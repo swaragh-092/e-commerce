@@ -1,0 +1,66 @@
+# ── Dependencies ──
+node_modules/
+.pnp
+.pnp.js
+
+# ── Build output ──
+dist/
+build/
+.next/
+
+# ── Environment ──
+.env
+.env.local
+.env.development
+.env.production
+.env.staging
+.env.*.local
+
+# ── Logs ──
+logs/
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# ── OS generated ──
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+desktop.ini
+
+# ── IDE / Editor ──
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.project
+.classpath
+.settings/
+
+# ── Uploads (user content, don't commit) ──
+server/uploads/
+!server/uploads/.gitkeep
+
+# ── Database ──
+*.sql.gz
+*.dump
+
+# ── Docker ──
+docker-compose.override.yml
+
+# ── Testing ──
+coverage/
+.nyc_output/
+
+# ── Misc ──
+*.tgz
+*.pid
+*.seed
+*.pid.lock
+.eslintcache

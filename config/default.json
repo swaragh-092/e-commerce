@@ -1,0 +1,47 @@
+{
+    "general": {
+        "storeName": "My Store",
+        "storeDescription": "Premium online shopping experience",
+        "currency": "USD",
+        "currencySymbol": "$",
+        "locale": "en-US"
+    },
+    "theme": {
+        "primaryColor": "#6C63FF",
+        "secondaryColor": "#FF6584",
+        "backgroundColor": "#0F0F1A",
+        "surfaceColor": "#1A1A2E",
+        "textColor": "#FFFFFF",
+        "fontFamily": "Inter",
+        "borderRadius": "12px",
+        "mode": "dark"
+    },
+    "features": {
+        "wishlist": true,
+        "reviews": true,
+        "coupons": true,
+        "multiCurrency": false,
+        "socialLogin": false,
+        "guestCheckout": true,
+        "emailVerification": false,
+        "requirePurchaseForReview": false
+    },
+    "shipping": {
+        "method": "flat_rate",
+        "flatRate": 5.00,
+        "freeThreshold": 50.00
+    },
+    "tax": {
+        "rate": 0.00,
+        "inclusive": false
+    },
+    "seo": {
+        "titleTemplate": "%s | My Store",
+        "defaultDescription": "Shop the best products online at unbeatable prices",
+        "ogImage": "/assets/og-image.jpg"
+    },
+    "logo": {
+        "main": "/assets/logo.png",
+        "favicon": "/assets/favicon.ico"
+    }
+}

@@ -1,0 +1,17 @@
+node_modules
+npm-debug.log
+.env
+.env.*
+.git
+.gitignore
+.editorconfig
+.prettierrc
+docs/
+README.md
+*.md
+coverage/
+.nyc_output/
+.vscode/
+.idea/
+.agent/
+server/uploads/
