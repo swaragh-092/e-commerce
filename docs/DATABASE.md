@@ -5,6 +5,17 @@
 > **Conventions**: UUID primary keys, timestamps on all tables, soft delete where noted  
 > **Key Updates in v2**: CHECK constraints, coupon tables, notification tables, webhook_events, address snapshot in orders, weight + taxRate on products
 
+## Table of Contents
+1. [Settings](#settings)
+2. [Users & Auth](#users--auth)
+3. [Products & Categories](#products--categories)
+4. [Advanced Products (Variations, Attributes, Custom Fields)](#advanced-products-variations-attributes-custom-fields)
+5. [Carts & Orders](#carts--orders)
+6. [Promotions & Wishlists](#promotions--wishlists)
+7. [Reviews & Feedback](#reviews--feedback)
+8. [Notifications & Logging](#notifications--logging)
+9. [Indexes Overview](#indexes-overview)
+
 ---
 
 ## Settings
@@ -92,7 +103,6 @@ CREATE TABLE products (
   weight            DECIMAL(8,2),                       -- grams (for shipping calc)
   tax_rate          DECIMAL(5,4),                       -- per-product tax override (nullable)
   status            VARCHAR(20) DEFAULT 'draft',
-  category_id       UUID REFERENCES categories(id) ON DELETE SET NULL,
   is_featured       BOOLEAN DEFAULT FALSE,
   created_at        TIMESTAMP DEFAULT NOW(),
   updated_at        TIMESTAMP DEFAULT NOW(),
@@ -140,6 +150,12 @@ CREATE TABLE product_tags (
   product_id      UUID REFERENCES products(id) ON DELETE CASCADE,
   tag_id          UUID REFERENCES tags(id) ON DELETE CASCADE,
   PRIMARY KEY (product_id, tag_id)
+);
+
+CREATE TABLE product_categories (
+  product_id      UUID REFERENCES products(id) ON DELETE CASCADE,
+  category_id     UUID REFERENCES categories(id) ON DELETE CASCADE,
+  PRIMARY KEY (product_id, category_id)
 );
 ```
 
@@ -394,7 +410,6 @@ CREATE INDEX idx_audit_logs_created ON audit_logs(created_at DESC);
 ```sql
 -- Products & Categories
 CREATE INDEX idx_products_slug ON products(slug);
-CREATE INDEX idx_products_category ON products(category_id);
 CREATE INDEX idx_products_status ON products(status);
 CREATE INDEX idx_products_featured ON products(is_featured) WHERE is_featured = TRUE;
 CREATE INDEX idx_categories_slug ON categories(slug);

@@ -36,6 +36,7 @@ desktop.ini
 # ── IDE / Editor ──
 .vscode/
 .idea/
+.agent/
 *.swp
 *.swo
 *~

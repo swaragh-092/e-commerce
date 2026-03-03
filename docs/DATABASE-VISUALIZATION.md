@@ -6,417 +6,300 @@
 
 ---
 
-## Entity Relationship Diagram
+## Core Entity Relationship Diagrams
 
+To make the database easier to understand, the schema is broken down into logical domains using Mermaid `erDiagram` syntax.
+
+### 1. User & Authentication Layer
+
+```mermaid
+erDiagram
+    users ||--o{ user_profiles : "has one"
+    users ||--o{ refresh_tokens : "has many"
+
+    users {
+        UUID id PK
+        VARCHAR email "UNIQUE"
+        VARCHAR password
+        VARCHAR first_name
+        VARCHAR last_name
+        VARCHAR role "super_admin, admin, customer"
+        VARCHAR status "active, inactive, banned"
+        TIMESTAMP created_at
+        TIMESTAMP updated_at
+        TIMESTAMP deleted_at
+    }
+
+    user_profiles {
+        UUID id PK
+        UUID user_id FK "UNIQUE"
+        VARCHAR phone
+        VARCHAR avatar
+        DATE date_of_birth
+        VARCHAR gender
+    }
+
+    refresh_tokens {
+        UUID id PK
+        UUID user_id FK
+        VARCHAR token "UNIQUE"
+        TIMESTAMP expires_at
+        TIMESTAMP created_at
+    }
 ```
-┌─────────────────────────────────────────────────────────────────────────────┐
-│                         USER & AUTHENTICATION LAYER                         │
-└─────────────────────────────────────────────────────────────────────────────┘
 
-    ┌──────────────┐
-    │    users     │
-    ├──────────────┤
-    │ id (PK)      │
-    │ email        │◄──────────────┐
-    │ password     │               │
-    │ first_name   │               │
-    │ last_name    │               │
-    │ role         │               │
-    │ status       │               │
-    │ created_at   │               │
-    │ updated_at   │               │
-    │ deleted_at   │               │
-    └──────────────┘               │
-           │                       │
-           │ (1:1)                 │ (1:N)
-           ▼                       │
-    ┌──────────────────┐   ┌───────────────────┐
-    │  user_profiles   │   │ refresh_tokens    │
-    ├──────────────────┤   ├───────────────────┤
-    │ id (PK)          │   │ id (PK)           │
-    │ user_id (FK)     │   │ user_id (FK)      │
-    │ phone            │   │ token             │
-    │ avatar           │   │ expires_at        │
-    │ date_of_birth    │   │ created_at        │
-    │ gender           │   └───────────────────┘
-    └──────────────────┘
+### 2. Product Catalog Layer (Core)
 
-┌─────────────────────────────────────────────────────────────────────────────┐
-│                      PRODUCT CATALOG LAYER                                  │
-└─────────────────────────────────────────────────────────────────────────────┘
+```mermaid
+erDiagram
+    products ||--o{ product_categories : "belongs to many"
+    categories ||--o{ product_categories : "has many"
+    categories ||--o{ categories : "parent_id (self-referencing)"
+    products ||--o{ product_images : "has many"
+    products ||--o{ product_tags : "belongs to many"
+    tags ||--o{ product_tags : "has many"
 
-    ┌──────────────────┐
-    │  categories      │
-    ├──────────────────┤
-    │ id (PK)          │
-    │ name             │
-    │ slug             │
-    │ description      │
-    │ parent_id (FK)   │◄──── (1:N Self-Ref)
-    │ image            │
-    │ sort_order       │
-    │ created_at       │
-    └──────────────────┘
-           ▲
-           │ (1:N)
-           │
-    ┌──────────────────────┐
-    │    products          │
-    ├──────────────────────┤
-    │ id (PK)              │
-    │ name                 │
-    │ slug                 │
-    │ description          │
-    │ short_description    │
-    │ sku                  │
-    │ price                │     ┌─────────────────┐
-    │ sale_price           │◄────┤ product_images  │
-    │ quantity             │     ├─────────────────┤
-    │ reserved_qty         │     │ id (PK)         │
-    │ weight               │     │ product_id (FK) │
-    │ tax_rate             │     │ url             │
-    │ status               │     │ alt             │
-    │ category_id (FK)     │     │ sort_order      │
-    │ is_featured          │     │ is_primary      │
-    │ created_at           │     └─────────────────┘
-    │ deleted_at (soft)    │
-    └──────────────────────┘
-           │
-           │ (1:N)
-           ├──────────────────────┐
-           │                      │
-           ▼                      ▼
-    ┌─────────────────┐    ┌──────────────────┐
-    │  product_tags   │    │     tags         │
-    ├─────────────────┤    ├──────────────────┤
-    │ product_id (FK) │    │ id (PK)          │
-    │ tag_id (FK)     │    │ name             │
-    │ PRIMARY KEY     │    │ slug             │
-    │ (product_id,tag)│    │ created_at       │
-    └─────────────────┘    └──────────────────┘
-           ▲
-           │ (N:N)
-           │
+    products {
+        UUID id PK
+        VARCHAR name
+        VARCHAR slug "UNIQUE"
+        TEXT description
+        VARCHAR sku "UNIQUE"
+        DECIMAL price
+        DECIMAL sale_price
+        INTEGER quantity
+        DECIMAL weight
+        DECIMAL tax_rate
+        VARCHAR status
+        BOOLEAN is_featured
+    }
 
-┌─────────────────────────────────────────────────────────────────────────────┐
-│              ADVANCED PRICING & VARIATIONS LAYER (ENHANCED)                 │
-└─────────────────────────────────────────────────────────────────────────────┘
+    categories {
+        UUID id PK
+        VARCHAR name
+        VARCHAR slug "UNIQUE"
+        UUID parent_id FK "NULLABLE"
+    }
 
-    ┌────────────────────────────────────┐
-    │  product_pricing_tiers (ENHANCED)  │  ◄── Flexible tier pricing
-    ├────────────────────────────────────┤
-    │ id (PK)                            │
-    │ product_id (FK)                    │
-    │ min_quantity                       │
-    │ discount_type                      │  ◄── fixed_price, percentage, fixed_discount
-    │ discount_value (DECIMAL)           │
-    │ sort_order                         │
-    │ created_at                         │
-    │ updated_at                         │
-    └────────────────────────────────────┘
-           ▲
-           │ (1:N)
-           │
-        products
+    product_categories {
+        UUID product_id FK
+        UUID category_id FK
+    }
 
-    ┌─────────────────────────────┐
-    │     attributes              │  ◄── Size, Color, Material, etc.
-    ├─────────────────────────────┤
-    │ id (PK)                     │
-    │ name                        │
-    │ slug                        │
-    │ type                        │
-    │ created_at                  │
-    │ updated_at                  │
-    │ deleted_at (soft delete)    │
-    └─────────────────────────────┘
-           │
-           ├─► (1:N) attribute_values
-           │
-           └─► (N:N) product_attributes ◄──── Define allowed attributes per product
-               (product_id, attribute_id)
+    product_images {
+        UUID id PK
+        UUID product_id FK
+        VARCHAR url
+        INTEGER sort_order
+        BOOLEAN is_primary
+    }
 
-    ┌──────────────────────────────────┐
-    │    attribute_values (ENHANCED)   │
-    ├──────────────────────────────────┤
-    │ id (PK)                          │
-    │ attribute_id (FK)                │
-    │ parent_id (FK) NULLABLE          │  ◄── Self-ref for unlimited nesting
-    │ value                            │
-    │ path (VARCHAR) NULLABLE          │  ◄── Materialized path for optimization
-    │ sort_order                       │
-    │ created_at                       │
-    │ updated_at                       │
-    │ deleted_at (soft delete)         │
-    └──────────────────────────────────┘
-           ▲
-           │ (Self-Ref, 1:N)
-           │
-           └─ Recursive (Dark Red → Premium Dark Red → ... unlimited depth)
-                    │
-                    └─► (N:N) product_variation_attribute_values
-                        (product_variation_id, attribute_value_id)
+    tags {
+        UUID id PK
+        VARCHAR name
+    }
 
-    ┌─────────────────────────────────────────┐
-    │  product_variations (COMBINATION-BASED) │  ◄── No duplicate combinations
-    ├─────────────────────────────────────────┤
-    │ id (PK)                                 │
-    │ product_id (FK)                         │
-    │ combination_hash (VARCHAR, UNIQUE)      │  ◄── Prevents duplicates
-    │ sku (UNIQUE)                            │
-    │ price (DECIMAL)                         │
-    │ quantity                                │
-    │ image                                   │
-    │ created_at                              │
-    │ updated_at                              │
-    │ deleted_at (soft delete)                │
-    └─────────────────────────────────────────┘
-           ▲
-           │ (1:N)
-           │
-        products
+    product_tags {
+        UUID product_id FK
+        UUID tag_id FK
+    }
+```
 
-┌─────────────────────────────────────────────────────────────────────────────┐
-│                   DYNAMIC CUSTOM FIELDS LAYER (ENHANCED)                    │
-└─────────────────────────────────────────────────────────────────────────────┘
+### 3. Advanced Catalog (Variations & Dynamic Fields)
 
-    ┌──────────────────────────────┐
-    │    dynamic_fields (ENHANCED) │  ◄── Text, Number, Dropdown, etc.
-    ├──────────────────────────────┤
-    │ id (PK)                      │
-    │ name                         │
-    │ slug                         │
-    │ type                         │  ◄── text, number, dropdown, etc.
-    │ validation_rules (JSONB)     │
-    │ is_filterable                │
-    │ is_sortable                  │
-    │ created_at                   │
-    │ updated_at                   │
-    │ deleted_at (soft delete)     │
-    └──────────────────────────────┘
-           │
-           │ (1:N)
-           ├────────────────────────────────────────┐
-           │                                        │
-           ▼                                        ▼
-    ┌──────────────────────┐    ┌──────────────────────────────────────┐
-    │ dynamic_field_       │    │ product_dynamic_field_values (ENHANCED)
-    │     options          │    ├──────────────────────────────────────┤
-    ├──────────────────────┤    │ id (PK)                              │
-    │ id (PK)              │    │ product_id (FK)                      │
-    │ field_id (FK)        │    │ field_id (FK)                        │
-    │ value                │    │ value_text (VARCHAR, NULLABLE)       │
-    │ sort_order           │    │ value_number (DECIMAL, NULLABLE)     │
-    │ created_at           │    │ value_boolean (BOOLEAN, NULLABLE)    │
-    └──────────────────────┘    │ value_date (DATE, NULLABLE)          │
-                                 │ created_at                           │
-                                 │ updated_at                           │
-                                 └──────────────────────────────────────┘
-                                        ▲
-                                        │ (N:1) field_id
-                                        │
-                                    products
+```mermaid
+erDiagram
+    products ||--o{ product_pricing_tiers : "has many"
+    products ||--o{ product_attributes : "allowed attributes"
+    attributes ||--o{ product_attributes : "used in"
+    attributes ||--o{ attribute_values : "has many"
+    attribute_values ||--o{ attribute_values : "parent_id (hierarchy)"
+    products ||--o{ product_variations : "has many"
+    product_variations ||--o{ product_variation_attribute_values : "has combination of"
+    attribute_values ||--o{ product_variation_attribute_values : "part of"
+    
+    dynamic_fields ||--o{ dynamic_field_options : "has options"
+    products ||--o{ product_dynamic_field_values : "has extra data"
+    dynamic_fields ||--o{ product_dynamic_field_values : "defined by"
 
+    product_pricing_tiers {
+        UUID id PK
+        UUID product_id FK
+        INTEGER min_quantity
+        VARCHAR discount_type "fixed, percent"
+        DECIMAL discount_value
+    }
 
-    ┌─────────────────┐
-    │     carts       │
-    ├─────────────────┤
-    │ id (PK)         │
-    │ user_id (FK)    │
-    │ session_id      │
-    │ status          │     ┌──────────────────┐
-    │ created_at      │────►│  cart_items      │
-    │ updated_at      │     ├──────────────────┤
-    └─────────────────┘     │ id (PK)          │
-                            │ cart_id (FK)     │
-                            │ product_id (FK)  │
-                            │ variant_id (FK)  │
-                            │ quantity         │
-                            │ created_at       │
-                            └──────────────────┘
+    attributes {
+        UUID id PK
+        VARCHAR name
+    }
 
-    ┌──────────────────┐
-    │    wishlists     │
-    ├──────────────────┤
-    │ id (PK)          │
-    │ user_id (FK,U)   │     ┌──────────────────┐
-    │ created_at       │────►│ wishlist_items   │
-    └──────────────────┘     ├──────────────────┤
-                             │ id (PK)          │
-                             │ wishlist_id (FK) │
-                             │ product_id (FK)  │
-                             │ created_at       │
-                             └──────────────────┘
+    product_attributes {
+        UUID product_id FK
+        UUID attribute_id FK
+    }
 
-┌─────────────────────────────────────────────────────────────────────────────┐
-│                   ORDER & PAYMENT LAYER                                     │
-└─────────────────────────────────────────────────────────────────────────────┘
+    attribute_values {
+        UUID id PK
+        UUID attribute_id FK
+        UUID parent_id FK "NULLABLE"
+        VARCHAR value
+        VARCHAR path "Materialized path"
+    }
 
-    ┌──────────────────┐
-    │   addresses      │
-    ├──────────────────┤
-    │ id (PK)          │
-    │ user_id (FK)     │
-    │ label            │
-    │ full_name        │
-    │ phone            │
-    │ address_line1    │
-    │ address_line2    │
-    │ city             │
-    │ state            │
-    │ postal_code      │
-    │ country          │
-    │ is_default       │
-    │ created_at       │
-    └──────────────────┘
+    product_variations {
+        UUID id PK
+        UUID product_id FK
+        VARCHAR combination_hash "UNIQUE"
+        VARCHAR sku "UNIQUE"
+        DECIMAL price
+        INTEGER quantity
+    }
 
-    ┌───────────────────────┐
-    │      coupons          │
-    ├───────────────────────┤
-    │ id (PK)               │
-    │ code                  │
-    │ type                  │
-    │ value                 │
-    │ min_order_amount      │
-    │ max_discount          │
-    │ usage_limit           │
-    │ used_count            │
-    │ per_user_limit        │
-    │ start_date            │
-    │ end_date              │
-    │ is_active             │
-    │ applicable_to         │
-    │ applicable_ids        │
-    │ created_at            │
-    └───────────────────────┘
-           │
-           │ (1:N)
-           ▼
-    ┌───────────────────────┐
-    │  coupon_usages        │
-    ├───────────────────────┤
-    │ id (PK)               │
-    │ coupon_id (FK)        │
-    │ user_id (FK)          │
-    │ order_id (FK)         │
-    │ created_at            │
-    └───────────────────────┘
+    product_variation_attribute_values {
+        UUID product_variation_id FK
+        UUID attribute_value_id FK
+    }
 
-    ┌──────────────────────┐
-    │      orders          │
-    ├──────────────────────┤
-    │ id (PK)              │  ┌────────────────┐
-    │ order_number (U)     │  │  order_items   │
-    │ user_id (FK)         │◄─┤ (1:N)          │
-    │ status               │  ├────────────────┤
-    │ subtotal             │  │ id (PK)        │
-    │ tax                  │  │ order_id (FK)  │
-    │ shipping_cost        │  │ product_id (FK)│
-    │ discount_amount      │  │ snapshot_*     │
-    │ total                │  │ variant_info   │
-    │ coupon_id (FK)       │  │ quantity       │
-    │ shipping_address_*   │  │ total          │
-    │ notes                │  │ created_at     │
-    │ created_at           │  └────────────────┘
-    │ updated_at           │
-    └──────────────────────┘
-           │
-           │ (1:1)
-           ▼
-    ┌───────────────────────┐
-    │     payments          │
-    ├───────────────────────┤
-    │ id (PK)               │
-    │ order_id (FK,U)       │
-    │ provider              │
-    │ transaction_id        │
-    │ amount                │
-    │ currency              │
-    │ status                │
-    │ metadata              │
-    │ created_at            │
-    │ updated_at            │
-    └───────────────────────┘
+    dynamic_fields {
+        UUID id PK
+        VARCHAR name
+        VARCHAR type "text, number, boolean, date"
+    }
 
-┌─────────────────────────────────────────────────────────────────────────────┐
-│                  REVIEWS & FEEDBACK LAYER                                   │
-└─────────────────────────────────────────────────────────────────────────────┘
+    product_dynamic_field_values {
+        UUID id PK
+        UUID product_id FK
+        UUID field_id FK
+        VARCHAR value_text
+        DECIMAL value_number
+        BOOLEAN value_boolean
+        DATE value_date
+    }
+```
 
-    ┌──────────────────┐
-    │     reviews      │
-    ├──────────────────┤
-    │ id (PK)          │
-    │ product_id (FK)  │
-    │ user_id (FK)     │
-    │ rating           │
-    │ title            │
-    │ body             │
-    │ is_verified_*    │
-    │ status           │
-    │ created_at       │
-    │ updated_at       │
-    │ UNIQUE (user,    │
-    │    product)      │
-    └──────────────────┘
+### 4. Shopping, Orders & Payments Layer
 
-┌─────────────────────────────────────────────────────────────────────────────┐
-│              NOTIFICATIONS & AUDIT LAYER                                    │
-└─────────────────────────────────────────────────────────────────────────────┘
+```mermaid
+erDiagram
+    users ||--o{ carts : "owns"
+    users ||--o{ addresses : "has many"
+    users ||--o{ wishlists : "owns"
+    users ||--o{ orders : "places"
+    carts ||--o{ cart_items : "contains"
+    products ||--o{ cart_items : "added as"
+    product_variations ||--o{ cart_items : "added as variant"
+    
+    coupons ||--o{ coupon_usages : "used by"
+    users ||--o{ coupon_usages : "uses"
+    orders ||--o{ coupon_usages : "applied to"
+    
+    orders ||--o{ order_items : "contains"
+    products ||--o{ order_items : "snapshot of"
+    orders ||--o| payments : "has one"
+    
+    wishlists ||--o{ wishlist_items : "contains"
+    products ||--o{ wishlist_items : "added as"
 
-    ┌──────────────────────┐     ┌─────────────────────────┐
-    │notification_templates│     │  notification_logs      │
-    ├──────────────────────┤     ├─────────────────────────┤
-    │ id (PK)              │     │ id (PK)                 │
-    │ name (U)             │     │ template_name           │
-    │ subject              │     │ recipient_email         │
-    │ body_html            │     │ subject                 │
-    │ body_text            │     │ status                  │
-    │ is_active            │     │ error                   │
-    │ created_at           │     │ created_at              │
-    │ updated_at           │     └─────────────────────────┘
-    └──────────────────────┘
+    orders {
+        UUID id PK
+        VARCHAR order_number "UNIQUE"
+        UUID user_id FK
+        VARCHAR status
+        DECIMAL subtotal
+        DECIMAL total
+        UUID coupon_id FK
+    }
 
-    ┌──────────────────────┐
-    │    audit_logs        │
-    ├──────────────────────┤
-    │ id (PK)              │
-    │ user_id (FK)         │
-    │ action               │
-    │ entity               │
-    │ entity_id            │
-    │ changes (JSONB)      │
-    │ ip_address           │
-    │ user_agent           │
-    │ created_at           │
-    └──────────────────────┘
+    order_items {
+        UUID id PK
+        UUID order_id FK
+        UUID product_id FK
+        VARCHAR snapshot_name
+        DECIMAL snapshot_price
+        INTEGER quantity
+        DECIMAL total
+    }
 
-┌─────────────────────────────────────────────────────────────────────────────┐
-│                    SETTINGS & CONFIG LAYER                                  │
-└─────────────────────────────────────────────────────────────────────────────┘
+    payments {
+        UUID id PK
+        UUID order_id FK "UNIQUE"
+        VARCHAR provider
+        DECIMAL amount
+        VARCHAR status
+    }
 
-    ┌──────────────────┐
-    │    settings      │
-    ├──────────────────┤
-    │ id (PK)          │
-    │ key (U)          │
-    │ value (JSONB)    │
-    │ group            │
-    │ updated_by (FK)  │
-    │ created_at       │
-    │ updated_at       │
-    └──────────────────┘
+    carts {
+        UUID id PK
+        UUID user_id FK
+        VARCHAR status "active, checkout, abandoned"
+    }
 
-┌─────────────────────────────────────────────────────────────────────────────┐
-│                  WEBHOOK EVENTS & IDEMPOTENCY                               │
-└─────────────────────────────────────────────────────────────────────────────┘
+    cart_items {
+        UUID id PK
+        UUID cart_id FK
+        UUID product_id FK
+        UUID variant_id FK "NULLABLE"
+        INTEGER quantity
+    }
 
-    ┌──────────────────────┐
-    │  webhook_events      │
-    ├──────────────────────┤
-    │ id (PK, VARCHAR)     │
-    │ event_type           │
-    │ processed_at         │
-    └──────────────────────┘
+    coupons {
+        UUID id PK
+        VARCHAR code "UNIQUE"
+        VARCHAR type "percent, fixed_cart"
+        DECIMAL value
+        BOOLEAN is_active
+    }
+```
+
+### 5. Activity, Audits & Settings Layer
+
+```mermaid
+erDiagram
+    users ||--o{ reviews : "writes"
+    products ||--o{ reviews : "receives"
+    users ||--o{ audit_logs : "performs action"
+    users ||--o{ settings : "updates"
+    notification_templates ||--o{ notification_logs : "used for"
+
+    reviews {
+        UUID id PK
+        UUID product_id FK
+        UUID user_id FK
+        INTEGER rating "1-5"
+        VARCHAR title
+        TEXT body
+    }
+
+    audit_logs {
+        UUID id PK
+        UUID user_id FK
+        VARCHAR action
+        VARCHAR entity
+        UUID entity_id
+        JSONB changes
+    }
+
+    settings {
+        UUID id PK
+        VARCHAR key "UNIQUE"
+        JSONB value
+        VARCHAR group
+    }
+
+    webhook_events {
+        VARCHAR id PK "UNIQUE"
+        VARCHAR event_type
+        TIMESTAMP processed_at
+    }
+    
+    notification_logs {
+        UUID id PK
+        VARCHAR template_name
+        VARCHAR recipient_email
+        VARCHAR status
+    }
 ```
 
 ---
@@ -431,7 +314,7 @@
 
 1:N Relationships (One-to-Many)
   users → [refresh_tokens, addresses, carts, orders, reviews]
-  categories → [products, categories (self-ref)]
+  categories → [categories (self-ref)]
   products → [product_images, product_pricing_tiers, product_variations, product_dynamic_field_values]
   products ↔ attributes (via product_attributes junction)
   carts → cart_items
@@ -444,6 +327,7 @@
   dynamic_fields → [dynamic_field_options, product_dynamic_field_values]
 
 N:N Relationships (Many-to-Many)
+  products ↔ categories (via product_categories)
   products ↔ tags (via product_tags)
   products ↔ attributes (via product_attributes) [NEW - defines allowed attributes]
   product_variations ↔ attribute_values (via product_variation_attribute_values)
@@ -484,8 +368,8 @@ pending_payment ──────────────► paid ────�
 | users              | carts                         | 1:N         | Active & historical                            |
 | users              | orders                        | 1:N         | Full history                                   |
 | users              | reviews                       | 1:N         | Per product max 1                              |
-| categories         | products                      | 1:N         | SET NULL on delete                             |
 | categories         | categories (self)             | 1:N         | Hierarchical                                   |
+| products           | categories                    | N:M         | Via product_categories junction table          |
 | products           | product_images                | 1:N         | Multiple images                                |
 | products           | product_pricing_tiers         | 1:N         | Quantity/percentage-based pricing [ENHANCED]   |
 | products           | product_variations            | 1:N         | Attribute combinations (unique hashes)         |

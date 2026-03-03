@@ -1,0 +1,692 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Toy Store Database Simulator (Advanced)</title>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Fredoka:wght@400;600&family=Nunito:wght@400;700&display=swap');
+
+        :root {
+            --bg-color: #f0fdfa;
+            --primary: #ec4899;
+            --secondary: #3b82f6;
+            --accent: #f59e0b;
+            --text-dark: #1f2937;
+            --glass-bg: rgba(255, 255, 255, 0.85);
+            --glass-border: rgba(255, 255, 255, 0.4);
+            --shadow: 0 8px 32px 0 rgba(31, 38, 135, 0.1);
+            --highlight: #dcfce7;
+            --danger: #ef4444;
+            --purple: #8b5cf6;
+        }
+
+        body {
+            font-family: 'Nunito', sans-serif;
+            background: linear-gradient(135deg, #a7f3d0 0%, #bae6fd 100%);
+            color: var(--text-dark);
+            margin: 0;
+            padding: 20px;
+            display: flex;
+            flex-direction: column;
+            gap: 20px;
+            min-height: 100vh;
+            box-sizing: border-box;
+        }
+
+        h1,
+        h2,
+        h3 {
+            font-family: 'Fredoka', sans-serif;
+            margin: 0;
+            color: var(--primary);
+        }
+
+        h1 {
+            text-align: center;
+            font-size: 2.2rem;
+            text-shadow: 2px 2px 4px rgba(0, 0, 0, 0.1);
+            margin-bottom: 5px;
+        }
+
+        .container {
+            display: grid;
+            grid-template-columns: 1fr 2fr;
+            gap: 20px;
+            flex-grow: 1;
+        }
+
+        @media (max-width: 1200px) {
+            .container {
+                grid-template-columns: 1fr;
+            }
+        }
+
+        .panel {
+            background: var(--glass-bg);
+            border-radius: 20px;
+            border: 1px solid var(--glass-border);
+            box-shadow: var(--shadow);
+            padding: 20px;
+            backdrop-filter: blur(10px);
+            display: flex;
+            flex-direction: column;
+            gap: 15px;
+        }
+
+        .store-front {
+            border-top: 5px solid var(--primary);
+        }
+
+        .database-engine {
+            border-top: 5px solid var(--secondary);
+            overflow-y: auto;
+            max-height: 85vh;
+        }
+
+        .filters {
+            display: flex;
+            gap: 10px;
+            margin-bottom: 10px;
+            flex-wrap: wrap;
+        }
+
+        .filter-btn {
+            background: #e2e8f0;
+            border: none;
+            padding: 5px 15px;
+            border-radius: 20px;
+            cursor: pointer;
+            font-family: 'Fredoka';
+            transition: all 0.2s;
+        }
+
+        .filter-btn.active {
+            background: var(--purple);
+            color: white;
+        }
+
+        .toy-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
+            gap: 15px;
+        }
+
+        .toy-card {
+            background: white;
+            border-radius: 15px;
+            padding: 15px;
+            text-align: center;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.05);
+            transition: transform 0.2s, box-shadow 0.2s;
+            border: 2px solid transparent;
+            display: flex;
+            flex-direction: column;
+            justify-content: space-between;
+            gap: 8px;
+        }
+
+        .toy-card:hover {
+            transform: translateY(-5px);
+            box-shadow: 0 10px 15px rgba(0, 0, 0, 0.1);
+            border-color: var(--secondary);
+        }
+
+        .toy-emoji {
+            font-size: 2.5rem;
+        }
+
+        .toy-title {
+            font-weight: 700;
+            font-size: 1.1rem;
+        }
+
+        .toy-price {
+            color: var(--accent);
+            font-weight: bold;
+            font-size: 1.1rem;
+        }
+
+        .tag-container {
+            display: flex;
+            gap: 5px;
+            justify-content: center;
+            flex-wrap: wrap;
+        }
+
+        .toy-tag {
+            font-size: 0.7rem;
+            background: #fef3c7;
+            color: #d97706;
+            padding: 2px 6px;
+            border-radius: 10px;
+            font-weight: bold;
+        }
+
+        .variant-select {
+            padding: 5px;
+            border-radius: 8px;
+            border: 1px solid #cbd5e1;
+            font-family: 'Nunito';
+            font-size: 0.9rem;
+            width: 100%;
+        }
+
+        .btn {
+            background: var(--secondary);
+            color: white;
+            border: none;
+            padding: 10px 15px;
+            border-radius: 50px;
+            font-family: 'Fredoka', sans-serif;
+            font-size: 1rem;
+            cursor: pointer;
+            transition: all 0.2s;
+            box-shadow: 0 4px 0 #2563eb;
+        }
+
+        .btn:hover {
+            filter: brightness(1.1);
+            transform: translateY(2px);
+            box-shadow: 0 2px 0 #2563eb;
+        }
+
+        .btn:active {
+            transform: translateY(4px);
+            box-shadow: none;
+        }
+
+        .btn-checkout {
+            background: var(--accent);
+            box-shadow: 0 4px 0 #d97706;
+            width: 100%;
+            font-size: 1.2rem;
+            margin-top: 15px;
+        }
+
+        .tables-wrapper {
+            display: flex;
+            flex-direction: column;
+            gap: 20px;
+        }
+
+        .tables-section {
+            background: rgba(255, 255, 255, 0.5);
+            padding: 15px;
+            border-radius: 15px;
+            border: 1px dashed #cbd5e1;
+        }
+
+        .tables-section h3.section-title {
+            margin-top: 0;
+            font-size: 1.1rem;
+            color: var(--text-dark);
+            margin-bottom: 15px;
+            text-align: center;
+        }
+
+        .tables-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+            gap: 15px;
+        }
+
+        .db-table {
+            background: white;
+            border-radius: 10px;
+            overflow: hidden;
+            box-shadow: 0 2px 10px rgba(0, 0, 0, 0.05);
+            font-size: 0.8rem;
+        }
+
+        .db-table h4 {
+            background: #f8fafc;
+            padding: 8px 12px;
+            font-size: 0.9rem;
+            border-bottom: 2px solid #e2e8f0;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin: 0;
+            font-family: monospace;
+            color: var(--secondary);
+        }
+
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            font-family: monospace;
+        }
+
+        th,
+        td {
+            padding: 6px 10px;
+            text-align: left;
+            border-bottom: 1px solid #f1f5f9;
+        }
+
+        th {
+            background: #f1f5f9;
+            color: #64748b;
+            font-weight: 600;
+            text-transform: uppercase;
+            font-size: 0.7rem;
+        }
+
+        tr:last-child td {
+            border-bottom: none;
+        }
+
+        @keyframes highlightRow {
+            0% {
+                background-color: var(--highlight);
+                transform: scale(1.02);
+            }
+
+            100% {
+                background-color: transparent;
+                transform: scale(1);
+            }
+        }
+
+        .new-row {
+            animation: highlightRow 2s ease-out;
+        }
+
+        .foreign-key {
+            color: var(--purple);
+            font-weight: bold;
+            cursor: help;
+            border-bottom: 1px dashed var(--purple);
+        }
+
+        #notification {
+            position: fixed;
+            top: 20px;
+            right: 20px;
+            background: var(--glass-bg);
+            border-left: 5px solid var(--accent);
+            padding: 15px 25px;
+            border-radius: 10px;
+            box-shadow: 0 10px 25px rgba(0, 0, 0, 0.1);
+            backdrop-filter: blur(10px);
+            font-weight: bold;
+            transform: translateX(150%);
+            transition: transform 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+            z-index: 1000;
+        }
+
+        #notification.show {
+            transform: translateX(0);
+        }
+    </style>
+</head>
+
+<body>
+
+    <h1>🚀 Ultimate Database Simulator! 🚀</h1>
+    <div id="notification">Action completed!</div>
+
+    <div class="container">
+        <!-- Store Front Panel -->
+        <div class="panel store-front">
+            <h2>🏬 1. The Toy Store</h2>
+            <p style="font-size: 0.9rem;">Categories & Tags filter toys! Notice how <strong>Variants</strong> let you
+                pick Colors before adding to Cart.</p>
+
+            <div class="filters" id="category-filters">
+                <button class="filter-btn active" onclick="filterCat('all')">All</button>
+                <button class="filter-btn" onclick="filterCat('cat_1')">Plushies</button>
+                <button class="filter-btn" onclick="filterCat('cat_2')">Action</button>
+                <button class="filter-btn" onclick="filterCat('cat_3')">Puzzles</button>
+            </div>
+
+            <div class="toy-grid" id="toy-grid">
+                <!-- Toys injected via JS -->
+            </div>
+
+            <div style="margin-top: auto;">
+                <h3 id="cart-total-display">Cart Total: $0.00</h3>
+                <button class="btn btn-checkout" onclick="checkout()">💳 Pay & Checkout</button>
+            </div>
+        </div>
+
+        <!-- Database Engine Panel -->
+        <div class="panel database-engine">
+            <h2>⚙️ 2. The Database Engine</h2>
+
+            <div class="tables-wrapper">
+
+                <!-- Core Setup Data -->
+                <div class="tables-section">
+                    <h3 class="section-title">🧱 Core Catalog (Master Data & N:M Relations)</h3>
+                    <div class="tables-grid">
+                        <div class="db-table">
+                            <h4>products</h4>
+                            <table id="products-table"><tbody></tbody></table>
+                        </div>
+                        <div class="db-table">
+                            <h4>product_variations</h4>
+                            <table id="variants-table"><tbody></tbody></table>
+                        </div>
+                        <div class="db-table">
+                            <h4>categories & tags</h4>
+                            <table id="cats-tags-table"><tbody></tbody></table>
+                        </div>
+                        <div class="db-table">
+                            <h4>attributes & values</h4>
+                            <table id="attrs-table"><tbody></tbody></table>
+                        </div>
+                        <div class="db-table">
+                            <h4>dynamic_fields & values</h4>
+                            <table id="dynamic-fields-table"><tbody></tbody></table>
+                        </div>
+                        <div class="db-table">
+                            <h4>product_categories (N:M)</h4>
+                            <table id="prod-cats-table"><tbody></tbody></table>
+                        </div>
+                        <div class="db-table">
+                            <h4>product_tags (N:M)</h4>
+                            <table id="prod-tags-table"><tbody></tbody></table>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Shopping Data -->
+                <div class="tables-section">
+                    <h3 class="section-title">🛒 Shopping Activity (Data you create!)</h3>
+                    <div class="tables-grid">
+                        <div class="db-table">
+                            <h4>carts</h4>
+                            <table id="carts-table">
+                                <tbody></tbody>
+                            </table>
+                        </div>
+                        <div class="db-table">
+                            <h4>cart_items (points to variant_id)</h4>
+                            <table id="cart-items-table">
+                                <tbody></tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Order Data -->
+                <div class="tables-section" style="background: rgba(220, 252, 231, 0.5);">
+                    <h3 class="section-title">📜 Permanent Records (Checkout)</h3>
+                    <div class="tables-grid">
+                        <div class="db-table">
+                            <h4>orders</h4>
+                            <table id="orders-table">
+                                <tbody></tbody>
+                            </table>
+                        </div>
+                        <div class="db-table">
+                            <h4>order_items</h4>
+                            <table id="order-items-table">
+                                <tbody></tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // Database State (Master Data + User Data)
+        let db = {
+            products: [
+                { id: 'p_1', name: 'Teddy Bear', emoji: '🧸', price: 15 },
+                { id: 'p_2', name: 'RC Car', emoji: '🏎️', price: 25 },
+                { id: 'p_3', name: 'Puzzle 500', emoji: '🧩', price: 10 }
+            ],
+            categories: [
+                { id: 'c_1', name: 'Plushies' }, { id: 'c_2', name: 'Action' }, { id: 'c_3', name: 'Puzzles' }
+            ],
+            product_categories: [
+                { product_id: 'p_1', category_id: 'c_1' },
+                { product_id: 'p_2', category_id: 'c_2' },
+                { product_id: 'p_3', category_id: 'c_3' }
+            ],
+            variants: [
+                { id: 'v_1', product_id: 'p_1', attribute: 'Brown' },
+                { id: 'v_2', product_id: 'p_1', attribute: 'White' },
+                { id: 'v_3', product_id: 'p_2', attribute: 'Red' },
+                { id: 'v_4', product_id: 'p_2', attribute: 'Blue' },
+                { id: 'v_5', product_id: 'p_3', attribute: 'Standard' }
+            ],
+            tags: [
+                { id: 't_1', name: '#Soft' }, { id: 't_2', name: '#Fast' }
+            ],
+            product_tags: [
+                { product_id: 'p_1', tag_id: 't_1' },
+                { product_id: 'p_2', tag_id: 't_2' }
+            ],
+            attributes: [
+                { id: 'a_1', name: 'Color' }, { id: 'a_2', name: 'Size' }
+            ],
+            attribute_values: [
+                { id: 'av_1', attr_id: 'a_1', value: 'Brown' },
+                { id: 'av_2', attr_id: 'a_1', value: 'White' },
+                { id: 'av_3', attr_id: 'a_1', value: 'Red' },
+                { id: 'av_4', attr_id: 'a_1', value: 'Blue' },
+                { id: 'av_5', attr_id: 'a_2', value: 'Standard' }
+            ],
+            dynamic_fields: [
+                { id: 'df_1', name: 'Battery Required?', type: 'boolean' },
+                { id: 'df_2', name: 'Weight (lbs)', type: 'number' }
+            ],
+            product_dynamic_fields: [
+                { product_id: 'p_1', field_id: 'df_1', value: 'False' },
+                { product_id: 'p_2', field_id: 'df_1', value: 'True' },
+                { product_id: 'p_2', field_id: 'df_2', value: '2.5' }
+            ],
+            carts: [], cart_items: [], orders: [], order_items: []
+        };
+
+        const USER_ID = 'u_99';
+        let idCounter = 1;
+        function genId(prefix) { return `${prefix}_${idCounter++}`; }
+
+        function showNotification(message) {
+            const notif = document.getElementById('notification');
+            notif.textContent = message;
+            notif.classList.add('show');
+            setTimeout(() => notif.classList.remove('show'), 3000);
+        }
+
+        // Render functions for Store UI
+        function renderStoreFront(filterCatId = 'all') {
+            const grid = document.getElementById('toy-grid');
+            grid.innerHTML = '';
+
+            db.products.forEach(prod => {
+                // Filter logic (using N:M product_categories!)
+                const prodCats = db.product_categories.filter(pc => pc.product_id === prod.id).map(pc => pc.category_id);
+                if (filterCatId !== 'all' && !prodCats.includes(filterCatId)) return;
+
+                // Tags logic (using N:M product_tags)
+                const prodTagsIds = db.product_tags.filter(pt => pt.product_id === prod.id).map(pt => pt.tag_id);
+                const tagNames = prodTagsIds.map(tid => db.tags.find(t => t.id === tid).name);
+
+                // Variants logic (1:N product_variations)
+                const prodVars = db.variants.filter(v => v.product_id === prod.id);
+
+                // Dynamic Info Logic
+                const prodDynFields = db.product_dynamic_fields.filter(df => df.product_id === prod.id);
+                let dynHtml = prodDynFields.map(df => {
+                     const fieldDef = db.dynamic_fields.find(f => f.id === df.field_id);
+                     return `<div style="font-size:0.75rem; color:#64748b; margin-top:5px;"><i>${fieldDef.name}: ${df.value}</i></div>`;
+                }).join('');
+
+                const card = document.createElement('div');
+                card.className = 'toy-card';
+
+                let tagsHtml = `<div class="tag-container">${tagNames.map(t => `<span class="toy-tag">${t}</span>`).join('')}</div>`;
+                let variantsHtml = `<select id="sel_${prod.id}" class="variant-select">
+                    ${prodVars.map(v => `<option value="${v.id}">${v.attribute}</option>`).join('')}
+                </select>`;
+
+                card.innerHTML = `
+                    <div class="toy-emoji">${prod.emoji}</div>
+                    ${tagsHtml}
+                    <div class="toy-title">${prod.name}</div>
+                    <div class="toy-price">$${prod.price.toFixed(2)}</div>
+                    ${dynHtml}
+                    <div style="margin-top:10px;">
+                    ${variantsHtml}
+                    </div>
+                    <button class="btn" style="margin-top:10px" onclick="addToCart('${prod.id}')">Add to Cart</button>
+                `;
+                grid.appendChild(card);
+            });
+        }
+
+        function filterCat(catId) {
+            document.querySelectorAll('.filter-btn').forEach(btn => btn.classList.remove('active'));
+            event.target.classList.add('active');
+            renderStoreFront(catId);
+        }
+
+        // Action: Add to Cart (With Variant!)
+        function addToCart(productId) {
+            const variantId = document.getElementById(`sel_${productId}`).value;
+            const variant = db.variants.find(v => v.id === variantId);
+            const product = db.products.find(p => p.id === productId);
+
+            let currentCart = db.carts.find(c => c.status === 'active');
+            if (!currentCart) {
+                currentCart = { id: genId('cart'), user_id: USER_ID, status: 'active', isNew: true };
+                db.carts.push(currentCart);
+            }
+
+            // check if this specific variant is already in cart
+            let existingItem = db.cart_items.find(i => i.cart_id === currentCart.id && i.variant_id === variantId);
+
+            if (existingItem) {
+                existingItem.qty += 1;
+                existingItem.isNew = true;
+                showNotification(`Added another ${variant.attribute} ${product.name}!`);
+            } else {
+                db.cart_items.push({
+                    id: genId('ci'),
+                    cart_id: currentCart.id,
+                    variant_id: variantId, // Links to exact variation!
+                    qty: 1,
+                    isNew: true
+                });
+                showNotification(`Added ${variant.attribute} ${product.name} to Cart!`);
+            }
+            refreshAllTables();
+        }
+
+        function checkout() {
+            let currentCart = db.carts.find(c => c.status === 'active');
+            let itemsToMove = db.cart_items.filter(i => i.cart_id === currentCart?.id);
+
+            if (!currentCart || itemsToMove.length === 0) {
+                showNotification("Cart is empty!"); return;
+            }
+
+            let total = 0;
+            itemsToMove.forEach(item => {
+                const variant = db.variants.find(v => v.id === item.variant_id);
+                const product = db.products.find(p => p.id === variant.product_id);
+                total += (product.price * item.qty);
+            });
+
+            let newOrder = { id: genId('ord'), user_id: USER_ID, total: total, status: 'paid', isNew: true };
+            db.orders.push(newOrder);
+
+            itemsToMove.forEach(item => {
+                const variant = db.variants.find(v => v.id === item.variant_id);
+                const product = db.products.find(p => p.id === variant.product_id);
+                db.order_items.push({
+                    id: genId('oi'),
+                    order_id: newOrder.id,
+                    variant_id: item.variant_id,
+                    price_snapshot: product.price,
+                    qty: item.qty,
+                    isNew: true
+                });
+            });
+
+            currentCart.status = 'ordered';
+            db.cart_items = db.cart_items.filter(i => i.cart_id !== currentCart.id);
+
+            showNotification("Checkout complete! Data moved to permanent Orders.");
+            refreshAllTables();
+        }
+
+        function renderGenericTable(tableId, headers, dataRows) {
+            const table = document.getElementById(tableId);
+            let html = `<thead><tr>${headers.map(h => `<th>${h}</th>`).join('')}</tr></thead><tbody>`;
+
+            if (dataRows.length === 0) {
+                html += `<tr><td colspan="${headers.length}" style="text-align:center;color:#94a3b8;font-style:italic">Empty</td></tr>`;
+            } else {
+                dataRows.forEach(row => {
+                    const rowClass = row.isNew ? 'class="new-row"' : '';
+                    if (row.isNew) setTimeout(() => row.isNew = false, 2000);
+
+                    html += `<tr ${rowClass}>`;
+                    headers.forEach(key => {
+                        let val = row[key];
+                        if (key.includes('_id') && val) val = `<span class="foreign-key">${val}</span>`;
+                        if (key.includes('price') || key === 'total') val = `$${val.toFixed(2)}`;
+                        html += `<td>${val}</td>`;
+                    });
+                    html += `</tr>`;
+                });
+            }
+            html += `</tbody>`;
+            table.innerHTML = html;
+        }
+
+        function refreshAllTables() {
+            // Master Data
+            renderGenericTable('products-table', ['id', 'name', 'price'], db.products);
+            renderGenericTable('variants-table', ['id', 'product_id', 'attribute'], db.variants);
+            renderGenericTable('prod-cats-table', ['product_id', 'category_id'], db.product_categories);
+            renderGenericTable('prod-tags-table', ['product_id', 'tag_id'], db.product_tags);
+
+            // Combine cats & tags for space saving
+            const comboData = [...db.categories.map(c => ({ type: 'Cat', id: c.id, name: c.name })), ...db.tags.map(t => ({ type: 'Tag', id: t.id, name: t.name }))];
+            renderGenericTable('cats-tags-table', ['type', 'id', 'name'], comboData);
+
+            // Attributes and Dynamic Fields
+            const attrData = [...db.attributes.map(a => ({ type: 'Attr', id: a.id, name: a.name, value: '-' })), ...db.attribute_values.map(av => ({ type: 'Val', id: av.id, name: av.attr_id, value: av.value }))];
+            renderGenericTable('attrs-table', ['type', 'id', 'name', 'value'], attrData);
+
+            const dynData = [...db.dynamic_fields.map(df => ({ source: 'Def', id: df.id, field: df.name, value: df.type })), ...db.product_dynamic_fields.map(pdf => ({ source: 'Prod', id: pdf.product_id, field: pdf.field_id, value: pdf.value }))];
+            renderGenericTable('dynamic-fields-table', ['source', 'id', 'field', 'value'], dynData);
+
+            // Dynamic Data
+            renderGenericTable('carts-table', ['id', 'user_id', 'status'], db.carts);
+            renderGenericTable('cart-items-table', ['id', 'cart_id', 'variant_id', 'qty'], db.cart_items);
+            renderGenericTable('orders-table', ['id', 'user_id', 'total', 'status'], db.orders);
+            renderGenericTable('order-items-table', ['id', 'order_id', 'variant_id', 'price_snapshot', 'qty'], db.order_items);
+
+            // Update Cart Total
+            let currentCart = db.carts.find(c => c.status === 'active');
+            let total = 0;
+            if (currentCart) {
+                db.cart_items.filter(i => i.cart_id === currentCart.id).forEach(item => {
+                    const variant = db.variants.find(v => v.id === item.variant_id);
+                    const product = db.products.find(p => p.id === variant.product_id);
+                    total += (product.price * item.qty);
+                });
+            }
+            document.getElementById('cart-total-display').textContent = `Cart Total: $${total.toFixed(2)}`;
+        }
+
+        // Init
+        renderStoreFront();
+        refreshAllTables();
+    </script>
+</body>
+
+</html>
