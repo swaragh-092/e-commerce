@@ -44,10 +44,16 @@ const settingsRoutes = require('./modules/settings/settings.routes');
 const authRoutes = require('./modules/auth/auth.routes');
 const userRoutes = require('./modules/user/user.routes');
 const notificationRoutes = require('./modules/notification/notification.routes');
+const categoryRoutes = require('./modules/category/category.routes');
+const productRoutes = require('./modules/product/product.routes');
+const mediaRoutes = require('./modules/media/media.routes');
 
 app.use('/api/settings', settingsRoutes);
 app.use('/api/auth', authRoutes);
 app.use('/api/users', userRoutes);
+app.use('/api/categories', categoryRoutes);
+app.use('/api/products', productRoutes);
+app.use('/api/media', mediaRoutes);
 // Do not expose notifications out in phase 1, but we can mount if needed:
 // app.use('/api/notifications', notificationRoutes);
 
