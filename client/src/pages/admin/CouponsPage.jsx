@@ -110,7 +110,7 @@ const CouponsPage = () => {
 
       {alert && <Alert severity={alert.type} onClose={() => setAlert(null)} sx={{ mb: 2 }}>{alert.msg}</Alert>}
 
-      <Box sx={{ height: 560, bgcolor: 'white', borderRadius: 2, border: '1px solid', borderColor: 'divider' }}>
+      <Box sx={{ height: 560, bgcolor: 'background.default', borderRadius: 2, border: '1px solid', borderColor: 'divider' }}>
         <DataGrid rows={rows} columns={columns} rowCount={total} loading={loading}
           paginationMode="server" paginationModel={paginationModel}
           onPaginationModelChange={setPaginationModel} disableRowSelectionOnClick />

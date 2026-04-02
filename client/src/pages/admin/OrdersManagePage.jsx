@@ -90,7 +90,7 @@ const OrdersManagePage = () => {
         </FormControl>
       </Stack>
 
-      <Box sx={{ height: 580, bgcolor: 'white', borderRadius: 2, border: '1px solid', borderColor: 'divider' }}>
+      <Box sx={{ height: 580, bgcolor: 'background.default', borderRadius: 2, border: '1px solid', borderColor: 'divider' }}>
         <DataGrid
           rows={orders}
           columns={columns}
