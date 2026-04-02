@@ -64,9 +64,9 @@
 | POST   | `/auth/login`           | 5/15min    | Login → access + refresh tokens     |
 | POST   | `/auth/refresh`         | —          | Refresh access token                |
 | POST   | `/auth/logout`          | —          | Invalidate refresh token            |
-| POST   | `/auth/forgot-password` | 3/hour     | Send reset email                    |
-| POST   | `/auth/reset-password`  | —          | Reset with token                    |
-| POST   | `/auth/verify-email`    | —          | Verify email with token             |
+| POST   | `/auth/forgot-password` | 3/hour     | Send reset email (uses `password_reset_tokens`) |
+| POST   | `/auth/reset-password`  | —          | Reset with token from email                 |
+| POST   | `/auth/verify-email`    | —          | Verify email (uses `email_verification_tokens`) |
 
 ### POST `/auth/register`
 ```json
@@ -141,7 +141,10 @@
   "status": "draft",
   "tags": ["electronics"],
   "variants": [
-    { "name": "Color", "value": "Black", "priceModifier": 0, "quantity": 30 }
+    { "name": "Color", "value": "Black", "priceModifier": 0, "quantity": 30, "sku": "HP-001-BLK" }
+  ],
+  "images": [
+    { "url": "...", "alt": "Front View", "isPrimary": true, "mediaId": "uuid" }
   ]
 }
 // Note: slug auto-generated from name, with collision handling (blue-shirt → blue-shirt-1)
@@ -286,8 +289,8 @@
 
 | Method | Endpoint                  | Rate Limit | Auth | Role     | Description                       |
 | ------ | ------------------------- | ---------- | ---- | -------- | --------------------------------- |
-| GET    | `/products/:slug/reviews` | —          | —    | Public   | Product reviews                   |
-| POST   | `/products/:slug/reviews` | 5/day      | ✅    | Customer | Submit (one per product per user) |
+| GET    | `/products/:slug/reviews` | —          | —    | Public   | Product reviews (includes `orderId` if verified) |
+| POST   | `/products/:slug/reviews` | 5/day      | ✅    | Customer | Submit (can reference `orderId`) |
 | PUT    | `/reviews/:id/status`     | —          | ✅    | Admin    | Moderate                          |
 | DELETE | `/reviews/:id`            | —          | ✅    | Admin    | Delete                            |
 

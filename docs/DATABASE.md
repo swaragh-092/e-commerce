@@ -14,7 +14,8 @@
 6. [Promotions & Wishlists](#promotions--wishlists)
 7. [Reviews & Feedback](#reviews--feedback)
 8. [Notifications & Logging](#notifications--logging)
-9. [Indexes Overview](#indexes-overview)
+9. [Media](#media)
+10. [Indexes Overview](#indexes-overview)
 
 ---
 
@@ -70,6 +71,24 @@ CREATE TABLE refresh_tokens (
   expires_at      TIMESTAMP NOT NULL,
   created_at      TIMESTAMP DEFAULT NOW()
 );
+
+CREATE TABLE password_reset_tokens (
+  id              UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  user_id         UUID REFERENCES users(id) ON DELETE CASCADE,
+  token           VARCHAR(500) UNIQUE NOT NULL,
+  expires_at      TIMESTAMP NOT NULL,
+  created_at      TIMESTAMP DEFAULT NOW(),
+  updated_at      TIMESTAMP DEFAULT NOW()
+);
+
+CREATE TABLE email_verification_tokens (
+  id              UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  user_id         UUID REFERENCES users(id) ON DELETE CASCADE,
+  token           VARCHAR(500) UNIQUE NOT NULL,
+  expires_at      TIMESTAMP NOT NULL,
+  created_at      TIMESTAMP DEFAULT NOW(),
+  updated_at      TIMESTAMP DEFAULT NOW()
+);
 ```
 
 ---
@@ -118,7 +137,8 @@ CREATE TABLE products (
 CREATE TABLE product_images (
   id              UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   product_id      UUID REFERENCES products(id) ON DELETE CASCADE,
-  url             VARCHAR(500) NOT NULL,
+  url             VARCHAR(500) NOT NULL,              -- fallback/legacy
+  media_id        UUID REFERENCES media(id) ON DELETE SET NULL,
   alt             VARCHAR(255),
   sort_order      INTEGER DEFAULT 0,
   is_primary      BOOLEAN DEFAULT FALSE,
@@ -136,7 +156,8 @@ CREATE TABLE product_variants (
   created_at      TIMESTAMP DEFAULT NOW(),
   updated_at      TIMESTAMP DEFAULT NOW(),
 
-  CONSTRAINT chk_variant_qty CHECK (quantity >= 0)
+  CONSTRAINT chk_variant_qty CHECK (quantity >= 0),
+  deleted_at      TIMESTAMP                           -- soft delete (paranoid)
 );
 
 CREATE TABLE tags (
@@ -170,7 +191,9 @@ CREATE TABLE carts (
   session_id      VARCHAR(255),
   status          VARCHAR(20) DEFAULT 'active',       -- 'active' | 'merged' | 'converted' | 'expired'
   created_at      TIMESTAMP DEFAULT NOW(),
-  updated_at      TIMESTAMP DEFAULT NOW()
+  updated_at      TIMESTAMP DEFAULT NOW(),
+
+  CONSTRAINT chk_cart_owner CHECK (user_id IS NOT NULL OR session_id IS NOT NULL)
 );
 
 CREATE TABLE cart_items (
@@ -210,7 +233,8 @@ CREATE TABLE coupons (
   updated_at        TIMESTAMP DEFAULT NOW(),
 
   CONSTRAINT chk_coupon_value CHECK (value > 0),
-  CONSTRAINT chk_coupon_dates CHECK (end_date > start_date)
+  CONSTRAINT chk_coupon_dates CHECK (end_date > start_date),
+  CONSTRAINT chk_coupon_percentage_limit CHECK (type != 'percentage' OR value <= 100)
 );
 
 CREATE TABLE coupon_usages (
@@ -343,6 +367,7 @@ CREATE TABLE reviews (
   body                 TEXT,                                -- sanitized plain text
   is_verified_purchase BOOLEAN DEFAULT FALSE,
   status               VARCHAR(20) DEFAULT 'pending',
+  order_id             UUID REFERENCES orders(id) ON DELETE SET NULL,
   created_at           TIMESTAMP DEFAULT NOW(),
   updated_at           TIMESTAMP DEFAULT NOW(),
 
@@ -373,6 +398,8 @@ CREATE TABLE notification_logs (
   recipient_email   VARCHAR(255) NOT NULL,
   subject           VARCHAR(500),
   status            VARCHAR(20) DEFAULT 'sent',           -- 'sent' | 'failed' | 'bounced'
+  user_id           UUID REFERENCES users(id) ON DELETE SET NULL,
+  order_id          UUID REFERENCES orders(id) ON DELETE SET NULL,
   error             TEXT,
   created_at        TIMESTAMP DEFAULT NOW()
 );
@@ -391,7 +418,7 @@ CREATE TABLE audit_logs (
   user_id         UUID REFERENCES users(id),
   action          VARCHAR(50) NOT NULL,
   entity          VARCHAR(100) NOT NULL,
-  entity_id       UUID,
+  entity_id       VARCHAR(255),
   changes         JSONB,
   ip_address      VARCHAR(50),
   user_agent      TEXT,
@@ -401,6 +428,25 @@ CREATE TABLE audit_logs (
 CREATE INDEX idx_audit_logs_entity ON audit_logs(entity, entity_id);
 CREATE INDEX idx_audit_logs_user ON audit_logs(user_id);
 CREATE INDEX idx_audit_logs_created ON audit_logs(created_at DESC);
+
+---
+
+## Media
+
+```sql
+CREATE TABLE media (
+  id              UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  url             VARCHAR(500) NOT NULL,
+  filename        VARCHAR(255) NOT NULL,
+  mime_type       VARCHAR(100) NOT NULL,
+  size            INTEGER NOT NULL,
+  provider        VARCHAR(50) DEFAULT 'local',        -- 'local' | 's3' | 'cloudinary'
+  created_at      TIMESTAMP DEFAULT NOW(),
+  updated_at      TIMESTAMP DEFAULT NOW()
+);
+
+CREATE INDEX idx_media_filename ON media(filename);
+```
 ```
 
 ---
@@ -412,6 +458,7 @@ CREATE INDEX idx_audit_logs_created ON audit_logs(created_at DESC);
 CREATE INDEX idx_products_slug ON products(slug);
 CREATE INDEX idx_products_status ON products(status);
 CREATE INDEX idx_products_featured ON products(is_featured) WHERE is_featured = TRUE;
+CREATE INDEX idx_products_deleted_at ON products(deleted_at) WHERE deleted_at IS NOT NULL;
 CREATE INDEX idx_categories_slug ON categories(slug);
 CREATE INDEX idx_categories_parent ON categories(parent_id);
 
@@ -420,6 +467,7 @@ CREATE INDEX idx_orders_user ON orders(user_id);
 CREATE INDEX idx_orders_status ON orders(status);
 CREATE INDEX idx_orders_number ON orders(order_number);
 CREATE INDEX idx_orders_created ON orders(created_at DESC);
+CREATE INDEX idx_coupon_usage_order_id ON coupon_usages(order_id);
 
 -- Cart
 CREATE INDEX idx_cart_items_cart ON cart_items(cart_id);

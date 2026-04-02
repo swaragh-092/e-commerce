@@ -1,0 +1,78 @@
+import React, { createContext, useState, useEffect } from 'react';
+import { ThemeProvider, createTheme, CssBaseline } from '@mui/material';
+import settingsService from '../services/settingsService';
+
+export const SettingsContext = createContext(null);
+
+export const SettingsProvider = ({ children }) => {
+  const [settings, setSettings] = useState(null);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    const fetchSettings = async () => {
+      try {
+        const data = await settingsService.getAllSettings();
+        setSettings(data);
+        
+        // Update document title if store name changes
+        if (data?.general?.storeName) {
+            document.title = data.general.storeName;
+        }
+      } catch (error) {
+        console.error("Failed to load settings", error);
+        // Fallback settings mapping so app doesn't crash
+        setSettings({
+            theme: { primaryColor: '#1976d2', mode: 'light' },
+            general: { storeName: 'E-Commerce Store' },
+            features: { wishlistEnabled: false, reviewsEnabled: false }
+        });
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    fetchSettings();
+  }, []);
+
+  const themeConfig = createTheme({
+    palette: {
+      mode: settings?.theme?.mode || 'light',
+      primary: {
+        main: settings?.theme?.primaryColor || '#1976d2',
+      },
+    },
+    typography: {
+      fontFamily: '"Inter", "Roboto", "Helvetica", "Arial", sans-serif',
+      h1: { fontSize: '2.5rem', fontWeight: 700 },
+      h2: { fontSize: '2rem', fontWeight: 600 },
+      button: { textTransform: 'none' }
+    },
+    components: {
+      MuiButton: {
+        styleOverrides: {
+          root: { borderRadius: 8 },
+        },
+      },
+      MuiCard: {
+          styleOverrides: {
+              root: { borderRadius: 12, boxShadow: '0 4px 12px 0 rgba(0,0,0,0.05)' }
+          }
+      }
+    },
+  });
+
+  const value = {
+    settings,
+    loading
+  };
+
+  // We wrap the ThemeProvider here so the entire app gets the DB-driven theme immediately.
+  return (
+    <SettingsContext.Provider value={value}>
+      <ThemeProvider theme={themeConfig}>
+        <CssBaseline />
+        {!loading && children}
+      </ThemeProvider>
+    </SettingsContext.Provider>
+  );
+};

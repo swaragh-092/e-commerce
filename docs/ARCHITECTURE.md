@@ -64,6 +64,7 @@ This platform is designed as a **single, production-ready codebase** that is clo
 | Cron             | node-cron                                       | —        | Background jobs (cart cleanup, reservation timeout) |
 | Security         | helmet, cors, express-rate-limit, sanitize-html | —        | HTTP hardening                                      |
 | Containerization | Docker + Docker Compose                         | —        | Deployment                                          |
+| **Associations** | **Automatic Wiring**                            | —        | See [ASSOCIATIONS.md](../server/src/modules/ASSOCIATIONS.md) |
 
 ---
 
@@ -510,6 +511,10 @@ config/default.json (file-based defaults)
 | `lastLoginAt`   | TIMESTAMP       | —                                  |
 | `deletedAt`     | TIMESTAMP       | Soft delete (paranoid)             |
 
+**Related Token Tables**:
+- `PasswordResetToken` — `userId`, `token`, `expiresAt`
+- `EmailVerificationToken` — `userId`, `token`, `expiresAt`
+
 **API Endpoints**:
 | Method | Endpoint                    | Access | Description              |
 | ------ | --------------------------- | ------ | ------------------------ |
@@ -930,7 +935,7 @@ Built with **MUI DataGrid** for tables and **Recharts** for charts.
 | `userId`    | UUID (FK) | Admin who performed action                       |
 | `action`    | STRING    | `CREATE`, `UPDATE`, `DELETE`, `STATUS_CHANGE`    |
 | `entity`    | STRING    | `Product`, `Order`, `User`, `Settings`, `Coupon` |
-| `entityId`  | UUID      | ID of affected record                            |
+| `entityId`  | STRING    | ID of affected record (supports UUID & numeric)  |
 | `changes`   | JSONB     | `{ field: { old: "...", new: "..." } }`          |
 | `ipAddress` | STRING    | Request IP                                       |
 | `userAgent` | STRING    | Browser/client info                              |
@@ -1007,6 +1012,8 @@ const auditLog = (entity) => (req, res, next) => {
 | `recipientEmail` | STRING    | Sent to                     |
 | `subject`        | STRING    | Rendered subject            |
 | `status`         | ENUM      | `sent`, `failed`, `bounced` |
+| `userId`         | UUID (FK) | Optional recipient reference |
+| `orderId`        | UUID (FK) | Optional order reference     |
 | `error`          | TEXT      | Error message if failed     |
 | `createdAt`      | TIMESTAMP | When sent                   |
 
