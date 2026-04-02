@@ -1,11 +1,14 @@
-import { Box, AppBar, Toolbar, Typography, Button, Container } from '@mui/material';
+import { Box, AppBar, Toolbar, Typography, Button, IconButton, Badge } from '@mui/material';
+import ShoppingCartIcon from '@mui/icons-material/ShoppingCart';
 import { Outlet, Link as RouterLink } from 'react-router-dom';
 import { useAuth } from '../hooks/useAuth';
 import { useSettings } from '../hooks/useSettings';
+import { useCart } from '../hooks/useCart';
 
 const StoreLayout = () => {
   const { isAuthenticated, user, logout } = useAuth();
   const { settings } = useSettings();
+  const { cartCount } = useCart();
 
   return (
     <Box sx={{ display: 'flex', flexDirection: 'column', minHeight: '100vh' }}>
@@ -14,7 +17,12 @@ const StoreLayout = () => {
           <Typography variant="h6" component={RouterLink} to="/" sx={{ flexGrow: 1, textDecoration: 'none', color: 'inherit', fontWeight: 700 }}>
             {settings?.general?.storeName || 'E-Commerce Store'}
           </Typography>
-          <Box>
+          <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
+            <IconButton color="inherit" component={RouterLink} to="/cart">
+              <Badge badgeContent={cartCount || 0} color="error">
+                <ShoppingCartIcon />
+              </Badge>
+            </IconButton>
             {isAuthenticated ? (
               <>
                 {(user?.role === 'admin' || user?.role === 'super_admin') && (
@@ -34,18 +42,16 @@ const StoreLayout = () => {
         </Toolbar>
       </AppBar>
 
-      <Box component="main" sx={{ flexGrow: 1, py: 4 }}>
-        <Container maxWidth="lg">
-          <Outlet />
-        </Container>
+      <Box component="main" sx={{ flexGrow: 1 }}>
+        <Outlet />
       </Box>
 
       <Box component="footer" sx={{ py: 3, bgcolor: 'background.paper', borderTop: '1px solid', borderColor: 'divider' }}>
-        <Container maxWidth="lg">
+        <Box sx={{ maxWidth: 'lg', mx: 'auto', px: 3 }}>
           <Typography variant="body2" color="text.secondary" align="center">
             © {new Date().getFullYear()} {settings?.general?.storeName || 'E-Commerce Store'}. All rights reserved.
           </Typography>
-        </Container>
+        </Box>
       </Box>
     </Box>
   );

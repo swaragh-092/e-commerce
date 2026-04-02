@@ -18,6 +18,13 @@ const AccountPage = lazy(() => import('../pages/storefront/AccountPage'));
 const WishlistPage = lazy(() => import('../pages/storefront/WishlistPage'));
 const ProductDetailPage = lazy(() => import('../pages/storefront/ProductDetailPage'));
 const ProductListPage = lazy(() => import('../pages/storefront/ProductListPage'));
+const CartPage = lazy(() => import('../pages/storefront/CartPage'));
+const CheckoutPage = lazy(() => import('../pages/storefront/CheckoutPage'));
+const PaymentPage = lazy(() => import('../pages/storefront/PaymentPage'));
+const PaymentSuccessPage = lazy(() => import('../pages/storefront/PaymentSuccessPage'));
+const PaymentFailurePage = lazy(() => import('../pages/storefront/PaymentFailurePage'));
+const HomePage = lazy(() => import('../pages/storefront/HomePage'));
+const NotFoundPage = lazy(() => import('../pages/storefront/NotFoundPage'));
 
 // Admin pages
 const DashboardPage = lazy(() => import('../pages/admin/DashboardPage'));
@@ -40,7 +47,7 @@ const LoadingFallback = () => (
 );
 
 
-const Home = () => <div>Home Page Placeholder</div>;
+const Home = () => <HomePage />;
 
 const AppRoutes = () => (
   <Suspense fallback={<LoadingFallback />}>
@@ -49,8 +56,10 @@ const AppRoutes = () => (
       <Route path="/" element={<StoreLayout />}>
         <Route index element={<Home />} />
         <Route path="products" element={<ProductListPage />} />
+        <Route path="products/:slug" element={<ProductDetailPage />} />
         <Route path="product/:slug" element={<ProductDetailPage />} />
         <Route path="category/:categorySlug" element={<ProductListPage />} />
+        <Route path="cart" element={<CartPage />} />
 
         {/* Auth */}
         <Route path="login" element={<LoginPage />} />
@@ -64,7 +73,14 @@ const AppRoutes = () => (
           <Route path="account" element={<AccountPage />} />
           <Route path="profile" element={<AccountPage />} />
           <Route path="wishlist" element={<WishlistPage />} />
+          <Route path="checkout" element={<CheckoutPage />} />
+          <Route path="payment/:orderId" element={<PaymentPage />} />
+          <Route path="payment/success" element={<PaymentSuccessPage />} />
+          <Route path="payment/failure" element={<PaymentFailurePage />} />
         </Route>
+
+        {/* 404 catch-all */}
+        <Route path="*" element={<NotFoundPage />} />
       </Route>
 
       {/* Admin Routes — role-gated */}
