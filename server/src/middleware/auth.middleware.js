@@ -2,7 +2,7 @@
 
 const jwt = require('jsonwebtoken');
 const AppError = require('../utils/AppError');
-const { User } = require('../models'); 
+const { User } = require('../modules');
 
 /**
  * Middleware to authenticate user via JWT

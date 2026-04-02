@@ -3,6 +3,7 @@ const { sequelize, Coupon, CouponUsage, Category, Product } = require('../index'
 const AppError = require('../../utils/AppError');
 const AuditService = require('../audit/audit.service');
 const { getPagination } = require('../../utils/pagination');
+const { ACTIONS, ENTITIES } = require('../../config/constants');
 
 const list = async ({ page, limit }) => {
   const { limit: lmt, offset } = getPagination(page, limit);
@@ -29,8 +30,8 @@ const create = async (payload, actingUserId) => {
     try {
         if (AuditService && AuditService.log) {
             await AuditService.log({
-                userId: actingUserId, action: 'CREATE',
-                entity: 'Coupon', entityId: item.id,
+                userId: actingUserId, action: ACTIONS.CREATE,
+                entity: ENTITIES.COUPON, entityId: item.id,
             }, t);
         }
     } catch(err) {}
@@ -55,8 +56,8 @@ const update = async (id, payload, actingUserId) => {
     try {
         if (AuditService && AuditService.log) {
             await AuditService.log({
-            userId: actingUserId, action: 'UPDATE',
-            entity: 'Coupon', entityId: id,
+            userId: actingUserId, action: ACTIONS.UPDATE,
+            entity: ENTITIES.COUPON, entityId: id,
             changes: { before, after: item.toJSON() },
             }, t);
         }
@@ -75,8 +76,8 @@ const remove = async (id, actingUserId) => {
     try {
         if (AuditService && AuditService.log) {
             await AuditService.log({
-            userId: actingUserId, action: 'DELETE',
-            entity: 'Coupon', entityId: id,
+            userId: actingUserId, action: ACTIONS.DELETE,
+            entity: ENTITIES.COUPON, entityId: id,
             }, t);
         }
     } catch(err) {}

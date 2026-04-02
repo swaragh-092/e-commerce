@@ -1,9 +1,12 @@
 'use strict';
+const { Op } = require('sequelize');
 const { sequelize, Order, OrderItem, Cart, CartItem, Product, ProductVariant, Address, Coupon, CouponUsage, Setting } = require('../index');
 const AppError = require('../../utils/AppError');
 const AuditService = require('../audit/audit.service');
 const CouponService = require('../coupon/coupon.service');
+const PaymentService = require('../payment/payment.service');
 const { getPagination } = require('../../utils/pagination');
+const { ACTIONS, ENTITIES } = require('../../config/constants');
 
 // Utility to fetch settings
 const getSetting = async (key, defaultVal) => {
@@ -101,7 +104,7 @@ const placeOrder = async (userId, payload) => {
                 { 
                   where: { 
                     id: product.id, 
-                    [sequelize.Op.and]: sequelize.literal(`(quantity - reserved_qty) >= ${item.quantity}`)
+                    [Op.and]: sequelize.literal(`(quantity - reserved_qty) >= ${item.quantity}`)
                   }, 
                   transaction: t 
                 }
@@ -154,11 +157,21 @@ const placeOrder = async (userId, payload) => {
 
         await cart.update({ status: 'converted' }, { transaction: t });
 
-        return {
-             order,
-             clientSecret: `pi_mock_${orderNumber}_secret_test`
-        };
+        return order;
     });
+
+    // createIntent runs OUTSIDE the transaction so a Stripe failure
+    // doesn't roll back the order — the order exists, payment can be retried
+    let clientSecret = null;
+    try {
+        const intent = await PaymentService.createIntent(order.userId, order.id);
+        clientSecret = intent.clientSecret;
+    } catch (err) {
+        // Log but don't fail — the order is saved; frontend can retry payment
+        clientSecret = null;
+    }
+
+    return { order, clientSecret };
 };
 
 const getOrders = async (userId, isAdmin, page = 1, limit = 20) => {

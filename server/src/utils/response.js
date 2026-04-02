@@ -33,4 +33,28 @@ const error = (res, message = 'Error', statusCode = 400, code = 'BAD_REQUEST', d
     return res.status(statusCode).json(response);
 };
 
-module.exports = { success, error };
+/**
+ * Send a paginated list response.
+ * @param {object} res - Express response object
+ * @param {Array}  rows - Array of records
+ * @param {number} count - Total record count (before pagination)
+ * @param {number} page - Current page (1-indexed)
+ * @param {number} limit - Page size
+ * @param {string} message - Optional message
+ */
+const paginated = (res, rows, count, page, limit, message = 'Success') => {
+    const totalPages = Math.ceil(count / limit);
+    return res.status(200).json({
+        success: true,
+        data: rows,
+        message,
+        meta: {
+            total: count,
+            page: Number(page),
+            totalPages,
+            limit: Number(limit),
+        },
+    });
+};
+
+module.exports = { success, error, paginated };

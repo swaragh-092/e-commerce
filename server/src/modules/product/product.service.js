@@ -5,6 +5,9 @@ const { Op } = Sequelize;
 const { generateSlug } = require('../../utils/slugify');
 const { getPagination, getPagingData } = require('../../utils/pagination');
 const sanitizeHtml = require('sanitize-html');
+const AuditService = require('../audit/audit.service');
+const AppError = require('../../utils/AppError');
+const { ACTIONS, ENTITIES } = require('../../config/constants');
 
 const sanitizeRichText = (html) => {
     if (!html) return html;
@@ -120,7 +123,19 @@ exports.createProduct = async (data) => {
         }
 
         await transaction.commit();
-        return this.getProductBySlug(slug);
+
+        // Audit log — fire-and-forget, never crashes creation
+        try {
+            await AuditService.log({
+                userId: data.createdBy || null,
+                action: ACTIONS.CREATE,
+                entity: ENTITIES.PRODUCT,
+                entityId: product.id,
+                changes: { name: product.name, sku: product.sku }
+            });
+        } catch(e) {}
+
+        return exports.getProductBySlug(slug);
     } catch (error) {
         await transaction.rollback();
         throw error;
@@ -129,7 +144,7 @@ exports.createProduct = async (data) => {
 
 exports.updateProduct = async (id, data) => {
     const product = await Product.findByPk(id);
-    if (!product) throw new Error('Product not found');
+    if (!product) throw new AppError('NOT_FOUND', 404, 'Product not found');
     
     const transaction = await Product.sequelize.transaction();
     try {
@@ -167,16 +182,42 @@ exports.updateProduct = async (id, data) => {
         }
 
         await transaction.commit();
-        return this.getProductBySlug(product.slug || data.slug);
+
+        // Audit log
+        try {
+            await AuditService.log({
+                userId: data.updatedBy || null,
+                action: ACTIONS.UPDATE,
+                entity: ENTITIES.PRODUCT,
+                entityId: id,
+                changes: data
+            });
+        } catch(e) {}
+
+        return exports.getProductBySlug(product.slug || data.slug);
     } catch (error) {
         await transaction.rollback();
         throw error;
     }
 };
 
-exports.deleteProduct = async (id) => {
+exports.deleteProduct = async (id, actingUserId = null) => {
     const product = await Product.findByPk(id);
-    if (!product) throw new Error('Product not found');
+    if (!product) throw new AppError('NOT_FOUND', 404, 'Product not found');
+
+    const snapshot = { name: product.name, sku: product.sku };
     await product.destroy();
+
+    // Audit log
+    try {
+        await AuditService.log({
+            userId: actingUserId,
+            action: ACTIONS.DELETE,
+            entity: ENTITIES.PRODUCT,
+            entityId: id,
+            changes: snapshot
+        });
+    } catch(e) {}
+
     return true;
 };

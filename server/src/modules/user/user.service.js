@@ -4,6 +4,7 @@ const { sequelize, User, UserProfile, Order, Address, Media } = require('../inde
 const AppError = require('../../utils/AppError');
 const AuditService = require('../audit/audit.service');
 const { getPagination } = require('../../utils/pagination');
+const { ACTIONS, ENTITIES } = require('../../config/constants');
 
 const getMe = async (userId) => {
   const user = await User.findByPk(userId, {
@@ -50,8 +51,8 @@ const updateMe = async (userId, payload) => {
       if (AuditService && AuditService.log) {
         await AuditService.log({
           userId,
-          action: 'UPDATE',
-          entity: 'User',
+          action: ACTIONS.UPDATE,
+          entity: ENTITIES.USER,
           entityId: userId,
           changes: { before, after: updatedUser.toJSON() }
         }, t);
@@ -94,8 +95,8 @@ const updateAvatar = async (userId, mediaId) => {
       if (AuditService && AuditService.log) {
         await AuditService.log({
           userId,
-          action: 'UPDATE_AVATAR',
-          entity: 'User',
+          action: ACTIONS.UPDATE,
+          entity: ENTITIES.USER,
           entityId: userId,
           changes: { avatar: media.url }
         }, t);
@@ -124,8 +125,8 @@ const listAll = async ({ page, limit, status, role }) => {
 const getById = async (id) => {
   const user = await User.findByPk(id, {
     include: [
-      { model: UserProfile, as: 'profile' },
-      { model: Order, limit: 5, order: [['createdAt', 'DESC']] }
+      { model: UserProfile, as: 'profile' }
+      // Recent orders excluded — load separately via GET /api/orders?userId=:id
     ],
     attributes: { exclude: ['password'] }
   });
@@ -150,8 +151,8 @@ const updateStatus = async (id, status, actingUserId) => {
       if (AuditService && AuditService.log) {
         await AuditService.log({
           userId: actingUserId,
-          action: 'STATUS_CHANGE',
-          entity: 'User',
+          action: ACTIONS.STATUS_CHANGE,
+          entity: ENTITIES.USER,
           entityId: id,
           changes: { before: before.status, after: status }
         }, t);

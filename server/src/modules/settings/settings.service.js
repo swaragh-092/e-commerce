@@ -3,13 +3,15 @@
 const { sequelize, Setting } = require('../index');
 const AuditService = require('../audit/audit.service');
 const AppError = require('../../utils/AppError');
+const { ACTIONS, ENTITIES } = require('../../config/constants');
 
-// Read local settings file for defaults (for fallback)
+// Read local config/default.json for fallback defaults
+// Path: server/src/modules/settings/ → ../../../config/default.json = server/config/default.json
 let defaultSettings = {};
 try {
-  defaultSettings = require('../../../config/default.json');
+  defaultSettings = require('../../../../config/default.json');
 } catch (e) {
-  // Ignore if not present
+  // Ignore if not found — DB values are used instead
 }
 
 const getAll = async () => {
@@ -68,8 +70,8 @@ const updateKey = async (key, value, group, actingUserId) => {
         if (AuditService && AuditService.log) {
             await AuditService.log({
                 userId: actingUserId,
-                action: 'UPDATE',
-                entity: 'Setting',
+                action: ACTIONS.UPDATE,
+                entity: ENTITIES.SETTING,
                 entityId: key,
                 changes: { before, after: setting.toJSON() }
             }, t);

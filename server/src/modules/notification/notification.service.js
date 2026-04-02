@@ -2,7 +2,7 @@
 
 const nodemailer = require('nodemailer');
 const handlebars = require('handlebars');
-const { NotificationTemplate, NotificationLog } = require('../../models');
+const { NotificationTemplate, NotificationLog } = require('../index');
 const AppError = require('../../utils/AppError');
 const logger = require('../../utils/logger');
 
@@ -71,16 +71,13 @@ const send = async (templateName, recipientEmail, variables = {}, userId = null,
             }
         }
 
-        // Log notification using existing model
+        // Log notification — columns match notification_logs migration exactly
         await NotificationLog.create({
-            userId,
-            orderId,
-            type: 'email',
-            recipient: recipientEmail,
+            templateName,
+            recipientEmail,
             subject,
-            body: html, // Assuming storing HTML version in log
             status,
-            errorMessage
+            error: errorMessage || null,
         }, queryOptions);
 
         return status === 'sent';

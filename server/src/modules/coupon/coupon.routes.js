@@ -6,14 +6,7 @@ const { createCouponSchema, updateCouponSchema, validateCouponSchema } = require
 const { authenticate } = require('../../middleware/auth.middleware');
 const { authorize } = require('../../middleware/role.middleware');
 const { auditLog } = require('../audit/audit.middleware');
-const rateLimit = require('express-rate-limit');
-
-// 10 requests per minute
-const couponLimiter = rateLimit({
-  windowMs: 1 * 60 * 1000,
-  max: 10,
-  message: { success: false, error: { code: 'RATE_LIMIT', message: 'Too many attempts. Try again in 1 minute.' } }
-});
+const { couponLimiter } = require('../../middleware/rateLimiter.middleware');
 
 router.get('/', authenticate, authorize('admin', 'super_admin'), couponController.list);
 router.post('/', authenticate, authorize('admin', 'super_admin'), validate(createCouponSchema), auditLog('Coupon'), couponController.create);

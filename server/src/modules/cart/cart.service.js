@@ -35,7 +35,7 @@ const getCart = async (userId, sessionId) => {
                     { 
                         model: Product, 
                         as: 'product',
-                        where: { deletedAt: null }, 
+                        // paranoid: true on Product auto-adds WHERE deleted_at IS NULL
                         required: false 
                     },
                     {

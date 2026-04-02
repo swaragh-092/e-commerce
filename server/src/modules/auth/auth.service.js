@@ -6,6 +6,7 @@ const { sequelize, User, RefreshToken, PasswordResetToken, EmailVerificationToke
 const AppError = require('../../utils/AppError');
 const NotificationService = require('../notification/notification.service');
 const AuditService = require('../audit/audit.service');
+const { ACTIONS, ENTITIES } = require('../../config/constants');
 
 const generateTokens = (user) => {
   const payload = { id: user.id, role: user.role };
@@ -94,7 +95,8 @@ const login = async (email, password, ipAddress) => {
     createdByIp: ipAddress
   });
 
-  // Load user data without password for response
+  // Update lastLoginAt and load user data without password for response
+  await user.update({ lastLoginAt: new Date() });
   const userData = await User.findByPk(user.id);
   
   // Try audit log
@@ -102,8 +104,8 @@ const login = async (email, password, ipAddress) => {
       if (AuditService && AuditService.log) {
           await AuditService.log({
               userId: user.id,
-              action: 'LOGIN',
-              entity: 'User',
+              action: ACTIONS.LOGIN,
+              entity: ENTITIES.USER,
               entityId: user.id,
               ipAddress
           });
@@ -148,8 +150,8 @@ const logout = async (refreshTokenStr, userId) => {
       if (AuditService && AuditService.log) {
           await AuditService.log({
               userId: userId,
-              action: 'LOGOUT',
-              entity: 'User',
+              action: ACTIONS.LOGOUT,
+              entity: ENTITIES.USER,
               entityId: userId
           });
       }

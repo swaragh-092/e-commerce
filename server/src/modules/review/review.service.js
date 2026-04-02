@@ -5,6 +5,7 @@ const AppError = require('../../utils/AppError');
 const AuditService = require('../audit/audit.service');
 const { getPagination } = require('../../utils/pagination');
 const { sanitizePlainText } = require('../../middleware/sanitize.middleware');
+const { ACTIONS, ENTITIES } = require('../../config/constants');
 
 const create = async (userId, slug, payload) => {
   return sequelize.transaction(async (t) => {
@@ -93,8 +94,8 @@ const moderate = async (id, status, adminId) => {
       if (AuditService && AuditService.log) {
         await AuditService.log({
           userId: adminId,
-          action: 'MODERATE_REVIEW',
-          entity: 'Review',
+          action: ACTIONS.UPDATE,
+          entity: ENTITIES.REVIEW,
           entityId: review.id,
           changes: { before: before.status, after: status }
         }, t);
@@ -116,8 +117,8 @@ const remove = async (id, adminId) => {
       if (AuditService && AuditService.log) {
         await AuditService.log({
           userId: adminId,
-          action: 'DELETE_REVIEW',
-          entity: 'Review',
+          action: ACTIONS.DELETE,
+          entity: ENTITIES.REVIEW,
           entityId: review.id
         }, t);
       }

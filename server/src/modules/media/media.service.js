@@ -6,8 +6,8 @@ const { v4: uuidv4 } = require('uuid');
 const { Media } = require('../index');
 const { getPagination, getPagingData } = require('../../utils/pagination');
 
-// Navigate out from server/src/modules/media to server/uploads
-const UPLOADS_DIR = path.join(__dirname, '../../../../uploads');
+// Respect UPLOAD_DIR env var — works in both local dev and Docker
+const UPLOADS_DIR = path.resolve(process.env.UPLOAD_DIR || 'uploads');
 
 // Create directories if they don't exist
 const ensureDirs = async () => {

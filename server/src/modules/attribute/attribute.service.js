@@ -1,9 +1,8 @@
 'use strict';
 
-const db = require('../../models');
+const { AttributeTemplate, AttributeValue, CategoryAttribute, Category, Product, ProductVariant, sequelize } = require('../index');
 const { generateSlug } = require('../../utils/slugify');
-
-const { AttributeTemplate, AttributeValue, CategoryAttribute, Category, Product, ProductVariant, sequelize } = db;
+const AppError = require('../../utils/AppError');
 
 /**
  * Attribute Template CRUD
@@ -24,7 +23,7 @@ const getAttributeById = async (id) => {
     const attr = await AttributeTemplate.findByPk(id, {
         include: [{ model: AttributeValue, as: 'values', attributes: ['id', 'value', 'slug', 'sortOrder'] }],
     });
-    if (!attr) throw { statusCode: 404, message: 'Attribute not found' };
+    if (!attr) throw new AppError('NOT_FOUND', 404, 'Attribute not found');
     return attr;
 };
 
@@ -53,7 +52,7 @@ const addValue = async (attributeId, data) => {
 
 const removeValue = async (attributeId, valueId) => {
     const val = await AttributeValue.findOne({ where: { id: valueId, attributeId } });
-    if (!val) throw { statusCode: 404, message: 'Attribute value not found' };
+    if (!val) throw new AppError('NOT_FOUND', 404, 'Attribute value not found');
     await val.destroy();
 };
 
@@ -67,14 +66,14 @@ const linkAttributeToCategory = async (categoryId, attributeId) => {
     await getAttributeById(attributeId); // ensure attribute exists
 
     const existing = await CategoryAttribute.findOne({ where: { categoryId, attributeId } });
-    if (existing) throw { statusCode: 409, message: 'Attribute already linked to this category' };
+    if (existing) throw new AppError('CONFLICT', 409, 'Attribute already linked to this category');
 
     return CategoryAttribute.create({ categoryId, attributeId });
 };
 
 const unlinkAttributeFromCategory = async (categoryId, attributeId) => {
     const link = await CategoryAttribute.findOne({ where: { categoryId, attributeId } });
-    if (!link) throw { statusCode: 404, message: 'Attribute link not found' };
+    if (!link) throw new AppError('NOT_FOUND', 404, 'Attribute link not found');
     await link.destroy();
 };
 
@@ -85,7 +84,7 @@ const unlinkAttributeFromCategory = async (categoryId, attributeId) => {
  */
 const getCategoryAttributes = async (categoryId, inherit = false) => {
     const category = await Category.findByPk(categoryId);
-    if (!category) throw { statusCode: 404, message: 'Category not found' };
+    if (!category) throw new AppError('NOT_FOUND', 404, 'Category not found');
 
     let categoryIds = [categoryId];
 
@@ -128,7 +127,7 @@ const getCategoryAttributes = async (categoryId, inherit = false) => {
  */
 const bulkGenerateVariants = async (productId, attributes) => {
     const product = await Product.findByPk(productId);
-    if (!product) throw { statusCode: 404, message: 'Product not found' };
+    if (!product) throw new AppError('NOT_FOUND', 404, 'Product not found');
 
     const t = await sequelize.transaction();
     try {
@@ -169,13 +168,13 @@ const bulkGenerateVariants = async (productId, attributes) => {
  */
 const cloneVariants = async (targetProductId, sourceProductId) => {
     const sourceProduct = await Product.findByPk(sourceProductId);
-    if (!sourceProduct) throw { statusCode: 404, message: 'Source product not found' };
+    if (!sourceProduct) throw new AppError('NOT_FOUND', 404, 'Source product not found');
 
     const targetProduct = await Product.findByPk(targetProductId);
-    if (!targetProduct) throw { statusCode: 404, message: 'Target product not found' };
+    if (!targetProduct) throw new AppError('NOT_FOUND', 404, 'Target product not found');
 
     const sourceVariants = await ProductVariant.findAll({ where: { productId: sourceProductId } });
-    if (sourceVariants.length === 0) throw { statusCode: 400, message: 'Source product has no variants to clone' };
+    if (sourceVariants.length === 0) throw new AppError('VALIDATION_ERROR', 400, 'Source product has no variants to clone');
 
     const t = await sequelize.transaction();
     try {

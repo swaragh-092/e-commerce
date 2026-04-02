@@ -6,11 +6,11 @@ class SeoService {
   async generateSitemap() {
     const products = await Product.findAll({
       where: { status: 'published' },
-      attributes: ['slug', 'updated_at']
+      attributes: ['slug', 'updatedAt']
     });
 
     const categories = await Category.findAll({
-      attributes: ['slug', 'updated_at']
+      attributes: ['slug', 'updatedAt']
     });
 
     const clientUrl = process.env.CLIENT_URL || 'http://localhost:5173';
@@ -26,7 +26,7 @@ class SeoService {
     for (const category of categories) {
       xml += `  <url>\n`;
       xml += `    <loc>${clientUrl}/category/${category.slug}</loc>\n`;
-      xml += `    <lastmod>${category.updated_at ? category.updated_at.toISOString() : new Date().toISOString()}</lastmod>\n`;
+      xml += `    <lastmod>${category.updatedAt ? category.updatedAt.toISOString() : new Date().toISOString()}</lastmod>\n`;
       xml += `    <changefreq>weekly</changefreq>\n`;
       xml += `    <priority>0.7</priority>\n`;
       xml += `  </url>\n`;
@@ -36,7 +36,7 @@ class SeoService {
     for (const product of products) {
       xml += `  <url>\n`;
       xml += `    <loc>${clientUrl}/product/${product.slug}</loc>\n`;
-      xml += `    <lastmod>${product.updated_at ? product.updated_at.toISOString() : new Date().toISOString()}</lastmod>\n`;
+      xml += `    <lastmod>${product.updatedAt ? product.updatedAt.toISOString() : new Date().toISOString()}</lastmod>\n`;
       xml += `    <changefreq>weekly</changefreq>\n`;
       xml += `    <priority>0.6</priority>\n`;
       xml += `  </url>\n`;

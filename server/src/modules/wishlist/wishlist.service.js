@@ -14,7 +14,6 @@ const getWishlist = async (userId) => {
     where: { wishlistId: wishlist.id },
     include: [{
       model: Product,
-      where: { deletedAt: null }, // only show active products
       include: [{
         model: ProductImage,
         where: { isPrimary: true },

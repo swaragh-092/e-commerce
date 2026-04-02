@@ -85,6 +85,11 @@ module.exports = (sequelize, DataTypes) => {
         User.hasMany(models.Review, { foreignKey: 'userId', onDelete: 'CASCADE' });
         User.hasOne(models.Wishlist, { foreignKey: 'userId', onDelete: 'CASCADE' });
         User.hasOne(models.Cart, { foreignKey: 'userId', onDelete: 'CASCADE' });
+        // Auth flows
+        User.hasMany(models.PasswordResetToken, { foreignKey: 'userId', onDelete: 'CASCADE' });
+        User.hasMany(models.EmailVerificationToken, { foreignKey: 'userId', onDelete: 'CASCADE' });
+        // Coupons
+        User.hasMany(models.CouponUsage, { foreignKey: 'userId' });
     };
 
     return User;
