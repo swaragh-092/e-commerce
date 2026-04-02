@@ -22,7 +22,7 @@ module.exports = (sequelize, DataTypes) => {
             allowNull: false,
         },
         entityId: {
-            type: DataTypes.UUID,
+            type: DataTypes.STRING(255),
         },
         changes: {
             type: DataTypes.JSONB,

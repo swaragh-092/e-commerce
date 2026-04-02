@@ -39,6 +39,7 @@ module.exports = (sequelize, DataTypes) => {
         Category.belongsTo(models.Category, { foreignKey: 'parentId', as: 'parent', onDelete: 'SET NULL' });
         Category.hasMany(models.Category, { foreignKey: 'parentId', as: 'children' });
         Category.belongsToMany(models.Product, { through: models.ProductCategory, foreignKey: 'categoryId', otherKey: 'productId', as: 'products' });
+        Category.belongsToMany(models.AttributeTemplate, { through: models.CategoryAttribute, foreignKey: 'categoryId', otherKey: 'attributeId', as: 'attributes' });
     };
 
     return Category;

@@ -40,6 +40,9 @@ module.exports = (sequelize, DataTypes) => {
                 isIn: [['pending', 'approved', 'rejected']],
             },
         },
+        orderId: {
+            type: DataTypes.UUID,
+        },
     }, {
         tableName: 'reviews',
         timestamps: true,
@@ -56,6 +59,7 @@ module.exports = (sequelize, DataTypes) => {
     Review.associate = (models) => {
         Review.belongsTo(models.Product, { foreignKey: 'productId', onDelete: 'CASCADE' });
         Review.belongsTo(models.User, { foreignKey: 'userId', onDelete: 'CASCADE' });
+        Review.belongsTo(models.Order, { foreignKey: 'orderId', onDelete: 'SET NULL' });
     };
 
     return Review;

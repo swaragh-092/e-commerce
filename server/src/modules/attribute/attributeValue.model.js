@@ -1,45 +1,38 @@
 'use strict';
 
 module.exports = (sequelize, DataTypes) => {
-    const ProductVariant = sequelize.define('ProductVariant', {
+    const AttributeValue = sequelize.define('AttributeValue', {
         id: {
             type: DataTypes.UUID,
             defaultValue: DataTypes.UUIDV4,
             primaryKey: true,
         },
-        productId: {
+        attributeId: {
             type: DataTypes.UUID,
-            allowNull: false,
-        },
-        name: {
-            type: DataTypes.STRING(100),
             allowNull: false,
         },
         value: {
             type: DataTypes.STRING(100),
             allowNull: false,
         },
-        priceModifier: {
-            type: DataTypes.DECIMAL(10, 2),
-            defaultValue: 0,
+        slug: {
+            type: DataTypes.STRING(100),
+            allowNull: false,
         },
-        quantity: {
+        sortOrder: {
             type: DataTypes.INTEGER,
             defaultValue: 0,
         },
-        sku: {
-            type: DataTypes.STRING(100),
-        },
     }, {
-        tableName: 'product_variants',
+        tableName: 'attribute_values',
         timestamps: true,
         underscored: true,
-        paranoid: true,
+        updatedAt: false, // only created_at, no updated_at per schema
     });
 
-    ProductVariant.associate = (models) => {
-        ProductVariant.belongsTo(models.Product, { foreignKey: 'productId', onDelete: 'CASCADE' });
+    AttributeValue.associate = (models) => {
+        AttributeValue.belongsTo(models.AttributeTemplate, { foreignKey: 'attributeId', as: 'attribute', onDelete: 'CASCADE' });
     };
 
-    return ProductVariant;
+    return AttributeValue;
 };

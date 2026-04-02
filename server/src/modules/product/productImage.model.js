@@ -26,6 +26,9 @@ module.exports = (sequelize, DataTypes) => {
             type: DataTypes.BOOLEAN,
             defaultValue: false,
         },
+        mediaId: {
+            type: DataTypes.UUID,
+        },
     }, {
         tableName: 'product_images',
         timestamps: true,
@@ -35,6 +38,7 @@ module.exports = (sequelize, DataTypes) => {
 
     ProductImage.associate = (models) => {
         ProductImage.belongsTo(models.Product, { foreignKey: 'productId', onDelete: 'CASCADE' });
+        ProductImage.belongsTo(models.Media, { foreignKey: 'mediaId', onDelete: 'SET NULL' });
     };
 
     return ProductImage;

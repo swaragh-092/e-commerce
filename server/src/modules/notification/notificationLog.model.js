@@ -27,12 +27,23 @@ module.exports = (sequelize, DataTypes) => {
         error: {
             type: DataTypes.TEXT,
         },
+        userId: {
+            type: DataTypes.UUID,
+        },
+        orderId: {
+            type: DataTypes.UUID,
+        },
     }, {
         tableName: 'notification_logs',
         timestamps: true,
         updatedAt: false,
         underscored: true,
     });
+
+    NotificationLog.associate = (models) => {
+        NotificationLog.belongsTo(models.User, { foreignKey: 'userId', onDelete: 'SET NULL' });
+        NotificationLog.belongsTo(models.Order, { foreignKey: 'orderId', onDelete: 'SET NULL' });
+    };
 
     return NotificationLog;
 };
