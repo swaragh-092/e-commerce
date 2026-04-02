@@ -47,6 +47,10 @@ const notificationRoutes = require('./modules/notification/notification.routes')
 const categoryRoutes = require('./modules/category/category.routes');
 const productRoutes = require('./modules/product/product.routes');
 const mediaRoutes = require('./modules/media/media.routes');
+const cartRoutes = require('./modules/cart/cart.routes');
+const couponRoutes = require('./modules/coupon/coupon.routes');
+const orderRoutes = require('./modules/order/order.routes');
+const paymentRoutes = require('./modules/payment/payment.routes');
 
 app.use('/api/settings', settingsRoutes);
 app.use('/api/auth', authRoutes);
@@ -54,6 +58,10 @@ app.use('/api/users', userRoutes);
 app.use('/api/categories', categoryRoutes);
 app.use('/api/products', productRoutes);
 app.use('/api/media', mediaRoutes);
+app.use('/api/cart', cartRoutes);
+app.use('/api/coupons', couponRoutes);
+app.use('/api/orders', orderRoutes);
+app.use('/api/payments', paymentRoutes);
 // Do not expose notifications out in phase 1, but we can mount if needed:
 // app.use('/api/notifications', notificationRoutes);
 

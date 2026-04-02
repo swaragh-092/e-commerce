@@ -1,7 +1,7 @@
 'use strict';
 
 const { sequelize } = require('../../config/database');
-const { User, UserProfile, Order } = require('../../models');
+const { User, UserProfile, Order, Address } = require('../../models');
 const AppError = require('../../utils/AppError');
 const AuditService = require('../audit/audit.service');
 const { getPagination } = require('../../utils/pagination');
@@ -132,11 +132,85 @@ const updateStatus = async (id, status, actingUserId) => {
   });
 };
 
+const getAddresses = async (userId) => {
+  return Address.findAll({
+    where: { userId },
+    order: [['isDefault', 'DESC'], ['createdAt', 'DESC']]
+  });
+};
+
+const createAddress = async (userId, payload) => {
+  return sequelize.transaction(async (t) => {
+    if (payload.isDefault) {
+      await Address.update({ isDefault: false }, { where: { userId }, transaction: t });
+    } else {
+      const addressCount = await Address.count({ where: { userId }, transaction: t });
+      if (addressCount === 0) {
+        payload.isDefault = true;
+      }
+    }
+    
+    return Address.create({ ...payload, userId }, { transaction: t });
+  });
+};
+
+const updateAddress = async (userId, addressId, payload) => {
+  return sequelize.transaction(async (t) => {
+    const address = await Address.findOne({ where: { id: addressId, userId }, transaction: t });
+    if (!address) throw new AppError('NOT_FOUND', 404, 'Address not found');
+
+    if (payload.isDefault && !address.isDefault) {
+      await Address.update({ isDefault: false }, { where: { userId }, transaction: t });
+    }
+
+    await address.update(payload, { transaction: t });
+    return address;
+  });
+};
+
+const deleteAddress = async (userId, addressId) => {
+  return sequelize.transaction(async (t) => {
+    const address = await Address.findOne({ where: { id: addressId, userId }, transaction: t });
+    if (!address) throw new AppError('NOT_FOUND', 404, 'Address not found');
+
+    await address.destroy({ transaction: t });
+    
+    if (address.isDefault) {
+      const nextAddress = await Address.findOne({
+         where: { userId },
+         order: [['createdAt', 'DESC']],
+         transaction: t 
+      });
+      if (nextAddress) {
+        await nextAddress.update({ isDefault: true }, { transaction: t });
+      }
+    }
+  });
+};
+
+const setDefaultAddress = async (userId, addressId) => {
+  return sequelize.transaction(async (t) => {
+    const address = await Address.findOne({ where: { id: addressId, userId }, transaction: t });
+    if (!address) throw new AppError('NOT_FOUND', 404, 'Address not found');
+
+    if (!address.isDefault) {
+      await Address.update({ isDefault: false }, { where: { userId }, transaction: t });
+      await address.update({ isDefault: true }, { transaction: t });
+    }
+    return address;
+  });
+};
+
 module.exports = {
   getMe,
   updateMe,
   changePassword,
   listAll,
   getById,
-  updateStatus
+  updateStatus,
+  getAddresses,
+  createAddress,
+  updateAddress,
+  deleteAddress,
+  setDefaultAddress
 };

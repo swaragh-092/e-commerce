@@ -60,11 +60,51 @@ const updateStatus = async (req, res, next) => {
   }
 };
 
+const getAddresses = async (req, res, next) => {
+  try {
+    const addresses = await UserService.getAddresses(req.user.id);
+    return success(res, addresses);
+  } catch (err) { next(err); }
+};
+
+const createAddress = async (req, res, next) => {
+  try {
+    const address = await UserService.createAddress(req.user.id, req.validated);
+    return success(res, address, 'Address added successfully', 201);
+  } catch (err) { next(err); }
+};
+
+const updateAddress = async (req, res, next) => {
+  try {
+    const address = await UserService.updateAddress(req.user.id, req.params.id, req.validated);
+    return success(res, address, 'Address updated successfully');
+  } catch (err) { next(err); }
+};
+
+const deleteAddress = async (req, res, next) => {
+  try {
+    await UserService.deleteAddress(req.user.id, req.params.id);
+    return success(res, null, 'Address deleted successfully');
+  } catch (err) { next(err); }
+};
+
+const setDefaultAddress = async (req, res, next) => {
+  try {
+    const address = await UserService.setDefaultAddress(req.user.id, req.params.id);
+    return success(res, address, 'Default address updated successfully');
+  } catch (err) { next(err); }
+};
+
 module.exports = {
   getMe,
   updateMe,
   changePassword,
   list,
   getOne,
-  updateStatus
+  updateStatus,
+  getAddresses,
+  createAddress,
+  updateAddress,
+  deleteAddress,
+  setDefaultAddress
 };

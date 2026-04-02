@@ -44,4 +44,33 @@ const authenticate = async (req, res, next) => {
   }
 };
 
-module.exports = { authenticate };
+const optionalAuth = async (req, res, next) => {
+  try {
+    const authHeader = req.headers.authorization;
+    if (!authHeader || !authHeader.startsWith('Bearer ')) {
+      return next();
+    }
+
+    const token = authHeader.split(' ')[1];
+    
+    let decoded;
+    try {
+      decoded = jwt.verify(token, process.env.JWT_ACCESS_SECRET);
+    } catch (err) {
+      return next();
+    }
+
+    const user = await User.findByPk(decoded.id, {
+      attributes: ['id', 'email', 'role', 'status']
+    });
+
+    if (user && user.status === 'active') {
+      req.user = user.toJSON();
+    }
+    next();
+  } catch (error) {
+    next();
+  }
+};
+
+module.exports = { authenticate, optionalAuth };

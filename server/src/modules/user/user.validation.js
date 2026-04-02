@@ -22,8 +22,36 @@ const updateStatusSchema = Joi.object({
   status: Joi.string().valid('active', 'inactive', 'banned').required()
 });
 
+const createAddressSchema = Joi.object({
+  label: Joi.string().max(50).optional().allow(null, ''),
+  fullName: Joi.string().max(255).required(),
+  phone: Joi.string().max(20).optional().allow(null, ''),
+  addressLine1: Joi.string().max(255).required(),
+  addressLine2: Joi.string().max(255).optional().allow(null, ''),
+  city: Joi.string().max(100).required(),
+  state: Joi.string().max(100).optional().allow(null, ''),
+  postalCode: Joi.string().max(20).required(),
+  country: Joi.string().max(100).required(),
+  isDefault: Joi.boolean().default(false)
+});
+
+const updateAddressSchema = Joi.object({
+  label: Joi.string().max(50).optional().allow(null, ''),
+  fullName: Joi.string().max(255).optional(),
+  phone: Joi.string().max(20).optional().allow(null, ''),
+  addressLine1: Joi.string().max(255).optional(),
+  addressLine2: Joi.string().max(255).optional().allow(null, ''),
+  city: Joi.string().max(100).optional(),
+  state: Joi.string().max(100).optional().allow(null, ''),
+  postalCode: Joi.string().max(20).optional(),
+  country: Joi.string().max(100).optional(),
+  isDefault: Joi.boolean().optional()
+});
+
 module.exports = {
   updateProfileSchema,
   changePasswordSchema,
-  updateStatusSchema
+  updateStatusSchema,
+  createAddressSchema,
+  updateAddressSchema
 };
