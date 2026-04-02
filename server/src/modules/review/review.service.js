@@ -65,11 +65,15 @@ const create = async (userId, slug, payload) => {
 };
 
 const list = async (slug, { page, limit, status }) => {
-  const product = await Product.findOne({ where: { slug } });
-  if (!product) throw new AppError('NOT_FOUND', 404, 'Product not found');
+  let where = {};
+  
+  if (slug) {
+    const product = await Product.findOne({ where: { slug } });
+    if (!product) throw new AppError('NOT_FOUND', 404, 'Product not found');
+    where.productId = product.id;
+  }
 
   const { limit: lmt, offset } = getPagination(page, limit);
-  const where = { productId: product.id };
   
   if (status) where.status = status;
 

@@ -40,6 +40,11 @@ const placeOrder = async (userId, payload) => {
     }
     const shippingAddressSnapshot = address.toJSON();
 
+    const orderSettingsKeys = ['tax.rate', 'shipping.method', 'shipping.flatRate', 'shipping.freeThreshold'];
+    const settingsRows = await Setting.findAll({ where: { key: { [Op.in]: orderSettingsKeys } } });
+    const settingsMap = settingsRows.reduce((acc, s) => { acc[s.key] = s.value; return acc; }, {});
+    const getLocalSetting = (key, defaultVal) => settingsMap[key] !== undefined ? settingsMap[key] : defaultVal;
+
     return sequelize.transaction(async (t) => {
         let subtotal = 0;
 
@@ -77,21 +82,21 @@ const placeOrder = async (userId, payload) => {
             }
         }
 
-        const globalTaxRate = await getSetting('tax.rate', 0);
+        const globalTaxRate = getLocalSetting('tax.rate', 0);
         let totalTax = 0;
         for (const item of cart.items) {
              const taxRate = item.currentProduct.taxRate !== null ? Number(item.currentProduct.taxRate) : Number(globalTaxRate);
              totalTax += (item.currentPrice * item.quantity) * taxRate;
         }
 
-        const shippingMethod = await getSetting('shipping.method', 'flat_rate');
+        const shippingMethod = getLocalSetting('shipping.method', 'flat_rate');
         let shippingCost = 0;
         if (shippingMethod === 'flat_rate') {
-             shippingCost = Number(await getSetting('shipping.flatRate', 5));
+             shippingCost = Number(getLocalSetting('shipping.flatRate', 5));
         } else if (shippingMethod === 'free_above_threshold') {
-             const threshold = Number(await getSetting('shipping.freeThreshold', 50));
+             const threshold = Number(getLocalSetting('shipping.freeThreshold', 50));
              if (subtotal < threshold) {
-                 shippingCost = Number(await getSetting('shipping.flatRate', 5));
+                 shippingCost = Number(getLocalSetting('shipping.flatRate', 5));
              }
         }
 

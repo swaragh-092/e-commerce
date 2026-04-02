@@ -3,6 +3,9 @@
 const { Product, ProductImage, ProductVariant, Tag, Category, Sequelize } = require('../index');
 const { Op } = Sequelize;
 const { generateSlug } = require('../../utils/slugify');
+// Note: Although the ARCHITECTURE/STANDARDS refer to `generateUniqueSlug()`, 
+// the `slugify.js` utility internally implements the collision-safe loop 
+// and exports it as `generateSlug`. This handles duplicates automatically.
 const { getPagination, getPagingData } = require('../../utils/pagination');
 const sanitizeHtml = require('sanitize-html');
 const AuditService = require('../audit/audit.service');

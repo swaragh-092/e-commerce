@@ -66,8 +66,8 @@ const addItem = async (userId, sessionId, payload) => {
         const { productId, variantId, quantity = 1 } = payload;
 
         const product = await Product.findByPk(productId, { transaction: t });
-        if (!product || product.deletedAt !== null) {
-            throw new AppError('NOT_FOUND', 404, 'Product not found');
+        if (!product) {
+            throw new AppError('NOT_FOUND', 404, 'Product not found or unavailable');
         }
 
         const availableStock = product.quantity - product.reservedQty;

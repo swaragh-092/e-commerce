@@ -11,7 +11,14 @@ const updateSingleSettingSchema = Joi.object({
   value: Joi.any().required()
 });
 
-const bulkUpdateSchema = Joi.object().pattern(Joi.string(), Joi.any()); // Used in Phase 5 but good to have
+const bulkUpdateSchema = Joi.alternatives().try(
+  Joi.object().pattern(Joi.string(), Joi.any()),
+  Joi.array().items(Joi.object({
+    key: Joi.string().required(),
+    value: Joi.any().required(),
+    group: Joi.string().optional()
+  }))
+);
 
 module.exports = {
   updateSettingsGroupSchema,

@@ -4,12 +4,10 @@ const { sequelize, Payment, Order, WebhookEvent } = require('../index');
 const AppError = require('../../utils/AppError');
 
 // Stripe is dynamically initialized from environment
-const stripe = () => {
-    if (!process.env.STRIPE_SECRET_KEY) {
-        throw new AppError('INTERNAL_ERROR', 500, 'Stripe configuration missing');
-    }
-    return require('stripe')(process.env.STRIPE_SECRET_KEY);
-};
+if (!process.env.STRIPE_SECRET_KEY) {
+    throw new AppError('INTERNAL_ERROR', 500, 'Stripe configuration missing');
+}
+const stripe = require('stripe')(process.env.STRIPE_SECRET_KEY);
 
 const createIntent = async (userId, orderId) => {
     const order = await Order.findOne({ where: { id: orderId, userId } });
@@ -21,7 +19,7 @@ const createIntent = async (userId, orderId) => {
 
     const amountInCents = Math.round(Number(order.total) * 100);
 
-    const paymentIntent = await stripe().paymentIntents.create({
+    const paymentIntent = await stripe.paymentIntents.create({
         amount: amountInCents,
         currency: 'usd',
         metadata: {
@@ -45,7 +43,7 @@ const createIntent = async (userId, orderId) => {
 const handleWebhook = async (payload, signature, secret) => {
     let event;
     try {
-        event = stripe().webhooks.constructEvent(payload, signature, secret);
+        event = stripe.webhooks.constructEvent(payload, signature, secret);
     } catch (err) {
         throw new AppError('VALIDATION_ERROR', 400, `Webhook Error: ${err.message}`);
     }

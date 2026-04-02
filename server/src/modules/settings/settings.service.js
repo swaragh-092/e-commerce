@@ -5,13 +5,23 @@ const AuditService = require('../audit/audit.service');
 const AppError = require('../../utils/AppError');
 const { ACTIONS, ENTITIES } = require('../../config/constants');
 
+const fs = require('fs');
+const path = require('path');
+const logger = require('../../utils/logger');
+
 // Read local config/default.json for fallback defaults
 // Path: server/src/modules/settings/ → ../../../config/default.json = server/config/default.json
 let defaultSettings = {};
-try {
-  defaultSettings = require('../../../../config/default.json');
-} catch (e) {
-  // Ignore if not found — DB values are used instead
+const configPath = path.resolve(__dirname, '../../../../config/default.json');
+
+if (fs.existsSync(configPath)) {
+    try {
+        defaultSettings = require(configPath);
+    } catch (e) {
+        logger.error('Failed to parse default.json', e);
+    }
+} else {
+    logger.warn(`WARNING: Default settings file not found at ${configPath}. Using empty defaults.`);
 }
 
 const getAll = async () => {
@@ -84,11 +94,17 @@ const updateKey = async (key, value, group, actingUserId) => {
   });
 };
 
-const bulkUpdate = async (settingsObj, actingUserId) => {
+const bulkUpdate = async (settingsInput, actingUserId) => {
     const validGroups = ['theme', 'features', 'seo', 'general', 'shipping', 'tax'];
+    
+    // Normalize input to an array of { key, value }
+    const settingsArray = Array.isArray(settingsInput) 
+        ? settingsInput 
+        : Object.entries(settingsInput).map(([key, value]) => ({ key, value }));
+
     return sequelize.transaction(async (t) => {
         let updatedCount = 0;
-        for (const [key, value] of Object.entries(settingsObj)) {
+        for (const { key, value, group } of settingsArray) {
             // Find which group this key belongs to (based on defaults or existing)
             let setting = await Setting.findOne({ where: { key }, transaction: t });
             
@@ -97,11 +113,13 @@ const bulkUpdate = async (settingsObj, actingUserId) => {
                 updatedCount++;
             } else {
                 // If it's brand new, we try to guess the group from defaults
-                let guessedGroup = 'general';
-                for (const g of validGroups) {
-                    if (defaultSettings[g] && defaultSettings[g][key] !== undefined) {
-                        guessedGroup = g;
-                        break;
+                let guessedGroup = group || 'general';
+                if (!group) {
+                    for (const g of validGroups) {
+                        if (defaultSettings[g] && defaultSettings[g][key] !== undefined) {
+                            guessedGroup = g;
+                            break;
+                        }
                     }
                 }
                 await Setting.create({ key, value, group: guessedGroup, updatedBy: actingUserId }, { transaction: t });

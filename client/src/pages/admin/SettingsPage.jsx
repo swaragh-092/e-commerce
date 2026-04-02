@@ -31,7 +31,10 @@ const SettingsPage = () => {
   const handleSave = async () => {
     setSaving(true);
     try {
-      const payload = Object.entries(form).map(([key, value]) => ({ key, value }));
+      const payload = Object.entries(form).map(([flatKey, value]) => {
+        const [group, ...keyParts] = flatKey.split('.');
+        return { group, key: keyParts.join('.'), value };
+      });
       await updateSettings(payload);
       setAlert({ type: 'success', msg: 'Settings saved successfully.' });
     } catch (e) {

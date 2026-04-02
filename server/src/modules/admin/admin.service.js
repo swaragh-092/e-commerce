@@ -20,7 +20,7 @@ const getStats = async () => {
   ] = await Promise.all([
     // Total revenue from paid/processing/shipped/delivered orders
     Order.findOne({
-      attributes: [[fn('COALESCE', fn('SUM', col('total')), 0), 'totalRevenue']],
+      attributes: [[fn('COALESCE', fn('SUM', col('"Order".total')), 0), 'totalRevenue']],
       where: { status: { [Op.in]: ['paid', 'processing', 'shipped', 'delivered'] } },
       raw: true,
     }),
@@ -55,9 +55,9 @@ const getSalesChart = async (period = 'monthly') => {
 
   const rows = await Order.findAll({
     attributes: [
-      [fn('DATE_TRUNC', trunc, col('created_at')), 'date'],
-      [fn('COALESCE', fn('SUM', col('total')), 0), 'revenue'],
-      [fn('COUNT', col('id')), 'orderCount'],
+      [fn('DATE_TRUNC', trunc, col('"Order".created_at')), 'date'],
+      [fn('COALESCE', fn('SUM', col('"Order".total')), 0), 'revenue'],
+      [fn('COUNT', col('"Order".id')), 'orderCount'],
     ],
     where: {
       status: { [Op.in]: ['paid', 'processing', 'shipped', 'delivered'] },
@@ -72,8 +72,8 @@ const getSalesChart = async (period = 'monthly') => {
         ),
       },
     },
-    group: [fn('DATE_TRUNC', trunc, col('created_at'))],
-    order: [[fn('DATE_TRUNC', trunc, col('created_at')), 'ASC']],
+    group: [fn('DATE_TRUNC', trunc, col('"Order".created_at'))],
+    order: [[fn('DATE_TRUNC', trunc, col('"Order".created_at')), 'ASC']],
     raw: true,
   });
 

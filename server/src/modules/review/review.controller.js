@@ -17,9 +17,14 @@ const create = async (req, res, next) => {
 
 const list = async (req, res, next) => {
   try {
-    const { page, limit } = req.query;
-    // Public only sees approved
-    const result = await ReviewService.list(req.params.slug, { page, limit, status: 'approved' });
+    const { page, limit, status } = req.query;
+    const slug = req.params.slug;
+    
+    // If slug exists, it's a public product view (only show approved)
+    // If no slug, it's an admin view (use status from query)
+    const effectiveStatus = slug ? 'approved' : (status || 'approved');
+    
+    const result = await ReviewService.list(slug, { page, limit, status: effectiveStatus });
     return paginated(res, result.rows, { page, limit, total: result.count });
   } catch (err) {
     next(err);

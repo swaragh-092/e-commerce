@@ -13,6 +13,9 @@ const { createReviewSchema, moderateReviewSchema } = require('./review.validatio
 // Public read access for approved reviews
 router.get('/products/:slug/reviews', featureGate('reviews'), reviewController.list);
 
+// Admin read access for all reviews (global list)
+router.get('/reviews', authenticate, authorize('admin', 'super_admin'), reviewController.list);
+
 // Customer post reviews
 router.post('/products/:slug/reviews', authenticate, featureGate('reviews'), reviewLimiter, validate(createReviewSchema), reviewController.create);
 

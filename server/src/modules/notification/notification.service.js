@@ -6,6 +6,11 @@ const { NotificationTemplate, NotificationLog } = require('../index');
 const AppError = require('../../utils/AppError');
 const logger = require('../../utils/logger');
 
+// Startup check
+if (process.env.NODE_ENV === 'production' && (!process.env.SMTP_USER || !process.env.SMTP_PASS)) {
+    logger.warn('WARNING: SMTP_USER or SMTP_PASS is missing in production. Emails may silently fail.');
+}
+
 // Create reusable transporter object using SMTP transport
 const createTransporter = () => {
     return nodemailer.createTransport({
