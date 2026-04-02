@@ -1,30 +1,57 @@
+import React, { Suspense, lazy } from 'react';
 import { Routes, Route } from 'react-router-dom';
+import { Box, CircularProgress } from '@mui/material';
+
 
 // Layouts
 import StoreLayout from '../layouts/StoreLayout';
 import AdminLayout from '../layouts/AdminLayout';
 import { ProtectedRoute } from './ProtectedRoute';
 
-// Example Pages (To be created)
-import LoginPage from '../pages/storefront/LoginPage';
-import RegisterPage from '../pages/storefront/RegisterPage';
-import ForgotPasswordPage from '../pages/storefront/ForgotPasswordPage';
-import ResetPasswordPage from '../pages/storefront/ResetPasswordPage';
-import VerifyEmailPage from '../pages/storefront/VerifyEmailPage';
-import AccountPage from '../pages/storefront/AccountPage';
-import WishlistPage from '../pages/storefront/WishlistPage';
+// Storefront pages
+const LoginPage = lazy(() => import('../pages/storefront/LoginPage'));
+const RegisterPage = lazy(() => import('../pages/storefront/RegisterPage'));
+const ForgotPasswordPage = lazy(() => import('../pages/storefront/ForgotPasswordPage'));
+const ResetPasswordPage = lazy(() => import('../pages/storefront/ResetPasswordPage'));
+const VerifyEmailPage = lazy(() => import('../pages/storefront/VerifyEmailPage'));
+const AccountPage = lazy(() => import('../pages/storefront/AccountPage'));
+const WishlistPage = lazy(() => import('../pages/storefront/WishlistPage'));
+const ProductDetailPage = lazy(() => import('../pages/storefront/ProductDetailPage'));
+const ProductListPage = lazy(() => import('../pages/storefront/ProductListPage'));
 
-// Placeholder Pages
+// Admin pages
+const DashboardPage = lazy(() => import('../pages/admin/DashboardPage'));
+const ProductsManagePage = lazy(() => import('../pages/admin/ProductsManagePage'));
+const ProductEditPage = lazy(() => import('../pages/admin/ProductEditPage'));
+const CategoriesPage = lazy(() => import('../pages/admin/CategoriesPage'));
+const OrdersManagePage = lazy(() => import('../pages/admin/OrdersManagePage'));
+const OrderDetailPage = lazy(() => import('../pages/admin/OrderDetailPage'));
+const CustomersPage = lazy(() => import('../pages/admin/CustomersPage'));
+const CouponsPage = lazy(() => import('../pages/admin/CouponsPage'));
+const ReviewsPage = lazy(() => import('../pages/admin/ReviewsPage'));
+const MediaPage = lazy(() => import('../pages/admin/MediaPage'));
+const SettingsPage = lazy(() => import('../pages/admin/SettingsPage'));
+const AuditLogPage = lazy(() => import('../pages/admin/AuditLogPage'));
+
+const LoadingFallback = () => (
+  <Box sx={{ display: 'flex', justifyContent: 'center', alignItems: 'center', minHeight: '50vh' }}>
+    <CircularProgress />
+  </Box>
+);
+
+
 const Home = () => <div>Home Page Placeholder</div>;
-const Dashboard = () => <div>Admin Dashboard Placeholder</div>;
 
-const AppRoutes = () => {
-  return (
+const AppRoutes = () => (
+  <Suspense fallback={<LoadingFallback />}>
     <Routes>
       {/* Storefront Routes */}
       <Route path="/" element={<StoreLayout />}>
         <Route index element={<Home />} />
-        
+        <Route path="products" element={<ProductListPage />} />
+        <Route path="product/:slug" element={<ProductDetailPage />} />
+        <Route path="category/:categorySlug" element={<ProductListPage />} />
+
         {/* Auth */}
         <Route path="login" element={<LoginPage />} />
         <Route path="register" element={<RegisterPage />} />
@@ -32,24 +59,35 @@ const AppRoutes = () => {
         <Route path="reset-password" element={<ResetPasswordPage />} />
         <Route path="verify-email" element={<VerifyEmailPage />} />
 
-        {/* Protected Storefront Routes */}
+        {/* Protected Storefront */}
         <Route element={<ProtectedRoute />}>
-           <Route path="account" element={<AccountPage />} />
-           <Route path="profile" element={<AccountPage />} />
-           <Route path="wishlist" element={<WishlistPage />} />
+          <Route path="account" element={<AccountPage />} />
+          <Route path="profile" element={<AccountPage />} />
+          <Route path="wishlist" element={<WishlistPage />} />
         </Route>
       </Route>
 
-      {/* Admin Routes */}
+      {/* Admin Routes — role-gated */}
       <Route path="/admin" element={<ProtectedRoute role="admin" />}>
         <Route element={<AdminLayout />}>
-          <Route index element={<Dashboard />} />
-          <Route path="users" element={<div>Users Placeholder</div>} />
-          <Route path="settings" element={<div>Settings Placeholder</div>} />
+          <Route index element={<DashboardPage />} />
+          <Route path="products" element={<ProductsManagePage />} />
+          <Route path="products/new" element={<ProductEditPage />} />
+          <Route path="products/:id/edit" element={<ProductEditPage />} />
+          <Route path="categories" element={<CategoriesPage />} />
+          <Route path="orders" element={<OrdersManagePage />} />
+          <Route path="orders/:id" element={<OrderDetailPage />} />
+          <Route path="customers" element={<CustomersPage />} />
+          <Route path="coupons" element={<CouponsPage />} />
+          <Route path="reviews" element={<ReviewsPage />} />
+          <Route path="media" element={<MediaPage />} />
+          <Route path="settings" element={<SettingsPage />} />
+          <Route path="audit-log" element={<AuditLogPage />} />
         </Route>
       </Route>
     </Routes>
-  );
-};
+  </Suspense>
+);
+
 
 export default AppRoutes;

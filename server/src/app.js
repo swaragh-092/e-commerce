@@ -5,6 +5,8 @@ const cors = require('cors');
 const helmet = require('helmet');
 const morgan = require('morgan');
 const path = require('path');
+const compression = require('compression');
+const { v4: uuidv4 } = require('uuid');
 const { errorHandler } = require('./middleware/errorHandler.middleware');
 const { globalLimiter } = require('./middleware/rateLimiter.middleware');
 
@@ -12,8 +14,21 @@ const app = express();
 
 // Security Middleware
 app.use(helmet());
+app.use(compression());
+app.use((req, res, next) => {
+  req.id = uuidv4();
+  res.setHeader('X-Request-Id', req.id);
+  next();
+});
 app.use(cors({
-  origin: process.env.CLIENT_URL || 'http://localhost:5173',
+  origin: (origin, callback) => {
+    const allowedOrigins = (process.env.CLIENT_URL || 'http://localhost:5173,http://localhost:3000,http://localhost:3001').split(',');
+    if (!origin || allowedOrigins.includes(origin)) {
+      callback(null, true);
+    } else {
+      callback(new Error('Not allowed by CORS'));
+    }
+  },
   credentials: true
 }));
 
@@ -39,7 +54,11 @@ app.use('/api', globalLimiter);
 // Serve uploads statically
 app.use('/uploads', express.static(path.join(__dirname, '../../uploads')));
 
+// Serve public statically for robots.txt
+app.use(express.static(path.join(__dirname, '../../public')));
+
 // Routes
+const seoRoutes = require('./modules/seo/seo.routes');
 const settingsRoutes = require('./modules/settings/settings.routes');
 const authRoutes = require('./modules/auth/auth.routes');
 const userRoutes = require('./modules/user/user.routes');
@@ -53,7 +72,10 @@ const orderRoutes = require('./modules/order/order.routes');
 const paymentRoutes = require('./modules/payment/payment.routes');
 const wishlistRoutes = require('./modules/wishlist/wishlist.routes');
 const reviewRoutes = require('./modules/review/review.routes');
+const auditRoutes = require('./modules/audit/audit.routes');
+const adminRoutes = require('./modules/admin/admin.routes');
 
+app.use('/api', seoRoutes);
 app.use('/api/settings', settingsRoutes);
 app.use('/api/auth', authRoutes);
 app.use('/api/users', userRoutes);
@@ -66,12 +88,20 @@ app.use('/api/orders', orderRoutes);
 app.use('/api/payments', paymentRoutes);
 app.use('/api/wishlist', wishlistRoutes);
 app.use('/api', reviewRoutes);
+app.use('/api/audit-logs', auditRoutes);
+app.use('/api/admin', adminRoutes);
 // Do not expose notifications out in phase 1, but we can mount if needed:
 // app.use('/api/notifications', notificationRoutes);
 
 // Health check endpoint
-app.get('/health', (req, res) => {
-  res.status(200).json({ status: 'ok', uptime: process.uptime() });
+app.get('/health', async (req, res) => {
+  try {
+    const { sequelize } = require('./modules');
+    await sequelize.authenticate();
+    res.status(200).json({ status: 'ok', db: 'connected', uptime: process.uptime() });
+  } catch (err) {
+    res.status(500).json({ status: 'error', db: 'disconnected', uptime: process.uptime() });
+  }
 });
 
 // Handle 404

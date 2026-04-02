@@ -6,7 +6,7 @@ const categoryController = require('./category.controller');
 const { createCategorySchema, updateCategorySchema } = require('./category.validation');
 const { authenticate } = require('../../middleware/auth.middleware');
 const { authorize } = require('../../middleware/role.middleware');
-const validate = require('../../middleware/validate.middleware');
+const { validate } = require('../../middleware/validate.middleware');
 const { auditLog } = require('../audit/audit.middleware');
 
 router.get('/', categoryController.getTree);

@@ -1,0 +1,20 @@
+services:
+  db:
+    image: postgres:15-alpine
+    environment: { POSTGRES_DB: ecommerce, POSTGRES_USER: postgres, POSTGRES_PASSWORD: secret }
+    volumes: [pgdata:/var/lib/postgresql/data]
+    healthcheck: { test: [CMD, pg_isready], interval: 10s }
+
+  server:
+    build: ./server
+    env_file: ./server/.env
+    depends_on: { db: { condition: service_healthy } }
+    volumes: [./server/uploads:/app/uploads]
+    ports: [5000:5000]
+
+  client:
+    build: ./client
+    ports: [80:80]
+    depends_on: [server]
+
+volumes: { pgdata: }

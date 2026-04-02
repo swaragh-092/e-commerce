@@ -5,7 +5,7 @@ const productController = require('./product.controller');
 const { createProductSchema, updateProductSchema } = require('./product.validation');
 const { authenticate } = require('../../middleware/auth.middleware');
 const { authorize } = require('../../middleware/role.middleware');
-const validate = require('../../middleware/validate.middleware');
+const { validate } = require('../../middleware/validate.middleware');
 const { auditLog } = require('../audit/audit.middleware');
 
 router.get('/', productController.list);

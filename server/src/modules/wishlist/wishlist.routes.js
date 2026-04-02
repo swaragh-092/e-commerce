@@ -3,7 +3,7 @@
 const router = require('express').Router();
 const { authenticate } = require('../../middleware/auth.middleware');
 const { validate } = require('../../middleware/validate.middleware');
-const featureGate = require('../../middleware/featureGate.middleware');
+const { featureGate } = require('../../middleware/featureGate.middleware');
 const wishlistController = require('./wishlist.controller');
 const { addItemSchema } = require('./wishlist.validation');
 

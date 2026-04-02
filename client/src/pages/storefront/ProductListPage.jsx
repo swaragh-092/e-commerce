@@ -5,6 +5,7 @@ import { useSearchParams } from 'react-router-dom';
 import ProductGrid from '../../components/product/ProductGrid';
 import ProductFilters from '../../components/product/ProductFilters';
 import { getProducts } from '../../services/productService';
+import PageSEO from '../../components/common/PageSEO';
 
 const ProductListPage = () => {
     const [searchParams, setSearchParams] = useSearchParams();
@@ -53,6 +54,7 @@ const ProductListPage = () => {
 
     return (
         <Container maxWidth="xl" sx={{ py: 4 }}>
+            <PageSEO title="Products" description="Browse our products" />
             <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 3 }}>
                 <Typography variant="h4" fontWeight="bold">Our Products</Typography>
                 

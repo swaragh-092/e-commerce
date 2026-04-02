@@ -3,6 +3,7 @@ import { Box, Typography, Tabs, Tab, Paper, Container, TextField, Button, Alert 
 import { AuthContext } from '../../context/AuthContext';
 import { userService } from '../../services/userService';
 import AvatarUploader from '../../components/common/AvatarUploader';
+import PageSEO from '../../components/common/PageSEO';
 
 function TabPanel(props) {
   const { children, value, index, ...other } = props;
@@ -32,6 +33,7 @@ const AccountPage = () => {
 
     return (
         <Container maxWidth="md" sx={{ py: 4 }}>
+            <PageSEO title="My Account" type="noindex" />
             <Typography variant="h4" gutterBottom>My Account</Typography>
             <Paper sx={{ width: '100%' }}>
                 <Box sx={{ borderBottom: 1, borderColor: 'divider' }}>

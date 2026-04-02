@@ -4,7 +4,7 @@ const router = require('express').Router();
 const { authenticate } = require('../../middleware/auth.middleware');
 const { authorize } = require('../../middleware/role.middleware');
 const { validate } = require('../../middleware/validate.middleware');
-const featureGate = require('../../middleware/featureGate.middleware');
+const { featureGate } = require('../../middleware/featureGate.middleware');
 const { reviewLimiter } = require('../../middleware/rateLimiter.middleware');
 
 const reviewController = require('./review.controller');

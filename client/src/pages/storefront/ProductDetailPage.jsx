@@ -1,12 +1,5 @@
-import React, { useState, useEffect } from 'react';
-import { useParams } from 'react-router-dom';
-import { Box, Container, Grid, Typography, Button, Chip, CircularProgress, Divider } from '@mui/material';
-import { AddShoppingCart as CartIcon } from '@mui/icons-material';
-import ProductImages from '../../components/product/ProductImages';
-import VariantSelector from '../../components/product/VariantSelector';
-import WishlistButton from '../../components/common/WishlistButton';
-import ReviewSection from '../../components/product/ReviewSection';
 import { getProduct } from '../../services/productService';
+import PageSEO from '../../components/common/PageSEO';
 
 const ProductDetailPage = () => {
     const { slug } = useParams();
@@ -43,6 +36,12 @@ const ProductDetailPage = () => {
 
     return (
         <Container maxWidth="lg" sx={{ py: 6 }}>
+            <PageSEO 
+                title={product.name} 
+                description={product.shortDescription} 
+                image={product.images?.[0]?.url}
+                type="product"
+            />
             <Grid container spacing={6}>
                 <Grid item xs={12} md={6}>
                     <ProductImages images={product.images} />
