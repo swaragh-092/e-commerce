@@ -2,6 +2,10 @@
 
 const Joi = require('joi');
 
+const updateAvatarSchema = Joi.object({
+  mediaId: Joi.string().uuid().required()
+});
+
 const updateProfileSchema = Joi.object({
   firstName: Joi.string().max(50),
   lastName: Joi.string().max(50),
@@ -51,6 +55,7 @@ const updateAddressSchema = Joi.object({
 module.exports = {
   updateProfileSchema,
   changePasswordSchema,
+  updateAvatarSchema,
   updateStatusSchema,
   createAddressSchema,
   updateAddressSchema

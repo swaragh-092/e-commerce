@@ -15,13 +15,12 @@ module.exports = (sequelize, DataTypes) => {
     }, {
         tableName: 'wishlists',
         timestamps: true,
-        updatedAt: false,
         underscored: true,
     });
 
     Wishlist.associate = (models) => {
         Wishlist.belongsTo(models.User, { foreignKey: 'userId', onDelete: 'CASCADE' });
-        Wishlist.hasMany(models.WishlistItem, { foreignKey: 'wishlistId', as: 'items', onDelete: 'CASCADE' });
+        Wishlist.hasMany(models.WishlistItem, { foreignKey: 'wishlistId', onDelete: 'CASCADE' });
     };
 
     return Wishlist;

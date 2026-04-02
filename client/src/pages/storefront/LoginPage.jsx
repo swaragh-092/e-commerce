@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { Box, Typography, TextField, Button, Alert, useTheme } from '@mui/material';
 import { useNavigate, Link as RouterLink, useLocation } from 'react-router-dom';
-import { useAuth } from '../../../hooks/useAuth';
+import { useAuth } from '../../hooks/useAuth';
 
 const LoginPage = () => {
   const theme = useTheme();

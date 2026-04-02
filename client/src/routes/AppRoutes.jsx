@@ -11,6 +11,8 @@ import RegisterPage from '../pages/storefront/RegisterPage';
 import ForgotPasswordPage from '../pages/storefront/ForgotPasswordPage';
 import ResetPasswordPage from '../pages/storefront/ResetPasswordPage';
 import VerifyEmailPage from '../pages/storefront/VerifyEmailPage';
+import AccountPage from '../pages/storefront/AccountPage';
+import WishlistPage from '../pages/storefront/WishlistPage';
 
 // Placeholder Pages
 const Home = () => <div>Home Page Placeholder</div>;
@@ -32,7 +34,9 @@ const AppRoutes = () => {
 
         {/* Protected Storefront Routes */}
         <Route element={<ProtectedRoute />}>
-           <Route path="profile" element={<div>Profile Placeholder</div>} />
+           <Route path="account" element={<AccountPage />} />
+           <Route path="profile" element={<AccountPage />} />
+           <Route path="wishlist" element={<WishlistPage />} />
         </Route>
       </Route>
 

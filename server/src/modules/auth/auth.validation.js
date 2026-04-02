@@ -33,10 +33,16 @@ const resetPasswordSchema = Joi.object({
   newPassword: passwordPolicy,
 });
 
+const resendVerificationSchema = Joi.object({
+  email: Joi.string().email().required().lowercase()
+});
+
 module.exports = {
   registerSchema,
   loginSchema,
   refreshSchema,
   forgotPasswordSchema,
   resetPasswordSchema,
+  resendVerificationSchema
 };
+

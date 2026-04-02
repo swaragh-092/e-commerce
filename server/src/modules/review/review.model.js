@@ -15,6 +15,9 @@ module.exports = (sequelize, DataTypes) => {
             type: DataTypes.UUID,
             allowNull: false,
         },
+        orderId: {
+            type: DataTypes.UUID,
+        },
         rating: {
             type: DataTypes.INTEGER,
             allowNull: false,
@@ -40,9 +43,6 @@ module.exports = (sequelize, DataTypes) => {
                 isIn: [['pending', 'approved', 'rejected']],
             },
         },
-        orderId: {
-            type: DataTypes.UUID,
-        },
     }, {
         tableName: 'reviews',
         timestamps: true,
@@ -50,16 +50,17 @@ module.exports = (sequelize, DataTypes) => {
         indexes: [
             {
                 unique: true,
-                fields: ['user_id', 'product_id'],
-                name: 'uniq_user_product_review',
-            },
-        ],
+                fields: ['userId', 'productId'],
+            }
+        ]
     });
 
     Review.associate = (models) => {
-        Review.belongsTo(models.Product, { foreignKey: 'productId', onDelete: 'CASCADE' });
         Review.belongsTo(models.User, { foreignKey: 'userId', onDelete: 'CASCADE' });
-        Review.belongsTo(models.Order, { foreignKey: 'orderId', onDelete: 'SET NULL' });
+        Review.belongsTo(models.Product, { foreignKey: 'productId', onDelete: 'CASCADE' });
+        if (models.Order) {
+            Review.belongsTo(models.Order, { foreignKey: 'orderId', onDelete: 'SET NULL' });
+        }
     };
 
     return Review;

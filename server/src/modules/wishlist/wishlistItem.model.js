@@ -18,14 +18,13 @@ module.exports = (sequelize, DataTypes) => {
     }, {
         tableName: 'wishlist_items',
         timestamps: true,
-        updatedAt: false,
         underscored: true,
         indexes: [
             {
                 unique: true,
-                fields: ['wishlist_id', 'product_id'],
-            },
-        ],
+                fields: ['wishlistId', 'productId'],
+            }
+        ]
     });
 
     WishlistItem.associate = (models) => {

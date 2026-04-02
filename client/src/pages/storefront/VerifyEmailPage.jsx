@@ -1,7 +1,7 @@
 import { useEffect, useState, useRef } from 'react';
 import { Box, Typography, Button, Alert, CircularProgress } from '@mui/material';
 import { useSearchParams, Link as RouterLink } from 'react-router-dom';
-import authService from '../../../services/authService';
+import authService from '../../services/authService';
 
 const VerifyEmailPage = () => {
   const [searchParams] = useSearchParams();

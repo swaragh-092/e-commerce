@@ -21,6 +21,16 @@ const updateMe = async (req, res, next) => {
   }
 };
 
+const updateAvatar = async (req, res, next) => {
+  try {
+    const { mediaId } = req.body;
+    const user = await UserService.updateAvatar(req.user.id, mediaId);
+    return success(res, user, 'Avatar updated successfully');
+  } catch (err) {
+    next(err);
+  }
+};
+
 const changePassword = async (req, res, next) => {
   try {
     const { currentPassword, newPassword } = req.validated;
@@ -98,6 +108,7 @@ const setDefaultAddress = async (req, res, next) => {
 module.exports = {
   getMe,
   updateMe,
+  updateAvatar,
   changePassword,
   list,
   getOne,

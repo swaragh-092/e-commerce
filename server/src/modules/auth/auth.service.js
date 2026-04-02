@@ -202,6 +202,35 @@ const resetPassword = async (token, newPassword) => {
   });
 };
 
+const resendVerification = async (email) => {
+  return sequelize.transaction(async (t) => {
+    const user = await User.findOne({ where: { email }, transaction: t });
+    if (!user) return; // Silent return for security
+
+    if (user.emailVerified) {
+      throw new AppError('VALIDATION_ERROR', 400, 'Email is already verified');
+    }
+
+    await EmailVerificationToken.destroy({ where: { userId: user.id }, transaction: t });
+
+    const verifyToken = crypto.randomBytes(32).toString('hex');
+    await EmailVerificationToken.create({
+      userId: user.id,
+      token: verifyToken,
+      expiresAt: new Date(Date.now() + 24 * 60 * 60 * 1000) // 24 hours
+    }, { transaction: t });
+
+    try {
+        if (NotificationService && NotificationService.send) {
+            await NotificationService.send('verify_email', user.email, {
+                name: user.firstName,
+                verify_url: `${process.env.CLIENT_URL || 'http://localhost:5173'}/verify-email?token=${verifyToken}`
+            }, user.id, null, t);
+        }
+    } catch (e) {}
+  });
+};
+
 const verifyEmail = async (token) => {
   return sequelize.transaction(async (t) => {
     const verifyRecord = await EmailVerificationToken.findOne({ where: { token }, transaction: t });
@@ -225,5 +254,6 @@ module.exports = {
   logout,
   forgotPassword,
   resetPassword,
-  verifyEmail
+  verifyEmail,
+  resendVerification
 };

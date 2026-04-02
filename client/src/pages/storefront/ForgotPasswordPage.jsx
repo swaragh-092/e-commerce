@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { Box, Typography, TextField, Button, Alert } from '@mui/material';
 import { Link as RouterLink } from 'react-router-dom';
-import authService from '../../../services/authService';
+import authService from '../../services/authService';
 
 const ForgotPasswordPage = () => {
   const [email, setEmail] = useState('');

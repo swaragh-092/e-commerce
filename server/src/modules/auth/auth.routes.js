@@ -14,7 +14,8 @@ const {
   loginSchema, 
   refreshSchema, 
   forgotPasswordSchema, 
-  resetPasswordSchema 
+  resetPasswordSchema,
+  resendVerificationSchema
 } = require('./auth.validation');
 
 const authController = require('./auth.controller');
@@ -26,6 +27,8 @@ router.post('/logout', authenticate, authController.logout);
 
 router.post('/forgot-password', forgotPasswordLimiter, validate(forgotPasswordSchema), authController.forgotPassword);
 router.post('/reset-password', validate(resetPasswordSchema), authController.resetPassword);
+
+router.post('/resend-verification', forgotPasswordLimiter, validate(resendVerificationSchema), authController.resendVerification);
 
 // Uses query parameter instead of body: /verify-email?token=xxx
 router.get('/verify-email', authController.verifyEmail);

@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { Box, Typography, TextField, Button, Alert } from '@mui/material';
 import { useNavigate, useSearchParams, Link as RouterLink } from 'react-router-dom';
-import authService from '../../../services/authService';
+import authService from '../../services/authService';
 
 const ResetPasswordPage = () => {
   const [searchParams] = useSearchParams();

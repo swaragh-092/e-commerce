@@ -4,6 +4,8 @@ import { Box, Container, Grid, Typography, Button, Chip, CircularProgress, Divid
 import { AddShoppingCart as CartIcon } from '@mui/icons-material';
 import ProductImages from '../../components/product/ProductImages';
 import VariantSelector from '../../components/product/VariantSelector';
+import WishlistButton from '../../components/common/WishlistButton';
+import ReviewSection from '../../components/product/ReviewSection';
 import { getProduct } from '../../services/productService';
 
 const ProductDetailPage = () => {
@@ -51,9 +53,12 @@ const ProductDetailPage = () => {
                         {product.categories?.map(c => c.name).join(' > ')}
                     </Typography>
                     
-                    <Typography variant="h4" fontWeight="bold" gutterBottom>
-                        {product.name}
-                    </Typography>
+                    <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 1 }}>
+                        <Typography variant="h4" fontWeight="bold">
+                            {product.name}
+                        </Typography>
+                        <WishlistButton productId={product.id} />
+                    </Box>
                     
                     <Box sx={{ display: 'flex', alignItems: 'center', gap: 2, mb: 3 }}>
                         {hasSale ? (
@@ -102,6 +107,8 @@ const ProductDetailPage = () => {
                             {product.tags.map(t => <Chip key={t.id} label={t.name} size="small" variant="outlined" />)}
                         </Box>
                     )}
+
+                    <ReviewSection slug={product.slug} />
                 </Grid>
             </Grid>
         </Container>

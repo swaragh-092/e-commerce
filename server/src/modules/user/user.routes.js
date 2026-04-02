@@ -7,6 +7,7 @@ const { validate } = require('../../middleware/validate.middleware');
 const { 
   updateProfileSchema, 
   changePasswordSchema, 
+  updateAvatarSchema,
   updateStatusSchema,
   createAddressSchema,
   updateAddressSchema
@@ -17,6 +18,7 @@ const userController = require('./user.controller');
 // Profile Endpoints
 router.get('/me', authenticate, userController.getMe);
 router.put('/me', authenticate, validate(updateProfileSchema), userController.updateMe);
+router.post('/me/avatar', authenticate, validate(updateAvatarSchema), userController.updateAvatar);
 router.put('/me/password', authenticate, validate(changePasswordSchema), userController.changePassword);
 
 // Address Endpoints

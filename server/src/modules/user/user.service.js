@@ -1,7 +1,7 @@
 'use strict';
 
 const { sequelize } = require('../../config/database');
-const { User, UserProfile, Order, Address } = require('../../models');
+const { User, UserProfile, Order, Address, Media } = require('../../models');
 const AppError = require('../../utils/AppError');
 const AuditService = require('../audit/audit.service');
 const { getPagination } = require('../../utils/pagination');
@@ -73,6 +73,37 @@ const changePassword = async (userId, currentPassword, newPassword) => {
     }
 
     await user.update({ password: newPassword }, { transaction: t });
+  });
+};
+
+const updateAvatar = async (userId, mediaId) => {
+  return sequelize.transaction(async (t) => {
+    const media = await Media.findByPk(mediaId, { transaction: t });
+    if (!media) throw new AppError('NOT_FOUND', 404, 'Media not found');
+
+    let profile = await UserProfile.findOne({ where: { userId }, transaction: t });
+    if (!profile) {
+      profile = await UserProfile.create({ userId, avatar: media.url }, { transaction: t });
+    } else {
+      await profile.update({ avatar: media.url }, { transaction: t });
+    }
+
+    // fetch updated record
+    const updatedUser = await getMe(userId);
+
+    try {
+      if (AuditService && AuditService.log) {
+        await AuditService.log({
+          userId,
+          action: 'UPDATE_AVATAR',
+          entity: 'User',
+          entityId: userId,
+          changes: { avatar: media.url }
+        }, t);
+      }
+    } catch(err) {}
+
+    return updatedUser;
   });
 };
 
@@ -204,6 +235,7 @@ const setDefaultAddress = async (userId, addressId) => {
 module.exports = {
   getMe,
   updateMe,
+  updateAvatar,
   changePassword,
   listAll,
   getById,

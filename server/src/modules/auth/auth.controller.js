@@ -66,6 +66,15 @@ const resetPassword = async (req, res, next) => {
   }
 };
 
+const resendVerification = async (req, res, next) => {
+  try {
+    await AuthService.resendVerification(req.validated.email);
+    return success(res, null, 'If your account exists and is unverified, a verification link has been sent');
+  } catch (err) {
+    next(err);
+  }
+};
+
 const verifyEmail = async (req, res, next) => {
   try {
     // Read from query param: ?token=xxx
@@ -81,6 +90,7 @@ const verifyEmail = async (req, res, next) => {
 
 module.exports = {
   register,
+  resendVerification,
   login,
   refresh,
   logout,
