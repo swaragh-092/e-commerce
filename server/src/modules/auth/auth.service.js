@@ -2,8 +2,7 @@
 
 const jwt = require('jsonwebtoken');
 const crypto = require('crypto');
-const { sequelize } = require('../../config/database');
-const { User, RefreshToken, PasswordResetToken, EmailVerificationToken, UserProfile } = require('../../models');
+const { sequelize, User, RefreshToken, PasswordResetToken, EmailVerificationToken, UserProfile } = require('../index');
 const AppError = require('../../utils/AppError');
 const NotificationService = require('../notification/notification.service');
 const AuditService = require('../audit/audit.service');

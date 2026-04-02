@@ -1,7 +1,6 @@
 'use strict';
 
-const { sequelize } = require('../../config/database');
-const { Wishlist, WishlistItem, Product, ProductImage, Cart, CartItem } = require('../../models');
+const { sequelize, Wishlist, WishlistItem, Product, ProductImage, Cart, CartItem } = require('../index');
 const AppError = require('../../utils/AppError');
 
 const getWishlist = async (userId) => {

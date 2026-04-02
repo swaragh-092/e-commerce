@@ -1,6 +1,5 @@
 'use strict';
-const { sequelize } = require('../../config/database');
-const { Cart, CartItem, Product, ProductVariant } = require('../../models');
+const { sequelize, Cart, CartItem, Product, ProductVariant } = require('../index');
 const AppError = require('../../utils/AppError');
 
 const getActiveCartByOwner = async (userId, sessionId, transaction) => {

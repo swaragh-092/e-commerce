@@ -1,7 +1,6 @@
 'use strict';
 
-const { sequelize } = require('../../config/database');
-const { User, UserProfile, Order, Address, Media } = require('../../models');
+const { sequelize, User, UserProfile, Order, Address, Media } = require('../index');
 const AppError = require('../../utils/AppError');
 const AuditService = require('../audit/audit.service');
 const { getPagination } = require('../../utils/pagination');

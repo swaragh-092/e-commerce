@@ -1,7 +1,6 @@
 'use strict';
 const Stripe = require('stripe');
-const { sequelize } = require('../../config/database');
-const { Order, Payment, WebhookEvent } = require('../../models');
+const { sequelize, Payment, Order, WebhookEvent } = require('../index');
 const AppError = require('../../utils/AppError');
 
 // Stripe is dynamically initialized from environment

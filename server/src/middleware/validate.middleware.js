@@ -31,6 +31,7 @@ const validate = (schema) => {
         }
 
         req.body = value; // use sanitized/stripped value
+        req.validated = value; // for consistency with controllers
         next();
     };
 };
