@@ -128,6 +128,9 @@ const CouponsPage = () => {
             </Select>
           </FormControl>
           <TextField fullWidth size="small" label="Value" type="number" value={form.value} onChange={(e) => set('value', e.target.value)} />
+          {form.type === 'percentage' && (
+            <TextField fullWidth size="small" label="Max Discount Cap ($)" type="number" value={form.maxDiscount || ''} onChange={(e) => set('maxDiscount', e.target.value)} helperText="Leave blank for no cap" />
+          )}
           <TextField fullWidth size="small" label="Min Order Amount" type="number" value={form.minOrderAmount || ''} onChange={(e) => set('minOrderAmount', e.target.value)} />
           <TextField fullWidth size="small" label="Usage Limit (blank = unlimited)" type="number" value={form.usageLimit || ''} onChange={(e) => set('usageLimit', e.target.value)} />
           <TextField fullWidth size="small" label="Per-User Limit" type="number" value={form.perUserLimit} onChange={(e) => set('perUserLimit', e.target.value)} />

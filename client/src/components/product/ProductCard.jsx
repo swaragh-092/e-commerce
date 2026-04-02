@@ -5,6 +5,7 @@ import { Link } from 'react-router-dom';
 const ProductCard = ({ product }) => {
     const primaryImage = product.images?.find(i => i.isPrimary)?.url || product.images?.[0]?.url || '/placeholder.png';
     const hasSale = product.salePrice && parseFloat(product.salePrice) < parseFloat(product.price);
+    const hasRating = product.averageRating != null;
 
     return (
         <Card sx={{ height: '100%', display: 'flex', flexDirection: 'column', textDecoration: 'none' }} component={Link} to={`/products/${product.slug}`}>
@@ -26,20 +27,24 @@ const ProductCard = ({ product }) => {
                 <Typography variant="h6" component="div" noWrap sx={{ fontWeight: 600 }}>
                     {product.name}
                 </Typography>
-                <Box sx={{ display: 'flex', alignItems: 'center', mb: 1 }}>
-                    <Rating value={4.5} readOnly size="small" />
-                    <Typography variant="body2" sx={{ ml: 1 }}>(12)</Typography>
-                </Box>
+                {hasRating && (
+                    <Box sx={{ display: 'flex', alignItems: 'center', mb: 1 }}>
+                        <Rating value={parseFloat(product.averageRating)} readOnly size="small" precision={0.5} />
+                        {product.reviewCount != null && (
+                            <Typography variant="body2" sx={{ ml: 1 }}>({product.reviewCount})</Typography>
+                        )}
+                    </Box>
+                )}
                 <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
                     {hasSale ? (
                         <>
-                            <Typography variant="h6" color="primary">${product.salePrice}</Typography>
+                            <Typography variant="h6" color="primary">${parseFloat(product.salePrice).toFixed(2)}</Typography>
                             <Typography variant="body1" color="text.secondary" sx={{ textDecoration: 'line-through' }}>
-                                ${product.price}
+                                ${parseFloat(product.price).toFixed(2)}
                             </Typography>
                         </>
                     ) : (
-                        <Typography variant="h6">${product.price}</Typography>
+                        <Typography variant="h6">${parseFloat(product.price).toFixed(2)}</Typography>
                     )}
                 </Box>
             </CardContent>

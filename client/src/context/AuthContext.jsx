@@ -1,7 +1,16 @@
 import React, { createContext, useState, useEffect } from 'react';
+import { Box, CircularProgress } from '@mui/material';
 import authService from '../services/authService';
+import { userService } from '../services/userService';
+import cartService, { clearSessionId } from '../services/cartService';
 
 export const AuthContext = createContext(null);
+
+const FullPageLoader = () => (
+  <Box sx={{ display: 'flex', justifyContent: 'center', alignItems: 'center', minHeight: '100vh' }}>
+    <CircularProgress />
+  </Box>
+);
 
 export const AuthProvider = ({ children }) => {
   const [user, setUser] = useState(null);
@@ -13,11 +22,11 @@ export const AuthProvider = ({ children }) => {
       const token = localStorage.getItem('accessToken');
       if (token) {
         try {
-          const userData = await authService.getMe();
+          const userData = await userService.getMe();
           setUser(userData);
           setIsAuthenticated(true);
         } catch (error) {
-          console.error("Failed to restore session", error);
+          console.error('Failed to restore session', error);
           localStorage.removeItem('accessToken');
           localStorage.removeItem('refreshToken');
         }
@@ -27,7 +36,6 @@ export const AuthProvider = ({ children }) => {
 
     initAuth();
 
-    // Listen for unauthorized events to force logout
     const handleUnauthorized = () => {
       setUser(null);
       setIsAuthenticated(false);
@@ -41,13 +49,19 @@ export const AuthProvider = ({ children }) => {
     const data = await authService.login(email, password);
     setUser(data.user);
     setIsAuthenticated(true);
+    // Merge guest cart into authenticated cart
+    try { await cartService.mergeGuestCart(); } catch (_) {}
+    clearSessionId();
     return data;
   };
 
   const register = async (userData) => {
+    // Option B: log in immediately after register and redirect to home
     const data = await authService.register(userData);
-    setUser(data.data.user);
+    setUser(data.user);
     setIsAuthenticated(true);
+    try { await cartService.mergeGuestCart(); } catch (_) {}
+    clearSessionId();
     return data;
   };
 
@@ -57,11 +71,18 @@ export const AuthProvider = ({ children }) => {
     setIsAuthenticated(false);
   };
 
+  /** Re-fetches /users/me and updates context — use after profile/avatar changes */
+  const refreshUser = async () => {
+    const updatedUser = await userService.getMe();
+    setUser(updatedUser);
+    return updatedUser;
+  };
+
   const updateProfile = async (data) => {
-      const updatedUser = await authService.updateProfile(data);
-      setUser(updatedUser);
-      return updatedUser;
-  }
+    const updatedUser = await userService.updateMe(data);
+    setUser(updatedUser);
+    return updatedUser;
+  };
 
   const value = {
     user,
@@ -70,12 +91,14 @@ export const AuthProvider = ({ children }) => {
     login,
     register,
     logout,
-    updateProfile
+    updateProfile,
+    refreshUser,
+    setUser,
   };
 
   return (
     <AuthContext.Provider value={value}>
-      {!loading && children}
+      {loading ? <FullPageLoader /> : children}
     </AuthContext.Provider>
   );
 };

@@ -1,19 +1,28 @@
 import React, { useState, useEffect } from 'react';
-import { Box, Typography, Slider, FormControl, Select, MenuItem, InputLabel, Button, Collapse, List, ListItem, ListItemText } from '@mui/material';
+import { Box, Typography, Slider, FormControl, Select, MenuItem, InputLabel, Button, List, ListItem, ListItemText, Collapse } from '@mui/material';
 import { getCategoryTree } from '../../services/categoryService';
 
 const ProductFilters = ({ filters, onFilterChange }) => {
     const [categories, setCategories] = useState([]);
-    
+    // Local state for slider — only commits to URL on release (prevents per-pixel API calls)
+    const [sliderValue, setSliderValue] = useState([
+        parseInt(filters.minPrice) || 0,
+        parseInt(filters.maxPrice) || 2000,
+    ]);
+
     useEffect(() => {
         getCategoryTree().then(res => {
             if (res?.data?.categories) setCategories(res.data.categories);
         }).catch(console.error);
     }, []);
 
-    const handlePriceChange = (e, newValue) => {
-        onFilterChange({ ...filters, minPrice: newValue[0], maxPrice: newValue[1], page: 1 });
-    };
+    // Sync slider when URL params change externally (e.g. clear all)
+    useEffect(() => {
+        setSliderValue([
+            parseInt(filters.minPrice) || 0,
+            parseInt(filters.maxPrice) || 2000,
+        ]);
+    }, [filters.minPrice, filters.maxPrice]);
 
     return (
         <Box>
@@ -43,13 +52,19 @@ const ProductFilters = ({ filters, onFilterChange }) => {
             <Typography variant="h6" gutterBottom sx={{ mt: 3 }}>Price Range</Typography>
             <Box sx={{ px: 2 }}>
                 <Slider
-                    value={[parseInt(filters.minPrice) || 0, parseInt(filters.maxPrice) || 1000]}
-                    onChange={(e, val) => onFilterChange({ ...filters, minPrice: val[0], maxPrice: val[1], page: 1 })}
-                    onChangeCommitted={handlePriceChange}
+                    value={sliderValue}
+                    onChange={(_, val) => setSliderValue(val)}           /* local only — no API call */
+                    onChangeCommitted={(_, val) =>                        /* fires API on release */
+                        onFilterChange({ ...filters, minPrice: val[0], maxPrice: val[1], page: 1 })
+                    }
                     valueLabelDisplay="auto"
                     min={0}
                     max={2000}
                 />
+                <Box sx={{ display: 'flex', justifyContent: 'space-between' }}>
+                    <Typography variant="caption">${sliderValue[0]}</Typography>
+                    <Typography variant="caption">${sliderValue[1]}</Typography>
+                </Box>
             </Box>
 
             <FormControl fullWidth sx={{ mt: 3 }}>

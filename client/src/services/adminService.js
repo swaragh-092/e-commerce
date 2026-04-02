@@ -26,8 +26,9 @@ const getAdminReviews = (params = {}) => {
   const query = new URLSearchParams(params).toString();
   return api.get(`/reviews${query ? `?${query}` : ''}`);
 };
-const updateReviewStatus = (id, status) => api.put(`/reviews/${id}/status`, { status });
-const deleteReview = (id) => api.delete(`/reviews/${id}`);
+// ✅ Correct route: PUT /admin/reviews/:id/moderate
+const updateReviewStatus = (id, status) => api.put(`/admin/reviews/${id}/moderate`, { status });
+const deleteReview = (id) => api.delete(`/admin/reviews/${id}`);
 
 // Coupons
 const getCoupons = (params = {}) => {
@@ -50,6 +51,25 @@ const refundOrder = (id) => api.post(`/payments/${id}/refund`);
 // Settings bulk update
 const updateSettings = (settings) => api.put('/settings/bulk', settings);
 
+// Coupon validation (storefront)
+const validateCoupon = (code, subtotal) => api.post('/coupons/validate', { code, subtotal });
+
+// Storefront orders
+const getMyOrders = (params = {}) => {
+  const query = new URLSearchParams(params).toString();
+  return api.get(`/orders${query ? `?${query}` : ''}`);
+};
+const getMyOrderById = (id) => api.get(`/orders/${id}`);
+const cancelOrder = (id) => api.post(`/orders/${id}/cancel`);
+const placeOrder = (data) => api.post('/orders', data);
+
+// Storefront addresses
+const getAddresses = () => api.get('/users/me/addresses');
+const createAddress = (data) => api.post('/users/me/addresses', data);
+const updateAddress = (id, data) => api.put(`/users/me/addresses/${id}`, data);
+const deleteAddress = (id) => api.delete(`/users/me/addresses/${id}`);
+const setDefaultAddress = (id) => api.put(`/users/me/addresses/${id}/default`);
+
 export {
   getStats, getSalesChart, getLowStock, getRecentOrders,
   getAuditLogs,
@@ -58,4 +78,7 @@ export {
   getCoupons, createCoupon, updateCoupon, deleteCoupon,
   getAllOrders, getOrderById, updateOrderStatus, refundOrder,
   updateSettings,
+  validateCoupon,
+  getMyOrders, getMyOrderById, cancelOrder, placeOrder,
+  getAddresses, createAddress, updateAddress, deleteAddress, setDefaultAddress,
 };

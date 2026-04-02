@@ -12,11 +12,12 @@ const authService = {
 
   register: async (userData) => {
     const response = await api.post('/auth/register', userData);
+    // Store tokens so the user is logged in immediately after registering
     if (response.data.data.tokens) {
       localStorage.setItem('accessToken', response.data.data.tokens.accessToken);
       localStorage.setItem('refreshToken', response.data.data.tokens.refreshToken);
     }
-    return response.data;
+    return response.data.data; // { user, tokens }
   },
 
   logout: async () => {
@@ -52,20 +53,11 @@ const authService = {
     return response.data;
   },
 
-  getMe: async () => {
-    const response = await api.get('/users/me');
-    return response.data.data;
-  },
-
-  updateProfile: async (data) => {
-    const response = await api.put('/users/me', data);
-    return response.data.data;
-  },
-
   changePassword: async (currentPassword, newPassword) => {
     const response = await api.put('/users/me/password', { currentPassword, newPassword });
     return response.data;
-  }
+  },
 };
 
 export default authService;
+

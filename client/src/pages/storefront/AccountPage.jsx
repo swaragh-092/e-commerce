@@ -1,33 +1,38 @@
-import React, { useState, useContext } from 'react';
-import { Box, Typography, Tabs, Tab, Paper, Container, TextField, Button, Alert } from '@mui/material';
+import React, { useState, useContext, useEffect, useCallback } from 'react';
+import {
+    Box, Typography, Tabs, Tab, Paper, Container, TextField, Button, Alert,
+    List, ListItem, ListItemText, ListItemSecondaryAction, IconButton, Chip,
+    Dialog, DialogTitle, DialogContent, DialogActions, Divider, CircularProgress,
+    Table, TableBody, TableCell, TableContainer, TableHead, TableRow, Tooltip,
+} from '@mui/material';
+import DeleteIcon from '@mui/icons-material/Delete';
+import EditIcon from '@mui/icons-material/Edit';
+import StarIcon from '@mui/icons-material/Star';
+import StarBorderIcon from '@mui/icons-material/StarBorder';
+import AddIcon from '@mui/icons-material/Add';
 import { AuthContext } from '../../context/AuthContext';
 import { userService } from '../../services/userService';
 import AvatarUploader from '../../components/common/AvatarUploader';
 import PageSEO from '../../components/common/PageSEO';
+import { Link } from 'react-router-dom';
 
 function TabPanel(props) {
-  const { children, value, index, ...other } = props;
-
-  return (
-    <div
-      role="tabpanel"
-      hidden={value !== index}
-      {...other}
-    >
-      {value === index && (
-        <Box sx={{ p: 3 }}>
-          {children}
-        </Box>
-      )}
-    </div>
-  );
+    const { children, value, index, ...other } = props;
+    return (
+        <div role="tabpanel" hidden={value !== index} {...other}>
+            {value === index && <Box sx={{ p: 3 }}>{children}</Box>}
+        </div>
+    );
 }
+
+const ORDER_STATUS_COLOR = {
+    pending_payment: 'warning', paid: 'info', processing: 'info',
+    shipped: 'primary', delivered: 'success', cancelled: 'error', refunded: 'default',
+};
 
 const AccountPage = () => {
     const { user, updateProfile } = useContext(AuthContext);
     const [tab, setTab] = useState(0);
-
-    const handleTabChange = (event, newValue) => setTab(newValue);
 
     if (!user) return null;
 
@@ -37,7 +42,7 @@ const AccountPage = () => {
             <Typography variant="h4" gutterBottom>My Account</Typography>
             <Paper sx={{ width: '100%' }}>
                 <Box sx={{ borderBottom: 1, borderColor: 'divider' }}>
-                    <Tabs value={tab} onChange={handleTabChange} variant="scrollable" scrollButtons="auto">
+                    <Tabs value={tab} onChange={(_, v) => setTab(v)} variant="scrollable" scrollButtons="auto">
                         <Tab label="Profile" />
                         <Tab label="Addresses" />
                         <Tab label="Password" />
@@ -48,19 +53,20 @@ const AccountPage = () => {
                     <ProfileTab user={user} updateProfile={updateProfile} />
                 </TabPanel>
                 <TabPanel value={tab} index={1}>
-                    <Typography>Addresses management coming soon...</Typography>
+                    <AddressesTab />
                 </TabPanel>
                 <TabPanel value={tab} index={2}>
                     <PasswordTab />
                 </TabPanel>
                 <TabPanel value={tab} index={3}>
-                    <Typography>Order history coming soon...</Typography>
+                    <OrdersTab />
                 </TabPanel>
             </Paper>
         </Container>
     );
 };
 
+/* ─── Profile Tab ─────────────────────────────────────────────────────── */
 const ProfileTab = ({ user, updateProfile }) => {
     const [formData, setFormData] = useState({
         firstName: user?.firstName || '',
@@ -68,8 +74,6 @@ const ProfileTab = ({ user, updateProfile }) => {
         phone: user?.UserProfile?.phone || '',
     });
     const [status, setStatus] = useState(null);
-
-    const handleChange = (e) => setFormData({ ...formData, [e.target.name]: e.target.value });
 
     const handleSubmit = async (e) => {
         e.preventDefault();
@@ -85,19 +89,170 @@ const ProfileTab = ({ user, updateProfile }) => {
         <Box component="form" onSubmit={handleSubmit} sx={{ maxWidth: 400 }}>
             <AvatarUploader />
             {status && <Alert severity={status.type} sx={{ mb: 2 }}>{status.message}</Alert>}
-            <TextField fullWidth label="First Name" name="firstName" value={formData.firstName} onChange={handleChange} margin="normal" required />
-            <TextField fullWidth label="Last Name" name="lastName" value={formData.lastName} onChange={handleChange} margin="normal" required />
-            <TextField fullWidth label="Phone" name="phone" value={formData.phone} onChange={handleChange} margin="normal" />
+            <TextField fullWidth label="First Name" name="firstName" value={formData.firstName}
+                onChange={(e) => setFormData({ ...formData, firstName: e.target.value })} margin="normal" required />
+            <TextField fullWidth label="Last Name" name="lastName" value={formData.lastName}
+                onChange={(e) => setFormData({ ...formData, lastName: e.target.value })} margin="normal" required />
+            <TextField fullWidth label="Phone" name="phone" value={formData.phone}
+                onChange={(e) => setFormData({ ...formData, phone: e.target.value })} margin="normal" />
             <Button type="submit" variant="contained" color="primary" sx={{ mt: 2 }}>Save Changes</Button>
         </Box>
     );
 };
 
+/* ─── Addresses Tab ───────────────────────────────────────────────────── */
+const emptyAddr = { label: '', fullName: '', phone: '', addressLine1: '', addressLine2: '', city: '', state: '', postalCode: '', country: '' };
+
+const AddressesTab = () => {
+    const [addresses, setAddresses] = useState([]);
+    const [loading, setLoading] = useState(true);
+    const [dialogOpen, setDialogOpen] = useState(false);
+    const [editing, setEditing] = useState(null);
+    const [form, setForm] = useState(emptyAddr);
+    const [saving, setSaving] = useState(false);
+    const [alert, setAlert] = useState(null);
+
+    const fetchAddresses = useCallback(async () => {
+        setLoading(true);
+        try {
+            const data = await userService.getAddresses();
+            setAddresses(Array.isArray(data) ? data : data?.rows || []);
+        } catch (err) {
+            setAlert({ type: 'error', message: 'Failed to load addresses.' });
+        } finally {
+            setLoading(false);
+        }
+    }, []);
+
+    useEffect(() => { fetchAddresses(); }, [fetchAddresses]);
+
+    const openCreate = () => { setEditing(null); setForm(emptyAddr); setDialogOpen(true); };
+    const openEdit = (addr) => { setEditing(addr); setForm({ ...addr }); setDialogOpen(true); };
+
+    const handleSave = async () => {
+        setSaving(true);
+        try {
+            if (editing) await userService.updateAddress(editing.id, form);
+            else await userService.createAddress(form);
+            setDialogOpen(false);
+            fetchAddresses();
+        } catch (err) {
+            setAlert({ type: 'error', message: err?.response?.data?.message || 'Failed to save address.' });
+        } finally {
+            setSaving(false);
+        }
+    };
+
+    const handleDelete = async (id) => {
+        if (!window.confirm('Delete this address?')) return;
+        try {
+            await userService.deleteAddress(id);
+            setAddresses((prev) => prev.filter((a) => a.id !== id));
+        } catch (err) {
+            setAlert({ type: 'error', message: 'Failed to delete address.' });
+        }
+    };
+
+    const handleSetDefault = async (id) => {
+        try {
+            await userService.setDefaultAddress(id);
+            setAddresses((prev) => prev.map((a) => ({ ...a, isDefault: a.id === id })));
+        } catch (err) {
+            setAlert({ type: 'error', message: 'Failed to set default address.' });
+        }
+    };
+
+    const set = (k, v) => setForm((f) => ({ ...f, [k]: v }));
+
+    if (loading) return <Box sx={{ display: 'flex', justifyContent: 'center', py: 4 }}><CircularProgress /></Box>;
+
+    return (
+        <Box>
+            {alert && <Alert severity={alert.type} onClose={() => setAlert(null)} sx={{ mb: 2 }}>{alert.message}</Alert>}
+            <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2 }}>
+                <Typography variant="h6">Saved Addresses</Typography>
+                <Button startIcon={<AddIcon />} variant="outlined" size="small" onClick={openCreate}>Add Address</Button>
+            </Box>
+
+            {addresses.length === 0 ? (
+                <Typography color="text.secondary">No addresses saved yet.</Typography>
+            ) : (
+                <List disablePadding>
+                    {addresses.map((addr, i) => (
+                        <React.Fragment key={addr.id}>
+                            {i > 0 && <Divider />}
+                            <ListItem alignItems="flex-start" sx={{ pr: 12 }}>
+                                <ListItemText
+                                    primary={
+                                        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                                            <Typography variant="body1" fontWeight={600}>{addr.label || 'Address'}</Typography>
+                                            {addr.isDefault && <Chip label="Default" size="small" color="primary" />}
+                                        </Box>
+                                    }
+                                    secondary={
+                                        <>
+                                            <Typography variant="body2">{addr.fullName}</Typography>
+                                            <Typography variant="body2">{addr.addressLine1}{addr.addressLine2 ? `, ${addr.addressLine2}` : ''}</Typography>
+                                            <Typography variant="body2">{addr.city}, {addr.state} {addr.postalCode}, {addr.country}</Typography>
+                                            {addr.phone && <Typography variant="body2">{addr.phone}</Typography>}
+                                        </>
+                                    }
+                                />
+                                <ListItemSecondaryAction>
+                                    <Tooltip title="Edit">
+                                        <IconButton size="small" onClick={() => openEdit(addr)}><EditIcon fontSize="small" /></IconButton>
+                                    </Tooltip>
+                                    {!addr.isDefault ? (
+                                        <Tooltip title="Set as Default">
+                                            <IconButton size="small" onClick={() => handleSetDefault(addr.id)}><StarBorderIcon fontSize="small" /></IconButton>
+                                        </Tooltip>
+                                    ) : (
+                                        <Tooltip title="Default Address">
+                                            <span>
+                                                <IconButton size="small" disabled><StarIcon fontSize="small" color="primary" /></IconButton>
+                                            </span>
+                                        </Tooltip>
+                                    )}
+                                    <Tooltip title="Delete">
+                                        <IconButton size="small" color="error" onClick={() => handleDelete(addr.id)}><DeleteIcon fontSize="small" /></IconButton>
+                                    </Tooltip>
+                                </ListItemSecondaryAction>
+                            </ListItem>
+                        </React.Fragment>
+                    ))}
+                </List>
+            )}
+
+            <Dialog open={dialogOpen} onClose={() => setDialogOpen(false)} maxWidth="sm" fullWidth>
+                <DialogTitle>{editing ? 'Edit Address' : 'Add Address'}</DialogTitle>
+                <DialogContent sx={{ display: 'flex', flexDirection: 'column', gap: 2, pt: 2 }}>
+                    <TextField size="small" label="Label (e.g. Home, Work)" value={form.label} onChange={(e) => set('label', e.target.value)} />
+                    <TextField size="small" label="Full Name" value={form.fullName} onChange={(e) => set('fullName', e.target.value)} required />
+                    <TextField size="small" label="Phone" value={form.phone} onChange={(e) => set('phone', e.target.value)} />
+                    <TextField size="small" label="Address Line 1" value={form.addressLine1} onChange={(e) => set('addressLine1', e.target.value)} required />
+                    <TextField size="small" label="Address Line 2 (optional)" value={form.addressLine2} onChange={(e) => set('addressLine2', e.target.value)} />
+                    <Box sx={{ display: 'flex', gap: 2 }}>
+                        <TextField size="small" label="City" value={form.city} onChange={(e) => set('city', e.target.value)} required fullWidth />
+                        <TextField size="small" label="State/Province" value={form.state} onChange={(e) => set('state', e.target.value)} fullWidth />
+                    </Box>
+                    <Box sx={{ display: 'flex', gap: 2 }}>
+                        <TextField size="small" label="Postal Code" value={form.postalCode} onChange={(e) => set('postalCode', e.target.value)} required fullWidth />
+                        <TextField size="small" label="Country" value={form.country} onChange={(e) => set('country', e.target.value)} required fullWidth />
+                    </Box>
+                </DialogContent>
+                <DialogActions>
+                    <Button onClick={() => setDialogOpen(false)}>Cancel</Button>
+                    <Button variant="contained" onClick={handleSave} disabled={saving}>{saving ? 'Saving…' : 'Save'}</Button>
+                </DialogActions>
+            </Dialog>
+        </Box>
+    );
+};
+
+/* ─── Password Tab ────────────────────────────────────────────────────── */
 const PasswordTab = () => {
     const [passwords, setPasswords] = useState({ currentPassword: '', newPassword: '' });
     const [status, setStatus] = useState(null);
-
-    const handleChange = (e) => setPasswords({ ...passwords, [e.target.name]: e.target.value });
 
     const handleSubmit = async (e) => {
         e.preventDefault();
@@ -113,11 +268,96 @@ const PasswordTab = () => {
     return (
         <Box component="form" onSubmit={handleSubmit} sx={{ maxWidth: 400 }}>
             {status && <Alert severity={status.type} sx={{ mb: 2 }}>{status.message}</Alert>}
-            <TextField fullWidth type="password" label="Current Password" name="currentPassword" value={passwords.currentPassword} onChange={handleChange} margin="normal" required />
-            <TextField fullWidth type="password" label="New Password" name="newPassword" value={passwords.newPassword} onChange={handleChange} margin="normal" required />
+            <TextField fullWidth type="password" label="Current Password" name="currentPassword"
+                value={passwords.currentPassword} onChange={(e) => setPasswords({ ...passwords, currentPassword: e.target.value })} margin="normal" required />
+            <TextField fullWidth type="password" label="New Password" name="newPassword"
+                value={passwords.newPassword} onChange={(e) => setPasswords({ ...passwords, newPassword: e.target.value })} margin="normal" required />
             <Button type="submit" variant="contained" color="secondary" sx={{ mt: 2 }}>Update Password</Button>
         </Box>
     );
-}
+};
 
+/* ─── Orders Tab ──────────────────────────────────────────────────────── */
+const OrdersTab = () => {
+    const [orders, setOrders] = useState([]);
+    const [loading, setLoading] = useState(true);
+    const [alert, setAlert] = useState(null);
+
+    const fetchOrders = useCallback(async () => {
+        setLoading(true);
+        try {
+            const res = await userService.getMyOrders({ limit: 50 });
+            setOrders(res.data?.rows || res.data || []);
+        } catch (err) {
+            setAlert({ type: 'error', message: 'Failed to load orders.' });
+        } finally {
+            setLoading(false);
+        }
+    }, []);
+
+    useEffect(() => { fetchOrders(); }, [fetchOrders]);
+
+    const handleCancel = async (id) => {
+        if (!window.confirm('Cancel this order?')) return;
+        try {
+            await userService.cancelOrder(id);
+            setOrders((prev) => prev.map((o) => o.id === id ? { ...o, status: 'cancelled' } : o));
+        } catch (err) {
+            setAlert({ type: 'error', message: err?.response?.data?.message || 'Failed to cancel order.' });
+        }
+    };
+
+    if (loading) return <Box sx={{ display: 'flex', justifyContent: 'center', py: 4 }}><CircularProgress /></Box>;
+
+    return (
+        <Box>
+            {alert && <Alert severity={alert.type} onClose={() => setAlert(null)} sx={{ mb: 2 }}>{alert.message}</Alert>}
+            <Typography variant="h6" mb={2}>Order History</Typography>
+            {orders.length === 0 ? (
+                <Typography color="text.secondary">No orders yet. <Link to="/products">Start shopping!</Link></Typography>
+            ) : (
+                <TableContainer>
+                    <Table size="small">
+                        <TableHead>
+                            <TableRow>
+                                <TableCell>Order #</TableCell>
+                                <TableCell>Date</TableCell>
+                                <TableCell>Items</TableCell>
+                                <TableCell align="right">Total</TableCell>
+                                <TableCell>Status</TableCell>
+                                <TableCell />
+                            </TableRow>
+                        </TableHead>
+                        <TableBody>
+                            {orders.map((order) => (
+                                <TableRow key={order.id}>
+                                    <TableCell>
+                                        <Typography variant="body2" fontWeight={600}>{order.orderNumber}</Typography>
+                                    </TableCell>
+                                    <TableCell>
+                                        <Typography variant="body2">{new Date(order.createdAt).toLocaleDateString()}</Typography>
+                                    </TableCell>
+                                    <TableCell>
+                                        <Typography variant="body2">{order.OrderItems?.length ?? '—'} item(s)</Typography>
+                                    </TableCell>
+                                    <TableCell align="right">
+                                        <Typography variant="body2" fontWeight={600}>${parseFloat(order.total || 0).toFixed(2)}</Typography>
+                                    </TableCell>
+                                    <TableCell>
+                                        <Chip label={order.status} size="small" color={ORDER_STATUS_COLOR[order.status] || 'default'} />
+                                    </TableCell>
+                                    <TableCell>
+                                        {order.status === 'pending_payment' && (
+                                            <Button size="small" color="error" onClick={() => handleCancel(order.id)}>Cancel</Button>
+                                        )}
+                                    </TableCell>
+                                </TableRow>
+                            ))}
+                        </TableBody>
+                    </Table>
+                </TableContainer>
+            )}
+        </Box>
+    );
+};
 export default AccountPage;

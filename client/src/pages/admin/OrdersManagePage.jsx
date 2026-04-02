@@ -41,7 +41,7 @@ const OrdersManagePage = () => {
       .finally(() => setLoading(false));
   };
 
-  useEffect(() => { fetchOrders(); }, [paginationModel, status]);
+  useEffect(() => { fetchOrders(); }, [paginationModel, status, search]);
 
   const columns = [
     { field: 'orderNumber', headerName: 'Order #', width: 160 },
@@ -80,6 +80,13 @@ const OrdersManagePage = () => {
       <Typography variant="h5" fontWeight={700} mb={3}>Orders</Typography>
 
       <Stack direction="row" spacing={2} mb={2}>
+        <TextField
+          size="small"
+          placeholder="Search order # or customer..."
+          value={search}
+          onChange={(e) => setSearch(e.target.value)}
+          sx={{ minWidth: 240 }}
+        />
         <FormControl size="small" sx={{ minWidth: 160 }}>
           <InputLabel>Status</InputLabel>
           <Select value={status} label="Status" onChange={(e) => setStatus(e.target.value)}>

@@ -34,5 +34,25 @@ export const userService = {
   deleteAddress: async (id) => {
     const response = await api.delete(`/users/me/addresses/${id}`);
     return response.data;
-  }
+  },
+
+  getAddresses: async () => {
+    const response = await api.get('/users/me/addresses');
+    return response.data.data;
+  },
+
+  setDefaultAddress: async (id) => {
+    const response = await api.patch(`/users/me/addresses/${id}/default`);
+    return response.data.data;
+  },
+
+  getMyOrders: async (params = {}) => {
+    const response = await api.get('/orders', { params });
+    return response.data;
+  },
+
+  cancelOrder: async (id) => {
+    const response = await api.post(`/orders/${id}/cancel`);
+    return response.data;
+  },
 };

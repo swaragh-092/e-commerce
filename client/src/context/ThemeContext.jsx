@@ -1,5 +1,5 @@
 import React, { createContext, useState, useEffect } from 'react';
-import { ThemeProvider, createTheme, CssBaseline } from '@mui/material';
+import { ThemeProvider, createTheme, CssBaseline, Box, CircularProgress } from '@mui/material';
 import settingsService from '../services/settingsService';
 
 export const SettingsContext = createContext(null);
@@ -66,12 +66,15 @@ export const SettingsProvider = ({ children }) => {
     loading
   };
 
-  // We wrap the ThemeProvider here so the entire app gets the DB-driven theme immediately.
   return (
     <SettingsContext.Provider value={value}>
       <ThemeProvider theme={themeConfig}>
         <CssBaseline />
-        {!loading && children}
+        {loading ? (
+          <Box sx={{ display: 'flex', justifyContent: 'center', alignItems: 'center', minHeight: '100vh' }}>
+            <CircularProgress />
+          </Box>
+        ) : children}
       </ThemeProvider>
     </SettingsContext.Provider>
   );

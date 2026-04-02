@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import {
   Box, Typography, Grid, Paper, Chip, Divider, Button, MenuItem,
-  Select, FormControl, InputLabel, Alert, CircularProgress,
+  Select, FormControl, InputLabel, Alert, CircularProgress, Tooltip,
 } from '@mui/material';
 import { useParams, useNavigate } from 'react-router-dom';
 import { getOrderById, updateOrderStatus, refundOrder } from '../../services/adminService';
@@ -148,11 +148,15 @@ const OrderDetailPage = () => {
             </Button>
           </Paper>
 
-          {/* Refund */}
+          {/* Refund — backend endpoint not yet implemented */}
           {['paid', 'processing', 'shipped', 'delivered'].includes(order.status) && (
-            <Button variant="outlined" color="error" fullWidth onClick={handleRefund} disabled={updating}>
-              Issue Refund
-            </Button>
+            <Tooltip title="Refund processing not yet available" placement="top">
+              <span>
+                <Button variant="outlined" color="error" fullWidth disabled>
+                  Issue Refund (Coming Soon)
+                </Button>
+              </span>
+            </Tooltip>
           )}
         </Grid>
       </Grid>

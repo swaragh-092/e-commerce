@@ -1,5 +1,7 @@
 import { getProduct } from '../../services/productService';
 import PageSEO from '../../components/common/PageSEO';
+import DOMPurify from 'dompurify';
+import { useCart } from '../../hooks/useCart';
 
 const ProductDetailPage = () => {
     const { slug } = useParams();
@@ -7,6 +9,9 @@ const ProductDetailPage = () => {
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState(null);
     const [selectedVariant, setSelectedVariant] = useState(null);
+    const [addingToCart, setAddingToCart] = useState(false);
+    const [cartMsg, setCartMsg] = useState(null);
+    const { addItem } = useCart();
 
     useEffect(() => {
         const fetchProduct = async () => {
@@ -30,9 +35,23 @@ const ProductDetailPage = () => {
     if (loading) return <Box sx={{ display: 'flex', justifyContent: 'center', py: 10 }}><CircularProgress /></Box>;
     if (error || !product) return <Typography variant="h5" color="error" textAlign="center" sx={{ mt: 10 }}>{error}</Typography>;
 
-    const currentPrice = selectedVariant?.priceModifier ? parseFloat(product.salePrice || product.price) + parseFloat(selectedVariant.priceModifier) : parseFloat(product.salePrice || product.price);
+    const basePrice = parseFloat(product.salePrice || product.price);
+    const currentPrice = basePrice + parseFloat(selectedVariant?.priceModifier ?? 0);
     const hasSale = product.salePrice && parseFloat(product.salePrice) < parseFloat(product.price);
     const stockAvailable = selectedVariant ? selectedVariant.quantity > 0 : product.quantity > 0;
+
+    const handleAddToCart = async () => {
+        setAddingToCart(true);
+        setCartMsg(null);
+        try {
+            await addItem(product.id, 1, selectedVariant?.id || null);
+            setCartMsg({ type: 'success', text: 'Added to cart!' });
+        } catch (err) {
+            setCartMsg({ type: 'error', text: err?.response?.data?.message || 'Failed to add to cart' });
+        } finally {
+            setAddingToCart(false);
+        }
+    };
 
     return (
         <Container maxWidth="lg" sx={{ py: 6 }}>
@@ -84,22 +103,28 @@ const ProductDetailPage = () => {
                     />
 
                     <Box sx={{ mb: 4, mt: 3 }}>
+                        {cartMsg && (
+                            <Typography color={cartMsg.type === 'error' ? 'error' : 'success.main'} variant="body2" sx={{ mb: 1 }}>
+                                {cartMsg.text}
+                            </Typography>
+                        )}
                         <Button 
                             variant="contained" 
                             size="large" 
                             fullWidth 
                             startIcon={<CartIcon />}
-                            disabled={!stockAvailable}
+                            disabled={!stockAvailable || addingToCart}
+                            onClick={handleAddToCart}
                             sx={{ py: 1.5, fontSize: '1.1rem' }}
                         >
-                            {stockAvailable ? 'Add to Cart' : 'Out of Stock'}
+                            {addingToCart ? 'Adding...' : stockAvailable ? 'Add to Cart' : 'Out of Stock'}
                         </Button>
                     </Box>
 
                     <Divider sx={{ my: 4 }} />
                     
                     <Typography variant="h6" gutterBottom>Product Details</Typography>
-                    <Box dangerouslySetInnerHTML={{ __html: product.description }} sx={{ typography: 'body2', color: 'text.secondary', '& p': { mt: 0, mb: 2 } }} />
+                    <Box dangerouslySetInnerHTML={{ __html: DOMPurify.sanitize(product.description || '') }} sx={{ typography: 'body2', color: 'text.secondary', '& p': { mt: 0, mb: 2 } }} />
                     
                     {product.tags?.length > 0 && (
                         <Box sx={{ mt: 3, display: 'flex', gap: 1, flexWrap: 'wrap' }}>
@@ -107,7 +132,7 @@ const ProductDetailPage = () => {
                         </Box>
                     )}
 
-                    <ReviewSection slug={product.slug} />
+                    <ReviewSection slug={product.slug} productId={product.id} />
                 </Grid>
             </Grid>
         </Container>

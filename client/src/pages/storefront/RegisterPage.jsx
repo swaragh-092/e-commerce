@@ -31,8 +31,8 @@ const RegisterPage = () => {
           email: formData.email,
           password: formData.password
       });
-      // Redirect to login with a success state message
-      navigate('/login', { state: { message: 'Registration successful! Please log in.' } });
+      // register() auto-logs-in, redirect to home
+      navigate('/');
     } catch (err) {
       setError(err.response?.data?.message || 'Registration failed');
     } finally {

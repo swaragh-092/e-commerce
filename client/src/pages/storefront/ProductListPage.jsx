@@ -6,6 +6,7 @@ import ProductGrid from '../../components/product/ProductGrid';
 import ProductFilters from '../../components/product/ProductFilters';
 import { getProducts } from '../../services/productService';
 import PageSEO from '../../components/common/PageSEO';
+import { useDebounce } from '../../hooks/useDebounce';
 
 const ProductListPage = () => {
     const [searchParams, setSearchParams] = useSearchParams();
@@ -17,7 +18,22 @@ const ProductListPage = () => {
     const theme = useTheme();
     const isMobile = useMediaQuery(theme.breakpoints.down('md'));
 
-    const filters = {
+    const [searchInput, setSearchInput] = useState(searchParams.get('search') || '');
+    const debouncedSearch = useDebounce(searchInput, 400);
+
+    // Sync debounced search into URL params
+    useEffect(() => {
+        const current = searchParams.get('search') || '';
+        if (debouncedSearch !== current) {
+            handleFilterChange({ ...filters, search: debouncedSearch, page: 1 });
+        }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [debouncedSearch]);
+
+    // Sync searchInput when URL changes externally (e.g. clear filters)
+    useEffect(() => {
+        setSearchInput(searchParams.get('search') || '');
+    }, [searchParams]);
         search: searchParams.get('search') || '',
         category: searchParams.get('category') || '',
         page: parseInt(searchParams.get('page')) || 1,
@@ -67,8 +83,8 @@ const ProductListPage = () => {
                     <TextField
                         size="small"
                         placeholder="Search products..."
-                        value={filters.search}
-                        onChange={(e) => handleFilterChange({ ...filters, search: e.target.value, page: 1 })}
+                        value={searchInput}
+                        onChange={(e) => setSearchInput(e.target.value)}
                         InputProps={{
                             startAdornment: <InputAdornment position="start"><SearchIcon /></InputAdornment>,
                         }}
