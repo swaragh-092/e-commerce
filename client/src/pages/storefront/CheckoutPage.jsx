@@ -6,7 +6,7 @@ import {
 } from '@mui/material';
 import { useNavigate } from 'react-router-dom';
 import { AuthContext } from '../../context/AuthContext';
-import { useSettings } from '../../hooks/useSettings';
+import { useSettings, useCurrency } from '../../hooks/useSettings';
 import { useCart } from '../../hooks/useCart';
 import { userService } from '../../services/userService';
 import { validateCoupon } from '../../services/adminService';
@@ -16,6 +16,7 @@ const CheckoutPage = () => {
     const navigate = useNavigate();
     const { user } = useContext(AuthContext);
     const { settings } = useSettings();
+    const { formatPrice } = useCurrency();
     const { cart, clearCart } = useCart();
     const couponsEnabled = settings?.features?.coupons !== false;
     const STEPS = couponsEnabled
@@ -182,7 +183,7 @@ const CheckoutPage = () => {
                             {couponResult && (
                                 <Alert severity={couponResult.error ? 'error' : 'success'} sx={{ mb: 1 }}>
                                     {couponResult.message}
-                                    {!couponResult.error && ` — Saving $${Number(couponResult.discount).toFixed(2)}`}
+                                    {!couponResult.error && ` — Saving ${formatPrice(couponResult.discount)}`}
                                 </Alert>
                             )}
                             <Box sx={{ display: 'flex', justifyContent: 'space-between', mt: 3 }}>
@@ -205,7 +206,7 @@ const CheckoutPage = () => {
                                             {item.product?.name} {item.variant ? `(${item.variant.name}: ${item.variant.value})` : ''} × {item.quantity}
                                         </Typography>
                                         <Typography variant="body2" fontWeight={600}>
-                                            ${((price + modifier) * item.quantity).toFixed(2)}
+                                            {formatPrice((price + modifier) * item.quantity)}
                                         </Typography>
                                     </Box>
                                 );
@@ -241,18 +242,18 @@ const CheckoutPage = () => {
                     <Typography variant="h6" fontWeight={700} mb={2}>Summary</Typography>
                     <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 1 }}>
                         <Typography color="text.secondary">Subtotal</Typography>
-                        <Typography>${subtotal.toFixed(2)}</Typography>
+                        <Typography>{formatPrice(subtotal)}</Typography>
                     </Box>
                     {discount > 0 && (
                         <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 1 }}>
                             <Typography color="success.main">Discount</Typography>
-                            <Typography color="success.main">-${discount.toFixed(2)}</Typography>
+                            <Typography color="success.main">-{formatPrice(discount)}</Typography>
                         </Box>
                     )}
                     <Divider sx={{ my: 1.5 }} />
                     <Box sx={{ display: 'flex', justifyContent: 'space-between' }}>
                         <Typography fontWeight={700}>Total</Typography>
-                        <Typography fontWeight={700} color="primary.main">${total.toFixed(2)}</Typography>
+                        <Typography fontWeight={700} color="primary.main">{formatPrice(total)}</Typography>
                     </Box>
                 </Paper>
             </Box>

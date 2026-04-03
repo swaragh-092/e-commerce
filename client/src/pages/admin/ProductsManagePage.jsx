@@ -17,10 +17,12 @@ import { DataGrid } from '@mui/x-data-grid';
 import { Add as AddIcon, Edit as EditIcon, Delete as DeleteIcon } from '@mui/icons-material';
 import { Link, useNavigate } from 'react-router-dom';
 import { getProducts, deleteProduct } from '../../services/productService';
+import { useCurrency } from '../../hooks/useSettings';
 import { useNotification } from '../../context/NotificationContext';
 
 const ProductsManagePage = () => {
   const navigate = useNavigate();
+  const { formatPrice } = useCurrency();
   const notify = useNotification();
 
   const [rows, setRows] = useState([]);
@@ -85,13 +87,13 @@ const ProductsManagePage = () => {
       field: 'price',
       headerName: 'Price',
       width: 100,
-      renderCell: ({ value }) => `$${parseFloat(value).toFixed(2)}`,
+      renderCell: ({ value }) => formatPrice(value),
     },
     {
       field: 'salePrice',
       headerName: 'Sale Price',
       width: 110,
-      renderCell: ({ value }) => (value ? `$${parseFloat(value).toFixed(2)}` : '—'),
+      renderCell: ({ value }) => (value ? formatPrice(value) : '—'),
     },
     { field: 'quantity', headerName: 'Stock', width: 80 },
     {

@@ -12,6 +12,7 @@ import WishlistButton from '../../components/common/WishlistButton';
 import ReviewSection from '../../components/product/ReviewSection';
 import DOMPurify from 'dompurify';
 import { useCart } from '../../hooks/useCart';
+import { useCurrency } from '../../hooks/useSettings';
 
 const ProductDetailPage = () => {
     const { slug } = useParams();
@@ -22,6 +23,7 @@ const ProductDetailPage = () => {
     const [addingToCart, setAddingToCart] = useState(false);
     const [cartMsg, setCartMsg] = useState(null);
     const { addItem } = useCart();
+    const { formatPrice } = useCurrency();
 
     useEffect(() => {
         const fetchProduct = async () => {
@@ -91,13 +93,13 @@ const ProductDetailPage = () => {
                     <Box sx={{ display: 'flex', alignItems: 'center', gap: 2, mb: 3 }}>
                         {hasSale ? (
                             <>
-                                <Typography variant="h5" color="primary" fontWeight="bold">${currentPrice.toFixed(2)}</Typography>
+                                <Typography variant="h5" color="primary" fontWeight="bold">{formatPrice(currentPrice)}</Typography>
                                 <Typography variant="h6" color="text.secondary" sx={{ textDecoration: 'line-through' }}>
-                                    ${parseFloat(product.price).toFixed(2)}
+                                    {formatPrice(product.price)}
                                 </Typography>
                             </>
                         ) : (
-                            <Typography variant="h5" fontWeight="bold">${currentPrice.toFixed(2)}</Typography>
+                            <Typography variant="h5" fontWeight="bold">{formatPrice(currentPrice)}</Typography>
                         )}
                         {hasSale && <Chip label="Sale" color="error" />}
                     </Box>

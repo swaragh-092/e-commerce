@@ -7,12 +7,14 @@ import { Link } from 'react-router-dom';
 import { getProducts } from '../../services/productService';
 import { getCategories } from '../../services/categoryService';
 import { getMediaUrl } from '../../utils/media';
+import { useCurrency } from '../../hooks/useSettings';
 import PageSEO from '../../components/common/PageSEO';
 
 const HomePage = () => {
     const [featuredProducts, setFeaturedProducts] = useState([]);
     const [categories, setCategories] = useState([]);
     const [loading, setLoading] = useState(true);
+    const { formatPrice } = useCurrency();
 
     useEffect(() => {
         Promise.all([
@@ -111,11 +113,11 @@ const HomePage = () => {
                                                     <Typography variant="body1" fontWeight={600} noWrap>{product.name}</Typography>
                                                     <Box sx={{ display: 'flex', gap: 1, alignItems: 'center', mt: 0.5 }}>
                                                         <Typography variant="h6" color="primary.main" fontWeight={700}>
-                                                            ${parseFloat(price).toFixed(2)}
+                                                            {formatPrice(price)}
                                                         </Typography>
                                                         {hasSale && (
-                                                            <Typography variant="body2" color="text.disabled" sx={{ textDecoration: 'line-through' }}>
-                                                                ${parseFloat(product.price).toFixed(2)}
+                                                            <Typography variant="body2" color="text.secondary" sx={{ textDecoration: 'line-through' }}>
+                                                                {formatPrice(product.price)}
                                                             </Typography>
                                                         )}
                                                     </Box>

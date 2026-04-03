@@ -1,9 +1,11 @@
 import React, { useState, useEffect } from 'react';
 import { Box, Typography, Slider, FormControl, Select, MenuItem, InputLabel, Button, List, ListItem, ListItemText, Collapse } from '@mui/material';
 import { useCategories } from '../../context/CategoryContext';
+import { useCurrency } from '../../hooks/useSettings';
 
 const ProductFilters = ({ filters, onFilterChange }) => {
     const { categories } = useCategories();
+    const { formatPrice } = useCurrency();
     // Local state for slider — only commits to URL on release (prevents per-pixel API calls)
     const [sliderValue, setSliderValue] = useState([
         parseInt(filters.minPrice) || 0,
@@ -56,8 +58,8 @@ const ProductFilters = ({ filters, onFilterChange }) => {
                     max={2000}
                 />
                 <Box sx={{ display: 'flex', justifyContent: 'space-between' }}>
-                    <Typography variant="caption">${sliderValue[0]}</Typography>
-                    <Typography variant="caption">${sliderValue[1]}</Typography>
+                    <Typography variant="caption">{formatPrice(sliderValue[0])}</Typography>
+                    <Typography variant="caption">{formatPrice(sliderValue[1])}</Typography>
                 </Box>
             </Box>
 

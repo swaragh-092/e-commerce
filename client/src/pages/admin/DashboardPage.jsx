@@ -11,6 +11,7 @@ import WarningIcon from '@mui/icons-material/Warning';
 import StatCard from '../../components/admin/StatCard';
 import SalesChart from '../../components/admin/SalesChart';
 import { getStats, getLowStock, getRecentOrders } from '../../services/adminService';
+import { useCurrency } from '../../hooks/useSettings';
 
 const statusColor = {
   pending_payment: 'warning', paid: 'info', processing: 'info',
@@ -34,8 +35,7 @@ const DashboardPage = () => {
       .finally(() => setLoading(false));
   }, []);
 
-  const fmt = (n) =>
-    new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(n || 0);
+  const { formatPrice } = useCurrency();
 
   return (
     <Box>
@@ -44,7 +44,7 @@ const DashboardPage = () => {
       {/* Stat Cards */}
       <Grid container spacing={3} mb={4}>
         {[
-          { title: 'Total Revenue', value: fmt(stats?.totalRevenue), icon: <AttachMoneyIcon fontSize="inherit" />, color: 'success.main' },
+          { title: 'Total Revenue', value: formatPrice(stats?.totalRevenue), icon: <AttachMoneyIcon fontSize="inherit" />, color: 'success.main' },
           { title: 'Total Orders', value: stats?.orderCount ?? 0, icon: <ShoppingCartIcon fontSize="inherit" />, color: 'primary.main' },
           { title: 'Customers', value: stats?.customerCount ?? 0, icon: <PeopleIcon fontSize="inherit" />, color: 'info.main' },
           { title: 'Published Products', value: stats?.productCount ?? 0, icon: <InventoryIcon fontSize="inherit" />, color: 'warning.main' },
@@ -77,7 +77,7 @@ const DashboardPage = () => {
                     </Box>
                     <Box textAlign="right">
                       <Chip label={o.status} size="small" color={statusColor[o.status] || 'default'} sx={{ mb: 0.25 }} />
-                      <Typography variant="caption" display="block">${o.total.toFixed(2)}</Typography>
+                      <Typography variant="caption" display="block">{formatPrice(o.total)}</Typography>
                     </Box>
                   </Box>
                 ))

@@ -11,6 +11,7 @@ import {
 } from 'recharts';
 import { getSalesChart } from '../../services/adminService';
 import { useTheme } from '@mui/material/styles';
+import { useCurrency } from '../../hooks/useSettings';
 
 const fmt = (d) => {
   const date = new Date(d);
@@ -19,6 +20,7 @@ const fmt = (d) => {
 
 const SalesChart = () => {
   const theme = useTheme();
+  const { formatPrice } = useCurrency();
   const [period, setPeriod] = useState('monthly');
   const [data, setData] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -79,7 +81,7 @@ const SalesChart = () => {
             <YAxis tick={{ fontSize: 11 }} />
             <Tooltip
               formatter={(val, name) =>
-                name === 'Revenue' ? [`$${val.toFixed(2)}`, name] : [val, name]
+                name === 'Revenue' ? [formatPrice(val), name] : [val, name]
               }
             />
             <Area

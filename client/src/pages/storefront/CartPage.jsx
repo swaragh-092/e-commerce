@@ -10,10 +10,12 @@ import ShoppingBagIcon from '@mui/icons-material/ShoppingBag';
 import { Link, useNavigate } from 'react-router-dom';
 import { useCart } from '../../hooks/useCart';
 import { getMediaUrl } from '../../utils/media';
+import { useCurrency } from '../../hooks/useSettings';
 import PageSEO from '../../components/common/PageSEO';
 
 const CartPage = () => {
     const { cart, cartCount, loading, updateItem, removeItem, clearCart } = useCart();
+    const { formatPrice } = useCurrency();
     const navigate = useNavigate();
 
     const items = cart?.items || [];
@@ -88,7 +90,7 @@ const CartPage = () => {
                                             <Chip label={`${variant.name}: ${variant.value}`} size="small" sx={{ mt: 0.5 }} />
                                         )}
                                         <Typography variant="body2" color="primary.main" fontWeight={600} sx={{ mt: 0.5 }}>
-                                            ${itemPrice.toFixed(2)}
+                                            {formatPrice(itemPrice)}
                                         </Typography>
                                     </Box>
 
@@ -112,7 +114,7 @@ const CartPage = () => {
 
                                     {/* Line total */}
                                     <Typography variant="body1" fontWeight={700} sx={{ minWidth: 70, textAlign: 'right', flexShrink: 0 }}>
-                                        ${(itemPrice * item.quantity).toFixed(2)}
+                                        {formatPrice(itemPrice * item.quantity)}
                                     </Typography>
 
                                     {/* Remove */}
@@ -136,7 +138,7 @@ const CartPage = () => {
                         <Typography variant="h6" fontWeight={700} mb={2}>Order Summary</Typography>
                         <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 1 }}>
                             <Typography color="text.secondary">Subtotal ({cartCount} items)</Typography>
-                            <Typography fontWeight={600}>${subtotal.toFixed(2)}</Typography>
+                            <Typography fontWeight={600}>{formatPrice(subtotal)}</Typography>
                         </Box>
                         <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 1 }}>
                             <Typography color="text.secondary">Shipping</Typography>
@@ -145,7 +147,7 @@ const CartPage = () => {
                         <Divider sx={{ my: 2 }} />
                         <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 2 }}>
                             <Typography variant="h6" fontWeight={700}>Estimated Total</Typography>
-                            <Typography variant="h6" fontWeight={700} color="primary.main">${subtotal.toFixed(2)}</Typography>
+                            <Typography variant="h6" fontWeight={700} color="primary.main">{formatPrice(subtotal)}</Typography>
                         </Box>
                         <Button
                             variant="contained"

@@ -8,6 +8,10 @@ import {
   TextField,
   Switch,
   FormControlLabel,
+  FormControl,
+  InputLabel,
+  Select,
+  MenuItem,
   Slider,
   Button,
   Divider,
@@ -19,6 +23,24 @@ import { updateSettings } from '../../services/adminService';
 import api from '../../services/api';
 import { useNotification } from '../../context/NotificationContext';
 import { SettingsContext } from '../../context/ThemeContext';
+
+const CURRENCIES = [
+  { code: 'USD', symbol: '$',  name: 'US Dollar' },
+  { code: 'INR', symbol: '₹',  name: 'Indian Rupee' },
+  { code: 'EUR', symbol: '€',  name: 'Euro' },
+  { code: 'GBP', symbol: '£',  name: 'British Pound' },
+  { code: 'JPY', symbol: '¥',  name: 'Japanese Yen' },
+  { code: 'AED', symbol: 'د.إ', name: 'UAE Dirham' },
+  { code: 'CAD', symbol: 'CA$', name: 'Canadian Dollar' },
+  { code: 'AUD', symbol: 'A$', name: 'Australian Dollar' },
+  { code: 'SGD', symbol: 'S$', name: 'Singapore Dollar' },
+  { code: 'MYR', symbol: 'RM', name: 'Malaysian Ringgit' },
+  { code: 'BDT', symbol: '৳',  name: 'Bangladeshi Taka' },
+  { code: 'PKR', symbol: '₨',  name: 'Pakistani Rupee' },
+];
+
+const getCurrencySymbol = (code) =>
+  CURRENCIES.find((c) => c.code === code)?.symbol || code || '$';
 
 const FONTS = [
   'Roboto',
@@ -82,6 +104,8 @@ const SettingsPage = () => {
 
   const tabs = ['Theme', 'Features', 'Shipping', 'Tax', 'SEO', 'General'];
 
+  // Current currency symbol — used in shipping adornments
+  const currSymbol = getCurrencySymbol(form['general.currency']);
   const field = (key, label, type = 'text', extra = {}) => (
     <TextField
       key={key}
@@ -153,11 +177,11 @@ const SettingsPage = () => {
     /* Shipping */
     <Box key="shipping">
       {field('shipping.method', 'Shipping Method')}
-      {field('shipping.flatRate', 'Flat Rate ($)', 'number', {
-        InputProps: { startAdornment: <InputAdornment position="start">$</InputAdornment> },
+      {field('shipping.flatRate', `Flat Rate (${currSymbol})`, 'number', {
+        InputProps: { startAdornment: <InputAdornment position="start">{currSymbol}</InputAdornment> },
       })}
-      {field('shipping.freeThreshold', 'Free Shipping Above ($)', 'number', {
-        InputProps: { startAdornment: <InputAdornment position="start">$</InputAdornment> },
+      {field('shipping.freeThreshold', `Free Shipping Above (${currSymbol})`, 'number', {
+        InputProps: { startAdornment: <InputAdornment position="start">{currSymbol}</InputAdornment> },
       })}
     </Box>,
 
@@ -177,7 +201,20 @@ const SettingsPage = () => {
     /* General */
     <Box key="general">
       {field('general.storeName', 'Store Name')}
-      {field('general.currency', 'Currency (e.g. USD)')}
+      <FormControl fullWidth size="small" sx={{ mb: 2 }}>
+        <InputLabel>Currency</InputLabel>
+        <Select
+          label="Currency"
+          value={form['general.currency'] || 'USD'}
+          onChange={(e) => set('general.currency', e.target.value)}
+        >
+          {CURRENCIES.map((c) => (
+            <MenuItem key={c.code} value={c.code}>
+              {c.symbol}&nbsp;&nbsp;{c.name} ({c.code})
+            </MenuItem>
+          ))}
+        </Select>
+      </FormControl>
       {field('general.timezone', 'Time Zone')}
       {field('general.contactEmail', 'Contact Email', 'email')}
     </Box>,

@@ -15,6 +15,7 @@ import {
 import { DataGrid } from '@mui/x-data-grid';
 import VisibilityIcon from '@mui/icons-material/Visibility';
 import { useNavigate } from 'react-router-dom';
+import { useCurrency } from '../../hooks/useSettings';
 import { getAllOrders } from '../../services/adminService';
 
 const STATUS_OPTIONS = [
@@ -40,6 +41,7 @@ const statusColor = {
 
 const OrdersManagePage = () => {
   const navigate = useNavigate();
+  const { formatPrice } = useCurrency();
   const [orders, setOrders] = useState([]);
   const [loading, setLoading] = useState(true);
   const [total, setTotal] = useState(0);
@@ -80,7 +82,7 @@ const OrdersManagePage = () => {
       field: 'total',
       headerName: 'Total',
       width: 110,
-      renderCell: ({ value }) => `$${parseFloat(value || 0).toFixed(2)}`,
+      renderCell: ({ value }) => formatPrice(value || 0),
     },
     {
       field: 'status',

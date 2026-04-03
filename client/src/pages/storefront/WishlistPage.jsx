@@ -5,10 +5,11 @@ import ShoppingCartIcon from '@mui/icons-material/ShoppingCart';
 import { wishlistService } from '../../services/wishlistService';
 import { Link } from 'react-router-dom';
 import { getMediaUrl } from '../../utils/media';
-import { useFeature } from '../../hooks/useSettings';
+import { useFeature, useCurrency } from '../../hooks/useSettings';
 
 const WishlistPage = () => {
     const wishlistEnabled = useFeature('wishlist');
+    const { formatPrice } = useCurrency();
     if (!wishlistEnabled) {
         return (
             <Container maxWidth="sm" sx={{ py: 10, textAlign: 'center' }}>
@@ -80,7 +81,7 @@ const WishlistPage = () => {
                                             {product.name}
                                         </Typography>
                                         <Typography color="text.secondary">
-                                            ${product.price}
+                                            {formatPrice(product.price)}
                                         </Typography>
                                     </CardContent>
                                     <CardActions sx={{ justifyContent: 'space-between' }}>

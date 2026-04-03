@@ -15,6 +15,7 @@ import { userService } from '../../services/userService';
 import AvatarUploader from '../../components/common/AvatarUploader';
 import PageSEO from '../../components/common/PageSEO';
 import { Link } from 'react-router-dom';
+import { useCurrency } from '../../hooks/useSettings';
 
 function TabPanel(props) {
     const { children, value, index, ...other } = props;
@@ -31,6 +32,7 @@ const ORDER_STATUS_COLOR = {
 };
 
 const AccountPage = () => {
+    const { formatPrice } = useCurrency();
     const { user, updateProfile } = useContext(AuthContext);
     const [tab, setTab] = useState(0);
 
@@ -341,7 +343,7 @@ const OrdersTab = () => {
                                         <Typography variant="body2">{order.OrderItems?.length ?? '—'} item(s)</Typography>
                                     </TableCell>
                                     <TableCell align="right">
-                                        <Typography variant="body2" fontWeight={600}>${parseFloat(order.total || 0).toFixed(2)}</Typography>
+                                        <Typography variant="body2" fontWeight={600}>{formatPrice(order.total || 0)}</Typography>
                                     </TableCell>
                                     <TableCell>
                                         <Chip label={order.status} size="small" color={ORDER_STATUS_COLOR[order.status] || 'default'} />

@@ -2,8 +2,10 @@ import React from 'react';
 import { Card, CardMedia, CardContent, Typography, Box, Rating, Chip } from '@mui/material';
 import { Link } from 'react-router-dom';
 import { getMediaUrl } from '../../utils/media';
+import { useCurrency } from '../../hooks/useSettings';
 
 const ProductCard = ({ product }) => {
+  const { formatPrice } = useCurrency();
   const primaryImage =
     getMediaUrl(product.images?.find((i) => i.isPrimary)?.url || product.images?.[0]?.url || '') || '/placeholder.png';
   const hasSale = product.salePrice && parseFloat(product.salePrice) < parseFloat(product.price);
@@ -57,18 +59,18 @@ const ProductCard = ({ product }) => {
           {hasSale ? (
             <>
               <Typography variant="h6" color="primary">
-                ${parseFloat(product.salePrice).toFixed(2)}
+                {formatPrice(product.salePrice)}
               </Typography>
               <Typography
                 variant="body1"
                 color="text.secondary"
                 sx={{ textDecoration: 'line-through' }}
               >
-                ${parseFloat(product.price).toFixed(2)}
+                {formatPrice(product.price)}
               </Typography>
             </>
           ) : (
-            <Typography variant="h6">${parseFloat(product.price).toFixed(2)}</Typography>
+            <Typography variant="h6">{formatPrice(product.price)}</Typography>
           )}
         </Box>
       </CardContent>

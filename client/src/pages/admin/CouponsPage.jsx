@@ -25,6 +25,7 @@ import EditIcon from '@mui/icons-material/Edit';
 import DeleteIcon from '@mui/icons-material/Delete';
 import { getCoupons, createCoupon, updateCoupon, deleteCoupon } from '../../services/adminService';
 import { useNotification } from '../../context/NotificationContext';
+import { useCurrency } from '../../hooks/useSettings';
 
 const empty = {
   code: '',
@@ -50,6 +51,7 @@ const CouponsPage = () => {
   const [formErrors, setFormErrors] = useState({});
   const [saving, setSaving] = useState(false);
   const notify = useNotification();
+  const { formatPrice } = useCurrency();
 
   const validate = (f) => {
     const errs = {};
@@ -195,7 +197,7 @@ const CouponsPage = () => {
       field: 'value',
       headerName: 'Value',
       width: 90,
-      renderCell: ({ row }) => (row.type === 'percentage' ? `${row.value}%` : `$${row.value}`),
+      renderCell: ({ row }) => (row.type === 'percentage' ? `${row.value}%` : formatPrice(row.value)),
     },
     {
       field: 'usage',

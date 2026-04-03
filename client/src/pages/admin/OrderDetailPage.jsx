@@ -15,6 +15,7 @@ import {
   Alert,
 } from '@mui/material';
 import { useParams, useNavigate } from 'react-router-dom';
+import { useCurrency } from '../../hooks/useSettings';
 import { getOrderById, updateOrderStatus, refundOrder } from '../../services/adminService';
 import { useNotification } from '../../context/NotificationContext';
 
@@ -41,6 +42,7 @@ const statusColor = {
 const OrderDetailPage = () => {
   const { id } = useParams();
   const navigate = useNavigate();
+  const { formatPrice } = useCurrency();
   const [order, setOrder] = useState(null);
   const [loading, setLoading] = useState(true);
   const [newStatus, setNewStatus] = useState('');
@@ -152,10 +154,10 @@ const OrderDetailPage = () => {
                 </Box>
                 <Box textAlign="right">
                   <Typography variant="body2">
-                    ${parseFloat(item.snapshotPrice).toFixed(2)} × {item.quantity}
+                    {formatPrice(item.snapshotPrice)} × {item.quantity}
                   </Typography>
                   <Typography variant="body2" fontWeight={600}>
-                    ${parseFloat(item.total).toFixed(2)}
+                    {formatPrice(item.total)}
                   </Typography>
                 </Box>
               </Box>
@@ -179,14 +181,14 @@ const OrderDetailPage = () => {
                           {label}
                         </Typography>
                         <Typography variant="body2">
-                          {label === 'Discount' ? '-' : ''}${parseFloat(val).toFixed(2)}
+                          {label === 'Discount' ? '-' : ''}{formatPrice(val)}
                         </Typography>
                       </Box>
                     )
                 )}
                 <Box sx={{ display: 'flex', justifyContent: 'space-between', gap: 4, mt: 1 }}>
                   <Typography fontWeight={700}>Total</Typography>
-                  <Typography fontWeight={700}>${parseFloat(order.total).toFixed(2)}</Typography>
+                  <Typography fontWeight={700}>{formatPrice(order.total)}</Typography>
                 </Box>
               </Box>
             </Box>
