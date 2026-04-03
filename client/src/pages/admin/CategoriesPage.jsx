@@ -11,8 +11,19 @@ import {
   DialogContent,
   DialogActions,
   TextField,
+  Chip,
+  Tooltip,
+  Divider,
+  Stack,
+  MenuItem,
 } from '@mui/material';
-import { Add as AddIcon, Edit as EditIcon, Delete as DeleteIcon } from '@mui/icons-material';
+import {
+  Add as AddIcon,
+  Edit as EditIcon,
+  Delete as DeleteIcon,
+  FolderOpen as FolderOpenIcon,
+  Folder as FolderIcon,
+} from '@mui/icons-material';
 import {
   getCategoryTree,
   createCategory,
@@ -21,12 +32,124 @@ import {
 } from '../../services/categoryService';
 import { useNotification } from '../../context/NotificationContext';
 
+/* ─── helpers ─────────────────────────────────────────────────── */
+const flattenTree = (nodes, result = []) => {
+  nodes.forEach((n) => {
+    result.push(n);
+    if (n.children?.length) flattenTree(n.children, result);
+  });
+  return result;
+};
+
+/* ─── CategoryRow ──────────────────────────────────────────────── */
+const CategoryRow = ({ node, level, onEdit, onDelete, onAddChild }) => {
+  const hasChildren = node.children?.length > 0;
+
+  return (
+    <>
+      <Box
+        sx={{
+          display: 'flex',
+          alignItems: 'center',
+          px: 2,
+          py: 1.5,
+          pl: 2 + level * 3,
+          gap: 1.5,
+          bgcolor: level === 0 ? 'action.hover' : 'background.paper',
+          borderBottom: '1px solid',
+          borderColor: 'divider',
+          '&:hover': { bgcolor: 'action.selected' },
+          transition: 'background-color 0.15s',
+        }}
+      >
+        {/* icon */}
+        <Box sx={{ color: level === 0 ? 'primary.main' : 'text.secondary', display: 'flex' }}>
+          {hasChildren ? <FolderOpenIcon fontSize="small" /> : <FolderIcon fontSize="small" />}
+        </Box>
+
+        {/* name */}
+        <Typography
+          sx={{
+            flexGrow: 1,
+            fontWeight: level === 0 ? 600 : 400,
+            fontSize: level === 0 ? '0.95rem' : '0.875rem',
+            color: level === 0 ? 'text.primary' : 'text.secondary',
+          }}
+        >
+          {node.name}
+        </Typography>
+
+        {/* sub-count badge */}
+        {hasChildren && (
+          <Chip
+            label={`${node.children.length} sub`}
+            size="small"
+            variant="outlined"
+            sx={{ fontSize: '0.7rem', height: 20 }}
+          />
+        )}
+
+        {/* description hint */}
+        {node.description && (
+          <Typography
+            variant="caption"
+            color="text.disabled"
+            sx={{
+              display: { xs: 'none', md: 'block' },
+              maxWidth: 200,
+              overflow: 'hidden',
+              textOverflow: 'ellipsis',
+              whiteSpace: 'nowrap',
+            }}
+          >
+            {node.description}
+          </Typography>
+        )}
+
+        {/* actions */}
+        <Stack direction="row" spacing={0.5}>
+          <Tooltip title="Add sub-category">
+            <IconButton size="small" onClick={() => onAddChild(node)}>
+              <AddIcon fontSize="small" />
+            </IconButton>
+          </Tooltip>
+          <Tooltip title="Edit">
+            <IconButton size="small" onClick={() => onEdit(node)}>
+              <EditIcon fontSize="small" />
+            </IconButton>
+          </Tooltip>
+          <Tooltip title="Delete">
+            <IconButton size="small" color="error" onClick={() => onDelete(node.id)}>
+              <DeleteIcon fontSize="small" />
+            </IconButton>
+          </Tooltip>
+        </Stack>
+      </Box>
+
+      {/* recurse for children */}
+      {node.children?.map((child) => (
+        <CategoryRow
+          key={child.id}
+          node={child}
+          level={level + 1}
+          onEdit={onEdit}
+          onDelete={onDelete}
+          onAddChild={onAddChild}
+        />
+      ))}
+    </>
+  );
+};
+
+/* ─── Main page ────────────────────────────────────────────────── */
 const CategoriesPage = () => {
   const [categories, setCategories] = useState([]);
   const [loading, setLoading] = useState(true);
   const [open, setOpen] = useState(false);
+  const [saving, setSaving] = useState(false);
   const [editingCat, setEditingCat] = useState(null);
   const [formData, setFormData] = useState({ name: '', description: '', parentId: '' });
+  const [formErrors, setFormErrors] = useState({});
   const notify = useNotification();
 
   const fetchCategories = async () => {
@@ -34,8 +157,8 @@ const CategoriesPage = () => {
       setLoading(true);
       const res = await getCategoryTree();
       setCategories(res?.data?.categories || []);
-    } catch (err) {
-      console.error(err);
+    } catch {
+      notify('Failed to load categories.', 'error');
     } finally {
       setLoading(false);
     }
@@ -45,13 +168,21 @@ const CategoriesPage = () => {
     fetchCategories();
   }, []);
 
-  const handleOpen = (cat = null) => {
+  const openCreate = (parent = null) => {
+    setEditingCat(null);
+    setFormData({ name: '', description: '', parentId: parent?.id || '' });
+    setFormErrors({});
+    setOpen(true);
+  };
+
+  const openEdit = (cat) => {
     setEditingCat(cat);
-    setFormData(
-      cat
-        ? { name: cat.name, description: cat.description || '', parentId: cat.parentId || '' }
-        : { name: '', description: '', parentId: '' }
-    );
+    setFormData({
+      name: cat.name,
+      description: cat.description || '',
+      parentId: cat.parentId || '',
+    });
+    setFormErrors({});
     setOpen(true);
   };
 
@@ -61,127 +192,149 @@ const CategoriesPage = () => {
   };
 
   const handleSave = async () => {
-    try {
-      const data = { ...formData };
-      if (!data.parentId) data.parentId = null;
+    const errs = {};
+    if (!formData.name.trim()) errs.name = 'Name is required.';
+    if (Object.keys(errs).length) {
+      setFormErrors(errs);
+      return;
+    }
 
+    setSaving(true);
+    try {
+      const data = { ...formData, parentId: formData.parentId || null };
       if (editingCat) {
         await updateCategory(editingCat.id, data);
+        notify('Category updated.', 'success');
       } else {
         await createCategory(data);
+        notify('Category created.', 'success');
       }
       handleClose();
       fetchCategories();
     } catch (err) {
       notify(err?.response?.data?.error?.message || err.message, 'error');
+    } finally {
+      setSaving(false);
     }
   };
 
   const handleDelete = async (id) => {
-    if (!window.confirm('Delete category?')) return;
+    if (!window.confirm('Delete this category? Sub-categories may also be affected.')) return;
     try {
       await deleteCategory(id);
+      notify('Category deleted.', 'success');
       fetchCategories();
     } catch (err) {
       notify('Cannot delete: ' + (err?.response?.data?.error?.message || err.message), 'error');
     }
   };
 
-  const renderTree = (nodes, level = 0) => {
-    return nodes.map((node) => (
-      <Box
-        key={node.id}
-        sx={{
-          ml: level * 4,
-          display: 'flex',
-          alignItems: 'center',
-          py: 1,
-          borderBottom: '1px solid',
-          borderColor: 'divider',
-        }}
-      >
-        <Typography
-          sx={{ flexGrow: 1, pl: level > 0 ? 1 : 0, fontWeight: level === 0 ? 'bold' : 'normal' }}
-        >
-          {level > 0 ? '↳ ' : ''}
-          {node.name}
-        </Typography>
-        <IconButton size="small" onClick={() => handleOpen(node)}>
-          <EditIcon fontSize="small" />
-        </IconButton>
-        <IconButton size="small" color="error" onClick={() => handleDelete(node.id)}>
-          <DeleteIcon fontSize="small" />
-        </IconButton>
-        {node.children && renderTree(node.children, level + 1)}
-      </Box>
-    ));
-  };
-
-  const flatCategories = [];
-  const flatten = (nodes) => {
-    nodes.forEach((n) => {
-      flatCategories.push(n);
-      if (n.children?.length) flatten(n.children);
-    });
-  };
-  flatten(categories);
+  const flatCategories = flattenTree(categories);
+  const totalCount = flatCategories.length;
 
   return (
-    <Box sx={{ p: 3 }}>
-      <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 3 }}>
-        <Typography variant="h4" gutterBottom>
-          Manage Categories
-        </Typography>
-        <Button variant="contained" startIcon={<AddIcon />} onClick={() => handleOpen()}>
+    <Box>
+      {/* Header */}
+      <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 3 }}>
+        <Box>
+          <Typography variant="h5" fontWeight={700}>
+            Categories
+          </Typography>
+          {!loading && (
+            <Typography variant="body2" color="text.secondary">
+              {totalCount} {totalCount === 1 ? 'category' : 'categories'} total
+            </Typography>
+          )}
+        </Box>
+        <Button variant="contained" startIcon={<AddIcon />} onClick={() => openCreate()}>
           Add Category
         </Button>
       </Box>
 
-      <Paper sx={{ p: 2 }}>{loading ? <CircularProgress /> : renderTree(categories)}</Paper>
+      {/* Tree */}
+      <Paper
+        elevation={0}
+        sx={{ border: '1px solid', borderColor: 'divider', borderRadius: 2, overflow: 'hidden' }}
+      >
+        {loading ? (
+          <Box sx={{ display: 'flex', justifyContent: 'center', py: 8 }}>
+            <CircularProgress />
+          </Box>
+        ) : categories.length === 0 ? (
+          <Box sx={{ textAlign: 'center', py: 8, color: 'text.secondary' }}>
+            <FolderOpenIcon sx={{ fontSize: 48, mb: 1, opacity: 0.3 }} />
+            <Typography>No categories yet.</Typography>
+            <Button sx={{ mt: 1 }} onClick={() => openCreate()}>
+              Create your first category
+            </Button>
+          </Box>
+        ) : (
+          categories.map((cat) => (
+            <CategoryRow
+              key={cat.id}
+              node={cat}
+              level={0}
+              onEdit={openEdit}
+              onDelete={handleDelete}
+              onAddChild={openCreate}
+            />
+          ))
+        )}
+      </Paper>
 
+      {/* Dialog */}
       <Dialog open={open} onClose={handleClose} maxWidth="sm" fullWidth>
-        <DialogTitle>{editingCat ? 'Edit Category' : 'New Category'}</DialogTitle>
-        <DialogContent>
+        <DialogTitle sx={{ pb: 1 }}>{editingCat ? 'Edit Category' : 'New Category'}</DialogTitle>
+        <Divider />
+        <DialogContent sx={{ pt: 2, display: 'flex', flexDirection: 'column', gap: 2 }}>
           <TextField
             autoFocus
-            margin="dense"
-            label="Name"
+            label="Name *"
             fullWidth
+            size="small"
             value={formData.name}
-            onChange={(e) => setFormData({ ...formData, name: e.target.value })}
+            error={!!formErrors.name}
+            helperText={formErrors.name}
+            onChange={(e) => {
+              setFormData((f) => ({ ...f, name: e.target.value }));
+              if (formErrors.name) setFormErrors((f) => ({ ...f, name: undefined }));
+            }}
           />
           <TextField
-            margin="dense"
             label="Description"
             fullWidth
+            size="small"
             multiline
             rows={3}
             value={formData.description}
-            onChange={(e) => setFormData({ ...formData, description: e.target.value })}
+            onChange={(e) => setFormData((f) => ({ ...f, description: e.target.value }))}
           />
           <TextField
             select
-            margin="dense"
             label="Parent Category"
             fullWidth
+            size="small"
             value={formData.parentId}
-            onChange={(e) => setFormData({ ...formData, parentId: e.target.value })}
-            SelectProps={{ native: true }}
+            onChange={(e) => setFormData((f) => ({ ...f, parentId: e.target.value }))}
+            helperText="Leave empty to create a top-level category"
           >
-            <option value=""></option>
+            <MenuItem value="">— None (top level) —</MenuItem>
             {flatCategories
               .filter((c) => c.id !== editingCat?.id)
               .map((c) => (
-                <option key={c.id} value={c.id}>
-                  {c.name}
-                </option>
+                <MenuItem key={c.id} value={c.id}>
+                  {c.parentId ? `↳ ${c.name}` : c.name}
+                </MenuItem>
               ))}
           </TextField>
         </DialogContent>
-        <DialogActions>
-          <Button onClick={handleClose}>Cancel</Button>
-          <Button variant="contained" onClick={handleSave}>
-            Save
+        <Divider />
+        <DialogActions sx={{ px: 3, py: 2 }}>
+          <Button onClick={handleClose} disabled={saving}>
+            Cancel
+          </Button>
+          <Button variant="contained" onClick={handleSave} disabled={saving}>
+            {saving ? 'Saving…' : 'Save'}
           </Button>
         </DialogActions>
       </Dialog>
