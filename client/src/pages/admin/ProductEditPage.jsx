@@ -15,12 +15,7 @@ import {
   OutlinedInput,
   FormHelperText,
 } from '@mui/material';
-import {
-  getProduct,
-  getProductById,
-  createProduct,
-  updateProduct,
-} from '../../services/productService';
+import { getProductById, createProduct, updateProduct } from '../../services/productService';
 import { getCategoryTree } from '../../services/categoryService';
 import MediaUploader from '../../components/common/MediaUploader';
 import { useNotification } from '../../context/NotificationContext';
@@ -69,72 +64,6 @@ const ProductEditPage = () => {
   const notify = useNotification();
   const isNew = !id || id === 'new';
 
-<<<<<<< HEAD
-    const [formData, setFormData] = useState({
-        name: '', description: '', shortDescription: '', sku: '',
-        price: '', salePrice: '', quantity: '', status: 'draft',
-        categoryIds: [],
-        images: [],
-        variants: [],
-    });
-
-    const [categories, setCategories] = useState([]);
-    const [saveError, setSaveError] = useState(null);
-    
-    useEffect(() => {
-        const load = async () => {
-            const catRes = await getCategoryTree();
-            setCategories(catRes?.data?.categories || []);
-
-            if (!isNew) {
-                // Fetch product by id or slug
-                const prodRes = await getProduct(id);
-                if (prodRes?.data?.product) {
-                    const p = prodRes.data.product;
-                    setFormData({
-                        name: p.name, description: p.description || '', shortDescription: p.shortDescription || '',
-                        sku: p.sku || '', price: p.price, salePrice: p.salePrice || '', quantity: p.quantity,
-                        status: p.status, categoryIds: p.categories?.map(c => c.id) || [],
-                        images: p.images || [],
-                        variants: (p.ProductVariants || p.variants || []).map(v => ({
-                            id: v.id,
-                            name: v.name || '',
-                            value: v.value || '',
-                            priceModifier: v.priceModifier ?? 0,
-                            quantity: v.quantity ?? 0,
-                            sku: v.sku || '',
-                        })),
-                    });
-                }
-            }
-        };
-        load();
-    }, [id, isNew]);
-
-    const handleSave = async (e) => {
-        e.preventDefault();
-        setSaveError(null);
-        try {
-            const payload = {
-                ...formData,
-                price: parseFloat(formData.price),
-                salePrice: formData.salePrice ? parseFloat(formData.salePrice) : null,
-                quantity: parseInt(formData.quantity) || 0,
-                variants: formData.variants.map(v => ({
-                    ...v,
-                    priceModifier: parseFloat(v.priceModifier) || 0,
-                    quantity: parseInt(v.quantity) || 0,
-                })),
-            };
-            if (isNew) {
-                await createProduct(payload);
-            } else {
-                await updateProduct(id, payload);
-            }
-            navigate('/admin/products');
-        } catch (err) {
-            setSaveError(err.response?.data?.error?.message || err.message || 'Failed to save product.');
-=======
   const [formData, setFormData] = useState({
     name: '',
     description: '',
@@ -174,7 +103,6 @@ const ProductEditPage = () => {
               images: p.images || [],
             });
           }
->>>>>>> 93a4558 (fix admin panel)
         }
       } catch (err) {
         notify('Failed to load product data.', 'error');
