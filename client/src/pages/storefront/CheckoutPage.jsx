@@ -187,7 +187,7 @@ const CheckoutPage = () => {
                             )}
                             <Box sx={{ display: 'flex', justifyContent: 'space-between', mt: 3 }}>
                                 <Button onClick={() => setActiveStep(0)}>Back</Button>
-                                <Button variant="contained" onClick={() => setActiveStep(2)}>Continue</Button>
+                                <Button variant="contained" onClick={() => setActiveStep(reviewStep)}>Continue</Button>
                             </Box>
                         </Paper>
                     )}

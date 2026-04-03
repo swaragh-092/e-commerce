@@ -29,26 +29,34 @@ import TuneIcon from '@mui/icons-material/Tune';
 import StoreIcon from '@mui/icons-material/Storefront';
 import ExitIcon from '@mui/icons-material/ExitToApp';
 import { useAuth } from '../hooks/useAuth';
+import { useSettings } from '../hooks/useSettings';
 
 const drawerWidth = 240;
 
-const menuItems = [
-  { text: 'Dashboard', path: '/admin', icon: <DashboardIcon /> },
-  { text: 'Products', path: '/admin/products', icon: <InventoryIcon /> },
+// Items with a `feature` key are hidden when that feature is disabled in Settings.
+const ALL_MENU_ITEMS = [
+  { text: 'Dashboard',  path: '/admin',            icon: <DashboardIcon /> },
+  { text: 'Products',   path: '/admin/products',   icon: <InventoryIcon /> },
   { text: 'Categories', path: '/admin/categories', icon: <CategoryIcon /> },
   { text: 'Attributes', path: '/admin/attributes', icon: <TuneIcon /> },
-  { text: 'Orders', path: '/admin/orders', icon: <ShoppingCartIcon /> },
-  { text: 'Customers', path: '/admin/customers', icon: <PeopleIcon /> },
-  { text: 'Coupons', path: '/admin/coupons', icon: <LocalOfferIcon /> },
-  { text: 'Reviews', path: '/admin/reviews', icon: <StarIcon /> },
-  { text: 'Media', path: '/admin/media', icon: <PhotoLibraryIcon /> },
-  { text: 'Settings', path: '/admin/settings', icon: <SettingsIcon /> },
-  { text: 'Audit Log', path: '/admin/audit-log', icon: <HistoryIcon /> },
+  { text: 'Orders',     path: '/admin/orders',     icon: <ShoppingCartIcon /> },
+  { text: 'Customers',  path: '/admin/customers',  icon: <PeopleIcon /> },
+  { text: 'Coupons',    path: '/admin/coupons',    icon: <LocalOfferIcon />, feature: 'coupons' },
+  { text: 'Reviews',    path: '/admin/reviews',    icon: <StarIcon />,       feature: 'reviews' },
+  { text: 'Media',      path: '/admin/media',      icon: <PhotoLibraryIcon /> },
+  { text: 'Settings',   path: '/admin/settings',   icon: <SettingsIcon /> },
+  { text: 'Audit Log',  path: '/admin/audit-log',  icon: <HistoryIcon /> },
 ];
 
 const AdminLayout = () => {
   const { logout, user } = useAuth();
   const location = useLocation();
+  const { settings } = useSettings();
+
+  // Hide feature-gated items when the feature is explicitly disabled
+  const menuItems = ALL_MENU_ITEMS.filter(
+    (item) => !item.feature || settings?.features?.[item.feature] !== false
+  );
 
   const isActive = (path) =>
     path === '/admin' ? location.pathname === '/admin' : location.pathname.startsWith(path);

@@ -57,11 +57,14 @@ if (process.env.NODE_ENV !== 'test') {
 app.use('/api', globalLimiter);
 
 // Serve uploads statically — allow cross-origin loading for <img> tags
+// Use the same resolution strategy as media.service.js so both always point
+// to the same directory regardless of the working directory at startup.
+const UPLOADS_SERVE_DIR = path.resolve(process.env.UPLOAD_DIR || 'uploads');
 app.use('/uploads', (req, res, next) => {
   res.setHeader('Cross-Origin-Resource-Policy', 'cross-origin');
   next();
 });
-app.use('/uploads', express.static(path.join(__dirname, '../uploads')));
+app.use('/uploads', express.static(UPLOADS_SERVE_DIR));
 // Fallback: serve placeholder for any missing upload file
 app.use('/uploads', (req, res) => {
   res.setHeader('Cross-Origin-Resource-Policy', 'cross-origin');

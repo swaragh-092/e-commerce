@@ -1,8 +1,12 @@
 import React, { useState } from 'react';
 import { Box, CardMedia, Grid } from '@mui/material';
+import { getMediaUrl } from '../../utils/media';
 
 const ProductImages = ({ images }) => {
-  const sortedImages = [...(images || [])].sort((a, b) => a.sortOrder - b.sortOrder);
+  // Resolve all URLs to full absolute URLs once so every consumer is consistent
+  const sortedImages = [...(images || [])]
+    .sort((a, b) => a.sortOrder - b.sortOrder)
+    .map((img) => ({ ...img, url: getMediaUrl(img.url) || '/placeholder.png' }));
   const primaryImage = sortedImages.find((i) => i.isPrimary) || sortedImages[0];
   const defaultImage = primaryImage?.url || '/placeholder.png';
 

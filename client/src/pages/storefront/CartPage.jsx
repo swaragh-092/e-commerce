@@ -61,7 +61,7 @@ const CartPage = () => {
                         const price = parseFloat(product?.salePrice || product?.price || 0);
                         const modifier = parseFloat(variant?.priceModifier ?? 0);
                         const itemPrice = price + modifier;
-                        const imageUrl = getMediaUrl(product?.images?.[0]?.url || '') || 'https://via.placeholder.com/80';
+                        const imageUrl = getMediaUrl(product?.images?.[0]?.url || '') || '/placeholder.png';
 
                         return (
                             <React.Fragment key={item.id}>

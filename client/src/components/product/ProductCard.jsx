@@ -1,10 +1,11 @@
 import React from 'react';
 import { Card, CardMedia, CardContent, Typography, Box, Rating, Chip } from '@mui/material';
 import { Link } from 'react-router-dom';
+import { getMediaUrl } from '../../utils/media';
 
 const ProductCard = ({ product }) => {
   const primaryImage =
-    product.images?.find((i) => i.isPrimary)?.url || product.images?.[0]?.url || '/placeholder.png';
+    getMediaUrl(product.images?.find((i) => i.isPrimary)?.url || product.images?.[0]?.url || '') || '/placeholder.png';
   const hasSale = product.salePrice && parseFloat(product.salePrice) < parseFloat(product.price);
   const hasRating = product.averageRating != null;
 

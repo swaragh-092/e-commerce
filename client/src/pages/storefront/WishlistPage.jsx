@@ -62,8 +62,8 @@ const WishlistPage = () => {
                 <Grid container spacing={3}>
                     {items.map((item) => {
                         const product = item.Product;
-                        const image = product?.ProductImages?.[0]?.url || '';
-                        const imageUrl = getMediaUrl(image) || 'https://via.placeholder.com/300';
+                        const image = product?.images?.[0]?.url || '';
+                        const imageUrl = getMediaUrl(image) || '/placeholder.png';
 
                         return (
                             <Grid item xs={12} sm={6} md={4} key={item.id}>

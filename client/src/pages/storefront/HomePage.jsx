@@ -93,7 +93,7 @@ const HomePage = () => {
                                 </Grid>
                             ))
                             : featuredProducts.map((product) => {
-                                const imageUrl = getMediaUrl(product.ProductImages?.[0]?.url || '') || 'https://via.placeholder.com/300';
+                                const imageUrl = getMediaUrl(product.images?.[0]?.url || '') || '/placeholder.png';
                                 const price = product.salePrice || product.price;
                                 const hasSale = product.salePrice && parseFloat(product.salePrice) < parseFloat(product.price);
 

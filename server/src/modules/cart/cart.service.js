@@ -1,5 +1,5 @@
 'use strict';
-const { sequelize, Cart, CartItem, Product, ProductVariant } = require('../index');
+const { sequelize, Cart, CartItem, Product, ProductImage, ProductVariant } = require('../index');
 const AppError = require('../../utils/AppError');
 
 const getActiveCartByOwner = async (userId, sessionId, transaction) => {
@@ -30,7 +30,12 @@ const fetchCartWithItems = async (cartId, transaction) => {
             model: CartItem,
             as: 'items',
             include: [
-                { model: Product, as: 'product', required: false },
+                {
+                    model: Product,
+                    as: 'product',
+                    required: false,
+                    include: [{ model: ProductImage, as: 'images' }]
+                },
                 { model: ProductVariant, as: 'variant', required: false }
             ]
         }],
