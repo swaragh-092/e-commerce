@@ -5,8 +5,19 @@ import ShoppingCartIcon from '@mui/icons-material/ShoppingCart';
 import { wishlistService } from '../../services/wishlistService';
 import { Link } from 'react-router-dom';
 import { getMediaUrl } from '../../utils/media';
+import { useFeature } from '../../hooks/useSettings';
 
 const WishlistPage = () => {
+    const wishlistEnabled = useFeature('wishlist');
+    if (!wishlistEnabled) {
+        return (
+            <Container maxWidth="sm" sx={{ py: 10, textAlign: 'center' }}>
+                <Typography variant="h5" gutterBottom>Wishlist Unavailable</Typography>
+                <Typography color="text.secondary">The wishlist feature is currently disabled.</Typography>
+                <Button variant="contained" href="/products" sx={{ mt: 3 }}>Browse Products</Button>
+            </Container>
+        );
+    }
     const [items, setItems] = useState([]);
     const [loading, setLoading] = useState(true);
 

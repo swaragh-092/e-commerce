@@ -16,10 +16,10 @@ const CartPage = () => {
     const { cart, cartCount, loading, updateItem, removeItem, clearCart } = useCart();
     const navigate = useNavigate();
 
-    const items = cart?.CartItems || [];
+    const items = cart?.items || [];
     const subtotal = items.reduce((sum, item) => {
-        const price = parseFloat(item.Product?.salePrice || item.Product?.price || 0);
-        const modifier = parseFloat(item.ProductVariant?.priceModifier ?? 0);
+        const price = parseFloat(item.product?.salePrice || item.product?.price || 0);
+        const modifier = parseFloat(item.variant?.priceModifier ?? 0);
         return sum + (price + modifier) * item.quantity;
     }, 0);
 
@@ -56,12 +56,12 @@ const CartPage = () => {
                 {/* Items list */}
                 <Paper elevation={0} sx={{ border: '1px solid', borderColor: 'divider', borderRadius: 2 }}>
                     {items.map((item, idx) => {
-                        const product = item.Product;
-                        const variant = item.ProductVariant;
+                        const product = item.product;
+                        const variant = item.variant;
                         const price = parseFloat(product?.salePrice || product?.price || 0);
                         const modifier = parseFloat(variant?.priceModifier ?? 0);
                         const itemPrice = price + modifier;
-                        const imageUrl = getMediaUrl(product?.ProductImages?.[0]?.url || '') || 'https://via.placeholder.com/80';
+                        const imageUrl = getMediaUrl(product?.images?.[0]?.url || '') || 'https://via.placeholder.com/80';
 
                         return (
                             <React.Fragment key={item.id}>

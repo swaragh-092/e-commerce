@@ -26,6 +26,7 @@ const create = async (userId, slug, payload) => {
         where: { userId, status: 'delivered' },
         include: [{
             model: OrderItem,
+            as: 'items',
             where: { productId }
         }],
         transaction: t

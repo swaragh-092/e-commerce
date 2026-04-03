@@ -3,8 +3,11 @@ import { Box, Typography, Button, Rating, TextField, Divider, Avatar, List, List
 import { reviewService } from '../../services/reviewService';
 import { useAuth } from '../../hooks/useAuth';
 import { getMyOrders } from '../../services/adminService';
+import { useFeature } from '../../hooks/useSettings';
 
 const ReviewSection = ({ slug, productId }) => {
+    const reviewsEnabled = useFeature('reviews');
+    if (!reviewsEnabled) return null;
     const [reviews, setReviews] = useState([]);
     const [showForm, setShowForm] = useState(false);
     const [formData, setFormData] = useState({ rating: 0, title: '', body: '', orderId: null });

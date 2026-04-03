@@ -1,15 +1,18 @@
 import React, { createContext, useState, useEffect, useCallback, useContext } from 'react';
 import { wishlistService } from '../services/wishlistService';
 import { useAuth } from '../hooks/useAuth';
+import { useSettings } from '../hooks/useSettings';
 
 const WishlistContext = createContext({ wishlistIds: new Set(), refreshWishlist: () => {} });
 
 export const WishlistProvider = ({ children }) => {
   const [wishlistIds, setWishlistIds] = useState(new Set());
   const { isAuthenticated } = useAuth();
+  const { settings } = useSettings();
+  const wishlistEnabled = settings?.features?.wishlist !== false;
 
   const refreshWishlist = useCallback(async () => {
-    if (!isAuthenticated) {
+    if (!isAuthenticated || !wishlistEnabled) {
       setWishlistIds(new Set());
       return;
     }
@@ -23,7 +26,7 @@ export const WishlistProvider = ({ children }) => {
     } catch (_) {
       // silently ignore — wishlist is non-critical
     }
-  }, [isAuthenticated]);
+  }, [isAuthenticated, wishlistEnabled]);
 
   useEffect(() => {
     refreshWishlist();

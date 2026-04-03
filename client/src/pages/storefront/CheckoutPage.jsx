@@ -6,17 +6,22 @@ import {
 } from '@mui/material';
 import { useNavigate } from 'react-router-dom';
 import { AuthContext } from '../../context/AuthContext';
+import { useSettings } from '../../hooks/useSettings';
 import { useCart } from '../../hooks/useCart';
 import { userService } from '../../services/userService';
 import { validateCoupon } from '../../services/adminService';
 import PageSEO from '../../components/common/PageSEO';
 
-const STEPS = ['Shipping', 'Coupon', 'Review & Place Order'];
-
 const CheckoutPage = () => {
     const navigate = useNavigate();
     const { user } = useContext(AuthContext);
+    const { settings } = useSettings();
     const { cart, clearCart } = useCart();
+    const couponsEnabled = settings?.features?.coupons !== false;
+    const STEPS = couponsEnabled
+        ? ['Shipping', 'Coupon', 'Review & Place Order']
+        : ['Shipping', 'Review & Place Order'];
+    const reviewStep = couponsEnabled ? 2 : 1;
     const [activeStep, setActiveStep] = useState(0);
 
     // Addresses
@@ -36,10 +41,10 @@ const CheckoutPage = () => {
     const [placing, setPlacing] = useState(false);
     const [error, setError] = useState(null);
 
-    const items = cart?.CartItems || [];
+    const items = cart?.items || [];
     const subtotal = items.reduce((sum, item) => {
-        const price = parseFloat(item.Product?.salePrice || item.Product?.price || 0);
-        const modifier = parseFloat(item.ProductVariant?.priceModifier ?? 0);
+        const price = parseFloat(item.product?.salePrice || item.product?.price || 0);
+        const modifier = parseFloat(item.variant?.priceModifier ?? 0);
         return sum + (price + modifier) * item.quantity;
     }, 0);
     const discount = couponResult?.discount || 0;
@@ -159,7 +164,7 @@ const CheckoutPage = () => {
                     )}
 
                     {/* Step 1: Coupon */}
-                    {activeStep === 1 && (
+                    {activeStep === 1 && couponsEnabled && (
                         <Paper elevation={0} sx={{ border: '1px solid', borderColor: 'divider', borderRadius: 2, p: 3 }}>
                             <Typography variant="h6" fontWeight={600} mb={2}>Coupon Code (optional)</Typography>
                             <Box sx={{ display: 'flex', gap: 1, mb: 1 }}>
@@ -188,16 +193,16 @@ const CheckoutPage = () => {
                     )}
 
                     {/* Step 2: Review & Place */}
-                    {activeStep === 2 && (
+                    {activeStep === reviewStep && (
                         <Paper elevation={0} sx={{ border: '1px solid', borderColor: 'divider', borderRadius: 2, p: 3 }}>
                             <Typography variant="h6" fontWeight={600} mb={2}>Review Your Order</Typography>
                             {items.map((item) => {
-                                const price = parseFloat(item.Product?.salePrice || item.Product?.price || 0);
-                                const modifier = parseFloat(item.ProductVariant?.priceModifier ?? 0);
+                                const price = parseFloat(item.product?.salePrice || item.product?.price || 0);
+                                const modifier = parseFloat(item.variant?.priceModifier ?? 0);
                                 return (
                                     <Box key={item.id} sx={{ display: 'flex', justifyContent: 'space-between', mb: 1 }}>
                                         <Typography variant="body2">
-                                            {item.Product?.name} {item.ProductVariant ? `(${item.ProductVariant.name}: ${item.ProductVariant.value})` : ''} × {item.quantity}
+                                            {item.product?.name} {item.variant ? `(${item.variant.name}: ${item.variant.value})` : ''} × {item.quantity}
                                         </Typography>
                                         <Typography variant="body2" fontWeight={600}>
                                             ${((price + modifier) * item.quantity).toFixed(2)}
@@ -217,7 +222,7 @@ const CheckoutPage = () => {
                                 sx={{ mb: 2 }}
                             />
                             <Box sx={{ display: 'flex', justifyContent: 'space-between', mt: 2 }}>
-                                <Button onClick={() => setActiveStep(1)}>Back</Button>
+                                <Button onClick={() => setActiveStep(reviewStep - 1)}>Back</Button>
                                 <Button
                                     variant="contained"
                                     size="large"

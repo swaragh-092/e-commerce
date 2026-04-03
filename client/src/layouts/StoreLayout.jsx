@@ -29,7 +29,9 @@ const StoreLayout = () => {
                 {(user?.role === 'admin' || user?.role === 'super_admin') && (
                   <Button color="inherit" component={RouterLink} to="/admin">Admin Panel</Button>
                 )}
-                <Button color="inherit" component={RouterLink} to="/wishlist">Wishlist</Button>
+                {settings?.features?.wishlist !== false && (
+                  <Button color="inherit" component={RouterLink} to="/wishlist">Wishlist</Button>
+                )}
                 <Button color="inherit" component={RouterLink} to="/profile">Profile</Button>
                 <Button color="inherit" onClick={logout}>Logout</Button>
               </>

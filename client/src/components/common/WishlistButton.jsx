@@ -6,8 +6,11 @@ import { useNavigate, useLocation } from 'react-router-dom';
 import { wishlistService } from '../../services/wishlistService';
 import { useAuth } from '../../hooks/useAuth';
 import { useWishlist } from '../../context/WishlistContext';
+import { useFeature } from '../../hooks/useSettings';
 
 const WishlistButton = ({ productId }) => {
+  const wishlistEnabled = useFeature('wishlist');
+  if (!wishlistEnabled) return null;
   const { wishlistIds, refreshWishlist } = useWishlist();
   const [inWishlist, setInWishlist] = useState(false);
 
