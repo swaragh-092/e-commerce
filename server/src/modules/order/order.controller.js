@@ -18,7 +18,7 @@ const getOrders = async (req, res, next) => {
         const isAdminSession = req.user.role === 'admin' || req.user.role === 'super_admin';
         // But an admin might want to view own orders? Usually we trust `isAdmin`
         const result = await OrderService.getOrders(req.user.id, isAdminSession, page, limit);
-        return paginated(res, result.rows, { page, limit, total: result.count });
+        return paginated(res, result.rows, result.count, page, limit);
     } catch (err) { next(err); }
 };
 

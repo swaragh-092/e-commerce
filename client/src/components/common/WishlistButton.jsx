@@ -1,13 +1,20 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { IconButton, Tooltip, Snackbar, Alert } from '@mui/material';
 import FavoriteIcon from '@mui/icons-material/Favorite';
 import FavoriteBorderIcon from '@mui/icons-material/FavoriteBorder';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { wishlistService } from '../../services/wishlistService';
 import { useAuth } from '../../hooks/useAuth';
+import { useWishlist } from '../../context/WishlistContext';
 
-const WishlistButton = ({ productId, initialInWishlist = false }) => {
-  const [inWishlist, setInWishlist] = useState(initialInWishlist);
+const WishlistButton = ({ productId }) => {
+  const { wishlistIds, refreshWishlist } = useWishlist();
+  const [inWishlist, setInWishlist] = useState(false);
+
+  // Sync with global wishlist context whenever the set changes
+  useEffect(() => {
+    setInWishlist(wishlistIds.has(productId));
+  }, [wishlistIds, productId]);
   const [loading, setLoading] = useState(false);
   const [snackbar, setSnackbar] = useState(null);
   const { isAuthenticated } = useAuth();
@@ -24,13 +31,13 @@ const WishlistButton = ({ productId, initialInWishlist = false }) => {
     try {
       if (inWishlist) {
         await wishlistService.removeItem(productId);
-        setInWishlist(false);
         setSnackbar({ severity: 'info', message: 'Removed from wishlist' });
       } else {
         await wishlistService.addItem(productId);
-        setInWishlist(true);
         setSnackbar({ severity: 'success', message: 'Added to wishlist' });
       }
+      // Refresh the global set so all other WishlistButton instances update too
+      await refreshWishlist();
     } catch (error) {
       setSnackbar({ severity: 'error', message: error?.response?.data?.message || 'Wishlist update failed' });
     } finally {

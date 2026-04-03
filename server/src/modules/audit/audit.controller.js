@@ -15,11 +15,7 @@ const getAll = async (req, res, next) => {
       page: parseInt(page, 10),
       limit: parseInt(limit, 10),
     });
-    return paginated(res, rows, {
-      page: parseInt(page, 10),
-      limit: parseInt(limit, 10),
-      total: count,
-    });
+    return paginated(res, rows, count, parseInt(page, 10), parseInt(limit, 10));
   } catch (err) {
     next(err);
   }

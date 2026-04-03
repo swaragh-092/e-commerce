@@ -46,7 +46,7 @@ const list = async (req, res, next) => {
   try {
     const { page, limit, status, role } = req.query;
     const result = await UserService.listAll({ page, limit, status, role });
-    return paginated(res, result.rows, { page, limit, total: result.count });
+    return paginated(res, result.rows, result.count, page, limit);
   } catch (err) {
     next(err);
   }

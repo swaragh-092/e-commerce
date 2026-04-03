@@ -6,7 +6,7 @@ const list = async (req, res, next) => {
   try {
     const { page = 1, limit = 20 } = req.query;
     const result = await CouponService.list({ page, limit });
-    return paginated(res, result.rows, { page, limit, total: result.count });
+    return paginated(res, result.rows, result.count, page, limit);
   } catch (err) { next(err); }
 };
 

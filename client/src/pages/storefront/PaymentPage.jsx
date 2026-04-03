@@ -3,7 +3,7 @@ import { Box, Container, Typography, CircularProgress, Alert, Button, Paper, Div
 import { useParams, useNavigate } from 'react-router-dom';
 import { loadStripe } from '@stripe/stripe-js';
 import { Elements, PaymentElement, useStripe, useElements } from '@stripe/react-stripe-js';
-import { createIntent } from '../../services/paymentService';
+import paymentService from '../../services/paymentService';
 import PageSEO from '../../components/common/PageSEO';
 
 const stripePromise = loadStripe(import.meta.env.VITE_STRIPE_PUBLIC_KEY || '');
@@ -69,7 +69,7 @@ const PaymentPage = () => {
 
     useEffect(() => {
         if (!orderId) { navigate('/cart'); return; }
-        createIntent(orderId)
+        paymentService.createIntent(orderId)
             .then((res) => {
                 setClientSecret(res.data?.data?.clientSecret || res.data?.clientSecret);
             })

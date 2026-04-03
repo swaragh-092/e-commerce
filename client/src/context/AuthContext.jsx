@@ -13,8 +13,14 @@ const FullPageLoader = () => (
 );
 
 export const AuthProvider = ({ children }) => {
-  const [user, setUser] = useState(null);
-  const [isAuthenticated, setIsAuthenticated] = useState(false);
+  // Hydrate from cache immediately so the UI has data before the first API round-trip
+  const cachedUser = (() => {
+    try { return JSON.parse(localStorage.getItem('userProfile') || 'null'); }
+    catch { return null; }
+  })();
+
+  const [user, setUser] = useState(cachedUser);
+  const [isAuthenticated, setIsAuthenticated] = useState(Boolean(cachedUser));
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -25,10 +31,14 @@ export const AuthProvider = ({ children }) => {
           const userData = await userService.getMe();
           setUser(userData);
           setIsAuthenticated(true);
+          localStorage.setItem('userProfile', JSON.stringify(userData));
         } catch (error) {
           console.error('Failed to restore session', error);
           localStorage.removeItem('accessToken');
           localStorage.removeItem('refreshToken');
+          localStorage.removeItem('userProfile');
+          setUser(null);
+          setIsAuthenticated(false);
         }
       }
       setLoading(false);
@@ -49,6 +59,7 @@ export const AuthProvider = ({ children }) => {
     const data = await authService.login(email, password);
     setUser(data.user);
     setIsAuthenticated(true);
+    localStorage.setItem('userProfile', JSON.stringify(data.user));
     // Merge guest cart into authenticated cart
     try { await cartService.mergeGuestCart(); } catch (_) {}
     clearSessionId();
@@ -60,6 +71,7 @@ export const AuthProvider = ({ children }) => {
     const data = await authService.register(userData);
     setUser(data.user);
     setIsAuthenticated(true);
+    localStorage.setItem('userProfile', JSON.stringify(data.user));
     try { await cartService.mergeGuestCart(); } catch (_) {}
     clearSessionId();
     return data;
@@ -69,12 +81,14 @@ export const AuthProvider = ({ children }) => {
     await authService.logout();
     setUser(null);
     setIsAuthenticated(false);
+    localStorage.removeItem('userProfile');
   };
 
   /** Re-fetches /users/me and updates context — use after profile/avatar changes */
   const refreshUser = async () => {
     const updatedUser = await userService.getMe();
     setUser(updatedUser);
+    localStorage.setItem('userProfile', JSON.stringify(updatedUser));
     return updatedUser;
   };
 

@@ -23,40 +23,37 @@ const getActiveCartByOwner = async (userId, sessionId, transaction) => {
     return cart;
 };
 
+// Shared helper — reads cart+items within an existing transaction
+const fetchCartWithItems = async (cartId, transaction) => {
+    const cartWithItems = await Cart.findByPk(cartId, {
+        include: [{
+            model: CartItem,
+            as: 'items',
+            include: [
+                { model: Product, as: 'product', required: false },
+                { model: ProductVariant, as: 'variant', required: false }
+            ]
+        }],
+        transaction
+    });
+
+    const items = cartWithItems.items
+        ? cartWithItems.items.filter(item => item.product !== null)
+        : [];
+
+    return {
+        id: cartWithItems.id,
+        status: cartWithItems.status,
+        userId: cartWithItems.userId,
+        sessionId: cartWithItems.sessionId,
+        items
+    };
+};
+
 const getCart = async (userId, sessionId) => {
     return sequelize.transaction(async (t) => {
         const cart = await getActiveCartByOwner(userId, sessionId, t);
-        
-        const cartWithItems = await Cart.findByPk(cart.id, {
-            include: [{
-                model: CartItem,
-                as: 'items',
-                include: [
-                    { 
-                        model: Product, 
-                        as: 'product',
-                        // paranoid: true on Product auto-adds WHERE deleted_at IS NULL
-                        required: false 
-                    },
-                    {
-                        model: ProductVariant,
-                        as: 'variant',
-                        required: false
-                    }
-                ]
-            }],
-            transaction: t
-        });
-
-        const items = cartWithItems.items ? cartWithItems.items.filter(item => item.product !== null) : [];
-        
-        return {
-            id: cartWithItems.id,
-            status: cartWithItems.status,
-            userId: cartWithItems.userId,
-            sessionId: cartWithItems.sessionId,
-            items: items
-        };
+        return fetchCartWithItems(cart.id, t);
     });
 };
 
@@ -70,7 +67,7 @@ const addItem = async (userId, sessionId, payload) => {
             throw new AppError('NOT_FOUND', 404, 'Product not found or unavailable');
         }
 
-        const availableStock = product.quantity - product.reservedQty;
+        const availableStock = product.quantity - (product.reservedQty || 0);
         
         let item = await CartItem.findOne({
             where: { cartId: cart.id, productId, variantId: variantId || null },
@@ -95,7 +92,7 @@ const addItem = async (userId, sessionId, payload) => {
             }, { transaction: t });
         }
 
-        return await getCart(userId, sessionId);
+        return fetchCartWithItems(cart.id, t);
     });
 };
 
@@ -118,13 +115,13 @@ const updateItem = async (userId, sessionId, itemId, quantity) => {
             throw new AppError('NOT_FOUND', 404, 'Product no longer available and removed from cart');
         }
 
-        const availableStock = product.quantity - product.reservedQty;
+        const availableStock = product.quantity - (product.reservedQty || 0);
         if (quantity > availableStock) {
              throw new AppError('CONFLICT', 409, 'Insufficient stock');
         }
 
         await item.update({ quantity }, { transaction: t });
-        return await getCart(userId, sessionId);
+        return fetchCartWithItems(cart.id, t);
     });
 };
 
@@ -138,7 +135,7 @@ const removeItem = async (userId, sessionId, itemId) => {
         if (!item) throw new AppError('NOT_FOUND', 404, 'Cart item not found');
         
         await item.destroy({ transaction: t });
-        return await getCart(userId, sessionId);
+        return fetchCartWithItems(cart.id, t);
     });
 };
 
@@ -160,7 +157,10 @@ const mergeGuestCart = async (guestSessionId, userId) => {
             transaction: t 
         });
 
-        if (!guestCart || !guestCart.items || guestCart.items.length === 0) return await getCart(userId, null);
+        if (!guestCart || !guestCart.items || guestCart.items.length === 0) {
+            const userCart = await getActiveCartByOwner(userId, null, t);
+            return fetchCartWithItems(userCart.id, t);
+        }
 
         const userCart = await getActiveCartByOwner(userId, null, t);
 
@@ -189,7 +189,7 @@ const mergeGuestCart = async (guestSessionId, userId) => {
         }
 
         await guestCart.update({ status: 'merged' }, { transaction: t });
-        return await getCart(userId, null);
+        return fetchCartWithItems(userCart.id, t);
     });
 };
 

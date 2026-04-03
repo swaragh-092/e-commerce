@@ -1,20 +1,14 @@
 import React, { useState, useEffect } from 'react';
 import { Box, Typography, Slider, FormControl, Select, MenuItem, InputLabel, Button, List, ListItem, ListItemText, Collapse } from '@mui/material';
-import { getCategoryTree } from '../../services/categoryService';
+import { useCategories } from '../../context/CategoryContext';
 
 const ProductFilters = ({ filters, onFilterChange }) => {
-    const [categories, setCategories] = useState([]);
+    const { categories } = useCategories();
     // Local state for slider — only commits to URL on release (prevents per-pixel API calls)
     const [sliderValue, setSliderValue] = useState([
         parseInt(filters.minPrice) || 0,
         parseInt(filters.maxPrice) || 2000,
     ]);
-
-    useEffect(() => {
-        getCategoryTree().then(res => {
-            if (res?.data?.categories) setCategories(res.data.categories);
-        }).catch(console.error);
-    }, []);
 
     // Sync slider when URL params change externally (e.g. clear all)
     useEffect(() => {

@@ -16,6 +16,7 @@ const getWishlist = async (userId) => {
       model: Product,
       include: [{
         model: ProductImage,
+        as: 'images',
         where: { isPrimary: true },
         required: false
       }],

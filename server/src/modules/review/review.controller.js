@@ -25,7 +25,7 @@ const list = async (req, res, next) => {
     const effectiveStatus = slug ? 'approved' : (status || 'approved');
     
     const result = await ReviewService.list(slug, { page, limit, status: effectiveStatus });
-    return paginated(res, result.rows, { page, limit, total: result.count });
+    return paginated(res, result.rows, result.count, page, limit);
   } catch (err) {
     next(err);
   }

@@ -4,6 +4,7 @@ import { Outlet, Link as RouterLink } from 'react-router-dom';
 import { useAuth } from '../hooks/useAuth';
 import { useSettings } from '../hooks/useSettings';
 import { useCart } from '../hooks/useCart';
+import CategoryNav from '../components/layout/CategoryNav';
 
 const StoreLayout = () => {
   const { isAuthenticated, user, logout } = useAuth();
@@ -41,6 +42,7 @@ const StoreLayout = () => {
           </Box>
         </Toolbar>
       </AppBar>
+      <CategoryNav />
 
       <Box component="main" sx={{ flexGrow: 1 }}>
         <Outlet />
