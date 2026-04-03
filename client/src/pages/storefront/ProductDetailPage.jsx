@@ -1,5 +1,15 @@
+import { useState, useEffect } from 'react';
+import { useParams } from 'react-router-dom';
+import {
+    Box, Button, Chip, CircularProgress, Container, Divider, Grid, Typography,
+} from '@mui/material';
+import CartIcon from '@mui/icons-material/ShoppingCart';
 import { getProduct } from '../../services/productService';
 import PageSEO from '../../components/common/PageSEO';
+import ProductImages from '../../components/product/ProductImages';
+import VariantSelector from '../../components/product/VariantSelector';
+import WishlistButton from '../../components/common/WishlistButton';
+import ReviewSection from '../../components/product/ReviewSection';
 import DOMPurify from 'dompurify';
 import { useCart } from '../../hooks/useCart';
 

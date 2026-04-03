@@ -18,6 +18,7 @@ module.exports = (sequelize, DataTypes) => {
     }, {
         tableName: 'wishlist_items',
         timestamps: true,
+        updatedAt: false,
         underscored: true,
         indexes: [
             {
