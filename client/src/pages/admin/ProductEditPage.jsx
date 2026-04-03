@@ -1,6 +1,12 @@
 import React, { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { Box, Typography, TextField, Button, Grid, Paper, FormControl, InputLabel, Select, MenuItem, FormHelperText, Chip, OutlinedInput } from '@mui/material';
+import {
+    Box, Typography, TextField, Button, Grid, Paper,
+    FormControl, InputLabel, Select, MenuItem, Chip,
+    OutlinedInput, Alert, IconButton, Divider, Tooltip,
+} from '@mui/material';
+import AddIcon from '@mui/icons-material/Add';
+import DeleteIcon from '@mui/icons-material/Delete';
 import { getProduct, createProduct, updateProduct } from '../../services/productService';
 import { getCategoryTree } from '../../services/categoryService';
 import MediaUploader from '../../components/common/MediaUploader';
@@ -14,10 +20,12 @@ const ProductEditPage = () => {
         name: '', description: '', shortDescription: '', sku: '',
         price: '', salePrice: '', quantity: '', status: 'draft',
         categoryIds: [],
-        images: []
+        images: [],
+        variants: [],
     });
 
     const [categories, setCategories] = useState([]);
+    const [saveError, setSaveError] = useState(null);
     
     useEffect(() => {
         const load = async () => {
@@ -33,7 +41,15 @@ const ProductEditPage = () => {
                         name: p.name, description: p.description || '', shortDescription: p.shortDescription || '',
                         sku: p.sku || '', price: p.price, salePrice: p.salePrice || '', quantity: p.quantity,
                         status: p.status, categoryIds: p.categories?.map(c => c.id) || [],
-                        images: p.images || []
+                        images: p.images || [],
+                        variants: (p.ProductVariants || p.variants || []).map(v => ({
+                            id: v.id,
+                            name: v.name || '',
+                            value: v.value || '',
+                            priceModifier: v.priceModifier ?? 0,
+                            quantity: v.quantity ?? 0,
+                            sku: v.sku || '',
+                        })),
                     });
                 }
             }
@@ -43,12 +59,18 @@ const ProductEditPage = () => {
 
     const handleSave = async (e) => {
         e.preventDefault();
+        setSaveError(null);
         try {
             const payload = {
                 ...formData,
                 price: parseFloat(formData.price),
                 salePrice: formData.salePrice ? parseFloat(formData.salePrice) : null,
-                quantity: parseInt(formData.quantity) || 0
+                quantity: parseInt(formData.quantity) || 0,
+                variants: formData.variants.map(v => ({
+                    ...v,
+                    priceModifier: parseFloat(v.priceModifier) || 0,
+                    quantity: parseInt(v.quantity) || 0,
+                })),
             };
             if (isNew) {
                 await createProduct(payload);
@@ -57,9 +79,25 @@ const ProductEditPage = () => {
             }
             navigate('/admin/products');
         } catch (err) {
-            alert(err.response?.data?.error?.message || err.message);
+            setSaveError(err.response?.data?.error?.message || err.message || 'Failed to save product.');
         }
     };
+
+    /* ── Variant helpers ── */
+    const addVariant = () =>
+        setFormData(prev => ({
+            ...prev,
+            variants: [...prev.variants, { name: '', value: '', priceModifier: 0, quantity: 0, sku: '' }],
+        }));
+
+    const removeVariant = (idx) =>
+        setFormData(prev => ({ ...prev, variants: prev.variants.filter((_, i) => i !== idx) }));
+
+    const setVariantField = (idx, field, value) =>
+        setFormData(prev => ({
+            ...prev,
+            variants: prev.variants.map((v, i) => i === idx ? { ...v, [field]: value } : v),
+        }));
 
     const handleMediaUpload = (media) => {
         setFormData(prev => ({
@@ -120,7 +158,7 @@ const ProductEditPage = () => {
                         </Paper>
                     </Grid>
 
-                    <Grid item xs={12} md={4}>
+                <Grid item xs={12} md={4}>
                         <Paper sx={{ p: 3, mb: 3 }}>
                             <Typography variant="h6" gutterBottom>Status</Typography>
                             <FormControl fullWidth margin="normal">
@@ -167,8 +205,81 @@ const ProductEditPage = () => {
 
                     </Grid>
                 </Grid>
-                
-                <Box sx={{ mt: 4, display: 'flex', justifyContent: 'flex-end', gap: 2 }}>
+
+                {/* Variants */}
+                <Paper sx={{ p: 3, mt: 2, mb: 3 }}>
+                    <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2 }}>
+                        <Typography variant="h6">Product Variants</Typography>
+                        <Button size="small" startIcon={<AddIcon />} onClick={addVariant} variant="outlined">
+                            Add Variant
+                        </Button>
+                    </Box>
+
+                    {formData.variants.length === 0 ? (
+                        <Typography variant="body2" color="text.secondary">
+                            No variants — product uses the base price and stock quantity above.
+                        </Typography>
+                    ) : (
+                        formData.variants.map((v, idx) => (
+                            <Box key={idx}>
+                                {idx > 0 && <Divider sx={{ my: 2 }} />}
+                                <Grid container spacing={2} alignItems="center">
+                                    <Grid item xs={12} sm={2}>
+                                        <TextField
+                                            fullWidth size="small" label="Attribute"
+                                            placeholder="e.g. Color"
+                                            value={v.name}
+                                            onChange={(e) => setVariantField(idx, 'name', e.target.value)}
+                                        />
+                                    </Grid>
+                                    <Grid item xs={12} sm={2}>
+                                        <TextField
+                                            fullWidth size="small" label="Value"
+                                            placeholder="e.g. Red"
+                                            value={v.value}
+                                            onChange={(e) => setVariantField(idx, 'value', e.target.value)}
+                                        />
+                                    </Grid>
+                                    <Grid item xs={6} sm={2}>
+                                        <TextField
+                                            fullWidth size="small" label="Price Modifier"
+                                            type="number" inputProps={{ step: '0.01' }}
+                                            value={v.priceModifier}
+                                            onChange={(e) => setVariantField(idx, 'priceModifier', e.target.value)}
+                                            helperText="+/- from base"
+                                        />
+                                    </Grid>
+                                    <Grid item xs={6} sm={2}>
+                                        <TextField
+                                            fullWidth size="small" label="Stock"
+                                            type="number"
+                                            value={v.quantity}
+                                            onChange={(e) => setVariantField(idx, 'quantity', e.target.value)}
+                                        />
+                                    </Grid>
+                                    <Grid item xs={10} sm={3}>
+                                        <TextField
+                                            fullWidth size="small" label="SKU (optional)"
+                                            value={v.sku}
+                                            onChange={(e) => setVariantField(idx, 'sku', e.target.value)}
+                                        />
+                                    </Grid>
+                                    <Grid item xs={2} sm={1}>
+                                        <Tooltip title="Remove variant">
+                                            <IconButton color="error" size="small" onClick={() => removeVariant(idx)}>
+                                                <DeleteIcon fontSize="small" />
+                                            </IconButton>
+                                        </Tooltip>
+                                    </Grid>
+                                </Grid>
+                            </Box>
+                        ))
+                    )}
+                </Paper>
+
+                {saveError && <Alert severity="error" sx={{ mb: 2 }}>{saveError}</Alert>}
+
+                <Box sx={{ mt: 2, display: 'flex', justifyContent: 'flex-end', gap: 2 }}>
                     <Button onClick={() => navigate('/admin/products')}>Cancel</Button>
                     <Button variant="contained" type="submit" size="large">Save Product</Button>
                 </Box>

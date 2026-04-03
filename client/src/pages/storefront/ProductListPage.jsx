@@ -34,6 +34,8 @@ const ProductListPage = () => {
     useEffect(() => {
         setSearchInput(searchParams.get('search') || '');
     }, [searchParams]);
+
+    const filters = {
         search: searchParams.get('search') || '',
         category: searchParams.get('category') || '',
         page: parseInt(searchParams.get('page')) || 1,
