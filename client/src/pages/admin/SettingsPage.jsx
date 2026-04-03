@@ -102,7 +102,7 @@ const SettingsPage = () => {
     }
   };
 
-  const tabs = ['Theme', 'Features', 'Shipping', 'Tax', 'SEO', 'General'];
+  const tabs = ['Theme', 'Features', 'Shipping', 'Tax', 'SEO', 'General', 'SKU', 'Logo'];
 
   // Current currency symbol — used in shipping adornments
   const currSymbol = getCurrencySymbol(form['general.currency']);
@@ -143,6 +143,7 @@ const SettingsPage = () => {
         sx={{ mb: 2, display: 'block' }}
       />
       <Divider sx={{ mb: 2 }} />
+      <Typography variant="subtitle2" sx={{ mb: 1 }}>Brand Colors</Typography>
       <Grid container spacing={2}>
         <Grid item xs={12} sm={6}>
           {field('theme.primaryColor', 'Primary Color', 'color')}
@@ -150,6 +151,22 @@ const SettingsPage = () => {
         <Grid item xs={12} sm={6}>
           {field('theme.secondaryColor', 'Secondary Color', 'color')}
         </Grid>
+      </Grid>
+      <Typography variant="subtitle2" sx={{ mb: 1, mt: 1 }}>Background Colors</Typography>
+      <Grid container spacing={2}>
+        <Grid item xs={12} sm={6}>
+          {field('theme.backgroundColor', 'Background Color', 'color')}
+        </Grid>
+        <Grid item xs={12} sm={6}>
+          {field('theme.surfaceColor', 'Surface / Card Color', 'color')}
+        </Grid>
+        <Grid item xs={12} sm={6}>
+          {field('theme.textColor', 'Text Color', 'color')}
+        </Grid>
+      </Grid>
+      <Divider sx={{ my: 2 }} />
+      <Typography variant="subtitle2" sx={{ mb: 1 }}>Typography &amp; Shape</Typography>
+      <Grid container spacing={2}>
         <Grid item xs={12} sm={6}>
           <Autocomplete
             options={FONTS}
@@ -160,47 +177,88 @@ const SettingsPage = () => {
           />
         </Grid>
         <Grid item xs={12} sm={6}>
-          {field('theme.borderRadius', 'Border Radius')}
+          {field('theme.borderRadius', 'Border Radius (e.g. 12px)')}
         </Grid>
       </Grid>
     </Box>,
 
     /* Features */
     <Box key="features" sx={{ display: 'flex', flexDirection: 'column' }}>
+      <Typography variant="subtitle2" sx={{ mb: 1 }}>Store Features</Typography>
       {toggle('features.wishlist', 'Wishlist')}
       {toggle('features.reviews', 'Reviews')}
       {toggle('features.coupons', 'Coupons')}
-      {toggle('features.requirePurchaseForReview', 'Require purchase to review')}
-      {toggle('features.requireEmailVerification', 'Require email verification')}
+      {toggle('features.guestCheckout', 'Guest Checkout (no account required)')}
+      <Divider sx={{ my: 1.5 }} />
+      <Typography variant="subtitle2" sx={{ mb: 1 }}>Accounts &amp; Auth</Typography>
+      {toggle('features.emailVerification', 'Require email verification on signup')}
+      {toggle('features.requirePurchaseForReview', 'Require purchase to leave a review')}
+      <Divider sx={{ my: 1.5 }} />
+      <Typography variant="subtitle2" sx={{ mb: 1 }}>Advanced (coming soon)</Typography>
+      {toggle('features.multiCurrency', 'Multi-currency support')}
+      {toggle('features.socialLogin', 'Social login (Google / GitHub)')}
     </Box>,
 
     /* Shipping */
     <Box key="shipping">
-      {field('shipping.method', 'Shipping Method')}
-      {field('shipping.flatRate', `Flat Rate (${currSymbol})`, 'number', {
-        InputProps: { startAdornment: <InputAdornment position="start">{currSymbol}</InputAdornment> },
-      })}
-      {field('shipping.freeThreshold', `Free Shipping Above (${currSymbol})`, 'number', {
-        InputProps: { startAdornment: <InputAdornment position="start">{currSymbol}</InputAdornment> },
-      })}
+      <FormControl fullWidth size="small" sx={{ mb: 2 }}>
+        <InputLabel>Shipping Method</InputLabel>
+        <Select
+          label="Shipping Method"
+          value={form['shipping.method'] || 'flat_rate'}
+          onChange={(e) => set('shipping.method', e.target.value)}
+        >
+          <MenuItem value="flat_rate">Flat Rate — charge a fixed fee on every order</MenuItem>
+          <MenuItem value="free_above_threshold">Free above threshold — flat rate until a minimum order amount</MenuItem>
+          <MenuItem value="free">Always Free — no shipping charge</MenuItem>
+        </Select>
+      </FormControl>
+      {form['shipping.method'] !== 'free' && (
+        field('shipping.flatRate', `Flat Rate (${currSymbol})`, 'number', {
+          InputProps: { startAdornment: <InputAdornment position="start">{currSymbol}</InputAdornment> },
+        })
+      )}
+      {form['shipping.method'] === 'free_above_threshold' && (
+        field('shipping.freeThreshold', `Free Shipping Above (${currSymbol})`, 'number', {
+          InputProps: { startAdornment: <InputAdornment position="start">{currSymbol}</InputAdornment> },
+        })
+      )}
     </Box>,
 
     /* Tax */
     <Box key="tax">
-      {field('tax.rate', 'Tax Rate (e.g. 0.18 for 18%)', 'number')}
-      {toggle('tax.inclusive', 'Prices include tax')}
+      <Typography variant="subtitle2" fontWeight={600} color="text.secondary" mb={1.5}>Base Tax</Typography>
+      {field('tax.rate', 'Global Tax Rate — used when no GST component is enabled (e.g. 0.18 for 18%)', 'number')}
+      {toggle('tax.inclusive', 'Prices include tax (no tax added at checkout)')}
+
+      <Divider sx={{ my: 2 }} />
+      <Typography variant="subtitle2" fontWeight={600} color="text.secondary" mb={0.5}>GST Breakdown (India)</Typography>
+      <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mb: 2 }}>
+        When any GST component is enabled it overrides the global rate and shows a line-by-line breakdown.
+      </Typography>
+
+      {toggle('tax.enableCGST', 'Enable CGST (Central Goods & Services Tax)')}
+      {Boolean(form['tax.enableCGST']) && field('tax.cgstRate', 'CGST Rate (e.g. 0.09 for 9%)', 'number')}
+
+      {toggle('tax.enableSGST', 'Enable SGST (State Goods & Services Tax)')}
+      {Boolean(form['tax.enableSGST']) && field('tax.sgstRate', 'SGST Rate (e.g. 0.09 for 9%)', 'number')}
+
+      {toggle('tax.enableIGST', 'Enable IGST (Integrated GST — inter-state)')}
+      {Boolean(form['tax.enableIGST']) && field('tax.igstRate', 'IGST Rate (e.g. 0.18 for 18%)', 'number')}
     </Box>,
 
     /* SEO */
     <Box key="seo">
-      {field('seo.siteName', 'Site Name')}
-      {field('seo.metaDescription', 'Meta Description')}
-      {field('seo.googleAnalyticsId', 'Google Analytics ID')}
+      {field('seo.titleTemplate', 'Page Title Template (use %s for page name, e.g. %s | My Store)')}
+      {field('seo.defaultDescription', 'Default Meta Description')}
+      {field('seo.ogImage', 'Default OG / Social Share Image URL')}
+      {field('seo.googleAnalyticsId', 'Google Analytics ID (e.g. G-XXXXXXXX)')}
     </Box>,
 
     /* General */
     <Box key="general">
       {field('general.storeName', 'Store Name')}
+      {field('general.storeDescription', 'Store Description')}
       <FormControl fullWidth size="small" sx={{ mb: 2 }}>
         <InputLabel>Currency</InputLabel>
         <Select
@@ -215,8 +273,101 @@ const SettingsPage = () => {
           ))}
         </Select>
       </FormControl>
-      {field('general.timezone', 'Time Zone')}
+      {field('general.locale', 'Locale (e.g. en-US, fr-FR)')}
+      {field('general.timezone', 'Time Zone (e.g. UTC, Asia/Kolkata)')}
       {field('general.contactEmail', 'Contact Email', 'email')}
+    </Box>,
+
+    /* SKU */
+    <Box key="sku">
+      <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
+        Controls how SKUs are auto-generated for products and variants. Use the ⚡ button in product and variant forms to generate SKUs based on these rules.
+      </Typography>
+      <Divider sx={{ mb: 3 }} />
+      <Grid container spacing={2}>
+        <Grid item xs={12} sm={6}>
+          {field('sku.prefix', 'Prefix (e.g. SHOP, BRAND)', 'text')}
+        </Grid>
+        <Grid item xs={12} sm={6}>
+          <FormControl fullWidth size="small" sx={{ mb: 2 }}>
+            <InputLabel>Separator</InputLabel>
+            <Select
+              label="Separator"
+              value={form['sku.separator'] ?? '-'}
+              onChange={(e) => set('sku.separator', e.target.value)}
+            >
+              <MenuItem value="-">Hyphen  ( - )</MenuItem>
+              <MenuItem value="_">Underscore  ( _ )</MenuItem>
+              <MenuItem value=".">Dot  ( . )</MenuItem>
+              <MenuItem value="">None</MenuItem>
+            </Select>
+          </FormControl>
+        </Grid>
+      </Grid>
+
+      <Typography variant="subtitle2" sx={{ mt: 1, mb: 1 }}>Product SKU options</Typography>
+      {toggle('sku.includeProductName', 'Include product name code (first word, max 8 chars)')}
+      {toggle('sku.useRandom', 'Append random characters for guaranteed uniqueness')}
+      {form['sku.useRandom'] && (
+        <TextField
+          size="small"
+          label="Random character length"
+          type="number"
+          value={form['sku.randomLength'] ?? 4}
+          onChange={(e) => set('sku.randomLength', e.target.value)}
+          sx={{ mt: 1, mb: 2, width: 200 }}
+          inputProps={{ min: 2, max: 8 }}
+        />
+      )}
+
+      <Typography variant="subtitle2" sx={{ mt: 2, mb: 1 }}>Variant SKU options</Typography>
+      {toggle('sku.includeAttributeName', 'Include attribute name (e.g. Color, Size)')}
+      {toggle('sku.includeAttributeValue', 'Include attribute value (e.g. Red, XL)')}
+      {toggle('sku.autoUppercase', 'Auto-uppercase everything')}
+
+      <Divider sx={{ my: 2 }} />
+      <Typography variant="subtitle2" sx={{ mb: 1 }}>Live Preview</Typography>
+      {(() => {
+        const sep = form['sku.separator'] ?? '-';
+        const prefix = (form['sku.prefix'] || '').trim();
+        const upper = form['sku.autoUppercase'] !== false;
+        const apply = (s) => (upper ? s.toUpperCase() : s);
+        const parts = [];
+        if (prefix) parts.push(apply(prefix));
+        if (form['sku.includeProductName'] !== false) parts.push(apply('Tshirt'));
+        if (form['sku.useRandom']) parts.push('A3X7');
+        const baseSku = parts.join(sep) || apply('Tshirt');
+        const varParts = [baseSku];
+        if (form['sku.includeAttributeName']) varParts.push(apply('Color'));
+        if (form['sku.includeAttributeValue'] !== false) varParts.push(apply('Red'));
+        const variantSku = varParts.join(sep);
+        return (
+          <Box sx={{ fontFamily: 'monospace', bgcolor: 'action.hover', p: 2, borderRadius: 2 }}>
+            <Typography variant="body2">Product SKU: <strong>{baseSku}</strong></Typography>
+            <Typography variant="body2" sx={{ mt: 0.5 }}>Variant SKU: <strong>{variantSku}</strong></Typography>
+          </Box>
+        );
+      })()}
+    </Box>,
+
+    /* Logo */
+    <Box key="logo">
+      <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
+        Paths to logo and favicon assets. These should be URLs or paths relative to the public folder (e.g. <code>/assets/logo.png</code>).
+      </Typography>
+      <Divider sx={{ mb: 3 }} />
+      {field('logo.main', 'Main Logo URL (used in header/navbar)')}
+      {form['logo.main'] && (
+        <Box sx={{ mb: 2 }}>
+          <img src={form['logo.main']} alt="Logo preview" style={{ maxHeight: 60, objectFit: 'contain', border: '1px solid #ddd', borderRadius: 8, padding: 4 }} onError={(e) => { e.target.style.display = 'none'; }} />
+        </Box>
+      )}
+      {field('logo.favicon', 'Favicon URL (16×16 or 32×32 .ico / .png)')}
+      {form['logo.favicon'] && (
+        <Box sx={{ mb: 2 }}>
+          <img src={form['logo.favicon']} alt="Favicon preview" style={{ maxHeight: 32, objectFit: 'contain', border: '1px solid #ddd', borderRadius: 4, padding: 2 }} onError={(e) => { e.target.style.display = 'none'; }} />
+        </Box>
+      )}
     </Box>,
   ];
 

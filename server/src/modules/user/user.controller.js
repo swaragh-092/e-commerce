@@ -23,7 +23,18 @@ const updateMe = async (req, res, next) => {
 
 const updateAvatar = async (req, res, next) => {
   try {
+    // Support both direct file upload and legacy { mediaId } JSON body
+    if (req.file) {
+      const mediaService = require('../media/media.service');
+      const media = await mediaService.uploadMedia(req.file);
+      const user = await UserService.updateAvatar(req.user.id, media.id);
+      return success(res, user, 'Avatar updated successfully');
+    }
+
     const { mediaId } = req.body;
+    if (!mediaId) {
+      return next(Object.assign(new Error('No file or mediaId provided'), { statusCode: 400 }));
+    }
     const user = await UserService.updateAvatar(req.user.id, mediaId);
     return success(res, user, 'Avatar updated successfully');
   } catch (err) {

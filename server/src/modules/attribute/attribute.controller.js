@@ -122,3 +122,41 @@ exports.cloneVariants = async (req, res, next) => {
         next(err);
     }
 };
+
+// --- Per-product variant CRUD ---
+
+exports.getProductVariants = async (req, res, next) => {
+    try {
+        const result = await attributeService.getProductVariants(req.params.id);
+        return success(res, result, 'Variants retrieved');
+    } catch (err) {
+        next(err);
+    }
+};
+
+exports.addProductVariant = async (req, res, next) => {
+    try {
+        const result = await attributeService.addProductVariant(req.params.id, req.body);
+        return success(res, result, 'Variant added', 201);
+    } catch (err) {
+        next(err);
+    }
+};
+
+exports.updateProductVariant = async (req, res, next) => {
+    try {
+        const result = await attributeService.updateProductVariant(req.params.id, req.params.variantId, req.body);
+        return success(res, result, 'Variant updated');
+    } catch (err) {
+        next(err);
+    }
+};
+
+exports.deleteProductVariant = async (req, res, next) => {
+    try {
+        await attributeService.deleteProductVariant(req.params.id, req.params.variantId);
+        return success(res, null, 'Variant deleted');
+    } catch (err) {
+        next(err);
+    }
+};

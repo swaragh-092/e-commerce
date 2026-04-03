@@ -1,5 +1,5 @@
-import React, { useState, useEffect } from 'react';
-import { useParams, useNavigate } from 'react-router-dom';
+import React, { useState, useEffect, useCallback } from 'react';
+import { useParams, useNavigate, Link } from 'react-router-dom';
 import {
   Box,
   Typography,
@@ -14,9 +14,26 @@ import {
   Chip,
   OutlinedInput,
   FormHelperText,
+  Table,
+  TableHead,
+  TableRow,
+  TableBody,
+  TableCell,
+  CircularProgress,
+  Tooltip,
+  IconButton,
+  Divider,
+  Alert,
+  InputAdornment,
+} from '@mui/material';
+import { Add as AddIcon, Delete as DeleteIcon, ContentCopy as ContentCopyIcon, ElectricBolt as ElectricBoltIcon } from '@mui/icons-material';
+import useSKUGenerator from '../../hooks/useSKUGenerator';
+import {
+  Dialog, DialogTitle, DialogContent, DialogActions,
 } from '@mui/material';
 import { getProductById, createProduct, updateProduct } from '../../services/productService';
 import { getCategoryTree } from '../../services/categoryService';
+import attributeService from '../../services/attributeService';
 import MediaUploader from '../../components/common/MediaUploader';
 import { useNotification } from '../../context/NotificationContext';
 
@@ -63,6 +80,7 @@ const ProductEditPage = () => {
   const navigate = useNavigate();
   const notify = useNotification();
   const isNew = !id || id === 'new';
+  const { generateProductSKU } = useSKUGenerator();
 
   const [formData, setFormData] = useState({
     name: '',
@@ -137,13 +155,14 @@ const ProductEditPage = () => {
         quantity: parseInt(formData.quantity) || 0,
       };
       if (isNew) {
-        await createProduct(payload);
-        notify('Product created successfully!', 'success');
+        const res = await createProduct(payload);
+        const newId = res?.data?.product?.id;
+        notify('Product created! You can now add variants below.', 'success');
+        navigate(`/admin/products/${newId}/edit`, { replace: true });
       } else {
         await updateProduct(id, payload);
         notify('Product updated successfully!', 'success');
       }
-      navigate('/admin/products');
     } catch (err) {
       notify(err.response?.data?.error?.message || err.message, 'error');
     } finally {
@@ -326,6 +345,21 @@ const ProductEditPage = () => {
                 onChange={(e) => setField('sku', e.target.value)}
                 error={Boolean(errors.sku)}
                 helperText={errors.sku}
+                InputProps={{
+                  endAdornment: (
+                    <InputAdornment position="end">
+                      <Tooltip title="Auto-generate SKU from product name (uses SKU settings)">
+                        <IconButton
+                          size="small"
+                          onClick={() => setField('sku', generateProductSKU(formData.name))}
+                          disabled={!formData.name.trim()}
+                        >
+                          <ElectricBoltIcon fontSize="small" color="warning" />
+                        </IconButton>
+                      </Tooltip>
+                    </InputAdornment>
+                  ),
+                }}
               />
               <TextField
                 fullWidth
@@ -351,7 +385,360 @@ const ProductEditPage = () => {
           </Button>
         </Box>
       </form>
+
+      {/* Variants panel — only visible once the product has been saved and has a real ID */}
+      {!isNew && <VariantsPanel productId={id} baseSku={formData.sku} />}
     </Box>
+  );
+};
+
+/* ─── Variants Panel ──────────────────────────────────────────────────────── */
+const VariantsPanel = ({ productId, baseSku }) => {
+  const notify = useNotification();
+  const { generateVariantSKU } = useSKUGenerator();
+  const [variants, setVariants] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+  const [attributes, setAttributes] = useState([]);
+  const [selectedTemplate, setSelectedTemplate] = useState('');
+  const [cloneOpen, setCloneOpen] = useState(false);
+  const [cloneSourceId, setCloneSourceId] = useState('');
+  const [cloning, setCloning] = useState(false);
+
+  const loadAll = useCallback(async () => {
+    setLoading(true);
+    try {
+      const [varRes, attrRes] = await Promise.all([
+        attributeService.getProductVariants(productId),
+        attributeService.getAttributes({ limit: 100 }),
+      ]);
+      const varData = varRes?.data?.data || [];
+      const attrData = attrRes?.data?.data?.rows || attrRes?.data?.data || [];
+      setVariants(varData.map((v) => ({ ...v, _dirty: false, _new: false })));
+      setAttributes(attrData);
+    } catch {
+      notify('Failed to load variants.', 'error');
+    } finally {
+      setLoading(false);
+    }
+  }, [productId]);
+
+  useEffect(() => { loadAll(); }, [loadAll]);
+
+  // Add all values from the selected attribute template as pending rows
+  const handleAddFromTemplate = () => {
+    const tmpl = attributes.find((a) => a.id === selectedTemplate);
+    if (!tmpl) return;
+    if (!tmpl.values?.length) {
+      notify(`"${tmpl.name}" has no values. Add values in the Attributes section first.`, 'warning');
+      return;
+    }
+    setVariants((prev) => [
+      ...prev,
+      ...tmpl.values.map((v) => ({
+        _tempId: `${Date.now()}-${Math.random()}`,
+        _new: true,
+        _dirty: false,
+        name: tmpl.name,
+        value: v.value,
+        priceModifier: 0,
+        quantity: 0,
+        sku: '',
+      })),
+    ]);
+    setSelectedTemplate('');
+  };
+
+  // Add a blank custom row
+  const handleAddCustom = () => {
+    setVariants((prev) => [
+      ...prev,
+      {
+        _tempId: `${Date.now()}-${Math.random()}`,
+        _new: true,
+        _dirty: false,
+        name: '',
+        value: '',
+        priceModifier: 0,
+        quantity: 0,
+        sku: '',
+      },
+    ]);
+  };
+
+  const handleChange = (index, field, value) => {
+    setVariants((prev) =>
+      prev.map((v, i) => (i === index ? { ...v, [field]: value, _dirty: true } : v))
+    );
+  };
+
+  const handleDelete = async (index) => {
+    const v = variants[index];
+    if (v._new) {
+      setVariants((prev) => prev.filter((_, i) => i !== index));
+      return;
+    }
+    if (!window.confirm('Delete this variant?')) return;
+    try {
+      await attributeService.deleteProductVariant(productId, v.id);
+      setVariants((prev) => prev.filter((_, i) => i !== index));
+      notify('Variant deleted.', 'success');
+    } catch {
+      notify('Failed to delete variant.', 'error');
+    }
+  };
+
+  // Save all new/dirty rows in one click
+  const handleSaveVariants = async () => {
+    const toCreate = variants.filter((v) => v._new && v.name.trim() && v.value.trim());
+    const toUpdate = variants.filter((v) => !v._new && v._dirty);
+    if (toCreate.length === 0 && toUpdate.length === 0) {
+      notify('No changes to save.', 'info');
+      return;
+    }
+    setSaving(true);
+    try {
+      for (const v of toCreate) {
+        await attributeService.addProductVariant(productId, {
+          name: v.name.trim(),
+          value: v.value.trim(),
+          priceModifier: parseFloat(v.priceModifier) || 0,
+          quantity: parseInt(v.quantity, 10) || 0,
+          sku: v.sku?.trim() || null,
+        });
+      }
+      for (const v of toUpdate) {
+        await attributeService.updateProductVariant(productId, v.id, {
+          name: v.name.trim(),
+          value: v.value.trim(),
+          priceModifier: parseFloat(v.priceModifier) || 0,
+          quantity: parseInt(v.quantity, 10) || 0,
+          sku: v.sku?.trim() || null,
+        });
+      }
+      notify('Variants saved successfully.', 'success');
+      loadAll();
+    } catch (err) {
+      notify(err?.response?.data?.message || 'Failed to save variants.', 'error');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const hasPending = variants.some((v) => v._new || v._dirty);
+
+  const handleClone = async () => {
+    if (!cloneSourceId.trim()) return;
+    setCloning(true);
+    try {
+      await attributeService.cloneVariants(productId, { sourceProductId: cloneSourceId.trim() });
+      notify('Variants cloned successfully!', 'success');
+      setCloneOpen(false);
+      setCloneSourceId('');
+      loadAll();
+    } catch (err) {
+      notify(err?.response?.data?.message || 'Clone failed — check the source product ID.', 'error');
+    } finally {
+      setCloning(false);
+    }
+  };
+
+  return (
+    <Paper sx={{ p: 3, mt: 3 }}>
+      <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 1 }}>
+        <Typography variant="h6">Variants</Typography>
+        <Box sx={{ display: 'flex', gap: 1 }}>
+          <Tooltip title="Copy all variants from another product">
+            <Button
+              size="small"
+              variant="outlined"
+              startIcon={<ContentCopyIcon fontSize="small" />}
+              onClick={() => setCloneOpen(true)}
+            >
+              Clone from Product
+            </Button>
+          </Tooltip>
+          {hasPending && (
+            <Button variant="contained" size="small" onClick={handleSaveVariants} disabled={saving}>
+              {saving ? 'Saving…' : 'Save Variants'}
+            </Button>
+          )}
+        </Box>
+      </Box>
+
+      <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
+        Each row (e.g. Color=Red, Size=M) is an independent SKU with its own stock, price adjustment and SKU code.
+        Manage reusable templates in{' '}
+        <Link to="/admin/attributes" style={{ color: 'inherit', fontWeight: 600 }}>Attributes →</Link>
+      </Typography>
+
+      <Divider sx={{ mb: 2 }} />
+
+      {/* ── Template Picker ── */}
+      <Box sx={{ display: 'flex', gap: 1, mb: 2, alignItems: 'center', flexWrap: 'wrap' }}>
+        <FormControl size="small" sx={{ minWidth: 220 }}>
+          <InputLabel>Load from Template</InputLabel>
+          <Select
+            value={selectedTemplate}
+            label="Load from Template"
+            onChange={(e) => setSelectedTemplate(e.target.value)}
+          >
+            <MenuItem value="">— select —</MenuItem>
+            {attributes.map((a) => (
+              <MenuItem key={a.id} value={a.id}>
+                {a.name}{a.values?.length ? ` (${a.values.length} values)` : ' — no values'}
+              </MenuItem>
+            ))}
+          </Select>
+        </FormControl>
+        <Tooltip title="Adds one row per value in the selected template (e.g. Color → Red, Blue, Green)">
+          <span>
+            <Button
+              variant="outlined"
+              size="small"
+              disabled={!selectedTemplate}
+              onClick={handleAddFromTemplate}
+            >
+              + Add All Values
+            </Button>
+          </span>
+        </Tooltip>
+        <Button variant="outlined" size="small" startIcon={<AddIcon />} onClick={handleAddCustom}>
+          Custom Row
+        </Button>
+      </Box>
+
+      {/* ── Variants Table ── */}
+      {loading ? (
+        <Box sx={{ display: 'flex', justifyContent: 'center', py: 3 }}>
+          <CircularProgress size={28} />
+        </Box>
+      ) : variants.length === 0 ? (
+        <Alert severity="info">
+          No variants yet. Select a template above or add a custom row, then click <strong>Save Variants</strong>.
+        </Alert>
+      ) : (
+        <Box sx={{ overflowX: 'auto' }}>
+          <Table size="small">
+            <TableHead>
+              <TableRow sx={{ bgcolor: 'action.hover' }}>
+                <TableCell sx={{ fontWeight: 600 }}>Attribute</TableCell>
+                <TableCell sx={{ fontWeight: 600 }}>Value</TableCell>
+                <TableCell sx={{ fontWeight: 600 }}>Price Adj (±)</TableCell>
+                <TableCell sx={{ fontWeight: 600 }}>Stock Qty</TableCell>
+                <TableCell sx={{ fontWeight: 600 }}>SKU</TableCell>
+                <TableCell />
+              </TableRow>
+            </TableHead>
+            <TableBody>
+              {variants.map((v, i) => (
+                <TableRow
+                  key={v.id || v._tempId}
+                  sx={{ bgcolor: v._new ? 'action.selected' : undefined }}
+                >
+                  <TableCell>
+                    <TextField
+                      size="small"
+                      value={v.name}
+                      onChange={(e) => handleChange(i, 'name', e.target.value)}
+                      placeholder="e.g. Color"
+                      sx={{ width: 130 }}
+                    />
+                  </TableCell>
+                  <TableCell>
+                    <TextField
+                      size="small"
+                      value={v.value}
+                      onChange={(e) => handleChange(i, 'value', e.target.value)}
+                      placeholder="e.g. Red"
+                      sx={{ width: 130 }}
+                    />
+                  </TableCell>
+                  <TableCell>
+                    <TextField
+                      size="small"
+                      type="number"
+                      value={v.priceModifier}
+                      onChange={(e) => handleChange(i, 'priceModifier', e.target.value)}
+                      sx={{ width: 100 }}
+                      inputProps={{ step: 0.01 }}
+                    />
+                  </TableCell>
+                  <TableCell>
+                    <TextField
+                      size="small"
+                      type="number"
+                      value={v.quantity}
+                      onChange={(e) => handleChange(i, 'quantity', e.target.value)}
+                      sx={{ width: 90 }}
+                      inputProps={{ min: 0 }}
+                    />
+                  </TableCell>
+                  <TableCell>
+                    <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
+                      <TextField
+                        size="small"
+                        value={v.sku || ''}
+                        onChange={(e) => handleChange(i, 'sku', e.target.value)}
+                        placeholder="optional"
+                        sx={{ width: 130 }}
+                      />
+                      <Tooltip title="Auto-generate SKU from attribute name/value (uses SKU settings)">
+                        <IconButton
+                          size="small"
+                          onClick={() =>
+                            handleChange(i, 'sku', generateVariantSKU(baseSku, v.name, v.value))
+                          }
+                        >
+                          <ElectricBoltIcon fontSize="small" color="warning" />
+                        </IconButton>
+                      </Tooltip>
+                    </Box>
+                  </TableCell>
+                  <TableCell>
+                    <Tooltip title="Delete variant">
+                      <IconButton size="small" color="error" onClick={() => handleDelete(i)}>
+                        <DeleteIcon fontSize="small" />
+                      </IconButton>
+                    </Tooltip>
+                  </TableCell>
+                </TableRow>
+              ))}
+            </TableBody>
+          </Table>
+        </Box>
+      )}
+
+      {/* ── Clone Dialog ── */}
+      <Dialog open={cloneOpen} onClose={() => setCloneOpen(false)} maxWidth="xs" fullWidth>
+        <DialogTitle>Clone Variants from Another Product</DialogTitle>
+        <DialogContent sx={{ pt: 2 }}>
+          <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
+            All variants (name, value, price modifier) will be copied from the source product.
+            Quantities are reset to 0 and SKUs are cleared since they must be unique.
+          </Typography>
+          <TextField
+            fullWidth
+            size="small"
+            label="Source Product ID"
+            placeholder="Paste the product UUID here"
+            value={cloneSourceId}
+            onChange={(e) => setCloneSourceId(e.target.value)}
+            helperText="Find the ID in the URL when editing the source product: /admin/products/:id/edit"
+          />
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => { setCloneOpen(false); setCloneSourceId(''); }}>Cancel</Button>
+          <Button
+            variant="contained"
+            onClick={handleClone}
+            disabled={cloning || !cloneSourceId.trim()}
+          >
+            {cloning ? 'Cloning…' : 'Clone Variants'}
+          </Button>
+        </DialogActions>
+      </Dialog>
+    </Paper>
   );
 };
 

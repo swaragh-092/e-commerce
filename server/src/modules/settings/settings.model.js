@@ -20,7 +20,7 @@ module.exports = (sequelize, DataTypes) => {
             type: DataTypes.STRING(50),
             allowNull: false,
             validate: {
-                isIn: [['theme', 'features', 'seo', 'general', 'shipping', 'tax']],
+                isIn: [['theme', 'features', 'seo', 'general', 'shipping', 'tax', 'sku', 'logo']],
             },
         },
         updatedBy: {

@@ -21,7 +21,8 @@ exports.list = async (req, res, next) => {
 
 exports.getBySlug = async (req, res, next) => {
   try {
-    const product = await productService.getProductBySlug(req.params.slug);
+    const isAdmin = req.user && ['admin', 'super_admin'].includes(req.user.role);
+    const product = await productService.getProductBySlug(req.params.slug, { adminView: isAdmin });
     return success(res, { product });
   } catch (err) {
     if (err.message === 'Product not found') return error(res, err.message, 404, 'NOT_FOUND');

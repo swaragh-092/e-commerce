@@ -40,7 +40,7 @@ const placeOrder = async (userId, payload) => {
     }
     const shippingAddressSnapshot = address.toJSON();
 
-    const orderSettingsKeys = ['tax.rate', 'shipping.method', 'shipping.flatRate', 'shipping.freeThreshold'];
+    const orderSettingsKeys = ['tax.rate', 'tax.inclusive', 'tax.enableCGST', 'tax.cgstRate', 'tax.enableSGST', 'tax.sgstRate', 'tax.enableIGST', 'tax.igstRate', 'shipping.method', 'shipping.flatRate', 'shipping.freeThreshold'];
     const settingsRows = await Setting.findAll({ where: { key: { [Op.in]: orderSettingsKeys } } });
     const settingsMap = settingsRows.reduce((acc, s) => { acc[s.key] = s.value; return acc; }, {});
     const getLocalSetting = (key, defaultVal) => settingsMap[key] !== undefined ? settingsMap[key] : defaultVal;
@@ -82,11 +82,28 @@ const placeOrder = async (userId, payload) => {
             }
         }
 
-        const globalTaxRate = getLocalSetting('tax.rate', 0);
+        const globalTaxRate = Number(getLocalSetting('tax.rate', 0));
+        const enableCGST = getLocalSetting('tax.enableCGST', false) === true || getLocalSetting('tax.enableCGST', false) === 'true';
+        const enableSGST = getLocalSetting('tax.enableSGST', false) === true || getLocalSetting('tax.enableSGST', false) === 'true';
+        const enableIGST = getLocalSetting('tax.enableIGST', false) === true || getLocalSetting('tax.enableIGST', false) === 'true';
+        const useGST = enableCGST || enableSGST || enableIGST;
+        // GST overrides inclusive; inclusive only applies when no GST component is active
+        const taxInclusive = !useGST && (getLocalSetting('tax.inclusive', false) === true || getLocalSetting('tax.inclusive', false) === 'true');
+        const cgstRate = enableCGST ? Number(getLocalSetting('tax.cgstRate', 0.09)) : 0;
+        const sgstRate = enableSGST ? Number(getLocalSetting('tax.sgstRate', 0.09)) : 0;
+        const igstRate = enableIGST ? Number(getLocalSetting('tax.igstRate', 0.18)) : 0;
+
         let totalTax = 0;
-        for (const item of cart.items) {
-             const taxRate = item.currentProduct.taxRate !== null ? Number(item.currentProduct.taxRate) : Number(globalTaxRate);
-             totalTax += (item.currentPrice * item.quantity) * taxRate;
+        if (!taxInclusive) {
+            for (const item of cart.items) {
+                const itemSubtotal = item.currentPrice * item.quantity;
+                if (useGST) {
+                    totalTax += itemSubtotal * (cgstRate + sgstRate + igstRate);
+                } else {
+                    const taxRate = item.currentProduct.taxRate !== null ? Number(item.currentProduct.taxRate) : globalTaxRate;
+                    totalTax += itemSubtotal * taxRate;
+                }
+            }
         }
 
         const shippingMethod = getLocalSetting('shipping.method', 'flat_rate');

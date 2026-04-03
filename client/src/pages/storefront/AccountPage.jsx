@@ -73,7 +73,7 @@ const ProfileTab = ({ user, updateProfile }) => {
     const [formData, setFormData] = useState({
         firstName: user?.firstName || '',
         lastName: user?.lastName || '',
-        phone: user?.UserProfile?.phone || '',
+        phone: user?.profile?.phone || '',
     });
     const [status, setStatus] = useState(null);
 
@@ -281,6 +281,7 @@ const PasswordTab = () => {
 
 /* ─── Orders Tab ──────────────────────────────────────────────────────── */
 const OrdersTab = () => {
+    const { formatPrice } = useCurrency();
     const [orders, setOrders] = useState([]);
     const [loading, setLoading] = useState(true);
     const [alert, setAlert] = useState(null);

@@ -114,9 +114,11 @@ exports.getProducts = async (filters, page, limit, isAdmin = false) => {
   return getPagingData(rows, count, page, queryLimit);
 };
 
-exports.getProductBySlug = async (slug) => {
+exports.getProductBySlug = async (slug, { adminView = false } = {}) => {
+  const where = { slug };
+  if (!adminView) where.status = 'published';
   const product = await Product.findOne({
-    where: { slug },
+    where,
     include: [
       { model: ProductImage, as: 'images' },
       { model: ProductVariant, as: 'variants' },
@@ -192,7 +194,7 @@ exports.createProduct = async (data) => {
       });
     } catch (e) {}
 
-    return exports.getProductBySlug(slug);
+    return exports.getProductBySlug(slug, { adminView: true });
   } catch (error) {
     await transaction.rollback();
     throw error;
@@ -257,7 +259,7 @@ exports.updateProduct = async (id, data) => {
       });
     } catch (e) {}
 
-    return exports.getProductBySlug(product.slug || data.slug);
+    return exports.getProductBySlug(product.slug || data.slug, { adminView: true });
   } catch (error) {
     await transaction.rollback();
     throw error;

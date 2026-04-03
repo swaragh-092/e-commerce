@@ -33,7 +33,13 @@
     },
     "tax": {
         "rate": 0.00,
-        "inclusive": false
+        "inclusive": false,
+        "enableCGST": false,
+        "cgstRate": 0.09,
+        "enableSGST": false,
+        "sgstRate": 0.09,
+        "enableIGST": false,
+        "igstRate": 0.18
     },
     "seo": {
         "titleTemplate": "%s | My Store",
@@ -43,5 +49,15 @@
     "logo": {
         "main": "/assets/logo.png",
         "favicon": "/assets/favicon.ico"
+    },
+    "sku": {
+        "prefix": "",
+        "separator": "-",
+        "includeProductName": true,
+        "includeAttributeName": false,
+        "includeAttributeValue": true,
+        "autoUppercase": true,
+        "useRandom": false,
+        "randomLength": 4
     }
 }

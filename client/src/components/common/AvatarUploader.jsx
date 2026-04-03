@@ -10,7 +10,7 @@ const AvatarUploader = () => {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
 
-  const avatarUrl = getMediaUrl(user?.UserProfile?.avatar || '');
+  const avatarUrl = getMediaUrl(user?.profile?.avatar || '');
 
   const handleFileChange = async (e) => {
     const file = e.target.files[0];

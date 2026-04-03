@@ -65,9 +65,19 @@ const AdminLayout = () => {
     <Box sx={{ display: 'flex' }}>
       <AppBar position="fixed" sx={{ zIndex: (t) => t.zIndex.drawer + 1 }}>
         <Toolbar>
-          <Typography variant="h6" noWrap sx={{ flexGrow: 1, fontWeight: 700 }}>
-            Admin Dashboard
-          </Typography>
+          <Box sx={{ flexGrow: 1, display: 'flex', alignItems: 'center', gap: 1 }}>
+            {settings?.logo?.main ? (
+              <img
+                src={settings.logo.main}
+                alt={settings?.general?.storeName || 'Admin'}
+                style={{ maxHeight: 32, maxWidth: 120, objectFit: 'contain', filter: 'brightness(0) invert(1)' }}
+                onError={(e) => { e.target.style.display = 'none'; }}
+              />
+            ) : null}
+            <Typography variant="h6" noWrap sx={{ fontWeight: 700 }}>
+              Admin Dashboard
+            </Typography>
+          </Box>
           <Tooltip title="View Store">
             <IconButton color="inherit" component={RouterLink} to="/" sx={{ mr: 1 }}>
               <StoreIcon />

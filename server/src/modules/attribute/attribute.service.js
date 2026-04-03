@@ -224,6 +224,37 @@ const cartesian = (attributes) => {
     return result;
 };
 
+/**
+ * Per-product variant CRUD (single row operations)
+ */
+const getProductVariants = async (productId) => {
+    const product = await Product.findByPk(productId);
+    if (!product) throw new AppError('NOT_FOUND', 404, 'Product not found');
+    return ProductVariant.findAll({
+        where: { productId },
+        order: [['createdAt', 'ASC']],
+    });
+};
+
+const addProductVariant = async (productId, data) => {
+    const product = await Product.findByPk(productId);
+    if (!product) throw new AppError('NOT_FOUND', 404, 'Product not found');
+    return ProductVariant.create({ ...data, productId });
+};
+
+const updateProductVariant = async (productId, variantId, data) => {
+    const variant = await ProductVariant.findOne({ where: { id: variantId, productId } });
+    if (!variant) throw new AppError('NOT_FOUND', 404, 'Variant not found');
+    await variant.update(data);
+    return variant;
+};
+
+const deleteProductVariant = async (productId, variantId) => {
+    const variant = await ProductVariant.findOne({ where: { id: variantId, productId } });
+    if (!variant) throw new AppError('NOT_FOUND', 404, 'Variant not found');
+    await variant.destroy();
+};
+
 module.exports = {
     createAttribute,
     getAllAttributes,
@@ -237,4 +268,8 @@ module.exports = {
     getCategoryAttributes,
     bulkGenerateVariants,
     cloneVariants,
+    getProductVariants,
+    addProductVariant,
+    updateProductVariant,
+    deleteProductVariant,
 };

@@ -16,7 +16,7 @@ import {
 import { DataGrid } from '@mui/x-data-grid';
 import { Add as AddIcon, Edit as EditIcon, Delete as DeleteIcon } from '@mui/icons-material';
 import { Link, useNavigate } from 'react-router-dom';
-import { getProducts, deleteProduct } from '../../services/productService';
+import { getProducts, deleteProduct, updateProduct } from '../../services/productService';
 import { useCurrency } from '../../hooks/useSettings';
 import { useNotification } from '../../context/NotificationContext';
 
@@ -81,6 +81,17 @@ const ProductsManagePage = () => {
     }
   };
 
+  const handleToggleStatus = async (row) => {
+    const newStatus = row.status === 'published' ? 'draft' : 'published';
+    try {
+      await updateProduct(row.id, { status: newStatus });
+      setRows((prev) => prev.map((r) => r.id === row.id ? { ...r, status: newStatus } : r));
+      notify(`Product marked as ${newStatus}.`, 'success');
+    } catch (err) {
+      notify('Failed to update status: ' + (err?.response?.data?.message || err.message), 'error');
+    }
+  };
+
   const columns = [
     { field: 'name', headerName: 'Name', flex: 1, minWidth: 160 },
     {
@@ -99,9 +110,17 @@ const ProductsManagePage = () => {
     {
       field: 'status',
       headerName: 'Status',
-      width: 110,
-      renderCell: ({ value }) => (
-        <Chip label={value} size="small" color={value === 'published' ? 'success' : 'default'} />
+      width: 130,
+      renderCell: ({ row }) => (
+        <Tooltip title={row.status === 'published' ? 'Click to set Draft' : 'Click to Publish'}>
+          <Chip
+            label={row.status}
+            size="small"
+            color={row.status === 'published' ? 'success' : 'default'}
+            onClick={() => handleToggleStatus(row)}
+            sx={{ cursor: 'pointer', fontWeight: 600 }}
+          />
+        </Tooltip>
       ),
     },
     {

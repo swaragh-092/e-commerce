@@ -56,6 +56,24 @@ const bulkGenerateVariants = (productId, data) =>
 const cloneVariants = (productId, data) =>
   api.post(`/products/${productId}/variants/clone`, data);
 
+// ─── Per-product Variant CRUD ────────────────────────────────────────────────
+
+/** List all variants for a product (admin only) */
+const getProductVariants = (productId) =>
+  api.get(`/products/${productId}/variants`);
+
+/** Add a single variant row to a product (admin only) */
+const addProductVariant = (productId, data) =>
+  api.post(`/products/${productId}/variants`, data);
+
+/** Update a single variant row (admin only) */
+const updateProductVariant = (productId, variantId, data) =>
+  api.put(`/products/${productId}/variants/${variantId}`, data);
+
+/** Delete a single variant row (admin only) */
+const deleteProductVariant = (productId, variantId) =>
+  api.delete(`/products/${productId}/variants/${variantId}`);
+
 // ─── Exports ─────────────────────────────────────────────────────────────────
 
 const attributeService = {
@@ -71,6 +89,10 @@ const attributeService = {
   unlinkAttributeFromCategory,
   bulkGenerateVariants,
   cloneVariants,
+  getProductVariants,
+  addProductVariant,
+  updateProductVariant,
+  deleteProductVariant,
 };
 
 export default attributeService;

@@ -57,9 +57,11 @@ export const AuthProvider = ({ children }) => {
 
   const login = async (email, password) => {
     const data = await authService.login(email, password);
-    setUser(data.user);
+    // Fetch full user data including profile (login response doesn't include profile)
+    const fullUser = await userService.getMe();
+    setUser(fullUser);
     setIsAuthenticated(true);
-    localStorage.setItem('userProfile', JSON.stringify(data.user));
+    localStorage.setItem('userProfile', JSON.stringify(fullUser));
     // Merge guest cart into authenticated cart
     try { await cartService.mergeGuestCart(); } catch (_) {}
     clearSessionId();
@@ -69,9 +71,10 @@ export const AuthProvider = ({ children }) => {
   const register = async (userData) => {
     // Option B: log in immediately after register and redirect to home
     const data = await authService.register(userData);
-    setUser(data.user);
+    const fullUser = await userService.getMe();
+    setUser(fullUser);
     setIsAuthenticated(true);
-    localStorage.setItem('userProfile', JSON.stringify(data.user));
+    localStorage.setItem('userProfile', JSON.stringify(fullUser));
     try { await cartService.mergeGuestCart(); } catch (_) {}
     clearSessionId();
     return data;

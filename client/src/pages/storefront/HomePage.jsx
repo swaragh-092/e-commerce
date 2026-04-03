@@ -18,7 +18,7 @@ const HomePage = () => {
 
     useEffect(() => {
         Promise.all([
-            getProducts({ limit: 8, sort: 'newest' }),
+            getProducts({ limit: 8, sort: 'newest', status: 'published' }),
             getCategories(),
         ]).then(([productsRes, categoriesRes]) => {
             if (productsRes.success) setFeaturedProducts(productsRes.data?.slice(0, 8) || []);

@@ -7,8 +7,10 @@ import DeleteOutlineIcon from '@mui/icons-material/DeleteOutline';
 import AddIcon from '@mui/icons-material/Add';
 import RemoveIcon from '@mui/icons-material/Remove';
 import ShoppingBagIcon from '@mui/icons-material/ShoppingBag';
+import LocalShippingIcon from '@mui/icons-material/LocalShipping';
 import { Link, useNavigate } from 'react-router-dom';
 import { useCart } from '../../hooks/useCart';
+import { useSettings } from '../../hooks/useSettings';
 import { getMediaUrl } from '../../utils/media';
 import { useCurrency } from '../../hooks/useSettings';
 import PageSEO from '../../components/common/PageSEO';
@@ -16,6 +18,7 @@ import PageSEO from '../../components/common/PageSEO';
 const CartPage = () => {
     const { cart, cartCount, loading, updateItem, removeItem, clearCart } = useCart();
     const { formatPrice } = useCurrency();
+    const { settings } = useSettings();
     const navigate = useNavigate();
 
     const items = cart?.items || [];
@@ -24,6 +27,33 @@ const CartPage = () => {
         const modifier = parseFloat(item.variant?.priceModifier ?? 0);
         return sum + (price + modifier) * item.quantity;
     }, 0);
+
+    // Calculate shipping from settings (mirrors server logic)
+    const shippingMethod = settings?.shipping?.method || 'flat_rate';
+    const flatRate = parseFloat(settings?.shipping?.flatRate || 0);
+    const freeThreshold = parseFloat(settings?.shipping?.freeThreshold || 0);
+    let shippingCost = 0;
+    if (shippingMethod === 'flat_rate') {
+        shippingCost = flatRate;
+    } else if (shippingMethod === 'free_above_threshold') {
+        shippingCost = subtotal >= freeThreshold ? 0 : flatRate;
+    }
+
+    // Calculate tax from settings (supports CGST / SGST / IGST breakdown)
+    // GST components override the inclusive flag when enabled
+    const enableCGST = settings?.tax?.enableCGST === true;
+    const enableSGST = settings?.tax?.enableSGST === true;
+    const enableIGST = settings?.tax?.enableIGST === true;
+    const useGST = enableCGST || enableSGST || enableIGST;
+    const taxInclusive = !useGST && settings?.tax?.inclusive === true;
+    const cgstAmount = enableCGST ? subtotal * parseFloat(settings?.tax?.cgstRate ?? 0) : 0;
+    const sgstAmount = enableSGST ? subtotal * parseFloat(settings?.tax?.sgstRate ?? 0) : 0;
+    const igstAmount = enableIGST ? subtotal * parseFloat(settings?.tax?.igstRate ?? 0) : 0;
+    const taxRate = parseFloat(settings?.tax?.rate ?? 0);
+    const flatTaxAmount = (!taxInclusive && !useGST && taxRate > 0) ? subtotal * taxRate : 0;
+    const taxAmount = useGST ? cgstAmount + sgstAmount + igstAmount : flatTaxAmount;
+
+    const estimatedTotal = subtotal + shippingCost + taxAmount;
 
     if (loading) {
         return (
@@ -141,13 +171,57 @@ const CartPage = () => {
                             <Typography fontWeight={600}>{formatPrice(subtotal)}</Typography>
                         </Box>
                         <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 1 }}>
-                            <Typography color="text.secondary">Shipping</Typography>
-                            <Typography color="text.secondary">Calculated at checkout</Typography>
+                            <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
+                                <LocalShippingIcon fontSize="small" color="action" />
+                                <Typography color="text.secondary">Shipping</Typography>
+                            </Box>
+                            {shippingMethod === 'free' || shippingCost === 0 ? (
+                                <Typography color="success.main" fontWeight={600}>Free</Typography>
+                            ) : (
+                                <Typography fontWeight={600}>{formatPrice(shippingCost)}</Typography>
+                            )}
                         </Box>
+                        {shippingMethod === 'free_above_threshold' && shippingCost > 0 && (
+                            <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mb: 1, pl: 3 }}>
+                                Add {formatPrice(freeThreshold - subtotal)} more for free shipping
+                            </Typography>
+                        )}
+                        {/* GST breakdown */}
+                        {enableCGST && cgstAmount > 0 && (
+                            <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 0.5 }}>
+                                <Typography color="text.secondary" variant="body2">CGST ({(parseFloat(settings?.tax?.cgstRate ?? 0) * 100).toFixed(1)}%)</Typography>
+                                <Typography fontWeight={600} variant="body2">{formatPrice(cgstAmount)}</Typography>
+                            </Box>
+                        )}
+                        {enableSGST && sgstAmount > 0 && (
+                            <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 0.5 }}>
+                                <Typography color="text.secondary" variant="body2">SGST ({(parseFloat(settings?.tax?.sgstRate ?? 0) * 100).toFixed(1)}%)</Typography>
+                                <Typography fontWeight={600} variant="body2">{formatPrice(sgstAmount)}</Typography>
+                            </Box>
+                        )}
+                        {enableIGST && igstAmount > 0 && (
+                            <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 0.5 }}>
+                                <Typography color="text.secondary" variant="body2">IGST ({(parseFloat(settings?.tax?.igstRate ?? 0) * 100).toFixed(1)}%)</Typography>
+                                <Typography fontWeight={600} variant="body2">{formatPrice(igstAmount)}</Typography>
+                            </Box>
+                        )}
+                        {/* fallback flat tax */}
+                        {!useGST && flatTaxAmount > 0 && (
+                            <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 0.5 }}>
+                                <Typography color="text.secondary" variant="body2">Tax ({(taxRate * 100).toFixed(0)}%)</Typography>
+                                <Typography fontWeight={600} variant="body2">{formatPrice(flatTaxAmount)}</Typography>
+                            </Box>
+                        )}
+                        {/* inclusive note */}
+                        {taxInclusive && (
+                            <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mb: 1 }}>
+                                Tax included in price
+                            </Typography>
+                        )}
                         <Divider sx={{ my: 2 }} />
                         <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 2 }}>
-                            <Typography variant="h6" fontWeight={700}>Estimated Total</Typography>
-                            <Typography variant="h6" fontWeight={700} color="primary.main">{formatPrice(subtotal)}</Typography>
+                            <Typography variant="h6" fontWeight={700}>Total</Typography>
+                            <Typography variant="h6" fontWeight={700} color="primary.main">{formatPrice(estimatedTotal)}</Typography>
                         </Box>
                         <Button
                             variant="contained"
