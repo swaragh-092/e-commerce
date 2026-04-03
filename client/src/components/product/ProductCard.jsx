@@ -3,53 +3,76 @@ import { Card, CardMedia, CardContent, Typography, Box, Rating, Chip } from '@mu
 import { Link } from 'react-router-dom';
 
 const ProductCard = ({ product }) => {
-    const primaryImage = product.images?.find(i => i.isPrimary)?.url || product.images?.[0]?.url || '/placeholder.png';
-    const hasSale = product.salePrice && parseFloat(product.salePrice) < parseFloat(product.price);
-    const hasRating = product.averageRating != null;
+  const primaryImage =
+    product.images?.find((i) => i.isPrimary)?.url || product.images?.[0]?.url || '/placeholder.png';
+  const hasSale = product.salePrice && parseFloat(product.salePrice) < parseFloat(product.price);
+  const hasRating = product.averageRating != null;
 
-    return (
-        <Card sx={{ height: '100%', display: 'flex', flexDirection: 'column', textDecoration: 'none' }} component={Link} to={`/products/${product.slug}`}>
-            <Box sx={{ position: 'relative', pt: '100%', backgroundColor: '#f5f5f5' }}>
-                {hasSale && (
-                    <Chip label="Sale" color="error" size="small" sx={{ position: 'absolute', top: 8, right: 8, zIndex: 1 }} />
-                )}
-                <CardMedia
-                    component="img"
-                    image={primaryImage}
-                    alt={product.name}
-                    sx={{ position: 'absolute', top: 0, width: '100%', height: '100%', objectFit: 'contain' }}
-                />
-            </Box>
-            <CardContent sx={{ flexGrow: 1 }}>
-                <Typography variant="body2" color="text.secondary" noWrap gutterBottom>
-                    {product.categories?.[0]?.name}
-                </Typography>
-                <Typography variant="h6" component="div" noWrap sx={{ fontWeight: 600 }}>
-                    {product.name}
-                </Typography>
-                {hasRating && (
-                    <Box sx={{ display: 'flex', alignItems: 'center', mb: 1 }}>
-                        <Rating value={parseFloat(product.averageRating)} readOnly size="small" precision={0.5} />
-                        {product.reviewCount != null && (
-                            <Typography variant="body2" sx={{ ml: 1 }}>({product.reviewCount})</Typography>
-                        )}
-                    </Box>
-                )}
-                <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                    {hasSale ? (
-                        <>
-                            <Typography variant="h6" color="primary">${parseFloat(product.salePrice).toFixed(2)}</Typography>
-                            <Typography variant="body1" color="text.secondary" sx={{ textDecoration: 'line-through' }}>
-                                ${parseFloat(product.price).toFixed(2)}
-                            </Typography>
-                        </>
-                    ) : (
-                        <Typography variant="h6">${parseFloat(product.price).toFixed(2)}</Typography>
-                    )}
-                </Box>
-            </CardContent>
-        </Card>
-    );
+  return (
+    <Card
+      sx={{ height: '100%', display: 'flex', flexDirection: 'column', textDecoration: 'none' }}
+      component={Link}
+      to={`/products/${product.slug}`}
+    >
+      <Box sx={{ position: 'relative', pt: '100%', backgroundColor: 'action.hover' }}>
+        {hasSale && (
+          <Chip
+            label="Sale"
+            color="error"
+            size="small"
+            sx={{ position: 'absolute', top: 8, right: 8, zIndex: 1 }}
+          />
+        )}
+        <CardMedia
+          component="img"
+          image={primaryImage}
+          alt={product.name}
+          sx={{ position: 'absolute', top: 0, width: '100%', height: '100%', objectFit: 'contain' }}
+        />
+      </Box>
+      <CardContent sx={{ flexGrow: 1 }}>
+        <Typography variant="body2" color="text.secondary" noWrap gutterBottom>
+          {product.categories?.[0]?.name}
+        </Typography>
+        <Typography variant="h6" component="div" noWrap sx={{ fontWeight: 600 }}>
+          {product.name}
+        </Typography>
+        {hasRating && (
+          <Box sx={{ display: 'flex', alignItems: 'center', mb: 1 }}>
+            <Rating
+              value={parseFloat(product.averageRating)}
+              readOnly
+              size="small"
+              precision={0.5}
+            />
+            {product.reviewCount != null && (
+              <Typography variant="body2" sx={{ ml: 1 }}>
+                ({product.reviewCount})
+              </Typography>
+            )}
+          </Box>
+        )}
+        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+          {hasSale ? (
+            <>
+              <Typography variant="h6" color="primary">
+                ${parseFloat(product.salePrice).toFixed(2)}
+              </Typography>
+              <Typography
+                variant="body1"
+                color="text.secondary"
+                sx={{ textDecoration: 'line-through' }}
+              >
+                ${parseFloat(product.price).toFixed(2)}
+              </Typography>
+            </>
+          ) : (
+            <Typography variant="h6">${parseFloat(product.price).toFixed(2)}</Typography>
+          )}
+        </Box>
+      </CardContent>
+    </Card>
+  );
 };
 
 export default ProductCard;

@@ -1,6 +1,18 @@
 import {
-  Box, AppBar, Toolbar, Typography, Drawer, List, ListItem, ListItemButton,
-  ListItemIcon, ListItemText, Divider, Avatar, Tooltip, IconButton,
+  Box,
+  AppBar,
+  Toolbar,
+  Typography,
+  Drawer,
+  List,
+  ListItem,
+  ListItemButton,
+  ListItemIcon,
+  ListItemText,
+  Divider,
+  Avatar,
+  Tooltip,
+  IconButton,
 } from '@mui/material';
 import { Outlet, Link as RouterLink, useLocation } from 'react-router-dom';
 import DashboardIcon from '@mui/icons-material/Dashboard';
@@ -37,9 +49,7 @@ const AdminLayout = () => {
   const location = useLocation();
 
   const isActive = (path) =>
-    path === '/admin'
-      ? location.pathname === '/admin'
-      : location.pathname.startsWith(path);
+    path === '/admin' ? location.pathname === '/admin' : location.pathname.startsWith(path);
 
   return (
     <Box sx={{ display: 'flex' }}>
@@ -103,7 +113,9 @@ const AdminLayout = () => {
           <List dense>
             <ListItem disablePadding>
               <ListItemButton onClick={logout} sx={{ mx: 1, borderRadius: 2 }}>
-                <ListItemIcon sx={{ minWidth: 36 }}><ExitIcon /></ListItemIcon>
+                <ListItemIcon sx={{ minWidth: 36 }}>
+                  <ExitIcon />
+                </ListItemIcon>
                 <ListItemText primary="Logout" primaryTypographyProps={{ fontSize: 14 }} />
               </ListItemButton>
             </ListItem>
@@ -111,7 +123,10 @@ const AdminLayout = () => {
         </Box>
       </Drawer>
 
-      <Box component="main" sx={{ flexGrow: 1, p: 3, bgcolor: 'background.default', minHeight: '100vh' }}>
+      <Box
+        component="main"
+        sx={{ flexGrow: 1, p: 3, bgcolor: 'background.default', minHeight: '100vh' }}
+      >
         <Toolbar />
         <Outlet />
       </Box>

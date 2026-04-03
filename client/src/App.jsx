@@ -5,21 +5,24 @@ import { AuthProvider } from './context/AuthContext';
 import { CartProvider } from './context/CartContext';
 import { WishlistProvider } from './context/WishlistContext';
 import { CategoryProvider } from './context/CategoryContext';
+import { NotificationProvider } from './context/NotificationContext';
 import AppRoutes from './routes/AppRoutes';
 
 function App() {
   return (
     <BrowserRouter future={{ v7_startTransition: true, v7_relativeSplatPath: true }}>
       <SettingsProvider>
-        <AuthProvider>
-          <CartProvider>
-            <CategoryProvider>
-              <WishlistProvider>
-                <AppRoutes />
-              </WishlistProvider>
-            </CategoryProvider>
-          </CartProvider>
-        </AuthProvider>
+        <NotificationProvider>
+          <AuthProvider>
+            <CartProvider>
+              <CategoryProvider>
+                <WishlistProvider>
+                  <AppRoutes />
+                </WishlistProvider>
+              </CategoryProvider>
+            </CartProvider>
+          </AuthProvider>
+        </NotificationProvider>
       </SettingsProvider>
     </BrowserRouter>
   );

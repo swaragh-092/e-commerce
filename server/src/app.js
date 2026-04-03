@@ -20,17 +20,22 @@ app.use((req, res, next) => {
   res.setHeader('X-Request-Id', req.id);
   next();
 });
-app.use(cors({
-  origin: (origin, callback) => {
-    const allowedOrigins = (process.env.CLIENT_URL || 'http://localhost:5173,http://localhost:3000,http://localhost:3001').split(',');
-    if (!origin || allowedOrigins.includes(origin)) {
-      callback(null, true);
-    } else {
-      callback(new Error('Not allowed by CORS'));
-    }
-  },
-  credentials: true
-}));
+app.use(
+  cors({
+    origin: (origin, callback) => {
+      const allowedOrigins = (
+        process.env.CLIENT_URL ||
+        'http://localhost:5173,http://localhost:3000,http://localhost:3001'
+      ).split(',');
+      if (!origin || allowedOrigins.includes(origin)) {
+        callback(null, true);
+      } else {
+        callback(new Error('Not allowed by CORS'));
+      }
+    },
+    credentials: true,
+  })
+);
 
 // Body Parsing
 // Important: Webhook routes must be parsed as raw, so only apply json parser if not a webhook
@@ -51,11 +56,20 @@ if (process.env.NODE_ENV !== 'test') {
 // Global rate limiting
 app.use('/api', globalLimiter);
 
-// Serve uploads statically
-app.use('/uploads', express.static(path.join(__dirname, '../../uploads')));
+// Serve uploads statically — allow cross-origin loading for <img> tags
+app.use('/uploads', (req, res, next) => {
+  res.setHeader('Cross-Origin-Resource-Policy', 'cross-origin');
+  next();
+});
+app.use('/uploads', express.static(path.join(__dirname, '../uploads')));
+// Fallback: serve placeholder for any missing upload file
+app.use('/uploads', (req, res) => {
+  res.setHeader('Cross-Origin-Resource-Policy', 'cross-origin');
+  res.sendFile(path.join(__dirname, '../public/no-image.png'));
+});
 
 // Serve public statically for robots.txt
-app.use(express.static(path.join(__dirname, '../../public')));
+app.use(express.static(path.join(__dirname, '../public')));
 
 // Routes
 const seoRoutes = require('./modules/seo/seo.routes');
