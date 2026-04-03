@@ -25,6 +25,7 @@ import StarIcon from '@mui/icons-material/Star';
 import PhotoLibraryIcon from '@mui/icons-material/PhotoLibrary';
 import SettingsIcon from '@mui/icons-material/Settings';
 import HistoryIcon from '@mui/icons-material/History';
+import TuneIcon from '@mui/icons-material/Tune';
 import StoreIcon from '@mui/icons-material/Storefront';
 import ExitIcon from '@mui/icons-material/ExitToApp';
 import { useAuth } from '../hooks/useAuth';
@@ -35,6 +36,7 @@ const menuItems = [
   { text: 'Dashboard', path: '/admin', icon: <DashboardIcon /> },
   { text: 'Products', path: '/admin/products', icon: <InventoryIcon /> },
   { text: 'Categories', path: '/admin/categories', icon: <CategoryIcon /> },
+  { text: 'Attributes', path: '/admin/attributes', icon: <TuneIcon /> },
   { text: 'Orders', path: '/admin/orders', icon: <ShoppingCartIcon /> },
   { text: 'Customers', path: '/admin/customers', icon: <PeopleIcon /> },
   { text: 'Coupons', path: '/admin/coupons', icon: <LocalOfferIcon /> },

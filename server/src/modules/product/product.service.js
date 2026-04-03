@@ -11,6 +11,7 @@ const sanitizeHtml = require('sanitize-html');
 const AuditService = require('../audit/audit.service');
 const AppError = require('../../utils/AppError');
 const { ACTIONS, ENTITIES } = require('../../config/constants');
+const { getCategoryAndDescendantIds } = require('../category/category.service');
 
 const sanitizeRichText = (html) => {
   if (!html) return html;
@@ -35,10 +36,17 @@ const sanitizeRichText = (html) => {
   });
 };
 
-exports.getProducts = async (filters, page, limit) => {
+exports.getProducts = async (filters, page, limit, isAdmin = false) => {
   const { limit: queryLimit, offset } = getPagination(page, limit);
   const where = {};
   const order = [];
+
+  // Always restrict to published products for storefront; admins can filter by any status
+  if (!isAdmin) {
+    where.status = 'published';
+  } else if (filters.status) {
+    where.status = filters.status;
+  }
 
   // Filter Logic
   if (filters.search) {
@@ -52,7 +60,6 @@ exports.getProducts = async (filters, page, limit) => {
     if (filters.minPrice) where.price[Op.gte] = filters.minPrice;
     if (filters.maxPrice) where.price[Op.lte] = filters.maxPrice;
   }
-  if (filters.status) where.status = filters.status;
 
   // Sort logic
   if (filters.sort === 'price_asc') order.push(['price', 'ASC']);
@@ -68,13 +75,26 @@ exports.getProducts = async (filters, page, limit) => {
     { model: Tag, as: 'tags' },
   ];
 
+  // F-11: Category filter — match the category AND all its descendants
   if (filters.category) {
-    include.push({
-      model: Category,
-      as: 'categories',
+    // Find the category by slug to get its ID, then expand to full subtree
+    const rootCat = await Category.findOne({
       where: { slug: filters.category },
-      required: true, // INNER JOIN to filter products by category
+      attributes: ['id'],
     });
+    if (rootCat) {
+      const categoryIds = await getCategoryAndDescendantIds(rootCat.id);
+      include.push({
+        model: Category,
+        as: 'categories',
+        where: { id: { [Op.in]: categoryIds } },
+        required: true, // INNER JOIN to filter products by category subtree
+      });
+    } else {
+      // Unknown slug → return zero results instead of ignoring the filter
+      where.id = null;
+      include.push({ model: Category, as: 'categories' });
+    }
   } else {
     include.push({
       model: Category,

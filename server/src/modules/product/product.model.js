@@ -58,6 +58,15 @@ module.exports = (sequelize, DataTypes) => {
             type: DataTypes.BOOLEAN,
             defaultValue: false,
         },
+        avgRating: {
+            type: DataTypes.DECIMAL(3, 2),
+            allowNull: true,
+            defaultValue: null,
+        },
+        reviewCount: {
+            type: DataTypes.INTEGER,
+            defaultValue: 0,
+        },
     }, {
         tableName: 'products',
         timestamps: true,

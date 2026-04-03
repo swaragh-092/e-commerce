@@ -67,8 +67,20 @@ const addItem = async (userId, sessionId, payload) => {
             throw new AppError('NOT_FOUND', 404, 'Product not found or unavailable');
         }
 
-        const availableStock = product.quantity - (product.reservedQty || 0);
-        
+        let availableStock;
+        if (variantId) {
+            const variant = await ProductVariant.findOne({
+                where: { id: variantId, productId },
+                transaction: t,
+            });
+            if (!variant) {
+                throw new AppError('NOT_FOUND', 404, 'Variant not found');
+            }
+            availableStock = variant.quantity;
+        } else {
+            availableStock = product.quantity - (product.reservedQty || 0);
+        }
+
         let item = await CartItem.findOne({
             where: { cartId: cart.id, productId, variantId: variantId || null },
             transaction: t

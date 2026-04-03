@@ -5,9 +5,9 @@ const { success, error } = require('../../utils/response');
 exports.list = async (req, res, next) => {
   try {
     const { page, limit, search, category, minPrice, maxPrice, status, sort, tags } = req.query;
-    // status is usually admin only
+    const isAdmin = req.user && ['admin', 'super_admin'].includes(req.user.role);
     const filters = { search, category, minPrice, maxPrice, status, sort, tags };
-    const result = await productService.getProducts(filters, page, limit);
+    const result = await productService.getProducts(filters, page, limit, isAdmin);
     return success(res, result.data, 'Products found', 200, {
       total: result.totalItems,
       page: result.currentPage,

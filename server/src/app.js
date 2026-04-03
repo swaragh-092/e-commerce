@@ -88,6 +88,9 @@ const wishlistRoutes = require('./modules/wishlist/wishlist.routes');
 const reviewRoutes = require('./modules/review/review.routes');
 const auditRoutes = require('./modules/audit/audit.routes');
 const adminRoutes = require('./modules/admin/admin.routes');
+const attributeRoutes = require('./modules/attribute/attribute.routes');
+const categoryAttributeRoutes = require('./modules/attribute/categoryAttribute.routes');
+const productVariantRoutes = require('./modules/attribute/productVariant.routes');
 
 app.use('/api', seoRoutes);
 app.use('/api/settings', settingsRoutes);
@@ -104,6 +107,9 @@ app.use('/api/wishlist', wishlistRoutes);
 app.use('/api', reviewRoutes);
 app.use('/api/audit-logs', auditRoutes);
 app.use('/api/admin', adminRoutes);
+app.use('/api/attributes', attributeRoutes);
+app.use('/api/categories', categoryAttributeRoutes); // extends existing /api/categories with /:id/attributes sub-routes
+app.use('/api/products', productVariantRoutes);     // extends existing /api/products with /:id/variants/* sub-routes
 // Do not expose notifications out in phase 1, but we can mount if needed:
 // app.use('/api/notifications', notificationRoutes);
 

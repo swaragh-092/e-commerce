@@ -1,11 +1,31 @@
 'use strict';
 
 const { sequelize, Review, Product, Order, OrderItem, User } = require('../index');
+const { Op } = require('sequelize');
 const AppError = require('../../utils/AppError');
 const AuditService = require('../audit/audit.service');
 const { getPagination } = require('../../utils/pagination');
 const { sanitizePlainText } = require('../../middleware/sanitize.middleware');
 const { ACTIONS, ENTITIES } = require('../../config/constants');
+
+/**
+ * F-13: Recomputes and stores avg_rating + review_count on the product row.
+ * Should be called (outside any long transaction) after a review is created
+ * or its status is changed.
+ */
+const refreshProductRatingCache = async (productId) => {
+    const result = await Review.findOne({
+        where: { productId, status: 'approved' },
+        attributes: [
+            [sequelize.fn('AVG', sequelize.col('rating')), 'avgRating'],
+            [sequelize.fn('COUNT', sequelize.col('id')), 'reviewCount'],
+        ],
+        raw: true,
+    });
+    const avgRating = result && result.avgRating ? parseFloat(parseFloat(result.avgRating).toFixed(2)) : null;
+    const reviewCount = result ? parseInt(result.reviewCount, 10) : 0;
+    await Product.update({ avgRating, reviewCount }, { where: { id: productId } });
+};
 
 const create = async (userId, slug, payload) => {
   return sequelize.transaction(async (t) => {
@@ -63,6 +83,8 @@ const create = async (userId, slug, payload) => {
 
     return review;
   });
+  // Note: rating cache is NOT refreshed here because the review is still 'pending'.
+  // Cache is updated when the review gets approved via moderate().
 };
 
 const list = async (slug, { page, limit, status }) => {
@@ -88,7 +110,7 @@ const list = async (slug, { page, limit, status }) => {
 };
 
 const moderate = async (id, status, adminId) => {
-  return sequelize.transaction(async (t) => {
+  const productId = await sequelize.transaction(async (t) => {
     const review = await Review.findByPk(id, { transaction: t });
     if (!review) throw new AppError('NOT_FOUND', 404, 'Review not found');
 
@@ -107,8 +129,13 @@ const moderate = async (id, status, adminId) => {
       }
     } catch(err) {}
 
-    return review;
+    return review.productId;
   });
+
+  // Refresh the cached avg/count outside the transaction
+  await refreshProductRatingCache(productId);
+
+  return Review.findByPk(id);
 };
 
 const remove = async (id, adminId) => {

@@ -45,7 +45,7 @@ const placeOrder = async (userId, payload) => {
     const settingsMap = settingsRows.reduce((acc, s) => { acc[s.key] = s.value; return acc; }, {});
     const getLocalSetting = (key, defaultVal) => settingsMap[key] !== undefined ? settingsMap[key] : defaultVal;
 
-    return sequelize.transaction(async (t) => {
+    const order = await sequelize.transaction(async (t) => {
         let subtotal = 0;
 
         for (const item of cart.items) {
@@ -141,6 +141,7 @@ const placeOrder = async (userId, payload) => {
             await OrderItem.create({
                 orderId: order.id,
                 productId: item.productId,
+                variantId: item.variantId || null,
                 snapshotName: item.currentProduct.name,
                 snapshotPrice: item.currentPrice,
                 snapshotImage: null,
@@ -230,8 +231,8 @@ const cancelOrder = async (id, userId) => {
         const order = await Order.findOne({ where: { id, userId }, include: [{ model: OrderItem, as: 'items' }], transaction: t });
         if (!order) throw new AppError('NOT_FOUND', 404, 'Order not found');
 
-        if (order.status !== 'pending_payment') {
-            throw new AppError('VALIDATION_ERROR', 400, 'Only pending orders can be cancelled');
+        if (!['pending_payment', 'processing'].includes(order.status)) {
+            throw new AppError('VALIDATION_ERROR', 400, 'Only pending or processing orders can be cancelled');
         }
 
         await order.update({ status: 'cancelled' }, { transaction: t });

@@ -5,21 +5,9 @@ const VariantSelector = ({ variants, selectedVariantId, onSelect }) => {
     // Per-group selection map: { [attrName]: variantId }
     const [selections, setSelections] = useState({});
 
-    if (!variants || variants.length === 0) return null;
-
-    const grouped = variants.reduce((acc, curr) => {
-        if (!acc[curr.name]) acc[curr.name] = [];
-        acc[curr.name].push(curr);
-        return acc;
-    }, {});
-
-    const groupNames = Object.keys(grouped);
-    const isMultiGroup = groupNames.length > 1;
-
-    // Sync external selectedVariantId into per-group selections
-    // eslint-disable-next-line react-hooks/rules-of-hooks
+    // Hook must be declared before any conditional return (Rules of Hooks)
     useEffect(() => {
-        if (selectedVariantId) {
+        if (selectedVariantId && variants) {
             const v = variants.find(v => v.id === selectedVariantId);
             if (v) {
                 setSelections(prev => {
@@ -30,6 +18,17 @@ const VariantSelector = ({ variants, selectedVariantId, onSelect }) => {
             }
         }
     }, [selectedVariantId, variants]);
+
+    if (!variants || variants.length === 0) return null;
+
+    const grouped = variants.reduce((acc, curr) => {
+        if (!acc[curr.name]) acc[curr.name] = [];
+        acc[curr.name].push(curr);
+        return acc;
+    }, {});
+
+    const groupNames = Object.keys(grouped);
+    const isMultiGroup = groupNames.length > 1;
 
     const handleSelect = (opt) => {
         setSelections(prev => ({ ...prev, [opt.name]: opt.id }));

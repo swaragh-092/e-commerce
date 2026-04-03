@@ -12,10 +12,15 @@ const createAttribute = async (data) => {
     return AttributeTemplate.create({ ...data, slug });
 };
 
-const getAllAttributes = async () => {
-    return AttributeTemplate.findAll({
+const getAllAttributes = async (page = 1, limit = 20) => {
+    const offset = (Math.max(1, parseInt(page, 10)) - 1) * Math.min(100, Math.max(1, parseInt(limit, 10)));
+    const safeLimit = Math.min(100, Math.max(1, parseInt(limit, 10)));
+    return AttributeTemplate.findAndCountAll({
         include: [{ model: AttributeValue, as: 'values', attributes: ['id', 'value', 'slug', 'sortOrder'] }],
         order: [['sortOrder', 'ASC'], [{ model: AttributeValue, as: 'values' }, 'sortOrder', 'ASC']],
+        limit: safeLimit,
+        offset,
+        distinct: true,
     });
 };
 

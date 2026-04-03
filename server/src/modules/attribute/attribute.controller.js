@@ -16,7 +16,8 @@ exports.createAttribute = async (req, res, next) => {
 
 exports.getAllAttributes = async (req, res, next) => {
     try {
-        const result = await attributeService.getAllAttributes();
+        const { page = 1, limit = 20 } = req.query;
+        const result = await attributeService.getAllAttributes(page, limit);
         return success(res, result, 'Attributes retrieved');
     } catch (err) {
         next(err);
