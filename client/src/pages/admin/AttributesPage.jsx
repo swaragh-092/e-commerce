@@ -41,7 +41,7 @@ const ValuesPanel = ({ attribute, onRefresh }) => {
   };
 
   return (
-    <Box sx={{ p: 2, bgcolor: 'grey.50', borderTop: '1px solid', borderColor: 'divider' }}>
+    <Box sx={{ p: 2, bgcolor: 'background.paper', borderTop: '1px solid', borderColor: 'divider' }}>
       <Typography variant="subtitle2" gutterBottom>Values</Typography>
       <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 1, mb: 2 }}>
         {(attribute.values || []).length === 0 && (
@@ -167,7 +167,7 @@ const AttributesPage = () => {
         <Paper variant="outlined">
           <Table size="small">
             <TableHead>
-              <TableRow sx={{ bgcolor: 'grey.100' }}>
+              <TableRow sx={{ bgcolor: 'background.paper' }}>
                 <TableCell sx={{ fontWeight: 'bold' }}>Name</TableCell>
                 <TableCell sx={{ fontWeight: 'bold' }}>Type</TableCell>
                 <TableCell sx={{ fontWeight: 'bold' }}>Values</TableCell>

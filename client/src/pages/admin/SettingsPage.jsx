@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useContext } from 'react';
 import {
   Box,
   Typography,
@@ -13,16 +13,34 @@ import {
   Divider,
   Grid,
   InputAdornment,
+  Autocomplete,
 } from '@mui/material';
 import { updateSettings } from '../../services/adminService';
 import api from '../../services/api';
 import { useNotification } from '../../context/NotificationContext';
+import { SettingsContext } from '../../context/ThemeContext';
+
+const FONTS = [
+  'Roboto',
+  'Inter',
+  'Open Sans',
+  'Lato',
+  'Poppins',
+  'Montserrat',
+  'Source Sans Pro',
+  'Ubuntu',
+  'IBM Plex Sans',
+  'Work Sans',
+  'Quicksand',
+  'Raleway',
+];
 
 const SettingsPage = () => {
   const [tab, setTab] = useState(0);
   const [form, setForm] = useState({});
   const [saving, setSaving] = useState(false);
   const notify = useNotification();
+  const { refreshSettings } = useContext(SettingsContext) || {};
 
   useEffect(() => {
     api.get('/settings').then((res) => {
@@ -51,6 +69,10 @@ const SettingsPage = () => {
       });
       await updateSettings(payload);
       notify('Settings saved successfully.', 'success');
+      // Refresh theme settings in real-time
+      if (refreshSettings) {
+        await refreshSettings();
+      }
     } catch (e) {
       notify('Failed to save settings.', 'error');
     } finally {
@@ -86,6 +108,17 @@ const SettingsPage = () => {
   const panels = [
     /* Theme */
     <Box key="theme">
+      <FormControlLabel
+        control={
+          <Switch
+            checked={form['theme.mode'] === 'dark'}
+            onChange={(e) => set('theme.mode', e.target.checked ? 'dark' : 'light')}
+          />
+        }
+        label="Dark Mode"
+        sx={{ mb: 2, display: 'block' }}
+      />
+      <Divider sx={{ mb: 2 }} />
       <Grid container spacing={2}>
         <Grid item xs={12} sm={6}>
           {field('theme.primaryColor', 'Primary Color', 'color')}
@@ -94,7 +127,13 @@ const SettingsPage = () => {
           {field('theme.secondaryColor', 'Secondary Color', 'color')}
         </Grid>
         <Grid item xs={12} sm={6}>
-          {field('theme.fontFamily', 'Font Family')}
+          <Autocomplete
+            options={FONTS}
+            value={form['theme.fontFamily'] || ''}
+            onChange={(e, value) => set('theme.fontFamily', value || '')}
+            freeSolo
+            renderInput={(params) => <TextField {...params} label="Font Family" size="small" sx={{ mb: 2 }} />}
+          />
         </Grid>
         <Grid item xs={12} sm={6}>
           {field('theme.borderRadius', 'Border Radius')}
