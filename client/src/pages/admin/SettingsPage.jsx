@@ -1,16 +1,28 @@
 import { useState, useEffect } from 'react';
 import {
-  Box, Typography, Paper, Tab, Tabs, TextField, Switch, FormControlLabel,
-  Slider, Button, Alert, Divider, Grid, InputAdornment,
+  Box,
+  Typography,
+  Paper,
+  Tab,
+  Tabs,
+  TextField,
+  Switch,
+  FormControlLabel,
+  Slider,
+  Button,
+  Divider,
+  Grid,
+  InputAdornment,
 } from '@mui/material';
 import { updateSettings } from '../../services/adminService';
 import api from '../../services/api';
+import { useNotification } from '../../context/NotificationContext';
 
 const SettingsPage = () => {
   const [tab, setTab] = useState(0);
   const [form, setForm] = useState({});
   const [saving, setSaving] = useState(false);
-  const [alert, setAlert] = useState(null);
+  const notify = useNotification();
 
   useEffect(() => {
     api.get('/settings').then((res) => {
@@ -19,7 +31,9 @@ const SettingsPage = () => {
       const flat = {};
       Object.entries(raw).forEach(([group, keys]) => {
         if (typeof keys === 'object') {
-          Object.entries(keys).forEach(([k, v]) => { flat[`${group}.${k}`] = v; });
+          Object.entries(keys).forEach(([k, v]) => {
+            flat[`${group}.${k}`] = v;
+          });
         }
       });
       setForm(flat);
@@ -36,9 +50,9 @@ const SettingsPage = () => {
         return { group, key: keyParts.join('.'), value };
       });
       await updateSettings(payload);
-      setAlert({ type: 'success', msg: 'Settings saved successfully.' });
+      notify('Settings saved successfully.', 'success');
     } catch (e) {
-      setAlert({ type: 'error', msg: 'Failed to save settings.' });
+      notify('Failed to save settings.', 'error');
     } finally {
       setSaving(false);
     }
@@ -63,12 +77,7 @@ const SettingsPage = () => {
   const toggle = (key, label) => (
     <FormControlLabel
       key={key}
-      control={
-        <Switch
-          checked={Boolean(form[key])}
-          onChange={(e) => set(key, e.target.checked)}
-        />
-      }
+      control={<Switch checked={Boolean(form[key])} onChange={(e) => set(key, e.target.checked)} />}
       label={label}
       sx={{ mb: 1 }}
     />
@@ -78,10 +87,18 @@ const SettingsPage = () => {
     /* Theme */
     <Box key="theme">
       <Grid container spacing={2}>
-        <Grid item xs={12} sm={6}>{field('theme.primaryColor', 'Primary Color', 'color')}</Grid>
-        <Grid item xs={12} sm={6}>{field('theme.secondaryColor', 'Secondary Color', 'color')}</Grid>
-        <Grid item xs={12} sm={6}>{field('theme.fontFamily', 'Font Family')}</Grid>
-        <Grid item xs={12} sm={6}>{field('theme.borderRadius', 'Border Radius')}</Grid>
+        <Grid item xs={12} sm={6}>
+          {field('theme.primaryColor', 'Primary Color', 'color')}
+        </Grid>
+        <Grid item xs={12} sm={6}>
+          {field('theme.secondaryColor', 'Secondary Color', 'color')}
+        </Grid>
+        <Grid item xs={12} sm={6}>
+          {field('theme.fontFamily', 'Font Family')}
+        </Grid>
+        <Grid item xs={12} sm={6}>
+          {field('theme.borderRadius', 'Border Radius')}
+        </Grid>
       </Grid>
     </Box>,
 
@@ -97,8 +114,12 @@ const SettingsPage = () => {
     /* Shipping */
     <Box key="shipping">
       {field('shipping.method', 'Shipping Method')}
-      {field('shipping.flatRate', 'Flat Rate ($)', 'number', { InputProps: { startAdornment: <InputAdornment position="start">$</InputAdornment> } })}
-      {field('shipping.freeThreshold', 'Free Shipping Above ($)', 'number', { InputProps: { startAdornment: <InputAdornment position="start">$</InputAdornment> } })}
+      {field('shipping.flatRate', 'Flat Rate ($)', 'number', {
+        InputProps: { startAdornment: <InputAdornment position="start">$</InputAdornment> },
+      })}
+      {field('shipping.freeThreshold', 'Free Shipping Above ($)', 'number', {
+        InputProps: { startAdornment: <InputAdornment position="start">$</InputAdornment> },
+      })}
     </Box>,
 
     /* Tax */
@@ -126,22 +147,25 @@ const SettingsPage = () => {
   return (
     <Box>
       <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 3 }}>
-        <Typography variant="h5" fontWeight={700}>Settings</Typography>
+        <Typography variant="h5" fontWeight={700}>
+          Settings
+        </Typography>
         <Button variant="contained" onClick={handleSave} disabled={saving}>
           {saving ? 'Saving…' : 'Save All'}
         </Button>
       </Box>
 
-      {alert && <Alert severity={alert.type} onClose={() => setAlert(null)} sx={{ mb: 2 }}>{alert.msg}</Alert>}
-
-      <Paper elevation={0} sx={{ borderRadius: 3, border: '1px solid', borderColor: 'divider', overflow: 'hidden' }}>
+      <Paper
+        elevation={0}
+        sx={{ borderRadius: 3, border: '1px solid', borderColor: 'divider', overflow: 'hidden' }}
+      >
         <Tabs value={tab} onChange={(_, v) => setTab(v)} variant="scrollable" scrollButtons="auto">
-          {tabs.map((t) => <Tab key={t} label={t} />)}
+          {tabs.map((t) => (
+            <Tab key={t} label={t} />
+          ))}
         </Tabs>
         <Divider />
-        <Box sx={{ p: 3 }}>
-          {panels[tab]}
-        </Box>
+        <Box sx={{ p: 3 }}>{panels[tab]}</Box>
       </Paper>
     </Box>
   );

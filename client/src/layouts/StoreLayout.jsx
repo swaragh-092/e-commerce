@@ -44,7 +44,7 @@ const StoreLayout = () => {
           </Box>
         </Toolbar>
       </AppBar>
-      <CategoryNav />
+      {/* <CategoryNav /> */}
 
       <Box component="main" sx={{ flexGrow: 1 }}>
         <Outlet />

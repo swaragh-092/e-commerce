@@ -1,7 +1,13 @@
 import { useState, useEffect } from 'react';
 import { Box, Typography, ToggleButtonGroup, ToggleButton, Skeleton } from '@mui/material';
 import {
-  AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
+  AreaChart,
+  Area,
+  XAxis,
+  YAxis,
+  CartesianGrid,
+  Tooltip,
+  ResponsiveContainer,
 } from 'recharts';
 import { getSalesChart } from '../../services/adminService';
 import { useTheme } from '@mui/material/styles';
@@ -25,8 +31,12 @@ const SalesChart = () => {
         if (!cancelled) setData(res.data.data || []);
       })
       .catch(console.error)
-      .finally(() => { if (!cancelled) setLoading(false); });
-    return () => { cancelled = true; };
+      .finally(() => {
+        if (!cancelled) setLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
   }, [period]);
 
   const chartData = data.map((r) => ({
@@ -38,7 +48,9 @@ const SalesChart = () => {
   return (
     <Box>
       <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 2 }}>
-        <Typography variant="h6" fontWeight={600}>Sales Overview</Typography>
+        <Typography variant="h6" fontWeight={600}>
+          Sales Overview
+        </Typography>
         <ToggleButtonGroup
           size="small"
           exclusive
@@ -62,7 +74,7 @@ const SalesChart = () => {
                 <stop offset="95%" stopColor={theme.palette.primary.main} stopOpacity={0} />
               </linearGradient>
             </defs>
-            <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
+            <CartesianGrid strokeDasharray="3 3" stroke={theme.palette.divider} />
             <XAxis dataKey="date" tick={{ fontSize: 11 }} />
             <YAxis tick={{ fontSize: 11 }} />
             <Tooltip

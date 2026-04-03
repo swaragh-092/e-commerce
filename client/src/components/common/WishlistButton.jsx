@@ -42,7 +42,10 @@ const WishlistButton = ({ productId }) => {
       // Refresh the global set so all other WishlistButton instances update too
       await refreshWishlist();
     } catch (error) {
-      setSnackbar({ severity: 'error', message: error?.response?.data?.message || 'Wishlist update failed' });
+      setSnackbar({
+        severity: 'error',
+        message: error?.response?.data?.message || 'Wishlist update failed',
+      });
     } finally {
       setLoading(false);
     }

@@ -1,7 +1,16 @@
 import { useState, useEffect, useCallback } from 'react';
 import {
-  Box, Typography, Chip, IconButton, Tooltip, Alert, TextField,
-  MenuItem, FormControl, InputLabel, Select, Stack,
+  Box,
+  Typography,
+  Chip,
+  IconButton,
+  Tooltip,
+  TextField,
+  MenuItem,
+  FormControl,
+  InputLabel,
+  Select,
+  Stack,
 } from '@mui/material';
 import { DataGrid } from '@mui/x-data-grid';
 import VisibilityIcon from '@mui/icons-material/Visibility';
@@ -9,6 +18,7 @@ import BlockIcon from '@mui/icons-material/Block';
 import CheckCircleIcon from '@mui/icons-material/CheckCircle';
 import { getUsers, getUserById } from '../../services/adminService';
 import api from '../../services/api';
+import { useNotification } from '../../context/NotificationContext';
 
 const CustomersPage = () => {
   const [rows, setRows] = useState([]);
@@ -16,11 +26,16 @@ const CustomersPage = () => {
   const [loading, setLoading] = useState(true);
   const [paginationModel, setPaginationModel] = useState({ page: 0, pageSize: 20 });
   const [search, setSearch] = useState('');
-  const [alert, setAlert] = useState(null);
+  const notify = useNotification();
 
   const fetchUsers = useCallback(() => {
     setLoading(true);
-    getUsers({ page: paginationModel.page + 1, limit: paginationModel.pageSize, role: 'customer', ...(search && { search }) })
+    getUsers({
+      page: paginationModel.page + 1,
+      limit: paginationModel.pageSize,
+      role: 'customer',
+      ...(search && { search }),
+    })
       .then((res) => {
         setRows(res.data.data?.rows || res.data.data || []);
         setTotal(res.data.meta?.total || 0);
@@ -29,16 +44,18 @@ const CustomersPage = () => {
       .finally(() => setLoading(false));
   }, [paginationModel, search]);
 
-  useEffect(() => { fetchUsers(); }, [fetchUsers]);
+  useEffect(() => {
+    fetchUsers();
+  }, [fetchUsers]);
 
   const handleBan = async (id, currentStatus) => {
     const newStatus = currentStatus === 'banned' ? 'active' : 'banned';
     try {
       await api.put(`/users/${id}/status`, { status: newStatus });
-      setAlert({ type: 'success', msg: `User ${newStatus}.` });
+      notify(`User ${newStatus}.`, 'success');
       fetchUsers();
     } catch {
-      setAlert({ type: 'error', msg: 'Failed to update user status.' });
+      notify('Failed to update user status.', 'error');
     }
   };
 
@@ -47,27 +64,51 @@ const CustomersPage = () => {
     { field: 'lastName', headerName: 'Last', width: 120 },
     { field: 'email', headerName: 'Email', flex: 1 },
     {
-      field: 'status', headerName: 'Status', width: 100,
+      field: 'status',
+      headerName: 'Status',
+      width: 100,
       renderCell: ({ value }) => (
-        <Chip label={value} size="small"
-          color={value === 'active' ? 'success' : value === 'banned' ? 'error' : 'default'} />
+        <Chip
+          label={value}
+          size="small"
+          color={value === 'active' ? 'success' : value === 'banned' ? 'error' : 'default'}
+        />
       ),
     },
     {
-      field: 'emailVerified', headerName: 'Verified', width: 90,
-      renderCell: ({ value }) => value ? <Chip label="Yes" size="small" color="success" /> : <Chip label="No" size="small" />,
+      field: 'emailVerified',
+      headerName: 'Verified',
+      width: 90,
+      renderCell: ({ value }) =>
+        value ? (
+          <Chip label="Yes" size="small" color="success" />
+        ) : (
+          <Chip label="No" size="small" />
+        ),
     },
     {
-      field: 'createdAt', headerName: 'Joined', width: 120,
+      field: 'createdAt',
+      headerName: 'Joined',
+      width: 120,
       renderCell: ({ value }) => new Date(value).toLocaleDateString(),
     },
     {
-      field: 'actions', headerName: '', width: 90, sortable: false,
+      field: 'actions',
+      headerName: '',
+      width: 90,
+      sortable: false,
       renderCell: ({ row }) => (
         <Tooltip title={row.status === 'banned' ? 'Unban' : 'Ban'}>
-          <IconButton size="small" color={row.status === 'banned' ? 'success' : 'error'}
-            onClick={() => handleBan(row.id, row.status)}>
-            {row.status === 'banned' ? <CheckCircleIcon fontSize="small" /> : <BlockIcon fontSize="small" />}
+          <IconButton
+            size="small"
+            color={row.status === 'banned' ? 'success' : 'error'}
+            onClick={() => handleBan(row.id, row.status)}
+          >
+            {row.status === 'banned' ? (
+              <CheckCircleIcon fontSize="small" />
+            ) : (
+              <BlockIcon fontSize="small" />
+            )}
           </IconButton>
         </Tooltip>
       ),
@@ -76,19 +117,39 @@ const CustomersPage = () => {
 
   return (
     <Box>
-      <Typography variant="h5" fontWeight={700} mb={3}>Customers</Typography>
+      <Typography variant="h5" fontWeight={700} mb={3}>
+        Customers
+      </Typography>
 
       <Stack direction="row" mb={2}>
-        <TextField size="small" label="Search" value={search}
-          onChange={(e) => setSearch(e.target.value)} sx={{ width: 240 }} />
+        <TextField
+          size="small"
+          label="Search"
+          value={search}
+          onChange={(e) => setSearch(e.target.value)}
+          sx={{ width: 240 }}
+        />
       </Stack>
 
-      {alert && <Alert severity={alert.type} onClose={() => setAlert(null)} sx={{ mb: 2 }}>{alert.msg}</Alert>}
-
-      <Box sx={{ height: 580, bgcolor: 'background.default', borderRadius: 2, border: '1px solid', borderColor: 'divider' }}>
-        <DataGrid rows={rows} columns={columns} rowCount={total} loading={loading}
-          paginationMode="server" paginationModel={paginationModel}
-          onPaginationModelChange={setPaginationModel} disableRowSelectionOnClick />
+      <Box
+        sx={{
+          height: 580,
+          bgcolor: 'background.paper',
+          borderRadius: 2,
+          border: '1px solid',
+          borderColor: 'divider',
+        }}
+      >
+        <DataGrid
+          rows={rows}
+          columns={columns}
+          rowCount={total}
+          loading={loading}
+          paginationMode="server"
+          paginationModel={paginationModel}
+          onPaginationModelChange={setPaginationModel}
+          disableRowSelectionOnClick
+        />
       </Box>
     </Box>
   );
