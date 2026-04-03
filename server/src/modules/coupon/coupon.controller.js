@@ -7,13 +7,11 @@ const list = async (req, res, next) => {
     const { page = 1, limit = 20 } = req.query;
     const result = await CouponService.list({ page, limit });
     return paginated(res, result.rows, result.count, page, limit);
-<<<<<<< HEAD
-  } catch (err) { next(err); }
-=======
+
   } catch (err) {
     next(err);
   }
->>>>>>> 93a4558 (fix admin panel)
+
 };
 
 const getOne = async (req, res, next) => {

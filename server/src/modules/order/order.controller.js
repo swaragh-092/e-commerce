@@ -12,18 +12,6 @@ const placeOrder = async (req, res, next) => {
 };
 
 const getOrders = async (req, res, next) => {
-<<<<<<< HEAD
-    try {
-        const { page = 1, limit = 20 } = req.query;
-        // If super_admin or admin hitting /orders, we treat them as fetching their own unless they explicitly want all 
-        // Typically, /orders for everyone versus /admin/orders or based on role checks in service. 
-        // The API.md says `GET /orders My orders (customer) / All orders (admin)`
-        const isAdminSession = req.user.role === 'admin' || req.user.role === 'super_admin';
-        // But an admin might want to view own orders? Usually we trust `isAdmin`
-        const result = await OrderService.getOrders(req.user.id, isAdminSession, page, limit);
-        return paginated(res, result.rows, result.count, page, limit);
-    } catch (err) { next(err); }
-=======
   try {
     const { page = 1, limit = 20 } = req.query;
     // If super_admin or admin hitting /orders, we treat them as fetching their own unless they explicitly want all
@@ -36,7 +24,6 @@ const getOrders = async (req, res, next) => {
   } catch (err) {
     next(err);
   }
->>>>>>> 93a4558 (fix admin panel)
 };
 
 const getOrderById = async (req, res, next) => {
