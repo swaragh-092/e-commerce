@@ -7,6 +7,7 @@ import ProductFilters from '../../components/product/ProductFilters';
 import { getProducts } from '../../services/productService';
 import PageSEO from '../../components/common/PageSEO';
 import { useDebounce } from '../../hooks/useDebounce';
+import { useSettings } from '../../hooks/useSettings';
 
 const ProductListPage = () => {
     const [searchParams, setSearchParams] = useSearchParams();
@@ -17,6 +18,12 @@ const ProductListPage = () => {
     
     const theme = useTheme();
     const isMobile = useMediaQuery(theme.breakpoints.down('md'));
+    const { settings } = useSettings();
+    const catalog      = settings?.catalog || {};
+    const defaultSort  = catalog.defaultSort  || 'newest';
+    const defaultLimit = parseInt(catalog.defaultPageSize) || 20;
+    const gridCols     = parseInt(catalog.gridColumns) || 4;
+    const showFilters  = catalog.showFilters !== false;
 
     const [searchInput, setSearchInput] = useState(searchParams.get('search') || '');
     const debouncedSearch = useDebounce(searchInput, 400);
@@ -39,10 +46,11 @@ const ProductListPage = () => {
         search: searchParams.get('search') || '',
         category: searchParams.get('category') || '',
         page: parseInt(searchParams.get('page')) || 1,
-        sort: searchParams.get('sort') || 'newest',
+        sort: searchParams.get('sort') || defaultSort,
         minPrice: searchParams.get('minPrice') || '',
         maxPrice: searchParams.get('maxPrice') || '',
         status: 'published',
+        limit: defaultLimit,
     };
 
     useEffect(() => {
@@ -78,7 +86,7 @@ const ProductListPage = () => {
                 <Typography variant="h4" fontWeight="bold">Our Products</Typography>
                 
                 <Box sx={{ display: 'flex', gap: 2 }}>
-                    {isMobile && (
+                    {showFilters && isMobile && (
                         <IconButton onClick={() => setMobileFilterOpen(true)} color="primary">
                             <FilterIcon />
                         </IconButton>
@@ -96,14 +104,14 @@ const ProductListPage = () => {
             </Box>
 
             <Grid container spacing={4}>
-                {!isMobile && (
+                {showFilters && !isMobile && (
                     <Grid item md={3} lg={2.5}>
                         <ProductFilters filters={filters} onFilterChange={handleFilterChange} />
                     </Grid>
                 )}
                 
-                <Grid item xs={12} md={9} lg={9.5}>
-                    <ProductGrid products={products} loading={loading} />
+                <Grid item xs={12} md={showFilters ? 9 : 12} lg={showFilters ? 9.5 : 12}>
+                    <ProductGrid products={products} loading={loading} gridCols={gridCols} />
                     
                     {meta.totalPages > 1 && (
                         <Box sx={{ display: 'flex', justifyContent: 'center', mt: 6 }}>

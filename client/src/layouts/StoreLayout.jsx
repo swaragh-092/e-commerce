@@ -1,5 +1,7 @@
+import { useState } from 'react';
 import { Box, AppBar, Toolbar, Typography, Button, IconButton, Badge } from '@mui/material';
 import ShoppingCartIcon from '@mui/icons-material/ShoppingCart';
+import CloseIcon from '@mui/icons-material/Close';
 import { Outlet, Link as RouterLink } from 'react-router-dom';
 import { useAuth } from '../hooks/useAuth';
 import { useSettings } from '../hooks/useSettings';
@@ -11,10 +13,43 @@ const StoreLayout = () => {
   const { isAuthenticated, user, logout } = useAuth();
   const { settings } = useSettings();
   const { cartCount } = useCart();
+  const [announcementDismissed, setAnnouncementDismissed] = useState(false);
+
+  const nav          = settings?.nav          || {};
+  const announcement = settings?.announcement || {};
+  const showAnnouncement = announcement.enabled && !announcementDismissed;
+  const navPosition  = nav.sticky !== false ? 'sticky' : 'static';
 
   return (
     <Box sx={{ display: 'flex', flexDirection: 'column', minHeight: '100vh' }}>
-      <AppBar position="static" color="primary" elevation={0}>
+      {/* Announcement Bar */}
+      {showAnnouncement && (
+        <Box sx={{
+          bgcolor: announcement.bgColor || 'primary.dark',
+          color: announcement.fgColor || '#fff',
+          py: 0.75, px: 2,
+          textAlign: 'center',
+          display: 'flex', alignItems: 'center', justifyContent: 'center',
+          gap: 1, position: 'relative',
+        }}>
+          {announcement.link ? (
+            <Typography variant="body2" component={RouterLink} to={announcement.link}
+              sx={{ color: 'inherit', textDecoration: 'underline', '&:hover': { opacity: 0.85 } }}>
+              {announcement.text}
+            </Typography>
+          ) : (
+            <Typography variant="body2">{announcement.text}</Typography>
+          )}
+          {announcement.dismissible !== false && (
+            <IconButton size="small" onClick={() => setAnnouncementDismissed(true)}
+              sx={{ color: 'inherit', position: 'absolute', right: 8, p: 0.5 }}>
+              <CloseIcon fontSize="small" />
+            </IconButton>
+          )}
+        </Box>
+      )}
+
+      <AppBar position={navPosition} color="primary" elevation={0}>
         <Toolbar>
           <Box component={RouterLink} to="/" sx={{ flexGrow: 1, display: 'flex', alignItems: 'center', textDecoration: 'none', color: 'inherit', gap: 1 }}>
             {settings?.logo?.main ? (
@@ -56,7 +91,7 @@ const StoreLayout = () => {
           </Box>
         </Toolbar>
       </AppBar>
-      {/* <CategoryNav /> */}
+      {nav.showCategoryBar && <CategoryNav />}
 
       <Box component="main" sx={{ flexGrow: 1 }}>
         <Outlet />

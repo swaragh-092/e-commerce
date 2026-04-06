@@ -1,47 +1,84 @@
 import React, { useState, useEffect } from 'react';
-import { Box, Typography, Slider, FormControl, Select, MenuItem, InputLabel, Button, List, ListItem, ListItemText, Collapse } from '@mui/material';
+import { Box, Typography, Slider, FormControl, Select, MenuItem, InputLabel, Button, List, ListItem, ListItemText } from '@mui/material';
 import { useCategories } from '../../context/CategoryContext';
-import { useCurrency } from '../../hooks/useSettings';
+import { useCurrency, useSettings } from '../../hooks/useSettings';
+
+/**
+ * Recursively renders a category and its children up to maxDepth.
+ * depth starts at 1 (root). indent is the left-padding multiplier.
+ */
+const CategoryItem = ({ cat, depth, maxDepth, filters, onFilterChange }) => {
+    const indent = depth * 2; // MUI spacing units per level
+    const hasChildren = cat.children?.length > 0 && depth < maxDepth;
+
+    return (
+        <>
+            <ListItem
+                button
+                sx={{ pl: indent }}
+                onClick={() => onFilterChange({ ...filters, category: cat.slug, page: 1 })}
+                selected={filters.category === cat.slug}
+            >
+                <ListItemText
+                    primary={cat.name}
+                    primaryTypographyProps={{ variant: depth === 1 ? 'body2' : 'caption', fontWeight: depth === 1 ? 600 : 400 }}
+                />
+            </ListItem>
+            {hasChildren && (
+                <List component="div" disablePadding>
+                    {cat.children.map(child => (
+                        <CategoryItem
+                            key={child.id}
+                            cat={child}
+                            depth={depth + 1}
+                            maxDepth={maxDepth}
+                            filters={filters}
+                            onFilterChange={onFilterChange}
+                        />
+                    ))}
+                </List>
+            )}
+        </>
+    );
+};
 
 const ProductFilters = ({ filters, onFilterChange }) => {
     const { categories } = useCategories();
     const { formatPrice } = useCurrency();
+    const { settings } = useSettings();
+    const priceRangeMax = parseInt(settings?.catalog?.priceRangeMax) || 2000;
+    const categoryDepth = parseInt(settings?.catalog?.categoryDepth) || 3;
+
     // Local state for slider — only commits to URL on release (prevents per-pixel API calls)
     const [sliderValue, setSliderValue] = useState([
         parseInt(filters.minPrice) || 0,
-        parseInt(filters.maxPrice) || 2000,
+        parseInt(filters.maxPrice) || priceRangeMax,
     ]);
 
     // Sync slider when URL params change externally (e.g. clear all)
     useEffect(() => {
         setSliderValue([
             parseInt(filters.minPrice) || 0,
-            parseInt(filters.maxPrice) || 2000,
+            parseInt(filters.maxPrice) || priceRangeMax,
         ]);
-    }, [filters.minPrice, filters.maxPrice]);
+    }, [filters.minPrice, filters.maxPrice, priceRangeMax]);
 
     return (
         <Box>
             <Typography variant="h6" gutterBottom sx={{ mt: 3 }}>Categories</Typography>
             <List dense>
                 <ListItem button onClick={() => onFilterChange({ ...filters, category: '', page: 1 })} selected={!filters.category}>
-                    <ListItemText primary="All Products" />
+                    <ListItemText primary="All Products" primaryTypographyProps={{ variant: 'body2', fontWeight: 600 }} />
                 </ListItem>
                 {categories.map(cat => (
-                    <React.Fragment key={cat.id}>
-                        <ListItem button onClick={() => onFilterChange({ ...filters, category: cat.slug, page: 1 })} selected={filters.category === cat.slug}>
-                            <ListItemText primary={cat.name} />
-                        </ListItem>
-                        <Collapse in={true} timeout="auto" unmountOnExit>
-                            <List component="div" disablePadding>
-                                {cat.children?.map(sub => (
-                                    <ListItem key={sub.id} button sx={{ pl: 4 }} onClick={() => onFilterChange({ ...filters, category: sub.slug, page: 1 })} selected={filters.category === sub.slug}>
-                                        <ListItemText primary={sub.name} />
-                                    </ListItem>
-                                ))}
-                            </List>
-                        </Collapse>
-                    </React.Fragment>
+                    <CategoryItem
+                        key={cat.id}
+                        cat={cat}
+                        depth={1}
+                        maxDepth={categoryDepth}
+                        filters={filters}
+                        onFilterChange={onFilterChange}
+                    />
                 ))}
             </List>
 
@@ -55,7 +92,7 @@ const ProductFilters = ({ filters, onFilterChange }) => {
                     }
                     valueLabelDisplay="auto"
                     min={0}
-                    max={2000}
+                    max={priceRangeMax}
                 />
                 <Box sx={{ display: 'flex', justifyContent: 'space-between' }}>
                     <Typography variant="caption">{formatPrice(sliderValue[0])}</Typography>

@@ -93,5 +93,37 @@
         "email": "",
         "phone": "",
         "address": ""
+    },
+    "announcement": {
+        "enabled": false,
+        "text": "Free shipping on orders over $50!",
+        "bgColor": "",
+        "fgColor": "",
+        "link": "",
+        "dismissible": true
+    },
+    "nav": {
+        "sticky": true,
+        "showCategoryBar": false
+    },
+    "catalog": {
+        "defaultSort": "newest",
+        "defaultPageSize": 20,
+        "priceRangeMax": 2000,
+        "showFilters": true,
+        "gridColumns": 4,
+        "categoryDepth": 3
+    },
+    "homepage": {
+        "showCategories": true,
+        "categoriesTitle": "Shop by Category",
+        "showNewArrivals": true,
+        "newArrivalsTitle": "New Arrivals",
+        "newArrivalsCount": 8
+    },
+    "productPage": {
+        "showSKU": true,
+        "showStockBadge": true,
+        "addToCartLabel": "Add to Cart"
     }
 }

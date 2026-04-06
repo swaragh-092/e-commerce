@@ -18,6 +18,12 @@ const HomePage = () => {
     const { settings } = useSettings();
     const theme = useTheme();
     const hero = settings?.hero || {};
+    const hp = settings?.homepage || {};
+    const showCategories  = hp.showCategories  !== false;
+    const categoriesTitle = hp.categoriesTitle || 'Shop by Category';
+    const showNewArrivals = hp.showNewArrivals !== false;
+    const newArrivalsTitle = hp.newArrivalsTitle || 'New Arrivals';
+    const newArrivalsCount = parseInt(hp.newArrivalsCount) || 8;
     const bgType = hero.backgroundType || 'gradient';
     const bgImage = hero.backgroundImage || '';
     const overlayOpacity = Number(hero.overlayOpacity ?? 0.5);
@@ -29,10 +35,10 @@ const HomePage = () => {
 
     useEffect(() => {
         Promise.all([
-            getProducts({ limit: 8, sort: 'newest', status: 'published' }),
+            getProducts({ limit: newArrivalsCount, sort: 'newest', status: 'published' }),
             getCategories(),
         ]).then(([productsRes, categoriesRes]) => {
-            if (productsRes.success) setFeaturedProducts(productsRes.data?.slice(0, 8) || []);
+            if (productsRes.success) setFeaturedProducts(productsRes.data?.slice(0, newArrivalsCount) || []);
             setCategories(Array.isArray(categoriesRes) ? categoriesRes.slice(0, 6) : []);
         }).catch(() => {})
           .finally(() => setLoading(false));
@@ -79,9 +85,9 @@ const HomePage = () => {
 
             <Container maxWidth="xl" sx={{ py: 6 }}>
                 {/* Categories */}
-                {categories.length > 0 && (
+                {showCategories && categories.length > 0 && (
                     <Box sx={{ mb: 6 }}>
-                        <Typography variant="h5" fontWeight={700} mb={3}>Shop by Category</Typography>
+                        <Typography variant="h5" fontWeight={700} mb={3}>{categoriesTitle}</Typography>
                         <Box sx={{ display: 'flex', gap: 1.5, flexWrap: 'wrap' }}>
                             {categories.map((cat) => (
                                 <Chip
@@ -100,9 +106,10 @@ const HomePage = () => {
                 )}
 
                 {/* Featured Products */}
+                {showNewArrivals && (
                 <Box>
                     <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 3 }}>
-                        <Typography variant="h5" fontWeight={700}>New Arrivals</Typography>
+                        <Typography variant="h5" fontWeight={700}>{newArrivalsTitle}</Typography>
                         <Button component={Link} to="/products" variant="outlined" size="small">View All</Button>
                     </Box>
                     <Grid container spacing={2}>
@@ -150,6 +157,7 @@ const HomePage = () => {
                         }
                     </Grid>
                 </Box>
+                )}
             </Container>
         </Box>
     );

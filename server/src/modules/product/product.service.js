@@ -61,8 +61,12 @@ exports.getProducts = async (filters, page, limit, isAdmin = false) => {
     if (filters.maxPrice) where.price[Op.lte] = filters.maxPrice;
   }
 
-  // Sort logic
-  if (filters.sort === 'price_asc') order.push(['price', 'ASC']);
+  // Sort logic — supports both legacy 'sort' enum and explicit sortBy/sortOrder from the admin grid
+  const SORTABLE_FIELDS = { price: 'price', quantity: 'quantity', name: 'name', createdAt: 'createdAt' };
+  if (filters.sortBy && SORTABLE_FIELDS[filters.sortBy]) {
+    const dir = filters.sortOrder?.toUpperCase() === 'ASC' ? 'ASC' : 'DESC';
+    order.push([SORTABLE_FIELDS[filters.sortBy], dir]);
+  } else if (filters.sort === 'price_asc') order.push(['price', 'ASC']);
   else if (filters.sort === 'price_desc') order.push(['price', 'DESC']);
   else if (filters.sort === 'newest') order.push(['createdAt', 'DESC']);
   else if (filters.sort === 'name_asc') order.push(['name', 'ASC']);
@@ -75,9 +79,18 @@ exports.getProducts = async (filters, page, limit, isAdmin = false) => {
     { model: Tag, as: 'tags' },
   ];
 
-  // F-11: Category filter — match the category AND all its descendants
-  if (filters.category) {
-    // Find the category by slug to get its ID, then expand to full subtree
+  // Category filter — supports UUID (admin grid) and slug (storefront)
+  if (filters.categoryId) {
+    // Admin grid sends a UUID directly — expand to full subtree
+    const categoryIds = await getCategoryAndDescendantIds(filters.categoryId);
+    include.push({
+      model: Category,
+      as: 'categories',
+      where: { id: { [Op.in]: categoryIds } },
+      required: true,
+    });
+  } else if (filters.category) {
+    // Storefront sends a slug — look up ID first, then expand subtree
     const rootCat = await Category.findOne({
       where: { slug: filters.category },
       attributes: ['id'],
@@ -88,7 +101,7 @@ exports.getProducts = async (filters, page, limit, isAdmin = false) => {
         model: Category,
         as: 'categories',
         where: { id: { [Op.in]: categoryIds } },
-        required: true, // INNER JOIN to filter products by category subtree
+        required: true,
       });
     } else {
       // Unknown slug → return zero results instead of ignoring the filter
@@ -96,10 +109,7 @@ exports.getProducts = async (filters, page, limit, isAdmin = false) => {
       include.push({ model: Category, as: 'categories' });
     }
   } else {
-    include.push({
-      model: Category,
-      as: 'categories',
-    });
+    include.push({ model: Category, as: 'categories' });
   }
 
   const { rows, count } = await Product.findAndCountAll({

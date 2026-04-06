@@ -105,7 +105,7 @@ const SettingsPage = () => {
     }
   };
 
-  const tabs = ['Theme', 'Hero', 'Features', 'Shipping', 'Tax', 'SEO', 'General', 'SKU', 'Logo', 'Footer'];
+  const tabs = ['Theme', 'Hero', 'Features', 'Shipping', 'Tax', 'SEO', 'General', 'SKU', 'Logo', 'Footer', 'Announcement', 'Nav', 'Catalog', 'Homepage', 'Product Page'];
 
   // Current currency symbol — used in shipping adornments
   const currSymbol = getCurrencySymbol(form['general.currency']);
@@ -526,6 +526,139 @@ const SettingsPage = () => {
           />
         </>
       )}
+    </Box>,
+
+    /* Announcement */
+    <Box key="announcement">
+      <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
+        A slim banner shown at the very top of every storefront page. Supports a dismiss button and an optional link.
+      </Typography>
+      <Divider sx={{ mb: 3 }} />
+      {toggle('announcement.enabled', 'Show announcement bar')}
+      {Boolean(form['announcement.enabled']) && (
+        <>
+          <TextField
+            fullWidth size="small" label="Message text"
+            value={form['announcement.text'] ?? ''}
+            onChange={(e) => set('announcement.text', e.target.value)}
+            sx={{ mb: 2, mt: 1 }}
+            inputProps={{ maxLength: 200 }}
+            helperText={`${String(form['announcement.text'] ?? '').length}/200`}
+          />
+          {field('announcement.link', 'Link URL — leave empty for no link (e.g. /products)')}
+          <Divider sx={{ my: 2 }} />
+          <Typography variant="subtitle2" sx={{ mb: 1 }}>Colours</Typography>
+          <Grid container spacing={2}>
+            <Grid item xs={12} sm={4}>
+              {field('announcement.bgColor', 'Background Color', 'color')}
+            </Grid>
+            <Grid item xs={12} sm={4}>
+              {field('announcement.fgColor', 'Text Color', 'color')}
+            </Grid>
+          </Grid>
+          {toggle('announcement.dismissible', 'Show dismiss (✕) button')}
+        </>
+      )}
+    </Box>,
+
+    /* Nav */
+    <Box key="nav">
+      <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
+        Controls the top navigation bar behaviour.
+      </Typography>
+      <Divider sx={{ mb: 3 }} />
+      {toggle('nav.sticky', 'Sticky navbar — stays visible while scrolling')}
+      {toggle('nav.showCategoryBar', 'Show category bar below the navbar')}
+    </Box>,
+
+    /* Catalog */
+    <Box key="catalog">
+      <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
+        Controls the product listing / catalog page defaults.
+      </Typography>
+      <Divider sx={{ mb: 3 }} />
+      <FormControl fullWidth size="small" sx={{ mb: 2 }}>
+        <InputLabel>Default Sort Order</InputLabel>
+        <Select
+          label="Default Sort Order"
+          value={form['catalog.defaultSort'] || 'newest'}
+          onChange={(e) => set('catalog.defaultSort', e.target.value)}
+        >
+          <MenuItem value="newest">Newest Arrivals</MenuItem>
+          <MenuItem value="price_asc">Price: Low to High</MenuItem>
+          <MenuItem value="price_desc">Price: High to Low</MenuItem>
+          <MenuItem value="name_asc">Name: A to Z</MenuItem>
+        </Select>
+      </FormControl>
+      <Grid container spacing={2}>
+        <Grid item xs={12} sm={6}>
+          {field('catalog.defaultPageSize', 'Products per page (e.g. 12, 20, 40)', 'number')}
+        </Grid>
+        <Grid item xs={12} sm={6}>
+          <FormControl fullWidth size="small" sx={{ mb: 2 }}>
+            <InputLabel>Grid Columns (desktop)</InputLabel>
+            <Select
+              label="Grid Columns (desktop)"
+              value={Number(form['catalog.gridColumns']) || 4}
+              onChange={(e) => set('catalog.gridColumns', e.target.value)}
+            >
+              <MenuItem value={2}>2 — Wide cards</MenuItem>
+              <MenuItem value={3}>3 columns</MenuItem>
+              <MenuItem value={4}>4 columns (default)</MenuItem>
+              <MenuItem value={5}>5 — Dense grid</MenuItem>
+            </Select>
+          </FormControl>
+        </Grid>
+      </Grid>
+      {field('catalog.priceRangeMax', 'Max price on filter slider (e.g. 2000)', 'number')}
+      {toggle('catalog.showFilters', 'Show filter sidebar on catalog page')}
+      <Divider sx={{ my: 2 }} />
+      <Typography variant="subtitle2" sx={{ mb: 1 }}>Category Tree Depth</Typography>
+      <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mb: 1.5 }}>
+        How many levels of sub-categories to show in the filter sidebar and category nav bar.<br />
+        1 = top-level only &nbsp;|&nbsp; 2 = top + sub &nbsp;|&nbsp; 3 = top + sub + sub-sub (default)
+      </Typography>
+      <FormControl fullWidth size="small" sx={{ mb: 2 }}>
+        <InputLabel>Category Depth</InputLabel>
+        <Select
+          label="Category Depth"
+          value={Number(form['catalog.categoryDepth']) || 3}
+          onChange={(e) => set('catalog.categoryDepth', e.target.value)}
+        >
+          <MenuItem value={1}>1 — Top-level only</MenuItem>
+          <MenuItem value={2}>2 — Top + sub-categories</MenuItem>
+          <MenuItem value={3}>3 — Top + sub + sub-sub (default)</MenuItem>
+          <MenuItem value={4}>4 levels deep</MenuItem>
+          <MenuItem value={5}>5 levels deep</MenuItem>
+        </Select>
+      </FormControl>
+    </Box>,
+
+    /* Homepage */
+    <Box key="homepage">
+      <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
+        Controls the sections displayed on the storefront home page (below the hero banner).
+      </Typography>
+      <Divider sx={{ mb: 3 }} />
+      <Typography variant="subtitle2" sx={{ mb: 1 }}>Category Section</Typography>
+      {toggle('homepage.showCategories', 'Show categories section')}
+      {field('homepage.categoriesTitle', 'Section heading (e.g. Shop by Category)')}
+      <Divider sx={{ my: 2 }} />
+      <Typography variant="subtitle2" sx={{ mb: 1 }}>New Arrivals Section</Typography>
+      {toggle('homepage.showNewArrivals', 'Show new arrivals / featured products section')}
+      {field('homepage.newArrivalsTitle', 'Section heading (e.g. New Arrivals)')}
+      {field('homepage.newArrivalsCount', 'Number of products to display (e.g. 8)', 'number')}
+    </Box>,
+
+    /* Product Page */
+    <Box key="productPage">
+      <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
+        Controls what is shown on individual product detail pages.
+      </Typography>
+      <Divider sx={{ mb: 3 }} />
+      {toggle('productPage.showSKU', 'Show SKU code under product name')}
+      {toggle('productPage.showStockBadge', 'Show In Stock / Out of Stock badge')}
+      {field('productPage.addToCartLabel', 'Add to Cart button label (e.g. Add to Cart, Buy Now, Add to Bag)')}
     </Box>,
   ];
 

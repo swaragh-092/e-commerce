@@ -12,8 +12,7 @@ import WishlistButton from '../../components/common/WishlistButton';
 import ReviewSection from '../../components/product/ReviewSection';
 import DOMPurify from 'dompurify';
 import { useCart } from '../../hooks/useCart';
-import { useCurrency } from '../../hooks/useSettings';
-
+    import { useCurrency, useSettings } from '../../hooks/useSettings';
 const ProductDetailPage = () => {
     const { slug } = useParams();
     const [product, setProduct] = useState(null);
@@ -24,6 +23,9 @@ const ProductDetailPage = () => {
     const [cartMsg, setCartMsg] = useState(null);
     const { addItem } = useCart();
     const { formatPrice } = useCurrency();
+    const { settings } = useSettings();
+    const pp = settings?.productPage || {};
+    const addToCartLabel = pp.addToCartLabel || 'Add to Cart';
 
     useEffect(() => {
         const fetchProduct = async () => {
@@ -89,6 +91,20 @@ const ProductDetailPage = () => {
                         </Typography>
                         <WishlistButton productId={product.id} />
                     </Box>
+
+                    {pp.showStockBadge !== false && (
+                        <Chip
+                            label={stockAvailable ? 'In Stock' : 'Out of Stock'}
+                            color={stockAvailable ? 'success' : 'default'}
+                            size="small"
+                            sx={{ mb: 1.5 }}
+                        />
+                    )}
+                    {pp.showSKU !== false && product.sku && (
+                        <Typography variant="body2" color="text.secondary" sx={{ mb: 1 }}>
+                            SKU: <strong>{product.sku}</strong>
+                        </Typography>
+                    )}
                     
                     <Box sx={{ display: 'flex', alignItems: 'center', gap: 2, mb: 3 }}>
                         {hasSale ? (
@@ -129,7 +145,7 @@ const ProductDetailPage = () => {
                             onClick={handleAddToCart}
                             sx={{ py: 1.5, fontSize: '1.1rem' }}
                         >
-                            {addingToCart ? 'Adding...' : stockAvailable ? 'Add to Cart' : 'Out of Stock'}
+                            {addingToCart ? 'Adding...' : stockAvailable ? addToCartLabel : 'Out of Stock'}
                         </Button>
                     </Box>
 

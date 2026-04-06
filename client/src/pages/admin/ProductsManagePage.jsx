@@ -10,7 +10,7 @@ import {
   Add as AddIcon, Edit as EditIcon, Delete as DeleteIcon,
   OpenInNew as OpenInNewIcon, Clear as ClearIcon,
   CheckCircle as CheckCircleIcon, RemoveCircle as RemoveCircleIcon,
-  DeleteSweep as DeleteSweepIcon,
+  DeleteSweep as DeleteSweepIcon, Download as DownloadIcon, Tune as TuneIcon,
 } from '@mui/icons-material';
 import { Link, useNavigate } from 'react-router-dom';
 import { getProducts, deleteProduct, updateProduct } from '../../services/productService';
@@ -44,6 +44,54 @@ const ProductsManagePage = () => {
   // Delete confirmation dialog
   const [deleteDialog, setDeleteDialog] = useState({ open: false, id: null, name: '', bulk: false });
 
+  // Server-side sorting
+  const [sortModel, setSortModel] = useState([]);
+
+  // Quick-edit dialog (stock + price)
+  const [editDialog, setEditDialog] = useState({ open: false, row: null, quantity: '', price: '', salePrice: '', saving: false });
+  const openEditDialog = (row) =>
+    setEditDialog({ open: true, row, quantity: row.quantity, price: row.price, salePrice: row.salePrice ?? '', saving: false });
+  const handleQuickSave = async () => {
+    setEditDialog((s) => ({ ...s, saving: true }));
+    try {
+      const payload = {
+        quantity: parseInt(editDialog.quantity, 10) || 0,
+        price: parseFloat(editDialog.price),
+        ...(editDialog.salePrice !== '' ? { salePrice: parseFloat(editDialog.salePrice) } : { salePrice: null }),
+      };
+      await updateProduct(editDialog.row.id, payload);
+      setRows((prev) => prev.map((r) => r.id === editDialog.row.id ? { ...r, ...payload } : r));
+      notify('Product updated.', 'success');
+      setEditDialog((s) => ({ ...s, open: false }));
+    } catch (err) {
+      notify('Failed to update: ' + (err?.response?.data?.error?.message || err.message), 'error');
+      setEditDialog((s) => ({ ...s, saving: false }));
+    }
+  };
+
+  // CSV export — exports the current page's visible rows
+  const handleExportCSV = () => {
+    const headers = ['Name', 'SKU', 'Price', 'Sale Price', 'Stock', 'Status'];
+    const csvRows = [headers.join(',')];
+    rows.forEach((r) => {
+      csvRows.push([
+        `"${(r.name || '').replace(/"/g, '""')}"`,
+        `"${r.sku || ''}"`,
+        r.price,
+        r.salePrice ?? '',
+        r.quantity,
+        r.status,
+      ].join(','));
+    });
+    const blob = new Blob([csvRows.join('\n')], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `products-${new Date().toISOString().slice(0, 10)}.csv`;
+    a.click();
+    URL.revokeObjectURL(url);
+  };
+
   // Load flat category list for the filter dropdown
   useEffect(() => {
     getCategoryTree().then((res) => {
@@ -69,6 +117,7 @@ const ProductsManagePage = () => {
       ...(search && { search }),
       ...(status && { status }),
       ...(categoryFilter && { categoryId: categoryFilter }),
+      ...(sortModel[0] && { sortBy: sortModel[0].field, sortOrder: sortModel[0].sort }),
     };
     getProducts(params)
       .then((res) => {
@@ -77,7 +126,7 @@ const ProductsManagePage = () => {
       })
       .catch(console.error)
       .finally(() => setLoading(false));
-  }, [paginationModel, search, status, categoryFilter]);
+  }, [paginationModel, search, status, categoryFilter, sortModel]);
 
   useEffect(() => {
     fetchProducts();
@@ -170,6 +219,7 @@ const ProductsManagePage = () => {
       headerName: 'Product',
       flex: 1,
       minWidth: 200,
+      sortable: true,
       renderCell: ({ row }) => (
         <Box sx={{ py: 0.5, overflow: 'hidden' }}>
           <Typography variant="body2" fontWeight={600} noWrap lineHeight={1.4}>
@@ -186,6 +236,7 @@ const ProductsManagePage = () => {
       field: 'price',
       headerName: 'Price',
       width: 120,
+      sortable: true,
       renderCell: ({ row }) => (
         <Box>
           <Typography
@@ -208,6 +259,7 @@ const ProductsManagePage = () => {
       field: 'quantity',
       headerName: 'Stock',
       width: 90,
+      sortable: true,
       renderCell: ({ value }) => {
         const v = Number(value);
         const color = v === 0 ? 'error' : v <= 10 ? 'warning' : 'success';
@@ -239,14 +291,19 @@ const ProductsManagePage = () => {
         </Tooltip>
       ),
     },
-    // 6. Actions: edit | view on storefront | delete
+    // 6. Actions: quick-edit | edit | view on storefront | delete
     {
       field: 'actions',
       headerName: '',
-      width: 110,
+      width: 140,
       sortable: false,
       renderCell: ({ row }) => (
         <Stack direction="row" spacing={0.25}>
+          <Tooltip title="Quick-edit stock &amp; price">
+            <IconButton size="small" color="primary" onClick={() => openEditDialog(row)}>
+              <TuneIcon fontSize="small" />
+            </IconButton>
+          </Tooltip>
           <Tooltip title="Edit product">
             <IconButton size="small" onClick={() => navigate(`/admin/products/${row.id}/edit`)}>
               <EditIcon fontSize="small" />
@@ -281,9 +338,14 @@ const ProductsManagePage = () => {
           <Typography variant="h5" fontWeight={700}>Manage Products</Typography>
           <Typography variant="body2" color="text.secondary">{total} products total</Typography>
         </Box>
-        <Button variant="contained" startIcon={<AddIcon />} component={Link} to="/admin/products/new">
-          Add Product
-        </Button>
+        <Stack direction="row" spacing={1.5}>
+          <Button variant="outlined" startIcon={<DownloadIcon />} onClick={handleExportCSV} disabled={rows.length === 0}>
+            Export CSV
+          </Button>
+          <Button variant="contained" startIcon={<AddIcon />} component={Link} to="/admin/products/new">
+            Add Product
+          </Button>
+        </Stack>
       </Box>
 
       {/* ── Filters ── */}
@@ -383,6 +445,9 @@ const ProductsManagePage = () => {
           paginationModel={paginationModel}
           onPaginationModelChange={setPaginationModel}
           pageSizeOptions={[10, 20, 50]}
+          sortingMode="server"
+          sortModel={sortModel}
+          onSortModelChange={(m) => { setSortModel(m); setPaginationModel((p) => ({ ...p, page: 0 })); }}
           checkboxSelection
           rowSelectionModel={selectedIds}
           onRowSelectionModelChange={(ids) => setSelectedIds(ids)}
@@ -391,6 +456,55 @@ const ProductsManagePage = () => {
           sx={{ border: 0 }}
         />
       </Box>
+
+      {/* ── Quick-Edit Dialog ── */}
+      <Dialog
+        open={editDialog.open}
+        onClose={() => !editDialog.saving && setEditDialog((s) => ({ ...s, open: false }))}
+        maxWidth="xs"
+        fullWidth
+      >
+        <DialogTitle fontWeight={700}>Quick Edit — {editDialog.row?.name}</DialogTitle>
+        <DialogContent>
+          <Stack spacing={2} sx={{ mt: 1 }}>
+            <TextField
+              label="Stock Quantity"
+              type="number"
+              size="small"
+              fullWidth
+              inputProps={{ min: 0 }}
+              value={editDialog.quantity}
+              onChange={(e) => setEditDialog((s) => ({ ...s, quantity: e.target.value }))}
+            />
+            <TextField
+              label="Price"
+              type="number"
+              size="small"
+              fullWidth
+              inputProps={{ step: '0.01', min: 0 }}
+              value={editDialog.price}
+              onChange={(e) => setEditDialog((s) => ({ ...s, price: e.target.value }))}
+            />
+            <TextField
+              label="Sale Price (blank to remove)"
+              type="number"
+              size="small"
+              fullWidth
+              inputProps={{ step: '0.01', min: 0 }}
+              value={editDialog.salePrice}
+              onChange={(e) => setEditDialog((s) => ({ ...s, salePrice: e.target.value }))}
+            />
+          </Stack>
+        </DialogContent>
+        <DialogActions sx={{ px: 3, pb: 2 }}>
+          <Button onClick={() => setEditDialog((s) => ({ ...s, open: false }))} disabled={editDialog.saving}>
+            Cancel
+          </Button>
+          <Button variant="contained" onClick={handleQuickSave} disabled={editDialog.saving}>
+            {editDialog.saving ? 'Saving…' : 'Save'}
+          </Button>
+        </DialogActions>
+      </Dialog>
 
       {/* ── Delete Confirmation Dialog ── */}
       <Dialog

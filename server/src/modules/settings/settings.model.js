@@ -9,7 +9,6 @@ module.exports = (sequelize, DataTypes) => {
         },
         key: {
             type: DataTypes.STRING(255),
-            unique: true,
             allowNull: false,
         },
         value: {
@@ -20,7 +19,7 @@ module.exports = (sequelize, DataTypes) => {
             type: DataTypes.STRING(50),
             allowNull: false,
             validate: {
-                isIn: [['theme', 'features', 'seo', 'general', 'shipping', 'tax', 'sku', 'logo', 'hero', 'footer']],
+                isIn: [['theme', 'features', 'seo', 'general', 'shipping', 'tax', 'sku', 'logo', 'hero', 'footer', 'announcement', 'nav', 'catalog', 'homepage', 'productPage']],
             },
         },
         updatedBy: {
@@ -30,6 +29,9 @@ module.exports = (sequelize, DataTypes) => {
         tableName: 'settings',
         timestamps: true,
         underscored: true,
+        indexes: [
+            { unique: true, fields: ['key', 'group'], name: 'settings_key_group_unique' },
+        ],
     });
 
     Setting.associate = (models) => {

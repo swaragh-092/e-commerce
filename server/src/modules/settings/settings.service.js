@@ -39,6 +39,11 @@ const getAll = async () => {
     logo: { ...defaultSettings.logo },
     hero: { ...defaultSettings.hero },
     footer: { ...defaultSettings.footer },
+    announcement: { ...defaultSettings.announcement },
+    nav: { ...defaultSettings.nav },
+    catalog: { ...defaultSettings.catalog },
+    homepage: { ...defaultSettings.homepage },
+    productPage: { ...defaultSettings.productPage },
   };
 
   settings.forEach(s => {
@@ -51,7 +56,7 @@ const getAll = async () => {
 };
 
 const getByGroup = async (groupName) => {
-  const validGroups = ['theme', 'features', 'seo', 'general', 'shipping', 'tax', 'sku', 'logo', 'hero', 'footer'];
+  const validGroups = ['theme', 'features', 'seo', 'general', 'shipping', 'tax', 'sku', 'logo', 'hero', 'footer', 'announcement', 'nav', 'catalog', 'homepage', 'productPage'];
   if (!validGroups.includes(groupName)) {
     throw new AppError('VALIDATION_ERROR', 400, 'Invalid setting group');
   }
@@ -99,7 +104,7 @@ const updateKey = async (key, value, group, actingUserId) => {
 };
 
 const bulkUpdate = async (settingsInput, actingUserId) => {
-    const validGroups = ['theme', 'features', 'seo', 'general', 'shipping', 'tax', 'sku', 'logo', 'hero', 'footer'];
+    const validGroups = ['theme', 'features', 'seo', 'general', 'shipping', 'tax', 'sku', 'logo', 'hero', 'footer', 'announcement', 'nav', 'catalog', 'homepage', 'productPage'];
     
     // Normalize input to an array of { key, value, group }
     const settingsArray = Array.isArray(settingsInput) 
