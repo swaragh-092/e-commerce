@@ -5,12 +5,13 @@ import {
     FormControlLabel, Chip,
 } from '@mui/material';
 import LocalShippingIcon from '@mui/icons-material/LocalShipping';
+import LocalOfferIcon from '@mui/icons-material/LocalOffer';
 import { useNavigate } from 'react-router-dom';
 import { AuthContext } from '../../context/AuthContext';
-import { useSettings, useCurrency } from '../../hooks/useSettings';
+import { useSettings, useCurrency, useFeature } from '../../hooks/useSettings';
 import { useCart } from '../../hooks/useCart';
 import { userService } from '../../services/userService';
-import { validateCoupon } from '../../services/adminService';
+import { validateCoupon, getPublicCoupons } from '../../services/adminService';
 import PageSEO from '../../components/common/PageSEO';
 
 const CheckoutPage = () => {
@@ -20,6 +21,7 @@ const CheckoutPage = () => {
     const { formatPrice } = useCurrency();
     const { cart, clearCart } = useCart();
     const couponsEnabled = settings?.features?.coupons !== false;
+    const showAvailableCoupons = useFeature('showAvailableCoupons');
     const STEPS = couponsEnabled
         ? ['Shipping', 'Coupon', 'Review & Place Order']
         : ['Shipping', 'Review & Place Order'];
@@ -35,6 +37,8 @@ const CheckoutPage = () => {
     const [couponCode, setCouponCode] = useState('');
     const [couponResult, setCouponResult] = useState(null); // { discount, message }
     const [couponLoading, setCouponLoading] = useState(false);
+    const [publicCoupons, setPublicCoupons] = useState([]);
+    const [publicCouponsLoading, setPublicCouponsLoading] = useState(false);
 
     // Notes
     const [notes, setNotes] = useState('');
@@ -91,14 +95,27 @@ const CheckoutPage = () => {
             .finally(() => setLoadingAddresses(false));
     }, []);
 
-    const handleApplyCoupon = async () => {
+    useEffect(() => {
+        if (activeStep === 1 && couponsEnabled && showAvailableCoupons) {
+            setPublicCouponsLoading(true);
+            getPublicCoupons()
+                .then(res => setPublicCoupons(res.data?.data || []))
+                .catch(() => {})
+                .finally(() => setPublicCouponsLoading(false));
+        }
+    }, [activeStep, couponsEnabled, showAvailableCoupons]);
+
+    const handleApplyCoupon = async (codeOverride) => {
+        const code = codeOverride || couponCode;
+        if (!code) return;
+        if (codeOverride) setCouponCode(codeOverride);
         setCouponLoading(true);
         setCouponResult(null);
         try {
-            const res = await validateCoupon(couponCode, subtotal);
-            setCouponResult({ discount: res.data?.data?.discountAmount || 0, message: res.data?.data?.message || 'Coupon applied!' });
+            const res = await validateCoupon(code, subtotal);
+            setCouponResult({ discount: res.data?.data?.discount || 0, message: res.data?.data?.message || 'Coupon applied!' });
         } catch (err) {
-            setCouponResult({ discount: 0, message: err?.response?.data?.message || 'Invalid coupon code.', error: true });
+            setCouponResult({ discount: 0, message: err?.response?.data?.error?.message || 'Invalid coupon code.', error: true });
         } finally {
             setCouponLoading(false);
         }
@@ -195,15 +212,55 @@ const CheckoutPage = () => {
                     {activeStep === 1 && couponsEnabled && (
                         <Paper elevation={0} sx={{ border: '1px solid', borderColor: 'divider', borderRadius: 2, p: 3 }}>
                             <Typography variant="h6" fontWeight={600} mb={2}>Coupon Code (optional)</Typography>
+
+                            {/* Available coupons */}
+                            {showAvailableCoupons && (
+                                <Box sx={{ mb: 2.5 }}>
+                                    <Typography variant="body2" fontWeight={600} mb={1} color="text.secondary">
+                                        Available Coupons
+                                    </Typography>
+                                    {publicCouponsLoading ? (
+                                        <CircularProgress size={18} />
+                                    ) : publicCoupons.length > 0 ? (
+                                        <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 1 }}>
+                                            {publicCoupons.map((c) => {
+                                                const label = c.type === 'percentage'
+                                                    ? `${Number(c.value)}% off`
+                                                    : `${formatPrice(Number(c.value))} off`;
+                                                const minNote = Number(c.minOrderAmount) > 0
+                                                    ? ` · min ${formatPrice(Number(c.minOrderAmount))}`
+                                                    : '';
+                                                const applied = couponCode === c.code && couponResult && !couponResult.error;
+                                                return (
+                                                    <Chip
+                                                        key={c.code}
+                                                        icon={<LocalOfferIcon />}
+                                                        label={`${c.code} — ${label}${minNote}`}
+                                                        onClick={() => handleApplyCoupon(c.code)}
+                                                        color={applied ? 'success' : 'default'}
+                                                        variant={applied ? 'filled' : 'outlined'}
+                                                        clickable
+                                                        disabled={couponLoading}
+                                                        size="small"
+                                                    />
+                                                );
+                                            })}
+                                        </Box>
+                                    ) : (
+                                        <Typography variant="caption" color="text.secondary">No coupons available right now.</Typography>
+                                    )}
+                                </Box>
+                            )}
+
                             <Box sx={{ display: 'flex', gap: 1, mb: 1 }}>
                                 <TextField
                                     size="small"
                                     label="Enter coupon code"
                                     value={couponCode}
-                                    onChange={(e) => setCouponCode(e.target.value.toUpperCase())}
+                                    onChange={(e) => { setCouponCode(e.target.value.toUpperCase()); setCouponResult(null); }}
                                     sx={{ flexGrow: 1 }}
                                 />
-                                <Button variant="outlined" onClick={handleApplyCoupon} disabled={!couponCode || couponLoading}>
+                                <Button variant="outlined" onClick={() => handleApplyCoupon()} disabled={!couponCode || couponLoading}>
                                     {couponLoading ? <CircularProgress size={20} /> : 'Apply'}
                                 </Button>
                             </Box>

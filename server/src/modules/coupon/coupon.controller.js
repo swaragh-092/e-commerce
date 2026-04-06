@@ -61,4 +61,13 @@ const validateCoupon = async (req, res, next) => {
   }
 };
 
-module.exports = { list, getOne, create, update, remove, validateCoupon };
+const listPublic = async (req, res, next) => {
+  try {
+    const coupons = await CouponService.listPublic();
+    return success(res, coupons);
+  } catch (err) {
+    next(err);
+  }
+};
+
+module.exports = { list, getOne, create, update, remove, validateCoupon, listPublic };

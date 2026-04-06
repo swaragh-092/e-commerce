@@ -131,4 +131,18 @@ const validateCoupon = async (code, userId, cartSubtotal) => {
     };
 };
 
-module.exports = { list, findById, create, update, remove, validateCoupon };
+const listPublic = async () => {
+    const { Op } = require('sequelize');
+    const now = new Date();
+    return Coupon.findAll({
+        where: {
+            isActive: true,
+            startDate: { [Op.lte]: now },
+            endDate: { [Op.gte]: now },
+        },
+        attributes: ['code', 'type', 'value', 'minOrderAmount', 'maxDiscount', 'endDate'],
+        order: [['value', 'DESC']],
+    });
+};
+
+module.exports = { list, findById, create, update, remove, validateCoupon, listPublic };

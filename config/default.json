@@ -24,7 +24,8 @@
         "socialLogin": false,
         "guestCheckout": true,
         "emailVerification": false,
-        "requirePurchaseForReview": false
+        "requirePurchaseForReview": false,
+        "showAvailableCoupons": true
     },
     "shipping": {
         "method": "flat_rate",

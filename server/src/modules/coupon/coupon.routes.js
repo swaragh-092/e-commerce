@@ -7,6 +7,10 @@ const { authenticate } = require('../../middleware/auth.middleware');
 const { authorize } = require('../../middleware/role.middleware');
 const { auditLog } = require('../audit/audit.middleware');
 const { couponLimiter } = require('../../middleware/rateLimiter.middleware');
+const { featureGate } = require('../../middleware/featureGate.middleware');
+
+// Public: authenticated users can see available coupons (gated by showAvailableCoupons feature flag)
+router.get('/public', authenticate, featureGate('showAvailableCoupons'), couponController.listPublic);
 
 router.get('/', authenticate, authorize('admin', 'super_admin'), couponController.list);
 router.post('/', authenticate, authorize('admin', 'super_admin'), validate(createCouponSchema), auditLog('Coupon'), couponController.create);

@@ -254,6 +254,7 @@ const SettingsPage = () => {
       {toggle('features.wishlist', 'Wishlist')}
       {toggle('features.reviews', 'Reviews')}
       {toggle('features.coupons', 'Coupons')}
+      {toggle('features.showAvailableCoupons', 'Show available coupons to customers at checkout')}
       {toggle('features.guestCheckout', 'Guest Checkout (no account required)')}
       <Divider sx={{ my: 1.5 }} />
       <Typography variant="subtitle2" sx={{ mb: 1 }}>Accounts &amp; Auth</Typography>

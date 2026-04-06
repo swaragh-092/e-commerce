@@ -53,6 +53,8 @@ const updateSettings = (settings) => api.put('/settings/bulk', settings);
 
 // Coupon validation (storefront)
 const validateCoupon = (code, subtotal) => api.post('/coupons/validate', { code, subtotal });
+// Public coupon listing (storefront)
+const getPublicCoupons = () => api.get('/coupons/public');
 
 // Storefront orders
 const getMyOrders = (params = {}) => {
@@ -78,7 +80,7 @@ export {
   getCoupons, createCoupon, updateCoupon, deleteCoupon,
   getAllOrders, getOrderById, updateOrderStatus, refundOrder,
   updateSettings,
-  validateCoupon,
+  validateCoupon, getPublicCoupons,
   getMyOrders, getMyOrderById, cancelOrder, placeOrder,
   getAddresses, createAddress, updateAddress, deleteAddress, setDefaultAddress,
 };

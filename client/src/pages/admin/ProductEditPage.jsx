@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { useParams, useNavigate, Link } from 'react-router-dom';
 import {
   Box,
@@ -26,13 +26,15 @@ import {
   Alert,
   InputAdornment,
   Autocomplete,
+  Tabs,
+  Tab,
 } from '@mui/material';
 import { Add as AddIcon, Delete as DeleteIcon, ContentCopy as ContentCopyIcon, ElectricBolt as ElectricBoltIcon } from '@mui/icons-material';
 import useSKUGenerator from '../../hooks/useSKUGenerator';
 import {
   Dialog, DialogTitle, DialogContent, DialogActions,
 } from '@mui/material';
-import { getProductById, createProduct, updateProduct } from '../../services/productService';
+import { getProductById, getProducts, createProduct, updateProduct } from '../../services/productService';
 import { getCategoryTree } from '../../services/categoryService';
 import attributeService from '../../services/attributeService';
 import MediaUploader from '../../components/common/MediaUploader';
@@ -381,6 +383,7 @@ const ProductEditPage = () => {
                   endAdornment: (
                     <InputAdornment position="end">
                       <Tooltip title="Auto-generate SKU from product name (uses SKU settings)">
+                        <span>
                         <IconButton
                           size="small"
                           onClick={() => setField('sku', generateProductSKU(formData.name))}
@@ -388,6 +391,7 @@ const ProductEditPage = () => {
                         >
                           <ElectricBoltIcon fontSize="small" color="warning" />
                         </IconButton>
+                        </span>
                       </Tooltip>
                     </InputAdornment>
                   ),
@@ -419,13 +423,13 @@ const ProductEditPage = () => {
       </form>
 
       {/* Variants panel — only visible once the product has been saved and has a real ID */}
-      {!isNew && <VariantsPanel productId={id} baseSku={formData.sku} />}
+      {!isNew && <VariantsPanel productId={id} baseSku={formData.sku} flatCatFiles={flatCatFiles} />}
     </Box>
   );
 };
 
 /* ─── Variants Panel ──────────────────────────────────────────────────────── */
-const VariantsPanel = ({ productId, baseSku }) => {
+const VariantsPanel = ({ productId, baseSku, flatCatFiles = [] }) => {
   const notify = useNotification();
   const { generateVariantSKU } = useSKUGenerator();
   const [variants, setVariants] = useState([]);
@@ -435,7 +439,20 @@ const VariantsPanel = ({ productId, baseSku }) => {
   const [selectedTemplate, setSelectedTemplate] = useState('');
   const [cloneOpen, setCloneOpen] = useState(false);
   const [cloneSourceId, setCloneSourceId] = useState('');
+  const [cloneSourceName, setCloneSourceName] = useState('');
   const [cloning, setCloning] = useState(false);
+  const [cloneTab, setCloneTab] = useState(0);
+  // Tab 0: search by name
+  const [cloneSearchInput, setCloneSearchInput] = useState('');
+  const [cloneSearchResults, setCloneSearchResults] = useState([]);
+  const [cloneSearchLoading, setCloneSearchLoading] = useState(false);
+  const [cloneSelectedProduct, setCloneSelectedProduct] = useState(null);
+  // Tab 1: browse by category
+  const [cloneCatId, setCloneCatId] = useState('');
+  const [cloneCatProducts, setCloneCatProducts] = useState([]);
+  const [cloneCatProductsLoading, setCloneCatProductsLoading] = useState(false);
+  const [cloneCatSelectedProduct, setCloneCatSelectedProduct] = useState(null);
+  const cloneSearchTimer = useRef(null);
 
   const loadAll = useCallback(async () => {
     setLoading(true);
@@ -560,19 +577,55 @@ const VariantsPanel = ({ productId, baseSku }) => {
   const hasPending = variants.some((v) => v._new || v._dirty);
 
   const handleClone = async () => {
-    if (!cloneSourceId.trim()) return;
+    const activeProduct = cloneTab === 0 ? cloneSelectedProduct : cloneCatSelectedProduct;
+    if (!activeProduct) return;
     setCloning(true);
     try {
-      await attributeService.cloneVariants(productId, { sourceProductId: cloneSourceId.trim() });
-      notify('Variants cloned successfully!', 'success');
+      await attributeService.cloneVariants(productId, { sourceProductId: activeProduct.id });
+      notify(`Variants cloned from "${activeProduct.name}" successfully!`, 'success');
       setCloneOpen(false);
-      setCloneSourceId('');
+      // reset dialog state
+      setCloneSelectedProduct(null); setCloneSearchInput(''); setCloneSearchResults([]);
+      setCloneCatSelectedProduct(null); setCloneCatId(''); setCloneCatProducts([]);
       loadAll();
     } catch (err) {
-      notify(err?.response?.data?.message || 'Clone failed — check the source product ID.', 'error');
+      notify(err?.response?.data?.error?.message || err?.response?.data?.message || 'Clone failed.', 'error');
     } finally {
       setCloning(false);
     }
+  };
+
+  // Debounced search for clone tab 0
+  const handleCloneSearchChange = (inputValue) => {
+    setCloneSearchInput(inputValue);
+    setCloneSelectedProduct(null);
+    clearTimeout(cloneSearchTimer.current);
+    if (!inputValue.trim()) { setCloneSearchResults([]); return; }
+    cloneSearchTimer.current = setTimeout(async () => {
+      setCloneSearchLoading(true);
+      try {
+        const res = await getProducts({ search: inputValue.trim(), limit: 20 });
+        const rows = res?.data || [];
+        // exclude current product from results
+        setCloneSearchResults(rows.filter(p => p.id !== productId));
+      } catch { setCloneSearchResults([]); }
+      finally { setCloneSearchLoading(false); }
+    }, 350);
+  };
+
+  // Load products when category is selected in clone tab 1
+  const handleCloneCatChange = async (catId) => {
+    setCloneCatId(catId);
+    setCloneCatSelectedProduct(null);
+    setCloneCatProducts([]);
+    if (!catId) return;
+    setCloneCatProductsLoading(true);
+    try {
+      const res = await getProducts({ categoryId: catId, limit: 100 });
+      const rows = res?.data || [];
+      setCloneCatProducts(rows.filter(p => p.id !== productId));
+    } catch { setCloneCatProducts([]); }
+    finally { setCloneCatProductsLoading(false); }
   };
 
   return (
@@ -742,29 +795,119 @@ const VariantsPanel = ({ productId, baseSku }) => {
       )}
 
       {/* ── Clone Dialog ── */}
-      <Dialog open={cloneOpen} onClose={() => setCloneOpen(false)} maxWidth="xs" fullWidth>
+      <Dialog open={cloneOpen} onClose={() => setCloneOpen(false)} maxWidth="sm" fullWidth>
         <DialogTitle>Clone Variants from Another Product</DialogTitle>
-        <DialogContent sx={{ pt: 2 }}>
+        <DialogContent sx={{ pt: 1 }}>
           <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
-            All variants (name, value, price modifier) will be copied from the source product.
-            Quantities are reset to 0 and SKUs are cleared since they must be unique.
+            Variant names, values and price modifiers will be copied. Quantities reset to 0 and SKUs cleared.
           </Typography>
-          <TextField
-            fullWidth
-            size="small"
-            label="Source Product ID"
-            placeholder="Paste the product UUID here"
-            value={cloneSourceId}
-            onChange={(e) => setCloneSourceId(e.target.value)}
-            helperText="Find the ID in the URL when editing the source product: /admin/products/:id/edit"
-          />
+          <Tabs value={cloneTab} onChange={(_, v) => { setCloneTab(v); setCloneSelectedProduct(null); setCloneCatSelectedProduct(null); }} sx={{ mb: 2 }}>
+            <Tab label="Search by Product Name" />
+            <Tab label="Browse by Category" />
+          </Tabs>
+
+          {/* Tab 0: search by name */}
+          {cloneTab === 0 && (
+            <Autocomplete
+              options={cloneSearchResults}
+              getOptionLabel={(o) => o.name || ''}
+              filterOptions={(x) => x}
+              loading={cloneSearchLoading}
+              value={cloneSelectedProduct}
+              onChange={(_, val) => setCloneSelectedProduct(val)}
+              inputValue={cloneSearchInput}
+              onInputChange={(_, val, reason) => { if (reason !== 'reset') handleCloneSearchChange(val); }}
+              renderOption={(props, option) => (
+                <Box component="li" {...props} key={option.id}>
+                  <Box>
+                    <Typography variant="body2" fontWeight={600}>{option.name}</Typography>
+                    <Typography variant="caption" color="text.secondary">
+                      {option.categories?.map(c => c.name).join(', ') || 'No category'}
+                    </Typography>
+                  </Box>
+                </Box>
+              )}
+              renderInput={(params) => (
+                <TextField
+                  {...params}
+                  label="Search products"
+                  placeholder="Type product name..."
+                  size="small"
+                  InputProps={{ ...params.InputProps, endAdornment: (
+                    <>
+                      {cloneSearchLoading && <CircularProgress size={16} />}
+                      {params.InputProps.endAdornment}
+                    </>
+                  )}}
+                />
+              )}
+              noOptionsText={cloneSearchInput.length > 0 ? 'No products found' : 'Start typing to search'}
+            />
+          )}
+
+          {/* Tab 1: browse by category then product */}
+          {cloneTab === 1 && (
+            <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+              <FormControl fullWidth size="small">
+                <InputLabel>Select Category</InputLabel>
+                <Select
+                  label="Select Category"
+                  value={cloneCatId}
+                  onChange={(e) => handleCloneCatChange(e.target.value)}
+                >
+                  <MenuItem value=""><em>— pick a category —</em></MenuItem>
+                  {flatCatFiles.map((c) => (
+                    <MenuItem key={c.id} value={c.id} sx={{ pl: 2 + c.depth * 2 }}>
+                      {c.path}
+                    </MenuItem>
+                  ))}
+                </Select>
+              </FormControl>
+
+              {cloneCatId && (
+                cloneCatProductsLoading ? (
+                  <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                    <CircularProgress size={18} />
+                    <Typography variant="body2" color="text.secondary">Loading products…</Typography>
+                  </Box>
+                ) : cloneCatProducts.length === 0 ? (
+                  <Typography variant="body2" color="text.secondary">No other products in this category.</Typography>
+                ) : (
+                  <FormControl fullWidth size="small">
+                    <InputLabel>Select Product</InputLabel>
+                    <Select
+                      label="Select Product"
+                      value={cloneCatSelectedProduct?.id || ''}
+                      onChange={(e) => setCloneCatSelectedProduct(cloneCatProducts.find(p => p.id === e.target.value) || null)}
+                    >
+                      <MenuItem value=""><em>— pick a product —</em></MenuItem>
+                      {cloneCatProducts.map((p) => (
+                        <MenuItem key={p.id} value={p.id}>{p.name}</MenuItem>
+                      ))}
+                    </Select>
+                  </FormControl>
+                )
+              )}
+            </Box>
+          )}
+
+          {/* Confirmation */}
+          {(cloneTab === 0 ? cloneSelectedProduct : cloneCatSelectedProduct) && (
+            <Alert severity="info" sx={{ mt: 2 }}>
+              Will clone variants from: <strong>{(cloneTab === 0 ? cloneSelectedProduct : cloneCatSelectedProduct)?.name}</strong>
+            </Alert>
+          )}
         </DialogContent>
         <DialogActions>
-          <Button onClick={() => { setCloneOpen(false); setCloneSourceId(''); }}>Cancel</Button>
+          <Button onClick={() => {
+            setCloneOpen(false);
+            setCloneSelectedProduct(null); setCloneSearchInput(''); setCloneSearchResults([]);
+            setCloneCatSelectedProduct(null); setCloneCatId(''); setCloneCatProducts([]);
+          }}>Cancel</Button>
           <Button
             variant="contained"
             onClick={handleClone}
-            disabled={cloning || !cloneSourceId.trim()}
+            disabled={cloning || !(cloneTab === 0 ? cloneSelectedProduct : cloneCatSelectedProduct)}
           >
             {cloning ? 'Cloning…' : 'Clone Variants'}
           </Button>
