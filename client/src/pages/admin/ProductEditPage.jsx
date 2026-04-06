@@ -29,7 +29,15 @@ import {
   Tabs,
   Tab,
 } from '@mui/material';
-import { Add as AddIcon, Delete as DeleteIcon, ContentCopy as ContentCopyIcon, ElectricBolt as ElectricBoltIcon } from '@mui/icons-material';
+import {
+  Add as AddIcon,
+  Delete as DeleteIcon,
+  ContentCopy as ContentCopyIcon,
+  ElectricBolt as ElectricBoltIcon,
+  Star as StarIcon,
+  StarBorder as StarBorderIcon,
+} from '@mui/icons-material';
+import { getMediaUrl } from '../../utils/media';
 import useSKUGenerator from '../../hooks/useSKUGenerator';
 import {
   Dialog, DialogTitle, DialogContent, DialogActions,
@@ -188,6 +196,23 @@ const ProductEditPage = () => {
     }));
   };
 
+  const handleRemoveImage = (index) => {
+    setFormData((prev) => ({
+      ...prev,
+      images: prev.images.filter((_, i) => i !== index),
+    }));
+  };
+
+  const handleSetPrimaryImage = (index) => {
+    setFormData((prev) => ({
+      ...prev,
+      images: prev.images.map((img, i) => ({
+        ...img,
+        isPrimary: i === index,
+      })),
+    }));
+  };
+
   // Build a flat list of every category node with depth + full breadcrumb path.
   // e.g. { id, name, depth: 2, path: 'Vegetable › Roots › Beetroot' }
   const flatCatFiles = [];
@@ -201,8 +226,8 @@ const ProductEditPage = () => {
   flattenWithDepth(categories);
 
   return (
-    <Box sx={{ p: 3, maxWidth: 1000, mx: 'auto' }}>
-      <Typography variant="h4" gutterBottom>
+    <Box sx={{ p: 3, mx: 'auto' }}>
+      <Typography variant="h5" fontWeight={700} gutterBottom>
         {isNew ? 'Create Product' : 'Edit Product'}
       </Typography>
       <form onSubmit={handleSave} noValidate>
@@ -216,6 +241,7 @@ const ProductEditPage = () => {
                 fullWidth
                 label="Product Name *"
                 margin="normal"
+                size='small'
                 value={formData.name}
                 onChange={(e) => setField('name', e.target.value)}
                 error={Boolean(errors.name)}
@@ -225,6 +251,7 @@ const ProductEditPage = () => {
                 fullWidth
                 label="Short Description"
                 margin="normal"
+                size='small'
                 value={formData.shortDescription}
                 onChange={(e) => setField('shortDescription', e.target.value)}
                 error={Boolean(errors.shortDescription)}
@@ -235,6 +262,7 @@ const ProductEditPage = () => {
                 fullWidth
                 label="Full Description"
                 margin="normal"
+                size='small'
                 multiline
                 rows={6}
                 value={formData.description}
@@ -281,7 +309,101 @@ const ProductEditPage = () => {
               <Typography variant="h6" gutterBottom>
                 Media / Images
               </Typography>
-              <MediaUploader onUploadSuccess={handleMediaUpload} />
+              <MediaUploader onUploadSuccess={handleMediaUpload} multiple />
+
+              {formData.images.length > 0 && (
+                <Box sx={{ mt: 3 }}>
+                  <Typography variant="subtitle2" gutterBottom color="text.secondary">
+                    {formData.images.length} images uploaded
+                  </Typography>
+                  <Grid container spacing={2}>
+                    {formData.images.map((img, index) => (
+                      <Grid item xs={6} sm={4} md={2} key={img.id || index}>
+                        <Paper
+                          variant="outlined"
+                          sx={{
+                            position: 'relative',
+                            pt: '100%', // 1:1 Aspect Ratio
+                            overflow: 'hidden',
+                            borderRadius: 2,
+                            borderColor: img.isPrimary ? 'primary.main' : 'divider',
+                            borderWidth: img.isPrimary ? 2 : 1,
+                            '&:hover .image-actions': { opacity: 1 },
+                          }}
+                        >
+                          <Box
+                            component="img"
+                            src={getMediaUrl(img.url)}
+                            alt={img.alt}
+                            sx={{
+                              position: 'absolute',
+                              top: 0,
+                              left: 0,
+                              width: '100%',
+                              height: '100%',
+                              objectFit: 'cover',
+                            }}
+                          />
+                          {/* Overlay actions */}
+                          <Box
+                            className="image-actions"
+                            sx={{
+                              position: 'absolute',
+                              top: 0,
+                              left: 0,
+                              right: 0,
+                              bottom: 0,
+                              bgcolor: 'rgba(0,0,0,0.3)',
+                              display: 'flex',
+                              alignItems: 'center',
+                              justifyContent: 'center',
+                              gap: 1,
+                              opacity: 0,
+                              transition: 'opacity 0.2s',
+                            }}
+                          >
+                            <Tooltip title={img.isPrimary ? 'Primary Image' : 'Set as Primary'}>
+                              <IconButton
+                                size="small"
+                                sx={{ bgcolor: 'background.paper', '&:hover': { bgcolor: 'primary.50' } }}
+                                onClick={() => handleSetPrimaryImage(index)}
+                                color={img.isPrimary ? 'warning' : 'default'}
+                              >
+                                {img.isPrimary ? <StarIcon /> : <StarBorderIcon />}
+                              </IconButton>
+                            </Tooltip>
+                            <Tooltip title="Remove Image">
+                              <IconButton
+                                size="small"
+                                sx={{ bgcolor: 'background.paper', '&:hover': { bgcolor: 'error.50' } }}
+                                onClick={() => handleRemoveImage(index)}
+                                color="error"
+                              >
+                                <DeleteIcon />
+                              </IconButton>
+                            </Tooltip>
+                          </Box>
+                          {img.isPrimary && (
+                            <Chip
+                              label="Primary"
+                              size="small"
+                              color="primary"
+                              sx={{
+                                position: 'absolute',
+                                top: 8,
+                                left: 8,
+                                fontWeight: 700,
+                                height: 20,
+                                '& .MuiChip-label': { px: 1 },
+                              }}
+                            />
+                          )}
+                        </Paper>
+                      </Grid>
+                    ))}
+                  </Grid>
+                </Box>
+              )}
             </Paper>
           </Grid>
 
