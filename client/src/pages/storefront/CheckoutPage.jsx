@@ -2,10 +2,13 @@ import React, { useState, useEffect, useContext } from 'react';
 import {
     Box, Container, Typography, Button, Divider, Paper, TextField,
     CircularProgress, Alert, Stepper, Step, StepLabel, Radio, RadioGroup,
-    FormControlLabel, Chip,
+    FormControlLabel, Chip, Dialog, DialogTitle, DialogContent, DialogActions,
+    Grid, IconButton, Checkbox,
 } from '@mui/material';
 import LocalShippingIcon from '@mui/icons-material/LocalShipping';
 import LocalOfferIcon from '@mui/icons-material/LocalOffer';
+import AddIcon from '@mui/icons-material/Add';
+import EditIcon from '@mui/icons-material/Edit';
 import { useNavigate } from 'react-router-dom';
 import { AuthContext } from '../../context/AuthContext';
 import { useSettings, useCurrency, useFeature } from '../../hooks/useSettings';
@@ -13,6 +16,13 @@ import { useCart } from '../../hooks/useCart';
 import { userService } from '../../services/userService';
 import { validateCoupon, getPublicCoupons } from '../../services/adminService';
 import PageSEO from '../../components/common/PageSEO';
+
+const EMPTY_ADDR = {
+    label: '', fullName: '', phone: '',
+    addressLine1: '', addressLine2: '',
+    city: '', state: '', postalCode: '', country: '',
+    isDefault: false,
+};
 
 const CheckoutPage = () => {
     const navigate = useNavigate();
@@ -42,6 +52,44 @@ const CheckoutPage = () => {
 
     // Notes
     const [notes, setNotes] = useState('');
+
+    // Address add / edit dialog
+    const [addrDialog, setAddrDialog] = useState({ open: false, mode: 'add', addrId: null, form: EMPTY_ADDR, saving: false });
+    const openAddAddrDialog = () =>
+        setAddrDialog({ open: true, mode: 'add', addrId: null, form: { ...EMPTY_ADDR }, saving: false });
+    const openEditAddrDialog = (addr) =>
+        setAddrDialog({
+            open: true, mode: 'edit', addrId: addr.id, saving: false,
+            form: {
+                label: addr.label || '', fullName: addr.fullName || '', phone: addr.phone || '',
+                addressLine1: addr.addressLine1 || '', addressLine2: addr.addressLine2 || '',
+                city: addr.city || '', state: addr.state || '',
+                postalCode: addr.postalCode || '', country: addr.country || '',
+                isDefault: !!addr.isDefault,
+            },
+        });
+    const setAddrField = (field, val) =>
+        setAddrDialog((s) => ({ ...s, form: { ...s.form, [field]: val } }));
+    const handleAddrSave = async () => {
+        const { mode, addrId, form } = addrDialog;
+        setAddrDialog((s) => ({ ...s, saving: true }));
+        try {
+            let saved;
+            if (mode === 'add') {
+                saved = await userService.createAddress(form);
+            } else {
+                saved = await userService.updateAddress(addrId, form);
+            }
+            const list = await userService.getAddresses();
+            const addrList = Array.isArray(list) ? list : list?.rows || [];
+            setAddresses(addrList);
+            if (mode === 'add' && saved?.id) setSelectedAddressId(saved.id);
+            setAddrDialog((s) => ({ ...s, open: false }));
+        } catch (err) {
+            setAddrDialog((s) => ({ ...s, saving: false }));
+            setError(err?.response?.data?.error?.message || 'Failed to save address.');
+        }
+    };
 
     // Placing order
     const [placing, setPlacing] = useState(false);
@@ -169,35 +217,50 @@ const CheckoutPage = () => {
                     {/* Step 0: Shipping */}
                     {activeStep === 0 && (
                         <Paper elevation={0} sx={{ border: '1px solid', borderColor: 'divider', borderRadius: 2, p: 3 }}>
-                            <Typography variant="h6" fontWeight={600} mb={2}>Select Shipping Address</Typography>
+                            <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2 }}>
+                                <Typography variant="h6" fontWeight={600}>Select Shipping Address</Typography>
+                                <Button size="small" startIcon={<AddIcon />} onClick={openAddAddrDialog}>
+                                    Add New
+                                </Button>
+                            </Box>
                             {loadingAddresses ? (
                                 <CircularProgress size={24} />
                             ) : addresses.length === 0 ? (
-                                <Box>
-                                    <Alert severity="warning" sx={{ mb: 2 }}>No saved addresses. Please add one in your account settings.</Alert>
-                                    <Button variant="outlined" href="/account">Go to Account</Button>
+                                <Box sx={{ textAlign: 'center', py: 3 }}>
+                                    <Typography color="text.secondary" mb={2}>No saved addresses yet.</Typography>
+                                    <Button variant="outlined" startIcon={<AddIcon />} onClick={openAddAddrDialog}>
+                                        Add Your First Address
+                                    </Button>
                                 </Box>
                             ) : (
                                 <RadioGroup value={selectedAddressId} onChange={(e) => setSelectedAddressId(e.target.value)}>
                                     {addresses.map((addr) => (
                                         <Paper key={addr.id} variant="outlined" sx={{ p: 2, mb: 1.5, borderColor: selectedAddressId === addr.id ? 'primary.main' : 'divider' }}>
-                                            <FormControlLabel
-                                                value={addr.id}
-                                                control={<Radio />}
-                                                label={
-                                                    <Box>
-                                                        <Box sx={{ display: 'flex', gap: 1, alignItems: 'center' }}>
-                                                            <Typography variant="body2" fontWeight={600}>{addr.label || 'Address'}</Typography>
-                                                            {addr.isDefault && <Chip label="Default" size="small" color="primary" />}
+                                            <Box sx={{ display: 'flex', alignItems: 'flex-start' }}>
+                                                <FormControlLabel
+                                                    value={addr.id}
+                                                    control={<Radio />}
+                                                    label={
+                                                        <Box>
+                                                            <Box sx={{ display: 'flex', gap: 1, alignItems: 'center' }}>
+                                                                <Typography variant="body2" fontWeight={600}>{addr.label || 'Address'}</Typography>
+                                                                {addr.isDefault && <Chip label="Default" size="small" color="primary" />}
+                                                            </Box>
+                                                            <Typography variant="body2">
+                                                                {addr.fullName}{addr.phone ? ` · ${addr.phone}` : ''}
+                                                            </Typography>
+                                                            <Typography variant="body2" color="text.secondary">
+                                                                {addr.addressLine1}{addr.addressLine2 ? `, ${addr.addressLine2}` : ''},{' '}
+                                                                {addr.city}{addr.state ? `, ${addr.state}` : ''} {addr.postalCode}, {addr.country}
+                                                            </Typography>
                                                         </Box>
-                                                        <Typography variant="body2">{addr.fullName}</Typography>
-                                                        <Typography variant="body2" color="text.secondary">
-                                                            {addr.addressLine1}, {addr.city}, {addr.state} {addr.postalCode}, {addr.country}
-                                                        </Typography>
-                                                    </Box>
-                                                }
-                                                sx={{ alignItems: 'flex-start', m: 0 }}
-                                            />
+                                                    }
+                                                    sx={{ alignItems: 'flex-start', m: 0, flexGrow: 1 }}
+                                                />
+                                                <IconButton size="small" sx={{ ml: 1, mt: 0.25 }} onClick={() => openEditAddrDialog(addr)}>
+                                                    <EditIcon fontSize="small" />
+                                                </IconButton>
+                                            </Box>
                                         </Paper>
                                     ))}
                                 </RadioGroup>
@@ -397,6 +460,129 @@ const CheckoutPage = () => {
                     </Box>
                 </Paper>
             </Box>
+
+            {/* ── Add / Edit Address Dialog ── */}
+            <Dialog
+                open={addrDialog.open}
+                onClose={() => !addrDialog.saving && setAddrDialog((s) => ({ ...s, open: false }))}
+                maxWidth="sm"
+                fullWidth
+            >
+                <DialogTitle fontWeight={700}>
+                    {addrDialog.mode === 'add' ? 'Add New Address' : 'Edit Address'}
+                </DialogTitle>
+                <DialogContent>
+                    <Grid container spacing={2} sx={{ mt: 0.5 }}>
+                        <Grid item xs={12} sm={6}>
+                            <TextField
+                                label="Label (e.g. Home, Work)"
+                                size="small" fullWidth
+                                value={addrDialog.form.label}
+                                onChange={(e) => setAddrField('label', e.target.value)}
+                            />
+                        </Grid>
+                        <Grid item xs={12} sm={6}>
+                            <TextField
+                                label="Full Name *"
+                                size="small" fullWidth required
+                                value={addrDialog.form.fullName}
+                                onChange={(e) => setAddrField('fullName', e.target.value)}
+                            />
+                        </Grid>
+                        <Grid item xs={12} sm={6}>
+                            <TextField
+                                label="Phone"
+                                size="small" fullWidth
+                                value={addrDialog.form.phone}
+                                onChange={(e) => setAddrField('phone', e.target.value)}
+                            />
+                        </Grid>
+                        <Grid item xs={12}>
+                            <TextField
+                                label="Address Line 1 *"
+                                size="small" fullWidth required
+                                value={addrDialog.form.addressLine1}
+                                onChange={(e) => setAddrField('addressLine1', e.target.value)}
+                            />
+                        </Grid>
+                        <Grid item xs={12}>
+                            <TextField
+                                label="Address Line 2"
+                                size="small" fullWidth
+                                value={addrDialog.form.addressLine2}
+                                onChange={(e) => setAddrField('addressLine2', e.target.value)}
+                            />
+                        </Grid>
+                        <Grid item xs={12} sm={6}>
+                            <TextField
+                                label="City *"
+                                size="small" fullWidth required
+                                value={addrDialog.form.city}
+                                onChange={(e) => setAddrField('city', e.target.value)}
+                            />
+                        </Grid>
+                        <Grid item xs={12} sm={6}>
+                            <TextField
+                                label="State / Province"
+                                size="small" fullWidth
+                                value={addrDialog.form.state}
+                                onChange={(e) => setAddrField('state', e.target.value)}
+                            />
+                        </Grid>
+                        <Grid item xs={12} sm={6}>
+                            <TextField
+                                label="Postal Code *"
+                                size="small" fullWidth required
+                                value={addrDialog.form.postalCode}
+                                onChange={(e) => setAddrField('postalCode', e.target.value)}
+                            />
+                        </Grid>
+                        <Grid item xs={12} sm={6}>
+                            <TextField
+                                label="Country *"
+                                size="small" fullWidth required
+                                value={addrDialog.form.country}
+                                onChange={(e) => setAddrField('country', e.target.value)}
+                            />
+                        </Grid>
+                        <Grid item xs={12}>
+                            <FormControlLabel
+                                control={
+                                    <Checkbox
+                                        checked={!!addrDialog.form.isDefault}
+                                        onChange={(e) => setAddrField('isDefault', e.target.checked)}
+                                    />
+                                }
+                                label="Set as default address"
+                            />
+                        </Grid>
+                    </Grid>
+                </DialogContent>
+                <DialogActions sx={{ px: 3, pb: 2 }}>
+                    <Button
+                        onClick={() => setAddrDialog((s) => ({ ...s, open: false }))}
+                        disabled={addrDialog.saving}
+                    >
+                        Cancel
+                    </Button>
+                    <Button
+                        variant="contained"
+                        onClick={handleAddrSave}
+                        disabled={
+                            addrDialog.saving ||
+                            !addrDialog.form.fullName ||
+                            !addrDialog.form.addressLine1 ||
+                            !addrDialog.form.city ||
+                            !addrDialog.form.postalCode ||
+                            !addrDialog.form.country
+                        }
+                    >
+                        {addrDialog.saving
+                            ? <CircularProgress size={20} color="inherit" />
+                            : addrDialog.mode === 'add' ? 'Add Address' : 'Save Changes'}
+                    </Button>
+                </DialogActions>
+            </Dialog>
         </Container>
     );
 };
