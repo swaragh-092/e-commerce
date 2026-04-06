@@ -25,6 +25,7 @@ import {
   Divider,
   Alert,
   InputAdornment,
+  Autocomplete,
 } from '@mui/material';
 import { Add as AddIcon, Delete as DeleteIcon, ContentCopy as ContentCopyIcon, ElectricBolt as ElectricBoltIcon } from '@mui/icons-material';
 import useSKUGenerator from '../../hooks/useSKUGenerator';
@@ -185,14 +186,17 @@ const ProductEditPage = () => {
     }));
   };
 
+  // Build a flat list of every category node with depth + full breadcrumb path.
+  // e.g. { id, name, depth: 2, path: 'Vegetable › Roots › Beetroot' }
   const flatCatFiles = [];
-  const flatten = (arr) => {
+  const flattenWithDepth = (arr, depth = 0, parentPath = '') => {
     arr.forEach((c) => {
-      flatCatFiles.push(c);
-      if (c.children?.length) flatten(c.children);
+      const path = parentPath ? `${parentPath} › ${c.name}` : c.name;
+      flatCatFiles.push({ ...c, depth, path });
+      if (c.children?.length) flattenWithDepth(c.children, depth + 1, path);
     });
   };
-  flatten(categories);
+  flattenWithDepth(categories);
 
   return (
     <Box sx={{ p: 3, maxWidth: 1000, mx: 'auto' }}>
@@ -301,36 +305,64 @@ const ProductEditPage = () => {
               <Typography variant="h6" gutterBottom>
                 Organization
               </Typography>
-              <FormControl fullWidth margin="normal">
-                <InputLabel>Categories</InputLabel>
-                <Select
-                  multiple
-                  value={formData.categoryIds}
-                  onChange={(e) =>
-                    setField(
-                      'categoryIds',
-                      typeof e.target.value === 'string'
-                        ? e.target.value.split(',')
-                        : e.target.value
-                    )
-                  }
-                  input={<OutlinedInput label="Categories" />}
-                  renderValue={(selected) => (
-                    <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 0.5 }}>
-                      {selected.map((value) => {
-                        const cat = flatCatFiles.find((c) => c.id === value);
-                        return <Chip key={value} label={cat?.name || value} size="small" />;
-                      })}
+              <Autocomplete
+                multiple
+                options={flatCatFiles}
+                getOptionLabel={(o) => o.path || o.name}
+                isOptionEqualToValue={(o, v) => o.id === v.id}
+                value={flatCatFiles.filter((c) => formData.categoryIds.includes(c.id))}
+                onChange={(_, newValue) =>
+                  setField('categoryIds', newValue.map((c) => c.id))
+                }
+                renderOption={(props, option) => (
+                  <Box
+                    component="li"
+                    {...props}
+                    key={option.id}
+                    sx={{ pl: `${(option.depth * 16) + 8}px !important`, py: '6px !important' }}
+                  >
+                    <Box sx={{ display: 'flex', flexDirection: 'column' }}>
+                      <Typography variant="body2" fontWeight={option.depth === 0 ? 700 : 400}>
+                        {option.name}
+                      </Typography>
+                      {option.depth > 0 && (
+                        <Typography variant="caption" color="text.secondary" sx={{ lineHeight: 1.2 }}>
+                          {option.path}
+                        </Typography>
+                      )}
                     </Box>
-                  )}
-                >
-                  {flatCatFiles.map((c) => (
-                    <MenuItem key={c.id} value={c.id}>
-                      {c.name}
-                    </MenuItem>
-                  ))}
-                </Select>
-              </FormControl>
+                  </Box>
+                )}
+                renderTags={(value, getTagProps) =>
+                  value.map((option, index) => (
+                    <Chip
+                      key={option.id}
+                      label={option.depth > 0 ? option.path : option.name}
+                      size="small"
+                      title={option.path}
+                      {...getTagProps({ index })}
+                    />
+                  ))
+                }
+                renderInput={(params) => (
+                  <TextField
+                    {...params}
+                    label="Categories"
+                    placeholder={formData.categoryIds.length === 0 ? 'Search or select…' : ''}
+                    margin="normal"
+                  />
+                )}
+                groupBy={(o) => {
+                  // Group by root category name for visual separation
+                  const root = flatCatFiles.find(
+                    (c) => c.depth === 0 && (c.id === o.id || o.path.startsWith(c.name))
+                  );
+                  return root?.name || o.name;
+                }}
+                noOptionsText="No categories found"
+                disableCloseOnSelect
+                sx={{ mt: 1 }}
+              />
             </Paper>
 
             <Paper sx={{ p: 3, mb: 3 }}>
