@@ -5,6 +5,7 @@ import { useSearchParams } from 'react-router-dom';
 import ProductGrid from '../../components/product/ProductGrid';
 import ProductFilters from '../../components/product/ProductFilters';
 import { getProducts } from '../../services/productService';
+import { getCategoryTree } from '../../services/categoryService';
 import PageSEO from '../../components/common/PageSEO';
 import { useDebounce } from '../../hooks/useDebounce';
 import { useSettings } from '../../hooks/useSettings';
@@ -15,6 +16,7 @@ const ProductListPage = () => {
     const [loading, setLoading] = useState(true);
     const [mobileFilterOpen, setMobileFilterOpen] = useState(false);
     const [meta, setMeta] = useState({ page: 1, totalPages: 1 });
+    const [categoryName, setCategoryName] = useState('');
     
     const theme = useTheme();
     const isMobile = useMediaQuery(theme.breakpoints.down('md'));
@@ -71,6 +73,32 @@ const ProductListPage = () => {
         fetchProducts();
     }, [searchParams]);
 
+    // Resolve the category slug → full breadcrumb path for the contextual breadcrumb on PDP
+    // e.g. "vegetable" slug → "Vegetable > Roots > Beetroot" when filtering by beetroot
+    useEffect(() => {
+        const categorySlug = searchParams.get('category');
+        if (!categorySlug) { setCategoryName(''); return; }
+
+        // Recursively search the tree, building the path as we go.
+        // Returns the full path string if found, or null.
+        const findPathInTree = (nodes, slug, ancestors = []) => {
+            for (const node of nodes) {
+                const currentPath = [...ancestors, node.name];
+                if (node.slug === slug) return currentPath.join(' > ');
+                if (node.children?.length) {
+                    const found = findPathInTree(node.children, slug, currentPath);
+                    if (found) return found;
+                }
+            }
+            return null;
+        };
+
+        getCategoryTree().then((res) => {
+            const path = findPathInTree(res?.data?.categories || [], categorySlug);
+            setCategoryName(path || '');
+        }).catch(() => setCategoryName(''));
+    }, [searchParams]);
+
     const handleFilterChange = (newFilters) => {
         const params = new URLSearchParams();
         Object.entries(newFilters).forEach(([k, v]) => {
@@ -111,7 +139,7 @@ const ProductListPage = () => {
                 )}
                 
                 <Grid item xs={12} md={showFilters ? 9 : 12} lg={showFilters ? 9.5 : 12}>
-                    <ProductGrid products={products} loading={loading} gridCols={gridCols} />
+                    <ProductGrid products={products} loading={loading} gridCols={gridCols} fromCategory={categoryName} />
                     
                     {meta.totalPages > 1 && (
                         <Box sx={{ display: 'flex', justifyContent: 'center', mt: 6 }}>

@@ -10,7 +10,7 @@ const COLS_MAP = {
     5: { xs: 12, sm: 4,  md: 3,  lg: 2.4 },
 };
 
-const ProductGrid = ({ products, loading, gridCols = 4 }) => {
+const ProductGrid = ({ products, loading, gridCols = 4, fromCategory }) => {
     const cols = COLS_MAP[parseInt(gridCols)] || COLS_MAP[4];
 
     if (loading) {
@@ -39,7 +39,7 @@ const ProductGrid = ({ products, loading, gridCols = 4 }) => {
         <Grid container spacing={3}>
             {products.map(product => (
                 <Grid item xs={cols.xs} sm={cols.sm} md={cols.md} lg={cols.lg} key={product.id}>
-                    <ProductCard product={product} />
+                    <ProductCard product={product} fromCategory={fromCategory} />
                 </Grid>
             ))}
         </Grid>

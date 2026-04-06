@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { useParams } from 'react-router-dom';
+import { useParams, useLocation } from 'react-router-dom';
 import {
     Box, Button, Chip, CircularProgress, Container, Divider, Grid, Typography,
 } from '@mui/material';
@@ -15,6 +15,7 @@ import { useCart } from '../../hooks/useCart';
     import { useCurrency, useSettings } from '../../hooks/useSettings';
 const ProductDetailPage = () => {
     const { slug } = useParams();
+    const location = useLocation();
     const [product, setProduct] = useState(null);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState(null);
@@ -82,7 +83,24 @@ const ProductDetailPage = () => {
                 
                 <Grid item xs={12} md={6}>
                     <Typography variant="body2" color="text.secondary" gutterBottom>
-                        {product.categories?.map(c => c.name).join(' > ')}
+                        {(() => {
+                            // If the user navigated here from a category page, show that context.
+                            if (location.state?.fromCategory) return location.state.fromCategory;
+
+                            // Fallback: build the deepest category path from the product's category list.
+                            const cats = product.categories;
+                            if (!cats?.length) return null;
+                            const catMap = Object.fromEntries(cats.map(c => [c.id, c]));
+                            const parentIds = new Set(cats.map(c => c.parentId).filter(Boolean));
+                            const leaf = cats.find(c => !parentIds.has(c.id)) || cats[0];
+                            const path = [];
+                            let cur = leaf;
+                            while (cur) {
+                                path.unshift(cur.name);
+                                cur = cur.parentId ? catMap[cur.parentId] : null;
+                            }
+                            return path.join(' > ');
+                        })()}
                     </Typography>
                     
                     <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 1 }}>

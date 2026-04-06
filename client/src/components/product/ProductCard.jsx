@@ -4,7 +4,7 @@ import { Link } from 'react-router-dom';
 import { getMediaUrl } from '../../utils/media';
 import { useCurrency } from '../../hooks/useSettings';
 
-const ProductCard = ({ product }) => {
+const ProductCard = ({ product, fromCategory }) => {
   const { formatPrice } = useCurrency();
   const primaryImage =
     getMediaUrl(product.images?.find((i) => i.isPrimary)?.url || product.images?.[0]?.url || '') || '/placeholder.png';
@@ -16,6 +16,7 @@ const ProductCard = ({ product }) => {
       sx={{ height: '100%', display: 'flex', flexDirection: 'column', textDecoration: 'none' }}
       component={Link}
       to={`/products/${product.slug}`}
+      state={fromCategory ? { fromCategory } : undefined}
     >
       <Box sx={{ position: 'relative', pt: '100%', backgroundColor: 'action.hover' }}>
         {hasSale && (
