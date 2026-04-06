@@ -1,13 +1,13 @@
 import React, { useState, useEffect } from 'react';
 import {
     Box, Container, Typography, Button, Grid, Card, CardMedia,
-    CardContent, CardActionArea, Skeleton, Chip,
+    CardContent, CardActionArea, Skeleton, Chip, useTheme,
 } from '@mui/material';
 import { Link } from 'react-router-dom';
 import { getProducts } from '../../services/productService';
 import { getCategories } from '../../services/categoryService';
 import { getMediaUrl } from '../../utils/media';
-import { useCurrency } from '../../hooks/useSettings';
+import { useCurrency, useSettings } from '../../hooks/useSettings';
 import PageSEO from '../../components/common/PageSEO';
 
 const HomePage = () => {
@@ -15,6 +15,17 @@ const HomePage = () => {
     const [categories, setCategories] = useState([]);
     const [loading, setLoading] = useState(true);
     const { formatPrice } = useCurrency();
+    const { settings } = useSettings();
+    const theme = useTheme();
+    const hero = settings?.hero || {};
+    const bgType = hero.backgroundType || 'gradient';
+    const bgImage = hero.backgroundImage || '';
+    const overlayOpacity = Number(hero.overlayOpacity ?? 0.5);
+    const heroTextColor = hero.color || '#ffffff';
+    const heroTitle = hero.title || 'Shop the Latest';
+    const heroSubtitle = hero.subtitle || 'Discover thousands of products at great prices.';
+    const heroBtnText = hero.buttonText || 'Shop Now';
+    const heroBtnLink = hero.buttonLink || '/products';
 
     useEffect(() => {
         Promise.all([
@@ -33,26 +44,35 @@ const HomePage = () => {
 
             {/* Hero */}
             <Box sx={{
-                background: (theme) => `linear-gradient(135deg, ${theme.palette.primary.dark} 0%, ${theme.palette.primary.main} 100%)`,
-                color: 'white',
+                position: 'relative',
+                overflow: 'hidden',
+                ...(bgType === 'image' && bgImage
+                    ? { backgroundImage: `url(${bgImage})`, backgroundSize: 'cover', backgroundPosition: 'center' }
+                    : { background: `linear-gradient(135deg, ${theme.palette.primary.dark} 0%, ${theme.palette.primary.main} 100%)` }
+                ),
+                color: heroTextColor,
                 py: { xs: 8, md: 12 },
                 textAlign: 'center',
             }}>
-                <Container maxWidth="md">
+                {/* Overlay for image backgrounds */}
+                {bgType === 'image' && bgImage && (
+                    <Box sx={{ position: 'absolute', inset: 0, bgcolor: 'black', opacity: overlayOpacity, zIndex: 1 }} />
+                )}
+                <Container maxWidth="md" sx={{ position: 'relative', zIndex: 2 }}>
                     <Typography variant="h2" fontWeight={800} gutterBottom sx={{ fontSize: { xs: '2rem', md: '3.5rem' } }}>
-                        Shop the Latest
+                        {heroTitle}
                     </Typography>
                     <Typography variant="h6" sx={{ opacity: 0.9, mb: 4 }}>
-                        Discover thousands of products at great prices.
+                        {heroSubtitle}
                     </Typography>
                     <Button
                         variant="contained"
                         size="large"
                         component={Link}
-                        to="/products"
+                        to={heroBtnLink}
                         sx={{ bgcolor: 'white', color: 'primary.main', '&:hover': { bgcolor: 'grey.100' }, py: 1.5, px: 4, fontSize: '1.1rem' }}
                     >
-                        Shop Now
+                        {heroBtnText}
                     </Button>
                 </Container>
             </Box>

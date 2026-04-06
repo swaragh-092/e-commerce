@@ -18,7 +18,10 @@ import {
   Grid,
   InputAdornment,
   Autocomplete,
+  IconButton,
 } from '@mui/material';
+import DeleteOutlineIcon from '@mui/icons-material/DeleteOutline';
+import AddIcon from '@mui/icons-material/Add';
 import { updateSettings } from '../../services/adminService';
 import api from '../../services/api';
 import { useNotification } from '../../context/NotificationContext';
@@ -102,7 +105,7 @@ const SettingsPage = () => {
     }
   };
 
-  const tabs = ['Theme', 'Features', 'Shipping', 'Tax', 'SEO', 'General', 'SKU', 'Logo'];
+  const tabs = ['Theme', 'Hero', 'Features', 'Shipping', 'Tax', 'SEO', 'General', 'SKU', 'Logo', 'Footer'];
 
   // Current currency symbol — used in shipping adornments
   const currSymbol = getCurrencySymbol(form['general.currency']);
@@ -178,6 +181,69 @@ const SettingsPage = () => {
         </Grid>
         <Grid item xs={12} sm={6}>
           {field('theme.borderRadius', 'Border Radius (e.g. 12px)')}
+        </Grid>
+      </Grid>
+    </Box>,
+
+    /* Hero */
+    <Box key="hero">
+      <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
+        Customize the hero banner on the storefront home page.
+      </Typography>
+      <Divider sx={{ mb: 3 }} />
+      <Typography variant="subtitle2" sx={{ mb: 1 }}>Content</Typography>
+      {field('hero.title', 'Headline')}
+      {field('hero.subtitle', 'Subheading')}
+      <Grid container spacing={2}>
+        <Grid item xs={12} sm={6}>
+          {field('hero.buttonText', 'Button Label')}
+        </Grid>
+        <Grid item xs={12} sm={6}>
+          {field('hero.buttonLink', 'Button Link (e.g. /products)')}
+        </Grid>
+      </Grid>
+      <Divider sx={{ my: 2 }} />
+      <Typography variant="subtitle2" sx={{ mb: 1 }}>Background</Typography>
+      <FormControl fullWidth size="small" sx={{ mb: 2 }}>
+        <InputLabel>Background Type</InputLabel>
+        <Select
+          label="Background Type"
+          value={form['hero.backgroundType'] || 'gradient'}
+          onChange={(e) => set('hero.backgroundType', e.target.value)}
+        >
+          <MenuItem value="gradient">Gradient — uses your brand colors</MenuItem>
+          <MenuItem value="image">Custom Image</MenuItem>
+        </Select>
+      </FormControl>
+      {(form['hero.backgroundType'] || 'gradient') === 'image' && (
+        <>
+          {field('hero.backgroundImage', 'Image URL (paste a URL or /uploads/… path)')}
+          {form['hero.backgroundImage'] && (
+            <Box sx={{ mb: 2, borderRadius: 2, overflow: 'hidden', maxHeight: 160, border: '1px solid', borderColor: 'divider' }}>
+              <img
+                src={form['hero.backgroundImage']}
+                alt="Hero preview"
+                style={{ width: '100%', maxHeight: 160, objectFit: 'cover', display: 'block' }}
+                onError={(e) => { e.target.style.display = 'none'; }}
+              />
+            </Box>
+          )}
+          <Typography variant="subtitle2" sx={{ mb: 0.5, mt: 1 }}>
+            Dark Overlay: {Math.round(Number(form['hero.overlayOpacity'] ?? 0.5) * 100)}%
+          </Typography>
+          <Slider
+            min={0} max={1} step={0.05}
+            value={Number(form['hero.overlayOpacity'] ?? 0.5)}
+            onChange={(_, v) => set('hero.overlayOpacity', v)}
+            sx={{ mb: 2 }}
+          />
+        </>
+      )}
+      <Divider sx={{ my: 2 }} />
+      <Typography variant="subtitle2" sx={{ mb: 1 }}>Text</Typography>
+      <Grid container spacing={2}>
+        <Grid item xs={12} sm={4}>
+          {field('hero.color', 'Text Color', 'color')}
         </Grid>
       </Grid>
     </Box>,
@@ -367,6 +433,98 @@ const SettingsPage = () => {
         <Box sx={{ mb: 2 }}>
           <img src={form['logo.favicon']} alt="Favicon preview" style={{ maxHeight: 32, objectFit: 'contain', border: '1px solid #ddd', borderRadius: 4, padding: 2 }} onError={(e) => { e.target.style.display = 'none'; }} />
         </Box>
+      )}
+    </Box>,
+
+    /* Footer */
+    <Box key="footer">
+      <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
+        Customize the storefront footer: appearance, social links, navigation and contact info.
+      </Typography>
+      <Divider sx={{ mb: 3 }} />
+
+      {toggle('footer.enabled', 'Show footer')}
+
+      <Typography variant="subtitle2" sx={{ mb: 1, mt: 2 }}>Appearance</Typography>
+      <Grid container spacing={2}>
+        <Grid item xs={12} sm={4}>
+          {field('footer.bgColor', 'Background Color', 'color')}
+        </Grid>
+        <Grid item xs={12} sm={4}>
+          {field('footer.fgColor', 'Text &amp; Icon Color', 'color')}
+        </Grid>
+      </Grid>
+      {field('footer.tagline', 'Tagline (shown below store name / logo)')}
+      {field('footer.copyright', 'Copyright line — use {year} and {storeName}')}
+
+      <Divider sx={{ my: 2 }} />
+      <Typography variant="subtitle2" sx={{ mb: 1 }}>Social Links</Typography>
+      {toggle('footer.showSocial', 'Show social icons')}
+      {Boolean(form['footer.showSocial']) && (
+        <Grid container spacing={2} sx={{ mt: 0.5 }}>
+          <Grid item xs={12} sm={6}>{field('footer.facebook',  'Facebook URL')}</Grid>
+          <Grid item xs={12} sm={6}>{field('footer.instagram', 'Instagram URL')}</Grid>
+          <Grid item xs={12} sm={6}>{field('footer.twitter',   'Twitter / X URL')}</Grid>
+          <Grid item xs={12} sm={6}>{field('footer.youtube',   'YouTube URL')}</Grid>
+          <Grid item xs={12} sm={6}>{field('footer.linkedin',  'LinkedIn URL')}</Grid>
+        </Grid>
+      )}
+
+      <Divider sx={{ my: 2 }} />
+      <Typography variant="subtitle2" sx={{ mb: 1 }}>Quick Links Column</Typography>
+      {toggle('footer.showLinks', 'Show quick links column')}
+      {field('footer.linksTitle', 'Column heading (e.g. Quick Links)')}
+      {(() => {
+        const links = Array.isArray(form['footer.links']) ? form['footer.links'] : [];
+        const setLinks = (v) => set('footer.links', v);
+        return (
+          <Box sx={{ mb: 1 }}>
+            {links.map((link, i) => (
+              <Box key={i} sx={{ display: 'flex', gap: 1, mb: 1, alignItems: 'center' }}>
+                <TextField
+                  size="small" label="Label"
+                  value={link.label || ''}
+                  onChange={(e) => { const n = [...links]; n[i] = { ...n[i], label: e.target.value }; setLinks(n); }}
+                  sx={{ flex: 1 }}
+                />
+                <TextField
+                  size="small" label="URL (e.g. /about)"
+                  value={link.url || ''}
+                  onChange={(e) => { const n = [...links]; n[i] = { ...n[i], url: e.target.value }; setLinks(n); }}
+                  sx={{ flex: 2 }}
+                />
+                <IconButton size="small" color="error" onClick={() => setLinks(links.filter((_, j) => j !== i))}>
+                  <DeleteOutlineIcon fontSize="small" />
+                </IconButton>
+              </Box>
+            ))}
+            <Button
+              size="small"
+              startIcon={<AddIcon />}
+              onClick={() => setLinks([...links, { label: '', url: '' }])}
+              sx={{ mt: 0.5 }}
+            >
+              Add Link
+            </Button>
+          </Box>
+        );
+      })()}
+
+      <Divider sx={{ my: 2 }} />
+      <Typography variant="subtitle2" sx={{ mb: 1 }}>Contact Column</Typography>
+      {toggle('footer.showContact', 'Show contact column')}
+      {Boolean(form['footer.showContact']) && (
+        <>
+          {field('footer.email', 'Email address')}
+          {field('footer.phone', 'Phone number')}
+          <TextField
+            fullWidth size="small" label="Address (supports multiple lines)"
+            multiline rows={3}
+            value={form['footer.address'] ?? ''}
+            onChange={(e) => set('footer.address', e.target.value)}
+            sx={{ mb: 2 }}
+          />
+        </>
       )}
     </Box>,
   ];

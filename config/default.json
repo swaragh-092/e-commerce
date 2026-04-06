@@ -50,6 +50,16 @@
         "main": "/assets/logo.png",
         "favicon": "/assets/favicon.ico"
     },
+    "hero": {
+        "title": "Shop the Latest",
+        "subtitle": "Discover thousands of products at great prices.",
+        "buttonText": "Shop Now",
+        "buttonLink": "/products",
+        "backgroundType": "gradient",
+        "backgroundImage": "",
+        "overlayOpacity": 0.5,
+        "color": "#ffffff"
+    },
     "sku": {
         "prefix": "",
         "separator": "-",
@@ -59,5 +69,29 @@
         "autoUppercase": true,
         "useRandom": false,
         "randomLength": 4
+    },
+    "footer": {
+        "enabled": true,
+        "bgColor": "",
+        "fgColor": "",
+        "tagline": "Premium online shopping experience.",
+        "copyright": "© {year} {storeName}. All rights reserved.",
+        "showSocial": false,
+        "facebook": "",
+        "instagram": "",
+        "twitter": "",
+        "youtube": "",
+        "linkedin": "",
+        "showLinks": true,
+        "linksTitle": "Quick Links",
+        "links": [
+            { "label": "Home",     "url": "/" },
+            { "label": "Products", "url": "/products" },
+            { "label": "Cart",     "url": "/cart" }
+        ],
+        "showContact": false,
+        "email": "",
+        "phone": "",
+        "address": ""
     }
 }

@@ -5,6 +5,7 @@ import { useAuth } from '../hooks/useAuth';
 import { useSettings } from '../hooks/useSettings';
 import { useCart } from '../hooks/useCart';
 import CategoryNav from '../components/layout/CategoryNav';
+import StorefrontFooter from '../components/layout/StorefrontFooter';
 
 const StoreLayout = () => {
   const { isAuthenticated, user, logout } = useAuth();
@@ -61,13 +62,7 @@ const StoreLayout = () => {
         <Outlet />
       </Box>
 
-      <Box component="footer" sx={{ py: 3, bgcolor: 'background.paper', borderTop: '1px solid', borderColor: 'divider' }}>
-        <Box sx={{ maxWidth: 'lg', mx: 'auto', px: 3 }}>
-          <Typography variant="body2" color="text.secondary" align="center">
-            © {new Date().getFullYear()} {settings?.general?.storeName || 'E-Commerce Store'}. All rights reserved.
-          </Typography>
-        </Box>
-      </Box>
+      <StorefrontFooter />
     </Box>
   );
 };

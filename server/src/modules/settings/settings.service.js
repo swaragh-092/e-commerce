@@ -37,6 +37,8 @@ const getAll = async () => {
     tax: { ...defaultSettings.tax },
     sku: { ...defaultSettings.sku },
     logo: { ...defaultSettings.logo },
+    hero: { ...defaultSettings.hero },
+    footer: { ...defaultSettings.footer },
   };
 
   settings.forEach(s => {
@@ -49,7 +51,7 @@ const getAll = async () => {
 };
 
 const getByGroup = async (groupName) => {
-  const validGroups = ['theme', 'features', 'seo', 'general', 'shipping', 'tax', 'sku', 'logo'];
+  const validGroups = ['theme', 'features', 'seo', 'general', 'shipping', 'tax', 'sku', 'logo', 'hero', 'footer'];
   if (!validGroups.includes(groupName)) {
     throw new AppError('VALIDATION_ERROR', 400, 'Invalid setting group');
   }
@@ -97,9 +99,9 @@ const updateKey = async (key, value, group, actingUserId) => {
 };
 
 const bulkUpdate = async (settingsInput, actingUserId) => {
-    const validGroups = ['theme', 'features', 'seo', 'general', 'shipping', 'tax', 'sku', 'logo'];
+    const validGroups = ['theme', 'features', 'seo', 'general', 'shipping', 'tax', 'sku', 'logo', 'hero', 'footer'];
     
-    // Normalize input to an array of { key, value }
+    // Normalize input to an array of { key, value, group }
     const settingsArray = Array.isArray(settingsInput) 
         ? settingsInput 
         : Object.entries(settingsInput).map(([key, value]) => ({ key, value }));
@@ -107,24 +109,27 @@ const bulkUpdate = async (settingsInput, actingUserId) => {
     return sequelize.transaction(async (t) => {
         let updatedCount = 0;
         for (const { key, value, group } of settingsArray) {
-            // Find which group this key belongs to (based on defaults or existing)
-            let setting = await Setting.findOne({ where: { key }, transaction: t });
+            // Resolve the group for this key upfront so lookups are always scoped
+            // to (key + group) — prevents different groups sharing the same key name
+            // from accidentally overwriting each other's DB row.
+            let resolvedGroup = group || 'general';
+            if (!group) {
+                for (const g of validGroups) {
+                    if (defaultSettings[g] && defaultSettings[g][key] !== undefined) {
+                        resolvedGroup = g;
+                        break;
+                    }
+                }
+            }
+
+            // Look up by (key, group) — not key alone — to avoid cross-group collisions
+            let setting = await Setting.findOne({ where: { key, group: resolvedGroup }, transaction: t });
             
             if (setting) {
                 await setting.update({ value, updatedBy: actingUserId }, { transaction: t });
                 updatedCount++;
             } else {
-                // If it's brand new, we try to guess the group from defaults
-                let guessedGroup = group || 'general';
-                if (!group) {
-                    for (const g of validGroups) {
-                        if (defaultSettings[g] && defaultSettings[g][key] !== undefined) {
-                            guessedGroup = g;
-                            break;
-                        }
-                    }
-                }
-                await Setting.create({ key, value, group: guessedGroup, updatedBy: actingUserId }, { transaction: t });
+                await Setting.create({ key, value, group: resolvedGroup, updatedBy: actingUserId }, { transaction: t });
                 updatedCount++;
             }
         }
