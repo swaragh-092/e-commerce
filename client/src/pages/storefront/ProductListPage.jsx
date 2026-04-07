@@ -17,7 +17,7 @@ const ProductListPage = () => {
     const [mobileFilterOpen, setMobileFilterOpen] = useState(false);
     const [meta, setMeta] = useState({ page: 1, totalPages: 1 });
     const [categoryName, setCategoryName] = useState('');
-    
+
     const theme = useTheme();
     const isMobile = useMediaQuery(theme.breakpoints.down('md'));
     const { settings } = useSettings();
@@ -112,7 +112,7 @@ const ProductListPage = () => {
             <PageSEO title="Products" description="Browse our products" />
             <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 3 }}>
                 <Typography variant="h4" fontWeight="bold">Our Products</Typography>
-                
+
                 <Box sx={{ display: 'flex', gap: 2 }}>
                     {showFilters && isMobile && (
                         <IconButton onClick={() => setMobileFilterOpen(true)} color="primary">
@@ -137,18 +137,18 @@ const ProductListPage = () => {
                         <ProductFilters filters={filters} onFilterChange={handleFilterChange} />
                     </Grid>
                 )}
-                
+
                 <Grid item xs={12} md={showFilters ? 9 : 12} lg={showFilters ? 9.5 : 12}>
                     <ProductGrid products={products} loading={loading} gridCols={gridCols} fromCategory={categoryName} />
-                    
+
                     {meta.totalPages > 1 && (
                         <Box sx={{ display: 'flex', justifyContent: 'center', mt: 6 }}>
-                            <Pagination 
-                                count={meta.totalPages} 
-                                page={meta.page} 
-                                onChange={(e, p) => handleFilterChange({ ...filters, page: p })} 
-                                color="primary" 
-                                size="large" 
+                            <Pagination
+                                count={meta.totalPages}
+                                page={meta.page}
+                                onChange={(e, p) => handleFilterChange({ ...filters, page: p })}
+                                color="primary"
+                                size="large"
                             />
                         </Box>
                     )}

@@ -6,6 +6,7 @@ const AppError = require('../../utils/AppError');
 const AuditService = require('../audit/audit.service');
 const { getPagination } = require('../../utils/pagination');
 const { sanitizePlainText } = require('../../middleware/sanitize.middleware');
+const SettingsService = require('../settings/settings.service');
 const { ACTIONS, ENTITIES } = require('../../config/constants');
 
 /**
@@ -65,6 +66,12 @@ const create = async (userId, slug, payload) => {
         } else {
             orderId = null; // invalid order id given
         }
+    }
+
+    // Enforce purchase requirement if enabled
+    const features = await SettingsService.getByGroup('features');
+    if (features.requirePurchaseForReview && !isVerifiedPurchase) {
+        throw new AppError('FORBIDDEN', 403, 'You must purchase this product and have it delivered before leaving a review');
     }
 
     const title = sanitizePlainText(payload.title);

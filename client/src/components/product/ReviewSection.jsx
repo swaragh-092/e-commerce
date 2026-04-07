@@ -7,12 +7,16 @@ import { useFeature } from '../../hooks/useSettings';
 
 const ReviewSection = ({ slug, productId }) => {
     const reviewsEnabled = useFeature('reviews');
+    const requirePurchase = useFeature('requirePurchaseForReview');
+    
     if (!reviewsEnabled) return null;
+    
     const [reviews, setReviews] = useState([]);
     const [showForm, setShowForm] = useState(false);
     const [formData, setFormData] = useState({ rating: 0, title: '', body: '', orderId: null });
     const { isAuthenticated } = useAuth();
     const [submitStatus, setSubmitStatus] = useState(null);
+    const [hasPurchased, setHasPurchased] = useState(false);
 
     const fetchReviews = async () => {
         try {
@@ -34,10 +38,12 @@ const ReviewSection = ({ slug, productId }) => {
             .then((res) => {
                 const orders = res.data?.data?.rows || res.data?.data || [];
                 for (const order of orders) {
-                    if (['paid', 'processing', 'shipped', 'delivered'].includes(order.status)) {
+                    // Only count delivered orders as verified purchases for review purposes
+                    if (order.status === 'delivered') {
                         const match = order.OrderItems?.find(item => item.productId === productId);
                         if (match) {
                             setFormData(prev => ({ ...prev, orderId: order.id }));
+                            setHasPurchased(true);
                             break;
                         }
                     }
@@ -63,9 +69,19 @@ const ReviewSection = ({ slug, productId }) => {
             <Typography variant="h5" gutterBottom>Customer Reviews</Typography>
 
             {isAuthenticated ? (
-                <Button variant="outlined" onClick={() => setShowForm(!showForm)}>
-                    {showForm ? 'Cancel' : 'Write a Review'}
-                </Button>
+                <>
+                    {requirePurchase && !hasPurchased ? 
+                    // (
+                    //     <Alert severity="warning" sx={{ mb: 2 }}>
+                    //         Only verified purchasers can leave a review for this product.
+                    //     </Alert>
+                    // )
+                    '' : (
+                        <Button variant="outlined" onClick={() => setShowForm(!showForm)}>
+                            {showForm ? 'Cancel' : 'Write a Review'}
+                        </Button>
+                    )}
+                </>
             ) : (
                 <Typography color="text.secondary">Please login to write a review</Typography>
             )}

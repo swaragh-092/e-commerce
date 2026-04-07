@@ -92,9 +92,9 @@ const ProductDetailPage = () => {
 
     return (
         <Container maxWidth="lg" sx={{ py: 6 }}>
-            <PageSEO 
-                title={product.name} 
-                description={product.shortDescription} 
+            <PageSEO
+                title={product.name}
+                description={product.shortDescription}
                 image={product.images?.[0]?.url}
                 type="product"
             />
@@ -102,7 +102,7 @@ const ProductDetailPage = () => {
                 <Grid item xs={12} md={6}>
                     <ProductImages images={product.images} />
                 </Grid>
-                
+
                 <Grid item xs={12} md={6}>
                     <Typography variant="body2" color="text.secondary" gutterBottom>
                         {(() => {
@@ -124,7 +124,7 @@ const ProductDetailPage = () => {
                             return path.join(' > ');
                         })()}
                     </Typography>
-                    
+
                     <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 1 }}>
                         <Typography variant="h4" fontWeight="bold">
                             {product.name}
@@ -145,7 +145,7 @@ const ProductDetailPage = () => {
                             SKU: <strong>{product.sku}</strong>
                         </Typography>
                     )}
-                    
+
                     <Box sx={{ display: 'flex', alignItems: 'center', gap: 2, mb: 3 }}>
                         {hasSale ? (
                             <>
@@ -220,10 +220,10 @@ const ProductDetailPage = () => {
                         {product.shortDescription}
                     </Typography>
 
-                    <VariantSelector 
-                        variants={product.variants} 
-                        selectedVariantId={selectedVariant?.id} 
-                        onSelect={setSelectedVariant} 
+                    <VariantSelector
+                        variants={product.variants}
+                        selectedVariantId={selectedVariant?.id}
+                        onSelect={setSelectedVariant}
                     />
 
                     <Box sx={{ mb: 4, mt: 3 }}>
@@ -232,10 +232,10 @@ const ProductDetailPage = () => {
                                 {cartMsg.text}
                             </Typography>
                         )}
-                        <Button 
-                            variant="contained" 
-                            size="large" 
-                            fullWidth 
+                        <Button
+                            variant="contained"
+                            size="large"
+                            fullWidth
                             startIcon={<CartIcon />}
                             disabled={!stockAvailable || addingToCart}
                             onClick={handleAddToCart}
@@ -246,10 +246,10 @@ const ProductDetailPage = () => {
                     </Box>
 
                     <Divider sx={{ my: 4 }} />
-                    
+
                     <Typography variant="h6" gutterBottom>Product Details</Typography>
                     <Box dangerouslySetInnerHTML={{ __html: DOMPurify.sanitize(product.description || '') }} sx={{ typography: 'body2', color: 'text.secondary', '& p': { mt: 0, mb: 2 } }} />
-                    
+
                     {product.tags?.length > 0 && (
                         <Box sx={{ mt: 3, display: 'flex', gap: 1, flexWrap: 'wrap' }}>
                             {product.tags.map(t => <Chip key={t.id} label={t.name} size="small" variant="outlined" />)}
