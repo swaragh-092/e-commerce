@@ -9,6 +9,7 @@ import { getCategories } from '../../services/categoryService';
 import { getMediaUrl } from '../../utils/media';
 import { isEndingSoon } from '../../utils/pricing';
 import { useCurrency, useSettings } from '../../hooks/useSettings';
+import ProductCard from '../../components/product/ProductCard';
 import PageSEO from '../../components/common/PageSEO';
 
 const HomePage = () => {
@@ -43,7 +44,7 @@ const HomePage = () => {
             setCategories(Array.isArray(categoriesRes) ? categoriesRes.slice(0, 6) : []);
         }).catch(() => {})
           .finally(() => setLoading(false));
-    }, []);
+    }, [newArrivalsCount]);
 
     return (
         <Box>
@@ -122,83 +123,11 @@ const HomePage = () => {
                                     <Skeleton width="60%" />
                                 </Grid>
                             ))
-                            : featuredProducts.map((product) => {
-                                const imageUrl = getMediaUrl(product.images?.[0]?.url || '') || '/placeholder.png';
-                                const price = product.effectivePrice ?? product.salePrice ?? product.price;
-                                const hasSale = product.isSaleActive ?? (product.salePrice && parseFloat(product.salePrice) < parseFloat(product.price));
-                                const isScheduledSale = product.saleStatus === 'scheduled';
-                                const discountPercent = product.discountPercent || 0;
-                                const sales = settings?.sales || {};
-                                const saleLabel = sales.showSaleLabel === false ? null : (product.saleLabel || sales.defaultSaleLabel || null);
-                                const endingSoon = hasSale && sales.showCountdown !== false && isEndingSoon(product.saleEndAt, sales.endingSoonHours);
-
-                                return (
-                                    <Grid item xs={12} sm={6} md={4} lg={3} key={product.id}>
-                                        <Card elevation={0} sx={{ border: '1px solid', borderColor: 'divider', height: '100%', '&:hover': { boxShadow: 3 }, transition: 'box-shadow 0.2s' }}>
-                                            <CardActionArea component={Link} to={`/products/${product.slug}`}>
-                                                <Box sx={{ position: 'relative' }}>
-                                                    {endingSoon && (
-                                                        <Chip
-                                                            label="Ending Soon"
-                                                            size="small"
-                                                            color="warning"
-                                                            sx={{ position: 'absolute', top: 8, left: 8, zIndex: 1, fontWeight: 700 }}
-                                                        />
-                                                    )}
-                                                    <CardMedia
-                                                        component="img"
-                                                        image={imageUrl}
-                                                        alt={product.name}
-                                                        sx={{ height: 200, objectFit: 'cover' }}
-                                                    />
-                                                </Box>
-                                                <CardContent>
-                                                    <Typography variant="body1" fontWeight={600} noWrap>{product.name}</Typography>
-                                                    {(hasSale || isScheduledSale) && sales.showDiscountPercent !== false && discountPercent > 0 && (
-                                                        <Box sx={{ mt: 0.75, mb: 0.5 }}>
-                                                            <Chip
-                                                                label={hasSale ? `${discountPercent}% OFF` : 'Starts Soon'}
-                                                                size="small"
-                                                                color={hasSale ? 'error' : 'warning'}
-                                                            />
-                                                        </Box>
-                                                    )}
-                                                    <Box sx={{ display: 'flex', gap: 1, alignItems: 'center', mt: 0.5 }}>
-                                                        <Typography variant="h6" color="primary.main" fontWeight={700}>
-                                                            {formatPrice(price)}
-                                                        </Typography>
-                                                        {hasSale && (
-                                                            <Typography variant="body2" color="text.secondary" sx={{ textDecoration: 'line-through' }}>
-                                                                {formatPrice(product.price)}
-                                                            </Typography>
-                                                        )}
-                                                    </Box>
-                                                    {saleLabel && (
-                                                        <Typography variant="caption" color="error.main" sx={{ display: 'block', mt: 0.5, fontWeight: 700 }}>
-                                                            {saleLabel}
-                                                        </Typography>
-                                                    )}
-                                                    {sales.showSaleTiming !== false && product.saleStatus === 'scheduled' && product.saleStartAt && (
-                                                        <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mt: 0.25 }}>
-                                                            Starts {new Intl.DateTimeFormat(undefined, { dateStyle: 'medium', timeStyle: 'short' }).format(new Date(product.saleStartAt))}
-                                                        </Typography>
-                                                    )}
-                                                    {sales.showSaleTiming !== false && product.saleStatus === 'active' && product.saleEndAt && (
-                                                        <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mt: 0.25 }}>
-                                                            Ends {new Intl.DateTimeFormat(undefined, { dateStyle: 'medium', timeStyle: 'short' }).format(new Date(product.saleEndAt))}
-                                                        </Typography>
-                                                    )}
-                                                    {endingSoon && (
-                                                        <Typography variant="caption" color="warning.main" sx={{ display: 'block', mt: 0.25, fontWeight: 700 }}>
-                                                            Sale ends soon
-                                                        </Typography>
-                                                    )}
-                                                </CardContent>
-                                            </CardActionArea>
-                                        </Card>
-                                    </Grid>
-                                );
-                            })
+                            : featuredProducts.map((product) => (
+                                <Grid item xs={12} sm={6} md={4} lg={3} key={product.id}>
+                                    <ProductCard product={product} />
+                                </Grid>
+                            ))
                         }
                     </Grid>
                 </Box>
