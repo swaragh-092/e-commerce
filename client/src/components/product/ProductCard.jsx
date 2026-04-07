@@ -2,13 +2,22 @@ import React from 'react';
 import { Card, CardMedia, CardContent, Typography, Box, Rating, Chip } from '@mui/material';
 import { Link } from 'react-router-dom';
 import { getMediaUrl } from '../../utils/media';
-import { useCurrency } from '../../hooks/useSettings';
+import { useCurrency, useSettings } from '../../hooks/useSettings';
+import { getDiscountPercent, getSaleTimingMessage, isEndingSoon } from '../../utils/pricing';
 
 const ProductCard = ({ product, fromCategory }) => {
   const { formatPrice } = useCurrency();
+  const { settings } = useSettings();
+  const sales = settings?.sales || {};
   const primaryImage =
     getMediaUrl(product.images?.find((i) => i.isPrimary)?.url || product.images?.[0]?.url || '') || '/placeholder.png';
-  const hasSale = product.salePrice && parseFloat(product.salePrice) < parseFloat(product.price);
+  const displayPrice = product.effectivePrice ?? product.salePrice ?? product.price;
+  const hasSale = product.isSaleActive ?? (product.salePrice && parseFloat(product.salePrice) < parseFloat(product.price));
+  const isScheduledSale = product.saleStatus === 'scheduled';
+  const discountPercent = product.discountPercent || getDiscountPercent(product);
+  const saleTiming = sales.showSaleTiming !== false ? getSaleTimingMessage(product) : null;
+  const saleLabel = sales.showSaleLabel === false ? null : (product.saleLabel || sales.defaultSaleLabel || null);
+  const endingSoon = hasSale && sales.showCountdown !== false && isEndingSoon(product.saleEndAt, sales.endingSoonHours);
   const hasRating = product.averageRating != null;
 
   return (
@@ -19,12 +28,20 @@ const ProductCard = ({ product, fromCategory }) => {
       state={fromCategory ? { fromCategory } : undefined}
     >
       <Box sx={{ position: 'relative', pt: '100%', backgroundColor: 'action.hover' }}>
-        {hasSale && (
+        {(hasSale || isScheduledSale) && sales.showDiscountPercent !== false && discountPercent > 0 && (
           <Chip
-            label="Sale"
-            color="error"
+            label={hasSale ? `${discountPercent}% OFF` : 'Starts Soon'}
+            color={hasSale ? 'error' : 'warning'}
             size="small"
             sx={{ position: 'absolute', top: 8, right: 8, zIndex: 1 }}
+          />
+        )}
+        {endingSoon && (
+          <Chip
+            label="Ending Soon"
+            color="warning"
+            size="small"
+            sx={{ position: 'absolute', top: 8, left: 8, zIndex: 1, fontWeight: 700 }}
           />
         )}
         <CardMedia
@@ -60,7 +77,7 @@ const ProductCard = ({ product, fromCategory }) => {
           {hasSale ? (
             <>
               <Typography variant="h6" color="primary">
-                {formatPrice(product.salePrice)}
+                {formatPrice(displayPrice)}
               </Typography>
               <Typography
                 variant="body1"
@@ -71,9 +88,28 @@ const ProductCard = ({ product, fromCategory }) => {
               </Typography>
             </>
           ) : (
-            <Typography variant="h6">{formatPrice(product.price)}</Typography>
+            <Typography variant="h6">{formatPrice(displayPrice)}</Typography>
           )}
         </Box>
+        {(saleLabel || saleTiming) && (
+          <Box sx={{ mt: 1 }}>
+            {saleLabel && (
+              <Typography variant="caption" color="error.main" sx={{ display: 'block', fontWeight: 700 }}>
+                {saleLabel}
+              </Typography>
+            )}
+            {saleTiming && (
+              <Typography variant="caption" color="text.secondary" sx={{ display: 'block' }}>
+                {saleTiming}
+              </Typography>
+            )}
+            {endingSoon && (
+              <Typography variant="caption" color="warning.main" sx={{ display: 'block', fontWeight: 700 }}>
+                Ends soon
+              </Typography>
+            )}
+          </Box>
+        )}
       </CardContent>
     </Card>
   );

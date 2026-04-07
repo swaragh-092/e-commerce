@@ -4,9 +4,9 @@ const { success, error } = require('../../utils/response');
 
 exports.list = async (req, res, next) => {
   try {
-    const { page, limit, search, category, categoryId, minPrice, maxPrice, status, sort, sortBy, sortOrder, tags } = req.query;
+    const { page, limit, search, category, categoryId, minPrice, maxPrice, status, saleStatus, sort, sortBy, sortOrder, tags } = req.query;
     const isAdmin = req.user && ['admin', 'super_admin'].includes(req.user.role);
-    const filters = { search, category, categoryId, minPrice, maxPrice, status, sort, sortBy, sortOrder, tags };
+    const filters = { search, category, categoryId, minPrice, maxPrice, status, saleStatus, sort, sortBy, sortOrder, tags };
     const result = await productService.getProducts(filters, page, limit, isAdmin);
     return success(res, result.data, 'Products found', 200, {
       total: result.totalItems,
@@ -55,6 +55,15 @@ exports.update = async (req, res, next) => {
     return success(res, { product }, 'Product updated');
   } catch (err) {
     if (err.message === 'Product not found') return error(res, err.message, 404, 'NOT_FOUND');
+    next(err);
+  }
+};
+
+exports.bulkSale = async (req, res, next) => {
+  try {
+    const result = await productService.bulkUpdateSale(req.body, req.user?.id || null);
+    return success(res, result, result.action === 'clear' ? 'Sale removed from products' : 'Sale applied to products');
+  } catch (err) {
     next(err);
   }
 };

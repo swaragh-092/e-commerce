@@ -47,6 +47,7 @@ import { getCategoryTree } from '../../services/categoryService';
 import attributeService from '../../services/attributeService';
 import MediaUploader from '../../components/common/MediaUploader';
 import { useNotification } from '../../context/NotificationContext';
+import { useSettings } from '../../hooks/useSettings';
 
 const validate = (formData) => {
   const errs = {};
@@ -68,6 +69,14 @@ const validate = (formData) => {
     }
   }
 
+  if ((formData.saleStartAt || formData.saleEndAt || formData.saleLabel) && (formData.salePrice === '' || formData.salePrice === null)) {
+    errs.salePrice = 'Add a sale price before scheduling a sale.';
+  }
+
+  if (formData.saleStartAt && formData.saleEndAt && new Date(formData.saleEndAt) <= new Date(formData.saleStartAt)) {
+    errs.saleEndAt = 'Sale end must be after the start date.';
+  }
+
   if (
     formData.quantity !== '' &&
     (isNaN(Number(formData.quantity)) || Number(formData.quantity) < 0)
@@ -86,12 +95,24 @@ const validate = (formData) => {
   return errs;
 };
 
+const toDateTimeLocal = (value) => {
+  if (!value) return '';
+  const date = new Date(value);
+  const offset = date.getTimezoneOffset();
+  const localDate = new Date(date.getTime() - (offset * 60 * 1000));
+  return localDate.toISOString().slice(0, 16);
+};
+
+const toIsoOrNull = (value) => (value ? new Date(value).toISOString() : null);
+
 const ProductEditPage = () => {
   const { id } = useParams();
   const navigate = useNavigate();
   const notify = useNotification();
+  const { settings } = useSettings();
   const isNew = !id || id === 'new';
   const { generateProductSKU } = useSKUGenerator();
+  const sales = settings?.sales || {};
 
   const [formData, setFormData] = useState({
     name: '',
@@ -100,6 +121,9 @@ const ProductEditPage = () => {
     sku: '',
     price: '',
     salePrice: '',
+    saleStartAt: '',
+    saleEndAt: '',
+    saleLabel: '',
     quantity: '',
     status: 'draft',
     categoryIds: [],
@@ -126,6 +150,9 @@ const ProductEditPage = () => {
               sku: p.sku || '',
               price: p.price,
               salePrice: p.salePrice || '',
+              saleStartAt: toDateTimeLocal(p.saleStartAt),
+              saleEndAt: toDateTimeLocal(p.saleEndAt),
+              saleLabel: p.saleLabel || '',
               quantity: p.quantity,
               status: p.status,
               categoryIds: p.categories?.map((c) => c.id) || [],
@@ -163,6 +190,9 @@ const ProductEditPage = () => {
           formData.salePrice !== '' && formData.salePrice !== null
             ? parseFloat(formData.salePrice)
             : null,
+        saleStartAt: formData.salePrice ? toIsoOrNull(formData.saleStartAt) : null,
+        saleEndAt: formData.salePrice ? toIsoOrNull(formData.saleEndAt) : null,
+        saleLabel: formData.salePrice ? (formData.saleLabel || null) : null,
         quantity: parseInt(formData.quantity) || 0,
       };
       if (isNew) {
@@ -283,6 +313,7 @@ const ProductEditPage = () => {
                     fullWidth
                     label="Price *"
                     type="number"
+                    InputProps={{ startAdornment: <InputAdornment position="start">₹</InputAdornment> }}
                     inputProps={{ step: '0.01', min: 0 }}
                     value={formData.price}
                     onChange={(e) => setField('price', e.target.value)}
@@ -295,12 +326,71 @@ const ProductEditPage = () => {
                     fullWidth
                     label="Sale Price"
                     type="number"
+                    InputProps={{ startAdornment: <InputAdornment position="start">₹</InputAdornment> }}
                     inputProps={{ step: '0.01', min: 0 }}
                     value={formData.salePrice}
                     onChange={(e) => setField('salePrice', e.target.value)}
                     error={Boolean(errors.salePrice)}
                     helperText={errors.salePrice || 'Must be less than regular price'}
                   />
+                </Grid>
+                <Grid item xs={12}>
+                  <TextField
+                    fullWidth
+                    label="Sale Label"
+                    size="small"
+                    value={formData.saleLabel}
+                    onChange={(e) => setField('saleLabel', e.target.value)}
+                    disabled={!formData.salePrice}
+                    placeholder={sales.defaultSaleLabel || 'Limited Time Offer'}
+                    helperText={!formData.salePrice ? 'Add a sale price to enable scheduling.' : 'Optional label like Summer Sale or Flash Deal'}
+                  />
+                </Grid>
+                {sales.allowScheduling !== false && (
+                  <>
+                    <Grid item xs={12} md={6}>
+                      <TextField
+                        fullWidth
+                        label="Sale Starts"
+                        type="datetime-local"
+                        size="small"
+                        value={formData.saleStartAt}
+                        onChange={(e) => setField('saleStartAt', e.target.value)}
+                        disabled={!formData.salePrice}
+                        InputLabelProps={{ shrink: true }}
+                      />
+                    </Grid>
+                    <Grid item xs={12} md={6}>
+                      <TextField
+                        fullWidth
+                        label="Sale Ends"
+                        type="datetime-local"
+                        size="small"
+                        value={formData.saleEndAt}
+                        onChange={(e) => setField('saleEndAt', e.target.value)}
+                        disabled={!formData.salePrice}
+                        error={Boolean(errors.saleEndAt)}
+                        helperText={errors.saleEndAt || 'Leave blank for an open-ended sale'}
+                        InputLabelProps={{ shrink: true }}
+                      />
+                    </Grid>
+                  </>
+                )}
+                <Grid item xs={12}>
+                  <Box sx={{ display: 'flex', justifyContent: 'flex-end' }}>
+                    <Button
+                      size="small"
+                      onClick={() => {
+                        setField('salePrice', '');
+                        setField('saleStartAt', '');
+                        setField('saleEndAt', '');
+                        setField('saleLabel', '');
+                      }}
+                      disabled={!formData.salePrice && !formData.saleStartAt && !formData.saleEndAt && !formData.saleLabel}
+                    >
+                      Clear Sale
+                    </Button>
+                  </Box>
                 </Grid>
               </Grid>
             </Paper>

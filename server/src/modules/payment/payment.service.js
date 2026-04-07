@@ -1,6 +1,6 @@
 'use strict';
 const Stripe = require('stripe');
-const { sequelize, Payment, Order, WebhookEvent } = require('../index');
+const { sequelize, Payment, Order, WebhookEvent, Setting } = require('../index');
 const AppError = require('../../utils/AppError');
 
 // Stripe is dynamically initialized from environment
@@ -17,11 +17,15 @@ const createIntent = async (userId, orderId) => {
         throw new AppError('VALIDATION_ERROR', 400, 'Order is not in pending_payment status');
     }
 
+    // Read currency from settings, fallback to 'usd'
+    const currencySetting = await Setting.findOne({ where: { group: 'general', key: 'currency' } });
+    const currency = (currencySetting?.value || 'USD').toLowerCase();
+
     const amountInCents = Math.round(Number(order.total) * 100);
 
     const paymentIntent = await stripe.paymentIntents.create({
         amount: amountInCents,
-        currency: 'usd',
+        currency,
         metadata: {
             orderId: order.id,
             userId: userId
@@ -33,7 +37,7 @@ const createIntent = async (userId, orderId) => {
         provider: 'stripe',
         transactionId: paymentIntent.id,
         amount: order.total,
-        currency: 'usd',
+        currency,
         status: 'pending'
     });
 

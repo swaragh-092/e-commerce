@@ -105,7 +105,7 @@ const SettingsPage = () => {
     }
   };
 
-  const tabs = ['Theme', 'Hero', 'Features', 'Shipping', 'Tax', 'SEO', 'General', 'SKU', 'Logo', 'Footer', 'Announcement', 'Nav', 'Catalog', 'Homepage', 'Product Page'];
+  const tabs = ['Theme', 'Hero', 'Features', 'Sales', 'Shipping', 'Tax', 'SEO', 'General', 'SKU', 'Logo', 'Footer', 'Announcement', 'Nav', 'Catalog', 'Homepage', 'Product Page'];
 
   // Current currency symbol — used in shipping adornments
   const currSymbol = getCurrencySymbol(form['general.currency']);
@@ -264,6 +264,31 @@ const SettingsPage = () => {
       <Typography variant="subtitle2" sx={{ mb: 1 }}>Advanced (coming soon)</Typography>
       {toggle('features.multiCurrency', 'Multi-currency support')}
       {toggle('features.socialLogin', 'Social login (Google / GitHub)')}
+    </Box>,
+
+    /* Sales */
+    <Box key="sales">
+      <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
+        Global controls for how sale campaigns behave and appear across admin and storefront.
+      </Typography>
+      <Divider sx={{ mb: 3 }} />
+
+      <Typography variant="subtitle2" sx={{ mb: 1 }}>Admin Controls</Typography>
+      {toggle('sales.allowScheduling', 'Allow admins to schedule sale start/end dates on products')}
+      {toggle('sales.allowBulkSales', 'Allow bulk apply / remove sale actions in Manage Products')}
+
+      <Divider sx={{ my: 2 }} />
+      <Typography variant="subtitle2" sx={{ mb: 1 }}>Storefront Display</Typography>
+      {toggle('sales.showDiscountPercent', 'Show discount percentage badges (e.g. 30% OFF)')}
+      {toggle('sales.showSavingsAmount', 'Show “You save …” messages on product pages')}
+      {toggle('sales.showSaleLabel', 'Show sale labels such as Flash Sale or Summer Deal')}
+      {toggle('sales.showSaleTiming', 'Show sale start / end timing text')}
+      {toggle('sales.showCountdown', 'Show countdown / relative timing messages')}
+      {field('sales.defaultSaleLabel', 'Default sale label when product has no custom label')}
+      {field('sales.endingSoonHours', 'Ending soon threshold in hours', 'number', {
+        inputProps: { min: 1, max: 168 },
+        helperText: 'Used to highlight sales that are about to end.',
+      })}
     </Box>,
 
     /* Shipping */

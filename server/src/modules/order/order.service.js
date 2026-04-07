@@ -7,6 +7,7 @@ const CouponService = require('../coupon/coupon.service');
 const PaymentService = require('../payment/payment.service');
 const { getPagination } = require('../../utils/pagination');
 const { ACTIONS, ENTITIES } = require('../../config/constants');
+const { getEffectivePrice } = require('../product/product.pricing');
 
 // Utility to fetch settings
 const getSetting = async (key, defaultVal) => {
@@ -50,13 +51,16 @@ const placeOrder = async (userId, payload) => {
 
         for (const item of cart.items) {
             const product = item.product;
-            if (!product || product.deletedAt !== null) {
-                throw new AppError('VALIDATION_ERROR', 400, `Product no longer available`);
+            if (!product) {
+                throw new AppError('VALIDATION_ERROR', 400, 'One or more products in your cart are no longer available. Please clear your cart and try again.');
+            }
+            if (product.status !== 'published') {
+                throw new AppError('VALIDATION_ERROR', 400, `"${product.name}" is not available for purchase. Please remove it from your cart.`);
             }
 
             const currentProduct = await Product.findByPk(product.id, { transaction: t, lock: t.LOCK.UPDATE });
             
-            let currentPrice = Number(currentProduct.salePrice || currentProduct.price);
+            let currentPrice = getEffectivePrice(currentProduct);
 
             if (item.variantId && item.variant) {
                 const currentVariant = await ProductVariant.findByPk(item.variantId, { transaction: t });

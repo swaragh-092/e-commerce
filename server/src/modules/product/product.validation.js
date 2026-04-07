@@ -8,6 +8,9 @@ const createProductSchema = Joi.object({
   sku: Joi.string().max(100).allow('', null),
   price: Joi.number().precision(2).positive().required(),
   salePrice: Joi.number().precision(2).positive().allow(null).less(Joi.ref('price')),
+  saleStartAt: Joi.date().iso().allow(null),
+  saleEndAt: Joi.date().iso().allow(null).greater(Joi.ref('saleStartAt')),
+  saleLabel: Joi.string().max(100).allow('', null),
   quantity: Joi.number().integer().min(0),
   weight: Joi.number().precision(2).min(0).allow(null),
   taxRate: Joi.number().precision(4).min(0).allow(null),
@@ -39,4 +42,34 @@ const updateProductSchema = createProductSchema
   .fork(['name', 'price'], (schema) => schema.optional())
   .min(1);
 
-module.exports = { createProductSchema, updateProductSchema };
+const bulkSaleSchema = Joi.object({
+  action: Joi.string().valid('apply', 'clear').required(),
+  productIds: Joi.array().items(Joi.string().uuid()).min(1).required(),
+  saleType: Joi.when('action', {
+    is: 'apply',
+    then: Joi.string().valid('fixed', 'percentage').required(),
+    otherwise: Joi.forbidden(),
+  }),
+  value: Joi.when('action', {
+    is: 'apply',
+    then: Joi.number().positive().required(),
+    otherwise: Joi.forbidden(),
+  }),
+  saleStartAt: Joi.when('action', {
+    is: 'apply',
+    then: Joi.date().iso().allow(null),
+    otherwise: Joi.forbidden(),
+  }),
+  saleEndAt: Joi.when('action', {
+    is: 'apply',
+    then: Joi.date().iso().allow(null).greater(Joi.ref('saleStartAt')),
+    otherwise: Joi.forbidden(),
+  }),
+  saleLabel: Joi.when('action', {
+    is: 'apply',
+    then: Joi.string().max(100).allow('', null),
+    otherwise: Joi.forbidden(),
+  }),
+});
+
+module.exports = { createProductSchema, updateProductSchema, bulkSaleSchema };

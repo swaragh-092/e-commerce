@@ -27,6 +27,17 @@
         "requirePurchaseForReview": false,
         "showAvailableCoupons": true
     },
+    "sales": {
+        "allowScheduling": true,
+        "allowBulkSales": true,
+        "showCountdown": true,
+        "showSaleTiming": true,
+        "showSavingsAmount": true,
+        "showDiscountPercent": true,
+        "showSaleLabel": true,
+        "defaultSaleLabel": "Limited Time Offer",
+        "endingSoonHours": 24
+    },
     "shipping": {
         "method": "flat_rate",
         "flatRate": 5.00,

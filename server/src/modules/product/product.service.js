@@ -12,6 +12,7 @@ const AuditService = require('../audit/audit.service');
 const AppError = require('../../utils/AppError');
 const { ACTIONS, ENTITIES } = require('../../config/constants');
 const { getCategoryAndDescendantIds } = require('../category/category.service');
+const { normalizeSalePayload, serializeProductPricing } = require('./product.pricing');
 
 const sanitizeRichText = (html) => {
   if (!html) return html;
@@ -40,6 +41,7 @@ exports.getProducts = async (filters, page, limit, isAdmin = false) => {
   const { limit: queryLimit, offset } = getPagination(page, limit);
   const where = {};
   const order = [];
+  const now = new Date();
 
   // Always restrict to published products for storefront; admins can filter by any status
   if (!isAdmin) {
@@ -59,6 +61,32 @@ exports.getProducts = async (filters, page, limit, isAdmin = false) => {
     where.price = {};
     if (filters.minPrice) where.price[Op.gte] = filters.minPrice;
     if (filters.maxPrice) where.price[Op.lte] = filters.maxPrice;
+  }
+  if (isAdmin && filters.saleStatus) {
+    const saleFilters = {
+      none: { salePrice: null },
+      scheduled: {
+        salePrice: { [Op.ne]: null },
+        saleStartAt: { [Op.gt]: now },
+      },
+      active: {
+        [Op.and]: [
+          { salePrice: { [Op.ne]: null } },
+          { [Op.or]: [{ saleStartAt: null }, { saleStartAt: { [Op.lte]: now } }] },
+          { [Op.or]: [{ saleEndAt: null }, { saleEndAt: { [Op.gte]: now } }] },
+        ],
+      },
+      expired: {
+        [Op.and]: [
+          { salePrice: { [Op.ne]: null } },
+          { saleEndAt: { [Op.lt]: now } },
+        ],
+      },
+    };
+
+    if (saleFilters[filters.saleStatus]) {
+      where[Op.and] = [...(where[Op.and] || []), saleFilters[filters.saleStatus]];
+    }
   }
 
   // Sort logic — supports both legacy 'sort' enum and explicit sortBy/sortOrder from the admin grid
@@ -121,7 +149,7 @@ exports.getProducts = async (filters, page, limit, isAdmin = false) => {
     distinct: true,
   });
 
-  return getPagingData(rows, count, page, queryLimit);
+  return getPagingData(rows.map((row) => serializeProductPricing(row, { adminView: isAdmin })), count, page, queryLimit);
 };
 
 exports.getProductBySlug = async (slug, { adminView = false } = {}) => {
@@ -137,7 +165,7 @@ exports.getProductBySlug = async (slug, { adminView = false } = {}) => {
     ],
   });
   if (!product) throw new Error('Product not found');
-  return product;
+  return serializeProductPricing(product, { adminView });
 };
 
 exports.getProductById = async (id) => {
@@ -150,12 +178,13 @@ exports.getProductById = async (id) => {
     ],
   });
   if (!product) throw new Error('Product not found');
-  return product;
+  return serializeProductPricing(product, { adminView: true });
 };
 
 exports.createProduct = async (data) => {
   const transaction = await Product.sequelize.transaction();
   try {
+    data = normalizeSalePayload(data);
     const slug = await generateSlug(data.name, Product);
 
     if (data.description) data.description = sanitizeRichText(data.description);
@@ -217,6 +246,7 @@ exports.updateProduct = async (id, data) => {
 
   const transaction = await Product.sequelize.transaction();
   try {
+    data = normalizeSalePayload(data, product.price);
     if (data.name && data.name !== product.name) {
       data.slug = await generateSlug(data.name, Product);
     }
@@ -295,4 +325,56 @@ exports.deleteProduct = async (id, actingUserId = null) => {
   } catch (e) {}
 
   return true;
+};
+
+exports.bulkUpdateSale = async (payload, actingUserId = null) => {
+  const { action, productIds, saleType, value, saleStartAt, saleEndAt, saleLabel } = payload;
+
+  if (action === 'apply' && saleType === 'percentage' && Number(value) >= 100) {
+    throw new AppError('VALIDATION_ERROR', 400, 'Percentage discount must be less than 100');
+  }
+
+  return Product.sequelize.transaction(async (transaction) => {
+    const products = await Product.findAll({
+      where: { id: productIds },
+      transaction,
+    });
+
+    if (products.length !== productIds.length) {
+      throw new AppError('NOT_FOUND', 404, 'One or more products were not found');
+    }
+
+    for (const product of products) {
+      const updatePayload = action === 'clear'
+        ? normalizeSalePayload({ salePrice: null, saleStartAt: null, saleEndAt: null, saleLabel: null }, product.price)
+        : normalizeSalePayload({
+            salePrice: saleType === 'fixed'
+              ? Number(value)
+              : Number((Number(product.price) * (1 - (Number(value) / 100))).toFixed(2)),
+            saleStartAt: saleStartAt || null,
+            saleEndAt: saleEndAt || null,
+            saleLabel: saleLabel || null,
+          }, product.price);
+
+      await product.update(updatePayload, { transaction });
+
+      try {
+        await AuditService.log({
+          userId: actingUserId,
+          action: ACTIONS.UPDATE,
+          entity: ENTITIES.PRODUCT,
+          entityId: product.id,
+          changes: action === 'clear'
+            ? { salePrice: null, saleStartAt: null, saleEndAt: null, saleLabel: null }
+            : { saleType, value, saleStartAt: saleStartAt || null, saleEndAt: saleEndAt || null, saleLabel: saleLabel || null },
+        });
+      } catch (e) {}
+    }
+
+    return {
+      action,
+      updatedCount: products.length,
+      productIds: products.map((product) => product.id),
+    };
+  });
 };

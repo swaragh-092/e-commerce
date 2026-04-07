@@ -12,7 +12,8 @@ import WishlistButton from '../../components/common/WishlistButton';
 import ReviewSection from '../../components/product/ReviewSection';
 import DOMPurify from 'dompurify';
 import { useCart } from '../../hooks/useCart';
-    import { useCurrency, useSettings } from '../../hooks/useSettings';
+import { useCurrency, useSettings } from '../../hooks/useSettings';
+import { formatSaleDateTime, getCountdownText, getDiscountPercent, getSaleTimingMessage, getSavingsAmount, isEndingSoon } from '../../utils/pricing';
 const ProductDetailPage = () => {
     const { slug } = useParams();
     const location = useLocation();
@@ -26,7 +27,15 @@ const ProductDetailPage = () => {
     const { formatPrice } = useCurrency();
     const { settings } = useSettings();
     const pp = settings?.productPage || {};
+    const sales = settings?.sales || {};
     const addToCartLabel = pp.addToCartLabel || 'Add to Cart';
+    const [countdownNow, setCountdownNow] = useState(Date.now());
+
+    useEffect(() => {
+        if (sales.showCountdown === false) return undefined;
+        const timer = window.setInterval(() => setCountdownNow(Date.now()), 60000);
+        return () => window.clearInterval(timer);
+    }, [sales.showCountdown]);
 
     useEffect(() => {
         const fetchProduct = async () => {
@@ -50,9 +59,22 @@ const ProductDetailPage = () => {
     if (loading) return <Box sx={{ display: 'flex', justifyContent: 'center', py: 10 }}><CircularProgress /></Box>;
     if (error || !product) return <Typography variant="h5" color="error" textAlign="center" sx={{ mt: 10 }}>{error}</Typography>;
 
-    const basePrice = parseFloat(product.salePrice || product.price);
+    const basePrice = parseFloat(product.effectivePrice || product.salePrice || product.price);
     const currentPrice = basePrice + parseFloat(selectedVariant?.priceModifier ?? 0);
-    const hasSale = product.salePrice && parseFloat(product.salePrice) < parseFloat(product.price);
+    const hasSale = product.isSaleActive ?? (product.salePrice && parseFloat(product.salePrice) < parseFloat(product.price));
+    const isScheduledSale = product.saleStatus === 'scheduled';
+    const discountPercent = product.discountPercent || getDiscountPercent(product);
+    const savingsAmount = product.savingsAmount || getSavingsAmount(product);
+    const saleTiming = sales.showSaleTiming !== false ? getSaleTimingMessage(product) : null;
+    const countdownText = sales.showCountdown === false ? null : (isScheduledSale
+        ? getCountdownText(product.saleStartAt, 'Starts in ')
+        : hasSale
+            ? getCountdownText(product.saleEndAt, 'Ends in ')
+            : null);
+    const saleLabel = sales.showSaleLabel === false ? null : (product.saleLabel || sales.defaultSaleLabel || null);
+    const showDiscountPercent = sales.showDiscountPercent !== false;
+    const showSavingsAmount = sales.showSavingsAmount !== false;
+    const endingSoon = hasSale && sales.showCountdown !== false && isEndingSoon(product.saleEndAt, sales.endingSoonHours);
     const stockAvailable = selectedVariant ? selectedVariant.quantity > 0 : product.quantity > 0;
 
     const handleAddToCart = async () => {
@@ -135,8 +157,64 @@ const ProductDetailPage = () => {
                         ) : (
                             <Typography variant="h5" fontWeight="bold">{formatPrice(currentPrice)}</Typography>
                         )}
-                        {hasSale && <Chip label="Sale" color="error" />}
+                        {hasSale && showDiscountPercent && discountPercent > 0 && <Chip label={`${discountPercent}% OFF`} color="error" />}
+                        {isScheduledSale && <Chip label="Sale Starts Soon" color="warning" />}
+                        {endingSoon && <Chip label="Ending Soon" color="warning" variant="outlined" />}
                     </Box>
+
+                    {(hasSale || isScheduledSale) && (
+                        <Box
+                            sx={{
+                                mb: 3,
+                                p: 2,
+                                borderRadius: 2,
+                                border: '1px solid',
+                                borderColor: hasSale ? 'error.light' : 'warning.light',
+                                bgcolor: hasSale ? 'error.50' : 'warning.50',
+                            }}
+                        >
+                            <Box sx={{ display: 'flex', gap: 1, flexWrap: 'wrap', alignItems: 'center', mb: 1 }}>
+                                {saleLabel && <Chip label={saleLabel} color={hasSale ? 'error' : 'warning'} size="small" />}
+                                {showDiscountPercent && discountPercent > 0 && <Chip label={`${discountPercent}% OFF`} color={hasSale ? 'error' : 'warning'} variant="outlined" size="small" />}
+                                {saleTiming && <Chip label={saleTiming} variant="outlined" size="small" />}
+                                {countdownText && <Chip key={countdownNow} label={countdownText} color={hasSale ? 'error' : 'warning'} variant="filled" size="small" />}
+                            </Box>
+
+                            {hasSale && showSavingsAmount && (
+                                <Typography variant="body2" color="text.secondary" sx={{ mb: 0.5 }}>
+                                    You save <strong>{formatPrice(savingsAmount)}</strong> on this product.
+                                </Typography>
+                            )}
+
+                            {isScheduledSale && product.salePrice && (
+                                <Typography variant="body2" color="text.secondary" sx={{ mb: 0.5 }}>
+                                    Upcoming sale price: <strong>{formatPrice(product.salePrice)}</strong>
+                                </Typography>
+                            )}
+
+                            {countdownText && (
+                                <Typography variant="body2" color={hasSale ? 'error.main' : 'warning.dark'} sx={{ mb: 0.5, fontWeight: 700 }}>
+                                    {countdownText}
+                                </Typography>
+                            )}
+                            {endingSoon && (
+                                <Typography variant="body2" color="warning.dark" sx={{ mb: 0.5, fontWeight: 700 }}>
+                                    Hurry — this sale is inside the ending-soon window.
+                                </Typography>
+                            )}
+
+                            {sales.showSaleTiming !== false && product.saleStartAt && (
+                                <Typography variant="caption" color="text.secondary" sx={{ display: 'block' }}>
+                                    Starts: {formatSaleDateTime(product.saleStartAt)}
+                                </Typography>
+                            )}
+                            {sales.showSaleTiming !== false && product.saleEndAt && (
+                                <Typography variant="caption" color="text.secondary" sx={{ display: 'block' }}>
+                                    Ends: {formatSaleDateTime(product.saleEndAt)}
+                                </Typography>
+                            )}
+                        </Box>
+                    )}
 
                     <Typography variant="body1" color="text.secondary" paragraph>
                         {product.shortDescription}

@@ -1,6 +1,7 @@
 'use strict';
 const { sequelize, Cart, CartItem, Product, ProductImage, ProductVariant } = require('../index');
 const AppError = require('../../utils/AppError');
+const { serializeProductPricing } = require('../product/product.pricing');
 
 const getActiveCartByOwner = async (userId, sessionId, transaction) => {
     let whereClause = {};
@@ -44,6 +45,10 @@ const fetchCartWithItems = async (cartId, transaction) => {
 
     const items = cartWithItems.items
         ? cartWithItems.items.filter(item => item.product !== null)
+            .map((item) => ({
+                ...item.toJSON(),
+                product: serializeProductPricing(item.product),
+            }))
         : [];
 
     return {

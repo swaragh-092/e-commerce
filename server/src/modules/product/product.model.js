@@ -33,6 +33,18 @@ module.exports = (sequelize, DataTypes) => {
         salePrice: {
             type: DataTypes.DECIMAL(10, 2),
         },
+        saleStartAt: {
+            type: DataTypes.DATE,
+            allowNull: true,
+        },
+        saleEndAt: {
+            type: DataTypes.DATE,
+            allowNull: true,
+        },
+        saleLabel: {
+            type: DataTypes.STRING(100),
+            allowNull: true,
+        },
         quantity: {
             type: DataTypes.INTEGER,
             defaultValue: 0,

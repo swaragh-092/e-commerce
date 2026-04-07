@@ -19,6 +19,17 @@ export const SettingsProvider = ({ children }) => {
         theme: { primaryColor: '#1976d2', mode: 'light', fontFamily: 'Roboto' },
         general: { storeName: 'E-Commerce Store' },
         features: { wishlist: true, reviews: true, coupons: true, guestCheckout: true },
+        sales: {
+          allowScheduling: true,
+          allowBulkSales: true,
+          showCountdown: true,
+          showSaleTiming: true,
+          showSavingsAmount: true,
+          showDiscountPercent: true,
+          showSaleLabel: true,
+          defaultSaleLabel: 'Limited Time Offer',
+          endingSoonHours: 24,
+        },
       });
     } finally {
       setLoading(false);

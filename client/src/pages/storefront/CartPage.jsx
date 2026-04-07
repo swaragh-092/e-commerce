@@ -23,7 +23,7 @@ const CartPage = () => {
 
     const items = cart?.items || [];
     const subtotal = items.reduce((sum, item) => {
-        const price = parseFloat(item.product?.salePrice || item.product?.price || 0);
+        const price = parseFloat(item.product?.effectivePrice || item.product?.salePrice || item.product?.price || 0);
         const modifier = parseFloat(item.variant?.priceModifier ?? 0);
         return sum + (price + modifier) * item.quantity;
     }, 0);
@@ -90,7 +90,7 @@ const CartPage = () => {
                     {items.map((item, idx) => {
                         const product = item.product;
                         const variant = item.variant;
-                        const price = parseFloat(product?.salePrice || product?.price || 0);
+                        const price = parseFloat(product?.effectivePrice || product?.salePrice || product?.price || 0);
                         const modifier = parseFloat(variant?.priceModifier ?? 0);
                         const itemPrice = price + modifier;
                         const imageUrl = getMediaUrl(product?.images?.[0]?.url || '') || '/placeholder.png';

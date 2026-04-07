@@ -97,7 +97,7 @@ const CheckoutPage = () => {
 
     const items = cart?.items || [];
     const subtotal = items.reduce((sum, item) => {
-        const price = parseFloat(item.product?.salePrice || item.product?.price || 0);
+        const price = parseFloat(item.product?.effectivePrice || item.product?.salePrice || item.product?.price || 0);
         const modifier = parseFloat(item.variant?.priceModifier ?? 0);
         return sum + (price + modifier) * item.quantity;
     }, 0);
@@ -345,7 +345,7 @@ const CheckoutPage = () => {
                         <Paper elevation={0} sx={{ border: '1px solid', borderColor: 'divider', borderRadius: 2, p: 3 }}>
                             <Typography variant="h6" fontWeight={600} mb={2}>Review Your Order</Typography>
                             {items.map((item) => {
-                                const price = parseFloat(item.product?.salePrice || item.product?.price || 0);
+                                const price = parseFloat(item.product?.effectivePrice || item.product?.salePrice || item.product?.price || 0);
                                 const modifier = parseFloat(item.variant?.priceModifier ?? 0);
                                 return (
                                     <Box key={item.id} sx={{ display: 'flex', justifyContent: 'space-between', mb: 1 }}>
