@@ -64,6 +64,7 @@ const SettingsPage = () => {
   const [tab, setTab] = useState(0);
   const [form, setForm] = useState({});
   const [saving, setSaving] = useState(false);
+  const [searchQuery, setSearchQuery] = useState('');
   const notify = useNotification();
   const { refreshSettings } = useContext(SettingsContext) || {};
 
@@ -105,7 +106,8 @@ const SettingsPage = () => {
     }
   };
 
-  const tabs = ['Theme', 'Hero', 'Features', 'Sales', 'Shipping', 'Tax', 'SEO', 'General', 'SKU', 'Logo', 'Footer', 'Announcement', 'Nav', 'Catalog', 'Homepage', 'Product Page'];
+  const tabs = ['Store', 'Branding', 'Layout', 'Homepage', 'Catalog', 'Checkout', 'Promotions', 'Advanced'];
+  const currentTab = tabs[tab];
 
   // Current currency symbol — used in shipping adornments
   const currSymbol = getCurrencySymbol(form['general.currency']);
@@ -132,378 +134,438 @@ const SettingsPage = () => {
     />
   );
 
-  const panels = [
-    /* Theme */
-    <Box key="theme">
-      <FormControlLabel
-        control={
-          <Switch
-            checked={form['theme.mode'] === 'dark'}
-            onChange={(e) => set('theme.mode', e.target.checked ? 'dark' : 'light')}
-          />
-        }
-        label="Dark Mode"
-        sx={{ mb: 2, display: 'block' }}
-      />
-      <Divider sx={{ mb: 2 }} />
-      <Typography variant="subtitle2" sx={{ mb: 1 }}>Brand Colors</Typography>
-      <Grid container spacing={2}>
-        <Grid item xs={12} sm={6}>
-          {field('theme.primaryColor', 'Primary Color', 'color')}
-        </Grid>
-        <Grid item xs={12} sm={6}>
-          {field('theme.secondaryColor', 'Secondary Color', 'color')}
-        </Grid>
-      </Grid>
-      <Typography variant="subtitle2" sx={{ mb: 1, mt: 1 }}>Background Colors</Typography>
-      <Grid container spacing={2}>
-        <Grid item xs={12} sm={6}>
-          {field('theme.backgroundColor', 'Background Color', 'color')}
-        </Grid>
-        <Grid item xs={12} sm={6}>
-          {field('theme.surfaceColor', 'Surface / Card Color', 'color')}
-        </Grid>
-        <Grid item xs={12} sm={6}>
-          {field('theme.textColor', 'Text Color', 'color')}
-        </Grid>
-      </Grid>
-      <Divider sx={{ my: 2 }} />
-      <Typography variant="subtitle2" sx={{ mb: 1 }}>Typography &amp; Shape</Typography>
-      <Grid container spacing={2}>
-        <Grid item xs={12} sm={6}>
-          <Autocomplete
-            options={FONTS}
-            value={form['theme.fontFamily'] || ''}
-            onChange={(e, value) => set('theme.fontFamily', value || '')}
-            freeSolo
-            renderInput={(params) => <TextField {...params} label="Font Family" size="small" sx={{ mb: 2 }} />}
-          />
-        </Grid>
-        <Grid item xs={12} sm={6}>
-          {field('theme.borderRadius', 'Border Radius (e.g. 12px)')}
-        </Grid>
-      </Grid>
-    </Box>,
+  const section = (title, description, content, keywords = []) => ({ title, description, content, keywords });
 
-    /* Hero */
-    <Box key="hero">
-      <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
-        Customize the hero banner on the storefront home page.
-      </Typography>
-      <Divider sx={{ mb: 3 }} />
-      <Typography variant="subtitle2" sx={{ mb: 1 }}>Content</Typography>
-      {field('hero.title', 'Headline')}
-      {field('hero.subtitle', 'Subheading')}
-      <Grid container spacing={2}>
-        <Grid item xs={12} sm={6}>
-          {field('hero.buttonText', 'Button Label')}
-        </Grid>
-        <Grid item xs={12} sm={6}>
-          {field('hero.buttonLink', 'Button Link (e.g. /products)')}
-        </Grid>
-      </Grid>
-      <Divider sx={{ my: 2 }} />
-      <Typography variant="subtitle2" sx={{ mb: 1 }}>Background</Typography>
-      <FormControl fullWidth size="small" sx={{ mb: 2 }}>
-        <InputLabel>Background Type</InputLabel>
-        <Select
-          label="Background Type"
-          value={form['hero.backgroundType'] || 'gradient'}
-          onChange={(e) => set('hero.backgroundType', e.target.value)}
-        >
-          <MenuItem value="gradient">Gradient — uses your brand colors</MenuItem>
-          <MenuItem value="image">Custom Image</MenuItem>
-        </Select>
-      </FormControl>
-      {(form['hero.backgroundType'] || 'gradient') === 'image' && (
-        <>
-          {field('hero.backgroundImage', 'Image URL (paste a URL or /uploads/… path)')}
-          {form['hero.backgroundImage'] && (
-            <Box sx={{ mb: 2, borderRadius: 2, overflow: 'hidden', maxHeight: 160, border: '1px solid', borderColor: 'divider' }}>
-              <img
-                src={form['hero.backgroundImage']}
-                alt="Hero preview"
-                style={{ width: '100%', maxHeight: 160, objectFit: 'cover', display: 'block' }}
-                onError={(e) => { e.target.style.display = 'none'; }}
-              />
+  const renderSections = (sections) => {
+    const query = searchQuery.trim().toLowerCase();
+    const filtered = !query
+      ? sections
+      : sections.filter((s) => [s.title, s.description, ...(s.keywords || [])].join(' ').toLowerCase().includes(query));
+
+    if (filtered.length === 0) {
+      return (
+        <Paper variant="outlined" sx={{ p: 4, borderRadius: 3, textAlign: 'center', color: 'text.secondary' }}>
+          <Typography variant="subtitle1" fontWeight={600} gutterBottom>
+            No settings found
+          </Typography>
+          <Typography variant="body2">
+            Try a different search like logo, tax, shipping, footer, sale, hero, or checkout.
+          </Typography>
+        </Paper>
+      );
+    }
+
+    return filtered.map((s) => (
+      <Paper key={s.title} variant="outlined" sx={{ p: 3, borderRadius: 3, mb: 2.5, boxShadow: 'none' }}>
+        <Typography variant="h6" fontWeight={700} gutterBottom>
+          {s.title}
+        </Typography>
+        {s.description && (
+          <Typography variant="body2" color="text.secondary" sx={{ mb: 2.5 }}>
+            {s.description}
+          </Typography>
+        )}
+        {s.content}
+      </Paper>
+    ));
+  };
+
+  const links = Array.isArray(form['footer.links']) ? form['footer.links'] : [];
+  const setLinks = (v) => set('footer.links', v);
+  const themeMode = form['theme.mode'] || 'light';
+  const brandPrimary = form['theme.primaryColor'] || '#6C63FF';
+  const brandSecondary = form['theme.secondaryColor'] || '#FF6584';
+  const pageBackground = form['theme.backgroundColor'] || (themeMode === 'dark' ? '#0F0F1A' : '#F7F8FC');
+  const surfaceColor = form['theme.surfaceColor'] || (themeMode === 'dark' ? '#1A1A2E' : '#FFFFFF');
+  const textColor = form['theme.textColor'] || (themeMode === 'dark' ? '#FFFFFF' : '#1A1A1A');
+  const heroTextColor = form['hero.color'] || '#FFFFFF';
+  const fontFamily = form['theme.fontFamily'] || 'Inter';
+  const borderRadius = Number.parseInt(form['theme.borderRadius'], 10) || 12;
+  const storeName = form['general.storeName'] || 'My Store';
+  const storeDescription = form['general.storeDescription'] || 'Premium online shopping experience';
+  const heroTitle = form['hero.title'] || 'Shop the Latest';
+  const heroSubtitle = form['hero.subtitle'] || 'Discover thousands of products at great prices.';
+  const heroButtonText = form['hero.buttonText'] || 'Shop Now';
+  const footerTagline = form['footer.tagline'] || 'Premium online shopping experience.';
+  const saleLabel = form['sales.defaultSaleLabel'] || 'Limited Time Offer';
+  const addToCartLabel = form['productPage.addToCartLabel'] || 'Add to Cart';
+  const previewStyles = {
+    fontFamily: `"${fontFamily}", "Roboto", "Helvetica", "Arial", sans-serif`,
+    bgcolor: pageBackground,
+    color: textColor,
+    borderRadius: `${borderRadius}px`,
+  };
+
+  const formatMoney = (amount) => {
+    try {
+      return new Intl.NumberFormat(undefined, {
+        style: 'currency',
+        currency: form['general.currency'] || 'USD',
+        minimumFractionDigits: 2,
+      }).format(amount);
+    } catch {
+      return `${currSymbol}${Number(amount).toFixed(2)}`;
+    }
+  };
+
+  const previewPanel = () => {
+    const previewContainerSx = {
+      ...previewStyles,
+      p: 2,
+      border: '1px solid',
+      borderColor: themeMode === 'dark' ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.08)',
+      overflow: 'hidden',
+      boxShadow: '0 12px 30px rgba(0,0,0,0.08)',
+    };
+
+    if (currentTab === 'Store' || currentTab === 'Branding') {
+      return (
+        <Box sx={previewContainerSx}>
+          <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 2 }}>
+            <Box>
+              <Typography variant="subtitle2" sx={{ color: 'text.secondary' }}>Storefront Header</Typography>
+              <Typography variant="h6" fontWeight={700} sx={{ color: textColor }}>{storeName}</Typography>
+            </Box>
+            {form['logo.main'] ? (
+              <Box component="img" src={form['logo.main']} alt="Logo" sx={{ maxWidth: 72, maxHeight: 36, objectFit: 'contain' }} />
+            ) : (
+              <Box sx={{ px: 1.5, py: 0.75, bgcolor: brandPrimary, color: '#fff', borderRadius: 2, fontWeight: 700 }}>Logo</Box>
+            )}
+          </Box>
+          <Box sx={{ p: 2, bgcolor: surfaceColor, borderRadius: `${borderRadius}px`, mb: 2 }}>
+            <Typography variant="body2" sx={{ color: textColor, fontWeight: 600 }}>{storeDescription}</Typography>
+            <Typography variant="caption" sx={{ color: themeMode === 'dark' ? 'rgba(255,255,255,0.7)' : 'text.secondary' }}>
+              {form['general.contactEmail'] || 'hello@store.com'}
+            </Typography>
+          </Box>
+          <Box sx={{ display: 'flex', gap: 1 }}>
+            <Box sx={{ flex: 1, p: 1.5, bgcolor: brandPrimary, color: '#fff', borderRadius: 2, textAlign: 'center', fontWeight: 700 }}>Primary</Box>
+            <Box sx={{ flex: 1, p: 1.5, bgcolor: brandSecondary, color: '#fff', borderRadius: 2, textAlign: 'center', fontWeight: 700 }}>Accent</Box>
+          </Box>
+        </Box>
+      );
+    }
+
+    if (currentTab === 'Layout') {
+      return (
+        <Box sx={previewContainerSx}>
+          {Boolean(form['announcement.enabled']) && (
+            <Box sx={{ mb: 1.5, px: 1.5, py: 1, bgcolor: form['announcement.bgColor'] || brandPrimary, color: form['announcement.fgColor'] || '#fff', borderRadius: 2, fontSize: 12, textAlign: 'center' }}>
+              {form['announcement.text'] || 'Free shipping on orders over $50!'}
             </Box>
           )}
-          <Typography variant="subtitle2" sx={{ mb: 0.5, mt: 1 }}>
-            Dark Overlay: {Math.round(Number(form['hero.overlayOpacity'] ?? 0.5) * 100)}%
+          <Box sx={{ p: 1.5, bgcolor: surfaceColor, borderRadius: `${borderRadius}px`, mb: 1.5, border: '1px solid', borderColor: 'divider' }}>
+            <Typography variant="subtitle2" fontWeight={700}>{storeName}</Typography>
+            <Typography variant="caption" color="text.secondary">
+              {Boolean(form['nav.sticky']) ? 'Sticky header enabled' : 'Standard header'} • {Boolean(form['nav.showCategoryBar']) ? 'Category bar visible' : 'Category bar hidden'}
+            </Typography>
+          </Box>
+          {Boolean(form['footer.enabled']) && (
+            <Box sx={{ mt: 2, p: 2, bgcolor: form['footer.bgColor'] || surfaceColor, color: form['footer.fgColor'] || textColor, borderRadius: `${borderRadius}px`, border: '1px solid', borderColor: 'divider' }}>
+              <Typography variant="subtitle2" fontWeight={700}>{storeName}</Typography>
+              <Typography variant="body2" sx={{ mt: 0.5 }}>{footerTagline}</Typography>
+              {Boolean(form['footer.showLinks']) && (
+                <Typography variant="caption" sx={{ display: 'block', mt: 1.5 }}>
+                  {(links.slice(0, 3).map((link) => link.label).filter(Boolean).join(' • ')) || 'Home • Products • Cart'}
+                </Typography>
+              )}
+            </Box>
+          )}
+        </Box>
+      );
+    }
+
+    if (currentTab === 'Homepage') {
+      return (
+        <Box sx={previewContainerSx}>
+          <Box
+            sx={{
+              p: 2.5,
+              borderRadius: `${borderRadius + 4}px`,
+              color: heroTextColor,
+              background: form['hero.backgroundType'] === 'image' && form['hero.backgroundImage']
+                ? `linear-gradient(rgba(0,0,0,${Number(form['hero.overlayOpacity'] ?? 0.5)}), rgba(0,0,0,${Number(form['hero.overlayOpacity'] ?? 0.5)})), url(${form['hero.backgroundImage']}) center/cover`
+                : `linear-gradient(135deg, ${brandPrimary}, ${brandSecondary})`,
+            }}
+          >
+            <Typography variant="h6" fontWeight={800} sx={{ color: heroTextColor }}>{heroTitle}</Typography>
+            <Typography variant="body2" sx={{ color: heroTextColor, opacity: 0.9, mt: 0.75, mb: 2 }}>{heroSubtitle}</Typography>
+            <Box sx={{ display: 'inline-block', px: 1.5, py: 0.9, bgcolor: '#fff', color: brandPrimary, borderRadius: 2, fontWeight: 700, fontSize: 13 }}>
+              {heroButtonText}
+            </Box>
+          </Box>
+          <Box sx={{ mt: 2, display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 1.25 }}>
+            {Boolean(form['homepage.showCategories']) && [1, 2, 3].map((item) => (
+              <Box key={item} sx={{ p: 1.25, bgcolor: surfaceColor, borderRadius: 2, textAlign: 'center', border: '1px solid', borderColor: 'divider' }}>
+                <Typography variant="caption" fontWeight={700}>{(form['homepage.categoriesTitle'] || 'Shop by Category').split(' ')[0]} {item}</Typography>
+              </Box>
+            ))}
+          </Box>
+        </Box>
+      );
+    }
+
+    if (currentTab === 'Catalog') {
+      return (
+        <Box sx={previewContainerSx}>
+          <Typography variant="subtitle2" sx={{ color: 'text.secondary', mb: 1.5 }}>Catalog Card Preview</Typography>
+          <Box sx={{ p: 1.5, bgcolor: surfaceColor, borderRadius: `${borderRadius}px`, border: '1px solid', borderColor: 'divider' }}>
+            <Box sx={{ height: 120, borderRadius: 2, background: `linear-gradient(135deg, ${brandPrimary}22, ${brandSecondary}33)`, mb: 1.5 }} />
+            <Typography variant="body2" fontWeight={700}>Everyday Essential Tee</Typography>
+            {Boolean(form['productPage.showSKU']) && (
+              <Typography variant="caption" color="text.secondary">SKU: TSHIRT-RED-M</Typography>
+            )}
+            <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mt: 1.5 }}>
+              <Typography variant="body2" fontWeight={700}>{formatMoney(49.99)}</Typography>
+              {Boolean(form['productPage.showStockBadge']) && (
+                <Box sx={{ px: 1, py: 0.4, borderRadius: 999, bgcolor: '#2e7d3220', color: '#2e7d32', fontSize: 11, fontWeight: 700 }}>In Stock</Box>
+              )}
+            </Box>
+            <Box sx={{ mt: 1.5, px: 1.25, py: 0.9, bgcolor: brandPrimary, color: '#fff', borderRadius: 2, textAlign: 'center', fontSize: 13, fontWeight: 700 }}>
+              {addToCartLabel}
+            </Box>
+          </Box>
+        </Box>
+      );
+    }
+
+    if (currentTab === 'Checkout') {
+      const shippingValue = form['shipping.method'] === 'free'
+        ? 0
+        : Number(form['shipping.flatRate'] || 5);
+      const taxRate = Number(form['tax.rate'] || 0);
+      const subtotal = 89.99;
+      const taxAmount = Boolean(form['tax.inclusive']) ? 0 : subtotal * taxRate;
+      const total = subtotal + shippingValue + taxAmount;
+
+      return (
+        <Box sx={previewContainerSx}>
+          <Typography variant="subtitle2" sx={{ color: 'text.secondary', mb: 1.5 }}>Checkout Summary</Typography>
+          <Box sx={{ p: 2, bgcolor: surfaceColor, borderRadius: `${borderRadius}px`, border: '1px solid', borderColor: 'divider' }}>
+            <Typography variant="body2" fontWeight={700} sx={{ mb: 1.5 }}>Order #Preview</Typography>
+            <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 0.75 }}><Typography variant="body2">Subtotal</Typography><Typography variant="body2">{formatMoney(subtotal)}</Typography></Box>
+            <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 0.75 }}><Typography variant="body2">Shipping</Typography><Typography variant="body2">{shippingValue === 0 ? 'Free' : formatMoney(shippingValue)}</Typography></Box>
+            <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 0.75 }}><Typography variant="body2">Tax</Typography><Typography variant="body2">{Boolean(form['tax.inclusive']) ? 'Included' : formatMoney(taxAmount)}</Typography></Box>
+            <Divider sx={{ my: 1.25 }} />
+            <Box sx={{ display: 'flex', justifyContent: 'space-between' }}><Typography variant="subtitle2" fontWeight={800}>Total</Typography><Typography variant="subtitle2" fontWeight={800}>{formatMoney(total)}</Typography></Box>
+          </Box>
+          <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mt: 1.5 }}>
+            {Boolean(form['features.guestCheckout']) ? 'Guest checkout enabled' : 'Account required'} • {Boolean(form['features.coupons']) ? 'Coupons available' : 'Coupons hidden'}
           </Typography>
-          <Slider
-            min={0} max={1} step={0.05}
-            value={Number(form['hero.overlayOpacity'] ?? 0.5)}
-            onChange={(_, v) => set('hero.overlayOpacity', v)}
-            sx={{ mb: 2 }}
-          />
-        </>
-      )}
-      <Divider sx={{ my: 2 }} />
-      <Typography variant="subtitle2" sx={{ mb: 1 }}>Text</Typography>
-      <Grid container spacing={2}>
-        <Grid item xs={12} sm={4}>
-          {field('hero.color', 'Text Color', 'color')}
-        </Grid>
-      </Grid>
-    </Box>,
+        </Box>
+      );
+    }
 
-    /* Features */
-    <Box key="features" sx={{ display: 'flex', flexDirection: 'column' }}>
-      <Typography variant="subtitle2" sx={{ mb: 1 }}>Store Features</Typography>
-      {toggle('features.wishlist', 'Wishlist')}
-      {toggle('features.reviews', 'Reviews')}
-      {toggle('features.coupons', 'Coupons')}
-      {toggle('features.showAvailableCoupons', 'Show available coupons to customers at checkout')}
-      {toggle('features.guestCheckout', 'Guest Checkout (no account required)')}
-      <Divider sx={{ my: 1.5 }} />
-      <Typography variant="subtitle2" sx={{ mb: 1 }}>Accounts &amp; Auth</Typography>
-      {toggle('features.emailVerification', 'Require email verification on signup')}
-      {toggle('features.requirePurchaseForReview', 'Require purchase to leave a review')}
-      <Divider sx={{ my: 1.5 }} />
-      <Typography variant="subtitle2" sx={{ mb: 1 }}>Advanced (coming soon)</Typography>
-      {toggle('features.multiCurrency', 'Multi-currency support')}
-      {toggle('features.socialLogin', 'Social login (Google / GitHub)')}
-    </Box>,
+    if (currentTab === 'Promotions') {
+      return (
+        <Box sx={previewContainerSx}>
+          <Box sx={{ p: 2, bgcolor: surfaceColor, borderRadius: `${borderRadius}px`, border: '1px solid', borderColor: 'divider' }}>
+            <Box sx={{ display: 'flex', gap: 1, alignItems: 'center', mb: 1.25 }}>
+              {Boolean(form['sales.showSaleLabel']) && (
+                <Box sx={{ px: 1, py: 0.4, borderRadius: 999, bgcolor: `${brandSecondary}22`, color: brandSecondary, fontSize: 11, fontWeight: 700 }}>
+                  {saleLabel}
+                </Box>
+              )}
+              {Boolean(form['sales.showDiscountPercent']) && (
+                <Box sx={{ px: 1, py: 0.4, borderRadius: 999, bgcolor: `${brandPrimary}22`, color: brandPrimary, fontSize: 11, fontWeight: 700 }}>
+                  25% OFF
+                </Box>
+              )}
+            </Box>
+            <Typography variant="body2" fontWeight={700}>Wireless Headphones</Typography>
+            <Box sx={{ display: 'flex', alignItems: 'baseline', gap: 1, mt: 1 }}>
+              <Typography variant="h6" fontWeight={800}>{formatMoney(149.99)}</Typography>
+              <Typography variant="body2" sx={{ textDecoration: 'line-through', color: 'text.secondary' }}>{formatMoney(199.99)}</Typography>
+            </Box>
+            {Boolean(form['sales.showSavingsAmount']) && (
+              <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mt: 1 }}>You save {formatMoney(50)}</Typography>
+            )}
+            {Boolean(form['sales.showTiming']) || Boolean(form['sales.showSaleTiming']) ? null : null}
+            {Boolean(form['sales.showSaleTiming']) && (
+              <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mt: 0.5 }}>Ends tomorrow at 11:59 PM</Typography>
+            )}
+            {Boolean(form['sales.showCountdown']) && (
+              <Typography variant="caption" sx={{ display: 'block', mt: 0.5, color: brandSecondary, fontWeight: 700 }}>Ending soon • 08h 24m left</Typography>
+            )}
+          </Box>
+        </Box>
+      );
+    }
 
-    /* Sales */
-    <Box key="sales">
-      <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
-        Global controls for how sale campaigns behave and appear across admin and storefront.
-      </Typography>
-      <Divider sx={{ mb: 3 }} />
+    return (
+      <Box sx={previewContainerSx}>
+        <Typography variant="subtitle2" sx={{ color: 'text.secondary', mb: 1.5 }}>Search & Discovery Preview</Typography>
+        <Box sx={{ p: 2, bgcolor: surfaceColor, borderRadius: `${borderRadius}px`, border: '1px solid', borderColor: 'divider' }}>
+          <Typography variant="caption" color="text.secondary">Search result</Typography>
+          <Typography variant="h6" fontWeight={700} sx={{ mt: 0.5 }}>{storeName} | Premium online shopping experience</Typography>
+          <Typography variant="body2" color="text.secondary" sx={{ mt: 1 }}>{form['seo.defaultDescription'] || 'Shop the best products online at unbeatable prices.'}</Typography>
+          <Typography variant="caption" sx={{ display: 'block', mt: 1.5, color: brandPrimary }}>
+            {form['seo.googleAnalyticsId'] || 'Analytics not connected yet'}
+          </Typography>
+        </Box>
+      </Box>
+    );
+  };
 
-      <Typography variant="subtitle2" sx={{ mb: 1 }}>Admin Controls</Typography>
-      {toggle('sales.allowScheduling', 'Allow admins to schedule sale start/end dates on products')}
-      {toggle('sales.allowBulkSales', 'Allow bulk apply / remove sale actions in Manage Products')}
-
-      <Divider sx={{ my: 2 }} />
-      <Typography variant="subtitle2" sx={{ mb: 1 }}>Storefront Display</Typography>
-      {toggle('sales.showDiscountPercent', 'Show discount percentage badges (e.g. 30% OFF)')}
-      {toggle('sales.showSavingsAmount', 'Show “You save …” messages on product pages')}
-      {toggle('sales.showSaleLabel', 'Show sale labels such as Flash Sale or Summer Deal')}
-      {toggle('sales.showSaleTiming', 'Show sale start / end timing text')}
-      {toggle('sales.showCountdown', 'Show countdown / relative timing messages')}
-      {field('sales.defaultSaleLabel', 'Default sale label when product has no custom label')}
-      {field('sales.endingSoonHours', 'Ending soon threshold in hours', 'number', {
-        inputProps: { min: 1, max: 168 },
-        helperText: 'Used to highlight sales that are about to end.',
-      })}
-    </Box>,
-
-    /* Shipping */
-    <Box key="shipping">
-      <FormControl fullWidth size="small" sx={{ mb: 2 }}>
-        <InputLabel>Shipping Method</InputLabel>
-        <Select
-          label="Shipping Method"
-          value={form['shipping.method'] || 'flat_rate'}
-          onChange={(e) => set('shipping.method', e.target.value)}
-        >
-          <MenuItem value="flat_rate">Flat Rate — charge a fixed fee on every order</MenuItem>
-          <MenuItem value="free_above_threshold">Free above threshold — flat rate until a minimum order amount</MenuItem>
-          <MenuItem value="free">Always Free — no shipping charge</MenuItem>
-        </Select>
-      </FormControl>
-      {form['shipping.method'] !== 'free' && (
-        field('shipping.flatRate', `Flat Rate (${currSymbol})`, 'number', {
-          InputProps: { startAdornment: <InputAdornment position="start">{currSymbol}</InputAdornment> },
-        })
-      )}
-      {form['shipping.method'] === 'free_above_threshold' && (
-        field('shipping.freeThreshold', `Free Shipping Above (${currSymbol})`, 'number', {
-          InputProps: { startAdornment: <InputAdornment position="start">{currSymbol}</InputAdornment> },
-        })
-      )}
-    </Box>,
-
-    /* Tax */
-    <Box key="tax">
-      <Typography variant="subtitle2" fontWeight={600} color="text.secondary" mb={1.5}>Base Tax</Typography>
-      {field('tax.rate', 'Global Tax Rate — used when no GST component is enabled (e.g. 0.18 for 18%)', 'number')}
-      {toggle('tax.inclusive', 'Prices include tax (no tax added at checkout)')}
-
-      <Divider sx={{ my: 2 }} />
-      <Typography variant="subtitle2" fontWeight={600} color="text.secondary" mb={0.5}>GST Breakdown (India)</Typography>
-      <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mb: 2 }}>
-        When any GST component is enabled it overrides the global rate and shows a line-by-line breakdown.
-      </Typography>
-
-      {toggle('tax.enableCGST', 'Enable CGST (Central Goods & Services Tax)')}
-      {Boolean(form['tax.enableCGST']) && field('tax.cgstRate', 'CGST Rate (e.g. 0.09 for 9%)', 'number')}
-
-      {toggle('tax.enableSGST', 'Enable SGST (State Goods & Services Tax)')}
-      {Boolean(form['tax.enableSGST']) && field('tax.sgstRate', 'SGST Rate (e.g. 0.09 for 9%)', 'number')}
-
-      {toggle('tax.enableIGST', 'Enable IGST (Integrated GST — inter-state)')}
-      {Boolean(form['tax.enableIGST']) && field('tax.igstRate', 'IGST Rate (e.g. 0.18 for 18%)', 'number')}
-    </Box>,
-
-    /* SEO */
-    <Box key="seo">
-      {field('seo.titleTemplate', 'Page Title Template (use %s for page name, e.g. %s | My Store)')}
-      {field('seo.defaultDescription', 'Default Meta Description')}
-      {field('seo.ogImage', 'Default OG / Social Share Image URL')}
-      {field('seo.googleAnalyticsId', 'Google Analytics ID (e.g. G-XXXXXXXX)')}
-    </Box>,
-
-    /* General */
-    <Box key="general">
-      {field('general.storeName', 'Store Name')}
-      {field('general.storeDescription', 'Store Description')}
-      <FormControl fullWidth size="small" sx={{ mb: 2 }}>
-        <InputLabel>Currency</InputLabel>
-        <Select
-          label="Currency"
-          value={form['general.currency'] || 'USD'}
-          onChange={(e) => set('general.currency', e.target.value)}
-        >
-          {CURRENCIES.map((c) => (
-            <MenuItem key={c.code} value={c.code}>
-              {c.symbol}&nbsp;&nbsp;{c.name} ({c.code})
-            </MenuItem>
-          ))}
-        </Select>
-      </FormControl>
-      {field('general.locale', 'Locale (e.g. en-US, fr-FR)')}
-      {field('general.timezone', 'Time Zone (e.g. UTC, Asia/Kolkata)')}
-      {field('general.contactEmail', 'Contact Email', 'email')}
-    </Box>,
-
-    /* SKU */
-    <Box key="sku">
-      <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
-        Controls how SKUs are auto-generated for products and variants. Use the ⚡ button in product and variant forms to generate SKUs based on these rules.
-      </Typography>
-      <Divider sx={{ mb: 3 }} />
-      <Grid container spacing={2}>
-        <Grid item xs={12} sm={6}>
-          {field('sku.prefix', 'Prefix (e.g. SHOP, BRAND)', 'text')}
-        </Grid>
-        <Grid item xs={12} sm={6}>
+  const panels = [
+    [
+      section(
+        'Store Identity',
+        'Manage your store name, description, and the regional basics customers see across the storefront.',
+        <>
+          {field('general.storeName', 'Store Name')}
+          {field('general.storeDescription', 'Store Description')}
           <FormControl fullWidth size="small" sx={{ mb: 2 }}>
-            <InputLabel>Separator</InputLabel>
+            <InputLabel>Currency</InputLabel>
             <Select
-              label="Separator"
-              value={form['sku.separator'] ?? '-'}
-              onChange={(e) => set('sku.separator', e.target.value)}
+              label="Currency"
+              value={form['general.currency'] || 'USD'}
+              onChange={(e) => set('general.currency', e.target.value)}
             >
-              <MenuItem value="-">Hyphen  ( - )</MenuItem>
-              <MenuItem value="_">Underscore  ( _ )</MenuItem>
-              <MenuItem value=".">Dot  ( . )</MenuItem>
-              <MenuItem value="">None</MenuItem>
+              {CURRENCIES.map((c) => (
+                <MenuItem key={c.code} value={c.code}>
+                  {c.symbol}&nbsp;&nbsp;{c.name} ({c.code})
+                </MenuItem>
+              ))}
             </Select>
           </FormControl>
-        </Grid>
-      </Grid>
+          {field('general.locale', 'Locale (e.g. en-US, fr-FR)')}
+          {field('general.timezone', 'Time Zone (e.g. UTC, Asia/Kolkata)')}
+          {field('general.contactEmail', 'Contact Email', 'email')}
+        </>,
+        ['store', 'general', 'currency', 'locale', 'timezone', 'email']
+      ),
+      section(
+        'Brand Assets',
+        'Upload or reference the logos customers see in the header and browser tab.',
+        <>
+          {field('logo.main', 'Main Logo URL (used in header/navbar)')}
+          {form['logo.main'] && (
+            <Box sx={{ mb: 2 }}>
+              <img src={form['logo.main']} alt="Logo preview" style={{ maxHeight: 60, objectFit: 'contain', border: '1px solid #ddd', borderRadius: 8, padding: 4 }} onError={(e) => { e.target.style.display = 'none'; }} />
+            </Box>
+          )}
+          {field('logo.favicon', 'Favicon URL (16×16 or 32×32 .ico / .png)')}
+          {form['logo.favicon'] && (
+            <Box sx={{ mb: 2 }}>
+              <img src={form['logo.favicon']} alt="Favicon preview" style={{ maxHeight: 32, objectFit: 'contain', border: '1px solid #ddd', borderRadius: 4, padding: 2 }} onError={(e) => { e.target.style.display = 'none'; }} />
+            </Box>
+          )}
+        </>,
+        ['logo', 'favicon', 'brand assets']
+      ),
+    ],
+    [
+      section(
+        'Theme & Colors',
+        'Define the overall visual language of your storefront, including dark mode and core brand colors.',
+        <>
+          <FormControlLabel
+            control={
+              <Switch
+                checked={form['theme.mode'] === 'dark'}
+                onChange={(e) => set('theme.mode', e.target.checked ? 'dark' : 'light')}
+              />
+            }
+            label="Dark Mode"
+            sx={{ mb: 2, display: 'block' }}
+          />
+          <Divider sx={{ mb: 2 }} />
+          <Typography variant="subtitle2" sx={{ mb: 1 }}>Brand Colors</Typography>
+          <Grid container spacing={2}>
+            <Grid item xs={12} sm={6}>{field('theme.primaryColor', 'Primary Color', 'color')}</Grid>
+            <Grid item xs={12} sm={6}>{field('theme.secondaryColor', 'Secondary Color', 'color')}</Grid>
+            <Grid item xs={12} sm={6}>{field('theme.backgroundColor', 'Background Color', 'color')}</Grid>
+            <Grid item xs={12} sm={6}>{field('theme.surfaceColor', 'Surface / Card Color', 'color')}</Grid>
+            <Grid item xs={12} sm={6}>{field('theme.textColor', 'Text Color', 'color')}</Grid>
+          </Grid>
+        </>,
+        ['theme', 'colors', 'dark mode', 'primary', 'secondary']
+      ),
+      section(
+        'Typography & Shape',
+        'Adjust fonts and radius so the store matches your brand personality.',
+        <Grid container spacing={2}>
+          <Grid item xs={12} sm={6}>
+            <Autocomplete
+              options={FONTS}
+              value={form['theme.fontFamily'] || ''}
+              onChange={(e, value) => set('theme.fontFamily', value || '')}
+              freeSolo
+              renderInput={(params) => <TextField {...params} label="Font Family" size="small" sx={{ mb: 2 }} />}
+            />
+          </Grid>
+          <Grid item xs={12} sm={6}>{field('theme.borderRadius', 'Border Radius (e.g. 12px)')}</Grid>
+        </Grid>,
+        ['font', 'radius', 'typography', 'shape']
+      ),
+      section(
+        'Announcement Bar',
+        'Control the slim message strip shown at the top of every storefront page.',
+        <>
+          {toggle('announcement.enabled', 'Show announcement bar')}
+          {Boolean(form['announcement.enabled']) && (
+            <>
+              <TextField
+                fullWidth size="small" label="Message text"
+                value={form['announcement.text'] ?? ''}
+                onChange={(e) => set('announcement.text', e.target.value)}
+                sx={{ mb: 2, mt: 1 }}
+                inputProps={{ maxLength: 200 }}
+                helperText={`${String(form['announcement.text'] ?? '').length}/200`}
+              />
+              {field('announcement.link', 'Link URL — leave empty for no link (e.g. /products)')}
+              <Grid container spacing={2}>
+                <Grid item xs={12} sm={4}>{field('announcement.bgColor', 'Background Color', 'color')}</Grid>
+                <Grid item xs={12} sm={4}>{field('announcement.fgColor', 'Text Color', 'color')}</Grid>
+              </Grid>
+              {toggle('announcement.dismissible', 'Show dismiss (✕) button')}
+            </>
+          )}
+        </>,
+        ['announcement', 'banner', 'top bar']
+      ),
+    ],
+    [
+      section(
+        'Header & Navigation',
+        'Choose how the top navigation behaves and whether category navigation is promoted.',
+        <>
+          {toggle('nav.sticky', 'Sticky navbar — stays visible while scrolling')}
+          {toggle('nav.showCategoryBar', 'Show category bar below the navbar')}
+        </>,
+        ['header', 'nav', 'navigation', 'sticky']
+      ),
+      section(
+        'Footer',
+        'Customize footer layout, links, social icons, and contact information in one place.',
+        <>
+          {toggle('footer.enabled', 'Show footer')}
+          <Typography variant="subtitle2" sx={{ mb: 1, mt: 2 }}>Appearance</Typography>
+          <Grid container spacing={2}>
+            <Grid item xs={12} sm={4}>{field('footer.bgColor', 'Background Color', 'color')}</Grid>
+            <Grid item xs={12} sm={4}>{field('footer.fgColor', 'Text & Icon Color', 'color')}</Grid>
+          </Grid>
+          {field('footer.tagline', 'Tagline (shown below store name / logo)')}
+          {field('footer.copyright', 'Copyright line — use {year} and {storeName}')}
 
-      <Typography variant="subtitle2" sx={{ mt: 1, mb: 1 }}>Product SKU options</Typography>
-      {toggle('sku.includeProductName', 'Include product name code (first word, max 8 chars)')}
-      {toggle('sku.useRandom', 'Append random characters for guaranteed uniqueness')}
-      {form['sku.useRandom'] && (
-        <TextField
-          size="small"
-          label="Random character length"
-          type="number"
-          value={form['sku.randomLength'] ?? 4}
-          onChange={(e) => set('sku.randomLength', e.target.value)}
-          sx={{ mt: 1, mb: 2, width: 200 }}
-          inputProps={{ min: 2, max: 8 }}
-        />
-      )}
+          <Divider sx={{ my: 2 }} />
+          <Typography variant="subtitle2" sx={{ mb: 1 }}>Social Links</Typography>
+          {toggle('footer.showSocial', 'Show social icons')}
+          {Boolean(form['footer.showSocial']) && (
+            <Grid container spacing={2} sx={{ mt: 0.5 }}>
+              <Grid item xs={12} sm={6}>{field('footer.facebook', 'Facebook URL')}</Grid>
+              <Grid item xs={12} sm={6}>{field('footer.instagram', 'Instagram URL')}</Grid>
+              <Grid item xs={12} sm={6}>{field('footer.twitter', 'Twitter / X URL')}</Grid>
+              <Grid item xs={12} sm={6}>{field('footer.youtube', 'YouTube URL')}</Grid>
+              <Grid item xs={12} sm={6}>{field('footer.linkedin', 'LinkedIn URL')}</Grid>
+            </Grid>
+          )}
 
-      <Typography variant="subtitle2" sx={{ mt: 2, mb: 1 }}>Variant SKU options</Typography>
-      {toggle('sku.includeAttributeName', 'Include attribute name (e.g. Color, Size)')}
-      {toggle('sku.includeAttributeValue', 'Include attribute value (e.g. Red, XL)')}
-      {toggle('sku.autoUppercase', 'Auto-uppercase everything')}
-
-      <Divider sx={{ my: 2 }} />
-      <Typography variant="subtitle2" sx={{ mb: 1 }}>Live Preview</Typography>
-      {(() => {
-        const sep = form['sku.separator'] ?? '-';
-        const prefix = (form['sku.prefix'] || '').trim();
-        const upper = form['sku.autoUppercase'] !== false;
-        const apply = (s) => (upper ? s.toUpperCase() : s);
-        const parts = [];
-        if (prefix) parts.push(apply(prefix));
-        if (form['sku.includeProductName'] !== false) parts.push(apply('Tshirt'));
-        if (form['sku.useRandom']) parts.push('A3X7');
-        const baseSku = parts.join(sep) || apply('Tshirt');
-        const varParts = [baseSku];
-        if (form['sku.includeAttributeName']) varParts.push(apply('Color'));
-        if (form['sku.includeAttributeValue'] !== false) varParts.push(apply('Red'));
-        const variantSku = varParts.join(sep);
-        return (
-          <Box sx={{ fontFamily: 'monospace', bgcolor: 'action.hover', p: 2, borderRadius: 2 }}>
-            <Typography variant="body2">Product SKU: <strong>{baseSku}</strong></Typography>
-            <Typography variant="body2" sx={{ mt: 0.5 }}>Variant SKU: <strong>{variantSku}</strong></Typography>
-          </Box>
-        );
-      })()}
-    </Box>,
-
-    /* Logo */
-    <Box key="logo">
-      <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
-        Paths to logo and favicon assets. These should be URLs or paths relative to the public folder (e.g. <code>/assets/logo.png</code>).
-      </Typography>
-      <Divider sx={{ mb: 3 }} />
-      {field('logo.main', 'Main Logo URL (used in header/navbar)')}
-      {form['logo.main'] && (
-        <Box sx={{ mb: 2 }}>
-          <img src={form['logo.main']} alt="Logo preview" style={{ maxHeight: 60, objectFit: 'contain', border: '1px solid #ddd', borderRadius: 8, padding: 4 }} onError={(e) => { e.target.style.display = 'none'; }} />
-        </Box>
-      )}
-      {field('logo.favicon', 'Favicon URL (16×16 or 32×32 .ico / .png)')}
-      {form['logo.favicon'] && (
-        <Box sx={{ mb: 2 }}>
-          <img src={form['logo.favicon']} alt="Favicon preview" style={{ maxHeight: 32, objectFit: 'contain', border: '1px solid #ddd', borderRadius: 4, padding: 2 }} onError={(e) => { e.target.style.display = 'none'; }} />
-        </Box>
-      )}
-    </Box>,
-
-    /* Footer */
-    <Box key="footer">
-      <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
-        Customize the storefront footer: appearance, social links, navigation and contact info.
-      </Typography>
-      <Divider sx={{ mb: 3 }} />
-
-      {toggle('footer.enabled', 'Show footer')}
-
-      <Typography variant="subtitle2" sx={{ mb: 1, mt: 2 }}>Appearance</Typography>
-      <Grid container spacing={2}>
-        <Grid item xs={12} sm={4}>
-          {field('footer.bgColor', 'Background Color', 'color')}
-        </Grid>
-        <Grid item xs={12} sm={4}>
-          {field('footer.fgColor', 'Text &amp; Icon Color', 'color')}
-        </Grid>
-      </Grid>
-      {field('footer.tagline', 'Tagline (shown below store name / logo)')}
-      {field('footer.copyright', 'Copyright line — use {year} and {storeName}')}
-
-      <Divider sx={{ my: 2 }} />
-      <Typography variant="subtitle2" sx={{ mb: 1 }}>Social Links</Typography>
-      {toggle('footer.showSocial', 'Show social icons')}
-      {Boolean(form['footer.showSocial']) && (
-        <Grid container spacing={2} sx={{ mt: 0.5 }}>
-          <Grid item xs={12} sm={6}>{field('footer.facebook',  'Facebook URL')}</Grid>
-          <Grid item xs={12} sm={6}>{field('footer.instagram', 'Instagram URL')}</Grid>
-          <Grid item xs={12} sm={6}>{field('footer.twitter',   'Twitter / X URL')}</Grid>
-          <Grid item xs={12} sm={6}>{field('footer.youtube',   'YouTube URL')}</Grid>
-          <Grid item xs={12} sm={6}>{field('footer.linkedin',  'LinkedIn URL')}</Grid>
-        </Grid>
-      )}
-
-      <Divider sx={{ my: 2 }} />
-      <Typography variant="subtitle2" sx={{ mb: 1 }}>Quick Links Column</Typography>
-      {toggle('footer.showLinks', 'Show quick links column')}
-      {field('footer.linksTitle', 'Column heading (e.g. Quick Links)')}
-      {(() => {
-        const links = Array.isArray(form['footer.links']) ? form['footer.links'] : [];
-        const setLinks = (v) => set('footer.links', v);
-        return (
+          <Divider sx={{ my: 2 }} />
+          <Typography variant="subtitle2" sx={{ mb: 1 }}>Quick Links</Typography>
+          {toggle('footer.showLinks', 'Show quick links column')}
+          {field('footer.linksTitle', 'Column heading (e.g. Quick Links)')}
           <Box sx={{ mb: 1 }}>
             {links.map((link, i) => (
               <Box key={i} sx={{ display: 'flex', gap: 1, mb: 1, alignItems: 'center' }}>
@@ -524,168 +586,347 @@ const SettingsPage = () => {
                 </IconButton>
               </Box>
             ))}
-            <Button
-              size="small"
-              startIcon={<AddIcon />}
-              onClick={() => setLinks([...links, { label: '', url: '' }])}
-              sx={{ mt: 0.5 }}
-            >
+            <Button size="small" startIcon={<AddIcon />} onClick={() => setLinks([...links, { label: '', url: '' }])} sx={{ mt: 0.5 }}>
               Add Link
             </Button>
           </Box>
-        );
-      })()}
 
-      <Divider sx={{ my: 2 }} />
-      <Typography variant="subtitle2" sx={{ mb: 1 }}>Contact Column</Typography>
-      {toggle('footer.showContact', 'Show contact column')}
-      {Boolean(form['footer.showContact']) && (
-        <>
-          {field('footer.email', 'Email address')}
-          {field('footer.phone', 'Phone number')}
-          <TextField
-            fullWidth size="small" label="Address (supports multiple lines)"
-            multiline rows={3}
-            value={form['footer.address'] ?? ''}
-            onChange={(e) => set('footer.address', e.target.value)}
-            sx={{ mb: 2 }}
-          />
-        </>
-      )}
-    </Box>,
-
-    /* Announcement */
-    <Box key="announcement">
-      <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
-        A slim banner shown at the very top of every storefront page. Supports a dismiss button and an optional link.
-      </Typography>
-      <Divider sx={{ mb: 3 }} />
-      {toggle('announcement.enabled', 'Show announcement bar')}
-      {Boolean(form['announcement.enabled']) && (
-        <>
-          <TextField
-            fullWidth size="small" label="Message text"
-            value={form['announcement.text'] ?? ''}
-            onChange={(e) => set('announcement.text', e.target.value)}
-            sx={{ mb: 2, mt: 1 }}
-            inputProps={{ maxLength: 200 }}
-            helperText={`${String(form['announcement.text'] ?? '').length}/200`}
-          />
-          {field('announcement.link', 'Link URL — leave empty for no link (e.g. /products)')}
           <Divider sx={{ my: 2 }} />
-          <Typography variant="subtitle2" sx={{ mb: 1 }}>Colours</Typography>
+          <Typography variant="subtitle2" sx={{ mb: 1 }}>Contact Details</Typography>
+          {toggle('footer.showContact', 'Show contact column')}
+          {Boolean(form['footer.showContact']) && (
+            <>
+              {field('footer.email', 'Email address')}
+              {field('footer.phone', 'Phone number')}
+              <TextField
+                fullWidth size="small" label="Address (supports multiple lines)"
+                multiline rows={3}
+                value={form['footer.address'] ?? ''}
+                onChange={(e) => set('footer.address', e.target.value)}
+                sx={{ mb: 2 }}
+              />
+            </>
+          )}
+        </>,
+        ['footer', 'links', 'social', 'contact']
+      ),
+    ],
+    [
+      section(
+        'Hero Banner',
+        'Control the main landing banner content, button, and visual presentation.',
+        <>
+          <Typography variant="subtitle2" sx={{ mb: 1 }}>Content</Typography>
+          {field('hero.title', 'Headline')}
+          {field('hero.subtitle', 'Subheading')}
           <Grid container spacing={2}>
-            <Grid item xs={12} sm={4}>
-              {field('announcement.bgColor', 'Background Color', 'color')}
-            </Grid>
-            <Grid item xs={12} sm={4}>
-              {field('announcement.fgColor', 'Text Color', 'color')}
-            </Grid>
+            <Grid item xs={12} sm={6}>{field('hero.buttonText', 'Button Label')}</Grid>
+            <Grid item xs={12} sm={6}>{field('hero.buttonLink', 'Button Link (e.g. /products)')}</Grid>
           </Grid>
-          {toggle('announcement.dismissible', 'Show dismiss (✕) button')}
-        </>
-      )}
-    </Box>,
 
-    /* Nav */
-    <Box key="nav">
-      <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
-        Controls the top navigation bar behaviour.
-      </Typography>
-      <Divider sx={{ mb: 3 }} />
-      {toggle('nav.sticky', 'Sticky navbar — stays visible while scrolling')}
-      {toggle('nav.showCategoryBar', 'Show category bar below the navbar')}
-    </Box>,
-
-    /* Catalog */
-    <Box key="catalog">
-      <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
-        Controls the product listing / catalog page defaults.
-      </Typography>
-      <Divider sx={{ mb: 3 }} />
-      <FormControl fullWidth size="small" sx={{ mb: 2 }}>
-        <InputLabel>Default Sort Order</InputLabel>
-        <Select
-          label="Default Sort Order"
-          value={form['catalog.defaultSort'] || 'newest'}
-          onChange={(e) => set('catalog.defaultSort', e.target.value)}
-        >
-          <MenuItem value="newest">Newest Arrivals</MenuItem>
-          <MenuItem value="price_asc">Price: Low to High</MenuItem>
-          <MenuItem value="price_desc">Price: High to Low</MenuItem>
-          <MenuItem value="name_asc">Name: A to Z</MenuItem>
-        </Select>
-      </FormControl>
-      <Grid container spacing={2}>
-        <Grid item xs={12} sm={6}>
-          {field('catalog.defaultPageSize', 'Products per page (e.g. 12, 20, 40)', 'number')}
-        </Grid>
-        <Grid item xs={12} sm={6}>
+          <Divider sx={{ my: 2 }} />
+          <Typography variant="subtitle2" sx={{ mb: 1 }}>Background</Typography>
           <FormControl fullWidth size="small" sx={{ mb: 2 }}>
-            <InputLabel>Grid Columns (desktop)</InputLabel>
+            <InputLabel>Background Type</InputLabel>
             <Select
-              label="Grid Columns (desktop)"
-              value={Number(form['catalog.gridColumns']) || 4}
-              onChange={(e) => set('catalog.gridColumns', e.target.value)}
+              label="Background Type"
+              value={form['hero.backgroundType'] || 'gradient'}
+              onChange={(e) => set('hero.backgroundType', e.target.value)}
             >
-              <MenuItem value={2}>2 — Wide cards</MenuItem>
-              <MenuItem value={3}>3 columns</MenuItem>
-              <MenuItem value={4}>4 columns (default)</MenuItem>
-              <MenuItem value={5}>5 — Dense grid</MenuItem>
+              <MenuItem value="gradient">Gradient — uses your brand colors</MenuItem>
+              <MenuItem value="image">Custom Image</MenuItem>
             </Select>
           </FormControl>
-        </Grid>
-      </Grid>
-      {field('catalog.priceRangeMax', 'Max price on filter slider (e.g. 2000)', 'number')}
-      {toggle('catalog.showFilters', 'Show filter sidebar on catalog page')}
-      <Divider sx={{ my: 2 }} />
-      <Typography variant="subtitle2" sx={{ mb: 1 }}>Category Tree Depth</Typography>
-      <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mb: 1.5 }}>
-        How many levels of sub-categories to show in the filter sidebar and category nav bar.<br />
-        1 = top-level only &nbsp;|&nbsp; 2 = top + sub &nbsp;|&nbsp; 3 = top + sub + sub-sub (default)
-      </Typography>
-      <FormControl fullWidth size="small" sx={{ mb: 2 }}>
-        <InputLabel>Category Depth</InputLabel>
-        <Select
-          label="Category Depth"
-          value={Number(form['catalog.categoryDepth']) || 3}
-          onChange={(e) => set('catalog.categoryDepth', e.target.value)}
-        >
-          <MenuItem value={1}>1 — Top-level only</MenuItem>
-          <MenuItem value={2}>2 — Top + sub-categories</MenuItem>
-          <MenuItem value={3}>3 — Top + sub + sub-sub (default)</MenuItem>
-          <MenuItem value={4}>4 levels deep</MenuItem>
-          <MenuItem value={5}>5 levels deep</MenuItem>
-        </Select>
-      </FormControl>
-    </Box>,
+          {(form['hero.backgroundType'] || 'gradient') === 'image' && (
+            <>
+              {field('hero.backgroundImage', 'Image URL (paste a URL or /uploads/… path)')}
+              {form['hero.backgroundImage'] && (
+                <Box sx={{ mb: 2, borderRadius: 2, overflow: 'hidden', maxHeight: 160, border: '1px solid', borderColor: 'divider' }}>
+                  <img
+                    src={form['hero.backgroundImage']}
+                    alt="Hero preview"
+                    style={{ width: '100%', maxHeight: 160, objectFit: 'cover', display: 'block' }}
+                    onError={(e) => { e.target.style.display = 'none'; }}
+                  />
+                </Box>
+              )}
+              <Typography variant="subtitle2" sx={{ mb: 0.5, mt: 1 }}>
+                Dark Overlay: {Math.round(Number(form['hero.overlayOpacity'] ?? 0.5) * 100)}%
+              </Typography>
+              <Slider min={0} max={1} step={0.05} value={Number(form['hero.overlayOpacity'] ?? 0.5)} onChange={(_, v) => set('hero.overlayOpacity', v)} sx={{ mb: 2 }} />
+            </>
+          )}
+          <Grid container spacing={2}>
+            <Grid item xs={12} sm={4}>{field('hero.color', 'Text Color', 'color')}</Grid>
+          </Grid>
+        </>,
+        ['hero', 'homepage banner', 'headline']
+      ),
+      section(
+        'Homepage Sections',
+        'Decide which content blocks appear below the hero banner and how they are titled.',
+        <>
+          <Typography variant="subtitle2" sx={{ mb: 1 }}>Category Section</Typography>
+          {toggle('homepage.showCategories', 'Show categories section')}
+          {field('homepage.categoriesTitle', 'Section heading (e.g. Shop by Category)')}
 
-    /* Homepage */
-    <Box key="homepage">
-      <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
-        Controls the sections displayed on the storefront home page (below the hero banner).
-      </Typography>
-      <Divider sx={{ mb: 3 }} />
-      <Typography variant="subtitle2" sx={{ mb: 1 }}>Category Section</Typography>
-      {toggle('homepage.showCategories', 'Show categories section')}
-      {field('homepage.categoriesTitle', 'Section heading (e.g. Shop by Category)')}
-      <Divider sx={{ my: 2 }} />
-      <Typography variant="subtitle2" sx={{ mb: 1 }}>New Arrivals Section</Typography>
-      {toggle('homepage.showNewArrivals', 'Show new arrivals / featured products section')}
-      {field('homepage.newArrivalsTitle', 'Section heading (e.g. New Arrivals)')}
-      {field('homepage.newArrivalsCount', 'Number of products to display (e.g. 8)', 'number')}
-    </Box>,
+          <Divider sx={{ my: 2 }} />
+          <Typography variant="subtitle2" sx={{ mb: 1 }}>New Arrivals</Typography>
+          {toggle('homepage.showNewArrivals', 'Show new arrivals / featured products section')}
+          {field('homepage.newArrivalsTitle', 'Section heading (e.g. New Arrivals)')}
+          {field('homepage.newArrivalsCount', 'Number of products to display (e.g. 8)', 'number')}
+        </>,
+        ['homepage', 'new arrivals', 'categories section']
+      ),
+    ],
+    [
+      section(
+        'Catalog Listing',
+        'Control sorting, filters, grid density, and category depth in product listing pages.',
+        <>
+          <FormControl fullWidth size="small" sx={{ mb: 2 }}>
+            <InputLabel>Default Sort Order</InputLabel>
+            <Select
+              label="Default Sort Order"
+              value={form['catalog.defaultSort'] || 'newest'}
+              onChange={(e) => set('catalog.defaultSort', e.target.value)}
+            >
+              <MenuItem value="newest">Newest Arrivals</MenuItem>
+              <MenuItem value="price_asc">Price: Low to High</MenuItem>
+              <MenuItem value="price_desc">Price: High to Low</MenuItem>
+              <MenuItem value="name_asc">Name: A to Z</MenuItem>
+            </Select>
+          </FormControl>
+          <Grid container spacing={2}>
+            <Grid item xs={12} sm={6}>{field('catalog.defaultPageSize', 'Products per page (e.g. 12, 20, 40)', 'number')}</Grid>
+            <Grid item xs={12} sm={6}>
+              <FormControl fullWidth size="small" sx={{ mb: 2 }}>
+                <InputLabel>Grid Columns (desktop)</InputLabel>
+                <Select
+                  label="Grid Columns (desktop)"
+                  value={Number(form['catalog.gridColumns']) || 4}
+                  onChange={(e) => set('catalog.gridColumns', e.target.value)}
+                >
+                  <MenuItem value={2}>2 — Wide cards</MenuItem>
+                  <MenuItem value={3}>3 columns</MenuItem>
+                  <MenuItem value={4}>4 columns (default)</MenuItem>
+                  <MenuItem value={5}>5 — Dense grid</MenuItem>
+                </Select>
+              </FormControl>
+            </Grid>
+          </Grid>
+          {field('catalog.priceRangeMax', 'Max price on filter slider (e.g. 2000)', 'number')}
+          {toggle('catalog.showFilters', 'Show filter sidebar on catalog page')}
+          <FormControl fullWidth size="small" sx={{ mb: 2 }}>
+            <InputLabel>Category Depth</InputLabel>
+            <Select
+              label="Category Depth"
+              value={Number(form['catalog.categoryDepth']) || 3}
+              onChange={(e) => set('catalog.categoryDepth', e.target.value)}
+            >
+              <MenuItem value={1}>1 — Top-level only</MenuItem>
+              <MenuItem value={2}>2 — Top + sub-categories</MenuItem>
+              <MenuItem value={3}>3 — Top + sub + sub-sub (default)</MenuItem>
+              <MenuItem value={4}>4 levels deep</MenuItem>
+              <MenuItem value={5}>5 levels deep</MenuItem>
+            </Select>
+          </FormControl>
+        </>,
+        ['catalog', 'sort', 'filters', 'grid', 'category depth']
+      ),
+      section(
+        'Product Page Experience',
+        'Choose what customers see on individual product pages and whether engagement features are enabled.',
+        <>
+          {toggle('productPage.showSKU', 'Show SKU code under product name')}
+          {toggle('productPage.showStockBadge', 'Show In Stock / Out of Stock badge')}
+          {field('productPage.addToCartLabel', 'Add to Cart button label (e.g. Add to Cart, Buy Now, Add to Bag)')}
+          <Divider sx={{ my: 2 }} />
+          <Typography variant="subtitle2" sx={{ mb: 1 }}>Customer Engagement</Typography>
+          {toggle('features.wishlist', 'Enable wishlist')}
+          {toggle('features.reviews', 'Enable reviews')}
+          {toggle('features.requirePurchaseForReview', 'Require purchase to leave a review')}
+        </>,
+        ['product page', 'wishlist', 'reviews', 'stock badge', 'sku']
+      ),
+      section(
+        'SKU Automation',
+        'Set up how product and variant SKUs are auto-generated for the catalog.',
+        <>
+          <Grid container spacing={2}>
+            <Grid item xs={12} sm={6}>{field('sku.prefix', 'Prefix (e.g. SHOP, BRAND)', 'text')}</Grid>
+            <Grid item xs={12} sm={6}>
+              <FormControl fullWidth size="small" sx={{ mb: 2 }}>
+                <InputLabel>Separator</InputLabel>
+                <Select label="Separator" value={form['sku.separator'] ?? '-'} onChange={(e) => set('sku.separator', e.target.value)}>
+                  <MenuItem value="-">Hyphen  ( - )</MenuItem>
+                  <MenuItem value="_">Underscore  ( _ )</MenuItem>
+                  <MenuItem value=".">Dot  ( . )</MenuItem>
+                  <MenuItem value="">None</MenuItem>
+                </Select>
+              </FormControl>
+            </Grid>
+          </Grid>
 
-    /* Product Page */
-    <Box key="productPage">
-      <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
-        Controls what is shown on individual product detail pages.
-      </Typography>
-      <Divider sx={{ mb: 3 }} />
-      {toggle('productPage.showSKU', 'Show SKU code under product name')}
-      {toggle('productPage.showStockBadge', 'Show In Stock / Out of Stock badge')}
-      {field('productPage.addToCartLabel', 'Add to Cart button label (e.g. Add to Cart, Buy Now, Add to Bag)')}
-    </Box>,
+          <Typography variant="subtitle2" sx={{ mt: 1, mb: 1 }}>Product SKU Options</Typography>
+          {toggle('sku.includeProductName', 'Include product name code (first word, max 8 chars)')}
+          {toggle('sku.useRandom', 'Append random characters for guaranteed uniqueness')}
+          {form['sku.useRandom'] && (
+            <TextField size="small" label="Random character length" type="number" value={form['sku.randomLength'] ?? 4} onChange={(e) => set('sku.randomLength', e.target.value)} sx={{ mt: 1, mb: 2, width: 200 }} inputProps={{ min: 2, max: 8 }} />
+          )}
+
+          <Typography variant="subtitle2" sx={{ mt: 2, mb: 1 }}>Variant SKU Options</Typography>
+          {toggle('sku.includeAttributeName', 'Include attribute name (e.g. Color, Size)')}
+          {toggle('sku.includeAttributeValue', 'Include attribute value (e.g. Red, XL)')}
+          {toggle('sku.autoUppercase', 'Auto-uppercase everything')}
+
+          <Divider sx={{ my: 2 }} />
+          <Typography variant="subtitle2" sx={{ mb: 1 }}>Live Preview</Typography>
+          {(() => {
+            const sep = form['sku.separator'] ?? '-';
+            const prefix = (form['sku.prefix'] || '').trim();
+            const upper = form['sku.autoUppercase'] !== false;
+            const apply = (s) => (upper ? s.toUpperCase() : s);
+            const parts = [];
+            if (prefix) parts.push(apply(prefix));
+            if (form['sku.includeProductName'] !== false) parts.push(apply('Tshirt'));
+            if (form['sku.useRandom']) parts.push('A3X7');
+            const baseSku = parts.join(sep) || apply('Tshirt');
+            const varParts = [baseSku];
+            if (form['sku.includeAttributeName']) varParts.push(apply('Color'));
+            if (form['sku.includeAttributeValue'] !== false) varParts.push(apply('Red'));
+            const variantSku = varParts.join(sep);
+            return (
+              <Box sx={{ fontFamily: 'monospace', bgcolor: 'action.hover', p: 2, borderRadius: 2 }}>
+                <Typography variant="body2">Product SKU: <strong>{baseSku}</strong></Typography>
+                <Typography variant="body2" sx={{ mt: 0.5 }}>Variant SKU: <strong>{variantSku}</strong></Typography>
+              </Box>
+            );
+          })()}
+        </>,
+        ['sku', 'inventory code', 'automation', 'prefix']
+      ),
+    ],
+    [
+      section(
+        'Shipping',
+        'Set how shipping is calculated at checkout and when customers qualify for free delivery.',
+        <>
+          <FormControl fullWidth size="small" sx={{ mb: 2 }}>
+            <InputLabel>Shipping Method</InputLabel>
+            <Select
+              label="Shipping Method"
+              value={form['shipping.method'] || 'flat_rate'}
+              onChange={(e) => set('shipping.method', e.target.value)}
+            >
+              <MenuItem value="flat_rate">Flat Rate — charge a fixed fee on every order</MenuItem>
+              <MenuItem value="free_above_threshold">Free above threshold — flat rate until a minimum order amount</MenuItem>
+              <MenuItem value="free">Always Free — no shipping charge</MenuItem>
+            </Select>
+          </FormControl>
+          {form['shipping.method'] !== 'free' && field('shipping.flatRate', `Flat Rate (${currSymbol})`, 'number', { InputProps: { startAdornment: <InputAdornment position="start">{currSymbol}</InputAdornment> } })}
+          {form['shipping.method'] === 'free_above_threshold' && field('shipping.freeThreshold', `Free Shipping Above (${currSymbol})`, 'number', { InputProps: { startAdornment: <InputAdornment position="start">{currSymbol}</InputAdornment> } })}
+        </>,
+        ['shipping', 'free shipping', 'delivery']
+      ),
+      section(
+        'Taxes',
+        'Configure your store-wide tax strategy, including inclusive pricing and GST breakdowns.',
+        <>
+          <Typography variant="subtitle2" fontWeight={600} color="text.secondary" mb={1.5}>Base Tax</Typography>
+          {field('tax.rate', 'Global Tax Rate — used when no GST component is enabled (e.g. 0.18 for 18%)', 'number')}
+          {toggle('tax.inclusive', 'Prices include tax (no tax added at checkout)')}
+
+          <Divider sx={{ my: 2 }} />
+          <Typography variant="subtitle2" fontWeight={600} color="text.secondary" mb={0.5}>GST Breakdown (India)</Typography>
+          <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mb: 2 }}>
+            When any GST component is enabled it overrides the global rate and shows a line-by-line breakdown.
+          </Typography>
+
+          {toggle('tax.enableCGST', 'Enable CGST (Central Goods & Services Tax)')}
+          {Boolean(form['tax.enableCGST']) && field('tax.cgstRate', 'CGST Rate (e.g. 0.09 for 9%)', 'number')}
+          {toggle('tax.enableSGST', 'Enable SGST (State Goods & Services Tax)')}
+          {Boolean(form['tax.enableSGST']) && field('tax.sgstRate', 'SGST Rate (e.g. 0.09 for 9%)', 'number')}
+          {toggle('tax.enableIGST', 'Enable IGST (Integrated GST — inter-state)')}
+          {Boolean(form['tax.enableIGST']) && field('tax.igstRate', 'IGST Rate (e.g. 0.18 for 18%)', 'number')}
+        </>,
+        ['tax', 'gst', 'cgst', 'sgst', 'igst']
+      ),
+      section(
+        'Checkout Experience',
+        'Decide how easy checkout is and which customer conveniences are available.',
+        <>
+          {toggle('features.guestCheckout', 'Guest checkout (no account required)')}
+          {toggle('features.coupons', 'Enable coupon codes')}
+          {toggle('features.showAvailableCoupons', 'Show available coupons to customers at checkout')}
+        </>,
+        ['checkout', 'guest checkout', 'coupons']
+      ),
+    ],
+    [
+      section(
+        'Sale Display & Behavior',
+        'Control how sale campaigns behave in admin and how they appear across the storefront.',
+        <>
+          <Typography variant="subtitle2" sx={{ mb: 1 }}>Admin Controls</Typography>
+          {toggle('sales.allowScheduling', 'Allow admins to schedule sale start/end dates on products')}
+          {toggle('sales.allowBulkSales', 'Allow bulk apply / remove sale actions in Manage Products')}
+
+          <Divider sx={{ my: 2 }} />
+          <Typography variant="subtitle2" sx={{ mb: 1 }}>Storefront Display</Typography>
+          {toggle('sales.showDiscountPercent', 'Show discount percentage badges (e.g. 30% OFF)')}
+          {toggle('sales.showSavingsAmount', 'Show “You save …” messages on product pages')}
+          {toggle('sales.showSaleLabel', 'Show sale labels such as Flash Sale or Summer Deal')}
+          {toggle('sales.showSaleTiming', 'Show sale start / end timing text')}
+          {toggle('sales.showCountdown', 'Show countdown / relative timing messages')}
+          {field('sales.defaultSaleLabel', 'Default sale label when product has no custom label')}
+          {field('sales.endingSoonHours', 'Ending soon threshold in hours', 'number', {
+            inputProps: { min: 1, max: 168 },
+            helperText: 'Used to highlight sales that are about to end.',
+          })}
+        </>,
+        ['sales', 'promotions', 'discount', 'countdown', 'ending soon']
+      ),
+      section(
+        'Coupon Marketing',
+        'Choose whether customers can use and discover coupon campaigns during checkout.',
+        <>
+          {toggle('features.coupons', 'Enable coupon codes store-wide')}
+          {toggle('features.showAvailableCoupons', 'Show available coupons to customers at checkout')}
+        </>,
+        ['coupon', 'promotions', 'marketing']
+      ),
+    ],
+    [
+      section(
+        'SEO & Discovery',
+        'Set defaults for search engines, social sharing, and analytics snippets.',
+        <>
+          {field('seo.titleTemplate', 'Page Title Template (use %s for page name, e.g. %s | My Store)')}
+          {field('seo.defaultDescription', 'Default Meta Description')}
+          {field('seo.ogImage', 'Default OG / Social Share Image URL')}
+          {field('seo.googleAnalyticsId', 'Google Analytics ID (e.g. G-XXXXXXXX)')}
+        </>,
+        ['seo', 'analytics', 'meta description', 'og image']
+      ),
+      section(
+        'Accounts & Authentication',
+        'Tighten customer account rules and decide which login experiences are enabled.',
+        <>
+          {toggle('features.emailVerification', 'Require email verification on signup')}
+          {toggle('features.socialLogin', 'Social login (Google / GitHub)')}
+        </>,
+        ['auth', 'email verification', 'social login', 'accounts']
+      ),
+      section(
+        'Experimental Features',
+        'Keep lower-priority or upcoming capabilities here so the main settings stay focused.',
+        <>
+          {toggle('features.multiCurrency', 'Multi-currency support')}
+        </>,
+        ['advanced', 'multi currency', 'experimental']
+      ),
+    ],
   ];
 
   return (
@@ -699,18 +940,52 @@ const SettingsPage = () => {
         </Button>
       </Box>
 
-      <Paper
-        elevation={0}
-        sx={{ borderRadius: 3, border: '1px solid', borderColor: 'divider', overflow: 'hidden' }}
-      >
-        <Tabs value={tab} onChange={(_, v) => setTab(v)} variant="scrollable" scrollButtons="auto">
-          {tabs.map((t) => (
-            <Tab key={t} label={t} />
-          ))}
-        </Tabs>
-        <Divider />
-        <Box sx={{ p: 3 }}>{panels[tab]}</Box>
-      </Paper>
+      <Grid container spacing={3}>
+        <Grid item xs={12} xl={8}>
+          <Paper variant="outlined" sx={{ p: 2.5, borderRadius: 3, mb: 3, boxShadow: 'none' }}>
+            <Typography variant="subtitle1" fontWeight={700} gutterBottom>
+              Quick Find
+            </Typography>
+            <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
+              Search across all settings using plain-language terms like logo, shipping, tax, sale, hero, footer, checkout, or SEO.
+            </Typography>
+            <TextField
+              fullWidth
+              size="small"
+              placeholder="Search settings…"
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+            />
+          </Paper>
+
+          <Paper
+            elevation={0}
+            sx={{ borderRadius: 3, border: '1px solid', borderColor: 'divider', overflow: 'hidden' }}
+          >
+            <Tabs value={tab} onChange={(_, v) => setTab(v)} variant="scrollable" scrollButtons="auto">
+              {tabs.map((t) => (
+                <Tab key={t} label={t} />
+              ))}
+            </Tabs>
+            <Divider />
+            <Box sx={{ p: 3 }}>{renderSections(panels[tab])}</Box>
+          </Paper>
+        </Grid>
+
+        <Grid item xs={12} xl={4}>
+          <Box sx={{ position: { xl: 'sticky' }, top: { xl: 24 } }}>
+            <Paper variant="outlined" sx={{ p: 2.5, borderRadius: 3, boxShadow: 'none' }}>
+              <Typography variant="subtitle1" fontWeight={700} gutterBottom>
+                Live Preview
+              </Typography>
+              <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
+                This mock storefront updates instantly as you edit {currentTab.toLowerCase()} settings.
+              </Typography>
+              {previewPanel()}
+            </Paper>
+          </Box>
+        </Grid>
+      </Grid>
     </Box>
   );
 };
