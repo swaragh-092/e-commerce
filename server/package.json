@@ -37,11 +37,11 @@
         "nodemailer": "^6.9.14",
         "pg": "^8.12.0",
         "pg-hstore": "^2.3.4",
+        "razorpay": "^2.9.6",
         "sanitize-html": "^2.13.0",
         "sequelize": "^6.37.3",
         "sharp": "^0.33.4",
         "slugify": "^1.6.6",
-        "stripe": "^16.12.0",
         "uuid": "^10.0.0",
         "winston": "^3.19.0"
     },

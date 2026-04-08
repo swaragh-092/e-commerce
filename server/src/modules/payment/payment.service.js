@@ -1,15 +1,23 @@
 'use strict';
-const Stripe = require('stripe');
+const Razorpay = require('razorpay');
+const crypto = require('crypto');
 const { sequelize, Payment, Order, WebhookEvent, Setting } = require('../index');
 const AppError = require('../../utils/AppError');
 
-// Stripe is dynamically initialized from environment
-if (!process.env.STRIPE_SECRET_KEY) {
-    throw new AppError('INTERNAL_ERROR', 500, 'Stripe configuration missing');
+// Razorpay is initialized from environment
+if (!process.env.RAZORPAY_KEY_ID || !process.env.RAZORPAY_KEY_SECRET) {
+    throw new AppError('INTERNAL_ERROR', 500, 'Razorpay configuration missing');
 }
-const stripe = require('stripe')(process.env.STRIPE_SECRET_KEY);
 
-const createIntent = async (userId, orderId) => {
+const razorpay = new Razorpay({
+    key_id: process.env.RAZORPAY_KEY_ID,
+    key_secret: process.env.RAZORPAY_KEY_SECRET,
+});
+
+/**
+ * Creates a Razorpay Order
+ */
+const createOrder = async (userId, orderId) => {
     const order = await Order.findOne({ where: { id: orderId, userId } });
     if (!order) throw new AppError('NOT_FOUND', 404, 'Order not found');
     
@@ -17,74 +25,125 @@ const createIntent = async (userId, orderId) => {
         throw new AppError('VALIDATION_ERROR', 400, 'Order is not in pending_payment status');
     }
 
-    // Read currency from settings, fallback to 'usd'
+    // Read currency from settings, fallback to 'INR'
     const currencySetting = await Setting.findOne({ where: { group: 'general', key: 'currency' } });
-    const currency = (currencySetting?.value || 'USD').toLowerCase();
+    const currency = (currencySetting?.value || 'INR').toUpperCase();
 
-    const amountInCents = Math.round(Number(order.total) * 100);
+    // Razorpay expects amount in subunits (paise for INR, cents for USD)
+    const amountInSubunits = Math.round(Number(order.total) * 100);
 
-    const paymentIntent = await stripe.paymentIntents.create({
-        amount: amountInCents,
-        currency,
-        metadata: {
+    try {
+        const razorpayOrder = await razorpay.orders.create({
+            amount: amountInSubunits,
+            currency,
+            receipt: `order_rcptid_${order.id}`,
+            notes: {
+                orderId: order.id,
+                userId: userId,
+            },
+        });
+
+        await Payment.upsert({
             orderId: order.id,
-            userId: userId
-        }
-    });
+            provider: 'razorpay',
+            transactionId: razorpayOrder.id,
+            amount: order.total,
+            currency,
+            status: 'pending',
+        });
 
-    await Payment.upsert({
-        orderId: order.id,
-        provider: 'stripe',
-        transactionId: paymentIntent.id,
-        amount: order.total,
-        currency,
-        status: 'pending'
-    });
-
-    return { clientSecret: paymentIntent.client_secret };
+        return {
+            id: razorpayOrder.id,
+            amount: razorpayOrder.amount,
+            currency: razorpayOrder.currency,
+        };
+    } catch (err) {
+        throw new AppError('PAYMENT_ERROR', 400, `Razorpay Order Creation Failed: ${err.message}`);
+    }
 };
 
-const handleWebhook = async (payload, signature, secret) => {
-    let event;
-    try {
-        event = stripe.webhooks.constructEvent(payload, signature, secret);
-    } catch (err) {
-        throw new AppError('VALIDATION_ERROR', 400, `Webhook Error: ${err.message}`);
+/**
+ * Verifies Razorpay Signature
+ */
+const verifyPayment = async (userId, orderId, paymentData) => {
+    const { razorpay_order_id, razorpay_payment_id, razorpay_signature } = paymentData;
+
+    if (!razorpay_order_id || !razorpay_payment_id || !razorpay_signature) {
+        throw new AppError('VALIDATION_ERROR', 400, 'Missing payment verification data');
     }
 
-    const existingEvent = await WebhookEvent.findByPk(event.id);
-    if (existingEvent) {
-        return { success: true, message: 'Event already processed' };
+    const order = await Order.findOne({ where: { id: orderId, userId } });
+    if (!order) throw new AppError('NOT_FOUND', 404, 'Order not found');
+
+    const body = razorpay_order_id + "|" + razorpay_payment_id;
+    const expectedSignature = crypto
+        .createHmac("sha256", process.env.RAZORPAY_KEY_SECRET)
+        .update(body.toString())
+        .digest("hex");
+
+    if (expectedSignature !== razorpay_signature) {
+        throw new AppError('PAYMENT_ERROR', 400, 'Invalid payment signature');
     }
 
-    const intent = event.data.object;
-    const orderId = intent.metadata?.orderId;
-    
-    if (orderId) {
-        if (event.type === 'payment_intent.succeeded') {
-            await sequelize.transaction(async (t) => {
-                const order = await Order.findByPk(orderId, { transaction: t });
-                if (order && order.status === 'pending_payment') {
-                    await order.update({ status: 'paid' }, { transaction: t });
-                }
-                const payment = await Payment.findOne({ where: { transactionId: intent.id }, transaction: t });
-                if (payment) {
-                    await payment.update({ status: 'completed' }, { transaction: t });
-                }
-                await WebhookEvent.create({ id: event.id, eventType: event.type }, { transaction: t });
-            });
-        } else if (event.type === 'payment_intent.payment_failed') {
-            await sequelize.transaction(async (t) => {
-                const payment = await Payment.findOne({ where: { transactionId: intent.id }, transaction: t });
-                if (payment) {
-                    await payment.update({ status: 'failed' }, { transaction: t });
-                }
-                await WebhookEvent.create({ id: event.id, eventType: event.type }, { transaction: t });
-            });
+    // Success: Update Order and Payment status
+    await sequelize.transaction(async (t) => {
+        await order.update({ status: 'paid' }, { transaction: t });
+        
+        const payment = await Payment.findOne({ 
+            where: { orderId: order.id, transactionId: razorpay_order_id },
+            transaction: t 
+        });
+        
+        if (payment) {
+            await payment.update({ 
+                status: 'completed',
+                transactionId: razorpay_payment_id, // Link to actual payment ID
+                metadata: { razorpay_order_id }
+            }, { transaction: t });
         }
+    });
+
+    return { success: true };
+};
+
+const handleWebhook = async (payload, signature) => {
+    // Razorpay Webhook Verification
+    const secret = process.env.RAZORPAY_WEBHOOK_SECRET;
+    const expectedSignature = crypto
+        .createHmac("sha256", secret)
+        .update(JSON.stringify(payload))
+        .digest("hex");
+
+    if (expectedSignature !== signature) {
+        throw new AppError('VALIDATION_ERROR', 400, 'Invalid webhook signature');
+    }
+
+    const event = payload.event;
+    const paymentEntity = payload.payload.payment.entity;
+    const orderId = paymentEntity.notes?.orderId;
+
+    if (orderId && event === 'payment.captured') {
+        await sequelize.transaction(async (t) => {
+            const order = await Order.findByPk(orderId, { transaction: t });
+            if (order && order.status === 'pending_payment') {
+                await order.update({ status: 'paid' }, { transaction: t });
+            }
+            
+            const payment = await Payment.findOne({ 
+                where: { orderId: orderId }, 
+                transaction: t 
+            });
+            
+            if (payment && payment.status !== 'completed') {
+                await payment.update({ 
+                    status: 'completed',
+                    transactionId: paymentEntity.id 
+                }, { transaction: t });
+            }
+        });
     }
 
     return { received: true };
 };
 
-module.exports = { createIntent, handleWebhook };
+module.exports = { createOrder, verifyPayment, handleWebhook };

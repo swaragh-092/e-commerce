@@ -1,83 +1,80 @@
 import React, { useState, useEffect } from 'react';
 import { Box, Container, Typography, CircularProgress, Alert, Button, Paper, Divider } from '@mui/material';
 import { useParams, useNavigate } from 'react-router-dom';
-import { loadStripe } from '@stripe/stripe-js';
-import { Elements, PaymentElement, useStripe, useElements } from '@stripe/react-stripe-js';
 import paymentService from '../../services/paymentService';
 import PageSEO from '../../components/common/PageSEO';
-
-const stripePromise = loadStripe(import.meta.env.VITE_STRIPE_PUBLIC_KEY || '');
-
-/* Inner form - must be inside <Elements> */
-const CheckoutForm = ({ orderId }) => {
-    const stripe = useStripe();
-    const elements = useElements();
-    const navigate = useNavigate();
-    const [processing, setProcessing] = useState(false);
-    const [error, setError] = useState(null);
-
-    const handleSubmit = async (e) => {
-        e.preventDefault();
-        if (!stripe || !elements) return;
-
-        setProcessing(true);
-        setError(null);
-
-        const { error: stripeError } = await stripe.confirmPayment({
-            elements,
-            confirmParams: {
-                return_url: `${window.location.origin}/payment/success`,
-            },
-            redirect: 'if_required',
-        });
-
-        if (stripeError) {
-            setError(stripeError.message);
-            setProcessing(false);
-        } else {
-            navigate('/payment/success', { state: { orderId } });
-        }
-    };
-
-    return (
-        <Box component="form" onSubmit={handleSubmit}>
-            {error && <Alert severity="error" sx={{ mb: 2 }}>{error}</Alert>}
-            <PaymentElement />
-            <Button
-                type="submit"
-                variant="contained"
-                fullWidth
-                size="large"
-                disabled={!stripe || processing}
-                sx={{ mt: 3, py: 1.5 }}
-            >
-                {processing ? <CircularProgress size={22} color="inherit" /> : 'Confirm Payment'}
-            </Button>
-            <Button fullWidth sx={{ mt: 1 }} onClick={() => navigate('/cart')} disabled={processing}>
-                Back to Cart
-            </Button>
-        </Box>
-    );
-};
+import api from '../../services/api';
 
 const PaymentPage = () => {
     const { orderId } = useParams();
     const navigate = useNavigate();
-    const [clientSecret, setClientSecret] = useState(null);
+    const [orderData, setOrderData] = useState(null);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState(null);
+    const [processing, setProcessing] = useState(false);
 
     useEffect(() => {
         if (!orderId) { navigate('/cart'); return; }
-        paymentService.createIntent(orderId)
+        
+        // Initialize Razorpay Order on mount/checkout
+        paymentService.createOrder(orderId)
             .then((res) => {
-                setClientSecret(res.data?.data?.clientSecret || res.data?.clientSecret);
+                setOrderData(res.data?.data || res.data);
             })
             .catch((err) => {
                 setError(err?.response?.data?.message || 'Failed to initialize payment. Please contact support.');
             })
             .finally(() => setLoading(false));
     }, [orderId, navigate]);
+
+    const handlePayment = () => {
+        if (!orderData || !window.Razorpay) {
+            setError('Payment system is not ready. Please try again.');
+            return;
+        }
+
+        setProcessing(true);
+
+        const options = {
+            key: import.meta.env.VITE_RAZORPAY_KEY_ID, // Enter the Key ID generated from the Dashboard
+            amount: orderData.amount, // Amount is in currency subunits. Default currency is INR. Hence, 50000 refers to 50000 paise
+            currency: orderData.currency,
+            name: "My Store",
+            description: `Order #${orderId}`,
+            order_id: orderData.id, // This is a sample Order ID. Pass the `id` obtained in the response of Step 1
+            handler: async (response) => {
+                try {
+                    // Send verification data to backend
+                    await paymentService.verifyPayment(orderId, {
+                        razorpay_order_id: response.razorpay_order_id,
+                        razorpay_payment_id: response.razorpay_payment_id,
+                        razorpay_signature: response.razorpay_signature
+                    });
+                    navigate('/payment/success', { state: { orderId } });
+                } catch (err) {
+                    setError(err?.response?.data?.message || 'Payment verification failed.');
+                    setProcessing(false);
+                }
+            },
+            prefill: {
+                // You can optionally prefill customer details
+                name: "",
+                email: "",
+                contact: ""
+            },
+            theme: {
+                color: "#6C63FF"
+            },
+            modal: {
+                ondismiss: () => {
+                    setProcessing(false);
+                }
+            }
+        };
+
+        const rzp = new window.Razorpay(options);
+        rzp.open();
+    };
 
     if (loading) {
         return (
@@ -87,7 +84,7 @@ const PaymentPage = () => {
         );
     }
 
-    if (error || !clientSecret) {
+    if (error || !orderData) {
         return (
             <Container maxWidth="sm" sx={{ py: 8, textAlign: 'center' }}>
                 <Alert severity="error" sx={{ mb: 3 }}>{error || 'Could not load payment details.'}</Alert>
@@ -100,14 +97,32 @@ const PaymentPage = () => {
         <Container maxWidth="sm" sx={{ py: 4 }}>
             <PageSEO title="Payment" type="noindex" />
             <Typography variant="h4" fontWeight={700} mb={3}>Complete Payment</Typography>
-            <Paper elevation={0} sx={{ border: '1px solid', borderColor: 'divider', borderRadius: 2, p: 3 }}>
-                <Typography variant="body2" color="text.secondary" mb={2}>
-                    Order #{orderId} — Enter your payment details below.
+            <Paper elevation={0} sx={{ border: '1px solid', borderColor: 'divider', borderRadius: 2, p: 4, textAlign: 'center' }}>
+                <Typography variant="h6" gutterBottom>Confirm your order</Typography>
+                <Typography variant="body2" color="text.secondary" mb={4}>
+                    Order #{orderId} — Total: {orderData.currency} {(orderData.amount / 100).toFixed(2)}
                 </Typography>
-                <Divider sx={{ mb: 3 }} />
-                <Elements stripe={stripePromise} options={{ clientSecret }}>
-                    <CheckoutForm orderId={orderId} />
-                </Elements>
+                <Divider sx={{ mb: 4 }} />
+                
+                <Button
+                    variant="contained"
+                    fullWidth
+                    size="large"
+                    disabled={processing}
+                    onClick={handlePayment}
+                    sx={{ py: 1.5, mb: 2 }}
+                >
+                    {processing ? <CircularProgress size={24} color="inherit" /> : 'Pay Now'}
+                </Button>
+                
+                <Button 
+                    fullWidth 
+                    variant="text" 
+                    onClick={() => navigate('/cart')} 
+                    disabled={processing}
+                >
+                    Cancel and Return to Cart
+                </Button>
             </Paper>
         </Container>
     );
