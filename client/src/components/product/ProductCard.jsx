@@ -16,7 +16,7 @@ const ProductCard = ({ product, fromCategory }) => {
   const isScheduledSale = product.saleStatus === 'scheduled';
   const discountPercent = product.discountPercent || getDiscountPercent(product);
   const saleTiming = sales.showSaleTiming !== false ? getSaleTimingMessage(product) : null;
-  const saleLabel = sales.showSaleLabel === false ? null : (product.saleLabel || sales.defaultSaleLabel || null);
+  const saleLabel = (hasSale || isScheduledSale) && sales.showSaleLabel !== false ? (product.saleLabel || sales.defaultSaleLabel || null) : null;
   const endingSoon = hasSale && sales.showCountdown !== false && isEndingSoon(product.saleEndAt, sales.endingSoonHours);
   const hasRating = product.averageRating != null;
 
@@ -48,7 +48,7 @@ const ProductCard = ({ product, fromCategory }) => {
           component="img"
           image={primaryImage}
           alt={product.name}
-          sx={{ position: 'absolute', top: 0, width: '100%', height: '100%', objectFit: 'contain' }}
+          sx={{ position: 'absolute', top: 0, width: '100%', height: '100%', objectFit: 'cover' }}
         />
       </Box>
       <CardContent sx={{ flexGrow: 1 }}>

@@ -71,7 +71,7 @@ const ProductDetailPage = () => {
         : hasSale
             ? getCountdownText(product.saleEndAt, 'Ends in ')
             : null);
-    const saleLabel = sales.showSaleLabel === false ? null : (product.saleLabel || sales.defaultSaleLabel || null);
+    const saleLabel = (hasSale || isScheduledSale) && sales.showSaleLabel !== false ? (product.saleLabel || sales.defaultSaleLabel || null) : null;
     const showDiscountPercent = sales.showDiscountPercent !== false;
     const showSavingsAmount = sales.showSavingsAmount !== false;
     const endingSoon = hasSale && sales.showCountdown !== false && isEndingSoon(product.saleEndAt, sales.endingSoonHours);
