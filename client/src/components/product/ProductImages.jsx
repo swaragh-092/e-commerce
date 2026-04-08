@@ -28,7 +28,7 @@ const ProductImages = ({ images }) => {
         <CardMedia
           component="img"
           image={selectedImage}
-          sx={{ position: 'absolute', top: 0, width: '100%', height: '100%', objectFit: 'contain' }}
+          sx={{ position: 'absolute', top: 0, width: '100%', height: '100%', objectFit: 'cover' }}
         />
       </Box>
       {sortedImages.length > 1 && (

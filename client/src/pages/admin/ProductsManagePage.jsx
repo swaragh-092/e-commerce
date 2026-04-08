@@ -325,7 +325,7 @@ const ProductsManagePage = () => {
       minWidth: 200,
       sortable: true,
       renderCell: ({ row }) => (
-        <Box sx={{ py: 0.5, overflow: 'hidden' }}>
+        <Box sx={{ py: 1, overflow: 'hidden' }}>
           <Typography variant="body2" fontWeight={600} noWrap lineHeight={1.4}>
             {row.name}
           </Typography>
@@ -342,7 +342,7 @@ const ProductsManagePage = () => {
       width: 160,
       sortable: true,
       renderCell: ({ row }) => (
-        <Box>
+        <Box sx={{ py: 1 }}>
           <Typography
             variant="body2"
             fontWeight={700}
@@ -351,12 +351,12 @@ const ProductsManagePage = () => {
             {formatPrice(row.effectivePrice ?? row.salePrice ?? row.price)}
           </Typography>
           {row.salePrice && (
-            <Typography variant="caption" color="text.secondary" sx={{ textDecoration: 'line-through' }}>
+            <Typography variant="caption" color="text.secondary" sx={{ textDecoration: 'line-through', display: 'block' }}>
               {formatPrice(row.price)}
             </Typography>
           )}
           {row.saleStatus && row.saleStatus !== 'none' && (
-            <Typography variant="caption" color={row.saleStatus === 'active' ? 'error.main' : 'text.secondary'}>
+            <Typography variant="caption" color={row.saleStatus === 'active' ? 'error.main' : 'text.secondary'} sx={{ display: 'block' }}>
               {row.saleStatus === 'active' ? 'Active sale' : row.saleStatus === 'scheduled' ? 'Scheduled sale' : 'Expired sale'}
             </Typography>
           )}
@@ -376,7 +376,7 @@ const ProductsManagePage = () => {
         const endingSoon = row.saleStatus === 'active' && isEndingSoon(row.saleEndAt, sales.endingSoonHours);
 
         return (
-          <Box sx={{ py: 0.5 }}>
+          <Box sx={{ py: 1 }}>
             <Stack direction="row" spacing={0.5} sx={{ mb: 0.25, flexWrap: 'wrap' }}>
               <Chip
                 size="small"
@@ -629,8 +629,15 @@ const ProductsManagePage = () => {
           rowSelectionModel={selectedIds}
           onRowSelectionModelChange={(ids) => setSelectedIds(ids)}
           disableRowSelectionOnClick
-          rowHeight={64}
-          sx={{ border: 0 }}
+          getRowHeight={() => 'auto'}
+          getEstimatedRowHeight={() => 80}
+          sx={{
+            border: 0,
+            '& .MuiDataGrid-cell': {
+              display: 'flex',
+              alignItems: 'center',
+            },
+          }}
         />
       </Box>
 
