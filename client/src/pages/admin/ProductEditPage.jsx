@@ -44,6 +44,7 @@ import {
 } from '@mui/material';
 import { getProductById, getProducts, createProduct, updateProduct } from '../../services/productService';
 import { getCategoryTree } from '../../services/categoryService';
+import brandService from '../../services/brandService';
 import attributeService from '../../services/attributeService';
 import MediaUploader from '../../components/common/MediaUploader';
 import { useNotification } from '../../context/NotificationContext';
@@ -127,10 +128,12 @@ const ProductEditPage = () => {
     quantity: '',
     status: 'draft',
     categoryIds: [],
+    brandId: '',
     images: [],
   });
   const [errors, setErrors] = useState({});
   const [categories, setCategories] = useState([]);
+  const [brands, setBrands] = useState([]);
   const [saving, setSaving] = useState(false);
 
   useEffect(() => {
@@ -138,6 +141,9 @@ const ProductEditPage = () => {
       try {
         const catRes = await getCategoryTree();
         setCategories(catRes?.data?.categories || []);
+
+        const brandRes = await brandService.getBrands({ limit: 100, isActive: 'true' });
+        setBrands(brandRes?.data?.data || []);
 
         if (!isNew) {
           const prodRes = await getProductById(id);
@@ -156,6 +162,7 @@ const ProductEditPage = () => {
               quantity: p.quantity,
               status: p.status,
               categoryIds: p.categories?.map((c) => c.id) || [],
+              brandId: p.brandId || '',
               images: p.images || [],
             });
           }
@@ -193,6 +200,7 @@ const ProductEditPage = () => {
         saleStartAt: formData.salePrice ? toIsoOrNull(formData.saleStartAt) : null,
         saleEndAt: formData.salePrice ? toIsoOrNull(formData.saleEndAt) : null,
         saleLabel: formData.salePrice ? (formData.saleLabel || null) : null,
+        brandId: formData.brandId || null,
         quantity: parseInt(formData.quantity) || 0,
       };
       if (isNew) {
@@ -577,6 +585,25 @@ const ProductEditPage = () => {
                 disableCloseOnSelect
                 sx={{ mt: 1 }}
               />
+
+              <FormControl fullWidth margin="normal">
+                <InputLabel id="brand-select-label">Brand</InputLabel>
+                <Select
+                  labelId="brand-select-label"
+                  value={formData.brandId}
+                  label="Brand"
+                  onChange={(e) => setField('brandId', e.target.value)}
+                  size="small"
+                >
+                  <MenuItem value=""><em>None</em></MenuItem>
+                  {brands.map((b) => (
+                    <MenuItem key={b.id} value={b.id}>
+                      {b.name}
+                    </MenuItem>
+                  ))}
+                </Select>
+                <FormHelperText>Select a product brand</FormHelperText>
+              </FormControl>
             </Paper>
 
             <Paper sx={{ p: 3, mb: 3 }}>

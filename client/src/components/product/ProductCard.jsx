@@ -52,6 +52,11 @@ const ProductCard = ({ product, fromCategory }) => {
         />
       </Box>
       <CardContent sx={{ flexGrow: 1 }}>
+        {product.brand?.name && (
+          <Typography variant="caption" color="primary" sx={{ display: 'block', fontWeight: 600, mb: 0.5 }}>
+            {product.brand.name}
+          </Typography>
+        )}
         <Typography variant="body2" color="text.secondary" noWrap gutterBottom>
           {product.categories?.[0]?.name}
         </Typography>

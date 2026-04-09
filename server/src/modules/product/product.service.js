@@ -1,6 +1,6 @@
 'use strict';
 
-const { Product, ProductImage, ProductVariant, Tag, Category, Sequelize } = require('../index');
+const { Product, ProductImage, ProductVariant, Tag, Category, Brand, Sequelize } = require('../index');
 const { Op } = Sequelize;
 const { generateSlug } = require('../../utils/slugify');
 // Note: Although the ARCHITECTURE/STANDARDS refer to `generateUniqueSlug()`,
@@ -62,6 +62,19 @@ exports.getProducts = async (filters, page, limit, isAdmin = false) => {
     if (filters.minPrice) where.price[Op.gte] = filters.minPrice;
     if (filters.maxPrice) where.price[Op.lte] = filters.maxPrice;
   }
+  if (filters.brand) {
+    const isUUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(filters.brand);
+    if (isUUID) {
+      where.brandId = filters.brand;
+    } else {
+      const b = await Brand.findOne({ where: { slug: filters.brand }, attributes: ['id'] });
+      if (b) {
+        where.brandId = b.id;
+      } else {
+        where.id = null; // force empty result instead of ignoring invalid slug
+      }
+    }
+  }
   if (isAdmin && filters.saleStatus) {
     const saleFilters = {
       none: { salePrice: null },
@@ -105,6 +118,7 @@ exports.getProducts = async (filters, page, limit, isAdmin = false) => {
     { model: ProductImage, as: 'images' },
     { model: ProductVariant, as: 'variants' },
     { model: Tag, as: 'tags' },
+    { model: Brand, as: 'brand' },
   ];
 
   // Category filter — supports UUID (admin grid) and slug (storefront)
@@ -162,6 +176,7 @@ exports.getProductBySlug = async (slug, { adminView = false } = {}) => {
       { model: ProductVariant, as: 'variants' },
       { model: Category, as: 'categories' },
       { model: Tag, as: 'tags' },
+      { model: Brand, as: 'brand' },
     ],
   });
   if (!product) throw new Error('Product not found');
@@ -175,6 +190,7 @@ exports.getProductById = async (id) => {
       { model: ProductVariant, as: 'variants' },
       { model: Category, as: 'categories' },
       { model: Tag, as: 'tags' },
+      { model: Brand, as: 'brand' },
     ],
   });
   if (!product) throw new Error('Product not found');

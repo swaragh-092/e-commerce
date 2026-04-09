@@ -40,6 +40,7 @@ const MediaPage = lazy(() => import('../pages/admin/MediaPage'));
 const SettingsPage = lazy(() => import('../pages/admin/SettingsPage'));
 const AuditLogPage = lazy(() => import('../pages/admin/AuditLogPage'));
 const AttributesPage = lazy(() => import('../pages/admin/AttributesPage'));
+const BrandsPage = lazy(() => import('../pages/admin/BrandsPage'));
 
 const LoadingFallback = () => (
   <Box sx={{ display: 'flex', justifyContent: 'center', alignItems: 'center', minHeight: '50vh' }}>
@@ -92,6 +93,7 @@ const AppRoutes = () => (
           <Route path="products/new" element={<ProductEditPage />} />
           <Route path="products/:id/edit" element={<ProductEditPage />} />
           <Route path="categories" element={<CategoriesPage />} />
+          <Route path="brands" element={<BrandsPage />} />
           <Route path="attributes" element={<AttributesPage />} />
           <Route path="orders" element={<OrdersManagePage />} />
           <Route path="orders/:id" element={<OrderDetailPage />} />

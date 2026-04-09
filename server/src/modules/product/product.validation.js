@@ -17,6 +17,7 @@ const createProductSchema = Joi.object({
   status: Joi.string().valid('draft', 'published'),
   isFeatured: Joi.boolean(),
   categoryIds: Joi.array().items(Joi.string().uuid()),
+  brandId: Joi.string().uuid().allow(null),
   tags: Joi.array().items(Joi.string()),
   variants: Joi.array().items(
     Joi.object({

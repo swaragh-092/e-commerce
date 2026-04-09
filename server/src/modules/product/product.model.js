@@ -79,6 +79,11 @@ module.exports = (sequelize, DataTypes) => {
             type: DataTypes.INTEGER,
             defaultValue: 0,
         },
+        brandId: {
+            type: DataTypes.UUID,
+            allowNull: true,
+            field: 'brand_id'
+        },
     }, {
         tableName: 'products',
         timestamps: true,
@@ -87,6 +92,7 @@ module.exports = (sequelize, DataTypes) => {
     });
 
     Product.associate = (models) => {
+        Product.belongsTo(models.Brand, { foreignKey: 'brandId', as: 'brand' });
         Product.belongsToMany(models.Category, { through: models.ProductCategory, foreignKey: 'productId', otherKey: 'categoryId', as: 'categories' });
         Product.hasMany(models.ProductImage, { foreignKey: 'productId', as: 'images', onDelete: 'CASCADE' });
         Product.hasMany(models.ProductVariant, { foreignKey: 'productId', as: 'variants', onDelete: 'CASCADE' });

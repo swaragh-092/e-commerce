@@ -47,6 +47,7 @@ const ProductListPage = () => {
     const filters = {
         search: searchParams.get('search') || '',
         category: searchParams.get('category') || '',
+        brand: searchParams.get('brand') || '',
         page: parseInt(searchParams.get('page')) || 1,
         sort: searchParams.get('sort') || defaultSort,
         minPrice: searchParams.get('minPrice') || '',

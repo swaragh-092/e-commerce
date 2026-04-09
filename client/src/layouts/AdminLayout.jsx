@@ -38,6 +38,7 @@ const ALL_MENU_ITEMS = [
   { text: 'Dashboard',  path: '/admin',            icon: <DashboardIcon /> },
   { text: 'Products',   path: '/admin/products',   icon: <InventoryIcon /> },
   { text: 'Categories', path: '/admin/categories', icon: <CategoryIcon /> },
+  { text: 'Brands',     path: '/admin/brands',     icon: <LocalOfferIcon /> },
   { text: 'Attributes', path: '/admin/attributes', icon: <TuneIcon /> },
   { text: 'Orders',     path: '/admin/orders',     icon: <ShoppingCartIcon /> },
   { text: 'Customers',  path: '/admin/customers',  icon: <PeopleIcon /> },
