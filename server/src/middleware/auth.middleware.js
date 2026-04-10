@@ -2,7 +2,17 @@
 
 const jwt = require('jsonwebtoken');
 const AppError = require('../utils/AppError');
-const { User } = require('../modules');
+const { User, Role, Permission } = require('../modules');
+const { enrichUserAuthorization } = require('../config/permissions');
+
+const authUserInclude = [
+  {
+    model: Role,
+    as: 'roles',
+    through: { attributes: [] },
+    include: [{ model: Permission, as: 'permissions', through: { attributes: [] } }],
+  },
+];
 
 /**
  * Middleware to authenticate user via JWT
@@ -26,7 +36,8 @@ const authenticate = async (req, res, next) => {
 
     // Check if user still exists (could be deleted)
     const user = await User.findByPk(decoded.id, {
-      attributes: ['id', 'email', 'role', 'status']
+      attributes: ['id', 'email', 'role', 'status'],
+      include: authUserInclude,
     });
 
     if (!user) {
@@ -37,7 +48,7 @@ const authenticate = async (req, res, next) => {
       throw new AppError('FORBIDDEN', 403, 'Your account is inactive or banned');
     }
 
-    req.user = user.toJSON();
+    req.user = enrichUserAuthorization(user);
     next();
   } catch (error) {
     next(error);
@@ -61,11 +72,12 @@ const optionalAuth = async (req, res, next) => {
     }
 
     const user = await User.findByPk(decoded.id, {
-      attributes: ['id', 'email', 'role', 'status']
+      attributes: ['id', 'email', 'role', 'status'],
+      include: authUserInclude,
     });
 
     if (user && user.status === 'active') {
-      req.user = user.toJSON();
+      req.user = enrichUserAuthorization(user);
     }
     next();
   } catch (error) {

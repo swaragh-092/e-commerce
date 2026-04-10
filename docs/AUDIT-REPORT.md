@@ -181,7 +181,7 @@ The `VariantSelector.jsx` groups variants by `name` and shows `value` as buttons
 | Refresh token rotation | ✅ |
 | Password reset (token-based) | ✅ |
 | Email verification | ✅ |
-| Role-based access (admin/super_admin/customer) | ✅ |
+| DB-backed RBAC access (system/custom roles + permissions) | ✅ |
 | Account status guard (banned/inactive) | ✅ |
 | Rate limiting (login, register, forgot) | ✅ |
 | Token blacklisting on logout | ✅ |

@@ -90,6 +90,7 @@ module.exports = (sequelize, DataTypes) => {
         User.hasMany(models.EmailVerificationToken, { foreignKey: 'userId', onDelete: 'CASCADE' });
         // Coupons
         User.hasMany(models.CouponUsage, { foreignKey: 'userId' });
+        User.belongsToMany(models.Role, { through: models.UserRole, foreignKey: 'userId', otherKey: 'roleId', as: 'roles' });
     };
 
     return User;

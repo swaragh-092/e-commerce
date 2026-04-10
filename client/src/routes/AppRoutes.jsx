@@ -41,6 +41,7 @@ const SettingsPage = lazy(() => import('../pages/admin/SettingsPage'));
 const AuditLogPage = lazy(() => import('../pages/admin/AuditLogPage'));
 const AttributesPage = lazy(() => import('../pages/admin/AttributesPage'));
 const BrandsPage = lazy(() => import('../pages/admin/BrandsPage'));
+const AccessControlPage = lazy(() => import('../pages/admin/AccessControlPage'));
 
 const LoadingFallback = () => (
   <Box sx={{ display: 'flex', justifyContent: 'center', alignItems: 'center', minHeight: '50vh' }}>
@@ -85,8 +86,8 @@ const AppRoutes = () => (
         <Route path="*" element={<NotFoundPage />} />
       </Route>
 
-      {/* Admin Routes — role-gated */}
-      <Route path="/admin" element={<ProtectedRoute role="admin" />}>
+      {/* Admin Routes — permission-gated foundation */}
+      <Route path="/admin" element={<ProtectedRoute permission="dashboard.view" />}>
         <Route element={<AdminLayout />}>
           <Route index element={<DashboardPage />} />
           <Route path="products" element={<ProductsManagePage />} />
@@ -103,6 +104,21 @@ const AppRoutes = () => (
           <Route path="media" element={<MediaPage />} />
           <Route path="settings" element={<SettingsPage />} />
           <Route path="audit-log" element={<AuditLogPage />} />
+          <Route
+            path="access-control"
+            element={(
+              <ProtectedRoute
+                permissions={[
+                  'roles.read',
+                  'roles.manage',
+                  'system_roles.manage',
+                  'users.assign_roles',
+                ]}
+              />
+            )}
+          >
+            <Route index element={<AccessControlPage />} />
+          </Route>
         </Route>
       </Route>
     </Routes>

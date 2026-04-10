@@ -20,7 +20,9 @@ npm run db:reset             # Drop → create → migrate → seed (destructive
 npm run migrate:undo         # Rollback last migration
 ```
 
-Default credentials after seeding: `admin@store.com` / `Admin123!` (super_admin), `customer@store.com` / `Customer123!`.
+Default credentials after seeding: `admin@example.com` / `Password123!` (super_admin), `customer@example.com` / `Password123!`.
+
+DB-backed RBAC is enabled: system roles are seeded, super admins manage custom roles from `/admin/access-control`, and permission checks should be preferred over raw role-string checks when wiring new access rules.
 
 Stripe webhooks require raw body — the app skips `express.json()` for any route containing `/webhook` (see [server/src/app.js](../server/src/app.js)).
 

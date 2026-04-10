@@ -24,7 +24,7 @@ const LoginPage = () => {
 
     try {
       const data = await login(formData.email, formData.password);
-      if (data.user.role === 'admin' || data.user.role === 'super_admin') {
+      if (Array.isArray(data.user.permissions) && data.user.permissions.includes('dashboard.view')) {
         navigate('/admin');
       } else {
         navigate('/');

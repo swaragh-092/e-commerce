@@ -2,11 +2,21 @@
 
 const jwt = require('jsonwebtoken');
 const crypto = require('crypto');
-const { sequelize, User, RefreshToken, PasswordResetToken, EmailVerificationToken, UserProfile } = require('../index');
+const { sequelize, User, RefreshToken, PasswordResetToken, EmailVerificationToken, UserProfile, Role, Permission } = require('../index');
 const AppError = require('../../utils/AppError');
 const NotificationService = require('../notification/notification.service');
 const AuditService = require('../audit/audit.service');
 const { ACTIONS, ENTITIES } = require('../../config/constants');
+const { enrichUserAuthorization } = require('../../config/permissions');
+
+const authUserInclude = [
+  {
+    model: Role,
+    as: 'roles',
+    through: { attributes: [] },
+    include: [{ model: Permission, as: 'permissions', through: { attributes: [] } }],
+  },
+];
 
 const generateTokens = (user) => {
   const payload = { id: user.id, role: user.role };
@@ -32,6 +42,11 @@ const register = async (payload) => {
       role: 'customer',
       status: 'active'
     }, { transaction: t });
+
+    const customerRole = await Role.findOne({ where: { slug: 'customer' }, transaction });
+    if (customerRole) {
+      await user.setRoles([customerRole], { transaction: t });
+    }
 
     // Explicitly create profile (if it doesn't auto-create via hooks)
     if (UserProfile) {
@@ -69,7 +84,7 @@ const register = async (payload) => {
       createdByIp: 'registration'
     }, { transaction: t });
 
-    return { user: user.toJSON(), tokens }; // password is excluded via defaultScope
+    return { user: enrichUserAuthorization(user), tokens };
   });
 };
 
@@ -97,7 +112,7 @@ const login = async (email, password, ipAddress) => {
 
   // Update lastLoginAt and load user data without password for response
   await user.update({ lastLoginAt: new Date() });
-  const userData = await User.findByPk(user.id);
+  const userData = await User.findByPk(user.id, { include: authUserInclude });
   
   // Try audit log
   try {
@@ -112,7 +127,7 @@ const login = async (email, password, ipAddress) => {
       }
   } catch(e) {}
 
-  return { user: userData.toJSON(), tokens };
+  return { user: enrichUserAuthorization(userData), tokens };
 };
 
 const refresh = async (refreshTokenStr, ipAddress) => {

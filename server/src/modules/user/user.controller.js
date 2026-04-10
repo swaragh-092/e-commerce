@@ -2,11 +2,12 @@
 
 const UserService = require('./user.service');
 const { success, paginated } = require('../../utils/response');
+const { enrichUserAuthorization } = require('../../config/permissions');
 
 const getMe = async (req, res, next) => {
   try {
     const user = await UserService.getMe(req.user.id);
-    return success(res, user);
+    return success(res, enrichUserAuthorization(user));
   } catch (err) {
     next(err);
   }
@@ -15,7 +16,7 @@ const getMe = async (req, res, next) => {
 const updateMe = async (req, res, next) => {
   try {
     const user = await UserService.updateMe(req.user.id, req.validated);
-    return success(res, user, 'Profile updated successfully');
+    return success(res, enrichUserAuthorization(user), 'Profile updated successfully');
   } catch (err) {
     next(err);
   }
@@ -28,7 +29,7 @@ const updateAvatar = async (req, res, next) => {
       const mediaService = require('../media/media.service');
       const media = await mediaService.uploadMedia(req.file);
       const user = await UserService.updateAvatar(req.user.id, media.id);
-      return success(res, user, 'Avatar updated successfully');
+      return success(res, enrichUserAuthorization(user), 'Avatar updated successfully');
     }
 
     const { mediaId } = req.body;
@@ -36,7 +37,7 @@ const updateAvatar = async (req, res, next) => {
       return next(Object.assign(new Error('No file or mediaId provided'), { statusCode: 400 }));
     }
     const user = await UserService.updateAvatar(req.user.id, mediaId);
-    return success(res, user, 'Avatar updated successfully');
+    return success(res, enrichUserAuthorization(user), 'Avatar updated successfully');
   } catch (err) {
     next(err);
   }
@@ -57,7 +58,7 @@ const list = async (req, res, next) => {
   try {
     const { page, limit, status, role } = req.query;
     const result = await UserService.listAll({ page, limit, status, role });
-    return paginated(res, result.rows, result.count, page, limit);
+    return paginated(res, result.rows.map((user) => enrichUserAuthorization(user)), result.count, page, limit);
   } catch (err) {
     next(err);
   }
@@ -66,7 +67,7 @@ const list = async (req, res, next) => {
 const getOne = async (req, res, next) => {
   try {
     const user = await UserService.getById(req.params.id);
-    return success(res, user);
+    return success(res, enrichUserAuthorization(user));
   } catch (err) {
     next(err);
   }
@@ -75,7 +76,7 @@ const getOne = async (req, res, next) => {
 const updateStatus = async (req, res, next) => {
   try {
     const user = await UserService.updateStatus(req.params.id, req.validated.status, req.user.id);
-    return success(res, user, 'User status updated successfully');
+    return success(res, enrichUserAuthorization(user), 'User status updated successfully');
   } catch (err) {
     next(err);
   }

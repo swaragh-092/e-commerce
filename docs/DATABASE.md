@@ -3,7 +3,7 @@
 > **ORM**: Sequelize 6+  
 > **Database**: PostgreSQL 15+  
 > **Conventions**: UUID primary keys, timestamps on all tables, soft delete where noted  
-> **Key Updates in v2**: CHECK constraints, coupon tables, notification tables, webhook_events, address snapshot in orders, weight + taxRate on products
+> **Key Updates in v2**: CHECK constraints, coupon tables, notification tables, webhook_events, address snapshot in orders, weight + taxRate on products, DB-backed RBAC tables
 
 ## Table of Contents
 1. [Settings](#settings)
@@ -89,7 +89,54 @@ CREATE TABLE email_verification_tokens (
   created_at      TIMESTAMP DEFAULT NOW(),
   updated_at      TIMESTAMP DEFAULT NOW()
 );
+
+CREATE TABLE roles (
+  id              UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  name            VARCHAR(100) NOT NULL,
+  slug            VARCHAR(100) UNIQUE NOT NULL,
+  description     VARCHAR(255),
+  base_role       VARCHAR(20) NOT NULL DEFAULT 'admin', -- 'customer' | 'admin' | 'super_admin' for seeded system roles
+  is_system       BOOLEAN NOT NULL DEFAULT FALSE,
+  is_active       BOOLEAN NOT NULL DEFAULT TRUE,
+  created_at      TIMESTAMP DEFAULT NOW(),
+  updated_at      TIMESTAMP DEFAULT NOW()
+);
+
+CREATE TABLE permissions (
+  id              UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  key             VARCHAR(120) UNIQUE NOT NULL,         -- e.g. 'products.read'
+  name            VARCHAR(120) NOT NULL,
+  permission_group VARCHAR(60) NOT NULL,               -- e.g. 'products', 'orders', 'roles'
+  description     VARCHAR(255),
+  created_at      TIMESTAMP DEFAULT NOW(),
+  updated_at      TIMESTAMP DEFAULT NOW()
+);
+
+CREATE TABLE role_permissions (
+  id              UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  role_id         UUID NOT NULL REFERENCES roles(id) ON DELETE CASCADE,
+  permission_id   UUID NOT NULL REFERENCES permissions(id) ON DELETE CASCADE,
+  created_at      TIMESTAMP DEFAULT NOW(),
+  updated_at      TIMESTAMP DEFAULT NOW(),
+  UNIQUE (role_id, permission_id)
+);
+
+CREATE TABLE user_roles (
+  id              UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  user_id         UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  role_id         UUID NOT NULL REFERENCES roles(id) ON DELETE CASCADE,
+  created_at      TIMESTAMP DEFAULT NOW(),
+  updated_at      TIMESTAMP DEFAULT NOW(),
+  UNIQUE (user_id, role_id)
+);
 ```
+
+### RBAC Notes
+
+- `users.role` still exists for backward compatibility and base-role checks during the transition to DB-backed RBAC.
+- Seeded system roles are `customer`, `admin`, and `super_admin`.
+- Custom roles are stored in `roles` with `is_system = false` and currently use `base_role` of `customer` or `admin`.
+- Access-control permissions like `roles.manage` and `users.assign_roles` are reserved for super admins.
 
 ---
 

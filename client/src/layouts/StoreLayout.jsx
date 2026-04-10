@@ -10,7 +10,7 @@ import CategoryNav from '../components/layout/CategoryNav';
 import StorefrontFooter from '../components/layout/StorefrontFooter';
 
 const StoreLayout = () => {
-  const { isAuthenticated, user, logout } = useAuth();
+  const { isAuthenticated, logout, hasPermission } = useAuth();
   const { settings } = useSettings();
   const { cartCount } = useCart();
   const [announcementDismissed, setAnnouncementDismissed] = useState(false);
@@ -73,7 +73,7 @@ const StoreLayout = () => {
             </IconButton>
             {isAuthenticated ? (
               <>
-                {(user?.role === 'admin' || user?.role === 'super_admin') && (
+                {hasPermission('dashboard.view') && (
                   <Button color="inherit" component={RouterLink} to="/admin">Admin Panel</Button>
                 )}
                 {settings?.features?.wishlist !== false && (

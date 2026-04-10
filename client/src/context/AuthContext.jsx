@@ -3,6 +3,7 @@ import { Box, CircularProgress } from '@mui/material';
 import authService from '../services/authService';
 import { userService } from '../services/userService';
 import cartService, { clearSessionId } from '../services/cartService';
+import { getPermissionsForUser, getRolesForUser } from '../utils/permissions';
 
 export const AuthContext = createContext(null);
 
@@ -65,7 +66,7 @@ export const AuthProvider = ({ children }) => {
     // Merge guest cart into authenticated cart
     try { await cartService.mergeGuestCart(); } catch (_) {}
     clearSessionId();
-    return data;
+    return { ...data, user: fullUser };
   };
 
   const register = async (userData) => {
@@ -77,7 +78,7 @@ export const AuthProvider = ({ children }) => {
     localStorage.setItem('userProfile', JSON.stringify(fullUser));
     try { await cartService.mergeGuestCart(); } catch (_) {}
     clearSessionId();
-    return data;
+    return { ...data, user: fullUser };
   };
 
   const logout = async () => {
@@ -105,6 +106,11 @@ export const AuthProvider = ({ children }) => {
     user,
     isAuthenticated,
     loading,
+    roles: getRolesForUser(user),
+    permissions: getPermissionsForUser(user),
+    hasRole: (role) => getRolesForUser(user).includes(role),
+    hasPermission: (permission) => getPermissionsForUser(user).includes(permission),
+    hasAnyPermission: (permissions = []) => permissions.some((permission) => getPermissionsForUser(user).includes(permission)),
     login,
     register,
     logout,

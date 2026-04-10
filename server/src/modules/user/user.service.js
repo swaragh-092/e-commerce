@@ -1,15 +1,25 @@
 'use strict';
 
-const { sequelize, User, UserProfile, Order, Address, Media } = require('../index');
+const { sequelize, User, UserProfile, Order, Address, Media, Role, Permission } = require('../index');
 const AppError = require('../../utils/AppError');
 const AuditService = require('../audit/audit.service');
 const { getPagination } = require('../../utils/pagination');
 const { ACTIONS, ENTITIES } = require('../../config/constants');
 
+const authzInclude = [
+  {
+    model: Role,
+    as: 'roles',
+    through: { attributes: [] },
+    include: [{ model: Permission, as: 'permissions', through: { attributes: [] } }],
+  },
+];
+
 const getMe = async (userId) => {
   const user = await User.findByPk(userId, {
     include: [
-      { model: UserProfile, as: 'profile' }
+      { model: UserProfile, as: 'profile' },
+      ...authzInclude,
       // addresses can be included in Phase 4 when address module is fully integrated
     ]
   });
@@ -118,14 +128,16 @@ const listAll = async ({ page, limit, status, role }) => {
     limit: lmt,
     offset,
     order: [['createdAt', 'DESC']],
-    attributes: { exclude: ['password'] }
+    attributes: { exclude: ['password'] },
+    include: authzInclude,
   });
 };
 
 const getById = async (id) => {
   const user = await User.findByPk(id, {
     include: [
-      { model: UserProfile, as: 'profile' }
+      { model: UserProfile, as: 'profile' },
+      ...authzInclude,
       // Recent orders excluded — load separately via GET /api/orders?userId=:id
     ],
     attributes: { exclude: ['password'] }

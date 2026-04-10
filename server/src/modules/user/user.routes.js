@@ -2,7 +2,7 @@
 
 const router = require('express').Router();
 const { authenticate } = require('../../middleware/auth.middleware');
-const { authorize } = require('../../middleware/role.middleware');
+const { authorizePermissions } = require('../../middleware/role.middleware');
 const { validate } = require('../../middleware/validate.middleware');
 const { 
   updateProfileSchema, 
@@ -12,6 +12,7 @@ const {
   createAddressSchema,
   updateAddressSchema
 } = require('./user.validation');
+const { PERMISSIONS } = require('../../config/permissions');
 
 const userController = require('./user.controller');
 
@@ -29,8 +30,8 @@ router.delete('/me/addresses/:id', authenticate, userController.deleteAddress);
 router.put('/me/addresses/:id/default', authenticate, userController.setDefaultAddress);
 
 // Admin Endpoints
-router.get('/', authenticate, authorize('admin', 'super_admin'), userController.list);
-router.get('/:id', authenticate, authorize('admin', 'super_admin'), userController.getOne);
-router.put('/:id/status', authenticate, authorize('admin', 'super_admin'), validate(updateStatusSchema), userController.updateStatus);
+router.get('/', authenticate, authorizePermissions(PERMISSIONS.CUSTOMERS_READ), userController.list);
+router.get('/:id', authenticate, authorizePermissions(PERMISSIONS.CUSTOMERS_READ), userController.getOne);
+router.put('/:id/status', authenticate, authorizePermissions(PERMISSIONS.CUSTOMERS_MANAGE), validate(updateStatusSchema), userController.updateStatus);
 
 module.exports = router;

@@ -26,37 +26,54 @@ import PhotoLibraryIcon from '@mui/icons-material/PhotoLibrary';
 import SettingsIcon from '@mui/icons-material/Settings';
 import HistoryIcon from '@mui/icons-material/History';
 import TuneIcon from '@mui/icons-material/Tune';
+import AdminPanelSettingsIcon from '@mui/icons-material/AdminPanelSettings';
 import StoreIcon from '@mui/icons-material/Storefront';
 import ExitIcon from '@mui/icons-material/ExitToApp';
 import { useAuth } from '../hooks/useAuth';
 import { useSettings } from '../hooks/useSettings';
+import { PERMISSIONS } from '../utils/permissions';
 
 const drawerWidth = 240;
 
 // Items with a `feature` key are hidden when that feature is disabled in Settings.
 const ALL_MENU_ITEMS = [
-  { text: 'Dashboard',  path: '/admin',            icon: <DashboardIcon /> },
-  { text: 'Products',   path: '/admin/products',   icon: <InventoryIcon /> },
-  { text: 'Categories', path: '/admin/categories', icon: <CategoryIcon /> },
-  { text: 'Brands',     path: '/admin/brands',     icon: <LocalOfferIcon /> },
-  { text: 'Attributes', path: '/admin/attributes', icon: <TuneIcon /> },
-  { text: 'Orders',     path: '/admin/orders',     icon: <ShoppingCartIcon /> },
-  { text: 'Customers',  path: '/admin/customers',  icon: <PeopleIcon /> },
-  { text: 'Coupons',    path: '/admin/coupons',    icon: <LocalOfferIcon />, feature: 'coupons' },
-  { text: 'Reviews',    path: '/admin/reviews',    icon: <StarIcon />,       feature: 'reviews' },
-  { text: 'Media',      path: '/admin/media',      icon: <PhotoLibraryIcon /> },
-  { text: 'Settings',   path: '/admin/settings',   icon: <SettingsIcon /> },
-  { text: 'Audit Log',  path: '/admin/audit-log',  icon: <HistoryIcon /> },
+  { text: 'Dashboard',  path: '/admin',            icon: <DashboardIcon />, permission: PERMISSIONS.DASHBOARD_VIEW },
+  { text: 'Products',   path: '/admin/products',   icon: <InventoryIcon />, permission: PERMISSIONS.PRODUCTS_READ },
+  { text: 'Categories', path: '/admin/categories', icon: <CategoryIcon />, permission: PERMISSIONS.CATEGORIES_READ },
+  { text: 'Brands',     path: '/admin/brands',     icon: <LocalOfferIcon />, permission: PERMISSIONS.PRODUCTS_READ },
+  { text: 'Attributes', path: '/admin/attributes', icon: <TuneIcon />, permission: PERMISSIONS.ATTRIBUTES_READ },
+  { text: 'Orders',     path: '/admin/orders',     icon: <ShoppingCartIcon />, permission: PERMISSIONS.ORDERS_READ },
+  { text: 'Customers',  path: '/admin/customers',  icon: <PeopleIcon />, permission: PERMISSIONS.CUSTOMERS_READ },
+  { text: 'Coupons',    path: '/admin/coupons',    icon: <LocalOfferIcon />, feature: 'coupons', permission: PERMISSIONS.COUPONS_READ },
+  { text: 'Reviews',    path: '/admin/reviews',    icon: <StarIcon />, feature: 'reviews', permission: PERMISSIONS.REVIEWS_READ },
+  { text: 'Media',      path: '/admin/media',      icon: <PhotoLibraryIcon />, permission: PERMISSIONS.MEDIA_READ },
+  { text: 'Settings',   path: '/admin/settings',   icon: <SettingsIcon />, permission: PERMISSIONS.SETTINGS_READ },
+  {
+    text: 'Access Control',
+    path: '/admin/access-control',
+    icon: <AdminPanelSettingsIcon />,
+    permissions: [
+      PERMISSIONS.ROLES_READ,
+      PERMISSIONS.ROLES_MANAGE,
+      PERMISSIONS.SYSTEM_ROLES_MANAGE,
+      PERMISSIONS.USERS_ASSIGN_ROLES,
+    ],
+  },
+  { text: 'Audit Log',  path: '/admin/audit-log',  icon: <HistoryIcon />, permission: PERMISSIONS.AUDIT_READ },
 ];
 
 const AdminLayout = () => {
-  const { logout, user } = useAuth();
+  const { logout, user, hasAnyPermission, hasPermission } = useAuth();
   const location = useLocation();
   const { settings } = useSettings();
 
   // Hide feature-gated items when the feature is explicitly disabled
   const menuItems = ALL_MENU_ITEMS.filter(
-    (item) => !item.feature || settings?.features?.[item.feature] !== false
+    (item) => (
+      (!item.feature || settings?.features?.[item.feature] !== false)
+      && (!item.permission || hasPermission(item.permission))
+      && (!item.permissions || hasAnyPermission(item.permissions))
+    )
   );
 
   const isActive = (path) =>

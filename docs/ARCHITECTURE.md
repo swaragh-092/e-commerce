@@ -1,7 +1,7 @@
 # E-Commerce Platform — Architecture Documentation (v2)
 
 > **Version**: 2.0  
-> **Last Updated**: 2026-02-28  
+> **Last Updated**: 2026-04-07  
 > **Purpose**: Reusable, fully customizable e-commerce platform — one codebase, one instance per client.
 
 ---
@@ -77,7 +77,7 @@ This platform is designed as a **single, production-ready codebase** that is clo
 │  │        React (Vite) + MUI Theme Engine            │   │
 │  │  ┌──────────────┐    ┌──────────────────────┐     │   │
 │  │  │  Storefront   │    │  Admin Dashboard     │     │   │
-│  │  │  (Customer)   │    │  (Role-gated)        │     │   │
+│  │  │  (Customer)   │    │  (Permission-gated)  │     │   │
 │  │  └──────────────┘    └──────────────────────┘     │   │
 │  │           │                      │                │   │
 │  │           └─────────┬────────────┘                │   │
@@ -97,7 +97,7 @@ This platform is designed as a **single, production-ready codebase** that is clo
 │  ├─────────────────────────────────────────────────┤    │
 │  │            Auth Middleware Layer                 │    │
 │  │  ┌─────────┐ ┌──────────┐ ┌───────────────┐    │    │
-│  │  │ JWT Auth│ │ Role Gate│ │ Feature Gate  │    │    │
+│  │  │ JWT Auth│ │ RBAC Gate│ │ Feature Gate  │    │    │
 │  │  └─────────┘ └──────────┘ └───────────────┘    │    │
 │  ├─────────────────────────────────────────────────┤    │
 │  │               Module Layer                      │    │
@@ -155,13 +155,14 @@ e-commerce/
 │   │   │   │   ├── AccountPage.jsx
 │   │   │   │   ├── LoginPage.jsx
 │   │   │   │   └── RegisterPage.jsx
-│   │   │   └── admin/                  # Admin-only pages (role-gated)
+│   │   │   └── admin/                  # Admin pages (permission-gated)
 │   │   │       ├── DashboardPage.jsx
 │   │   │       ├── ProductsManagePage.jsx
 │   │   │       ├── OrdersManagePage.jsx
 │   │   │       ├── CustomersPage.jsx
 │   │   │       ├── SettingsPage.jsx
-│   │   │       └── AuditLogPage.jsx
+│   │   │       ├── AuditLogPage.jsx
+│   │   │       └── AccessControlPage.jsx
 │   │   ├── layouts/
 │   │   │   ├── StoreLayout.jsx         # Header + Footer wrapper
 │   │   │   └── AdminLayout.jsx         # Sidebar + TopBar wrapper
@@ -182,7 +183,7 @@ e-commerce/
 │   │   │   └── useSettings.js
 │   │   ├── routes/
 │   │   │   ├── AppRoutes.jsx           # Route definitions
-│   │   │   └── ProtectedRoute.jsx      # Role-based route guard
+│   │   │   └── ProtectedRoute.jsx      # Permission-aware route guard
 │   │   ├── theme/
 │   │   │   └── muiTheme.js             # createTheme() from config
 │   │   ├── utils/
@@ -477,7 +478,13 @@ config/default.json (file-based defaults)
 
 ### Module 2 — Authentication & Authorization
 
-**Roles**: `super_admin`, `admin`, `customer`
+**System Roles**: `super_admin`, `admin`, `customer`
+
+**RBAC Model**:
+- `users.role` remains as a legacy compatibility column and base-role fallback.
+- Effective access is derived from DB-backed role assignments and permissions.
+- System roles are seeded into `roles`; custom roles are created in `/admin/access-control`.
+- Reserved access-control permissions stay super-admin-only.
 
 **Features**:
 - Register with email + password (with **password policy** enforcement)
@@ -486,6 +493,7 @@ config/default.json (file-based defaults)
 - Logout (invalidate refresh token)
 - Forgot/reset password (email link via Notification module)
 - Email verification (optional, toggleable)
+- Permission-aware route + API gating across admin features
 
 **Security Measures**:
 | Threat              | Mitigation                                                                                                            |
@@ -505,11 +513,17 @@ config/default.json (file-based defaults)
 | `password`      | STRING          | bcrypt hash (cost 12)              |
 | `firstName`     | STRING          | —                                  |
 | `lastName`      | STRING          | —                                  |
-| `role`          | ENUM            | `super_admin`, `admin`, `customer` |
+| `role`          | ENUM            | Legacy base role / compatibility fallback |
 | `status`        | ENUM            | `active`, `inactive`, `banned`     |
 | `emailVerified` | BOOLEAN         | —                                  |
 | `lastLoginAt`   | TIMESTAMP       | —                                  |
 | `deletedAt`     | TIMESTAMP       | Soft delete (paranoid)             |
+
+**RBAC Tables**:
+- `roles` — seeded system roles plus custom admin/customer-derived roles
+- `permissions` — normalized permission catalog such as `products.read` and `roles.manage`
+- `role_permissions` — many-to-many permission mapping for each role
+- `user_roles` — many-to-many user assignment table (UI currently manages one active assigned role)
 
 **Related Token Tables**:
 - `PasswordResetToken` — `userId`, `token`, `expiresAt`
@@ -526,13 +540,17 @@ config/default.json (file-based defaults)
 | POST   | `/api/auth/reset-password`  | Public | Reset with token         |
 
 **Frontend Components**:
-- `AuthContext` — stores user, tokens, login/logout methods
-- `ProtectedRoute` — wraps routes, checks role:
+- `AuthContext` — stores user, tokens, login/logout methods, derived roles, and derived permissions
+- `ProtectedRoute` — wraps routes, checks permission and role helpers:
   ```jsx
-  <ProtectedRoute roles={['admin', 'super_admin']}>
-    <AdminDashboard />
+  <ProtectedRoute permission="dashboard.view">
+    <AdminLayout />
   </ProtectedRoute>
   ```
+
+**Admin Access Control UI**:
+- `AccessControlPage` lets super admins list roles, inspect permissions, create custom roles, and assign roles to users.
+- Custom roles use `baseRole` of `customer` or `admin`; practical access is permission-driven.
 
 ---
 

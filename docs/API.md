@@ -51,7 +51,7 @@
 | ------ | ------------------ | ---- | ------ | ---------------------------------------------- |
 | GET    | `/settings`        | —    | Public | Get all public settings                        |
 | GET    | `/settings/:group` | —    | Public | Get by group (theme/features/seo/shipping/tax) |
-| PUT    | `/settings`        | ✅    | Admin  | Bulk update settings                           |
+| PUT    | `/settings/bulk`   | ✅    | Admin  | Bulk update settings                           |
 | PUT    | `/settings/:key`   | ✅    | Admin  | Update single setting                          |
 
 ---
@@ -320,6 +320,35 @@
 | `userId`         | string | Filter by admin user                    |
 | `from` / `to`    | date   | Date range                              |
 | `page` / `limit` | number | Pagination                              |
+
+---
+
+## Access Control
+
+| Method | Endpoint                           | Auth | Role        | Description                          |
+| ------ | ---------------------------------- | ---- | ----------- | ------------------------------------ |
+| GET    | `/admin/access-control/roles`      | ✅    | Super Admin | List system + custom roles           |
+| GET    | `/admin/access-control/permissions`| ✅    | Super Admin | List assignable permissions          |
+| POST   | `/admin/access-control/roles`      | ✅    | Super Admin | Create custom role                   |
+| PUT    | `/admin/access-control/roles/:id`  | ✅    | Super Admin | Update custom role                   |
+| GET    | `/admin/access-control/users`      | ✅    | Super Admin | List users with assigned access role |
+| PUT    | `/admin/access-control/users/:id/role` | ✅ | Super Admin | Assign a role to a user              |
+
+### Notes
+- System roles are seeded: `customer`, `admin`, and `super_admin`.
+- Reserved access-control permissions remain super-admin-only.
+- Custom roles use `baseRole` of `customer` or `admin`; permissions determine practical access.
+- Assigning roles prevents self-demotion and demoting the last active super admin.
+
+### Example Create Role Payload
+```json
+{
+  "name": "Catalog Manager",
+  "description": "Manages catalog and categories",
+  "baseRole": "admin",
+  "permissionIds": ["permission-uuid-1", "permission-uuid-2"]
+}
+```
 
 ---
 

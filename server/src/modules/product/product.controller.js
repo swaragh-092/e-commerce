@@ -1,11 +1,14 @@
 'use strict';
 const productService = require('./product.service');
 const { success, error } = require('../../utils/response');
+const { PERMISSIONS, getPermissionsForUser } = require('../../config/permissions');
+
+const hasProductAdminView = (user) => getPermissionsForUser(user).includes(PERMISSIONS.PRODUCTS_READ);
 
 exports.list = async (req, res, next) => {
   try {
     const { page, limit, search, brand, category, categoryId, minPrice, maxPrice, status, saleStatus, sort, sortBy, sortOrder, tags } = req.query;
-    const isAdmin = req.user && ['admin', 'super_admin'].includes(req.user.role);
+    const isAdmin = hasProductAdminView(req.user);
     const filters = { search, brand, category, categoryId, minPrice, maxPrice, status, saleStatus, sort, sortBy, sortOrder, tags };
     const result = await productService.getProducts(filters, page, limit, isAdmin);
     return success(res, result.data, 'Products found', 200, {
@@ -21,7 +24,7 @@ exports.list = async (req, res, next) => {
 
 exports.getBySlug = async (req, res, next) => {
   try {
-    const isAdmin = req.user && ['admin', 'super_admin'].includes(req.user.role);
+    const isAdmin = hasProductAdminView(req.user);
     const product = await productService.getProductBySlug(req.params.slug, { adminView: isAdmin });
     return success(res, { product });
   } catch (err) {

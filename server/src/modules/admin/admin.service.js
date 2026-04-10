@@ -1,8 +1,69 @@
 'use strict';
 
 const { Op, fn, col, literal } = require('sequelize');
+const slugify = require('slugify');
 const db = require('../index');
-const { Order, OrderItem, User, Product } = db;
+const { Order, User, Product, Role, Permission } = db;
+const AppError = require('../../utils/AppError');
+const AuditService = require('../audit/audit.service');
+const { ACTIONS, ENTITIES, ROLES } = require('../../config/constants');
+const {
+  PERMISSIONS,
+  enrichUserAuthorization,
+  RESERVED_SUPER_ADMIN_PERMISSIONS,
+  getPermissionsForUser,
+} = require('../../config/permissions');
+const { getPagination } = require('../../utils/pagination');
+
+const roleInclude = [
+  {
+    model: Permission,
+    as: 'permissions',
+    through: { attributes: [] },
+  },
+];
+
+const userRoleInclude = [
+  {
+    model: Role,
+    as: 'roles',
+    through: { attributes: [] },
+    include: roleInclude,
+  },
+];
+
+const serializeRole = (role) => ({
+  id: role.id,
+  key: role.slug,
+  slug: role.slug,
+  name: role.name,
+  description: role.description,
+  baseRole: role.baseRole,
+  isSystem: Boolean(role.isSystem),
+  isActive: Boolean(role.isActive),
+  permissions: (role.permissions || []).map((permission) => ({
+    id: permission.id,
+    key: permission.key,
+    name: permission.name,
+    group: permission.group,
+    description: permission.description,
+  })),
+});
+
+const serializeAccessUser = (user) => {
+  const enriched = enrichUserAuthorization(user);
+  const assignedRole = Array.isArray(user.roles) && user.roles.length ? serializeRole(user.roles[0]) : null;
+
+  return {
+    ...enriched,
+    assignedRole,
+    roleId: assignedRole?.id || null,
+    roleName: assignedRole?.name || user.role,
+  };
+};
+
+const canManageCustomRoles = (user) => getPermissionsForUser(user).includes(PERMISSIONS.ROLES_MANAGE);
+const canManageSystemRoles = (user) => getPermissionsForUser(user).includes(PERMISSIONS.SYSTEM_ROLES_MANAGE);
 
 /**
  * Overall dashboard stats:
@@ -136,4 +197,248 @@ const getRecentOrders = async () => {
   }));
 };
 
-module.exports = { getStats, getSalesChart, getLowStock, getRecentOrders };
+const getAccessRoles = async () => {
+  const roles = await Role.findAll({
+    include: roleInclude,
+    order: [['isSystem', 'DESC'], ['name', 'ASC']],
+  });
+
+  return roles.map(serializeRole);
+};
+
+const getAccessPermissions = async () => {
+  const permissions = await Permission.findAll({
+    order: [['group', 'ASC'], ['name', 'ASC']],
+  });
+
+  return permissions.map((permission) => ({
+    id: permission.id,
+    key: permission.key,
+    name: permission.name,
+    group: permission.group,
+    description: permission.description,
+    reserved: RESERVED_SUPER_ADMIN_PERMISSIONS.includes(permission.key),
+  }));
+};
+
+const buildRoleSlug = async (name, roleId = null) => {
+  const baseSlug = slugify(name, { lower: true, strict: true, trim: true }) || 'custom-role';
+  let slug = baseSlug;
+  let suffix = 1;
+
+  while (true) {
+    const existingRole = await Role.findOne({ where: { slug } });
+    if (!existingRole || existingRole.id === roleId) {
+      return slug;
+    }
+    slug = `${baseSlug}-${suffix}`;
+    suffix += 1;
+  }
+};
+
+const createAccessRole = async ({ name, description, baseRole, permissionIds }, actingUserId) => {
+  return db.sequelize.transaction(async (transaction) => {
+    const permissions = await Permission.findAll({ where: { id: permissionIds }, transaction });
+    if (permissions.length !== permissionIds.length) {
+      throw new AppError('VALIDATION_ERROR', 400, 'One or more permissions are invalid');
+    }
+
+    if (permissions.some((permission) => RESERVED_SUPER_ADMIN_PERMISSIONS.includes(permission.key))) {
+      throw new AppError('FORBIDDEN', 403, 'Reserved super admin permissions cannot be assigned to custom roles');
+    }
+
+    const role = await Role.create({
+      name: name.trim(),
+      slug: await buildRoleSlug(name),
+      description: description || null,
+      baseRole,
+      isSystem: false,
+      isActive: true,
+    }, { transaction });
+
+    await role.setPermissions(permissionIds, { transaction });
+    const createdRole = await Role.findByPk(role.id, { include: roleInclude, transaction });
+
+    try {
+      await AuditService.log({
+        userId: actingUserId,
+        action: ACTIONS.CREATE,
+        entity: 'Role',
+        entityId: role.id,
+        changes: {
+          name: role.name,
+          baseRole,
+          permissionIds,
+        },
+      }, transaction);
+    } catch (error) {}
+
+    return serializeRole(createdRole);
+  });
+};
+
+const updateAccessRole = async (roleId, payload, actingUser) => {
+  return db.sequelize.transaction(async (transaction) => {
+    const role = await Role.findByPk(roleId, { include: roleInclude, transaction });
+    if (!role) {
+      throw new AppError('NOT_FOUND', 404, 'Role not found');
+    }
+
+    if (role.isSystem && !canManageSystemRoles(actingUser)) {
+      throw new AppError('FORBIDDEN', 403, 'Only super admins can edit system roles');
+    }
+
+    if (!role.isSystem && !canManageCustomRoles(actingUser)) {
+      throw new AppError('FORBIDDEN', 403, 'You do not have permission to edit custom roles');
+    }
+
+    if (payload.permissionIds) {
+      const permissions = await Permission.findAll({ where: { id: payload.permissionIds }, transaction });
+      if (permissions.length !== payload.permissionIds.length) {
+        throw new AppError('VALIDATION_ERROR', 400, 'One or more permissions are invalid');
+      }
+      if (!role.isSystem && permissions.some((permission) => RESERVED_SUPER_ADMIN_PERMISSIONS.includes(permission.key))) {
+        throw new AppError('FORBIDDEN', 403, 'Reserved super admin permissions cannot be assigned to custom roles');
+      }
+      await role.setPermissions(payload.permissionIds, { transaction });
+    }
+
+    const updates = {};
+    if (!role.isSystem && payload.name && payload.name.trim() !== role.name) {
+      updates.name = payload.name.trim();
+      updates.slug = await buildRoleSlug(payload.name, role.id);
+    } else if (role.isSystem && payload.name && payload.name.trim() !== role.name) {
+      throw new AppError('VALIDATION_ERROR', 400, 'System role names cannot be changed');
+    }
+    if (payload.description !== undefined) {
+      updates.description = payload.description || null;
+    }
+    if (!role.isSystem && payload.baseRole) {
+      updates.baseRole = payload.baseRole;
+    } else if (role.isSystem && payload.baseRole && payload.baseRole !== role.baseRole) {
+      throw new AppError('VALIDATION_ERROR', 400, 'System role base role cannot be changed');
+    }
+
+    if (Object.keys(updates).length > 0) {
+      await role.update(updates, { transaction });
+    }
+
+    const updatedRole = await Role.findByPk(role.id, { include: roleInclude, transaction });
+
+    try {
+      await AuditService.log({
+        userId: actingUser.id,
+        action: ACTIONS.UPDATE,
+        entity: 'Role',
+        entityId: role.id,
+        changes: payload,
+      }, transaction);
+    } catch (error) {}
+
+    return serializeRole(updatedRole);
+  });
+};
+
+const listAccessUsers = async ({ page, limit, search, roleId, includeCustomers = false }) => {
+  const { limit: pageSize, offset } = getPagination(page, limit);
+  const where = {};
+  const include = [...userRoleInclude];
+
+  if (roleId) {
+    include[0] = {
+      ...include[0],
+      where: { id: roleId },
+    };
+  }
+
+  if (search) {
+    where[Op.or] = [
+      { email: { [Op.iLike]: `%${search}%` } },
+      { firstName: { [Op.iLike]: `%${search}%` } },
+      { lastName: { [Op.iLike]: `%${search}%` } },
+    ];
+  }
+
+  if (!includeCustomers) {
+    where.role = { [Op.ne]: ROLES.CUSTOMER };
+  }
+
+  const result = await User.findAndCountAll({
+    where,
+    include,
+    distinct: true,
+    limit: pageSize,
+    offset,
+    order: [['createdAt', 'DESC']],
+  });
+
+  return {
+    count: result.count,
+    rows: result.rows.map((user) => serializeAccessUser(user)),
+  };
+};
+
+const updateUserRole = async (userId, roleId, actingUserId) => {
+  return db.sequelize.transaction(async (transaction) => {
+    const user = await User.findByPk(userId, { include: userRoleInclude, transaction });
+    if (!user) {
+      throw new AppError('NOT_FOUND', 404, 'User not found');
+    }
+
+    if (user.id === actingUserId) {
+      throw new AppError('VALIDATION_ERROR', 400, 'You cannot change your own role');
+    }
+
+    const role = await Role.findByPk(roleId, { include: roleInclude, transaction });
+    if (!role || !role.isActive) {
+      throw new AppError('NOT_FOUND', 404, 'Role not found');
+    }
+
+    const previousRole = user.role;
+    const previousAssignedRole = Array.isArray(user.roles) && user.roles.length ? user.roles[0] : null;
+
+    if (previousRole === ROLES.SUPER_ADMIN && role.baseRole !== ROLES.SUPER_ADMIN) {
+      const superAdminCount = await User.count({
+        where: { role: ROLES.SUPER_ADMIN, status: 'active' },
+        transaction,
+      });
+
+      if (superAdminCount <= 1) {
+        throw new AppError('VALIDATION_ERROR', 400, 'You cannot demote the last active super admin');
+      }
+    }
+
+    await user.update({ role: role.baseRole }, { transaction });
+    await user.setRoles([role], { transaction });
+
+    const updatedUser = await User.findByPk(user.id, { include: userRoleInclude, transaction });
+
+    try {
+      await AuditService.log({
+        userId: actingUserId,
+        action: ACTIONS.UPDATE,
+        entity: ENTITIES.USER,
+        entityId: user.id,
+        changes: {
+          baseRole: { old: previousRole, new: role.baseRole },
+          assignedRole: { old: previousAssignedRole?.slug || null, new: role.slug },
+        },
+      }, transaction);
+    } catch (error) {}
+
+    return serializeAccessUser(updatedUser);
+  });
+};
+
+module.exports = {
+  getStats,
+  getSalesChart,
+  getLowStock,
+  getRecentOrders,
+  getAccessRoles,
+  getAccessPermissions,
+  createAccessRole,
+  updateAccessRole,
+  listAccessUsers,
+  updateUserRole,
+};

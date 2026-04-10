@@ -5,6 +5,17 @@ const getStats = () => api.get('/admin/dashboard/stats');
 const getSalesChart = (period = 'monthly') => api.get(`/admin/dashboard/sales-chart?period=${period}`);
 const getLowStock = (threshold = 10) => api.get(`/admin/dashboard/low-stock?threshold=${threshold}`);
 const getRecentOrders = () => api.get('/admin/dashboard/recent-orders');
+const getAccessRoles = () => api.get('/admin/access-control/roles');
+const getAccessPermissions = () => api.get('/admin/access-control/permissions');
+const getAccessUsers = (params = {}) => {
+  const query = new URLSearchParams(
+    Object.fromEntries(Object.entries(params).filter(([, value]) => value != null && value !== ''))
+  ).toString();
+  return api.get(`/admin/access-control/users${query ? `?${query}` : ''}`);
+};
+const createAccessRole = (data) => api.post('/admin/access-control/roles', data);
+const updateAccessRole = (id, data) => api.put(`/admin/access-control/roles/${id}`, data);
+const updateAccessUserRole = (id, roleId) => api.put(`/admin/access-control/users/${id}/role`, { roleId });
 
 // Audit Logs
 const getAuditLogs = (params = {}) => {
@@ -74,6 +85,7 @@ const setDefaultAddress = (id) => api.put(`/users/me/addresses/${id}/default`);
 
 export {
   getStats, getSalesChart, getLowStock, getRecentOrders,
+  getAccessRoles, getAccessPermissions, getAccessUsers, createAccessRole, updateAccessRole, updateAccessUserRole,
   getAuditLogs,
   getUsers, getUserById,
   getAdminReviews, updateReviewStatus, deleteReview,

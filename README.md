@@ -74,8 +74,14 @@ e-commerce/
 
 | Role        | Email              | Password     |
 | ----------- | ------------------ | ------------ |
-| Super Admin | admin@store.com    | Admin123!    |
-| Customer    | customer@store.com | Customer123! |
+| Super Admin | admin@example.com  | Password123! |
+| Customer    | customer@example.com | Password123! |
+
+## Access Control
+
+- Super admins can manage custom roles and assignments from `/admin/access-control`.
+- System roles (`customer`, `admin`, `super_admin`) are seeded and protected.
+- Custom roles inherit a `baseRole` (`customer` or `admin`) for backward compatibility while permissions drive actual access.
 
 ## License
 
