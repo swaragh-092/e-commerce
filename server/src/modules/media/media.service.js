@@ -22,8 +22,8 @@ ensureDirs();
 exports.uploadMedia = async (file) => {
   if (!file) throw new AppError('VALIDATION_ERROR', 400, 'No file provided');
 
-  const fileType = await import('file-type');
-  const typeInfo = await fileType.default.fromBuffer(file.buffer);
+  const { fileTypeFromBuffer } = await import('file-type');
+  const typeInfo = await fileTypeFromBuffer(file.buffer);
 
   if (!typeInfo) throw new AppError('VALIDATION_ERROR', 400, 'Could not determine file type');
 

@@ -28,14 +28,13 @@ import {
   Visibility as PreviewIcon,
   Save as SaveIcon,
 } from '@mui/icons-material';
-import ReactQuill from 'react-quill';
-import 'react-quill/dist/quill.snow.css';
 import PageService from '../../services/pageService';
 import MediaUploader from '../../components/common/MediaUploader';
 import { getMediaUrl } from '../../utils/media';
 import { useNotification } from '../../context/NotificationContext';
 import { useAuth } from '../../hooks/useAuth';
 import { PERMISSIONS } from '../../utils/permissions';
+import RichTextEditor from '../../components/editor/RichTextEditor';
 
 const QUILL_MODULES = {
   toolbar: [
@@ -347,13 +346,12 @@ const PageEditPage = () => {
             {/* Visual Editor */}
             {activeTab === 0 && (
               <Box sx={{ mb: 2 }}>
-                <ReactQuill
-                  theme="snow"
+                <RichTextEditor
                   value={formData.content}
                   onChange={handleContentChange}
                   modules={QUILL_MODULES}
                   formats={QUILL_FORMATS}
-                  style={{ height: '450px', marginBottom: '60px' }}
+                  minHeight={450}
                 />
               </Box>
             )}
