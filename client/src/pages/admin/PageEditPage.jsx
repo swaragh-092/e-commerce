@@ -34,6 +34,8 @@ import PageService from '../../services/pageService';
 import MediaUploader from '../../components/common/MediaUploader';
 import { getMediaUrl } from '../../utils/media';
 import { useNotification } from '../../context/NotificationContext';
+import { useAuth } from '../../hooks/useAuth';
+import { PERMISSIONS } from '../../utils/permissions';
 
 const QUILL_MODULES = {
   toolbar: [
@@ -132,7 +134,10 @@ const PageEditPage = () => {
   const { id } = useParams();
   const navigate = useNavigate();
   const notify = useNotification();
+  const { hasPermission } = useAuth();
   const isNew = !id || id === 'new';
+  const canManagePages = hasPermission(PERMISSIONS.PAGES_MANAGE);
+  const canUploadMedia = hasPermission(PERMISSIONS.MEDIA_UPLOAD);
 
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -194,12 +199,22 @@ const PageEditPage = () => {
   };
 
   const handleBannerUpload = (media) => {
+    if (!canUploadMedia) {
+      notify('You do not have permission to upload media.', 'error');
+      return;
+    }
+
     setFormData((prev) => ({ ...prev, bannerUrl: media.url }));
   };
 
   const handleSave = async (e) => {
     e.preventDefault();
     setSaveError('');
+
+    if (!canManagePages) {
+      setSaveError('You do not have permission to manage pages.');
+      return;
+    }
 
     if (!formData.title.trim()) {
       setSaveError('Page title is required.');
@@ -292,7 +307,7 @@ const PageEditPage = () => {
             variant="contained"
             startIcon={<SaveIcon />}
             onClick={handleSave}
-            disabled={saving}
+            disabled={saving || !canManagePages}
           >
             {saving ? 'Saving…' : 'Save Page'}
           </Button>
@@ -475,14 +490,21 @@ const PageEditPage = () => {
                   color="error"
                   sx={{ mt: 1 }}
                   onClick={() => setFormData((prev) => ({ ...prev, bannerUrl: '' }))}
+                  disabled={!canManagePages}
                 >
                   Remove Banner
                 </Button>
               </Box>
             )}
-            <MediaUploader
-              onUploadSuccess={handleBannerUpload}
-            />
+            {canUploadMedia ? (
+              <MediaUploader
+                onUploadSuccess={handleBannerUpload}
+              />
+            ) : (
+              <Alert severity="info" sx={{ mt: 1 }}>
+                Banner uploads require the media upload permission.
+              </Alert>
+            )}
             <Typography variant="caption" color="text.secondary" display="block" sx={{ mt: 1 }}>
               Recommended: 1920×400px. Shown as a full-width hero on the page.
             </Typography>

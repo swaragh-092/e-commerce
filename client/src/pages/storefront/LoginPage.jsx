@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { Box, Typography, TextField, Button, Alert, useTheme } from '@mui/material';
 import { useNavigate, Link as RouterLink, useLocation } from 'react-router-dom';
 import { useAuth } from '../../hooks/useAuth';
+import { getFirstAccessibleAdminPath } from '../../utils/permissions';
 
 const LoginPage = () => {
   const theme = useTheme();
@@ -24,8 +25,9 @@ const LoginPage = () => {
 
     try {
       const data = await login(formData.email, formData.password);
-      if (Array.isArray(data.user.permissions) && data.user.permissions.includes('dashboard.view')) {
-        navigate('/admin');
+      const adminEntryPath = getFirstAccessibleAdminPath(data.user);
+      if (adminEntryPath) {
+        navigate(adminEntryPath);
       } else {
         navigate('/');
       }

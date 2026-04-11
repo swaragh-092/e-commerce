@@ -18,6 +18,18 @@ const authUserInclude = [
   },
 ];
 
+const getRefreshTokenExpiryDate = () => new Date(Date.now() + 7 * 24 * 60 * 60 * 1000);
+
+const isEmailVerificationRequired = async () => {
+  try {
+    const SettingsService = require('../settings/settings.service');
+    const features = await SettingsService.getByGroup('features');
+    return features?.emailVerification === true;
+  } catch (error) {
+    return false;
+  }
+};
+
 const generateTokens = (user) => {
   const payload = { id: user.id, role: user.role };
   const accessToken = jwt.sign(payload, process.env.JWT_ACCESS_SECRET, { expiresIn: process.env.JWT_ACCESS_EXPIRES || '15m' });
@@ -43,7 +55,7 @@ const register = async (payload) => {
       status: 'active'
     }, { transaction: t });
 
-    const customerRole = await Role.findOne({ where: { slug: 'customer' }, transaction });
+    const customerRole = await Role.findOne({ where: { slug: 'customer' }, transaction: t });
     if (customerRole) {
       await user.setRoles([customerRole], { transaction: t });
     }
@@ -80,7 +92,7 @@ const register = async (payload) => {
     await RefreshToken.create({
       userId: user.id,
       token: tokens.refreshToken,
-      expiresAt: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000), // 7 days
+      expiresAt: getRefreshTokenExpiryDate(),
       createdByIp: 'registration'
     }, { transaction: t });
 
@@ -99,6 +111,12 @@ const login = async (email, password, ipAddress) => {
     throw new AppError('FORBIDDEN', 403, 'Your account is inactive or banned');
   }
 
+  if (await isEmailVerificationRequired()) {
+    if (!user.emailVerified) {
+      throw new AppError('FORBIDDEN', 403, 'Please verify your email before logging in');
+    }
+  }
+
   // Generate tokens
   const tokens = generateTokens(user);
 
@@ -106,7 +124,7 @@ const login = async (email, password, ipAddress) => {
   await RefreshToken.create({
     userId: user.id,
     token: tokens.refreshToken,
-    expiresAt: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000), // 7 days
+    expiresAt: getRefreshTokenExpiryDate(),
     createdByIp: ipAddress
   });
 
@@ -135,7 +153,7 @@ const refresh = async (refreshTokenStr, ipAddress) => {
     const decoded = jwt.verify(refreshTokenStr, process.env.JWT_REFRESH_SECRET);
     const tokenRecord = await RefreshToken.findOne({ where: { token: refreshTokenStr } });
 
-    if (!tokenRecord || tokenRecord.revokedAt) {
+    if (!tokenRecord || tokenRecord.revokedAt || tokenRecord.expiresAt < new Date()) {
       throw new AppError('UNAUTHORIZED', 401, 'Token revoked');
     }
 
@@ -144,12 +162,25 @@ const refresh = async (refreshTokenStr, ipAddress) => {
       throw new AppError('FORBIDDEN', 403, 'User inactive');
     }
 
-    const { accessToken } = generateTokens(user);
-    
-    // In a strict implementation, we would rotate the refresh token here too
-    // For Phase 1, just returning a new access token is sufficient.
+    if (await isEmailVerificationRequired()) {
+      if (!user.emailVerified) {
+        throw new AppError('FORBIDDEN', 403, 'Please verify your email before logging in');
+      }
+    }
 
-    return { accessToken };
+    const tokens = generateTokens(user);
+
+    await sequelize.transaction(async (t) => {
+      await tokenRecord.update({ revokedAt: new Date() }, { transaction: t });
+      await RefreshToken.create({
+        userId: user.id,
+        token: tokens.refreshToken,
+        expiresAt: getRefreshTokenExpiryDate(),
+        createdByIp: ipAddress,
+      }, { transaction: t });
+    });
+
+    return tokens;
   } catch (err) {
     if (err instanceof AppError) throw err;
     throw new AppError('UNAUTHORIZED', 401, 'Invalid or expired refresh token');
@@ -157,18 +188,22 @@ const refresh = async (refreshTokenStr, ipAddress) => {
 };
 
 const logout = async (refreshTokenStr, userId) => {
-  const tokenRecord = await RefreshToken.findOne({ where: { token: refreshTokenStr, userId } });
+  const tokenRecord = await RefreshToken.findOne({ where: { token: refreshTokenStr } });
   if (tokenRecord) {
-    await tokenRecord.destroy(); // Hard delete or you could soft delete / set revokedAt
+    if (userId && tokenRecord.userId !== userId) {
+      throw new AppError('FORBIDDEN', 403, 'You do not have permission to revoke this token');
+    }
+
+    await tokenRecord.update({ revokedAt: new Date() });
   }
   
   try {
       if (AuditService && AuditService.log) {
           await AuditService.log({
-              userId: userId,
+              userId: userId || tokenRecord?.userId,
               action: ACTIONS.LOGOUT,
               entity: ENTITIES.USER,
-              entityId: userId
+              entityId: userId || tokenRecord?.userId
           });
       }
   } catch(e) {}

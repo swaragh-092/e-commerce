@@ -5,7 +5,8 @@ const brandController = require('./brand.controller');
 const brandValidation = require('./brand.validation');
 const { validate } = require('../../middleware/validate.middleware');
 const { authenticate } = require('../../middleware/auth.middleware');
-const { authorize } = require('../../middleware/role.middleware');
+const { authorizePermissions } = require('../../middleware/role.middleware');
+const { PERMISSIONS } = require('../../config/permissions');
 
 const router = express.Router();
 
@@ -16,7 +17,7 @@ router.get('/:slug', brandController.getBrandBySlug);
 router.post(
     '/',
     authenticate,
-    authorize('admin', 'super_admin'),
+    authorizePermissions(PERMISSIONS.PRODUCTS_CREATE),
     validate(brandValidation.createBrandSchema),
     brandController.createBrand
 );
@@ -24,7 +25,7 @@ router.post(
 router.patch(
     '/:id',
     authenticate,
-    authorize('admin', 'super_admin'),
+    authorizePermissions(PERMISSIONS.PRODUCTS_UPDATE),
     validate(brandValidation.updateBrandSchema),
     brandController.updateBrand
 );
@@ -32,7 +33,7 @@ router.patch(
 router.delete(
     '/:id',
     authenticate,
-    authorize('admin', 'super_admin'),
+    authorizePermissions(PERMISSIONS.PRODUCTS_DELETE),
     brandController.deleteBrand
 );
 

@@ -36,10 +36,7 @@ const refresh = async (req, res, next) => {
 
 const logout = async (req, res, next) => {
   try {
-    // Need refresh token from body
-    if (req.body.refreshToken) {
-      await AuthService.logout(req.body.refreshToken, req.user.id);
-    }
+    await AuthService.logout(req.validated.refreshToken, req.user?.id);
     return success(res, null, 'Logged out successfully');
   } catch (err) {
     next(err);

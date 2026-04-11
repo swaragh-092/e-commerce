@@ -16,9 +16,9 @@ const placeOrder = async (req, res, next) => {
 
 const getOrders = async (req, res, next) => {
   try {
-    const { page = 1, limit = 20 } = req.query;
+    const { page = 1, limit = 20, status, search } = req.query;
     const isAdminSession = hasOrderAdminAccess(req.user);
-    const result = await OrderService.getOrders(req.user.id, isAdminSession, page, limit);
+    const result = await OrderService.getOrders(req.user.id, isAdminSession, page, limit, { status, search });
     return paginated(res, result.rows, result.count, page, limit);
   } catch (err) {
     next(err);
@@ -38,6 +38,8 @@ const getOrderById = async (req, res, next) => {
 const updateStatus = async (req, res, next) => {
   try {
     const order = await OrderService.updateStatus(req.params.id, req.validated.status, req.user.id);
+    req._auditAction = 'STATUS_CHANGE';
+    req._auditChanges = { status: req.validated.status };
     return success(res, order, 'Order status updated');
   } catch (err) {
     next(err);
@@ -53,10 +55,22 @@ const cancelOrder = async (req, res, next) => {
   }
 };
 
+const refundOrder = async (req, res, next) => {
+  try {
+    const order = await OrderService.refundOrder(req.params.id, req.user.id);
+    req._auditAction = 'STATUS_CHANGE';
+    req._auditChanges = { status: 'refunded' };
+    return success(res, order, 'Order refunded successfully');
+  } catch (err) {
+    next(err);
+  }
+};
+
 module.exports = {
   placeOrder,
   getOrders,
   getOrderById,
   updateStatus,
   cancelOrder,
+  refundOrder,
 };

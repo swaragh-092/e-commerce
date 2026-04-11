@@ -19,6 +19,8 @@ import { getMediaUrl } from '../../utils/media';
 import { useCurrency, useSettings } from '../../hooks/useSettings';
 import { useNotification } from '../../context/NotificationContext';
 import { formatSaleDateTime, isEndingSoon } from '../../utils/pricing';
+import { useAuth } from '../../hooks/useAuth';
+import { PERMISSIONS } from '../../utils/permissions';
 
 const STOREFRONT_BASE = (import.meta.env.VITE_APP_URL || 'http://localhost:3000');
 const toDateTimeLocal = (value) => {
@@ -35,7 +37,13 @@ const ProductsManagePage = () => {
   const { formatPrice } = useCurrency();
   const { settings } = useSettings();
   const notify = useNotification();
+  const { hasPermission } = useAuth();
   const sales = settings?.sales || {};
+  const canCreateProducts = hasPermission(PERMISSIONS.PRODUCTS_CREATE);
+  const canUpdateProducts = hasPermission(PERMISSIONS.PRODUCTS_UPDATE);
+  const canDeleteProducts = hasPermission(PERMISSIONS.PRODUCTS_DELETE);
+  const canBulkSaleProducts = hasPermission(PERMISSIONS.PRODUCTS_BULK_SALE);
+  const canBulkModify = canUpdateProducts || canDeleteProducts || canBulkSaleProducts;
 
   const [rows, setRows] = useState([]);
   const [total, setTotal] = useState(0);
@@ -83,7 +91,12 @@ const ProductsManagePage = () => {
     saleEndAt: '',
     saving: false,
   });
-  const openEditDialog = (row) =>
+  const openEditDialog = (row) => {
+    if (!canUpdateProducts) {
+      notify('You do not have permission to update products.', 'error');
+      return;
+    }
+
     setEditDialog({
       open: true,
       row,
@@ -97,7 +110,13 @@ const ProductsManagePage = () => {
       status: row.status || 'draft',
       saving: false,
     });
+  };
   const handleQuickSave = async () => {
+    if (!canUpdateProducts) {
+      notify('You do not have permission to update products.', 'error');
+      return;
+    }
+
     setEditDialog((s) => ({ ...s, saving: true }));
     try {
       const payload = {
@@ -207,10 +226,21 @@ const ProductsManagePage = () => {
   };
 
   // ── Actions ─────────────────────────────────────────────────
-  const confirmDelete = (id, name, bulk = false) =>
+  const confirmDelete = (id, name, bulk = false) => {
+    if (!canDeleteProducts) {
+      notify('You do not have permission to delete products.', 'error');
+      return;
+    }
+
     setDeleteDialog({ open: true, id, name, bulk });
+  };
 
   const handleDelete = async () => {
+    if (!canDeleteProducts) {
+      notify('You do not have permission to delete products.', 'error');
+      return;
+    }
+
     const { id, bulk } = deleteDialog;
     setDeleteDialog({ open: false, id: null, name: '', bulk: false });
     try {
@@ -229,6 +259,11 @@ const ProductsManagePage = () => {
   };
 
   const handleBulkStatus = async (newStatus) => {
+    if (!canUpdateProducts) {
+      notify('You do not have permission to update products.', 'error');
+      return;
+    }
+
     try {
       await Promise.all(selectedIds.map((sid) => updateProduct(sid, { status: newStatus })));
       setRows((prev) =>
@@ -242,6 +277,11 @@ const ProductsManagePage = () => {
   };
 
   const handleBulkSale = async () => {
+    if (!canBulkSaleProducts) {
+      notify('You do not have permission to apply bulk sales.', 'error');
+      return;
+    }
+
     setBulkSaleDialog((s) => ({ ...s, saving: true }));
     try {
       const payload = bulkSaleDialog.mode === 'clear'
@@ -267,6 +307,11 @@ const ProductsManagePage = () => {
   };
 
   const handleToggleStatus = async (row) => {
+    if (!canUpdateProducts) {
+      notify('You do not have permission to update products.', 'error');
+      return;
+    }
+
     const newStatus = row.status === 'published' ? 'draft' : 'published';
     try {
       await updateProduct(row.id, { status: newStatus });
@@ -452,16 +497,20 @@ const ProductsManagePage = () => {
       sortable: false,
       renderCell: ({ row }) => (
         <Stack direction="row" spacing={0.25}>
-          <Tooltip title="Quick edit stock, pricing and status">
-            <IconButton size="small" color="primary" onClick={() => openEditDialog(row)}>
-              <EditNoteIcon fontSize="small" />
-            </IconButton>
-          </Tooltip>
-          <Tooltip title="Edit product">
-            <IconButton size="small" onClick={() => navigate(`/admin/products/${row.id}/edit`)}>
-              <EditIcon fontSize="small" />
-            </IconButton>
-          </Tooltip>
+          {canUpdateProducts && (
+            <Tooltip title="Quick edit stock, pricing and status">
+              <IconButton size="small" color="primary" onClick={() => openEditDialog(row)}>
+                <EditNoteIcon fontSize="small" />
+              </IconButton>
+            </Tooltip>
+          )}
+          {canUpdateProducts && (
+            <Tooltip title="Edit product">
+              <IconButton size="small" onClick={() => navigate(`/admin/products/${row.id}/edit`)}>
+                <EditIcon fontSize="small" />
+              </IconButton>
+            </Tooltip>
+          )}
           <Tooltip title="View on storefront">
             <IconButton
               size="small"
@@ -473,11 +522,13 @@ const ProductsManagePage = () => {
               <OpenInNewIcon fontSize="small" />
             </IconButton>
           </Tooltip>
-          <Tooltip title="Delete product">
-            <IconButton size="small" color="error" onClick={() => confirmDelete(row.id, row.name)}>
-              <DeleteIcon fontSize="small" />
-            </IconButton>
-          </Tooltip>
+          {canDeleteProducts && (
+            <Tooltip title="Delete product">
+              <IconButton size="small" color="error" onClick={() => confirmDelete(row.id, row.name)}>
+                <DeleteIcon fontSize="small" />
+              </IconButton>
+            </Tooltip>
+          )}
         </Stack>
       ),
     },
@@ -495,9 +546,11 @@ const ProductsManagePage = () => {
           <Button variant="outlined" startIcon={<DownloadIcon />} onClick={handleExportCSV} disabled={rows.length === 0}>
             Export CSV
           </Button>
-          <Button variant="contained" startIcon={<AddIcon />} component={Link} to="/admin/products/new">
-            Add Product
-          </Button>
+          {canCreateProducts && (
+            <Button variant="contained" startIcon={<AddIcon />} component={Link} to="/admin/products/new">
+              Add Product
+            </Button>
+          )}
         </Stack>
       </Box>
 
@@ -561,7 +614,7 @@ const ProductsManagePage = () => {
       </Stack>
 
       {/* ── Bulk actions bar (only shown when rows are selected) ── */}
-      {selectedIds.length > 0 && (
+      {selectedIds.length > 0 && canBulkModify && (
         <Paper
           elevation={0}
           sx={{
@@ -574,28 +627,34 @@ const ProductsManagePage = () => {
           <Typography variant="body2" fontWeight={600} color="primary.main">
             {selectedIds.length} selected
           </Typography>
-          <Button
-            size="small" variant="outlined" color="success"
-            startIcon={<CheckCircleIcon />}
-            onClick={() => handleBulkStatus('published')}
-          >
-            Publish
-          </Button>
-          <Button
-            size="small" variant="outlined" color="inherit"
-            startIcon={<RemoveCircleIcon />}
-            onClick={() => handleBulkStatus('draft')}
-          >
-            Set Draft
-          </Button>
-          <Button
-            size="small" variant="outlined" color="error"
-            startIcon={<DeleteSweepIcon />}
-            onClick={() => confirmDelete(null, `${selectedIds.length} products`, true)}
-          >
-            Delete
-          </Button>
-          {sales.allowBulkSales !== false && (
+          {canUpdateProducts && (
+            <>
+              <Button
+                size="small" variant="outlined" color="success"
+                startIcon={<CheckCircleIcon />}
+                onClick={() => handleBulkStatus('published')}
+              >
+                Publish
+              </Button>
+              <Button
+                size="small" variant="outlined" color="inherit"
+                startIcon={<RemoveCircleIcon />}
+                onClick={() => handleBulkStatus('draft')}
+              >
+                Set Draft
+              </Button>
+            </>
+          )}
+          {canDeleteProducts && (
+            <Button
+              size="small" variant="outlined" color="error"
+              startIcon={<DeleteSweepIcon />}
+              onClick={() => confirmDelete(null, `${selectedIds.length} products`, true)}
+            >
+              Delete
+            </Button>
+          )}
+          {sales.allowBulkSales !== false && canBulkSaleProducts && (
             <>
               <Button size="small" variant="outlined" onClick={() => setBulkSaleDialog({ open: true, mode: 'apply', saleType: 'percentage', value: '', saleLabel: '', saleStartAt: '', saleEndAt: '', saving: false })}>
                 Apply Sale
@@ -625,7 +684,7 @@ const ProductsManagePage = () => {
           sortingMode="server"
           sortModel={sortModel}
           onSortModelChange={(m) => { setSortModel(m); setPaginationModel((p) => ({ ...p, page: 0 })); }}
-          checkboxSelection
+          checkboxSelection={canBulkModify}
           rowSelectionModel={selectedIds}
           onRowSelectionModelChange={(ids) => setSelectedIds(ids)}
           disableRowSelectionOnClick
@@ -808,7 +867,7 @@ const ProductsManagePage = () => {
         </DialogActions>
       </Dialog>
 
-      {sales.allowBulkSales !== false && <Dialog
+      {sales.allowBulkSales !== false && canBulkSaleProducts && <Dialog
         open={bulkSaleDialog.open}
         onClose={() => !bulkSaleDialog.saving && setBulkSaleDialog((s) => ({ ...s, open: false }))}
         maxWidth="xs"

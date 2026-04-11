@@ -18,16 +18,11 @@ import PageSEO from '../../components/common/PageSEO';
 import AppliedDiscountsSummary from '../../components/orders/AppliedDiscountsSummary';
 import { useCurrency } from '../../hooks/useSettings';
 import { userService } from '../../services/userService';
-
-const ORDER_STATUS_COLOR = {
-  pending_payment: 'warning',
-  paid: 'info',
-  processing: 'info',
-  shipped: 'primary',
-  delivered: 'success',
-  cancelled: 'error',
-  refunded: 'default',
-};
+import {
+  getOrderStatusColor,
+  getOrderStatusLabel,
+  isOrderCustomerCancelableStatus,
+} from '../../utils/orderWorkflow';
 
 const OrderDetailPage = () => {
   const { id } = useParams();
@@ -75,7 +70,7 @@ const OrderDetailPage = () => {
   );
   const appliedDiscounts = Array.isArray(order?.appliedDiscounts) ? order.appliedDiscounts : [];
   const address = order?.shippingAddressSnapshot;
-  const canCancel = ['pending_payment', 'processing'].includes(order?.status);
+  const canCancel = isOrderCustomerCancelableStatus(order?.status);
 
   if (loading) {
     return (
@@ -113,7 +108,7 @@ const OrderDetailPage = () => {
           </Typography>
         </Box>
         <Box sx={{ display: 'flex', alignItems: 'flex-start', gap: 1, flexWrap: 'wrap' }}>
-          <Chip label={order.status} color={ORDER_STATUS_COLOR[order.status] || 'default'} />
+          <Chip label={getOrderStatusLabel(order.status)} color={getOrderStatusColor(order.status)} />
           {canCancel && (
             <Button color="error" variant="outlined" onClick={handleCancel} disabled={actionLoading}>
               {actionLoading ? 'Cancelling…' : 'Cancel order'}

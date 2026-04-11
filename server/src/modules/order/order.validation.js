@@ -1,5 +1,6 @@
 'use strict';
 const Joi = require('joi');
+const { ORDER_STATUS_VALUES } = require('../../utils/orderWorkflow');
 
 const placeOrderSchema = Joi.object({
     shippingAddressId: Joi.string().uuid().required(),
@@ -14,7 +15,7 @@ const placeOrderSchema = Joi.object({
 });
 
 const updateOrderStatusSchema = Joi.object({
-    status: Joi.string().valid('pending_payment', 'paid', 'processing', 'shipped', 'delivered', 'cancelled', 'refunded').required()
+    status: Joi.string().valid(...ORDER_STATUS_VALUES).required()
 });
 
 module.exports = {

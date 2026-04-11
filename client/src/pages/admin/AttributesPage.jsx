@@ -10,13 +10,16 @@ import {
   ExpandMore as ExpandMoreIcon, ExpandLess as ExpandLessIcon,
 } from '@mui/icons-material';
 import attributeService from '../../services/attributeService';
+import { useAuth } from '../../hooks/useAuth';
+import { PERMISSIONS } from '../../utils/permissions';
 
 // ─── Attribute Values Inline Panel ───────────────────────────────────────────
-const ValuesPanel = ({ attribute, onRefresh }) => {
+const ValuesPanel = ({ attribute, onRefresh, canManage }) => {
   const [newValue, setNewValue] = useState('');
   const [saving, setSaving] = useState(false);
 
   const handleAdd = async () => {
+    if (!canManage) return;
     if (!newValue.trim()) return;
     try {
       setSaving(true);
@@ -31,6 +34,7 @@ const ValuesPanel = ({ attribute, onRefresh }) => {
   };
 
   const handleRemove = async (valueId) => {
+    if (!canManage) return;
     if (!window.confirm('Remove this value?')) return;
     try {
       await attributeService.removeAttributeValue(attribute.id, valueId);
@@ -52,7 +56,7 @@ const ValuesPanel = ({ attribute, onRefresh }) => {
             key={v.id}
             label={v.value}
             size="small"
-            onDelete={() => handleRemove(v.id)}
+            onDelete={canManage ? () => handleRemove(v.id) : undefined}
           />
         ))}
       </Box>
@@ -65,7 +69,7 @@ const ValuesPanel = ({ attribute, onRefresh }) => {
           onKeyDown={(e) => e.key === 'Enter' && handleAdd()}
           sx={{ width: 220 }}
         />
-        <Button variant="outlined" size="small" onClick={handleAdd} disabled={saving || !newValue.trim()}>
+        <Button variant="outlined" size="small" onClick={handleAdd} disabled={!canManage || saving || !newValue.trim()}>
           Add
         </Button>
       </Box>
@@ -75,6 +79,7 @@ const ValuesPanel = ({ attribute, onRefresh }) => {
 
 // ─── Main Page ────────────────────────────────────────────────────────────────
 const AttributesPage = () => {
+  const { hasPermission } = useAuth();
   const [attributes, setAttributes] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
@@ -84,6 +89,7 @@ const AttributesPage = () => {
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editing, setEditing] = useState(null);
   const [formData, setFormData] = useState({ name: '', type: 'select', isRequired: false });
+  const canManageAttributes = hasPermission(PERMISSIONS.ATTRIBUTES_MANAGE);
 
   const fetchAttributes = useCallback(async () => {
     try {
@@ -104,12 +110,14 @@ const AttributesPage = () => {
 
   // ─── Dialog handlers ────────────────────────────────────────────────────────
   const openCreate = () => {
+    if (!canManageAttributes) return;
     setEditing(null);
     setFormData({ name: '', type: 'select', isRequired: false });
     setDialogOpen(true);
   };
 
   const openEdit = (attr) => {
+    if (!canManageAttributes) return;
     setEditing(attr);
     setFormData({ name: attr.name, type: attr.type || 'select', isRequired: attr.isRequired || false });
     setDialogOpen(true);
@@ -121,6 +129,7 @@ const AttributesPage = () => {
   };
 
   const handleSave = async () => {
+    if (!canManageAttributes) return;
     try {
       if (editing) {
         await attributeService.updateAttribute(editing.id, formData);
@@ -135,6 +144,7 @@ const AttributesPage = () => {
   };
 
   const handleDelete = async (id) => {
+    if (!canManageAttributes) return;
     if (!window.confirm('Delete this attribute template? This will also remove all its values and category links.')) return;
     try {
       await attributeService.deleteAttribute(id);
@@ -152,9 +162,11 @@ const AttributesPage = () => {
     <Box sx={{ p: 3 }}>
       <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 3 }}>
         <Typography variant="h5" fontWeight="bold">Attribute Templates</Typography>
-        <Button variant="contained" startIcon={<AddIcon />} onClick={openCreate}>
-          New Attribute
-        </Button>
+        {canManageAttributes && (
+          <Button variant="contained" startIcon={<AddIcon />} onClick={openCreate}>
+            New Attribute
+          </Button>
+        )}
       </Box>
 
       {error && <Alert severity="error" sx={{ mb: 2 }}>{error}</Alert>}
@@ -201,12 +213,12 @@ const AttributesPage = () => {
                     </TableCell>
                     <TableCell align="right">
                       <Tooltip title="Edit">
-                        <IconButton size="small" onClick={() => openEdit(attr)}>
+                        <IconButton size="small" onClick={() => openEdit(attr)} disabled={!canManageAttributes}>
                           <EditIcon fontSize="small" />
                         </IconButton>
                       </Tooltip>
                       <Tooltip title="Delete">
-                        <IconButton size="small" color="error" onClick={() => handleDelete(attr.id)}>
+                        <IconButton size="small" color="error" onClick={() => handleDelete(attr.id)} disabled={!canManageAttributes}>
                           <DeleteIcon fontSize="small" />
                         </IconButton>
                       </Tooltip>
@@ -215,7 +227,7 @@ const AttributesPage = () => {
                   <TableRow>
                     <TableCell colSpan={4} sx={{ p: 0, border: 0 }}>
                       <Collapse in={!!expanded[attr.id]} unmountOnExit>
-                        <ValuesPanel attribute={attr} onRefresh={fetchAttributes} />
+                        <ValuesPanel attribute={attr} onRefresh={fetchAttributes} canManage={canManageAttributes} />
                       </Collapse>
                     </TableCell>
                   </TableRow>
@@ -255,7 +267,7 @@ const AttributesPage = () => {
         </DialogContent>
         <DialogActions sx={{ px: 3, pb: 2 }}>
           <Button onClick={handleDialogClose}>Cancel</Button>
-          <Button variant="contained" onClick={handleSave} disabled={!formData.name.trim()}>
+          <Button variant="contained" onClick={handleSave} disabled={!canManageAttributes || !formData.name.trim()}>
             {editing ? 'Save Changes' : 'Create'}
           </Button>
         </DialogActions>

@@ -5,7 +5,8 @@ const pageController = require('./page.controller');
 const pageValidation = require('./page.validation');
 const { validate } = require('../../middleware/validate.middleware');
 const { authenticate } = require('../../middleware/auth.middleware');
-const { authorize } = require('../../middleware/role.middleware');
+const { authorizeAnyPermission, authorizePermissions } = require('../../middleware/role.middleware');
+const { PERMISSIONS } = require('../../config/permissions');
 const sanitizeHtml = require('sanitize-html');
 
 const router = express.Router();
@@ -43,7 +44,7 @@ router.get('/public/:slug', pageController.getPageBySlug);
 router.get(
     '/',
     authenticate,
-    authorize('admin', 'super_admin'),
+    authorizeAnyPermission(PERMISSIONS.PAGES_READ, PERMISSIONS.PAGES_MANAGE),
     validate(pageValidation.queryPageSchema, 'query'),
     pageController.adminGetPages
 );
@@ -51,14 +52,14 @@ router.get(
 router.get(
     '/:id',
     authenticate,
-    authorize('admin', 'super_admin'),
+    authorizeAnyPermission(PERMISSIONS.PAGES_READ, PERMISSIONS.PAGES_MANAGE),
     pageController.adminGetPageById
 );
 
 router.post(
     '/',
     authenticate,
-    authorize('admin', 'super_admin'),
+    authorizePermissions(PERMISSIONS.PAGES_MANAGE),
     sanitizeBodyExceptContent,
     validate(pageValidation.createPageSchema),
     pageController.adminCreatePage
@@ -67,7 +68,7 @@ router.post(
 router.put(
     '/:id',
     authenticate,
-    authorize('admin', 'super_admin'),
+    authorizePermissions(PERMISSIONS.PAGES_MANAGE),
     sanitizeBodyExceptContent,
     validate(pageValidation.updatePageSchema),
     pageController.adminUpdatePage
@@ -76,7 +77,7 @@ router.put(
 router.delete(
     '/:id',
     authenticate,
-    authorize('admin', 'super_admin'),
+    authorizePermissions(PERMISSIONS.PAGES_MANAGE),
     pageController.adminDeletePage
 );
 

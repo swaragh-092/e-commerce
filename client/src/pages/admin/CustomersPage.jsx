@@ -19,6 +19,8 @@ import CheckCircleIcon from '@mui/icons-material/CheckCircle';
 import { getUsers, getUserById } from '../../services/adminService';
 import api from '../../services/api';
 import { useNotification } from '../../context/NotificationContext';
+import { useAuth } from '../../hooks/useAuth';
+import { PERMISSIONS } from '../../utils/permissions';
 
 const CustomersPage = () => {
   const [rows, setRows] = useState([]);
@@ -27,6 +29,8 @@ const CustomersPage = () => {
   const [paginationModel, setPaginationModel] = useState({ page: 0, pageSize: 20 });
   const [search, setSearch] = useState('');
   const notify = useNotification();
+  const { hasPermission } = useAuth();
+  const canManageCustomers = hasPermission(PERMISSIONS.CUSTOMERS_MANAGE);
 
   const fetchUsers = useCallback(() => {
     setLoading(true);
@@ -49,6 +53,11 @@ const CustomersPage = () => {
   }, [fetchUsers]);
 
   const handleBan = async (id, currentStatus) => {
+    if (!canManageCustomers) {
+      notify('You do not have permission to manage customers.', 'error');
+      return;
+    }
+
     const newStatus = currentStatus === 'banned' ? 'active' : 'banned';
     try {
       await api.put(`/users/${id}/status`, { status: newStatus });
@@ -103,6 +112,7 @@ const CustomersPage = () => {
             size="small"
             color={row.status === 'banned' ? 'success' : 'error'}
             onClick={() => handleBan(row.id, row.status)}
+            disabled={!canManageCustomers}
           >
             {row.status === 'banned' ? (
               <CheckCircleIcon fontSize="small" />

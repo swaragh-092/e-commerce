@@ -57,7 +57,7 @@ const getAllOrders = (params = {}) => {
 };
 const getOrderById = (id) => api.get(`/orders/${id}`);
 const updateOrderStatus = (id, status) => api.put(`/orders/${id}/status`, { status });
-const refundOrder = (id) => api.post(`/payments/${id}/refund`);
+const refundOrder = (id) => api.post(`/orders/${id}/refund`);
 
 // Settings bulk update
 const updateSettings = (settings) => api.put('/settings/bulk', settings);

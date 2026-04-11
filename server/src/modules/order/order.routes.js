@@ -15,5 +15,6 @@ router.post('/:id/cancel', authenticate, orderController.cancelOrder);
 
 // Admin
 router.put('/:id/status', authenticate, authorizePermissions(PERMISSIONS.ORDERS_UPDATE_STATUS), validate(updateOrderStatusSchema), auditLog('Order'), orderController.updateStatus);
+router.post('/:id/refund', authenticate, authorizePermissions(PERMISSIONS.ORDERS_REFUND), auditLog('Order'), orderController.refundOrder);
 
 module.exports = router;

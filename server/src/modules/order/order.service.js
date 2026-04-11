@@ -1,6 +1,22 @@
 'use strict';
 const { Op } = require('sequelize');
-const { sequelize, Order, OrderItem, Cart, CartItem, Product, ProductVariant, Address, Coupon, CouponUsage, Setting, Category, Brand } = require('../index');
+const {
+    sequelize,
+    Order,
+    OrderItem,
+    Cart,
+    CartItem,
+    Product,
+    ProductVariant,
+    Address,
+    Coupon,
+    CouponUsage,
+    Setting,
+    Category,
+    Brand,
+    User,
+    Payment,
+} = require('../index');
 const AppError = require('../../utils/AppError');
 const AuditService = require('../audit/audit.service');
 const CouponService = require('../coupon/coupon.service');
@@ -8,6 +24,30 @@ const PaymentService = require('../payment/payment.service');
 const { getPagination } = require('../../utils/pagination');
 const { ACTIONS, ENTITIES } = require('../../config/constants');
 const { getVariantUnitPrice } = require('../product/product.pricing');
+const {
+    ORDER_DEFAULT_STATUS,
+    getAllowedNextStatuses,
+    isCustomerCancelableOrderStatus,
+    isRefundableOrderStatus,
+} = require('../../utils/orderWorkflow');
+
+const ADMIN_ORDER_LIST_USER_ATTRIBUTES = ['id', 'firstName', 'lastName', 'email'];
+const ADMIN_ORDER_PAYMENT_ATTRIBUTES = ['id', 'provider', 'status', 'amount', 'currency', 'transactionId', 'createdAt', 'updatedAt'];
+
+const ensureValidStatusTransition = (currentStatus, nextStatus) => {
+    if (currentStatus === nextStatus) {
+        return;
+    }
+
+    const allowedStatuses = getAllowedNextStatuses(currentStatus);
+    if (!allowedStatuses.includes(nextStatus)) {
+        throw new AppError(
+            'VALIDATION_ERROR',
+            400,
+            `Cannot change order status from ${currentStatus} to ${nextStatus}`
+        );
+    }
+};
 
 // Utility to fetch settings
 const getSetting = async (key, defaultVal) => {
@@ -230,7 +270,7 @@ const placeOrder = async (userId, payload) => {
         const order = await Order.create({
             orderNumber,
             userId,
-            status: 'pending_payment',
+            status: ORDER_DEFAULT_STATUS,
             subtotal,
             tax: totalTax,
             shippingCost,
@@ -302,15 +342,50 @@ const placeOrder = async (userId, payload) => {
     return { order, clientSecret };
 };
 
-const getOrders = async (userId, isAdmin, page = 1, limit = 20) => {
+const getOrders = async (userId, isAdmin, page = 1, limit = 20, filters = {}) => {
     const { limit: lmt, offset } = getPagination(page, limit);
     const where = isAdmin ? {} : { userId };
 
+    const normalizedStatus = typeof filters.status === 'string' ? filters.status.trim() : '';
+    const normalizedSearch = typeof filters.search === 'string' ? filters.search.trim() : '';
+
+    if (normalizedStatus) {
+        where.status = normalizedStatus;
+    }
+
+    const include = [];
+
+    if (isAdmin) {
+        include.push({
+            model: User,
+            attributes: ADMIN_ORDER_LIST_USER_ATTRIBUTES,
+            required: false,
+        });
+        include.push({
+            model: Payment,
+            attributes: ADMIN_ORDER_PAYMENT_ATTRIBUTES,
+            required: false,
+        });
+
+        if (normalizedSearch) {
+            const searchPattern = `%${normalizedSearch}%`;
+            where[Op.or] = [
+                { orderNumber: { [Op.iLike]: searchPattern } },
+                { '$User.firstName$': { [Op.iLike]: searchPattern } },
+                { '$User.lastName$': { [Op.iLike]: searchPattern } },
+                { '$User.email$': { [Op.iLike]: searchPattern } },
+            ];
+        }
+    }
+
     return Order.findAndCountAll({
         where,
+        include,
         limit: lmt,
         offset,
         order: [['createdAt', 'DESC']],
+        distinct: true,
+        subQuery: false,
     });
 };
 
@@ -318,7 +393,19 @@ const getOrderById = async (id, userId, isAdmin) => {
     const where = isAdmin ? { id } : { id, userId };
     const order = await Order.findOne({
         where,
-        include: [{ model: OrderItem, as: 'items' }]
+        include: [
+            {
+                model: OrderItem,
+                as: 'items',
+                include: [
+                    { model: Product, as: 'product', attributes: ['id', 'name', 'slug'], required: false },
+                    { model: ProductVariant, as: 'variant', attributes: ['id', 'name', 'sku'], required: false },
+                ],
+            },
+            { model: User, attributes: ADMIN_ORDER_LIST_USER_ATTRIBUTES, required: false },
+            { model: Payment, attributes: ADMIN_ORDER_PAYMENT_ATTRIBUTES, required: false },
+            { model: Coupon, attributes: ['id', 'code', 'name'], required: false },
+        ],
     });
 
     if (!order) throw new AppError('NOT_FOUND', 404, 'Order not found');
@@ -331,6 +418,7 @@ const updateStatus = async (id, status, actingUserId) => {
         if (!order) throw new AppError('NOT_FOUND', 404, 'Order not found');
 
         const before = order.toJSON();
+        ensureValidStatusTransition(order.status, status);
         await order.update({ status }, { transaction: t });
 
         try {
@@ -348,12 +436,72 @@ const updateStatus = async (id, status, actingUserId) => {
     });
 };
 
+const refundOrder = async (id, actingUserId) => {
+    return sequelize.transaction(async (t) => {
+        const order = await Order.findByPk(id, {
+            include: [{ model: Payment, attributes: ADMIN_ORDER_PAYMENT_ATTRIBUTES, required: false }],
+            transaction: t,
+            lock: t.LOCK.UPDATE,
+        });
+
+        if (!order) {
+            throw new AppError('NOT_FOUND', 404, 'Order not found');
+        }
+
+        if (!isRefundableOrderStatus(order.status)) {
+            throw new AppError('VALIDATION_ERROR', 400, 'Only paid, processing, shipped, or delivered orders can be refunded');
+        }
+
+        const previousStatus = order.status;
+        await order.update({ status: 'refunded' }, { transaction: t });
+
+        if (order.Payment && order.Payment.status !== 'refunded') {
+            const currentMetadata = order.Payment.metadata && typeof order.Payment.metadata === 'object'
+                ? order.Payment.metadata
+                : {};
+
+            await order.Payment.update({
+                status: 'refunded',
+                metadata: {
+                    ...currentMetadata,
+                    manualRefund: {
+                        refundedAt: new Date().toISOString(),
+                        refundedBy: actingUserId,
+                    },
+                },
+            }, { transaction: t });
+        }
+
+        try {
+            if (AuditService && AuditService.log) {
+                await AuditService.log({
+                    userId: actingUserId,
+                    action: ACTIONS.STATUS_CHANGE,
+                    entity: ENTITIES.ORDER,
+                    entityId: id,
+                    changes: { before: previousStatus, after: 'refunded' },
+                }, t);
+            }
+        } catch (err) {}
+
+        return Order.findByPk(id, {
+            include: [
+                { model: OrderItem, as: 'items' },
+                { model: User, attributes: ADMIN_ORDER_LIST_USER_ATTRIBUTES, required: false },
+                { model: Payment, attributes: ADMIN_ORDER_PAYMENT_ATTRIBUTES, required: false },
+                { model: Coupon, attributes: ['id', 'code', 'name'], required: false },
+            ],
+            transaction: t,
+        });
+    });
+};
+
 const cancelOrder = async (id, userId) => {
     return sequelize.transaction(async (t) => {
         const order = await Order.findOne({ where: { id, userId }, include: [{ model: OrderItem, as: 'items' }], transaction: t });
         if (!order) throw new AppError('NOT_FOUND', 404, 'Order not found');
 
-        if (!['pending_payment', 'processing'].includes(order.status)) {
+        if (!isCustomerCancelableOrderStatus(order.status)) {
             throw new AppError('VALIDATION_ERROR', 400, 'Only pending or processing orders can be cancelled');
         }
 
@@ -398,5 +546,7 @@ module.exports = {
     getOrders,
     getOrderById,
     updateStatus,
-    cancelOrder
+    cancelOrder,
+    refundOrder,
+    getAllowedNextStatuses,
 };

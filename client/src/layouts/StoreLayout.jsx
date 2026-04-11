@@ -11,14 +11,17 @@ import CategoryNav from '../components/layout/CategoryNav';
 import StorefrontFooter from '../components/layout/StorefrontFooter';
 import { useWishlist } from '../context/WishlistContext';
 import PageService from '../services/pageService';
+import { ADMIN_ACCESS_PERMISSIONS, getFirstAccessibleAdminPath } from '../utils/permissions';
 
 const StoreLayout = () => {
-  const { isAuthenticated, logout, hasPermission } = useAuth();
+  const { isAuthenticated, logout, hasAnyPermission, user } = useAuth();
   const { settings } = useSettings();
   const { cartCount } = useCart();
   const { wishlistCount } = useWishlist();
   const [announcementDismissed, setAnnouncementDismissed] = useState(false);
   const [topLinks, setTopLinks] = useState([]);
+  const adminEntryPath = getFirstAccessibleAdminPath(user);
+  const canAccessAdmin = hasAnyPermission(ADMIN_ACCESS_PERMISSIONS);
 
   useEffect(() => {
     const fetchTopLinks = async () => {
@@ -103,8 +106,8 @@ const StoreLayout = () => {
             </IconButton>
             {isAuthenticated ? (
               <>
-                {hasPermission('dashboard.view') && (
-                  <Button color="inherit" component={RouterLink} to="/admin">Admin Panel</Button>
+                {canAccessAdmin && adminEntryPath && (
+                  <Button color="inherit" component={RouterLink} to={adminEntryPath}>Admin Panel</Button>
                 )}
                 {settings?.features?.wishlist !== false && (
                   <Button color="inherit" component={RouterLink} to="/wishlist" startIcon={<Badge badgeContent={wishlistCount || 0} color="error"><FavoriteBorderIcon /></Badge>}>

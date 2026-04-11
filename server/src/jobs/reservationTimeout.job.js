@@ -21,16 +21,35 @@ const run = () => {
           status: 'pending_payment',
           createdAt: { [Op.lt]: fifteenMinsAgo },
         },
-        include: [{ model: OrderItem, as: 'items' }],
         lock: transaction.LOCK.UPDATE,  // prevent concurrent job runs from racing
+        skipLocked: true,
         transaction,
       });
 
+      const orderItems = expiredOrders.length > 0
+        ? await OrderItem.findAll({
+            where: { orderId: expiredOrders.map((order) => order.id) },
+            lock: transaction.LOCK.UPDATE,
+            of: OrderItem,
+            transaction,
+          })
+        : [];
+
+      const itemsByOrderId = orderItems.reduce((accumulator, item) => {
+        const orderId = item.orderId;
+        if (!accumulator[orderId]) {
+          accumulator[orderId] = [];
+        }
+        accumulator[orderId].push(item);
+        return accumulator;
+      }, {});
+
       for (const order of expiredOrders) {
+        const orderItemsForOrder = itemsByOrderId[order.id] || [];
         // Release product-level reserved inventory.
         // GREATEST(..., 0) ensures we never go below zero even if there's
         // a data inconsistency (e.g. a prior partial decrement).
-        for (const item of order.items) {
+        for (const item of orderItemsForOrder) {
           if (item.productId && item.quantity > 0) {
             await Product.update(
               {

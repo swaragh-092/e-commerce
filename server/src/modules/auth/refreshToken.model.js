@@ -20,6 +20,16 @@ module.exports = (sequelize, DataTypes) => {
             type: DataTypes.DATE,
             allowNull: false,
         },
+            createdByIp: {
+                type: DataTypes.STRING(100),
+                allowNull: true,
+                field: 'created_by_ip',
+            },
+            revokedAt: {
+                type: DataTypes.DATE,
+                allowNull: true,
+                field: 'revoked_at',
+            },
     }, {
         tableName: 'refresh_tokens',
         timestamps: true,

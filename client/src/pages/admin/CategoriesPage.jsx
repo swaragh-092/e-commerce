@@ -31,6 +31,8 @@ import {
   deleteCategory,
 } from '../../services/categoryService';
 import { useNotification } from '../../context/NotificationContext';
+import { useAuth } from '../../hooks/useAuth';
+import { PERMISSIONS } from '../../utils/permissions';
 
 /* ─── helpers ─────────────────────────────────────────────────── */
 const flattenTree = (nodes, result = []) => {
@@ -42,7 +44,7 @@ const flattenTree = (nodes, result = []) => {
 };
 
 /* ─── CategoryRow ──────────────────────────────────────────────── */
-const CategoryRow = ({ node, level, onEdit, onDelete, onAddChild }) => {
+const CategoryRow = ({ node, level, onEdit, onDelete, onAddChild, canManage }) => {
   const hasChildren = node.children?.length > 0;
 
   return (
@@ -109,17 +111,17 @@ const CategoryRow = ({ node, level, onEdit, onDelete, onAddChild }) => {
         {/* actions */}
         <Stack direction="row" spacing={0.5}>
           <Tooltip title="Add sub-category">
-            <IconButton size="small" onClick={() => onAddChild(node)}>
+            <IconButton size="small" onClick={() => onAddChild(node)} disabled={!canManage}>
               <AddIcon fontSize="small" />
             </IconButton>
           </Tooltip>
           <Tooltip title="Edit">
-            <IconButton size="small" onClick={() => onEdit(node)}>
+            <IconButton size="small" onClick={() => onEdit(node)} disabled={!canManage}>
               <EditIcon fontSize="small" />
             </IconButton>
           </Tooltip>
           <Tooltip title="Delete">
-            <IconButton size="small" color="error" onClick={() => onDelete(node.id)}>
+            <IconButton size="small" color="error" onClick={() => onDelete(node.id)} disabled={!canManage}>
               <DeleteIcon fontSize="small" />
             </IconButton>
           </Tooltip>
@@ -135,6 +137,7 @@ const CategoryRow = ({ node, level, onEdit, onDelete, onAddChild }) => {
           onEdit={onEdit}
           onDelete={onDelete}
           onAddChild={onAddChild}
+          canManage={canManage}
         />
       ))}
     </>
@@ -151,6 +154,8 @@ const CategoriesPage = () => {
   const [formData, setFormData] = useState({ name: '', description: '', parentId: '' });
   const [formErrors, setFormErrors] = useState({});
   const notify = useNotification();
+  const { hasPermission } = useAuth();
+  const canManageCategories = hasPermission(PERMISSIONS.CATEGORIES_MANAGE);
 
   const fetchCategories = async () => {
     try {
@@ -169,6 +174,11 @@ const CategoriesPage = () => {
   }, []);
 
   const openCreate = (parent = null) => {
+    if (!canManageCategories) {
+      notify('You do not have permission to manage categories.', 'error');
+      return;
+    }
+
     setEditingCat(null);
     setFormData({ name: '', description: '', parentId: parent?.id || '' });
     setFormErrors({});
@@ -176,6 +186,11 @@ const CategoriesPage = () => {
   };
 
   const openEdit = (cat) => {
+    if (!canManageCategories) {
+      notify('You do not have permission to manage categories.', 'error');
+      return;
+    }
+
     setEditingCat(cat);
     setFormData({
       name: cat.name,
@@ -192,6 +207,11 @@ const CategoriesPage = () => {
   };
 
   const handleSave = async () => {
+    if (!canManageCategories) {
+      notify('You do not have permission to manage categories.', 'error');
+      return;
+    }
+
     const errs = {};
     if (!formData.name.trim()) errs.name = 'Name is required.';
     if (Object.keys(errs).length) {
@@ -219,6 +239,11 @@ const CategoriesPage = () => {
   };
 
   const handleDelete = async (id) => {
+    if (!canManageCategories) {
+      notify('You do not have permission to manage categories.', 'error');
+      return;
+    }
+
     if (!window.confirm('Delete this category? Sub-categories may also be affected.')) return;
     try {
       await deleteCategory(id);
@@ -246,9 +271,11 @@ const CategoriesPage = () => {
             </Typography>
           )}
         </Box>
-        <Button variant="contained" startIcon={<AddIcon />} onClick={() => openCreate()}>
-          Add Category
-        </Button>
+        {canManageCategories && (
+          <Button variant="contained" startIcon={<AddIcon />} onClick={() => openCreate()}>
+            Add Category
+          </Button>
+        )}
       </Box>
 
       {/* Tree */}
@@ -264,7 +291,7 @@ const CategoriesPage = () => {
           <Box sx={{ textAlign: 'center', py: 8, color: 'text.secondary' }}>
             <FolderOpenIcon sx={{ fontSize: 48, mb: 1, opacity: 0.3 }} />
             <Typography>No categories yet.</Typography>
-            <Button sx={{ mt: 1 }} onClick={() => openCreate()}>
+            <Button sx={{ mt: 1 }} onClick={() => openCreate()} disabled={!canManageCategories}>
               Create your first category
             </Button>
           </Box>
@@ -277,6 +304,7 @@ const CategoriesPage = () => {
               onEdit={openEdit}
               onDelete={handleDelete}
               onAddChild={openCreate}
+              canManage={canManageCategories}
             />
           ))
         )}
@@ -333,7 +361,7 @@ const CategoriesPage = () => {
           <Button onClick={handleClose} disabled={saving}>
             Cancel
           </Button>
-          <Button variant="contained" onClick={handleSave} disabled={saving}>
+          <Button variant="contained" onClick={handleSave} disabled={saving || !canManageCategories}>
             {saving ? 'Saving…' : 'Save'}
           </Button>
         </DialogActions>

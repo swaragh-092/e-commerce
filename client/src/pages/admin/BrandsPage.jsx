@@ -27,9 +27,17 @@ import brandService from '../../services/brandService';
 import { getMediaUrl } from '../../utils/media';
 import { useNotification } from '../../context/NotificationContext';
 import MediaUploader from '../../components/common/MediaUploader';
+import { useAuth } from '../../hooks/useAuth';
+import { PERMISSIONS } from '../../utils/permissions';
 
 const BrandsPage = () => {
   const notify = useNotification();
+  const { hasPermission } = useAuth();
+
+  const canCreateBrand = hasPermission(PERMISSIONS.PRODUCTS_CREATE);
+  const canUpdateBrand = hasPermission(PERMISSIONS.PRODUCTS_UPDATE);
+  const canDeleteBrand = hasPermission(PERMISSIONS.PRODUCTS_DELETE);
+  const canUploadMedia = hasPermission(PERMISSIONS.MEDIA_UPLOAD);
 
   const [rows, setRows] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -84,6 +92,11 @@ const BrandsPage = () => {
   };
 
   const handleOpenDialog = (brand = null) => {
+    if ((brand && !canUpdateBrand) || (!brand && !canCreateBrand)) {
+      notify('You do not have permission to manage brands.', 'error');
+      return;
+    }
+
     if (brand) {
       setEditingBrand(brand);
       setFormData({
@@ -120,6 +133,11 @@ const BrandsPage = () => {
   };
 
   const handleSave = async () => {
+    if ((editingBrand && !canUpdateBrand) || (!editingBrand && !canCreateBrand)) {
+      notify('You do not have permission to manage brands.', 'error');
+      return;
+    }
+
     if (!validate()) return;
 
     setSaving(true);
@@ -141,6 +159,11 @@ const BrandsPage = () => {
   };
 
   const handleDelete = async () => {
+    if (!canDeleteBrand) {
+      notify('You do not have permission to delete brands.', 'error');
+      return;
+    }
+
     try {
       await brandService.deleteBrand(deleteConfirm.id);
       notify('Brand deleted successfully', 'success');
@@ -152,6 +175,11 @@ const BrandsPage = () => {
   };
 
   const handleMediaUpload = (media) => {
+    if (!canUploadMedia) {
+      notify('You do not have permission to upload media.', 'error');
+      return;
+    }
+
     setFormData((prev) => ({ ...prev, image: media.url }));
   };
 
@@ -185,26 +213,42 @@ const BrandsPage = () => {
         />
       ),
     },
-    {
+  ];
+
+  if (canUpdateBrand || canDeleteBrand) {
+    columns.push({
       field: 'actions',
       type: 'actions',
       headerName: 'Actions',
       width: 100,
-      getActions: (params) => [
-        <GridActionsCellItem
-          icon={<EditIcon />}
-          label="Edit"
-          onClick={() => handleOpenDialog(params.row)}
-        />,
-        <GridActionsCellItem
-          icon={<DeleteIcon />}
-          label="Delete"
-          onClick={() => setDeleteConfirm({ open: true, id: params.id, name: params.row.name })}
-          color="error"
-        />,
-      ],
-    },
-  ];
+      getActions: (params) => {
+        const actions = [];
+
+        if (canUpdateBrand) {
+          actions.push(
+            <GridActionsCellItem
+              icon={<EditIcon />}
+              label="Edit"
+              onClick={() => handleOpenDialog(params.row)}
+            />
+          );
+        }
+
+        if (canDeleteBrand) {
+          actions.push(
+            <GridActionsCellItem
+              icon={<DeleteIcon />}
+              label="Delete"
+              onClick={() => setDeleteConfirm({ open: true, id: params.id, name: params.row.name })}
+              color="error"
+            />
+          );
+        }
+
+        return actions;
+      },
+    });
+  }
 
   return (
     <Box>
@@ -217,13 +261,15 @@ const BrandsPage = () => {
             Manage product brands and logos
           </Typography>
         </Box>
-        <Button
-          variant="contained"
-          startIcon={<AddIcon />}
-          onClick={() => handleOpenDialog()}
-        >
-          Add Brand
-        </Button>
+        {canCreateBrand && (
+          <Button
+            variant="contained"
+            startIcon={<AddIcon />}
+            onClick={() => handleOpenDialog()}
+          >
+            Add Brand
+          </Button>
+        )}
       </Stack>
 
       <Paper sx={{ mb: 3, p: 2 }}>
@@ -320,12 +366,19 @@ const BrandsPage = () => {
                       '&:hover': { bgcolor: 'error.50' },
                     }}
                     onClick={() => setFormData({ ...formData, image: '' })}
+                    disabled={!canUpdateBrand && !canCreateBrand}
                   >
                     <DeleteIcon fontSize="small" color="error" />
                   </IconButton>
                 </Box>
               )}
-              <MediaUploader onUploadSuccess={handleMediaUpload} multiple={false} />
+              {canUploadMedia ? (
+                <MediaUploader onUploadSuccess={handleMediaUpload} multiple={false} />
+              ) : (
+                <Typography variant="caption" color="text.secondary">
+                  Media upload permission is required to add or replace a brand logo.
+                </Typography>
+              )}
             </Box>
 
             <FormControlLabel

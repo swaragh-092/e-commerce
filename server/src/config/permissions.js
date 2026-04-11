@@ -1,115 +1,15 @@
 'use strict';
 
 const { ROLES } = require('./constants');
+const authorizationSchema = require('../../../shared/authorization.json');
 
-const PERMISSIONS = Object.freeze({
-  DASHBOARD_VIEW: 'dashboard.view',
+const PERMISSIONS = Object.freeze({ ...authorizationSchema.permissions });
 
-  PRODUCTS_READ: 'products.read',
-  PRODUCTS_CREATE: 'products.create',
-  PRODUCTS_UPDATE: 'products.update',
-  PRODUCTS_DELETE: 'products.delete',
-  PRODUCTS_BULK_SALE: 'products.bulk_sale',
+const SYSTEM_ROLE_DEFINITIONS = Object.freeze({ ...authorizationSchema.systemRoleDefinitions });
 
-  CATEGORIES_READ: 'categories.read',
-  CATEGORIES_MANAGE: 'categories.manage',
+const ADMIN_PERMISSIONS = [...authorizationSchema.adminPermissionKeys];
 
-  ATTRIBUTES_READ: 'attributes.read',
-  ATTRIBUTES_MANAGE: 'attributes.manage',
-
-  ORDERS_READ: 'orders.read',
-  ORDERS_UPDATE_STATUS: 'orders.update_status',
-  ORDERS_REFUND: 'orders.refund',
-
-  CUSTOMERS_READ: 'customers.read',
-  CUSTOMERS_MANAGE: 'customers.manage',
-
-  COUPONS_READ: 'coupons.read',
-  COUPONS_MANAGE: 'coupons.manage',
-
-  REVIEWS_READ: 'reviews.read',
-  REVIEWS_MODERATE: 'reviews.moderate',
-  REVIEWS_DELETE: 'reviews.delete',
-
-  MEDIA_READ: 'media.read',
-  MEDIA_UPLOAD: 'media.upload',
-  MEDIA_DELETE: 'media.delete',
-
-  SETTINGS_READ: 'settings.read',
-  SETTINGS_MANAGE: 'settings.manage',
-  SETTINGS_ADVANCED: 'settings.advanced',
-
-  AUDIT_READ: 'audit.read',
-  PAGES_READ: 'pages.read',
-  PAGES_MANAGE: 'pages.manage',
-
-  ACCOUNT_SELF: 'account.self',
-  CART_SELF: 'cart.self',
-  WISHLIST_SELF: 'wishlist.self',
-  CHECKOUT_SELF: 'checkout.self',
-  REVIEWS_CREATE: 'reviews.create',
-
-  ROLES_READ: 'roles.read',
-  ROLES_MANAGE: 'roles.manage',
-  SYSTEM_ROLES_MANAGE: 'system_roles.manage',
-  USERS_ASSIGN_ROLES: 'users.assign_roles',
-});
-
-const SYSTEM_ROLE_DEFINITIONS = Object.freeze({
-  [ROLES.CUSTOMER]: {
-    key: ROLES.CUSTOMER,
-    name: 'Customer',
-    description: 'Storefront customer with account, cart, checkout, and review capabilities.',
-  },
-  [ROLES.ADMIN]: {
-    key: ROLES.ADMIN,
-    name: 'Admin',
-    description: 'Operational admin with catalog, order, customer, content, and dashboard access.',
-  },
-  [ROLES.SUPER_ADMIN]: {
-    key: ROLES.SUPER_ADMIN,
-    name: 'Super Admin',
-    description: 'Full system access including audit, advanced settings, and role/permission management.',
-  },
-});
-
-const ADMIN_PERMISSIONS = [
-  PERMISSIONS.DASHBOARD_VIEW,
-  PERMISSIONS.PRODUCTS_READ,
-  PERMISSIONS.PRODUCTS_CREATE,
-  PERMISSIONS.PRODUCTS_UPDATE,
-  PERMISSIONS.PRODUCTS_DELETE,
-  PERMISSIONS.PRODUCTS_BULK_SALE,
-  PERMISSIONS.CATEGORIES_READ,
-  PERMISSIONS.CATEGORIES_MANAGE,
-  PERMISSIONS.ATTRIBUTES_READ,
-  PERMISSIONS.ATTRIBUTES_MANAGE,
-  PERMISSIONS.ORDERS_READ,
-  PERMISSIONS.ORDERS_UPDATE_STATUS,
-  PERMISSIONS.ORDERS_REFUND,
-  PERMISSIONS.CUSTOMERS_READ,
-  PERMISSIONS.CUSTOMERS_MANAGE,
-  PERMISSIONS.COUPONS_READ,
-  PERMISSIONS.COUPONS_MANAGE,
-  PERMISSIONS.REVIEWS_READ,
-  PERMISSIONS.REVIEWS_MODERATE,
-  PERMISSIONS.REVIEWS_DELETE,
-  PERMISSIONS.MEDIA_READ,
-  PERMISSIONS.MEDIA_UPLOAD,
-  PERMISSIONS.MEDIA_DELETE,
-  PERMISSIONS.SETTINGS_READ,
-  PERMISSIONS.SETTINGS_MANAGE,
-  PERMISSIONS.AUDIT_READ,
-  PERMISSIONS.PAGES_READ,
-];
-
-const CUSTOMER_PERMISSIONS = [
-  PERMISSIONS.ACCOUNT_SELF,
-  PERMISSIONS.CART_SELF,
-  PERMISSIONS.WISHLIST_SELF,
-  PERMISSIONS.CHECKOUT_SELF,
-  PERMISSIONS.REVIEWS_CREATE,
-];
+const CUSTOMER_PERMISSIONS = [...authorizationSchema.customerPermissionKeys];
 
 const ROLE_PERMISSIONS = Object.freeze({
   [ROLES.CUSTOMER]: CUSTOMER_PERMISSIONS,
@@ -121,10 +21,7 @@ const ROLE_PERMISSIONS = Object.freeze({
   ])],
 });
 
-const RESERVED_SUPER_ADMIN_PERMISSIONS = Object.freeze([
-  PERMISSIONS.SYSTEM_ROLES_MANAGE,
-  PERMISSIONS.USERS_ASSIGN_ROLES,
-]);
+const RESERVED_SUPER_ADMIN_PERMISSIONS = Object.freeze([...authorizationSchema.reservedSuperAdminPermissions]);
 
 const unique = (items = []) => [...new Set(items.filter(Boolean))];
 
@@ -198,6 +95,8 @@ const getSystemRoles = () =>
 module.exports = {
   PERMISSIONS,
   SYSTEM_ROLE_DEFINITIONS,
+  ADMIN_PERMISSIONS,
+  CUSTOMER_PERMISSIONS,
   ROLE_PERMISSIONS,
   RESERVED_SUPER_ADMIN_PERMISSIONS,
   getRolesForUser,

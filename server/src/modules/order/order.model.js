@@ -1,5 +1,7 @@
 'use strict';
 
+const { ORDER_DEFAULT_STATUS, ORDER_STATUS_VALUES } = require('../../utils/orderWorkflow');
+
 module.exports = (sequelize, DataTypes) => {
     const Order = sequelize.define('Order', {
         id: {
@@ -17,9 +19,9 @@ module.exports = (sequelize, DataTypes) => {
         },
         status: {
             type: DataTypes.STRING(30),
-            defaultValue: 'pending_payment',
+            defaultValue: ORDER_DEFAULT_STATUS,
             validate: {
-                isIn: [['pending_payment', 'paid', 'processing', 'shipped', 'delivered', 'cancelled', 'refunded']],
+                isIn: [ORDER_STATUS_VALUES],
             },
         },
         subtotal: {

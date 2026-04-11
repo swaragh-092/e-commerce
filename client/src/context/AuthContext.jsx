@@ -41,6 +41,10 @@ export const AuthProvider = ({ children }) => {
           setUser(null);
           setIsAuthenticated(false);
         }
+      } else {
+        localStorage.removeItem('userProfile');
+        setUser(null);
+        setIsAuthenticated(false);
       }
       setLoading(false);
     };
@@ -48,6 +52,9 @@ export const AuthProvider = ({ children }) => {
     initAuth();
 
     const handleUnauthorized = () => {
+      localStorage.removeItem('accessToken');
+      localStorage.removeItem('refreshToken');
+      localStorage.removeItem('userProfile');
       setUser(null);
       setIsAuthenticated(false);
     };
@@ -99,6 +106,7 @@ export const AuthProvider = ({ children }) => {
   const updateProfile = async (data) => {
     const updatedUser = await userService.updateMe(data);
     setUser(updatedUser);
+    localStorage.setItem('userProfile', JSON.stringify(updatedUser));
     return updatedUser;
   };
 
@@ -111,6 +119,7 @@ export const AuthProvider = ({ children }) => {
     hasRole: (role) => getRolesForUser(user).includes(role),
     hasPermission: (permission) => getPermissionsForUser(user).includes(permission),
     hasAnyPermission: (permissions = []) => permissions.some((permission) => getPermissionsForUser(user).includes(permission)),
+    hasAllPermissions: (permissions = []) => permissions.every((permission) => getPermissionsForUser(user).includes(permission)),
     login,
     register,
     logout,

@@ -1,5 +1,6 @@
 import { useState, useEffect, useContext } from 'react';
 import {
+  Alert,
   Box,
   Typography,
   Paper,
@@ -26,6 +27,8 @@ import { updateSettings } from '../../services/adminService';
 import api from '../../services/api';
 import { useNotification } from '../../context/NotificationContext';
 import { SettingsContext } from '../../context/ThemeContext';
+import { useAuth } from '../../hooks/useAuth';
+import { PERMISSIONS } from '../../utils/permissions';
 
 const CURRENCIES = [
   { code: 'USD', symbol: '$',  name: 'US Dollar' },
@@ -67,6 +70,8 @@ const SettingsPage = () => {
   const [searchQuery, setSearchQuery] = useState('');
   const notify = useNotification();
   const { refreshSettings } = useContext(SettingsContext) || {};
+  const { hasPermission } = useAuth();
+  const canManageSettings = hasPermission(PERMISSIONS.SETTINGS_MANAGE);
 
   useEffect(() => {
     api.get('/settings').then((res) => {
@@ -87,6 +92,11 @@ const SettingsPage = () => {
   const set = (key, value) => setForm((f) => ({ ...f, [key]: value }));
 
   const handleSave = async () => {
+    if (!canManageSettings) {
+      notify('You do not have permission to manage settings.', 'error');
+      return;
+    }
+
     setSaving(true);
     try {
       const payload = Object.entries(form).map(([flatKey, value]) => {
@@ -967,10 +977,16 @@ const SettingsPage = () => {
         <Typography variant="h5" fontWeight={700}>
           Settings
         </Typography>
-        <Button variant="contained" onClick={handleSave} disabled={saving}>
+        <Button variant="contained" onClick={handleSave} disabled={saving || !canManageSettings}>
           {saving ? 'Saving…' : 'Save All'}
         </Button>
       </Box>
+
+      {!canManageSettings && (
+        <Alert severity="info" sx={{ mb: 3 }}>
+          You have read-only access to settings. Changes are disabled until you are granted the settings manage permission.
+        </Alert>
+      )}
 
       <Grid container spacing={3}>
         <Grid item xs={12} xl={8}>
@@ -1000,7 +1016,11 @@ const SettingsPage = () => {
               ))}
             </Tabs>
             <Divider />
-            <Box sx={{ p: 3 }}>{renderSections(panels[tab])}</Box>
+            <Box sx={{ p: 3 }}>
+              <Box sx={{ pointerEvents: canManageSettings ? 'auto' : 'none', opacity: canManageSettings ? 1 : 0.75 }}>
+                {renderSections(panels[tab])}
+              </Box>
+            </Box>
           </Paper>
         </Grid>
 

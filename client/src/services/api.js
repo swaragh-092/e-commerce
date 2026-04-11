@@ -69,7 +69,11 @@ api.interceptors.response.use(
         const { data } = await axios.post(`${import.meta.env.VITE_API_URL || 'http://localhost:5000/api'}/auth/refresh`, { refreshToken });
         
         const newAccessToken = data.data.accessToken;
+        const newRefreshToken = data.data.refreshToken;
         localStorage.setItem('accessToken', newAccessToken);
+        if (newRefreshToken) {
+          localStorage.setItem('refreshToken', newRefreshToken);
+        }
         
         api.defaults.headers.common['Authorization'] = `Bearer ${newAccessToken}`;
         originalRequest.headers['Authorization'] = `Bearer ${newAccessToken}`;
@@ -80,6 +84,7 @@ api.interceptors.response.use(
         processQueue(refreshError, null);
         localStorage.removeItem('accessToken');
         localStorage.removeItem('refreshToken');
+        localStorage.removeItem('userProfile');
         window.dispatchEvent(new Event('auth:unauthorized'));
         return Promise.reject(refreshError);
       } finally {

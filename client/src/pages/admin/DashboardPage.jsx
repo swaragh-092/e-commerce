@@ -12,11 +12,7 @@ import StatCard from '../../components/admin/StatCard';
 import SalesChart from '../../components/admin/SalesChart';
 import { getStats, getLowStock, getRecentOrders } from '../../services/adminService';
 import { useCurrency } from '../../hooks/useSettings';
-
-const statusColor = {
-  pending_payment: 'warning', paid: 'info', processing: 'info',
-  shipped: 'primary', delivered: 'success', cancelled: 'error', refunded: 'default',
-};
+import { getOrderStatusColor, getOrderStatusLabel } from '../../utils/orderWorkflow';
 
 const DashboardPage = () => {
   const [stats, setStats] = useState(null);
@@ -76,7 +72,7 @@ const DashboardPage = () => {
                       <Typography variant="caption" color="text.secondary">{o.customer?.name || 'Guest'}</Typography>
                     </Box>
                     <Box textAlign="right">
-                      <Chip label={o.status} size="small" color={statusColor[o.status] || 'default'} sx={{ mb: 0.25 }} />
+                      <Chip label={getOrderStatusLabel(o.status)} size="small" color={getOrderStatusColor(o.status)} sx={{ mb: 0.25 }} />
                       <Typography variant="caption" display="block">{formatPrice(o.total)}</Typography>
                     </Box>
                   </Box>

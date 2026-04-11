@@ -50,6 +50,8 @@ import MediaUploader from '../../components/common/MediaUploader';
 import { useNotification } from '../../context/NotificationContext';
 import { useSettings } from '../../hooks/useSettings';
 import { getProductBasePrice, getVariantPriceModifierFromInput, getVariantUnitPrice } from '../../utils/variantPricing';
+import { useAuth } from '../../hooks/useAuth';
+import { PERMISSIONS } from '../../utils/permissions';
 
 const validate = (formData) => {
   const errs = {};
@@ -112,9 +114,14 @@ const ProductEditPage = () => {
   const navigate = useNavigate();
   const notify = useNotification();
   const { settings } = useSettings();
+  const { hasPermission } = useAuth();
   const isNew = !id || id === 'new';
   const { generateProductSKU } = useSKUGenerator();
   const sales = settings?.sales || {};
+  const canCreateProducts = hasPermission(PERMISSIONS.PRODUCTS_CREATE);
+  const canUpdateProducts = hasPermission(PERMISSIONS.PRODUCTS_UPDATE);
+  const canUploadMedia = hasPermission(PERMISSIONS.MEDIA_UPLOAD);
+  const canSaveProduct = isNew ? canCreateProducts : canUpdateProducts;
 
   const [formData, setFormData] = useState({
     name: '',
@@ -182,6 +189,11 @@ const ProductEditPage = () => {
 
   const handleSave = async (e) => {
     e.preventDefault();
+    if (!canSaveProduct) {
+      notify(`You do not have permission to ${isNew ? 'create' : 'update'} products.`, 'error');
+      return;
+    }
+
     const errs = validate(formData);
     if (Object.keys(errs).length > 0) {
       setErrors(errs);
@@ -221,6 +233,11 @@ const ProductEditPage = () => {
   };
 
   const handleMediaUpload = (media) => {
+    if (!canSaveProduct || !canUploadMedia) {
+      notify('You do not have permission to upload product media.', 'error');
+      return;
+    }
+
     setFormData((prev) => ({
       ...prev,
       images: [
@@ -236,6 +253,11 @@ const ProductEditPage = () => {
   };
 
   const handleRemoveImage = (index) => {
+    if (!canSaveProduct) {
+      notify('You do not have permission to update products.', 'error');
+      return;
+    }
+
     setFormData((prev) => ({
       ...prev,
       images: prev.images.filter((_, i) => i !== index),
@@ -243,6 +265,11 @@ const ProductEditPage = () => {
   };
 
   const handleSetPrimaryImage = (index) => {
+    if (!canSaveProduct) {
+      notify('You do not have permission to update products.', 'error');
+      return;
+    }
+
     setFormData((prev) => ({
       ...prev,
       images: prev.images.map((img, i) => ({
@@ -408,7 +435,13 @@ const ProductEditPage = () => {
               <Typography variant="h6" gutterBottom>
                 Media / Images
               </Typography>
-              <MediaUploader onUploadSuccess={handleMediaUpload} multiple />
+              {canUploadMedia ? (
+                <MediaUploader onUploadSuccess={handleMediaUpload} multiple />
+              ) : (
+                <Alert severity="info" sx={{ mb: 2 }}>
+                  You can edit product details, but media upload requires the media upload permission.
+                </Alert>
+              )}
 
               {formData.images.length > 0 && (
                 <Box sx={{ mt: 3 }}>
@@ -467,6 +500,7 @@ const ProductEditPage = () => {
                                 sx={{ bgcolor: 'background.paper', '&:hover': { bgcolor: 'primary.50' } }}
                                 onClick={() => handleSetPrimaryImage(index)}
                                 color={img.isPrimary ? 'warning' : 'default'}
+                                disabled={!canSaveProduct}
                               >
                                 {img.isPrimary ? <StarIcon /> : <StarBorderIcon />}
                               </IconButton>
@@ -477,6 +511,7 @@ const ProductEditPage = () => {
                                 sx={{ bgcolor: 'background.paper', '&:hover': { bgcolor: 'error.50' } }}
                                 onClick={() => handleRemoveImage(index)}
                                 color="error"
+                                disabled={!canSaveProduct}
                               >
                                 <DeleteIcon />
                               </IconButton>
@@ -656,20 +691,20 @@ const ProductEditPage = () => {
           <Button onClick={() => navigate('/admin/products')} disabled={saving}>
             Cancel
           </Button>
-          <Button variant="contained" type="submit" size="large" disabled={saving}>
+          <Button variant="contained" type="submit" size="large" disabled={saving || !canSaveProduct}>
             {saving ? 'Saving…' : 'Save Product'}
           </Button>
         </Box>
       </form>
 
       {/* Variants panel — only visible once the product has been saved and has a real ID */}
-      {!isNew && <VariantsPanel productId={id} baseSku={formData.sku} flatCatFiles={flatCatFiles} />}
+      {!isNew && <VariantsPanel productId={id} baseSku={formData.sku} flatCatFiles={flatCatFiles} canManageVariants={canUpdateProducts} />}
     </Box>
   );
 };
 
 /* ─── Variants Panel ──────────────────────────────────────────────────────── */
-const VariantsPanel = ({ productId, baseSku, flatCatFiles = [] }) => {
+const VariantsPanel = ({ productId, baseSku, flatCatFiles = [], canManageVariants = false }) => {
   const notify = useNotification();
   const { generateVariantSKU } = useSKUGenerator();
   const [variants, setVariants] = useState([]);
@@ -726,6 +761,7 @@ const VariantsPanel = ({ productId, baseSku, flatCatFiles = [] }) => {
 
   // Add all values from the selected attribute template as pending rows
   const handleAddFromTemplate = () => {
+    if (!canManageVariants) return;
     const tmpl = attributes.find((a) => a.id === selectedTemplate);
     if (!tmpl) return;
     if (!tmpl.values?.length) {
@@ -750,6 +786,7 @@ const VariantsPanel = ({ productId, baseSku, flatCatFiles = [] }) => {
 
   // Add a blank custom row
   const handleAddCustom = () => {
+    if (!canManageVariants) return;
     setVariants((prev) => [
       ...prev,
       {
@@ -766,12 +803,14 @@ const VariantsPanel = ({ productId, baseSku, flatCatFiles = [] }) => {
   };
 
   const handleChange = (index, field, value) => {
+    if (!canManageVariants) return;
     setVariants((prev) =>
       prev.map((v, i) => (i === index ? { ...v, [field]: value, _dirty: true } : v))
     );
   };
 
   const handleDelete = async (index) => {
+    if (!canManageVariants) return;
     const v = variants[index];
     if (v._new) {
       setVariants((prev) => prev.filter((_, i) => i !== index));
@@ -789,6 +828,11 @@ const VariantsPanel = ({ productId, baseSku, flatCatFiles = [] }) => {
 
   // Save all new/dirty rows in one click
   const handleSaveVariants = async () => {
+    if (!canManageVariants) {
+      notify('You do not have permission to update products.', 'error');
+      return;
+    }
+
     const toCreate = variants.filter((v) => v._new && v.name.trim() && v.value.trim());
     const toUpdate = variants.filter((v) => !v._new && v._dirty);
     if (toCreate.length === 0 && toUpdate.length === 0) {
@@ -827,6 +871,7 @@ const VariantsPanel = ({ productId, baseSku, flatCatFiles = [] }) => {
   const hasPending = variants.some((v) => v._new || v._dirty);
 
   const handleClone = async () => {
+    if (!canManageVariants) return;
     const activeProduct = cloneTab === 0 ? cloneSelectedProduct : cloneCatSelectedProduct;
     if (!activeProduct) return;
     setCloning(true);
@@ -883,17 +928,19 @@ const VariantsPanel = ({ productId, baseSku, flatCatFiles = [] }) => {
       <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 1 }}>
         <Typography variant="h6">Variants</Typography>
         <Box sx={{ display: 'flex', gap: 1 }}>
-          <Tooltip title="Copy all variants from another product">
-            <Button
-              size="small"
-              variant="outlined"
-              startIcon={<ContentCopyIcon fontSize="small" />}
-              onClick={() => setCloneOpen(true)}
-            >
-              Clone from Product
-            </Button>
-          </Tooltip>
-          {hasPending && (
+          {canManageVariants && (
+            <Tooltip title="Copy all variants from another product">
+              <Button
+                size="small"
+                variant="outlined"
+                startIcon={<ContentCopyIcon fontSize="small" />}
+                onClick={() => setCloneOpen(true)}
+              >
+                Clone from Product
+              </Button>
+            </Tooltip>
+          )}
+          {hasPending && canManageVariants && (
             <Button variant="contained" size="small" onClick={handleSaveVariants} disabled={saving}>
               {saving ? 'Saving…' : 'Save Variants'}
             </Button>
@@ -931,14 +978,14 @@ const VariantsPanel = ({ productId, baseSku, flatCatFiles = [] }) => {
             <Button
               variant="outlined"
               size="small"
-              disabled={!selectedTemplate}
+              disabled={!selectedTemplate || !canManageVariants}
               onClick={handleAddFromTemplate}
             >
               + Add All Values
             </Button>
           </span>
         </Tooltip>
-        <Button variant="outlined" size="small" startIcon={<AddIcon />} onClick={handleAddCustom}>
+        <Button variant="outlined" size="small" startIcon={<AddIcon />} onClick={handleAddCustom} disabled={!canManageVariants}>
           Custom Row
         </Button>
       </Box>
@@ -975,6 +1022,7 @@ const VariantsPanel = ({ productId, baseSku, flatCatFiles = [] }) => {
                     <TextField
                       size="small"
                       value={v.name}
+                      disabled={!canManageVariants}
                       onChange={(e) => handleChange(i, 'name', e.target.value)}
                       placeholder="e.g. Color"
                       sx={{ width: 130 }}
@@ -984,6 +1032,7 @@ const VariantsPanel = ({ productId, baseSku, flatCatFiles = [] }) => {
                     <TextField
                       size="small"
                       value={v.value}
+                      disabled={!canManageVariants}
                       onChange={(e) => handleChange(i, 'value', e.target.value)}
                       placeholder="e.g. Red"
                       sx={{ width: 130 }}
@@ -994,6 +1043,7 @@ const VariantsPanel = ({ productId, baseSku, flatCatFiles = [] }) => {
                       size="small"
                       type="number"
                       value={v.priceModifier}
+                      disabled={!canManageVariants}
                       onChange={(e) => handleChange(i, 'priceModifier', e.target.value)}
                       sx={{ width: 100 }}
                       inputProps={{ step: 0.01 }}
@@ -1004,6 +1054,7 @@ const VariantsPanel = ({ productId, baseSku, flatCatFiles = [] }) => {
                       size="small"
                       type="number"
                       value={v.quantity}
+                      disabled={!canManageVariants}
                       onChange={(e) => handleChange(i, 'quantity', e.target.value)}
                       sx={{ width: 90 }}
                       inputProps={{ min: 0 }}
@@ -1014,6 +1065,7 @@ const VariantsPanel = ({ productId, baseSku, flatCatFiles = [] }) => {
                       <TextField
                         size="small"
                         value={v.sku || ''}
+                        disabled={!canManageVariants}
                         onChange={(e) => handleChange(i, 'sku', e.target.value)}
                         placeholder="optional"
                         sx={{ width: 130 }}
@@ -1021,6 +1073,7 @@ const VariantsPanel = ({ productId, baseSku, flatCatFiles = [] }) => {
                       <Tooltip title="Auto-generate SKU from attribute name/value (uses SKU settings)">
                         <IconButton
                           size="small"
+                          disabled={!canManageVariants}
                           onClick={() =>
                             handleChange(i, 'sku', generateVariantSKU(baseSku, v.name, v.value))
                           }
@@ -1032,7 +1085,7 @@ const VariantsPanel = ({ productId, baseSku, flatCatFiles = [] }) => {
                   </TableCell>
                   <TableCell>
                     <Tooltip title="Delete variant">
-                      <IconButton size="small" color="error" onClick={() => handleDelete(i)}>
+                      <IconButton size="small" color="error" onClick={() => handleDelete(i)} disabled={!canManageVariants}>
                         <DeleteIcon fontSize="small" />
                       </IconButton>
                     </Tooltip>

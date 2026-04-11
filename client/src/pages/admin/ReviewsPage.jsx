@@ -18,6 +18,8 @@ import CancelIcon from '@mui/icons-material/Cancel';
 import DeleteIcon from '@mui/icons-material/Delete';
 import { getAdminReviews, updateReviewStatus, deleteReview } from '../../services/adminService';
 import { useNotification } from '../../context/NotificationContext';
+import { useAuth } from '../../hooks/useAuth';
+import { PERMISSIONS } from '../../utils/permissions';
 
 const ReviewsPage = () => {
   const [rows, setRows] = useState([]);
@@ -26,6 +28,9 @@ const ReviewsPage = () => {
   const [paginationModel, setPaginationModel] = useState({ page: 0, pageSize: 20 });
   const [statusFilter, setStatusFilter] = useState('pending');
   const notify = useNotification();
+  const { hasPermission } = useAuth();
+  const canModerateReviews = hasPermission(PERMISSIONS.REVIEWS_MODERATE);
+  const canDeleteReviews = hasPermission(PERMISSIONS.REVIEWS_DELETE);
 
   const fetchReviews = useCallback(() => {
     setLoading(true);
@@ -47,6 +52,11 @@ const ReviewsPage = () => {
   }, [fetchReviews]);
 
   const handleStatus = async (id, status) => {
+    if (!canModerateReviews) {
+      notify('You do not have permission to moderate reviews.', 'error');
+      return;
+    }
+
     try {
       await updateReviewStatus(id, status);
       notify(`Review ${status}.`, 'success');
@@ -57,6 +67,11 @@ const ReviewsPage = () => {
   };
 
   const handleDelete = async (id) => {
+    if (!canDeleteReviews) {
+      notify('You do not have permission to delete reviews.', 'error');
+      return;
+    }
+
     if (!window.confirm('Delete this review?')) return;
     deleteReview(id)
       .then(fetchReviews)
@@ -109,31 +124,37 @@ const ReviewsPage = () => {
       sortable: false,
       renderCell: ({ row }) => (
         <>
-          <Tooltip title="Approve">
-            <IconButton
-              size="small"
-              color="success"
-              onClick={() => handleStatus(row.id, 'approved')}
-              disabled={row.status === 'approved'}
-            >
-              <CheckCircleIcon fontSize="small" />
-            </IconButton>
-          </Tooltip>
-          <Tooltip title="Reject">
-            <IconButton
-              size="small"
-              color="warning"
-              onClick={() => handleStatus(row.id, 'rejected')}
-              disabled={row.status === 'rejected'}
-            >
-              <CancelIcon fontSize="small" />
-            </IconButton>
-          </Tooltip>
-          <Tooltip title="Delete">
-            <IconButton size="small" color="error" onClick={() => handleDelete(row.id)}>
-              <DeleteIcon fontSize="small" />
-            </IconButton>
-          </Tooltip>
+          {canModerateReviews && (
+            <>
+              <Tooltip title="Approve">
+                <IconButton
+                  size="small"
+                  color="success"
+                  onClick={() => handleStatus(row.id, 'approved')}
+                  disabled={row.status === 'approved'}
+                >
+                  <CheckCircleIcon fontSize="small" />
+                </IconButton>
+              </Tooltip>
+              <Tooltip title="Reject">
+                <IconButton
+                  size="small"
+                  color="warning"
+                  onClick={() => handleStatus(row.id, 'rejected')}
+                  disabled={row.status === 'rejected'}
+                >
+                  <CancelIcon fontSize="small" />
+                </IconButton>
+              </Tooltip>
+            </>
+          )}
+          {canDeleteReviews && (
+            <Tooltip title="Delete">
+              <IconButton size="small" color="error" onClick={() => handleDelete(row.id)}>
+                <DeleteIcon fontSize="small" />
+              </IconButton>
+            </Tooltip>
+          )}
         </>
       ),
     },

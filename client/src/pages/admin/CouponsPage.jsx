@@ -34,6 +34,8 @@ import { useCurrency } from '../../hooks/useSettings';
 import { getProducts } from '../../services/productService';
 import { getCategoryTree } from '../../services/categoryService';
 import brandService from '../../services/brandService';
+import { useAuth } from '../../hooks/useAuth';
+import { PERMISSIONS } from '../../utils/permissions';
 
 const empty = {
   name: '',
@@ -94,6 +96,8 @@ const CouponsPage = () => {
   const [brands, setBrands] = useState([]);
   const notify = useNotification();
   const { formatPrice } = useCurrency();
+  const { hasPermission } = useAuth();
+  const canManageCoupons = hasPermission(PERMISSIONS.COUPONS_MANAGE);
 
   const productOptions = useMemo(
     () => products.map((product) => ({ id: product.id, name: `${product.name}${product.sku ? ` (${product.sku})` : ''}` })),
@@ -191,6 +195,11 @@ const CouponsPage = () => {
   };
 
   const openCreate = () => {
+    if (!canManageCoupons) {
+      notify('You do not have permission to manage coupons.', 'error');
+      return;
+    }
+
     setEditing(null);
     setForm(empty);
     setFormErrors({});
@@ -198,6 +207,11 @@ const CouponsPage = () => {
   };
 
   const openEdit = (row) => {
+    if (!canManageCoupons) {
+      notify('You do not have permission to manage coupons.', 'error');
+      return;
+    }
+
     setEditing(row);
     setForm({
       ...empty,
@@ -226,6 +240,11 @@ const CouponsPage = () => {
   };
 
   const duplicateCoupon = (row) => {
+    if (!canManageCoupons) {
+      notify('You do not have permission to manage coupons.', 'error');
+      return;
+    }
+
     setEditing(null);
     setForm({
       ...empty,
@@ -289,6 +308,11 @@ const CouponsPage = () => {
   });
 
   const handleSave = async () => {
+    if (!canManageCoupons) {
+      notify('You do not have permission to manage coupons.', 'error');
+      return;
+    }
+
     const errs = validate(form);
     if (Object.keys(errs).length > 0) {
       setFormErrors(errs);
@@ -315,6 +339,11 @@ const CouponsPage = () => {
   };
 
   const handleDelete = async (id) => {
+    if (!canManageCoupons) {
+      notify('You do not have permission to manage coupons.', 'error');
+      return;
+    }
+
     if (!window.confirm('Delete this coupon?')) return;
     deleteCoupon(id)
       .then(() => {
@@ -459,23 +488,25 @@ const CouponsPage = () => {
       width: 120,
       sortable: false,
       renderCell: ({ row }) => (
-        <>
-          <Tooltip title="Duplicate">
-            <IconButton size="small" onClick={() => duplicateCoupon(row)}>
-              <FileCopyIcon fontSize="small" />
-            </IconButton>
-          </Tooltip>
-          <Tooltip title="Edit">
-            <IconButton size="small" onClick={() => openEdit(row)}>
-              <EditIcon fontSize="small" />
-            </IconButton>
-          </Tooltip>
-          <Tooltip title="Delete">
-            <IconButton size="small" color="error" onClick={() => handleDelete(row.id)}>
-              <DeleteIcon fontSize="small" />
-            </IconButton>
-          </Tooltip>
-        </>
+        canManageCoupons ? (
+          <>
+            <Tooltip title="Duplicate">
+              <IconButton size="small" onClick={() => duplicateCoupon(row)}>
+                <FileCopyIcon fontSize="small" />
+              </IconButton>
+            </Tooltip>
+            <Tooltip title="Edit">
+              <IconButton size="small" onClick={() => openEdit(row)}>
+                <EditIcon fontSize="small" />
+              </IconButton>
+            </Tooltip>
+            <Tooltip title="Delete">
+              <IconButton size="small" color="error" onClick={() => handleDelete(row.id)}>
+                <DeleteIcon fontSize="small" />
+              </IconButton>
+            </Tooltip>
+          </>
+        ) : null
       ),
     },
   ];
@@ -487,7 +518,7 @@ const CouponsPage = () => {
           <Typography variant="h5" fontWeight={700}>Coupons & Promotions</Typography>
           <Typography variant="body2" color="text.secondary">Build targeted offers with schedule, visibility, exclusions, and eligibility rules.</Typography>
         </Box>
-        <Button variant="contained" startIcon={<AddIcon />} onClick={openCreate}>New Promotion</Button>
+        {canManageCoupons && <Button variant="contained" startIcon={<AddIcon />} onClick={openCreate}>New Promotion</Button>}
       </Box>
 
       <Box sx={{ height: 620, bgcolor: 'background.paper', borderRadius: 2, border: '1px solid', borderColor: 'divider' }}>
@@ -661,7 +692,7 @@ const CouponsPage = () => {
         </DialogContent>
         <DialogActions>
           <Button onClick={closeDialog}>Cancel</Button>
-          <Button variant="contained" onClick={handleSave} disabled={saving}>{saving ? 'Saving…' : 'Save Promotion'}</Button>
+          <Button variant="contained" onClick={handleSave} disabled={saving || !canManageCoupons}>{saving ? 'Saving…' : 'Save Promotion'}</Button>
         </DialogActions>
       </Dialog>
     </Box>

@@ -1,5 +1,5 @@
 import React, { Suspense, lazy } from 'react';
-import { Routes, Route } from 'react-router-dom';
+import { Routes, Route, Navigate } from 'react-router-dom';
 import { Box, CircularProgress } from '@mui/material';
 
 
@@ -7,6 +7,8 @@ import { Box, CircularProgress } from '@mui/material';
 import StoreLayout from '../layouts/StoreLayout';
 import AdminLayout from '../layouts/AdminLayout';
 import { ProtectedRoute } from './ProtectedRoute';
+import { ADMIN_ACCESS_PERMISSIONS, PERMISSIONS, getFirstAccessibleAdminPath } from '../utils/permissions';
+import { useAuth } from '../hooks/useAuth';
 
 // Storefront pages
 const LoginPage = lazy(() => import('../pages/storefront/LoginPage'));
@@ -56,6 +58,21 @@ const LoadingFallback = () => (
 
 const Home = () => <HomePage />;
 
+const AdminIndex = () => {
+  const { user, hasPermission } = useAuth();
+
+  if (hasPermission(PERMISSIONS.DASHBOARD_VIEW)) {
+    return <DashboardPage />;
+  }
+
+  const adminEntryPath = getFirstAccessibleAdminPath(user);
+  if (adminEntryPath && adminEntryPath !== '/admin') {
+    return <Navigate to={adminEntryPath} replace />;
+  }
+
+  return <Navigate to="/" replace />;
+};
+
 const AppRoutes = () => (
   <Suspense fallback={<LoadingFallback />}>
     <Routes>
@@ -93,35 +110,63 @@ const AppRoutes = () => (
       </Route>
 
       {/* Admin Routes — permission-gated foundation */}
-      <Route path="/admin" element={<ProtectedRoute permission="dashboard.view" />}>
+      <Route path="/admin" element={<ProtectedRoute permissions={ADMIN_ACCESS_PERMISSIONS} />}>
         <Route element={<AdminLayout />}>
-          <Route index element={<DashboardPage />} />
-          <Route path="products" element={<ProductsManagePage />} />
-          <Route path="products/new" element={<ProductEditPage />} />
-          <Route path="products/:id/edit" element={<ProductEditPage />} />
-          <Route path="categories" element={<CategoriesPage />} />
-          <Route path="brands" element={<BrandsPage />} />
-          <Route path="attributes" element={<AttributesPage />} />
-          <Route path="orders" element={<OrdersManagePage />} />
-          <Route path="orders/:id" element={<OrderDetailPage />} />
-          <Route path="customers" element={<CustomersPage />} />
-          <Route path="coupons" element={<CouponsPage />} />
-          <Route path="reviews" element={<ReviewsPage />} />
-          <Route path="media" element={<MediaPage />} />
-          <Route path="settings" element={<SettingsPage />} />
-          <Route path="audit-log" element={<AuditLogPage />} />
-          <Route path="pages" element={<PagesManagePage />} />
-          <Route path="pages/new" element={<PageEditPage />} />
-          <Route path="pages/:id/edit" element={<PageEditPage />} />
+          <Route index element={<AdminIndex />} />
+          <Route element={<ProtectedRoute permission={PERMISSIONS.PRODUCTS_READ} />}>
+            <Route path="products" element={<ProductsManagePage />} />
+            <Route path="brands" element={<BrandsPage />} />
+          </Route>
+          <Route element={<ProtectedRoute permission={PERMISSIONS.PRODUCTS_CREATE} />}>
+            <Route path="products/new" element={<ProductEditPage />} />
+          </Route>
+          <Route element={<ProtectedRoute permission={PERMISSIONS.PRODUCTS_UPDATE} />}>
+            <Route path="products/:id/edit" element={<ProductEditPage />} />
+          </Route>
+          <Route element={<ProtectedRoute permission={PERMISSIONS.CATEGORIES_READ} />}>
+            <Route path="categories" element={<CategoriesPage />} />
+          </Route>
+          <Route element={<ProtectedRoute permission={PERMISSIONS.ATTRIBUTES_READ} />}>
+            <Route path="attributes" element={<AttributesPage />} />
+          </Route>
+          <Route element={<ProtectedRoute permission={PERMISSIONS.ORDERS_READ} />}>
+            <Route path="orders" element={<OrdersManagePage />} />
+            <Route path="orders/:id" element={<OrderDetailPage />} />
+          </Route>
+          <Route element={<ProtectedRoute permission={PERMISSIONS.CUSTOMERS_READ} />}>
+            <Route path="customers" element={<CustomersPage />} />
+          </Route>
+          <Route element={<ProtectedRoute permission={PERMISSIONS.COUPONS_READ} />}>
+            <Route path="coupons" element={<CouponsPage />} />
+          </Route>
+          <Route element={<ProtectedRoute permission={PERMISSIONS.REVIEWS_READ} />}>
+            <Route path="reviews" element={<ReviewsPage />} />
+          </Route>
+          <Route element={<ProtectedRoute permission={PERMISSIONS.MEDIA_READ} />}>
+            <Route path="media" element={<MediaPage />} />
+          </Route>
+          <Route element={<ProtectedRoute permission={PERMISSIONS.SETTINGS_READ} />}>
+            <Route path="settings" element={<SettingsPage />} />
+          </Route>
+          <Route element={<ProtectedRoute permission={PERMISSIONS.AUDIT_READ} />}>
+            <Route path="audit-log" element={<AuditLogPage />} />
+          </Route>
+          <Route element={<ProtectedRoute permission={PERMISSIONS.PAGES_READ} />}>
+            <Route path="pages" element={<PagesManagePage />} />
+          </Route>
+          <Route element={<ProtectedRoute permission={PERMISSIONS.PAGES_MANAGE} />}>
+            <Route path="pages/new" element={<PageEditPage />} />
+            <Route path="pages/:id/edit" element={<PageEditPage />} />
+          </Route>
           <Route
             path="access-control"
             element={(
               <ProtectedRoute
                 permissions={[
-                  'roles.read',
-                  'roles.manage',
-                  'system_roles.manage',
-                  'users.assign_roles',
+                  PERMISSIONS.ROLES_READ,
+                  PERMISSIONS.ROLES_MANAGE,
+                  PERMISSIONS.SYSTEM_ROLES_MANAGE,
+                  PERMISSIONS.USERS_ASSIGN_ROLES,
                 ]}
               />
             )}

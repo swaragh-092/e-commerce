@@ -1,16 +1,17 @@
 'use strict';
 
+const { ORDER_STATUS_VALUES } = require('../utils/orderWorkflow');
+
+const toConstantKey = (value) => String(value || '').toUpperCase();
+
 module.exports = {
   // Order Statuses
-  ORDER_STATUS: {
-    PENDING_PAYMENT: 'pending_payment',
-    PAID: 'paid',
-    PROCESSING: 'processing',
-    SHIPPED: 'shipped',
-    DELIVERED: 'delivered',
-    CANCELLED: 'cancelled',
-    REFUNDED: 'refunded',
-  },
+  ORDER_STATUS: Object.freeze(
+    ORDER_STATUS_VALUES.reduce((accumulator, value) => {
+      accumulator[toConstantKey(value)] = value;
+      return accumulator;
+    }, {})
+  ),
 
   // Payment Statuses
   PAYMENT_STATUS: {

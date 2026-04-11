@@ -15,11 +15,15 @@ import DeleteIcon from '@mui/icons-material/Delete';
 import ContentCopyIcon from '@mui/icons-material/ContentCopy';
 import api from '../../services/api';
 import { useNotification } from '../../context/NotificationContext';
+import { useAuth } from '../../hooks/useAuth';
+import { PERMISSIONS } from '../../utils/permissions';
 
 const MediaPage = () => {
   const [files, setFiles] = useState([]);
   const [loading, setLoading] = useState(true);
   const notify = useNotification();
+  const { hasPermission } = useAuth();
+  const canDeleteMedia = hasPermission(PERMISSIONS.MEDIA_DELETE);
 
   const fetchMedia = () => {
     setLoading(true);
@@ -35,6 +39,11 @@ const MediaPage = () => {
   }, []);
 
   const handleDelete = async (id) => {
+    if (!canDeleteMedia) {
+      notify('You do not have permission to delete media.', 'error');
+      return;
+    }
+
     if (!window.confirm('Delete this file?')) return;
     try {
       await api.delete(`/media/${id}`);
@@ -90,11 +99,13 @@ const MediaPage = () => {
                       <ContentCopyIcon fontSize="small" />
                     </IconButton>
                   </Tooltip>
-                  <Tooltip title="Delete">
-                    <IconButton size="small" color="error" onClick={() => handleDelete(file.id)}>
-                      <DeleteIcon fontSize="small" />
-                    </IconButton>
-                  </Tooltip>
+                  {canDeleteMedia && (
+                    <Tooltip title="Delete">
+                      <IconButton size="small" color="error" onClick={() => handleDelete(file.id)}>
+                        <DeleteIcon fontSize="small" />
+                      </IconButton>
+                    </Tooltip>
+                  )}
                 </CardActions>
               </Card>
             </Grid>

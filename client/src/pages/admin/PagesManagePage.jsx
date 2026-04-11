@@ -21,21 +21,34 @@ import {
 import { DataGrid } from '@mui/x-data-grid';
 import PageService from '../../services/pageService';
 import { useNavigate } from 'react-router-dom';
+import { useNotification } from '../../context/NotificationContext';
+import { useAuth } from '../../hooks/useAuth';
+import { PERMISSIONS } from '../../utils/permissions';
 
 const PagesManagePage = () => {
   const [pages, setPages] = useState([]);
   const [loading, setLoading] = useState(false);
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   const [selectedPage, setSelectedPage] = useState(null);
+  const [paginationModel, setPaginationModel] = useState({ page: 0, pageSize: 10 });
+  const [rowCount, setRowCount] = useState(0);
   const navigate = useNavigate();
+  const notify = useNotification();
+  const { hasPermission } = useAuth();
+  const canManagePages = hasPermission(PERMISSIONS.PAGES_MANAGE);
 
   const fetchPages = async () => {
     setLoading(true);
     try {
-      const response = await PageService.adminGetPages();
+      const response = await PageService.adminGetPages({
+        page: paginationModel.page + 1,
+        limit: paginationModel.pageSize,
+      });
       setPages(response.data);
+      setRowCount(response.meta?.total || 0);
     } catch (error) {
       console.error('Error fetching pages:', error);
+      notify(error?.response?.data?.error?.message || 'Failed to load pages.', 'error');
     } finally {
       setLoading(false);
     }
@@ -43,7 +56,7 @@ const PagesManagePage = () => {
 
   useEffect(() => {
     fetchPages();
-  }, []);
+  }, [paginationModel.page, paginationModel.pageSize]);
 
   const handleDeleteClick = (page) => {
     setSelectedPage(page);
@@ -51,12 +64,19 @@ const PagesManagePage = () => {
   };
 
   const confirmDelete = async () => {
+    if (!selectedPage?.id || !canManagePages) {
+      setDeleteDialogOpen(false);
+      return;
+    }
+
     try {
       await PageService.adminDeletePage(selectedPage.id);
+      notify('Page deleted successfully.', 'success');
       fetchPages();
       setDeleteDialogOpen(false);
     } catch (error) {
       console.error('Error deleting page:', error);
+      notify(error?.response?.data?.error?.message || 'Failed to delete page.', 'error');
     }
   };
 
@@ -101,15 +121,17 @@ const PagesManagePage = () => {
             </IconButton>
           </Tooltip>
           <Tooltip title="Edit">
-            <IconButton onClick={() => navigate(`/admin/pages/${params.row.id}/edit`)}>
+            <span>
+            <IconButton onClick={() => navigate(`/admin/pages/${params.row.id}/edit`)} disabled={!canManagePages}>
               <EditIcon />
             </IconButton>
+            </span>
           </Tooltip>
           <Tooltip title={params.row.isSystem ? "Cannot Delete System Page" : "Delete"}>
             <span>
               <IconButton
                 onClick={() => handleDeleteClick(params.row)}
-                disabled={params.row.isSystem}
+                disabled={params.row.isSystem || !canManagePages}
                 color="error"
               >
                 <DeleteIcon />
@@ -125,13 +147,15 @@ const PagesManagePage = () => {
     <Box p={3}>
       <Box display="flex" justifyContent="space-between" alignItems="center" mb={3}>
         <Typography variant="h4">Dynamic Static Pages</Typography>
-        <Button
-          variant="contained"
-          startIcon={<AddIcon />}
-          onClick={() => navigate('/admin/pages/new')}
-        >
-          Add New Page
-        </Button>
+        {canManagePages && (
+          <Button
+            variant="contained"
+            startIcon={<AddIcon />}
+            onClick={() => navigate('/admin/pages/new')}
+          >
+            Add New Page
+          </Button>
+        )}
       </Box>
 
       <Paper sx={{ height: 600, width: '100%' }}>
@@ -139,8 +163,11 @@ const PagesManagePage = () => {
           rows={pages}
           columns={columns}
           loading={loading}
-          pageSize={10}
-          rowsPerPageOptions={[10, 20, 50]}
+          rowCount={rowCount}
+          paginationMode="server"
+          paginationModel={paginationModel}
+          onPaginationModelChange={setPaginationModel}
+          pageSizeOptions={[10, 20, 50]}
           disableSelectionOnClick
         />
       </Paper>

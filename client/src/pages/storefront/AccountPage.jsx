@@ -17,6 +17,11 @@ import PageSEO from '../../components/common/PageSEO';
 import { Link } from 'react-router-dom';
 import { useCurrency } from '../../hooks/useSettings';
 import AppliedDiscountsSummary from '../../components/orders/AppliedDiscountsSummary';
+import {
+    getOrderStatusColor,
+    getOrderStatusLabel,
+    isOrderCustomerCancelableStatus,
+} from '../../utils/orderWorkflow';
 
 function TabPanel(props) {
     const { children, value, index, ...other } = props;
@@ -26,11 +31,6 @@ function TabPanel(props) {
         </div>
     );
 }
-
-const ORDER_STATUS_COLOR = {
-    pending_payment: 'warning', paid: 'info', processing: 'info',
-    shipped: 'primary', delivered: 'success', cancelled: 'error', refunded: 'default',
-};
 
 const AccountPage = () => {
     const { formatPrice } = useCurrency();
@@ -357,13 +357,13 @@ const OrdersTab = () => {
                                         </Box>
                                     </TableCell>
                                     <TableCell>
-                                        <Chip label={order.status} size="small" color={ORDER_STATUS_COLOR[order.status] || 'default'} />
+                                        <Chip label={getOrderStatusLabel(order.status)} size="small" color={getOrderStatusColor(order.status)} />
                                     </TableCell>
                                     <TableCell>
                                         <Button size="small" component={Link} to={`/account/orders/${order.id}`} sx={{ mr: 1 }}>
                                             View
                                         </Button>
-                                        {order.status === 'pending_payment' && (
+                                        {isOrderCustomerCancelableStatus(order.status) && (
                                             <Button size="small" color="error" onClick={() => handleCancel(order.id)}>Cancel</Button>
                                         )}
                                     </TableCell>
