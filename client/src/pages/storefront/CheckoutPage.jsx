@@ -9,13 +9,14 @@ import LocalShippingIcon from '@mui/icons-material/LocalShipping';
 import LocalOfferIcon from '@mui/icons-material/LocalOffer';
 import AddIcon from '@mui/icons-material/Add';
 import EditIcon from '@mui/icons-material/Edit';
-import { useNavigate } from 'react-router-dom';
+import { useLocation, useNavigate } from 'react-router-dom';
 import { AuthContext } from '../../context/AuthContext';
 import { useSettings, useCurrency, useFeature } from '../../hooks/useSettings';
 import { useCart } from '../../hooks/useCart';
 import { userService } from '../../services/userService';
 import { validateCoupon, getEligibleCoupons } from '../../services/adminService';
 import PageSEO from '../../components/common/PageSEO';
+import { getCartItemUnitPrice } from '../../utils/variantPricing';
 
 const EMPTY_ADDR = {
     label: '', fullName: '', phone: '',
@@ -24,12 +25,66 @@ const EMPTY_ADDR = {
     isDefault: false,
 };
 
+const normalizeBuyNowQuantity = (value) => {
+    const parsedQuantity = Number(value);
+
+    if (!Number.isFinite(parsedQuantity)) {
+        return 1;
+    }
+
+    return Math.max(1, Math.floor(parsedQuantity));
+};
+
+const normalizeBuyNowItem = (item) => {
+    if (!item?.productId) {
+        return null;
+    }
+
+    const product = item.product && typeof item.product === 'object' ? item.product : null;
+    const variant = item.variant && typeof item.variant === 'object' ? item.variant : null;
+    const hasProductIdentity = Boolean(product?.id || product?.name);
+    const hasPriceData = Boolean(
+        product && (
+            product.effectivePrice != null ||
+            product.price != null ||
+            product.salePrice != null ||
+            variant?.unitPrice != null ||
+            variant?.priceModifier != null
+        )
+    );
+
+    if (!hasProductIdentity || !hasPriceData) {
+        return null;
+    }
+
+    return {
+        id: item.id || `${item.productId}-${item.variantId || variant?.id || 'base'}`,
+        productId: item.productId,
+        variantId: item.variantId ?? variant?.id ?? null,
+        quantity: normalizeBuyNowQuantity(item.quantity),
+        product: {
+            ...product,
+            id: product.id || item.productId,
+            name: product.name || 'Product',
+        },
+        variant: variant
+            ? {
+                ...variant,
+                id: variant.id || item.variantId || null,
+            }
+            : null,
+    };
+};
+
 const CheckoutPage = () => {
     const navigate = useNavigate();
+    const location = useLocation();
     const { user } = useContext(AuthContext);
     const { settings } = useSettings();
     const { formatPrice } = useCurrency();
     const { cart, clearCart } = useCart();
+    const buyNowItem = location.state?.fromBuyNow ? normalizeBuyNowItem(location.state?.buyNowItem) : null;
+    const isBuyNowFlow = Boolean(buyNowItem);
     const couponsEnabled = settings?.features?.coupons !== false;
     const showAvailableCoupons = useFeature('showAvailableCoupons');
     const STEPS = couponsEnabled
@@ -96,11 +151,11 @@ const CheckoutPage = () => {
     const [placing, setPlacing] = useState(false);
     const [error, setError] = useState(null);
 
-    const items = cart?.items || [];
+    const items = isBuyNowFlow ? [buyNowItem] : (cart?.items || []);
     const subtotal = items.reduce((sum, item) => {
-        const price = parseFloat(item.product?.effectivePrice || item.product?.salePrice || item.product?.price || 0);
-        const modifier = parseFloat(item.variant?.priceModifier ?? 0);
-        return sum + (price + modifier) * item.quantity;
+        const quantity = normalizeBuyNowQuantity(item?.quantity);
+        const itemPrice = item?.product ? getCartItemUnitPrice(item) : 0;
+        return sum + itemPrice * quantity;
     }, 0);
     const orderDiscount = couponResult?.orderDiscount || 0;
     const appliedCoupons = couponResult?.appliedCoupons || [];
@@ -194,9 +249,18 @@ const CheckoutPage = () => {
                 ...(couponCode && couponResult && !couponResult.error && { couponCode }),
                 ...(appliedCoupons.length > 0 && { couponCodes: appliedCoupons.map((coupon) => coupon.code) }),
                 ...(notes && { notes }),
+                ...(isBuyNowFlow && {
+                    buyNowItem: {
+                        productId: buyNowItem.productId,
+                        variantId: buyNowItem.variantId || null,
+                        quantity: buyNowItem.quantity,
+                    },
+                }),
             });
             const orderId = res.data?.data?.id;
-            await clearCart();
+            if (!isBuyNowFlow) {
+                await clearCart();
+            }
             navigate(`/payment/${orderId}`);
         } catch (err) {
             setError(err?.response?.data?.message || 'Failed to place order. Please try again.');
@@ -381,15 +445,16 @@ const CheckoutPage = () => {
                         <Paper elevation={0} sx={{ border: '1px solid', borderColor: 'divider', borderRadius: 2, p: 3 }}>
                             <Typography variant="h6" fontWeight={600} mb={2}>Review Your Order</Typography>
                             {items.map((item) => {
-                                const price = parseFloat(item.product?.effectivePrice || item.product?.salePrice || item.product?.price || 0);
-                                const modifier = parseFloat(item.variant?.priceModifier ?? 0);
+                                const itemPrice = item?.product ? getCartItemUnitPrice(item) : 0;
+                                const quantity = normalizeBuyNowQuantity(item?.quantity);
+                                const itemName = item?.product?.name || 'Product';
                                 return (
-                                    <Box key={item.id} sx={{ display: 'flex', justifyContent: 'space-between', mb: 1 }}>
+                                    <Box key={item.id || `${item.productId}-${item.variantId || 'base'}`} sx={{ display: 'flex', justifyContent: 'space-between', mb: 1 }}>
                                         <Typography variant="body2">
-                                            {item.product?.name} {item.variant ? `(${item.variant.name}: ${item.variant.value})` : ''} × {item.quantity}
+                                            {itemName} {item.variant ? `(${item.variant.name}: ${item.variant.value})` : ''} × {quantity}
                                         </Typography>
                                         <Typography variant="body2" fontWeight={600}>
-                                            {formatPrice((price + modifier) * item.quantity)}
+                                            {formatPrice(itemPrice * quantity)}
                                         </Typography>
                                     </Box>
                                 );

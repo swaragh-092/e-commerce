@@ -189,6 +189,27 @@ const SettingsPage = () => {
   const footerTagline = form['footer.tagline'] || 'Premium online shopping experience.';
   const saleLabel = form['sales.defaultSaleLabel'] || 'Limited Time Offer';
   const addToCartLabel = form['productPage.addToCartLabel'] || 'Add to Cart';
+  const buyNowLabel = form['productPage.buyNowLabel'] || 'Buy Now';
+  const announcementEnabled = Boolean(form['announcement.enabled']);
+  const stickyHeader = Boolean(form['nav.sticky']);
+  const showCategoryBar = Boolean(form['nav.showCategoryBar']);
+  const footerEnabled = Boolean(form['footer.enabled']);
+  const footerShowLinks = Boolean(form['footer.showLinks']);
+  const homepageShowCategories = Boolean(form['homepage.showCategories']);
+  const showProductSku = Boolean(form['productPage.showSKU']);
+  const showStockBadge = Boolean(form['productPage.showStockBadge']);
+  const showBuyNowButton = form['productPage.showBuyNowButton'] !== false;
+  const taxInclusive = Boolean(form['tax.inclusive']);
+  const guestCheckoutEnabled = Boolean(form['features.guestCheckout']);
+  const couponsEnabled = Boolean(form['features.coupons']);
+  const showSaleLabelBadge = Boolean(form['sales.showSaleLabel']);
+  const showDiscountPercentBadge = Boolean(form['sales.showDiscountPercent']);
+  const showSavingsAmount = Boolean(form['sales.showSavingsAmount']);
+  const showSaleTiming = Boolean(form['sales.showSaleTiming']);
+  const showCountdown = Boolean(form['sales.showCountdown']);
+  const enableCGST = Boolean(form['tax.enableCGST']);
+  const enableSGST = Boolean(form['tax.enableSGST']);
+  const enableIGST = Boolean(form['tax.enableIGST']);
   const previewStyles = {
     fontFamily: `"${fontFamily}", "Roboto", "Helvetica", "Arial", sans-serif`,
     bgcolor: pageBackground,
@@ -249,7 +270,7 @@ const SettingsPage = () => {
     if (currentTab === 'Layout') {
       return (
         <Box sx={previewContainerSx}>
-          {Boolean(form['announcement.enabled']) && (
+          {announcementEnabled && (
             <Box sx={{ mb: 1.5, px: 1.5, py: 1, bgcolor: form['announcement.bgColor'] || brandPrimary, color: form['announcement.fgColor'] || '#fff', borderRadius: 2, fontSize: 12, textAlign: 'center' }}>
               {form['announcement.text'] || 'Free shipping on orders over $50!'}
             </Box>
@@ -257,14 +278,14 @@ const SettingsPage = () => {
           <Box sx={{ p: 1.5, bgcolor: surfaceColor, borderRadius: `${borderRadius}px`, mb: 1.5, border: '1px solid', borderColor: 'divider' }}>
             <Typography variant="subtitle2" fontWeight={700}>{storeName}</Typography>
             <Typography variant="caption" color="text.secondary">
-              {Boolean(form['nav.sticky']) ? 'Sticky header enabled' : 'Standard header'} • {Boolean(form['nav.showCategoryBar']) ? 'Category bar visible' : 'Category bar hidden'}
+              {stickyHeader ? 'Sticky header enabled' : 'Standard header'} • {showCategoryBar ? 'Category bar visible' : 'Category bar hidden'}
             </Typography>
           </Box>
-          {Boolean(form['footer.enabled']) && (
+          {footerEnabled && (
             <Box sx={{ mt: 2, p: 2, bgcolor: form['footer.bgColor'] || surfaceColor, color: form['footer.fgColor'] || textColor, borderRadius: `${borderRadius}px`, border: '1px solid', borderColor: 'divider' }}>
               <Typography variant="subtitle2" fontWeight={700}>{storeName}</Typography>
               <Typography variant="body2" sx={{ mt: 0.5 }}>{footerTagline}</Typography>
-              {Boolean(form['footer.showLinks']) && (
+              {footerShowLinks && (
                 <Typography variant="caption" sx={{ display: 'block', mt: 1.5 }}>
                   {(links.slice(0, 3).map((link) => link.label).filter(Boolean).join(' • ')) || 'Home • Products • Cart'}
                 </Typography>
@@ -295,7 +316,7 @@ const SettingsPage = () => {
             </Box>
           </Box>
           <Box sx={{ mt: 2, display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 1.25 }}>
-            {Boolean(form['homepage.showCategories']) && [1, 2, 3].map((item) => (
+            {homepageShowCategories && [1, 2, 3].map((item) => (
               <Box key={item} sx={{ p: 1.25, bgcolor: surfaceColor, borderRadius: 2, textAlign: 'center', border: '1px solid', borderColor: 'divider' }}>
                 <Typography variant="caption" fontWeight={700}>{(form['homepage.categoriesTitle'] || 'Shop by Category').split(' ')[0]} {item}</Typography>
               </Box>
@@ -312,17 +333,24 @@ const SettingsPage = () => {
           <Box sx={{ p: 1.5, bgcolor: surfaceColor, borderRadius: `${borderRadius}px`, border: '1px solid', borderColor: 'divider' }}>
             <Box sx={{ height: 120, borderRadius: 2, background: `linear-gradient(135deg, ${brandPrimary}22, ${brandSecondary}33)`, mb: 1.5 }} />
             <Typography variant="body2" fontWeight={700}>Everyday Essential Tee</Typography>
-            {Boolean(form['productPage.showSKU']) && (
+            {showProductSku && (
               <Typography variant="caption" color="text.secondary">SKU: TSHIRT-RED-M</Typography>
             )}
             <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mt: 1.5 }}>
               <Typography variant="body2" fontWeight={700}>{formatMoney(49.99)}</Typography>
-              {Boolean(form['productPage.showStockBadge']) && (
+              {showStockBadge && (
                 <Box sx={{ px: 1, py: 0.4, borderRadius: 999, bgcolor: '#2e7d3220', color: '#2e7d32', fontSize: 11, fontWeight: 700 }}>In Stock</Box>
               )}
             </Box>
-            <Box sx={{ mt: 1.5, px: 1.25, py: 0.9, bgcolor: brandPrimary, color: '#fff', borderRadius: 2, textAlign: 'center', fontSize: 13, fontWeight: 700 }}>
-              {addToCartLabel}
+            <Box sx={{ mt: 1.5, display: 'grid', gridTemplateColumns: showBuyNowButton ? '1fr 1fr' : '1fr', gap: 1 }}>
+              <Box sx={{ px: 1.25, py: 0.9, bgcolor: brandPrimary, color: '#fff', borderRadius: 2, textAlign: 'center', fontSize: 13, fontWeight: 700 }}>
+                {addToCartLabel}
+              </Box>
+              {showBuyNowButton && (
+                <Box sx={{ px: 1.25, py: 0.9, border: '1px solid', borderColor: brandPrimary, color: brandPrimary, borderRadius: 2, textAlign: 'center', fontSize: 13, fontWeight: 700 }}>
+                  {buyNowLabel}
+                </Box>
+              )}
             </Box>
           </Box>
         </Box>
@@ -335,7 +363,7 @@ const SettingsPage = () => {
         : Number(form['shipping.flatRate'] || 5);
       const taxRate = Number(form['tax.rate'] || 0);
       const subtotal = 89.99;
-      const taxAmount = Boolean(form['tax.inclusive']) ? 0 : subtotal * taxRate;
+      const taxAmount = taxInclusive ? 0 : subtotal * taxRate;
       const total = subtotal + shippingValue + taxAmount;
 
       return (
@@ -345,12 +373,12 @@ const SettingsPage = () => {
             <Typography variant="body2" fontWeight={700} sx={{ mb: 1.5 }}>Order #Preview</Typography>
             <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 0.75 }}><Typography variant="body2">Subtotal</Typography><Typography variant="body2">{formatMoney(subtotal)}</Typography></Box>
             <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 0.75 }}><Typography variant="body2">Shipping</Typography><Typography variant="body2">{shippingValue === 0 ? 'Free' : formatMoney(shippingValue)}</Typography></Box>
-            <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 0.75 }}><Typography variant="body2">Tax</Typography><Typography variant="body2">{Boolean(form['tax.inclusive']) ? 'Included' : formatMoney(taxAmount)}</Typography></Box>
+            <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 0.75 }}><Typography variant="body2">Tax</Typography><Typography variant="body2">{taxInclusive ? 'Included' : formatMoney(taxAmount)}</Typography></Box>
             <Divider sx={{ my: 1.25 }} />
             <Box sx={{ display: 'flex', justifyContent: 'space-between' }}><Typography variant="subtitle2" fontWeight={800}>Total</Typography><Typography variant="subtitle2" fontWeight={800}>{formatMoney(total)}</Typography></Box>
           </Box>
           <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mt: 1.5 }}>
-            {Boolean(form['features.guestCheckout']) ? 'Guest checkout enabled' : 'Account required'} • {Boolean(form['features.coupons']) ? 'Coupons available' : 'Coupons hidden'}
+            {guestCheckoutEnabled ? 'Guest checkout enabled' : 'Account required'} • {couponsEnabled ? 'Coupons available' : 'Coupons hidden'}
           </Typography>
         </Box>
       );
@@ -361,12 +389,12 @@ const SettingsPage = () => {
         <Box sx={previewContainerSx}>
           <Box sx={{ p: 2, bgcolor: surfaceColor, borderRadius: `${borderRadius}px`, border: '1px solid', borderColor: 'divider' }}>
             <Box sx={{ display: 'flex', gap: 1, alignItems: 'center', mb: 1.25 }}>
-              {Boolean(form['sales.showSaleLabel']) && (
+              {showSaleLabelBadge && (
                 <Box sx={{ px: 1, py: 0.4, borderRadius: 999, bgcolor: `${brandSecondary}22`, color: brandSecondary, fontSize: 11, fontWeight: 700 }}>
                   {saleLabel}
                 </Box>
               )}
-              {Boolean(form['sales.showDiscountPercent']) && (
+              {showDiscountPercentBadge && (
                 <Box sx={{ px: 1, py: 0.4, borderRadius: 999, bgcolor: `${brandPrimary}22`, color: brandPrimary, fontSize: 11, fontWeight: 700 }}>
                   25% OFF
                 </Box>
@@ -377,14 +405,14 @@ const SettingsPage = () => {
               <Typography variant="h6" fontWeight={800}>{formatMoney(149.99)}</Typography>
               <Typography variant="body2" sx={{ textDecoration: 'line-through', color: 'text.secondary' }}>{formatMoney(199.99)}</Typography>
             </Box>
-            {Boolean(form['sales.showSavingsAmount']) && (
+            {showSavingsAmount && (
               <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mt: 1 }}>You save {formatMoney(50)}</Typography>
             )}
             {Boolean(form['sales.showTiming']) || Boolean(form['sales.showSaleTiming']) ? null : null}
-            {Boolean(form['sales.showSaleTiming']) && (
+            {showSaleTiming && (
               <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mt: 0.5 }}>Ends tomorrow at 11:59 PM</Typography>
             )}
-            {Boolean(form['sales.showCountdown']) && (
+            {showCountdown && (
               <Typography variant="caption" sx={{ display: 'block', mt: 0.5, color: brandSecondary, fontWeight: 700 }}>Ending soon • 08h 24m left</Typography>
             )}
           </Box>
@@ -741,6 +769,8 @@ const SettingsPage = () => {
           {toggle('productPage.showSKU', 'Show SKU code under product name')}
           {toggle('productPage.showStockBadge', 'Show In Stock / Out of Stock badge')}
           {field('productPage.addToCartLabel', 'Add to Cart button label (e.g. Add to Cart, Buy Now, Add to Bag)')}
+          {toggle('productPage.showBuyNowButton', 'Show Buy Now button next to Add to Cart')}
+          {field('productPage.buyNowLabel', 'Buy Now button label (e.g. Buy Now, Quick Checkout, Order Now)')}
           <Divider sx={{ my: 2 }} />
           <Typography variant="subtitle2" sx={{ mb: 1 }}>Customer Engagement</Typography>
           {toggle('features.wishlist', 'Enable wishlist')}
@@ -786,15 +816,17 @@ const SettingsPage = () => {
             const sep = form['sku.separator'] ?? '-';
             const prefix = (form['sku.prefix'] || '').trim();
             const upper = form['sku.autoUppercase'] !== false;
+            const includeProductName = form['sku.includeProductName'] !== false;
+            const includeAttributeValue = form['sku.includeAttributeValue'] !== false;
             const apply = (s) => (upper ? s.toUpperCase() : s);
             const parts = [];
             if (prefix) parts.push(apply(prefix));
-            if (form['sku.includeProductName'] !== false) parts.push(apply('Tshirt'));
+            if (includeProductName) parts.push(apply('Tshirt'));
             if (form['sku.useRandom']) parts.push('A3X7');
             const baseSku = parts.join(sep) || apply('Tshirt');
             const varParts = [baseSku];
             if (form['sku.includeAttributeName']) varParts.push(apply('Color'));
-            if (form['sku.includeAttributeValue'] !== false) varParts.push(apply('Red'));
+            if (includeAttributeValue) varParts.push(apply('Red'));
             const variantSku = varParts.join(sep);
             return (
               <Box sx={{ fontFamily: 'monospace', bgcolor: 'action.hover', p: 2, borderRadius: 2 }}>
@@ -844,11 +876,11 @@ const SettingsPage = () => {
           </Typography>
 
           {toggle('tax.enableCGST', 'Enable CGST (Central Goods & Services Tax)')}
-          {Boolean(form['tax.enableCGST']) && field('tax.cgstRate', 'CGST Rate (e.g. 0.09 for 9%)', 'number')}
+          {enableCGST && field('tax.cgstRate', 'CGST Rate (e.g. 0.09 for 9%)', 'number')}
           {toggle('tax.enableSGST', 'Enable SGST (State Goods & Services Tax)')}
-          {Boolean(form['tax.enableSGST']) && field('tax.sgstRate', 'SGST Rate (e.g. 0.09 for 9%)', 'number')}
+          {enableSGST && field('tax.sgstRate', 'SGST Rate (e.g. 0.09 for 9%)', 'number')}
           {toggle('tax.enableIGST', 'Enable IGST (Integrated GST — inter-state)')}
-          {Boolean(form['tax.enableIGST']) && field('tax.igstRate', 'IGST Rate (e.g. 0.18 for 18%)', 'number')}
+          {enableIGST && field('tax.igstRate', 'IGST Rate (e.g. 0.18 for 18%)', 'number')}
         </>,
         ['tax', 'gst', 'cgst', 'sgst', 'igst']
       ),

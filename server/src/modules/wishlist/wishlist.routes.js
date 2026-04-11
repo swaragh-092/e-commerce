@@ -12,6 +12,8 @@ router.use(featureGate('wishlist'));
 
 router.get('/', wishlistController.getWishlist);
 router.post('/items', validate(addItemSchema), wishlistController.addItem);
+router.post('/items/move-all-to-cart', wishlistController.moveAllToCart);
+router.delete('/items', wishlistController.clearWishlist);
 router.delete('/items/:productId', wishlistController.removeItem);
 router.post('/items/:productId/to-cart', wishlistController.moveToCart);
 

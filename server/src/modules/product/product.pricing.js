@@ -44,6 +44,29 @@ const getEffectivePrice = (product, referenceDate = new Date()) => {
   return isSaleActive(product, referenceDate) ? Number(product.salePrice) : Number(product.price);
 };
 
+const toFiniteNumber = (value) => {
+  const number = Number(value);
+  return Number.isFinite(number) ? number : null;
+};
+
+const getVariantUnitPrice = (product, variant, referenceDate = new Date()) => {
+  const basePrice = getEffectivePrice(product, referenceDate);
+  const explicitUnitPrice = toFiniteNumber(variant?.unitPrice ?? variant?.effectivePrice);
+
+  if (explicitUnitPrice !== null) {
+    return explicitUnitPrice;
+  }
+
+  const modifier = toFiniteNumber(variant?.priceModifier);
+  if (modifier === null) {
+    return Number(basePrice.toFixed(2));
+  }
+
+  const looksLikeLegacyAbsolutePrice = modifier >= 0 && basePrice > 0 && modifier >= basePrice;
+  const resolvedPrice = looksLikeLegacyAbsolutePrice ? modifier : basePrice + modifier;
+  return Number(resolvedPrice.toFixed(2));
+};
+
 const getDiscountPercent = (product) => {
   const regularPrice = Number(product?.price);
   const salePrice = Number(product?.salePrice);
@@ -76,6 +99,12 @@ const serializeProductPricing = (product, { adminView = false } = {}) => {
 
   return {
     ...plain,
+    variants: Array.isArray(plain.variants)
+      ? plain.variants.map((variant) => ({
+          ...variant,
+          unitPrice: getVariantUnitPrice(plain, variant),
+        }))
+      : plain.variants,
     effectivePrice: getEffectivePrice(plain),
     isSaleActive: saleActive,
     saleStatus,
@@ -146,6 +175,7 @@ const normalizeSalePayload = (payload, currentPrice = null) => {
 module.exports = {
   getDiscountPercent,
   getEffectivePrice,
+  getVariantUnitPrice,
   getSaleStatus,
   getSavingsAmount,
   isSaleActive,

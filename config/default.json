@@ -136,6 +136,8 @@
     "productPage": {
         "showSKU": true,
         "showStockBadge": true,
-        "addToCartLabel": "Add to Cart"
+        "addToCartLabel": "Add to Cart",
+        "showBuyNowButton": true,
+        "buyNowLabel": "Buy Now"
     }
 }

@@ -6,13 +6,16 @@ import { Outlet, Link as RouterLink } from 'react-router-dom';
 import { useAuth } from '../hooks/useAuth';
 import { useSettings } from '../hooks/useSettings';
 import { useCart } from '../hooks/useCart';
+import FavoriteBorderIcon from '@mui/icons-material/FavoriteBorder';
 import CategoryNav from '../components/layout/CategoryNav';
 import StorefrontFooter from '../components/layout/StorefrontFooter';
+import { useWishlist } from '../context/WishlistContext';
 
 const StoreLayout = () => {
   const { isAuthenticated, logout, hasPermission } = useAuth();
   const { settings } = useSettings();
   const { cartCount } = useCart();
+  const { wishlistCount } = useWishlist();
   const [announcementDismissed, setAnnouncementDismissed] = useState(false);
 
   const nav          = settings?.nav          || {};
@@ -77,7 +80,9 @@ const StoreLayout = () => {
                   <Button color="inherit" component={RouterLink} to="/admin">Admin Panel</Button>
                 )}
                 {settings?.features?.wishlist !== false && (
-                  <Button color="inherit" component={RouterLink} to="/wishlist">Wishlist</Button>
+                  <Button color="inherit" component={RouterLink} to="/wishlist" startIcon={<Badge badgeContent={wishlistCount || 0} color="error"><FavoriteBorderIcon /></Badge>}>
+                    Wishlist
+                  </Button>
                 )}
                 <Button color="inherit" component={RouterLink} to="/profile">Profile</Button>
                 <Button color="inherit" onClick={logout}>Logout</Button>

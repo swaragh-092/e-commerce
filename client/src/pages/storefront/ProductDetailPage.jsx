@@ -1,9 +1,10 @@
 import { useState, useEffect } from 'react';
-import { useParams, useLocation } from 'react-router-dom';
+import { useParams, useLocation, useNavigate } from 'react-router-dom';
 import {
     Box, Button, Chip, CircularProgress, Container, Divider, Grid, Typography,
 } from '@mui/material';
 import CartIcon from '@mui/icons-material/ShoppingCart';
+import FlashOnIcon from '@mui/icons-material/FlashOn';
 import { getProduct } from '../../services/productService';
 import PageSEO from '../../components/common/PageSEO';
 import ProductImages from '../../components/product/ProductImages';
@@ -14,14 +15,22 @@ import DOMPurify from 'dompurify';
 import { useCart } from '../../hooks/useCart';
 import { useCurrency, useSettings } from '../../hooks/useSettings';
 import { formatSaleDateTime, getCountdownText, getDiscountPercent, getSaleTimingMessage, getSavingsAmount, isEndingSoon } from '../../utils/pricing';
+import {
+    getVariantDiscountPercent,
+    getVariantRegularPrice,
+    getVariantSalePrice,
+    getVariantSavingsAmount,
+    getVariantUnitPrice,
+} from '../../utils/variantPricing';
 const ProductDetailPage = () => {
     const { slug } = useParams();
     const location = useLocation();
+    const navigate = useNavigate();
     const [product, setProduct] = useState(null);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState(null);
     const [selectedVariant, setSelectedVariant] = useState(null);
-    const [addingToCart, setAddingToCart] = useState(false);
+    const [pendingAction, setPendingAction] = useState(null);
     const [cartMsg, setCartMsg] = useState(null);
     const { addItem } = useCart();
     const { formatPrice } = useCurrency();
@@ -29,6 +38,8 @@ const ProductDetailPage = () => {
     const pp = settings?.productPage || {};
     const sales = settings?.sales || {};
     const addToCartLabel = pp.addToCartLabel || 'Add to Cart';
+    const buyNowLabel = pp.buyNowLabel || 'Buy Now';
+    const showBuyNowButton = pp.showBuyNowButton !== false;
     const [countdownNow, setCountdownNow] = useState(Date.now());
 
     useEffect(() => {
@@ -59,13 +70,19 @@ const ProductDetailPage = () => {
     if (loading) return <Box sx={{ display: 'flex', justifyContent: 'center', py: 10 }}><CircularProgress /></Box>;
     if (error || !product) return <Typography variant="h5" color="error" textAlign="center" sx={{ mt: 10 }}>{error}</Typography>;
 
-    const basePrice = parseFloat(product.effectivePrice || product.salePrice || product.price);
-    const currentPrice = basePrice + parseFloat(selectedVariant?.priceModifier ?? 0);
-    const hasSale = product.isSaleActive ?? (product.salePrice && parseFloat(product.salePrice) < parseFloat(product.price));
+    const currentPrice = getVariantUnitPrice(product, selectedVariant);
+    const regularPrice = getVariantRegularPrice(product, selectedVariant);
+    const upcomingSalePrice = getVariantSalePrice(product, selectedVariant);
+    const productHasSale = product.isSaleActive ?? (product.salePrice && parseFloat(product.salePrice) < parseFloat(product.price));
     const isScheduledSale = product.saleStatus === 'scheduled';
-    const discountPercent = product.discountPercent || getDiscountPercent(product);
-    const savingsAmount = product.savingsAmount || getSavingsAmount(product);
+    const discountPercent = selectedVariant
+        ? getVariantDiscountPercent(product, selectedVariant)
+        : (product.discountPercent || getDiscountPercent(product));
+    const savingsAmount = selectedVariant
+        ? getVariantSavingsAmount(product, selectedVariant)
+        : (product.savingsAmount || getSavingsAmount(product));
     const saleTiming = sales.showSaleTiming !== false ? getSaleTimingMessage(product) : null;
+    const hasSale = productHasSale && currentPrice < regularPrice;
     const countdownText = sales.showCountdown === false ? null : (isScheduledSale
         ? getCountdownText(product.saleStartAt, 'Starts in ')
         : hasSale
@@ -77,17 +94,63 @@ const ProductDetailPage = () => {
     const endingSoon = hasSale && sales.showCountdown !== false && isEndingSoon(product.saleEndAt, sales.endingSoonHours);
     const stockAvailable = selectedVariant ? selectedVariant.quantity > 0 : product.quantity > 0;
 
-    const handleAddToCart = async () => {
-        setAddingToCart(true);
+    const addSelectedItemToCart = async (action) => {
+        setPendingAction(action);
         setCartMsg(null);
         try {
             await addItem(product.id, 1, selectedVariant?.id || null);
-            setCartMsg({ type: 'success', text: 'Added to cart!' });
+            return true;
         } catch (err) {
             setCartMsg({ type: 'error', text: err?.response?.data?.message || 'Failed to add to cart' });
+            return false;
         } finally {
-            setAddingToCart(false);
+            setPendingAction(null);
         }
+    };
+
+    const handleAddToCart = async () => {
+        const added = await addSelectedItemToCart('cart');
+        if (added) {
+            setCartMsg({ type: 'success', text: 'Added to cart!' });
+        }
+    };
+
+    const handleBuyNow = async () => {
+        if (!stockAvailable) {
+            return;
+        }
+
+        navigate('/checkout', {
+            state: {
+                fromBuyNow: true,
+                buyNowItem: {
+                    productId: product.id,
+                    variantId: selectedVariant?.id || null,
+                    quantity: 1,
+                    product: {
+                        id: product.id,
+                        name: product.name,
+                        slug: product.slug,
+                        price: product.price,
+                        salePrice: product.salePrice,
+                        effectivePrice: product.effectivePrice,
+                        saleStartAt: product.saleStartAt,
+                        saleEndAt: product.saleEndAt,
+                        images: product.images,
+                    },
+                    variant: selectedVariant
+                        ? {
+                            id: selectedVariant.id,
+                            name: selectedVariant.name,
+                            value: selectedVariant.value,
+                            priceModifier: selectedVariant.priceModifier,
+                            unitPrice: currentPrice,
+                            quantity: selectedVariant.quantity,
+                        }
+                        : null,
+                },
+            },
+        });
     };
 
     return (
@@ -129,7 +192,7 @@ const ProductDetailPage = () => {
                         <Typography variant="h4" fontWeight="bold">
                             {product.name}
                         </Typography>
-                        <WishlistButton productId={product.id} />
+                        <WishlistButton productId={product.id} variantId={selectedVariant?.id || null} />
                     </Box>
 
                     {pp.showStockBadge !== false && (
@@ -151,7 +214,7 @@ const ProductDetailPage = () => {
                             <>
                                 <Typography variant="h5" color="primary" fontWeight="bold">{formatPrice(currentPrice)}</Typography>
                                 <Typography variant="h6" color="text.secondary" sx={{ textDecoration: 'line-through' }}>
-                                    {formatPrice(product.price)}
+                                    {formatPrice(regularPrice)}
                                 </Typography>
                             </>
                         ) : (
@@ -186,9 +249,9 @@ const ProductDetailPage = () => {
                                 </Typography>
                             )}
 
-                            {isScheduledSale && product.salePrice && (
+                            {isScheduledSale && upcomingSalePrice !== null && (
                                 <Typography variant="body2" color="text.secondary" sx={{ mb: 0.5 }}>
-                                    Upcoming sale price: <strong>{formatPrice(product.salePrice)}</strong>
+                                    Upcoming sale price: <strong>{formatPrice(upcomingSalePrice)}</strong>
                                 </Typography>
                             )}
 
@@ -232,17 +295,33 @@ const ProductDetailPage = () => {
                                 {cartMsg.text}
                             </Typography>
                         )}
-                        <Button
-                            variant="contained"
-                            size="large"
-                            fullWidth
-                            startIcon={<CartIcon />}
-                            disabled={!stockAvailable || addingToCart}
-                            onClick={handleAddToCart}
-                            sx={{ py: 1.5, fontSize: '1.1rem' }}
-                        >
-                            {addingToCart ? 'Adding...' : stockAvailable ? addToCartLabel : 'Out of Stock'}
-                        </Button>
+                        <Box sx={{ display: 'grid', gap: 1.5, gridTemplateColumns: showBuyNowButton ? { xs: '1fr', sm: '1fr 1fr' } : '1fr' }}>
+                            <Button
+                                variant="contained"
+                                size="large"
+                                fullWidth
+                                startIcon={<CartIcon />}
+                                disabled={!stockAvailable || pendingAction !== null}
+                                onClick={handleAddToCart}
+                                sx={{ py: 1.5, fontSize: '1.1rem' }}
+                            >
+                                {pendingAction === 'cart' ? 'Adding...' : stockAvailable ? addToCartLabel : 'Out of Stock'}
+                            </Button>
+                            {showBuyNowButton && (
+                                <Button
+                                    variant="outlined"
+                                    color="primary"
+                                    size="large"
+                                    fullWidth
+                                    startIcon={<FlashOnIcon />}
+                                    disabled={!stockAvailable || pendingAction !== null}
+                                    onClick={handleBuyNow}
+                                    sx={{ py: 1.5, fontSize: '1.1rem' }}
+                                >
+                                    {pendingAction === 'buyNow' ? 'Redirecting...' : stockAvailable ? buyNowLabel : 'Out of Stock'}
+                                </Button>
+                            )}
+                        </Box>
                     </Box>
 
                     <Divider sx={{ my: 4 }} />

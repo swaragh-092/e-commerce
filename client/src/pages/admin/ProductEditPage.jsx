@@ -49,6 +49,7 @@ import attributeService from '../../services/attributeService';
 import MediaUploader from '../../components/common/MediaUploader';
 import { useNotification } from '../../context/NotificationContext';
 import { useSettings } from '../../hooks/useSettings';
+import { getProductBasePrice, getVariantPriceModifierFromInput, getVariantUnitPrice } from '../../utils/variantPricing';
 
 const validate = (formData) => {
   const errs = {};
@@ -672,6 +673,7 @@ const VariantsPanel = ({ productId, baseSku, flatCatFiles = [] }) => {
   const notify = useNotification();
   const { generateVariantSKU } = useSKUGenerator();
   const [variants, setVariants] = useState([]);
+  const [productBasePrice, setProductBasePrice] = useState(0);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [attributes, setAttributes] = useState([]);
@@ -696,13 +698,22 @@ const VariantsPanel = ({ productId, baseSku, flatCatFiles = [] }) => {
   const loadAll = useCallback(async () => {
     setLoading(true);
     try {
-      const [varRes, attrRes] = await Promise.all([
+      const [varRes, attrRes, productRes] = await Promise.all([
         attributeService.getProductVariants(productId),
         attributeService.getAttributes({ limit: 100 }),
+        getProductById(productId),
       ]);
       const varData = varRes?.data?.data || [];
       const attrData = attrRes?.data?.data?.rows || attrRes?.data?.data || [];
-      setVariants(varData.map((v) => ({ ...v, _dirty: false, _new: false })));
+      const product = productRes?.data?.product || null;
+      const basePrice = getProductBasePrice(product);
+      setProductBasePrice(basePrice);
+      setVariants(varData.map((v) => ({
+        ...v,
+        priceModifier: getVariantUnitPrice(product || { price: basePrice, effectivePrice: basePrice }, v),
+        _dirty: false,
+        _new: false,
+      })));
       setAttributes(attrData);
     } catch {
       notify('Failed to load variants.', 'error');
@@ -729,7 +740,7 @@ const VariantsPanel = ({ productId, baseSku, flatCatFiles = [] }) => {
         _dirty: false,
         name: tmpl.name,
         value: v.value,
-        priceModifier: 0,
+        priceModifier: productBasePrice,
         quantity: 0,
         sku: '',
       })),
@@ -747,7 +758,7 @@ const VariantsPanel = ({ productId, baseSku, flatCatFiles = [] }) => {
         _dirty: false,
         name: '',
         value: '',
-        priceModifier: 0,
+        priceModifier: productBasePrice,
         quantity: 0,
         sku: '',
       },
@@ -790,7 +801,7 @@ const VariantsPanel = ({ productId, baseSku, flatCatFiles = [] }) => {
         await attributeService.addProductVariant(productId, {
           name: v.name.trim(),
           value: v.value.trim(),
-          priceModifier: parseFloat(v.priceModifier) || 0,
+          priceModifier: getVariantPriceModifierFromInput(productBasePrice, v.priceModifier),
           quantity: parseInt(v.quantity, 10) || 0,
           sku: v.sku?.trim() || null,
         });
@@ -799,7 +810,7 @@ const VariantsPanel = ({ productId, baseSku, flatCatFiles = [] }) => {
         await attributeService.updateProductVariant(productId, v.id, {
           name: v.name.trim(),
           value: v.value.trim(),
-          priceModifier: parseFloat(v.priceModifier) || 0,
+          priceModifier: getVariantPriceModifierFromInput(productBasePrice, v.priceModifier),
           quantity: parseInt(v.quantity, 10) || 0,
           sku: v.sku?.trim() || null,
         });
@@ -891,7 +902,7 @@ const VariantsPanel = ({ productId, baseSku, flatCatFiles = [] }) => {
       </Box>
 
       <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
-        Each row (e.g. Color=Red, Size=M) is an independent SKU with its own stock, price adjustment and SKU code.
+        Each row (e.g. Color=Red, Size=M) is an independent SKU with its own stock, final selling price and SKU code.
         Manage reusable templates in{' '}
         <Link to="/admin/attributes" style={{ color: 'inherit', fontWeight: 600 }}>Attributes →</Link>
       </Typography>
@@ -948,7 +959,7 @@ const VariantsPanel = ({ productId, baseSku, flatCatFiles = [] }) => {
               <TableRow sx={{ bgcolor: 'action.hover' }}>
                 <TableCell sx={{ fontWeight: 600 }}>Attribute</TableCell>
                 <TableCell sx={{ fontWeight: 600 }}>Value</TableCell>
-                <TableCell sx={{ fontWeight: 600 }}>Price Adj (±)</TableCell>
+                <TableCell sx={{ fontWeight: 600 }}>Variant Price</TableCell>
                 <TableCell sx={{ fontWeight: 600 }}>Stock Qty</TableCell>
                 <TableCell sx={{ fontWeight: 600 }}>SKU</TableCell>
                 <TableCell />

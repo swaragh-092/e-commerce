@@ -1,23 +1,35 @@
 import api from './api';
 
+const buildVariantParams = (variantId) => (variantId ? { params: { variantId } } : undefined);
+
 export const wishlistService = {
   getWishlist: async () => {
     const response = await api.get('/wishlist');
+    return Object.assign(response.data?.data || [], { meta: response.data?.meta || {} });
+  },
+
+  addItem: async (productId, variantId = null) => {
+    const response = await api.post('/wishlist/items', { productId, variantId });
     return response.data.data;
   },
 
-  addItem: async (productId) => {
-    const response = await api.post('/wishlist/items', { productId });
+  removeItem: async (productId, variantId = null) => {
+    const response = await api.delete(`/wishlist/items/${productId}`, buildVariantParams(variantId));
+    return response.data?.data;
+  },
+
+  moveToCart: async (productId, variantId = null) => {
+    const response = await api.post(`/wishlist/items/${productId}/to-cart`, {}, buildVariantParams(variantId));
     return response.data.data;
   },
 
-  removeItem: async (productId) => {
-    const response = await api.delete(`/wishlist/items/${productId}`);
-    return response.data;
+  moveAllToCart: async () => {
+    const response = await api.post('/wishlist/items/move-all-to-cart');
+    return response.data.data;
   },
 
-  moveToCart: async (productId) => {
-    const response = await api.post(`/wishlist/items/${productId}/to-cart`);
+  clearWishlist: async () => {
+    const response = await api.delete('/wishlist/items');
     return response.data.data;
-  }
+  },
 };

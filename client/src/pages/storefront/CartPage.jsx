@@ -16,6 +16,7 @@ import { useCurrency } from '../../hooks/useSettings';
 import PageSEO from '../../components/common/PageSEO';
 import { AuthContext } from '../../context/AuthContext';
 import { getEligibleCoupons } from '../../services/adminService';
+import { getCartItemUnitPrice } from '../../utils/variantPricing';
 
 const CartPage = () => {
     const { cart, cartCount, loading, updateItem, removeItem, clearCart } = useCart();
@@ -27,9 +28,7 @@ const CartPage = () => {
 
     const items = cart?.items || [];
     const subtotal = items.reduce((sum, item) => {
-        const price = parseFloat(item.product?.effectivePrice || item.product?.salePrice || item.product?.price || 0);
-        const modifier = parseFloat(item.variant?.priceModifier ?? 0);
-        return sum + (price + modifier) * item.quantity;
+        return sum + getCartItemUnitPrice(item) * item.quantity;
     }, 0);
 
     // Calculate shipping from settings (mirrors server logic)
@@ -105,9 +104,7 @@ const CartPage = () => {
                     {items.map((item, idx) => {
                         const product = item.product;
                         const variant = item.variant;
-                        const price = parseFloat(product?.effectivePrice || product?.salePrice || product?.price || 0);
-                        const modifier = parseFloat(variant?.priceModifier ?? 0);
-                        const itemPrice = price + modifier;
+                        const itemPrice = getCartItemUnitPrice(item);
                         const imageUrl = getMediaUrl(product?.images?.[0]?.url || '') || '/placeholder.png';
 
                         return (

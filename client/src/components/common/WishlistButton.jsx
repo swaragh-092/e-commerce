@@ -8,21 +8,22 @@ import { useAuth } from '../../hooks/useAuth';
 import { useWishlist } from '../../context/WishlistContext';
 import { useFeature } from '../../hooks/useSettings';
 
-const WishlistButton = ({ productId }) => {
+const WishlistButton = ({ productId, variantId = null }) => {
   const wishlistEnabled = useFeature('wishlist');
-  if (!wishlistEnabled) return null;
-  const { wishlistIds, refreshWishlist } = useWishlist();
+  const { isInWishlist, refreshWishlist } = useWishlist();
   const [inWishlist, setInWishlist] = useState(false);
-
-  // Sync with global wishlist context whenever the set changes
-  useEffect(() => {
-    setInWishlist(wishlistIds.has(productId));
-  }, [wishlistIds, productId]);
   const [loading, setLoading] = useState(false);
   const [snackbar, setSnackbar] = useState(null);
   const { isAuthenticated } = useAuth();
   const navigate = useNavigate();
   const location = useLocation();
+
+  // Sync with global wishlist context whenever the set changes
+  useEffect(() => {
+    setInWishlist(isInWishlist(productId, variantId));
+  }, [isInWishlist, productId, variantId]);
+
+  if (!wishlistEnabled) return null;
 
   const toggleWishlist = async () => {
     if (!isAuthenticated) {
@@ -33,10 +34,10 @@ const WishlistButton = ({ productId }) => {
     setLoading(true);
     try {
       if (inWishlist) {
-        await wishlistService.removeItem(productId);
+        await wishlistService.removeItem(productId, variantId);
         setSnackbar({ severity: 'info', message: 'Removed from wishlist' });
       } else {
-        await wishlistService.addItem(productId);
+        await wishlistService.addItem(productId, variantId);
         setSnackbar({ severity: 'success', message: 'Added to wishlist' });
       }
       // Refresh the global set so all other WishlistButton instances update too

@@ -7,7 +7,7 @@ const CouponService = require('../coupon/coupon.service');
 const PaymentService = require('../payment/payment.service');
 const { getPagination } = require('../../utils/pagination');
 const { ACTIONS, ENTITIES } = require('../../config/constants');
-const { getEffectivePrice } = require('../product/product.pricing');
+const { getVariantUnitPrice } = require('../product/product.pricing');
 
 // Utility to fetch settings
 const getSetting = async (key, defaultVal) => {
@@ -17,29 +17,70 @@ const getSetting = async (key, defaultVal) => {
 };
 
 const placeOrder = async (userId, payload) => {
-    const { shippingAddressId, couponCode, couponCodes = [], notes } = payload;
-    
-    const cart = await Cart.findOne({
-        where: { userId, status: 'active' },
-        include: [{
-            model: CartItem,
-            as: 'items',
-            include: [
-                {
-                    model: Product,
-                    as: 'product',
-                    include: [
-                        { model: Category, as: 'categories' },
-                        { model: Brand, as: 'brand' },
-                    ],
-                },
-                { model: ProductVariant, as: 'variant' }
-            ]
-        }]
-    });
+    const { shippingAddressId, couponCode, couponCodes = [], notes, buyNowItem = null } = payload;
+    let cart = null;
+    let checkoutItems = [];
 
-    if (!cart || !cart.items || cart.items.length === 0) {
-        throw new AppError('VALIDATION_ERROR', 400, 'Cart is empty');
+    if (buyNowItem?.productId) {
+        const product = await Product.findByPk(buyNowItem.productId, {
+            include: [
+                { model: Category, as: 'categories' },
+                { model: Brand, as: 'brand' },
+            ],
+        });
+
+        if (!product) {
+            throw new AppError('NOT_FOUND', 404, 'Buy Now product not found');
+        }
+
+        let variant = null;
+        if (buyNowItem.variantId) {
+            variant = await ProductVariant.findOne({
+                where: { id: buyNowItem.variantId, productId: buyNowItem.productId },
+            });
+
+            if (!variant) {
+                throw new AppError('NOT_FOUND', 404, 'Selected product variant not found');
+            }
+        }
+
+        const quantity = Number(buyNowItem.quantity);
+        if (!Number.isInteger(quantity) || quantity <= 0) {
+            throw new AppError('VALIDATION_ERROR', 400, 'Invalid quantity for Buy Now item');
+        }
+
+        checkoutItems = [{
+            productId: product.id,
+            variantId: variant?.id || null,
+            quantity,
+            product,
+            variant,
+        }];
+    } else {
+        cart = await Cart.findOne({
+            where: { userId, status: 'active' },
+            include: [{
+                model: CartItem,
+                as: 'items',
+                include: [
+                    {
+                        model: Product,
+                        as: 'product',
+                        include: [
+                            { model: Category, as: 'categories' },
+                            { model: Brand, as: 'brand' },
+                        ],
+                    },
+                    { model: ProductVariant, as: 'variant' }
+                ]
+            }]
+        });
+
+        if (!cart || !cart.items || cart.items.length === 0) {
+            throw new AppError('VALIDATION_ERROR', 400, 'Cart is empty');
+        }
+
+        checkoutItems = cart.items;
     }
 
     const address = await Address.findOne({ where: { id: shippingAddressId, userId } });
@@ -56,7 +97,7 @@ const placeOrder = async (userId, payload) => {
     const order = await sequelize.transaction(async (t) => {
         let subtotal = 0;
 
-        for (const item of cart.items) {
+        for (const item of checkoutItems) {
             const product = item.product;
             if (!product) {
                 throw new AppError('VALIDATION_ERROR', 400, 'One or more products in your cart are no longer available. Please clear your cart and try again.');
@@ -66,19 +107,33 @@ const placeOrder = async (userId, payload) => {
             }
 
             const currentProduct = await Product.findByPk(product.id, { transaction: t, lock: t.LOCK.UPDATE });
+            if (!currentProduct) {
+                throw new AppError(
+                    'VALIDATION_ERROR',
+                    400,
+                    `"${product.name}" is no longer available. Please remove it from your cart before checkout.`
+                );
+            }
             
-            let currentPrice = getEffectivePrice(currentProduct);
+            let currentPrice = getVariantUnitPrice(currentProduct, null);
 
-            if (item.variantId && item.variant) {
+            if (item.variantId) {
                 const currentVariant = await ProductVariant.findByPk(item.variantId, { transaction: t });
-                if (currentVariant) {
-                    currentPrice += Number(currentVariant.priceModifier);
+                if (!currentVariant) {
+                    throw new AppError('VALIDATION_ERROR', 400, `The selected variant for "${product.name}" is no longer available.`);
                 }
+
+                currentPrice = getVariantUnitPrice(currentProduct, currentVariant);
+                item.variant = currentVariant;
             }
 
             subtotal += currentPrice * item.quantity;
             item.currentPrice = currentPrice;
-            item.currentProduct = currentProduct;
+            item.currentProduct = {
+                ...(typeof currentProduct.toJSON === 'function' ? currentProduct.toJSON() : currentProduct),
+                categories: product.categories || [],
+                brand: product.brand || null,
+            };
         }
 
         const globalTaxRate = Number(getLocalSetting('tax.rate', 0));
@@ -94,7 +149,7 @@ const placeOrder = async (userId, payload) => {
 
         let totalTax = 0;
         if (!taxInclusive) {
-            for (const item of cart.items) {
+            for (const item of checkoutItems) {
                 const itemSubtotal = item.currentPrice * item.quantity;
                 if (useGST) {
                     totalTax += itemSubtotal * (cgstRate + sgstRate + igstRate);
@@ -127,13 +182,13 @@ const placeOrder = async (userId, payload) => {
         if (requestedCouponCodes.length > 0) {
             couponBenefits = await CouponService.resolveCoupons(requestedCouponCodes, userId, {
                 cartSubtotal: subtotal,
-                cartItems: cart.items,
+                cartItems: checkoutItems,
                 shippingCost,
             });
         } else {
             couponBenefits = await CouponService.resolveCoupons([], userId, {
                 cartSubtotal: subtotal,
-                cartItems: cart.items,
+                cartItems: checkoutItems,
                 shippingCost,
             });
         }
@@ -151,7 +206,7 @@ const placeOrder = async (userId, payload) => {
 
         const total = subtotal + totalTax + shippingCost - discountAmount;
 
-        for (const item of cart.items) {
+        for (const item of checkoutItems) {
             const product = item.currentProduct;
             const updatedRows = await Product.update(
                 { reservedQty: sequelize.literal(`reserved_qty + ${item.quantity}`) },
@@ -196,7 +251,7 @@ const placeOrder = async (userId, payload) => {
             notes
         }, { transaction: t });
 
-        for (const item of cart.items) {
+        for (const item of checkoutItems) {
             await OrderItem.create({
                 orderId: order.id,
                 productId: item.productId,
@@ -226,7 +281,9 @@ const placeOrder = async (userId, payload) => {
             );
         }
 
-        await cart.update({ status: 'converted' }, { transaction: t });
+        if (cart) {
+            await cart.update({ status: 'converted' }, { transaction: t });
+        }
 
         return order;
     });

@@ -19,6 +19,13 @@ export const SettingsProvider = ({ children }) => {
         theme: { primaryColor: '#1976d2', mode: 'light', fontFamily: 'Roboto' },
         general: { storeName: 'E-Commerce Store' },
         features: { wishlist: true, reviews: true, coupons: true, guestCheckout: true },
+        productPage: {
+          showSKU: true,
+          showStockBadge: true,
+          addToCartLabel: 'Add to Cart',
+          showBuyNowButton: true,
+          buyNowLabel: 'Buy Now',
+        },
         sales: {
           allowScheduling: true,
           allowBulkSales: true,

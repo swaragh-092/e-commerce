@@ -17,7 +17,7 @@ const AppError = require('../../utils/AppError');
 const AuditService = require('../audit/audit.service');
 const { getPagination } = require('../../utils/pagination');
 const { ACTIONS, ENTITIES } = require('../../config/constants');
-const { getEffectivePrice, isSaleActive } = require('../product/product.pricing');
+const { getEffectivePrice, getVariantUnitPrice, isSaleActive } = require('../product/product.pricing');
 
 const ensureArray = (value) => (Array.isArray(value) ? [...new Set(value.filter(Boolean))] : []);
 
@@ -389,8 +389,7 @@ const mapCartLine = (item) => {
     const product = item.currentProduct || item.product;
     if (!product) return null;
 
-    const basePrice = product.effectivePrice !== undefined ? toNumber(product.effectivePrice) : getEffectivePrice(product);
-    const variantModifier = item.variant ? toNumber(item.variant.priceModifier) : 0;
+    const unitPrice = getVariantUnitPrice(product, item.variant);
     const quantity = Number(item.quantity || 0);
 
     return {
@@ -399,8 +398,8 @@ const mapCartLine = (item) => {
         brandId: product.brandId || product.brand?.id || null,
         categoryIds: Array.isArray(product.categories) ? product.categories.map((category) => category.id) : [],
         quantity,
-        unitPrice: Number((basePrice + variantModifier).toFixed(2)),
-        lineSubtotal: Number(((basePrice + variantModifier) * quantity).toFixed(2)),
+        unitPrice,
+        lineSubtotal: Number((unitPrice * quantity).toFixed(2)),
         isSaleItem: product.isSaleActive !== undefined ? Boolean(product.isSaleActive) : isSaleActive(product),
     };
 };
