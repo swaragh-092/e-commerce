@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { Box, AppBar, Toolbar, Typography, Button, IconButton, Badge } from '@mui/material';
 import ShoppingCartIcon from '@mui/icons-material/ShoppingCart';
 import CloseIcon from '@mui/icons-material/Close';
@@ -10,6 +10,7 @@ import FavoriteBorderIcon from '@mui/icons-material/FavoriteBorder';
 import CategoryNav from '../components/layout/CategoryNav';
 import StorefrontFooter from '../components/layout/StorefrontFooter';
 import { useWishlist } from '../context/WishlistContext';
+import PageService from '../services/pageService';
 
 const StoreLayout = () => {
   const { isAuthenticated, logout, hasPermission } = useAuth();
@@ -17,6 +18,19 @@ const StoreLayout = () => {
   const { cartCount } = useCart();
   const { wishlistCount } = useWishlist();
   const [announcementDismissed, setAnnouncementDismissed] = useState(false);
+  const [topLinks, setTopLinks] = useState([]);
+
+  useEffect(() => {
+    const fetchTopLinks = async () => {
+      try {
+        const response = await PageService.getPublicPages('top');
+        setTopLinks(response.data || []);
+      } catch (error) {
+        console.error('Error fetching top links:', error);
+      }
+    };
+    fetchTopLinks();
+  }, []);
 
   const nav          = settings?.nav          || {};
   const announcement = settings?.announcement || {};
@@ -67,6 +81,19 @@ const StoreLayout = () => {
                 {settings?.general?.storeName || 'E-Commerce Store'}
               </Typography>
             )}
+          </Box>
+          <Box sx={{ display: 'none', md: 'flex', alignItems: 'center', gap: 2, mr: 3 }}>
+            {topLinks.map((link) => (
+              <Button
+                key={link.id}
+                color="inherit"
+                component={RouterLink}
+                to={`/p/${link.slug}`}
+                sx={{ textTransform: 'none', fontWeight: 500 }}
+              >
+                {link.title}
+              </Button>
+            ))}
           </Box>
           <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
             <IconButton color="inherit" component={RouterLink} to="/cart">

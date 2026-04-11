@@ -26,6 +26,8 @@ export const PERMISSIONS = Object.freeze({
   SETTINGS_MANAGE: 'settings.manage',
   SETTINGS_ADVANCED: 'settings.advanced',
   AUDIT_READ: 'audit.read',
+  PAGES_READ: 'pages.read',
+  PAGES_MANAGE: 'pages.manage',
   ACCOUNT_SELF: 'account.self',
   CART_SELF: 'cart.self',
   WISHLIST_SELF: 'wishlist.self',
@@ -70,6 +72,7 @@ const ADMIN_PERMISSIONS = [
   PERMISSIONS.SETTINGS_READ,
   PERMISSIONS.SETTINGS_MANAGE,
   PERMISSIONS.AUDIT_READ,
+  PERMISSIONS.PAGES_READ,
 ];
 
 const CUSTOMER_PERMISSIONS = [

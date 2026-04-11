@@ -14,6 +14,7 @@ import PhoneIcon from '@mui/icons-material/Phone';
 import LocationOnIcon from '@mui/icons-material/LocationOn';
 import { useSettings } from '../../hooks/useSettings';
 import { useTheme } from '@mui/material/styles';
+import PageService from '../../services/pageService';
 
 const SOCIAL = [
   { key: 'facebook',  Icon: FacebookIcon,  label: 'Facebook'  },
@@ -26,6 +27,20 @@ const SOCIAL = [
 const StorefrontFooter = () => {
   const { settings } = useSettings();
   const theme = useTheme();
+  const [dynamicLinks, setDynamicLinks] = React.useState([]);
+
+  React.useEffect(() => {
+    const fetchDynamicLinks = async () => {
+      try {
+        const response = await PageService.getPublicPages('bottom');
+        setDynamicLinks(response.data || []);
+      } catch (error) {
+        console.error('Error fetching dynamic footer links:', error);
+      }
+    };
+    fetchDynamicLinks();
+  }, []);
+
   const f       = settings?.footer  || {};
   const general = settings?.general || {};
 
@@ -39,9 +54,15 @@ const StorefrontFooter = () => {
     .replace('{year}',      new Date().getFullYear())
     .replace('{storeName}', general.storeName || 'Store');
 
-  const links      = Array.isArray(f.links) ? f.links : [];
+  const staticLinks = Array.isArray(f.links) ? f.links : [];
+  // Merge static links from settings with dynamic links from the Pages module
+  const allLinks = [
+    ...staticLinks.map(l => ({ label: l.label, url: l.url })),
+    ...dynamicLinks.map(p => ({ label: p.title, url: `/p/${p.slug}` }))
+  ];
+
   const hasSocial  = f.showSocial  && SOCIAL.some(({ key }) => f[key]);
-  const hasLinks   = f.showLinks !== false && links.length > 0;
+  const hasLinks   = (f.showLinks !== false && staticLinks.length > 0) || dynamicLinks.length > 0;
   const hasContact = f.showContact && (f.email || f.phone || f.address);
 
   const activeCols = [true, hasLinks, hasContact].filter(Boolean).length;
@@ -119,7 +140,7 @@ const StorefrontFooter = () => {
                 {f.linksTitle || 'Quick Links'}
               </Typography>
               <Stack spacing={1}>
-                {links.map((link, i) => (
+                {allLinks.map((link, i) => (
                   <MuiLink
                     key={i}
                     component={RouterLink}

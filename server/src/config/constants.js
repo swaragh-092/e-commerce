@@ -36,6 +36,7 @@ module.exports = {
     COUPON: 'Coupon',
     REVIEW: 'Review',
     SETTING: 'Setting',
+    PAGE: 'Page',
   },
 
   // Actions for Audit Logs

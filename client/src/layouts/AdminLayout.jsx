@@ -29,6 +29,7 @@ import TuneIcon from '@mui/icons-material/Tune';
 import AdminPanelSettingsIcon from '@mui/icons-material/AdminPanelSettings';
 import StoreIcon from '@mui/icons-material/Storefront';
 import ExitIcon from '@mui/icons-material/ExitToApp';
+import DescriptionIcon from '@mui/icons-material/Description';
 import { useAuth } from '../hooks/useAuth';
 import { useSettings } from '../hooks/useSettings';
 import { PERMISSIONS } from '../utils/permissions';
@@ -48,6 +49,7 @@ const ALL_MENU_ITEMS = [
   { text: 'Reviews',    path: '/admin/reviews',    icon: <StarIcon />, feature: 'reviews', permission: PERMISSIONS.REVIEWS_READ },
   { text: 'Media',      path: '/admin/media',      icon: <PhotoLibraryIcon />, permission: PERMISSIONS.MEDIA_READ },
   { text: 'Settings',   path: '/admin/settings',   icon: <SettingsIcon />, permission: PERMISSIONS.SETTINGS_READ },
+  { text: 'Pages',      path: '/admin/pages',     icon: <DescriptionIcon />, permission: PERMISSIONS.PAGES_READ },
   {
     text: 'Access Control',
     path: '/admin/access-control',

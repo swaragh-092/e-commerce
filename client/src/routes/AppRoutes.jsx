@@ -43,6 +43,9 @@ const AuditLogPage = lazy(() => import('../pages/admin/AuditLogPage'));
 const AttributesPage = lazy(() => import('../pages/admin/AttributesPage'));
 const BrandsPage = lazy(() => import('../pages/admin/BrandsPage'));
 const AccessControlPage = lazy(() => import('../pages/admin/AccessControlPage'));
+const PagesManagePage = lazy(() => import('../pages/admin/PagesManagePage'));
+const PageEditPage = lazy(() => import('../pages/admin/PageEditPage'));
+const StaticPageView = lazy(() => import('../pages/storefront/StaticPageView'));
 
 const LoadingFallback = () => (
   <Box sx={{ display: 'flex', justifyContent: 'center', alignItems: 'center', minHeight: '50vh' }}>
@@ -63,6 +66,7 @@ const AppRoutes = () => (
         <Route path="products/:slug" element={<ProductDetailPage />} />
         <Route path="product/:slug" element={<ProductDetailPage />} />
         <Route path="category/:categorySlug" element={<ProductListPage />} />
+        <Route path="p/:slug" element={<StaticPageView />} />
         <Route path="cart" element={<CartPage />} />
 
         {/* Auth */}
@@ -106,6 +110,9 @@ const AppRoutes = () => (
           <Route path="media" element={<MediaPage />} />
           <Route path="settings" element={<SettingsPage />} />
           <Route path="audit-log" element={<AuditLogPage />} />
+          <Route path="pages" element={<PagesManagePage />} />
+          <Route path="pages/new" element={<PageEditPage />} />
+          <Route path="pages/:id/edit" element={<PageEditPage />} />
           <Route
             path="access-control"
             element={(
