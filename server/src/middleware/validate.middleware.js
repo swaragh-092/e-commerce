@@ -2,14 +2,15 @@
 
 /**
  * Validation middleware using Joi.
- * Validates req.body against the provided Joi schema.
+ * Validates req[property] against the provided Joi schema.
  *
  * @param {object} schema - Joi validation schema
+ * @param {string} property - req property to validate (e.g. 'body', 'query', 'params'). Defaults to 'body'.
  * @returns {Function} Express middleware
  */
-const validate = (schema) => {
+const validate = (schema, property = 'body') => {
     return (req, res, next) => {
-        const { error, value } = schema.validate(req.body, {
+        const { error, value } = schema.validate(req[property], {
             abortEarly: false,
             stripUnknown: true,
         });
@@ -30,8 +31,10 @@ const validate = (schema) => {
             });
         }
 
-        req.body = value; // use sanitized/stripped value
-        req.validated = value; // for consistency with controllers
+        req[property] = value; // use sanitized/stripped value
+        if (property === 'body') {
+            req.validated = value; // keep legacy behavior for body
+        }
         next();
     };
 };

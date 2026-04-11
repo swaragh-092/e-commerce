@@ -12,7 +12,9 @@ exports.getPublicPages = async (req, res, next) => {
         const { linkPosition } = req.query;
         // Public view only sees published pages
         const result = await PageService.getPages({ linkPosition }, 1, 100, false);
-        return res.status(200).json(success('Pages retrieved successfully', result.data));
+        // getPages returns { totalItems, data, totalPages, currentPage } for paginated data
+        // For public pages, we just return the array of data directly
+        return success(res, result.data, 'Pages retrieved successfully');
     } catch (err) {
         next(err);
     }
@@ -25,7 +27,7 @@ exports.getPageBySlug = async (req, res, next) => {
     try {
         const { slug } = req.params;
         const page = await PageService.getPageBySlug(slug, { adminView: false });
-        return res.status(200).json(success('Page retrieved successfully', page));
+        return success(res, page, 'Page retrieved successfully');
     } catch (err) {
         next(err);
     }
@@ -38,7 +40,9 @@ exports.adminGetPages = async (req, res, next) => {
     try {
         const { page = 1, limit = 10, status, search, linkPosition } = req.query;
         const result = await PageService.getPages({ status, search, linkPosition }, page, limit, true);
-        return res.status(200).json(paginated('Pages retrieved successfully', result.data, result.meta));
+        // result assumes it has: data, totalItems, currentPage. Let's look at getPagingData struct.
+        // getPagingData returns { totalItems, data, totalPages, currentPage }
+        return paginated(res, result.data, result.totalItems, result.currentPage, limit, 'Pages retrieved successfully');
     } catch (err) {
         next(err);
     }
@@ -51,7 +55,7 @@ exports.adminCreatePage = async (req, res, next) => {
     try {
         const data = { ...req.body, createdBy: req.user.id };
         const page = await PageService.createPage(data);
-        return res.status(201).json(success('Page created successfully', page));
+        return success(res, page, 'Page created successfully', 201);
     } catch (err) {
         next(err);
     }
@@ -63,7 +67,7 @@ exports.adminCreatePage = async (req, res, next) => {
 exports.adminGetPageById = async (req, res, next) => {
     try {
         const page = await PageService.getPageById(req.params.id);
-        return res.status(200).json(success('Page retrieved successfully', page));
+        return success(res, page, 'Page retrieved successfully');
     } catch (err) {
         next(err);
     }
@@ -76,7 +80,7 @@ exports.adminUpdatePage = async (req, res, next) => {
     try {
         const data = { ...req.body, updatedBy: req.user.id };
         const page = await PageService.updatePage(req.params.id, data);
-        return res.status(200).json(success('Page updated successfully', page));
+        return success(res, page, 'Page updated successfully');
     } catch (err) {
         next(err);
     }
@@ -88,7 +92,7 @@ exports.adminUpdatePage = async (req, res, next) => {
 exports.adminDeletePage = async (req, res, next) => {
     try {
         await PageService.deletePage(req.params.id, req.user.id);
-        return res.status(200).json(success('Page deleted successfully'));
+        return success(res, null, 'Page deleted successfully');
     } catch (err) {
         next(err);
     }

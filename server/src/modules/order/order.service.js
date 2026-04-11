@@ -362,8 +362,15 @@ const cancelOrder = async (id, userId) => {
         for (const item of order.items) {
              if (item.productId) {
                  await Product.update(
-                     { reservedQty: sequelize.literal(`reserved_qty - ${item.quantity}`) },
-                     { where: { id: item.productId }, transaction: t }
+                     // GREATEST prevents underflow if the job already decremented
+                     { reservedQty: sequelize.literal(`GREATEST(reserved_qty - ${item.quantity}, 0)`) },
+                     {
+                         where: {
+                             id: item.productId,
+                             reservedQty: { [Op.gt]: 0 },
+                         },
+                         transaction: t,
+                     }
                  );
              }
         }

@@ -5,6 +5,7 @@ const sharp = require('sharp');
 const { v4: uuidv4 } = require('uuid');
 const { Media } = require('../index');
 const { getPagination, getPagingData } = require('../../utils/pagination');
+const AppError = require('../../utils/AppError');
 
 // Respect UPLOAD_DIR env var — works in both local dev and Docker
 const UPLOADS_DIR = path.resolve(process.env.UPLOAD_DIR || 'uploads');
@@ -19,16 +20,16 @@ const ensureDirs = async () => {
 ensureDirs();
 
 exports.uploadMedia = async (file) => {
-  if (!file) throw new Error('No file provided');
+  if (!file) throw new AppError('VALIDATION_ERROR', 400, 'No file provided');
 
   const fileType = await import('file-type');
   const typeInfo = await fileType.default.fromBuffer(file.buffer);
 
-  if (!typeInfo) throw new Error('Could not determine file type');
+  if (!typeInfo) throw new AppError('VALIDATION_ERROR', 400, 'Could not determine file type');
 
   const allowedMimes = ['image/jpeg', 'image/png', 'image/webp', 'image/gif'];
   if (!allowedMimes.includes(typeInfo.mime)) {
-    throw new Error('Invalid file type. Only JPEG, PNG, WebP, and GIF are allowed.');
+    throw new AppError('VALIDATION_ERROR', 400, 'Invalid file type. Only JPEG, PNG, WebP, and GIF are allowed.');
   }
 
   const uniqueId = uuidv4();
@@ -76,7 +77,7 @@ exports.listMedia = async (page, limit) => {
 
 exports.deleteMedia = async (id) => {
   const media = await Media.findByPk(id);
-  if (!media) throw new Error('Media not found');
+  if (!media) throw new AppError('NOT_FOUND', 404, 'Media not found');
 
   const filename = media.filename;
 

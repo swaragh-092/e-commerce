@@ -136,12 +136,12 @@ const refresh = async (refreshTokenStr, ipAddress) => {
     const tokenRecord = await RefreshToken.findOne({ where: { token: refreshTokenStr } });
 
     if (!tokenRecord || tokenRecord.revokedAt) {
-      throw new Error('Token revoked');
+      throw new AppError('UNAUTHORIZED', 401, 'Token revoked');
     }
 
     const user = await User.findByPk(decoded.id);
     if (!user || user.status !== 'active') {
-      throw new Error('User inactive');
+      throw new AppError('FORBIDDEN', 403, 'User inactive');
     }
 
     const { accessToken } = generateTokens(user);
@@ -151,6 +151,7 @@ const refresh = async (refreshTokenStr, ipAddress) => {
 
     return { accessToken };
   } catch (err) {
+    if (err instanceof AppError) throw err;
     throw new AppError('UNAUTHORIZED', 401, 'Invalid or expired refresh token');
   }
 };

@@ -135,37 +135,65 @@ const handleWebhook = async (payload, signature) => {
     }
 
     const expectedSignature = crypto
-        .createHmac("sha256", secret)
+        .createHmac('sha256', secret)
         .update(JSON.stringify(payload))
-        .digest("hex");
+        .digest('hex');
 
     if (expectedSignature !== signature) {
         throw new AppError('VALIDATION_ERROR', 400, 'Invalid webhook signature');
     }
 
     const event = payload.event;
-    const paymentEntity = payload.payload.payment.entity;
-    const orderId = paymentEntity.notes?.orderId;
+    // Razorpay uses its payment entity ID as the unique event identifier
+    const paymentEntity = payload.payload?.payment?.entity;
+    const razorpayEventId = paymentEntity?.id;
 
-    if (orderId && event === 'payment.captured') {
+    if (!razorpayEventId) {
+        // Malformed payload — acknowledge without processing
+        return { received: true, skipped: true };
+    }
+
+    // ── Idempotency check — uses WebhookEvent PK as a deduplication fence ──
+    // This insert + order update are wrapped in a single transaction so concurrent
+    // duplicate webhook deliveries cannot both slip through the status check.
+    try {
         await sequelize.transaction(async (t) => {
-            const order = await Order.findByPk(orderId, { transaction: t });
-            if (order && order.status === 'pending_payment') {
-                await order.update({ status: 'paid' }, { transaction: t });
-            }
-            
-            const payment = await Payment.findOne({ 
-                where: { orderId: orderId }, 
-                transaction: t 
-            });
-            
-            if (payment && payment.status !== 'completed') {
-                await payment.update({ 
-                    status: 'completed',
-                    transactionId: paymentEntity.id 
-                }, { transaction: t });
+            // INSERT will throw a unique-constraint error if this event was already processed.
+            // We catch that specific error below and return early.
+            await WebhookEvent.create(
+                { id: razorpayEventId, eventType: event, processedAt: new Date() },
+                { transaction: t }
+            );
+
+            // Only process recognized events
+            if (event === 'payment.captured') {
+                const orderId = paymentEntity.notes?.orderId;
+                if (!orderId) return;
+
+                const order = await Order.findByPk(orderId, { transaction: t, lock: t.LOCK.UPDATE });
+                if (order && order.status === 'pending_payment') {
+                    await order.update({ status: 'paid' }, { transaction: t });
+                }
+
+                const payment = await Payment.findOne({
+                    where: { orderId },
+                    transaction: t,
+                    lock: t.LOCK.UPDATE,
+                });
+                if (payment && payment.status !== 'completed') {
+                    await payment.update({
+                        status: 'completed',
+                        transactionId: paymentEntity.id,
+                    }, { transaction: t });
+                }
             }
         });
+    } catch (err) {
+        // Sequelize unique constraint violation = duplicate event — safe to ignore
+        if (err.name === 'SequelizeUniqueConstraintError') {
+            return { received: true, duplicate: true };
+        }
+        throw err;
     }
 
     return { received: true };

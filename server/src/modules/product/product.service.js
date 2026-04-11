@@ -179,7 +179,7 @@ exports.getProductBySlug = async (slug, { adminView = false } = {}) => {
       { model: Brand, as: 'brand' },
     ],
   });
-  if (!product) throw new Error('Product not found');
+  if (!product) throw new AppError('NOT_FOUND', 404, 'Product not found');
   return serializeProductPricing(product, { adminView });
 };
 
@@ -193,7 +193,7 @@ exports.getProductById = async (id) => {
       { model: Brand, as: 'brand' },
     ],
   });
-  if (!product) throw new Error('Product not found');
+  if (!product) throw new AppError('NOT_FOUND', 404, 'Product not found');
   return serializeProductPricing(product, { adminView: true });
 };
 

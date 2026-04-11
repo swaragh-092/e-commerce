@@ -12,6 +12,10 @@ const app = require('./src/app');
 const { sequelize } = require('./src/modules');
 const logger = require('./src/utils/logger');
 const startJobs = require('./src/jobs');
+const { validateEnvironment } = require('./src/utils/validateEnvironment');
+
+// Fail fast — verify secrets before touching the DB or network
+validateEnvironment();
 
 
 const PORT = process.env.PORT || 5000;
