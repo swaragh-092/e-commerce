@@ -1,23 +1,39 @@
 'use strict';
-const Razorpay = require('razorpay');
 const crypto = require('crypto');
 const { sequelize, Payment, Order, WebhookEvent, Setting } = require('../index');
 const AppError = require('../../utils/AppError');
 
-// Razorpay is initialized from environment
-if (!process.env.RAZORPAY_KEY_ID || !process.env.RAZORPAY_KEY_SECRET) {
-    throw new AppError('INTERNAL_ERROR', 500, 'Razorpay configuration missing');
-}
+let Razorpay;
+let razorpayClient = null;
 
-const razorpay = new Razorpay({
-    key_id: process.env.RAZORPAY_KEY_ID,
-    key_secret: process.env.RAZORPAY_KEY_SECRET,
-});
+const getRazorpayClient = () => {
+    if (razorpayClient) {
+        return razorpayClient;
+    }
+
+    if (!process.env.RAZORPAY_KEY_ID || !process.env.RAZORPAY_KEY_SECRET) {
+        throw new AppError('PAYMENT_UNAVAILABLE', 503, 'Razorpay configuration missing');
+    }
+
+    try {
+        Razorpay = Razorpay || require('razorpay');
+    } catch (error) {
+        throw new AppError('PAYMENT_UNAVAILABLE', 503, 'Razorpay SDK is not installed');
+    }
+
+    razorpayClient = new Razorpay({
+        key_id: process.env.RAZORPAY_KEY_ID,
+        key_secret: process.env.RAZORPAY_KEY_SECRET,
+    });
+
+    return razorpayClient;
+};
 
 /**
  * Creates a Razorpay Order
  */
 const createOrder = async (userId, orderId) => {
+    const razorpay = getRazorpayClient();
     const order = await Order.findOne({ where: { id: orderId, userId } });
     if (!order) throw new AppError('NOT_FOUND', 404, 'Order not found');
     
@@ -68,6 +84,10 @@ const createOrder = async (userId, orderId) => {
 const verifyPayment = async (userId, orderId, paymentData) => {
     const { razorpay_order_id, razorpay_payment_id, razorpay_signature } = paymentData;
 
+    if (!process.env.RAZORPAY_KEY_SECRET) {
+        throw new AppError('PAYMENT_UNAVAILABLE', 503, 'Razorpay configuration missing');
+    }
+
     if (!razorpay_order_id || !razorpay_payment_id || !razorpay_signature) {
         throw new AppError('VALIDATION_ERROR', 400, 'Missing payment verification data');
     }
@@ -109,6 +129,11 @@ const verifyPayment = async (userId, orderId, paymentData) => {
 const handleWebhook = async (payload, signature) => {
     // Razorpay Webhook Verification
     const secret = process.env.RAZORPAY_WEBHOOK_SECRET;
+
+    if (!secret) {
+        throw new AppError('PAYMENT_UNAVAILABLE', 503, 'Razorpay webhook configuration missing');
+    }
+
     const expectedSignature = crypto
         .createHmac("sha256", secret)
         .update(JSON.stringify(payload))

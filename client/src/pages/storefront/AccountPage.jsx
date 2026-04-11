@@ -16,6 +16,7 @@ import AvatarUploader from '../../components/common/AvatarUploader';
 import PageSEO from '../../components/common/PageSEO';
 import { Link } from 'react-router-dom';
 import { useCurrency } from '../../hooks/useSettings';
+import AppliedDiscountsSummary from '../../components/orders/AppliedDiscountsSummary';
 
 function TabPanel(props) {
     const { children, value, index, ...other } = props;
@@ -290,7 +291,7 @@ const OrdersTab = () => {
         setLoading(true);
         try {
             const res = await userService.getMyOrders({ limit: 50 });
-            setOrders(res.data?.rows || res.data || []);
+            setOrders(res.rows || []);
         } catch (err) {
             setAlert({ type: 'error', message: 'Failed to load orders.' });
         } finally {
@@ -345,11 +346,23 @@ const OrdersTab = () => {
                                     </TableCell>
                                     <TableCell align="right">
                                         <Typography variant="body2" fontWeight={600}>{formatPrice(order.total || 0)}</Typography>
+                                        <Box sx={{ mt: 0.75, display: 'flex', justifyContent: 'flex-end' }}>
+                                            <Box sx={{ maxWidth: 280 }}>
+                                                <AppliedDiscountsSummary
+                                                    discounts={order.appliedDiscounts}
+                                                    formatPrice={formatPrice}
+                                                    compact
+                                                />
+                                            </Box>
+                                        </Box>
                                     </TableCell>
                                     <TableCell>
                                         <Chip label={order.status} size="small" color={ORDER_STATUS_COLOR[order.status] || 'default'} />
                                     </TableCell>
                                     <TableCell>
+                                        <Button size="small" component={Link} to={`/account/orders/${order.id}`} sx={{ mr: 1 }}>
+                                            View
+                                        </Button>
                                         {order.status === 'pending_payment' && (
                                             <Button size="small" color="error" onClick={() => handleCancel(order.id)}>Cancel</Button>
                                         )}

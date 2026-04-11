@@ -63,9 +63,15 @@ const refundOrder = (id) => api.post(`/payments/${id}/refund`);
 const updateSettings = (settings) => api.put('/settings/bulk', settings);
 
 // Coupon validation (storefront)
-const validateCoupon = (code, subtotal) => api.post('/coupons/validate', { code, subtotal });
+const validateCoupon = (codeOrPayload, subtotal) => {
+  const payload = typeof codeOrPayload === 'object'
+    ? codeOrPayload
+    : { code: codeOrPayload, subtotal };
+  return api.post('/coupons/validate', payload);
+};
 // Public coupon listing (storefront)
 const getPublicCoupons = () => api.get('/coupons/public');
+const getEligibleCoupons = (payload = {}) => api.post('/coupons/eligible', payload);
 
 // Storefront orders
 const getMyOrders = (params = {}) => {
@@ -92,7 +98,7 @@ export {
   getCoupons, createCoupon, updateCoupon, deleteCoupon,
   getAllOrders, getOrderById, updateOrderStatus, refundOrder,
   updateSettings,
-  validateCoupon, getPublicCoupons,
+  validateCoupon, getPublicCoupons, getEligibleCoupons,
   getMyOrders, getMyOrderById, cancelOrder, placeOrder,
   getAddresses, createAddress, updateAddress, deleteAddress, setDefaultAddress,
 };

@@ -48,7 +48,15 @@ export const userService = {
 
   getMyOrders: async (params = {}) => {
     const response = await api.get('/orders', { params });
-    return response.data;
+    return {
+      rows: response.data.data || [],
+      meta: response.data.meta || {},
+    };
+  },
+
+  getMyOrderById: async (id) => {
+    const response = await api.get(`/orders/${id}`);
+    return response.data.data;
   },
 
   cancelOrder: async (id) => {

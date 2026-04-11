@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useContext, useEffect, useState } from 'react';
 import {
     Box, Container, Typography, Button, Divider, IconButton,
     TextField, Paper, Chip, CircularProgress, Alert,
@@ -14,12 +14,16 @@ import { useSettings } from '../../hooks/useSettings';
 import { getMediaUrl } from '../../utils/media';
 import { useCurrency } from '../../hooks/useSettings';
 import PageSEO from '../../components/common/PageSEO';
+import { AuthContext } from '../../context/AuthContext';
+import { getEligibleCoupons } from '../../services/adminService';
 
 const CartPage = () => {
     const { cart, cartCount, loading, updateItem, removeItem, clearCart } = useCart();
     const { formatPrice } = useCurrency();
     const { settings } = useSettings();
+    const { user } = useContext(AuthContext);
     const navigate = useNavigate();
+    const [offerSummary, setOfferSummary] = useState(null);
 
     const items = cart?.items || [];
     const subtotal = items.reduce((sum, item) => {
@@ -54,6 +58,17 @@ const CartPage = () => {
     const taxAmount = useGST ? cgstAmount + sgstAmount + igstAmount : flatTaxAmount;
 
     const estimatedTotal = subtotal + shippingCost + taxAmount;
+
+    useEffect(() => {
+        if (!user || items.length === 0 || settings?.features?.coupons === false || settings?.features?.showAvailableCoupons === false) {
+            setOfferSummary(null);
+            return;
+        }
+
+        getEligibleCoupons({ subtotal, shippingCost })
+            .then((res) => setOfferSummary(res.data?.data || null))
+            .catch(() => setOfferSummary(null));
+    }, [user, items.length, subtotal, shippingCost, settings?.features?.coupons, settings?.features?.showAvailableCoupons]);
 
     if (loading) {
         return (
@@ -217,6 +232,14 @@ const CartPage = () => {
                             <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mb: 1 }}>
                                 Tax included in price
                             </Typography>
+                        )}
+                        {offerSummary?.bestCoupon && (
+                            <Alert severity={offerSummary.autoAppliedCoupon ? 'success' : 'info'} sx={{ my: 2 }}>
+                                {offerSummary.autoAppliedCoupon
+                                    ? `${offerSummary.autoAppliedCoupon.coupon.name || offerSummary.autoAppliedCoupon.coupon.code} will auto-apply at checkout.`
+                                    : `${offerSummary.bestCoupon.coupon.name || offerSummary.bestCoupon.coupon.code} is available at checkout.`}
+                                {` Save ${formatPrice(offerSummary.bestCoupon.totalDiscount || 0)}.`}
+                            </Alert>
                         )}
                         <Divider sx={{ my: 2 }} />
                         <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 2 }}>

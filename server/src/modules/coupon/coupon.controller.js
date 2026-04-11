@@ -52,9 +52,9 @@ const remove = async (req, res, next) => {
 
 const validateCoupon = async (req, res, next) => {
   try {
-    const { code, subtotal } = req.validated;
+    const { code, subtotal, shippingCost } = req.validated;
     const userId = req.user.id;
-    const result = await CouponService.validateCoupon(code, userId, subtotal);
+    const result = await CouponService.validateCoupon(code, userId, { cartSubtotal: subtotal, shippingCost });
     return success(res, result);
   } catch (err) {
     next(err);
@@ -70,4 +70,13 @@ const listPublic = async (req, res, next) => {
   }
 };
 
-module.exports = { list, getOne, create, update, remove, validateCoupon, listPublic };
+const getEligibleCoupons = async (req, res, next) => {
+  try {
+    const result = await CouponService.getEligibleCoupons(req.user.id, req.validated || {});
+    return success(res, result);
+  } catch (err) {
+    next(err);
+  }
+};
+
+module.exports = { list, getOne, create, update, remove, validateCoupon, listPublic, getEligibleCoupons };

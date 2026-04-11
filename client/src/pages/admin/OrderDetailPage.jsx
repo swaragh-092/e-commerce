@@ -18,6 +18,7 @@ import { useParams, useNavigate } from 'react-router-dom';
 import { useCurrency } from '../../hooks/useSettings';
 import { getOrderById, updateOrderStatus, refundOrder } from '../../services/adminService';
 import { useNotification } from '../../context/NotificationContext';
+import AppliedDiscountsSummary from '../../components/orders/AppliedDiscountsSummary';
 
 const STATUS_ORDER = [
   'pending_payment',
@@ -94,6 +95,7 @@ const OrderDetailPage = () => {
   if (!order) return <Alert severity="error">Order not found.</Alert>;
 
   const addr = order.shippingAddressSnapshot;
+  const appliedDiscounts = Array.isArray(order.appliedDiscounts) ? order.appliedDiscounts : [];
 
   return (
     <Box>
@@ -163,6 +165,9 @@ const OrderDetailPage = () => {
               </Box>
             ))}
             <Divider sx={{ my: 2 }} />
+            <Box sx={{ mb: appliedDiscounts.length > 0 ? 2 : 0 }}>
+              <AppliedDiscountsSummary discounts={appliedDiscounts} formatPrice={formatPrice} />
+            </Box>
             <Box sx={{ display: 'flex', justifyContent: 'flex-end' }}>
               <Box>
                 {[

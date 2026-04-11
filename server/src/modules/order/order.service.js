@@ -1,6 +1,6 @@
 'use strict';
 const { Op } = require('sequelize');
-const { sequelize, Order, OrderItem, Cart, CartItem, Product, ProductVariant, Address, Coupon, CouponUsage, Setting } = require('../index');
+const { sequelize, Order, OrderItem, Cart, CartItem, Product, ProductVariant, Address, Coupon, CouponUsage, Setting, Category, Brand } = require('../index');
 const AppError = require('../../utils/AppError');
 const AuditService = require('../audit/audit.service');
 const CouponService = require('../coupon/coupon.service');
@@ -17,7 +17,7 @@ const getSetting = async (key, defaultVal) => {
 };
 
 const placeOrder = async (userId, payload) => {
-    const { shippingAddressId, couponCode, notes } = payload;
+    const { shippingAddressId, couponCode, couponCodes = [], notes } = payload;
     
     const cart = await Cart.findOne({
         where: { userId, status: 'active' },
@@ -25,7 +25,14 @@ const placeOrder = async (userId, payload) => {
             model: CartItem,
             as: 'items',
             include: [
-                { model: Product, as: 'product' },
+                {
+                    model: Product,
+                    as: 'product',
+                    include: [
+                        { model: Category, as: 'categories' },
+                        { model: Brand, as: 'brand' },
+                    ],
+                },
                 { model: ProductVariant, as: 'variant' }
             ]
         }]
@@ -74,18 +81,6 @@ const placeOrder = async (userId, payload) => {
             item.currentProduct = currentProduct;
         }
 
-        let discountAmount = 0;
-        let appliedCoupon = null;
-        if (couponCode) {
-            try {
-                const validateResult = await CouponService.validateCoupon(couponCode, userId, subtotal);
-                discountAmount = validateResult.discount;
-                appliedCoupon = validateResult.coupon;
-            } catch (err) {
-                 throw err;
-            }
-        }
-
         const globalTaxRate = Number(getLocalSetting('tax.rate', 0));
         const enableCGST = getLocalSetting('tax.enableCGST', false) === true || getLocalSetting('tax.enableCGST', false) === 'true';
         const enableSGST = getLocalSetting('tax.enableSGST', false) === true || getLocalSetting('tax.enableSGST', false) === 'true';
@@ -121,6 +116,39 @@ const placeOrder = async (userId, payload) => {
              }
         }
 
+        const requestedCouponCodes = [...new Set([
+            ...couponCodes,
+            couponCode,
+        ].filter(Boolean).map((code) => String(code).trim().toUpperCase()))];
+
+        let orderDiscountAmount = 0;
+        let appliedCoupon = null;
+        let couponBenefits = null;
+        if (requestedCouponCodes.length > 0) {
+            couponBenefits = await CouponService.resolveCoupons(requestedCouponCodes, userId, {
+                cartSubtotal: subtotal,
+                cartItems: cart.items,
+                shippingCost,
+            });
+        } else {
+            couponBenefits = await CouponService.resolveCoupons([], userId, {
+                cartSubtotal: subtotal,
+                cartItems: cart.items,
+                shippingCost,
+            });
+        }
+
+        orderDiscountAmount = Number(couponBenefits?.orderDiscount || 0);
+        appliedCoupon = couponBenefits?.primaryCoupon || couponBenefits?.coupon || null;
+
+        let shippingDiscount = 0;
+        if (couponBenefits?.freeShipping) {
+            shippingDiscount = Number(couponBenefits.shippingDiscount || shippingCost || 0);
+            shippingCost = 0;
+        }
+
+        const discountAmount = Number((orderDiscountAmount + shippingDiscount).toFixed(2));
+
         const total = subtotal + totalTax + shippingCost - discountAmount;
 
         for (const item of cart.items) {
@@ -154,6 +182,16 @@ const placeOrder = async (userId, payload) => {
             discountAmount,
             total,
             couponId: appliedCoupon ? appliedCoupon.id : null,
+            appliedDiscounts: (couponBenefits?.appliedCoupons || []).map((coupon) => ({
+                couponId: coupon.id,
+                code: coupon.code,
+                name: coupon.name,
+                type: coupon.type,
+                applicationMode: coupon.applicationMode,
+                orderDiscount: Number(coupon.orderDiscount || 0),
+                shippingDiscount: Number(coupon.shippingDiscount || 0),
+                totalDiscount: Number(coupon.totalDiscount || 0),
+            })),
             shippingAddressSnapshot,
             notes
         }, { transaction: t });
@@ -173,13 +211,19 @@ const placeOrder = async (userId, payload) => {
             }, { transaction: t });
         }
 
-        if (appliedCoupon) {
+        const appliedCouponIds = (couponBenefits?.appliedCoupons || []).map((coupon) => coupon.id);
+        for (const appliedItem of couponBenefits?.appliedCoupons || []) {
             await CouponUsage.create({
-                couponId: appliedCoupon.id,
+                couponId: appliedItem.id,
                 userId,
                 orderId: order.id
             }, { transaction: t });
-            await Coupon.update({ usedCount: sequelize.literal('used_count + 1') }, { where: { id: appliedCoupon.id }, transaction: t });
+        }
+        if (appliedCouponIds.length > 0) {
+            await Coupon.update(
+                { usedCount: sequelize.literal('used_count + 1') },
+                { where: { id: { [Op.in]: appliedCouponIds } }, transaction: t }
+            );
         }
 
         await cart.update({ status: 'converted' }, { transaction: t });
@@ -267,12 +311,19 @@ const cancelOrder = async (id, userId) => {
              }
         }
 
-        if (order.couponId) {
-             const usage = await CouponUsage.findOne({ where: { orderId: order.id, couponId: order.couponId }, transaction: t });
-             if (usage) {
+        const appliedCouponIds = Array.from(new Set([
+            ...(Array.isArray(order.appliedDiscounts) ? order.appliedDiscounts.map((item) => item.couponId).filter(Boolean) : []),
+            order.couponId,
+        ].filter(Boolean)));
+        if (appliedCouponIds.length > 0) {
+             const usages = await CouponUsage.findAll({ where: { orderId: order.id, couponId: { [Op.in]: appliedCouponIds } }, transaction: t });
+             for (const usage of usages) {
                  await usage.destroy({ transaction: t });
-                 await Coupon.update({ usedCount: sequelize.literal('used_count - 1') }, { where: { id: order.couponId }, transaction: t });
              }
+             await Coupon.update(
+                 { usedCount: sequelize.literal('used_count - 1') },
+                 { where: { id: { [Op.in]: appliedCouponIds } }, transaction: t }
+             );
         }
         return order;
     });

@@ -45,6 +45,10 @@ module.exports = (sequelize, DataTypes) => {
         couponId: {
             type: DataTypes.UUID,
         },
+        appliedDiscounts: {
+            type: DataTypes.JSONB,
+            defaultValue: [],
+        },
         shippingAddressSnapshot: {
             type: DataTypes.JSONB,
         },

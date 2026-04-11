@@ -14,7 +14,7 @@ import { AuthContext } from '../../context/AuthContext';
 import { useSettings, useCurrency, useFeature } from '../../hooks/useSettings';
 import { useCart } from '../../hooks/useCart';
 import { userService } from '../../services/userService';
-import { validateCoupon, getPublicCoupons } from '../../services/adminService';
+import { validateCoupon, getEligibleCoupons } from '../../services/adminService';
 import PageSEO from '../../components/common/PageSEO';
 
 const EMPTY_ADDR = {
@@ -45,10 +45,11 @@ const CheckoutPage = () => {
 
     // Coupon
     const [couponCode, setCouponCode] = useState('');
-    const [couponResult, setCouponResult] = useState(null); // { discount, message }
+    const [couponResult, setCouponResult] = useState(null);
     const [couponLoading, setCouponLoading] = useState(false);
     const [publicCoupons, setPublicCoupons] = useState([]);
     const [publicCouponsLoading, setPublicCouponsLoading] = useState(false);
+    const [eligibleCouponSummary, setEligibleCouponSummary] = useState(null);
 
     // Notes
     const [notes, setNotes] = useState('');
@@ -101,7 +102,8 @@ const CheckoutPage = () => {
         const modifier = parseFloat(item.variant?.priceModifier ?? 0);
         return sum + (price + modifier) * item.quantity;
     }, 0);
-    const discount = couponResult?.discount || 0;
+    const orderDiscount = couponResult?.orderDiscount || 0;
+    const appliedCoupons = couponResult?.appliedCoupons || [];
 
     // Shipping calculation (mirrors server logic)
     const shippingMethod = settings?.shipping?.method || 'flat_rate';
@@ -113,6 +115,8 @@ const CheckoutPage = () => {
     } else if (shippingMethod === 'free_above_threshold') {
         shippingCost = subtotal >= freeThreshold ? 0 : flatRate;
     } // 'free' => 0
+    const shippingDiscount = couponResult?.shippingDiscount || (couponResult?.freeShipping ? shippingCost : 0);
+    const effectiveShippingCost = Math.max(0, shippingCost - shippingDiscount);
 
     // Tax calculation (supports CGST / SGST / IGST breakdown)
     // GST components override the inclusive flag when enabled
@@ -128,7 +132,7 @@ const CheckoutPage = () => {
     const flatTaxAmount = (!taxInclusive && !useGST && taxRate > 0) ? subtotal * taxRate : 0;
     const taxAmount = useGST ? cgstAmount + sgstAmount + igstAmount : flatTaxAmount;
 
-    const total = Math.max(0, subtotal + shippingCost + taxAmount - discount);
+    const total = Math.max(0, subtotal + effectiveShippingCost + taxAmount - orderDiscount);
 
     useEffect(() => {
         userService.getAddresses()
@@ -146,12 +150,22 @@ const CheckoutPage = () => {
     useEffect(() => {
         if (activeStep === 1 && couponsEnabled && showAvailableCoupons) {
             setPublicCouponsLoading(true);
-            getPublicCoupons()
-                .then(res => setPublicCoupons(res.data?.data || []))
+            getEligibleCoupons({ subtotal, shippingCost })
+                .then((res) => {
+                    const data = res.data?.data || {};
+                    setPublicCoupons(data.eligibleCoupons || []);
+                    setEligibleCouponSummary(data);
+
+                    if (!couponResult && !couponCode && data.bestCombination?.appliedCoupons?.length) {
+                        const manualCoupon = data.bestCombination.appliedCoupons.find((coupon) => coupon.applicationMode !== 'auto');
+                        setCouponCode(manualCoupon?.code || data.bestCombination.appliedCoupons[0]?.code || '');
+                        setCouponResult(data.bestCombination);
+                    }
+                })
                 .catch(() => {})
                 .finally(() => setPublicCouponsLoading(false));
         }
-    }, [activeStep, couponsEnabled, showAvailableCoupons]);
+    }, [activeStep, couponsEnabled, showAvailableCoupons, subtotal, shippingCost]);
 
     const handleApplyCoupon = async (codeOverride) => {
         const code = codeOverride || couponCode;
@@ -160,10 +174,10 @@ const CheckoutPage = () => {
         setCouponLoading(true);
         setCouponResult(null);
         try {
-            const res = await validateCoupon(code, subtotal);
-            setCouponResult({ discount: res.data?.data?.discount || 0, message: res.data?.data?.message || 'Coupon applied!' });
+            const res = await validateCoupon({ code, subtotal, shippingCost });
+            setCouponResult(res.data?.data || null);
         } catch (err) {
-            setCouponResult({ discount: 0, message: err?.response?.data?.error?.message || 'Invalid coupon code.', error: true });
+            setCouponResult({ orderDiscount: 0, totalDiscount: 0, message: err?.response?.data?.error?.message || 'Invalid coupon code.', error: true });
         } finally {
             setCouponLoading(false);
         }
@@ -178,6 +192,7 @@ const CheckoutPage = () => {
             const res = await placeOrder({
                 shippingAddressId: selectedAddressId,
                 ...(couponCode && couponResult && !couponResult.error && { couponCode }),
+                ...(appliedCoupons.length > 0 && { couponCodes: appliedCoupons.map((coupon) => coupon.code) }),
                 ...(notes && { notes }),
             });
             const orderId = res.data?.data?.id;
@@ -286,10 +301,13 @@ const CheckoutPage = () => {
                                         <CircularProgress size={18} />
                                     ) : publicCoupons.length > 0 ? (
                                         <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 1 }}>
-                                            {publicCoupons.map((c) => {
+                                            {publicCoupons.map((offer) => {
+                                                const c = offer.coupon || offer;
                                                 const label = c.type === 'percentage'
                                                     ? `${Number(c.value)}% off`
-                                                    : `${formatPrice(Number(c.value))} off`;
+                                                    : c.type === 'free_shipping'
+                                                        ? 'Free shipping'
+                                                        : `${formatPrice(Number(c.value))} off`;
                                                 const minNote = Number(c.minOrderAmount) > 0
                                                     ? ` · min ${formatPrice(Number(c.minOrderAmount))}`
                                                     : '';
@@ -298,7 +316,7 @@ const CheckoutPage = () => {
                                                     <Chip
                                                         key={c.code}
                                                         icon={<LocalOfferIcon />}
-                                                        label={`${c.code} — ${label}${minNote}`}
+                                                        label={`${c.code} — ${c.name || label}${minNote}`}
                                                         onClick={() => handleApplyCoupon(c.code)}
                                                         color={applied ? 'success' : 'default'}
                                                         variant={applied ? 'filled' : 'outlined'}
@@ -311,6 +329,11 @@ const CheckoutPage = () => {
                                         </Box>
                                     ) : (
                                         <Typography variant="caption" color="text.secondary">No coupons available right now.</Typography>
+                                    )}
+                                    {eligibleCouponSummary?.bestCoupon && !couponResult?.error && (
+                                        <Typography variant="caption" color="success.main" sx={{ display: 'block', mt: 1 }}>
+                                            Best available offer saves {formatPrice(eligibleCouponSummary.bestCoupon.totalDiscount || 0)}.
+                                        </Typography>
                                     )}
                                 </Box>
                             )}
@@ -330,8 +353,21 @@ const CheckoutPage = () => {
                             {couponResult && (
                                 <Alert severity={couponResult.error ? 'error' : 'success'} sx={{ mb: 1 }}>
                                     {couponResult.message}
-                                    {!couponResult.error && ` — Saving ${formatPrice(couponResult.discount)}`}
+                                    {!couponResult.error && ` — Saving ${formatPrice(couponResult.totalDiscount || couponResult.orderDiscount || 0)}`}
                                 </Alert>
+                            )}
+                            {!couponResult?.error && appliedCoupons.length > 1 && (
+                                <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 1, mb: 1 }}>
+                                    {appliedCoupons.map((coupon) => (
+                                        <Chip
+                                            key={coupon.code}
+                                            size="small"
+                                            color={coupon.applicationMode === 'auto' ? 'info' : 'success'}
+                                            variant="outlined"
+                                            label={`${coupon.code} · ${formatPrice(coupon.totalDiscount || 0)}`}
+                                        />
+                                    ))}
+                                </Box>
                             )}
                             <Box sx={{ display: 'flex', justifyContent: 'space-between', mt: 3 }}>
                                 <Button onClick={() => setActiveStep(0)}>Back</Button>
@@ -359,6 +395,28 @@ const CheckoutPage = () => {
                                 );
                             })}
                             <Divider sx={{ my: 2 }} />
+                            {couponResult && !couponResult.error && (
+                                <Alert severity="success" sx={{ mb: 2 }}>
+                                    {appliedCoupons.length > 1
+                                        ? `${appliedCoupons.length} promotions applied.`
+                                        : `${couponResult.coupon?.name || couponCode} applied.`}
+                                    {couponResult.coupon?.summary ? ` ${couponResult.coupon.summary}.` : ''}
+                                </Alert>
+                            )}
+                            {couponResult && !couponResult.error && appliedCoupons.length > 0 && (
+                                <Box sx={{ mb: 2 }}>
+                                    {appliedCoupons.map((coupon) => (
+                                        <Box key={coupon.code} sx={{ display: 'flex', justifyContent: 'space-between', mb: 0.5 }}>
+                                            <Typography variant="body2" color="text.secondary">
+                                                {coupon.code}{coupon.applicationMode === 'auto' ? ' (auto)' : ''}
+                                            </Typography>
+                                            <Typography variant="body2" color="success.main">
+                                                -{formatPrice(coupon.totalDiscount || 0)}
+                                            </Typography>
+                                        </Box>
+                                    ))}
+                                </Box>
+                            )}
                             <TextField
                                 fullWidth
                                 size="small"
@@ -402,10 +460,18 @@ const CheckoutPage = () => {
                         </Box>
                         {shippingCost === 0 ? (
                             <Chip label="Free" size="small" color="success" />
+                        ) : shippingDiscount > 0 ? (
+                            <Typography>{formatPrice(effectiveShippingCost)}</Typography>
                         ) : (
                             <Typography>{formatPrice(shippingCost)}</Typography>
                         )}
                     </Box>
+                    {shippingDiscount > 0 && (
+                        <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 1 }}>
+                            <Typography color="success.main">Shipping discount</Typography>
+                            <Typography color="success.main">-{formatPrice(shippingDiscount)}</Typography>
+                        </Box>
+                    )}
                     {shippingMethod === 'free_above_threshold' && shippingCost > 0 && (
                         <Typography variant="caption" color="success.main" display="block" mb={1} textAlign="right">
                             Add {formatPrice(freeThreshold - subtotal)} more for free shipping
@@ -446,10 +512,24 @@ const CheckoutPage = () => {
                     )}
 
                     {/* Discount */}
-                    {discount > 0 && (
+                    {orderDiscount > 0 && (
                         <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 1 }}>
                             <Typography color="success.main">Discount</Typography>
-                            <Typography color="success.main">-{formatPrice(discount)}</Typography>
+                            <Typography color="success.main">-{formatPrice(orderDiscount)}</Typography>
+                        </Box>
+                    )}
+                    {appliedCoupons.length > 0 && (
+                        <Box sx={{ mb: 1 }}>
+                            {appliedCoupons.map((coupon) => (
+                                <Box key={coupon.code} sx={{ display: 'flex', justifyContent: 'space-between', mb: 0.5 }}>
+                                    <Typography color="text.secondary" variant="body2">
+                                        {coupon.code}{coupon.applicationMode === 'auto' ? ' (auto)' : ''}
+                                    </Typography>
+                                    <Typography color="success.main" variant="body2">
+                                        -{formatPrice(coupon.totalDiscount || 0)}
+                                    </Typography>
+                                </Box>
+                            ))}
                         </Box>
                     )}
 

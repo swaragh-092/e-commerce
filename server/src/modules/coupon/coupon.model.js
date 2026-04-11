@@ -12,11 +12,18 @@ module.exports = (sequelize, DataTypes) => {
             unique: true,
             allowNull: false,
         },
+        name: {
+            type: DataTypes.STRING(255),
+            allowNull: false,
+        },
+        description: {
+            type: DataTypes.TEXT,
+        },
         type: {
             type: DataTypes.STRING(20),
             allowNull: false,
             validate: {
-                isIn: [['percentage', 'fixed_amount']],
+                isIn: [['percentage', 'fixed_amount', 'free_shipping']],
             },
         },
         value: {
@@ -53,15 +60,76 @@ module.exports = (sequelize, DataTypes) => {
             type: DataTypes.BOOLEAN,
             defaultValue: true,
         },
+        campaignStatus: {
+            type: DataTypes.STRING(20),
+            defaultValue: 'active',
+            validate: {
+                isIn: [['draft', 'active', 'paused', 'archived']],
+            },
+        },
+        applicationMode: {
+            type: DataTypes.STRING(20),
+            defaultValue: 'manual',
+            validate: {
+                isIn: [['manual', 'suggest', 'auto']],
+            },
+        },
+        stackingRules: {
+            type: DataTypes.JSONB,
+            defaultValue: {
+                allowOrderDiscounts: false,
+                allowShippingDiscounts: true,
+                allowMultipleCoupons: false,
+            },
+        },
         applicableTo: {
             type: DataTypes.STRING(20),
             defaultValue: 'all',
             validate: {
-                isIn: [['all', 'category', 'product']],
+                isIn: [['all', 'category', 'product', 'brand']],
             },
         },
         applicableIds: {
             type: DataTypes.JSONB,
+            defaultValue: [],
+        },
+        excludedProductIds: {
+            type: DataTypes.JSONB,
+            defaultValue: [],
+        },
+        excludedCategoryIds: {
+            type: DataTypes.JSONB,
+            defaultValue: [],
+        },
+        excludedBrandIds: {
+            type: DataTypes.JSONB,
+            defaultValue: [],
+        },
+        excludeSaleItems: {
+            type: DataTypes.BOOLEAN,
+            defaultValue: false,
+        },
+        visibility: {
+            type: DataTypes.STRING(20),
+            defaultValue: 'private',
+            validate: {
+                isIn: [['private', 'public']],
+            },
+        },
+        customerEligibility: {
+            type: DataTypes.STRING(20),
+            defaultValue: 'all',
+            validate: {
+                isIn: [['all', 'authenticated', 'first_order']],
+            },
+        },
+        isExclusive: {
+            type: DataTypes.BOOLEAN,
+            defaultValue: false,
+        },
+        priority: {
+            type: DataTypes.INTEGER,
+            defaultValue: 0,
         },
     }, {
         tableName: 'coupons',
