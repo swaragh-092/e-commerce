@@ -114,6 +114,7 @@ const AddressesTab = () => {
     const [form, setForm] = useState(emptyAddr);
     const [saving, setSaving] = useState(false);
     const [alert, setAlert] = useState(null);
+    const [validationErrors, setValidationErrors] = useState({});
 
     const fetchAddresses = useCallback(async () => {
         setLoading(true);
@@ -129,18 +130,26 @@ const AddressesTab = () => {
 
     useEffect(() => { fetchAddresses(); }, [fetchAddresses]);
 
-    const openCreate = () => { setEditing(null); setForm(emptyAddr); setDialogOpen(true); };
-    const openEdit = (addr) => { setEditing(addr); setForm({ ...addr }); setDialogOpen(true); };
+    const openCreate = () => { setEditing(null); setForm(emptyAddr); setValidationErrors({}); setDialogOpen(true); };
+    const openEdit = (addr) => { setEditing(addr); setForm({ ...addr }); setValidationErrors({}); setDialogOpen(true); };
 
     const handleSave = async () => {
         setSaving(true);
+        setValidationErrors({});
         try {
             if (editing) await userService.updateAddress(editing.id, form);
             else await userService.createAddress(form);
             setDialogOpen(false);
             fetchAddresses();
         } catch (err) {
-            setAlert({ type: 'error', message: err?.response?.data?.message || 'Failed to save address.' });
+            const errData = err?.response?.data?.error;
+            if (errData?.code === 'VALIDATION_ERROR' && errData?.details) {
+                const errors = {};
+                errData.details.forEach(detail => { errors[detail.field] = detail.message; });
+                setValidationErrors(errors);
+            } else {
+                setAlert({ type: 'error', message: err?.response?.data?.message || 'Failed to save address.' });
+            }
         } finally {
             setSaving(false);
         }
@@ -229,18 +238,18 @@ const AddressesTab = () => {
             <Dialog open={dialogOpen} onClose={() => setDialogOpen(false)} maxWidth="sm" fullWidth>
                 <DialogTitle>{editing ? 'Edit Address' : 'Add Address'}</DialogTitle>
                 <DialogContent sx={{ display: 'flex', flexDirection: 'column', gap: 2, pt: 2 }}>
-                    <TextField size="small" label="Label (e.g. Home, Work)" value={form.label} onChange={(e) => set('label', e.target.value)} />
-                    <TextField size="small" label="Full Name" value={form.fullName} onChange={(e) => set('fullName', e.target.value)} required />
-                    <TextField size="small" label="Phone" value={form.phone} onChange={(e) => set('phone', e.target.value)} />
-                    <TextField size="small" label="Address Line 1" value={form.addressLine1} onChange={(e) => set('addressLine1', e.target.value)} required />
-                    <TextField size="small" label="Address Line 2 (optional)" value={form.addressLine2} onChange={(e) => set('addressLine2', e.target.value)} />
+                    <TextField size="small" label="Label (e.g. Home, Work)" value={form.label} onChange={(e) => set('label', e.target.value)} error={!!validationErrors.label} helperText={validationErrors.label} />
+                    <TextField size="small" label="Full Name" value={form.fullName} onChange={(e) => set('fullName', e.target.value)} required error={!!validationErrors.fullName} helperText={validationErrors.fullName} />
+                    <TextField size="small" label="Phone" value={form.phone} onChange={(e) => set('phone', e.target.value)} error={!!validationErrors.phone} helperText={validationErrors.phone} />
+                    <TextField size="small" label="Address Line 1" value={form.addressLine1} onChange={(e) => set('addressLine1', e.target.value)} required error={!!validationErrors.addressLine1} helperText={validationErrors.addressLine1} />
+                    <TextField size="small" label="Address Line 2 (optional)" value={form.addressLine2} onChange={(e) => set('addressLine2', e.target.value)} error={!!validationErrors.addressLine2} helperText={validationErrors.addressLine2} />
                     <Box sx={{ display: 'flex', gap: 2 }}>
-                        <TextField size="small" label="City" value={form.city} onChange={(e) => set('city', e.target.value)} required fullWidth />
-                        <TextField size="small" label="State/Province" value={form.state} onChange={(e) => set('state', e.target.value)} fullWidth />
+                        <TextField size="small" label="City" value={form.city} onChange={(e) => set('city', e.target.value)} required fullWidth error={!!validationErrors.city} helperText={validationErrors.city} />
+                        <TextField size="small" label="State/Province" value={form.state} onChange={(e) => set('state', e.target.value)} fullWidth error={!!validationErrors.state} helperText={validationErrors.state} />
                     </Box>
                     <Box sx={{ display: 'flex', gap: 2 }}>
-                        <TextField size="small" label="Postal Code" value={form.postalCode} onChange={(e) => set('postalCode', e.target.value)} required fullWidth />
-                        <TextField size="small" label="Country" value={form.country} onChange={(e) => set('country', e.target.value)} required fullWidth />
+                        <TextField size="small" label="Postal Code" value={form.postalCode} onChange={(e) => set('postalCode', e.target.value)} required fullWidth error={!!validationErrors.postalCode} helperText={validationErrors.postalCode} />
+                        <TextField size="small" label="Country" value={form.country} onChange={(e) => set('country', e.target.value)} required fullWidth error={!!validationErrors.country} helperText={validationErrors.country} />
                     </Box>
                 </DialogContent>
                 <DialogActions>
@@ -256,15 +265,25 @@ const AddressesTab = () => {
 const PasswordTab = () => {
     const [passwords, setPasswords] = useState({ currentPassword: '', newPassword: '' });
     const [status, setStatus] = useState(null);
+    const [validationErrors, setValidationErrors] = useState({});
 
     const handleSubmit = async (e) => {
         e.preventDefault();
+        setValidationErrors({});
+        setStatus(null);
         try {
             await userService.changePassword(passwords);
             setStatus({ type: 'success', message: 'Password changed successfully' });
             setPasswords({ currentPassword: '', newPassword: '' });
         } catch (error) {
-            setStatus({ type: 'error', message: error?.response?.data?.message || 'Password change failed' });
+            const errData = error?.response?.data?.error;
+            if (errData?.code === 'VALIDATION_ERROR' && errData?.details) {
+                const errors = {};
+                errData.details.forEach(d => { errors[d.field] = d.message; });
+                setValidationErrors(errors);
+            } else {
+                setStatus({ type: 'error', message: error?.response?.data?.message || 'Password change failed' });
+            }
         }
     };
 
@@ -272,9 +291,11 @@ const PasswordTab = () => {
         <Box component="form" onSubmit={handleSubmit} sx={{ maxWidth: 400 }}>
             {status && <Alert severity={status.type} sx={{ mb: 2 }}>{status.message}</Alert>}
             <TextField fullWidth type="password" label="Current Password" name="currentPassword"
-                value={passwords.currentPassword} onChange={(e) => setPasswords({ ...passwords, currentPassword: e.target.value })} margin="normal" required />
+                value={passwords.currentPassword} onChange={(e) => setPasswords({ ...passwords, currentPassword: e.target.value })} margin="normal"  
+                error={!!validationErrors.currentPassword} helperText={validationErrors.currentPassword} />
             <TextField fullWidth type="password" label="New Password" name="newPassword"
-                value={passwords.newPassword} onChange={(e) => setPasswords({ ...passwords, newPassword: e.target.value })} margin="normal" required />
+                value={passwords.newPassword} onChange={(e) => setPasswords({ ...passwords, newPassword: e.target.value })} margin="normal"  
+                error={!!validationErrors.newPassword} helperText={validationErrors.newPassword} />
             <Button type="submit" variant="contained" color="secondary" sx={{ mt: 2 }}>Update Password</Button>
         </Box>
     );

@@ -106,13 +106,11 @@ const StoreLayout = () => {
             </IconButton>
             {isAuthenticated ? (
               <>
+                {settings?.features?.wishlist !== false && (
+                  <Button color="inherit" component={RouterLink} to="/wishlist" startIcon={<Badge badgeContent={wishlistCount || 0} color="error"><FavoriteBorderIcon /></Badge>}></Button>
+                )}
                 {canAccessAdmin && adminEntryPath && (
                   <Button color="inherit" component={RouterLink} to={adminEntryPath}>Admin Panel</Button>
-                )}
-                {settings?.features?.wishlist !== false && (
-                  <Button color="inherit" component={RouterLink} to="/wishlist" startIcon={<Badge badgeContent={wishlistCount || 0} color="error"><FavoriteBorderIcon /></Badge>}>
-                    Wishlist
-                  </Button>
                 )}
                 <Button color="inherit" component={RouterLink} to="/profile">Profile</Button>
                 <Button color="inherit" onClick={logout}>Logout</Button>

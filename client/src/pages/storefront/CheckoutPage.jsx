@@ -110,9 +110,9 @@ const CheckoutPage = () => {
     const [notes, setNotes] = useState('');
 
     // Address add / edit dialog
-    const [addrDialog, setAddrDialog] = useState({ open: false, mode: 'add', addrId: null, form: EMPTY_ADDR, saving: false });
+    const [addrDialog, setAddrDialog] = useState({ open: false, mode: 'add', addrId: null, form: EMPTY_ADDR, saving: false, errors: {} });
     const openAddAddrDialog = () =>
-        setAddrDialog({ open: true, mode: 'add', addrId: null, form: { ...EMPTY_ADDR }, saving: false });
+        setAddrDialog({ open: true, mode: 'add', addrId: null, form: { ...EMPTY_ADDR }, saving: false, errors: {} });
     const openEditAddrDialog = (addr) =>
         setAddrDialog({
             open: true, mode: 'edit', addrId: addr.id, saving: false,
@@ -123,12 +123,13 @@ const CheckoutPage = () => {
                 postalCode: addr.postalCode || '', country: addr.country || '',
                 isDefault: !!addr.isDefault,
             },
+            errors: {},
         });
     const setAddrField = (field, val) =>
         setAddrDialog((s) => ({ ...s, form: { ...s.form, [field]: val } }));
     const handleAddrSave = async () => {
         const { mode, addrId, form } = addrDialog;
-        setAddrDialog((s) => ({ ...s, saving: true }));
+        setAddrDialog((s) => ({ ...s, saving: true, errors: {} }));
         try {
             let saved;
             if (mode === 'add') {
@@ -142,8 +143,15 @@ const CheckoutPage = () => {
             if (mode === 'add' && saved?.id) setSelectedAddressId(saved.id);
             setAddrDialog((s) => ({ ...s, open: false }));
         } catch (err) {
-            setAddrDialog((s) => ({ ...s, saving: false }));
-            setError(err?.response?.data?.error?.message || 'Failed to save address.');
+            const errData = err?.response?.data?.error;
+            if (errData?.code === 'VALIDATION_ERROR' && errData?.details) {
+                const validationErrors = {};
+                errData.details.forEach(d => { validationErrors[d.field] = d.message; });
+                setAddrDialog((s) => ({ ...s, saving: false, errors: validationErrors }));
+            } else {
+                setAddrDialog((s) => ({ ...s, saving: false }));
+                setError(err?.response?.data?.error?.message || err?.response?.data?.message || 'Failed to save address.');
+            }
         }
     };
 
@@ -624,6 +632,8 @@ const CheckoutPage = () => {
                                 size="small" fullWidth
                                 value={addrDialog.form.label}
                                 onChange={(e) => setAddrField('label', e.target.value)}
+                                error={!!addrDialog.errors?.label}
+                                helperText={addrDialog.errors?.label}
                             />
                         </Grid>
                         <Grid item xs={12} sm={6}>
@@ -632,6 +642,8 @@ const CheckoutPage = () => {
                                 size="small" fullWidth required
                                 value={addrDialog.form.fullName}
                                 onChange={(e) => setAddrField('fullName', e.target.value)}
+                                error={!!addrDialog.errors?.fullName}
+                                helperText={addrDialog.errors?.fullName}
                             />
                         </Grid>
                         <Grid item xs={12} sm={6}>
@@ -640,6 +652,8 @@ const CheckoutPage = () => {
                                 size="small" fullWidth
                                 value={addrDialog.form.phone}
                                 onChange={(e) => setAddrField('phone', e.target.value)}
+                                error={!!addrDialog.errors?.phone}
+                                helperText={addrDialog.errors?.phone}
                             />
                         </Grid>
                         <Grid item xs={12}>
@@ -648,6 +662,8 @@ const CheckoutPage = () => {
                                 size="small" fullWidth required
                                 value={addrDialog.form.addressLine1}
                                 onChange={(e) => setAddrField('addressLine1', e.target.value)}
+                                error={!!addrDialog.errors?.addressLine1}
+                                helperText={addrDialog.errors?.addressLine1}
                             />
                         </Grid>
                         <Grid item xs={12}>
@@ -656,6 +672,8 @@ const CheckoutPage = () => {
                                 size="small" fullWidth
                                 value={addrDialog.form.addressLine2}
                                 onChange={(e) => setAddrField('addressLine2', e.target.value)}
+                                error={!!addrDialog.errors?.addressLine2}
+                                helperText={addrDialog.errors?.addressLine2}
                             />
                         </Grid>
                         <Grid item xs={12} sm={6}>
@@ -664,6 +682,8 @@ const CheckoutPage = () => {
                                 size="small" fullWidth required
                                 value={addrDialog.form.city}
                                 onChange={(e) => setAddrField('city', e.target.value)}
+                                error={!!addrDialog.errors?.city}
+                                helperText={addrDialog.errors?.city}
                             />
                         </Grid>
                         <Grid item xs={12} sm={6}>
@@ -672,6 +692,8 @@ const CheckoutPage = () => {
                                 size="small" fullWidth
                                 value={addrDialog.form.state}
                                 onChange={(e) => setAddrField('state', e.target.value)}
+                                error={!!addrDialog.errors?.state}
+                                helperText={addrDialog.errors?.state}
                             />
                         </Grid>
                         <Grid item xs={12} sm={6}>
@@ -680,6 +702,8 @@ const CheckoutPage = () => {
                                 size="small" fullWidth required
                                 value={addrDialog.form.postalCode}
                                 onChange={(e) => setAddrField('postalCode', e.target.value)}
+                                error={!!addrDialog.errors?.postalCode}
+                                helperText={addrDialog.errors?.postalCode}
                             />
                         </Grid>
                         <Grid item xs={12} sm={6}>
@@ -688,6 +712,8 @@ const CheckoutPage = () => {
                                 size="small" fullWidth required
                                 value={addrDialog.form.country}
                                 onChange={(e) => setAddrField('country', e.target.value)}
+                                error={!!addrDialog.errors?.country}
+                                helperText={addrDialog.errors?.country}
                             />
                         </Grid>
                         <Grid item xs={12}>

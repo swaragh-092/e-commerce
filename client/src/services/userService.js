@@ -42,7 +42,7 @@ export const userService = {
   },
 
   setDefaultAddress: async (id) => {
-    const response = await api.patch(`/users/me/addresses/${id}/default`);
+    const response = await api.put(`/users/me/addresses/${id}/default`);
     return response.data.data;
   },
 

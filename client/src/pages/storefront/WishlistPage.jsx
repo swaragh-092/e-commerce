@@ -124,7 +124,7 @@ const WishlistPage = () => {
             {error && (
                 <Typography color="error" sx={{ mb: 2 }}>{error}</Typography>
             )}
-            
+
             {displayItems.length === 0 ? (
                 <Typography>Your wishlist is currently empty.</Typography>
             ) : (
