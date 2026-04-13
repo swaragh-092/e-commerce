@@ -3,7 +3,6 @@
 const nodemailer = require('nodemailer');
 const handlebars = require('handlebars');
 const { NotificationTemplate, NotificationLog } = require('../index');
-const AppError = require('../../utils/AppError');
 const logger = require('../../utils/logger');
 
 // Startup check

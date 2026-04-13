@@ -17,6 +17,8 @@ import { userService } from '../../services/userService';
 import { validateCoupon, getEligibleCoupons } from '../../services/adminService';
 import PageSEO from '../../components/common/PageSEO';
 import { getCartItemUnitPrice } from '../../utils/variantPricing';
+import CenteredLoader from '../../components/common/CenteredLoader';
+import { getApiErrorMessage } from '../../utils/apiErrors';
 
 const EMPTY_ADDR = {
     label: '', fullName: '', phone: '',
@@ -150,7 +152,7 @@ const CheckoutPage = () => {
                 setAddrDialog((s) => ({ ...s, saving: false, errors: validationErrors }));
             } else {
                 setAddrDialog((s) => ({ ...s, saving: false }));
-                setError(err?.response?.data?.error?.message || err?.response?.data?.message || 'Failed to save address.');
+                setError(getApiErrorMessage(err, 'Failed to save address.'));
             }
         }
     };
@@ -240,7 +242,7 @@ const CheckoutPage = () => {
             const res = await validateCoupon({ code, subtotal, shippingCost });
             setCouponResult(res.data?.data || null);
         } catch (err) {
-            setCouponResult({ orderDiscount: 0, totalDiscount: 0, message: err?.response?.data?.error?.message || 'Invalid coupon code.', error: true });
+            setCouponResult({ orderDiscount: 0, totalDiscount: 0, message: getApiErrorMessage(err, 'Invalid coupon code.'), error: true });
         } finally {
             setCouponLoading(false);
         }
@@ -271,7 +273,7 @@ const CheckoutPage = () => {
             }
             navigate(`/payment/${orderId}`);
         } catch (err) {
-            setError(err?.response?.data?.message || 'Failed to place order. Please try again.');
+            setError(getApiErrorMessage(err, 'Failed to place order. Please try again.'));
             setPlacing(false);
         }
     };
@@ -311,7 +313,7 @@ const CheckoutPage = () => {
                                 </Button>
                             </Box>
                             {loadingAddresses ? (
-                                <CircularProgress size={24} />
+                                <CenteredLoader message="Loading your saved addresses..." minHeight="160px" />
                             ) : addresses.length === 0 ? (
                                 <Box sx={{ textAlign: 'center', py: 3 }}>
                                     <Typography color="text.secondary" mb={2}>No saved addresses yet.</Typography>

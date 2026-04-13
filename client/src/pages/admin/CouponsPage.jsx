@@ -326,7 +326,7 @@ const CouponsPage = () => {
       else await createCoupon(payload);
       closeDialog();
       fetchCoupons();
-      notify(editing ? 'Coupon updated.' : 'Coupon created.', 'success');
+      notify(editing ? 'Coupon updated successfully.' : 'Coupon created successfully.', 'success');
     } catch (error) {
       const err = error.response?.data;
       const apiErr = err?.error || err;
@@ -348,7 +348,7 @@ const CouponsPage = () => {
     deleteCoupon(id)
       .then(() => {
         fetchCoupons();
-        notify('Coupon deleted.', 'success');
+        notify('Coupon deleted successfully.', 'success');
       })
       .catch(() => notify('Failed to delete coupon.', 'error'));
   };

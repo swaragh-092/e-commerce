@@ -1,7 +1,7 @@
 'use strict';
 
 const AuthService = require('./auth.service');
-const { success } = require('../../utils/response');
+const { success, error } = require('../../utils/response');
 
 const register = async (req, res, next) => {
   try {
@@ -76,7 +76,7 @@ const verifyEmail = async (req, res, next) => {
   try {
     // Read from query param: ?token=xxx
     const token = req.query.token;
-    if (!token) return res.status(400).json({ success: false, message: 'Token is required' });
+    if (!token) return error(res, 'Token is required', 400, 'VALIDATION_ERROR');
     
     await AuthService.verifyEmail(token);
     return success(res, null, 'Email verified successfully');

@@ -9,6 +9,7 @@ const compression = require('compression');
 const { v4: uuidv4 } = require('uuid');
 const { errorHandler } = require('./middleware/errorHandler.middleware');
 const { globalLimiter } = require('./middleware/rateLimiter.middleware');
+const { success, error } = require('./utils/response');
 
 const app = express();
 
@@ -37,6 +38,9 @@ app.use(
   })
 );
 
+// Global rate limiting
+app.use('/api', globalLimiter);
+
 // Body Parsing
 // Important: Webhook routes must be parsed as raw, so only apply json parser if not a webhook
 app.use((req, res, next) => {
@@ -52,9 +56,6 @@ app.use(express.urlencoded({ extended: true }));
 if (process.env.NODE_ENV !== 'test') {
   app.use(morgan('dev'));
 }
-
-// Global rate limiting
-app.use('/api', globalLimiter);
 
 // Serve uploads statically — allow cross-origin loading for <img> tags
 // Use the same resolution strategy as media.service.js so both always point
@@ -79,7 +80,6 @@ const seoRoutes = require('./modules/seo/seo.routes');
 const settingsRoutes = require('./modules/settings/settings.routes');
 const authRoutes = require('./modules/auth/auth.routes');
 const userRoutes = require('./modules/user/user.routes');
-const notificationRoutes = require('./modules/notification/notification.routes');
 const categoryRoutes = require('./modules/category/category.routes');
 const productRoutes = require('./modules/product/product.routes');
 const mediaRoutes = require('./modules/media/media.routes');
@@ -125,15 +125,19 @@ app.get('/health', async (req, res) => {
   try {
     const { sequelize } = require('./modules');
     await sequelize.authenticate();
-    res.status(200).json({ status: 'ok', db: 'connected', uptime: process.uptime() });
+    return success(res, { status: 'ok', db: 'connected', uptime: process.uptime() }, 'Health check OK');
   } catch (err) {
-    res.status(500).json({ status: 'error', db: 'disconnected', uptime: process.uptime() });
+    return error(res, 'Database disconnected', 500, 'HEALTH_CHECK_FAILED', {
+      status: 'error',
+      db: 'disconnected',
+      uptime: process.uptime(),
+    });
   }
 });
 
 // Handle 404
 app.use((req, res) => {
-  res.status(404).json({ success: false, message: 'Endpoint not found' });
+  return error(res, 'Endpoint not found', 404, 'NOT_FOUND');
 });
 
 // Global Error Handler

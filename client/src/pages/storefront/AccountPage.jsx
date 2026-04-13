@@ -17,6 +17,8 @@ import PageSEO from '../../components/common/PageSEO';
 import { Link } from 'react-router-dom';
 import { useCurrency } from '../../hooks/useSettings';
 import AppliedDiscountsSummary from '../../components/orders/AppliedDiscountsSummary';
+import CenteredLoader from '../../components/common/CenteredLoader';
+import { getApiErrorMessage } from '../../utils/apiErrors';
 import {
     getOrderStatusColor,
     getOrderStatusLabel,
@@ -84,7 +86,7 @@ const ProfileTab = ({ user, updateProfile }) => {
             await updateProfile(formData);
             setStatus({ type: 'success', message: 'Profile updated successfully' });
         } catch (error) {
-            setStatus({ type: 'error', message: error?.response?.data?.message || 'Update failed' });
+            setStatus({ type: 'error', message: getApiErrorMessage(error, 'Update failed') });
         }
     };
 
@@ -148,7 +150,7 @@ const AddressesTab = () => {
                 errData.details.forEach(detail => { errors[detail.field] = detail.message; });
                 setValidationErrors(errors);
             } else {
-                setAlert({ type: 'error', message: err?.response?.data?.message || 'Failed to save address.' });
+                setAlert({ type: 'error', message: getApiErrorMessage(err, 'Failed to save address.') });
             }
         } finally {
             setSaving(false);
@@ -161,7 +163,7 @@ const AddressesTab = () => {
             await userService.deleteAddress(id);
             setAddresses((prev) => prev.filter((a) => a.id !== id));
         } catch (err) {
-            setAlert({ type: 'error', message: 'Failed to delete address.' });
+            setAlert({ type: 'error', message: getApiErrorMessage(err, 'Failed to delete address.') });
         }
     };
 
@@ -170,13 +172,13 @@ const AddressesTab = () => {
             await userService.setDefaultAddress(id);
             setAddresses((prev) => prev.map((a) => ({ ...a, isDefault: a.id === id })));
         } catch (err) {
-            setAlert({ type: 'error', message: 'Failed to set default address.' });
+            setAlert({ type: 'error', message: getApiErrorMessage(err, 'Failed to set default address.') });
         }
     };
 
     const set = (k, v) => setForm((f) => ({ ...f, [k]: v }));
 
-    if (loading) return <Box sx={{ display: 'flex', justifyContent: 'center', py: 4 }}><CircularProgress /></Box>;
+    if (loading) return <CenteredLoader message="Loading your addresses..." minHeight="220px" />;
 
     return (
         <Box>
@@ -282,7 +284,7 @@ const PasswordTab = () => {
                 errData.details.forEach(d => { errors[d.field] = d.message; });
                 setValidationErrors(errors);
             } else {
-                setStatus({ type: 'error', message: error?.response?.data?.message || 'Password change failed' });
+                setStatus({ type: 'error', message: getApiErrorMessage(error, 'Password change failed') });
             }
         }
     };
@@ -328,11 +330,11 @@ const OrdersTab = () => {
             await userService.cancelOrder(id);
             setOrders((prev) => prev.map((o) => o.id === id ? { ...o, status: 'cancelled' } : o));
         } catch (err) {
-            setAlert({ type: 'error', message: err?.response?.data?.message || 'Failed to cancel order.' });
+            setAlert({ type: 'error', message: getApiErrorMessage(err, 'Failed to cancel order.') });
         }
     };
 
-    if (loading) return <Box sx={{ display: 'flex', justifyContent: 'center', py: 4 }}><CircularProgress /></Box>;
+    if (loading) return <CenteredLoader message="Loading your orders..." minHeight="220px" />;
 
     return (
         <Box>

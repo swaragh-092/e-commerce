@@ -59,7 +59,7 @@ const ReviewsPage = () => {
 
     try {
       await updateReviewStatus(id, status);
-      notify(`Review ${status}.`, 'success');
+      notify(`Review status updated to ${status} successfully.`, 'success');
       fetchReviews();
     } catch {
       notify('Failed to update review.', 'error');

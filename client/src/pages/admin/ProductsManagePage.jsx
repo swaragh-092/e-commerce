@@ -21,6 +21,7 @@ import { useNotification } from '../../context/NotificationContext';
 import { formatSaleDateTime, isEndingSoon } from '../../utils/pricing';
 import { useAuth } from '../../hooks/useAuth';
 import { PERMISSIONS } from '../../utils/permissions';
+import { getApiErrorMessage } from '../../utils/apiErrors';
 
 const STOREFRONT_BASE = (import.meta.env.VITE_APP_URL || 'http://localhost:3000');
 const toDateTimeLocal = (value) => {
@@ -139,10 +140,10 @@ const ProductsManagePage = () => {
         effectivePrice: payload.salePrice ?? payload.price,
         isSaleActive: !!payload.salePrice && (!payload.saleStartAt || new Date(payload.saleStartAt) <= new Date()) && (!payload.saleEndAt || new Date(payload.saleEndAt) >= new Date()),
       } : r));
-      notify('Product updated.', 'success');
+      notify('Product updated successfully.', 'success');
       setEditDialog((s) => ({ ...s, open: false }));
     } catch (err) {
-      notify('Failed to update: ' + (err?.response?.data?.error?.message || err.message), 'error');
+      notify(`Failed to update: ${getApiErrorMessage(err)}`, 'error');
       setEditDialog((s) => ({ ...s, saving: false }));
     }
   };
@@ -246,11 +247,11 @@ const ProductsManagePage = () => {
     try {
       if (bulk) {
         await Promise.all(selectedIds.map((sid) => deleteProduct(sid)));
-        notify(`${selectedIds.length} products deleted.`, 'success');
+        notify(`${selectedIds.length} products deleted successfully.`, 'success');
         setSelectedIds([]);
       } else {
         await deleteProduct(id);
-        notify('Product deleted.', 'success');
+        notify('Product deleted successfully.', 'success');
       }
       fetchProducts();
     } catch (err) {
@@ -269,7 +270,7 @@ const ProductsManagePage = () => {
       setRows((prev) =>
         prev.map((r) => selectedIds.includes(r.id) ? { ...r, status: newStatus } : r)
       );
-      notify(`${selectedIds.length} products set to ${newStatus}.`, 'success');
+      notify(`${selectedIds.length} products updated to ${newStatus} successfully.`, 'success');
       setSelectedIds([]);
     } catch (err) {
       notify('Bulk update failed: ' + err.message, 'error');
@@ -296,12 +297,17 @@ const ProductsManagePage = () => {
             saleEndAt: toIsoOrNull(bulkSaleDialog.saleEndAt),
           };
       await bulkUpdateSale(payload);
-      notify(bulkSaleDialog.mode === 'clear' ? 'Sale removed from selected products.' : 'Sale applied to selected products.', 'success');
+      notify(
+        bulkSaleDialog.mode === 'clear'
+          ? 'Sale removed from selected products successfully.'
+          : 'Sale applied to selected products successfully.',
+        'success'
+      );
       setBulkSaleDialog((s) => ({ ...s, open: false, saving: false }));
       setSelectedIds([]);
       fetchProducts();
     } catch (err) {
-      notify('Bulk sale update failed: ' + (err?.response?.data?.error?.message || err.message), 'error');
+      notify(`Bulk sale update failed: ${getApiErrorMessage(err)}`, 'error');
       setBulkSaleDialog((s) => ({ ...s, saving: false }));
     }
   };
@@ -316,9 +322,9 @@ const ProductsManagePage = () => {
     try {
       await updateProduct(row.id, { status: newStatus });
       setRows((prev) => prev.map((r) => r.id === row.id ? { ...r, status: newStatus } : r));
-      notify(`Product marked as ${newStatus}.`, 'success');
+      notify(`Product status updated to ${newStatus} successfully.`, 'success');
     } catch (err) {
-      notify('Failed to update status: ' + (err?.response?.data?.message || err.message), 'error');
+      notify(`Failed to update status: ${getApiErrorMessage(err)}`, 'error');
     }
   };
 

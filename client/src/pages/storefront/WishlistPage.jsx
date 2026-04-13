@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Box, Typography, Container, Grid, Card, CardMedia, CardContent, CardActions, Button, IconButton, Chip, Stack } from '@mui/material';
+import { Box, Typography, Container, Grid, Card, CardMedia, CardContent, CardActions, Button, IconButton, Chip, Stack, Alert } from '@mui/material';
 import DeleteIcon from '@mui/icons-material/Delete';
 import ShoppingCartIcon from '@mui/icons-material/ShoppingCart';
 import { wishlistService } from '../../services/wishlistService';
@@ -10,17 +10,21 @@ import { useWishlist } from '../../context/WishlistContext';
 import { useCart } from '../../hooks/useCart';
 import { useNotification } from '../../context/NotificationContext';
 import { getVariantDiscountPercent, getVariantRegularPrice, getVariantUnitPrice } from '../../utils/variantPricing';
+import CenteredLoader from '../../components/common/CenteredLoader';
+import { getApiErrorMessage } from '../../utils/apiErrors';
 
 const WishlistPage = () => {
     const wishlistEnabled = useFeature('wishlist');
     const { formatPrice } = useCurrency();
-    const { refreshWishlist, wishlistCount } = useWishlist();
+    const { refreshWishlist } = useWishlist();
     const { fetchCart } = useCart();
     const notify = useNotification();
     const [items, setItems] = useState([]);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState(null);
     const displayItems = items.filter((item) => item?.Product?.id);
+    const filteredCount = displayItems.length;
+    const unavailableCount = Math.max(items.length - filteredCount, 0);
 
     if (!wishlistEnabled) {
         return (
@@ -39,7 +43,7 @@ const WishlistPage = () => {
             setItems(response.items || []);
         } catch (error) {
             console.error("Failed to load wishlist", error);
-            setError(error?.response?.data?.error?.message || 'Failed to load wishlist.');
+            setError(getApiErrorMessage(error, 'Failed to load wishlist.'));
         } finally {
             setLoading(false);
         }
@@ -61,7 +65,7 @@ const WishlistPage = () => {
             await refreshWishlist();
             notify('Item removed from wishlist.', 'info');
         } catch (err) {
-            setError(err?.response?.data?.error?.message || 'Failed to remove item from wishlist.');
+            setError(getApiErrorMessage(err, 'Failed to remove item from wishlist.'));
         }
     };
 
@@ -80,7 +84,7 @@ const WishlistPage = () => {
             await Promise.all([refreshWishlist(), fetchCart()]);
             notify('Item moved to cart.', 'success');
         } catch (err) {
-            setError(err?.response?.data?.error?.message || 'Failed to move item to cart.');
+            setError(getApiErrorMessage(err, 'Failed to move item to cart.'));
         }
     };
 
@@ -90,7 +94,7 @@ const WishlistPage = () => {
             await Promise.all([fetchWishlist(), fetchCart()]);
             notify(`${result?.movedCount || 0} wishlist item${result?.movedCount === 1 ? '' : 's'} moved to cart.`, 'success');
         } catch (err) {
-            setError(err?.response?.data?.error?.message || 'Failed to move wishlist items to cart.');
+            setError(getApiErrorMessage(err, 'Failed to move wishlist items to cart.'));
         }
     };
 
@@ -100,17 +104,17 @@ const WishlistPage = () => {
             await fetchWishlist();
             notify(`${result?.removedCount || 0} wishlist item${result?.removedCount === 1 ? '' : 's'} removed.`, 'info');
         } catch (err) {
-            setError(err?.response?.data?.error?.message || 'Failed to clear wishlist.');
+            setError(getApiErrorMessage(err, 'Failed to clear wishlist.'));
         }
     };
 
-    if (loading) return <Container sx={{ py: 4 }}><Typography>Loading...</Typography></Container>;
+    if (loading) return <CenteredLoader message="Loading your wishlist..." minHeight="45vh" />;
 
     return (
         <Container maxWidth="md" sx={{ py: 4 }}>
             <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 2, mb: 2, flexWrap: 'wrap' }}>
-                <Typography variant="h4">My Wishlist ({wishlistCount})</Typography>
-                {displayItems.length > 0 && (
+                <Typography variant="h4">My Wishlist ({filteredCount})</Typography>
+                {filteredCount > 0 && (
                     <Stack direction={{ xs: 'column', sm: 'row' }} spacing={1}>
                         <Button variant="outlined" startIcon={<ShoppingCartIcon />} onClick={handleMoveAllToCart}>
                             Move All to Cart
@@ -122,11 +126,18 @@ const WishlistPage = () => {
                 )}
             </Box>
             {error && (
-                <Typography color="error" sx={{ mb: 2 }}>{error}</Typography>
+                <Alert severity="error" sx={{ mb: 2 }}>{error}</Alert>
+            )}
+            {unavailableCount > 0 && (
+                <Alert severity="info" sx={{ mb: 2 }}>
+                    {unavailableCount} wishlist item{unavailableCount === 1 ? ' is' : 's are'} currently unavailable and hidden from this view.
+                </Alert>
             )}
 
-            {displayItems.length === 0 ? (
-                <Typography>Your wishlist is currently empty.</Typography>
+            {filteredCount === 0 ? (
+                <Typography>
+                    {unavailableCount > 0 ? 'No available wishlist items right now.' : 'Your wishlist is currently empty.'}
+                </Typography>
             ) : (
                 <Grid container spacing={3}>
                     {displayItems.map((item) => {

@@ -38,6 +38,7 @@ import {
 import { useAuth } from '../../hooks/useAuth';
 import { PERMISSIONS } from '../../utils/permissions';
 import { useNotification } from '../../context/NotificationContext';
+import { getApiErrorMessage } from '../../utils/apiErrors';
 
 const roleColors = {
   customer: 'default',
@@ -196,7 +197,7 @@ const AccessControlPage = () => {
       closeRoleDialog();
       fetchAccessControl();
     } catch (error) {
-      notify(error.response?.data?.error?.message || 'Failed to save role.', 'error');
+      notify(getApiErrorMessage(error, 'Failed to save role.'), 'error');
     } finally {
       setSavingRole(false);
     }
@@ -209,7 +210,7 @@ const AccessControlPage = () => {
       notify('User access role updated successfully.', 'success');
       fetchAccessControl();
     } catch (error) {
-      notify(error.response?.data?.error?.message || 'Failed to update user role.', 'error');
+      notify(getApiErrorMessage(error, 'Failed to update user role.'), 'error');
     } finally {
       setUpdatingUserId(null);
     }

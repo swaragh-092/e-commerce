@@ -61,7 +61,7 @@ const CustomersPage = () => {
     const newStatus = currentStatus === 'banned' ? 'active' : 'banned';
     try {
       await api.put(`/users/${id}/status`, { status: newStatus });
-      notify(`User ${newStatus}.`, 'success');
+      notify(`User status updated to ${newStatus} successfully.`, 'success');
       fetchUsers();
     } catch {
       notify('Failed to update user status.', 'error');

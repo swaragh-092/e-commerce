@@ -1,5 +1,7 @@
 'use strict';
 
+const { error: sendError } = require('../utils/response');
+
 /**
  * Validation middleware using Joi.
  * Validates req[property] against the provided Joi schema.
@@ -21,14 +23,7 @@ const validate = (schema, property = 'body') => {
                 message: d.message,
             }));
 
-            return res.status(400).json({
-                success: false,
-                error: {
-                    code: 'VALIDATION_ERROR',
-                    message: 'Validation failed',
-                    details,
-                },
-            });
+            return sendError(res, 'Validation failed', 400, 'VALIDATION_ERROR', details);
         }
 
         req[property] = value; // use sanitized/stripped value

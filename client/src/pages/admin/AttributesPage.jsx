@@ -12,9 +12,11 @@ import {
 import attributeService from '../../services/attributeService';
 import { useAuth } from '../../hooks/useAuth';
 import { PERMISSIONS } from '../../utils/permissions';
+import { getApiErrorMessage } from '../../utils/apiErrors';
+import { useNotification } from '../../context/NotificationContext';
 
-// ─── Attribute Values Inline Panel ───────────────────────────────────────────
 const ValuesPanel = ({ attribute, onRefresh, canManage }) => {
+  const notify = useNotification();
   const [newValue, setNewValue] = useState('');
   const [saving, setSaving] = useState(false);
 
@@ -27,7 +29,7 @@ const ValuesPanel = ({ attribute, onRefresh, canManage }) => {
       setNewValue('');
       onRefresh();
     } catch (err) {
-      alert(err?.response?.data?.error?.message || err.message);
+      notify(getApiErrorMessage(err), 'error');
     } finally {
       setSaving(false);
     }
@@ -40,7 +42,7 @@ const ValuesPanel = ({ attribute, onRefresh, canManage }) => {
       await attributeService.removeAttributeValue(attribute.id, valueId);
       onRefresh();
     } catch (err) {
-      alert(err?.response?.data?.error?.message || err.message);
+      notify(getApiErrorMessage(err), 'error');
     }
   };
 
@@ -51,12 +53,12 @@ const ValuesPanel = ({ attribute, onRefresh, canManage }) => {
         {(attribute.values || []).length === 0 && (
           <Typography variant="body2" color="text.secondary">No values yet.</Typography>
         )}
-        {(attribute.values || []).map((v) => (
+        {(attribute.values || []).map((value) => (
           <Chip
-            key={v.id}
-            label={v.value}
+            key={value.id}
+            label={value.value}
             size="small"
-            onDelete={canManage ? () => handleRemove(v.id) : undefined}
+            onDelete={canManage ? () => handleRemove(value.id) : undefined}
           />
         ))}
       </Box>
@@ -65,8 +67,8 @@ const ValuesPanel = ({ attribute, onRefresh, canManage }) => {
           size="small"
           placeholder="New value…"
           value={newValue}
-          onChange={(e) => setNewValue(e.target.value)}
-          onKeyDown={(e) => e.key === 'Enter' && handleAdd()}
+          onChange={(event) => setNewValue(event.target.value)}
+          onKeyDown={(event) => event.key === 'Enter' && handleAdd()}
           sx={{ width: 220 }}
         />
         <Button variant="outlined" size="small" onClick={handleAdd} disabled={!canManage || saving || !newValue.trim()}>
@@ -77,15 +79,13 @@ const ValuesPanel = ({ attribute, onRefresh, canManage }) => {
   );
 };
 
-// ─── Main Page ────────────────────────────────────────────────────────────────
 const AttributesPage = () => {
   const { hasPermission } = useAuth();
+  const notify = useNotification();
   const [attributes, setAttributes] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [expanded, setExpanded] = useState({});
-
-  // Dialog state
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editing, setEditing] = useState(null);
   const [formData, setFormData] = useState({ name: '', type: 'select', isRequired: false });
@@ -95,10 +95,10 @@ const AttributesPage = () => {
     try {
       setLoading(true);
       setError('');
-      const res = await attributeService.getAttributes({ page: 1, limit: 100 });
-      setAttributes(res?.data?.data?.rows || res?.data?.data || []);
+      const response = await attributeService.getAttributes({ page: 1, limit: 100 });
+      setAttributes(response?.data?.data?.rows || response?.data?.data || []);
     } catch (err) {
-      setError(err?.response?.data?.error?.message || 'Failed to load attributes');
+      setError(getApiErrorMessage(err, 'Failed to load attributes'));
     } finally {
       setLoading(false);
     }
@@ -108,7 +108,6 @@ const AttributesPage = () => {
     fetchAttributes();
   }, [fetchAttributes]);
 
-  // ─── Dialog handlers ────────────────────────────────────────────────────────
   const openCreate = () => {
     if (!canManageAttributes) return;
     setEditing(null);
@@ -116,10 +115,14 @@ const AttributesPage = () => {
     setDialogOpen(true);
   };
 
-  const openEdit = (attr) => {
+  const openEdit = (attribute) => {
     if (!canManageAttributes) return;
-    setEditing(attr);
-    setFormData({ name: attr.name, type: attr.type || 'select', isRequired: attr.isRequired || false });
+    setEditing(attribute);
+    setFormData({
+      name: attribute.name,
+      type: attribute.type || 'select',
+      isRequired: attribute.isRequired || false,
+    });
     setDialogOpen(true);
   };
 
@@ -139,7 +142,7 @@ const AttributesPage = () => {
       handleDialogClose();
       fetchAttributes();
     } catch (err) {
-      alert(err?.response?.data?.error?.message || err.message);
+      notify(getApiErrorMessage(err), 'error');
     }
   };
 
@@ -150,14 +153,14 @@ const AttributesPage = () => {
       await attributeService.deleteAttribute(id);
       fetchAttributes();
     } catch (err) {
-      alert(err?.response?.data?.error?.message || err.message);
+      notify(getApiErrorMessage(err), 'error');
     }
   };
 
-  const toggleExpanded = (id) =>
+  const toggleExpanded = (id) => {
     setExpanded((prev) => ({ ...prev, [id]: !prev[id] }));
+  };
 
-  // ─── Render ─────────────────────────────────────────────────────────────────
   return (
     <Box sx={{ p: 3 }}>
       <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 3 }}>
@@ -194,31 +197,31 @@ const AttributesPage = () => {
                   </TableCell>
                 </TableRow>
               )}
-              {attributes.map((attr) => (
-                <React.Fragment key={attr.id}>
+              {attributes.map((attribute) => (
+                <React.Fragment key={attribute.id}>
                   <TableRow hover>
-                    <TableCell>{attr.name}</TableCell>
+                    <TableCell>{attribute.name}</TableCell>
                     <TableCell>
-                      <Chip label={attr.type || 'select'} size="small" variant="outlined" />
+                      <Chip label={attribute.type || 'select'} size="small" variant="outlined" />
                     </TableCell>
                     <TableCell>
                       <Button
                         size="small"
                         variant="text"
-                        endIcon={expanded[attr.id] ? <ExpandLessIcon /> : <ExpandMoreIcon />}
-                        onClick={() => toggleExpanded(attr.id)}
+                        endIcon={expanded[attribute.id] ? <ExpandLessIcon /> : <ExpandMoreIcon />}
+                        onClick={() => toggleExpanded(attribute.id)}
                       >
-                        {(attr.values || []).length} value{(attr.values || []).length !== 1 ? 's' : ''}
+                        {(attribute.values || []).length} value{(attribute.values || []).length !== 1 ? 's' : ''}
                       </Button>
                     </TableCell>
                     <TableCell align="right">
                       <Tooltip title="Edit">
-                        <IconButton size="small" onClick={() => openEdit(attr)} disabled={!canManageAttributes}>
+                        <IconButton size="small" onClick={() => openEdit(attribute)} disabled={!canManageAttributes}>
                           <EditIcon fontSize="small" />
                         </IconButton>
                       </Tooltip>
                       <Tooltip title="Delete">
-                        <IconButton size="small" color="error" onClick={() => handleDelete(attr.id)} disabled={!canManageAttributes}>
+                        <IconButton size="small" color="error" onClick={() => handleDelete(attribute.id)} disabled={!canManageAttributes}>
                           <DeleteIcon fontSize="small" />
                         </IconButton>
                       </Tooltip>
@@ -226,8 +229,8 @@ const AttributesPage = () => {
                   </TableRow>
                   <TableRow>
                     <TableCell colSpan={4} sx={{ p: 0, border: 0 }}>
-                      <Collapse in={!!expanded[attr.id]} unmountOnExit>
-                        <ValuesPanel attribute={attr} onRefresh={fetchAttributes} canManage={canManageAttributes} />
+                      <Collapse in={!!expanded[attribute.id]} timeout="auto" unmountOnExit>
+                        <ValuesPanel attribute={attribute} onRefresh={fetchAttributes} canManage={canManageAttributes} />
                       </Collapse>
                     </TableCell>
                   </TableRow>
@@ -238,7 +241,6 @@ const AttributesPage = () => {
         </Paper>
       )}
 
-      {/* Create / Edit Dialog */}
       <Dialog open={dialogOpen} onClose={handleDialogClose} maxWidth="xs" fullWidth>
         <DialogTitle>{editing ? 'Edit Attribute' : 'New Attribute'}</DialogTitle>
         <Divider />
@@ -247,7 +249,7 @@ const AttributesPage = () => {
             label="Name"
             fullWidth
             value={formData.name}
-            onChange={(e) => setFormData((f) => ({ ...f, name: e.target.value }))}
+            onChange={(event) => setFormData((current) => ({ ...current, name: event.target.value }))}
             sx={{ mb: 2 }}
             autoFocus
           />
@@ -257,7 +259,7 @@ const AttributesPage = () => {
             select
             SelectProps={{ native: true }}
             value={formData.type}
-            onChange={(e) => setFormData((f) => ({ ...f, type: e.target.value }))}
+            onChange={(event) => setFormData((current) => ({ ...current, type: event.target.value }))}
           >
             <option value="select">Select (dropdown)</option>
             <option value="multiselect">Multi-select</option>

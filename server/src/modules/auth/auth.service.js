@@ -3,11 +3,13 @@
 const jwt = require('jsonwebtoken');
 const crypto = require('crypto');
 const { sequelize, User, RefreshToken, PasswordResetToken, EmailVerificationToken, UserProfile, Role, Permission } = require('../index');
+const { Transaction } = require('sequelize');
 const AppError = require('../../utils/AppError');
 const NotificationService = require('../notification/notification.service');
 const AuditService = require('../audit/audit.service');
-const { ACTIONS, ENTITIES } = require('../../config/constants');
+const { ACTIONS, AUTH_TIME, ENTITIES } = require('../../config/constants');
 const { enrichUserAuthorization } = require('../../config/permissions');
+const logger = require('../../utils/logger');
 
 const authUserInclude = [
   {
@@ -18,7 +20,7 @@ const authUserInclude = [
   },
 ];
 
-const getRefreshTokenExpiryDate = () => new Date(Date.now() + 7 * 24 * 60 * 60 * 1000);
+const getRefreshTokenExpiryDate = () => new Date(Date.now() + AUTH_TIME.REFRESH_TOKEN_TTL_MS);
 
 const isEmailVerificationRequired = async () => {
   try {
@@ -38,7 +40,7 @@ const generateTokens = (user) => {
 };
 
 const register = async (payload) => {
-  return sequelize.transaction(async (t) => {
+  const registrationResult = await sequelize.transaction(async (t) => {
     // Check if email exists
     const existingUser = await User.findOne({ where: { email: payload.email }, transaction: t });
     if (existingUser) {
@@ -70,20 +72,8 @@ const register = async (payload) => {
     await EmailVerificationToken.create({
       userId: user.id,
       token: verifyToken,
-      expiresAt: new Date(Date.now() + 24 * 60 * 60 * 1000) // 24 hours
+      expiresAt: new Date(Date.now() + AUTH_TIME.EMAIL_VERIFICATION_TTL_MS)
     }, { transaction: t });
-
-    // Send Welcome & Verification Email
-    try {
-        if (NotificationService && NotificationService.send) {
-            await NotificationService.send('verify_email', user.email, {
-                name: user.firstName,
-                verify_url: `${process.env.CLIENT_URL || 'http://localhost:5173'}/verify-email?token=${verifyToken}`
-            }, user.id, null, t);
-        }
-    } catch (e) {
-        // Log but don't fail registration
-    }
 
     // Generate JWTs
     const tokens = generateTokens(user);
@@ -96,13 +86,61 @@ const register = async (payload) => {
       createdByIp: 'registration'
     }, { transaction: t });
 
-    return { user: enrichUserAuthorization(user), tokens };
+    return {
+      user: enrichUserAuthorization(user),
+      tokens,
+      verificationEmail: {
+        userId: user.id,
+        email: user.email,
+        firstName: user.firstName,
+        verifyToken,
+      },
+    };
   });
+
+  try {
+    if (NotificationService && NotificationService.send) {
+      await NotificationService.send('verify_email', registrationResult.verificationEmail.email, {
+        name: registrationResult.verificationEmail.firstName,
+        verify_url: `${process.env.CLIENT_URL || 'http://localhost:5173'}/verify-email?token=${registrationResult.verificationEmail.verifyToken}`
+      }, registrationResult.verificationEmail.userId);
+    }
+  } catch (e) {
+    logger.error('Registration verification email failed', {
+      userId: registrationResult.verificationEmail.userId,
+      operation: 'NotificationService.send.verify_email',
+      errorMessage: e.message,
+      stack: e.stack,
+    });
+  }
+
+  try {
+    if (AuditService && AuditService.log) {
+      await AuditService.log({
+        userId: registrationResult.user.id,
+        action: ACTIONS.CREATE,
+        entity: ENTITIES.USER,
+        entityId: registrationResult.user.id,
+      });
+    }
+  } catch (e) {
+    logger.error('Registration audit log failed', {
+      userId: registrationResult.user.id,
+      operation: 'AuditService.log.registration',
+      errorMessage: e.message,
+      stack: e.stack,
+    });
+  }
+
+  return registrationResult;
 };
 
 const login = async (email, password, ipAddress) => {
-  const user = await User.scope('withPassword').findOne({ where: { email } });
-  
+  const user = await User.scope('withPassword').findOne({
+    where: { email },
+    include: authUserInclude,
+  });
+
   if (!user || !(await user.validatePassword(password))) {
     throw new AppError('UNAUTHORIZED', 401, 'Invalid email or password');
   }
@@ -151,36 +189,67 @@ const login = async (email, password, ipAddress) => {
 const refresh = async (refreshTokenStr, ipAddress) => {
   try {
     const decoded = jwt.verify(refreshTokenStr, process.env.JWT_REFRESH_SECRET);
-    const tokenRecord = await RefreshToken.findOne({ where: { token: refreshTokenStr } });
+    const emailVerificationRequired = await isEmailVerificationRequired();
 
-    if (!tokenRecord || tokenRecord.revokedAt || tokenRecord.expiresAt < new Date()) {
-      throw new AppError('UNAUTHORIZED', 401, 'Token revoked');
-    }
+    return sequelize.transaction(
+      { isolationLevel: Transaction.ISOLATION_LEVELS.READ_COMMITTED },
+      async (t) => {
+        const tokenRecord = await RefreshToken.findOne({
+          where: { token: refreshTokenStr },
+          transaction: t,
+          lock: t.LOCK.UPDATE,
+        });
 
-    const user = await User.findByPk(decoded.id);
-    if (!user || user.status !== 'active') {
-      throw new AppError('FORBIDDEN', 403, 'User inactive');
-    }
+        if (!tokenRecord || tokenRecord.revokedAt || tokenRecord.expiresAt < new Date()) {
+          throw new AppError('UNAUTHORIZED', 401, 'Token revoked');
+        }
 
-    if (await isEmailVerificationRequired()) {
-      if (!user.emailVerified) {
-        throw new AppError('FORBIDDEN', 403, 'Please verify your email before logging in');
+        const user = await User.findByPk(decoded.id, {
+          transaction: t,
+          lock: t.LOCK.UPDATE,
+        });
+        if (!user || user.status !== 'active') {
+          throw new AppError('FORBIDDEN', 403, 'User inactive');
+        }
+
+        if (emailVerificationRequired) {
+          if (!user.emailVerified) {
+            throw new AppError('FORBIDDEN', 403, 'Please verify your email before logging in');
+          }
+        }
+
+        const tokens = generateTokens(user);
+
+        await tokenRecord.update({ revokedAt: new Date() }, { transaction: t });
+        await RefreshToken.create({
+          userId: user.id,
+          token: tokens.refreshToken,
+          expiresAt: getRefreshTokenExpiryDate(),
+          createdByIp: ipAddress,
+        }, { transaction: t });
+
+        try {
+          if (AuditService && AuditService.log) {
+            await AuditService.log({
+              userId: user.id,
+              action: ACTIONS.REFRESH,
+              entity: ENTITIES.USER,
+              entityId: user.id,
+              ipAddress,
+            });
+          }
+        } catch (e) {
+          logger.error('Refresh audit log failed', {
+            userId: user.id,
+            operation: 'AuditService.log.refresh',
+            errorMessage: e.message,
+            stack: e.stack,
+          });
+        }
+
+        return tokens;
       }
-    }
-
-    const tokens = generateTokens(user);
-
-    await sequelize.transaction(async (t) => {
-      await tokenRecord.update({ revokedAt: new Date() }, { transaction: t });
-      await RefreshToken.create({
-        userId: user.id,
-        token: tokens.refreshToken,
-        expiresAt: getRefreshTokenExpiryDate(),
-        createdByIp: ipAddress,
-      }, { transaction: t });
-    });
-
-    return tokens;
+    );
   } catch (err) {
     if (err instanceof AppError) throw err;
     throw new AppError('UNAUTHORIZED', 401, 'Invalid or expired refresh token');
@@ -221,7 +290,7 @@ const forgotPassword = async (email) => {
     await PasswordResetToken.create({
       userId: user.id,
       token: resetToken,
-      expiresAt: new Date(Date.now() + 15 * 60 * 1000) // 15 mins
+      expiresAt: new Date(Date.now() + AUTH_TIME.PASSWORD_RESET_TTL_MS)
     }, { transaction: t });
 
     try {
@@ -251,6 +320,17 @@ const resetPassword = async (token, newPassword) => {
     
     // Revoke all existing refresh tokens so they have to log in anew
     await RefreshToken.destroy({ where: { userId: user.id }, transaction: t });
+
+    try {
+      if (AuditService && AuditService.log) {
+        await AuditService.log({
+          userId: user.id,
+          action: ACTIONS.PASSWORD_RESET,
+          entity: ENTITIES.USER,
+          entityId: user.id,
+        });
+      }
+    } catch (e) {}
   });
 };
 
@@ -269,7 +349,7 @@ const resendVerification = async (email) => {
     await EmailVerificationToken.create({
       userId: user.id,
       token: verifyToken,
-      expiresAt: new Date(Date.now() + 24 * 60 * 60 * 1000) // 24 hours
+      expiresAt: new Date(Date.now() + AUTH_TIME.EMAIL_VERIFICATION_TTL_MS)
     }, { transaction: t });
 
     try {
@@ -279,6 +359,17 @@ const resendVerification = async (email) => {
                 verify_url: `${process.env.CLIENT_URL || 'http://localhost:5173'}/verify-email?token=${verifyToken}`
             }, user.id, null, t);
         }
+    } catch (e) {}
+
+    try {
+      if (AuditService && AuditService.log) {
+        await AuditService.log({
+          userId: user.id,
+          action: ACTIONS.VERIFICATION_RESENT,
+          entity: ENTITIES.USER,
+          entityId: user.id,
+        });
+      }
     } catch (e) {}
   });
 };
@@ -296,6 +387,17 @@ const verifyEmail = async (token) => {
 
     await user.update({ emailVerified: true }, { transaction: t });
     await verifyRecord.destroy({ transaction: t });
+
+    try {
+      if (AuditService && AuditService.log) {
+        await AuditService.log({
+          userId: user.id,
+          action: ACTIONS.EMAIL_VERIFIED,
+          entity: ENTITIES.USER,
+          entityId: user.id,
+        });
+      }
+    } catch (e) {}
   });
 };
 

@@ -2,15 +2,31 @@ import { useState } from 'react';
 import { Box, Typography, TextField, Button, Alert } from '@mui/material';
 import { Link as RouterLink } from 'react-router-dom';
 import authService from '../../services/authService';
+import { validateEmail } from '../../utils/authValidation';
+import { getApiErrorMessage } from '../../utils/apiErrors';
 
 const ForgotPasswordPage = () => {
   const [email, setEmail] = useState('');
+  const [emailError, setEmailError] = useState('');
   const [status, setStatus] = useState({ type: '', message: '' });
   const [loading, setLoading] = useState(false);
 
+  const handleEmailChange = (e) => {
+    const nextEmail = e.target.value;
+    setEmail(nextEmail);
+    setEmailError(validateEmail(nextEmail));
+  };
+
   const handleSubmit = async (e) => {
     e.preventDefault();
+    const nextEmailError = validateEmail(email);
+    setEmailError(nextEmailError);
     setStatus({ type: '', message: '' });
+
+    if (nextEmailError) {
+      return;
+    }
+
     setLoading(true);
 
     try {
@@ -18,7 +34,7 @@ const ForgotPasswordPage = () => {
       setStatus({ type: 'success', message: res.message });
       setEmail('');
     } catch (err) {
-      setStatus({ type: 'error', message: err.response?.data?.message || 'Something went wrong. Please try again.' });
+      setStatus({ type: 'error', message: getApiErrorMessage(err, 'Something went wrong. Please try again.') });
     } finally {
       setLoading(false);
     }
@@ -42,7 +58,9 @@ const ForgotPasswordPage = () => {
           label="Email Address"
           type="email"
           value={email}
-          onChange={(e) => setEmail(e.target.value)}
+          onChange={handleEmailChange}
+          error={Boolean(emailError)}
+          helperText={emailError}
           required
         />
 

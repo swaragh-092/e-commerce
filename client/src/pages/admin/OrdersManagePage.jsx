@@ -20,6 +20,7 @@ import VisibilityIcon from '@mui/icons-material/Visibility';
 import { useNavigate } from 'react-router-dom';
 import { useCurrency } from '../../hooks/useSettings';
 import { getAllOrders } from '../../services/adminService';
+import { getApiErrorMessage } from '../../utils/apiErrors';
 import {
   ORDER_STATUS_OPTIONS,
   ORDER_STATUS_SUMMARY_GROUPS,
@@ -83,7 +84,7 @@ const OrdersManagePage = () => {
       })
       .catch((fetchError) => {
         console.error(fetchError);
-        setError(fetchError.response?.data?.error?.message || 'Failed to load orders.');
+        setError(getApiErrorMessage(fetchError, 'Failed to load orders.'));
         setOrders([]);
         setTotal(0);
       })

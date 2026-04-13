@@ -33,6 +33,7 @@ import {
 import { useNotification } from '../../context/NotificationContext';
 import { useAuth } from '../../hooks/useAuth';
 import { PERMISSIONS } from '../../utils/permissions';
+import { getApiErrorMessage } from '../../utils/apiErrors';
 
 /* ─── helpers ─────────────────────────────────────────────────── */
 const flattenTree = (nodes, result = []) => {
@@ -224,15 +225,15 @@ const CategoriesPage = () => {
       const data = { ...formData, parentId: formData.parentId || null };
       if (editingCat) {
         await updateCategory(editingCat.id, data);
-        notify('Category updated.', 'success');
+        notify('Category updated successfully.', 'success');
       } else {
         await createCategory(data);
-        notify('Category created.', 'success');
+        notify('Category created successfully.', 'success');
       }
       handleClose();
       fetchCategories();
     } catch (err) {
-      notify(err?.response?.data?.error?.message || err.message, 'error');
+      notify(getApiErrorMessage(err), 'error');
     } finally {
       setSaving(false);
     }
@@ -247,10 +248,10 @@ const CategoriesPage = () => {
     if (!window.confirm('Delete this category? Sub-categories may also be affected.')) return;
     try {
       await deleteCategory(id);
-      notify('Category deleted.', 'success');
+      notify('Category deleted successfully.', 'success');
       fetchCategories();
     } catch (err) {
-      notify('Cannot delete: ' + (err?.response?.data?.error?.message || err.message), 'error');
+      notify(`Cannot delete: ${getApiErrorMessage(err)}`, 'error');
     }
   };
 

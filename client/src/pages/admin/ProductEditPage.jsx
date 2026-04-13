@@ -52,6 +52,7 @@ import { useSettings } from '../../hooks/useSettings';
 import { getProductBasePrice, getVariantPriceModifierFromInput, getVariantUnitPrice } from '../../utils/variantPricing';
 import { useAuth } from '../../hooks/useAuth';
 import { PERMISSIONS } from '../../utils/permissions';
+import { getApiErrorMessage } from '../../utils/apiErrors';
 
 const validate = (formData) => {
   const errs = {};
@@ -219,14 +220,14 @@ const ProductEditPage = () => {
       if (isNew) {
         const res = await createProduct(payload);
         const newId = res?.data?.product?.id;
-        notify('Product created! You can now add variants below.', 'success');
+        notify('Product created successfully. You can now add variants below.', 'success');
         navigate(`/admin/products/${newId}/edit`, { replace: true });
       } else {
         await updateProduct(id, payload);
-        notify('Product updated successfully!', 'success');
+        notify('Product updated successfully.', 'success');
       }
     } catch (err) {
-      notify(err.response?.data?.error?.message || err.message, 'error');
+      notify(getApiErrorMessage(err), 'error');
     } finally {
       setSaving(false);
     }
@@ -820,7 +821,7 @@ const VariantsPanel = ({ productId, baseSku, flatCatFiles = [], canManageVariant
     try {
       await attributeService.deleteProductVariant(productId, v.id);
       setVariants((prev) => prev.filter((_, i) => i !== index));
-      notify('Variant deleted.', 'success');
+      notify('Variant deleted successfully.', 'success');
     } catch {
       notify('Failed to delete variant.', 'error');
     }
@@ -862,7 +863,7 @@ const VariantsPanel = ({ productId, baseSku, flatCatFiles = [], canManageVariant
       notify('Variants saved successfully.', 'success');
       loadAll();
     } catch (err) {
-      notify(err?.response?.data?.message || 'Failed to save variants.', 'error');
+      notify(getApiErrorMessage(err, 'Failed to save variants.'), 'error');
     } finally {
       setSaving(false);
     }
@@ -877,14 +878,14 @@ const VariantsPanel = ({ productId, baseSku, flatCatFiles = [], canManageVariant
     setCloning(true);
     try {
       await attributeService.cloneVariants(productId, { sourceProductId: activeProduct.id });
-      notify(`Variants cloned from "${activeProduct.name}" successfully!`, 'success');
+      notify(`Variants cloned from "${activeProduct.name}" successfully.`, 'success');
       setCloneOpen(false);
       // reset dialog state
       setCloneSelectedProduct(null); setCloneSearchInput(''); setCloneSearchResults([]);
       setCloneCatSelectedProduct(null); setCloneCatId(''); setCloneCatProducts([]);
       loadAll();
     } catch (err) {
-      notify(err?.response?.data?.error?.message || err?.response?.data?.message || 'Clone failed.', 'error');
+      notify(getApiErrorMessage(err, 'Clone failed.'), 'error');
     } finally {
       setCloning(false);
     }

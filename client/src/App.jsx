@@ -6,25 +6,28 @@ import { CartProvider } from './context/CartContext';
 import { WishlistProvider } from './context/WishlistContext';
 import { CategoryProvider } from './context/CategoryContext';
 import { NotificationProvider } from './context/NotificationContext';
+import AppErrorBoundary from './components/common/AppErrorBoundary';
 import AppRoutes from './routes/AppRoutes';
 
 function App() {
   return (
-    <BrowserRouter future={{ v7_startTransition: true, v7_relativeSplatPath: true }}>
-      <SettingsProvider>
-        <NotificationProvider>
-          <AuthProvider>
-            <CartProvider>
-              <CategoryProvider>
-                <WishlistProvider>
-                  <AppRoutes />
-                </WishlistProvider>
-              </CategoryProvider>
-            </CartProvider>
-          </AuthProvider>
-        </NotificationProvider>
-      </SettingsProvider>
-    </BrowserRouter>
+    <AppErrorBoundary>
+      <BrowserRouter future={{ v7_startTransition: true, v7_relativeSplatPath: true }}>
+        <SettingsProvider>
+          <NotificationProvider>
+            <AuthProvider>
+              <CartProvider>
+                <CategoryProvider>
+                  <WishlistProvider>
+                    <AppRoutes />
+                  </WishlistProvider>
+                </CategoryProvider>
+              </CartProvider>
+            </AuthProvider>
+          </NotificationProvider>
+        </SettingsProvider>
+      </BrowserRouter>
+    </AppErrorBoundary>
   );
 }
 

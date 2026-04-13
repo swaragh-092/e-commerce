@@ -24,6 +24,7 @@ import { useNavigate } from 'react-router-dom';
 import { useNotification } from '../../context/NotificationContext';
 import { useAuth } from '../../hooks/useAuth';
 import { PERMISSIONS } from '../../utils/permissions';
+import { getApiErrorMessage } from '../../utils/apiErrors';
 
 const PagesManagePage = () => {
   const [pages, setPages] = useState([]);
@@ -48,7 +49,7 @@ const PagesManagePage = () => {
       setRowCount(response.meta?.total || 0);
     } catch (error) {
       console.error('Error fetching pages:', error);
-      notify(error?.response?.data?.error?.message || 'Failed to load pages.', 'error');
+      notify(getApiErrorMessage(error, 'Failed to load pages.'), 'error');
     } finally {
       setLoading(false);
     }
@@ -76,7 +77,7 @@ const PagesManagePage = () => {
       setDeleteDialogOpen(false);
     } catch (error) {
       console.error('Error deleting page:', error);
-      notify(error?.response?.data?.error?.message || 'Failed to delete page.', 'error');
+      notify(getApiErrorMessage(error, 'Failed to delete page.'), 'error');
     }
   };
 

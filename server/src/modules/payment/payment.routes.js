@@ -1,6 +1,5 @@
 'use strict';
 const router = require('express').Router();
-const express = require('express');
 const paymentController = require('./payment.controller');
 const { authenticate } = require('../../middleware/auth.middleware');
 const { validate } = require('../../middleware/validate.middleware');

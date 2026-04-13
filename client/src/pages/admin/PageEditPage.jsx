@@ -35,6 +35,7 @@ import { useNotification } from '../../context/NotificationContext';
 import { useAuth } from '../../hooks/useAuth';
 import { PERMISSIONS } from '../../utils/permissions';
 import RichTextEditor from '../../components/editor/RichTextEditor';
+import { getApiErrorMessage } from '../../utils/apiErrors';
 
 const QUILL_MODULES = {
   toolbar: [
@@ -228,7 +229,7 @@ const PageEditPage = () => {
     try {
       if (isNew) {
         const res = await PageService.adminCreatePage(formData);
-        notify('Page created successfully!', 'success');
+        notify('Page created successfully.', 'success');
         // Navigate to edit view so slug and ID are available
         const newId = res.data?.id;
         if (newId) {
@@ -239,14 +240,10 @@ const PageEditPage = () => {
       } else {
         const res = await PageService.adminUpdatePage(id, formData);
         setSlug(res.data?.slug || slug);
-        notify('Page updated successfully!', 'success');
+        notify('Page updated successfully.', 'success');
       }
     } catch (error) {
-      const msg =
-        error.response?.data?.error?.message ||
-        error.response?.data?.message ||
-        error.message ||
-        'Error saving page';
+      const msg = getApiErrorMessage(error, 'Error saving page');
       setSaveError(msg);
       notify(msg, 'error');
     } finally {

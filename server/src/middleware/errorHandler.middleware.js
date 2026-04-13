@@ -12,6 +12,7 @@ const errorHandler = (err, req, res, next) => {
   let errorCode = err.code || 'INTERNAL_SERVER_ERROR';
   let message = err.message || 'An unexpected error occurred';
   let details = err.details || null;
+  const isProduction = process.env.NODE_ENV === 'production';
 
   // Handle Sequelize validation errors
   if (err.name === 'SequelizeValidationError' || err.name === 'SequelizeUniqueConstraintError') {
@@ -23,7 +24,21 @@ const errorHandler = (err, req, res, next) => {
 
   // Log error if it's not operational (i.e. a bug) or if it's a 500
   if (!err.isOperational || statusCode >= 500) {
-    logger.error('Unhandled Server Error: ', err);
+    logger.error('Unhandled server error', {
+      requestId: req.id,
+      method: req.method,
+      path: req.originalUrl,
+      statusCode,
+      errorCode,
+      errorName: err.name,
+      errorMessage: err.message,
+      stack: err.stack,
+    });
+  }
+
+  if (isProduction && statusCode >= 500) {
+    message = 'An unexpected error occurred';
+    details = null;
   }
 
   // Send consistent response payload (using response util)

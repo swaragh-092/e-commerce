@@ -55,7 +55,7 @@ const MediaPage = () => {
 
   const copyUrl = (url) => {
     navigator.clipboard.writeText(url);
-    notify('URL copied to clipboard!', 'success');
+    notify('Media URL copied to clipboard successfully.', 'success');
   };
 
   const baseUrl = import.meta.env.VITE_API_BASE_URL || 'http://localhost:5000';

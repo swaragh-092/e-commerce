@@ -2,6 +2,9 @@
 const crypto = require('crypto');
 const { sequelize, Payment, Order, WebhookEvent, Setting } = require('../index');
 const AppError = require('../../utils/AppError');
+const AuditService = require('../audit/audit.service');
+const { ACTIONS, ENTITIES } = require('../../config/constants');
+const logger = require('../../utils/logger');
 
 let Razorpay;
 let razorpayClient = null;
@@ -107,11 +110,22 @@ const verifyPayment = async (userId, orderId, paymentData) => {
 
     // Success: Update Order and Payment status
     await sequelize.transaction(async (t) => {
-        await order.update({ status: 'paid' }, { transaction: t });
+        const lockedOrder = await Order.findByPk(order.id, {
+            transaction: t,
+            lock: t.LOCK.UPDATE,
+        });
+
+        if (!lockedOrder || lockedOrder.userId !== userId) {
+            throw new AppError('NOT_FOUND', 404, 'Order not found');
+        }
+
+        const previousOrderStatus = lockedOrder.status;
+        await lockedOrder.update({ status: 'paid' }, { transaction: t });
         
         const payment = await Payment.findOne({ 
-            where: { orderId: order.id, transactionId: razorpay_order_id },
-            transaction: t 
+            where: { orderId: lockedOrder.id, transactionId: razorpay_order_id },
+            transaction: t,
+            lock: t.LOCK.UPDATE,
         });
         
         if (payment) {
@@ -120,6 +134,31 @@ const verifyPayment = async (userId, orderId, paymentData) => {
                 transactionId: razorpay_payment_id, // Link to actual payment ID
                 metadata: { razorpay_order_id }
             }, { transaction: t });
+        }
+
+        try {
+            if (AuditService && AuditService.log) {
+                await AuditService.log({
+                    userId,
+                    action: ACTIONS.STATUS_CHANGE,
+                    entity: ENTITIES.PAYMENT,
+                    entityId: payment?.id || razorpay_payment_id,
+                    changes: {
+                        orderStatus: { before: previousOrderStatus, after: 'paid' },
+                        paymentId: razorpay_payment_id,
+                    },
+                }, t);
+            }
+        } catch (err) {
+            logger.error('Payment verification audit log failed', {
+                userId,
+                action: ACTIONS.STATUS_CHANGE,
+                entity: ENTITIES.PAYMENT,
+                entityId: payment?.id || razorpay_payment_id,
+                operation: 'AuditService.log.paymentVerification',
+                errorMessage: err.message,
+                stack: err.stack,
+            });
         }
     });
 

@@ -1,6 +1,7 @@
 'use strict';
 
 const { AuditLog } = require('../index');
+const logger = require('../../utils/logger');
 
 /**
  * Log an admin action to the audit_logs table.
@@ -29,7 +30,14 @@ const log = async (
     );
   } catch (err) {
     // Audit failures must NEVER crash the main flow
-    console.error('[AuditService] Failed to write audit log:', err.message);
+    logger.error('Audit log write failed', {
+      userId,
+      action,
+      entity,
+      entityId: String(entityId || ''),
+      errorMessage: err.message,
+      stack: err.stack,
+    });
   }
 };
 

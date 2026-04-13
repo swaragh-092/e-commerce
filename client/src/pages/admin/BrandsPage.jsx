@@ -29,6 +29,7 @@ import { useNotification } from '../../context/NotificationContext';
 import MediaUploader from '../../components/common/MediaUploader';
 import { useAuth } from '../../hooks/useAuth';
 import { PERMISSIONS } from '../../utils/permissions';
+import { getApiErrorMessage } from '../../utils/apiErrors';
 
 const BrandsPage = () => {
   const notify = useNotification();
@@ -144,15 +145,15 @@ const BrandsPage = () => {
     try {
       if (editingBrand) {
         await brandService.updateBrand(editingBrand.id, formData);
-        notify('Brand updated successfully', 'success');
+        notify('Brand updated successfully.', 'success');
       } else {
         await brandService.createBrand(formData);
-        notify('Brand created successfully', 'success');
+        notify('Brand created successfully.', 'success');
       }
       handleCloseDialog();
       fetchBrands();
     } catch (err) {
-      notify(err.response?.data?.error?.message || 'Failed to save brand', 'error');
+      notify(getApiErrorMessage(err, 'Failed to save brand'), 'error');
     } finally {
       setSaving(false);
     }
@@ -166,7 +167,7 @@ const BrandsPage = () => {
 
     try {
       await brandService.deleteBrand(deleteConfirm.id);
-      notify('Brand deleted successfully', 'success');
+      notify('Brand deleted successfully.', 'success');
       setDeleteConfirm({ open: false, id: null, name: '' });
       fetchBrands();
     } catch (err) {

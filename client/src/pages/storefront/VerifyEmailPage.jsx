@@ -2,6 +2,7 @@ import { useEffect, useState, useRef } from 'react';
 import { Box, Typography, Button, Alert, CircularProgress } from '@mui/material';
 import { useSearchParams, Link as RouterLink } from 'react-router-dom';
 import authService from '../../services/authService';
+import { getApiErrorMessage } from '../../utils/apiErrors';
 
 const VerifyEmailPage = () => {
   const [searchParams] = useSearchParams();
@@ -24,7 +25,7 @@ const VerifyEmailPage = () => {
             await authService.verifyEmail(token);
             setStatus({ loading: false, type: 'success', message: 'Your email has been successfully verified! You can now log in.' });
         } catch (err) {
-            setStatus({ loading: false, type: 'error', message: err.response?.data?.message || 'Verification failed. The link may have expired or is invalid.' });
+          setStatus({ loading: false, type: 'error', message: getApiErrorMessage(err, 'Verification failed. The link may have expired or is invalid.') });
         }
     };
 

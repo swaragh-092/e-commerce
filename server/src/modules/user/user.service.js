@@ -5,6 +5,7 @@ const AppError = require('../../utils/AppError');
 const AuditService = require('../audit/audit.service');
 const { getPagination } = require('../../utils/pagination');
 const { ACTIONS, ENTITIES } = require('../../config/constants');
+const logger = require('../../utils/logger');
 
 const authzInclude = [
   {
@@ -67,7 +68,16 @@ const updateMe = async (userId, payload) => {
           changes: { before, after: updatedUser.toJSON() }
         }, t);
       }
-    } catch(err) {}
+    } catch(err) {
+      logger.error('AuditService.log failed for user profile update', {
+        userId,
+        entity: ENTITIES.USER,
+        action: ACTIONS.UPDATE,
+        operation: 'AuditService.log.updateMe',
+        errorMessage: err.message,
+        stack: err.stack,
+      });
+    }
 
     return updatedUser;
   });
@@ -83,6 +93,27 @@ const changePassword = async (userId, currentPassword, newPassword) => {
     }
 
     await user.update({ password: newPassword }, { transaction: t });
+
+    try {
+      if (AuditService && AuditService.log) {
+        await AuditService.log({
+          userId,
+          action: ACTIONS.UPDATE,
+          entity: ENTITIES.USER,
+          entityId: userId,
+          changes: { passwordChanged: true }
+        }, t);
+      }
+    } catch (err) {
+      logger.error('AuditService.log failed for password change', {
+        userId,
+        entity: ENTITIES.USER,
+        action: ACTIONS.UPDATE,
+        operation: 'AuditService.log.changePassword',
+        errorMessage: err.message,
+        stack: err.stack,
+      });
+    }
   });
 };
 
@@ -111,7 +142,16 @@ const updateAvatar = async (userId, mediaId) => {
           changes: { avatar: media.url }
         }, t);
       }
-    } catch(err) {}
+    } catch(err) {
+      logger.error('AuditService.log failed for avatar update', {
+        userId,
+        entity: ENTITIES.USER,
+        action: ACTIONS.UPDATE,
+        operation: 'AuditService.log.updateAvatar',
+        errorMessage: err.message,
+        stack: err.stack,
+      });
+    }
 
     return updatedUser;
   });
@@ -169,7 +209,16 @@ const updateStatus = async (id, status, actingUserId) => {
           changes: { before: before.status, after: status }
         }, t);
       }
-    } catch(err) {}
+    } catch(err) {
+      logger.error('AuditService.log failed for user status update', {
+        userId: actingUserId,
+        entity: ENTITIES.USER,
+        action: ACTIONS.STATUS_CHANGE,
+        operation: 'AuditService.log.updateStatus',
+        errorMessage: err.message,
+        stack: err.stack,
+      });
+    }
 
     return user;
   });
@@ -193,7 +242,30 @@ const createAddress = async (userId, payload) => {
       }
     }
     
-    return Address.create({ ...payload, userId }, { transaction: t });
+    const address = await Address.create({ ...payload, userId }, { transaction: t });
+
+    try {
+      if (AuditService && AuditService.log) {
+        await AuditService.log({
+          userId,
+          action: ACTIONS.CREATE,
+          entity: ENTITIES.ADDRESS,
+          entityId: address.id,
+          changes: { address: address.toJSON() }
+        }, t);
+      }
+    } catch (err) {
+      logger.error('AuditService.log failed for address create', {
+        userId,
+        entity: ENTITIES.ADDRESS,
+        action: ACTIONS.CREATE,
+        operation: 'AuditService.log.createAddress',
+        errorMessage: err.message,
+        stack: err.stack,
+      });
+    }
+
+    return address;
   });
 };
 
@@ -202,11 +274,35 @@ const updateAddress = async (userId, addressId, payload) => {
     const address = await Address.findOne({ where: { id: addressId, userId }, transaction: t });
     if (!address) throw new AppError('NOT_FOUND', 404, 'Address not found');
 
+    const before = address.toJSON();
+
     if (payload.isDefault && !address.isDefault) {
       await Address.update({ isDefault: false }, { where: { userId }, transaction: t });
     }
 
     await address.update(payload, { transaction: t });
+
+    try {
+      if (AuditService && AuditService.log) {
+        await AuditService.log({
+          userId,
+          action: ACTIONS.UPDATE,
+          entity: ENTITIES.ADDRESS,
+          entityId: address.id,
+          changes: { before, after: address.toJSON() }
+        }, t);
+      }
+    } catch (err) {
+      logger.error('AuditService.log failed for address update', {
+        userId,
+        entity: ENTITIES.ADDRESS,
+        action: ACTIONS.UPDATE,
+        operation: 'AuditService.log.updateAddress',
+        errorMessage: err.message,
+        stack: err.stack,
+      });
+    }
+
     return address;
   });
 };
@@ -215,6 +311,8 @@ const deleteAddress = async (userId, addressId) => {
   return sequelize.transaction(async (t) => {
     const address = await Address.findOne({ where: { id: addressId, userId }, transaction: t });
     if (!address) throw new AppError('NOT_FOUND', 404, 'Address not found');
+
+    const before = address.toJSON();
 
     await address.destroy({ transaction: t });
     
@@ -228,6 +326,27 @@ const deleteAddress = async (userId, addressId) => {
         await nextAddress.update({ isDefault: true }, { transaction: t });
       }
     }
+
+    try {
+      if (AuditService && AuditService.log) {
+        await AuditService.log({
+          userId,
+          action: ACTIONS.DELETE,
+          entity: ENTITIES.ADDRESS,
+          entityId: addressId,
+          changes: { before }
+        }, t);
+      }
+    } catch (err) {
+      logger.error('AuditService.log failed for address delete', {
+        userId,
+        entity: ENTITIES.ADDRESS,
+        action: ACTIONS.DELETE,
+        operation: 'AuditService.log.deleteAddress',
+        errorMessage: err.message,
+        stack: err.stack,
+      });
+    }
   });
 };
 
@@ -236,10 +355,34 @@ const setDefaultAddress = async (userId, addressId) => {
     const address = await Address.findOne({ where: { id: addressId, userId }, transaction: t });
     if (!address) throw new AppError('NOT_FOUND', 404, 'Address not found');
 
+    const before = address.toJSON();
+
     if (!address.isDefault) {
       await Address.update({ isDefault: false }, { where: { userId }, transaction: t });
       await address.update({ isDefault: true }, { transaction: t });
     }
+
+    try {
+      if (before.isDefault !== address.isDefault && AuditService && AuditService.log) {
+        await AuditService.log({
+          userId,
+          action: ACTIONS.STATUS_CHANGE,
+          entity: ENTITIES.ADDRESS,
+          entityId: address.id,
+          changes: { before: before.isDefault, after: address.isDefault }
+        }, t);
+      }
+    } catch (err) {
+      logger.error('AuditService.log failed for default address update', {
+        userId,
+        entity: ENTITIES.ADDRESS,
+        action: ACTIONS.STATUS_CHANGE,
+        operation: 'AuditService.log.setDefaultAddress',
+        errorMessage: err.message,
+        stack: err.stack,
+      });
+    }
+
     return address;
   });
 };

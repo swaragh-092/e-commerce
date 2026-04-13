@@ -3,7 +3,8 @@ import { Box, Container, Typography, CircularProgress, Alert, Button, Paper, Div
 import { useParams, useNavigate } from 'react-router-dom';
 import paymentService from '../../services/paymentService';
 import PageSEO from '../../components/common/PageSEO';
-import api from '../../services/api';
+import CenteredLoader from '../../components/common/CenteredLoader';
+import { getApiErrorMessage } from '../../utils/apiErrors';
 
 const PaymentPage = () => {
     const { orderId } = useParams();
@@ -22,7 +23,7 @@ const PaymentPage = () => {
                 setOrderData(res.data?.data || res.data);
             })
             .catch((err) => {
-                setError(err?.response?.data?.message || 'Failed to initialize payment. Please contact support.');
+                setError(getApiErrorMessage(err, 'Failed to initialize payment. Please contact support.'));
             })
             .finally(() => setLoading(false));
     }, [orderId, navigate]);
@@ -52,7 +53,7 @@ const PaymentPage = () => {
                     });
                     navigate('/payment/success', { state: { orderId } });
                 } catch (err) {
-                    setError(err?.response?.data?.message || 'Payment verification failed.');
+                    setError(getApiErrorMessage(err, 'Payment verification failed.'));
                     setProcessing(false);
                 }
             },
@@ -77,11 +78,7 @@ const PaymentPage = () => {
     };
 
     if (loading) {
-        return (
-            <Box sx={{ display: 'flex', justifyContent: 'center', mt: 8 }}>
-                <CircularProgress />
-            </Box>
-        );
+        return <CenteredLoader message="Loading payment details..." minHeight="50vh" />;
     }
 
     if (error || !orderData) {

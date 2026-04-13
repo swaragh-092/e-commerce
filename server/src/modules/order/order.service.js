@@ -339,6 +339,21 @@ const placeOrder = async (userId, payload) => {
         clientSecret = null;
     }
 
+    try {
+        if (AuditService && AuditService.log) {
+            await AuditService.log({
+                userId,
+                action: ACTIONS.CREATE,
+                entity: ENTITIES.ORDER,
+                entityId: order.id,
+                changes: {
+                    status: order.status,
+                    total: order.total,
+                },
+            });
+        }
+    } catch (err) {}
+
     return { order, clientSecret };
 };
 
@@ -501,6 +516,8 @@ const cancelOrder = async (id, userId) => {
         const order = await Order.findOne({ where: { id, userId }, include: [{ model: OrderItem, as: 'items' }], transaction: t });
         if (!order) throw new AppError('NOT_FOUND', 404, 'Order not found');
 
+        const previousStatus = order.status;
+
         if (!isCustomerCancelableOrderStatus(order.status)) {
             throw new AppError('VALIDATION_ERROR', 400, 'Only pending or processing orders can be cancelled');
         }
@@ -537,6 +554,19 @@ const cancelOrder = async (id, userId) => {
                  { where: { id: { [Op.in]: appliedCouponIds } }, transaction: t }
              );
         }
+
+        try {
+            if (AuditService && AuditService.log) {
+                await AuditService.log({
+                    userId,
+                    action: ACTIONS.STATUS_CHANGE,
+                    entity: ENTITIES.ORDER,
+                    entityId: order.id,
+                    changes: { before: previousStatus, after: 'cancelled' },
+                }, t);
+            }
+        } catch (err) {}
+
         return order;
     });
 };

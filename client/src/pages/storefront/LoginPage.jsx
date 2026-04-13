@@ -3,6 +3,8 @@ import { Box, Typography, TextField, Button, Alert, useTheme } from '@mui/materi
 import { useNavigate, Link as RouterLink, useLocation } from 'react-router-dom';
 import { useAuth } from '../../hooks/useAuth';
 import { getFirstAccessibleAdminPath } from '../../utils/permissions';
+import { validateEmail, validateRequired } from '../../utils/authValidation';
+import { getApiErrorMessage } from '../../utils/apiErrors';
 
 const LoginPage = () => {
   const theme = useTheme();
@@ -11,16 +13,33 @@ const LoginPage = () => {
   const { login } = useAuth();
   
   const [formData, setFormData] = useState({ email: '', password: '' });
+  const [fieldErrors, setFieldErrors] = useState({});
   const [error, setError] = useState('');
   const [successMsg, setSuccessMsg] = useState(location.state?.message || '');
   const [loading, setLoading] = useState(false);
 
-  const handleChange = (e) => setFormData({ ...formData, [e.target.name]: e.target.value });
+  const validateForm = (values) => ({
+    email: validateEmail(values.email),
+    password: validateRequired(values.password, 'Password'),
+  });
+
+  const handleChange = (e) => {
+    const nextFormData = { ...formData, [e.target.name]: e.target.value };
+    setFormData(nextFormData);
+    setFieldErrors(validateForm(nextFormData));
+  };
 
   const handleSubmit = async (e) => {
     e.preventDefault();
+    const nextErrors = validateForm(formData);
+    setFieldErrors(nextErrors);
     setError('');
     setSuccessMsg('');
+
+    if (Object.values(nextErrors).some(Boolean)) {
+      return;
+    }
+
     setLoading(true);
 
     try {
@@ -32,7 +51,7 @@ const LoginPage = () => {
         navigate('/');
       }
     } catch (err) {
-      setError(err.response?.data?.message || 'Login failed. Please verify credentials.');
+      setError(getApiErrorMessage(err, 'Login failed. Please verify credentials.'));
     } finally {
       setLoading(false);
     }
@@ -56,6 +75,8 @@ const LoginPage = () => {
           type="email"
           value={formData.email}
           onChange={handleChange}
+          error={Boolean(fieldErrors.email)}
+          helperText={fieldErrors.email}
           required
         />
         <TextField
@@ -66,6 +87,8 @@ const LoginPage = () => {
           type="password"
           value={formData.password}
           onChange={handleChange}
+          error={Boolean(fieldErrors.password)}
+          helperText={fieldErrors.password}
           required
         />
         

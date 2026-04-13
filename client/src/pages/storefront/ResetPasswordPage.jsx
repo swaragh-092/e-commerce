@@ -2,6 +2,8 @@ import { useState, useEffect } from 'react';
 import { Box, Typography, TextField, Button, Alert } from '@mui/material';
 import { useNavigate, useSearchParams, Link as RouterLink } from 'react-router-dom';
 import authService from '../../services/authService';
+import { validatePassword } from '../../utils/authValidation';
+import { getApiErrorMessage } from '../../utils/apiErrors';
 
 const ResetPasswordPage = () => {
   const [searchParams] = useSearchParams();
@@ -9,6 +11,7 @@ const ResetPasswordPage = () => {
   const navigate = useNavigate();
 
   const [formData, setFormData] = useState({ newPassword: '', confirmPassword: '' });
+  const [fieldErrors, setFieldErrors] = useState({});
   const [status, setStatus] = useState({ type: '', message: '' });
   const [loading, setLoading] = useState(false);
 
@@ -18,14 +21,28 @@ const ResetPasswordPage = () => {
     }
   }, [token]);
 
-  const handleChange = (e) => setFormData({ ...formData, [e.target.name]: e.target.value });
+  const validateForm = (values) => ({
+    newPassword: validatePassword(values.newPassword),
+    confirmPassword: values.confirmPassword
+      ? (values.newPassword === values.confirmPassword ? '' : 'Passwords do not match')
+      : 'Confirm password is required',
+  });
+
+  const handleChange = (e) => {
+    const nextFormData = { ...formData, [e.target.name]: e.target.value };
+    setFormData(nextFormData);
+    setFieldErrors(validateForm(nextFormData));
+  };
 
   const handleSubmit = async (e) => {
     e.preventDefault();
     if (!token) return;
 
-    if (formData.newPassword !== formData.confirmPassword) {
-        return setStatus({ type: 'error', message: "Passwords do not match." });
+    const nextErrors = validateForm(formData);
+    setFieldErrors(nextErrors);
+
+    if (Object.values(nextErrors).some(Boolean)) {
+        return setStatus({ type: 'error', message: 'Please fix the highlighted fields.' });
     }
 
     setStatus({ type: '', message: '' });
@@ -36,7 +53,7 @@ const ResetPasswordPage = () => {
       setStatus({ type: 'success', message: 'Password has been reset successfully.' });
       setTimeout(() => navigate('/login'), 3000); // Redirect to login after 3 seconds
     } catch (err) {
-      setStatus({ type: 'error', message: err.response?.data?.message || 'Failed to reset password. The token may be expired.' });
+      setStatus({ type: 'error', message: getApiErrorMessage(err, 'Failed to reset password. The token may be expired.') });
     } finally {
       setLoading(false);
     }
@@ -68,7 +85,8 @@ const ResetPasswordPage = () => {
             type="password"
             value={formData.newPassword}
             onChange={handleChange}
-            helperText="Minimum 8 characters, at least 1 uppercase and 1 number"
+            error={Boolean(fieldErrors.newPassword)}
+            helperText={fieldErrors.newPassword || 'Minimum 8 characters, at least 1 uppercase and 1 number'}
             required
             />
             <TextField
@@ -79,6 +97,8 @@ const ResetPasswordPage = () => {
             type="password"
             value={formData.confirmPassword}
             onChange={handleChange}
+            error={Boolean(fieldErrors.confirmPassword)}
+            helperText={fieldErrors.confirmPassword}
             required
             />
 

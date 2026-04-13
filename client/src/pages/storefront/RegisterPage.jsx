@@ -2,6 +2,8 @@ import { useState } from 'react';
 import { Box, Typography, TextField, Button, Alert, useTheme } from '@mui/material';
 import { useNavigate, Link as RouterLink } from 'react-router-dom';
 import { useAuth } from '../../hooks/useAuth';
+import { validateEmail, validatePassword, validateRequired } from '../../utils/authValidation';
+import { getApiErrorMessage } from '../../utils/apiErrors';
 
 const RegisterPage = () => {
   const theme = useTheme();
@@ -9,17 +11,34 @@ const RegisterPage = () => {
   const { register } = useAuth();
   
   const [formData, setFormData] = useState({ firstName: '', lastName: '', email: '', password: '', confirmPassword: '' });
+  const [fieldErrors, setFieldErrors] = useState({});
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
 
-  const handleChange = (e) => setFormData({ ...formData, [e.target.name]: e.target.value });
+  const validateForm = (values) => ({
+    firstName: validateRequired(values.firstName, 'First name'),
+    lastName: validateRequired(values.lastName, 'Last name'),
+    email: validateEmail(values.email),
+    password: validatePassword(values.password),
+    confirmPassword: values.confirmPassword
+      ? (values.password === values.confirmPassword ? '' : 'Passwords do not match')
+      : 'Confirm password is required',
+  });
+
+  const handleChange = (e) => {
+    const nextFormData = { ...formData, [e.target.name]: e.target.value };
+    setFormData(nextFormData);
+    setFieldErrors(validateForm(nextFormData));
+  };
 
   const handleSubmit = async (e) => {
     e.preventDefault();
     setError('');
+    const nextErrors = validateForm(formData);
+    setFieldErrors(nextErrors);
 
-    if (formData.password !== formData.confirmPassword) {
-        return setError("Passwords do not match");
+    if (Object.values(nextErrors).some(Boolean)) {
+        return setError('Please fix the highlighted fields.');
     }
 
     setLoading(true);
@@ -34,7 +53,7 @@ const RegisterPage = () => {
       // register() auto-logs-in, redirect to home
       navigate('/');
     } catch (err) {
-      setError(err.response?.data?.message || 'Registration failed');
+      setError(getApiErrorMessage(err, 'Registration failed'));
     } finally {
       setLoading(false);
     }
@@ -57,6 +76,8 @@ const RegisterPage = () => {
                 name="firstName"
                 value={formData.firstName}
                 onChange={handleChange}
+                error={Boolean(fieldErrors.firstName)}
+                helperText={fieldErrors.firstName}
                 required
             />
             <TextField
@@ -66,6 +87,8 @@ const RegisterPage = () => {
                 name="lastName"
                 value={formData.lastName}
                 onChange={handleChange}
+                error={Boolean(fieldErrors.lastName)}
+                helperText={fieldErrors.lastName}
                 required
             />
         </Box>
@@ -77,6 +100,8 @@ const RegisterPage = () => {
           type="email"
           value={formData.email}
           onChange={handleChange}
+          error={Boolean(fieldErrors.email)}
+          helperText={fieldErrors.email}
           required
         />
         <TextField
@@ -87,7 +112,8 @@ const RegisterPage = () => {
           type="password"
           value={formData.password}
           onChange={handleChange}
-          helperText="Minimum 8 characters, at least 1 uppercase and 1 number"
+          error={Boolean(fieldErrors.password)}
+          helperText={fieldErrors.password || 'Minimum 8 characters, at least 1 uppercase and 1 number'}
           required
         />
         <TextField
@@ -98,6 +124,8 @@ const RegisterPage = () => {
           type="password"
           value={formData.confirmPassword}
           onChange={handleChange}
+          error={Boolean(fieldErrors.confirmPassword)}
+          helperText={fieldErrors.confirmPassword}
           required
         />
 

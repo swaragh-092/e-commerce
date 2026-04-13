@@ -25,6 +25,7 @@ import { useNotification } from '../../context/NotificationContext';
 import AppliedDiscountsSummary from '../../components/orders/AppliedDiscountsSummary';
 import { useAuth } from '../../hooks/useAuth';
 import { PERMISSIONS } from '../../utils/permissions';
+import { getApiErrorMessage } from '../../utils/apiErrors';
 import {
   ORDER_STATUS_STEPPER,
   getAllowedOrderStatuses,
@@ -92,7 +93,7 @@ const OrderDetailPage = () => {
       })
       .catch((fetchError) => {
         console.error(fetchError);
-        setError(fetchError.response?.data?.error?.message || 'Failed to load order details.');
+        setError(getApiErrorMessage(fetchError, 'Failed to load order details.'));
         setOrder(null);
       })
       .finally(() => setLoading(false));
@@ -132,9 +133,9 @@ const OrderDetailPage = () => {
     try {
       const response = await updateOrderStatus(id, newStatus);
       setOrder(response.data.data);
-      notify('Order status updated.', 'success');
+      notify('Order status updated successfully.', 'success');
     } catch (updateError) {
-      notify(updateError.response?.data?.error?.message || 'Failed to update status.', 'error');
+      notify(getApiErrorMessage(updateError, 'Failed to update status.'), 'error');
     } finally {
       setUpdating(false);
     }
@@ -155,7 +156,7 @@ const OrderDetailPage = () => {
       setNewStatus('refunded');
       notify('Refund recorded successfully.', 'success');
     } catch (refundError) {
-      notify(refundError.response?.data?.error?.message || 'Failed to refund order.', 'error');
+      notify(getApiErrorMessage(refundError, 'Failed to refund order.'), 'error');
     } finally {
       setUpdating(false);
     }
