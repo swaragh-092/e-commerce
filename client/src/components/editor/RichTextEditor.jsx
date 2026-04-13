@@ -2,6 +2,40 @@ import { useEffect, useRef } from 'react';
 import Quill from 'quill';
 import 'quill/dist/quill.snow.css';
 
+const EMPTY_EDITOR_HTML = '<p><br></p>';
+
+const getEditorHtml = (quill) => {
+  const html = quill.root.innerHTML;
+  return html === EMPTY_EDITOR_HTML ? '' : html;
+};
+
+const applyHtmlToEditor = (quill, html) => {
+  if (!html) {
+    quill.setText('');
+    return;
+  }
+
+  quill.clipboard.dangerouslyPasteHTML(0, html, 'silent');
+};
+
+const restoreSelection = (quill, selection) => {
+  if (!selection) {
+    return;
+  }
+
+  const editorLength = quill.getLength();
+  const nextIndex = Math.min(Math.max(selection.index ?? 0, 0), Math.max(editorLength - 1, 0));
+  const maxLength = Math.max(editorLength - nextIndex - 1, 0);
+  const nextLength = Math.min(Math.max(selection.length ?? 0, 0), maxLength);
+
+  try {
+    quill.setSelection(nextIndex, nextLength, 'silent');
+  } catch (error) {
+    const fallbackIndex = Math.max(quill.getLength() - 1, 0);
+    quill.setSelection(fallbackIndex, 0, 'silent');
+  }
+};
+
 const RichTextEditor = ({
   value = '',
   onChange,
@@ -30,10 +64,10 @@ const RichTextEditor = ({
       placeholder,
     });
 
-    quill.root.innerHTML = value || '';
+    applyHtmlToEditor(quill, value || '');
 
     const handleTextChange = () => {
-      const html = quill.root.innerHTML === '<p><br></p>' ? '' : quill.root.innerHTML;
+      const html = getEditorHtml(quill);
       if (typeof onChangeRef.current === 'function') {
         onChangeRef.current(html);
       }
@@ -46,7 +80,7 @@ const RichTextEditor = ({
       quill.off('text-change', handleTextChange);
       quillRef.current = null;
     };
-  }, [formats, modules, placeholder, value]);
+  }, [formats, modules, placeholder]);
 
   useEffect(() => {
     const quill = quillRef.current;
@@ -55,23 +89,17 @@ const RichTextEditor = ({
     }
 
     const normalizedValue = value || '';
-    const currentHtml = quill.root.innerHTML === '<p><br></p>' ? '' : quill.root.innerHTML;
+    const currentHtml = getEditorHtml(quill);
     if (currentHtml !== normalizedValue) {
       const selection = quill.getSelection();
-      quill.root.innerHTML = normalizedValue;
-      if (selection) {
-        quill.setSelection(selection);
-      }
+
+      applyHtmlToEditor(quill, normalizedValue);
+      restoreSelection(quill, selection);
     }
   }, [value]);
 
   return (
-    <div
-      sx={{}}
-      style={{
-        marginBottom: '60px',
-      }}
-    >
+    <div style={{ marginBottom: '60px' }}>
       <div
         ref={containerRef}
         style={{
