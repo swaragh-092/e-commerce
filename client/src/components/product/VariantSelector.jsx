@@ -1,98 +1,110 @@
-import React, { useState, useEffect } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { Box, Typography, Button, Chip } from '@mui/material';
+import {
+    findMatchingVariant,
+    getVariantAttributeGroups,
+    getVariantOptionEntries,
+} from '../../utils/variantOptions';
 
 const VariantSelector = ({ variants, selectedVariantId, onSelect }) => {
-    // Per-group selection map: { [attrName]: variantId }
+    const activeVariants = useMemo(
+        () => (Array.isArray(variants) ? variants.filter((variant) => variant?.isActive !== false) : []),
+        [variants]
+    );
     const [selections, setSelections] = useState({});
 
-    // Hook must be declared before any conditional return (Rules of Hooks)
     useEffect(() => {
-        if (selectedVariantId && variants) {
-            const v = variants.find(v => v.id === selectedVariantId);
-            if (v) {
-                setSelections(prev => {
-                    // Only update if this group's selection actually changed
-                    if (prev[v.name] === v.id) return prev;
-                    return { ...prev, [v.name]: v.id };
-                });
-            }
+        if (!selectedVariantId || activeVariants.length === 0) {
+            return;
         }
-    }, [selectedVariantId, variants]);
 
-    if (!variants || variants.length === 0) return null;
+        const selectedVariant = activeVariants.find((variant) => variant.id === selectedVariantId);
+        if (!selectedVariant) {
+            return;
+        }
 
-    const grouped = variants.reduce((acc, curr) => {
-        if (!acc[curr.name]) acc[curr.name] = [];
-        acc[curr.name].push(curr);
-        return acc;
-    }, {});
+        const nextSelections = getVariantOptionEntries(selectedVariant).reduce((accumulator, entry) => {
+            accumulator[entry.attributeId] = entry.valueId;
+            return accumulator;
+        }, {});
 
-    const groupNames = Object.keys(grouped);
-    const isMultiGroup = groupNames.length > 1;
+        setSelections((currentSelections) => {
+            const currentKey = JSON.stringify(currentSelections);
+            const nextKey = JSON.stringify(nextSelections);
+            return currentKey === nextKey ? currentSelections : nextSelections;
+        });
+    }, [selectedVariantId, activeVariants]);
 
-    const handleSelect = (opt) => {
-        setSelections(prev => ({ ...prev, [opt.name]: opt.id }));
-        onSelect(opt); // backward-compat: parent receives the last-clicked variant
+    if (activeVariants.length === 0) return null;
+
+    const groups = getVariantAttributeGroups(activeVariants);
+
+    const handleSelect = (attributeId, valueId) => {
+        const nextSelections = { ...selections, [attributeId]: valueId };
+        setSelections(nextSelections);
+        const matchedVariant = findMatchingVariant(activeVariants, nextSelections);
+        if (matchedVariant) {
+            onSelect(matchedVariant);
+        }
     };
 
-    const unselectedGroups = groupNames.filter(g => !selections[g]);
+    const unselectedGroups = groups.filter((group) => !selections[group.attributeId]);
     const allGroupsSelected = unselectedGroups.length === 0;
 
     return (
         <Box sx={{ my: 3 }}>
-            {Object.entries(grouped).map(([attrName, options]) => {
-                const selectedId = selections[attrName];
-                return (
-                    <Box key={attrName} sx={{ mb: 2 }}>
-                        <Typography variant="subtitle2" sx={{ mb: 1, fontWeight: 'bold' }}>
-                            {attrName}
-                            {selectedId && (
-                                <Typography
-                                    component="span"
-                                    variant="body2"
-                                    color="text.secondary"
-                                    sx={{ ml: 1, fontWeight: 'normal' }}
-                                >
-                                    — {options.find(o => o.id === selectedId)?.value}
-                                </Typography>
-                            )}
-                        </Typography>
-                        <Box sx={{ display: 'flex', gap: 1, flexWrap: 'wrap' }}>
-                            {options.map(opt => {
-                                const isSelected = selectedId === opt.id;
-                                const isOutOfStock = opt.quantity <= 0;
-                                return (
-                                    <Button
-                                        key={opt.id}
-                                        variant={isSelected ? 'contained' : 'outlined'}
-                                        disabled={isOutOfStock}
-                                        onClick={() => handleSelect(opt)}
-                                        sx={{
-                                            minWidth: 60,
-                                            position: 'relative',
-                                            ...(isOutOfStock && {
-                                                textDecoration: 'line-through',
-                                                opacity: 0.5,
-                                            }),
-                                        }}
-                                    >
-                                        {opt.value}
-                                    </Button>
-                                );
-                            })}
-                        </Box>
-                    </Box>
-                );
-            })}
+            {groups.map((group) => (
+                <Box key={group.attributeId} sx={{ mb: 2.5 }}>
+                    <Typography variant="subtitle2" sx={{ mb: 1, fontWeight: 'bold' }}>
+                        {group.attributeName}
+                        {selections[group.attributeId] && (
+                            <Typography component="span" variant="body2" color="text.secondary" sx={{ ml: 1, fontWeight: 'normal' }}>
+                                - {group.values.find((value) => value.valueId === selections[group.attributeId])?.valueLabel}
+                            </Typography>
+                        )}
+                    </Typography>
+                    <Box sx={{ display: 'flex', gap: 1, flexWrap: 'wrap' }}>
+                        {group.values.map((value) => {
+                            const isSelected = selections[group.attributeId] === value.valueId;
+                            const hasMatchingVariant = activeVariants.some((variant) => {
+                                const variantEntries = getVariantOptionEntries(variant);
+                                const includesCurrentValue = variantEntries.some((entry) => (
+                                    entry.attributeId === group.attributeId && entry.valueId === value.valueId
+                                ));
+                                if (!includesCurrentValue) {
+                                    return false;
+                                }
 
-            {/* Cross-group validation reminder */}
-            {isMultiGroup && !allGroupsSelected && (
+                                return Object.entries(selections)
+                                    .filter(([attributeId]) => attributeId !== group.attributeId)
+                                    .every(([attributeId, valueId]) => (
+                                        !valueId || variantEntries.some((entry) => entry.attributeId === attributeId && entry.valueId === valueId)
+                                    ));
+                            });
+
+                            return (
+                                <Button
+                                    key={value.valueId}
+                                    variant={isSelected ? 'contained' : 'outlined'}
+                                    disabled={!hasMatchingVariant}
+                                    onClick={() => handleSelect(group.attributeId, value.valueId)}
+                                    sx={{ minWidth: 72 }}
+                                >
+                                    {value.valueLabel}
+                                </Button>
+                            );
+                        })}
+                    </Box>
+                </Box>
+            ))}
+
+            {groups.length > 1 && !allGroupsSelected && (
                 <Box sx={{ display: 'flex', gap: 0.5, flexWrap: 'wrap', mt: 1 }}>
                     <Typography variant="caption" color="warning.main">
                         Please also select:
                     </Typography>
-                    {unselectedGroups.map(g => (
-                        <Chip key={g} label={g} size="small" variant="outlined" color="warning" />
+                    {unselectedGroups.map((group) => (
+                        <Chip key={group.attributeId} label={group.attributeName} size="small" variant="outlined" color="warning" />
                     ))}
                 </Box>
             )}
@@ -101,4 +113,3 @@ const VariantSelector = ({ variants, selectedVariantId, onSelect }) => {
 };
 
 export default VariantSelector;
-

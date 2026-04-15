@@ -49,7 +49,8 @@ import attributeService from '../../services/attributeService';
 import MediaUploader from '../../components/common/MediaUploader';
 import { useNotification } from '../../context/NotificationContext';
 import { useSettings } from '../../hooks/useSettings';
-import { getProductBasePrice, getVariantPriceModifierFromInput, getVariantUnitPrice } from '../../utils/variantPricing';
+import { getProductBasePrice } from '../../utils/variantPricing';
+import { getVariantOptionLabel } from '../../utils/variantOptions';
 import { useAuth } from '../../hooks/useAuth';
 import { PERMISSIONS } from '../../utils/permissions';
 import { getApiErrorMessage } from '../../utils/apiErrors';
@@ -705,26 +706,25 @@ const ProductEditPage = () => {
 };
 
 /* ─── Variants Panel ──────────────────────────────────────────────────────── */
-const VariantsPanel = ({ productId, baseSku, flatCatFiles = [], canManageVariants = false }) => {
+const VariantsPanel = ({ productId, flatCatFiles = [], canManageVariants = false }) => {
   const notify = useNotification();
-  const { generateVariantSKU } = useSKUGenerator();
+  const [productAttributes, setProductAttributes] = useState([]);
   const [variants, setVariants] = useState([]);
   const [productBasePrice, setProductBasePrice] = useState(0);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [attributes, setAttributes] = useState([]);
   const [selectedTemplate, setSelectedTemplate] = useState('');
+  const [selectedValueIds, setSelectedValueIds] = useState([]);
+  const [customName, setCustomName] = useState('');
+  const [customValue, setCustomValue] = useState('');
   const [cloneOpen, setCloneOpen] = useState(false);
-  const [cloneSourceId, setCloneSourceId] = useState('');
-  const [cloneSourceName, setCloneSourceName] = useState('');
   const [cloning, setCloning] = useState(false);
   const [cloneTab, setCloneTab] = useState(0);
-  // Tab 0: search by name
   const [cloneSearchInput, setCloneSearchInput] = useState('');
   const [cloneSearchResults, setCloneSearchResults] = useState([]);
   const [cloneSearchLoading, setCloneSearchLoading] = useState(false);
   const [cloneSelectedProduct, setCloneSelectedProduct] = useState(null);
-  // Tab 1: browse by category
   const [cloneCatId, setCloneCatId] = useState('');
   const [cloneCatProducts, setCloneCatProducts] = useState([]);
   const [cloneCatProductsLoading, setCloneCatProductsLoading] = useState(false);
@@ -734,142 +734,162 @@ const VariantsPanel = ({ productId, baseSku, flatCatFiles = [], canManageVariant
   const loadAll = useCallback(async () => {
     setLoading(true);
     try {
-      const [varRes, attrRes, productRes] = await Promise.all([
+      const [attrRowsRes, varRes, attrRes, productRes] = await Promise.all([
+        attributeService.getProductAttributes(productId),
         attributeService.getProductVariants(productId),
         attributeService.getAttributes({ limit: 100 }),
         getProductById(productId),
       ]);
+      const attrRows = attrRowsRes?.data?.data || [];
       const varData = varRes?.data?.data || [];
       const attrData = attrRes?.data?.data?.rows || attrRes?.data?.data || [];
       const product = productRes?.data?.product || null;
-      const basePrice = getProductBasePrice(product);
-      setProductBasePrice(basePrice);
-      setVariants(varData.map((v) => ({
-        ...v,
-        priceModifier: getVariantUnitPrice(product || { price: basePrice, effectivePrice: basePrice }, v),
+      setProductAttributes(attrRows);
+      setVariants(varData.map((variant) => ({
+        ...variant,
+        price: variant.price ?? product?.effectivePrice ?? product?.price ?? 0,
+        stockQty: variant.stockQty ?? 0,
         _dirty: false,
-        _new: false,
       })));
       setAttributes(attrData);
-    } catch {
-      notify('Failed to load variants.', 'error');
+      setProductBasePrice(getProductBasePrice(product));
+    } catch (error) {
+      notify('Failed to load product options.', 'error');
     } finally {
       setLoading(false);
     }
-  }, [productId]);
+  }, [productId, notify]);
 
   useEffect(() => { loadAll(); }, [loadAll]);
 
-  // Add all values from the selected attribute template as pending rows
-  const handleAddFromTemplate = () => {
-    if (!canManageVariants) return;
-    const tmpl = attributes.find((a) => a.id === selectedTemplate);
-    if (!tmpl) return;
-    if (!tmpl.values?.length) {
-      notify(`"${tmpl.name}" has no values. Add values in the Attributes section first.`, 'warning');
+  const selectedTemplateRecord = attributes.find((attribute) => attribute.id === selectedTemplate);
+  const variantAttributeRows = productAttributes.filter((row) => row.isVariantAttr);
+  const canGenerateMatrix = variantAttributeRows.some((row) => row.attributeId) && variantAttributeRows.length > 0;
+  const hasVariantChanges = variants.some((variant) => variant._dirty);
+
+  const handleAddGlobalAttributes = async () => {
+    if (!canManageVariants || !selectedTemplate || selectedValueIds.length === 0) {
       return;
     }
-    setVariants((prev) => [
-      ...prev,
-      ...tmpl.values.map((v) => ({
-        _tempId: `${Date.now()}-${Math.random()}`,
-        _new: true,
-        _dirty: false,
-        name: tmpl.name,
-        value: v.value,
-        priceModifier: productBasePrice,
-        quantity: 0,
-        sku: '',
-      })),
-    ]);
-    setSelectedTemplate('');
+
+    try {
+      await Promise.all(selectedValueIds.map((valueId) => (
+        attributeService.addProductAttribute(productId, {
+          attributeId: selectedTemplate,
+          valueId,
+        })
+      )));
+      setSelectedTemplate('');
+      setSelectedValueIds([]);
+      notify('Product attributes added.', 'success');
+      loadAll();
+    } catch (error) {
+      notify(error?.response?.data?.error?.message || 'Failed to add product attributes.', 'error');
+    }
   };
 
-  // Add a blank custom row
-  const handleAddCustom = () => {
-    if (!canManageVariants) return;
-    setVariants((prev) => [
-      ...prev,
-      {
-        _tempId: `${Date.now()}-${Math.random()}`,
-        _new: true,
-        _dirty: false,
-        name: '',
-        value: '',
-        priceModifier: productBasePrice,
-        quantity: 0,
-        sku: '',
-      },
-    ]);
-  };
-
-  const handleChange = (index, field, value) => {
-    if (!canManageVariants) return;
-    setVariants((prev) =>
-      prev.map((v, i) => (i === index ? { ...v, [field]: value, _dirty: true } : v))
-    );
-  };
-
-  const handleDelete = async (index) => {
-    if (!canManageVariants) return;
-    const v = variants[index];
-    if (v._new) {
-      setVariants((prev) => prev.filter((_, i) => i !== index));
+  const handleAddCustomAttribute = async () => {
+    if (!canManageVariants || !customName.trim() || !customValue.trim()) {
       return;
     }
-    if (!window.confirm('Delete this variant?')) return;
+
+    try {
+      await attributeService.addProductAttribute(productId, {
+        customName: customName.trim(),
+        customValue: customValue.trim(),
+      });
+      setCustomName('');
+      setCustomValue('');
+      notify('Custom attribute added.', 'success');
+      loadAll();
+    } catch (error) {
+      notify(error?.response?.data?.error?.message || 'Failed to add custom attribute.', 'error');
+    }
+  };
+
+  const handleToggleVariantAttribute = async (row) => {
+    if (!canManageVariants) return;
+    if (!row.attributeId) {
+      notify('Only global attributes can be used to generate variant SKUs.', 'warning');
+      return;
+    }
+
+    try {
+      await attributeService.updateProductAttribute(productId, row.id, {
+        isVariantAttr: !row.isVariantAttr,
+      });
+      loadAll();
+    } catch (error) {
+      notify(error?.response?.data?.error?.message || 'Failed to update attribute.', 'error');
+    }
+  };
+
+  const handleDeleteAttribute = async (rowId) => {
+    if (!canManageVariants) return;
     try {
       await attributeService.deleteProductVariant(productId, v.id);
       setVariants((prev) => prev.filter((_, i) => i !== index));
-      notify('Variant deleted successfully.', 'success');
+      notify('Variant deleted.', 'success');
     } catch {
       notify('Failed to delete variant.', 'error');
     }
   };
 
-  // Save all new/dirty rows in one click
-  const handleSaveVariants = async () => {
-    if (!canManageVariants) {
-      notify('You do not have permission to update products.', 'error');
-      return;
+  const handleGenerateVariants = async () => {
+    if (!canManageVariants) return;
+    try {
+      await attributeService.bulkGenerateVariants(productId, {
+        defaultPrice: productBasePrice,
+        defaultStockQty: 0,
+      });
+      notify('Variant matrix generated from selected variant attributes.', 'success');
+      loadAll();
+    } catch (error) {
+      notify(error?.response?.data?.error?.message || 'Failed to generate variants.', 'error');
     }
+  };
 
-    const toCreate = variants.filter((v) => v._new && v.name.trim() && v.value.trim());
-    const toUpdate = variants.filter((v) => !v._new && v._dirty);
-    if (toCreate.length === 0 && toUpdate.length === 0) {
-      notify('No changes to save.', 'info');
-      return;
-    }
+  const handleVariantChange = (index, field, value) => {
+    if (!canManageVariants) return;
+    setVariants((current) => current.map((variant, currentIndex) => (
+      currentIndex === index ? { ...variant, [field]: value, _dirty: true } : variant
+    )));
+  };
+
+  const handleSaveVariants = async () => {
+    if (!canManageVariants || !hasVariantChanges) return;
     setSaving(true);
     try {
-      for (const v of toCreate) {
-        await attributeService.addProductVariant(productId, {
-          name: v.name.trim(),
-          value: v.value.trim(),
-          priceModifier: getVariantPriceModifierFromInput(productBasePrice, v.priceModifier),
-          quantity: parseInt(v.quantity, 10) || 0,
-          sku: v.sku?.trim() || null,
+      const dirtyVariants = variants.filter((variant) => variant._dirty);
+      for (const variant of dirtyVariants) {
+        await attributeService.updateProductVariant(productId, variant.id, {
+          sku: variant.sku?.trim() || null,
+          price: Number(variant.price || 0),
+          stockQty: Number(variant.stockQty || 0),
+          isActive: variant.isActive !== false,
+          sortOrder: Number(variant.sortOrder || 0),
         });
       }
-      for (const v of toUpdate) {
-        await attributeService.updateProductVariant(productId, v.id, {
-          name: v.name.trim(),
-          value: v.value.trim(),
-          priceModifier: getVariantPriceModifierFromInput(productBasePrice, v.priceModifier),
-          quantity: parseInt(v.quantity, 10) || 0,
-          sku: v.sku?.trim() || null,
-        });
-      }
-      notify('Variants saved successfully.', 'success');
+      notify('Variants updated.', 'success');
       loadAll();
     } catch (err) {
-      notify(getApiErrorMessage(err, 'Failed to save variants.'), 'error');
+      notify(err?.response?.data?.message || 'Failed to save variants.', 'error');
     } finally {
       setSaving(false);
     }
   };
 
-  const hasPending = variants.some((v) => v._new || v._dirty);
+  const handleDeleteVariant = async (variantId) => {
+    if (!canManageVariants) return;
+    if (!window.confirm('Delete this variant SKU?')) return;
+    try {
+      await attributeService.deleteProductVariant(productId, variantId);
+      notify('Variant deleted.', 'success');
+      loadAll();
+    } catch (error) {
+      notify(error?.response?.data?.error?.message || 'Failed to delete variant.', 'error');
+    }
+  };
 
   const handleClone = async () => {
     if (!canManageVariants) return;
@@ -880,9 +900,12 @@ const VariantsPanel = ({ productId, baseSku, flatCatFiles = [], canManageVariant
       await attributeService.cloneVariants(productId, { sourceProductId: activeProduct.id });
       notify(`Variants cloned from "${activeProduct.name}" successfully.`, 'success');
       setCloneOpen(false);
-      // reset dialog state
-      setCloneSelectedProduct(null); setCloneSearchInput(''); setCloneSearchResults([]);
-      setCloneCatSelectedProduct(null); setCloneCatId(''); setCloneCatProducts([]);
+      setCloneSelectedProduct(null);
+      setCloneSearchInput('');
+      setCloneSearchResults([]);
+      setCloneCatSelectedProduct(null);
+      setCloneCatId('');
+      setCloneCatProducts([]);
       loadAll();
     } catch (err) {
       notify(getApiErrorMessage(err, 'Clone failed.'), 'error');
@@ -891,7 +914,6 @@ const VariantsPanel = ({ productId, baseSku, flatCatFiles = [], canManageVariant
     }
   };
 
-  // Debounced search for clone tab 0
   const handleCloneSearchChange = (inputValue) => {
     setCloneSearchInput(inputValue);
     setCloneSelectedProduct(null);
@@ -902,14 +924,15 @@ const VariantsPanel = ({ productId, baseSku, flatCatFiles = [], canManageVariant
       try {
         const res = await getProducts({ search: inputValue.trim(), limit: 20 });
         const rows = res?.data || [];
-        // exclude current product from results
-        setCloneSearchResults(rows.filter(p => p.id !== productId));
-      } catch { setCloneSearchResults([]); }
-      finally { setCloneSearchLoading(false); }
+        setCloneSearchResults(rows.filter((product) => product.id !== productId));
+      } catch {
+        setCloneSearchResults([]);
+      } finally {
+        setCloneSearchLoading(false);
+      }
     }, 350);
   };
 
-  // Load products when category is selected in clone tab 1
   const handleCloneCatChange = async (catId) => {
     setCloneCatId(catId);
     setCloneCatSelectedProduct(null);
@@ -919,250 +942,295 @@ const VariantsPanel = ({ productId, baseSku, flatCatFiles = [], canManageVariant
     try {
       const res = await getProducts({ categoryId: catId, limit: 100 });
       const rows = res?.data || [];
-      setCloneCatProducts(rows.filter(p => p.id !== productId));
-    } catch { setCloneCatProducts([]); }
-    finally { setCloneCatProductsLoading(false); }
+      setCloneCatProducts(rows.filter((product) => product.id !== productId));
+    } catch {
+      setCloneCatProducts([]);
+    } finally {
+      setCloneCatProductsLoading(false);
+    }
   };
 
   return (
     <Paper sx={{ p: 3, mt: 3 }}>
-      <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 1 }}>
-        <Typography variant="h6">Variants</Typography>
-        <Box sx={{ display: 'flex', gap: 1 }}>
-          {canManageVariants && (
-            <Tooltip title="Copy all variants from another product">
-              <Button
-                size="small"
-                variant="outlined"
-                startIcon={<ContentCopyIcon fontSize="small" />}
-                onClick={() => setCloneOpen(true)}
-              >
-                Clone from Product
-              </Button>
-            </Tooltip>
-          )}
-          {hasPending && canManageVariants && (
-            <Button variant="contained" size="small" onClick={handleSaveVariants} disabled={saving}>
-              {saving ? 'Saving…' : 'Save Variants'}
-            </Button>
-          )}
-        </Box>
-      </Box>
-
-      <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
-        Each row (e.g. Color=Red, Size=M) is an independent SKU with its own stock, final selling price and SKU code.
-        Manage reusable templates in{' '}
-        <Link to="/admin/attributes" style={{ color: 'inherit', fontWeight: 600 }}>Attributes →</Link>
+      <Typography variant="h6" gutterBottom>
+        Attributes and Variants
+      </Typography>
+      <Typography variant="body2" color="text.secondary" sx={{ mb: 3 }}>
+        Assign product specifications first, then mark which global attributes should generate purchasable SKUs.
+        Manage reusable templates in <Link to="/admin/attributes" style={{ color: 'inherit', fontWeight: 600 }}>Attributes {'->'}</Link>
       </Typography>
 
-      <Divider sx={{ mb: 2 }} />
+      <Grid container spacing={3}>
+        <Grid item xs={12} lg={5}>
+          <Paper variant="outlined" sx={{ p: 2.5, height: '100%' }}>
+            <Typography variant="subtitle1" fontWeight={700} gutterBottom>
+              Product Attributes
+            </Typography>
 
-      {/* ── Template Picker ── */}
-      <Box sx={{ display: 'flex', gap: 1, mb: 2, alignItems: 'center', flexWrap: 'wrap' }}>
-        <FormControl size="small" sx={{ minWidth: 220 }}>
-          <InputLabel>Load from Template</InputLabel>
-          <Select
-            value={selectedTemplate}
-            label="Load from Template"
-            onChange={(e) => setSelectedTemplate(e.target.value)}
-          >
-            <MenuItem value="">— select —</MenuItem>
-            {attributes.map((a) => (
-              <MenuItem key={a.id} value={a.id}>
-                {a.name}{a.values?.length ? ` (${a.values.length} values)` : ' — no values'}
-              </MenuItem>
-            ))}
-          </Select>
-        </FormControl>
-        <Tooltip title="Adds one row per value in the selected template (e.g. Color → Red, Blue, Green)">
-          <span>
-            <Button
-              variant="outlined"
-              size="small"
-              disabled={!selectedTemplate || !canManageVariants}
-              onClick={handleAddFromTemplate}
-            >
-              + Add All Values
-            </Button>
-          </span>
-        </Tooltip>
-        <Button variant="outlined" size="small" startIcon={<AddIcon />} onClick={handleAddCustom} disabled={!canManageVariants}>
-          Custom Row
-        </Button>
-      </Box>
-
-      {/* ── Variants Table ── */}
-      {loading ? (
-        <Box sx={{ display: 'flex', justifyContent: 'center', py: 3 }}>
-          <CircularProgress size={28} />
-        </Box>
-      ) : variants.length === 0 ? (
-        <Alert severity="info">
-          No variants yet. Select a template above or add a custom row, then click <strong>Save Variants</strong>.
-        </Alert>
-      ) : (
-        <Box sx={{ overflowX: 'auto' }}>
-          <Table size="small">
-            <TableHead>
-              <TableRow sx={{ bgcolor: 'action.hover' }}>
-                <TableCell sx={{ fontWeight: 600 }}>Attribute</TableCell>
-                <TableCell sx={{ fontWeight: 600 }}>Value</TableCell>
-                <TableCell sx={{ fontWeight: 600 }}>Variant Price</TableCell>
-                <TableCell sx={{ fontWeight: 600 }}>Stock Qty</TableCell>
-                <TableCell sx={{ fontWeight: 600 }}>SKU</TableCell>
-                <TableCell />
-              </TableRow>
-            </TableHead>
-            <TableBody>
-              {variants.map((v, i) => (
-                <TableRow
-                  key={v.id || v._tempId}
-                  sx={{ bgcolor: v._new ? 'action.selected' : undefined }}
+            <Box sx={{ display: 'grid', gap: 1.5, mb: 2.5 }}>
+              <FormControl size="small" fullWidth>
+                <InputLabel>Global Attribute</InputLabel>
+                <Select
+                  label="Global Attribute"
+                  value={selectedTemplate}
+                  onChange={(e) => {
+                    setSelectedTemplate(e.target.value);
+                    setSelectedValueIds([]);
+                  }}
                 >
-                  <TableCell>
-                    <TextField
-                      size="small"
-                      value={v.name}
-                      disabled={!canManageVariants}
-                      onChange={(e) => handleChange(i, 'name', e.target.value)}
-                      placeholder="e.g. Color"
-                      sx={{ width: 130 }}
-                    />
-                  </TableCell>
-                  <TableCell>
-                    <TextField
-                      size="small"
-                      value={v.value}
-                      disabled={!canManageVariants}
-                      onChange={(e) => handleChange(i, 'value', e.target.value)}
-                      placeholder="e.g. Red"
-                      sx={{ width: 130 }}
-                    />
-                  </TableCell>
-                  <TableCell>
-                    <TextField
-                      size="small"
-                      type="number"
-                      value={v.priceModifier}
-                      disabled={!canManageVariants}
-                      onChange={(e) => handleChange(i, 'priceModifier', e.target.value)}
-                      sx={{ width: 100 }}
-                      inputProps={{ step: 0.01 }}
-                    />
-                  </TableCell>
-                  <TableCell>
-                    <TextField
-                      size="small"
-                      type="number"
-                      value={v.quantity}
-                      disabled={!canManageVariants}
-                      onChange={(e) => handleChange(i, 'quantity', e.target.value)}
-                      sx={{ width: 90 }}
-                      inputProps={{ min: 0 }}
-                    />
-                  </TableCell>
-                  <TableCell>
-                    <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
-                      <TextField
-                        size="small"
-                        value={v.sku || ''}
-                        disabled={!canManageVariants}
-                        onChange={(e) => handleChange(i, 'sku', e.target.value)}
-                        placeholder="optional"
-                        sx={{ width: 130 }}
-                      />
-                      <Tooltip title="Auto-generate SKU from attribute name/value (uses SKU settings)">
-                        <IconButton
-                          size="small"
-                          disabled={!canManageVariants}
-                          onClick={() =>
-                            handleChange(i, 'sku', generateVariantSKU(baseSku, v.name, v.value))
-                          }
-                        >
-                          <ElectricBoltIcon fontSize="small" color="warning" />
-                        </IconButton>
-                      </Tooltip>
-                    </Box>
-                  </TableCell>
-                  <TableCell>
-                    <Tooltip title="Delete variant">
-                      <IconButton size="small" color="error" onClick={() => handleDelete(i)} disabled={!canManageVariants}>
-                        <DeleteIcon fontSize="small" />
-                      </IconButton>
-                    </Tooltip>
-                  </TableCell>
-                </TableRow>
-              ))}
-            </TableBody>
-          </Table>
-        </Box>
-      )}
+                  <MenuItem value=""><em>Select attribute</em></MenuItem>
+                  {attributes.map((attribute) => (
+                    <MenuItem key={attribute.id} value={attribute.id}>{attribute.name}</MenuItem>
+                  ))}
+                </Select>
+              </FormControl>
 
-      {/* ── Clone Dialog ── */}
+              <FormControl size="small" fullWidth disabled={!selectedTemplateRecord}>
+                <InputLabel>Attribute Values</InputLabel>
+                <Select
+                  multiple
+                  value={selectedValueIds}
+                  label="Attribute Values"
+                  input={<OutlinedInput label="Attribute Values" />}
+                  onChange={(e) => setSelectedValueIds(e.target.value)}
+                  renderValue={(selected) => (
+                    <Box sx={{ display: 'flex', gap: 0.5, flexWrap: 'wrap' }}>
+                      {selected.map((valueId) => {
+                        const valueRecord = selectedTemplateRecord?.values?.find((value) => value.id === valueId);
+                        return <Chip key={valueId} size="small" label={valueRecord?.value || valueId} />;
+                      })}
+                    </Box>
+                  )}
+                >
+                  {(selectedTemplateRecord?.values || []).map((value) => (
+                    <MenuItem key={value.id} value={value.id}>{value.value}</MenuItem>
+                  ))}
+                </Select>
+              </FormControl>
+
+              <Button variant="outlined" onClick={handleAddGlobalAttributes} disabled={!canManageVariants || !selectedTemplate || selectedValueIds.length === 0}>
+                Add Global Attribute Values
+              </Button>
+            </Box>
+
+            <Divider sx={{ my: 2 }} />
+
+            <Box sx={{ display: 'grid', gap: 1.5, mb: 2.5 }}>
+              <TextField
+                size="small"
+                label="Custom Name"
+                value={customName}
+                onChange={(e) => setCustomName(e.target.value)}
+                disabled={!canManageVariants}
+              />
+              <TextField
+                size="small"
+                label="Custom Value"
+                value={customValue}
+                onChange={(e) => setCustomValue(e.target.value)}
+                disabled={!canManageVariants}
+              />
+              <Button variant="outlined" startIcon={<AddIcon />} onClick={handleAddCustomAttribute} disabled={!canManageVariants || !customName.trim() || !customValue.trim()}>
+                Add Custom Attribute
+              </Button>
+            </Box>
+
+            {loading ? (
+              <Box sx={{ display: 'flex', justifyContent: 'center', py: 3 }}><CircularProgress size={24} /></Box>
+            ) : productAttributes.length === 0 ? (
+              <Alert severity="info">No product attributes yet. Add specifications above before generating variants.</Alert>
+            ) : (
+              <Box sx={{ display: 'grid', gap: 1 }}>
+                {productAttributes.map((row) => {
+                  const label = row.attribute?.name || row.customName;
+                  const value = row.value?.value || row.customValue;
+                  return (
+                    <Paper key={row.id} variant="outlined" sx={{ p: 1.5 }}>
+                      <Box sx={{ display: 'flex', justifyContent: 'space-between', gap: 1, alignItems: 'flex-start' }}>
+                        <Box>
+                          <Typography variant="body2" fontWeight={700}>{label}</Typography>
+                          <Typography variant="body2" color="text.secondary">{value}</Typography>
+                          <Box sx={{ display: 'flex', gap: 0.75, flexWrap: 'wrap', mt: 1 }}>
+                            <Chip size="small" label={row.attributeId ? 'Global' : 'Custom'} variant="outlined" />
+                            <Chip size="small" label={row.isVariantAttr ? 'Variant SKU attribute' : 'Display only'} color={row.isVariantAttr ? 'primary' : 'default'} />
+                          </Box>
+                        </Box>
+                        <Box sx={{ display: 'flex', gap: 0.5 }}>
+                          <Button size="small" variant={row.isVariantAttr ? 'contained' : 'outlined'} onClick={() => handleToggleVariantAttribute(row)} disabled={!canManageVariants}>
+                            {row.isVariantAttr ? 'Used for Variants' : 'Mark for Variants'}
+                          </Button>
+                          <IconButton size="small" color="error" onClick={() => handleDeleteAttribute(row.id)} disabled={!canManageVariants}>
+                            <DeleteIcon fontSize="small" />
+                          </IconButton>
+                        </Box>
+                      </Box>
+                    </Paper>
+                  );
+                })}
+              </Box>
+            )}
+          </Paper>
+        </Grid>
+
+        <Grid item xs={12} lg={7}>
+          <Paper variant="outlined" sx={{ p: 2.5, height: '100%' }}>
+            <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 1, mb: 1, flexWrap: 'wrap' }}>
+              <Typography variant="subtitle1" fontWeight={700}>
+                Variant SKUs
+              </Typography>
+              <Box sx={{ display: 'flex', gap: 1, flexWrap: 'wrap' }}>
+                <Button variant="outlined" size="small" startIcon={<ContentCopyIcon fontSize="small" />} onClick={() => setCloneOpen(true)} disabled={!canManageVariants}>
+                  Clone from Product
+                </Button>
+                <Button variant="outlined" size="small" onClick={handleGenerateVariants} disabled={!canManageVariants || !canGenerateMatrix}>
+                  Generate Matrix
+                </Button>
+                <Button variant="contained" size="small" onClick={handleSaveVariants} disabled={!canManageVariants || !hasVariantChanges || saving}>
+                  {saving ? 'Saving...' : 'Save Variant Changes'}
+                </Button>
+              </Box>
+            </Box>
+
+            <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
+              Mark attributes like Color or Size as variant-forming, then generate one SKU row per combination. Price and stock are stored on the SKU row itself.
+            </Typography>
+
+            <Box sx={{ display: 'flex', gap: 0.75, flexWrap: 'wrap', mb: 2 }}>
+              {variantAttributeRows.length === 0 ? (
+                <Chip size="small" label="No variant-forming attributes selected yet" variant="outlined" />
+              ) : variantAttributeRows.map((row) => (
+                <Chip key={row.id} size="small" color="primary" label={`${row.attribute?.name || row.customName}: ${row.value?.value || row.customValue}`} />
+              ))}
+            </Box>
+
+            {loading ? (
+              <Box sx={{ display: 'flex', justifyContent: 'center', py: 4 }}><CircularProgress size={24} /></Box>
+            ) : variants.length === 0 ? (
+              <Alert severity="info">
+                No variants yet. Add product attributes and mark the SKU-defining ones first, then click <strong>Generate Matrix</strong>.
+              </Alert>
+            ) : (
+              <Box sx={{ overflowX: 'auto' }}>
+                <Table size="small">
+                  <TableHead>
+                    <TableRow>
+                      <TableCell sx={{ fontWeight: 700 }}>Combination</TableCell>
+                      <TableCell sx={{ fontWeight: 700 }}>Price</TableCell>
+                      <TableCell sx={{ fontWeight: 700 }}>Stock Qty</TableCell>
+                      <TableCell sx={{ fontWeight: 700 }}>SKU</TableCell>
+                      <TableCell sx={{ fontWeight: 700 }}>Status</TableCell>
+                      <TableCell />
+                    </TableRow>
+                  </TableHead>
+                  <TableBody>
+                    {variants.map((variant, index) => (
+                      <TableRow key={variant.id}>
+                        <TableCell>
+                          <Typography variant="body2" fontWeight={600}>{getVariantOptionLabel(variant) || 'Variant SKU'}</Typography>
+                        </TableCell>
+                        <TableCell>
+                          <TextField
+                            size="small"
+                            type="number"
+                            value={variant.price}
+                            onChange={(e) => handleVariantChange(index, 'price', e.target.value)}
+                            disabled={!canManageVariants}
+                            inputProps={{ min: 0, step: '0.01' }}
+                            sx={{ width: 120 }}
+                          />
+                        </TableCell>
+                        <TableCell>
+                          <TextField
+                            size="small"
+                            type="number"
+                            value={variant.stockQty}
+                            onChange={(e) => handleVariantChange(index, 'stockQty', e.target.value)}
+                            disabled={!canManageVariants}
+                            inputProps={{ min: 0 }}
+                            sx={{ width: 100 }}
+                          />
+                        </TableCell>
+                        <TableCell>
+                          <TextField
+                            size="small"
+                            value={variant.sku || ''}
+                            onChange={(e) => handleVariantChange(index, 'sku', e.target.value)}
+                            disabled={!canManageVariants}
+                            placeholder="Optional SKU"
+                            sx={{ width: 160 }}
+                          />
+                        </TableCell>
+                        <TableCell>
+                          <Button size="small" variant={variant.isActive === false ? 'outlined' : 'contained'} onClick={() => handleVariantChange(index, 'isActive', variant.isActive === false)} disabled={!canManageVariants}>
+                            {variant.isActive === false ? 'Inactive' : 'Active'}
+                          </Button>
+                        </TableCell>
+                        <TableCell>
+                          <IconButton size="small" color="error" onClick={() => handleDeleteVariant(variant.id)} disabled={!canManageVariants}>
+                            <DeleteIcon fontSize="small" />
+                          </IconButton>
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              </Box>
+            )}
+          </Paper>
+        </Grid>
+      </Grid>
+
       <Dialog open={cloneOpen} onClose={() => setCloneOpen(false)} maxWidth="sm" fullWidth>
         <DialogTitle>Clone Variants from Another Product</DialogTitle>
         <DialogContent sx={{ pt: 1 }}>
           <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
-            Variant names, values and price modifiers will be copied. Quantities reset to 0 and SKUs cleared.
+            Option combinations and prices will be copied. Stock stays reset so you can review the new product inventory safely.
           </Typography>
-          <Tabs value={cloneTab} onChange={(_, v) => { setCloneTab(v); setCloneSelectedProduct(null); setCloneCatSelectedProduct(null); }} sx={{ mb: 2 }}>
+          <Tabs value={cloneTab} onChange={(_, value) => { setCloneTab(value); setCloneSelectedProduct(null); setCloneCatSelectedProduct(null); }} sx={{ mb: 2 }}>
             <Tab label="Search by Product Name" />
             <Tab label="Browse by Category" />
           </Tabs>
 
-          {/* Tab 0: search by name */}
           {cloneTab === 0 && (
             <Autocomplete
               options={cloneSearchResults}
-              getOptionLabel={(o) => o.name || ''}
+              getOptionLabel={(option) => option.name || ''}
               filterOptions={(x) => x}
               loading={cloneSearchLoading}
               value={cloneSelectedProduct}
-              onChange={(_, val) => setCloneSelectedProduct(val)}
+              onChange={(_, value) => setCloneSelectedProduct(value)}
               inputValue={cloneSearchInput}
-              onInputChange={(_, val, reason) => { if (reason !== 'reset') handleCloneSearchChange(val); }}
-              renderOption={(props, option) => (
-                <Box component="li" {...props} key={option.id}>
-                  <Box>
-                    <Typography variant="body2" fontWeight={600}>{option.name}</Typography>
-                    <Typography variant="caption" color="text.secondary">
-                      {option.categories?.map(c => c.name).join(', ') || 'No category'}
-                    </Typography>
-                  </Box>
-                </Box>
-              )}
+              onInputChange={(_, value, reason) => { if (reason !== 'reset') handleCloneSearchChange(value); }}
               renderInput={(params) => (
                 <TextField
                   {...params}
                   label="Search products"
                   placeholder="Type product name..."
                   size="small"
-                  InputProps={{ ...params.InputProps, endAdornment: (
-                    <>
-                      {cloneSearchLoading && <CircularProgress size={16} />}
-                      {params.InputProps.endAdornment}
-                    </>
-                  )}}
+                  InputProps={{
+                    ...params.InputProps,
+                    endAdornment: (
+                      <>
+                        {cloneSearchLoading && <CircularProgress size={16} />}
+                        {params.InputProps.endAdornment}
+                      </>
+                    ),
+                  }}
                 />
               )}
               noOptionsText={cloneSearchInput.length > 0 ? 'No products found' : 'Start typing to search'}
             />
           )}
 
-          {/* Tab 1: browse by category then product */}
           {cloneTab === 1 && (
             <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
               <FormControl fullWidth size="small">
                 <InputLabel>Select Category</InputLabel>
-                <Select
-                  label="Select Category"
-                  value={cloneCatId}
-                  onChange={(e) => handleCloneCatChange(e.target.value)}
-                >
-                  <MenuItem value=""><em>— pick a category —</em></MenuItem>
-                  {flatCatFiles.map((c) => (
-                    <MenuItem key={c.id} value={c.id} sx={{ pl: 2 + c.depth * 2 }}>
-                      {c.path}
+                <Select label="Select Category" value={cloneCatId} onChange={(e) => handleCloneCatChange(e.target.value)}>
+                  <MenuItem value=""><em>Select category</em></MenuItem>
+                  {flatCatFiles.map((category) => (
+                    <MenuItem key={category.id} value={category.id} sx={{ pl: 2 + category.depth * 2 }}>
+                      {category.path}
                     </MenuItem>
                   ))}
                 </Select>
@@ -1172,21 +1240,17 @@ const VariantsPanel = ({ productId, baseSku, flatCatFiles = [], canManageVariant
                 cloneCatProductsLoading ? (
                   <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
                     <CircularProgress size={18} />
-                    <Typography variant="body2" color="text.secondary">Loading products…</Typography>
+                    <Typography variant="body2" color="text.secondary">Loading products...</Typography>
                   </Box>
                 ) : cloneCatProducts.length === 0 ? (
                   <Typography variant="body2" color="text.secondary">No other products in this category.</Typography>
                 ) : (
                   <FormControl fullWidth size="small">
                     <InputLabel>Select Product</InputLabel>
-                    <Select
-                      label="Select Product"
-                      value={cloneCatSelectedProduct?.id || ''}
-                      onChange={(e) => setCloneCatSelectedProduct(cloneCatProducts.find(p => p.id === e.target.value) || null)}
-                    >
-                      <MenuItem value=""><em>— pick a product —</em></MenuItem>
-                      {cloneCatProducts.map((p) => (
-                        <MenuItem key={p.id} value={p.id}>{p.name}</MenuItem>
+                    <Select label="Select Product" value={cloneCatSelectedProduct?.id || ''} onChange={(e) => setCloneCatSelectedProduct(cloneCatProducts.find((product) => product.id === e.target.value) || null)}>
+                      <MenuItem value=""><em>Select product</em></MenuItem>
+                      {cloneCatProducts.map((product) => (
+                        <MenuItem key={product.id} value={product.id}>{product.name}</MenuItem>
                       ))}
                     </Select>
                   </FormControl>
@@ -1195,7 +1259,6 @@ const VariantsPanel = ({ productId, baseSku, flatCatFiles = [], canManageVariant
             </Box>
           )}
 
-          {/* Confirmation */}
           {(cloneTab === 0 ? cloneSelectedProduct : cloneCatSelectedProduct) && (
             <Alert severity="info" sx={{ mt: 2 }}>
               Will clone variants from: <strong>{(cloneTab === 0 ? cloneSelectedProduct : cloneCatSelectedProduct)?.name}</strong>
@@ -1205,15 +1268,15 @@ const VariantsPanel = ({ productId, baseSku, flatCatFiles = [], canManageVariant
         <DialogActions>
           <Button onClick={() => {
             setCloneOpen(false);
-            setCloneSelectedProduct(null); setCloneSearchInput(''); setCloneSearchResults([]);
-            setCloneCatSelectedProduct(null); setCloneCatId(''); setCloneCatProducts([]);
+            setCloneSelectedProduct(null);
+            setCloneSearchInput('');
+            setCloneSearchResults([]);
+            setCloneCatSelectedProduct(null);
+            setCloneCatId('');
+            setCloneCatProducts([]);
           }}>Cancel</Button>
-          <Button
-            variant="contained"
-            onClick={handleClone}
-            disabled={cloning || !(cloneTab === 0 ? cloneSelectedProduct : cloneCatSelectedProduct)}
-          >
-            {cloning ? 'Cloning…' : 'Clone Variants'}
+          <Button variant="contained" onClick={handleClone} disabled={cloning || !(cloneTab === 0 ? cloneSelectedProduct : cloneCatSelectedProduct)}>
+            {cloning ? 'Cloning...' : 'Clone Variants'}
           </Button>
         </DialogActions>
       </Dialog>
@@ -1222,3 +1285,4 @@ const VariantsPanel = ({ productId, baseSku, flatCatFiles = [], canManageVariant
 };
 
 export default ProductEditPage;
+

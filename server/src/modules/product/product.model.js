@@ -96,6 +96,7 @@ module.exports = (sequelize, DataTypes) => {
         Product.belongsToMany(models.Category, { through: models.ProductCategory, foreignKey: 'productId', otherKey: 'categoryId', as: 'categories' });
         Product.hasMany(models.ProductImage, { foreignKey: 'productId', as: 'images', onDelete: 'CASCADE' });
         Product.hasMany(models.ProductVariant, { foreignKey: 'productId', as: 'variants', onDelete: 'CASCADE' });
+        Product.hasMany(models.ProductAttribute, { foreignKey: 'productId', as: 'attributes', onDelete: 'CASCADE' });
         Product.belongsToMany(models.Tag, { through: models.ProductTag, foreignKey: 'productId', otherKey: 'tagId', as: 'tags' });
         Product.hasMany(models.Review, { foreignKey: 'productId', onDelete: 'CASCADE' });
         Product.hasMany(models.CartItem, { foreignKey: 'productId' });

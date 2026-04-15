@@ -19,6 +19,7 @@ import PageSEO from '../../components/common/PageSEO';
 import { getCartItemUnitPrice } from '../../utils/variantPricing';
 import CenteredLoader from '../../components/common/CenteredLoader';
 import { getApiErrorMessage } from '../../utils/apiErrors';
+import { getVariantOptionLabel } from '../../utils/variantOptions';
 
 const EMPTY_ADDR = {
     label: '', fullName: '', phone: '',
@@ -461,7 +462,7 @@ const CheckoutPage = () => {
                                 return (
                                     <Box key={item.id || `${item.productId}-${item.variantId || 'base'}`} sx={{ display: 'flex', justifyContent: 'space-between', mb: 1 }}>
                                         <Typography variant="body2">
-                                            {itemName} {item.variant ? `(${item.variant.name}: ${item.variant.value})` : ''} × {quantity}
+                                            {itemName} {item.variant ? `(${getVariantOptionLabel(item.variant)})` : ''} � {quantity}
                                         </Typography>
                                         <Typography variant="body2" fontWeight={600}>
                                             {formatPrice(itemPrice * quantity)}
@@ -761,3 +762,6 @@ const CheckoutPage = () => {
 };
 
 export default CheckoutPage;
+
+
+

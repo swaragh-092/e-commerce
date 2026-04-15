@@ -11,6 +11,47 @@ const parseDateOrNull = (value) => {
   return parsed;
 };
 
+const toFiniteNumber = (value) => {
+  const number = Number(value);
+  return Number.isFinite(number) ? number : null;
+};
+
+const getVariantOptionLabel = (variant) => {
+  if (!Array.isArray(variant?.options) || variant.options.length === 0) {
+    return null;
+  }
+
+  return variant.options
+    .map((option) => {
+      const attributeName = option?.attribute?.name;
+      const valueLabel = option?.value?.value;
+      if (!attributeName || !valueLabel) {
+        return null;
+      }
+
+      return `${attributeName}: ${valueLabel}`;
+    })
+    .filter(Boolean)
+    .join(', ') || null;
+};
+
+const getVariantOptionMap = (variant) => {
+  if (!Array.isArray(variant?.options) || variant.options.length === 0) {
+    return {};
+  }
+
+  return variant.options.reduce((accumulator, option) => {
+    const attributeName = option?.attribute?.name;
+    const valueLabel = option?.value?.value;
+
+    if (attributeName && valueLabel) {
+      accumulator[attributeName] = valueLabel;
+    }
+
+    return accumulator;
+  }, {});
+};
+
 const isSaleActive = (product, referenceDate = new Date()) => {
   if (!product || product.salePrice === null || product.salePrice === undefined || product.salePrice === '') {
     return false;
@@ -44,27 +85,16 @@ const getEffectivePrice = (product, referenceDate = new Date()) => {
   return isSaleActive(product, referenceDate) ? Number(product.salePrice) : Number(product.price);
 };
 
-const toFiniteNumber = (value) => {
-  const number = Number(value);
-  return Number.isFinite(number) ? number : null;
-};
-
 const getVariantUnitPrice = (product, variant, referenceDate = new Date()) => {
-  const basePrice = getEffectivePrice(product, referenceDate);
-  const explicitUnitPrice = toFiniteNumber(variant?.unitPrice ?? variant?.effectivePrice);
+  const explicitUnitPrice = toFiniteNumber(
+    variant?.unitPrice ?? variant?.effectivePrice ?? variant?.price
+  );
 
   if (explicitUnitPrice !== null) {
-    return explicitUnitPrice;
+    return Number(explicitUnitPrice.toFixed(2));
   }
 
-  const modifier = toFiniteNumber(variant?.priceModifier);
-  if (modifier === null) {
-    return Number(basePrice.toFixed(2));
-  }
-
-  const looksLikeLegacyAbsolutePrice = modifier >= 0 && basePrice > 0 && modifier >= basePrice;
-  const resolvedPrice = looksLikeLegacyAbsolutePrice ? modifier : basePrice + modifier;
-  return Number(resolvedPrice.toFixed(2));
+  return Number(getEffectivePrice(product, referenceDate).toFixed(2));
 };
 
 const getDiscountPercent = (product) => {
@@ -89,6 +119,19 @@ const getSavingsAmount = (product) => {
   return Number((regularPrice - salePrice).toFixed(2));
 };
 
+const serializeVariantPricing = (product, variant, referenceDate = new Date()) => {
+  if (!variant) return variant;
+
+  const plainVariant = typeof variant.toJSON === 'function' ? variant.toJSON() : { ...variant };
+
+  return {
+    ...plainVariant,
+    unitPrice: getVariantUnitPrice(product, plainVariant, referenceDate),
+    optionLabel: plainVariant.optionLabel || getVariantOptionLabel(plainVariant),
+    optionMap: plainVariant.optionMap || getVariantOptionMap(plainVariant),
+  };
+};
+
 const serializeProductPricing = (product, { adminView = false } = {}) => {
   if (!product) return product;
 
@@ -100,10 +143,7 @@ const serializeProductPricing = (product, { adminView = false } = {}) => {
   return {
     ...plain,
     variants: Array.isArray(plain.variants)
-      ? plain.variants.map((variant) => ({
-          ...variant,
-          unitPrice: getVariantUnitPrice(plain, variant),
-        }))
+      ? plain.variants.map((variant) => serializeVariantPricing(plain, variant))
       : plain.variants,
     effectivePrice: getEffectivePrice(plain),
     isSaleActive: saleActive,
@@ -180,5 +220,6 @@ module.exports = {
   getSavingsAmount,
   isSaleActive,
   normalizeSalePayload,
+  serializeVariantPricing,
   serializeProductPricing,
 };

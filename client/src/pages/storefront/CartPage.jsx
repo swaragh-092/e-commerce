@@ -17,6 +17,7 @@ import PageSEO from '../../components/common/PageSEO';
 import { AuthContext } from '../../context/AuthContext';
 import { getEligibleCoupons } from '../../services/adminService';
 import { getCartItemUnitPrice } from '../../utils/variantPricing';
+import { getVariantOptionLabel } from '../../utils/variantOptions';
 
 const CartPage = () => {
     const { cart, cartCount, loading, updateItem, removeItem, clearCart } = useCart();
@@ -129,7 +130,7 @@ const CartPage = () => {
                                             {product?.name}
                                         </Typography>
                                         {variant && (
-                                            <Chip label={`${variant.name}: ${variant.value}`} size="small" sx={{ mt: 0.5 }} />
+                                            <Chip label={getVariantOptionLabel(variant)} size="small" sx={{ mt: 0.5 }} />
                                         )}
                                         <Typography variant="body2" color="primary.main" fontWeight={600} sx={{ mt: 0.5 }}>
                                             {formatPrice(itemPrice)}
@@ -268,3 +269,4 @@ const CartPage = () => {
 };
 
 export default CartPage;
+

@@ -1,11 +1,23 @@
 'use strict';
 
-const { Product, ProductImage, ProductVariant, Tag, Category, Brand, Sequelize } = require('../index');
+const {
+  Product,
+  ProductImage,
+  ProductVariant,
+  ProductAttribute,
+  VariantOption,
+  AttributeTemplate,
+  AttributeValue,
+  Tag,
+  Category,
+  Brand,
+  Sequelize,
+} = require('../index');
 const { Op } = Sequelize;
 const { generateSlug } = require('../../utils/slugify');
-// Note: Although the ARCHITECTURE/STANDARDS refer to `generateUniqueSlug()`,
-// the `slugify.js` utility internally implements the collision-safe loop
-// and exports it as `generateSlug`. This handles duplicates automatically.
+// Note: Although the ARCHITECTURE/STANDARDS refer to generateUniqueSlug(),
+// the slugify.js utility internally implements the collision-safe loop
+// and exports it as generateSlug. This handles duplicates automatically.
 const { getPagination, getPagingData } = require('../../utils/pagination');
 const sanitizeHtml = require('sanitize-html');
 const AuditService = require('../audit/audit.service');
@@ -37,6 +49,99 @@ const sanitizeRichText = (html) => {
   });
 };
 
+const variantInclude = {
+  model: ProductVariant,
+  as: 'variants',
+  include: [
+    {
+      model: VariantOption,
+      as: 'options',
+      include: [
+        { model: AttributeTemplate, as: 'attribute', attributes: ['id', 'name', 'slug'] },
+        { model: AttributeValue, as: 'value', attributes: ['id', 'value', 'slug'] },
+      ],
+    },
+  ],
+};
+
+const attributeInclude = {
+  model: ProductAttribute,
+  as: 'attributes',
+  include: [
+    { model: AttributeTemplate, as: 'attribute', attributes: ['id', 'name', 'slug'] },
+    { model: AttributeValue, as: 'value', attributes: ['id', 'value', 'slug'] },
+  ],
+};
+
+const validateVariantOptions = async (variants) => {
+  if (!variants?.length) return;
+
+  for (const variant of variants) {
+    for (const option of variant.options) {
+      const match = await AttributeValue.findOne({
+        where: {
+          id: option.valueId,
+          attributeId: option.attributeId,
+        },
+        attributes: ['id'],
+      });
+
+      if (!match) {
+        throw new AppError(
+          'VALIDATION_ERROR',
+          400,
+          'One or more variant options reference an invalid attribute/value pair'
+        );
+      }
+    }
+  }
+};
+
+const createVariantsWithOptions = async (productId, variants, transaction) => {
+  if (!variants?.length) return;
+
+  await validateVariantOptions(variants);
+
+  for (const variant of variants) {
+    const createdVariant = await ProductVariant.create(
+      {
+        productId,
+        sku: variant.sku ?? null,
+        price: variant.price,
+        stockQty: variant.stockQty ?? 0,
+        isActive: variant.isActive ?? true,
+        sortOrder: variant.sortOrder ?? 0,
+      },
+      { transaction }
+    );
+
+    const optionRows = variant.options.map((option) => ({
+      variantId: createdVariant.id,
+      attributeId: option.attributeId,
+      valueId: option.valueId,
+    }));
+
+    await VariantOption.bulkCreate(optionRows, { transaction });
+  }
+};
+
+const replaceVariantsWithOptions = async (productId, variants, transaction) => {
+  const existingVariants = await ProductVariant.findAll({
+    where: { productId },
+    attributes: ['id'],
+    paranoid: false,
+    transaction,
+  });
+
+  const variantIds = existingVariants.map((variant) => variant.id);
+  if (variantIds.length) {
+    await VariantOption.destroy({ where: { variantId: variantIds }, transaction });
+    await ProductVariant.destroy({ where: { id: variantIds }, force: true, transaction });
+  }
+
+  await createVariantsWithOptions(productId, variants, transaction);
+};
+
 exports.getProducts = async (filters, page, limit, isAdmin = false) => {
   const { limit: queryLimit, offset } = getPagination(page, limit);
   const where = {};
@@ -53,8 +158,8 @@ exports.getProducts = async (filters, page, limit, isAdmin = false) => {
   // Filter Logic
   if (filters.search) {
     where[Op.or] = [
-      { name: { [Op.iLike]: `%${filters.search}%` } },
-      { description: { [Op.iLike]: `%${filters.search}%` } },
+      { name: { [Op.iLike]: '%' + filters.search + '%' } },
+      { description: { [Op.iLike]: '%' + filters.search + '%' } },
     ];
   }
   if (filters.minPrice || filters.maxPrice) {
@@ -71,7 +176,7 @@ exports.getProducts = async (filters, page, limit, isAdmin = false) => {
       if (b) {
         where.brandId = b.id;
       } else {
-        where.id = null; // force empty result instead of ignoring invalid slug
+        where.id = null;
       }
     }
   }
@@ -102,7 +207,6 @@ exports.getProducts = async (filters, page, limit, isAdmin = false) => {
     }
   }
 
-  // Sort logic — supports both legacy 'sort' enum and explicit sortBy/sortOrder from the admin grid
   const SORTABLE_FIELDS = { price: 'price', quantity: 'quantity', name: 'name', createdAt: 'createdAt' };
   if (filters.sortBy && SORTABLE_FIELDS[filters.sortBy]) {
     const dir = filters.sortOrder?.toUpperCase() === 'ASC' ? 'ASC' : 'DESC';
@@ -111,9 +215,8 @@ exports.getProducts = async (filters, page, limit, isAdmin = false) => {
   else if (filters.sort === 'price_desc') order.push(['price', 'DESC']);
   else if (filters.sort === 'newest') order.push(['createdAt', 'DESC']);
   else if (filters.sort === 'name_asc') order.push(['name', 'ASC']);
-  else order.push(['createdAt', 'DESC']); // Default
+  else order.push(['createdAt', 'DESC']);
 
-  // Include Logic
   const include = [
     { model: ProductImage, as: 'images' },
     { model: ProductVariant, as: 'variants' },
@@ -121,9 +224,7 @@ exports.getProducts = async (filters, page, limit, isAdmin = false) => {
     { model: Brand, as: 'brand' },
   ];
 
-  // Category filter — supports UUID (admin grid) and slug (storefront)
   if (filters.categoryId) {
-    // Admin grid sends a UUID directly — expand to full subtree
     const categoryIds = await getCategoryAndDescendantIds(filters.categoryId);
     include.push({
       model: Category,
@@ -132,7 +233,6 @@ exports.getProducts = async (filters, page, limit, isAdmin = false) => {
       required: true,
     });
   } else if (filters.category) {
-    // Storefront sends a slug — look up ID first, then expand subtree
     const rootCat = await Category.findOne({
       where: { slug: filters.category },
       attributes: ['id'],
@@ -146,7 +246,6 @@ exports.getProducts = async (filters, page, limit, isAdmin = false) => {
         required: true,
       });
     } else {
-      // Unknown slug → return zero results instead of ignoring the filter
       where.id = null;
       include.push({ model: Category, as: 'categories' });
     }
@@ -173,7 +272,8 @@ exports.getProductBySlug = async (slug, { adminView = false } = {}) => {
     where,
     include: [
       { model: ProductImage, as: 'images' },
-      { model: ProductVariant, as: 'variants' },
+      variantInclude,
+      attributeInclude,
       { model: Category, as: 'categories' },
       { model: Tag, as: 'tags' },
       { model: Brand, as: 'brand' },
@@ -187,7 +287,8 @@ exports.getProductById = async (id) => {
   const product = await Product.findByPk(id, {
     include: [
       { model: ProductImage, as: 'images' },
-      { model: ProductVariant, as: 'variants' },
+      variantInclude,
+      attributeInclude,
       { model: Category, as: 'categories' },
       { model: Tag, as: 'tags' },
       { model: Brand, as: 'brand' },
@@ -212,8 +313,7 @@ exports.createProduct = async (data) => {
     }
 
     if (data.variants && data.variants.length) {
-      const tempVariants = data.variants.map((v) => ({ ...v, productId: product.id }));
-      await ProductVariant.bulkCreate(tempVariants, { transaction });
+      await createVariantsWithOptions(product.id, data.variants, transaction);
     }
 
     if (data.images && data.images.length) {
@@ -238,7 +338,6 @@ exports.createProduct = async (data) => {
 
     await transaction.commit();
 
-    // Audit log — fire-and-forget, never crashes creation
     try {
       await AuditService.log({
         userId: data.createdBy || null,
@@ -276,9 +375,7 @@ exports.updateProduct = async (id, data) => {
     }
 
     if (data.variants) {
-      await ProductVariant.destroy({ where: { productId: id }, transaction });
-      const tempVariants = data.variants.map((v) => ({ ...v, productId: id }));
-      await ProductVariant.bulkCreate(tempVariants, { transaction });
+      await replaceVariantsWithOptions(id, data.variants, transaction);
     }
 
     if (data.images) {
@@ -304,7 +401,6 @@ exports.updateProduct = async (id, data) => {
 
     await transaction.commit();
 
-    // Audit log
     try {
       await AuditService.log({
         userId: data.updatedBy || null,
@@ -315,7 +411,7 @@ exports.updateProduct = async (id, data) => {
       });
     } catch (e) {}
 
-    return exports.getProductBySlug(product.slug || data.slug, { adminView: true });
+    return exports.getProductBySlug(data.slug || product.slug, { adminView: true });
   } catch (error) {
     await transaction.rollback();
     throw error;
@@ -329,7 +425,6 @@ exports.deleteProduct = async (id, actingUserId = null) => {
   const snapshot = { name: product.name, sku: product.sku };
   await product.destroy();
 
-  // Audit log
   try {
     await AuditService.log({
       userId: actingUserId,

@@ -1,8 +1,34 @@
 'use strict';
 
-const { sequelize, Wishlist, WishlistItem, Product, ProductImage, ProductVariant, Cart, CartItem } = require('../index');
+const {
+  sequelize,
+  Wishlist,
+  WishlistItem,
+  Product,
+  ProductImage,
+  ProductVariant,
+  Cart,
+  CartItem,
+  VariantOption,
+  AttributeTemplate,
+  AttributeValue,
+} = require('../index');
 const AppError = require('../../utils/AppError');
-const { getVariantUnitPrice, serializeProductPricing } = require('../product/product.pricing');
+const { getVariantUnitPrice, serializeProductPricing, serializeVariantPricing } = require('../product/product.pricing');
+
+const variantInclude = {
+  model: ProductVariant,
+  as: 'variant',
+  required: false,
+  include: [{
+    model: VariantOption,
+    as: 'options',
+    include: [
+      { model: AttributeTemplate, as: 'attribute', attributes: ['id', 'name', 'slug'] },
+      { model: AttributeValue, as: 'value', attributes: ['id', 'value', 'slug'] },
+    ],
+  }],
+};
 
 const getWishlistItemWhere = (wishlistId, productId, variantId = null) => ({
   wishlistId,
@@ -24,7 +50,7 @@ const addWishlistItemToCart = async (userId, item, transaction) => {
     if (!variant) {
       throw new AppError('NOT_FOUND', 404, 'Selected variant not found');
     }
-    availableStock = Number(variant.quantity || 0);
+    availableStock = Number(variant.stockQty || 0);
   }
 
   if (availableStock <= 0) {
@@ -71,11 +97,7 @@ const getWishlist = async (userId) => {
           required: false,
         }],
         required: false,
-      }, {
-        model: ProductVariant,
-        as: 'variant',
-        required: false,
-      }],
+      }, variantInclude],
       order: [['createdAt', 'DESC']],
       transaction: t,
     });
@@ -90,19 +112,17 @@ const getWishlist = async (userId) => {
       .map((item) => {
         const plainItem = item.toJSON();
         const serializedProduct = serializeProductPricing(plainItem.Product);
-        const availableStock = plainItem.variant
-          ? Number(plainItem.variant.quantity || 0)
+        const serializedVariant = plainItem.variant
+          ? serializeVariantPricing(serializedProduct, plainItem.variant)
+          : null;
+        const availableStock = serializedVariant
+          ? Number(serializedVariant.stockQty || 0)
           : Math.max(0, Number(serializedProduct.quantity || 0) - Number(serializedProduct.reservedQty || 0));
 
         return {
           ...plainItem,
           Product: serializedProduct,
-          variant: plainItem.variant
-            ? {
-                ...plainItem.variant,
-                unitPrice: getVariantUnitPrice(serializedProduct, plainItem.variant),
-              }
-            : null,
+          variant: serializedVariant,
           availability: {
             inStock: availableStock > 0,
             availableStock,

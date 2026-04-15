@@ -12,6 +12,7 @@ import { useNotification } from '../../context/NotificationContext';
 import { getVariantDiscountPercent, getVariantRegularPrice, getVariantUnitPrice } from '../../utils/variantPricing';
 import CenteredLoader from '../../components/common/CenteredLoader';
 import { getApiErrorMessage } from '../../utils/apiErrors';
+import { getVariantOptionLabel } from '../../utils/variantOptions';
 
 const WishlistPage = () => {
     const wishlistEnabled = useFeature('wishlist');
@@ -167,7 +168,7 @@ const WishlistPage = () => {
                                         <Stack direction="row" spacing={1} flexWrap="wrap" sx={{ mb: 1 }}>
                                             <Chip size="small" label={inStock ? 'In Stock' : 'Out of Stock'} color={inStock ? 'success' : 'default'} />
                                             {product?.isSaleActive && discountPercent > 0 && <Chip size="small" label={`${discountPercent}% OFF`} color="error" variant="outlined" />}
-                                            {variant && <Chip size="small" label={`${variant.name}: ${variant.value}`} variant="outlined" />}
+                                            {variant && <Chip size="small" label={getVariantOptionLabel(variant)} variant="outlined" />}
                                         </Stack>
                                         <Typography color="text.secondary">
                                             {formatPrice(itemPrice)}
@@ -197,3 +198,4 @@ const WishlistPage = () => {
 };
 
 export default WishlistPage;
+

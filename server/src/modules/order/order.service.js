@@ -414,7 +414,7 @@ const getOrderById = async (id, userId, isAdmin) => {
                 as: 'items',
                 include: [
                     { model: Product, as: 'product', attributes: ['id', 'name', 'slug'], required: false },
-                    { model: ProductVariant, as: 'variant', attributes: ['id', 'name', 'sku'], required: false },
+                    { model: ProductVariant, as: 'variant', attributes: ['id', 'sku', 'price', 'stockQty', 'isActive'], required: false },
                 ],
             },
             { model: User, attributes: ADMIN_ORDER_LIST_USER_ATTRIBUTES, required: false },
@@ -580,3 +580,5 @@ module.exports = {
     refundOrder,
     getAllowedNextStatuses,
 };
+
+

@@ -32,6 +32,8 @@ module.exports = (sequelize, DataTypes) => {
 
     AttributeValue.associate = (models) => {
         AttributeValue.belongsTo(models.AttributeTemplate, { foreignKey: 'attributeId', as: 'attribute', onDelete: 'CASCADE' });
+        AttributeValue.hasMany(models.ProductAttribute, { foreignKey: 'valueId', as: 'productAttributes' });
+        AttributeValue.hasMany(models.VariantOption, { foreignKey: 'valueId', as: 'variantOptions' });
     };
 
     return AttributeValue;

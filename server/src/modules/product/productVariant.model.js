@@ -11,24 +11,26 @@ module.exports = (sequelize, DataTypes) => {
             type: DataTypes.UUID,
             allowNull: false,
         },
-        name: {
+        sku: {
             type: DataTypes.STRING(100),
-            allowNull: false,
+            allowNull: true,
+            unique: true,
         },
-        value: {
-            type: DataTypes.STRING(100),
-            allowNull: false,
-        },
-        priceModifier: {
+        price: {
             type: DataTypes.DECIMAL(10, 2),
-            defaultValue: 0,
+            allowNull: false,
         },
-        quantity: {
+        stockQty: {
             type: DataTypes.INTEGER,
             defaultValue: 0,
         },
-        sku: {
-            type: DataTypes.STRING(100),
+        isActive: {
+            type: DataTypes.BOOLEAN,
+            defaultValue: true,
+        },
+        sortOrder: {
+            type: DataTypes.INTEGER,
+            defaultValue: 0,
         },
     }, {
         tableName: 'product_variants',
@@ -38,7 +40,16 @@ module.exports = (sequelize, DataTypes) => {
     });
 
     ProductVariant.associate = (models) => {
-        ProductVariant.belongsTo(models.Product, { foreignKey: 'productId', onDelete: 'CASCADE' });
+        ProductVariant.belongsTo(models.Product, {
+            foreignKey: 'productId',
+            as: 'product',
+            onDelete: 'CASCADE',
+        });
+        ProductVariant.hasMany(models.VariantOption, {
+            foreignKey: 'variantId',
+            as: 'options',
+            onDelete: 'CASCADE',
+        });
     };
 
     return ProductVariant;

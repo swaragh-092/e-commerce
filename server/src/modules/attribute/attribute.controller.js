@@ -105,7 +105,7 @@ exports.unlinkAttributeFromCategory = async (req, res, next) => {
 
 exports.bulkGenerateVariants = async (req, res, next) => {
     try {
-        const result = await attributeService.bulkGenerateVariants(req.params.id, req.body.attributes);
+        const result = await attributeService.bulkGenerateVariants(req.params.id, req.body);
         return success(res, result, 'Variants generated', 201);
     } catch (err) {
         next(err);

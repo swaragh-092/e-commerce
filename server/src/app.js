@@ -57,7 +57,8 @@ if (process.env.NODE_ENV !== 'test') {
   app.use(morgan('dev'));
 }
 
-// Serve uploads statically — allow cross-origin loading for <img> tags
+app.use('/api', globalLimiter);
+
 // Use the same resolution strategy as media.service.js so both always point
 // to the same directory regardless of the working directory at startup.
 const UPLOADS_SERVE_DIR = path.resolve(process.env.UPLOAD_DIR || 'uploads');
@@ -94,6 +95,7 @@ const brandRoutes = require('./modules/brand/brand.routes');
 const adminRoutes = require('./modules/admin/admin.routes');
 const attributeRoutes = require('./modules/attribute/attribute.routes');
 const categoryAttributeRoutes = require('./modules/attribute/categoryAttribute.routes');
+const productAttributeRoutes = require('./modules/attribute/productAttribute.routes');
 const productVariantRoutes = require('./modules/attribute/productVariant.routes');
 const pageRoutes = require('./modules/page/page.routes');
 
@@ -115,6 +117,7 @@ app.use('/api/audit-logs', auditRoutes);
 app.use('/api/admin', adminRoutes);
 app.use('/api/attributes', attributeRoutes);
 app.use('/api/categories', categoryAttributeRoutes); // extends existing /api/categories with /:id/attributes sub-routes
+app.use('/api/products', productAttributeRoutes);   // extends existing /api/products with /:id/attributes sub-routes
 app.use('/api/products', productVariantRoutes);     // extends existing /api/products with /:id/variants/* sub-routes
 app.use('/api/pages', pageRoutes);
 // Do not expose notifications out in phase 1, but we can mount if needed:

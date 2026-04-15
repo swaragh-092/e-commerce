@@ -21,11 +21,17 @@ const createProductSchema = Joi.object({
   tags: Joi.array().items(Joi.string()),
   variants: Joi.array().items(
     Joi.object({
-      name: Joi.string().required(),
-      value: Joi.string().required(),
-      priceModifier: Joi.number().precision(2).default(0),
-      quantity: Joi.number().integer().min(0).default(0),
-      sku: Joi.string().allow('', null),
+      sku: Joi.string().max(100).allow('', null),
+      price: Joi.number().precision(2).min(0).required(),
+      stockQty: Joi.number().integer().min(0).default(0),
+      isActive: Joi.boolean().default(true),
+      sortOrder: Joi.number().integer().min(0).default(0),
+      options: Joi.array().items(
+        Joi.object({
+          attributeId: Joi.string().uuid().required(),
+          valueId: Joi.string().uuid().required(),
+        })
+      ).min(1).required(),
     })
   ),
   images: Joi.array().items(

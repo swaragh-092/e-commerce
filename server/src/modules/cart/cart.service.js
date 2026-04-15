@@ -1,7 +1,31 @@
 'use strict';
-const { sequelize, Cart, CartItem, Product, ProductImage, ProductVariant } = require('../index');
+const {
+    sequelize,
+    Cart,
+    CartItem,
+    Product,
+    ProductImage,
+    ProductVariant,
+    VariantOption,
+    AttributeTemplate,
+    AttributeValue,
+} = require('../index');
 const AppError = require('../../utils/AppError');
-const { serializeProductPricing } = require('../product/product.pricing');
+const { serializeProductPricing, serializeVariantPricing } = require('../product/product.pricing');
+
+const variantInclude = {
+    model: ProductVariant,
+    as: 'variant',
+    required: false,
+    include: [{
+        model: VariantOption,
+        as: 'options',
+        include: [
+            { model: AttributeTemplate, as: 'attribute', attributes: ['id', 'name', 'slug'] },
+            { model: AttributeValue, as: 'value', attributes: ['id', 'value', 'slug'] },
+        ],
+    }],
+};
 
 const getActiveCartByOwner = async (userId, sessionId, transaction) => {
     let whereClause = {};
@@ -24,7 +48,6 @@ const getActiveCartByOwner = async (userId, sessionId, transaction) => {
     return cart;
 };
 
-// Shared helper — reads cart+items within an existing transaction
 const fetchCartWithItems = async (cartId, transaction) => {
     const cartWithItems = await Cart.findByPk(cartId, {
         include: [{
@@ -37,7 +60,7 @@ const fetchCartWithItems = async (cartId, transaction) => {
                     required: false,
                     include: [{ model: ProductImage, as: 'images' }]
                 },
-                { model: ProductVariant, as: 'variant', required: false }
+                variantInclude,
             ]
         }],
         transaction
@@ -45,10 +68,18 @@ const fetchCartWithItems = async (cartId, transaction) => {
 
     const items = cartWithItems.items
         ? cartWithItems.items.filter(item => item.product !== null)
-            .map((item) => ({
-                ...item.toJSON(),
-                product: serializeProductPricing(item.product),
-            }))
+            .map((item) => {
+                const plainItem = item.toJSON();
+                const serializedProduct = serializeProductPricing(item.product);
+
+                return {
+                    ...plainItem,
+                    product: serializedProduct,
+                    variant: plainItem.variant
+                        ? serializeVariantPricing(serializedProduct, plainItem.variant)
+                        : null,
+                };
+            })
         : [];
 
     return {
@@ -86,7 +117,7 @@ const addItem = async (userId, sessionId, payload) => {
             if (!variant) {
                 throw new AppError('NOT_FOUND', 404, 'Variant not found');
             }
-            availableStock = variant.quantity;
+            availableStock = Number(variant.stockQty || 0);
         } else {
             availableStock = product.quantity - (product.reservedQty || 0);
         }
@@ -124,20 +155,24 @@ const updateItem = async (userId, sessionId, itemId, quantity) => {
         
         const item = await CartItem.findOne({
             where: { id: itemId, cartId: cart.id },
-            include: [{ model: Product, as: 'product' }],
+            include: [
+                { model: Product, as: 'product' },
+                { model: ProductVariant, as: 'variant', required: false },
+            ],
             transaction: t
         });
 
         if (!item) throw new AppError('NOT_FOUND', 404, 'Cart item not found');
 
         const product = item.product;
-        // Verify product logic
         if (!product || product.deletedAt !== null) {
             await item.destroy({ transaction: t });
             throw new AppError('NOT_FOUND', 404, 'Product no longer available and removed from cart');
         }
 
-        const availableStock = product.quantity - (product.reservedQty || 0);
+        const availableStock = item.variantId
+            ? Number(item.variant?.stockQty || 0)
+            : product.quantity - (product.reservedQty || 0);
         if (quantity > availableStock) {
              throw new AppError('CONFLICT', 409, 'Insufficient stock');
         }

@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { useParams, useLocation, useNavigate } from 'react-router-dom';
 import {
     Box, Button, Chip, CircularProgress, Container, Divider, Grid, Typography,
@@ -22,6 +22,8 @@ import {
     getVariantSavingsAmount,
     getVariantUnitPrice,
 } from '../../utils/variantPricing';
+import { getVariantOptionLabel } from '../../utils/variantOptions';
+
 const ProductDetailPage = () => {
     const { slug } = useParams();
     const location = useLocation();
@@ -52,11 +54,15 @@ const ProductDetailPage = () => {
         const fetchProduct = async () => {
             try {
                 const res = await getProduct(slug);
-                if (res?.data?.product) {
-                    setProduct(res.data.product);
-                    if (res.data.product.variants?.length > 0) {
-                        setSelectedVariant(res.data.product.variants[0]);
-                    }
+                const nextProduct = res?.data?.product || null;
+                setProduct(nextProduct);
+                if (nextProduct?.variants?.length > 0) {
+                    const initialVariant = nextProduct.variants.find((variant) => variant?.isActive !== false && Number(variant?.stockQty || 0) > 0)
+                        || nextProduct.variants.find((variant) => variant?.isActive !== false)
+                        || nextProduct.variants[0];
+                    setSelectedVariant(initialVariant || null);
+                } else {
+                    setSelectedVariant(null);
                 }
             } catch (err) {
                 setError('Product not found');
@@ -66,6 +72,15 @@ const ProductDetailPage = () => {
         };
         fetchProduct();
     }, [slug]);
+
+    const activeVariants = useMemo(
+        () => (Array.isArray(product?.variants) ? product.variants.filter((variant) => variant?.isActive !== false) : []),
+        [product]
+    );
+    const displayAttributes = useMemo(
+        () => (Array.isArray(product?.attributes) ? product.attributes : []),
+        [product]
+    );
 
     if (loading) return <Box sx={{ display: 'flex', justifyContent: 'center', py: 10 }}><CircularProgress /></Box>;
     if (error || !product) return <Typography variant="h5" color="error" textAlign="center" sx={{ mt: 10 }}>{error}</Typography>;
@@ -92,7 +107,9 @@ const ProductDetailPage = () => {
     const showDiscountPercent = sales.showDiscountPercent !== false;
     const showSavingsAmount = sales.showSavingsAmount !== false;
     const endingSoon = hasSale && sales.showCountdown !== false && isEndingSoon(product.saleEndAt, sales.endingSoonHours);
-    const stockAvailable = selectedVariant ? selectedVariant.quantity > 0 : product.quantity > 0;
+    const stockAvailable = selectedVariant ? Number(selectedVariant.stockQty || 0) > 0 : product.quantity > 0;
+    const selectedVariantLabel = selectedVariant ? getVariantOptionLabel(selectedVariant) : '';
+    const displaySku = selectedVariant?.sku || product.sku;
 
     const addSelectedItemToCart = async (action) => {
         setPendingAction(action);
@@ -140,12 +157,10 @@ const ProductDetailPage = () => {
                     },
                     variant: selectedVariant
                         ? {
-                            id: selectedVariant.id,
-                            name: selectedVariant.name,
-                            value: selectedVariant.value,
-                            priceModifier: selectedVariant.priceModifier,
+                            ...selectedVariant,
                             unitPrice: currentPrice,
-                            quantity: selectedVariant.quantity,
+                            optionLabel: selectedVariantLabel,
+                            stockQty: Number(selectedVariant.stockQty || 0),
                         }
                         : null,
                 },
@@ -169,10 +184,8 @@ const ProductDetailPage = () => {
                 <Grid item xs={12} md={6}>
                     <Typography variant="body2" color="text.secondary" gutterBottom>
                         {(() => {
-                            // If the user navigated here from a category page, show that context.
                             if (location.state?.fromCategory) return location.state.fromCategory;
 
-                            // Fallback: build the deepest category path from the product's category list.
                             const cats = product.categories;
                             if (!cats?.length) return null;
                             const catMap = Object.fromEntries(cats.map(c => [c.id, c]));
@@ -203,9 +216,14 @@ const ProductDetailPage = () => {
                             sx={{ mb: 1.5 }}
                         />
                     )}
-                    {pp.showSKU !== false && product.sku && (
+                    {pp.showSKU !== false && displaySku && (
                         <Typography variant="body2" color="text.secondary" sx={{ mb: 1 }}>
-                            SKU: <strong>{product.sku}</strong>
+                            SKU: <strong>{displaySku}</strong>
+                        </Typography>
+                    )}
+                    {selectedVariantLabel && (
+                        <Typography variant="body2" color="text.secondary" sx={{ mb: 1.5 }}>
+                            Selected: <strong>{selectedVariantLabel}</strong>
                         </Typography>
                     )}
 
@@ -262,7 +280,7 @@ const ProductDetailPage = () => {
                             )}
                             {endingSoon && (
                                 <Typography variant="body2" color="warning.dark" sx={{ mb: 0.5, fontWeight: 700 }}>
-                                    Hurry — this sale is inside the ending-soon window.
+                                    Hurry - this sale is inside the ending-soon window.
                                 </Typography>
                             )}
 
@@ -283,11 +301,13 @@ const ProductDetailPage = () => {
                         {product.shortDescription}
                     </Typography>
 
-                    <VariantSelector
-                        variants={product.variants}
-                        selectedVariantId={selectedVariant?.id}
-                        onSelect={setSelectedVariant}
-                    />
+                    {activeVariants.length > 0 && (
+                        <VariantSelector
+                            variants={activeVariants}
+                            selectedVariantId={selectedVariant?.id}
+                            onSelect={setSelectedVariant}
+                        />
+                    )}
 
                     <Box sx={{ mb: 4, mt: 3 }}>
                         {cartMsg && (
@@ -323,6 +343,39 @@ const ProductDetailPage = () => {
                             )}
                         </Box>
                     </Box>
+
+                    {displayAttributes.length > 0 && (
+                        <>
+                            <Divider sx={{ my: 4 }} />
+                            <Typography variant="h6" gutterBottom>Specifications</Typography>
+                            <Box sx={{ display: 'grid', gap: 1.25 }}>
+                                {displayAttributes.map((attributeRow) => {
+                                    const label = attributeRow.attribute?.name || attributeRow.customName;
+                                    const value = attributeRow.value?.value || attributeRow.customValue;
+                                    if (!label || !value) {
+                                        return null;
+                                    }
+
+                                    return (
+                                        <Box
+                                            key={attributeRow.id}
+                                            sx={{
+                                                display: 'grid',
+                                                gridTemplateColumns: { xs: '1fr', sm: '180px 1fr' },
+                                                gap: 1,
+                                                py: 1,
+                                                borderBottom: '1px solid',
+                                                borderColor: 'divider',
+                                            }}
+                                        >
+                                            <Typography variant="body2" color="text.secondary">{label}</Typography>
+                                            <Typography variant="body2" fontWeight={500}>{value}</Typography>
+                                        </Box>
+                                    );
+                                })}
+                            </Box>
+                        </>
+                    )}
 
                     <Divider sx={{ my: 4 }} />
 
