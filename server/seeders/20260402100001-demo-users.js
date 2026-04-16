@@ -7,7 +7,7 @@ module.exports = {
     const adminId = uuidv4();
     const customerId = uuidv4();
 
-    const hashedPassword = await bcrypt.hash('Password123!', 12);
+    const hashedPassword = await bcrypt.hash('Password123', 12);
     
     await queryInterface.bulkInsert('users', [
       {
