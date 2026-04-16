@@ -67,31 +67,31 @@ module.exports = {
             { product_id: PROD.BEET_222, category_id: CAT_BEETROOT },
         ]);
 
-        // 3. Create product variants
+        // 3. Create product variants (with new schema: price, stock_qty instead of price_modifier, quantity)
         await queryInterface.bulkInsert('product_variants', [
             // --- Beet-110 variants ---
             // Color
-            { id: 'e0000000-0000-0000-0000-000000000001', product_id: PROD.BEET_110, name: 'Color', value: 'Red',      price_modifier: 0,    quantity: 80,  sku: 'BEET-110-RED',     created_at: now, updated_at: now },
-            { id: 'e0000000-0000-0000-0000-000000000002', product_id: PROD.BEET_110, name: 'Color', value: 'Dark Red', price_modifier: 5.00, quantity: 60,  sku: 'BEET-110-DKRED',   created_at: now, updated_at: now },
+            { id: 'e0000000-0000-0000-0000-000000000001', product_id: PROD.BEET_110, price: 45.00, stock_qty: 80,  sku: 'BEET-110-RED',     is_active: true, sort_order: 0, created_at: now, updated_at: now },
+            { id: 'e0000000-0000-0000-0000-000000000002', product_id: PROD.BEET_110, price: 50.00, stock_qty: 60,  sku: 'BEET-110-DKRED',   is_active: true, sort_order: 1, created_at: now, updated_at: now },
             // Type
-            { id: 'e0000000-0000-0000-0000-000000000003', product_id: PROD.BEET_110, name: 'Type',  value: 'Organic',  price_modifier: 10.00, quantity: 50, sku: 'BEET-110-ORG',     created_at: now, updated_at: now },
-            { id: 'e0000000-0000-0000-0000-000000000004', product_id: PROD.BEET_110, name: 'Type',  value: 'Regular',  price_modifier: 0,     quantity: 90, sku: 'BEET-110-REG',     created_at: now, updated_at: now },
+            { id: 'e0000000-0000-0000-0000-000000000003', product_id: PROD.BEET_110, price: 55.00, stock_qty: 50, sku: 'BEET-110-ORG',     is_active: true, sort_order: 2, created_at: now, updated_at: now },
+            { id: 'e0000000-0000-0000-0000-000000000004', product_id: PROD.BEET_110, price: 45.00, stock_qty: 90, sku: 'BEET-110-REG',     is_active: true, sort_order: 3, created_at: now, updated_at: now },
             // Size
-            { id: 'e0000000-0000-0000-0000-000000000005', product_id: PROD.BEET_110, name: 'Size',  value: 'Small',    price_modifier: -5.00, quantity: 70, sku: 'BEET-110-SM',      created_at: now, updated_at: now },
-            { id: 'e0000000-0000-0000-0000-000000000006', product_id: PROD.BEET_110, name: 'Size',  value: 'Medium',   price_modifier: 0,     quantity: 80, sku: 'BEET-110-MD',      created_at: now, updated_at: now },
-            { id: 'e0000000-0000-0000-0000-000000000007', product_id: PROD.BEET_110, name: 'Size',  value: 'Large',    price_modifier: 8.00,  quantity: 50, sku: 'BEET-110-LG',      created_at: now, updated_at: now },
+            { id: 'e0000000-0000-0000-0000-000000000005', product_id: PROD.BEET_110, price: 40.00, stock_qty: 70, sku: 'BEET-110-SM',      is_active: true, sort_order: 4, created_at: now, updated_at: now },
+            { id: 'e0000000-0000-0000-0000-000000000006', product_id: PROD.BEET_110, price: 45.00, stock_qty: 80, sku: 'BEET-110-MD',      is_active: true, sort_order: 5, created_at: now, updated_at: now },
+            { id: 'e0000000-0000-0000-0000-000000000007', product_id: PROD.BEET_110, price: 53.00, stock_qty: 50, sku: 'BEET-110-LG',      is_active: true, sort_order: 6, created_at: now, updated_at: now },
 
             // --- Beet-222 variants ---
             // Color
-            { id: 'e0000000-0000-0000-0000-000000000010', product_id: PROD.BEET_222, name: 'Color', value: 'Red',      price_modifier: 0,    quantity: 60,  sku: 'BEET-222-RED',     created_at: now, updated_at: now },
-            { id: 'e0000000-0000-0000-0000-000000000011', product_id: PROD.BEET_222, name: 'Color', value: 'Dark Red', price_modifier: 5.00, quantity: 40,  sku: 'BEET-222-DKRED',   created_at: now, updated_at: now },
+            { id: 'e0000000-0000-0000-0000-000000000010', product_id: PROD.BEET_222, price: 55.00, stock_qty: 60,  sku: 'BEET-222-RED',     is_active: true, sort_order: 0, created_at: now, updated_at: now },
+            { id: 'e0000000-0000-0000-0000-000000000011', product_id: PROD.BEET_222, price: 60.00, stock_qty: 40,  sku: 'BEET-222-DKRED',   is_active: true, sort_order: 1, created_at: now, updated_at: now },
             // Type
-            { id: 'e0000000-0000-0000-0000-000000000012', product_id: PROD.BEET_222, name: 'Type',  value: 'Organic',  price_modifier: 12.00, quantity: 40, sku: 'BEET-222-ORG',     created_at: now, updated_at: now },
-            { id: 'e0000000-0000-0000-0000-000000000013', product_id: PROD.BEET_222, name: 'Type',  value: 'Regular',  price_modifier: 0,     quantity: 70, sku: 'BEET-222-REG',     created_at: now, updated_at: now },
+            { id: 'e0000000-0000-0000-0000-000000000012', product_id: PROD.BEET_222, price: 67.00, stock_qty: 40, sku: 'BEET-222-ORG',     is_active: true, sort_order: 2, created_at: now, updated_at: now },
+            { id: 'e0000000-0000-0000-0000-000000000013', product_id: PROD.BEET_222, price: 55.00, stock_qty: 70, sku: 'BEET-222-REG',     is_active: true, sort_order: 3, created_at: now, updated_at: now },
             // Size
-            { id: 'e0000000-0000-0000-0000-000000000014', product_id: PROD.BEET_222, name: 'Size',  value: 'Small',    price_modifier: -5.00, quantity: 50, sku: 'BEET-222-SM',      created_at: now, updated_at: now },
-            { id: 'e0000000-0000-0000-0000-000000000015', product_id: PROD.BEET_222, name: 'Size',  value: 'Medium',   price_modifier: 0,     quantity: 60, sku: 'BEET-222-MD',      created_at: now, updated_at: now },
-            { id: 'e0000000-0000-0000-0000-000000000016', product_id: PROD.BEET_222, name: 'Size',  value: 'Large',    price_modifier: 10.00, quantity: 40, sku: 'BEET-222-LG',      created_at: now, updated_at: now },
+            { id: 'e0000000-0000-0000-0000-000000000014', product_id: PROD.BEET_222, price: 50.00, stock_qty: 50, sku: 'BEET-222-SM',      is_active: true, sort_order: 4, created_at: now, updated_at: now },
+            { id: 'e0000000-0000-0000-0000-000000000015', product_id: PROD.BEET_222, price: 55.00, stock_qty: 60, sku: 'BEET-222-MD',      is_active: true, sort_order: 5, created_at: now, updated_at: now },
+            { id: 'e0000000-0000-0000-0000-000000000016', product_id: PROD.BEET_222, price: 65.00, stock_qty: 40, sku: 'BEET-222-LG',      is_active: true, sort_order: 6, created_at: now, updated_at: now },
         ]);
     },
 

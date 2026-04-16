@@ -1,56 +1,129 @@
 import React, { useState, useEffect } from 'react';
 import {
-    Box, Container, Typography, Button, Grid, Card, CardMedia,
-    CardContent, CardActionArea, Skeleton, Chip, useTheme,
+    Box, Container, Typography, Button, useTheme,
 } from '@mui/material';
 import { Link } from 'react-router-dom';
 import { getProducts } from '../../services/productService';
 import { getCategories } from '../../services/categoryService';
-import { getMediaUrl } from '../../utils/media';
-import { isEndingSoon } from '../../utils/pricing';
-import { useCurrency, useSettings } from '../../hooks/useSettings';
-import ProductCard from '../../components/product/ProductCard';
+import { getBrands } from '../../services/brandService';
+import { useSettings } from '../../hooks/useSettings';
+import ProductRow from '../../components/product/ProductRow';
+import CategoryGrid from '../../components/storefront/CategoryGrid';
+import BrandStrip from '../../components/storefront/BrandStrip';
 import PageSEO from '../../components/common/PageSEO';
 
+// ─── helpers ────────────────────────────────────────────────────────────────
+
+const bool = (val, fallback = true) => (val === undefined || val === null ? fallback : val !== false && val !== 'false');
+const num  = (val, fallback = 8)    => {
+    const parsed = parseInt(val, 10);
+    return isNaN(parsed) ? fallback : parsed;
+};
+const str  = (val, fallback = '')   => (val ?? fallback);
+
+// ─── component ──────────────────────────────────────────────────────────────
+
 const HomePage = () => {
-    const [featuredProducts, setFeaturedProducts] = useState([]);
-    const [categories, setCategories] = useState([]);
-    const [loading, setLoading] = useState(true);
-    const { formatPrice } = useCurrency();
     const { settings } = useSettings();
     const theme = useTheme();
-    const hero = settings?.hero || {};
-    const hp = settings?.homepage || {};
-    const showCategories  = hp.showCategories  !== false;
-    const categoriesTitle = hp.categoriesTitle || 'Shop by Category';
-    const showNewArrivals = hp.showNewArrivals !== false;
-    const newArrivalsTitle = hp.newArrivalsTitle || 'New Arrivals';
-    const newArrivalsCount = parseInt(hp.newArrivalsCount) || 8;
-    const bgType = hero.backgroundType || 'gradient';
-    const bgImage = hero.backgroundImage || '';
+
+    // ── section config from settings.homepage (all customizable) ────────────
+    const hp  = settings?.homepage  || {};
+    const hero = settings?.hero     || {};
+
+    // Hero
+    const bgType         = hero.backgroundType   || 'gradient';
+    const bgImage        = hero.backgroundImage  || '';
     const overlayOpacity = Number(hero.overlayOpacity ?? 0.5);
-    const heroTextColor = hero.color || '#ffffff';
-    const heroTitle = hero.title || 'Shop the Latest';
-    const heroSubtitle = hero.subtitle || 'Discover thousands of products at great prices.';
-    const heroBtnText = hero.buttonText || 'Shop Now';
-    const heroBtnLink = hero.buttonLink || '/products';
+    const heroTextColor  = hero.color            || '#ffffff';
+    const heroTitle      = str(hero.title,       'Shop the Latest');
+    const heroSubtitle   = str(hero.subtitle,    'Discover thousands of products at great prices.');
+    const heroBtnText    = str(hero.buttonText,  'Shop Now');
+    const heroBtnLink    = str(hero.buttonLink,  '/products');
 
+    // Categories
+    const showCategories    = bool(hp.showCategories,    true);
+    const categoriesTitle   = str(hp.categoriesTitle,    'Shop by Category');
+    const categoriesCount   = num(hp.categoriesCount,    12);
+
+    // New Arrivals
+    const showNewArrivals   = bool(hp.showNewArrivals,   true);
+    const newArrivalsTitle  = str(hp.newArrivalsTitle,   'New Arrivals');
+    const newArrivalsCount  = num(hp.newArrivalsCount,   8);
+    const newArrivalsLink   = str(hp.newArrivalsLink,    '/products?sort=newest');
+
+    // Featured
+    const showFeatured      = bool(hp.showFeatured,      true);
+    const featuredTitle     = str(hp.featuredTitle,      'Featured Products');
+    const featuredCount     = num(hp.featuredCount,      8);
+    const featuredLink      = str(hp.featuredLink,       '/products?featured=true');
+
+    // Best Sellers
+    const showBestSellers   = bool(hp.showBestSellers,   true);
+    const bestSellersTitle  = str(hp.bestSellersTitle,   'Best Sellers');
+    const bestSellersCount  = num(hp.bestSellersCount,   8);
+    const bestSellersLink   = str(hp.bestSellersLink,    '/products?sort=best-selling');
+
+    // On Sale
+    const showOnSale        = bool(hp.showOnSale,        true);
+    const onSaleTitle       = str(hp.onSaleTitle,        'On Sale');
+    const onSaleCount       = num(hp.onSaleCount,        8);
+    const onSaleLink        = str(hp.onSaleLink,         '/products?onSale=true');
+
+    // Brands
+    const showBrands        = bool(hp.showBrands,        true);
+    const brandsTitle       = str(hp.brandsTitle,        'Shop by Brand');
+    const brandsCount       = num(hp.brandsCount,        12);
+
+    // ── state ────────────────────────────────────────────────────────────────
+    const [data, setData] = useState({
+        newArrivals: [],
+        featured: [],
+        bestSellers: [],
+        onSale: [],
+        categories: [],
+        brands: [],
+    });
+    const [loading, setLoading] = useState(true);
+
+    // ── single parallel fetch ─────────────────────────────────────────────
     useEffect(() => {
-        Promise.all([
-            getProducts({ limit: newArrivalsCount, sort: 'newest', status: 'published' }),
-            getCategories(),
-        ]).then(([productsRes, categoriesRes]) => {
-            if (productsRes.success) setFeaturedProducts(productsRes.data?.slice(0, newArrivalsCount) || []);
-            setCategories(Array.isArray(categoriesRes) ? categoriesRes.slice(0, 6) : []);
-        }).catch(() => {})
-          .finally(() => setLoading(false));
-    }, [newArrivalsCount]);
+        const fetches = [
+            showNewArrivals  ? getProducts({ sort: 'newest',        limit: newArrivalsCount,  status: 'published' }) : Promise.resolve(null),
+            showFeatured     ? getProducts({ featured: true,        limit: featuredCount,     status: 'published' }) : Promise.resolve(null),
+            showBestSellers  ? getProducts({ sort: 'best-selling',  limit: bestSellersCount,  status: 'published' }) : Promise.resolve(null),
+            showOnSale       ? getProducts({ sale: true,            limit: onSaleCount,       status: 'published' }) : Promise.resolve(null),
+            showCategories   ? getCategories()                                                                        : Promise.resolve(null),
+            showBrands       ? getBrands({ limit: brandsCount, isActive: true }).then(r => r.data)                   : Promise.resolve(null),
+        ];
 
+        setLoading(true);
+        Promise.allSettled(fetches).then(([na, ft, bs, os, cats, brs]) => {
+            setData({
+                newArrivals:  na.status  === 'fulfilled' && na.value?.data  ? (na.value.data.slice  ? na.value.data.slice(0, newArrivalsCount)  : na.value.data)  : [],
+                featured:     ft.status  === 'fulfilled' && ft.value?.data  ? (ft.value.data.slice  ? ft.value.data.slice(0, featuredCount)     : ft.value.data)  : [],
+                bestSellers:  bs.status  === 'fulfilled' && bs.value?.data  ? (bs.value.data.slice  ? bs.value.data.slice(0, bestSellersCount)  : bs.value.data)  : [],
+                onSale:       os.status  === 'fulfilled' && os.value?.data  ? (os.value.data.slice  ? os.value.data.slice(0, onSaleCount)       : os.value.data)  : [],
+                categories:   cats.status === 'fulfilled' && Array.isArray(cats.value) ? cats.value.slice(0, categoriesCount) : [],
+                brands:       brs.status  === 'fulfilled' && Array.isArray(brs.value)  ? brs.value.slice(0, brandsCount)      : [],
+            });
+        }).finally(() => setLoading(false));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [
+        showNewArrivals, newArrivalsCount,
+        showFeatured, featuredCount,
+        showBestSellers, bestSellersCount,
+        showOnSale, onSaleCount,
+        showCategories, categoriesCount,
+        showBrands, brandsCount,
+    ]);
+
+    // ── render ────────────────────────────────────────────────────────────
     return (
         <Box>
-            <PageSEO title="Home" description="Shop the latest products" />
+            <PageSEO title="Home" description={heroSubtitle} />
 
-            {/* Hero */}
+            {/* ── Hero Banner ─────────────────────────────────────────── */}
             <Box sx={{
                 position: 'relative',
                 overflow: 'hidden',
@@ -62,7 +135,6 @@ const HomePage = () => {
                 py: { xs: 8, md: 12 },
                 textAlign: 'center',
             }}>
-                {/* Overlay for image backgrounds */}
                 {bgType === 'image' && bgImage && (
                     <Box sx={{ position: 'absolute', inset: 0, bgcolor: 'black', opacity: overlayOpacity, zIndex: 1 }} />
                 )}
@@ -85,53 +157,71 @@ const HomePage = () => {
                 </Container>
             </Box>
 
+            {/* ── Content Sections ────────────────────────────────────── */}
             <Container maxWidth="xl" sx={{ py: 6 }}>
-                {/* Categories */}
-                {showCategories && categories.length > 0 && (
-                    <Box sx={{ mb: 6 }}>
-                        <Typography variant="h5" fontWeight={700} mb={3}>{categoriesTitle}</Typography>
-                        <Box sx={{ display: 'flex', gap: 1.5, flexWrap: 'wrap' }}>
-                            {categories.map((cat) => (
-                                <Chip
-                                    key={cat.id}
-                                    label={cat.name}
-                                    component={Link}
-                                    to={`/products?category=${cat.slug}`}
-                                    clickable
-                                    variant="outlined"
-                                    size="medium"
-                                    sx={{ fontSize: '0.9rem', py: 2, px: 1 }}
-                                />
-                            ))}
-                        </Box>
-                    </Box>
+
+                {/* Shop by Category */}
+                {showCategories && (
+                    <CategoryGrid
+                        title={categoriesTitle}
+                        categories={data.categories}
+                        loading={loading}
+                    />
+                )}
+
+                {/* New Arrivals */}
+                {showNewArrivals && (
+                    <ProductRow
+                        title={newArrivalsTitle}
+                        viewAllLink={newArrivalsLink}
+                        products={data.newArrivals}
+                        loading={loading}
+                        count={newArrivalsCount}
+                    />
                 )}
 
                 {/* Featured Products */}
-                {showNewArrivals && (
-                <Box>
-                    <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 3 }}>
-                        <Typography variant="h5" fontWeight={700}>{newArrivalsTitle}</Typography>
-                        <Button component={Link} to="/products" variant="outlined" size="small">View All</Button>
-                    </Box>
-                    <Grid container spacing={2}>
-                        {loading
-                            ? Array.from({ length: 8 }).map((_, i) => (
-                                <Grid item xs={12} sm={6} md={4} lg={3} key={i}>
-                                    <Skeleton variant="rectangular" height={220} sx={{ borderRadius: 2 }} />
-                                    <Skeleton sx={{ mt: 1 }} />
-                                    <Skeleton width="60%" />
-                                </Grid>
-                            ))
-                            : featuredProducts.map((product) => (
-                                <Grid item xs={12} sm={6} md={4} lg={3} key={product.id}>
-                                    <ProductCard product={product} />
-                                </Grid>
-                            ))
-                        }
-                    </Grid>
-                </Box>
+                {showFeatured && (
+                    <ProductRow
+                        title={featuredTitle}
+                        viewAllLink={featuredLink}
+                        products={data.featured}
+                        loading={loading}
+                        count={featuredCount}
+                    />
                 )}
+
+                {/* Best Sellers */}
+                {showBestSellers && (
+                    <ProductRow
+                        title={bestSellersTitle}
+                        viewAllLink={bestSellersLink}
+                        products={data.bestSellers}
+                        loading={loading}
+                        count={bestSellersCount}
+                    />
+                )}
+
+                {/* On Sale */}
+                {showOnSale && (
+                    <ProductRow
+                        title={onSaleTitle}
+                        viewAllLink={onSaleLink}
+                        products={data.onSale}
+                        loading={loading}
+                        count={onSaleCount}
+                    />
+                )}
+
+                {/* Shop by Brand */}
+                {showBrands && (
+                    <BrandStrip
+                        title={brandsTitle}
+                        brands={data.brands}
+                        loading={loading}
+                    />
+                )}
+
             </Container>
         </Box>
     );

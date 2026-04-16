@@ -11,6 +11,7 @@ const {
   Tag,
   Category,
   Brand,
+  OrderItem,
   Sequelize,
 } = require('../index');
 const { Op } = Sequelize;
@@ -207,8 +208,32 @@ exports.getProducts = async (filters, page, limit, isAdmin = false) => {
     }
   }
 
+  if (filters.featured === 'true' || filters.featured === true) {
+    where.isFeatured = true;
+  }
+
+  // sale: salePrice is set AND sale window is active (or no window defined)
+  if (filters.onSale === 'true' || filters.onSale === true || filters.sale === 'true' || filters.sale === true) {
+    where[Op.and] = [
+      ...(where[Op.and] || []),
+      { salePrice: { [Op.ne]: null } },
+      { [Op.or]: [{ saleStartAt: null }, { saleStartAt: { [Op.lte]: now } }] },
+      { [Op.or]: [{ saleEndAt: null }, { saleEndAt: { [Op.gte]: now } }] },
+    ];
+  }
+
   const SORTABLE_FIELDS = { price: 'price', quantity: 'quantity', name: 'name', createdAt: 'createdAt' };
-  if (filters.sortBy && SORTABLE_FIELDS[filters.sortBy]) {
+  if (filters.sort === 'best-selling') {
+    // Subquery: rank products by total units sold across all orders
+    order.push([
+      Sequelize.literal(`(
+        SELECT COALESCE(SUM(oi.quantity), 0)
+        FROM order_items oi
+        WHERE oi.product_id = "Product"."id"
+      )`),
+      'DESC',
+    ]);
+  } else if (filters.sortBy && SORTABLE_FIELDS[filters.sortBy]) {
     const dir = filters.sortOrder?.toUpperCase() === 'ASC' ? 'ASC' : 'DESC';
     order.push([SORTABLE_FIELDS[filters.sortBy], dir]);
   } else if (filters.sort === 'price_asc') order.push(['price', 'ASC']);

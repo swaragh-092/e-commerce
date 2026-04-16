@@ -74,10 +74,11 @@ module.exports = {
       variantsRows.push({
         id: uuidv4(),
         product_id: prodId,
-        name: 'Size',
-        value: 'L',
-        price_modifier: 0,
-        quantity: 50,
+        price: 10 + (i * 5),
+        stock_qty: 50,
+        is_active: true,
+        sort_order: 0,
+        sku: `DEMO-SKU-${i}-L`,
         created_at: new Date(),
         updated_at: new Date()
       });

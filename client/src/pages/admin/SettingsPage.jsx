@@ -48,6 +48,10 @@ const CURRENCIES = [
 const getCurrencySymbol = (code) =>
   CURRENCIES.find((c) => c.code === code)?.symbol || code || '$';
 
+// helper: treat undefined/null as the fallback, 'false'/'0' as false
+const bool = (val, fallback = true) =>
+  val === undefined || val === null ? fallback : val !== false && val !== 'false' && val !== '0';
+
 const FONTS = [
   'Roboto',
   'Inter',
@@ -325,12 +329,72 @@ const SettingsPage = () => {
               {heroButtonText}
             </Box>
           </Box>
-          <Box sx={{ mt: 2, display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 1.25 }}>
-            {homepageShowCategories && [1, 2, 3].map((item) => (
-              <Box key={item} sx={{ p: 1.25, bgcolor: surfaceColor, borderRadius: 2, textAlign: 'center', border: '1px solid', borderColor: 'divider' }}>
-                <Typography variant="caption" fontWeight={700}>{(form['homepage.categoriesTitle'] || 'Shop by Category').split(' ')[0]} {item}</Typography>
+          <Box sx={{ mt: 2, display: 'flex', flexDirection: 'column', gap: 1.5 }}>
+            {homepageShowCategories && (
+              <Box>
+                <Typography variant="caption" fontWeight={700} sx={{ display: 'block', mb: 0.5 }}>{form['homepage.categoriesTitle'] || 'Categories'}</Typography>
+                <Box sx={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 1 }}>
+                  {[1, 2, 3].map((i) => (
+                    <Box key={i} sx={{ height: 40, bgcolor: surfaceColor, borderRadius: 1.5, border: '1px solid', borderColor: 'divider' }} />
+                  ))}
+                </Box>
               </Box>
-            ))}
+            )}
+
+            {bool(form['homepage.showNewArrivals']) && (
+              <Box>
+                <Typography variant="caption" fontWeight={700} sx={{ display: 'block', mb: 0.5 }}>{form['homepage.newArrivalsTitle'] || 'New Arrivals'}</Typography>
+                <Box sx={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: 1 }}>
+                  {[1, 2].map((i) => (
+                    <Box key={i} sx={{ height: 60, bgcolor: surfaceColor, borderRadius: 1.5, border: '1px solid', borderColor: 'divider' }} />
+                  ))}
+                </Box>
+              </Box>
+            )}
+
+            {bool(form['homepage.showFeatured']) && (
+              <Box>
+                <Typography variant="caption" fontWeight={700} sx={{ display: 'block', mb: 0.5 }}>{form['homepage.featuredTitle'] || 'Featured'}</Typography>
+                <Box sx={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: 1 }}>
+                  {[1, 2].map((i) => (
+                    <Box key={i} sx={{ height: 60, bgcolor: surfaceColor, borderRadius: 1.5, border: '1px solid', borderColor: 'divider' }} />
+                  ))}
+                </Box>
+              </Box>
+            )}
+
+            {bool(form['homepage.showBestSellers']) && (
+              <Box>
+                <Typography variant="caption" fontWeight={700} sx={{ display: 'block', mb: 0.5 }}>{form['homepage.bestSellersTitle'] || 'Best Sellers'}</Typography>
+                <Box sx={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: 1 }}>
+                  {[1, 2].map((i) => (
+                    <Box key={i} sx={{ height: 60, bgcolor: surfaceColor, borderRadius: 1.5, border: '1px solid', borderColor: 'divider' }} />
+                  ))}
+                </Box>
+              </Box>
+            )}
+
+            {bool(form['homepage.showOnSale']) && (
+              <Box>
+                <Typography variant="caption" fontWeight={700} sx={{ display: 'block', mb: 0.5 }}>{form['homepage.onSaleTitle'] || 'On Sale'}</Typography>
+                <Box sx={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: 1 }}>
+                  {[1, 2].map((i) => (
+                    <Box key={i} sx={{ height: 60, bgcolor: surfaceColor, borderRadius: 1.5, border: '1px solid', borderColor: 'divider' }} />
+                  ))}
+                </Box>
+              </Box>
+            )}
+
+            {bool(form['homepage.showBrands']) && (
+              <Box>
+                <Typography variant="caption" fontWeight={700} sx={{ display: 'block', mb: 0.5 }}>{form['homepage.brandsTitle'] || 'Brands'}</Typography>
+                <Box sx={{ display: 'flex', gap: 0.5 }}>
+                  {[1, 2, 3, 4].map((i) => (
+                    <Box key={i} sx={{ height: 20, width: 40, bgcolor: surfaceColor, borderRadius: 1, border: '1px solid', borderColor: 'divider' }} />
+                  ))}
+                </Box>
+              </Box>
+            )}
           </Box>
         </Box>
       );
@@ -702,19 +766,59 @@ const SettingsPage = () => {
       ),
       section(
         'Homepage Sections',
-        'Decide which content blocks appear below the hero banner and how they are titled.',
+        'Control every content block that appears below the hero banner. All sections are fully customizable.',
         <>
-          <Typography variant="subtitle2" sx={{ mb: 1 }}>Category Section</Typography>
+          {/* ── Shop by Category ── */}
+          <Typography variant="subtitle2" sx={{ mb: 1 }}>Shop by Category</Typography>
           {toggle('homepage.showCategories', 'Show categories section')}
           {field('homepage.categoriesTitle', 'Section heading (e.g. Shop by Category)')}
+          {field('homepage.categoriesCount', 'Max categories to show (e.g. 12)', 'number')}
 
           <Divider sx={{ my: 2 }} />
+
+          {/* ── New Arrivals ── */}
           <Typography variant="subtitle2" sx={{ mb: 1 }}>New Arrivals</Typography>
-          {toggle('homepage.showNewArrivals', 'Show new arrivals / featured products section')}
+          {toggle('homepage.showNewArrivals', 'Show new arrivals section')}
           {field('homepage.newArrivalsTitle', 'Section heading (e.g. New Arrivals)')}
-          {field('homepage.newArrivalsCount', 'Number of products to display (e.g. 8)', 'number')}
+          {field('homepage.newArrivalsCount', 'Number of products to show (e.g. 8)', 'number')}
+          {field('homepage.newArrivalsLink', '"View All" link (e.g. /products?sort=newest)')}
+
+          <Divider sx={{ my: 2 }} />
+
+          {/* ── Featured Products ── */}
+          <Typography variant="subtitle2" sx={{ mb: 1 }}>Featured Products</Typography>
+          {toggle('homepage.showFeatured', 'Show featured products section')}
+          {field('homepage.featuredTitle', 'Section heading (e.g. Featured Products)')}
+          {field('homepage.featuredCount', 'Number of products to show (e.g. 8)', 'number')}
+          {field('homepage.featuredLink', '"View All" link (e.g. /products?featured=true)')}
+
+          <Divider sx={{ my: 2 }} />
+
+          {/* ── Best Sellers ── */}
+          <Typography variant="subtitle2" sx={{ mb: 1 }}>Best Sellers</Typography>
+          {toggle('homepage.showBestSellers', 'Show best sellers section')}
+          {field('homepage.bestSellersTitle', 'Section heading (e.g. Best Sellers)')}
+          {field('homepage.bestSellersCount', 'Number of products to show (e.g. 8)', 'number')}
+          {field('homepage.bestSellersLink', '"View All" link (e.g. /products?sort=best-selling)')}
+
+          <Divider sx={{ my: 2 }} />
+
+          {/* ── On Sale ── */}
+          <Typography variant="subtitle2" sx={{ mb: 1 }}>On Sale</Typography>
+          {toggle('homepage.showOnSale', 'Show on-sale products section')}
+          {field('homepage.onSaleTitle', 'Section heading (e.g. On Sale)')}
+          {field('homepage.onSaleCount', 'Number of products to show (e.g. 8)', 'number')}
+          {field('homepage.onSaleLink', '"View All" link (e.g. /products?onSale=true)')}
+
+          <Divider sx={{ my: 2 }} />
+
+          {/* ── Shop by Brand ── */}
+          <Typography variant="subtitle2" sx={{ mb: 1 }}>Shop by Brand</Typography>
+          {toggle('homepage.showBrands', 'Show brands strip')}
+          {field('homepage.brandsTitle', 'Section heading (e.g. Shop by Brand)')}
+          {field('homepage.brandsCount', 'Max brands to show (e.g. 12)', 'number')}
         </>,
-        ['homepage', 'new arrivals', 'categories section']
+        ['homepage', 'new arrivals', 'categories', 'featured', 'best sellers', 'on sale', 'brands', 'sections']
       ),
     ],
     [
