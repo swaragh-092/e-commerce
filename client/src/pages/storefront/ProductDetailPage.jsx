@@ -77,10 +77,52 @@ const ProductDetailPage = () => {
         () => (Array.isArray(product?.variants) ? product.variants.filter((variant) => variant?.isActive !== false) : []),
         [product]
     );
-    const displayAttributes = useMemo(
-        () => (Array.isArray(product?.attributes) ? product.attributes : []),
-        [product]
-    );
+    const displayAttributes = useMemo(() => {
+        if (!Array.isArray(product?.attributes)) return [];
+
+        const groups = {};
+        product.attributes.forEach((attr) => {
+            const label = attr.attribute?.name || attr.customName;
+            const value = attr.value?.value || attr.customValue;
+            if (!label || !value) return;
+
+            if (!groups[label]) {
+                groups[label] = {
+                    id: attr.id,
+                    displayLabel: label,
+                    values: new Set(),
+                };
+            }
+            groups[label].values.add(value);
+        });
+
+        const selectedOptionsByLabel = {};
+        if (selectedVariant?.options) {
+            selectedVariant.options.forEach((opt) => {
+                const optLabel = opt?.attribute?.name;
+                const optValue = opt?.value?.value;
+                if (optLabel && optValue) {
+                    selectedOptionsByLabel[optLabel] = optValue;
+                }
+            });
+        }
+
+        return Object.values(groups).map((group) => {
+            if (selectedOptionsByLabel[group.displayLabel]) {
+                return {
+                    id: group.id,
+                    displayLabel: group.displayLabel,
+                    displayValue: selectedOptionsByLabel[group.displayLabel],
+                };
+            }
+
+            return {
+                id: group.id,
+                displayLabel: group.displayLabel,
+                displayValue: Array.from(group.values).join(', '),
+            };
+        });
+    }, [product, selectedVariant]);
 
     if (loading) return <Box sx={{ display: 'flex', justifyContent: 'center', py: 10 }}><CircularProgress /></Box>;
     if (error || !product) return <Typography variant="h5" color="error" textAlign="center" sx={{ mt: 10 }}>{error}</Typography>;
@@ -350,8 +392,8 @@ const ProductDetailPage = () => {
                             <Typography variant="h6" gutterBottom>Specifications</Typography>
                             <Box sx={{ display: 'grid', gap: 1.25 }}>
                                 {displayAttributes.map((attributeRow) => {
-                                    const label = attributeRow.attribute?.name || attributeRow.customName;
-                                    const value = attributeRow.value?.value || attributeRow.customValue;
+                                    const label = attributeRow.displayLabel;
+                                    const value = attributeRow.displayValue;
                                     if (!label || !value) {
                                         return null;
                                     }

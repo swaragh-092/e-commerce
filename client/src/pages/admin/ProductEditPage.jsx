@@ -28,6 +28,11 @@ import {
   Autocomplete,
   Tabs,
   Tab,
+  Checkbox,
+  FormControlLabel,
+  Accordion,
+  AccordionSummary,
+  AccordionDetails,
 } from '@mui/material';
 import {
   Add as AddIcon,
@@ -36,6 +41,7 @@ import {
   ElectricBolt as ElectricBoltIcon,
   Star as StarIcon,
   StarBorder as StarBorderIcon,
+  ExpandMore as ExpandMoreIcon,
 } from '@mui/icons-material';
 import { getMediaUrl } from '../../utils/media';
 import useSKUGenerator from '../../hooks/useSKUGenerator';
@@ -718,6 +724,9 @@ const VariantsPanel = ({ productId, flatCatFiles = [], canManageVariants = false
   const [selectedValueIds, setSelectedValueIds] = useState([]);
   const [customName, setCustomName] = useState('');
   const [customValue, setCustomValue] = useState('');
+  const [customIsVariant, setCustomIsVariant] = useState(false);
+  const [globalIsVariant, setGlobalIsVariant] = useState(false);
+  const [attributeTab, setAttributeTab] = useState(0);
   const [cloneOpen, setCloneOpen] = useState(false);
   const [cloning, setCloning] = useState(false);
   const [cloneTab, setCloneTab] = useState(0);
@@ -777,10 +786,12 @@ const VariantsPanel = ({ productId, flatCatFiles = [], canManageVariants = false
         attributeService.addProductAttribute(productId, {
           attributeId: selectedTemplate,
           valueId,
+          isVariantAttr: globalIsVariant,
         })
       )));
       setSelectedTemplate('');
       setSelectedValueIds([]);
+      setGlobalIsVariant(false);
       notify('Product attributes added.', 'success');
       loadAll();
     } catch (error) {
@@ -794,13 +805,18 @@ const VariantsPanel = ({ productId, flatCatFiles = [], canManageVariants = false
     }
 
     try {
-      await attributeService.addProductAttribute(productId, {
-        customName: customName.trim(),
-        customValue: customValue.trim(),
-      });
+      const values = customValue.split('|').map(v => v.trim()).filter(Boolean);
+      await Promise.all(values.map(val => 
+        attributeService.addProductAttribute(productId, {
+          customName: customName.trim(),
+          customValue: val,
+          isVariantAttr: customIsVariant,
+        })
+      ));
       setCustomName('');
       setCustomValue('');
-      notify('Custom attribute added.', 'success');
+      setCustomIsVariant(false);
+      notify('Custom attribute(s) added.', 'success');
       loadAll();
     } catch (error) {
       notify(error?.response?.data?.error?.message || 'Failed to add custom attribute.', 'error');
@@ -826,12 +842,13 @@ const VariantsPanel = ({ productId, flatCatFiles = [], canManageVariants = false
 
   const handleDeleteAttribute = async (rowId) => {
     if (!canManageVariants) return;
+    if (!window.confirm('Remove this attribute assignment? This will prune any variants that rely on this attribute during the next Matrix generation.')) return;
     try {
-      await attributeService.deleteProductVariant(productId, v.id);
-      setVariants((prev) => prev.filter((_, i) => i !== index));
-      notify('Variant deleted.', 'success');
-    } catch {
-      notify('Failed to delete variant.', 'error');
+      await attributeService.deleteProductAttribute(productId, rowId);
+      notify('Attribute removed.', 'success');
+      loadAll();
+    } catch (error) {
+      notify(error?.response?.data?.error?.message || 'Failed to remove attribute.', 'error');
     }
   };
 
@@ -963,77 +980,119 @@ const VariantsPanel = ({ productId, flatCatFiles = [], canManageVariants = false
       <Grid container spacing={3}>
         <Grid item xs={12} lg={5}>
           <Paper variant="outlined" sx={{ p: 2.5, height: '100%' }}>
-            <Typography variant="subtitle1" fontWeight={700} gutterBottom>
-              Product Attributes
-            </Typography>
-
-            <Box sx={{ display: 'grid', gap: 1.5, mb: 2.5 }}>
-              <FormControl size="small" fullWidth>
-                <InputLabel>Global Attribute</InputLabel>
-                <Select
-                  label="Global Attribute"
-                  value={selectedTemplate}
-                  onChange={(e) => {
-                    setSelectedTemplate(e.target.value);
-                    setSelectedValueIds([]);
-                  }}
-                >
-                  <MenuItem value=""><em>Select attribute</em></MenuItem>
-                  {attributes.map((attribute) => (
-                    <MenuItem key={attribute.id} value={attribute.id}>{attribute.name}</MenuItem>
-                  ))}
-                </Select>
-              </FormControl>
-
-              <FormControl size="small" fullWidth disabled={!selectedTemplateRecord}>
-                <InputLabel>Attribute Values</InputLabel>
-                <Select
-                  multiple
-                  value={selectedValueIds}
-                  label="Attribute Values"
-                  input={<OutlinedInput label="Attribute Values" />}
-                  onChange={(e) => setSelectedValueIds(e.target.value)}
-                  renderValue={(selected) => (
-                    <Box sx={{ display: 'flex', gap: 0.5, flexWrap: 'wrap' }}>
-                      {selected.map((valueId) => {
-                        const valueRecord = selectedTemplateRecord?.values?.find((value) => value.id === valueId);
-                        return <Chip key={valueId} size="small" label={valueRecord?.value || valueId} />;
-                      })}
-                    </Box>
-                  )}
-                >
-                  {(selectedTemplateRecord?.values || []).map((value) => (
-                    <MenuItem key={value.id} value={value.id}>{value.value}</MenuItem>
-                  ))}
-                </Select>
-              </FormControl>
-
-              <Button variant="outlined" onClick={handleAddGlobalAttributes} disabled={!canManageVariants || !selectedTemplate || selectedValueIds.length === 0}>
-                Add Global Attribute Values
-              </Button>
+            <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 1 }}>
+              <Typography variant="subtitle1" fontWeight={700}>
+                Product Attributes
+              </Typography>
             </Box>
 
-            <Divider sx={{ my: 2 }} />
+            <Tabs value={attributeTab} onChange={(e, val) => setAttributeTab(val)} sx={{ mb: 2 }}>
+              <Tab label="Add new" />
+              <Tab label="Add existing" />
+            </Tabs>
 
-            <Box sx={{ display: 'grid', gap: 1.5, mb: 2.5 }}>
-              <TextField
-                size="small"
-                label="Custom Name"
-                value={customName}
-                onChange={(e) => setCustomName(e.target.value)}
-                disabled={!canManageVariants}
-              />
-              <TextField
-                size="small"
-                label="Custom Value"
-                value={customValue}
-                onChange={(e) => setCustomValue(e.target.value)}
-                disabled={!canManageVariants}
-              />
-              <Button variant="outlined" startIcon={<AddIcon />} onClick={handleAddCustomAttribute} disabled={!canManageVariants || !customName.trim() || !customValue.trim()}>
-                Add Custom Attribute
-              </Button>
-            </Box>
+            {attributeTab === 1 && (
+              <Box sx={{ display: 'grid', gap: 1.5, mb: 2.5 }}>
+                <FormControl size="small" fullWidth>
+                  <InputLabel>Global Attribute</InputLabel>
+                  <Select
+                    label="Global Attribute"
+                    value={selectedTemplate}
+                    onChange={(e) => {
+                      setSelectedTemplate(e.target.value);
+                      setSelectedValueIds([]);
+                    }}
+                  >
+                    <MenuItem value=""><em>Select attribute</em></MenuItem>
+                    {attributes.map((attribute) => (
+                      <MenuItem key={attribute.id} value={attribute.id}>{attribute.name}</MenuItem>
+                    ))}
+                  </Select>
+                </FormControl>
+
+                <FormControl size="small" fullWidth disabled={!selectedTemplateRecord}>
+                  <InputLabel>Attribute Values</InputLabel>
+                  <Select
+                    multiple
+                    value={selectedValueIds}
+                    label="Attribute Values"
+                    input={<OutlinedInput label="Attribute Values" />}
+                    onChange={(e) => setSelectedValueIds(e.target.value)}
+                    renderValue={(selected) => (
+                      <Box sx={{ display: 'flex', gap: 0.5, flexWrap: 'wrap' }}>
+                        {selected.map((valueId) => {
+                          const valueRecord = selectedTemplateRecord?.values?.find((value) => value.id === valueId);
+                          return <Chip key={valueId} size="small" label={valueRecord?.value || valueId} />;
+                        })}
+                      </Box>
+                    )}
+                  >
+                    {(selectedTemplateRecord?.values || []).map((value) => (
+                      <MenuItem key={value.id} value={value.id}>{value.value}</MenuItem>
+                    ))}
+                  </Select>
+                </FormControl>
+
+                <FormControlLabel
+                  control={
+                    <Checkbox
+                      checked={globalIsVariant}
+                      onChange={(e) => setGlobalIsVariant(e.target.checked)}
+                      disabled={!canManageVariants}
+                    />
+                  }
+                  label={<Typography variant="body2">Used for variations</Typography>}
+                />
+
+                <Button variant="outlined" onClick={handleAddGlobalAttributes} disabled={!canManageVariants || !selectedTemplate || selectedValueIds.length === 0}>
+                  Add Global Attribute Values
+                </Button>
+              </Box>
+            )}
+
+            {attributeTab === 0 && (
+              <Box sx={{ display: 'grid', gap: 1.5, mb: 2.5 }}>
+                <TextField
+                  size="small"
+                  label="Name: e.g. length or weight"
+                  value={customName}
+                  onChange={(e) => setCustomName(e.target.value)}
+                  disabled={!canManageVariants}
+                />
+                <TextField
+                  size="small"
+                  label="Value(s)"
+                  placeholder='Enter descriptive text. Use "|" to separate different values.'
+                  value={customValue}
+                  onChange={(e) => setCustomValue(e.target.value)}
+                  disabled={!canManageVariants}
+                  multiline
+                  rows={2}
+                />
+
+                <Box sx={{ display: 'flex', flexDirection: 'column', mt: -1 }}>
+                  {/* <FormControlLabel
+                    control={<Checkbox checked={true} disabled />}
+                    label={<Typography variant="body2">Visible on the product page</Typography>}
+                    sx={{ mb: -1 }}
+                  /> */}
+                  <FormControlLabel
+                    control={
+                      <Checkbox
+                        checked={customIsVariant}
+                        onChange={(e) => setCustomIsVariant(e.target.checked)}
+                        disabled={!canManageVariants}
+                      />
+                    }
+                    label={<Typography variant="body2">Used for variations</Typography>}
+                  />
+                </Box>
+
+                <Button variant="outlined" startIcon={<AddIcon />} onClick={handleAddCustomAttribute} disabled={!canManageVariants || !customName.trim() || !customValue.trim()}>
+                  Add Custom Attribute
+                </Button>
+              </Box>
+            )}
 
             {loading ? (
               <Box sx={{ display: 'flex', justifyContent: 'center', py: 3 }}><CircularProgress size={24} /></Box>
@@ -1041,32 +1100,46 @@ const VariantsPanel = ({ productId, flatCatFiles = [], canManageVariants = false
               <Alert severity="info">No product attributes yet. Add specifications above before generating variants.</Alert>
             ) : (
               <Box sx={{ display: 'grid', gap: 1 }}>
-                {productAttributes.map((row) => {
-                  const label = row.attribute?.name || row.customName;
-                  const value = row.value?.value || row.customValue;
-                  return (
-                    <Paper key={row.id} variant="outlined" sx={{ p: 1.5 }}>
-                      <Box sx={{ display: 'flex', justifyContent: 'space-between', gap: 1, alignItems: 'flex-start' }}>
-                        <Box>
-                          <Typography variant="body2" fontWeight={700}>{label}</Typography>
-                          <Typography variant="body2" color="text.secondary">{value}</Typography>
-                          <Box sx={{ display: 'flex', gap: 0.75, flexWrap: 'wrap', mt: 1 }}>
-                            <Chip size="small" label={row.attributeId ? 'Global' : 'Custom'} variant="outlined" />
-                            <Chip size="small" label={row.isVariantAttr ? 'Variant SKU attribute' : 'Display only'} color={row.isVariantAttr ? 'primary' : 'default'} />
-                          </Box>
-                        </Box>
-                        <Box sx={{ display: 'flex', gap: 0.5 }}>
-                          <Button size="small" variant={row.isVariantAttr ? 'contained' : 'outlined'} onClick={() => handleToggleVariantAttribute(row)} disabled={!canManageVariants}>
-                            {row.isVariantAttr ? 'Used for Variants' : 'Mark for Variants'}
-                          </Button>
-                          <IconButton size="small" color="error" onClick={() => handleDeleteAttribute(row.id)} disabled={!canManageVariants}>
-                            <DeleteIcon fontSize="small" />
-                          </IconButton>
-                        </Box>
-                      </Box>
-                    </Paper>
-                  );
-                })}
+                {Object.entries(
+                  productAttributes.reduce((acc, row) => {
+                    const label = row.attribute?.name || row.customName || 'Other';
+                    if (!acc[label]) acc[label] = [];
+                    acc[label].push(row);
+                    return acc;
+                  }, {})
+                ).map(([label, rows]) => (
+                  <Accordion key={label} defaultExpanded={false} variant="outlined" sx={{ m: '0 !important' }}>
+                    <AccordionSummary expandIcon={<ExpandMoreIcon />}>
+                      <Typography fontWeight={700}>{label} ({rows.length})</Typography>
+                    </AccordionSummary>
+                    <AccordionDetails sx={{ display: 'grid', gap: 1, p: 2, pt: 0 }}>
+                      {rows.map((row) => {
+                        const value = row.value?.value || row.customValue;
+                        return (
+                          <Paper key={row.id} variant="outlined" sx={{ p: 1.5 }}>
+                            <Box sx={{ display: 'flex', justifyContent: 'space-between', gap: 1, alignItems: 'flex-start' }}>
+                              <Box>
+                                <Typography variant="body2" color="text.secondary" fontWeight={500}>{value}</Typography>
+                                <Box sx={{ display: 'flex', gap: 0.75, flexWrap: 'wrap', mt: 1 }}>
+                                  <Chip size="small" label={row.attributeId ? 'Global' : 'Custom'} variant="outlined" />
+                                  <Chip size="small" label={row.isVariantAttr ? 'Variant SKU attribute' : 'Display only'} color={row.isVariantAttr ? 'primary' : 'default'} />
+                                </Box>
+                              </Box>
+                              <Box sx={{ display: 'flex', gap: 0.5 }}>
+                                <Button size="small" variant={row.isVariantAttr ? 'contained' : 'outlined'} onClick={() => handleToggleVariantAttribute(row)} disabled={!canManageVariants}>
+                                  {row.isVariantAttr ? 'Used for Variants' : 'Mark for Variants'}
+                                </Button>
+                                <IconButton size="small" color="error" onClick={() => handleDeleteAttribute(row.id)} disabled={!canManageVariants}>
+                                  <DeleteIcon fontSize="small" />
+                                </IconButton>
+                              </Box>
+                            </Box>
+                          </Paper>
+                        );
+                      })}
+                    </AccordionDetails>
+                  </Accordion>
+                ))}
               </Box>
             )}
           </Paper>
