@@ -600,15 +600,18 @@ const ProductEditPage = () => {
                   </Box>
                 )}
                 renderTags={(value, getTagProps) =>
-                  value.map((option, index) => (
-                    <Chip
-                      key={option.id}
-                      label={option.depth > 0 ? option.path : option.name}
-                      size="small"
-                      title={option.path}
-                      {...getTagProps({ index })}
-                    />
-                  ))
+                  value.map((option, index) => {
+                    const { key, ...tagProps } = getTagProps({ index });
+                    return (
+                      <Chip
+                        key={key || option.id}
+                        label={option.depth > 0 ? option.path : option.name}
+                        size="small"
+                        title={option.path}
+                        {...tagProps}
+                      />
+                    );
+                  })
                 }
                 renderInput={(params) => (
                   <TextField

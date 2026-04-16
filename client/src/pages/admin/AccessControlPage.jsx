@@ -13,6 +13,8 @@ import {
   DialogTitle,
   FormControl,
   Grid,
+  IconButton,
+  InputAdornment,
   InputLabel,
   MenuItem,
   Paper,
@@ -26,9 +28,13 @@ import AdminPanelSettingsIcon from '@mui/icons-material/AdminPanelSettings';
 import VpnKeyIcon from '@mui/icons-material/VpnKey';
 import EditIcon from '@mui/icons-material/Edit';
 import AddIcon from '@mui/icons-material/Add';
+import PersonAddIcon from '@mui/icons-material/PersonAdd';
+import Visibility from '@mui/icons-material/Visibility';
+import VisibilityOff from '@mui/icons-material/VisibilityOff';
 import { DataGrid } from '@mui/x-data-grid';
 import {
   createAccessRole,
+  createAccessUser,
   getAccessPermissions,
   getAccessRoles,
   getAccessUsers,
@@ -60,6 +66,14 @@ const emptyRoleForm = {
   isSystem: false,
 };
 
+const emptyUserForm = {
+  firstName: '',
+  lastName: '',
+  email: '',
+  password: '',
+  roleId: '',
+};
+
 const AccessControlPage = () => {
   const notify = useNotification();
   const { hasPermission } = useAuth();
@@ -81,6 +95,11 @@ const AccessControlPage = () => {
   const canManageCustomRoles = hasPermission(PERMISSIONS.ROLES_MANAGE);
   const canManageSystemRoles = hasPermission(PERMISSIONS.SYSTEM_ROLES_MANAGE);
   const canAssignRoles = hasPermission(PERMISSIONS.USERS_ASSIGN_ROLES);
+
+  const [createUserDialogOpen, setCreateUserDialogOpen] = useState(false);
+  const [createUserForm, setCreateUserForm] = useState(emptyUserForm);
+  const [showPassword, setShowPassword] = useState(false);
+  const [savingUser, setSavingUser] = useState(false);
 
   const roleOptions = useMemo(() => roles.map((role) => ({ id: role.id, name: role.name })), [roles]);
 
@@ -216,6 +235,53 @@ const AccessControlPage = () => {
     }
   };
 
+  const openCreateUserDialog = () => {
+    setCreateUserForm(emptyUserForm);
+    setShowPassword(false);
+    setCreateUserDialogOpen(true);
+  };
+
+  const closeCreateUserDialog = () => {
+    setCreateUserDialogOpen(false);
+    setCreateUserForm(emptyUserForm);
+    setShowPassword(false);
+  };
+
+  const handleCreateUser = async () => {
+    const { firstName, lastName, email, password, roleId } = createUserForm;
+    if (!firstName.trim() || !lastName.trim()) {
+      notify('First and last name are required.', 'error');
+      return;
+    }
+    if (!email.trim()) {
+      notify('Email is required.', 'error');
+      return;
+    }
+    if (password.length < 8) {
+      notify('Password must be at least 8 characters.', 'error');
+      return;
+    }
+    if (!roleId) {
+      notify('Please select a role.', 'error');
+      return;
+    }
+
+    setSavingUser(true);
+    try {
+      await createAccessUser({ firstName: firstName.trim(), lastName: lastName.trim(), email: email.trim(), password, roleId });
+      notify('Staff user created successfully.', 'success');
+      closeCreateUserDialog();
+      fetchAccessControl();
+    } catch (error) {
+      notify(getApiErrorMessage(error, 'Failed to create user.'), 'error');
+    } finally {
+      setSavingUser(false);
+    }
+  };
+
+  const setUserField = (field) => (event) =>
+    setCreateUserForm((current) => ({ ...current, [field]: event.target.value }));
+
   const columns = [
     {
       field: 'name',
@@ -263,11 +329,18 @@ const AccessControlPage = () => {
             Super admins can edit system roles and assign roles to users. Delegated managers can create and edit custom roles when granted that permission.
           </Typography>
         </Box>
-        {canManageCustomRoles && (
-          <Button variant="contained" startIcon={<AddIcon />} onClick={openCreateDialog}>
-            Create Role
-          </Button>
-        )}
+        <Stack direction="row" spacing={1.5} alignItems="flex-start">
+          {canAssignRoles && (
+            <Button variant="outlined" startIcon={<PersonAddIcon />} onClick={openCreateUserDialog}>
+              Create User
+            </Button>
+          )}
+          {canManageCustomRoles && (
+            <Button variant="contained" startIcon={<AddIcon />} onClick={openCreateDialog}>
+              Create Role
+            </Button>
+          )}
+        </Stack>
       </Stack>
 
       <Alert severity="info" sx={{ mb: 3 }}>
@@ -413,6 +486,84 @@ const AccessControlPage = () => {
       </Paper>
       )}
 
+      {/* Create User Dialog */}
+      <Dialog open={createUserDialogOpen} onClose={closeCreateUserDialog} fullWidth maxWidth="sm">
+        <DialogTitle>Create Staff Account</DialogTitle>
+        <DialogContent dividers>
+          <Stack spacing={2} sx={{ mt: 1 }}>
+            <Stack direction={{ xs: 'column', sm: 'row' }} spacing={2}>
+              <TextField
+                label="First Name"
+                value={createUserForm.firstName}
+                onChange={setUserField('firstName')}
+                fullWidth
+                size="small"
+                autoFocus
+              />
+              <TextField
+                label="Last Name"
+                value={createUserForm.lastName}
+                onChange={setUserField('lastName')}
+                fullWidth
+                size="small"
+              />
+            </Stack>
+            <TextField
+              label="Email Address"
+              type="email"
+              value={createUserForm.email}
+              onChange={setUserField('email')}
+              fullWidth
+              size="small"
+            />
+            <TextField
+              label="Password"
+              type={showPassword ? 'text' : 'password'}
+              value={createUserForm.password}
+              onChange={setUserField('password')}
+              fullWidth
+              size="small"
+              helperText="Minimum 8 characters"
+              InputProps={{
+                endAdornment: (
+                  <InputAdornment position="end">
+                    <IconButton
+                      size="small"
+                      onClick={() => setShowPassword((current) => !current)}
+                      edge="end"
+                    >
+                      {showPassword ? <VisibilityOff /> : <Visibility />}
+                    </IconButton>
+                  </InputAdornment>
+                ),
+              }}
+            />
+            <FormControl size="small" fullWidth>
+              <InputLabel>Assign Role</InputLabel>
+              <Select
+                label="Assign Role"
+                value={createUserForm.roleId}
+                onChange={setUserField('roleId')}
+              >
+                {roleOptions.map((role) => (
+                  <MenuItem key={role.id} value={role.id}>{role.name}</MenuItem>
+                ))}
+              </Select>
+            </FormControl>
+            <Alert severity="info" sx={{ mt: 0.5 }}>
+              The account will be created as <strong>active</strong> with email pre-verified. Share the credentials with the staff member directly.
+            </Alert>
+          </Stack>
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={closeCreateUserDialog} disabled={savingUser}>Cancel</Button>
+          <Button onClick={handleCreateUser} variant="contained" startIcon={<PersonAddIcon />} disabled={savingUser}>
+            {savingUser ? 'Creating…' : 'Create Account'}
+          </Button>
+        </DialogActions>
+      </Dialog>
+
+      {/* Create / Edit Role Dialog */}
       <Dialog open={roleDialogOpen} onClose={closeRoleDialog} fullWidth maxWidth="md">
         <DialogTitle>
           {roleForm.id ? (roleForm.isSystem ? 'Edit System Role' : 'Edit Custom Role') : 'Create Custom Role'}

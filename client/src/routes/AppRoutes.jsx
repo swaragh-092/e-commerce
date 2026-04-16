@@ -18,6 +18,7 @@ const ResetPasswordPage = lazy(() => import('../pages/storefront/ResetPasswordPa
 const VerifyEmailPage = lazy(() => import('../pages/storefront/VerifyEmailPage'));
 const AccountPage = lazy(() => import('../pages/storefront/AccountPage'));
 const StoreOrderDetailPage = lazy(() => import('../pages/storefront/OrderDetailPage'));
+const StorefrontOrderInvoicePage = lazy(() => import('../pages/storefront/OrderInvoicePage'));
 const WishlistPage = lazy(() => import('../pages/storefront/WishlistPage'));
 const ProductDetailPage = lazy(() => import('../pages/storefront/ProductDetailPage'));
 const ProductListPage = lazy(() => import('../pages/storefront/ProductListPage'));
@@ -36,6 +37,7 @@ const ProductEditPage = lazy(() => import('../pages/admin/ProductEditPage'));
 const CategoriesPage = lazy(() => import('../pages/admin/CategoriesPage'));
 const OrdersManagePage = lazy(() => import('../pages/admin/OrdersManagePage'));
 const OrderDetailPage = lazy(() => import('../pages/admin/OrderDetailPage'));
+const OrderInvoicePage = lazy(() => import('../pages/admin/OrderInvoicePage'));
 const CustomersPage = lazy(() => import('../pages/admin/CustomersPage'));
 const CouponsPage = lazy(() => import('../pages/admin/CouponsPage'));
 const ReviewsPage = lazy(() => import('../pages/admin/ReviewsPage'));
@@ -97,6 +99,7 @@ const AppRoutes = () => (
         <Route element={<ProtectedRoute />}>
           <Route path="account" element={<AccountPage />} />
           <Route path="account/orders/:id" element={<StoreOrderDetailPage />} />
+          <Route path="account/orders/:id/invoice" element={<StorefrontOrderInvoicePage />} />
           <Route path="profile" element={<AccountPage />} />
           <Route path="wishlist" element={<WishlistPage />} />
           <Route path="checkout" element={<CheckoutPage />} />
@@ -111,6 +114,11 @@ const AppRoutes = () => (
 
       {/* Admin Routes — permission-gated foundation */}
       <Route path="/admin" element={<ProtectedRoute permissions={ADMIN_ACCESS_PERMISSIONS} />}>
+        {/* Standalone pages without AdminLayout */}
+        <Route element={<ProtectedRoute permission={PERMISSIONS.ORDERS_READ} />}>
+          <Route path="orders/:id/invoice" element={<OrderInvoicePage />} />
+        </Route>
+
         <Route element={<AdminLayout />}>
           <Route index element={<AdminIndex />} />
           <Route element={<ProtectedRoute permission={PERMISSIONS.PRODUCTS_READ} />}>

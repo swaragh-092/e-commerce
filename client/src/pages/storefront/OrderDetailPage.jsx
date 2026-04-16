@@ -14,6 +14,7 @@ import {
 import { useNavigate, useParams } from 'react-router-dom';
 import LocalShippingIcon from '@mui/icons-material/LocalShipping';
 import ReceiptLongIcon from '@mui/icons-material/ReceiptLong';
+import PrintIcon from '@mui/icons-material/Print';
 import PageSEO from '../../components/common/PageSEO';
 import AppliedDiscountsSummary from '../../components/orders/AppliedDiscountsSummary';
 import { useCurrency } from '../../hooks/useSettings';
@@ -109,6 +110,13 @@ const OrderDetailPage = () => {
         </Box>
         <Box sx={{ display: 'flex', alignItems: 'flex-start', gap: 1, flexWrap: 'wrap' }}>
           <Chip label={getOrderStatusLabel(order.status)} color={getOrderStatusColor(order.status)} />
+          <Button 
+            variant="outlined" 
+            startIcon={<PrintIcon />}
+            onClick={() => window.open(`/account/orders/${id}/invoice`, '_blank')}
+          >
+            Invoice
+          </Button>
           {canCancel && (
             <Button color="error" variant="outlined" onClick={handleCancel} disabled={actionLoading}>
               {actionLoading ? 'Cancelling…' : 'Cancel order'}

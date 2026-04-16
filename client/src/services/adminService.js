@@ -21,6 +21,7 @@ const getAccessUsers = (params = {}) => {
 const createAccessRole = (data) => api.post('/admin/access-control/roles', data);
 const updateAccessRole = (id, data) => api.put(`/admin/access-control/roles/${id}`, data);
 const updateAccessUserRole = (id, roleId) => api.put(`/admin/access-control/users/${id}/role`, { roleId });
+const createAccessUser = (data) => api.post('/admin/access-control/users', data);
 
 // Audit Logs
 const getAuditLogs = (params = {}) => {
@@ -96,7 +97,7 @@ const setDefaultAddress = (id) => api.put(`/users/me/addresses/${id}/default`);
 
 export {
   getStats, getSalesChart, getLowStock, getRecentOrders,
-  getAccessRoles, getAccessPermissions, getAccessUsers, createAccessRole, updateAccessRole, updateAccessUserRole,
+  getAccessRoles, getAccessPermissions, getAccessUsers, createAccessRole, updateAccessRole, updateAccessUserRole, createAccessUser,
   getAuditLogs,
   getUsers, getUserById,
   getAdminReviews, updateReviewStatus, deleteReview,

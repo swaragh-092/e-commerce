@@ -43,9 +43,18 @@ const salesChartQuerySchema = Joi.object({
   }),
 });
 
+const createStaffUserSchema = Joi.object({
+  firstName: Joi.string().max(100).required(),
+  lastName: Joi.string().max(100).required(),
+  email: Joi.string().email({ tlds: { allow: false } }).required(),
+  password: Joi.string().min(8).max(128).required(),
+  roleId: Joi.string().uuid().required(),
+});
+
 module.exports = {
   updateUserRoleSchema,
   createRoleSchema,
   updateRoleSchema,
   salesChartQuerySchema,
+  createStaffUserSchema,
 };

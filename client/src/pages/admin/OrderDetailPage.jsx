@@ -19,6 +19,7 @@ import {
   Typography,
 } from '@mui/material';
 import { useParams, useNavigate } from 'react-router-dom';
+import PrintIcon from '@mui/icons-material/Print';
 import { useCurrency } from '../../hooks/useSettings';
 import { getOrderById, updateOrderStatus, refundOrder } from '../../services/adminService';
 import { useNotification } from '../../context/NotificationContext';
@@ -201,11 +202,20 @@ const OrderDetailPage = () => {
           </Typography>
         </Box>
 
-        {canRefund && (
-          <Button variant="outlined" color="error" onClick={handleRefund} disabled={updating}>
-            {updating ? 'Processing…' : 'Issue Refund'}
+        <Stack direction="row" spacing={1}>
+          <Button 
+            variant="outlined" 
+            startIcon={<PrintIcon />}
+            onClick={() => window.open(`/admin/orders/${id}/invoice`, '_blank')}
+          >
+            Print Invoice
           </Button>
-        )}
+          {canRefund && (
+            <Button variant="outlined" color="error" onClick={handleRefund} disabled={updating}>
+              {updating ? 'Processing…' : 'Issue Refund'}
+            </Button>
+          )}
+        </Stack>
       </Box>
 
       {error && (

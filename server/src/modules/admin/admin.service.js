@@ -492,6 +492,61 @@ const updateUserRole = async (userId, roleId, actingUserId) => {
   });
 };
 
+/**
+ * Create a new staff (admin or super_admin) user from the admin panel.
+ * The User model's beforeSave hook hashes the password automatically.
+ * Only super admins can create super_admin-based accounts.
+ */
+const createStaffUser = async ({ firstName, lastName, email, password, roleId }, actingUser) => {
+  return db.sequelize.transaction(async (transaction) => {
+    const role = await Role.findByPk(roleId, { include: roleInclude, transaction });
+    if (!role || !role.isActive) {
+      throw new AppError('NOT_FOUND', 404, 'Role not found or inactive');
+    }
+
+    // Only super admins may create super_admin-level accounts
+    if (role.baseRole === ROLES.SUPER_ADMIN && actingUser.role !== ROLES.SUPER_ADMIN) {
+      throw new AppError('FORBIDDEN', 403, 'Only super admins can create super admin accounts');
+    }
+
+    const existing = await User.findOne({ where: { email: email.toLowerCase() }, transaction });
+    if (existing) {
+      throw new AppError('CONFLICT', 409, 'A user with this email already exists');
+    }
+
+    const newUser = await User.create({
+      firstName: firstName.trim(),
+      lastName: lastName.trim(),
+      email: email.toLowerCase().trim(),
+      password, // auto-hashed by User model's beforeSave hook
+      role: role.baseRole,
+      status: 'active',
+      isEmailVerified: true, // admin-created accounts are pre-verified
+    }, { transaction });
+
+    await newUser.setRoles([role], { transaction });
+
+    const createdUser = await User.findByPk(newUser.id, { include: userRoleInclude, transaction });
+
+    try {
+      await AuditService.log({
+        userId: actingUser.id,
+        action: ACTIONS.CREATE,
+        entity: ENTITIES.USER,
+        entityId: newUser.id,
+        changes: {
+          email: newUser.email,
+          baseRole: role.baseRole,
+          assignedRole: role.slug,
+          createdBy: actingUser.id,
+        },
+      }, transaction);
+    } catch (_) {}
+
+    return serializeAccessUser(createdUser);
+  });
+};
+
 module.exports = {
   getStats,
   getSalesChart,
@@ -503,4 +558,5 @@ module.exports = {
   updateAccessRole,
   listAccessUsers,
   updateUserRole,
+  createStaffUser,
 };

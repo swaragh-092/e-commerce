@@ -102,6 +102,15 @@ const updateUserRole = async (req, res, next) => {
   }
 };
 
+const createStaffUser = async (req, res, next) => {
+  try {
+    const user = await AdminService.createStaffUser(req.validated, req.user);
+    return success(res, user, 'Staff user created successfully', 201);
+  } catch (err) {
+    next(err);
+  }
+};
+
 module.exports = {
   getStats,
   getSalesChart,
@@ -113,4 +122,5 @@ module.exports = {
   updateAccessRole,
   getAccessUsers,
   updateUserRole,
+  createStaffUser,
 };

@@ -6,7 +6,7 @@ const { authorizeAnyPermission, authorizePermissions } = require('../../middlewa
 const adminController = require('./admin.controller');
 const { PERMISSIONS } = require('../../config/permissions');
 const { validate } = require('../../middleware/validate.middleware');
-const { updateUserRoleSchema, createRoleSchema, updateRoleSchema, salesChartQuerySchema } = require('./admin.validation');
+const { updateUserRoleSchema, createRoleSchema, updateRoleSchema, salesChartQuerySchema, createStaffUserSchema } = require('./admin.validation');
 
 const adminOnly = [authenticate, authorizePermissions(PERMISSIONS.DASHBOARD_VIEW)];
 const accessReadOnly = [
@@ -36,6 +36,7 @@ router.get('/access-control/permissions', ...accessReadOnly, adminController.get
 router.post('/access-control/roles', ...roleManageOnly, validate(createRoleSchema), adminController.createAccessRole);
 router.put('/access-control/roles/:id', ...roleEditOnly, validate(updateRoleSchema), adminController.updateAccessRole);
 router.get('/access-control/users', ...accessManageOnly, adminController.getAccessUsers);
+router.post('/access-control/users', ...accessManageOnly, validate(createStaffUserSchema), adminController.createStaffUser);
 router.put('/access-control/users/:id/role', ...accessManageOnly, validate(updateUserRoleSchema), adminController.updateUserRole);
 
 module.exports = router;

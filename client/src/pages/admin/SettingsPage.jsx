@@ -120,7 +120,7 @@ const SettingsPage = () => {
     }
   };
 
-  const tabs = ['Store', 'Branding', 'Layout', 'Homepage', 'Catalog', 'Checkout', 'Promotions', 'Advanced'];
+  const tabs = ['Store', 'Branding', 'Layout', 'Homepage', 'Catalog', 'Checkout', 'Promotions', 'Invoice', 'Advanced'];
   const currentTab = tabs[tab];
 
   // Current currency symbol — used in shipping adornments
@@ -1109,6 +1109,26 @@ const SettingsPage = () => {
           {toggle('features.showAvailableCoupons', 'Show available coupons to customers at checkout')}
         </>,
         ['coupon', 'promotions', 'marketing']
+      ),
+    ],
+    [
+      section(
+        'Invoice Customization',
+        'Configure how your printable customer invoices appear.',
+        <>
+          {field('invoice.prefix', 'Invoice Number Prefix (e.g. INV-)')}
+          {field('invoice.companyName', 'Company Legal Name (Overrides Store Name if provided)')}
+          {field('invoice.taxRegistryNumber', 'Tax / VAT Registration Number')}
+          <TextField
+            fullWidth size="small" label="Custom Invoice Notes / Terms"
+            multiline rows={4}
+            value={form['invoice.customNotes'] ?? ''}
+            onChange={(e) => set('invoice.customNotes', e.target.value)}
+            sx={{ mb: 2 }}
+            helperText="Appears at the bottom of the printed invoice."
+          />
+        </>,
+        ['invoice', 'print', 'tax id', 'terms', 'notes', 'legal']
       ),
     ],
     [
