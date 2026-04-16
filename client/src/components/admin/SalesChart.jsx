@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { Box, Typography, ToggleButtonGroup, ToggleButton, Skeleton } from '@mui/material';
+import { Box, Typography, Select, MenuItem, Skeleton, TextField, Button } from '@mui/material';
 import {
   AreaChart,
   Area,
@@ -18,17 +18,31 @@ const fmt = (d) => {
   return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
 };
 
-const SalesChart = () => {
+const SalesChart = ({ defaultPeriod = 'monthly' }) => {
   const theme = useTheme();
   const { formatPrice } = useCurrency();
-  const [period, setPeriod] = useState('monthly');
+  const [period, setPeriod] = useState(defaultPeriod);
+  const [startDate, setStartDate] = useState('');
+  const [endDate, setEndDate] = useState('');
   const [data, setData] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [trigger, setTrigger] = useState(0);
+
+  useEffect(() => {
+    // Sync the local period state if defaultPeriod prop changes unexpectedly
+    setPeriod(defaultPeriod);
+    if (defaultPeriod !== 'custom') {
+      setStartDate('');
+      setEndDate('');
+    }
+  }, [defaultPeriod]);
 
   useEffect(() => {
     let cancelled = false;
+    if (period === 'custom' && (!startDate || !endDate)) return; // Don't fetch custom without both dates
+
     setLoading(true);
-    getSalesChart(period)
+    getSalesChart({ period, startDate, endDate })
       .then((res) => {
         if (!cancelled) setData(res.data.data || []);
       })
@@ -39,7 +53,7 @@ const SalesChart = () => {
     return () => {
       cancelled = true;
     };
-  }, [period]);
+  }, [period, startDate, endDate, trigger]);
 
   const chartData = data.map((r) => ({
     date: fmt(r.date),
@@ -47,22 +61,71 @@ const SalesChart = () => {
     Orders: r.orderCount,
   }));
 
+  const handleCustomApply = () => {
+    if (startDate && endDate) {
+      setTrigger((prev) => prev + 1);
+    }
+  };
+
   return (
     <Box>
-      <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 2 }}>
+      <Box sx={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', mb: 2, flexWrap: 'wrap', gap: 2 }}>
         <Typography variant="h6" fontWeight={600}>
           Sales Overview
         </Typography>
-        <ToggleButtonGroup
-          size="small"
-          exclusive
-          value={period}
-          onChange={(_, v) => v && setPeriod(v)}
-        >
-          <ToggleButton value="daily">Daily</ToggleButton>
-          <ToggleButton value="weekly">Weekly</ToggleButton>
-          <ToggleButton value="monthly">Monthly</ToggleButton>
-        </ToggleButtonGroup>
+        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, flexWrap: 'wrap' }}>
+          {period === 'custom' && (
+            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+              <TextField
+                type="date"
+                size="small"
+                label="Start"
+                InputLabelProps={{ shrink: true }}
+                value={startDate}
+                onChange={(e) => {
+                  setStartDate(e.target.value);
+                  if (endDate && new Date(e.target.value) > new Date(endDate)) {
+                    setEndDate(e.target.value);
+                  }
+                }}
+                inputProps={{ max: endDate || undefined }}
+              />
+              <TextField
+                type="date"
+                size="small"
+                label="End"
+                InputLabelProps={{ shrink: true }}
+                value={endDate}
+                onChange={(e) => setEndDate(e.target.value)}
+                inputProps={{ min: startDate || undefined }}
+              />
+              <Button variant="contained" size="small" onClick={handleCustomApply} disabled={!startDate || !endDate}>
+                Apply
+              </Button>
+            </Box>
+          )}
+          <Select
+            size="small"
+            value={period}
+            onChange={(e) => {
+              setPeriod(e.target.value);
+              if (e.target.value !== 'custom') {
+                setStartDate('');
+                setEndDate('');
+              }
+            }}
+            sx={{ minWidth: 140 }}
+          >
+            <MenuItem value="daily">Daily (90 days)</MenuItem>
+            <MenuItem value="weekly">Weekly (52 wks)</MenuItem>
+            <MenuItem value="monthly">Monthly (12 mo)</MenuItem>
+            <MenuItem value="quarterly">Quarterly</MenuItem>
+            <MenuItem value="yearly">Yearly</MenuItem>
+            <MenuItem value="mtd">Month to Date</MenuItem>
+            <MenuItem value="ytd">Year to Date</MenuItem>
+            <MenuItem value="custom">Custom Range</MenuItem>
+          </Select>
+        </Box>
       </Box>
 
       {loading ? (

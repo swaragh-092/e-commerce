@@ -16,6 +16,7 @@ import {
   Divider,
   Stack,
   MenuItem,
+  CardMedia,
 } from '@mui/material';
 import {
   Add as AddIcon,
@@ -23,6 +24,7 @@ import {
   Delete as DeleteIcon,
   FolderOpen as FolderOpenIcon,
   Folder as FolderIcon,
+  Close as CloseIcon,
 } from '@mui/icons-material';
 import {
   getCategoryTree,
@@ -34,6 +36,8 @@ import { useNotification } from '../../context/NotificationContext';
 import { useAuth } from '../../hooks/useAuth';
 import { PERMISSIONS } from '../../utils/permissions';
 import { getApiErrorMessage } from '../../utils/apiErrors';
+import MediaUploader from '../../components/common/MediaUploader';
+import { getMediaUrl } from '../../utils/media';
 
 /* ─── helpers ─────────────────────────────────────────────────── */
 const flattenTree = (nodes, result = []) => {
@@ -69,6 +73,21 @@ const CategoryRow = ({ node, level, onEdit, onDelete, onAddChild, canManage }) =
         <Box sx={{ color: level === 0 ? 'primary.main' : 'text.secondary', display: 'flex' }}>
           {hasChildren ? <FolderOpenIcon fontSize="small" /> : <FolderIcon fontSize="small" />}
         </Box>
+
+        {/* image thumbnail */}
+        {node.image && level === 0 && (
+          <Box
+            sx={{
+              width: 32,
+              height: 32,
+              borderRadius: 1,
+              overflow: 'hidden',
+              flexShrink: 0,
+            }}
+          >
+            <img src={getMediaUrl(node.image)} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+          </Box>
+        )}
 
         {/* name */}
         <Typography
@@ -152,7 +171,7 @@ const CategoriesPage = () => {
   const [open, setOpen] = useState(false);
   const [saving, setSaving] = useState(false);
   const [editingCat, setEditingCat] = useState(null);
-  const [formData, setFormData] = useState({ name: '', description: '', parentId: '' });
+  const [formData, setFormData] = useState({ name: '', description: '', parentId: '', image: '' });
   const [formErrors, setFormErrors] = useState({});
   const notify = useNotification();
   const { hasPermission } = useAuth();
@@ -181,7 +200,7 @@ const CategoriesPage = () => {
     }
 
     setEditingCat(null);
-    setFormData({ name: '', description: '', parentId: parent?.id || '' });
+    setFormData({ name: '', description: '', parentId: parent?.id || '', image: '' });
     setFormErrors({});
     setOpen(true);
   };
@@ -197,6 +216,7 @@ const CategoriesPage = () => {
       name: cat.name,
       description: cat.description || '',
       parentId: cat.parentId || '',
+      image: cat.image || '',
     });
     setFormErrors({});
     setOpen(true);
@@ -223,6 +243,8 @@ const CategoriesPage = () => {
     setSaving(true);
     try {
       const data = { ...formData, parentId: formData.parentId || null };
+      if (!data.image) data.image = null; // Clean up empty strings
+
       if (editingCat) {
         await updateCategory(editingCat.id, data);
         notify('Category updated successfully.', 'success');
@@ -316,6 +338,34 @@ const CategoriesPage = () => {
         <DialogTitle sx={{ pb: 1 }}>{editingCat ? 'Edit Category' : 'New Category'}</DialogTitle>
         <Divider />
         <DialogContent sx={{ pt: 2, display: 'flex', flexDirection: 'column', gap: 2 }}>
+          
+          <Box>
+            <Typography variant="subtitle2" sx={{ mb: 1, fontWeight: 600 }}>Category Image</Typography>
+            {formData.image ? (
+              <Box sx={{ position: 'relative', width: '100%', height: 160, borderRadius: 2, overflow: 'hidden', border: '1px solid', borderColor: 'divider' }}>
+                <CardMedia
+                    component="img"
+                    image={getMediaUrl(formData.image)}
+                    sx={{ width: '100%', height: '100%', objectFit: 'cover' }}
+                />
+                <IconButton 
+                  size="small" 
+                  onClick={() => setFormData(f => ({ ...f, image: '' }))}
+                  sx={{ position: 'absolute', top: 4, right: 4, bgcolor: 'background.paper', '&:hover': { bgcolor: 'error.main', color: 'white' } }}
+                >
+                  <CloseIcon fontSize="small" />
+                </IconButton>
+              </Box>
+            ) : (
+              <MediaUploader 
+                multiple={false} 
+                onUploadSuccess={(media) => {
+                  setFormData(f => ({ ...f, image: media.url }));
+                }} 
+              />
+            )}
+          </Box>
+
           <TextField
             autoFocus
             label="Name *"

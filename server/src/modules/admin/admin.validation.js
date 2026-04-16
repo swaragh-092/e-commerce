@@ -27,8 +27,25 @@ const updateRoleSchema = Joi.object({
   permissionIds: Joi.array().items(Joi.string().uuid()).min(1).optional(),
 });
 
+const salesChartQuerySchema = Joi.object({
+  period: Joi.string()
+    .valid('daily', 'weekly', 'monthly', 'quarterly', 'yearly', 'mtd', 'ytd', 'custom')
+    .default('monthly'),
+  startDate: Joi.when('period', {
+    is: 'custom',
+    then: Joi.date().iso().required(),
+    otherwise: Joi.forbidden(),
+  }),
+  endDate: Joi.when('period', {
+    is: 'custom',
+    then: Joi.date().iso().min(Joi.ref('startDate')).required(),
+    otherwise: Joi.forbidden(),
+  }),
+});
+
 module.exports = {
   updateUserRoleSchema,
   createRoleSchema,
   updateRoleSchema,
+  salesChartQuerySchema,
 };

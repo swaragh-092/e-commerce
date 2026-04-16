@@ -108,11 +108,82 @@ const getStats = async () => {
  * Sales chart data grouped by period.
  * @param {'daily'|'weekly'|'monthly'} period
  */
-const getSalesChart = async (period = 'monthly') => {
+const getSalesChart = async ({ period = 'monthly', startDate, endDate }) => {
   const { sequelize } = db;
 
-  // Determine truncation level
-  const trunc = period === 'daily' ? 'day' : period === 'weekly' ? 'week' : 'month';
+  let trunc = 'month';
+  let dateFilter = {};
+  const currentMax = Date.now();
+
+  if (period === 'custom') {
+    if (!startDate || !endDate) {
+      const error = new Error('startDate and endDate are required for custom period');
+      error.statusCode = 400;
+      throw error;
+    }
+    const start = new Date(startDate);
+    const end = new Date(endDate);
+    
+    if (isNaN(start.getTime()) || isNaN(end.getTime())) {
+      const error = new Error('Invalid date format for startDate or endDate');
+      error.statusCode = 400;
+      throw error;
+    }
+    
+    if (start > end) {
+      const error = new Error('startDate must be before endDate');
+      error.statusCode = 400;
+      throw error;
+    }
+
+    const daysDiff = (end - start) / (1000 * 60 * 60 * 24);
+    trunc = daysDiff <= 31 ? 'day' : 'month';
+    dateFilter = {
+      [Op.gte]: start,
+      [Op.lte]: end,
+    };
+  } else {
+    // Presets
+    const now = new Date();
+    let startTimestamp;
+
+    switch (period) {
+      case 'daily':
+        trunc = 'day';
+        startTimestamp = now.getTime() - 90 * 864e5;
+        break;
+      case 'weekly':
+        trunc = 'week';
+        startTimestamp = now.getTime() - 364 * 864e5;
+        break;
+      case 'monthly':
+      default:
+        trunc = 'month';
+        startTimestamp = now.getTime() - 365 * 864e5;
+        break;
+      case 'quarterly':
+        trunc = 'quarter';
+        startTimestamp = now.getTime() - 4 * 90 * 864e5; // roughly 4 quarters
+        break;
+      case 'yearly':
+        trunc = 'year';
+        startTimestamp = now.getTime() - 3 * 365 * 864e5; // 3 years
+        break;
+      case 'mtd':
+        trunc = 'day';
+        startTimestamp = new Date(now.getFullYear(), now.getMonth(), 1).getTime();
+        break;
+      case 'ytd':
+        trunc = 'month';
+        startTimestamp = new Date(now.getFullYear(), 0, 1).getTime();
+        break;
+    }
+
+    dateFilter = {
+      [Op.gte]: new Date(startTimestamp),
+      [Op.lte]: now,
+    };
+  }
 
   const rows = await Order.findAll({
     attributes: [
@@ -122,16 +193,7 @@ const getSalesChart = async (period = 'monthly') => {
     ],
     where: {
       status: { [Op.in]: ['paid', 'processing', 'shipped', 'delivered'] },
-      createdAt: {
-        // Last 90 days for daily, last 52 weeks for weekly, last 12 months for monthly
-        [Op.gte]: new Date(
-          period === 'daily'
-            ? Date.now() - 90 * 864e5
-            : period === 'weekly'
-            ? Date.now() - 364 * 864e5
-            : Date.now() - 365 * 864e5,
-        ),
-      },
+      createdAt: dateFilter,
     },
     group: [fn('DATE_TRUNC', trunc, col('"Order".created_at'))],
     order: [[fn('DATE_TRUNC', trunc, col('"Order".created_at')), 'ASC']],

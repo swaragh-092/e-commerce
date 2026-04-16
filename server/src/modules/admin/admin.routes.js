@@ -6,7 +6,7 @@ const { authorizeAnyPermission, authorizePermissions } = require('../../middlewa
 const adminController = require('./admin.controller');
 const { PERMISSIONS } = require('../../config/permissions');
 const { validate } = require('../../middleware/validate.middleware');
-const { updateUserRoleSchema, createRoleSchema, updateRoleSchema } = require('./admin.validation');
+const { updateUserRoleSchema, createRoleSchema, updateRoleSchema, salesChartQuerySchema } = require('./admin.validation');
 
 const adminOnly = [authenticate, authorizePermissions(PERMISSIONS.DASHBOARD_VIEW)];
 const accessReadOnly = [
@@ -23,7 +23,12 @@ const roleEditOnly = [authenticate, authorizeAnyPermission(PERMISSIONS.ROLES_MAN
 const accessManageOnly = [authenticate, authorizePermissions(PERMISSIONS.USERS_ASSIGN_ROLES)];
 
 router.get('/dashboard/stats', ...adminOnly, adminController.getStats);
-router.get('/dashboard/sales-chart', ...adminOnly, adminController.getSalesChart);
+router.get(
+	'/dashboard/sales-chart',
+	...adminOnly,
+	validate(salesChartQuerySchema, 'query'),
+	adminController.getSalesChart
+);
 router.get('/dashboard/low-stock', ...adminOnly, adminController.getLowStock);
 router.get('/dashboard/recent-orders', ...adminOnly, adminController.getRecentOrders);
 router.get('/access-control/roles', ...accessReadOnly, adminController.getAccessRoles);

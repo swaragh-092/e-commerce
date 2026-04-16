@@ -14,8 +14,8 @@ const getStats = async (req, res, next) => {
 
 const getSalesChart = async (req, res, next) => {
   try {
-    const { period = 'monthly' } = req.query;
-    const data = await AdminService.getSalesChart(period);
+    const { period = 'monthly', startDate, endDate } = req.query;
+    const data = await AdminService.getSalesChart({ period, startDate, endDate });
     return success(res, data);
   } catch (err) {
     next(err);

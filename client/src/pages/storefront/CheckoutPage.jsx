@@ -268,7 +268,7 @@ const CheckoutPage = () => {
                     },
                 }),
             });
-            const orderId = res.data?.data?.id;
+            const orderId = res.data?.data?.order?.id;
             if (!isBuyNowFlow) {
                 await clearCart();
             }

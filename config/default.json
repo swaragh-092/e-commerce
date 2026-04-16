@@ -129,9 +129,30 @@
     "homepage": {
         "showCategories": true,
         "categoriesTitle": "Shop by Category",
+        
         "showNewArrivals": true,
         "newArrivalsTitle": "New Arrivals",
-        "newArrivalsCount": 8
+        "newArrivalsCount": 8,
+        "newArrivalsLayout": "grid",
+
+        "showFeatured": true,
+        "featuredTitle": "Featured Products",
+        "featuredCount": 8,
+        "featuredLayout": "carousel",
+
+        "showBestSellers": true,
+        "bestSellersTitle": "Best Sellers",
+        "bestSellersCount": 8,
+        "bestSellersLayout": "grid",
+
+        "showOnSale": true,
+        "onSaleTitle": "On Sale",
+        "onSaleCount": 8,
+        "onSaleLayout": "carousel",
+
+        "showBrands": true,
+        "brandsTitle": "Shop by Brand",
+        "brandsCount": 12
     },
     "productPage": {
         "showSKU": true,
@@ -139,5 +160,11 @@
         "addToCartLabel": "Add to Cart",
         "showBuyNowButton": true,
         "buyNowLabel": "Buy Now"
+    },
+    "admin": {
+        "dashboard.showStatCards": true,
+        "dashboard.showRecentOrders": true,
+        "dashboard.showLowStockAlerts": true,
+        "dashboard.defaultChartPeriod": "monthly"
     }
 }

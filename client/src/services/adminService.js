@@ -2,7 +2,12 @@ import api from './api';
 
 // Dashboard
 const getStats = () => api.get('/admin/dashboard/stats');
-const getSalesChart = (period = 'monthly') => api.get(`/admin/dashboard/sales-chart?period=${period}`);
+const getSalesChart = ({ period = 'monthly', startDate, endDate } = {}) => {
+  const params = new URLSearchParams({ period });
+  if (startDate) params.set('startDate', startDate);
+  if (endDate) params.set('endDate', endDate);
+  return api.get(`/admin/dashboard/sales-chart?${params.toString()}`);
+};
 const getLowStock = (threshold = 10) => api.get(`/admin/dashboard/low-stock?threshold=${threshold}`);
 const getRecentOrders = () => api.get('/admin/dashboard/recent-orders');
 const getAccessRoles = () => api.get('/admin/access-control/roles');

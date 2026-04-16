@@ -780,7 +780,24 @@ const SettingsPage = () => {
           <Typography variant="subtitle2" sx={{ mb: 1 }}>New Arrivals</Typography>
           {toggle('homepage.showNewArrivals', 'Show new arrivals section')}
           {field('homepage.newArrivalsTitle', 'Section heading (e.g. New Arrivals)')}
-          {field('homepage.newArrivalsCount', 'Number of products to show (e.g. 8)', 'number')}
+          <Grid container spacing={2}>
+            <Grid item xs={12} sm={6}>
+              {field('homepage.newArrivalsCount', 'Number of products to show', 'number')}
+            </Grid>
+            <Grid item xs={12} sm={6}>
+              <FormControl fullWidth size="small" sx={{ mb: 2 }}>
+                <InputLabel>Layout</InputLabel>
+                <Select
+                  label="Layout"
+                  value={form['homepage.newArrivalsLayout'] || 'grid'}
+                  onChange={(e) => set('homepage.newArrivalsLayout', e.target.value)}
+                >
+                  <MenuItem value="grid">Grid (Rows)</MenuItem>
+                  <MenuItem value="carousel">Carousel (Horizontal Scroll)</MenuItem>
+                </Select>
+              </FormControl>
+            </Grid>
+          </Grid>
           {field('homepage.newArrivalsLink', '"View All" link (e.g. /products?sort=newest)')}
 
           <Divider sx={{ my: 2 }} />
@@ -789,7 +806,24 @@ const SettingsPage = () => {
           <Typography variant="subtitle2" sx={{ mb: 1 }}>Featured Products</Typography>
           {toggle('homepage.showFeatured', 'Show featured products section')}
           {field('homepage.featuredTitle', 'Section heading (e.g. Featured Products)')}
-          {field('homepage.featuredCount', 'Number of products to show (e.g. 8)', 'number')}
+          <Grid container spacing={2}>
+            <Grid item xs={12} sm={6}>
+              {field('homepage.featuredCount', 'Number of products to show', 'number')}
+            </Grid>
+            <Grid item xs={12} sm={6}>
+              <FormControl fullWidth size="small" sx={{ mb: 2 }}>
+                <InputLabel>Layout</InputLabel>
+                <Select
+                  label="Layout"
+                  value={form['homepage.featuredLayout'] || 'carousel'}
+                  onChange={(e) => set('homepage.featuredLayout', e.target.value)}
+                >
+                  <MenuItem value="grid">Grid (Rows)</MenuItem>
+                  <MenuItem value="carousel">Carousel (Horizontal Scroll)</MenuItem>
+                </Select>
+              </FormControl>
+            </Grid>
+          </Grid>
           {field('homepage.featuredLink', '"View All" link (e.g. /products?featured=true)')}
 
           <Divider sx={{ my: 2 }} />
@@ -798,7 +832,24 @@ const SettingsPage = () => {
           <Typography variant="subtitle2" sx={{ mb: 1 }}>Best Sellers</Typography>
           {toggle('homepage.showBestSellers', 'Show best sellers section')}
           {field('homepage.bestSellersTitle', 'Section heading (e.g. Best Sellers)')}
-          {field('homepage.bestSellersCount', 'Number of products to show (e.g. 8)', 'number')}
+          <Grid container spacing={2}>
+            <Grid item xs={12} sm={6}>
+              {field('homepage.bestSellersCount', 'Number of products to show', 'number')}
+            </Grid>
+            <Grid item xs={12} sm={6}>
+              <FormControl fullWidth size="small" sx={{ mb: 2 }}>
+                <InputLabel>Layout</InputLabel>
+                <Select
+                  label="Layout"
+                  value={form['homepage.bestSellersLayout'] || 'grid'}
+                  onChange={(e) => set('homepage.bestSellersLayout', e.target.value)}
+                >
+                  <MenuItem value="grid">Grid (Rows)</MenuItem>
+                  <MenuItem value="carousel">Carousel (Horizontal Scroll)</MenuItem>
+                </Select>
+              </FormControl>
+            </Grid>
+          </Grid>
           {field('homepage.bestSellersLink', '"View All" link (e.g. /products?sort=best-selling)')}
 
           <Divider sx={{ my: 2 }} />
@@ -807,7 +858,24 @@ const SettingsPage = () => {
           <Typography variant="subtitle2" sx={{ mb: 1 }}>On Sale</Typography>
           {toggle('homepage.showOnSale', 'Show on-sale products section')}
           {field('homepage.onSaleTitle', 'Section heading (e.g. On Sale)')}
-          {field('homepage.onSaleCount', 'Number of products to show (e.g. 8)', 'number')}
+          <Grid container spacing={2}>
+            <Grid item xs={12} sm={6}>
+              {field('homepage.onSaleCount', 'Number of products to show', 'number')}
+            </Grid>
+            <Grid item xs={12} sm={6}>
+              <FormControl fullWidth size="small" sx={{ mb: 2 }}>
+                <InputLabel>Layout</InputLabel>
+                <Select
+                  label="Layout"
+                  value={form['homepage.onSaleLayout'] || 'carousel'}
+                  onChange={(e) => set('homepage.onSaleLayout', e.target.value)}
+                >
+                  <MenuItem value="grid">Grid (Rows)</MenuItem>
+                  <MenuItem value="carousel">Carousel (Horizontal Scroll)</MenuItem>
+                </Select>
+              </FormControl>
+            </Grid>
+          </Grid>
           {field('homepage.onSaleLink', '"View All" link (e.g. /products?onSale=true)')}
 
           <Divider sx={{ my: 2 }} />
@@ -1063,6 +1131,36 @@ const SettingsPage = () => {
           {toggle('features.socialLogin', 'Social login (Google / GitHub)')}
         </>,
         ['auth', 'email verification', 'social login', 'accounts']
+      ),
+      section(
+        'Dashboard',
+        'Customize which widgets and defaults appear on the admin dashboard.',
+        <>
+          <FormControl fullWidth size="small" sx={{ mb: 2 }}>
+            <InputLabel>Default Chart Period</InputLabel>
+            <Select
+              label="Default Chart Period"
+              value={form['admin.dashboard.defaultChartPeriod'] || 'monthly'}
+              onChange={(e) => set('admin.dashboard.defaultChartPeriod', e.target.value)}
+            >
+              <MenuItem value="daily">Daily (Last 90 days)</MenuItem>
+              <MenuItem value="weekly">Weekly (Last 52 weeks)</MenuItem>
+              <MenuItem value="monthly">Monthly (Last 12 months)</MenuItem>
+              <MenuItem value="quarterly">Quarterly</MenuItem>
+              <MenuItem value="yearly">Yearly (Last 3 years)</MenuItem>
+              <MenuItem value="mtd">Month to Date (MTD)</MenuItem>
+              <MenuItem value="ytd">Year to Date (YTD)</MenuItem>
+            </Select>
+          </FormControl>
+          <Divider sx={{ my: 2 }} />
+          <Typography variant="subtitle2" sx={{ mb: 1 }}>Widgets</Typography>
+          <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
+            {toggle('admin.dashboard.showStatCards', 'Show quick stat KPI cards')}
+            {toggle('admin.dashboard.showRecentOrders', 'Show recent orders list')}
+            {toggle('admin.dashboard.showLowStockAlerts', 'Show low stock alert panel')}
+          </Box>
+        </>,
+        ['dashboard', 'admin', 'chart', 'widgets']
       ),
       section(
         'Experimental Features',

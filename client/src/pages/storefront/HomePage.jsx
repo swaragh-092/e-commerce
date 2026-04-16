@@ -50,24 +50,28 @@ const HomePage = () => {
     const showNewArrivals   = bool(hp.showNewArrivals,   true);
     const newArrivalsTitle  = str(hp.newArrivalsTitle,   'New Arrivals');
     const newArrivalsCount  = num(hp.newArrivalsCount,   8);
+    const newArrivalsLayout = str(hp.newArrivalsLayout,  'grid');
     const newArrivalsLink   = str(hp.newArrivalsLink,    '/products?sort=newest');
 
     // Featured
     const showFeatured      = bool(hp.showFeatured,      true);
     const featuredTitle     = str(hp.featuredTitle,      'Featured Products');
     const featuredCount     = num(hp.featuredCount,      8);
+    const featuredLayout    = str(hp.featuredLayout,     'carousel');
     const featuredLink      = str(hp.featuredLink,       '/products?featured=true');
 
     // Best Sellers
     const showBestSellers   = bool(hp.showBestSellers,   true);
     const bestSellersTitle  = str(hp.bestSellersTitle,   'Best Sellers');
     const bestSellersCount  = num(hp.bestSellersCount,   8);
+    const bestSellersLayout = str(hp.bestSellersLayout,  'grid');
     const bestSellersLink   = str(hp.bestSellersLink,    '/products?sort=best-selling');
 
     // On Sale
     const showOnSale        = bool(hp.showOnSale,        true);
     const onSaleTitle       = str(hp.onSaleTitle,        'On Sale');
     const onSaleCount       = num(hp.onSaleCount,        8);
+    const onSaleLayout      = str(hp.onSaleLayout,       'carousel');
     const onSaleLink        = str(hp.onSaleLink,         '/products?onSale=true');
 
     // Brands
@@ -177,6 +181,7 @@ const HomePage = () => {
                         products={data.newArrivals}
                         loading={loading}
                         count={newArrivalsCount}
+                        layout={newArrivalsLayout}
                     />
                 )}
 
@@ -188,6 +193,7 @@ const HomePage = () => {
                         products={data.featured}
                         loading={loading}
                         count={featuredCount}
+                        layout={featuredLayout}
                     />
                 )}
 
@@ -199,6 +205,7 @@ const HomePage = () => {
                         products={data.bestSellers}
                         loading={loading}
                         count={bestSellersCount}
+                        layout={bestSellersLayout}
                     />
                 )}
 
@@ -210,6 +217,7 @@ const HomePage = () => {
                         products={data.onSale}
                         loading={loading}
                         count={onSaleCount}
+                        layout={onSaleLayout}
                     />
                 )}
 
