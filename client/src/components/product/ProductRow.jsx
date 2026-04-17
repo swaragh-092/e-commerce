@@ -1,21 +1,15 @@
-import React from 'react';
+import React, { useRef, useState, useEffect } from 'react';
 import {
-    Box, Typography, Button, Grid, Skeleton,
+    Box, Typography, Button, Grid, Skeleton, IconButton,
 } from '@mui/material';
 import { Link } from 'react-router-dom';
 import ProductCard from './ProductCard';
 import ArrowForwardIcon from '@mui/icons-material/ArrowForward';
+import ChevronLeftIcon from '@mui/icons-material/ChevronLeft';
+import ChevronRightIcon from '@mui/icons-material/ChevronRight';
 
 /**
  * ProductRow — reusable section component used on the homepage.
- * Props:
- *   title        {string}   Section heading
- *   viewAllLink  {string}   URL for the "View All" button (omit to hide button)
- *   viewAllLabel {string}   Override label for the "View All" button
- *   products     {array}    Array of product objects
- *   loading      {boolean}  Show skeleton state
- *   count        {number}   How many skeleton cards to show while loading (default 4)
- *   layout       {string}   'grid' or 'carousel' layout mode
  */
 const ProductRow = ({
     title,
@@ -26,24 +20,61 @@ const ProductRow = ({
     count = 4,
     layout = 'grid',
 }) => {
+    const scrollRef = useRef(null);
+    const [canScrollLeft, setCanScrollLeft] = useState(false);
+
+    // Track scroll to show/hide navigation
+    const checkScroll = () => {
+        if (scrollRef.current) {
+            setCanScrollLeft(scrollRef.current.scrollLeft > 20);
+        }
+    };
+
+    useEffect(() => {
+        const el = scrollRef.current;
+        if (el) {
+            el.addEventListener('scroll', checkScroll);
+            checkScroll(); // initial check
+            return () => el.removeEventListener('scroll', checkScroll);
+        }
+    }, [products, loading]);
+
+    const scroll = (direction) => {
+        if (scrollRef.current) {
+            const { clientWidth } = scrollRef.current;
+            const scrollAmount = direction === 'left' ? -clientWidth * 0.8 : clientWidth * 0.8;
+            scrollRef.current.scrollBy({ left: scrollAmount, behavior: 'smooth' });
+        }
+    };
+
     if (!loading && products.length === 0) return null;
 
-    // Layout configuration for carousels
     const carouselStyles = {
         display: 'flex',
         gap: 2,
         overflowX: 'auto',
-        pb: 2, // padding for strict scrollbars
-        scrollSnapType: 'x mandatory',
-        '&::-webkit-scrollbar': { height: 8 },
-        '&::-webkit-scrollbar-track': { bgcolor: 'divider', borderRadius: 4 },
-        '&::-webkit-scrollbar-thumb': { bgcolor: 'text.disabled', borderRadius: 4 },
-        // ensures cards snap to beginning
+        pb: 2,
+        scrollBehavior: 'smooth',
+        scrollbarWidth: 'none', // Firefox
+        msOverflowStyle: 'none', // IE 10+
+        '&::-webkit-scrollbar': { display: 'none' }, // Safari and Chrome
         '& > *': {
             scrollSnapAlign: 'start',
             minWidth: { xs: '260px', sm: '280px', md: '300px' },
             flexShrink: 0
         }
+    };
+
+    const arrowButtonStyles = {
+        position: 'absolute',
+        top: '50%',
+        transform: 'translateY(-50%)',
+        zIndex: 2,
+        bgcolor: 'background.paper',
+        boxShadow: 3,
+        '&:hover': { bgcolor: 'background.paper', boxShadow: 6 },
+        width: 44,
+        height: 44,
     };
 
     return (
@@ -69,21 +100,41 @@ const ProductRow = ({
 
             {/* Product content */}
             {layout === 'carousel' ? (
-                <Box sx={carouselStyles}>
-                    {loading
-                        ? Array.from({ length: count }).map((_, i) => (
-                            <Box key={i}>
-                                <Skeleton variant="rectangular" height={220} sx={{ borderRadius: 2 }} />
-                                <Skeleton sx={{ mt: 1 }} />
-                                <Skeleton width="60%" />
-                            </Box>
-                        ))
-                        : products.map((product) => (
-                            <Box key={product.id}>
-                                <ProductCard product={product} />
-                            </Box>
-                        ))
-                    }
+                <Box sx={{ position: 'relative', mx: { xs: 0, md: -1 } }}>
+                    {/* Previous Button (Fades in when moved) */}
+                    {canScrollLeft && (
+                        <IconButton
+                            onClick={() => scroll('left')}
+                            sx={{ ...arrowButtonStyles, left: -22, display: { xs: 'none', md: 'flex' } }}
+                        >
+                            <ChevronLeftIcon />
+                        </IconButton>
+                    )}
+
+                    {/* Next Button (Always visible) */}
+                    <IconButton
+                        onClick={() => scroll('right')}
+                        sx={{ ...arrowButtonStyles, right: -22, display: { xs: 'none', md: 'flex' } }}
+                    >
+                        <ChevronRightIcon />
+                    </IconButton>
+
+                    <Box ref={scrollRef} sx={carouselStyles}>
+                        {loading
+                            ? Array.from({ length: count }).map((_, i) => (
+                                <Box key={i}>
+                                    <Skeleton variant="rectangular" height={220} sx={{ borderRadius: 2 }} />
+                                    <Skeleton sx={{ mt: 1 }} />
+                                    <Skeleton width="60%" />
+                                </Box>
+                            ))
+                            : products.map((product) => (
+                                <Box key={product.id}>
+                                    <ProductCard product={product} />
+                                </Box>
+                            ))
+                        }
+                    </Box>
                 </Box>
             ) : (
                 <Grid container spacing={2}>

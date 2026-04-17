@@ -25,58 +25,84 @@ const CategoryGrid = ({ title, categories = [], loading = false }) => {
                     ))
                     : categories.slice(0, 12).map((cat) => (
                         <Grid item xs={6} sm={4} md={2} key={cat.id}>
-                            <Card
+                        <Card
+                            sx={{
+                                height: '100%',
+                                borderRadius: 2,
+                                overflow: 'visible', // Changed to visible for shadow
+                                transition: 'all 0.3s cubic-bezier(0.4, 0, 0.2, 1)',
+                                boxShadow: 'none',
+                                '&:hover': {
+                                    transform: 'translateY(-8px) scale(1.01)',
+                                    boxShadow: '0 20px 40px rgba(0,0,0,0.15)',
+                                    zIndex: 1, // Ensure it's on top when scaling
+                                },
+                            }}
+                        >
+                            <CardActionArea
                                 component={Link}
                                 to={`/products?category=${cat.slug}`}
                                 sx={{
-                                    textDecoration: 'none',
                                     height: '100%',
+                                    display: 'block', // Crucial for transform on some elements
+                                    textDecoration: 'none',
+                                    color: 'inherit',
                                     borderRadius: 2,
-                                    overflow: 'hidden',
-                                    transition: 'transform 0.2s ease, box-shadow 0.2s ease',
-                                    '&:hover': {
-                                        transform: 'translateY(-3px)',
-                                        boxShadow: 4,
+                                    overflow: 'hidden', // Keep rounding for internal content
+                                    '& .MuiCardActionArea-focusHighlight': {
+                                        backgroundColor: 'transparent',
                                     },
                                 }}
                             >
-                                <CardActionArea>
-                                    {cat.image ? (
+                                {cat.image ? (
+                                    <Box sx={{ overflow: 'hidden', height: 150 }}>
                                         <CardMedia
                                             component="img"
                                             image={getMediaUrl(cat.image)}
                                             alt={cat.name}
-                                            sx={{ height: 100, objectFit: 'cover' }}
+                                            sx={{
+                                                height: '100%',
+                                                objectFit: 'contain',
+                                                transition: 'transform 0.5s ease',
+                                            }}
                                         />
-                                    ) : (
-                                        <Box sx={{
-                                            height: 100,
-                                            background: (theme) =>
-                                                `linear-gradient(135deg, ${theme.palette.primary.light} 0%, ${theme.palette.primary.main} 100%)`,
-                                            display: 'flex',
-                                            alignItems: 'center',
-                                            justifyContent: 'center',
-                                        }}>
-                                            <Typography
-                                                variant="h4"
-                                                sx={{ color: 'white', opacity: 0.6, fontWeight: 800 }}
-                                            >
-                                                {cat.name?.[0] || '?'}
-                                            </Typography>
-                                        </Box>
-                                    )}
-                                    <CardContent sx={{ p: 1.5, pb: '12px !important' }}>
+                                    </Box>
+                                ) : (
+                                    <Box sx={{
+                                        height: 150,
+                                        background: (theme) =>
+                                            `linear-gradient(135deg, ${theme.palette.primary.light} 0%, ${theme.palette.primary.main} 100%)`,
+                                        display: 'flex',
+                                        alignItems: 'center',
+                                        justifyContent: 'center',
+                                        transition: 'transform 0.5s ease',
+                                    }}>
                                         <Typography
-                                            variant="body2"
-                                            fontWeight={600}
-                                            noWrap
-                                            align="center"
+                                            variant="h4"
+                                            sx={{ color: 'white', opacity: 0.6, fontWeight: 800 }}
                                         >
-                                            {cat.name}
+                                            {cat.name?.[0] || '?'}
                                         </Typography>
-                                    </CardContent>
-                                </CardActionArea>
-                            </Card>
+                                    </Box>
+                                )}
+                                <CardContent sx={{ p: 1.5, pb: '12px !important' }}>
+                                    <Typography
+                                        variant="body2"
+                                        fontWeight={600}
+                                        noWrap
+                                        align="center"
+                                        sx={{
+                                            transition: 'color 0.3s ease',
+                                            '.MuiCardActionArea-root:hover &': {
+                                                color: 'primary.main',
+                                            },
+                                        }}
+                                    >
+                                        {cat.name}
+                                    </Typography>
+                                </CardContent>
+                            </CardActionArea>
+                        </Card>
                         </Grid>
                     ))
                 }

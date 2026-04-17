@@ -69,7 +69,7 @@ const StoreLayout = () => {
         </Box>
       )}
 
-      <AppBar position={navPosition} color="primary" elevation={0}>
+      <AppBar position={navPosition} color="primary" elevation={0} sx={{ borderRadius: 0 }}>
         <Toolbar>
           <Box component={RouterLink} to="/" sx={{ flexGrow: 1, display: 'flex', alignItems: 'center', textDecoration: 'none', color: 'inherit', gap: 1 }}>
             {settings?.logo?.main ? (
