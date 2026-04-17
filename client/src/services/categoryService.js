@@ -25,12 +25,8 @@ export const deleteCategory = async (id) => {
     return response.data;
 };
 
-// Alias used by storefront components (returns flat/root categories)
+// Alias used by storefront components (returns flat root-level categories or tree)
 export const getCategories = async () => {
     const response = await api.get('/categories');
-    const data = response.data?.data;
-    // Backend may return tree or flat array; return flat root-level categories
-    if (Array.isArray(data)) return data;
-    if (Array.isArray(data?.categories)) return data.categories;
-    return [];
+    return response.data?.data || [];
 };

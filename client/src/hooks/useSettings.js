@@ -16,6 +16,8 @@ export const useFeature = (featureName) => {
   return settings?.features?.[featureName] !== false;
 };
 
+export const useFeatureFlag = useFeature;
+
 /**
  * Returns a formatPrice(amount) function that formats using the currency
  * saved in settings.general.currency (e.g. "INR", "USD", "EUR").

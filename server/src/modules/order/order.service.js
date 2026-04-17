@@ -1,5 +1,5 @@
 'use strict';
-const { Op } = require('sequelize');
+const { Op, Transaction } = require('sequelize');
 const {
     sequelize,
     Order,
@@ -31,25 +31,11 @@ const {
     getAllowedNextStatuses,
     isCustomerCancelableOrderStatus,
     isRefundableOrderStatus,
+    ensureValidStatusTransition,
 } = require('../../utils/orderWorkflow');
 
 const ADMIN_ORDER_LIST_USER_ATTRIBUTES = ['id', 'firstName', 'lastName', 'email'];
 const ADMIN_ORDER_PAYMENT_ATTRIBUTES = ['id', 'provider', 'status', 'amount', 'currency', 'transactionId', 'createdAt', 'updatedAt'];
-
-const ensureValidStatusTransition = (currentStatus, nextStatus) => {
-    if (currentStatus === nextStatus) {
-        return;
-    }
-
-    const allowedStatuses = getAllowedNextStatuses(currentStatus);
-    if (!allowedStatuses.includes(nextStatus)) {
-        throw new AppError(
-            'VALIDATION_ERROR',
-            400,
-            `Cannot change order status from ${currentStatus} to ${nextStatus}`
-        );
-    }
-};
 
 // Utility to fetch settings
 const getSetting = async (key, defaultVal) => {
@@ -148,7 +134,7 @@ const placeOrder = async (userId, payload) => {
                 throw new AppError('VALIDATION_ERROR', 400, `"${product.name}" is not available for purchase. Please remove it from your cart.`);
             }
 
-            const currentProduct = await Product.findByPk(product.id, { transaction: t, lock: t.LOCK.UPDATE });
+            const currentProduct = await Product.findByPk(product.id, { transaction: t, lock: Transaction.LOCK.UPDATE });
             if (!currentProduct) {
                 throw new AppError(
                     'VALIDATION_ERROR',
@@ -226,12 +212,14 @@ const placeOrder = async (userId, payload) => {
                 cartSubtotal: subtotal,
                 cartItems: checkoutItems,
                 shippingCost,
+                transaction: t,
             });
         } else {
             couponBenefits = await CouponService.resolveCoupons([], userId, {
                 cartSubtotal: subtotal,
                 cartItems: checkoutItems,
                 shippingCost,
+                transaction: t,
             });
         }
 
@@ -265,8 +253,9 @@ const placeOrder = async (userId, payload) => {
             }
         }
 
+        const crypto = require('crypto');
         const dateStr = new Date().toISOString().slice(0,10).replace(/-/g,'');
-        const randStr = Math.floor(1000 + Math.random() * 9000);
+        const randStr = crypto.randomBytes(3).toString('hex').toUpperCase();
         const orderNumber = `ORD-${dateStr}-${randStr}`;
 
         const order = await Order.create({
@@ -444,14 +433,15 @@ const getOrderById = async (id, userId, isAdmin) => {
 };
 
 const createFulfillment = async (orderId, payload, actingUserId) => {
-    // payload: { trackingNumber, courier, notes, items: [{ orderItemId, quantity }] }
-    const { trackingNumber, courier, notes, items } = payload;
+    // payload: { trackingNumber, courier, notes, status, items: [{ orderItemId, quantity }] }
+    const { trackingNumber, courier, notes, status, items } = payload;
 
     if (!items || items.length === 0) {
         throw new AppError('VALIDATION_ERROR', 400, 'At least one item is required for a shipment');
     }
 
     return sequelize.transaction(async (t) => {
+        // Lock the order row to prevent concurrent fulfillment races
         const order = await Order.findByPk(orderId, {
             include: [
                 {
@@ -461,80 +451,143 @@ const createFulfillment = async (orderId, payload, actingUserId) => {
                 },
             ],
             transaction: t,
-            lock: t.LOCK.UPDATE,
+            lock: Transaction.LOCK.UPDATE,
         });
 
         if (!order) throw new AppError('NOT_FOUND', 404, 'Order not found');
 
-        if (['cancelled', 'refunded'].includes(order.status)) {
-            throw new AppError('VALIDATION_ERROR', 400, `Cannot create a shipment for a ${order.status} order`);
+        // Hard block: check if order is in a fulfillable state
+        if (!isFulfillableOrderStatus(order.status)) {
+            throw new AppError(
+                'VALIDATION_ERROR',
+                400,
+                `Cannot create a shipment for a ${order.status} order`
+            );
         }
 
-        // Build a map of orderItemId -> already shipped quantity
+        // Build map: orderItemId → { totalQty, alreadyShipped, remaining, productId, snapshotName }
         const orderItemMap = {};
         for (const oi of order.items) {
-            const alreadyShipped = (oi.fulfillmentItems || []).reduce((sum, fi) => sum + fi.quantity, 0);
+            const alreadyShipped = (oi.fulfillmentItems || []).reduce(
+                (sum, fi) => sum + fi.quantity, 0
+            );
             orderItemMap[oi.id] = {
-                totalQty: oi.quantity,
+                totalQty:      oi.quantity,
                 alreadyShipped,
-                remaining: oi.quantity - alreadyShipped,
+                remaining:     oi.quantity - alreadyShipped,
+                productId:     oi.productId,
+                snapshotName:  oi.snapshotName,
             };
         }
 
-        // Validate each item in the shipment request
+        // Validate every item in the request — Number() coercion on all quantities
         for (const item of items) {
+            const qty = Number(item.quantity);
             const info = orderItemMap[item.orderItemId];
+
             if (!info) {
-                throw new AppError('VALIDATION_ERROR', 400, `Order item ${item.orderItemId} does not belong to this order`);
+                throw new AppError(
+                    'VALIDATION_ERROR',
+                    400,
+                    `Order item ${item.orderItemId} does not belong to this order`
+                );
             }
-            if (item.quantity <= 0) {
+            if (Number.isNaN(qty)) {
+                throw new AppError('VALIDATION_ERROR', 400, 'Shipment item quantity must be a valid number greater than 0');
+            }
+            if (qty <= 0) {
                 throw new AppError('VALIDATION_ERROR', 400, 'Shipment item quantity must be greater than 0');
             }
-            if (item.quantity > info.remaining) {
+            if (qty > info.remaining) {
                 throw new AppError(
                     'CONFLICT',
                     409,
-                    `Cannot ship ${item.quantity} of "${order.items.find((oi) => oi.id === item.orderItemId)?.snapshotName}": only ${info.remaining} remaining`
+                    `Cannot ship ${qty} of "${info.snapshotName}": only ${info.remaining} remaining`
                 );
             }
-            // Reserve this quantity for subsequent duplicate checks
-            info.remaining -= item.quantity;
+            // Track consumption within this request to catch duplicate orderItemId entries
+            info.remaining      -= qty;
+            info.alreadyShipped += qty;
+        }
+
+        // Group total deduction by productId
+        const productDeductions = new Map(); // productId → total qty to deduct
+        for (const item of items) {
+            const qty  = Number(item.quantity);
+            const info = orderItemMap[item.orderItemId];
+            if (!info?.productId) continue; // skip soft-deleted products
+            productDeductions.set(
+                info.productId,
+                (productDeductions.get(info.productId) || 0) + qty
+            );
+        }
+
+        // Row-lock each product then perform strict atomic stock deduction
+        for (const [productId, qty] of productDeductions) {
+            // Acquire row-level lock — prevents concurrent deductions on the same product
+            const product = await Product.findByPk(productId, {
+                transaction: t,
+                lock:        Transaction.LOCK.UPDATE,
+            });
+
+            if (!product) {
+                throw new AppError('NOT_FOUND', 404, `Product ${productId} not found during stock deduction`);
+            }
+
+            // Strict update — no GREATEST, no soft floor
+            // WHERE guards ensure we never go negative on quantity or reserved_qty
+            const [affectedRows] = await Product.update(
+                {
+                    quantity:    sequelize.literal(`quantity - ${qty}`),
+                    reservedQty: sequelize.literal(`reserved_qty - ${qty}`),
+                },
+                {
+                    where: {
+                        id:          productId,
+                        quantity:    { [Op.gte]: qty },   // actual stock must cover this shipment
+                        reservedQty: { [Op.gte]: qty },   // reserved must match (no phantom reserves)
+                    },
+                    transaction: t,
+                }
+            );
+
+            // 0 affected rows means stock or reserved_qty is insufficient — hard fail, full rollback
+            if (affectedRows === 0) {
+                throw new AppError(
+                    'CONFLICT',
+                    409,
+                    `Stock deduction failed for "${product.name}": ` +
+                    `available quantity or reserved stock is insufficient. Shipment aborted.`
+                );
+            }
         }
 
         // Create the fulfillment record
         const fulfillment = await Fulfillment.create({
             orderId,
             trackingNumber: trackingNumber || null,
-            courier: courier || null,
-            notes: notes || null,
-            status: 'shipped',
+            courier:        courier || null,
+            notes:          notes || null,
+            status:         status || 'pending',
         }, { transaction: t });
 
-        // Create fulfillment items
+        // Create all fulfillment items
         for (const item of items) {
-            if (item.quantity > 0) {
-                await FulfillmentItem.create({
-                    fulfillmentId: fulfillment.id,
-                    orderItemId: item.orderItemId,
-                    quantity: item.quantity,
-                }, { transaction: t });
-                // Update the map so we correctly compute totals below
-                orderItemMap[item.orderItemId].alreadyShipped += item.quantity;
-            }
+            const qty = Number(item.quantity);
+            await FulfillmentItem.create({
+                fulfillmentId: fulfillment.id,
+                orderItemId:   item.orderItemId,
+                quantity:      qty,
+            }, { transaction: t });
         }
 
         // Recalculate overall order fulfillment status
-        const totalOrderQty = order.items.reduce((sum, oi) => sum + oi.quantity, 0);
+        const totalOrderQty   = order.items.reduce((sum, oi) => sum + oi.quantity, 0);
         const totalShippedQty = Object.values(orderItemMap).reduce((sum, m) => sum + m.alreadyShipped, 0);
 
-        let newStatus;
-        if (totalShippedQty >= totalOrderQty) {
-            newStatus = 'shipped';
-        } else {
-            newStatus = 'partially_shipped';
-        }
+        const newStatus = totalShippedQty >= totalOrderQty ? 'shipped' : 'partially_shipped';
 
-        // Only update status if actually moving forward (don't regress a delivered order)
+        // Only transition forward — never regress a delivered/cancelled/refunded order
         if (!['delivered', 'cancelled', 'refunded'].includes(order.status)) {
             await order.update({ status: newStatus }, { transaction: t });
         }
@@ -542,11 +595,16 @@ const createFulfillment = async (orderId, payload, actingUserId) => {
         try {
             if (AuditService && AuditService.log) {
                 await AuditService.log({
-                    userId: actingUserId,
-                    action: ACTIONS.CREATE,
-                    entity: 'Fulfillment',
+                    userId:   actingUserId,
+                    action:   ACTIONS.CREATE,
+                    entity:   'Fulfillment',
                     entityId: fulfillment.id,
-                    changes: { orderId, trackingNumber, newOrderStatus: newStatus },
+                    changes:  {
+                        orderId,
+                        trackingNumber,
+                        fulfillmentStatus: status || 'pending',
+                        newOrderStatus:    newStatus,
+                    },
                 }, t);
             }
         } catch (err) {}
@@ -554,6 +612,7 @@ const createFulfillment = async (orderId, payload, actingUserId) => {
         return fulfillment;
     });
 };
+
 
 const updateStatus = async (id, status, actingUserId) => {
     return sequelize.transaction(async (t) => {
@@ -579,12 +638,15 @@ const updateStatus = async (id, status, actingUserId) => {
     });
 };
 
-const refundOrder = async (id, actingUserId) => {
+const refundOrder = async (id, actingUserId, isAdmin) => {
+    if (!isAdmin) {
+        throw new AppError('FORBIDDEN', 403, 'You do not have permission to refund orders');
+    }
     return sequelize.transaction(async (t) => {
         const order = await Order.findByPk(id, {
             include: [{ model: Payment, attributes: ADMIN_ORDER_PAYMENT_ATTRIBUTES, required: false }],
             transaction: t,
-            lock: t.LOCK.UPDATE,
+            lock: Transaction.LOCK.UPDATE,
         });
 
         if (!order) {
@@ -596,6 +658,7 @@ const refundOrder = async (id, actingUserId) => {
         }
 
         const previousStatus = order.status;
+        ensureValidStatusTransition(previousStatus, 'refunded');
         await order.update({ status: 'refunded' }, { transaction: t });
 
         if (order.Payment && order.Payment.status !== 'refunded') {
@@ -650,6 +713,7 @@ const cancelOrder = async (id, userId) => {
             throw new AppError('VALIDATION_ERROR', 400, 'Only pending or processing orders can be cancelled');
         }
 
+        ensureValidStatusTransition(previousStatus, 'cancelled');
         await order.update({ status: 'cancelled' }, { transaction: t });
 
         for (const item of order.items) {

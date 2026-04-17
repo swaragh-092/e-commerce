@@ -20,7 +20,7 @@ const updateBrandSchema = Joi.object({
 
 const queryBrandSchema = Joi.object({
     search: Joi.string().optional(),
-    isActive: Joi.string().valid('true', 'false').optional(),
+    isActive: Joi.boolean().optional(),
     page: Joi.number().integer().min(1).optional(),
     limit: Joi.number().integer().min(1).max(100).optional(),
     sortBy: Joi.string().valid('name', 'created_at', 'updated_at').optional(),

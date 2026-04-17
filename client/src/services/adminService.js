@@ -37,6 +37,7 @@ const getUsers = (params = {}) => {
   return api.get(`/users${query ? `?${query}` : ''}`);
 };
 const getUserById = (id) => api.get(`/users/${id}`);
+const updateUserStatus = (id, status) => api.put(`/users/${id}/status`, { status });
 
 // Reviews (admin moderation)
 const getAdminReviews = (params = {}) => {
@@ -100,7 +101,7 @@ export {
   getStats, getSalesChart, getLowStock, getRecentOrders,
   getAccessRoles, getAccessPermissions, getAccessUsers, createAccessRole, updateAccessRole, updateAccessUserRole, createAccessUser,
   getAuditLogs,
-  getUsers, getUserById,
+  getUsers, getUserById, updateUserStatus,
   getAdminReviews, updateReviewStatus, deleteReview,
   getCoupons, createCoupon, updateCoupon, deleteCoupon,
   getAllOrders, getOrderById, updateOrderStatus, refundOrder, createFulfillment,

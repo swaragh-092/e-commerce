@@ -1,6 +1,6 @@
 'use strict';
 
-const { Op } = require('sequelize');
+const { Op, Transaction } = require('sequelize');
 const {
     sequelize,
     Coupon,
@@ -448,6 +448,7 @@ const buildValidationContext = async (userId, rawContext = {}) => {
         cartItems,
         cartSubtotal: Number(cartSubtotal.toFixed(2)),
         shippingCost: Number(toNumber(legacyContext.shippingCost).toFixed(2)),
+        transaction: rawContext.transaction,
     };
 };
 
@@ -475,7 +476,15 @@ const matchesCouponTarget = (coupon, line) => {
     return true;
 };
 
-const assertCouponIsUsable = async (coupon, userId, cartSubtotal) => {
+const assertCouponIsUsable = async (couponInput, userId, cartSubtotal, transaction) => {
+    let coupon = couponInput;
+    if (transaction) {
+        const lockedRecord = await Coupon.findByPk(couponInput.id, { transaction, lock: Transaction.LOCK.UPDATE });
+        if (!lockedRecord) {
+            throw new AppError('NOT_FOUND', 404, 'Coupon not found');
+        }
+        coupon = serializeCoupon(lockedRecord);
+    }
     const status = getCouponStatus(coupon);
     if (status === 'draft') throw new AppError('VALIDATION_ERROR', 400, 'Coupon is still in draft');
     if (status === 'paused') throw new AppError('VALIDATION_ERROR', 400, 'Coupon is paused');
@@ -508,7 +517,7 @@ const assertCouponIsUsable = async (coupon, userId, cartSubtotal) => {
         }
     }
 
-    const userCount = await CouponUsage.count({ where: { couponId: coupon.id, userId } });
+    const userCount = await CouponUsage.count({ where: { couponId: coupon.id, userId }, transaction });
     if (userCount >= coupon.perUserLimit) {
         throw new AppError('VALIDATION_ERROR', 400, 'You have exceeded the usage limit for this coupon');
     }
@@ -519,7 +528,7 @@ const assertCouponIsUsable = async (coupon, userId, cartSubtotal) => {
 };
 
 const evaluateCouponAgainstContext = async (coupon, userId, context) => {
-    await assertCouponIsUsable(coupon, userId, context.cartSubtotal);
+    await assertCouponIsUsable(coupon, userId, context.cartSubtotal, context.transaction);
 
     const eligibleItems = context.cartItems.filter((line) => matchesCouponTarget(coupon, line));
     const eligibleSubtotal = context.cartItems.length

@@ -22,7 +22,7 @@ module.exports = (sequelize, DataTypes) => {
         },
         status: {
             type: DataTypes.STRING(50),
-            defaultValue: 'shipped',
+            defaultValue: 'pending',
         }
     }, {
         tableName: 'fulfillments',

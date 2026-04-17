@@ -49,7 +49,7 @@ export const userService = {
   getMyOrders: async (params = {}) => {
     const response = await api.get('/orders', { params });
     return {
-      rows: response.data.data || [],
+      data: response.data.data || [],
       meta: response.data.meta || {},
     };
   },

@@ -3,9 +3,10 @@ import api from './api';
 const buildVariantParams = (variantId) => (variantId ? { params: { variantId } } : undefined);
 
 export const wishlistService = {
-  getWishlist: async () => {
-    const response = await api.get('/wishlist');
-    return Object.assign(response.data?.data || [], { meta: response.data?.meta || {} });
+  getWishlist: async (params = {}) => {
+    const query = new URLSearchParams(params).toString();
+    const response = await api.get(`/wishlist${query ? `?${query}` : ''}`);
+    return { data: response.data?.data || [], meta: response.data?.meta || {} };
   },
 
   addItem: async (productId, variantId = null) => {

@@ -29,7 +29,7 @@ export const WishlistProvider = ({ children }) => {
     }
     try {
       const response = await wishlistService.getWishlist();
-      const items = Array.isArray(response) ? response : [];
+      const items = Array.isArray(response.data) ? response.data : [];
       const meta = response?.meta || {};
       const validItems = items.filter((item) => {
         const productId = item?.productId ?? item?.Product?.id;

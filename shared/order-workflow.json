@@ -22,6 +22,7 @@
   },
   "customerCancelableStatuses": ["pending_payment", "processing"],
   "adminRefundableStatuses": ["paid", "processing", "partially_shipped", "shipped", "delivered"],
+  "adminFulfillableStatuses": ["paid", "processing", "partially_shipped"],
   "adminSummaryGroups": [
     {
       "key": "pendingPayment",

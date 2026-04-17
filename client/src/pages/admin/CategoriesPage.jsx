@@ -181,7 +181,7 @@ const CategoriesPage = () => {
     try {
       setLoading(true);
       const res = await getCategoryTree();
-      setCategories(res?.data?.categories || []);
+      setCategories(res?.data || []);
     } catch {
       notify('Failed to load categories.', 'error');
     } finally {

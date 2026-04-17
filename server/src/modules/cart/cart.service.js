@@ -1,4 +1,5 @@
 'use strict';
+const { Transaction } = require('sequelize');
 const {
     sequelize,
     Cart,
@@ -101,9 +102,11 @@ const getCart = async (userId, sessionId) => {
 const addItem = async (userId, sessionId, payload) => {
     return sequelize.transaction(async (t) => {
         const cart = await getActiveCartByOwner(userId, sessionId, t);
+        // Lock the cart to prevent concurrent item additions from bypassing stock limits
+        await Cart.findByPk(cart.id, { transaction: t, lock: Transaction.LOCK.UPDATE });
         const { productId, variantId, quantity = 1 } = payload;
 
-        const product = await Product.findByPk(productId, { transaction: t });
+        const product = await Product.findByPk(productId, { transaction: t, lock: Transaction.LOCK.UPDATE });
         if (!product) {
             throw new AppError('NOT_FOUND', 404, 'Product not found or unavailable');
         }
@@ -113,6 +116,7 @@ const addItem = async (userId, sessionId, payload) => {
             const variant = await ProductVariant.findOne({
                 where: { id: variantId, productId },
                 transaction: t,
+                lock: Transaction.LOCK.UPDATE,
             });
             if (!variant) {
                 throw new AppError('NOT_FOUND', 404, 'Variant not found');

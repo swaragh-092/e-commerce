@@ -2,6 +2,7 @@
 const OrderService = require('./order.service');
 const { success, paginated } = require('../../utils/response');
 const { PERMISSIONS, getPermissionsForUser } = require('../../config/permissions');
+const AppError = require('../../utils/AppError');
 
 const hasOrderAdminAccess = (user) => getPermissionsForUser(user).includes(PERMISSIONS.ORDERS_READ);
 
@@ -37,6 +38,9 @@ const getOrderById = async (req, res, next) => {
 
 const updateStatus = async (req, res, next) => {
   try {
+    if (!hasOrderAdminAccess(req.user)) {
+      throw new AppError('FORBIDDEN', 403, 'You do not have permission to update order status');
+    }
     const order = await OrderService.updateStatus(req.params.id, req.validated.status, req.user.id);
     req._auditAction = 'STATUS_CHANGE';
     req._auditChanges = { status: req.validated.status };
@@ -57,7 +61,8 @@ const cancelOrder = async (req, res, next) => {
 
 const refundOrder = async (req, res, next) => {
   try {
-    const order = await OrderService.refundOrder(req.params.id, req.user.id);
+    const isAdmin = hasOrderAdminAccess(req.user);
+    const order = await OrderService.refundOrder(req.params.id, req.user.id, isAdmin);
     req._auditAction = 'STATUS_CHANGE';
     req._auditChanges = { status: 'refunded' };
     return success(res, order, 'Order refunded successfully');

@@ -10,9 +10,8 @@ import ShoppingBagIcon from '@mui/icons-material/ShoppingBag';
 import LocalShippingIcon from '@mui/icons-material/LocalShipping';
 import { Link, useNavigate } from 'react-router-dom';
 import { useCart } from '../../hooks/useCart';
-import { useSettings } from '../../hooks/useSettings';
+import { useSettings, useCurrency, useFeatureFlag } from '../../hooks/useSettings';
 import { getMediaUrl } from '../../utils/media';
-import { useCurrency } from '../../hooks/useSettings';
 import PageSEO from '../../components/common/PageSEO';
 import { AuthContext } from '../../context/AuthContext';
 import { getEligibleCoupons } from '../../services/adminService';
@@ -59,8 +58,11 @@ const CartPage = () => {
 
     const estimatedTotal = subtotal + shippingCost + taxAmount;
 
+    const couponsEnabled = useFeatureFlag('coupons');
+    const showAvailableCoupons = useFeatureFlag('showAvailableCoupons');
+
     useEffect(() => {
-        if (!user || items.length === 0 || settings?.features?.coupons === false || settings?.features?.showAvailableCoupons === false) {
+        if (!user || items.length === 0 || !couponsEnabled || !showAvailableCoupons) {
             setOfferSummary(null);
             return;
         }
@@ -68,7 +70,7 @@ const CartPage = () => {
         getEligibleCoupons({ subtotal, shippingCost })
             .then((res) => setOfferSummary(res.data?.data || null))
             .catch(() => setOfferSummary(null));
-    }, [user, items.length, subtotal, shippingCost, settings?.features?.coupons, settings?.features?.showAvailableCoupons]);
+    }, [user, items.length, subtotal, shippingCost, couponsEnabled, showAvailableCoupons]);
 
     if (loading) {
         return (

@@ -43,6 +43,10 @@ const salesChartQuerySchema = Joi.object({
   }),
 });
 
+const lowStockQuerySchema = Joi.object({
+  threshold: Joi.number().integer().min(1).default(10).optional(),
+});
+
 const createStaffUserSchema = Joi.object({
   firstName: Joi.string().max(100).required(),
   lastName: Joi.string().max(100).required(),
@@ -56,5 +60,6 @@ module.exports = {
   createRoleSchema,
   updateRoleSchema,
   salesChartQuerySchema,
+  lowStockQuerySchema,
   createStaffUserSchema,
 };

@@ -61,10 +61,8 @@ const ProductListPage = () => {
             setLoading(true);
             try {
                 const res = await getProducts(filters);
-                if (res.success) {
-                    setProducts(res.data);
-                    if (res.meta) setMeta(res.meta);
-                }
+                setProducts(res.data || []);
+                if (res.meta) setMeta(res.meta);
             } catch (err) {
                 console.error(err);
             } finally {
@@ -72,7 +70,8 @@ const ProductListPage = () => {
             }
         };
         fetchProducts();
-    }, [searchParams]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [searchParams.toString()]);
 
     // Resolve the category slug → full breadcrumb path for the contextual breadcrumb on PDP
     // e.g. "vegetable" slug → "Vegetable > Roots > Beetroot" when filtering by beetroot
@@ -95,10 +94,10 @@ const ProductListPage = () => {
         };
 
         getCategoryTree().then((res) => {
-            const path = findPathInTree(res?.data?.categories || [], categorySlug);
+            const path = findPathInTree(res?.data || [], categorySlug);
             setCategoryName(path || '');
         }).catch(() => setCategoryName(''));
-    }, [searchParams]);
+    }, [searchParams.get('category')]);
 
     const handleFilterChange = (newFilters) => {
         const params = new URLSearchParams();

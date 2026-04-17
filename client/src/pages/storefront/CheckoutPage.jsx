@@ -462,7 +462,7 @@ const CheckoutPage = () => {
                                 return (
                                     <Box key={item.id || `${item.productId}-${item.variantId || 'base'}`} sx={{ display: 'flex', justifyContent: 'space-between', mb: 1 }}>
                                         <Typography variant="body2">
-                                            {itemName} {item.variant ? `(${getVariantOptionLabel(item.variant)})` : ''} � {quantity}
+                                            {itemName} {item.variant ? `(${getVariantOptionLabel(item.variant)})` : ''} × {quantity}
                                         </Typography>
                                         <Typography variant="body2" fontWeight={600}>
                                             {formatPrice(itemPrice * quantity)}

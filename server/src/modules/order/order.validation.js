@@ -18,10 +18,13 @@ const updateOrderStatusSchema = Joi.object({
     status: Joi.string().valid(...ORDER_STATUS_VALUES).required()
 });
 
+const FULFILLMENT_STATUS_VALUES = ['pending', 'shipped', 'delivered', 'returned'];
+
 const createFulfillmentSchema = Joi.object({
     trackingNumber: Joi.string().max(255).allow(null, ''),
     courier: Joi.string().max(100).allow(null, ''),
     notes: Joi.string().allow(null, ''),
+    status: Joi.string().valid(...FULFILLMENT_STATUS_VALUES).default('pending'),
     items: Joi.array().items(Joi.object({
         orderItemId: Joi.string().uuid().required(),
         quantity: Joi.number().integer().min(1).required(),

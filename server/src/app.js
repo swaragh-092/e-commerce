@@ -45,7 +45,7 @@ app.use('/api', globalLimiter);
 // Important: Webhook routes must be parsed as raw, so only apply json parser if not a webhook
 app.use((req, res, next) => {
   if (req.originalUrl.includes('/webhook')) {
-    next();
+    express.raw({ type: 'application/json' })(req, res, next);
   } else {
     express.json()(req, res, next);
   }

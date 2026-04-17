@@ -174,7 +174,7 @@ const ProductsManagePage = () => {
   // Load flat category list for the filter dropdown
   useEffect(() => {
     getCategoryTree().then((res) => {
-      const tree = res?.data?.categories || [];
+      const tree = res?.data || [];
       const flat = [];
       const flatten = (arr, path = '') => {
         arr.forEach((c) => {

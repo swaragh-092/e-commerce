@@ -1,7 +1,7 @@
 'use strict';
 
 const cron = require('node-cron');
-const { Op } = require('sequelize');
+const { Op, Transaction } = require('sequelize');
 const { Order, OrderItem, Product, ProductVariant, sequelize } = require('../modules');
 const AuditService = require('../modules/audit/audit.service');
 const logger = require('../utils/logger');
@@ -21,7 +21,7 @@ const run = () => {
           status: 'pending_payment',
           createdAt: { [Op.lt]: fifteenMinsAgo },
         },
-        lock: transaction.LOCK.UPDATE,  // prevent concurrent job runs from racing
+        lock: Transaction.LOCK.UPDATE,  // prevent concurrent job runs from racing
         skipLocked: true,
         transaction,
       });
@@ -29,7 +29,7 @@ const run = () => {
       const orderItems = expiredOrders.length > 0
         ? await OrderItem.findAll({
             where: { orderId: expiredOrders.map((order) => order.id) },
-            lock: transaction.LOCK.UPDATE,
+            lock: Transaction.LOCK.UPDATE,
             of: OrderItem,
             transaction,
           })

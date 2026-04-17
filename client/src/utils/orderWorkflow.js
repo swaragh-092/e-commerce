@@ -37,5 +37,8 @@ export const isOrderRefundableStatus = (status) =>
 export const isOrderCustomerCancelableStatus = (status) =>
   (orderWorkflow.customerCancelableStatuses || []).includes(status);
 
+export const isOrderFulfillableStatus = (status) =>
+  (orderWorkflow.adminFulfillableStatuses || []).includes(status);
+
 export const countOrdersByStatuses = (orders = [], statuses = []) =>
   orders.filter((order) => statuses.includes(order?.status)).length;

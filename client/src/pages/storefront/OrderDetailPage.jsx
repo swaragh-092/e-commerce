@@ -23,8 +23,8 @@ import { userService } from '../../services/userService';
 import {
   getOrderStatusColor,
   getOrderStatusLabel,
-  isOrderCustomerCancelableStatus,
 } from '../../utils/orderWorkflow';
+import { useOrderStatusTransitions } from '../../hooks/useOrderStatusTransitions';
 
 const OrderDetailPage = () => {
   const { id } = useParams();
@@ -72,7 +72,8 @@ const OrderDetailPage = () => {
   );
   const appliedDiscounts = Array.isArray(order?.appliedDiscounts) ? order.appliedDiscounts : [];
   const address = order?.shippingAddressSnapshot;
-  const canCancel = isOrderCustomerCancelableStatus(order?.status);
+  const { isCancelable } = useOrderStatusTransitions(order?.status);
+  const canCancel = isCancelable;
 
   if (loading) {
     return (
@@ -151,7 +152,18 @@ const OrderDetailPage = () => {
                         .join(', ')}
                     </Typography>
                   )}
-                  <Typography variant="body2" color="text.secondary">Qty: {item.quantity}</Typography>
+                  <Typography variant="body2" color="text.secondary" sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                    Ordered: {item.quantity}
+                    {(item.fulfillmentItems || []).length > 0 && (
+                      <Chip 
+                        size="small" 
+                        color="success" 
+                        variant="outlined" 
+                        label={`Shipped: ${(item.fulfillmentItems || []).reduce((sum, fi) => sum + fi.quantity, 0)}`} 
+                        sx={{ height: 20, fontSize: '0.7rem' }} 
+                      />
+                    )}
+                  </Typography>
                 </Box>
                 <Box textAlign="right">
                   <Typography variant="body2" color="text.secondary">

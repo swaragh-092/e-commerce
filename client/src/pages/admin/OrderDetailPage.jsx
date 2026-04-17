@@ -43,11 +43,12 @@ import { PERMISSIONS } from '../../utils/permissions';
 import { getApiErrorMessage } from '../../utils/apiErrors';
 import {
   ORDER_STATUS_STEPPER,
-  getAllowedOrderStatuses,
   getOrderStatusColor,
   getOrderStatusLabel,
   isOrderRefundableStatus,
+  isOrderFulfillableStatus,
 } from '../../utils/orderWorkflow';
+import { useOrderStatusTransitions } from '../../hooks/useOrderStatusTransitions';
 
 const DetailCard = ({ title, children }) => (
   <Paper
@@ -86,6 +87,7 @@ const FulfillmentDialog = ({ open, onClose, orderItems, onSave, loading }) => {
   const [trackingNumber, setTrackingNumber] = useState('');
   const [courier, setCourier] = useState('');
   const [notes, setNotes] = useState('');
+  const [status, setStatus] = useState('pending');
   const [items, setItems] = useState({});
 
   useEffect(() => {
@@ -102,6 +104,7 @@ const FulfillmentDialog = ({ open, onClose, orderItems, onSave, loading }) => {
       setTrackingNumber('');
       setCourier('');
       setNotes('');
+      setStatus('pending');
     }
   }, [open, orderItems]);
 
@@ -116,7 +119,7 @@ const FulfillmentDialog = ({ open, onClose, orderItems, onSave, loading }) => {
       .map(([orderItemId, quantity]) => ({ orderItemId, quantity }));
 
     if (shipmentItems.length === 0) return;
-    onSave({ trackingNumber, courier, notes, items: shipmentItems });
+    onSave({ trackingNumber, courier, notes, status, items: shipmentItems });
   };
 
   return (
@@ -139,6 +142,19 @@ const FulfillmentDialog = ({ open, onClose, orderItems, onSave, loading }) => {
             value={trackingNumber}
             onChange={(e) => setTrackingNumber(e.target.value)}
           />
+          <TextField
+            select
+            label="Shipment Status"
+            fullWidth
+            size="small"
+            value={status}
+            onChange={(e) => setStatus(e.target.value)}
+          >
+            <MenuItem value="pending">Pending</MenuItem>
+            <MenuItem value="shipped">Shipped</MenuItem>
+            <MenuItem value="delivered">Delivered</MenuItem>
+            <MenuItem value="returned">Returned</MenuItem>
+          </TextField>
           <TextField
             label="Notes"
             fullWidth
@@ -248,9 +264,12 @@ const OrderDetailPage = () => {
   const address = order?.shippingAddressSnapshot;
   const payment = order?.Payment || null;
 
+  const { allowedNextStatuses, isRefundable, isFulfillable } = useOrderStatusTransitions(order?.status);
+
   const availableStatuses = useMemo(() => {
-    return getAllowedOrderStatuses(order?.status);
-  }, [order?.status]);
+    if (!order?.status) return [];
+    return [order.status, ...allowedNextStatuses];
+  }, [order?.status, allowedNextStatuses]);
 
   const currentStep = useMemo(() => {
     const stepIndex = ORDER_STATUS_STEPPER.indexOf(order?.status);
@@ -262,7 +281,8 @@ const OrderDetailPage = () => {
     return fullName || address?.fullName || 'Customer unavailable';
   }, [address?.fullName, order?.User?.firstName, order?.User?.lastName]);
 
-  const canRefund = canRefundOrders && isOrderRefundableStatus(order?.status);
+  const canRefund = canRefundOrders && isRefundable;
+  const canFulfill = canUpdateOrderStatus && isFulfillable;
 
   const handleStatusUpdate = async () => {
     if (!canUpdateOrderStatus) {
@@ -369,7 +389,7 @@ const OrderDetailPage = () => {
               {updating ? 'Processing…' : 'Issue Refund'}
             </Button>
           )}
-          {canUpdateOrderStatus && !['cancelled', 'refunded', 'delivered'].includes(order.status) && (
+          {canFulfill && (
              <Button 
                variant="contained" 
                color="primary" 

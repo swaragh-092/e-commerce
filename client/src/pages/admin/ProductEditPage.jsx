@@ -156,15 +156,15 @@ const ProductEditPage = () => {
     const load = async () => {
       try {
         const catRes = await getCategoryTree();
-        setCategories(catRes?.data?.categories || []);
+        setCategories(catRes?.data || []);
 
         const brandRes = await brandService.getBrands({ limit: 100, isActive: 'true' });
         setBrands(brandRes?.data?.data || []);
 
         if (!isNew) {
           const prodRes = await getProductById(id);
-          if (prodRes?.data?.product) {
-            const p = prodRes.data.product;
+          if (prodRes?.data) {
+            const p = prodRes.data;
             setFormData({
               name: p.name,
               description: p.description || '',
@@ -226,7 +226,14 @@ const ProductEditPage = () => {
       };
       if (isNew) {
         const res = await createProduct(payload);
-        const newId = res?.data?.product?.id;
+        const newId = res?.data?.id;
+
+        if (!newId) {
+          notify('Product created but ID not returned. Please refresh the product list.', 'warning');
+          navigate('/admin/products');
+          return;
+        }
+
         notify('Product created successfully. You can now add variants below.', 'success');
         navigate(`/admin/products/${newId}/edit`, { replace: true });
       } else {
@@ -755,7 +762,7 @@ const VariantsPanel = ({ productId, flatCatFiles = [], canManageVariants = false
       const attrRows = attrRowsRes?.data?.data || [];
       const varData = varRes?.data?.data || [];
       const attrData = attrRes?.data?.data?.rows || attrRes?.data?.data || [];
-      const product = productRes?.data?.product || null;
+      const product = productRes?.data || null;
       setProductAttributes(attrRows);
       setVariants(varData.map((variant) => ({
         ...variant,
