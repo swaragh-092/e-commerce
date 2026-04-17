@@ -685,17 +685,21 @@ const ProductsManagePage = () => {
           loading={loading}
           paginationMode="server"
           paginationModel={paginationModel}
-          onPaginationModelChange={setPaginationModel}
-          pageSizeOptions={[10, 20, 50]}
+          onPaginationModelChange={(newModel) => setPaginationModel(newModel)}
+          pageSizeOptions={[10, 20, 50, 100]}
           sortingMode="server"
           sortModel={sortModel}
-          onSortModelChange={(m) => { setSortModel(m); setPaginationModel((p) => ({ ...p, page: 0 })); }}
+          onSortModelChange={(m) => { 
+            setSortModel(m); 
+            setPaginationModel((p) => ({ ...p, page: 0 })); 
+          }}
           checkboxSelection={canBulkModify}
           rowSelectionModel={selectedIds}
           onRowSelectionModelChange={(ids) => setSelectedIds(ids)}
           disableRowSelectionOnClick
           getRowHeight={() => 'auto'}
           getEstimatedRowHeight={() => 80}
+          pagination
           sx={{
             border: 0,
             '& .MuiDataGrid-cell': {

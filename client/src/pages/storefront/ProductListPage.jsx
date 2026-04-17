@@ -133,7 +133,7 @@ const ProductListPage = () => {
 
             <Grid container spacing={4}>
                 {showFilters && !isMobile && (
-                    <Grid item md={3} lg={2.5}>
+                    <Grid item md={3} lg={2.5} sx={{ position: 'sticky', top: 24, alignSelf: 'flex-start', height: 'fit-content' }}>
                         <ProductFilters filters={filters} onFilterChange={handleFilterChange} />
                     </Grid>
                 )}
