@@ -1,11 +1,22 @@
 import React, { useCallback, useState } from 'react';
-import { Box, Typography, CircularProgress, IconButton, Stack } from '@mui/material';
-import { CloudUpload as UploadIcon, Close as CloseIcon } from '@mui/icons-material';
+import { 
+  Box, 
+  Typography, 
+  CircularProgress, 
+  IconButton, 
+  Stack, 
+  Button 
+} from '@mui/material';
+import UploadIcon from '@mui/icons-material/CloudUpload';
+import CloseIcon from '@mui/icons-material/Close';
+import DeleteIcon from '@mui/icons-material/Delete';
+import SendIcon from '@mui/icons-material/Send';
 import api from '../../services/api';
 import { useNotification } from '../../context/NotificationContext';
 
-const MediaUploader = ({ onUploadSuccess, multiple = true }) => {
+const MediaUploader = ({ onUploadSuccess, multiple = true, autoUpload = true }) => {
   const [uploading, setUploading] = useState(false);
+  const [selectedFiles, setSelectedFiles] = useState([]);
   const notify = useNotification();
 
   const handleUpload = async (file) => {
@@ -38,20 +49,37 @@ const MediaUploader = ({ onUploadSuccess, multiple = true }) => {
   const onDrop = useCallback(
     async (e) => {
       e.preventDefault();
-      const files = Array.from(e.dataTransfer?.files || e.target?.files || []);
-      if (files.length === 0) return;
+      const newFiles = Array.from(e.dataTransfer?.files || e.target?.files || []);
+      if (newFiles.length === 0) return;
 
-      setUploading(true);
-      // Upload one by one to avoid overwhelming the server or causing rate limit issues
-      for (const file of files) {
-        await handleUpload(file);
+      if (autoUpload) {
+        setUploading(true);
+        for (const file of newFiles) {
+          await handleUpload(file);
+        }
+        setUploading(false);
+      } else {
+        setSelectedFiles((prev) => [...prev, ...newFiles]);
       }
-      setUploading(false);
-      // Reset input value so same file can be selected again if needed
+
       if (e.target) e.target.value = '';
     },
-    [onUploadSuccess]
+    [autoUpload, onUploadSuccess]
   );
+
+  const startManualUpload = async () => {
+    if (selectedFiles.length === 0) return;
+    setUploading(true);
+    for (const file of selectedFiles) {
+      await handleUpload(file);
+    }
+    setUploading(false);
+    setSelectedFiles([]);
+  };
+
+  const removeFile = (index) => {
+    setSelectedFiles((prev) => prev.filter((_, i) => i !== index));
+  };
 
   return (
     <Box
@@ -94,13 +122,63 @@ const MediaUploader = ({ onUploadSuccess, multiple = true }) => {
       ) : (
         <>
           <UploadIcon sx={{ fontSize: 40, color: 'text.secondary', mb: 1.5 }} />
-          <Typography variant="body2" color="text.primary" fontWeight={600}>
-            {multiple ? 'Drop images here or click to upload' : 'Drop image here or click to upload'}
+          <Typography variant="body2" color="text.primary" fontWeight={600} textAlign="center">
+            {multiple ? 'Drop images here or click to select' : 'Drop image here or click to select'}
           </Typography>
           <Typography variant="caption" color="text.secondary">
             JPEG, PNG, WEBP, GIF (Max 5MB each)
           </Typography>
         </>
+      )}
+
+      {selectedFiles.length > 0 && !uploading && (
+        <Box 
+          onClick={(e) => e.stopPropagation()} 
+          sx={{ 
+            mt: 3, 
+            width: '100%', 
+            maxHeight: 200, 
+            overflowY: 'auto',
+            bgcolor: 'background.paper',
+            borderRadius: 1,
+            border: '1px solid',
+            borderColor: 'divider',
+            p: 1
+          }}
+        >
+          <Stack spacing={1}>
+            {selectedFiles.map((file, i) => (
+              <Box 
+                key={i} 
+                sx={{ 
+                  display: 'flex', 
+                  alignItems: 'center', 
+                  justifyContent: 'space-between', 
+                  bgcolor: 'action.hover', 
+                  p: 0.5, 
+                  px: 1, 
+                  borderRadius: 1 
+                }}
+              >
+                <Typography variant="caption" noWrap sx={{ maxWidth: '70%', fontWeight: 500 }}>
+                  {file.name} ({(file.size / 1024 / 1024).toFixed(2)}MB)
+                </Typography>
+                <IconButton size="small" color="error" onClick={() => removeFile(i)}>
+                  <DeleteIcon fontSize="inherit" />
+                </IconButton>
+              </Box>
+            ))}
+          </Stack>
+          <Button
+            fullWidth
+            variant="contained"
+            startIcon={<SendIcon />}
+            onClick={startManualUpload}
+            sx={{ mt: 2, borderRadius: 2 }}
+          >
+            Upload {selectedFiles.length} {selectedFiles.length === 1 ? 'File' : 'Files'}
+          </Button>
+        </Box>
       )}
     </Box>
   );

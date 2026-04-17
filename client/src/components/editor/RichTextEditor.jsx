@@ -10,12 +10,11 @@ const getEditorHtml = (quill) => {
 };
 
 const applyHtmlToEditor = (quill, html) => {
-  if (!html) {
-    quill.setText('');
-    return;
+  // Always clear the editor first to ensure we are replacing content, not appending
+  quill.setText('');
+  if (html) {
+    quill.clipboard.dangerouslyPasteHTML(0, html, 'silent');
   }
-
-  quill.clipboard.dangerouslyPasteHTML(0, html, 'silent');
 };
 
 const restoreSelection = (quill, selection) => {
@@ -57,7 +56,15 @@ const RichTextEditor = ({
       return undefined;
     }
 
-    const quill = new Quill(containerRef.current, {
+    // Clear anything that might be in the container (helpful for React Strict Mode or hot reloads)
+    containerRef.current.innerHTML = '';
+
+    // Create a dedicate editor div inside the container
+    const editorDiv = document.createElement('div');
+    editorDiv.style.minHeight = typeof minHeight === 'number' ? `${minHeight}px` : minHeight;
+    containerRef.current.appendChild(editorDiv);
+
+    const quill = new Quill(editorDiv, {
       theme: 'snow',
       modules,
       formats,
@@ -79,8 +86,12 @@ const RichTextEditor = ({
     return () => {
       quill.off('text-change', handleTextChange);
       quillRef.current = null;
+      // Optional: clean up the container's HTML when unmounting
+      if (containerRef.current) {
+        containerRef.current.innerHTML = '';
+      }
     };
-  }, [formats, modules, placeholder]);
+  }, [formats, modules, placeholder, minHeight]);
 
   useEffect(() => {
     const quill = quillRef.current;

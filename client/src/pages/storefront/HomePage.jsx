@@ -38,8 +38,8 @@ const HomePage = () => {
     const heroTextColor  = hero.color            || '#ffffff';
     const heroTitle      = str(hero.title,       'Shop the Latest');
     const heroSubtitle   = str(hero.subtitle,    'Discover thousands of products at great prices.');
-    const heroBtnText    = str(hero.buttonText,  'Shop Now');
-    const heroBtnLink    = str(hero.buttonLink,  '/products');
+    const heroBtnText    = hero.buttonText;
+    const heroBtnLink    = hero.buttonLink;
 
     // Categories
     const showCategories    = bool(hp.showCategories,    true);
@@ -138,6 +138,7 @@ const HomePage = () => {
                 color: heroTextColor,
                 py: { xs: 8, md: 12 },
                 textAlign: 'center',
+                minHeight: '60vh',
             }}>
                 {bgType === 'image' && bgImage && (
                     <Box sx={{ position: 'absolute', inset: 0, bgcolor: 'black', opacity: overlayOpacity, zIndex: 1 }} />
@@ -149,15 +150,17 @@ const HomePage = () => {
                     <Typography variant="h6" sx={{ opacity: 0.9, mb: 4 }}>
                         {heroSubtitle}
                     </Typography>
-                    <Button
-                        variant="contained"
-                        size="large"
-                        component={Link}
-                        to={heroBtnLink}
-                        sx={{ bgcolor: 'white', color: 'primary.main', '&:hover': { bgcolor: 'grey.100' }, py: 1.5, px: 4, fontSize: '1.1rem' }}
-                    >
-                        {heroBtnText}
-                    </Button>
+                    {heroBtnText && heroBtnLink && (
+                        <Button
+                            variant="contained"
+                            size="large"
+                            component={Link}
+                            to={heroBtnLink}
+                            sx={{ bgcolor: 'white', color: 'primary.main', '&:hover': { bgcolor: 'grey.100' }, py: 1.5, px: 4, fontSize: '1.1rem' }}
+                        >
+                            {heroBtnText}
+                        </Button>
+                    )}
                 </Container>
             </Box>
 
