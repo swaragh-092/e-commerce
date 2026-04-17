@@ -22,7 +22,7 @@ import { useParams, useNavigate } from 'react-router-dom';
 import PrintIcon from '@mui/icons-material/Print';
 import LocalShippingIcon from '@mui/icons-material/LocalShipping';
 import { useCurrency } from '../../hooks/useSettings';
-import { getOrderById, updateOrderStatus, refundOrder, createFulfillment } from '../../services/adminService';
+import { getOrderById, updateOrderStatus, refundOrder, createFulfillment, updateFulfillmentStatus } from '../../services/adminService';
 import { useNotification } from '../../context/NotificationContext';
 import {
   Dialog,
@@ -50,10 +50,10 @@ import {
 } from '../../utils/orderWorkflow';
 import { useOrderStatusTransitions } from '../../hooks/useOrderStatusTransitions';
 
-const DetailCard = ({ title, children }) => (
+const DetailCard = ({ title, children, sx = {} }) => (
   <Paper
     elevation={0}
-    sx={{ p: 3, borderRadius: 3, border: '1px solid', borderColor: 'divider' }}
+    sx={{ p: 3, borderRadius: 3, border: '1px solid', borderColor: 'divider', ...sx }}
   >
     <Typography variant="h6" fontWeight={700} mb={2}>
       {title}
@@ -337,6 +337,16 @@ const OrderDetailPage = () => {
     }
   };
 
+  const handleFulfillmentStatusUpdate = async (fulfillmentId, status) => {
+    try {
+      const response = await updateFulfillmentStatus(id, fulfillmentId, status);
+      setOrder(response.data.data);
+      notify('Shipment status updated successfully.', 'success');
+    } catch (err) {
+      notify(getApiErrorMessage(err, 'Failed to update shipment status.'), 'error');
+    }
+  };
+
   if (loading) {
     return (
       <Box sx={{ display: 'flex', justifyContent: 'center', mt: 8 }}>
@@ -452,6 +462,11 @@ const OrderDetailPage = () => {
                   {item.variantInfo && (
                     <Typography variant="caption" display="block" color="text.secondary">
                       {Object.entries(item.variantInfo)
+                        .filter(([key]) => ![
+                          'id', 'productId', 'variantId', 'orderId', 'sku', 'price', 
+                          'isActive', 'stockQty', 'createdAt', 'updatedAt', 'deletedAt', 
+                          'sortOrder', 'version', 'isDefault'
+                        ].includes(key))
                         .map(([key, value]) => `${key}: ${value}`)
                         .join(', ')}
                     </Typography>
@@ -516,6 +531,60 @@ const OrderDetailPage = () => {
             </Box>
           </DetailCard>
 
+          <Box sx={{ mt: 3, display: 'flex', gap: 2, alignItems: 'stretch' }}>
+            <DetailCard title="Payment Details" sx={{ flex: 1 }}>
+              <Stack spacing={1.25}>
+                <Box>
+                  <Typography variant="caption" color="text.secondary">
+                    Status
+                  </Typography>
+                  <Typography variant="body2" fontWeight={600}>
+                    {payment ? getOrderStatusLabel(payment.status) : 'Not captured'}
+                  </Typography>
+                </Box>
+                <Box>
+                  <Typography variant="caption" color="text.secondary">
+                    Provider
+                  </Typography>
+                  <Typography variant="body2">{payment?.provider || '—'}</Typography>
+                </Box>
+                <Box>
+                  <Typography variant="caption" color="text.secondary">
+                    Transaction
+                  </Typography>
+                  <Typography variant="body2">{payment?.transactionId || 'Pending / unavailable'}</Typography>
+                </Box>
+                <Box>
+                  <Typography variant="caption" color="text.secondary">
+                    Amount
+                  </Typography>
+                  <Typography variant="body2">
+                    {payment ? formatPrice(payment.amount || 0) : formatPrice(order.total || 0)}
+                  </Typography>
+                </Box>
+              </Stack>
+            </DetailCard>
+
+            <DetailCard title="Shipping Address" sx={{ flex: 1 }}>
+              {address ? (
+                <Stack spacing={0.5}>
+                  <Typography variant="body2">{address.fullName}</Typography>
+                  <Typography variant="body2">{address.addressLine1}</Typography>
+                  {address.addressLine2 && <Typography variant="body2">{address.addressLine2}</Typography>}
+                  <Typography variant="body2">
+                    {address.city}, {address.state} {address.postalCode}
+                  </Typography>
+                  <Typography variant="body2">{address.country}</Typography>
+                  {address.phone && <Typography variant="body2">{address.phone}</Typography>}
+                </Stack>
+              ) : (
+                <Typography variant="body2" color="text.secondary">
+                  No shipping snapshot was saved for this order.
+                </Typography>
+              )}
+            </DetailCard>
+          </Box>
+
           {order.fulfillments && order.fulfillments.length > 0 && (
             <Box sx={{ mt: 3 }}>
               <DetailCard title="Shipments / Sub-Orders">
@@ -524,32 +593,50 @@ const OrderDetailPage = () => {
                     <Paper 
                       key={f.id} 
                       elevation={0} 
-                      sx={{ p: 2, border: '1px solid', borderColor: 'divider', borderRadius: 2, bgcolor: 'grey.50' }}
+                      sx={{ p: 2.5, border: '1px solid', borderColor: 'divider', borderRadius: 2, bgcolor: 'grey.50' }}
                     >
-                      <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2 }}>
-                        <Box>
-                          <Typography variant="subtitle2" fontWeight={700}>Shipment #{index + 1}</Typography>
-                          <Typography variant="caption" color="text.secondary">
-                            Status: <Chip size="small" label={f.status} color="primary" sx={{ height: 20 }} />
-                          </Typography>
+                      <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', mb: 2 }}>
+                        <Box sx={{ flexGrow: 1 }}>
+                          <Typography variant="subtitle2" fontWeight={700} sx={{ mb: 0.5 }}>Shipment #{index + 1}</Typography>
+                          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                            <Typography variant="caption" color="text.secondary">Status:</Typography>
+                            <FormControl size="small" variant="standard" sx={{ minWidth: 100 }}>
+                              <Select
+                                value={f.status}
+                                onChange={(e) => handleFulfillmentStatusUpdate(f.id, e.target.value)}
+                                sx={{ 
+                                  fontSize: '0.75rem', 
+                                  fontWeight: 600,
+                                  color: 'primary.main',
+                                  '&:before, &:after': { display: 'none' }
+                                }}
+                              >
+                                <MenuItem value="pending" sx={{ fontSize: '0.75rem' }}>Pending</MenuItem>
+                                <MenuItem value="shipped" sx={{ fontSize: '0.75rem' }}>Shipped</MenuItem>
+                                <MenuItem value="delivered" sx={{ fontSize: '0.75rem' }}>Delivered</MenuItem>
+                                <MenuItem value="returned" sx={{ fontSize: '0.75rem' }}>Returned</MenuItem>
+                              </Select>
+                            </FormControl>
+                          </Box>
                         </Box>
                         <Box sx={{ textAlign: 'right' }}>
                           <Typography variant="body2" fontWeight={600}>{f.courier || 'Standard Courier'}</Typography>
-                          <Typography variant="body2" color="primary">{f.trackingNumber || 'No tracking available'}</Typography>
+                          <Typography variant="body2" color="primary" sx={{ fontWeight: 500 }}>{f.trackingNumber || 'No tracking'}</Typography>
                         </Box>
                       </Box>
-                      <Divider sx={{ mb: 1.5 }} />
-                      <Stack spacing={1}>
+                      <Divider sx={{ mb: 2 }} />
+                      <Stack spacing={1.25} sx={{ mb: f.notes ? 2 : 0 }}>
                         {f.items?.map(item => (
-                          <Box key={item.id} sx={{ display: 'flex', justifyContent: 'space-between' }}>
-                            <Typography variant="body2">{item.orderItem?.snapshotName}</Typography>
-                            <Typography variant="body2" fontWeight={600}>Qty: {item.quantity}</Typography>
+                          <Box key={item.id} sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                            <Typography variant="body2" color="text.primary">{item.orderItem?.snapshotName}</Typography>
+                            <Typography variant="body2" fontWeight={700} color="text.secondary">Qty: {item.quantity}</Typography>
                           </Box>
                         ))}
                       </Stack>
                       {f.notes && (
-                        <Box sx={{ mt: 1.5, p: 1, bgcolor: 'background.paper', borderRadius: 1 }}>
-                          <Typography variant="caption" color="text.secondary">Notes: {f.notes}</Typography>
+                        <Box sx={{ p: 1.5, bgcolor: 'background.paper', borderRadius: 1.5, border: '1px solid', borderColor: 'divider' }}>
+                          <Typography variant="caption" color="text.secondary" sx={{ display: 'block' }}>Notes:</Typography>
+                          <Typography variant="body2" sx={{ fontStyle: 'italic' }}>{f.notes}</Typography>
                         </Box>
                       )}
                     </Paper>
@@ -595,68 +682,7 @@ const OrderDetailPage = () => {
               </Stack>
             </DetailCard>
 
-            <DetailCard title="Payment Details">
-              <Stack spacing={1.25}>
-                <Box>
-                  <Typography variant="caption" color="text.secondary">
-                    Status
-                  </Typography>
-                  <Typography variant="body2" fontWeight={600}>
-                    {payment ? getOrderStatusLabel(payment.status) : 'Not captured'}
-                  </Typography>
-                </Box>
-                <Box>
-                  <Typography variant="caption" color="text.secondary">
-                    Provider
-                  </Typography>
-                  <Typography variant="body2">{payment?.provider || '—'}</Typography>
-                </Box>
-                <Box>
-                  <Typography variant="caption" color="text.secondary">
-                    Transaction
-                  </Typography>
-                  <Typography variant="body2">{payment?.transactionId || 'Pending / unavailable'}</Typography>
-                </Box>
-                <Box>
-                  <Typography variant="caption" color="text.secondary">
-                    Amount
-                  </Typography>
-                  <Typography variant="body2">
-                    {payment ? formatPrice(payment.amount || 0) : formatPrice(order.total || 0)}
-                  </Typography>
-                </Box>
-              </Stack>
-            </DetailCard>
-
-            <DetailCard title="Shipping Address">
-              {address ? (
-                <Stack spacing={0.5}>
-                  <Typography variant="body2">{address.fullName}</Typography>
-                  <Typography variant="body2">{address.addressLine1}</Typography>
-                  {address.addressLine2 && <Typography variant="body2">{address.addressLine2}</Typography>}
-                  <Typography variant="body2">
-                    {address.city}, {address.state} {address.postalCode}
-                  </Typography>
-                  <Typography variant="body2">{address.country}</Typography>
-                  {address.phone && <Typography variant="body2">{address.phone}</Typography>}
-                </Stack>
-              ) : (
-                <Typography variant="body2" color="text.secondary">
-                  No shipping snapshot was saved for this order.
-                </Typography>
-              )}
-            </DetailCard>
-
-            <DetailCard title="Order Progress">
-              <Stepper activeStep={currentStep} orientation="vertical">
-                {ORDER_STATUS_STEPPER.map((status) => (
-                  <Step key={status} completed={ORDER_STATUS_STEPPER.indexOf(status) <= currentStep}>
-                    <StepLabel>{getOrderStatusLabel(status)}</StepLabel>
-                  </Step>
-                ))}
-              </Stepper>
-            </DetailCard>
-
+            
             {canUpdateOrderStatus && (
               <DetailCard title="Update Status">
                 <FormControl fullWidth size="small" sx={{ mb: 2 }}>
@@ -684,6 +710,19 @@ const OrderDetailPage = () => {
                 </Button>
               </DetailCard>
             )}
+            
+
+            <DetailCard title="Order Progress">
+              <Stepper activeStep={currentStep} orientation="vertical">
+                {ORDER_STATUS_STEPPER.map((status) => (
+                  <Step key={status} completed={ORDER_STATUS_STEPPER.indexOf(status) <= currentStep}>
+                    <StepLabel>{getOrderStatusLabel(status)}</StepLabel>
+                  </Step>
+                ))}
+              </Stepper>
+            </DetailCard>
+
+            
           </Stack>
         </Grid>
       </Grid>

@@ -80,6 +80,20 @@ const createFulfillment = async (req, res, next) => {
   }
 };
 
+const updateFulfillmentStatus = async (req, res, next) => {
+  try {
+    const result = await OrderService.updateFulfillmentStatus(
+      req.params.id,
+      req.params.fulfillmentId,
+      req.validated.status,
+      req.user.id
+    );
+    return success(res, result, 'Shipment status updated successfully');
+  } catch (err) {
+    next(err);
+  }
+};
+
 module.exports = {
   placeOrder,
   getOrders,
@@ -88,4 +102,5 @@ module.exports = {
   cancelOrder,
   refundOrder,
   createFulfillment,
+  updateFulfillmentStatus,
 };

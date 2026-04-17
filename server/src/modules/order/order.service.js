@@ -31,11 +31,40 @@ const {
     getAllowedNextStatuses,
     isCustomerCancelableOrderStatus,
     isRefundableOrderStatus,
+    isFulfillableOrderStatus,
     ensureValidStatusTransition,
 } = require('../../utils/orderWorkflow');
 
 const ADMIN_ORDER_LIST_USER_ATTRIBUTES = ['id', 'firstName', 'lastName', 'email'];
 const ADMIN_ORDER_PAYMENT_ATTRIBUTES = ['id', 'provider', 'status', 'amount', 'currency', 'transactionId', 'createdAt', 'updatedAt'];
+
+const HEAVY_ORDER_INCLUDE = [
+    {
+        model: OrderItem,
+        as: 'items',
+        include: [
+            { model: Product, as: 'product', attributes: ['id', 'name', 'slug'], required: false },
+            { model: ProductVariant, as: 'variant', attributes: ['id', 'sku', 'price', 'stockQty', 'isActive'], required: false },
+            { model: FulfillmentItem, as: 'fulfillmentItems', attributes: ['quantity'], required: false },
+        ],
+    },
+    { model: User, attributes: ADMIN_ORDER_LIST_USER_ATTRIBUTES, required: false },
+    { model: Payment, attributes: ADMIN_ORDER_PAYMENT_ATTRIBUTES, required: false },
+    { model: Coupon, attributes: ['id', 'code', 'name'], required: false },
+    {
+        model: Fulfillment,
+        as: 'fulfillments',
+        include: [
+            {
+                model: FulfillmentItem,
+                as: 'items',
+                include: [
+                    { model: OrderItem, as: 'orderItem', attributes: ['id', 'snapshotName', 'snapshotSku', 'snapshotImage', 'variantInfo'] },
+                ],
+            },
+        ],
+    },
+];
 
 // Utility to fetch settings
 const getSetting = async (key, defaultVal) => {
@@ -399,33 +428,7 @@ const getOrderById = async (id, userId, isAdmin) => {
     const where = isAdmin ? { id } : { id, userId };
     const order = await Order.findOne({
         where,
-        include: [
-            {
-                model: OrderItem,
-                as: 'items',
-                include: [
-                    { model: Product, as: 'product', attributes: ['id', 'name', 'slug'], required: false },
-                    { model: ProductVariant, as: 'variant', attributes: ['id', 'sku', 'price', 'stockQty', 'isActive'], required: false },
-                    { model: FulfillmentItem, as: 'fulfillmentItems', attributes: ['quantity'], required: false },
-                ],
-            },
-            { model: User, attributes: ADMIN_ORDER_LIST_USER_ATTRIBUTES, required: false },
-            { model: Payment, attributes: ADMIN_ORDER_PAYMENT_ATTRIBUTES, required: false },
-            { model: Coupon, attributes: ['id', 'code', 'name'], required: false },
-            {
-                model: Fulfillment,
-                as: 'fulfillments',
-                include: [
-                    {
-                        model: FulfillmentItem,
-                        as: 'items',
-                        include: [
-                            { model: OrderItem, as: 'orderItem', attributes: ['id', 'snapshotName', 'snapshotSku', 'snapshotImage', 'variantInfo'] },
-                        ],
-                    },
-                ],
-            },
-        ],
+        include: HEAVY_ORDER_INCLUDE,
     });
 
     if (!order) throw new AppError('NOT_FOUND', 404, 'Order not found');
@@ -442,19 +445,23 @@ const createFulfillment = async (orderId, payload, actingUserId) => {
 
     return sequelize.transaction(async (t) => {
         // Lock the order row to prevent concurrent fulfillment races
+        // We split this from item fetching because FOR UPDATE cannot be applied to outer joins in some DBs (e.g. Postgres)
         const order = await Order.findByPk(orderId, {
-            include: [
-                {
-                    model: OrderItem,
-                    as: 'items',
-                    include: [{ model: FulfillmentItem, as: 'fulfillmentItems', required: false }],
-                },
-            ],
             transaction: t,
             lock: Transaction.LOCK.UPDATE,
         });
 
         if (!order) throw new AppError('NOT_FOUND', 404, 'Order not found');
+
+        // Fetch items associated with the locked order
+        const orderItems = await OrderItem.findAll({
+            where: { orderId: order.id },
+            include: [{ model: FulfillmentItem, as: 'fulfillmentItems', required: false }],
+            transaction: t,
+        });
+        
+        // Manually attach items to the order object for compatibility with downstream logic
+        order.items = orderItems;
 
         // Hard block: check if order is in a fulfillable state
         if (!isFulfillableOrderStatus(order.status)) {
@@ -634,7 +641,11 @@ const updateStatus = async (id, status, actingUserId) => {
                 }, t);
             }
         } catch(err) {}
-        return order;
+        
+        return Order.findByPk(id, {
+            include: HEAVY_ORDER_INCLUDE,
+            transaction: t,
+        });
     });
 };
 
@@ -691,12 +702,7 @@ const refundOrder = async (id, actingUserId, isAdmin) => {
         } catch (err) {}
 
         return Order.findByPk(id, {
-            include: [
-                { model: OrderItem, as: 'items' },
-                { model: User, attributes: ADMIN_ORDER_LIST_USER_ATTRIBUTES, required: false },
-                { model: Payment, attributes: ADMIN_ORDER_PAYMENT_ATTRIBUTES, required: false },
-                { model: Coupon, attributes: ['id', 'code', 'name'], required: false },
-            ],
+            include: HEAVY_ORDER_INCLUDE,
             transaction: t,
         });
     });
@@ -759,7 +765,82 @@ const cancelOrder = async (id, userId) => {
             }
         } catch (err) {}
 
-        return order;
+        return Order.findByPk(id, {
+            include: HEAVY_ORDER_INCLUDE,
+            transaction: t,
+        });
+    });
+};
+
+const updateFulfillmentStatus = async (orderId, fulfillmentId, status, actingUserId) => {
+    return sequelize.transaction(async (t) => {
+        const order = await Order.findByPk(orderId, {
+            transaction: t,
+            lock: Transaction.LOCK.UPDATE,
+        });
+
+        if (!order) throw new AppError('NOT_FOUND', 404, 'Order not found');
+
+        // Fetch associations separately to avoid JOIN + FOR UPDATE issues
+        const items = await OrderItem.findAll({ where: { orderId: order.id }, transaction: t });
+        const fulfillments = await Fulfillment.findAll({ where: { orderId: order.id }, transaction: t });
+        
+        order.items = items;
+        order.fulfillments = fulfillments;
+
+        const fulfillment = await Fulfillment.findOne({
+            where: { id: fulfillmentId, orderId },
+            transaction: t,
+        });
+
+        if (!fulfillment) throw new AppError('NOT_FOUND', 404, 'Shipment not found');
+
+        const oldStatus = fulfillment.status;
+        await fulfillment.update({ status }, { transaction: t });
+
+        // Logic: if all items are fully fulfilled AND all fulfillments are "delivered", update the main order
+        let shouldDeliverOrder = false;
+        if (status === 'delivered') {
+            const allOtherFulfillmentsDelivered = order.fulfillments
+                .filter(f => f.id !== fulfillmentId)
+                .every(f => f.status === 'delivered');
+
+            if (allOtherFulfillmentsDelivered) {
+                // Check if the order is fully fulfilled (no remaining items to ship)
+                const itemsWithFulfillment = await OrderItem.findAll({
+                    where: { orderId },
+                    include: [{ model: FulfillmentItem, as: 'fulfillmentItems' }],
+                    transaction: t,
+                });
+
+                const isFullyFulfilled = itemsWithFulfillment.every(item => {
+                    const shipped = (item.fulfillmentItems || []).reduce((sum, fi) => sum + fi.quantity, 0);
+                    return shipped >= item.quantity;
+                });
+
+                if (isFullyFulfilled) {
+                    shouldDeliverOrder = true;
+                }
+            }
+        }
+
+        if (shouldDeliverOrder && order.status !== 'delivered') {
+            await order.update({ status: 'delivered' }, { transaction: t });
+        }
+
+        try {
+            if (AuditService && AuditService.log) {
+                await AuditService.log({
+                    userId: actingUserId,
+                    action: 'STATUS_CHANGE',
+                    entity: 'Fulfillment',
+                    entityId: fulfillment.id,
+                    changes: { before: oldStatus, after: status, orderStatusUpdated: shouldDeliverOrder },
+                }, t);
+            }
+        } catch (err) {}
+
+        return getOrderById(orderId, actingUserId, true);
     });
 };
 
@@ -771,6 +852,7 @@ module.exports = {
     cancelOrder,
     refundOrder,
     createFulfillment,
+    updateFulfillmentStatus,
     getAllowedNextStatuses,
 };
 

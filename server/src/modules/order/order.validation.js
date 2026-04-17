@@ -31,8 +31,13 @@ const createFulfillmentSchema = Joi.object({
     })).min(1).required(),
 });
 
+const updateFulfillmentStatusSchema = Joi.object({
+    status: Joi.string().valid(...FULFILLMENT_STATUS_VALUES).required()
+});
+
 module.exports = {
     placeOrderSchema,
     updateOrderStatusSchema,
     createFulfillmentSchema,
+    updateFulfillmentStatusSchema,
 };
