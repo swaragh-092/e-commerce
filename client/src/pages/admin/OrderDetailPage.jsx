@@ -20,9 +20,23 @@ import {
 } from '@mui/material';
 import { useParams, useNavigate } from 'react-router-dom';
 import PrintIcon from '@mui/icons-material/Print';
+import LocalShippingIcon from '@mui/icons-material/LocalShipping';
 import { useCurrency } from '../../hooks/useSettings';
-import { getOrderById, updateOrderStatus, refundOrder } from '../../services/adminService';
+import { getOrderById, updateOrderStatus, refundOrder, createFulfillment } from '../../services/adminService';
 import { useNotification } from '../../context/NotificationContext';
+import {
+  Dialog,
+  DialogTitle,
+  DialogContent,
+  DialogActions,
+  TextField,
+  Table,
+  TableBody,
+  TableCell,
+  TableContainer,
+  TableHead,
+  TableRow,
+} from '@mui/material';
 import AppliedDiscountsSummary from '../../components/orders/AppliedDiscountsSummary';
 import { useAuth } from '../../hooks/useAuth';
 import { PERMISSIONS } from '../../utils/permissions';
@@ -68,6 +82,126 @@ const MetricCard = ({ label, value, accent = 'text.primary' }) => (
   </Paper>
 );
 
+const FulfillmentDialog = ({ open, onClose, orderItems, onSave, loading }) => {
+  const [trackingNumber, setTrackingNumber] = useState('');
+  const [courier, setCourier] = useState('');
+  const [notes, setNotes] = useState('');
+  const [items, setItems] = useState({});
+
+  useEffect(() => {
+    if (open) {
+      const initialItems = {};
+      orderItems.forEach(oi => {
+        const shipped = (oi.fulfillmentItems || []).reduce((sum, fi) => sum + fi.quantity, 0);
+        const remaining = oi.quantity - shipped;
+        if (remaining > 0) {
+          initialItems[oi.id] = remaining;
+        }
+      });
+      setItems(initialItems);
+      setTrackingNumber('');
+      setCourier('');
+      setNotes('');
+    }
+  }, [open, orderItems]);
+
+  const handleQtyChange = (id, val, max) => {
+    const qty = Math.min(max, Math.max(0, parseInt(val) || 0));
+    setItems(prev => ({ ...prev, [id]: qty }));
+  };
+
+  const handleSubmit = () => {
+    const shipmentItems = Object.entries(items)
+      .filter(([, qty]) => qty > 0)
+      .map(([orderItemId, quantity]) => ({ orderItemId, quantity }));
+
+    if (shipmentItems.length === 0) return;
+    onSave({ trackingNumber, courier, notes, items: shipmentItems });
+  };
+
+  return (
+    <Dialog open={open} onClose={onClose} fullWidth maxWidth="sm">
+      <DialogTitle>Create Shipment</DialogTitle>
+      <DialogContent dividers>
+        <Stack spacing={2} sx={{ mb: 3 }}>
+          <TextField
+            label="Carrier / Courier"
+            fullWidth
+            size="small"
+            value={courier}
+            onChange={(e) => setCourier(e.target.value)}
+            placeholder="e.g. FedEx, BlueDart"
+          />
+          <TextField
+            label="Tracking Number"
+            fullWidth
+            size="small"
+            value={trackingNumber}
+            onChange={(e) => setTrackingNumber(e.target.value)}
+          />
+          <TextField
+            label="Notes"
+            fullWidth
+            size="small"
+            multiline
+            rows={2}
+            value={notes}
+            onChange={(e) => setNotes(e.target.value)}
+          />
+        </Stack>
+        <Typography variant="subtitle2" sx={{ mb: 1, fontWeight: 700 }}>Items to Ship</Typography>
+        <TableContainer component={Paper} elevation={0} sx={{ border: '1px solid', borderColor: 'divider' }}>
+          <Table size="small">
+            <TableHead>
+              <TableRow>
+                <TableCell>Item</TableCell>
+                <TableCell align="right">Remaining</TableCell>
+                <TableCell align="right" width={100}>Ship Qty</TableCell>
+              </TableRow>
+            </TableHead>
+            <TableBody>
+              {orderItems.map((oi) => {
+                const shipped = (oi.fulfillmentItems || []).reduce((sum, fi) => sum + fi.quantity, 0);
+                const remaining = oi.quantity - shipped;
+                if (remaining <= 0) return null;
+
+                return (
+                  <TableRow key={oi.id}>
+                    <TableCell>
+                      <Typography variant="body2" fontWeight={500}>{oi.snapshotName}</Typography>
+                      <Typography variant="caption" color="text.secondary">{oi.snapshotSku || oi.variant?.sku}</Typography>
+                    </TableCell>
+                    <TableCell align="right">{remaining}</TableCell>
+                    <TableCell align="right">
+                      <TextField
+                        type="number"
+                        size="small"
+                        value={items[oi.id] || 0}
+                        onChange={(e) => handleQtyChange(oi.id, e.target.value, remaining)}
+                        inputProps={{ min: 0, max: remaining, style: { textAlign: 'right' } }}
+                      />
+                    </TableCell>
+                  </TableRow>
+                );
+              })}
+            </TableBody>
+          </Table>
+        </TableContainer>
+      </DialogContent>
+      <DialogActions sx={{ px: 3, py: 2 }}>
+        <Button onClick={onClose} color="inherit">Cancel</Button>
+        <Button 
+          onClick={handleSubmit} 
+          variant="contained" 
+          disabled={loading || Object.values(items).every(v => v === 0)}
+        >
+          {loading ? 'Creating...' : 'Create Shipment'}
+        </Button>
+      </DialogActions>
+    </Dialog>
+  );
+};
+
 const OrderDetailPage = () => {
   const { id } = useParams();
   const navigate = useNavigate();
@@ -82,22 +216,28 @@ const OrderDetailPage = () => {
   const [error, setError] = useState('');
   const [newStatus, setNewStatus] = useState('');
   const [updating, setUpdating] = useState(false);
+  const [fulfillmentDialogOpen, setFulfillmentDialogOpen] = useState(false);
+  const [fulfillmentLoading, setFulfillmentLoading] = useState(false);
+
+  const fetchOrder = async () => {
+    try {
+      const res = await getOrderById(id);
+      setOrder(res.data.data);
+      setNewStatus(res.data.data.status);
+    } catch (fetchError) {
+      console.error(fetchError);
+      setOrder(null);
+      setNewStatus('');
+      setError(getApiErrorMessage(fetchError, 'Failed to load order details.'));
+    } finally {
+      setLoading(false);
+    }
+  };
 
   useEffect(() => {
     setLoading(true);
     setError('');
-
-    getOrderById(id)
-      .then((res) => {
-        setOrder(res.data.data);
-        setNewStatus(res.data.data.status);
-      })
-      .catch((fetchError) => {
-        console.error(fetchError);
-        setError(getApiErrorMessage(fetchError, 'Failed to load order details.'));
-        setOrder(null);
-      })
-      .finally(() => setLoading(false));
+    fetchOrder();
   }, [id]);
 
   const orderItems = useMemo(() => (order?.items || order?.OrderItems || []).filter(Boolean), [order]);
@@ -163,6 +303,20 @@ const OrderDetailPage = () => {
     }
   };
 
+  const handleCreateFulfillment = async (data) => {
+    setFulfillmentLoading(true);
+    try {
+      await createFulfillment(id, data);
+      notify('Shipment created successfully.', 'success');
+      setFulfillmentDialogOpen(false);
+      fetchOrder(); // Refresh to catch updated status and fulfills
+    } catch (err) {
+      notify(getApiErrorMessage(err, 'Failed to create shipment.'), 'error');
+    } finally {
+      setFulfillmentLoading(false);
+    }
+  };
+
   if (loading) {
     return (
       <Box sx={{ display: 'flex', justifyContent: 'center', mt: 8 }}>
@@ -214,6 +368,16 @@ const OrderDetailPage = () => {
             <Button variant="outlined" color="error" onClick={handleRefund} disabled={updating}>
               {updating ? 'Processing…' : 'Issue Refund'}
             </Button>
+          )}
+          {canUpdateOrderStatus && !['cancelled', 'refunded', 'delivered'].includes(order.status) && (
+             <Button 
+               variant="contained" 
+               color="primary" 
+               startIcon={<LocalShippingIcon />}
+               onClick={() => setFulfillmentDialogOpen(true)}
+             >
+               Create Shipment
+             </Button>
           )}
         </Stack>
       </Box>
@@ -331,6 +495,49 @@ const OrderDetailPage = () => {
               </Box>
             </Box>
           </DetailCard>
+
+          {order.fulfillments && order.fulfillments.length > 0 && (
+            <Box sx={{ mt: 3 }}>
+              <DetailCard title="Shipments / Sub-Orders">
+                <Stack spacing={2}>
+                  {order.fulfillments.map((f, index) => (
+                    <Paper 
+                      key={f.id} 
+                      elevation={0} 
+                      sx={{ p: 2, border: '1px solid', borderColor: 'divider', borderRadius: 2, bgcolor: 'grey.50' }}
+                    >
+                      <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2 }}>
+                        <Box>
+                          <Typography variant="subtitle2" fontWeight={700}>Shipment #{index + 1}</Typography>
+                          <Typography variant="caption" color="text.secondary">
+                            Status: <Chip size="small" label={f.status} color="primary" sx={{ height: 20 }} />
+                          </Typography>
+                        </Box>
+                        <Box sx={{ textAlign: 'right' }}>
+                          <Typography variant="body2" fontWeight={600}>{f.courier || 'Standard Courier'}</Typography>
+                          <Typography variant="body2" color="primary">{f.trackingNumber || 'No tracking available'}</Typography>
+                        </Box>
+                      </Box>
+                      <Divider sx={{ mb: 1.5 }} />
+                      <Stack spacing={1}>
+                        {f.items?.map(item => (
+                          <Box key={item.id} sx={{ display: 'flex', justifyContent: 'space-between' }}>
+                            <Typography variant="body2">{item.orderItem?.snapshotName}</Typography>
+                            <Typography variant="body2" fontWeight={600}>Qty: {item.quantity}</Typography>
+                          </Box>
+                        ))}
+                      </Stack>
+                      {f.notes && (
+                        <Box sx={{ mt: 1.5, p: 1, bgcolor: 'background.paper', borderRadius: 1 }}>
+                          <Typography variant="caption" color="text.secondary">Notes: {f.notes}</Typography>
+                        </Box>
+                      )}
+                    </Paper>
+                  ))}
+                </Stack>
+              </DetailCard>
+            </Box>
+          )}
         </Grid>
 
         <Grid item xs={12} md={4}>
@@ -460,6 +667,14 @@ const OrderDetailPage = () => {
           </Stack>
         </Grid>
       </Grid>
+
+      <FulfillmentDialog
+        open={fulfillmentDialogOpen}
+        onClose={() => setFulfillmentDialogOpen(false)}
+        orderItems={orderItems}
+        onSave={handleCreateFulfillment}
+        loading={fulfillmentLoading}
+      />
     </Box>
   );
 };

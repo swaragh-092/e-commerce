@@ -4,6 +4,7 @@
     { "key": "pending_payment", "label": "Pending Payment", "muiColor": "warning" },
     { "key": "paid", "label": "Paid", "muiColor": "info" },
     { "key": "processing", "label": "Processing", "muiColor": "info" },
+    { "key": "partially_shipped", "label": "Partially Shipped", "muiColor": "secondary" },
     { "key": "shipped", "label": "Shipped", "muiColor": "primary" },
     { "key": "delivered", "label": "Delivered", "muiColor": "success" },
     { "key": "cancelled", "label": "Cancelled", "muiColor": "error" },
@@ -11,15 +12,16 @@
   ],
   "transitions": {
     "pending_payment": ["paid", "cancelled"],
-    "paid": ["processing", "cancelled", "refunded"],
-    "processing": ["shipped", "cancelled", "refunded"],
+    "paid": ["processing", "partially_shipped", "shipped", "cancelled", "refunded"],
+    "processing": ["partially_shipped", "shipped", "cancelled", "refunded"],
+    "partially_shipped": ["shipped", "refunded"],
     "shipped": ["delivered", "refunded"],
     "delivered": ["refunded"],
     "cancelled": [],
     "refunded": []
   },
   "customerCancelableStatuses": ["pending_payment", "processing"],
-  "adminRefundableStatuses": ["paid", "processing", "shipped", "delivered"],
+  "adminRefundableStatuses": ["paid", "processing", "partially_shipped", "shipped", "delivered"],
   "adminSummaryGroups": [
     {
       "key": "pendingPayment",
@@ -30,7 +32,7 @@
     {
       "key": "inTransit",
       "label": "Processing / Shipped",
-      "statuses": ["processing", "shipped"],
+      "statuses": ["processing", "partially_shipped", "shipped"],
       "tone": "default"
     },
     {

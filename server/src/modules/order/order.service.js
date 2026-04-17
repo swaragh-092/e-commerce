@@ -16,6 +16,8 @@ const {
     Brand,
     User,
     Payment,
+    Fulfillment,
+    FulfillmentItem,
 } = require('../index');
 const AppError = require('../../utils/AppError');
 const AuditService = require('../audit/audit.service');
@@ -415,16 +417,142 @@ const getOrderById = async (id, userId, isAdmin) => {
                 include: [
                     { model: Product, as: 'product', attributes: ['id', 'name', 'slug'], required: false },
                     { model: ProductVariant, as: 'variant', attributes: ['id', 'sku', 'price', 'stockQty', 'isActive'], required: false },
+                    { model: FulfillmentItem, as: 'fulfillmentItems', attributes: ['quantity'], required: false },
                 ],
             },
             { model: User, attributes: ADMIN_ORDER_LIST_USER_ATTRIBUTES, required: false },
             { model: Payment, attributes: ADMIN_ORDER_PAYMENT_ATTRIBUTES, required: false },
             { model: Coupon, attributes: ['id', 'code', 'name'], required: false },
+            {
+                model: Fulfillment,
+                as: 'fulfillments',
+                include: [
+                    {
+                        model: FulfillmentItem,
+                        as: 'items',
+                        include: [
+                            { model: OrderItem, as: 'orderItem', attributes: ['id', 'snapshotName', 'snapshotSku', 'snapshotImage', 'variantInfo'] },
+                        ],
+                    },
+                ],
+            },
         ],
     });
 
     if (!order) throw new AppError('NOT_FOUND', 404, 'Order not found');
     return order;
+};
+
+const createFulfillment = async (orderId, payload, actingUserId) => {
+    // payload: { trackingNumber, courier, notes, items: [{ orderItemId, quantity }] }
+    const { trackingNumber, courier, notes, items } = payload;
+
+    if (!items || items.length === 0) {
+        throw new AppError('VALIDATION_ERROR', 400, 'At least one item is required for a shipment');
+    }
+
+    return sequelize.transaction(async (t) => {
+        const order = await Order.findByPk(orderId, {
+            include: [
+                {
+                    model: OrderItem,
+                    as: 'items',
+                    include: [{ model: FulfillmentItem, as: 'fulfillmentItems', required: false }],
+                },
+            ],
+            transaction: t,
+            lock: t.LOCK.UPDATE,
+        });
+
+        if (!order) throw new AppError('NOT_FOUND', 404, 'Order not found');
+
+        if (['cancelled', 'refunded'].includes(order.status)) {
+            throw new AppError('VALIDATION_ERROR', 400, `Cannot create a shipment for a ${order.status} order`);
+        }
+
+        // Build a map of orderItemId -> already shipped quantity
+        const orderItemMap = {};
+        for (const oi of order.items) {
+            const alreadyShipped = (oi.fulfillmentItems || []).reduce((sum, fi) => sum + fi.quantity, 0);
+            orderItemMap[oi.id] = {
+                totalQty: oi.quantity,
+                alreadyShipped,
+                remaining: oi.quantity - alreadyShipped,
+            };
+        }
+
+        // Validate each item in the shipment request
+        for (const item of items) {
+            const info = orderItemMap[item.orderItemId];
+            if (!info) {
+                throw new AppError('VALIDATION_ERROR', 400, `Order item ${item.orderItemId} does not belong to this order`);
+            }
+            if (item.quantity <= 0) {
+                throw new AppError('VALIDATION_ERROR', 400, 'Shipment item quantity must be greater than 0');
+            }
+            if (item.quantity > info.remaining) {
+                throw new AppError(
+                    'CONFLICT',
+                    409,
+                    `Cannot ship ${item.quantity} of "${order.items.find((oi) => oi.id === item.orderItemId)?.snapshotName}": only ${info.remaining} remaining`
+                );
+            }
+            // Reserve this quantity for subsequent duplicate checks
+            info.remaining -= item.quantity;
+        }
+
+        // Create the fulfillment record
+        const fulfillment = await Fulfillment.create({
+            orderId,
+            trackingNumber: trackingNumber || null,
+            courier: courier || null,
+            notes: notes || null,
+            status: 'shipped',
+        }, { transaction: t });
+
+        // Create fulfillment items
+        for (const item of items) {
+            if (item.quantity > 0) {
+                await FulfillmentItem.create({
+                    fulfillmentId: fulfillment.id,
+                    orderItemId: item.orderItemId,
+                    quantity: item.quantity,
+                }, { transaction: t });
+                // Update the map so we correctly compute totals below
+                orderItemMap[item.orderItemId].alreadyShipped += item.quantity;
+            }
+        }
+
+        // Recalculate overall order fulfillment status
+        const totalOrderQty = order.items.reduce((sum, oi) => sum + oi.quantity, 0);
+        const totalShippedQty = Object.values(orderItemMap).reduce((sum, m) => sum + m.alreadyShipped, 0);
+
+        let newStatus;
+        if (totalShippedQty >= totalOrderQty) {
+            newStatus = 'shipped';
+        } else {
+            newStatus = 'partially_shipped';
+        }
+
+        // Only update status if actually moving forward (don't regress a delivered order)
+        if (!['delivered', 'cancelled', 'refunded'].includes(order.status)) {
+            await order.update({ status: newStatus }, { transaction: t });
+        }
+
+        try {
+            if (AuditService && AuditService.log) {
+                await AuditService.log({
+                    userId: actingUserId,
+                    action: ACTIONS.CREATE,
+                    entity: 'Fulfillment',
+                    entityId: fulfillment.id,
+                    changes: { orderId, trackingNumber, newOrderStatus: newStatus },
+                }, t);
+            }
+        } catch (err) {}
+
+        return fulfillment;
+    });
 };
 
 const updateStatus = async (id, status, actingUserId) => {
@@ -578,6 +706,7 @@ module.exports = {
     updateStatus,
     cancelOrder,
     refundOrder,
+    createFulfillment,
     getAllowedNextStatuses,
 };
 

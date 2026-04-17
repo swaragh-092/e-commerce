@@ -66,6 +66,15 @@ const refundOrder = async (req, res, next) => {
   }
 };
 
+const createFulfillment = async (req, res, next) => {
+  try {
+    const fulfillment = await OrderService.createFulfillment(req.params.id, req.validated, req.user.id);
+    return success(res, fulfillment, 'Shipment created successfully', 201);
+  } catch (err) {
+    next(err);
+  }
+};
+
 module.exports = {
   placeOrder,
   getOrders,
@@ -73,4 +82,5 @@ module.exports = {
   updateStatus,
   cancelOrder,
   refundOrder,
+  createFulfillment,
 };

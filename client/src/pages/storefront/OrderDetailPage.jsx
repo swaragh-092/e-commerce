@@ -9,6 +9,7 @@ import {
   Divider,
   Grid,
   Paper,
+  Stack,
   Typography,
 } from '@mui/material';
 import { useNavigate, useParams } from 'react-router-dom';
@@ -163,6 +164,47 @@ const OrderDetailPage = () => {
               </Box>
             ))}
           </Paper>
+
+          {order.fulfillments && order.fulfillments.length > 0 && (
+            <Paper elevation={0} sx={{ p: 3, borderRadius: 3, border: '1px solid', borderColor: 'divider', mb: 3 }}>
+              <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 2 }}>
+                <LocalShippingIcon color="primary" />
+                <Typography variant="h6" fontWeight={700}>Shipments</Typography>
+              </Box>
+              <Stack spacing={2}>
+                {order.fulfillments.map((f, index) => (
+                  <Box 
+                    key={f.id} 
+                    sx={{ p: 2, bgcolor: 'grey.50', borderRadius: 2, border: '1px solid', borderColor: 'divider' }}
+                  >
+                    <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', mb: 1 }}>
+                      <Box>
+                        <Typography variant="subtitle2" fontWeight={700}>Shipment #{index + 1}</Typography>
+                        <Typography variant="body2" color="text.secondary">
+                          Status: <Chip size="small" label={f.status} color="primary" sx={{ height: 20 }} />
+                        </Typography>
+                      </Box>
+                      <Box sx={{ textAlign: 'right' }}>
+                        <Typography variant="body2" fontWeight={600}>{f.courier || 'Standard Courier'}</Typography>
+                        <Typography variant="body2" color="primary" fontWeight={500}>
+                          {f.trackingNumber || 'No tracking available'}
+                        </Typography>
+                      </Box>
+                    </Box>
+                    <Divider sx={{ my: 1.5 }} />
+                    <Stack spacing={1}>
+                      {f.items?.map(item => (
+                        <Box key={item.id} sx={{ display: 'flex', justifyContent: 'space-between' }}>
+                          <Typography variant="body2">{item.orderItem?.snapshotName}</Typography>
+                          <Typography variant="body2" fontWeight={600}>Qty: {item.quantity}</Typography>
+                        </Box>
+                      ))}
+                    </Stack>
+                  </Box>
+                ))}
+              </Stack>
+            </Paper>
+          )}
 
           <Paper elevation={0} sx={{ p: 3, borderRadius: 3, border: '1px solid', borderColor: 'divider' }}>
             <Typography variant="h6" fontWeight={700} mb={2}>Promotions & totals</Typography>

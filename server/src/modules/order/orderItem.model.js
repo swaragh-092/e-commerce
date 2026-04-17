@@ -55,6 +55,7 @@ module.exports = (sequelize, DataTypes) => {
         OrderItem.belongsTo(models.Order, { foreignKey: 'orderId', onDelete: 'CASCADE' });
         OrderItem.belongsTo(models.Product, { foreignKey: 'productId', as: 'product' });
         OrderItem.belongsTo(models.ProductVariant, { foreignKey: 'variantId', as: 'variant', constraints: false });
+        OrderItem.hasMany(models.FulfillmentItem, { foreignKey: 'orderItemId', as: 'fulfillmentItems' });
     };
 
     return OrderItem;

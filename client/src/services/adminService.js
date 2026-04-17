@@ -64,6 +64,7 @@ const getAllOrders = (params = {}) => {
 const getOrderById = (id) => api.get(`/orders/${id}`);
 const updateOrderStatus = (id, status) => api.put(`/orders/${id}/status`, { status });
 const refundOrder = (id) => api.post(`/orders/${id}/refund`);
+const createFulfillment = (orderId, data) => api.post(`/orders/${orderId}/fulfillments`, data);
 
 // Settings bulk update
 const updateSettings = (settings) => api.put('/settings/bulk', settings);
@@ -102,7 +103,7 @@ export {
   getUsers, getUserById,
   getAdminReviews, updateReviewStatus, deleteReview,
   getCoupons, createCoupon, updateCoupon, deleteCoupon,
-  getAllOrders, getOrderById, updateOrderStatus, refundOrder,
+  getAllOrders, getOrderById, updateOrderStatus, refundOrder, createFulfillment,
   updateSettings,
   validateCoupon, getPublicCoupons, getEligibleCoupons,
   getMyOrders, getMyOrderById, cancelOrder, placeOrder,
