@@ -54,7 +54,10 @@ const ProductDetailPage = () => {
         const fetchProduct = async () => {
             try {
                 const res = await getProduct(slug);
-                const nextProduct = res?.data?.product || null;
+                const nextProduct = res?.data?.product || res?.data || null;
+                if (!nextProduct) {
+                    setError('Product not found');
+                }
                 setProduct(nextProduct);
                 if (nextProduct?.variants?.length > 0) {
                     const initialVariant = nextProduct.variants.find((variant) => variant?.isActive !== false && Number(variant?.stockQty || 0) > 0)

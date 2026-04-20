@@ -26,7 +26,7 @@ exports.getBySlug = async (req, res, next) => {
   try {
     const isAdmin = hasProductAdminView(req.user);
     const product = await productService.getProductBySlug(req.params.slug, { adminView: isAdmin });
-    return success(res, { product });
+    return success(res, product);
   } catch (err) {
     if (err.message === 'Product not found') return error(res, err.message, 404, 'NOT_FOUND');
     next(err);
@@ -36,7 +36,7 @@ exports.getBySlug = async (req, res, next) => {
 exports.getById = async (req, res, next) => {
   try {
     const product = await productService.getProductById(req.params.id);
-    return success(res, { product });
+    return success(res, product);
   } catch (err) {
     if (err.message === 'Product not found') return error(res, err.message, 404, 'NOT_FOUND');
     next(err);
@@ -46,7 +46,7 @@ exports.getById = async (req, res, next) => {
 exports.create = async (req, res, next) => {
   try {
     const product = await productService.createProduct(req.body);
-    return success(res, { product }, 'Product created', 201);
+    return success(res, product, 'Product created', 201);
   } catch (err) {
     next(err);
   }
@@ -55,7 +55,7 @@ exports.create = async (req, res, next) => {
 exports.update = async (req, res, next) => {
   try {
     const product = await productService.updateProduct(req.params.id, req.body);
-    return success(res, { product }, 'Product updated');
+    return success(res, product, 'Product updated');
   } catch (err) {
     if (err.message === 'Product not found') return error(res, err.message, 404, 'NOT_FOUND');
     next(err);
