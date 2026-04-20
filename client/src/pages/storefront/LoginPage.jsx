@@ -5,6 +5,7 @@ import { useAuth } from '../../hooks/useAuth';
 import { getFirstAccessibleAdminPath } from '../../utils/permissions';
 import { validateEmail, validateRequired } from '../../utils/authValidation';
 import { getApiErrorMessage } from '../../utils/apiErrors';
+import authService from '../../services/authService';
 
 const LoginPage = () => {
   const theme = useTheme();
@@ -17,6 +18,8 @@ const LoginPage = () => {
   const [error, setError] = useState('');
   const [successMsg, setSuccessMsg] = useState(location.state?.message || '');
   const [loading, setLoading] = useState(false);
+  const [showResend, setShowResend] = useState(false);
+  const [resending, setResending] = useState(false);
 
   const validateForm = (values) => ({
     email: validateEmail(values.email),
@@ -35,6 +38,7 @@ const LoginPage = () => {
     setFieldErrors(nextErrors);
     setError('');
     setSuccessMsg('');
+    setShowResend(false);
 
     if (Object.values(nextErrors).some(Boolean)) {
       return;
@@ -51,11 +55,36 @@ const LoginPage = () => {
         navigate('/');
       }
     } catch (err) {
-      setError(getApiErrorMessage(err, 'Login failed. Please verify credentials.'));
+      const msg = getApiErrorMessage(err, 'Login failed. Please verify credentials.');
+      setError(msg);
+      // Show resend link if this is an email verification error
+      if (msg.toLowerCase().includes('verify your email') || msg.toLowerCase().includes('verify email')) {
+        setShowResend(true);
+      }
     } finally {
       setLoading(false);
     }
   };
+
+  const handleResend = async () => {
+    if (!formData.email) {
+      setError('Please enter your email address above first.');
+      return;
+    }
+    setResending(true);
+    try {
+      await authService.resendVerification(formData.email);
+      setError('');
+      setShowResend(false);
+      setSuccessMsg('Verification email sent! Check your inbox (and spam folder).');
+    } catch (err) {
+      setSuccessMsg('');
+      setError(getApiErrorMessage(err, 'Failed to resend verification email.'));
+    } finally {
+      setResending(false);
+    }
+  };
+
 
   return (
     <Box sx={{ maxWidth: 400, mx: 'auto', mt: 8 }}>
@@ -63,7 +92,24 @@ const LoginPage = () => {
         Welcome Back
       </Typography>
       
-      {error && <Alert severity="error" sx={{ mb: 2 }}>{error}</Alert>}
+      {error && (
+        <Box sx={{ mb: 2 }}>
+          <Alert severity="error">{error}</Alert>
+          {showResend && (
+            <Box sx={{ mt: 1, textAlign: 'center' }}>
+              <Button
+                size="small"
+                variant="outlined"
+                color="primary"
+                disabled={resending}
+                onClick={handleResend}
+              >
+                {resending ? 'Sending…' : 'Resend verification email'}
+              </Button>
+            </Box>
+          )}
+        </Box>
+      )}
       {successMsg && <Alert severity="success" sx={{ mb: 2 }}>{successMsg}</Alert>}
 
       <Box component="form" onSubmit={handleSubmit}>

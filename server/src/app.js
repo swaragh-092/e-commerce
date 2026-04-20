@@ -98,6 +98,7 @@ const categoryAttributeRoutes = require('./modules/attribute/categoryAttribute.r
 const productAttributeRoutes = require('./modules/attribute/productAttribute.routes');
 const productVariantRoutes = require('./modules/attribute/productVariant.routes');
 const pageRoutes = require('./modules/page/page.routes');
+const notificationRoutes = require('./modules/notification/notification.routes');
 
 app.use('/api', seoRoutes);
 app.use('/api/settings', settingsRoutes);
@@ -120,8 +121,7 @@ app.use('/api/categories', categoryAttributeRoutes); // extends existing /api/ca
 app.use('/api/products', productAttributeRoutes);   // extends existing /api/products with /:id/attributes sub-routes
 app.use('/api/products', productVariantRoutes);     // extends existing /api/products with /:id/variants/* sub-routes
 app.use('/api/pages', pageRoutes);
-// Do not expose notifications out in phase 1, but we can mount if needed:
-// app.use('/api/notifications', notificationRoutes);
+app.use('/api/notifications', notificationRoutes);
 
 // Health check endpoint
 app.get('/health', async (req, res) => {

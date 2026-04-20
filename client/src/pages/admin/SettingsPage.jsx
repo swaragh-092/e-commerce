@@ -1,4 +1,4 @@
-import { useState, useEffect, useContext } from 'react';
+    import { useState, useEffect, useContext } from 'react';
 import {
   Alert,
   Box,
@@ -23,7 +23,7 @@ import {
 } from '@mui/material';
 import DeleteOutlineIcon from '@mui/icons-material/DeleteOutline';
 import AddIcon from '@mui/icons-material/Add';
-import { updateSettings } from '../../services/adminService';
+import { updateSettings, getEmailTemplates, updateEmailTemplate, sendTestEmail as sendTestEmailApi } from '../../services/adminService';
 import api from '../../services/api';
 import { useNotification } from '../../context/NotificationContext';
 import { SettingsContext } from '../../context/ThemeContext';
@@ -72,14 +72,18 @@ const SettingsPage = () => {
   const [form, setForm] = useState({});
   const [saving, setSaving] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
-  const { notify } = useNotification();
+  const [emailTemplates, setEmailTemplates] = useState([]);
+  const [templateSaving, setTemplateSaving] = useState({});
+  const [templateTestEmail, setTemplateTestEmail] = useState('');
+  const [templateTesting, setTemplateTesting] = useState({});
+  const [templateExpanded, setTemplateExpanded] = useState(null);
+  const notify = useNotification();
   const { refreshSettings } = useContext(SettingsContext) || {};
   const { hasPermission } = useAuth();
   const canManageSettings = hasPermission(PERMISSIONS.SETTINGS_MANAGE);
 
   useEffect(() => {
     api.get('/settings').then((res) => {
-      // Flatten { group: { key: value } } → { 'group.key': value }
       const raw = res.data.data || {};
       const flat = {};
       Object.entries(raw).forEach(([group, keys]) => {
@@ -91,6 +95,10 @@ const SettingsPage = () => {
       });
       setForm(flat);
     });
+    // Load email templates
+    getEmailTemplates()
+      .then((res) => setEmailTemplates(res.data?.data || []))
+      .catch(() => {});
   }, []);
 
   const set = (key, value) => setForm((f) => ({ ...f, [key]: value }));
@@ -120,8 +128,9 @@ const SettingsPage = () => {
     }
   };
 
-  const tabs = ['Store', 'Branding', 'Layout', 'Homepage', 'Catalog', 'Checkout', 'Promotions', 'Invoice', 'Advanced'];
+  const tabs = ['Store', 'Branding', 'Layout', 'Homepage', 'Catalog', 'Checkout', 'Promotions', 'Invoice', 'Advanced', 'Email Templates'];
   const currentTab = tabs[tab];
+  const isEmailTemplatesTab = currentTab === 'Email Templates';
 
   // Current currency symbol — used in shipping adornments
   const currSymbol = getCurrencySymbol(form['general.currency']);
@@ -1240,7 +1249,118 @@ const SettingsPage = () => {
             <Divider />
             <Box sx={{ p: 3 }}>
               <Box sx={{ pointerEvents: canManageSettings ? 'auto' : 'none', opacity: canManageSettings ? 1 : 0.75 }}>
-                {renderSections(panels[tab])}
+                {isEmailTemplatesTab ? (
+                  <Box>
+                    <Typography variant="body2" color="text.secondary" sx={{ mb: 3 }}>
+                      Customize the transactional emails your store sends. Use <code style={{ background: '#f4f4f4', padding: '1px 4px', borderRadius: 3 }}>{'{{variable}}'}</code> syntax for dynamic content. Changes apply immediately — no restart needed.
+                    </Typography>
+                    <Box sx={{ mb: 2.5, display: 'flex', gap: 1, alignItems: 'center' }}>
+                      <TextField
+                        size="small"
+                        label="Test email address"
+                        placeholder="you@example.com"
+                        value={templateTestEmail}
+                        onChange={(e) => setTemplateTestEmail(e.target.value)}
+                        sx={{ minWidth: 260 }}
+                        helperText="Enter an email to send test messages to"
+                      />
+                    </Box>
+                    {emailTemplates.length === 0 && (
+                      <Alert severity="info" sx={{ mb: 2 }}>No email templates found. Run the notification templates seeder to populate defaults.</Alert>
+                    )}
+                    {emailTemplates.map((tpl) => (
+                      <Paper key={tpl.name} variant="outlined" sx={{ mb: 2, borderRadius: 2, overflow: 'hidden' }}>
+                        <Box
+                          sx={{ p: 2, display: 'flex', alignItems: 'center', justifyContent: 'space-between', cursor: 'pointer', '&:hover': { bgcolor: 'action.hover' } }}
+                          onClick={() => setTemplateExpanded(templateExpanded === tpl.name ? null : tpl.name)}
+                        >
+                          <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
+                            <Box sx={{ width: 10, height: 10, borderRadius: '50%', bgcolor: tpl.isActive ? 'success.main' : 'text.disabled', flexShrink: 0 }} />
+                            <Box>
+                              <Typography variant="body2" fontWeight={700} sx={{ fontFamily: 'monospace' }}>{tpl.name}</Typography>
+                              <Typography variant="caption" color="text.secondary">{tpl.subject}</Typography>
+                            </Box>
+                          </Box>
+                          <Typography variant="caption" color="primary">{templateExpanded === tpl.name ? 'Collapse ▲' : 'Edit ▼'}</Typography>
+                        </Box>
+
+                        {templateExpanded === tpl.name && (
+                          <Box sx={{ p: 2.5, borderTop: '1px solid', borderColor: 'divider', display: 'flex', flexDirection: 'column', gap: 2 }}>
+                            <FormControlLabel
+                              control={
+                                <Switch
+                                  size="small"
+                                  checked={tpl.isActive}
+                                  onChange={(e) => setEmailTemplates((prev) => prev.map((t) => t.name === tpl.name ? { ...t, isActive: e.target.checked } : t))}
+                                />
+                              }
+                              label="Active — send this email"
+                            />
+                            <TextField
+                              fullWidth size="small" label="Subject line"
+                              helperText="Supports {{variables}}"
+                              value={tpl.subject}
+                              onChange={(e) => setEmailTemplates((prev) => prev.map((t) => t.name === tpl.name ? { ...t, subject: e.target.value } : t))}
+                            />
+                            <TextField
+                              fullWidth size="small" label="HTML Body"
+                              multiline rows={12}
+                              value={tpl.bodyHtml}
+                              onChange={(e) => setEmailTemplates((prev) => prev.map((t) => t.name === tpl.name ? { ...t, bodyHtml: e.target.value } : t))}
+                              inputProps={{ style: { fontFamily: 'monospace', fontSize: 12 } }}
+                              helperText="Full HTML email body. Use {{name}}, {{verify_url}}, {{reset_url}}, etc."
+                            />
+                            <TextField
+                              fullWidth size="small" label="Plain Text Body (fallback)"
+                              multiline rows={4}
+                              value={tpl.bodyText || ''}
+                              onChange={(e) => setEmailTemplates((prev) => prev.map((t) => t.name === tpl.name ? { ...t, bodyText: e.target.value } : t))}
+                              inputProps={{ style: { fontFamily: 'monospace', fontSize: 12 } }}
+                            />
+                            <Box sx={{ display: 'flex', gap: 1.5, flexWrap: 'wrap', pt: 0.5 }}>
+                              <Button
+                                variant="contained" size="small"
+                                disabled={templateSaving[tpl.name]}
+                                onClick={async () => {
+                                  setTemplateSaving((p) => ({ ...p, [tpl.name]: true }));
+                                  try {
+                                    await updateEmailTemplate(tpl.name, { subject: tpl.subject, bodyHtml: tpl.bodyHtml, bodyText: tpl.bodyText, isActive: tpl.isActive });
+                                    notify('Template saved!', 'success');
+                                  } catch {
+                                    notify('Failed to save template.', 'error');
+                                  } finally {
+                                    setTemplateSaving((p) => ({ ...p, [tpl.name]: false }));
+                                  }
+                                }}
+                              >
+                                {templateSaving[tpl.name] ? 'Saving…' : 'Save Template'}
+                              </Button>
+                              <Button
+                                variant="outlined" size="small"
+                                disabled={!templateTestEmail || templateTesting[tpl.name]}
+                                onClick={async () => {
+                                  setTemplateTesting((p) => ({ ...p, [tpl.name]: true }));
+                                  try {
+                                    await sendTestEmailApi(tpl.name, templateTestEmail);
+                                    notify(`Test email sent to ${templateTestEmail}`, 'success');
+                                  } catch {
+                                    notify('Failed to send test email. Check your SMTP config.', 'error');
+                                  } finally {
+                                    setTemplateTesting((p) => ({ ...p, [tpl.name]: false }));
+                                  }
+                                }}
+                              >
+                                {templateTesting[tpl.name] ? 'Sending…' : 'Send Test Email'}
+                              </Button>
+                            </Box>
+                          </Box>
+                        )}
+                      </Paper>
+                    ))}
+                  </Box>
+                ) : (
+                  renderSections(panels[tab])
+                )}
               </Box>
             </Box>
           </Paper>

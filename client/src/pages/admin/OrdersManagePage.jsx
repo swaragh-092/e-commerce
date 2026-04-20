@@ -278,6 +278,7 @@ const OrdersManagePage = () => {
           onPaginationModelChange={setPaginationModel}
           pageSizeOptions={[10, 20, 50]}
           disableRowSelectionOnClick
+          // getRowHeight={() => 'auto'}
           onRowClick={(params) => navigate(`/admin/orders/${params.id}`)}
           sx={{
             '& .MuiDataGrid-row': {

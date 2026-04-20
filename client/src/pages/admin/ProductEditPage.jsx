@@ -684,7 +684,6 @@ const ProductEditPage = () => {
                   value={formData.brandId}
                   label="Brand"
                   onChange={(e) => setField('brandId', e.target.value)}
-                  size="small"
                 >
                   <MenuItem value=""><em>None</em></MenuItem>
                   {brands.map((b) => (
@@ -693,7 +692,7 @@ const ProductEditPage = () => {
                     </MenuItem>
                   ))}
                 </Select>
-                <FormHelperText>Select a product brand</FormHelperText>
+                {/* <FormHelperText>Select a product brand</FormHelperText> */}
               </FormControl>
             </Paper>
 
