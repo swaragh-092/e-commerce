@@ -25,6 +25,7 @@ import {
   getOrderStatusLabel,
 } from '../../utils/orderWorkflow';
 import { useOrderStatusTransitions } from '../../hooks/useOrderStatusTransitions';
+import { useNotification } from '../../context/NotificationContext';
 
 const OrderDetailPage = () => {
   const { id } = useParams();
@@ -34,6 +35,7 @@ const OrderDetailPage = () => {
   const [loading, setLoading] = useState(true);
   const [actionLoading, setActionLoading] = useState(false);
   const [error, setError] = useState(null);
+  const { confirm } = useNotification();
 
   useEffect(() => {
     const fetchOrder = async () => {
@@ -54,7 +56,12 @@ const OrderDetailPage = () => {
   }, [id]);
 
   const handleCancel = async () => {
-    if (!window.confirm('Cancel this order?')) return;
+    const confirmed = await confirm(
+      'Cancel Order',
+      'Are you sure you want to cancel this order? This action cannot be undone.',
+      'error'
+    );
+    if (!confirmed) return;
     setActionLoading(true);
     try {
       await userService.cancelOrder(id);

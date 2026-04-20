@@ -23,6 +23,7 @@ const AppError = require('../../utils/AppError');
 const AuditService = require('../audit/audit.service');
 const CouponService = require('../coupon/coupon.service');
 const PaymentService = require('../payment/payment.service');
+const TaxService = require('../tax/tax.service');
 const { getPagination } = require('../../utils/pagination');
 const { ACTIONS, ENTITIES } = require('../../config/constants');
 const { getVariantUnitPrice } = require('../product/product.pricing');
@@ -146,7 +147,13 @@ const placeOrder = async (userId, payload) => {
     }
     const shippingAddressSnapshot = address.toJSON();
 
-    const orderSettingsKeys = ['tax.rate', 'tax.inclusive', 'tax.enableCGST', 'tax.cgstRate', 'tax.enableSGST', 'tax.sgstRate', 'tax.enableIGST', 'tax.igstRate', 'shipping.method', 'shipping.flatRate', 'shipping.freeThreshold'];
+    const orderSettingsKeys = [
+        'tax.rate', 'tax.inclusive', 'tax.originState',
+        'tax.enableCGST', 'tax.cgstRate',
+        'tax.enableSGST', 'tax.sgstRate',
+        'tax.enableIGST', 'tax.igstRate',
+        'shipping.method', 'shipping.flatRate', 'shipping.freeThreshold'
+    ];
     const settingsRows = await Setting.findAll({ where: { key: { [Op.in]: orderSettingsKeys } } });
     const settingsMap = settingsRows.reduce((acc, s) => { acc[s.key] = s.value; return acc; }, {});
     const getLocalSetting = (key, defaultVal) => settingsMap[key] !== undefined ? settingsMap[key] : defaultVal;
@@ -193,28 +200,26 @@ const placeOrder = async (userId, payload) => {
             };
         }
 
-        const globalTaxRate = Number(getLocalSetting('tax.rate', 0));
-        const enableCGST = getLocalSetting('tax.enableCGST', false) === true || getLocalSetting('tax.enableCGST', false) === 'true';
-        const enableSGST = getLocalSetting('tax.enableSGST', false) === true || getLocalSetting('tax.enableSGST', false) === 'true';
-        const enableIGST = getLocalSetting('tax.enableIGST', false) === true || getLocalSetting('tax.enableIGST', false) === 'true';
-        const useGST = enableCGST || enableSGST || enableIGST;
-        // GST overrides inclusive; inclusive only applies when no GST component is active
-        const taxInclusive = !useGST && (getLocalSetting('tax.inclusive', false) === true || getLocalSetting('tax.inclusive', false) === 'true');
-        const cgstRate = enableCGST ? Number(getLocalSetting('tax.cgstRate', 0.09)) : 0;
-        const sgstRate = enableSGST ? Number(getLocalSetting('tax.sgstRate', 0.09)) : 0;
-        const igstRate = enableIGST ? Number(getLocalSetting('tax.igstRate', 0.18)) : 0;
+        const originState = getLocalSetting('tax.originState', '');
+        const destinationState = shippingAddressSnapshot.state || '';
 
         let totalTax = 0;
-        if (!taxInclusive) {
-            for (const item of checkoutItems) {
-                const itemSubtotal = item.currentPrice * item.quantity;
-                if (useGST) {
-                    totalTax += itemSubtotal * (cgstRate + sgstRate + igstRate);
-                } else {
-                    const taxRate = item.currentProduct.taxRate !== null ? Number(item.currentProduct.taxRate) : globalTaxRate;
-                    totalTax += itemSubtotal * taxRate;
-                }
+        for (const item of checkoutItems) {
+            const effectiveTax = TaxService.getEffectiveTax(item.currentProduct, settingsMap);
+            const itemSubtotal = item.currentPrice * item.quantity;
+            const itemTaxBreakdown = TaxService.computeItemTax(
+                effectiveTax, 
+                itemSubtotal, 
+                destinationState, 
+                originState
+            );
+            
+            if (!itemTaxBreakdown || typeof itemTaxBreakdown.totalTax !== 'number' || !Number.isFinite(itemTaxBreakdown.totalTax)) {
+                throw new AppError('VALIDATION_ERROR', 500, `Tax calculation failed for "${item.currentProduct.name}"`);
             }
+            
+            item.taxBreakdown = itemTaxBreakdown;
+            totalTax += itemTaxBreakdown.totalTax;
         }
 
         const shippingMethod = getLocalSetting('shipping.method', 'flat_rate');
@@ -322,7 +327,8 @@ const placeOrder = async (userId, payload) => {
                 snapshotSku: item.currentProduct.sku,
                 variantInfo: item.variant ? item.variant.toJSON() : null,
                 quantity: item.quantity,
-                total: item.currentPrice * item.quantity
+                total: item.currentPrice * item.quantity,
+                taxBreakdown: item.taxBreakdown || null
             }, { transaction: t });
         }
 

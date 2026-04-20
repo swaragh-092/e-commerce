@@ -133,7 +133,7 @@ const ContentPreview = ({ content, bannerUrl }) => {
 const PageEditPage = () => {
   const { id } = useParams();
   const navigate = useNavigate();
-  const notify = useNotification();
+  const { notify } = useNotification();
   const { hasPermission } = useAuth();
   const isNew = !id || id === 'new';
   const canManagePages = hasPermission(PERMISSIONS.PAGES_MANAGE);

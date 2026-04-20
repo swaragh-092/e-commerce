@@ -110,7 +110,7 @@ exports.deleteCategory = async (id) => {
     }
 
     // F-10: guard against deleting a category that still has products
-    const productCount = await Product.count({ where: { categoryId: id } });
+    const productCount = await category.countProducts();
     if (productCount > 0) {
         throw new AppError('VALIDATION_ERROR', 400, `Cannot delete category: ${productCount} product(s) are still assigned to it`);
     }

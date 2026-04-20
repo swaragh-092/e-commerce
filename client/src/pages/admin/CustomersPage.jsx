@@ -28,7 +28,7 @@ const CustomersPage = () => {
   const [loading, setLoading] = useState(true);
   const [paginationModel, setPaginationModel] = useState({ page: 0, pageSize: 20 });
   const [search, setSearch] = useState('');
-  const notify = useNotification();
+  const { notify } = useNotification();
   const { hasPermission } = useAuth();
   const canManageCustomers = hasPermission(PERMISSIONS.CUSTOMERS_MANAGE);
 

@@ -16,7 +16,7 @@ import { getApiErrorMessage } from '../../utils/apiErrors';
 import { useNotification } from '../../context/NotificationContext';
 
 const ValuesPanel = ({ attribute, onRefresh, canManage }) => {
-  const notify = useNotification();
+  const { notify } = useNotification();
   const [newValue, setNewValue] = useState('');
   const [saving, setSaving] = useState(false);
 
@@ -81,7 +81,7 @@ const ValuesPanel = ({ attribute, onRefresh, canManage }) => {
 
 const AttributesPage = () => {
   const { hasPermission } = useAuth();
-  const notify = useNotification();
+  const { notify } = useNotification();
   const [attributes, setAttributes] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');

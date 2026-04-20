@@ -18,7 +18,7 @@ export const WishlistProvider = ({ children }) => {
   const [wishlistCount, setWishlistCount] = useState(0);
   const { isAuthenticated } = useAuth();
   const { settings } = useSettings();
-  const notify = useNotification();
+  const { notify } = useNotification();
   const wishlistEnabled = settings?.features?.wishlist !== false;
 
   const refreshWishlist = useCallback(async () => {

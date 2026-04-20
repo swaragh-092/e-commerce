@@ -63,25 +63,28 @@ import { getApiErrorMessage } from '../../utils/apiErrors';
 
 const validate = (formData) => {
   const errs = {};
-  if (!formData.name.trim()) errs.name = 'Product name is required.';
-  else if (formData.name.trim().length > 255)
+  if (!formData.name?.trim()) errs.name = 'Product name is required.';
+  else if (formData.name?.trim().length > 255)
     errs.name = 'Product name must be 255 characters or less.';
 
+  const rPrice = Number(formData.price);
   if (formData.price === '' || formData.price === null || formData.price === undefined) {
     errs.price = 'Price is required.';
-  } else if (isNaN(Number(formData.price)) || Number(formData.price) <= 0) {
+  } else if (isNaN(rPrice) || rPrice <= 0) {
     errs.price = 'Price must be a positive number.';
   }
 
   if (formData.salePrice !== '' && formData.salePrice !== null) {
-    if (isNaN(Number(formData.salePrice)) || Number(formData.salePrice) <= 0) {
+    const sPrice = Number(formData.salePrice);
+    if (isNaN(sPrice) || sPrice <= 0) {
       errs.salePrice = 'Sale price must be a positive number.';
-    } else if (Number(formData.salePrice) >= Number(formData.price)) {
+    } else if (!isNaN(rPrice) && rPrice > 0 && sPrice >= rPrice) {
       errs.salePrice = 'Sale price must be less than the regular price.';
     }
   }
 
-  if ((formData.saleStartAt || formData.saleEndAt || formData.saleLabel) && (formData.salePrice === '' || formData.salePrice === null)) {
+  // Only require sale price if a sale is actively being scheduled via dates
+  if ((formData.saleStartAt || formData.saleEndAt) && (formData.salePrice === '' || formData.salePrice === null)) {
     errs.salePrice = 'Add a sale price before scheduling a sale.';
   }
 
@@ -104,6 +107,18 @@ const validate = (formData) => {
     errs.sku = 'SKU must be 100 characters or less.';
   }
 
+  // Tax Configuration Validation
+  if (formData.taxConfig?.isCustom) {
+    const { sgst, cgst, igst } = formData.taxConfig;
+    if (isNaN(Number(sgst)) || sgst < 0 || sgst > 1) {
+      errs.taxConfig = 'SGST must be between 0 and 100%.';
+    } else if (isNaN(Number(cgst)) || cgst < 0 || cgst > 1) {
+      errs.taxConfig = 'CGST must be between 0 and 100%.';
+    } else if (isNaN(Number(igst)) || igst < 0 || igst > 1) {
+      errs.taxConfig = 'IGST must be between 0 and 100%.';
+    }
+  }
+
   return errs;
 };
 
@@ -120,7 +135,7 @@ const toIsoOrNull = (value) => (value ? new Date(value).toISOString() : null);
 const ProductEditPage = () => {
   const { id } = useParams();
   const navigate = useNavigate();
-  const notify = useNotification();
+  const { notify, confirm } = useNotification();
   const { settings } = useSettings();
   const { hasPermission } = useAuth();
   const isNew = !id || id === 'new';
@@ -146,6 +161,13 @@ const ProductEditPage = () => {
     categoryIds: [],
     brandId: '',
     images: [],
+    taxConfig: {
+      isCustom: false,
+      inclusive: false,
+      sgst: 0.09,
+      cgst: 0.09,
+      igst: 0.18,
+    },
   });
   const [errors, setErrors] = useState({});
   const [categories, setCategories] = useState([]);
@@ -166,20 +188,27 @@ const ProductEditPage = () => {
           if (prodRes?.data) {
             const p = prodRes.data;
             setFormData({
-              name: p.name,
+              name: p.name || '',
               description: p.description || '',
               shortDescription: p.shortDescription || '',
               sku: p.sku || '',
-              price: p.price,
+              price: p.price || '',
               salePrice: p.salePrice || '',
               saleStartAt: toDateTimeLocal(p.saleStartAt),
               saleEndAt: toDateTimeLocal(p.saleEndAt),
               saleLabel: p.saleLabel || '',
-              quantity: p.quantity,
-              status: p.status,
+              quantity: p.quantity || 0,
+              status: p.status || 'draft',
               categoryIds: p.categories?.map((c) => c.id) || [],
               brandId: p.brandId || '',
               images: p.images || [],
+              taxConfig: p.taxConfig || {
+                isCustom: false,
+                inclusive: false,
+                sgst: 0.09,
+                cgst: 0.09,
+                igst: 0.18,
+              },
             });
           }
         }
@@ -573,6 +602,14 @@ const ProductEditPage = () => {
                 </Select>
               </FormControl>
             </Paper>
+            
+            <TaxConfigSection 
+              taxConfig={formData.taxConfig} 
+              basePrice={formData.price}
+              setTaxConfig={(val) => setField('taxConfig', val)}
+              globalSettings={settings?.checkout || {}}
+              disabled={!canSaveProduct}
+            />
 
             <Paper sx={{ p: 3, mb: 3 }}>
               <Typography variant="h6" gutterBottom>
@@ -680,7 +717,7 @@ const ProductEditPage = () => {
                         <IconButton
                           size="small"
                           onClick={() => setField('sku', generateProductSKU(formData.name))}
-                          disabled={!formData.name.trim()}
+                          disabled={!formData.name?.trim()}
                         >
                           <ElectricBoltIcon fontSize="small" color="warning" />
                         </IconButton>
@@ -721,9 +758,128 @@ const ProductEditPage = () => {
   );
 };
 
+/* ─── Tax Configuration Section ────────────────────────────────────────────── */
+const TaxConfigSection = ({ taxConfig, basePrice, setTaxConfig, globalSettings, disabled }) => {
+  const handleChange = (field, value) => {
+    setTaxConfig({ ...taxConfig, [field]: value });
+  };
+
+  // Live tax preview logic
+  const isGST = globalSettings.enableCGST || globalSettings.enableSGST || globalSettings.enableIGST;
+  const currentPrice = parseFloat(basePrice) || 0;
+  
+  const effective = taxConfig.isCustom ? taxConfig : {
+    sgst: parseFloat(globalSettings.sgstRate || 0),
+    cgst: parseFloat(globalSettings.cgstRate || 0),
+    igst: parseFloat(globalSettings.igstRate || 0),
+    inclusive: globalSettings.inclusive,
+  };
+
+  const sgstAmount = currentPrice * (effective.sgst || 0);
+  const cgstAmount = currentPrice * (effective.cgst || 0);
+  const igstAmount = currentPrice * (effective.igst || 0);
+  const taxTotal = sgstAmount + cgstAmount; // Showing intra-state preview usually
+
+  return (
+    <Paper sx={{ p: 3, mb: 3 }}>
+      <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 2 }}>
+        <Typography variant="h6">
+          Tax Configuration
+        </Typography>
+        <FormControlLabel
+          control={
+            <Checkbox 
+              checked={taxConfig.isCustom} 
+              onChange={(e) => handleChange('isCustom', e.target.checked)}
+              disabled={disabled}
+            />
+          }
+          label={<Typography variant="body2" fontWeight={500}>Custom Tax</Typography>}
+        />
+      </Box>
+
+      {!taxConfig.isCustom ? (
+        <Alert severity="info" sx={{ mb: 2 }}>
+          Using global tax settings ({((parseFloat(globalSettings.sgstRate || 0) + parseFloat(globalSettings.cgstRate || 0)) * 100).toFixed(0)}% GST).
+        </Alert>
+      ) : (
+        <Grid container spacing={2}>
+          <Grid item xs={12}>
+            <FormControlLabel
+              control={
+                <Checkbox 
+                  checked={taxConfig.inclusive} 
+                  onChange={(e) => handleChange('inclusive', e.target.checked)}
+                  disabled={disabled}
+                />
+              }
+              label="Prices include tax"
+            />
+          </Grid>
+          <Grid item xs={4}>
+            <TextField
+              label="SGST (%)"
+              type="number"
+              fullWidth
+              size="small"
+              value={(taxConfig.sgst * 100).toFixed(2)}
+              onChange={(e) => handleChange('sgst', parseFloat(e.target.value) / 100)}
+              disabled={disabled}
+            />
+          </Grid>
+          <Grid item xs={4}>
+            <TextField
+              label="CGST (%)"
+              type="number"
+              fullWidth
+              size="small"
+              value={(taxConfig.cgst * 100).toFixed(2)}
+              onChange={(e) => handleChange('cgst', parseFloat(e.target.value) / 100)}
+              disabled={disabled}
+            />
+          </Grid>
+          <Grid item xs={4}>
+            <TextField
+              label="IGST (%)"
+              type="number"
+              fullWidth
+              size="small"
+              value={(taxConfig.igst * 100).toFixed(2)}
+              onChange={(e) => handleChange('igst', parseFloat(e.target.value) / 100)}
+              disabled={disabled}
+            />
+          </Grid>
+        </Grid>
+      )}
+
+      {currentPrice > 0 && (
+        <Box sx={{ mt: 2, p: 2, bgcolor: 'action.hover', borderRadius: 1 }}>
+          <Typography variant="caption" color="text.secondary" display="block" gutterBottom>
+            INTRA-STATE PREVIEW (ESTIMATE)
+          </Typography>
+          <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 0.5 }}>
+            <Typography variant="body2">Subtotal:</Typography>
+            <Typography variant="body2" fontWeight={500}>₹{currentPrice.toFixed(2)}</Typography>
+          </Box>
+          <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 0.5 }}>
+            <Typography variant="body2">Tax (Estimated):</Typography>
+            <Typography variant="body2" fontWeight={500}>+ ₹{taxTotal.toFixed(2)}</Typography>
+          </Box>
+          <Divider sx={{ my: 1 }} />
+          <Box sx={{ display: 'flex', justifyContent: 'space-between' }}>
+            <Typography variant="subtitle2">Total:</Typography>
+            <Typography variant="subtitle2" color="primary.main">₹{(currentPrice + taxTotal).toFixed(2)}</Typography>
+          </Box>
+        </Box>
+      )}
+    </Paper>
+  );
+};
+
+
 /* ─── Variants Panel ──────────────────────────────────────────────────────── */
 const VariantsPanel = ({ productId, flatCatFiles = [], canManageVariants = false }) => {
-  const notify = useNotification();
+  const { notify, confirm } = useNotification();
   const [productAttributes, setProductAttributes] = useState([]);
   const [variants, setVariants] = useState([]);
   const [productBasePrice, setProductBasePrice] = useState(0);
@@ -810,7 +966,7 @@ const VariantsPanel = ({ productId, flatCatFiles = [], canManageVariants = false
   };
 
   const handleAddCustomAttribute = async () => {
-    if (!canManageVariants || !customName.trim() || !customValue.trim()) {
+    if (!canManageVariants || !customName?.trim() || !customValue?.trim()) {
       return;
     }
 
@@ -852,7 +1008,12 @@ const VariantsPanel = ({ productId, flatCatFiles = [], canManageVariants = false
 
   const handleDeleteAttribute = async (rowId) => {
     if (!canManageVariants) return;
-    if (!window.confirm('Remove this attribute assignment? This will prune any variants that rely on this attribute during the next Matrix generation.')) return;
+    const confirmed = await confirm(
+      'Remove Attribute Assignment',
+      'Remove this attribute assignment? This will prune any variants that rely on this attribute during the next Matrix generation.',
+      'warning'
+    );
+    if (!confirmed) return;
     try {
       await attributeService.deleteProductAttribute(productId, rowId);
       notify('Attribute removed.', 'success');
@@ -908,7 +1069,12 @@ const VariantsPanel = ({ productId, flatCatFiles = [], canManageVariants = false
 
   const handleDeleteVariant = async (variantId) => {
     if (!canManageVariants) return;
-    if (!window.confirm('Delete this variant SKU?')) return;
+    const confirmed = await confirm(
+      'Delete Variant',
+      'Delete this variant SKU?',
+      'error'
+    );
+    if (!confirmed) return;
     try {
       await attributeService.deleteProductVariant(productId, variantId);
       notify('Variant deleted.', 'success');
@@ -945,7 +1111,7 @@ const VariantsPanel = ({ productId, flatCatFiles = [], canManageVariants = false
     setCloneSearchInput(inputValue);
     setCloneSelectedProduct(null);
     clearTimeout(cloneSearchTimer.current);
-    if (!inputValue.trim()) { setCloneSearchResults([]); return; }
+    if (!inputValue?.trim()) { setCloneSearchResults([]); return; }
     cloneSearchTimer.current = setTimeout(async () => {
       setCloneSearchLoading(true);
       try {
@@ -1098,7 +1264,7 @@ const VariantsPanel = ({ productId, flatCatFiles = [], canManageVariants = false
                   />
                 </Box>
 
-                <Button variant="outlined" startIcon={<AddIcon />} onClick={handleAddCustomAttribute} disabled={!canManageVariants || !customName.trim() || !customValue.trim()}>
+                <Button variant="outlined" startIcon={<AddIcon />} onClick={handleAddCustomAttribute} disabled={!canManageVariants || !customName?.trim() || !customValue?.trim()}>
                   Add Custom Attribute
                 </Button>
               </Box>

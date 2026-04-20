@@ -27,7 +27,7 @@ const ReviewsPage = () => {
   const [loading, setLoading] = useState(true);
   const [paginationModel, setPaginationModel] = useState({ page: 0, pageSize: 20 });
   const [statusFilter, setStatusFilter] = useState('pending');
-  const notify = useNotification();
+  const { notify, confirm } = useNotification();
   const { hasPermission } = useAuth();
   const canModerateReviews = hasPermission(PERMISSIONS.REVIEWS_MODERATE);
   const canDeleteReviews = hasPermission(PERMISSIONS.REVIEWS_DELETE);
@@ -72,10 +72,13 @@ const ReviewsPage = () => {
       return;
     }
 
-    if (!window.confirm('Delete this review?')) return;
-    deleteReview(id)
-      .then(fetchReviews)
-      .catch(() => notify('Failed to delete.', 'error'));
+    if (!(await confirm('Delete Review', 'Delete this review?', 'danger'))) return;
+    try {
+      await deleteReview(id);
+      fetchReviews();
+    } catch {
+      notify('Failed to delete.', 'error');
+    }
   };
 
   const columns = [

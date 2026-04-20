@@ -72,7 +72,7 @@ const SettingsPage = () => {
   const [form, setForm] = useState({});
   const [saving, setSaving] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
-  const notify = useNotification();
+  const { notify } = useNotification();
   const { refreshSettings } = useContext(SettingsContext) || {};
   const { hasPermission } = useAuth();
   const canManageSettings = hasPermission(PERMISSIONS.SETTINGS_MANAGE);

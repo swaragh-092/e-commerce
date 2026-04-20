@@ -32,7 +32,7 @@ import { PERMISSIONS } from '../../utils/permissions';
 import { getApiErrorMessage } from '../../utils/apiErrors';
 
 const BrandsPage = () => {
-  const notify = useNotification();
+  const { notify } = useNotification();
   const { hasPermission } = useAuth();
 
   const canCreateBrand = hasPermission(PERMISSIONS.PRODUCTS_CREATE);

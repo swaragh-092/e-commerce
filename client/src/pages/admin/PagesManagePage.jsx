@@ -34,7 +34,7 @@ const PagesManagePage = () => {
   const [paginationModel, setPaginationModel] = useState({ page: 0, pageSize: 10 });
   const [rowCount, setRowCount] = useState(0);
   const navigate = useNavigate();
-  const notify = useNotification();
+  const { notify } = useNotification();
   const { hasPermission } = useAuth();
   const canManagePages = hasPermission(PERMISSIONS.PAGES_MANAGE);
 

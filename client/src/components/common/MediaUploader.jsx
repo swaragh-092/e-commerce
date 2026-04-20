@@ -17,7 +17,7 @@ import { useNotification } from '../../context/NotificationContext';
 const MediaUploader = ({ onUploadSuccess, multiple = true, autoUpload = true }) => {
   const [uploading, setUploading] = useState(false);
   const [selectedFiles, setSelectedFiles] = useState([]);
-  const notify = useNotification();
+  const { notify } = useNotification();
 
   const handleUpload = async (file) => {
     if (!['image/jpeg', 'image/png', 'image/webp', 'image/gif'].includes(file.type)) {

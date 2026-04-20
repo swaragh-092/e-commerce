@@ -29,7 +29,7 @@ const MediaPage = () => {
   const [files, setFiles] = useState([]);
   const [loading, setLoading] = useState(true);
   const [uploadDialogOpen, setUploadDialogOpen] = useState(false);
-  const notify = useNotification();
+  const { notify, confirm } = useNotification();
   const { hasPermission } = useAuth();
   
   const canDeleteMedia = hasPermission(PERMISSIONS.MEDIA_DELETE);
@@ -54,7 +54,7 @@ const MediaPage = () => {
       return;
     }
 
-    if (!window.confirm('Delete this file?')) return;
+    if (!(await confirm('Delete File', 'Delete this file?', 'danger'))) return;
     try {
       await api.delete(`/media/${id}`);
       fetchMedia();

@@ -223,7 +223,7 @@ const OrderDetailPage = () => {
   const navigate = useNavigate();
   const { formatPrice } = useCurrency();
   const { hasPermission } = useAuth();
-  const notify = useNotification();
+  const { notify } = useNotification();
   const canUpdateOrderStatus = hasPermission(PERMISSIONS.ORDERS_UPDATE_STATUS);
   const canRefundOrders = hasPermission(PERMISSIONS.ORDERS_REFUND);
 

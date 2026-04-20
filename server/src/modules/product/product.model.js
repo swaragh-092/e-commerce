@@ -56,8 +56,10 @@ module.exports = (sequelize, DataTypes) => {
         weight: {
             type: DataTypes.DECIMAL(8, 2),
         },
-        taxRate: {
-            type: DataTypes.DECIMAL(5, 4),
+        taxConfig: {
+            type: DataTypes.JSONB,
+            allowNull: true,
+            defaultValue: null,
         },
         status: {
             type: DataTypes.STRING(20),

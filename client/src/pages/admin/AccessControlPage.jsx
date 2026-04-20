@@ -75,7 +75,7 @@ const emptyUserForm = {
 };
 
 const AccessControlPage = () => {
-  const notify = useNotification();
+  const { notify } = useNotification();
   const { hasPermission } = useAuth();
   const [roles, setRoles] = useState([]);
   const [permissions, setPermissions] = useState([]);

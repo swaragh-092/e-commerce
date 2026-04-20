@@ -20,10 +20,9 @@ import AppliedDiscountsSummary from '../../components/orders/AppliedDiscountsSum
 import CenteredLoader from '../../components/common/CenteredLoader';
 import { getApiErrorMessage } from '../../utils/apiErrors';
 import {
-    getOrderStatusColor,
-    getOrderStatusLabel,
     isOrderCustomerCancelableStatus,
 } from '../../utils/orderWorkflow';
+import { useNotification } from '../../context/NotificationContext';
 
 function TabPanel(props) {
     const { children, value, index, ...other } = props;
@@ -35,8 +34,8 @@ function TabPanel(props) {
 }
 
 const AccountPage = () => {
-    const { formatPrice } = useCurrency();
     const { user, updateProfile } = useContext(AuthContext);
+    const { confirm } = useNotification();
     const [tab, setTab] = useState(0);
 
     if (!user) return null;
@@ -158,7 +157,12 @@ const AddressesTab = () => {
     };
 
     const handleDelete = async (id) => {
-        if (!window.confirm('Delete this address?')) return;
+        const confirmed = await confirm(
+            'Delete Address',
+            'Are you sure you want to delete this address?',
+            'error'
+        );
+        if (!confirmed) return;
         try {
             await userService.deleteAddress(id);
             setAddresses((prev) => prev.filter((a) => a.id !== id));
@@ -325,7 +329,12 @@ const OrdersTab = () => {
     useEffect(() => { fetchOrders(); }, [fetchOrders]);
 
     const handleCancel = async (id) => {
-        if (!window.confirm('Cancel this order?')) return;
+        const confirmed = await confirm(
+            'Cancel Order',
+            'Are you sure you want to cancel this order? This action cannot be undone.',
+            'error'
+        );
+        if (!confirmed) return;
         try {
             await userService.cancelOrder(id);
             setOrders((prev) => prev.map((o) => o.id === id ? { ...o, status: 'cancelled' } : o));

@@ -44,6 +44,11 @@ module.exports = (sequelize, DataTypes) => {
             type: DataTypes.DECIMAL(10, 2),
             allowNull: false,
         },
+        taxBreakdown: {
+            type: DataTypes.JSONB,
+            allowNull: true,
+            defaultValue: null,
+        },
     }, {
         tableName: 'order_items',
         timestamps: true,

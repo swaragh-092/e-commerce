@@ -94,7 +94,7 @@ const CouponsPage = () => {
   const [products, setProducts] = useState([]);
   const [categories, setCategories] = useState([]);
   const [brands, setBrands] = useState([]);
-  const notify = useNotification();
+  const { notify } = useNotification();
   const { formatPrice } = useCurrency();
   const { hasPermission } = useAuth();
   const canManageCoupons = hasPermission(PERMISSIONS.COUPONS_MANAGE);

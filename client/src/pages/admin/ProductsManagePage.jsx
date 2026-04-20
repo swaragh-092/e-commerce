@@ -37,7 +37,7 @@ const ProductsManagePage = () => {
   const navigate = useNavigate();
   const { formatPrice } = useCurrency();
   const { settings } = useSettings();
-  const notify = useNotification();
+  const { notify } = useNotification();
   const { hasPermission } = useAuth();
   const sales = settings?.sales || {};
   const canCreateProducts = hasPermission(PERMISSIONS.PRODUCTS_CREATE);

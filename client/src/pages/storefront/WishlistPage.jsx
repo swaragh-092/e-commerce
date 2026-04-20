@@ -19,7 +19,7 @@ const WishlistPage = () => {
     const { formatPrice } = useCurrency();
     const { refreshWishlist } = useWishlist();
     const { fetchCart } = useCart();
-    const notify = useNotification();
+    const { notify } = useNotification();
     const [items, setItems] = useState([]);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState(null);
