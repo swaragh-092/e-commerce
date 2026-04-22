@@ -72,6 +72,11 @@ module.exports = (sequelize, DataTypes) => {
             type: DataTypes.BOOLEAN,
             defaultValue: false,
         },
+        isEnabled: {
+            type: DataTypes.BOOLEAN,
+            allowNull: false,
+            defaultValue: true,
+        },
         avgRating: {
             type: DataTypes.DECIMAL(3, 2),
             allowNull: true,

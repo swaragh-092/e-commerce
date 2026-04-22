@@ -5,7 +5,7 @@ const { Product, Category } = require('../index');
 class SeoService {
   async generateSitemap() {
     const products = await Product.findAll({
-      where: { status: 'published' },
+      where: { status: 'published', isEnabled: true },
       attributes: ['slug', 'updatedAt']
     });
 

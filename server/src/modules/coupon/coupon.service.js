@@ -291,6 +291,33 @@ const assertCouponRules = (coupon) => {
     if (!['manual', 'suggest', 'auto'].includes(coupon.applicationMode || 'manual')) {
         throw new AppError('VALIDATION_ERROR', 400, 'Invalid coupon application mode');
     }
+
+    // Guard: an item cannot be both included (via applicableIds) and excluded at the same time.
+    // Such a coupon would silently match nothing, so we reject it at creation/update time.
+    if (coupon.applicableTo === 'product') {
+        const conflict = ensureArray(coupon.applicableIds)
+            .filter((id) => ensureArray(coupon.excludedProductIds).includes(id));
+        if (conflict.length > 0) {
+            throw new AppError('VALIDATION_ERROR', 400,
+                'One or more included products are also in the exclusion list — remove the conflict before saving');
+        }
+    }
+    if (coupon.applicableTo === 'category') {
+        const conflict = ensureArray(coupon.applicableIds)
+            .filter((id) => ensureArray(coupon.excludedCategoryIds).includes(id));
+        if (conflict.length > 0) {
+            throw new AppError('VALIDATION_ERROR', 400,
+                'One or more included categories are also in the exclusion list — remove the conflict before saving');
+        }
+    }
+    if (coupon.applicableTo === 'brand') {
+        const conflict = ensureArray(coupon.applicableIds)
+            .filter((id) => ensureArray(coupon.excludedBrandIds).includes(id));
+        if (conflict.length > 0) {
+            throw new AppError('VALIDATION_ERROR', 400,
+                'One or more included brands are also in the exclusion list — remove the conflict before saving');
+        }
+    }
 };
 
 const list = async ({ page, limit }) => {
@@ -505,10 +532,12 @@ const assertCouponIsUsable = async (couponInput, userId, cartSubtotal, transacti
             throw new AppError('VALIDATION_ERROR', 400, 'This coupon is only available for first-time customers');
         }
 
+        // Only count orders that actually completed — pending/failed/processing orders
+        // should not disqualify a new customer from their first-order discount.
         const completedOrderCount = await Order.count({
             where: {
                 userId,
-                status: { [Op.notIn]: ['cancelled'] },
+                status: { [Op.in]: ['delivered', 'completed'] },
             },
         });
 
@@ -760,10 +789,26 @@ const listPublic = async () => {
         ],
     });
 
+    // Serialize once, filter by computed status, then shape for public consumption.
+    // Avoid double-serialization by reusing the already-plain object.
     return activeCoupons
         .map((coupon) => serializeCoupon(coupon))
         .filter((coupon) => coupon.status === 'active')
-        .map((coupon) => serializeCoupon(coupon, { forPublic: true }));
+        .map((plain) => ({
+            code: plain.code,
+            name: plain.name,
+            description: plain.description,
+            type: plain.type,
+            value: plain.value,
+            minOrderAmount: plain.minOrderAmount,
+            maxDiscount: plain.maxDiscount,
+            applicableTo: plain.applicableTo,
+            excludeSaleItems: plain.excludeSaleItems,
+            customerEligibility: plain.customerEligibility,
+            applicationMode: plain.applicationMode,
+            endDate: plain.endDate,
+            summary: plain.summary,
+        }));
 };
 
 module.exports = { list, findById, create, update, remove, validateCoupon, resolveCoupons, listPublic, getEligibleCoupons };

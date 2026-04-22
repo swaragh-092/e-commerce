@@ -146,6 +146,34 @@ const CouponsPage = () => {
     if (nextForm.applicableTo !== 'all' && (!Array.isArray(nextForm.applicableIds) || nextForm.applicableIds.length === 0)) {
       errs.applicableIds = 'Select at least one target';
     }
+
+    // Guard: an item that is both included and excluded will silently match nothing.
+    // Catch this in the UI before the API call so the admin gets immediate feedback.
+    if (nextForm.applicableTo === 'product') {
+      const conflict = (nextForm.applicableIds || []).filter((id) =>
+        (nextForm.excludedProductIds || []).includes(id)
+      );
+      if (conflict.length > 0) {
+        errs.applicableIds = 'Some included products are also in the exclusion list — remove the conflict';
+      }
+    }
+    if (nextForm.applicableTo === 'category') {
+      const conflict = (nextForm.applicableIds || []).filter((id) =>
+        (nextForm.excludedCategoryIds || []).includes(id)
+      );
+      if (conflict.length > 0) {
+        errs.applicableIds = 'Some included categories are also in the exclusion list — remove the conflict';
+      }
+    }
+    if (nextForm.applicableTo === 'brand') {
+      const conflict = (nextForm.applicableIds || []).filter((id) =>
+        (nextForm.excludedBrandIds || []).includes(id)
+      );
+      if (conflict.length > 0) {
+        errs.applicableIds = 'Some included brands are also in the exclusion list — remove the conflict';
+      }
+    }
+
     return errs;
   };
 

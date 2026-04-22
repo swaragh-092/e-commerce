@@ -3,6 +3,8 @@ const Joi = require('joi');
 
 const createProductSchema = Joi.object({
   name: Joi.string().max(255).required(),
+  slug: Joi.string().max(255).allow('', null),
+  isEnabled: Joi.boolean().default(true),
   description: Joi.string().allow('', null),
   shortDescription: Joi.string().max(500).allow('', null),
   sku: Joi.string().max(100).allow('', null),

@@ -166,7 +166,7 @@ const placeOrder = async (userId, payload) => {
             if (!product) {
                 throw new AppError('VALIDATION_ERROR', 400, 'One or more products in your cart are no longer available. Please clear your cart and try again.');
             }
-            if (product.status !== 'published') {
+            if (product.status !== 'published' || product.isEnabled === false) {
                 throw new AppError('VALIDATION_ERROR', 400, `"${product.name}" is not available for purchase. Please remove it from your cart.`);
             }
 

@@ -149,11 +149,17 @@ exports.getProducts = async (filters, page, limit, isAdmin = false) => {
   const order = [];
   const now = new Date();
 
-  // Always restrict to published products for storefront; admins can filter by any status
+  // Always restrict to published + enabled products for storefront; admins can filter by any status
   if (!isAdmin) {
     where.status = 'published';
-  } else if (filters.status) {
-    where.status = filters.status;
+    where.isEnabled = true;
+  } else {
+    if (filters.status) {
+      where.status = filters.status;
+    }
+    if (filters.isEnabled !== undefined) {
+      where.isEnabled = filters.isEnabled === 'true' || filters.isEnabled === true;
+    }
   }
 
   // Filter Logic
@@ -292,7 +298,10 @@ exports.getProducts = async (filters, page, limit, isAdmin = false) => {
 
 exports.getProductBySlug = async (slug, { adminView = false } = {}) => {
   const where = { slug };
-  if (!adminView) where.status = 'published';
+  if (!adminView) {
+    where.status = 'published';
+    where.isEnabled = true;
+  }
   const product = await Product.findOne({
     where,
     include: [
@@ -327,7 +336,7 @@ exports.createProduct = async (data) => {
   const transaction = await Product.sequelize.transaction();
   try {
     data = normalizeSalePayload(data);
-    const slug = await generateSlug(data.name, Product);
+    const slug = data.slug ? await generateSlug(data.slug, Product) : await generateSlug(data.name, Product);
 
     if (data.description) data.description = sanitizeRichText(data.description);
 
@@ -387,8 +396,13 @@ exports.updateProduct = async (id, data) => {
   const transaction = await Product.sequelize.transaction();
   try {
     data = normalizeSalePayload(data, product.price);
-    if (data.name && data.name !== product.name) {
+    
+    if (data.slug && data.slug !== product.slug) {
+      data.slug = await generateSlug(data.slug, Product);
+    } else if (data.name && data.name !== product.name && !data.slug) {
       data.slug = await generateSlug(data.name, Product);
+    } else {
+      delete data.slug;
     }
 
     if (data.description) data.description = sanitizeRichText(data.description);

@@ -68,7 +68,7 @@ const fetchCartWithItems = async (cartId, transaction) => {
     });
 
     const items = cartWithItems.items
-        ? cartWithItems.items.filter(item => item.product !== null)
+        ? cartWithItems.items.filter(item => item.product !== null && item.product.isEnabled !== false)
             .map((item) => {
                 const plainItem = item.toJSON();
                 const serializedProduct = serializeProductPricing(item.product);
@@ -107,7 +107,7 @@ const addItem = async (userId, sessionId, payload) => {
         const { productId, variantId, quantity = 1 } = payload;
 
         const product = await Product.findByPk(productId, { transaction: t, lock: Transaction.LOCK.UPDATE });
-        if (!product) {
+        if (!product || !product.isEnabled) {
             throw new AppError('NOT_FOUND', 404, 'Product not found or unavailable');
         }
 
@@ -169,7 +169,7 @@ const updateItem = async (userId, sessionId, itemId, quantity) => {
         if (!item) throw new AppError('NOT_FOUND', 404, 'Cart item not found');
 
         const product = item.product;
-        if (!product || product.deletedAt !== null) {
+        if (!product || product.deletedAt !== null || !product.isEnabled) {
             await item.destroy({ transaction: t });
             throw new AppError('NOT_FOUND', 404, 'Product no longer available and removed from cart');
         }

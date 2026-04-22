@@ -38,7 +38,7 @@ const getWishlistItemWhere = (wishlistId, productId, variantId = null) => ({
 
 const addWishlistItemToCart = async (userId, item, transaction) => {
   const product = await Product.findByPk(item.productId, { transaction });
-  if (!product || product.status !== 'published') {
+  if (!product || product.status !== 'published' || !product.isEnabled) {
     throw new AppError('NOT_FOUND', 404, 'Product not found or unavailable');
   }
 
@@ -102,7 +102,7 @@ const getWishlist = async (userId) => {
       transaction: t,
     });
 
-    const invalidItems = items.filter((item) => !item.Product || item.Product.status !== 'published' || (item.variantId && !item.variant));
+    const invalidItems = items.filter((item) => !item.Product || item.Product.status !== 'published' || item.Product.isEnabled === false || (item.variantId && !item.variant));
     if (invalidItems.length > 0) {
       await WishlistItem.destroy({ where: { id: invalidItems.map((item) => item.id) }, transaction: t });
     }
@@ -145,7 +145,7 @@ const addItem = async (userId, productId, variantId = null) => {
     }
 
     const product = await Product.findByPk(productId, { transaction: t });
-    if (!product || product.status !== 'published') throw new AppError('NOT_FOUND', 404, 'Product not found');
+    if (!product || product.status !== 'published' || !product.isEnabled) throw new AppError('NOT_FOUND', 404, 'Product not found');
 
     if (variantId) {
       const variant = await ProductVariant.findOne({ where: { id: variantId, productId }, transaction: t });

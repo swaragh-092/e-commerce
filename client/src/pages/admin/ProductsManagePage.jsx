@@ -3,7 +3,7 @@ import {
   Box, Typography, Button, Chip, IconButton, TextField,
   FormControl, InputLabel, Select, MenuItem, Stack, Tooltip,
   Avatar, Dialog, DialogTitle, DialogContent, DialogActions,
-  DialogContentText, InputAdornment, Paper,
+  DialogContentText, InputAdornment, Paper, Switch,
 } from '@mui/material';
 import { DataGrid } from '@mui/x-data-grid';
 import {
@@ -109,6 +109,7 @@ const ProductsManagePage = () => {
       saleEndAt: toDateTimeLocal(row.saleEndAt),
       saleLabel: row.saleLabel || '',
       status: row.status || 'draft',
+      isEnabled: row.isEnabled !== false,
       saving: false,
     });
   };
@@ -124,6 +125,7 @@ const ProductsManagePage = () => {
         quantity: parseInt(editDialog.quantity, 10) || 0,
         price: parseFloat(editDialog.price),
         status: editDialog.status,
+        isEnabled: editDialog.isEnabled,
         ...(editDialog.saleEnabled && editDialog.salePrice !== ''
           ? {
               salePrice: parseFloat(editDialog.salePrice),
@@ -274,6 +276,38 @@ const ProductsManagePage = () => {
       setSelectedIds([]);
     } catch (err) {
       notify('Bulk update failed: ' + err.message, 'error');
+    }
+  };
+
+  const handleToggleEnabled = async (row) => {
+    if (!canUpdateProducts) {
+      notify('You do not have permission to update products.', 'error');
+      return;
+    }
+    const newVal = !row.isEnabled;
+    try {
+      await updateProduct(row.id, { isEnabled: newVal });
+      setRows((prev) => prev.map((r) => r.id === row.id ? { ...r, isEnabled: newVal } : r));
+      notify(`Product ${newVal ? 'enabled' : 'disabled'} successfully.`, 'success');
+    } catch (err) {
+      notify(`Failed to toggle visibility: ${getApiErrorMessage(err)}`, 'error');
+    }
+  };
+
+  const handleBulkEnable = async (enable) => {
+    if (!canUpdateProducts) {
+      notify('You do not have permission to update products.', 'error');
+      return;
+    }
+    try {
+      await Promise.all(selectedIds.map((sid) => updateProduct(sid, { isEnabled: enable })));
+      setRows((prev) =>
+        prev.map((r) => selectedIds.includes(r.id) ? { ...r, isEnabled: enable } : r)
+      );
+      notify(`${selectedIds.length} products ${enable ? 'enabled' : 'disabled'} successfully.`, 'success');
+      setSelectedIds([]);
+    } catch (err) {
+      notify(`Bulk update failed: ${getApiErrorMessage(err)}`, 'error');
     }
   };
 
@@ -495,6 +529,24 @@ const ProductsManagePage = () => {
         />
       ),
     },
+    // 5b. Enabled toggle switch
+    {
+      field: 'isEnabled',
+      headerName: 'Enabled',
+      width: 90,
+      sortable: false,
+      renderCell: ({ row }) => (
+        <Tooltip title={row.isEnabled ? 'Visible on storefront — click to disable' : 'Hidden from storefront — click to enable'}>
+          <Switch
+            checked={!!row.isEnabled}
+            color="success"
+            size="small"
+            onChange={() => handleToggleEnabled(row)}
+            disabled={!canUpdateProducts}
+          />
+        </Tooltip>
+      ),
+    },
     // 6. Actions: quick-edit | edit | view on storefront | delete
     {
       field: 'actions',
@@ -648,6 +700,18 @@ const ProductsManagePage = () => {
                 onClick={() => handleBulkStatus('draft')}
               >
                 Set Draft
+              </Button>
+              <Button
+                size="small" variant="outlined" color="success"
+                onClick={() => handleBulkEnable(true)}
+              >
+                Enable
+              </Button>
+              <Button
+                size="small" variant="outlined" color="warning"
+                onClick={() => handleBulkEnable(false)}
+              >
+                Disable
               </Button>
             </>
           )}
@@ -860,6 +924,19 @@ const ProductsManagePage = () => {
               >
                 {editDialog.status === 'published' ? 'Published' : 'Draft'}
               </Button>
+            </Stack>
+            <Stack direction="row" justifyContent="space-between" alignItems="center" sx={{ pt: 0.5 }}>
+              <Box>
+                <Typography variant="body2" fontWeight={600}>Enabled</Typography>
+                <Typography variant="caption" color="text.secondary">
+                  Disabled products are hidden from the storefront.
+                </Typography>
+              </Box>
+              <Switch
+                checked={editDialog.isEnabled}
+                color="success"
+                onChange={() => setEditDialog((s) => ({ ...s, isEnabled: !s.isEnabled }))}
+              />
             </Stack>
           </Stack>
         </DialogContent>

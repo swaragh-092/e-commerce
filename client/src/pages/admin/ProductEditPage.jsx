@@ -61,6 +61,19 @@ import { useAuth } from '../../hooks/useAuth';
 import { PERMISSIONS } from '../../utils/permissions';
 import { getApiErrorMessage } from '../../utils/apiErrors';
 
+const generateSlug = (text) => {
+  if (!text) return '';
+  return text
+    .toString()
+    .toLowerCase()
+    .trim()
+    .replace(/\s+/g, '-')
+    .replace(/[^\w-]+/g, '')
+    .replace(/--+/g, '-')
+    .replace(/^-+/, '')
+    .replace(/-+$/, '');
+};
+
 const validate = (formData) => {
   const errs = {};
   if (!formData.name?.trim()) errs.name = 'Product name is required.';
@@ -107,6 +120,12 @@ const validate = (formData) => {
     errs.sku = 'SKU must be 100 characters or less.';
   }
 
+  if (formData.slug && !/^[a-z0-9-]+$/.test(formData.slug)) {
+    errs.slug = 'Slug can only contain lowercase letters, numbers, and hyphens.';
+  } else if (formData.slug && formData.slug.length > 255) {
+    errs.slug = 'Slug must be 255 characters or less.';
+  }
+
   // Tax Configuration Validation
   if (formData.taxConfig?.isCustom) {
     const { sgst, cgst, igst } = formData.taxConfig;
@@ -148,6 +167,7 @@ const ProductEditPage = () => {
 
   const [formData, setFormData] = useState({
     name: '',
+    slug: '',
     description: '',
     shortDescription: '',
     sku: '',
@@ -189,6 +209,7 @@ const ProductEditPage = () => {
             const p = prodRes.data;
             setFormData({
               name: p.name || '',
+              slug: p.slug || '',
               description: p.description || '',
               shortDescription: p.shortDescription || '',
               sku: p.sku || '',
@@ -353,9 +374,41 @@ const ProductEditPage = () => {
                 margin="normal"
                 size='small'
                 value={formData.name}
-                onChange={(e) => setField('name', e.target.value)}
+                onChange={(e) => {
+                  setField('name', e.target.value);
+                  if (isNew && (!formData.slug || formData.slug === generateSlug(formData.name))) {
+                    setField('slug', generateSlug(e.target.value));
+                  }
+                }}
                 error={Boolean(errors.name)}
                 helperText={errors.name}
+              />
+              <TextField
+                fullWidth
+                label="Slug"
+                margin="normal"
+                size='small'
+                value={formData.slug}
+                onChange={(e) => setField('slug', e.target.value)}
+                error={Boolean(errors.slug)}
+                helperText={errors.slug || 'Leave blank to auto-generate from name'}
+                InputProps={{
+                  endAdornment: (
+                    <InputAdornment position="end">
+                      <Tooltip title="Auto-generate slug from name">
+                        <span>
+                          <IconButton
+                            size="small"
+                            onClick={() => setField('slug', generateSlug(formData.name))}
+                            disabled={!formData.name?.trim()}
+                          >
+                            <ElectricBoltIcon fontSize="small" color="warning" />
+                          </IconButton>
+                        </span>
+                      </Tooltip>
+                    </InputAdornment>
+                  ),
+                }}
               />
               <TextField
                 fullWidth

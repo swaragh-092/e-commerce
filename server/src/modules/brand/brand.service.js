@@ -53,7 +53,7 @@ const getBrands = async (query = {}) => {
 const getBrandBySlug = async (slug) => {
     const brand = await Brand.findOne({
         where: { slug },
-        include: [{ model: Product, as: 'products', limit: 10 }]
+        include: [{ model: Product, as: 'products', where: { status: 'published', isEnabled: true }, required: false, limit: 10 }]
     });
 
     if (!brand) {

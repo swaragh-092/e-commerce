@@ -65,7 +65,7 @@ exports.getCategoryWithProducts = async (slug) => {
         include: [{
             model: Product,
             as: 'products',
-            where: { status: 'published' },
+            where: { status: 'published', isEnabled: true },
             required: false // LEFT JOIN so we still get category if no products
         }]
     });
