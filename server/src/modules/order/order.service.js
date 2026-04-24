@@ -75,7 +75,7 @@ const getSetting = async (key, defaultVal) => {
 };
 
 const placeOrder = async (userId, payload) => {
-    const { shippingAddressId, couponCode, couponCodes = [], notes, buyNowItem = null } = payload;
+    const { shippingAddressId, couponCode, couponCodes = [], notes, buyNowItem = null, paymentMethod = 'razorpay' } = payload;
     let cart = null;
     let checkoutItems = [];
 
@@ -292,10 +292,14 @@ const placeOrder = async (userId, payload) => {
         const randStr = crypto.randomBytes(3).toString('hex').toUpperCase();
         const orderNumber = `ORD-${dateStr}-${randStr}`;
 
+        // Determine initial order status based on payment method
+        const initialStatus = paymentMethod === 'cod' ? 'pending_cod' : ORDER_DEFAULT_STATUS;
+
         const order = await Order.create({
             orderNumber,
             userId,
-            status: ORDER_DEFAULT_STATUS,
+            status: initialStatus,
+            paymentMethod,
             subtotal,
             tax: totalTax,
             shippingCost,
@@ -315,6 +319,22 @@ const placeOrder = async (userId, payload) => {
             shippingAddressSnapshot,
             notes
         }, { transaction: t });
+
+        // For COD orders, create the Payment record immediately inside the transaction.
+        // This mirrors how Razorpay creates a pending Payment; it is updated to 'completed'
+        // by the admin "Mark COD as Collected" endpoint later.
+        if (paymentMethod === 'cod') {
+            const currencySetting = await Setting.findOne({ where: { group: 'general', key: 'currency' }, transaction: t });
+            const currency = (currencySetting?.value || 'INR').toUpperCase();
+            await Payment.create({
+                orderId: order.id,
+                provider: 'cod',
+                transactionId: null,
+                amount: total,
+                currency,
+                status: 'pending',
+            }, { transaction: t });
+        }
 
         for (const item of checkoutItems) {
             await OrderItem.create({
@@ -354,15 +374,18 @@ const placeOrder = async (userId, payload) => {
         return order;
     });
 
-    // createIntent runs OUTSIDE the transaction so a Stripe failure
-    // doesn't roll back the order — the order exists, payment can be retried
+    // For COD orders skip the payment gateway entirely — order is already confirmed.
+    // For Razorpay orders, createIntent runs OUTSIDE the transaction so a gateway failure
+    // doesn't roll back the order — the order exists, payment can be retried.
     let clientSecret = null;
-    try {
-        const intent = await PaymentService.createIntent(order.userId, order.id);
-        clientSecret = intent.clientSecret;
-    } catch (err) {
-        // Log but don't fail — the order is saved; frontend can retry payment
-        clientSecret = null;
+    if (paymentMethod !== 'cod') {
+        try {
+            const intent = await PaymentService.createIntent(order.userId, order.id);
+            clientSecret = intent.clientSecret;
+        } catch (err) {
+            // Log but don't fail — the order is saved; frontend can retry payment
+            clientSecret = null;
+        }
     }
 
     try {
@@ -375,6 +398,7 @@ const placeOrder = async (userId, payload) => {
                 changes: {
                     status: order.status,
                     total: order.total,
+                    paymentMethod,
                 },
             });
         }

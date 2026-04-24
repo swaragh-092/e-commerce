@@ -24,4 +24,11 @@ const handleWebhook = async (req, res, next) => {
     } catch (err) { next(err); }
 };
 
-module.exports = { createOrder, verifyPayment, handleWebhook };
+const confirmCodPayment = async (req, res, next) => {
+    try {
+        const result = await PaymentService.confirmCodPayment(req.user.id, req.params.orderId);
+        return success(res, result, 'COD payment confirmed');
+    } catch (err) { next(err); }
+};
+
+module.exports = { createOrder, verifyPayment, handleWebhook, confirmCodPayment };

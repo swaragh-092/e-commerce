@@ -238,4 +238,69 @@ const handleWebhook = async (payload, signature) => {
     return { received: true };
 };
 
-module.exports = { createOrder, verifyPayment, handleWebhook };
+/**
+ * Confirms that cash was collected for a COD order (admin action).
+ * Transitions order: pending_cod / processing → paid
+ * Transitions payment: pending → cod_collected
+ */
+const confirmCodPayment = async (actingUserId, orderId) => {
+    return sequelize.transaction(async (t) => {
+        const order = await Order.findByPk(orderId, {
+            transaction: t,
+            lock: t.LOCK.UPDATE,
+        });
+
+        if (!order) throw new AppError('NOT_FOUND', 404, 'Order not found');
+        if (order.paymentMethod !== 'cod') {
+            throw new AppError('VALIDATION_ERROR', 400, 'This order is not a COD order');
+        }
+        if (!['pending_cod', 'processing'].includes(order.status)) {
+            throw new AppError(
+                'VALIDATION_ERROR',
+                400,
+                `Cannot confirm COD collection for a ${order.status} order`
+            );
+        }
+
+        const previousStatus = order.status;
+        await order.update({ status: 'paid' }, { transaction: t });
+
+        const payment = await Payment.findOne({
+            where: { orderId, provider: 'cod' },
+            transaction: t,
+            lock: t.LOCK.UPDATE,
+        });
+
+        if (payment) {
+            await payment.update({
+                status: 'cod_collected',
+                metadata: {
+                    ...(payment.metadata || {}),
+                    confirmedBy: actingUserId,
+                    confirmedAt: new Date().toISOString(),
+                },
+            }, { transaction: t });
+        }
+
+        try {
+            if (AuditService && AuditService.log) {
+                await AuditService.log({
+                    userId: actingUserId,
+                    action: ACTIONS.STATUS_CHANGE,
+                    entity: ENTITIES.PAYMENT,
+                    entityId: payment?.id || orderId,
+                    changes: {
+                        orderStatus: { before: previousStatus, after: 'paid' },
+                        paymentStatus: { before: 'pending', after: 'cod_collected' },
+                    },
+                }, t);
+            }
+        } catch (err) {
+            logger.error('COD confirmation audit log failed', { actingUserId, orderId, errorMessage: err.message });
+        }
+
+        return { success: true, orderId, status: 'paid' };
+    });
+};
+
+module.exports = { createOrder, verifyPayment, handleWebhook, confirmCodPayment };

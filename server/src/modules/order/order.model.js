@@ -57,6 +57,15 @@ module.exports = (sequelize, DataTypes) => {
         notes: {
             type: DataTypes.TEXT,
         },
+        paymentMethod: {
+            type: DataTypes.STRING(20),
+            allowNull: false,
+            defaultValue: 'razorpay',
+            validate: {
+                isIn: [['razorpay', 'cod']],
+            },
+            field: 'payment_method',
+        },
     }, {
         tableName: 'orders',
         timestamps: true,

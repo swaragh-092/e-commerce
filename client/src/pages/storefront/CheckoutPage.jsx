@@ -161,6 +161,7 @@ const CheckoutPage = () => {
     // Placing order
     const [placing, setPlacing] = useState(false);
     const [error, setError] = useState(null);
+    const [paymentMethod, setPaymentMethod] = useState('razorpay');
 
     const items = isBuyNowFlow ? [buyNowItem] : (cart?.items || []);
     const subtotal = items.reduce((sum, item) => {
@@ -257,6 +258,7 @@ const CheckoutPage = () => {
             const { placeOrder } = await import('../../services/adminService');
             const res = await placeOrder({
                 shippingAddressId: selectedAddressId,
+                paymentMethod,
                 ...(couponCode && couponResult && !couponResult.error && { couponCode }),
                 ...(appliedCoupons.length > 0 && { couponCodes: appliedCoupons.map((coupon) => coupon.code) }),
                 ...(notes && { notes }),
@@ -272,7 +274,12 @@ const CheckoutPage = () => {
             if (!isBuyNowFlow) {
                 await clearCart();
             }
-            navigate(`/payment/${orderId}`);
+            if (paymentMethod === 'cod') {
+                // COD: skip the payment gateway, go straight to success
+                navigate('/payment/success', { state: { orderId, isCod: true } });
+            } else {
+                navigate(`/payment/${orderId}`);
+            }
         } catch (err) {
             setError(getApiErrorMessage(err, 'Failed to place order. Please try again.'));
             setPlacing(false);
@@ -503,6 +510,52 @@ const CheckoutPage = () => {
                                 onChange={(e) => setNotes(e.target.value)}
                                 sx={{ mb: 2 }}
                             />
+                            {/* Payment Method Selection */}
+                            <Paper
+                                variant="outlined"
+                                sx={{
+                                    borderRadius: 2,
+                                    mb: 2,
+                                    overflow: 'hidden',
+                                    borderColor: 'divider',
+                                }}
+                            >
+                                <Box sx={{ px: 2.5, py: 1.5, bgcolor: 'grey.50', borderBottom: '1px solid', borderColor: 'divider' }}>
+                                    <Typography variant="subtitle2" fontWeight={600}>Payment Method</Typography>
+                                </Box>
+                                <RadioGroup
+                                    value={paymentMethod}
+                                    onChange={(e) => setPaymentMethod(e.target.value)}
+                                >
+                                    <FormControlLabel
+                                        value="razorpay"
+                                        control={<Radio size="small" />}
+                                        label={
+                                            <Box>
+                                                <Typography variant="body2" fontWeight={600}>Pay Online (Razorpay)</Typography>
+                                                <Typography variant="caption" color="text.secondary">
+                                                    Credit / Debit card, UPI, Netbanking
+                                                </Typography>
+                                            </Box>
+                                        }
+                                        sx={{ mx: 0, px: 2, py: 1.5, borderBottom: '1px solid', borderColor: 'divider', alignItems: 'center' }}
+                                    />
+                                    <FormControlLabel
+                                        value="cod"
+                                        control={<Radio size="small" />}
+                                        label={
+                                            <Box>
+                                                <Typography variant="body2" fontWeight={600}>Cash on Delivery (COD)</Typography>
+                                                <Typography variant="caption" color="text.secondary">
+                                                    Pay when your order arrives
+                                                </Typography>
+                                            </Box>
+                                        }
+                                        sx={{ mx: 0, px: 2, py: 1.5, alignItems: 'center' }}
+                                    />
+                                </RadioGroup>
+                            </Paper>
+
                             <Box sx={{ display: 'flex', justifyContent: 'space-between', mt: 2 }}>
                                 <Button onClick={() => setActiveStep(reviewStep - 1)}>Back</Button>
                                 <Button
@@ -511,7 +564,9 @@ const CheckoutPage = () => {
                                     onClick={handlePlaceOrder}
                                     disabled={placing}
                                 >
-                                    {placing ? <CircularProgress size={22} color="inherit" /> : 'Place Order & Pay'}
+                                    {placing
+                                        ? <CircularProgress size={22} color="inherit" />
+                                        : paymentMethod === 'cod' ? 'Place COD Order' : 'Place Order & Pay'}
                                 </Button>
                             </Box>
                         </Paper>

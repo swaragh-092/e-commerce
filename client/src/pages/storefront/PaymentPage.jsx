@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { Box, Container, Typography, CircularProgress, Alert, Button, Paper, Divider } from '@mui/material';
 import { useParams, useNavigate } from 'react-router-dom';
 import paymentService from '../../services/paymentService';
+import { getOrderById } from '../../services/adminService';
 import PageSEO from '../../components/common/PageSEO';
 import CenteredLoader from '../../components/common/CenteredLoader';
 import { getApiErrorMessage } from '../../utils/apiErrors';
@@ -16,11 +17,21 @@ const PaymentPage = () => {
 
     useEffect(() => {
         if (!orderId) { navigate('/cart'); return; }
-        
-        // Initialize Razorpay Order on mount/checkout
-        paymentService.createOrder(orderId)
+
+        // First fetch the order to detect COD orders before touching Razorpay
+        getOrderById(orderId)
             .then((res) => {
-                setOrderData(res.data?.data || res.data);
+                const order = res.data?.data || res.data;
+
+                // Guard: COD orders should never reach this page — redirect to success
+                if (order?.paymentMethod === 'cod') {
+                    navigate('/payment/success', { replace: true, state: { orderId, isCod: true } });
+                    return;
+                }
+
+                // Razorpay flow: initialize the Razorpay order
+                return paymentService.createOrder(orderId)
+                    .then((r) => setOrderData(r.data?.data || r.data));
             })
             .catch((err) => {
                 setError(getApiErrorMessage(err, 'Failed to initialize payment. Please contact support.'));
@@ -37,15 +48,14 @@ const PaymentPage = () => {
         setProcessing(true);
 
         const options = {
-            key: import.meta.env.VITE_RAZORPAY_KEY_ID, // Enter the Key ID generated from the Dashboard
-            amount: orderData.amount, // Amount is in currency subunits. Default currency is INR. Hence, 50000 refers to 50000 paise
+            key: import.meta.env.VITE_RAZORPAY_KEY_ID,
+            amount: orderData.amount,
             currency: orderData.currency,
             name: "My Store",
             description: `Order #${orderId}`,
-            order_id: orderData.id, // This is a sample Order ID. Pass the `id` obtained in the response of Step 1
+            order_id: orderData.id,
             handler: async (response) => {
                 try {
-                    // Send verification data to backend
                     await paymentService.verifyPayment(orderId, {
                         razorpay_order_id: response.razorpay_order_id,
                         razorpay_payment_id: response.razorpay_payment_id,
@@ -58,7 +68,6 @@ const PaymentPage = () => {
                 }
             },
             prefill: {
-                // You can optionally prefill customer details
                 name: "",
                 email: "",
                 contact: ""
@@ -100,7 +109,7 @@ const PaymentPage = () => {
                     Order #{orderId} — Total: {orderData.currency} {(orderData.amount / 100).toFixed(2)}
                 </Typography>
                 <Divider sx={{ mb: 4 }} />
-                
+
                 <Button
                     variant="contained"
                     fullWidth
@@ -111,11 +120,11 @@ const PaymentPage = () => {
                 >
                     {processing ? <CircularProgress size={24} color="inherit" /> : 'Pay Now'}
                 </Button>
-                
-                <Button 
-                    fullWidth 
-                    variant="text" 
-                    onClick={() => navigate('/cart')} 
+
+                <Button
+                    fullWidth
+                    variant="text"
+                    onClick={() => navigate('/cart')}
                     disabled={processing}
                 >
                     Cancel and Return to Cart

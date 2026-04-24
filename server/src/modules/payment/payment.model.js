@@ -30,7 +30,7 @@ module.exports = (sequelize, DataTypes) => {
             type: DataTypes.STRING(20),
             defaultValue: 'pending',
             validate: {
-                isIn: [['pending', 'completed', 'failed', 'refunded']],
+                isIn: [['pending', 'completed', 'failed', 'refunded', 'cod_collected']],
             },
         },
         metadata: {
