@@ -94,8 +94,8 @@ const OrderDetailPage = () => {
     return (
       <Container maxWidth="md" sx={{ py: 6 }}>
         <Alert severity="error" sx={{ mb: 2 }}>{error || 'Order not found.'}</Alert>
-        <Button variant="outlined" onClick={() => navigate('/account')}>
-          Back to account
+        <Button variant="outlined" onClick={() => navigate('/orders')}>
+          Back to orders
         </Button>
       </Container>
     );
@@ -107,8 +107,8 @@ const OrderDetailPage = () => {
 
       <Box sx={{ display: 'flex', justifyContent: 'space-between', gap: 2, flexWrap: 'wrap', mb: 3 }}>
         <Box>
-          <Button variant="outlined" size="small" sx={{ mb: 1.5 }} onClick={() => navigate('/account')}>
-            ← Back to account
+          <Button variant="outlined" size="small" sx={{ mb: 1.5 }} onClick={() => navigate('/orders')}>
+            ← Back to orders
           </Button>
           <Typography variant="h4" fontWeight={700}>
             {order.orderNumber}

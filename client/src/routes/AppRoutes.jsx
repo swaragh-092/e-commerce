@@ -17,6 +17,7 @@ const ForgotPasswordPage = lazy(() => import('../pages/storefront/ForgotPassword
 const ResetPasswordPage = lazy(() => import('../pages/storefront/ResetPasswordPage'));
 const VerifyEmailPage = lazy(() => import('../pages/storefront/VerifyEmailPage'));
 const AccountPage = lazy(() => import('../pages/storefront/AccountPage'));
+const AllOrdersPage = lazy(() => import('../pages/storefront/AllOrdersPage/index'));
 const StoreOrderDetailPage = lazy(() => import('../pages/storefront/OrderDetailPage'));
 const StorefrontOrderInvoicePage = lazy(() => import('../pages/storefront/OrderInvoicePage'));
 const WishlistPage = lazy(() => import('../pages/storefront/WishlistPage'));
@@ -100,6 +101,7 @@ const AppRoutes = () => (
           <Route path="account" element={<AccountPage />} />
           <Route path="account/orders/:id" element={<StoreOrderDetailPage />} />
           <Route path="account/orders/:id/invoice" element={<StorefrontOrderInvoicePage />} />
+          <Route path="orders" element={<AllOrdersPage />} />
           <Route path="profile" element={<AccountPage />} />
           <Route path="wishlist" element={<WishlistPage />} />
           <Route path="checkout" element={<CheckoutPage />} />
