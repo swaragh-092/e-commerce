@@ -103,6 +103,13 @@ const updateAddress = (id, data) => api.put(`/users/me/addresses/${id}`, data);
 const deleteAddress = (id) => api.delete(`/users/me/addresses/${id}`);
 const setDefaultAddress = (id) => api.put(`/users/me/addresses/${id}/default`);
 
+// Sale Labels
+const getSaleLabels = () => api.get('/settings/sale-labels');
+const createSaleLabel = (data) => api.post('/settings/sale-labels', data);
+const updateSaleLabel = (id, data) => api.patch(`/settings/sale-labels/${id}`, data);
+const deleteSaleLabel = (id) => api.delete(`/settings/sale-labels/${id}`);
+const reorderSaleLabels = (labels) => api.put('/settings/sale-labels', { labels });
+
 export {
   getStats, getSalesChart, getLowStock, getRecentOrders,
   getAccessRoles, getAccessPermissions, getAccessUsers, createAccessRole, updateAccessRole, updateAccessUserRole, createAccessUser,
@@ -116,4 +123,5 @@ export {
   validateCoupon, getPublicCoupons, getEligibleCoupons,
   getMyOrders, getMyOrderById, cancelOrder, placeOrder,
   getAddresses, createAddress, updateAddress, deleteAddress, setDefaultAddress,
+  getSaleLabels, createSaleLabel, updateSaleLabel, deleteSaleLabel, reorderSaleLabels,
 };

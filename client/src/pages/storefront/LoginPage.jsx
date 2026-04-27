@@ -47,13 +47,9 @@ const LoginPage = () => {
     setLoading(true);
 
     try {
-      const data = await login(formData.email, formData.password);
-      const adminEntryPath = getFirstAccessibleAdminPath(data.user);
-      if (adminEntryPath) {
-        navigate(adminEntryPath);
-      } else {
-        navigate('/');
-      }
+      await login(formData.email, formData.password);
+      // For storefront login, always treat user as a customer and send to home/account
+      navigate('/');
     } catch (err) {
       const msg = getApiErrorMessage(err, 'Login failed. Please verify credentials.');
       setError(msg);

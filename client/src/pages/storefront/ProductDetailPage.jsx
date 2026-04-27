@@ -143,12 +143,30 @@ const ProductDetailPage = () => {
         : (product.savingsAmount || getSavingsAmount(product));
     const saleTiming = sales.showSaleTiming !== false ? getSaleTimingMessage(product) : null;
     const hasSale = productHasSale && currentPrice < regularPrice;
+    const resolvedLabel = product.saleLabelResolved;
+    const showLabelSetting = sales.showSaleLabel !== false;
+    let saleLabelText = null;
+    let saleLabelColor = hasSale ? 'error' : 'warning';
+
+    if ((hasSale || isScheduledSale) && showLabelSetting) {
+        if (resolvedLabel && resolvedLabel.name) {
+            saleLabelText = resolvedLabel.name;
+            if (resolvedLabel.color) {
+                saleLabelColor = resolvedLabel.color;
+            }
+        } else if (product.saleLabel) {
+            saleLabelText = product.saleLabel;
+        } else if (sales.defaultSaleLabel) {
+            saleLabelText = sales.defaultSaleLabel;
+        }
+    }
+
     const countdownText = sales.showCountdown === false ? null : (isScheduledSale
         ? getCountdownText(product.saleStartAt, 'Starts in ')
         : hasSale
             ? getCountdownText(product.saleEndAt, 'Ends in ')
             : null);
-    const saleLabel = (hasSale || isScheduledSale) && sales.showSaleLabel !== false ? (product.saleLabel || sales.defaultSaleLabel || null) : null;
+
     const showDiscountPercent = sales.showDiscountPercent !== false;
     const showSavingsAmount = sales.showSavingsAmount !== false;
     const endingSoon = hasSale && sales.showCountdown !== false && isEndingSoon(product.saleEndAt, sales.endingSoonHours);
@@ -300,7 +318,18 @@ const ProductDetailPage = () => {
                             }}
                         >
                             <Box sx={{ display: 'flex', gap: 1, flexWrap: 'wrap', alignItems: 'center', mb: 1 }}>
-                                {saleLabel && <Chip label={saleLabel} color={hasSale ? 'error' : 'warning'} size="small" />}
+                                {saleLabelText && (
+                                    <Chip 
+                                        label={saleLabelText} 
+                                        sx={{ 
+                                            bgcolor: saleLabelColor.startsWith('#') ? saleLabelColor : undefined,
+                                            color: saleLabelColor.startsWith('#') ? '#fff' : undefined,
+                                            fontWeight: 700
+                                        }}
+                                        color={!saleLabelColor.startsWith('#') ? saleLabelColor : undefined}
+                                        size="small" 
+                                    />
+                                )}
                                 {showDiscountPercent && discountPercent > 0 && <Chip label={`${discountPercent}% OFF`} color={hasSale ? 'error' : 'warning'} variant="outlined" size="small" />}
                                 {saleTiming && <Chip label={saleTiming} variant="outlined" size="small" />}
                                 {countdownText && <Chip key={countdownNow} label={countdownText} color={hasSale ? 'error' : 'warning'} variant="filled" size="small" />}

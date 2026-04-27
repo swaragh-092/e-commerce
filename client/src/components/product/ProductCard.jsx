@@ -16,7 +16,25 @@ const ProductCard = ({ product, fromCategory }) => {
   const isScheduledSale = product.saleStatus === 'scheduled';
   const discountPercent = product.discountPercent || getDiscountPercent(product);
   const saleTiming = sales.showSaleTiming !== false ? getSaleTimingMessage(product) : null;
-  const saleLabel = (hasSale || isScheduledSale) && sales.showSaleLabel !== false ? (product.saleLabel || sales.defaultSaleLabel || null) : null;
+  const resolvedLabel = product.saleLabelResolved;
+  const showLabelSetting = sales.showSaleLabel !== false;
+  
+  let saleLabelText = null;
+  let saleLabelColor = 'error.main'; 
+  
+  if ((hasSale || isScheduledSale) && showLabelSetting) {
+    if (resolvedLabel && resolvedLabel.name) {
+       saleLabelText = resolvedLabel.name;
+       if (resolvedLabel.color) {
+          saleLabelColor = resolvedLabel.color;
+       }
+    } else if (product.saleLabel) {
+       saleLabelText = product.saleLabel;
+    } else if (sales.defaultSaleLabel) {
+       saleLabelText = sales.defaultSaleLabel;
+    }
+  }
+
   const endingSoon = hasSale && sales.showCountdown !== false && isEndingSoon(product.saleEndAt, sales.endingSoonHours);
   const hasRating = product.averageRating != null;
 
@@ -42,6 +60,22 @@ const ProductCard = ({ product, fromCategory }) => {
             color="warning"
             size="small"
             sx={{ position: 'absolute', top: 8, left: 8, zIndex: 1, fontWeight: 700 }}
+          />
+        )}
+        {saleLabelText && (
+          <Chip
+            label={saleLabelText}
+            size="small"
+            sx={{ 
+              position: 'absolute', 
+              top: endingSoon ? 36 : 8, 
+              left: 8, 
+              zIndex: 1, 
+              fontWeight: 700,
+              bgcolor: saleLabelColor,
+              color: '#fff',
+              border: 'none',
+            }}
           />
         )}
         <CardMedia
@@ -96,13 +130,8 @@ const ProductCard = ({ product, fromCategory }) => {
             <Typography variant="h6">{formatPrice(displayPrice)}</Typography>
           )}
         </Box>
-        {(saleLabel || saleTiming) && (
+        {(saleTiming || endingSoon) && (
           <Box sx={{ mt: 1 }}>
-            {saleLabel && (
-              <Typography variant="caption" color="error.main" sx={{ display: 'block', fontWeight: 700 }}>
-                {saleLabel}
-              </Typography>
-            )}
             {saleTiming && (
               <Typography variant="caption" color="text.secondary" sx={{ display: 'block' }}>
                 {saleTiming}

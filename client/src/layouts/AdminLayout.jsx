@@ -46,6 +46,7 @@ const ALL_MENU_ITEMS = [
   { text: 'Orders',     path: '/admin/orders',     icon: <ShoppingCartIcon />, permission: PERMISSIONS.ORDERS_READ },
   { text: 'Customers',  path: '/admin/customers',  icon: <PeopleIcon />, permission: PERMISSIONS.CUSTOMERS_READ },
   { text: 'Coupons',    path: '/admin/coupons',    icon: <LocalOfferIcon />, feature: 'coupons', permission: PERMISSIONS.COUPONS_READ },
+  { text: 'Sale Labels',path: '/admin/sale-labels',icon: <LocalOfferIcon />, permission: PERMISSIONS.SETTINGS_READ },
   { text: 'Reviews',    path: '/admin/reviews',    icon: <StarIcon />, feature: 'reviews', permission: PERMISSIONS.REVIEWS_READ },
   { text: 'Media',      path: '/admin/media',      icon: <PhotoLibraryIcon />, permission: PERMISSIONS.MEDIA_READ },
   { text: 'Settings',   path: '/admin/settings',   icon: <SettingsIcon />, permission: PERMISSIONS.SETTINGS_READ },
