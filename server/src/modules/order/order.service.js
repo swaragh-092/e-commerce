@@ -24,6 +24,7 @@ const AuditService = require('../audit/audit.service');
 const CouponService = require('../coupon/coupon.service');
 const PaymentService = require('../payment/payment.service');
 const TaxService = require('../tax/tax.service');
+const defaultSettings = require('../../../../config/default.json');
 const { getPagination } = require('../../utils/pagination');
 const { ACTIONS, ENTITIES } = require('../../config/constants');
 const { getVariantUnitPrice } = require('../product/product.pricing');
@@ -38,6 +39,12 @@ const {
 
 const ADMIN_ORDER_LIST_USER_ATTRIBUTES = ['id', 'firstName', 'lastName', 'email'];
 const ADMIN_ORDER_PAYMENT_ATTRIBUTES = ['id', 'provider', 'status', 'amount', 'currency', 'transactionId', 'createdAt', 'updatedAt'];
+const FULFILLMENT_STATUS_TRANSITIONS = Object.freeze({
+    pending: ['shipped', 'delivered'],
+    shipped: ['delivered', 'returned'],
+    delivered: ['returned'],
+    returned: [],
+});
 
 const HEAVY_ORDER_INCLUDE = [
     {
@@ -72,6 +79,96 @@ const getSetting = async (key, defaultVal) => {
     const setting = await Setting.findOne({ where: { key } });
     if (setting) return setting.value;
     return defaultVal;
+};
+
+const buildSettingsSnapshot = async (groups = ['tax', 'shipping']) => {
+    const rows = await Setting.findAll({ where: { group: { [Op.in]: groups } } });
+    const snapshot = {};
+
+    for (const group of groups) {
+        const defaults = defaultSettings[group] || {};
+        Object.entries(defaults).forEach(([key, value]) => {
+            snapshot[`${group}.${key}`] = value;
+        });
+    }
+
+    rows.forEach((setting) => {
+        snapshot[`${setting.group}.${setting.key}`] = setting.value;
+    });
+
+    return snapshot;
+};
+
+const ensureValidFulfillmentTransition = (currentStatus, nextStatus) => {
+    if (currentStatus === nextStatus) return;
+    const allowedStatuses = FULFILLMENT_STATUS_TRANSITIONS[currentStatus] || [];
+    if (!allowedStatuses.includes(nextStatus)) {
+        throw new AppError(
+            'VALIDATION_ERROR',
+            400,
+            `Cannot change shipment status from ${currentStatus} to ${nextStatus}`
+        );
+    }
+};
+
+const calculateFulfillmentProgress = (order) => {
+    const items = order?.items || [];
+    const totalQuantity = items.reduce((sum, item) => sum + Number(item.quantity || 0), 0);
+    const fulfilledQuantity = items.reduce((sum, item) => (
+        sum + (item.fulfillmentItems || []).reduce((itemSum, fulfillmentItem) => itemSum + Number(fulfillmentItem.quantity || 0), 0)
+    ), 0);
+
+    return {
+        totalQuantity,
+        fulfilledQuantity,
+        remainingQuantity: Math.max(totalQuantity - fulfilledQuantity, 0),
+        percent: totalQuantity > 0 ? Math.round((fulfilledQuantity / totalQuantity) * 100) : 0,
+    };
+};
+
+const releaseOrderReservationsAndCoupons = async (order, transaction) => {
+    const orderItems = order.items || await OrderItem.findAll({
+        where: { orderId: order.id },
+        transaction,
+    });
+
+    for (const item of orderItems) {
+        if (item.productId) {
+            await Product.update(
+                { reservedQty: sequelize.literal(`GREATEST(reserved_qty - ${item.quantity}, 0)`) },
+                {
+                    where: {
+                        id: item.productId,
+                        reservedQty: { [Op.gt]: 0 },
+                    },
+                    transaction,
+                }
+            );
+        }
+    }
+
+    const appliedCouponIds = Array.from(new Set([
+        ...(Array.isArray(order.appliedDiscounts) ? order.appliedDiscounts.map((item) => item.couponId).filter(Boolean) : []),
+        order.couponId,
+    ].filter(Boolean)));
+
+    if (appliedCouponIds.length > 0) {
+        const usages = await CouponUsage.findAll({
+            where: { orderId: order.id, couponId: { [Op.in]: appliedCouponIds } },
+            transaction,
+        });
+
+        for (const usage of usages) {
+            await usage.destroy({ transaction });
+        }
+
+        if (usages.length > 0) {
+            await Coupon.update(
+                { usedCount: sequelize.literal(`GREATEST(used_count - 1, 0)`) },
+                { where: { id: { [Op.in]: appliedCouponIds } }, transaction }
+            );
+        }
+    }
 };
 
 const placeOrder = async (userId, payload) => {
@@ -147,15 +244,7 @@ const placeOrder = async (userId, payload) => {
     }
     const shippingAddressSnapshot = address.toJSON();
 
-    const orderSettingsKeys = [
-        'tax.rate', 'tax.inclusive', 'tax.originState',
-        'tax.enableCGST', 'tax.cgstRate',
-        'tax.enableSGST', 'tax.sgstRate',
-        'tax.enableIGST', 'tax.igstRate',
-        'shipping.method', 'shipping.flatRate', 'shipping.freeThreshold'
-    ];
-    const settingsRows = await Setting.findAll({ where: { key: { [Op.in]: orderSettingsKeys } } });
-    const settingsMap = settingsRows.reduce((acc, s) => { acc[s.key] = s.value; return acc; }, {});
+    const settingsMap = await buildSettingsSnapshot(['tax', 'shipping']);
     const getLocalSetting = (key, defaultVal) => settingsMap[key] !== undefined ? settingsMap[key] : defaultVal;
 
     const order = await sequelize.transaction(async (t) => {
@@ -204,6 +293,7 @@ const placeOrder = async (userId, payload) => {
         const destinationState = shippingAddressSnapshot.state || '';
 
         let totalTax = 0;
+        const itemTaxBreakdowns = [];
         for (const item of checkoutItems) {
             const effectiveTax = TaxService.getEffectiveTax(item.currentProduct, settingsMap);
             const itemSubtotal = item.currentPrice * item.quantity;
@@ -219,8 +309,19 @@ const placeOrder = async (userId, payload) => {
             }
             
             item.taxBreakdown = itemTaxBreakdown;
+            itemTaxBreakdowns.push({
+                productId: item.productId,
+                variantId: item.variantId || null,
+                subtotal: Number(itemSubtotal.toFixed(2)),
+                ...itemTaxBreakdown,
+            });
             totalTax += itemTaxBreakdown.totalTax;
         }
+        totalTax = Number(totalTax.toFixed(2));
+        const orderTaxBreakdown = TaxService.summarizeTaxBreakdown(itemTaxBreakdowns, {
+            originState,
+            destinationState,
+        });
 
         const shippingMethod = getLocalSetting('shipping.method', 'flat_rate');
         let shippingCost = 0;
@@ -268,7 +369,7 @@ const placeOrder = async (userId, payload) => {
 
         const discountAmount = Number((orderDiscountAmount + shippingDiscount).toFixed(2));
 
-        const total = subtotal + totalTax + shippingCost - discountAmount;
+        const total = Number(Math.max(0, subtotal + totalTax + shippingCost - discountAmount).toFixed(2));
 
         for (const item of checkoutItems) {
             const product = item.currentProduct;
@@ -302,6 +403,7 @@ const placeOrder = async (userId, payload) => {
             paymentMethod,
             subtotal,
             tax: totalTax,
+            taxBreakdown: orderTaxBreakdown,
             shippingCost,
             discountAmount,
             total,
@@ -437,15 +539,6 @@ const getOrders = async (userId, isAdmin, page = 1, limit = 20, filters = {}) =>
             required: false,
         });
 
-        if (normalizedSearch) {
-            const searchPattern = `%${normalizedSearch}%`;
-            where[Op.or] = [
-                {  orderNumber: { [Op.iLike]: searchPattern } },
-                { '$User.first_name$': { [Op.iLike]: searchPattern } },
-                { '$User.last_name$': { [Op.iLike]: searchPattern } },
-                { '$User.email$': { [Op.iLike]: searchPattern } },
-            ];
-        }
     } 
 
     // Always include OrderItem → Product for the user's order list
@@ -465,11 +558,19 @@ const getOrders = async (userId, isAdmin, page = 1, limit = 20, filters = {}) =>
 
     if (normalizedSearch) {
         const searchPattern = `%${normalizedSearch}%`;
-        where[Op.or] = [
+        const searchClauses = [
             { orderNumber: { [Op.iLike]: searchPattern } },
             { status: { [Op.iLike]: searchPattern } },
             { '$items.product.name$': { [Op.iLike]: searchPattern } },
         ];
+        if (isAdmin) {
+            searchClauses.push(
+                { '$User.first_name$': { [Op.iLike]: searchPattern } },
+                { '$User.last_name$': { [Op.iLike]: searchPattern } },
+                { '$User.email$': { [Op.iLike]: searchPattern } }
+            );
+        }
+        where[Op.or] = searchClauses;
     }
     
 
@@ -630,6 +731,7 @@ const createFulfillment = async (orderId, payload, actingUserId) => {
         }
 
         // Create the fulfillment record
+        ensureValidFulfillmentTransition('pending', status || 'pending');
         const fulfillment = await Fulfillment.create({
             orderId,
             trackingNumber: trackingNumber || null,
@@ -683,11 +785,20 @@ const createFulfillment = async (orderId, payload, actingUserId) => {
 
 const updateStatus = async (id, status, actingUserId) => {
     return sequelize.transaction(async (t) => {
-        const order = await Order.findByPk(id, { transaction: t });
+        const order = await Order.findByPk(id, {
+            transaction: t,
+            lock: Transaction.LOCK.UPDATE,
+        });
         if (!order) throw new AppError('NOT_FOUND', 404, 'Order not found');
 
         const before = order.toJSON();
+        if (status === 'refunded') {
+            throw new AppError('VALIDATION_ERROR', 400, 'Use the refund action so payment state and audit metadata stay consistent');
+        }
         ensureValidStatusTransition(order.status, status);
+        if (status === 'cancelled') {
+            await releaseOrderReservationsAndCoupons(order, t);
+        }
         await order.update({ status }, { transaction: t });
 
         try {
@@ -713,9 +824,8 @@ const refundOrder = async (id, actingUserId, isAdmin) => {
     if (!isAdmin) {
         throw new AppError('FORBIDDEN', 403, 'You do not have permission to refund orders');
     }
-    return sequelize.transaction(async (t) => {
+    const refundedOrderId = await sequelize.transaction(async (t) => {
         const order = await Order.findByPk(id, {
-            include: [{ model: Payment, attributes: ADMIN_ORDER_PAYMENT_ATTRIBUTES, required: false }],
             transaction: t,
             lock: Transaction.LOCK.UPDATE,
         });
@@ -728,16 +838,27 @@ const refundOrder = async (id, actingUserId, isAdmin) => {
             throw new AppError('VALIDATION_ERROR', 400, 'Only paid, processing, shipped, or delivered orders can be refunded');
         }
 
+        const payment = await Payment.findOne({
+            where: { orderId: order.id },
+            attributes: [...ADMIN_ORDER_PAYMENT_ATTRIBUTES, 'metadata'],
+            transaction: t,
+            lock: Transaction.LOCK.UPDATE,
+        });
+
+        if (!payment || !['completed', 'cod_collected'].includes(payment.status)) {
+            throw new AppError('VALIDATION_ERROR', 400, 'Cannot refund an order before payment has been captured or COD has been collected');
+        }
+
         const previousStatus = order.status;
         ensureValidStatusTransition(previousStatus, 'refunded');
         await order.update({ status: 'refunded' }, { transaction: t });
 
-        if (order.Payment && order.Payment.status !== 'refunded') {
-            const currentMetadata = order.Payment.metadata && typeof order.Payment.metadata === 'object'
-                ? order.Payment.metadata
+        if (payment && payment.status !== 'refunded') {
+            const currentMetadata = payment.metadata && typeof payment.metadata === 'object'
+                ? payment.metadata
                 : {};
 
-            await order.Payment.update({
+            await payment.update({
                 status: 'refunded',
                 metadata: {
                     ...currentMetadata,
@@ -761,11 +882,10 @@ const refundOrder = async (id, actingUserId, isAdmin) => {
             }
         } catch (err) {}
 
-        return Order.findByPk(id, {
-            include: HEAVY_ORDER_INCLUDE,
-            transaction: t,
-        });
+        return order.id;
     });
+
+    return getOrderById(refundedOrderId, actingUserId, true);
 };
 
 const cancelOrder = async (id, userId) => {
@@ -780,38 +900,8 @@ const cancelOrder = async (id, userId) => {
         }
 
         ensureValidStatusTransition(previousStatus, 'cancelled');
+        await releaseOrderReservationsAndCoupons(order, t);
         await order.update({ status: 'cancelled' }, { transaction: t });
-
-        for (const item of order.items) {
-             if (item.productId) {
-                 await Product.update(
-                     // GREATEST prevents underflow if the job already decremented
-                     { reservedQty: sequelize.literal(`GREATEST(reserved_qty - ${item.quantity}, 0)`) },
-                     {
-                         where: {
-                             id: item.productId,
-                             reservedQty: { [Op.gt]: 0 },
-                         },
-                         transaction: t,
-                     }
-                 );
-             }
-        }
-
-        const appliedCouponIds = Array.from(new Set([
-            ...(Array.isArray(order.appliedDiscounts) ? order.appliedDiscounts.map((item) => item.couponId).filter(Boolean) : []),
-            order.couponId,
-        ].filter(Boolean)));
-        if (appliedCouponIds.length > 0) {
-             const usages = await CouponUsage.findAll({ where: { orderId: order.id, couponId: { [Op.in]: appliedCouponIds } }, transaction: t });
-             for (const usage of usages) {
-                 await usage.destroy({ transaction: t });
-             }
-             await Coupon.update(
-                 { usedCount: sequelize.literal('used_count - 1') },
-                 { where: { id: { [Op.in]: appliedCouponIds } }, transaction: t }
-             );
-        }
 
         try {
             if (AuditService && AuditService.log) {
@@ -851,11 +941,13 @@ const updateFulfillmentStatus = async (orderId, fulfillmentId, status, actingUse
         const fulfillment = await Fulfillment.findOne({
             where: { id: fulfillmentId, orderId },
             transaction: t,
+            lock: Transaction.LOCK.UPDATE,
         });
 
         if (!fulfillment) throw new AppError('NOT_FOUND', 404, 'Shipment not found');
 
         const oldStatus = fulfillment.status;
+        ensureValidFulfillmentTransition(oldStatus, status);
         await fulfillment.update({ status }, { transaction: t });
 
         // Logic: if all items are fully fulfilled AND all fulfillments are "delivered", update the main order
@@ -904,10 +996,59 @@ const updateFulfillmentStatus = async (orderId, fulfillmentId, status, actingUse
     });
 };
 
+const getFulfillmentTracking = async (orderId, userId, isAdmin) => {
+    const order = await getOrderById(orderId, userId, isAdmin);
+    const plainOrder = typeof order.toJSON === 'function' ? order.toJSON() : order;
+    const progress = calculateFulfillmentProgress(plainOrder);
+    const fulfillments = (plainOrder.fulfillments || []).map((fulfillment, index) => ({
+        id: fulfillment.id,
+        shipmentNumber: index + 1,
+        status: fulfillment.status,
+        courier: fulfillment.courier,
+        trackingNumber: fulfillment.trackingNumber,
+        notes: fulfillment.notes,
+        createdAt: fulfillment.createdAt,
+        updatedAt: fulfillment.updatedAt,
+        items: fulfillment.items || [],
+    }));
+
+    return {
+        orderId: plainOrder.id,
+        orderNumber: plainOrder.orderNumber,
+        orderStatus: plainOrder.status,
+        progress,
+        fulfillments,
+        timeline: [
+            {
+                key: 'ordered',
+                label: 'Order placed',
+                status: 'completed',
+                occurredAt: plainOrder.createdAt,
+            },
+            {
+                key: 'processing',
+                label: 'Processing',
+                status: ['processing', 'partially_shipped', 'shipped', 'delivered'].includes(plainOrder.status) ? 'completed' : 'pending',
+            },
+            {
+                key: 'shipped',
+                label: progress.remainingQuantity > 0 ? 'Partially shipped' : 'Shipped',
+                status: progress.fulfilledQuantity > 0 ? (progress.remainingQuantity > 0 ? 'active' : 'completed') : 'pending',
+            },
+            {
+                key: 'delivered',
+                label: 'Delivered',
+                status: plainOrder.status === 'delivered' ? 'completed' : 'pending',
+            },
+        ],
+    };
+};
+
 module.exports = {
     placeOrder,
     getOrders,
     getOrderById,
+    getFulfillmentTracking,
     updateStatus,
     cancelOrder,
     refundOrder,
@@ -915,5 +1056,3 @@ module.exports = {
     updateFulfillmentStatus,
     getAllowedNextStatuses,
 };
-
-

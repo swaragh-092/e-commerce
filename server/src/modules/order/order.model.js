@@ -32,6 +32,11 @@ module.exports = (sequelize, DataTypes) => {
             type: DataTypes.DECIMAL(10, 2),
             defaultValue: 0,
         },
+        taxBreakdown: {
+            type: DataTypes.JSONB,
+            allowNull: true,
+            defaultValue: null,
+        },
         shippingCost: {
             type: DataTypes.DECIMAL(10, 2),
             defaultValue: 0,

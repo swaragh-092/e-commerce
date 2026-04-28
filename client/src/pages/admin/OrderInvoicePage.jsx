@@ -8,6 +8,19 @@ import { useCurrency } from '../../hooks/useSettings';
 import { SettingsContext } from '../../context/ThemeContext';
 import { getApiErrorMessage } from '../../utils/apiErrors';
 
+const getTaxRows = (order = {}) => {
+  const breakdown = order.taxBreakdown || {};
+  const rows = [
+    { label: 'CGST', value: breakdown.cgst },
+    { label: 'SGST', value: breakdown.sgst },
+    { label: 'IGST', value: breakdown.igst },
+    { label: 'Tax', value: breakdown.flatTax },
+  ].filter((row) => Number(row.value || 0) > 0);
+
+  if (rows.length > 0) return rows;
+  return Number(order.tax || 0) > 0 ? [{ label: 'Tax', value: order.tax }] : [];
+};
+
 const OrderInvoicePage = () => {
   const { id } = useParams();
   const navigate = useNavigate();
@@ -64,6 +77,7 @@ const OrderInvoicePage = () => {
 
   const address = order.shippingAddressSnapshot;
   const orderItems = (order.items || order.OrderItems || []).filter(Boolean);
+  const taxRows = getTaxRows(order);
 
   return (
     <Box 
@@ -215,12 +229,12 @@ const OrderInvoicePage = () => {
               </Box>
             )}
 
-            {Number(order.tax || 0) > 0 && (
-              <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 1 }}>
-                <Typography variant="body2" color="text.secondary">Tax</Typography>
-                <Typography variant="body2">{formatPrice(order.tax || 0)}</Typography>
+            {taxRows.map(({ label, value }) => (
+              <Box key={label} sx={{ display: 'flex', justifyContent: 'space-between', mb: 1 }}>
+                <Typography variant="body2" color="text.secondary">{label}</Typography>
+                <Typography variant="body2">{formatPrice(value || 0)}</Typography>
               </Box>
-            )}
+            ))}
             
             <Divider sx={{ my: 1.5 }} />
             

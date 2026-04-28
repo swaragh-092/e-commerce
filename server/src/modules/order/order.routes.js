@@ -15,6 +15,7 @@ const { PERMISSIONS } = require('../../config/permissions');
 
 router.post('/', authenticate, validate(placeOrderSchema), orderController.placeOrder);
 router.get('/', authenticate, orderController.getOrders);
+router.get('/:id/tracking', authenticate, orderController.getFulfillmentTracking);
 router.get('/:id', authenticate, orderController.getOrderById);
 router.post('/:id/cancel', authenticate, orderController.cancelOrder);
 

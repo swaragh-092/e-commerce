@@ -59,6 +59,11 @@ export const userService = {
     return response.data.data;
   },
 
+  getMyOrderTracking: async (id) => {
+    const response = await api.get(`/orders/${id}/tracking`);
+    return response.data.data;
+  },
+
   cancelOrder: async (id) => {
     const response = await api.post(`/orders/${id}/cancel`);
     return response.data;

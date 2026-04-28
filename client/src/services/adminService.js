@@ -63,10 +63,12 @@ const getAllOrders = (params = {}) => {
   return api.get(`/orders${query ? `?${query}` : ''}`);
 };
 const getOrderById = (id) => api.get(`/orders/${id}`);
+const getOrderTracking = (id) => api.get(`/orders/${id}/tracking`);
 const updateOrderStatus = (id, status) => api.put(`/orders/${id}/status`, { status });
 const refundOrder = (id) => api.post(`/orders/${id}/refund`);
 const createFulfillment = (orderId, data) => api.post(`/orders/${orderId}/fulfillments`, data);
 const updateFulfillmentStatus = (orderId, fulfillmentId, status) => api.patch(`/orders/${orderId}/fulfillments/${fulfillmentId}/status`, { status });
+const confirmCodPayment = (orderId) => api.post(`/payments/cod/confirm/${orderId}`);
 
 // Settings bulk update
 const updateSettings = (settings) => api.put('/settings/bulk', settings);
@@ -110,7 +112,7 @@ export {
   getUsers, getUserById, updateUserStatus,
   getAdminReviews, updateReviewStatus, deleteReview,
   getCoupons, createCoupon, updateCoupon, deleteCoupon,
-  getAllOrders, getOrderById, updateOrderStatus, refundOrder, createFulfillment, updateFulfillmentStatus,
+  getAllOrders, getOrderById, getOrderTracking, updateOrderStatus, refundOrder, createFulfillment, updateFulfillmentStatus, confirmCodPayment,
   updateSettings,
   getEmailTemplates, updateEmailTemplate, sendTestEmail,
   validateCoupon, getPublicCoupons, getEligibleCoupons,

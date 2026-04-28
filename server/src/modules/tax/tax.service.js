@@ -1,5 +1,20 @@
 'use strict';
 
+const toNumber = (value, fallback = 0) => {
+    const number = Number(value);
+    return Number.isFinite(number) ? number : fallback;
+};
+
+// Settings and product tax configs are stored as decimal factors in the admin UI
+// (0.09 = 9%). This also tolerates legacy percentage values (9 = 9%).
+const normalizeRate = (value) => {
+    const number = toNumber(value, 0);
+    if (Math.abs(number) <= 1) return number;
+    return number / 100;
+};
+
+const formatRatePercent = (rate) => Number((normalizeRate(rate) * 100).toFixed(4));
+
 /**
  * Resolves the effective tax rates for a product based on its custom config
  * and the global store settings.
@@ -14,10 +29,10 @@ const getEffectiveTax = (product, settingsMap) => {
     if (taxConfig && taxConfig.isCustom) {
         return {
             isCustom: true,
-            sgst: Number(taxConfig.sgst || 0),
-            cgst: Number(taxConfig.cgst || 0),
-            igst: Number(taxConfig.igst || 0),
-            flatRate: Number(taxConfig.flatRate || 0),
+            sgst: normalizeRate(taxConfig.sgst || 0),
+            cgst: normalizeRate(taxConfig.cgst || 0),
+            igst: normalizeRate(taxConfig.igst || 0),
+            flatRate: normalizeRate(taxConfig.flatRate || taxConfig.rate || 0),
             inclusive: !!taxConfig.inclusive,
             useGST: !!(taxConfig.sgst || taxConfig.cgst || taxConfig.igst)
         };
@@ -34,10 +49,10 @@ const getEffectiveTax = (product, settingsMap) => {
 
     return {
         isCustom: false,
-        sgst: enableSGST ? Number(settingsMap['tax.sgstRate'] || 0) : 0,
-        cgst: enableCGST ? Number(settingsMap['tax.cgstRate'] || 0) : 0,
-        igst: enableIGST ? Number(settingsMap['tax.igstRate'] || 0) : 0,
-        flatRate: !useGST ? Number(settingsMap['tax.rate'] || 0) : 0,
+        sgst: enableSGST ? normalizeRate(settingsMap['tax.sgstRate'] || 0) : 0,
+        cgst: enableCGST ? normalizeRate(settingsMap['tax.cgstRate'] || 0) : 0,
+        igst: enableIGST ? normalizeRate(settingsMap['tax.igstRate'] || 0) : 0,
+        flatRate: !useGST ? normalizeRate(settingsMap['tax.rate'] || 0) : 0,
         inclusive,
         useGST
     };
@@ -71,19 +86,25 @@ const computeItemTax = (effectiveTax, itemSubtotal, destinationState = '', origi
             igst: 0,
             flatTax: 0,
             totalTax: 0,
-            isInclusive: true
+            isInclusive: true,
+            rates: {
+                sgst: formatRatePercent(effectiveTax.sgst),
+                cgst: formatRatePercent(effectiveTax.cgst),
+                igst: formatRatePercent(effectiveTax.igst),
+                flatTax: formatRatePercent(effectiveTax.flatRate),
+            }
         };
     }
 
     if (effectiveTax.useGST) {
         if (isIntraState) {
-            sgst = itemSubtotal * (effectiveTax.sgst / 100);
-            cgst = itemSubtotal * (effectiveTax.cgst / 100);
+            sgst = itemSubtotal * effectiveTax.sgst;
+            cgst = itemSubtotal * effectiveTax.cgst;
         } else {
-            igst = itemSubtotal * (effectiveTax.igst / 100);
+            igst = itemSubtotal * effectiveTax.igst;
         }
     } else {
-        flatTax = itemSubtotal * ((effectiveTax.flatRate || 0) / 100);
+        flatTax = itemSubtotal * (effectiveTax.flatRate || 0);
     }
 
     // Round components first to ensure consistency between individual values and total
@@ -101,11 +122,45 @@ const computeItemTax = (effectiveTax, itemSubtotal, destinationState = '', origi
         igst: roundedIgst,
         flatTax: roundedFlatTax,
         totalTax,
-        isInclusive: false
+        isInclusive: false,
+        rates: {
+            sgst: formatRatePercent(effectiveTax.sgst),
+            cgst: formatRatePercent(effectiveTax.cgst),
+            igst: formatRatePercent(effectiveTax.igst),
+            flatTax: formatRatePercent(effectiveTax.flatRate),
+        }
+    };
+};
+
+const summarizeTaxBreakdown = (itemBreakdowns = [], metadata = {}) => {
+    const totals = itemBreakdowns.reduce((acc, breakdown) => {
+        acc.sgst += toNumber(breakdown?.sgst);
+        acc.cgst += toNumber(breakdown?.cgst);
+        acc.igst += toNumber(breakdown?.igst);
+        acc.flatTax += toNumber(breakdown?.flatTax);
+        acc.totalTax += toNumber(breakdown?.totalTax);
+        acc.isInclusive = acc.isInclusive || Boolean(breakdown?.isInclusive);
+        return acc;
+    }, { sgst: 0, cgst: 0, igst: 0, flatTax: 0, totalTax: 0, isInclusive: false });
+
+    const round = (value) => Number(value.toFixed(2));
+
+    return {
+        cgst: round(totals.cgst),
+        sgst: round(totals.sgst),
+        igst: round(totals.igst),
+        flatTax: round(totals.flatTax),
+        totalTax: round(totals.totalTax),
+        isInclusive: totals.isInclusive,
+        originState: metadata.originState || '',
+        destinationState: metadata.destinationState || '',
+        components: itemBreakdowns,
     };
 };
 
 module.exports = {
     getEffectiveTax,
-    computeItemTax
+    computeItemTax,
+    summarizeTaxBreakdown,
+    normalizeRate,
 };

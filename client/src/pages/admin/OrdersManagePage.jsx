@@ -13,20 +13,28 @@ import {
   Select,
   Stack,
   TextField,
+  Tooltip,
   Typography,
 } from '@mui/material';
 import { DataGrid } from '@mui/x-data-grid';
 import VisibilityIcon from '@mui/icons-material/Visibility';
+import PaymentsOutlinedIcon from '@mui/icons-material/PaymentsOutlined';
+import UndoOutlinedIcon from '@mui/icons-material/UndoOutlined';
 import { useNavigate } from 'react-router-dom';
 import { useCurrency } from '../../hooks/useSettings';
-import { getAllOrders } from '../../services/adminService';
+import { confirmCodPayment, getAllOrders, refundOrder, updateOrderStatus } from '../../services/adminService';
+import { useNotification } from '../../context/NotificationContext';
+import { useAuth } from '../../hooks/useAuth';
+import { PERMISSIONS } from '../../utils/permissions';
 import { getApiErrorMessage } from '../../utils/apiErrors';
 import {
   ORDER_STATUS_OPTIONS,
   ORDER_STATUS_SUMMARY_GROUPS,
   countOrdersByStatuses,
+  getAllowedOrderStatuses,
   getOrderStatusColor,
   getOrderStatusLabel,
+  isOrderRefundableStatus,
 } from '../../utils/orderWorkflow';
 
 const SummaryCard = ({ label, value, tone = 'default' }) => (
@@ -54,8 +62,13 @@ const SummaryCard = ({ label, value, tone = 'default' }) => (
 const OrdersManagePage = () => {
   const navigate = useNavigate();
   const { formatPrice } = useCurrency();
+  const { notify, confirm } = useNotification();
+  const { hasPermission } = useAuth();
+  const canUpdateStatus = hasPermission(PERMISSIONS.ORDERS_UPDATE_STATUS);
+  const canRefundOrders = hasPermission(PERMISSIONS.ORDERS_REFUND);
   const [orders, setOrders] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [actionLoadingId, setActionLoadingId] = useState(null);
   const [error, setError] = useState('');
   const [total, setTotal] = useState(0);
   const [paginationModel, setPaginationModel] = useState({ page: 0, pageSize: 20 });
@@ -84,7 +97,9 @@ const OrdersManagePage = () => {
       })
       .catch((fetchError) => {
         console.error(fetchError);
-        setError(getApiErrorMessage(fetchError, 'Failed to load orders.'));
+        const message = getApiErrorMessage(fetchError, 'Failed to load orders.');
+        setError(message);
+        notify(message, 'error');
         setOrders([]);
         setTotal(0);
       })
@@ -104,6 +119,68 @@ const OrdersManagePage = () => {
 
     return { revenue, groups };
   }, [orders]);
+
+  const handleQuickStatusUpdate = async (order, nextStatus) => {
+    if (!order || nextStatus === order.status) return;
+
+    const confirmed = await confirm(
+      'Update Order Status',
+      `Change ${order.orderNumber} from ${getOrderStatusLabel(order.status)} to ${getOrderStatusLabel(nextStatus)}?`,
+      'primary'
+    );
+    if (!confirmed) return;
+
+    setActionLoadingId(`${order.id}:status`);
+    try {
+      await updateOrderStatus(order.id, nextStatus);
+      notify('Order status updated.', 'success');
+      fetchOrders();
+    } catch (updateError) {
+      notify(getApiErrorMessage(updateError, 'Failed to update order status.'), 'error');
+    } finally {
+      setActionLoadingId(null);
+    }
+  };
+
+  const handleConfirmCodPayment = async (order) => {
+    const confirmed = await confirm(
+      'Mark COD Collected',
+      `Confirm cash collection for ${order.orderNumber}?`,
+      'primary'
+    );
+    if (!confirmed) return;
+
+    setActionLoadingId(`${order.id}:cod`);
+    try {
+      await confirmCodPayment(order.id);
+      notify('COD payment marked as collected.', 'success');
+      fetchOrders();
+    } catch (codError) {
+      notify(getApiErrorMessage(codError, 'Failed to confirm COD payment.'), 'error');
+    } finally {
+      setActionLoadingId(null);
+    }
+  };
+
+  const handleRefund = async (order) => {
+    const confirmed = await confirm(
+      'Issue Refund',
+      `Issue a full refund for ${order.orderNumber}? This will mark the order and payment as refunded.`,
+      'danger'
+    );
+    if (!confirmed) return;
+
+    setActionLoadingId(`${order.id}:refund`);
+    try {
+      await refundOrder(order.id);
+      notify('Refund recorded successfully.', 'success');
+      fetchOrders();
+    } catch (refundError) {
+      notify(getApiErrorMessage(refundError, 'Failed to refund order.'), 'error');
+    } finally {
+      setActionLoadingId(null);
+    }
+  };
 
   const columns = useMemo(
     () => [
@@ -141,7 +218,7 @@ const OrdersManagePage = () => {
       {
         field: 'payment',
         headerName: 'Payment',
-        width: 180,
+        width: 160,
         sortable: false,
         renderCell: ({ row }) => {
           const paymentStatus = row.Payment?.status || 'pending';
@@ -165,10 +242,37 @@ const OrdersManagePage = () => {
       {
         field: 'status',
         headerName: 'Status',
-        width: 150,
-        renderCell: ({ value }) => (
-          <Chip label={getOrderStatusLabel(value)} size="small" color={getOrderStatusColor(value)} />
-        ),
+        width: 170,
+        renderCell: ({ row }) => {
+          const statusOptions = getAllowedOrderStatuses(row.status).filter((statusOption) => statusOption !== 'refunded');
+          const canChange = canUpdateStatus && statusOptions.length > 1;
+
+          return canChange ? (
+            <Select
+              size="small"
+              value={row.status}
+              onClick={(event) => event.stopPropagation()}
+              onChange={(event) => handleQuickStatusUpdate(row, event.target.value)}
+              disabled={actionLoadingId === `${row.id}:status`}
+              sx={{
+                minWidth: 150,
+                height: 32,
+                fontSize: '0.78rem',
+                fontWeight: 700,
+                borderRadius: 2,
+                '& .MuiSelect-select': { py: 0.5 },
+              }}
+            >
+              {statusOptions.map((statusOption) => (
+                <MenuItem key={statusOption} value={statusOption}>
+                  {getOrderStatusLabel(statusOption)}
+                </MenuItem>
+              ))}
+            </Select>
+          ) : (
+            <Chip label={getOrderStatusLabel(row.status)} size="small" color={getOrderStatusColor(row.status)} />
+          );
+        },
       },
       {
         field: 'createdAt',
@@ -179,16 +283,61 @@ const OrdersManagePage = () => {
       {
         field: 'actions',
         headerName: 'Actions',
-        width: 90,
+        width: 300,
         sortable: false,
-        renderCell: ({ row }) => (
-          <IconButton size="small" onClick={() => navigate(`/admin/orders/${row.id}`)}>
-            <VisibilityIcon fontSize="small" />
-          </IconButton>
-        ),
+        renderCell: ({ row }) => {
+          const paymentStatus = row.Payment?.status;
+          const hasSettledPayment = ['completed', 'cod_collected'].includes(paymentStatus);
+          const canCollectCod = canUpdateStatus
+            && row.paymentMethod === 'cod'
+            && ['pending_cod', 'processing'].includes(row.status)
+            && (paymentStatus || 'pending') === 'pending';
+          const canRefund = canRefundOrders && isOrderRefundableStatus(row.status) && hasSettledPayment;
+
+          return (
+            <Stack
+              direction="row"
+              spacing={0.75}
+              alignItems="center"
+              onClick={(event) => event.stopPropagation()}
+              sx={{ width: '100%' }}
+            >
+              <Tooltip title="Open order">
+                <IconButton size="small" onClick={() => navigate(`/admin/orders/${row.id}`)}>
+                  <VisibilityIcon fontSize="small" />
+                </IconButton>
+              </Tooltip>
+              {canCollectCod && (
+                <Button
+                  size="small"
+                  variant="outlined"
+                  startIcon={<PaymentsOutlinedIcon />}
+                  disabled={actionLoadingId === `${row.id}:cod`}
+                  onClick={() => handleConfirmCodPayment(row)}
+                  sx={{ minWidth: 112, whiteSpace: 'nowrap' }}
+                >
+                  Collect COD
+                </Button>
+              )}
+              {canRefund && (
+                <Button
+                  size="small"
+                  color="error"
+                  variant="outlined"
+                  startIcon={<UndoOutlinedIcon />}
+                  disabled={actionLoadingId === `${row.id}:refund`}
+                  onClick={() => handleRefund(row)}
+                  sx={{ minWidth: 88, whiteSpace: 'nowrap' }}
+                >
+                  Refund
+                </Button>
+              )}
+            </Stack>
+          );
+        },
       },
     ],
-    [formatPrice, navigate]
+    [actionLoadingId, canRefundOrders, canUpdateStatus, formatPrice, navigate]
   );
 
   return (
@@ -273,6 +422,8 @@ const OrdersManagePage = () => {
           columns={columns}
           rowCount={total}
           loading={loading}
+          rowHeight={72}
+          columnHeaderHeight={48}
           paginationMode="server"
           paginationModel={paginationModel}
           onPaginationModelChange={setPaginationModel}
@@ -281,8 +432,26 @@ const OrdersManagePage = () => {
           // getRowHeight={() => 'auto'}
           onRowClick={(params) => navigate(`/admin/orders/${params.id}`)}
           sx={{
+            border: 0,
+            '& .MuiDataGrid-columnHeaders': {
+              bgcolor: 'background.paper',
+              borderBottom: '1px solid',
+              borderColor: 'divider',
+            },
+            '& .MuiDataGrid-columnHeaderTitle': {
+              fontWeight: 700,
+            },
+            '& .MuiDataGrid-cell': {
+              display: 'flex',
+              alignItems: 'center',
+              py: 1,
+              outline: 'none !important',
+            },
             '& .MuiDataGrid-row': {
               cursor: 'pointer',
+            },
+            '& .MuiDataGrid-row:hover': {
+              bgcolor: 'action.hover',
             },
           }}
         />

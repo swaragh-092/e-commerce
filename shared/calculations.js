@@ -1,3 +1,4 @@
 export function calculateTax(subtotal, taxRate) {
-  return subtotal * (taxRate / 100);
+  const rate = Number(taxRate) || 0;
+  return subtotal * (Math.abs(rate) <= 1 ? rate : rate / 100);
 }

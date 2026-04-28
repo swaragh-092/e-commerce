@@ -81,6 +81,19 @@ const MetaCard = ({ label, value, sub }) => (
   </Box>
 );
 
+const getTaxRows = (order = {}) => {
+  const breakdown = order.taxBreakdown || {};
+  const rows = [
+    { label: 'CGST', value: breakdown.cgst },
+    { label: 'SGST', value: breakdown.sgst },
+    { label: 'IGST', value: breakdown.igst },
+    { label: 'Tax', value: breakdown.flatTax },
+  ].filter((row) => Number(row.value || 0) > 0);
+
+  if (rows.length > 0) return rows;
+  return Number(order.tax || 0) > 0 ? [{ label: 'Tax', value: order.tax }] : [];
+};
+
 // ─── Timeline entry ───────────────────────────────────────────────────────────
 const TimelineEntry = ({ label, sub, done, active, last }) => (
   <Box sx={{ display: 'flex', gap: 1.5, alignItems: 'flex-start' }}>
@@ -124,7 +137,10 @@ const TimelineEntry = ({ label, sub, done, active, last }) => (
 );
 
 // ─── Totals tab panel ─────────────────────────────────────────────────────────
-const TotalsPanel = ({ order, appliedDiscounts, formatPrice }) => (
+const TotalsPanel = ({ order, appliedDiscounts, formatPrice }) => {
+  const taxRows = getTaxRows(order);
+
+  return (
   <Box>
     {appliedDiscounts.length > 0 && (
       <Box sx={{ mb: 2.5 }}>
@@ -175,7 +191,6 @@ const TotalsPanel = ({ order, appliedDiscounts, formatPrice }) => (
           prefix: '-',
         },
         { label: 'Shipping', value: order.shippingCost },
-        { label: `Tax (${order.taxRate ? `${order.taxRate}%` : 'GST 18%'})`, value: order.tax },
       ]
         .filter(r => Number(r.value || 0) > 0)
         .map(({ label, value, color, prefix }) => (
@@ -187,6 +202,21 @@ const TotalsPanel = ({ order, appliedDiscounts, formatPrice }) => (
           </Box>
         ))}
 
+      {taxRows.map(({ label, value }) => (
+        <Box key={label} sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+          <Typography variant="body2" color="text.secondary">{label}</Typography>
+          <Typography variant="body2" sx={{ fontWeight: 600 }}>
+            {formatPrice(value || 0)}
+          </Typography>
+        </Box>
+      ))}
+
+      {order.taxBreakdown?.isInclusive && (
+        <Typography variant="caption" color="text.secondary" sx={{ textAlign: 'right' }}>
+          Prices include applicable tax.
+        </Typography>
+      )}
+
       <Divider sx={{ my: 1 }} />
 
       <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
@@ -197,7 +227,8 @@ const TotalsPanel = ({ order, appliedDiscounts, formatPrice }) => (
       </Box>
     </Box>
   </Box>
-);
+  );
+};
 
 // ─── Main page ────────────────────────────────────────────────────────────────
 const OrderDetailPage = () => {
@@ -205,6 +236,7 @@ const OrderDetailPage = () => {
   const navigate = useNavigate();
   const { formatPrice } = useCurrency();
   const [order, setOrder] = useState(null);
+  const [tracking, setTracking] = useState(null);
   const [loading, setLoading] = useState(true);
   const [actionLoading, setActionLoading] = useState(false);
   const [error, setError] = useState(null);
@@ -216,11 +248,16 @@ const OrderDetailPage = () => {
       setLoading(true);
       setError(null);
       try {
-        const orderData = await userService.getMyOrderById(id);
+        const [orderData, trackingData] = await Promise.all([
+          userService.getMyOrderById(id),
+          userService.getMyOrderTracking(id).catch(() => null),
+        ]);
         setOrder(orderData || null);
+        setTracking(trackingData || null);
       } catch (fetchError) {
         setError(fetchError?.response?.data?.error?.message || 'Failed to load order details.');
         setOrder(null);
+        setTracking(null);
       } finally {
         setLoading(false);
       }
@@ -239,6 +276,7 @@ const OrderDetailPage = () => {
     try {
       await userService.cancelOrder(id);
       setOrder((current) => (current ? { ...current, status: 'cancelled' } : current));
+      setTracking((current) => (current ? { ...current, orderStatus: 'cancelled' } : current));
     } catch (cancelError) {
       setError(cancelError?.response?.data?.message || 'Failed to cancel order.');
     } finally {
@@ -278,20 +316,21 @@ const OrderDetailPage = () => {
 
   const dispatchedCount = (order.fulfillments || []).filter(f => f.status !== 'pending').length;
 
-  const timelineEntries = [
+  const trackingProgress = tracking?.progress;
+  const timelineEntries = tracking?.timeline?.map((entry) => ({
+    label: entry.label,
+    sub: entry.occurredAt ? new Date(entry.occurredAt).toLocaleString('en-US', { dateStyle: 'short', timeStyle: 'short' }) : undefined,
+    done: entry.status === 'completed',
+    active: entry.status === 'active',
+  })) || [
     {
-      label: 'Order confirmed',
+      label: 'Order placed',
       sub: new Date(order.createdAt).toLocaleString('en-US', { dateStyle: 'short', timeStyle: 'short' }),
       done: true,
     },
-    ...(order.fulfillments || []).map((f, i) => ({
-      label: `Shipment #${i + 1} dispatched`,
-      sub: f.courier ? `Via ${f.courier}` : undefined,
-      done: f.status === 'delivered',
-      active: f.status === 'in_transit' || f.status === 'shipped',
-    })),
-    { label: 'In transit', sub: 'Est. Dec 21–22', active: order.status === 'shipped' },
-    { label: 'Fully delivered', sub: 'Est. Dec 24–25' },
+    { label: 'Processing', done: ['processing', 'partially_shipped', 'shipped', 'delivered'].includes(order.status) },
+    { label: 'Shipped', done: ['shipped', 'delivered'].includes(order.status), active: order.status === 'partially_shipped' },
+    { label: 'Delivered', done: order.status === 'delivered' },
   ];
 
   return (
@@ -429,6 +468,7 @@ const OrderDetailPage = () => {
           <MetaCard
             label="Items ordered"
             value={`${orderItems.length} item${orderItems.length !== 1 ? 's' : ''}`}
+            sub={trackingProgress ? `${trackingProgress.fulfilledQuantity}/${trackingProgress.totalQuantity} units fulfilled` : undefined}
           />
           <MetaCard
             label="Payment"
@@ -683,6 +723,16 @@ const OrderDetailPage = () => {
               {/* Fulfillment timeline */}
               <Paper elevation={0} sx={sxCard}>
                 <SectionLabel icon={TimelineIcon}>Fulfillment timeline</SectionLabel>
+                {trackingProgress && (
+                  <Box sx={{ mb: 2, p: 1.5, borderRadius: 2, bgcolor: 'action.hover' }}>
+                    <Typography variant="body2" fontWeight={700}>
+                      {trackingProgress.percent}% fulfilled
+                    </Typography>
+                    <Typography variant="caption" color="text.secondary">
+                      {trackingProgress.fulfilledQuantity} shipped, {trackingProgress.remainingQuantity} remaining
+                    </Typography>
+                  </Box>
+                )}
                 <Box>
                   {timelineEntries.map((entry, i) => (
                     <TimelineEntry
@@ -761,8 +811,4 @@ const OrderDetailPage = () => {
 };
 
 export default OrderDetailPage;
-
-
-
-
 
