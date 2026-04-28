@@ -25,6 +25,7 @@ import StarIcon from '@mui/icons-material/Star';
 import PhotoLibraryIcon from '@mui/icons-material/PhotoLibrary';
 import SettingsIcon from '@mui/icons-material/Settings';
 import HistoryIcon from '@mui/icons-material/History';
+import NotificationsIcon from '@mui/icons-material/Notifications';
 import TuneIcon from '@mui/icons-material/Tune';
 import AdminPanelSettingsIcon from '@mui/icons-material/AdminPanelSettings';
 import StoreIcon from '@mui/icons-material/Storefront';
@@ -42,6 +43,7 @@ const ALL_MENU_ITEMS = [
   { text: 'Products',   path: '/admin/products',   icon: <InventoryIcon />, permission: PERMISSIONS.PRODUCTS_READ },
   { text: 'Categories', path: '/admin/categories', icon: <CategoryIcon />, permission: PERMISSIONS.CATEGORIES_READ },
   { text: 'Brands',     path: '/admin/brands',     icon: <LocalOfferIcon />, permission: PERMISSIONS.PRODUCTS_READ },
+  { text: 'Promotions', path: '/admin/promotions', icon: <LocalOfferIcon />, permission: PERMISSIONS.PROMOTIONS_READ },
   { text: 'Attributes', path: '/admin/attributes', icon: <TuneIcon />, permission: PERMISSIONS.ATTRIBUTES_READ },
   { text: 'Orders',     path: '/admin/orders',     icon: <ShoppingCartIcon />, permission: PERMISSIONS.ORDERS_READ },
   { text: 'Customers',  path: '/admin/customers',  icon: <PeopleIcon />, permission: PERMISSIONS.CUSTOMERS_READ },
@@ -62,6 +64,7 @@ const ALL_MENU_ITEMS = [
     ],
   },
   { text: 'Audit Log',  path: '/admin/audit-log',  icon: <HistoryIcon />, permission: PERMISSIONS.AUDIT_READ },
+  { text: 'Notif. Logs', path: '/admin/notification-logs', icon: <NotificationsIcon />, permission: PERMISSIONS.AUDIT_READ },
 ];
 
 const AdminLayout = () => {

@@ -44,8 +44,11 @@ const ReviewsPage = lazy(() => import('../pages/admin/ReviewsPage'));
 const MediaPage = lazy(() => import('../pages/admin/MediaPage'));
 const SettingsPage = lazy(() => import('../pages/admin/SettingsPage'));
 const AuditLogPage = lazy(() => import('../pages/admin/AuditLogPage'));
+const NotificationLogsPage = lazy(() => import('../pages/admin/NotificationLogsPage'));
 const AttributesPage = lazy(() => import('../pages/admin/AttributesPage'));
 const BrandsPage = lazy(() => import('../pages/admin/BrandsPage'));
+const PromotionsPage = lazy(() => import('../pages/admin/PromotionsPage'));
+const PromotionDetailPage = lazy(() => import('../pages/admin/PromotionDetailPage'));
 const AccessControlPage = lazy(() => import('../pages/admin/AccessControlPage'));
 const PagesManagePage = lazy(() => import('../pages/admin/PagesManagePage'));
 const PageEditPage = lazy(() => import('../pages/admin/PageEditPage'));
@@ -134,6 +137,10 @@ const AppRoutes = () => (
           <Route element={<ProtectedRoute permission={PERMISSIONS.CATEGORIES_READ} />}>
             <Route path="categories" element={<CategoriesPage />} />
           </Route>
+          <Route element={<ProtectedRoute permission={PERMISSIONS.PROMOTIONS_READ} />}>
+            <Route path="promotions" element={<PromotionsPage />} />
+            <Route path="promotions/:id" element={<PromotionDetailPage />} />
+          </Route>
           <Route element={<ProtectedRoute permission={PERMISSIONS.ATTRIBUTES_READ} />}>
             <Route path="attributes" element={<AttributesPage />} />
           </Route>
@@ -158,6 +165,7 @@ const AppRoutes = () => (
           </Route>
           <Route element={<ProtectedRoute permission={PERMISSIONS.AUDIT_READ} />}>
             <Route path="audit-log" element={<AuditLogPage />} />
+            <Route path="notification-logs" element={<NotificationLogsPage />} />
           </Route>
           <Route element={<ProtectedRoute permission={PERMISSIONS.PAGES_READ} />}>
             <Route path="pages" element={<PagesManagePage />} />

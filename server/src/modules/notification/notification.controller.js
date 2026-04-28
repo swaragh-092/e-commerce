@@ -1,6 +1,7 @@
 'use strict';
 
-const { NotificationTemplate } = require('../index');
+const { NotificationTemplate, NotificationLog } = require('../index');
+const { Op } = require('sequelize');
 const { success, error } = require('../../utils/response');
 const AppError = require('../../utils/AppError');
 
@@ -40,12 +41,17 @@ const updateTemplate = async (req, res, next) => {
     const template = await NotificationTemplate.findOne({ where: { name: req.params.name } });
     if (!template) throw new AppError('NOT_FOUND', 404, 'Template not found');
 
-    const { subject, bodyHtml, bodyText, isActive } = req.body;
+    const { subject, bodyHtml, bodyText, isActive, bodySms, bodyWhatsapp, enableEmail, enableSms, enableWhatsapp } = req.body;
     await template.update({
       ...(subject !== undefined && { subject }),
       ...(bodyHtml !== undefined && { bodyHtml }),
       ...(bodyText !== undefined && { bodyText }),
       ...(isActive !== undefined && { isActive }),
+      ...(bodySms !== undefined && { bodySms }),
+      ...(bodyWhatsapp !== undefined && { bodyWhatsapp }),
+      ...(enableEmail !== undefined && { enableEmail }),
+      ...(enableSms !== undefined && { enableSms }),
+      ...(enableWhatsapp !== undefined && { enableWhatsapp }),
     });
 
     return success(res, template, 'Template updated successfully');
@@ -89,4 +95,41 @@ const sendTestEmail = async (req, res, next) => {
   }
 };
 
-module.exports = { listTemplates, getTemplate, updateTemplate, sendTestEmail };
+/**
+ * GET /notifications/logs
+ * List notification logs with pagination and filters
+ */
+const listLogs = async (req, res, next) => {
+  try {
+    const page = parseInt(req.query.page) || 1;
+    const limit = parseInt(req.query.limit) || 20;
+    const offset = (page - 1) * limit;
+    
+    const { channel, status, search } = req.query;
+    const where = {};
+    
+    if (channel) where.channel = channel;
+    if (status) where.status = status;
+    if (search) {
+       where.recipient = { [Op.iLike]: `%${search}%` };
+    }
+
+    const logs = await NotificationLog.findAndCountAll({
+      where,
+      limit,
+      offset,
+      order: [['createdAt', 'DESC']]
+    });
+
+    return success(res, {
+        logs: logs.rows,
+        total: logs.count,
+        page,
+        totalPages: Math.ceil(logs.count / limit)
+    });
+  } catch (err) {
+    next(err);
+  }
+};
+
+module.exports = { listTemplates, getTemplate, updateTemplate, sendTestEmail, listLogs };

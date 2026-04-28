@@ -132,6 +132,26 @@ const serializeVariantPricing = (product, variant, referenceDate = new Date()) =
   };
 };
 
+const getActivePromotion = (product, referenceDate = new Date()) => {
+  if (!product?.promotions || !product.promotions.length) return null;
+
+  const now = referenceDate instanceof Date ? referenceDate : new Date(referenceDate);
+
+  const activePromotions = product.promotions.filter(promo => {
+    if (!promo.isActive) return false;
+    const start = promo.startDate ? new Date(promo.startDate) : null;
+    const end = promo.endDate ? new Date(promo.endDate) : null;
+    if (start && start > now) return false;
+    if (end && end < now) return false;
+    return true;
+  });
+
+  if (!activePromotions.length) return null;
+
+  // Sort by priority (descending)
+  return activePromotions.sort((a, b) => (b.priority || 0) - (a.priority || 0))[0];
+};
+
 const serializeProductPricing = (product, { adminView = false } = {}) => {
   if (!product) return product;
 
@@ -139,6 +159,8 @@ const serializeProductPricing = (product, { adminView = false } = {}) => {
   const saleStatus = getSaleStatus(plain);
   const saleActive = saleStatus === 'active';
   const shouldExposeSaleMeta = adminView || saleStatus === 'active' || saleStatus === 'scheduled';
+  
+  const activePromotion = getActivePromotion(plain);
 
   return {
     ...plain,
@@ -151,12 +173,15 @@ const serializeProductPricing = (product, { adminView = false } = {}) => {
     discountPercent: getDiscountPercent(plain),
     savingsAmount: getSavingsAmount(plain),
     ...(adminView
-      ? {}
+      ? { activePromotion }
       : {
           salePrice: shouldExposeSaleMeta ? plain.salePrice : null,
           saleStartAt: shouldExposeSaleMeta ? plain.saleStartAt : null,
           saleEndAt: shouldExposeSaleMeta ? plain.saleEndAt : null,
-          saleLabel: shouldExposeSaleMeta ? plain.saleLabel : null,
+          saleLabel: shouldExposeSaleMeta 
+            ? (activePromotion ? activePromotion.label : plain.saleLabel) 
+            : null,
+          activePromotion,
         }),
   };
 };
@@ -222,4 +247,5 @@ module.exports = {
   normalizeSalePayload,
   serializeVariantPricing,
   serializeProductPricing,
+  getActivePromotion,
 };

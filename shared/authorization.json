@@ -42,7 +42,9 @@
     "ROLES_READ": "roles.read",
     "ROLES_MANAGE": "roles.manage",
     "SYSTEM_ROLES_MANAGE": "system_roles.manage",
-    "USERS_ASSIGN_ROLES": "users.assign_roles"
+    "USERS_ASSIGN_ROLES": "users.assign_roles",
+    "PROMOTIONS_READ": "promotions.read",
+    "PROMOTIONS_MANAGE": "promotions.manage"
   },
   "systemRoleDefinitions": {
     "customer": {
@@ -88,7 +90,9 @@
     "settings.read",
     "settings.manage",
     "audit.read",
-    "pages.read"
+    "pages.read",
+    "promotions.read",
+    "promotions.manage"
   ],
   "customerPermissionKeys": [
     "account.self",

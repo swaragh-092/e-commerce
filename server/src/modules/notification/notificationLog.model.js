@@ -10,9 +10,13 @@ module.exports = (sequelize, DataTypes) => {
         templateName: {
             type: DataTypes.STRING(100),
         },
-        recipientEmail: {
+        recipient: {
             type: DataTypes.STRING(255),
             allowNull: false,
+        },
+        channel: {
+            type: DataTypes.STRING(20),
+            defaultValue: 'email',
         },
         subject: {
             type: DataTypes.STRING(500),

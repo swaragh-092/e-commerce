@@ -128,9 +128,9 @@ const SettingsPage = () => {
     }
   };
 
-  const tabs = ['Store', 'Branding', 'Layout', 'Homepage', 'Catalog', 'Checkout', 'Promotions', 'Invoice', 'Advanced', 'Email Templates'];
+  const tabs = ['Store', 'Branding', 'Layout', 'Homepage', 'Catalog', 'Checkout', 'Promotions', 'Invoice', 'Messaging Config', 'Advanced', 'Notification Templates'];
   const currentTab = tabs[tab];
-  const isEmailTemplatesTab = currentTab === 'Email Templates';
+  const isNotificationTemplatesTab = currentTab === 'Notification Templates';
 
   // Current currency symbol — used in shipping adornments
   const currSymbol = getCurrencySymbol(form['general.currency']);
@@ -1142,6 +1142,45 @@ const SettingsPage = () => {
     ],
     [
       section(
+        'Email Settings (SMTP)',
+        'Configure the SMTP server used to send transactional emails.',
+        <>
+          {field('smtp.host', 'SMTP Host (e.g. smtp.gmail.com)')}
+          {field('smtp.port', 'SMTP Port (e.g. 587)', 'number')}
+          {toggle('smtp.secure', 'Use Secure Connection (TLS/SSL)')}
+          {field('smtp.user', 'SMTP Username')}
+          {field('smtp.password', 'SMTP Password', 'password')}
+          {field('smtp.fromName', 'Sender Name (e.g. My Store)')}
+          {field('smtp.fromEmail', 'Sender Email (e.g. support@mystore.com)')}
+        </>,
+        ['smtp', 'email', 'mail', 'sender']
+      ),
+      section(
+        'SMS Settings',
+        'Configure your SMS provider to send order updates via text message.',
+        <>
+          {field('sms.provider', 'SMS Provider (e.g. twilio, messagebird, custom)')}
+          {field('sms.apiUrl', 'API URL')}
+          {field('sms.apiKey', 'Account SID / API Key')}
+          {field('sms.authToken', 'Auth Token / Secret', 'password')}
+          {field('sms.sender', 'Sender ID / Phone Number')}
+        </>,
+        ['sms', 'text message', 'twilio']
+      ),
+      section(
+        'WhatsApp Settings',
+        'Configure your WhatsApp Business API provider.',
+        <>
+          {field('whatsapp.provider', 'WhatsApp Provider')}
+          {field('whatsapp.apiUrl', 'API URL')}
+          {field('whatsapp.accessToken', 'Access Token', 'password')}
+          {field('whatsapp.sender', 'Sender Phone Number')}
+        </>,
+        ['whatsapp', 'message', 'meta']
+      ),
+    ],
+    [
+      section(
         'SEO & Discovery',
         'Set defaults for search engines, social sharing, and analytics snippets.',
         <>
@@ -1249,24 +1288,24 @@ const SettingsPage = () => {
             <Divider />
             <Box sx={{ p: 3 }}>
               <Box sx={{ pointerEvents: canManageSettings ? 'auto' : 'none', opacity: canManageSettings ? 1 : 0.75 }}>
-                {isEmailTemplatesTab ? (
+                {isNotificationTemplatesTab ? (
                   <Box>
                     <Typography variant="body2" color="text.secondary" sx={{ mb: 3 }}>
-                      Customize the transactional emails your store sends. Use <code style={{ background: '#f4f4f4', padding: '1px 4px', borderRadius: 3 }}>{'{{variable}}'}</code> syntax for dynamic content. Changes apply immediately — no restart needed.
+                      Customize multi-channel notifications (Email, SMS, WhatsApp) sent by your store. Use <code style={{ background: '#f4f4f4', padding: '1px 4px', borderRadius: 3 }}>{'{{variable}}'}</code> syntax for dynamic content.
                     </Typography>
                     <Box sx={{ mb: 2.5, display: 'flex', gap: 1, alignItems: 'center' }}>
                       <TextField
                         size="small"
-                        label="Test email address"
-                        placeholder="you@example.com"
+                        label="Test Email / Phone"
+                        placeholder="you@example.com or +1234567890"
                         value={templateTestEmail}
                         onChange={(e) => setTemplateTestEmail(e.target.value)}
                         sx={{ minWidth: 260 }}
-                        helperText="Enter an email to send test messages to"
+                        helperText="Provide recipient for tests (Email config required)"
                       />
                     </Box>
                     {emailTemplates.length === 0 && (
-                      <Alert severity="info" sx={{ mb: 2 }}>No email templates found. Run the notification templates seeder to populate defaults.</Alert>
+                      <Alert severity="info" sx={{ mb: 2 }}>No notification templates found. Run the seeder to populate defaults.</Alert>
                     )}
                     {emailTemplates.map((tpl) => (
                       <Paper key={tpl.name} variant="outlined" sx={{ mb: 2, borderRadius: 2, overflow: 'hidden' }}>
@@ -1278,7 +1317,9 @@ const SettingsPage = () => {
                             <Box sx={{ width: 10, height: 10, borderRadius: '50%', bgcolor: tpl.isActive ? 'success.main' : 'text.disabled', flexShrink: 0 }} />
                             <Box>
                               <Typography variant="body2" fontWeight={700} sx={{ fontFamily: 'monospace' }}>{tpl.name}</Typography>
-                              <Typography variant="caption" color="text.secondary">{tpl.subject}</Typography>
+                              <Typography variant="caption" color="text.secondary">
+                                {tpl.subject || 'No subject set'}
+                              </Typography>
                             </Box>
                           </Box>
                           <Typography variant="caption" color="primary">{templateExpanded === tpl.name ? 'Collapse ▲' : 'Edit ▼'}</Typography>
@@ -1287,44 +1328,54 @@ const SettingsPage = () => {
                         {templateExpanded === tpl.name && (
                           <Box sx={{ p: 2.5, borderTop: '1px solid', borderColor: 'divider', display: 'flex', flexDirection: 'column', gap: 2 }}>
                             <FormControlLabel
-                              control={
-                                <Switch
-                                  size="small"
-                                  checked={tpl.isActive}
-                                  onChange={(e) => setEmailTemplates((prev) => prev.map((t) => t.name === tpl.name ? { ...t, isActive: e.target.checked } : t))}
-                                />
-                              }
-                              label="Active — send this email"
+                              control={<Switch size="small" checked={tpl.isActive} onChange={(e) => setEmailTemplates((prev) => prev.map((t) => t.name === tpl.name ? { ...t, isActive: e.target.checked } : t))} />}
+                              label="Active — Master toggle for this entire event"
                             />
-                            <TextField
-                              fullWidth size="small" label="Subject line"
-                              helperText="Supports {{variables}}"
-                              value={tpl.subject}
-                              onChange={(e) => setEmailTemplates((prev) => prev.map((t) => t.name === tpl.name ? { ...t, subject: e.target.value } : t))}
+
+                            <Divider sx={{ my: 0.5 }} />
+                            <Typography variant="subtitle2">Email Channel</Typography>
+                            <FormControlLabel
+                              control={<Switch size="small" checked={tpl.enableEmail !== false} onChange={(e) => setEmailTemplates((prev) => prev.map((t) => t.name === tpl.name ? { ...t, enableEmail: e.target.checked } : t))} />}
+                              label="Enable Email"
                             />
-                            <TextField
-                              fullWidth size="small" label="HTML Body"
-                              multiline rows={12}
-                              value={tpl.bodyHtml}
-                              onChange={(e) => setEmailTemplates((prev) => prev.map((t) => t.name === tpl.name ? { ...t, bodyHtml: e.target.value } : t))}
-                              inputProps={{ style: { fontFamily: 'monospace', fontSize: 12 } }}
-                              helperText="Full HTML email body. Use {{name}}, {{verify_url}}, {{reset_url}}, etc."
+                            <TextField fullWidth size="small" label="Subject line" helperText="Supports {{variables}}" value={tpl.subject || ''} onChange={(e) => setEmailTemplates((prev) => prev.map((t) => t.name === tpl.name ? { ...t, subject: e.target.value } : t))} />
+                            <TextField fullWidth size="small" label="HTML Body" multiline rows={8} value={tpl.bodyHtml || ''} onChange={(e) => setEmailTemplates((prev) => prev.map((t) => t.name === tpl.name ? { ...t, bodyHtml: e.target.value } : t))} inputProps={{ style: { fontFamily: 'monospace', fontSize: 12 } }} />
+                            <TextField fullWidth size="small" label="Plain Text Body" multiline rows={3} value={tpl.bodyText || ''} onChange={(e) => setEmailTemplates((prev) => prev.map((t) => t.name === tpl.name ? { ...t, bodyText: e.target.value } : t))} inputProps={{ style: { fontFamily: 'monospace', fontSize: 12 } }} />
+
+                            <Divider sx={{ my: 0.5 }} />
+                            <Typography variant="subtitle2">SMS Channel</Typography>
+                            <FormControlLabel
+                              control={<Switch size="small" checked={tpl.enableSms || false} onChange={(e) => setEmailTemplates((prev) => prev.map((t) => t.name === tpl.name ? { ...t, enableSms: e.target.checked } : t))} />}
+                              label="Enable SMS"
                             />
-                            <TextField
-                              fullWidth size="small" label="Plain Text Body (fallback)"
-                              multiline rows={4}
-                              value={tpl.bodyText || ''}
-                              onChange={(e) => setEmailTemplates((prev) => prev.map((t) => t.name === tpl.name ? { ...t, bodyText: e.target.value } : t))}
-                              inputProps={{ style: { fontFamily: 'monospace', fontSize: 12 } }}
+                            <TextField fullWidth size="small" label="SMS Body" multiline rows={3} value={tpl.bodySms || ''} onChange={(e) => setEmailTemplates((prev) => prev.map((t) => t.name === tpl.name ? { ...t, bodySms: e.target.value } : t))} inputProps={{ style: { fontFamily: 'monospace', fontSize: 12 } }} helperText="Supports {{variables}}. Keep under 160 chars to avoid multi-part billing." />
+
+                            <Divider sx={{ my: 0.5 }} />
+                            <Typography variant="subtitle2">WhatsApp Channel</Typography>
+                            <FormControlLabel
+                              control={<Switch size="small" checked={tpl.enableWhatsapp || false} onChange={(e) => setEmailTemplates((prev) => prev.map((t) => t.name === tpl.name ? { ...t, enableWhatsapp: e.target.checked } : t))} />}
+                              label="Enable WhatsApp"
                             />
-                            <Box sx={{ display: 'flex', gap: 1.5, flexWrap: 'wrap', pt: 0.5 }}>
+                            <TextField fullWidth size="small" label="WhatsApp Body" multiline rows={4} value={tpl.bodyWhatsapp || ''} onChange={(e) => setEmailTemplates((prev) => prev.map((t) => t.name === tpl.name ? { ...t, bodyWhatsapp: e.target.value } : t))} inputProps={{ style: { fontFamily: 'monospace', fontSize: 12 } }} helperText="Supports WhatsApp formatting (*bold*, _italic_) and {{variables}}." />
+
+                            <Box sx={{ display: 'flex', gap: 1.5, flexWrap: 'wrap', pt: 1 }}>
                               <Button
                                 variant="contained" size="small"
                                 disabled={templateSaving[tpl.name]}
                                 onClick={async () => {
                                   setTemplateSaving((p) => ({ ...p, [tpl.name]: true }));
                                   try {
-                                    await updateEmailTemplate(tpl.name, { subject: tpl.subject, bodyHtml: tpl.bodyHtml, bodyText: tpl.bodyText, isActive: tpl.isActive });
+                                    await updateEmailTemplate(tpl.name, {
+                                      subject: tpl.subject,
+                                      bodyHtml: tpl.bodyHtml,
+                                      bodyText: tpl.bodyText,
+                                      bodySms: tpl.bodySms,
+                                      bodyWhatsapp: tpl.bodyWhatsapp,
+                                      isActive: tpl.isActive,
+                                      enableEmail: tpl.enableEmail !== false,
+                                      enableSms: tpl.enableSms || false,
+                                      enableWhatsapp: tpl.enableWhatsapp || false,
+                                    });
                                     notify('Template saved!', 'success');
                                   } catch {
                                     notify('Failed to save template.', 'error');
@@ -1342,15 +1393,15 @@ const SettingsPage = () => {
                                   setTemplateTesting((p) => ({ ...p, [tpl.name]: true }));
                                   try {
                                     await sendTestEmailApi(tpl.name, templateTestEmail);
-                                    notify(`Test email sent to ${templateTestEmail}`, 'success');
+                                    notify(`Test sent to ${templateTestEmail}`, 'success');
                                   } catch {
-                                    notify('Failed to send test email. Check your SMTP config.', 'error');
+                                    notify('Failed to send test. Check your SMTP config.', 'error');
                                   } finally {
                                     setTemplateTesting((p) => ({ ...p, [tpl.name]: false }));
                                   }
                                 }}
                               >
-                                {templateTesting[tpl.name] ? 'Sending…' : 'Send Test Email'}
+                                {templateTesting[tpl.name] ? 'Sending…' : 'Send Test'}
                               </Button>
                             </Box>
                           </Box>

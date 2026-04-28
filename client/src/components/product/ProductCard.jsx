@@ -17,6 +17,7 @@ const ProductCard = ({ product, fromCategory }) => {
   const discountPercent = product.discountPercent || getDiscountPercent(product);
   const saleTiming = sales.showSaleTiming !== false ? getSaleTimingMessage(product) : null;
   const saleLabel = (hasSale || isScheduledSale) && sales.showSaleLabel !== false ? (product.saleLabel || sales.defaultSaleLabel || null) : null;
+  const badgeColor = product.activePromotion?.badgeColor || 'error.main';
   const endingSoon = hasSale && sales.showCountdown !== false && isEndingSoon(product.saleEndAt, sales.endingSoonHours);
   const hasRating = product.averageRating != null;
 
@@ -99,7 +100,7 @@ const ProductCard = ({ product, fromCategory }) => {
         {(saleLabel || saleTiming) && (
           <Box sx={{ mt: 1 }}>
             {saleLabel && (
-              <Typography variant="caption" color="error.main" sx={{ display: 'block', fontWeight: 700 }}>
+              <Typography variant="caption" sx={{ display: 'block', fontWeight: 700, color: badgeColor }}>
                 {saleLabel}
               </Typography>
             )}

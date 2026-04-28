@@ -23,9 +23,27 @@ module.exports = (sequelize, DataTypes) => {
         bodyText: {
             type: DataTypes.TEXT,
         },
+        bodySms: {
+            type: DataTypes.TEXT,
+        },
+        bodyWhatsapp: {
+            type: DataTypes.TEXT,
+        },
         isActive: {
             type: DataTypes.BOOLEAN,
             defaultValue: true,
+        },
+        enableEmail: {
+            type: DataTypes.BOOLEAN,
+            defaultValue: true,
+        },
+        enableSms: {
+            type: DataTypes.BOOLEAN,
+            defaultValue: false,
+        },
+        enableWhatsapp: {
+            type: DataTypes.BOOLEAN,
+            defaultValue: false,
         },
     }, {
         tableName: 'notification_templates',

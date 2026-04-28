@@ -21,6 +21,7 @@ const {
 } = require('../index');
 const AppError = require('../../utils/AppError');
 const AuditService = require('../audit/audit.service');
+const NotificationService = require('../notification/notification.service');
 const CouponService = require('../coupon/coupon.service');
 const PaymentService = require('../payment/payment.service');
 const TaxService = require('../tax/tax.service');
@@ -404,6 +405,17 @@ const placeOrder = async (userId, payload) => {
         }
     } catch (err) {}
 
+    try {
+        if (NotificationService && NotificationService.send) {
+            const user = await User.findByPk(userId);
+            await NotificationService.send('order_placed', null, {
+                name: user ? user.firstName : 'Customer',
+                orderNumber: order.orderNumber,
+                total: order.total
+            }, userId, order.id);
+        }
+    } catch (err) {}
+
     return { order, clientSecret };
 };
 
@@ -627,6 +639,17 @@ const createFulfillment = async (orderId, payload, actingUserId) => {
         // Only transition forward — never regress a delivered/cancelled/refunded order
         if (!['delivered', 'cancelled', 'refunded'].includes(order.status)) {
             await order.update({ status: newStatus }, { transaction: t });
+
+            try {
+                if (NotificationService && NotificationService.send) {
+                    const user = await User.findByPk(order.userId, { transaction: t });
+                    await NotificationService.send(newStatus === 'shipped' ? 'order_shipped' : 'order_partially_shipped', null, {
+                        name: user ? user.firstName : 'Customer',
+                        orderNumber: order.orderNumber,
+                        trackingNumber: trackingNumber || 'N/A'
+                    }, order.userId, order.id, t);
+                }
+            } catch (err) {}
         }
 
         try {
@@ -659,6 +682,18 @@ const updateStatus = async (id, status, actingUserId) => {
         const before = order.toJSON();
         ensureValidStatusTransition(order.status, status);
         await order.update({ status }, { transaction: t });
+
+        if (status === 'delivered') {
+            try {
+                if (NotificationService && NotificationService.send) {
+                    const user = await User.findByPk(order.userId, { transaction: t });
+                    await NotificationService.send('order_delivered', null, {
+                        name: user ? user.firstName : 'Customer',
+                        orderNumber: order.orderNumber
+                    }, order.userId, order.id, t);
+                }
+            } catch (err) {}
+        }
 
         try {
             if (AuditService && AuditService.log) {
@@ -701,6 +736,16 @@ const refundOrder = async (id, actingUserId, isAdmin) => {
         const previousStatus = order.status;
         ensureValidStatusTransition(previousStatus, 'refunded');
         await order.update({ status: 'refunded' }, { transaction: t });
+
+        try {
+            if (NotificationService && NotificationService.send) {
+                const user = await User.findByPk(order.userId, { transaction: t });
+                await NotificationService.send('order_refunded', null, {
+                    name: user ? user.firstName : 'Customer',
+                    orderNumber: order.orderNumber
+                }, order.userId, order.id, t);
+            }
+        } catch (err) {}
 
         if (order.Payment && order.Payment.status !== 'refunded') {
             const currentMetadata = order.Payment.metadata && typeof order.Payment.metadata === 'object'
@@ -751,6 +796,16 @@ const cancelOrder = async (id, userId) => {
 
         ensureValidStatusTransition(previousStatus, 'cancelled');
         await order.update({ status: 'cancelled' }, { transaction: t });
+
+        try {
+            if (NotificationService && NotificationService.send) {
+                const user = await User.findByPk(order.userId, { transaction: t });
+                await NotificationService.send('order_cancelled', null, {
+                    name: user ? user.firstName : 'Customer',
+                    orderNumber: order.orderNumber
+                }, order.userId, order.id, t);
+            }
+        } catch (err) {}
 
         for (const item of order.items) {
              if (item.productId) {
