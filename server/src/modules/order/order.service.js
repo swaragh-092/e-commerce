@@ -39,7 +39,6 @@ const {
 const ADMIN_ORDER_LIST_USER_ATTRIBUTES = ['id', 'firstName', 'lastName', 'email'];
 const ADMIN_ORDER_PAYMENT_ATTRIBUTES = ['id', 'provider', 'status', 'amount', 'currency', 'transactionId', 'createdAt', 'updatedAt'];
 const PAYMENT_METHODS = ['razorpay', 'stripe', 'payu', 'cashfree', 'cod'];
-const CONNECTED_PAYMENT_METHODS = ['razorpay', 'cashfree', 'cod'];
 const PAYMENT_METHOD_NAMES = {
     razorpay: 'Razorpay',
     stripe: 'Stripe',
@@ -115,12 +114,16 @@ const ensurePaymentMethodEnabled = async (paymentMethod) => {
         throw new AppError('VALIDATION_ERROR', 400, 'Selected payment method is not available');
     }
 
-    if (!CONNECTED_PAYMENT_METHODS.includes(paymentMethod)) {
-        throw new AppError(
-            'PAYMENT_UNAVAILABLE',
-            503,
-            `${PAYMENT_METHOD_NAMES[paymentMethod]} is enabled for display but its gateway integration is not connected yet`
-        );
+    if (paymentMethod !== 'cod') {
+        const statuses = await PaymentService.getGatewayStatuses();
+        const gateway = statuses.find(s => s.id === paymentMethod);
+        if (gateway && !gateway.connected) {
+            throw new AppError(
+                'PAYMENT_UNAVAILABLE',
+                503,
+                `${PAYMENT_METHOD_NAMES[paymentMethod]} is enabled for display but its gateway integration is not connected yet`
+            );
+        }
     }
 };
 
