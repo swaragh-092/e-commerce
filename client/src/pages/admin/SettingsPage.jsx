@@ -1355,6 +1355,22 @@ const SettingsPage = () => {
           {field('invoice.prefix', 'Invoice Number Prefix (e.g. INV-)')}
           {field('invoice.companyName', 'Company Legal Name (Overrides Store Name if provided)')}
           {field('invoice.taxRegistryNumber', 'Tax / VAT Registration Number')}
+          
+          <Divider sx={{ my: 2 }} />
+          <Typography variant="subtitle2" fontWeight={600} color="text.secondary" mb={1.5}>Invoice Logo</Typography>
+          {toggle('invoice.showLogo', 'Show logo on printed invoices')}
+          {form['invoice.showLogo'] !== false && (
+            <>
+              {field('invoice.logoUrl', 'Specific Invoice Logo URL (Optional, falls back to store logo)')}
+              {form['invoice.logoUrl'] && (
+                <Box sx={{ mb: 2 }}>
+                  <img src={form['invoice.logoUrl']} alt="Invoice logo preview" style={{ maxHeight: 60, objectFit: 'contain', border: '1px solid #ddd', borderRadius: 8, padding: 4 }} />
+                </Box>
+              )}
+            </>
+          )}
+
+          <Divider sx={{ my: 2 }} />
           <TextField
             fullWidth size="small" label="Custom Invoice Notes / Terms"
             multiline rows={4}

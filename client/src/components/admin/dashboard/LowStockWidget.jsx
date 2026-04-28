@@ -11,9 +11,12 @@ import {
   Typography,
 } from '@mui/material';
 import WarningIcon from '@mui/icons-material/Warning';
+import { useNavigate } from 'react-router-dom';
 import { getPanelSx } from './dashboardUtils';
 
 const LowStockWidget = ({ lowStock, loading, spacing }) => {
+  const navigate = useNavigate();
+
   if (lowStock.length === 0) {
     return !loading ? (
       <Alert severity="success" sx={{ borderRadius: 2 }}>
@@ -39,7 +42,12 @@ const LowStockWidget = ({ lowStock, loading, spacing }) => {
         </TableHead>
         <TableBody>
           {lowStock.map((product) => (
-            <TableRow key={product.id}>
+            <TableRow
+              key={product.id}
+              hover
+              onClick={() => navigate(`/admin/products/${product.id}/edit`)}
+              sx={{ cursor: 'pointer' }}
+            >
               <TableCell>{product.name}</TableCell>
               <TableCell align="right">{product.quantity}</TableCell>
               <TableCell align="right">{product.reservedQty}</TableCell>

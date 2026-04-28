@@ -17,7 +17,7 @@ import {
 } from '@mui/material';
 import { DataGrid } from '@mui/x-data-grid';
 import VisibilityIcon from '@mui/icons-material/Visibility';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import { useCurrency } from '../../hooks/useSettings';
 import { getAllOrders } from '../../services/adminService';
 import { getApiErrorMessage } from '../../utils/apiErrors';
@@ -53,13 +53,15 @@ const SummaryCard = ({ label, value, tone = 'default' }) => (
 
 const OrdersManagePage = () => {
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
   const { formatPrice } = useCurrency();
   const [orders, setOrders] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [total, setTotal] = useState(0);
   const [paginationModel, setPaginationModel] = useState({ page: 0, pageSize: 20 });
-  const [status, setStatus] = useState('');
+  // Initialise status from URL query param so dashboard card links pre-apply the filter
+  const [status, setStatus] = useState(() => searchParams.get('status') || '');
   const [searchInput, setSearchInput] = useState('');
   const [search, setSearch] = useState('');
 

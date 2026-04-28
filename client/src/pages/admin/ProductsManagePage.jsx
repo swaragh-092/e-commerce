@@ -11,8 +11,9 @@ import {
   OpenInNew as OpenInNewIcon, Clear as ClearIcon,
   CheckCircle as CheckCircleIcon, RemoveCircle as RemoveCircleIcon,
   DeleteSweep as DeleteSweepIcon, Download as DownloadIcon, EditNote as EditNoteIcon,
+  Inventory as InventoryIcon,
 } from '@mui/icons-material';
-import { Link, useNavigate } from 'react-router-dom';
+import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import { getProducts, deleteProduct, updateProduct, bulkUpdateSale } from '../../services/productService';
 import { getCategoryTree } from '../../services/categoryService';
 import { getSaleLabels } from '../../services/adminService';
@@ -36,6 +37,7 @@ const toIsoOrNull = (value) => (value ? new Date(value).toISOString() : null);
 
 const ProductsManagePage = () => {
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
   const { formatPrice } = useCurrency();
   const { settings } = useSettings();
   const { notify } = useNotification();
@@ -52,14 +54,16 @@ const ProductsManagePage = () => {
   const [loading, setLoading] = useState(true);
   const [paginationModel, setPaginationModel] = useState({ page: 0, pageSize: 20 });
 
-  // Filters
+  // Filters – initialise from URL query params so dashboard cards can pre-apply filters
   const [search, setSearch] = useState('');
   const [searchInput, setSearchInput] = useState('');
-  const [status, setStatus] = useState('');
+  const [status, setStatus] = useState(() => searchParams.get('status') || '');
   const [saleFilter, setSaleFilter] = useState('');
   const [categoryFilter, setCategoryFilter] = useState('');
   const [flatCategories, setFlatCategories] = useState([]);
   const [saleLabels, setSaleLabels] = useState([]);
+  // ?stock=low from dashboard → show only items with qty ≤ 10
+  const [lowStockOnly, setLowStockOnly] = useState(() => searchParams.get('stock') === 'low');
 
   // Bulk selection
   const [selectedIds, setSelectedIds] = useState([]);
@@ -211,6 +215,8 @@ const ProductsManagePage = () => {
       ...(saleFilter && { saleStatus: saleFilter }),
       ...(categoryFilter && { categoryId: categoryFilter }),
       ...(sortModel[0] && { sortBy: sortModel[0].field, sortOrder: sortModel[0].sort }),
+      // Low-stock filter: pass maxQty=10 so the server returns only low-stock items
+      ...(lowStockOnly && { maxQty: 10 }),
     };
     getProducts(params)
       .then((res) => {
@@ -219,7 +225,7 @@ const ProductsManagePage = () => {
       })
       .catch(console.error)
       .finally(() => setLoading(false));
-  }, [paginationModel, search, status, saleFilter, categoryFilter, sortModel]);
+  }, [paginationModel, search, status, saleFilter, categoryFilter, sortModel, lowStockOnly]);
 
   useEffect(() => {
     fetchProducts();
@@ -625,6 +631,32 @@ const ProductsManagePage = () => {
           )}
         </Stack>
       </Box>
+
+      {/* ── Low-stock filter banner (from dashboard card click) ── */}
+      {lowStockOnly && (
+        <Paper
+          elevation={0}
+          sx={{
+            mb: 2, px: 2, py: 1,
+            display: 'flex', alignItems: 'center', gap: 2,
+            border: '1px solid', borderColor: 'warning.light',
+            borderRadius: 2, bgcolor: 'warning.50',
+          }}
+        >
+          <InventoryIcon color="warning" fontSize="small" />
+          <Typography variant="body2" fontWeight={600} color="warning.dark" sx={{ flexGrow: 1 }}>
+            Showing low-stock products (qty ≤ 10)
+          </Typography>
+          <Button
+            size="small"
+            variant="outlined"
+            color="warning"
+            onClick={() => setLowStockOnly(false)}
+          >
+            Clear filter
+          </Button>
+        </Paper>
+      )}
 
       {/* ── Filters ── */}
       <Stack direction="row" spacing={2} mb={2} flexWrap="wrap" alignItems="center">

@@ -1,9 +1,11 @@
 import { Alert, Box, LinearProgress, Paper, Typography } from '@mui/material';
 import CheckCircleOutlineIcon from '@mui/icons-material/CheckCircleOutline';
 import ErrorOutlineIcon from '@mui/icons-material/ErrorOutline';
+import { useNavigate } from 'react-router-dom';
 import { getPanelSx } from './dashboardUtils';
 
 const StoreHealthWidget = ({ stats, allSettings, spacing }) => {
+  const navigate = useNavigate();
   const payments = allSettings?.payments || {};
   const features = allSettings?.features || {};
   const logo = allSettings?.logo || {};
@@ -16,11 +18,11 @@ const StoreHealthWidget = ({ stats, allSettings, spacing }) => {
   ].filter(Boolean).length;
 
   const checks = [
-    { label: 'Payment method enabled', ok: enabledGateways > 0 },
-    { label: 'Published products available', ok: Number(stats?.productCount || 0) > 0 },
-    { label: 'Inventory healthy', ok: Number(stats?.lowStockCount || 0) === 0 },
-    { label: 'Logo configured', ok: Boolean(logo.main) },
-    { label: 'Guest checkout configured', ok: features.guestCheckout !== undefined },
+    { label: 'Payment method enabled', ok: enabledGateways > 0, to: '/admin/settings' },
+    { label: 'Published products available', ok: Number(stats?.productCount || 0) > 0, to: '/admin/products' },
+    { label: 'Inventory healthy', ok: Number(stats?.lowStockCount || 0) === 0, to: '/admin/products?stock=low' },
+    { label: 'Logo configured', ok: Boolean(logo.main), to: '/admin/settings' },
+    { label: 'Guest checkout configured', ok: features.guestCheckout !== undefined, to: '/admin/settings' },
   ];
   const healthy = checks.filter((check) => check.ok).length;
   const score = Math.round((healthy / checks.length) * 100);
@@ -36,7 +38,14 @@ const StoreHealthWidget = ({ stats, allSettings, spacing }) => {
             key={check.label}
             severity={check.ok ? 'success' : 'warning'}
             icon={check.ok ? <CheckCircleOutlineIcon /> : <ErrorOutlineIcon />}
-            sx={{ py: 0.25, borderRadius: 2 }}
+            onClick={() => navigate(check.to)}
+            sx={{
+              py: 0.25,
+              borderRadius: 2,
+              cursor: 'pointer',
+              transition: 'background-color 0.15s',
+              '&:hover': { filter: 'brightness(0.95)' }
+            }}
           >
             <Typography variant="caption">{check.label}</Typography>
           </Alert>
