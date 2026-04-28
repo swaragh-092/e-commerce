@@ -45,9 +45,13 @@ const send = async ({ to, subject, html, text }) => {
     const transporter = await createTransporter();
     const config = await SettingsService.getByGroup('messaging');
     const creds = await SettingsService.getByGroup('messaging_credentials');
+    const general = await SettingsService.getByGroup('general');
+
+    const storeName = general.storeName || 'E-Commerce Store';
+    const defaultFrom = `"${storeName}" <noreply@example.com>`;
 
     await transporter.sendMail({
-        from: config.emailFrom || creds.email_from || process.env.EMAIL_FROM || '"E-Commerce Store" <noreply@example.com>',
+        from: config.emailFrom || creds.email_from || process.env.EMAIL_FROM || defaultFrom,
         to,
         subject,
         text,

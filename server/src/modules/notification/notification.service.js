@@ -63,10 +63,33 @@ const send = async (
             return false;
         }
 
+        // Inject global settings into variables so templates can use them dynamically
+        // e.g. {{store_name}}, {{website_url}}, {{support_email}}
+        const SettingsService = require('../settings/settings.service');
+        const [general, seo, logo, footer] = await Promise.all([
+            SettingsService.getByGroup('general'),
+            SettingsService.getByGroup('seo'),
+            SettingsService.getByGroup('logo'),
+            SettingsService.getByGroup('footer')
+        ]);
+
+        const globalVars = {
+            store_name:    general.storeName || 'Our Store',
+            website_url:   process.env.CLIENT_URL || 'http://localhost:3000',
+            support_email: footer.email || 'support@example.com',
+            store_logo:    logo.main ? `${process.env.API_PUBLIC_URL || ''}${logo.main}` : null,
+            copyright:     (footer.copyright || '© {{year}} {{store_name}}. All rights reserved.')
+                            .replace('{{year}}', new Date().getFullYear())
+                            .replace('{{store_name}}', general.storeName || 'Our Store'),
+            current_year:  new Date().getFullYear()
+        };
+
+        const mergedVariables = { ...globalVars, ...variables };
+
         // Compile all three fields — Handlebars is cheap even if bodyText is empty
-        const subject = handlebars.compile(template.subject)(variables);
-        const html    = handlebars.compile(template.bodyHtml)(variables);
-        const text    = handlebars.compile(template.bodyText || '')(variables);
+        const subject = handlebars.compile(template.subject)(mergedVariables);
+        const html    = handlebars.compile(template.bodyHtml)(mergedVariables);
+        const text    = handlebars.compile(template.bodyText || '')(mergedVariables);
 
         const payload = buildPayload(channel, recipient, subject, html, text);
 

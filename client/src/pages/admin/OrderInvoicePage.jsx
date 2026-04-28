@@ -7,6 +7,7 @@ import { getOrderById } from '../../services/adminService';
 import { useCurrency } from '../../hooks/useSettings';
 import { SettingsContext } from '../../context/ThemeContext';
 import { getApiErrorMessage } from '../../utils/apiErrors';
+import { getMediaUrl } from '../../utils/media';
 
 const OrderInvoicePage = () => {
   const { id } = useParams();
@@ -102,7 +103,7 @@ const OrderInvoicePage = () => {
         <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', mb: 6 }}>
           <Box>
             {showLogo && storeLogo ? (
-              <Box component="img" src={storeLogo} alt={companyName} sx={{ maxHeight: 60, mb: 2, maxWidth: 200, objectFit: 'contain' }} />
+              <Box component="img" src={getMediaUrl(storeLogo)} alt={companyName} sx={{ maxHeight: 60, mb: 2, maxWidth: 200, objectFit: 'contain' }} />
             ) : (
               <Typography variant="h4" fontWeight={800} sx={{ mb: 1 }}>{companyName}</Typography>
             )}

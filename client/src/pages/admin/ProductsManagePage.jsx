@@ -78,6 +78,8 @@ const ProductsManagePage = () => {
   const [editDialog, setEditDialog] = useState({
     open: false,
     row: null,
+    name: '',
+    slug: '',
     quantity: '',
     price: '',
     salePrice: '',
@@ -107,6 +109,8 @@ const ProductsManagePage = () => {
     setEditDialog({
       open: true,
       row,
+      name: row.name || '',
+      slug: row.slug || '',
       quantity: row.quantity,
       price: row.price,
       salePrice: row.salePrice ?? '',
@@ -128,6 +132,8 @@ const ProductsManagePage = () => {
     setEditDialog((s) => ({ ...s, saving: true }));
     try {
       const payload = {
+        name: editDialog.name.trim(),
+        slug: editDialog.slug.trim(),
         quantity: parseInt(editDialog.quantity, 10) || 0,
         price: parseFloat(editDialog.price),
         status: editDialog.status,
@@ -851,6 +857,21 @@ const ProductsManagePage = () => {
         </DialogTitle>
         <DialogContent>
           <Stack spacing={2} sx={{ mt: 1 }}>
+            <TextField
+              label="Product Name"
+              size="small"
+              fullWidth
+              value={editDialog.name}
+              onChange={(e) => setEditDialog((s) => ({ ...s, name: e.target.value }))}
+            />
+            <TextField
+              label="Slug"
+              size="small"
+              fullWidth
+              value={editDialog.slug}
+              onChange={(e) => setEditDialog((s) => ({ ...s, slug: e.target.value.toLowerCase().replace(/[^a-z0-9-]/g, '-') }))}
+              helperText="URL-friendly name (e.g. apple-iphone-15)"
+            />
             <TextField
               label="Stock Quantity"
               type="number"
