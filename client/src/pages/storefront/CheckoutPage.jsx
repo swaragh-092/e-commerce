@@ -24,6 +24,7 @@ import { getCartItemUnitPrice } from '../../utils/variantPricing';
 import CenteredLoader from '../../components/common/CenteredLoader';
 import { getApiErrorMessage } from '../../utils/apiErrors';
 import { getVariantOptionLabel } from '../../utils/variantOptions';
+import {calculateTax} from '../../../../shared/calculations.js';
 
 const EMPTY_ADDR = {
     label: '', fullName: '', phone: '',
@@ -248,7 +249,7 @@ const CheckoutPage = () => {
     const sgstAmount = enableSGST ? subtotal * parseFloat(settings?.tax?.sgstRate ?? 0) : 0;
     const igstAmount = enableIGST ? subtotal * parseFloat(settings?.tax?.igstRate ?? 0) : 0;
     const taxRate = parseFloat(settings?.tax?.rate ?? 0);
-    const flatTaxAmount = (!taxInclusive && !useGST && taxRate > 0) ? subtotal * taxRate : 0;
+    const flatTaxAmount = (!taxInclusive && !useGST && taxRate > 0) ? calculateTax( subtotal, taxRate ) : 0;
     const taxAmount = useGST ? cgstAmount + sgstAmount + igstAmount : flatTaxAmount;
     const total = Math.max(0, subtotal + effectiveShippingCost + taxAmount - orderDiscount);
 
@@ -768,7 +769,7 @@ const CheckoutPage = () => {
                             )}
                             {!useGST && flatTaxAmount > 0 && (
                                 <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 0.5 }}>
-                                    <Typography variant="body2" color="text.secondary">Tax ({(taxRate * 100).toFixed(0)}%)</Typography>
+                                    <Typography variant="body2" color="text.secondary">Tax ({(taxRate).toFixed(0)}%)</Typography>
                                     <Typography variant="body2">{formatPrice(flatTaxAmount)}</Typography>
                                 </Box>
                             )}

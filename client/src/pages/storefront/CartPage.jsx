@@ -24,6 +24,7 @@ import { AuthContext } from '../../context/AuthContext';
 import { getEligibleCoupons } from '../../services/adminService';
 import { getCartItemUnitPrice } from '../../utils/variantPricing';
 import { getVariantOptionLabel } from '../../utils/variantOptions';
+import {calculateTax} from '../../../../shared/calculations.js';
 
 const row = (align = 'center', justify = 'flex-start') => ({
     display: 'flex', alignItems: align, justifyContent: justify,
@@ -332,6 +333,8 @@ const CartPage = () => {
     const [offerSummary, setOfferSummary] = useState(null);
     const [clearing, setClearing] = useState(false);
 
+
+
     const items = cart?.items || [];
     const { getQty, handleUpdate, handleRemove, removingIds, updatingIds } = useOptimisticCart(items, updateItem, removeItem);
 
@@ -351,8 +354,11 @@ const CartPage = () => {
     const cgst = enableCGST ? subtotal * parseFloat(settings?.tax?.cgstRate ?? 0) : 0;
     const sgst = enableSGST ? subtotal * parseFloat(settings?.tax?.sgstRate ?? 0) : 0;
     const igst = enableIGST ? subtotal * parseFloat(settings?.tax?.igstRate ?? 0) : 0;
-    const taxRate = parseFloat(settings?.tax?.rate ?? 0);
-    const flatTax = (!taxInclusive && !useGST && taxRate > 0) ? subtotal * taxRate : 0;
+    const taxRate = parseInt(settings?.tax?.rate ?? 0);
+
+  
+    const flatTax = (!taxInclusive && !useGST && taxRate > 0) ? calculateTax(subtotal, taxRate) : 0;
+
     const taxAmount = useGST ? cgst + sgst + igst : flatTax;
     const estimatedTotal = subtotal + shippingCost + taxAmount;
 
@@ -360,7 +366,7 @@ const CartPage = () => {
         ...(enableCGST && cgst > 0 ? [{ label: `CGST (${(parseFloat(settings?.tax?.cgstRate ?? 0) * 100).toFixed(1)}%)`, value: formatPrice(cgst) }] : []),
         ...(enableSGST && sgst > 0 ? [{ label: `SGST (${(parseFloat(settings?.tax?.sgstRate ?? 0) * 100).toFixed(1)}%)`, value: formatPrice(sgst) }] : []),
         ...(enableIGST && igst > 0 ? [{ label: `IGST (${(parseFloat(settings?.tax?.igstRate ?? 0) * 100).toFixed(1)}%)`, value: formatPrice(igst) }] : []),
-        ...(!useGST && flatTax > 0 ? [{ label: `Tax (${(taxRate * 100).toFixed(0)}%)`, value: formatPrice(flatTax) }] : []),
+        ...(!useGST && flatTax > 0 ? [{ label: `Tax (${(taxRate).toFixed(0)}%)`, value: formatPrice(flatTax) }] : []),
     ];
 
     const couponsEnabled = useFeatureFlag('coupons');

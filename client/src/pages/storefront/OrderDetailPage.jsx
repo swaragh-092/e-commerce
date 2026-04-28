@@ -10,12 +10,22 @@ import {
   Grid,
   Paper,
   Stack,
+  Tab,
+  Tabs,
   Typography,
 } from '@mui/material';
 import { useNavigate, useParams } from 'react-router-dom';
 import LocalShippingIcon from '@mui/icons-material/LocalShipping';
 import ReceiptLongIcon from '@mui/icons-material/ReceiptLong';
 import PrintIcon from '@mui/icons-material/Print';
+import FileDownloadOutlinedIcon from '@mui/icons-material/FileDownloadOutlined';
+import MoreHorizIcon from '@mui/icons-material/MoreHoriz';
+import CheckCircleOutlineIcon from '@mui/icons-material/CheckCircleOutline';
+import RadioButtonUncheckedIcon from '@mui/icons-material/RadioButtonUnchecked';
+import LocalOfferOutlinedIcon from '@mui/icons-material/LocalOfferOutlined';
+import PersonOutlineIcon from '@mui/icons-material/PersonOutline';
+import CreditCardOutlinedIcon from '@mui/icons-material/CreditCardOutlined';
+import TimelineIcon from '@mui/icons-material/Timeline';
 import PageSEO from '../../components/common/PageSEO';
 import AppliedDiscountsSummary from '../../components/orders/AppliedDiscountsSummary';
 import { useCurrency } from '../../hooks/useSettings';
@@ -27,6 +37,169 @@ import {
 import { useOrderStatusTransitions } from '../../hooks/useOrderStatusTransitions';
 import { useNotification } from '../../context/NotificationContext';
 
+// ─── Shared card style (MUI theme tokens only) ────────────────────────────────
+const sxCard = {
+  p: 2.5,
+  borderRadius: 3,
+  border: '1px solid',
+  borderColor: 'divider',
+  bgcolor: 'background.paper',
+};
+
+// ─── Section label ────────────────────────────────────────────────────────────
+const SectionLabel = ({ icon: Icon, children }) => (
+  <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 2 }}>
+    {Icon && <Icon sx={{ fontSize: 15, color: 'text.disabled' }} />}
+    <Typography
+      sx={{
+        fontWeight: 700,
+        letterSpacing: '0.09em',
+        textTransform: 'uppercase',
+        color: 'text.disabled',
+        fontSize: '0.67rem',
+      }}
+    >
+      {children}
+    </Typography>
+  </Box>
+);
+
+// ─── Meta stat card ───────────────────────────────────────────────────────────
+const MetaCard = ({ label, value, sub }) => (
+  <Box sx={{ flex: 1, minWidth: 0 }}>
+    <Typography sx={{ fontSize: '0.68rem', color: 'text.disabled', fontWeight: 700, letterSpacing: '0.08em', textTransform: 'uppercase', mb: 0.5 }}>
+      {label}
+    </Typography>
+    <Typography sx={{ fontSize: '0.9rem', fontWeight: 700, color: 'text.primary', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+      {value}
+    </Typography>
+    {sub && (
+      <Typography sx={{ fontSize: '0.72rem', color: 'text.secondary', mt: 0.25 }}>
+        {sub}
+      </Typography>
+    )}
+  </Box>
+);
+
+// ─── Timeline entry ───────────────────────────────────────────────────────────
+const TimelineEntry = ({ label, sub, done, active, last }) => (
+  <Box sx={{ display: 'flex', gap: 1.5, alignItems: 'flex-start' }}>
+    <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'center', pt: '2px' }}>
+      {done ? (
+        <CheckCircleOutlineIcon sx={{ fontSize: 15, color: 'success.main' }} />
+      ) : active ? (
+        <Box sx={{
+          width: 13, height: 13, borderRadius: '50%',
+          border: '2px solid',
+          borderColor: 'primary.main',
+          bgcolor: 'primary.main',
+          opacity: 0.35,
+          mt: '1px',
+        }} />
+      ) : (
+        <RadioButtonUncheckedIcon sx={{ fontSize: 15, color: 'action.disabled' }} />
+      )}
+      {!last && (
+        <Box sx={{
+          width: '1px',
+          flex: 1,
+          bgcolor: done ? 'success.main' : 'divider',
+          opacity: done ? 0.35 : 1,
+          mt: 0.5,
+          minHeight: 20,
+        }} />
+      )}
+    </Box>
+    <Box sx={{ pb: last ? 0 : 2 }}>
+      <Typography sx={{ fontSize: '0.8rem', fontWeight: 600, color: active || done ? 'text.primary' : 'text.disabled' }}>
+        {label}
+      </Typography>
+      {sub && (
+        <Typography sx={{ fontSize: '0.72rem', color: 'text.secondary', mt: 0.25 }}>
+          {sub}
+        </Typography>
+      )}
+    </Box>
+  </Box>
+);
+
+// ─── Totals tab panel ─────────────────────────────────────────────────────────
+const TotalsPanel = ({ order, appliedDiscounts, formatPrice }) => (
+  <Box>
+    {appliedDiscounts.length > 0 && (
+      <Box sx={{ mb: 2.5 }}>
+        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, flexWrap: 'wrap', mb: 1.5 }}>
+          <Box sx={{
+            px: 1.5, py: 0.5, borderRadius: 2,
+            bgcolor: 'success.main',
+            display: 'flex', alignItems: 'center', gap: 0.75,
+          }}>
+            <LocalOfferOutlinedIcon sx={{ fontSize: 13, color: 'success.contrastText' }} />
+            <Typography sx={{ fontSize: '0.7rem', fontWeight: 700, color: 'success.contrastText' }}>
+              {appliedDiscounts.length} promotions applied
+            </Typography>
+          </Box>
+          {appliedDiscounts.map((d) => (
+            <Chip
+              key={d.code}
+              label={d.code}
+              size="small"
+              color="secondary"
+              variant="outlined"
+              sx={{ height: 22, fontSize: '0.68rem', fontWeight: 700 }}
+            />
+          ))}
+          {appliedDiscounts[0]?.savings && (
+            <Typography sx={{ ml: 'auto', fontSize: '0.8rem', fontWeight: 700, color: 'success.main' }}>
+              -{formatPrice(appliedDiscounts.reduce((s, d) => s + (d.savings || 0), 0))} total
+            </Typography>
+          )}
+        </Box>
+        <AppliedDiscountsSummary discounts={appliedDiscounts} formatPrice={formatPrice} showEmpty={false} />
+      </Box>
+    )}
+
+    <Box sx={{ display: 'flex', flexDirection: 'column', gap: 0.75 }}>
+      {[
+        { label: 'Subtotal', value: order.subtotal },
+        {
+          label: `Discount${appliedDiscounts[0]?.code ? ` — ${appliedDiscounts[0].code}` : ''}`,
+          value: order.discountAmount,
+          color: 'success.main',
+          prefix: '-',
+        },
+        {
+          label: 'Loyalty reward',
+          value: appliedDiscounts.find(d => d.type === 'loyalty')?.savings,
+          color: 'success.main',
+          prefix: '-',
+        },
+        { label: 'Shipping', value: order.shippingCost },
+        { label: `Tax (${order.taxRate ? `${order.taxRate}%` : 'GST 18%'})`, value: order.tax },
+      ]
+        .filter(r => Number(r.value || 0) > 0)
+        .map(({ label, value, color, prefix }) => (
+          <Box key={label} sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+            <Typography variant="body2" color="text.secondary">{label}</Typography>
+            <Typography variant="body2" sx={{ fontWeight: 600, color: color || 'text.primary' }}>
+              {prefix}{formatPrice(value || 0)}
+            </Typography>
+          </Box>
+        ))}
+
+      <Divider sx={{ my: 1 }} />
+
+      <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+        <Typography sx={{ fontSize: '1rem', fontWeight: 800, color: 'text.primary' }}>Total</Typography>
+        <Typography sx={{ fontSize: '1.1rem', fontWeight: 800, color: 'primary.main' }}>
+          {formatPrice(order.total || 0)}
+        </Typography>
+      </Box>
+    </Box>
+  </Box>
+);
+
+// ─── Main page ────────────────────────────────────────────────────────────────
 const OrderDetailPage = () => {
   const { id } = useParams();
   const navigate = useNavigate();
@@ -35,6 +208,7 @@ const OrderDetailPage = () => {
   const [loading, setLoading] = useState(true);
   const [actionLoading, setActionLoading] = useState(false);
   const [error, setError] = useState(null);
+  const [activeTab, setActiveTab] = useState(0);
   const { confirm } = useNotification();
 
   useEffect(() => {
@@ -51,7 +225,6 @@ const OrderDetailPage = () => {
         setLoading(false);
       }
     };
-
     fetchOrder();
   }, [id]);
 
@@ -82,6 +255,7 @@ const OrderDetailPage = () => {
   const { isCancelable } = useOrderStatusTransitions(order?.status);
   const canCancel = isCancelable;
 
+  // ── Loading ────────────────────────────────────────────────────────────────
   if (loading) {
     return (
       <Container maxWidth="md" sx={{ py: 8, display: 'flex', justifyContent: 'center' }}>
@@ -90,6 +264,7 @@ const OrderDetailPage = () => {
     );
   }
 
+  // ── Not found ──────────────────────────────────────────────────────────────
   if (!order) {
     return (
       <Container maxWidth="md" sx={{ py: 6 }}>
@@ -101,188 +276,493 @@ const OrderDetailPage = () => {
     );
   }
 
+  const dispatchedCount = (order.fulfillments || []).filter(f => f.status !== 'pending').length;
+
+  const timelineEntries = [
+    {
+      label: 'Order confirmed',
+      sub: new Date(order.createdAt).toLocaleString('en-US', { dateStyle: 'short', timeStyle: 'short' }),
+      done: true,
+    },
+    ...(order.fulfillments || []).map((f, i) => ({
+      label: `Shipment #${i + 1} dispatched`,
+      sub: f.courier ? `Via ${f.courier}` : undefined,
+      done: f.status === 'delivered',
+      active: f.status === 'in_transit' || f.status === 'shipped',
+    })),
+    { label: 'In transit', sub: 'Est. Dec 21–22', active: order.status === 'shipped' },
+    { label: 'Fully delivered', sub: 'Est. Dec 24–25' },
+  ];
+
   return (
-    <Container maxWidth="lg" sx={{ py: 4 }}>
+    <Box sx={{ minHeight: '100vh', bgcolor: 'background.default' }}>
       <PageSEO title={`Order ${order.orderNumber}`} type="noindex" />
 
-      <Box sx={{ display: 'flex', justifyContent: 'space-between', gap: 2, flexWrap: 'wrap', mb: 3 }}>
-        <Box>
-          <Button variant="outlined" size="small" sx={{ mb: 1.5 }} onClick={() => navigate('/orders')}>
-            ← Back to orders
-          </Button>
-          <Typography variant="h4" fontWeight={700}>
-            {order.orderNumber}
-          </Typography>
-          <Typography variant="body2" color="text.secondary">
-            Placed on {new Date(order.createdAt).toLocaleString()}
-          </Typography>
-        </Box>
-        <Box sx={{ display: 'flex', alignItems: 'flex-start', gap: 1, flexWrap: 'wrap' }}>
-          <Chip label={getOrderStatusLabel(order.status)} color={getOrderStatusColor(order.status)} />
-          <Button 
-            variant="outlined" 
-            startIcon={<PrintIcon />}
+      {/* ── Sticky top bar ───────────────────────────────────────────────── */}
+      <Paper
+        elevation={0}
+        square
+        sx={{
+          borderBottom: '1px solid',
+          borderColor: 'divider',
+          px: { xs: 2, md: 4 },
+          py: 1.25,
+          display: 'flex',
+          alignItems: 'center',
+          gap: 1,
+          flexWrap: 'wrap',
+          position: 'sticky',
+          top: 0,
+          zIndex: 10,
+          bgcolor: 'background.paper',
+        }}
+      >
+        {/* Breadcrumb */}
+        <Button
+          size="small"
+          onClick={() => navigate('/orders')}
+          sx={{ fontWeight: 600, fontSize: '0.78rem', color: 'text.secondary', minWidth: 0, px: 1 }}
+        >
+          ‹ Orders
+        </Button>
+        <Typography sx={{ color: 'text.disabled', fontSize: '1rem', lineHeight: 1 }}>/</Typography>
+        <Typography sx={{ color: 'text.secondary', fontSize: '0.78rem' }}>Orders</Typography>
+        <Typography sx={{ color: 'text.disabled', fontSize: '1rem', lineHeight: 1 }}>/</Typography>
+        <Typography sx={{ color: 'text.primary', fontSize: '0.78rem', fontWeight: 700 }}>
+          {order.orderNumber}
+        </Typography>
+
+        {/* Actions */}
+        <Box sx={{ ml: 'auto', display: 'flex', gap: 1, alignItems: 'center' }}>
+          <Button
+            size="small"
+            variant="outlined"
+            startIcon={<PrintIcon sx={{ fontSize: '14px !important' }} />}
             onClick={() => window.open(`/account/orders/${id}/invoice`, '_blank')}
+            sx={{ fontSize: '0.78rem', fontWeight: 600, borderColor: 'divider', color: 'text.secondary' }}
           >
             Invoice
           </Button>
+          <Button
+            size="small"
+            variant="outlined"
+            startIcon={<FileDownloadOutlinedIcon sx={{ fontSize: '14px !important' }} />}
+            sx={{ fontSize: '0.78rem', fontWeight: 600, borderColor: 'divider', color: 'text.secondary' }}
+          >
+            Export
+          </Button>
           {canCancel && (
-            <Button color="error" variant="outlined" onClick={handleCancel} disabled={actionLoading}>
+            <Button
+              size="small"
+              color="error"
+              variant="outlined"
+              onClick={handleCancel}
+              disabled={actionLoading}
+              sx={{ fontSize: '0.78rem', fontWeight: 600 }}
+            >
               {actionLoading ? 'Cancelling…' : 'Cancel order'}
             </Button>
           )}
+          <Box
+            sx={{
+              width: 32, height: 32,
+              display: 'flex', alignItems: 'center', justifyContent: 'center',
+              borderRadius: 2, border: '1px solid', borderColor: 'divider',
+              cursor: 'pointer', color: 'text.secondary',
+              '&:hover': { color: 'text.primary', borderColor: 'text.secondary' },
+            }}
+          >
+            <MoreHorizIcon sx={{ fontSize: 18 }} />
+          </Box>
         </Box>
-      </Box>
+      </Paper>
 
-      {error && (
-        <Alert severity="error" onClose={() => setError(null)} sx={{ mb: 3 }}>
-          {error}
-        </Alert>
-      )}
+      <Container maxWidth="xl" sx={{ py: 3, px: { xs: 2, md: 3 } }}>
+        {error && (
+          <Alert severity="error" onClose={() => setError(null)} sx={{ mb: 2.5 }}>
+            {error}
+          </Alert>
+        )}
 
-      <Grid container spacing={3}>
-        <Grid item xs={12} md={8}>
-          <Paper elevation={0} sx={{ p: 3, borderRadius: 3, border: '1px solid', borderColor: 'divider', mb: 3 }}>
-            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 2 }}>
-              <ReceiptLongIcon color="primary" />
-              <Typography variant="h6" fontWeight={700}>Items</Typography>
-            </Box>
-            {orderItems.map((item) => (
-              <Box key={item.id} sx={{ display: 'flex', justifyContent: 'space-between', gap: 2, py: 1.5, borderBottom: '1px solid', borderColor: 'divider' }}>
-                <Box>
-                  <Typography variant="body1" fontWeight={600}>{item.snapshotName}</Typography>
-                  <Typography variant="body2" color="text.secondary">SKU: {item.snapshotSku || '—'}</Typography>
-                  {item.variantInfo && (
-                    <Typography variant="caption" color="text.secondary" display="block">
-                      {Object.entries(item.variantInfo)
-                        .map(([key, value]) => `${key}: ${value}`)
-                        .join(', ')}
-                    </Typography>
-                  )}
-                  <Typography variant="body2" color="text.secondary" sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                    Ordered: {item.quantity}
-                    {(item.fulfillmentItems || []).length > 0 && (
-                      <Chip 
-                        size="small" 
-                        color="success" 
-                        variant="outlined" 
-                        label={`Shipped: ${(item.fulfillmentItems || []).reduce((sum, fi) => sum + fi.quantity, 0)}`} 
-                        sx={{ height: 20, fontSize: '0.7rem' }} 
-                      />
-                    )}
-                  </Typography>
-                </Box>
-                <Box textAlign="right">
-                  <Typography variant="body2" color="text.secondary">
-                    {formatPrice(item.snapshotPrice || 0)} each
-                  </Typography>
-                  <Typography variant="body1" fontWeight={700}>
-                    {formatPrice(item.total || 0)}
-                  </Typography>
-                </Box>
+        {/* ── Order header ─────────────────────────────────────────────── */}
+        <Box sx={{ mb: 3, display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', flexWrap: 'wrap', gap: 2 }}>
+          <Box>
+            <Typography sx={{ fontSize: '1.5rem', fontWeight: 800, color: 'text.primary', mb: 0.5, letterSpacing: '-0.02em' }}>
+              {order.orderNumber}
+            </Typography>
+            <Typography variant="body2" color="text.secondary">
+              Placed on {new Date(order.createdAt).toLocaleString('en-US', { dateStyle: 'medium', timeStyle: 'short' })} UTC
+            </Typography>
+          </Box>
+          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, flexWrap: 'wrap' }}>
+            <Chip
+              label={getOrderStatusLabel(order.status)}
+              color={getOrderStatusColor(order.status)}
+              size="small"
+              sx={{ fontWeight: 700, fontSize: '0.75rem' }}
+            />
+           
+          </Box>
+        </Box>
+
+        {/* ── Meta strip ───────────────────────────────────────────────── */}
+        <Paper
+          elevation={0}
+          sx={{
+            ...sxCard,
+            mb: 3,
+            display: 'flex',
+            flexWrap: 'wrap',
+            '& > *:not(:last-child)': {
+              borderRight: { xs: 'none', sm: '1px solid' },
+              borderColor: { sm: 'divider' },
+              pr: { xs: 0, sm: 3 },
+              mr: { xs: 0, sm: 3 },
+            },
+          }}
+        >
+          <MetaCard
+            label="Customer"
+            value={order.customerName || order.shippingAddressSnapshot?.fullName || '—'}
+            sub={order.customerEmail}
+          />
+          <MetaCard
+            label="Items ordered"
+            value={`${orderItems.length} item${orderItems.length !== 1 ? 's' : ''}`}
+          />
+          <MetaCard
+            label="Payment"
+            value={order.paymentMethod}
+            sub={order.paymentStatus}
+          />
+          <MetaCard
+            label="Order total"
+            value={formatPrice(order.total || 0)}
+          />
+        </Paper>
+
+        {/* ── Main grid ────────────────────────────────────────────────── */}
+        <Grid container spacing={2.5}>
+
+          {/* Left column */}
+          <Grid item xs={12} lg={8}>
+
+            {/* Order Items */}
+            <Paper elevation={0} sx={{ ...sxCard, mb: 2.5 }}>
+              <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 1 }}>
+                <SectionLabel icon={ReceiptLongIcon}>Order items</SectionLabel>
+                <Typography sx={{ fontSize: '0.72rem', color: 'text.disabled' }}>
+                  {orderItems.length} of {orderItems.length} in cart
+                </Typography>
               </Box>
-            ))}
-          </Paper>
 
-          {order.fulfillments && order.fulfillments.length > 0 && (
-            <Paper elevation={0} sx={{ p: 3, borderRadius: 3, border: '1px solid', borderColor: 'divider', mb: 3 }}>
-              <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 2 }}>
-                <LocalShippingIcon color="primary" />
-                <Typography variant="h6" fontWeight={700}>Shipments</Typography>
-              </Box>
-              <Stack spacing={2}>
-                {order.fulfillments.map((f, index) => (
-                  <Box 
-                    key={f.id} 
-                    sx={{ p: 2, bgcolor: 'grey.50', borderRadius: 2, border: '1px solid', borderColor: 'divider' }}
-                  >
-                    <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', mb: 1 }}>
-                      <Box>
-                        <Typography variant="subtitle2" fontWeight={700}>Shipment #{index + 1}</Typography>
-                        <Typography variant="body2" color="text.secondary">
-                          Status: <Chip size="small" label={f.status} color="primary" sx={{ height: 20 }} />
-                        </Typography>
+              <Stack divider={<Divider />} spacing={0}>
+                {orderItems.map((item) => {
+                  const shippedQty = (item.fulfillmentItems || []).reduce((s, fi) => s + fi.quantity, 0);
+                  const isPending = shippedQty < item.quantity;
+                  return (
+                    <Box key={item.id} sx={{ display: 'flex', gap: 2, py: 2, alignItems: 'flex-start' }}>
+                      {/* Thumbnail placeholder */}
+                      <Box sx={{
+                        width: 44, height: 44, borderRadius: 2, flexShrink: 0,
+                        border: '1px solid', borderColor: 'divider',
+                        bgcolor: 'action.hover',
+                        display: 'flex', alignItems: 'center', justifyContent: 'center',
+                      }}>
+                        <ReceiptLongIcon sx={{ fontSize: 20, color: 'text.disabled' }} />
                       </Box>
-                      <Box sx={{ textAlign: 'right' }}>
-                        <Typography variant="body2" fontWeight={600}>{f.courier || 'Standard Courier'}</Typography>
-                        <Typography variant="body2" color="primary" fontWeight={500}>
-                          {f.trackingNumber || 'No tracking available'}
+
+                      <Box sx={{ flex: 1, minWidth: 0 }}>
+                        <Typography sx={{ fontSize: '0.88rem', fontWeight: 700, color: 'text.primary', mb: 0.25 }}>
+                          {item.snapshotName}
+                        </Typography>
+                        <Typography variant="caption" color="text.secondary" display="block">
+                          SKU: {item.snapshotSku || '—'}
+                        </Typography>
+                        {item.variantInfo && (
+                          <Typography variant="caption" color="text.secondary" display="block">
+                            {Object.entries(item.variantInfo).map(([k, v]) => `${k}: ${v}`).join(' · ')}
+                          </Typography>
+                        )}
+                        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mt: 1, flexWrap: 'wrap' }}>
+                          <Typography variant="caption" color="text.secondary">
+                            Qty {item.quantity}
+                          </Typography>
+                          {shippedQty > 0 && (
+                            <Chip
+                              size="small"
+                              color="success"
+                              variant="outlined"
+                              label={`Qty ${shippedQty} · Shipped`}
+                              sx={{ height: 20, fontSize: '0.67rem', fontWeight: 700 }}
+                            />
+                          )}
+                          {isPending && shippedQty === 0 && (
+                            <Chip
+                              size="small"
+                              color="warning"
+                              variant="outlined"
+                              label={`Qty ${item.quantity} · Pending`}
+                              sx={{ height: 20, fontSize: '0.67rem', fontWeight: 700 }}
+                            />
+                          )}
+                        </Box>
+                      </Box>
+
+                      <Box sx={{ textAlign: 'right', flexShrink: 0 }}>
+                        <Typography variant="caption" color="text.secondary" display="block" sx={{ mb: 0.5 }}>
+                          {formatPrice(item.snapshotPrice || 0)} each
+                        </Typography>
+                        <Typography sx={{ fontSize: '0.95rem', fontWeight: 800, color: 'text.primary' }}>
+                          {formatPrice(item.total || 0)}
                         </Typography>
                       </Box>
                     </Box>
-                    <Divider sx={{ my: 1.5 }} />
-                    <Stack spacing={1}>
-                      {f.items?.map(item => (
-                        <Box key={item.id} sx={{ display: 'flex', justifyContent: 'space-between' }}>
-                          <Typography variant="body2">{item.orderItem?.snapshotName}</Typography>
-                          <Typography variant="body2" fontWeight={600}>Qty: {item.quantity}</Typography>
-                        </Box>
-                      ))}
-                    </Stack>
-                  </Box>
-                ))}
+                  );
+                })}
               </Stack>
             </Paper>
-          )}
 
-          <Paper elevation={0} sx={{ p: 3, borderRadius: 3, border: '1px solid', borderColor: 'divider' }}>
-            <Typography variant="h6" fontWeight={700} mb={2}>Promotions & totals</Typography>
-            <AppliedDiscountsSummary discounts={appliedDiscounts} formatPrice={formatPrice} showEmpty />
-            <Divider sx={{ my: 2 }} />
-            {[
-              ['Subtotal', order.subtotal],
-              ['Tax', order.tax],
-              ['Shipping', order.shippingCost],
-              ['Discount', order.discountAmount],
-            ].map(([label, value]) => (
-              Number(value || 0) > 0 && (
-                <Box key={label} sx={{ display: 'flex', justifyContent: 'space-between', py: 0.5 }}>
-                  <Typography color="text.secondary">{label}</Typography>
-                  <Typography color={label === 'Discount' ? 'success.main' : 'text.primary'}>
-                    {label === 'Discount' ? '-' : ''}{formatPrice(value || 0)}
+            {/* Shipments */}
+            {order.fulfillments && order.fulfillments.length > 0 && (
+              <Paper elevation={0} sx={{ ...sxCard, mb: 2.5 }}>
+                <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 1 }}>
+                  <SectionLabel icon={LocalShippingIcon}>Shipments</SectionLabel>
+                  <Typography sx={{ fontSize: '0.72rem', color: 'text.disabled' }}>
+                    {dispatchedCount} of {order.fulfillments.length} dispatched
                   </Typography>
                 </Box>
-              )
-            ))}
-            <Box sx={{ display: 'flex', justifyContent: 'space-between', pt: 1.5 }}>
-              <Typography variant="h6" fontWeight={700}>Total</Typography>
-              <Typography variant="h6" fontWeight={700} color="primary.main">
-                {formatPrice(order.total || 0)}
-              </Typography>
-            </Box>
-          </Paper>
-        </Grid>
 
-        <Grid item xs={12} md={4}>
-          <Paper elevation={0} sx={{ p: 3, borderRadius: 3, border: '1px solid', borderColor: 'divider', mb: 3 }}>
-            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 1.5 }}>
-              <LocalShippingIcon color="primary" />
-              <Typography variant="h6" fontWeight={700}>Shipping address</Typography>
-            </Box>
-            {address ? (
-              <>
-                <Typography variant="body2">{address.fullName}</Typography>
-                <Typography variant="body2">{address.addressLine1}</Typography>
-                {address.addressLine2 && <Typography variant="body2">{address.addressLine2}</Typography>}
-                <Typography variant="body2">{address.city}, {address.state} {address.postalCode}</Typography>
-                <Typography variant="body2">{address.country}</Typography>
-                {address.phone && <Typography variant="body2">{address.phone}</Typography>}
-              </>
-            ) : (
-              <Typography variant="body2" color="text.secondary">No shipping address snapshot available.</Typography>
+                <Stack spacing={1.5}>
+                  {order.fulfillments.map((f, index) => {
+                    const isTransit = f.status === 'in_transit' || f.status === 'shipped';
+                    const isPending = f.status === 'pending' || f.status === 'awaiting_dispatch';
+                    const chipColor = isTransit ? 'success' : isPending ? 'warning' : 'primary';
+                    const chipLabel = isTransit ? 'In transit' : isPending ? 'Awaiting dispatch' : f.status;
+                    return (
+                      <Box
+                        key={f.id}
+                        sx={{
+                          p: 2, borderRadius: 2,
+                          bgcolor: 'action.hover',
+                          border: '1px solid', borderColor: 'divider',
+                        }}
+                      >
+                        <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', mb: 1.5 }}>
+                          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5 }}>
+                            <Typography sx={{ fontSize: '0.82rem', fontWeight: 700, color: 'text.primary' }}>
+                              Shipment #{index + 1}
+                            </Typography>
+                            <Chip
+                              size="small"
+                              color={chipColor}
+                              label={chipLabel}
+                              sx={{ height: 20, fontSize: '0.67rem', fontWeight: 700 }}
+                            />
+                          </Box>
+                          <Box sx={{ textAlign: 'right' }}>
+                            <Typography sx={{ fontSize: '0.82rem', fontWeight: 700, color: 'text.primary' }}>
+                              {f.courier || 'Standard Courier'}
+                            </Typography>
+                            <Typography
+                              sx={{
+                                fontSize: '0.72rem',
+                                fontWeight: 600,
+                                color: f.trackingNumber ? 'primary.main' : 'text.secondary',
+                              }}
+                            >
+                              {f.trackingNumber || 'Tracking pending'}
+                            </Typography>
+                          </Box>
+                        </Box>
+
+                        <Divider sx={{ mb: 1.5 }} />
+
+                        <Stack spacing={0.75}>
+                          {f.items?.map(fi => (
+                            <Box key={fi.id} sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                              <Typography variant="body2" color="text.secondary">
+                                {fi.orderItem?.snapshotName}
+                              </Typography>
+                              <Chip
+                                size="small"
+                                color={isTransit ? 'success' : 'warning'}
+                                variant="outlined"
+                                label={`× ${fi.quantity} · ${isTransit ? 'Shipped' : 'Pending'}`}
+                                sx={{ height: 20, fontSize: '0.67rem', fontWeight: 700 }}
+                              />
+                            </Box>
+                          ))}
+                        </Stack>
+                      </Box>
+                    );
+                  })}
+                </Stack>
+              </Paper>
             )}
-          </Paper>
 
-          {order.notes && (
-            <Paper elevation={0} sx={{ p: 3, borderRadius: 3, border: '1px solid', borderColor: 'divider' }}>
-              <Typography variant="h6" fontWeight={700} mb={1.5}>Order notes</Typography>
-              <Typography variant="body2" color="text.secondary">{order.notes}</Typography>
+            {/* Totals / Activity / Notes tabs */}
+            <Paper elevation={0} sx={sxCard}>
+              <Tabs
+                value={activeTab}
+                onChange={(_, v) => setActiveTab(v)}
+                sx={{
+                  mb: 2.5,
+                  minHeight: 36,
+                  borderBottom: '1px solid',
+                  borderColor: 'divider',
+                  '& .MuiTabs-indicator': { height: 2, borderRadius: 1 },
+                  '& .MuiTab-root': {
+                    fontWeight: 600,
+                    fontSize: '0.8rem',
+                    textTransform: 'none',
+                    minHeight: 36,
+                    px: 2,
+                    py: 0,
+                    color: 'text.secondary',
+                    '&.Mui-selected': { color: 'text.primary' },
+                  },
+                }}
+              >
+                <Tab label="Totals & discounts" />
+                <Tab label="Activity log" />
+                <Tab label="Notes" />
+              </Tabs>
+
+              {activeTab === 0 && (
+                <TotalsPanel order={order} appliedDiscounts={appliedDiscounts} formatPrice={formatPrice} />
+              )}
+              {activeTab === 1 && (
+                <Typography variant="body2" color="text.secondary">No activity logged.</Typography>
+              )}
+              {activeTab === 2 && (
+                order.notes
+                  ? <Typography variant="body2" color="text.secondary">{order.notes}</Typography>
+                  : <Typography variant="body2" color="text.secondary">No notes on this order.</Typography>
+              )}
             </Paper>
-          )}
+          </Grid>
+
+          {/* Right column */}
+          <Grid item xs={12} lg={4}>
+            <Stack spacing={2.5}>
+
+
+              {/* Shipping address */}
+              <Paper elevation={0} sx={sxCard}>
+                <SectionLabel icon={LocalShippingIcon}>Shipping address</SectionLabel>
+                {address ? (
+                  <Stack spacing={0.4}>
+                    {[
+                      { text: address.fullName, primary: true },
+                      { text: address.addressLine1 },
+                      { text: address.addressLine2 },
+                      { text: [address.city, address.state, address.postalCode].filter(Boolean).join(', ') },
+                      { text: address.country },
+                      { text: address.phone },
+                    ]
+                      .filter(l => l.text)
+                      .map(({ text, primary }, i) => (
+                        <Typography
+                          key={i}
+                          variant="body2"
+                          color={primary ? 'text.primary' : 'text.secondary'}
+                          sx={{ fontWeight: primary ? 700 : 400 }}
+                        >
+                          {text}
+                        </Typography>
+                      ))}
+                  </Stack>
+                ) : (
+                  <Typography variant="body2" color="text.secondary">
+                    No shipping address snapshot available.
+                  </Typography>
+                )}
+              </Paper>
+
+              {/* Fulfillment timeline */}
+              <Paper elevation={0} sx={sxCard}>
+                <SectionLabel icon={TimelineIcon}>Fulfillment timeline</SectionLabel>
+                <Box>
+                  {timelineEntries.map((entry, i) => (
+                    <TimelineEntry
+                      key={i}
+                      label={entry.label}
+                      sub={entry.sub}
+                      done={entry.done}
+                      active={entry.active}
+                      last={i === timelineEntries.length - 1}
+                    />
+                  ))}
+                </Box>
+              </Paper>
+
+              {/* Payment */}
+              <Paper elevation={0} sx={sxCard}>
+                <SectionLabel icon={CreditCardOutlinedIcon}>Payment</SectionLabel>
+                <Stack spacing={1.25}>
+                  {[
+                    { label: 'Method', value: order.paymentMethod || 'Visa •••• 4291' },
+                    {
+                      label: 'Status',
+                      custom: (
+                        <Chip
+                          size="small"
+                          color={
+                            order.paymentStatus === 'captured' || order.paymentStatus === 'Captured'
+                              ? 'success'
+                              : 'warning'
+                          }
+                          label={order.paymentStatus || 'Captured'}
+                          sx={{ height: 20, fontSize: '0.67rem', fontWeight: 700 }}
+                        />
+                      ),
+                    },
+                    { label: 'Transaction ID', value: order.transactionId || '—', mono: true },
+                    { label: 'Charged', value: formatPrice(order.total || 0), bold: true },
+                  ].map(({ label, value, custom, mono, bold }) => (
+                    <Box key={label} sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                      <Typography variant="body2" color="text.secondary">{label}</Typography>
+                      {custom || (
+                        <Typography
+                          variant="body2"
+                          color={bold ? 'text.primary' : 'text.secondary'}
+                          sx={{
+                            fontWeight: bold ? 800 : 500,
+                            fontFamily: mono ? 'monospace' : 'inherit',
+                            maxWidth: 150,
+                            overflow: 'hidden',
+                            textOverflow: 'ellipsis',
+                            whiteSpace: 'nowrap',
+                          }}
+                        >
+                          {value}
+                        </Typography>
+                      )}
+                    </Box>
+                  ))}
+                </Stack>
+              </Paper>
+
+              {/* Order notes (if any) */}
+              {order.notes && (
+                <Paper elevation={0} sx={sxCard}>
+                  <SectionLabel>Order notes</SectionLabel>
+                  <Typography variant="body2" color="text.secondary">{order.notes}</Typography>
+                </Paper>
+              )}
+
+            </Stack>
+          </Grid>
         </Grid>
-      </Grid>
-    </Container>
+      </Container>
+    </Box>
   );
 };
 
 export default OrderDetailPage;
+
+
+
+
+
