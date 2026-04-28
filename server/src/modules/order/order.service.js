@@ -94,7 +94,12 @@ const getSetting = async (key, defaultVal) => {
 const getPaymentSettings = async () => {
     const rows = await Setting.findAll({ where: { group: 'payments' } });
     return rows.reduce(
-        (settings, row) => ({ ...settings, [row.key]: row.value }),
+        (settings, row) => {
+            let parsedValue = row.value;
+            if (parsedValue === 'true') parsedValue = true;
+            else if (parsedValue === 'false') parsedValue = false;
+            return { ...settings, [row.key]: parsedValue };
+        },
         { ...DEFAULT_PAYMENT_SETTINGS }
     );
 };
