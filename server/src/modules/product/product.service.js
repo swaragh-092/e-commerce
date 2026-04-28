@@ -9,9 +9,10 @@ const {
   AttributeTemplate,
   AttributeValue,
   Tag,
-  Category,
   Brand,
   OrderItem,
+  Promotion,
+  Category,
   Sequelize,
 } = require('../index');
 const { Op } = Sequelize;
@@ -257,6 +258,7 @@ exports.getProducts = async (filters, page, limit, isAdmin = false) => {
     { model: ProductVariant, as: 'variants' },
     { model: Tag, as: 'tags' },
     { model: Brand, as: 'brand' },
+    { model: Promotion, as: 'promotions' },
   ];
 
   if (filters.categoryId) {
@@ -316,6 +318,7 @@ exports.getProductBySlug = async (slug, { adminView = false } = {}) => {
       { model: Category, as: 'categories' },
       { model: Tag, as: 'tags' },
       { model: Brand, as: 'brand' },
+      { model: Promotion, as: 'promotions' },
     ],
   });
   if (!product) throw new AppError('NOT_FOUND', 404, 'Product not found');
@@ -332,6 +335,7 @@ exports.getProductById = async (id) => {
       { model: Category, as: 'categories' },
       { model: Tag, as: 'tags' },
       { model: Brand, as: 'brand' },
+      { model: Promotion, as: 'promotions' },
     ],
   });
   if (!product) throw new AppError('NOT_FOUND', 404, 'Product not found');

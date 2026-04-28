@@ -16,22 +16,27 @@ const ProductCard = ({ product, fromCategory }) => {
   const isScheduledSale = product.saleStatus === 'scheduled';
   const discountPercent = product.discountPercent || getDiscountPercent(product);
   const saleTiming = sales.showSaleTiming !== false ? getSaleTimingMessage(product) : null;
+
+  // ── Sale label resolution ───────────────────────────────────────────────────
+  // Prefer the richly-resolved object from the API (name + color from the
+  // SaleLabel catalog), then fall back to the raw string on the product,
+  // then to the store-wide default label setting.
   const resolvedLabel = product.saleLabelResolved;
   const showLabelSetting = sales.showSaleLabel !== false;
-  
+
   let saleLabelText = null;
-  let saleLabelColor = 'error.main'; 
-  
+  let saleLabelColor = 'error.main';
+
   if ((hasSale || isScheduledSale) && showLabelSetting) {
     if (resolvedLabel && resolvedLabel.name) {
-       saleLabelText = resolvedLabel.name;
-       if (resolvedLabel.color) {
-          saleLabelColor = resolvedLabel.color;
-       }
+      saleLabelText = resolvedLabel.name;
+      if (resolvedLabel.color) {
+        saleLabelColor = resolvedLabel.color;
+      }
     } else if (product.saleLabel) {
-       saleLabelText = product.saleLabel;
+      saleLabelText = product.saleLabel;
     } else if (sales.defaultSaleLabel) {
-       saleLabelText = sales.defaultSaleLabel;
+      saleLabelText = sales.defaultSaleLabel;
     }
   }
 
@@ -66,11 +71,11 @@ const ProductCard = ({ product, fromCategory }) => {
           <Chip
             label={saleLabelText}
             size="small"
-            sx={{ 
-              position: 'absolute', 
-              top: endingSoon ? 36 : 8, 
-              left: 8, 
-              zIndex: 1, 
+            sx={{
+              position: 'absolute',
+              top: endingSoon ? 36 : 8,
+              left: 8,
+              zIndex: 1,
               fontWeight: 700,
               bgcolor: saleLabelColor,
               color: '#fff',

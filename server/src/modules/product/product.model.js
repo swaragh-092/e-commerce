@@ -101,6 +101,7 @@ module.exports = (sequelize, DataTypes) => {
     Product.associate = (models) => {
         Product.belongsTo(models.Brand, { foreignKey: 'brandId', as: 'brand' });
         Product.belongsToMany(models.Category, { through: models.ProductCategory, foreignKey: 'productId', otherKey: 'categoryId', as: 'categories' });
+        Product.belongsToMany(models.Promotion, { through: models.ProductPromotion, foreignKey: 'productId', otherKey: 'promotionId', as: 'promotions' });
         Product.hasMany(models.ProductImage, { foreignKey: 'productId', as: 'images', onDelete: 'CASCADE' });
         Product.hasMany(models.ProductVariant, { foreignKey: 'productId', as: 'variants', onDelete: 'CASCADE' });
         Product.hasMany(models.ProductAttribute, { foreignKey: 'productId', as: 'attributes', onDelete: 'CASCADE' });

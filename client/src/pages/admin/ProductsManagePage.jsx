@@ -364,22 +364,22 @@ const ProductsManagePage = () => {
 
   const editPriceValue = Number(editDialog.price);
   const editSalePriceValue = editDialog.salePrice === '' ? null : Number(editDialog.salePrice);
-  const hasInvalidPrice = editDialog.open && (!Number.isFinite(editPriceValue) || editPriceValue < 0);
-  const hasInvalidSalePrice = editDialog.open && editDialog.saleEnabled && (
+  const hasInvalidPrice = Boolean(editDialog.open && (!Number.isFinite(editPriceValue) || editPriceValue < 0));
+  const hasInvalidSalePrice = Boolean(editDialog.open && editDialog.saleEnabled && (
     editDialog.salePrice === '' ||
     !Number.isFinite(editSalePriceValue) ||
     editSalePriceValue < 0 ||
     editSalePriceValue >= editPriceValue
-  );
-  const hasInvalidQuantity = editDialog.open && (Number.isNaN(Number(editDialog.quantity)) || Number(editDialog.quantity) < 0);
-  const hasInvalidSaleDates = editDialog.open && editDialog.saleEnabled && editDialog.saleStartAt && editDialog.saleEndAt && new Date(editDialog.saleEndAt) <= new Date(editDialog.saleStartAt);
+  ));
+  const hasInvalidQuantity = Boolean(editDialog.open && (Number.isNaN(Number(editDialog.quantity)) || Number(editDialog.quantity) < 0));
+  const hasInvalidSaleDates = Boolean(editDialog.open && editDialog.saleEnabled && editDialog.saleStartAt && editDialog.saleEndAt && new Date(editDialog.saleEndAt) <= new Date(editDialog.saleStartAt));
   const bulkSaleValue = Number(bulkSaleDialog.value);
-  const hasInvalidBulkSale = bulkSaleDialog.mode === 'apply' && (
+  const hasInvalidBulkSale = Boolean(bulkSaleDialog.mode === 'apply' && (
     !Number.isFinite(bulkSaleValue) ||
     bulkSaleValue <= 0 ||
     (bulkSaleDialog.saleType === 'percentage' && bulkSaleValue >= 100) ||
     (bulkSaleDialog.saleStartAt && bulkSaleDialog.saleEndAt && new Date(bulkSaleDialog.saleEndAt) <= new Date(bulkSaleDialog.saleStartAt))
-  );
+  ));
 
   // ── Columns ──────────────────────────────────────────────────
   const columns = [

@@ -99,6 +99,7 @@ const productAttributeRoutes = require('./modules/attribute/productAttribute.rou
 const productVariantRoutes = require('./modules/attribute/productVariant.routes');
 const pageRoutes = require('./modules/page/page.routes');
 const notificationRoutes = require('./modules/notification/notification.routes');
+const promotionRoutes = require('./modules/promotion/promotion.routes');
 
 app.use('/api', seoRoutes);
 app.use('/api/settings', settingsRoutes);
@@ -122,6 +123,7 @@ app.use('/api/products', productAttributeRoutes);   // extends existing /api/pro
 app.use('/api/products', productVariantRoutes);     // extends existing /api/products with /:id/variants/* sub-routes
 app.use('/api/pages', pageRoutes);
 app.use('/api/notifications', notificationRoutes);
+app.use('/api/promotions', promotionRoutes);
 
 // Health check endpoint
 app.get('/health', async (req, res) => {
