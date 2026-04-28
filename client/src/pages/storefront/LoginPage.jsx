@@ -84,9 +84,9 @@ const LoginPage = () => {
 
   return (
     <Box sx={{ maxWidth: 400, mx: 'auto', mt: 8 }}>
-      <Typography variant="h4" component="h1" gutterBottom textAlign="center" fontWeight={600}>
+      {/* <Typography variant="h4" component="h1" gutterBottom textAlign="center" fontWeight={600}>
         Welcome Back
-      </Typography>
+      </Typography> */}
       
       {error && (
         <Box sx={{ mb: 2 }}>

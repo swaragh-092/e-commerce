@@ -9,8 +9,15 @@ module.exports = (sequelize, DataTypes) => {
         },
         name: {
             type: DataTypes.STRING(100),
-            unique: true,
             allowNull: false,
+        },
+        channel: {
+            type: DataTypes.STRING(20),
+            allowNull: false,
+            defaultValue: 'email',
+            validate: {
+                isIn: [['email', 'sms', 'whatsapp']],
+            },
         },
         subject: {
             type: DataTypes.STRING(500),
@@ -31,6 +38,10 @@ module.exports = (sequelize, DataTypes) => {
         tableName: 'notification_templates',
         timestamps: true,
         underscored: true,
+        indexes: [
+            // Unique per (name + channel) — one template per event per channel
+            { unique: true, fields: ['name', 'channel'], name: 'uq_notification_templates_name_channel' },
+        ],
     });
 
     return NotificationTemplate;

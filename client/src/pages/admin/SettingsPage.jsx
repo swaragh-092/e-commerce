@@ -32,6 +32,7 @@ import { SettingsContext } from '../../context/ThemeContext';
 import { useAuth } from '../../hooks/useAuth';
 import { PERMISSIONS } from '../../utils/permissions';
 import { DASHBOARD_PROFILES } from '../../components/admin/dashboard/dashboardWidgets';
+import MessagingSettingsPanel from '../../components/admin/settings/MessagingSettingsPanel';
 
 const CURRENCIES = [
   { code: 'USD', symbol: '$',  name: 'US Dollar' },
@@ -239,9 +240,9 @@ const SettingsPage = () => {
     }
   };
 
-  const tabs = ['Store', 'Branding', 'Layout', 'Homepage', 'Catalog', 'Checkout', 'Promotions', 'Invoice', 'Advanced', 'Email Templates'];
+  const tabs = ['Store', 'Branding', 'Layout', 'Homepage', 'Catalog', 'Checkout', 'Promotions', 'Invoice', 'Advanced', 'Notifications'];
   const currentTab = tabs[tab];
-  const isEmailTemplatesTab = currentTab === 'Email Templates';
+  const isMessagingTab = currentTab === 'Notifications';
 
   // Current currency symbol — used in shipping adornments
   const currSymbol = getCurrencySymbol(form['general.currency']);
@@ -1679,8 +1680,11 @@ const SettingsPage = () => {
             <Divider />
             <Box sx={{ p: 3 }}>
               <Box sx={{ pointerEvents: canManageSettings ? 'auto' : 'none', opacity: canManageSettings ? 1 : 0.75 }}>
-                {isEmailTemplatesTab ? (
+                {isMessagingTab ? (
                   <Box>
+                    <MessagingSettingsPanel form={form} set={set} />
+                    <Divider sx={{ my: 4 }} />
+                    <Typography variant="h6" fontWeight={700} sx={{ mb: 1 }}>Message Templates</Typography>
                     <Typography variant="body2" color="text.secondary" sx={{ mb: 3 }}>
                       Customize the transactional emails your store sends. Use <code style={{ background: '#f4f4f4', padding: '1px 4px', borderRadius: 3 }}>{'{{variable}}'}</code> syntax for dynamic content. Changes apply immediately — no restart needed.
                     </Typography>

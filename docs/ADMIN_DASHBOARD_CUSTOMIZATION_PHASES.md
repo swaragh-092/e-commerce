@@ -169,7 +169,17 @@ Still planned:
 
 Goal: make dashboards personal and reusable.
 
-- Allow admins to save multiple dashboard views.
-- Add per-user dashboard preference overrides.
-- Add reset-to-default action.
-- Add export/share dashboard configuration.
+Status: deferred.
+
+Reason: Phases 1–5 already cover all practical dashboard needs. Profile presets
+(Owner, Operations, Catalog, Support) handle multi-role use cases. Phase 6 adds
+per-browser saved views, but is not needed until there is a clear requirement for
+multiple admins who each want fully independent named configurations. Can be
+revisited when that need arises.
+
+Planned features (when implemented):
+
+- Allow admins to save multiple named dashboard views.
+- Add per-user dashboard preference overrides (local or server-persisted).
+- Add reset-to-global-defaults action.
+- Add export/import dashboard configuration as JSON.

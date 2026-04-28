@@ -48,12 +48,13 @@ const getAll = async () => {
     productPage: { ...defaultSettings.productPage },
     admin: { ...defaultSettings.admin },
     invoice: { ...defaultSettings.invoice },
-    // gateway_credentials is intentionally excluded — secrets must never be sent to the client
+    messaging: { ...defaultSettings.messaging },
+    // gateway_credentials and messaging_credentials are intentionally excluded — secrets must never be sent to the client
   };
 
   settings.forEach(s => {
-    // Skip gateway_credentials — they are server-side only and must not be exposed to the frontend
-    if (s.group === 'gateway_credentials') return;
+    // Skip server-side-only credential groups — never expose to the frontend
+    if (s.group === 'gateway_credentials' || s.group === 'messaging_credentials') return;
     if (grouped[s.group]) {
       let parsedValue = s.value;
       if (parsedValue === 'true') parsedValue = true;
@@ -66,7 +67,7 @@ const getAll = async () => {
 };
 
 const getByGroup = async (groupName) => {
-  const validGroups = ['theme', 'features', 'payments', 'sales', 'seo', 'general', 'shipping', 'tax', 'sku', 'logo', 'hero', 'footer', 'announcement', 'nav', 'catalog', 'homepage', 'productPage', 'admin', 'invoice', 'gateway_credentials'];
+  const validGroups = ['theme', 'features', 'payments', 'sales', 'seo', 'general', 'shipping', 'tax', 'sku', 'logo', 'hero', 'footer', 'announcement', 'nav', 'catalog', 'homepage', 'productPage', 'admin', 'invoice', 'gateway_credentials', 'messaging_credentials', 'messaging'];
   if (!validGroups.includes(groupName)) {
     throw new AppError('VALIDATION_ERROR', 400, 'Invalid setting group');
   }
@@ -117,7 +118,7 @@ const updateKey = async (key, value, group, actingUserId) => {
 };
 
 const bulkUpdate = async (settingsInput, actingUserId) => {
-  const validGroups = ['theme', 'features', 'payments', 'sales', 'seo', 'general', 'shipping', 'tax', 'sku', 'logo', 'hero', 'footer', 'announcement', 'nav', 'catalog', 'homepage', 'productPage', 'admin', 'invoice', 'gateway_credentials'];
+  const validGroups = ['theme', 'features', 'payments', 'sales', 'seo', 'general', 'shipping', 'tax', 'sku', 'logo', 'hero', 'footer', 'announcement', 'nav', 'catalog', 'homepage', 'productPage', 'admin', 'invoice', 'gateway_credentials', 'messaging_credentials', 'messaging'];
     
     // Normalize input to an array of { key, value, group }
     const settingsArray = Array.isArray(settingsInput) 

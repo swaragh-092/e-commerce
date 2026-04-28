@@ -24,6 +24,7 @@ const AuditService = require('../audit/audit.service');
 const CouponService = require('../coupon/coupon.service');
 const PaymentService = require('../payment/payment.service');
 const TaxService = require('../tax/tax.service');
+const NotificationService = require('../notification/notification.service');
 const { getPagination } = require('../../utils/pagination');
 const { ACTIONS, ENTITIES } = require('../../config/constants');
 const { getVariantUnitPrice } = require('../product/product.pricing');
@@ -458,6 +459,30 @@ const placeOrder = async (userId, payload) => {
             });
         }
     } catch (err) {}
+
+    // Send multi-channel notification for order placement
+    try {
+        if (NotificationService && NotificationService.sendToUser) {
+            const user = await User.findByPk(userId);
+            if (user) {
+                // Send to all enabled channels configured in settings
+                // Dispatcher will handle checking if channels are actually enabled
+                await NotificationService.sendToUser(
+                    'order_placed',
+                    ['email', 'sms', 'whatsapp'],
+                    user,
+                    {
+                        orderNumber: order.orderNumber,
+                        total: order.total,
+                        firstName: user.firstName || 'Customer',
+                    },
+                    order.id
+                );
+            }
+        }
+    } catch (err) {
+        logger.error('Failed to send order placement notifications', { orderId: order.id, error: err.message });
+    }
 
     return { order, clientSecret };
 };

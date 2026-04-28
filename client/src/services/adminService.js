@@ -75,6 +75,7 @@ const updateSettings = (settings) => api.put('/settings/bulk', settings);
 const getEmailTemplates = () => api.get('/notifications/templates');
 const updateEmailTemplate = (name, data) => api.put(`/notifications/templates/${name}`, data);
 const sendTestEmail = (templateName, recipientEmail) => api.post('/notifications/templates/test', { templateName, recipientEmail });
+const sendTestNotification = (templateName, recipient, channel) => api.post('/notifications/test', { templateName, recipient, channel });
 
 // Coupon validation (storefront)
 const validateCoupon = (codeOrPayload, subtotal) => {
@@ -119,7 +120,7 @@ export {
   getCoupons, createCoupon, updateCoupon, deleteCoupon,
   getAllOrders, getOrderById, updateOrderStatus, refundOrder, createFulfillment, updateFulfillmentStatus,
   updateSettings,
-  getEmailTemplates, updateEmailTemplate, sendTestEmail,
+  getEmailTemplates, updateEmailTemplate, sendTestEmail, sendTestNotification,
   validateCoupon, getPublicCoupons, getEligibleCoupons,
   getMyOrders, getMyOrderById, cancelOrder, placeOrder,
   getAddresses, createAddress, updateAddress, deleteAddress, setDefaultAddress,
