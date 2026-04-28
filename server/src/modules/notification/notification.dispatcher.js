@@ -5,9 +5,9 @@ const logger = require('../../utils/logger');
 
 // Channel map — keys match the `channel` column in notification_templates
 const CHANNELS = {
-    email:     () => require('./email.channel'),
-    sms:       () => require('./sms.channel'),
-    whatsapp:  () => require('./whatsapp.channel'),
+    email:     () => require('./channels/email.channel'),
+    sms:       () => require('./channels/sms.channel'),
+    whatsapp:  () => require('./channels/whatsapp.channel'),
 };
 
 const SettingsService = require('../settings/settings.service');

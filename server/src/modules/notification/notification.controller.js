@@ -69,15 +69,31 @@ const updateTemplate = async (req, res, next) => {
  */
 const sendTestNotification = async (req, res, next) => {
   try {
-    const { templateName, recipient, channel = 'email' } = req.body;
+    const { templateName, recipient, recipientEmail, channel = 'email' } = req.body;
+    const finalRecipient = recipient || recipientEmail;
 
-    if (!templateName || !recipient) {
+    if (!templateName || !finalRecipient) {
       return error(res, 'templateName and recipient are required', 400, 'VALIDATION_ERROR');
     }
 
     const validChannels = ['email', 'sms', 'whatsapp'];
     if (!validChannels.includes(channel)) {
       return error(res, `channel must be one of: ${validChannels.join(', ')}`, 400, 'VALIDATION_ERROR');
+    }
+
+    if (templateName === 'test_notification') {
+      const Dispatcher = require('./notification.dispatcher');
+      let payload;
+      if (channel === 'email') {
+          payload = { to: finalRecipient, subject: 'Test Notification', text: 'This is a test notification from the system.', html: '<p>This is a test notification from the system.</p>' };
+      } else {
+          payload = { to: finalRecipient, body: 'This is a test notification from the system.' };
+      }
+      const sent = await Dispatcher.dispatch(channel, payload);
+      if (!sent) {
+        return error(res, `Test ${channel} failed to send. Check your configuration and channel enable flags.`, 500, 'SEND_FAILED');
+      }
+      return success(res, null, `Test ${channel} sent to ${finalRecipient}`);
     }
 
     const NotificationService = require('./notification.service');
@@ -88,7 +104,7 @@ const sendTestNotification = async (req, res, next) => {
     }
 
     // Placeholder variables so Handlebars doesn't error on missing keys
-    const sent = await NotificationService.send(templateName, recipient, {
+    const sent = await NotificationService.send(templateName, finalRecipient, {
       name: 'Test User',
       verify_url: 'http://localhost:3000/verify-email?token=TEST_TOKEN',
       reset_url: 'http://localhost:3000/reset-password?token=TEST_TOKEN',
@@ -102,7 +118,7 @@ const sendTestNotification = async (req, res, next) => {
       return error(res, `Test ${channel} failed to send. Check your configuration and channel enable flags.`, 500, 'SEND_FAILED');
     }
 
-    return success(res, null, `Test ${channel} sent to ${recipient}`);
+    return success(res, null, `Test ${channel} sent to ${finalRecipient}`);
   } catch (err) {
     next(err);
   }

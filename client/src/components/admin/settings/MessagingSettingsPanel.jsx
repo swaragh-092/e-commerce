@@ -70,8 +70,63 @@ const MessagingSettingsPanel = ({ form, set }) => {
             sx={{ mb: 2 }}
           />
           <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
-            SMTP is configured via environment variables (SMTP_HOST, SMTP_PORT, SMTP_USER, SMTP_PASS).
+            Configure your SMTP server details below. If left empty, the system will fallback to environment variables.
           </Typography>
+          <Box sx={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 2, mb: 2 }}>
+            <TextField
+              fullWidth
+              size="small"
+              label="SMTP Host"
+              placeholder="smtp.example.com"
+              value={form['messaging_credentials.smtp_host'] || ''}
+              onChange={(e) => set('messaging_credentials.smtp_host', e.target.value)}
+            />
+            <TextField
+              fullWidth
+              size="small"
+              label="SMTP Port"
+              placeholder="587"
+              value={form['messaging_credentials.smtp_port'] || ''}
+              onChange={(e) => set('messaging_credentials.smtp_port', e.target.value)}
+            />
+          </Box>
+          <Box sx={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 2, mb: 2 }}>
+            <TextField
+              fullWidth
+              size="small"
+              label="SMTP User"
+              value={form['messaging_credentials.smtp_user'] || ''}
+              onChange={(e) => set('messaging_credentials.smtp_user', e.target.value)}
+            />
+            <TextField
+              fullWidth
+              size="small"
+              label="SMTP Password"
+              type="password"
+              value={form['messaging_credentials.smtp_pass'] || ''}
+              onChange={(e) => set('messaging_credentials.smtp_pass', e.target.value)}
+            />
+          </Box>
+          <Box sx={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 2, mb: 2 }}>
+            <TextField
+              fullWidth
+              size="small"
+              label="Sender Email (From)"
+              placeholder='"Store Name" <noreply@example.com>'
+              value={form['messaging.emailFrom'] || ''}
+              onChange={(e) => set('messaging.emailFrom', e.target.value)}
+            />
+            <FormControlLabel
+              control={
+                <Switch
+                  size="small"
+                  checked={form['messaging_credentials.smtp_secure'] === 'true' || form['messaging_credentials.smtp_secure'] === true}
+                  onChange={(e) => set('messaging_credentials.smtp_secure', e.target.checked)}
+                />
+              }
+              label="Use SSL/TLS (Port 465)"
+            />
+          </Box>
           <Divider sx={{ my: 2 }} />
           <Box sx={{ display: 'flex', gap: 2, alignItems: 'center' }}>
             <TextField
