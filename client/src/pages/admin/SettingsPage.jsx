@@ -1,4 +1,5 @@
-    import { useState, useEffect, useContext } from 'react';
+import { useState, useEffect, useContext } from 'react';
+import { DragDropContext, Draggable, Droppable } from '@hello-pangea/dnd';
 import {
   Alert,
   Box,
@@ -23,12 +24,15 @@ import {
 } from '@mui/material';
 import DeleteOutlineIcon from '@mui/icons-material/DeleteOutline';
 import AddIcon from '@mui/icons-material/Add';
+import DragIndicatorIcon from '@mui/icons-material/DragIndicator';
 import { updateSettings, getEmailTemplates, updateEmailTemplate, sendTestEmail as sendTestEmailApi } from '../../services/adminService';
 import api from '../../services/api';
 import { useNotification } from '../../context/NotificationContext';
 import { SettingsContext } from '../../context/ThemeContext';
 import { useAuth } from '../../hooks/useAuth';
 import { PERMISSIONS } from '../../utils/permissions';
+import { DASHBOARD_PROFILES } from '../../components/admin/dashboard/dashboardWidgets';
+import MessagingSettingsPanel from '../../components/admin/settings/MessagingSettingsPanel';
 
 const CURRENCIES = [
   { code: 'USD', symbol: '$',  name: 'US Dollar' },
@@ -67,6 +71,84 @@ const FONTS = [
   'Raleway',
 ];
 
+const THEME_PRESETS = [
+  {
+    name: 'Premium Retail',
+    description: 'Warm storefront with emerald actions and coral accents.',
+    values: {
+      'theme.mode': 'light',
+      'theme.primaryColor': '#0f766e',
+      'theme.secondaryColor': '#f97316',
+      'theme.backgroundColor': '#f7f3ec',
+      'theme.surfaceColor': '#fffaf2',
+      'theme.textColor': '#1f2933',
+      'theme.fontFamily': 'Inter',
+      'theme.borderRadius': '12px',
+      'theme.headerStyle': 'gradient',
+      'theme.buttonStyle': 'solid',
+      'theme.cardStyle': 'elevated',
+      'theme.backgroundStyle': 'softGradient',
+    },
+  },
+  {
+    name: 'Clean Minimal',
+    description: 'Bright, simple, and product-first.',
+    values: {
+      'theme.mode': 'light',
+      'theme.primaryColor': '#111827',
+      'theme.secondaryColor': '#2563eb',
+      'theme.backgroundColor': '#f8fafc',
+      'theme.surfaceColor': '#ffffff',
+      'theme.textColor': '#111827',
+      'theme.fontFamily': 'Inter',
+      'theme.borderRadius': '8px',
+      'theme.headerStyle': 'solid',
+      'theme.buttonStyle': 'solid',
+      'theme.cardStyle': 'outlined',
+      'theme.backgroundStyle': 'solid',
+    },
+  },
+  {
+    name: 'Luxury Dark',
+    description: 'Dark premium theme with gold accents.',
+    values: {
+      'theme.mode': 'dark',
+      'theme.primaryColor': '#d4af37',
+      'theme.secondaryColor': '#8b5cf6',
+      'theme.backgroundColor': '#0f1115',
+      'theme.surfaceColor': '#181b22',
+      'theme.textColor': '#f8fafc',
+      'theme.fontFamily': 'Montserrat',
+      'theme.borderRadius': '10px',
+      'theme.headerStyle': 'gradient',
+      'theme.buttonStyle': 'solid',
+      'theme.cardStyle': 'elevated',
+      'theme.backgroundStyle': 'softGradient',
+    },
+  },
+];
+
+const DASHBOARD_ORDER_WIDGETS = [
+  { id: 'salesChart', label: 'Sales Overview', description: 'Revenue and order trend chart' },
+  { id: 'recentOrders', label: 'Recent Orders', description: 'Latest order activity and statuses' },
+  { id: 'operationsSummary', label: 'Operations Summary', description: 'Pending payments, stock, customers, and catalog totals' },
+  { id: 'inventoryWarnings', label: 'Inventory Warnings', description: 'Critical and low inventory shortcuts' },
+  { id: 'storeHealth', label: 'Store Health', description: 'Configuration and operational readiness checks' },
+  { id: 'lowStock', label: 'Low Stock Alerts', description: 'Inventory items that need attention' },
+];
+
+const parseDashboardOrder = (value) => {
+  const saved = String(value || '')
+    .split(',')
+    .map((id) => id.trim())
+    .filter((id) => DASHBOARD_ORDER_WIDGETS.some((widget) => widget.id === id));
+
+  return [
+    ...saved,
+    ...DASHBOARD_ORDER_WIDGETS.map((widget) => widget.id).filter((id) => !saved.includes(id)),
+  ];
+};
+
 const SettingsPage = () => {
   const [tab, setTab] = useState(0);
   const [form, setForm] = useState({});
@@ -77,7 +159,7 @@ const SettingsPage = () => {
   const [templateTestEmail, setTemplateTestEmail] = useState('');
   const [templateTesting, setTemplateTesting] = useState({});
   const [templateExpanded, setTemplateExpanded] = useState(null);
-  const notify = useNotification();
+  const { notify } = useNotification();
   const { refreshSettings } = useContext(SettingsContext) || {};
   const { hasPermission } = useAuth();
   const canManageSettings = hasPermission(PERMISSIONS.SETTINGS_MANAGE);
@@ -102,6 +184,36 @@ const SettingsPage = () => {
   }, []);
 
   const set = (key, value) => setForm((f) => ({ ...f, [key]: value }));
+  const applyThemePreset = (preset) => setForm((f) => ({ ...f, ...preset.values }));
+  const dashboardOrder = parseDashboardOrder(form['admin.dashboard.widgetOrder']);
+  const setDashboardOrder = (order) => set('admin.dashboard.widgetOrder', order.join(','));
+  const applyDashboardProfile = (profileKey) => {
+    const profile = DASHBOARD_PROFILES[profileKey];
+    if (!profile) return;
+    setForm((current) => ({
+      ...current,
+      'admin.dashboard.profile': profileKey,
+      'admin.dashboard.widgetOrder': profile.widgetOrder,
+      'admin.dashboard.showStatCards': profile.widgetDefaults.showStatCards,
+      'admin.dashboard.showRevenueCard': profile.widgetDefaults.showRevenueCard,
+      'admin.dashboard.showOrdersCard': profile.widgetDefaults.showOrdersCard,
+      'admin.dashboard.showCustomersCard': profile.widgetDefaults.showCustomersCard,
+      'admin.dashboard.showProductsCard': profile.widgetDefaults.showProductsCard,
+      'admin.dashboard.showSalesChart': profile.widgetDefaults.showSalesChart,
+      'admin.dashboard.showRecentOrders': profile.widgetDefaults.showRecentOrders,
+      'admin.dashboard.showOperationsSummary': profile.widgetDefaults.showOperationsSummary,
+      'admin.dashboard.showInventoryWarnings': profile.widgetDefaults.showInventoryWarnings,
+      'admin.dashboard.showStoreHealth': profile.widgetDefaults.showStoreHealth,
+      'admin.dashboard.showLowStockAlerts': profile.widgetDefaults.showLowStockAlerts,
+    }));
+  };
+  const handleDashboardOrderDragEnd = ({ source, destination }) => {
+    if (!destination || destination.index === source.index) return;
+    const nextOrder = [...dashboardOrder];
+    const [moved] = nextOrder.splice(source.index, 1);
+    nextOrder.splice(destination.index, 0, moved);
+    setDashboardOrder(nextOrder);
+  };
 
   const handleSave = async () => {
     if (!canManageSettings) {
@@ -128,9 +240,9 @@ const SettingsPage = () => {
     }
   };
 
-  const tabs = ['Store', 'Branding', 'Layout', 'Homepage', 'Catalog', 'Checkout', 'Promotions', 'Invoice', 'Advanced', 'Email Templates'];
+  const tabs = ['Store', 'Branding', 'Layout', 'Homepage', 'Catalog', 'Checkout', 'Promotions', 'Invoice', 'Advanced', 'Notifications'];
   const currentTab = tabs[tab];
-  const isEmailTemplatesTab = currentTab === 'Email Templates';
+  const isMessagingTab = currentTab === 'Notifications';
 
   // Current currency symbol — used in shipping adornments
   const currSymbol = getCurrencySymbol(form['general.currency']);
@@ -204,6 +316,10 @@ const SettingsPage = () => {
   const heroTextColor = form['hero.color'] || '#FFFFFF';
   const fontFamily = form['theme.fontFamily'] || 'Inter';
   const borderRadius = Number.parseInt(form['theme.borderRadius'], 10) || 12;
+  const headerStyle = form['theme.headerStyle'] || 'gradient';
+  const buttonStyle = form['theme.buttonStyle'] || 'solid';
+  const cardStyle = form['theme.cardStyle'] || 'elevated';
+  const backgroundStyle = form['theme.backgroundStyle'] || 'softGradient';
   const storeName = form['general.storeName'] || 'My Store';
   const storeDescription = form['general.storeDescription'] || 'Premium online shopping experience';
   const heroTitle = form['hero.title'] || 'Shop the Latest';
@@ -235,9 +351,29 @@ const SettingsPage = () => {
   const enableIGST = Boolean(form['tax.enableIGST']);
   const previewStyles = {
     fontFamily: `"${fontFamily}", "Roboto", "Helvetica", "Arial", sans-serif`,
-    bgcolor: pageBackground,
+    background: backgroundStyle === 'softGradient'
+      ? `linear-gradient(180deg, ${pageBackground} 0%, ${surfaceColor} 100%)`
+      : pageBackground,
     color: textColor,
     borderRadius: `${borderRadius}px`,
+  };
+  const previewHeaderBackground = headerStyle === 'gradient'
+    ? `linear-gradient(135deg, ${brandPrimary}, ${brandSecondary})`
+    : headerStyle === 'glass'
+      ? `${surfaceColor}dd`
+      : brandPrimary;
+  const previewButtonSx = {
+    bgcolor: buttonStyle === 'soft' ? `${brandPrimary}22` : brandPrimary,
+    color: buttonStyle === 'soft' ? brandPrimary : '#fff',
+    border: buttonStyle === 'outline' ? `1px solid ${brandPrimary}` : '1px solid transparent',
+    borderRadius: `${Math.max(borderRadius - 2, 4)}px`,
+  };
+  const previewCardSx = {
+    bgcolor: surfaceColor,
+    borderRadius: `${borderRadius}px`,
+    border: cardStyle === 'flat' ? '1px solid transparent' : '1px solid',
+    borderColor: cardStyle === 'elevated' ? 'transparent' : 'divider',
+    boxShadow: cardStyle === 'elevated' ? '0 16px 34px rgba(0,0,0,0.14)' : 'none',
   };
 
   const formatMoney = (amount) => {
@@ -273,17 +409,17 @@ const SettingsPage = () => {
             {form['logo.main'] ? (
               <Box component="img" src={form['logo.main']} alt="Logo" sx={{ maxWidth: 72, maxHeight: 36, objectFit: 'contain' }} />
             ) : (
-              <Box sx={{ px: 1.5, py: 0.75, bgcolor: brandPrimary, color: '#fff', borderRadius: 2, fontWeight: 700 }}>Logo</Box>
+              <Box sx={{ px: 1.5, py: 0.75, background: previewHeaderBackground, color: headerStyle === 'glass' ? textColor : '#fff', borderRadius: 2, fontWeight: 700 }}>Logo</Box>
             )}
           </Box>
-          <Box sx={{ p: 2, bgcolor: surfaceColor, borderRadius: `${borderRadius}px`, mb: 2 }}>
+          <Box sx={{ ...previewCardSx, p: 2, mb: 2 }}>
             <Typography variant="body2" sx={{ color: textColor, fontWeight: 600 }}>{storeDescription}</Typography>
             <Typography variant="caption" sx={{ color: themeMode === 'dark' ? 'rgba(255,255,255,0.7)' : 'text.secondary' }}>
               {form['general.contactEmail'] || 'hello@store.com'}
             </Typography>
           </Box>
           <Box sx={{ display: 'flex', gap: 1 }}>
-            <Box sx={{ flex: 1, p: 1.5, bgcolor: brandPrimary, color: '#fff', borderRadius: 2, textAlign: 'center', fontWeight: 700 }}>Primary</Box>
+            <Box sx={{ flex: 1, p: 1.5, ...previewButtonSx, textAlign: 'center', fontWeight: 700 }}>Primary</Box>
             <Box sx={{ flex: 1, p: 1.5, bgcolor: brandSecondary, color: '#fff', borderRadius: 2, textAlign: 'center', fontWeight: 700 }}>Accent</Box>
           </Box>
         </Box>
@@ -298,7 +434,7 @@ const SettingsPage = () => {
               {form['announcement.text'] || 'Free shipping on orders over $50!'}
             </Box>
           )}
-          <Box sx={{ p: 1.5, bgcolor: surfaceColor, borderRadius: `${borderRadius}px`, mb: 1.5, border: '1px solid', borderColor: 'divider' }}>
+          <Box sx={{ ...previewCardSx, p: 1.5, mb: 1.5 }}>
             <Typography variant="subtitle2" fontWeight={700}>{storeName}</Typography>
             <Typography variant="caption" color="text.secondary">
               {stickyHeader ? 'Sticky header enabled' : 'Standard header'} • {showCategoryBar ? 'Category bar visible' : 'Category bar hidden'}
@@ -334,7 +470,7 @@ const SettingsPage = () => {
           >
             <Typography variant="h6" fontWeight={800} sx={{ color: heroTextColor }}>{heroTitle}</Typography>
             <Typography variant="body2" sx={{ color: heroTextColor, opacity: 0.9, mt: 0.75, mb: 2 }}>{heroSubtitle}</Typography>
-            <Box sx={{ display: 'inline-block', px: 1.5, py: 0.9, bgcolor: '#fff', color: brandPrimary, borderRadius: 2, fontWeight: 700, fontSize: 13 }}>
+            <Box sx={{ display: 'inline-block', px: 1.5, py: 0.9, ...previewButtonSx, fontWeight: 700, fontSize: 13 }}>
               {heroButtonText}
             </Box>
           </Box>
@@ -569,8 +705,28 @@ const SettingsPage = () => {
     [
       section(
         'Theme & Colors',
-        'Define the overall visual language of your storefront, including dark mode and core brand colors.',
+        'Start with a suggested theme, then fine-tune every color and token.',
         <>
+          <Typography variant="subtitle2" sx={{ mb: 1 }}>Suggested Custom Themes</Typography>
+          <Grid container spacing={1.5} sx={{ mb: 2 }}>
+            {THEME_PRESETS.map((preset) => (
+              <Grid item xs={12} md={4} key={preset.name}>
+                <Paper
+                  variant="outlined"
+                  sx={{ p: 1.5, height: '100%', borderRadius: 2, cursor: 'pointer', '&:hover': { borderColor: 'primary.main' } }}
+                  onClick={() => applyThemePreset(preset)}
+                >
+                  <Box sx={{ display: 'flex', gap: 0.75, mb: 1 }}>
+                    <Box sx={{ width: 22, height: 22, borderRadius: '50%', bgcolor: preset.values['theme.primaryColor'] }} />
+                    <Box sx={{ width: 22, height: 22, borderRadius: '50%', bgcolor: preset.values['theme.secondaryColor'] }} />
+                    <Box sx={{ width: 22, height: 22, borderRadius: '50%', bgcolor: preset.values['theme.backgroundColor'], border: '1px solid', borderColor: 'divider' }} />
+                  </Box>
+                  <Typography variant="body2" fontWeight={700}>{preset.name}</Typography>
+                  <Typography variant="caption" color="text.secondary">{preset.description}</Typography>
+                </Paper>
+              </Grid>
+            ))}
+          </Grid>
           <FormControlLabel
             control={
               <Switch
@@ -591,24 +747,65 @@ const SettingsPage = () => {
             <Grid item xs={12} sm={6}>{field('theme.textColor', 'Text Color', 'color')}</Grid>
           </Grid>
         </>,
-        ['theme', 'colors', 'dark mode', 'primary', 'secondary']
+        ['theme', 'colors', 'dark mode', 'primary', 'secondary', 'preset']
       ),
       section(
-        'Typography & Shape',
-        'Adjust fonts and radius so the store matches your brand personality.',
-        <Grid container spacing={2}>
-          <Grid item xs={12} sm={6}>
-            <Autocomplete
-              options={FONTS}
-              value={form['theme.fontFamily'] || ''}
-              onChange={(e, value) => set('theme.fontFamily', value || '')}
-              freeSolo
-              renderInput={(params) => <TextField {...params} label="Font Family" size="small" sx={{ mb: 2 }} />}
-            />
+        'Typography, Shape & Components',
+        'Control fonts, corner radius, header treatment, buttons, cards, and page background style.',
+        <>
+          <Grid container spacing={2}>
+            <Grid item xs={12} sm={6}>
+              <Autocomplete
+                options={FONTS}
+                value={form['theme.fontFamily'] || ''}
+                onChange={(e, value) => set('theme.fontFamily', value || '')}
+                freeSolo
+                renderInput={(params) => <TextField {...params} label="Font Family" size="small" sx={{ mb: 2 }} />}
+              />
+            </Grid>
+            <Grid item xs={12} sm={6}>{field('theme.borderRadius', 'Border Radius (e.g. 12px)')}</Grid>
+            <Grid item xs={12} sm={6}>
+              <FormControl fullWidth size="small" sx={{ mb: 2 }}>
+                <InputLabel>Header Style</InputLabel>
+                <Select label="Header Style" value={headerStyle} onChange={(e) => set('theme.headerStyle', e.target.value)}>
+                  <MenuItem value="gradient">Gradient</MenuItem>
+                  <MenuItem value="solid">Solid</MenuItem>
+                  <MenuItem value="glass">Glass</MenuItem>
+                </Select>
+              </FormControl>
+            </Grid>
+            <Grid item xs={12} sm={6}>
+              <FormControl fullWidth size="small" sx={{ mb: 2 }}>
+                <InputLabel>Button Style</InputLabel>
+                <Select label="Button Style" value={buttonStyle} onChange={(e) => set('theme.buttonStyle', e.target.value)}>
+                  <MenuItem value="solid">Solid</MenuItem>
+                  <MenuItem value="soft">Soft</MenuItem>
+                  <MenuItem value="outline">Outline</MenuItem>
+                </Select>
+              </FormControl>
+            </Grid>
+            <Grid item xs={12} sm={6}>
+              <FormControl fullWidth size="small" sx={{ mb: 2 }}>
+                <InputLabel>Card Style</InputLabel>
+                <Select label="Card Style" value={cardStyle} onChange={(e) => set('theme.cardStyle', e.target.value)}>
+                  <MenuItem value="elevated">Elevated</MenuItem>
+                  <MenuItem value="outlined">Outlined</MenuItem>
+                  <MenuItem value="flat">Flat</MenuItem>
+                </Select>
+              </FormControl>
+            </Grid>
+            <Grid item xs={12} sm={6}>
+              <FormControl fullWidth size="small" sx={{ mb: 2 }}>
+                <InputLabel>Background Style</InputLabel>
+                <Select label="Background Style" value={backgroundStyle} onChange={(e) => set('theme.backgroundStyle', e.target.value)}>
+                  <MenuItem value="softGradient">Soft Gradient</MenuItem>
+                  <MenuItem value="solid">Solid</MenuItem>
+                </Select>
+              </FormControl>
+            </Grid>
           </Grid>
-          <Grid item xs={12} sm={6}>{field('theme.borderRadius', 'Border Radius (e.g. 12px)')}</Grid>
-        </Grid>,
-        ['font', 'radius', 'typography', 'shape']
+        </>,
+        ['font', 'radius', 'typography', 'shape', 'header', 'button', 'card']
       ),
       section(
         'Announcement Bar',
@@ -1085,6 +1282,36 @@ const SettingsPage = () => {
         </>,
         ['checkout', 'guest checkout', 'coupons']
       ),
+      section(
+        'Payment Gateways',
+        'Enable, disable and configure payment providers from the dedicated gateway manager.',
+        <Box
+          sx={{
+            display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+            p: 2, border: '1px solid', borderColor: 'primary.main', borderRadius: 2,
+            bgcolor: 'primary.main', color: '#fff',
+          }}
+        >
+          <Box>
+            <Typography variant="subtitle2" fontWeight={700} sx={{ color: '#fff' }}>
+              💳 Manage Payment Gateways
+            </Typography>
+            <Typography variant="body2" sx={{ color: 'rgba(255,255,255,0.85)', mt: 0.25 }}>
+              Configure Razorpay, Cashfree, Stripe, PayU, and Cash on Delivery — including API keys and connection status.
+            </Typography>
+          </Box>
+          <Button
+            component="a"
+            href="/admin/payment-gateways"
+            variant="contained"
+            size="small"
+            sx={{ bgcolor: '#fff', color: 'primary.main', flexShrink: 0, ml: 2, '&:hover': { bgcolor: 'rgba(255,255,255,0.9)' } }}
+          >
+            Open Gateway Manager →
+          </Button>
+        </Box>,
+        ['payment', 'gateway', 'razorpay', 'stripe', 'payu', 'cashfree', 'cod']
+      ),
     ],
     [
       section(
@@ -1128,6 +1355,22 @@ const SettingsPage = () => {
           {field('invoice.prefix', 'Invoice Number Prefix (e.g. INV-)')}
           {field('invoice.companyName', 'Company Legal Name (Overrides Store Name if provided)')}
           {field('invoice.taxRegistryNumber', 'Tax / VAT Registration Number')}
+          
+          <Divider sx={{ my: 2 }} />
+          <Typography variant="subtitle2" fontWeight={600} color="text.secondary" mb={1.5}>Invoice Logo</Typography>
+          {toggle('invoice.showLogo', 'Show logo on printed invoices')}
+          {form['invoice.showLogo'] !== false && (
+            <>
+              {field('invoice.logoUrl', 'Specific Invoice Logo URL (Optional, falls back to store logo)')}
+              {form['invoice.logoUrl'] && (
+                <Box sx={{ mb: 2 }}>
+                  <img src={form['invoice.logoUrl']} alt="Invoice logo preview" style={{ maxHeight: 60, objectFit: 'contain', border: '1px solid #ddd', borderRadius: 8, padding: 4 }} />
+                </Box>
+              )}
+            </>
+          )}
+
+          <Divider sx={{ my: 2 }} />
           <TextField
             fullWidth size="small" label="Custom Invoice Notes / Terms"
             multiline rows={4}
@@ -1163,33 +1406,237 @@ const SettingsPage = () => {
       ),
       section(
         'Dashboard',
-        'Customize which widgets and defaults appear on the admin dashboard.',
+        'Control dashboard layout, density, default date period, and visible widgets.',
         <>
-          <FormControl fullWidth size="small" sx={{ mb: 2 }}>
-            <InputLabel>Default Chart Period</InputLabel>
-            <Select
-              label="Default Chart Period"
-              value={form['admin.dashboard.defaultChartPeriod'] || 'monthly'}
-              onChange={(e) => set('admin.dashboard.defaultChartPeriod', e.target.value)}
-            >
-              <MenuItem value="daily">Daily (Last 90 days)</MenuItem>
-              <MenuItem value="weekly">Weekly (Last 52 weeks)</MenuItem>
-              <MenuItem value="monthly">Monthly (Last 12 months)</MenuItem>
-              <MenuItem value="quarterly">Quarterly</MenuItem>
-              <MenuItem value="yearly">Yearly (Last 3 years)</MenuItem>
-              <MenuItem value="mtd">Month to Date (MTD)</MenuItem>
-              <MenuItem value="ytd">Year to Date (YTD)</MenuItem>
-            </Select>
-          </FormControl>
+          <Typography variant="subtitle2" sx={{ mb: 1 }}>Dashboard Profile</Typography>
+          <Grid container spacing={1.5} sx={{ mb: 2 }}>
+            {Object.entries(DASHBOARD_PROFILES).map(([profileKey, profile]) => {
+              const selected = (form['admin.dashboard.profile'] || 'owner') === profileKey;
+              return (
+                <Grid item xs={12} sm={6} md={3} key={profileKey}>
+                  <Paper
+                    variant="outlined"
+                    onClick={() => applyDashboardProfile(profileKey)}
+                    sx={{
+                      p: 1.5,
+                      borderRadius: 2,
+                      cursor: 'pointer',
+                      borderColor: selected ? 'primary.main' : 'divider',
+                      bgcolor: selected ? 'primary.light' : 'background.paper',
+                      color: selected ? 'primary.dark' : 'text.primary',
+                      height: '100%',
+                    }}
+                  >
+                    <Typography variant="body2" fontWeight={800}>{profile.label}</Typography>
+                    <Typography variant="caption" color={selected ? 'inherit' : 'text.secondary'}>
+                      Apply a dashboard preset for this admin workflow.
+                    </Typography>
+                  </Paper>
+                </Grid>
+              );
+            })}
+          </Grid>
+          <Grid container spacing={2}>
+            <Grid item xs={12} md={4}>
+              <FormControl fullWidth size="small" sx={{ mb: 2 }}>
+                <InputLabel>Dashboard Layout</InputLabel>
+                <Select
+                  label="Dashboard Layout"
+                  value={form['admin.dashboard.layout'] || 'balanced'}
+                  onChange={(e) => set('admin.dashboard.layout', e.target.value)}
+                >
+                  <MenuItem value="balanced">Balanced</MenuItem>
+                  <MenuItem value="analytics">Analytics Focus</MenuItem>
+                  <MenuItem value="compact">Compact Operations</MenuItem>
+                </Select>
+              </FormControl>
+            </Grid>
+            <Grid item xs={12} md={4}>
+              <FormControl fullWidth size="small" sx={{ mb: 2 }}>
+                <InputLabel>Dashboard Density</InputLabel>
+                <Select
+                  label="Dashboard Density"
+                  value={form['admin.dashboard.density'] || 'comfortable'}
+                  onChange={(e) => set('admin.dashboard.density', e.target.value)}
+                >
+                  <MenuItem value="compact">Compact</MenuItem>
+                  <MenuItem value="comfortable">Comfortable</MenuItem>
+                  <MenuItem value="spacious">Spacious</MenuItem>
+                </Select>
+              </FormControl>
+            </Grid>
+            <Grid item xs={12} md={4}>
+              <FormControl fullWidth size="small" sx={{ mb: 2 }}>
+                <InputLabel>Default Chart Period</InputLabel>
+                <Select
+                  label="Default Chart Period"
+                  value={form['admin.dashboard.defaultChartPeriod'] || 'monthly'}
+                  onChange={(e) => set('admin.dashboard.defaultChartPeriod', e.target.value)}
+                >
+                  <MenuItem value="daily">Daily (Last 90 days)</MenuItem>
+                  <MenuItem value="weekly">Weekly (Last 52 weeks)</MenuItem>
+                  <MenuItem value="monthly">Monthly (Last 12 months)</MenuItem>
+                  <MenuItem value="quarterly">Quarterly</MenuItem>
+                  <MenuItem value="yearly">Yearly (Last 3 years)</MenuItem>
+                  <MenuItem value="mtd">Month to Date (MTD)</MenuItem>
+                  <MenuItem value="ytd">Year to Date (YTD)</MenuItem>
+                </Select>
+              </FormControl>
+            </Grid>
+          </Grid>
           <Divider sx={{ my: 2 }} />
-          <Typography variant="subtitle2" sx={{ mb: 1 }}>Widgets</Typography>
+          <Typography variant="subtitle2" sx={{ mb: 1 }}>KPI Cards</Typography>
           <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
             {toggle('admin.dashboard.showStatCards', 'Show quick stat KPI cards')}
-            {toggle('admin.dashboard.showRecentOrders', 'Show recent orders list')}
-            {toggle('admin.dashboard.showLowStockAlerts', 'Show low stock alert panel')}
+            {bool(form['admin.dashboard.showStatCards']) && (
+              <Grid container spacing={2} sx={{ pl: { xs: 0, sm: 2 } }}>
+                <Grid item xs={12} sm={6}>{toggle('admin.dashboard.showRevenueCard', 'Total Revenue')}</Grid>
+                <Grid item xs={12} sm={6}>{toggle('admin.dashboard.showOrdersCard', 'Total Orders')}</Grid>
+                <Grid item xs={12} sm={6}>{toggle('admin.dashboard.showCustomersCard', 'Customers')}</Grid>
+                <Grid item xs={12} sm={6}>{toggle('admin.dashboard.showProductsCard', 'Published Products')}</Grid>
+              </Grid>
+            )}
           </Box>
+          <Divider sx={{ my: 2 }} />
+          <Typography variant="subtitle2" sx={{ mb: 1 }}>Main Widgets</Typography>
+          <DragDropContext onDragEnd={handleDashboardOrderDragEnd}>
+            <Droppable droppableId="dashboard-widget-order">
+              {(provided) => (
+                <Box
+                  ref={provided.innerRef}
+                  {...provided.droppableProps}
+                  sx={{ display: 'flex', flexDirection: 'column', gap: 1, mb: 2 }}
+                >
+                  {dashboardOrder.map((widgetId, index) => {
+                    const widget = DASHBOARD_ORDER_WIDGETS.find((item) => item.id === widgetId);
+                    if (!widget) return null;
+                    return (
+                      <Draggable key={widget.id} draggableId={widget.id} index={index}>
+                        {(dragProvided, snapshot) => (
+                          <Paper
+                            ref={dragProvided.innerRef}
+                            {...dragProvided.draggableProps}
+                            variant="outlined"
+                            sx={{
+                              p: 1.5,
+                              borderRadius: 2,
+                              display: 'flex',
+                              alignItems: 'center',
+                              gap: 1.5,
+                              bgcolor: snapshot.isDragging ? 'action.hover' : 'background.paper',
+                              boxShadow: snapshot.isDragging ? 3 : 'none',
+                            }}
+                          >
+                            <IconButton size="small" {...dragProvided.dragHandleProps} aria-label={`Reorder ${widget.label}`}>
+                              <DragIndicatorIcon fontSize="small" />
+                            </IconButton>
+                            <Box sx={{ flex: 1, minWidth: 0 }}>
+                              <Typography variant="body2" fontWeight={700}>{widget.label}</Typography>
+                              <Typography variant="caption" color="text.secondary">{widget.description}</Typography>
+                            </Box>
+                          </Paper>
+                        )}
+                      </Draggable>
+                    );
+                  })}
+                  {provided.placeholder}
+                </Box>
+              )}
+            </Droppable>
+          </DragDropContext>
+          <Grid container spacing={2}>
+            <Grid item xs={12} md={4}>
+              {toggle('admin.dashboard.showSalesChart', 'Show sales chart')}
+              <FormControl fullWidth size="small" disabled={!bool(form['admin.dashboard.showSalesChart'])}>
+                <InputLabel>Sales Chart Size</InputLabel>
+                <Select
+                  label="Sales Chart Size"
+                  value={form['admin.dashboard.salesChartSize'] || 'large'}
+                  onChange={(e) => set('admin.dashboard.salesChartSize', e.target.value)}
+                >
+                  <MenuItem value="large">Large</MenuItem>
+                  <MenuItem value="full">Full Width</MenuItem>
+                </Select>
+              </FormControl>
+            </Grid>
+            <Grid item xs={12} md={4}>
+              {toggle('admin.dashboard.showRecentOrders', 'Show recent orders')}
+              <FormControl fullWidth size="small" disabled={!bool(form['admin.dashboard.showRecentOrders'])}>
+                <InputLabel>Recent Orders Size</InputLabel>
+                <Select
+                  label="Recent Orders Size"
+                  value={form['admin.dashboard.recentOrdersSize'] || 'medium'}
+                  onChange={(e) => set('admin.dashboard.recentOrdersSize', e.target.value)}
+                >
+                  <MenuItem value="medium">Medium</MenuItem>
+                  <MenuItem value="large">Large</MenuItem>
+                  <MenuItem value="full">Full Width</MenuItem>
+                </Select>
+              </FormControl>
+            </Grid>
+            <Grid item xs={12} md={4}>
+              {toggle('admin.dashboard.showOperationsSummary', 'Show operations summary')}
+              <FormControl fullWidth size="small" disabled={!bool(form['admin.dashboard.showOperationsSummary'])}>
+                <InputLabel>Operations Summary Size</InputLabel>
+                <Select
+                  label="Operations Summary Size"
+                  value={form['admin.dashboard.operationsSummarySize'] || 'medium'}
+                  onChange={(e) => set('admin.dashboard.operationsSummarySize', e.target.value)}
+                >
+                  <MenuItem value="medium">Medium</MenuItem>
+                  <MenuItem value="large">Large</MenuItem>
+                  <MenuItem value="full">Full Width</MenuItem>
+                </Select>
+              </FormControl>
+            </Grid>
+            <Grid item xs={12} md={4}>
+              {toggle('admin.dashboard.showInventoryWarnings', 'Show inventory warnings')}
+              <FormControl fullWidth size="small" disabled={!bool(form['admin.dashboard.showInventoryWarnings'])}>
+                <InputLabel>Inventory Warnings Size</InputLabel>
+                <Select
+                  label="Inventory Warnings Size"
+                  value={form['admin.dashboard.inventoryWarningsSize'] || 'medium'}
+                  onChange={(e) => set('admin.dashboard.inventoryWarningsSize', e.target.value)}
+                >
+                  <MenuItem value="medium">Medium</MenuItem>
+                  <MenuItem value="large">Large</MenuItem>
+                  <MenuItem value="full">Full Width</MenuItem>
+                </Select>
+              </FormControl>
+            </Grid>
+            <Grid item xs={12} md={4}>
+              {toggle('admin.dashboard.showStoreHealth', 'Show store health')}
+              <FormControl fullWidth size="small" disabled={!bool(form['admin.dashboard.showStoreHealth'])}>
+                <InputLabel>Store Health Size</InputLabel>
+                <Select
+                  label="Store Health Size"
+                  value={form['admin.dashboard.storeHealthSize'] || 'medium'}
+                  onChange={(e) => set('admin.dashboard.storeHealthSize', e.target.value)}
+                >
+                  <MenuItem value="medium">Medium</MenuItem>
+                  <MenuItem value="large">Large</MenuItem>
+                  <MenuItem value="full">Full Width</MenuItem>
+                </Select>
+              </FormControl>
+            </Grid>
+            <Grid item xs={12} md={4}>
+              {toggle('admin.dashboard.showLowStockAlerts', 'Show low stock alert panel')}
+              <FormControl fullWidth size="small" disabled={!bool(form['admin.dashboard.showLowStockAlerts'])}>
+                <InputLabel>Low Stock Size</InputLabel>
+                <Select
+                  label="Low Stock Size"
+                  value={form['admin.dashboard.lowStockSize'] || 'full'}
+                  onChange={(e) => set('admin.dashboard.lowStockSize', e.target.value)}
+                >
+                  <MenuItem value="medium">Medium</MenuItem>
+                  <MenuItem value="large">Large</MenuItem>
+                  <MenuItem value="full">Full Width</MenuItem>
+                </Select>
+              </FormControl>
+            </Grid>
+          </Grid>
         </>,
-        ['dashboard', 'admin', 'chart', 'widgets']
+        ['dashboard', 'admin', 'chart', 'widgets', 'layout', 'density']
       ),
       section(
         'Experimental Features',
@@ -1249,8 +1696,11 @@ const SettingsPage = () => {
             <Divider />
             <Box sx={{ p: 3 }}>
               <Box sx={{ pointerEvents: canManageSettings ? 'auto' : 'none', opacity: canManageSettings ? 1 : 0.75 }}>
-                {isEmailTemplatesTab ? (
+                {isMessagingTab ? (
                   <Box>
+                    <MessagingSettingsPanel form={form} set={set} />
+                    <Divider sx={{ my: 4 }} />
+                    <Typography variant="h6" fontWeight={700} sx={{ mb: 1 }}>Message Templates</Typography>
                     <Typography variant="body2" color="text.secondary" sx={{ mb: 3 }}>
                       Customize the transactional emails your store sends. Use <code style={{ background: '#f4f4f4', padding: '1px 4px', borderRadius: 3 }}>{'{{variable}}'}</code> syntax for dynamic content. Changes apply immediately — no restart needed.
                     </Typography>

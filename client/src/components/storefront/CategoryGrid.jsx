@@ -14,7 +14,7 @@ const CategoryGrid = ({ title, categories = [], loading = false }) => {
 
     return (
         <Box sx={{ mb: 6 }}>
-            <Typography variant="h5" fontWeight={700} mb={3}>{title}</Typography>
+            <Typography variant="h5" fontWeight={800} mb={3}>{title}</Typography>
             <Grid container spacing={2}>
                 {loading
                     ? Array.from({ length: 6 }).map((_, i) => (
@@ -29,13 +29,14 @@ const CategoryGrid = ({ title, categories = [], loading = false }) => {
                             sx={{
                                 height: '100%',
                                 borderRadius: 2,
-                                overflow: 'visible', // Changed to visible for shadow
-                                transition: 'all 0.3s cubic-bezier(0.4, 0, 0.2, 1)',
-                                boxShadow: 'none',
+                                overflow: 'visible',
+                                bgcolor: 'background.paper',
+                                transition: 'transform 0.24s ease, box-shadow 0.24s ease, border-color 0.24s ease',
                                 '&:hover': {
-                                    transform: 'translateY(-8px) scale(1.01)',
-                                    boxShadow: '0 20px 40px rgba(0,0,0,0.15)',
-                                    zIndex: 1, // Ensure it's on top when scaling
+                                    transform: 'translateY(-6px)',
+                                    borderColor: 'primary.light',
+                                    boxShadow: '0 22px 42px rgba(31, 41, 51, 0.14)',
+                                    zIndex: 1,
                                 },
                             }}
                         >
@@ -55,7 +56,7 @@ const CategoryGrid = ({ title, categories = [], loading = false }) => {
                                 }}
                             >
                                 {cat.image ? (
-                                    <Box sx={{ overflow: 'hidden', height: 150 }}>
+                                    <Box sx={{ overflow: 'hidden', height: 150, bgcolor: 'action.hover' }}>
                                         <CardMedia
                                             component="img"
                                             image={getMediaUrl(cat.image)}

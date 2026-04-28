@@ -6,6 +6,9 @@ import { Link, useNavigate } from 'react-router-dom';
 const PaymentFailurePage = () => {
     const navigate = useNavigate();
 
+    const query = new URLSearchParams(window.location.search);
+    const orderId = query.get('orderId');
+
     return (
         <Container maxWidth="sm" sx={{ py: 8, textAlign: 'center' }}>
             <ErrorOutlineIcon sx={{ fontSize: 96, color: 'error.main', mb: 2 }} />
@@ -15,7 +18,7 @@ const PaymentFailurePage = () => {
                 Please check your payment details and try again.
             </Typography>
             <Box sx={{ display: 'flex', gap: 2, justifyContent: 'center', flexWrap: 'wrap' }}>
-                <Button variant="contained" onClick={() => navigate(-1)}>Try Again</Button>
+                <Button variant="contained" onClick={() => orderId ? navigate(`/payment/${orderId}`) : navigate(-1)}>Try Again</Button>
                 <Button variant="outlined" component={Link} to="/cart">Back to Cart</Button>
             </Box>
         </Container>

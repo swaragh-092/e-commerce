@@ -5,7 +5,8 @@ import { Link, useLocation } from 'react-router-dom';
 
 const PaymentSuccessPage = () => {
     const location = useLocation();
-    const orderId = location.state?.orderId;
+    const query = new URLSearchParams(location.search);
+    const orderId = location.state?.orderId || query.get('orderId');
 
     return (
         <Container maxWidth="sm" sx={{ py: 8, textAlign: 'center' }}>

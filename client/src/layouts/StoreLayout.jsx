@@ -54,9 +54,11 @@ const StoreLayout = () => {
   }, []);
 
   const nav          = settings?.nav          || {};
+  const themeSettings = settings?.theme || {};
   const announcement = settings?.announcement || {};
   const showAnnouncement = announcement.enabled && !announcementDismissed;
   const navPosition  = nav.sticky !== false ? 'sticky' : 'static';
+  const headerStyle = themeSettings.headerStyle || 'gradient';
 
   return (
     <Box sx={{ display: 'flex', flexDirection: 'column', minHeight: '100vh' }}>
@@ -87,8 +89,24 @@ const StoreLayout = () => {
         </Box>
       )}
 
-      <AppBar position={navPosition} color="primary" elevation={0} sx={{ borderRadius: 0 }}>
-        <Toolbar>
+      <AppBar
+        position={navPosition}
+        elevation={0}
+        sx={{
+          borderRadius: 0,
+          background: (theme) => {
+            if (headerStyle === 'solid') return theme.palette.primary.main;
+            if (headerStyle === 'glass') return `${theme.palette.background.paper}e8`;
+            return `linear-gradient(135deg, ${theme.palette.primary.dark} 0%, ${theme.palette.primary.main} 58%, ${theme.palette.secondary.dark} 100%)`;
+          },
+          color: headerStyle === 'glass' ? 'text.primary' : '#fff',
+          backdropFilter: headerStyle === 'glass' ? 'blur(14px)' : 'none',
+          borderBottom: headerStyle === 'glass' ? '1px solid' : '1px solid rgba(255,255,255,0.16)',
+          borderColor: headerStyle === 'glass' ? 'divider' : 'rgba(255,255,255,0.16)',
+          boxShadow: headerStyle === 'glass' ? '0 12px 28px rgba(15, 23, 42, 0.08)' : '0 14px 32px rgba(15, 23, 42, 0.18)',
+        }}
+      >
+        <Toolbar sx={{ minHeight: { xs: 64, md: 72 }, gap: 2 }}>
           <Box component={RouterLink} to="/" sx={{ flexGrow: 1, display: 'flex', alignItems: 'center', textDecoration: 'none', color: 'inherit', gap: 1 }}>
             {settings?.logo?.main ? (
               <img
@@ -110,14 +128,18 @@ const StoreLayout = () => {
                 color="inherit"
                 component={RouterLink}
                 to={`/p/${link.slug}`}
-                sx={{ textTransform: 'none', fontWeight: 500 }}
+                sx={{
+                  fontWeight: 700,
+                  opacity: 0.9,
+                  '&:hover': { bgcolor: 'rgba(255,255,255,0.12)', opacity: 1 },
+                }}
               >
                 {link.title}
               </Button>
             ))}
           </Box>
           <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
-            <IconButton color="inherit" component={RouterLink} to="/cart">
+            <IconButton color="inherit" component={RouterLink} to="/cart" sx={{ '&:hover': { bgcolor: 'rgba(255,255,255,0.12)' } }}>
               <Badge badgeContent={cartCount || 0} color="error">
                 <ShoppingCartIcon />
               </Badge>
@@ -125,8 +147,13 @@ const StoreLayout = () => {
             {isAuthenticated ? (
               <>
                 {settings?.features?.wishlist !== false && (
-                  <Button color="inherit" component={RouterLink} to="/wishlist" startIcon={<Badge badgeContent={wishlistCount || 0} color="error"><FavoriteBorderIcon /></Badge>}></Button>
+                  <IconButton color="inherit" component={RouterLink} to="/wishlist" sx={{ '&:hover': { bgcolor: 'rgba(255,255,255,0.12)' } }}>
+                    <Badge badgeContent={wishlistCount || 0} color="error">
+                      <FavoriteBorderIcon />
+                    </Badge>
+                  </IconButton>
                 )}
+
                 
                 <IconButton color="inherit" onClick={handleAccountMenuOpen}>
                   <AccountCircleIcon />
@@ -196,11 +223,24 @@ const StoreLayout = () => {
                     <Typography sx={{ fontSize: '0.95rem' }}>Logout</Typography>
                   </MenuItem>
                 </Menu>
+
               </>
             ) : (
               <>
-                <Button color="inherit" component={RouterLink} to="/login">Login</Button>
-                <Button color="inherit" component={RouterLink} to="/register">Register</Button>
+                <Button color="inherit" component={RouterLink} to="/login" sx={{ fontWeight: 700 }}>Login</Button>
+                <Button
+                  color="inherit"
+                  component={RouterLink}
+                  to="/register"
+                  variant="outlined"
+                  sx={{
+                    fontWeight: 700,
+                    borderColor: 'rgba(255,255,255,0.55)',
+                    '&:hover': { borderColor: '#fff', bgcolor: 'rgba(255,255,255,0.12)' },
+                  }}
+                >
+                  Register
+                </Button>
               </>
             )}
           </Box>

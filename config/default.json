@@ -14,7 +14,11 @@
         "textColor": "#FFFFFF",
         "fontFamily": "Inter",
         "borderRadius": "12px",
-        "mode": "dark"
+        "mode": "dark",
+        "headerStyle": "gradient",
+        "buttonStyle": "solid",
+        "cardStyle": "elevated",
+        "backgroundStyle": "softGradient"
     },
     "features": {
         "wishlist": true,
@@ -26,6 +30,14 @@
         "emailVerification": false,
         "requirePurchaseForReview": false,
         "showAvailableCoupons": true
+    },
+    "payments": {
+        "razorpayEnabled": true,
+        "stripeEnabled": false,
+        "payuEnabled": false,
+        "cashfreeEnabled": false,
+        "codEnabled": true,
+        "defaultMethod": "razorpay"
     },
     "sales": {
         "allowScheduling": true,
@@ -163,8 +175,26 @@
     },
     "admin": {
         "dashboard.showStatCards": true,
+        "dashboard.showRevenueCard": true,
+        "dashboard.showOrdersCard": true,
+        "dashboard.showCustomersCard": true,
+        "dashboard.showProductsCard": true,
+        "dashboard.showSalesChart": true,
         "dashboard.showRecentOrders": true,
+        "dashboard.showOperationsSummary": true,
+        "dashboard.showInventoryWarnings": true,
+        "dashboard.showStoreHealth": true,
         "dashboard.showLowStockAlerts": true,
-        "dashboard.defaultChartPeriod": "monthly"
+        "dashboard.defaultChartPeriod": "monthly",
+        "dashboard.layout": "balanced",
+        "dashboard.density": "comfortable",
+        "dashboard.profile": "owner",
+        "dashboard.salesChartSize": "large",
+        "dashboard.recentOrdersSize": "medium",
+        "dashboard.operationsSummarySize": "medium",
+        "dashboard.inventoryWarningsSize": "medium",
+        "dashboard.storeHealthSize": "medium",
+        "dashboard.lowStockSize": "full",
+        "dashboard.widgetOrder": "salesChart,recentOrders,operationsSummary,storeHealth,inventoryWarnings,lowStock"
     }
 }

@@ -133,21 +133,43 @@ const HomePage = () => {
                 overflow: 'hidden',
                 ...(bgType === 'image' && bgImage
                     ? { backgroundImage: `url(${bgImage})`, backgroundSize: 'cover', backgroundPosition: 'center' }
-                    : { background: `linear-gradient(135deg, ${theme.palette.primary.dark} 0%, ${theme.palette.primary.main} 100%)` }
+                    : {
+                        background: `linear-gradient(135deg, ${theme.palette.primary.dark} 0%, ${theme.palette.primary.main} 54%, ${theme.palette.secondary.dark} 100%)`,
+                    }
                 ),
                 color: heroTextColor,
-                py: { xs: 8, md: 12 },
+                py: { xs: 8, md: 11 },
                 textAlign: 'center',
-                minHeight: '60vh',
+                minHeight: { xs: '58vh', md: '64vh' },
+                display: 'flex',
+                alignItems: 'center',
+                '&::after': {
+                    content: '""',
+                    position: 'absolute',
+                    inset: 0,
+                    background:
+                        'linear-gradient(180deg, rgba(255,255,255,0.12) 0%, rgba(255,255,255,0) 38%, rgba(0,0,0,0.16) 100%)',
+                    zIndex: 1,
+                    pointerEvents: 'none',
+                },
             }}>
                 {bgType === 'image' && bgImage && (
                     <Box sx={{ position: 'absolute', inset: 0, bgcolor: 'black', opacity: overlayOpacity, zIndex: 1 }} />
                 )}
                 <Container maxWidth="md" sx={{ position: 'relative', zIndex: 2 }}>
-                    <Typography variant="h2" fontWeight={800} gutterBottom sx={{ fontSize: { xs: '2rem', md: '3.5rem' } }}>
+                    <Typography
+                        variant="h2"
+                        fontWeight={900}
+                        gutterBottom
+                        sx={{
+                            fontSize: { xs: '2.25rem', md: '4rem' },
+                            lineHeight: 1.05,
+                            textShadow: '0 10px 28px rgba(0,0,0,0.24)',
+                        }}
+                    >
                         {heroTitle}
                     </Typography>
-                    <Typography variant="h6" sx={{ opacity: 0.9, mb: 4 }}>
+                    <Typography variant="h6" sx={{ opacity: 0.92, mb: 4, maxWidth: 680, mx: 'auto', lineHeight: 1.65 }}>
                         {heroSubtitle}
                     </Typography>
                     {heroBtnText && heroBtnLink && (
@@ -156,7 +178,14 @@ const HomePage = () => {
                             size="large"
                             component={Link}
                             to={heroBtnLink}
-                            sx={{ bgcolor: 'white', color: 'primary.main', '&:hover': { bgcolor: 'grey.100' }, py: 1.5, px: 4, fontSize: '1.1rem' }}
+                            sx={{
+                                bgcolor: 'background.paper',
+                                color: 'primary.dark',
+                                '&:hover': { bgcolor: 'secondary.light', color: 'secondary.dark' },
+                                py: 1.5,
+                                px: 4,
+                                fontSize: '1.05rem',
+                            }}
                         >
                             {heroBtnText}
                         </Button>
@@ -165,7 +194,15 @@ const HomePage = () => {
             </Box>
 
             {/* ── Content Sections ────────────────────────────────────── */}
-            <Container maxWidth="xl" sx={{ py: 6 }}>
+            <Container
+                maxWidth="xl"
+                sx={{
+                    py: { xs: 5, md: 7 },
+                    '& > section, & > div': {
+                        scrollMarginTop: 96,
+                    },
+                }}
+            >
 
                 {/* Shop by Category */}
                 {showCategories && (

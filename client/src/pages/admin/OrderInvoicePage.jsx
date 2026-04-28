@@ -63,13 +63,14 @@ const OrderInvoicePage = () => {
     );
   }
 
-  const invoicePrefix = settings?.['invoice.prefix'] || 'INV-';
-  const companyName = settings?.['invoice.companyName'] || settings?.['general.storeName'] || 'Company Name';
-  const taxId = settings?.['invoice.taxRegistryNumber'];
-  const customNotes = settings?.['invoice.customNotes'];
-  const storeLogo = settings?.['logo.main'];
-  const storeAddress = settings?.['footer.address'];
-  const contactEmail = settings?.['general.contactEmail'];
+  const invoicePrefix = settings?.invoice?.prefix || 'INV-';
+  const companyName = settings?.invoice?.companyName || settings?.general?.storeName || 'Company Name';
+  const taxId = settings?.invoice?.taxRegistryNumber;
+  const customNotes = settings?.invoice?.customNotes;
+  const showLogo = settings?.invoice?.showLogo !== false;
+  const storeLogo = settings?.invoice?.logoUrl || settings?.logo?.main;
+  const storeAddress = settings?.footer?.address;
+  const contactEmail = settings?.general?.contactEmail;
   
   const customerName = order.User?.firstName && order.User?.lastName 
     ? `${order.User.firstName} ${order.User.lastName}` 
@@ -114,7 +115,7 @@ const OrderInvoicePage = () => {
         {/* Header */}
         <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', mb: 6 }}>
           <Box>
-            {storeLogo ? (
+            {showLogo && storeLogo ? (
               <Box component="img" src={storeLogo} alt={companyName} sx={{ maxHeight: 60, mb: 2, maxWidth: 200, objectFit: 'contain' }} />
             ) : (
               <Typography variant="h4" fontWeight={800} sx={{ mb: 1 }}>{companyName}</Typography>

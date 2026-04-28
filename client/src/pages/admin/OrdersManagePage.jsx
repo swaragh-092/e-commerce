@@ -18,9 +18,12 @@ import {
 } from '@mui/material';
 import { DataGrid } from '@mui/x-data-grid';
 import VisibilityIcon from '@mui/icons-material/Visibility';
+
 import PaymentsOutlinedIcon from '@mui/icons-material/PaymentsOutlined';
 import UndoOutlinedIcon from '@mui/icons-material/UndoOutlined';
-import { useNavigate } from 'react-router-dom';
+
+import { useNavigate, useSearchParams } from 'react-router-dom';
+
 import { useCurrency } from '../../hooks/useSettings';
 import { confirmCodPayment, getAllOrders, refundOrder, updateOrderStatus } from '../../services/adminService';
 import { useNotification } from '../../context/NotificationContext';
@@ -61,6 +64,7 @@ const SummaryCard = ({ label, value, tone = 'default' }) => (
 
 const OrdersManagePage = () => {
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
   const { formatPrice } = useCurrency();
   const { notify, confirm } = useNotification();
   const { hasPermission } = useAuth();
@@ -72,7 +76,8 @@ const OrdersManagePage = () => {
   const [error, setError] = useState('');
   const [total, setTotal] = useState(0);
   const [paginationModel, setPaginationModel] = useState({ page: 0, pageSize: 20 });
-  const [status, setStatus] = useState('');
+  // Initialise status from URL query param so dashboard card links pre-apply the filter
+  const [status, setStatus] = useState(() => searchParams.get('status') || '');
   const [searchInput, setSearchInput] = useState('');
   const [search, setSearch] = useState('');
 

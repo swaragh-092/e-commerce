@@ -19,7 +19,11 @@ const getCachedSetting = async (featureKey) => {
     // Cache miss or expired — query DB
     const { Setting } = require('../modules');
     const featureSetting = await Setting.findOne({ where: { group: 'features', key: featureKey } });
-    const isEnabled = featureSetting ? featureSetting.value === true : false;
+    
+    let isEnabled = false;
+    if (featureSetting) {
+        isEnabled = featureSetting.value === true || featureSetting.value === 'true';
+    }
 
     featureCache.set(featureKey, { value: isEnabled, expiresAt: now + CACHE_TTL_MS });
     return isEnabled;

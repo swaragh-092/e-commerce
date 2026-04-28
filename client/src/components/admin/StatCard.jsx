@@ -4,11 +4,12 @@ import TrendingDownIcon from '@mui/icons-material/TrendingDown';
 
 /**
  * Metric card for the admin dashboard.
- * @param {{ title, value, icon, loading, trend, color }} props
+ * @param {{ title, value, icon, loading, trend, color, onClick }} props
  */
-const StatCard = ({ title, value, icon, loading = false, trend, color = 'primary.main' }) => (
+const StatCard = ({ title, value, icon, loading = false, trend, color = 'primary.main', onClick }) => (
   <Paper
     elevation={0}
+    onClick={onClick}
     sx={{
       p: 3,
       borderRadius: 3,
@@ -17,8 +18,9 @@ const StatCard = ({ title, value, icon, loading = false, trend, color = 'primary
       display: 'flex',
       alignItems: 'center',
       gap: 2,
-      transition: 'transform 0.15s, box-shadow 0.15s',
-      '&:hover': { transform: 'translateY(-2px)', boxShadow: 4 },
+      transition: 'transform 0.15s, box-shadow 0.15s, border-color 0.15s',
+      cursor: onClick ? 'pointer' : 'default',
+      '&:hover': onClick ? { transform: 'translateY(-3px)', boxShadow: 6, borderColor: color } : {},
     }}
   >
     <Box

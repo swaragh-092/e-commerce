@@ -12,7 +12,7 @@ const BrandStrip = ({ title, brands = [], loading = false }) => {
 
     return (
         <Box sx={{ mb: 6 }}>
-            <Typography variant="h5" fontWeight={700} mb={3}>{title}</Typography>
+            <Typography variant="h5" fontWeight={800} mb={3}>{title}</Typography>
             <Box sx={{ display: 'flex', gap: 1.5, flexWrap: 'wrap' }}>
                 {loading
                     ? Array.from({ length: 8 }).map((_, i) => (
@@ -32,12 +32,18 @@ const BrandStrip = ({ title, brands = [], loading = false }) => {
                                 fontSize: '0.875rem',
                                 py: 2,
                                 px: 0.5,
-                                fontWeight: 500,
-                                transition: 'all 0.2s',
+                                fontWeight: 700,
+                                bgcolor: 'background.paper',
+                                borderColor: 'divider',
+                                transition: 'background-color 0.2s ease, color 0.2s ease, border-color 0.2s ease, transform 0.2s ease',
                                 '&:hover': {
                                     bgcolor: 'primary.main',
                                     color: 'primary.contrastText',
                                     borderColor: 'primary.main',
+                                    transform: 'translateY(-2px)',
+                                    '& .MuiChip-icon': {
+                                        color: 'inherit',
+                                    },
                                 },
                             }}
                         />

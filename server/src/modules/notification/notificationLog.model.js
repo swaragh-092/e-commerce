@@ -12,7 +12,19 @@ module.exports = (sequelize, DataTypes) => {
         },
         recipientEmail: {
             type: DataTypes.STRING(255),
+            // nullable — SMS/WhatsApp logs use recipientPhone instead
+        },
+        recipientPhone: {
+            type: DataTypes.STRING(30),
+            // nullable — email logs don't populate this
+        },
+        channel: {
+            type: DataTypes.STRING(20),
             allowNull: false,
+            defaultValue: 'email',
+            validate: {
+                isIn: [['email', 'sms', 'whatsapp', 'skipped']],
+            },
         },
         subject: {
             type: DataTypes.STRING(500),

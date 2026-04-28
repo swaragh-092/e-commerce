@@ -81,7 +81,7 @@ const ProductRow = ({
         <Box sx={{ mb: 6 }}>
             {/* Section header */}
             <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 3 }}>
-                <Typography variant="h5" fontWeight={700}>
+                <Typography variant="h5" fontWeight={800}>
                     {title}
                 </Typography>
                 {viewAllLink && (
@@ -91,7 +91,15 @@ const ProductRow = ({
                         variant="outlined"
                         size="small"
                         endIcon={<ArrowForwardIcon />}
-                        sx={{ textTransform: 'none' }}
+                        sx={{
+                            bgcolor: 'background.paper',
+                            borderColor: 'divider',
+                            '&:hover': {
+                                borderColor: 'primary.main',
+                                bgcolor: 'primary.light',
+                                color: 'primary.dark',
+                            },
+                        }}
                     >
                         {viewAllLabel}
                     </Button>

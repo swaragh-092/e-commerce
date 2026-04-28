@@ -1,11 +1,11 @@
 import api from './api';
 
 const paymentService = {
-  /** Creates a Razorpay Order. Returns { id, amount, currency } */
+  /** Creates a provider payment order/session. */
   createOrder: (orderId) =>
     api.post('/payments/create-order', { orderId }),
 
-  /** Verifies Razorpay payment signature */
+  /** Verifies provider payment status/signature. */
   verifyPayment: (orderId, paymentData) =>
     api.post(`/payments/verify/${orderId}`, paymentData),
 };

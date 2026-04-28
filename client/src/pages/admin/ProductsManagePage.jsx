@@ -11,10 +11,12 @@ import {
   OpenInNew as OpenInNewIcon, Clear as ClearIcon,
   CheckCircle as CheckCircleIcon, RemoveCircle as RemoveCircleIcon,
   DeleteSweep as DeleteSweepIcon, Download as DownloadIcon, EditNote as EditNoteIcon,
+  Inventory as InventoryIcon,
 } from '@mui/icons-material';
-import { Link, useNavigate } from 'react-router-dom';
+import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import { getProducts, deleteProduct, updateProduct, bulkUpdateSale } from '../../services/productService';
 import { getCategoryTree } from '../../services/categoryService';
+import { getSaleLabels } from '../../services/adminService';
 import { getMediaUrl } from '../../utils/media';
 import { useCurrency, useSettings } from '../../hooks/useSettings';
 import { useNotification } from '../../context/NotificationContext';
@@ -35,6 +37,7 @@ const toIsoOrNull = (value) => (value ? new Date(value).toISOString() : null);
 
 const ProductsManagePage = () => {
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
   const { formatPrice } = useCurrency();
   const { settings } = useSettings();
   const { notify } = useNotification();
@@ -51,13 +54,16 @@ const ProductsManagePage = () => {
   const [loading, setLoading] = useState(true);
   const [paginationModel, setPaginationModel] = useState({ page: 0, pageSize: 20 });
 
-  // Filters
+  // Filters – initialise from URL query params so dashboard cards can pre-apply filters
   const [search, setSearch] = useState('');
   const [searchInput, setSearchInput] = useState('');
-  const [status, setStatus] = useState('');
+  const [status, setStatus] = useState(() => searchParams.get('status') || '');
   const [saleFilter, setSaleFilter] = useState('');
   const [categoryFilter, setCategoryFilter] = useState('');
   const [flatCategories, setFlatCategories] = useState([]);
+  const [saleLabels, setSaleLabels] = useState([]);
+  // ?stock=low from dashboard → show only items with qty ≤ 10
+  const [lowStockOnly, setLowStockOnly] = useState(() => searchParams.get('stock') === 'low');
 
   // Bulk selection
   const [selectedIds, setSelectedIds] = useState([]);
@@ -190,6 +196,15 @@ const ProductsManagePage = () => {
     }).catch(() => {});
   }, []);
 
+  useEffect(() => {
+    getSaleLabels()
+      .then((res) => {
+        const fetchedLabels = res.data?.data || [];
+        setSaleLabels(fetchedLabels.filter((label) => label.isActive !== false));
+      })
+      .catch(() => {});
+  }, []);
+
   const fetchProducts = useCallback(() => {
     setLoading(true);
     const params = {
@@ -200,6 +215,8 @@ const ProductsManagePage = () => {
       ...(saleFilter && { saleStatus: saleFilter }),
       ...(categoryFilter && { categoryId: categoryFilter }),
       ...(sortModel[0] && { sortBy: sortModel[0].field, sortOrder: sortModel[0].sort }),
+      // Low-stock filter: pass maxQty=10 so the server returns only low-stock items
+      ...(lowStockOnly && { maxQty: 10 }),
     };
     getProducts(params)
       .then((res) => {
@@ -208,7 +225,7 @@ const ProductsManagePage = () => {
       })
       .catch(console.error)
       .finally(() => setLoading(false));
-  }, [paginationModel, search, status, saleFilter, categoryFilter, sortModel]);
+  }, [paginationModel, search, status, saleFilter, categoryFilter, sortModel, lowStockOnly]);
 
   useEffect(() => {
     fetchProducts();
@@ -379,6 +396,9 @@ const ProductsManagePage = () => {
     bulkSaleValue <= 0 ||
     (bulkSaleDialog.saleType === 'percentage' && bulkSaleValue >= 100) ||
     (bulkSaleDialog.saleStartAt && bulkSaleDialog.saleEndAt && new Date(bulkSaleDialog.saleEndAt) <= new Date(bulkSaleDialog.saleStartAt))
+  );
+  const hasUnknownEditSaleLabel = Boolean(
+    editDialog.saleLabel && !saleLabels.some((label) => label.id === editDialog.saleLabel)
   );
 
   // ── Columns ──────────────────────────────────────────────────
@@ -611,6 +631,32 @@ const ProductsManagePage = () => {
           )}
         </Stack>
       </Box>
+
+      {/* ── Low-stock filter banner (from dashboard card click) ── */}
+      {lowStockOnly && (
+        <Paper
+          elevation={0}
+          sx={{
+            mb: 2, px: 2, py: 1,
+            display: 'flex', alignItems: 'center', gap: 2,
+            border: '1px solid', borderColor: 'warning.light',
+            borderRadius: 2, bgcolor: 'warning.50',
+          }}
+        >
+          <InventoryIcon color="warning" fontSize="small" />
+          <Typography variant="body2" fontWeight={600} color="warning.dark" sx={{ flexGrow: 1 }}>
+            Showing low-stock products (qty ≤ 10)
+          </Typography>
+          <Button
+            size="small"
+            variant="outlined"
+            color="warning"
+            onClick={() => setLowStockOnly(false)}
+          >
+            Clear filter
+          </Button>
+        </Paper>
+      )}
 
       {/* ── Filters ── */}
       <Stack direction="row" spacing={2} mb={2} flexWrap="wrap" alignItems="center">
@@ -871,15 +917,29 @@ const ProductsManagePage = () => {
               value={editDialog.salePrice}
               onChange={(e) => setEditDialog((s) => ({ ...s, salePrice: e.target.value }))}
             />
-            <TextField
-              label="Sale Label"
-              size="small"
-              fullWidth
-              disabled={!editDialog.saleEnabled}
-              placeholder={sales.defaultSaleLabel || 'Limited Time Offer'}
-              value={editDialog.saleLabel}
-              onChange={(e) => setEditDialog((s) => ({ ...s, saleLabel: e.target.value }))}
-            />
+            <FormControl fullWidth size="small" disabled={!editDialog.saleEnabled}>
+              <InputLabel id="quick-edit-sale-label-select">Sale Label</InputLabel>
+              <Select
+                labelId="quick-edit-sale-label-select"
+                label="Sale Label"
+                value={editDialog.saleLabel}
+                onChange={(e) => setEditDialog((s) => ({ ...s, saleLabel: e.target.value }))}
+              >
+                <MenuItem value="">
+                  <em>None</em>
+                </MenuItem>
+                {hasUnknownEditSaleLabel && (
+                  <MenuItem value={editDialog.saleLabel} disabled>
+                    {editDialog.saleLabel}
+                  </MenuItem>
+                )}
+                {saleLabels.map((label) => (
+                  <MenuItem key={label.id} value={label.id}>
+                    {label.name}
+                  </MenuItem>
+                ))}
+              </Select>
+            </FormControl>
             {sales.allowScheduling !== false && (
               <>
                 <TextField
@@ -991,13 +1051,24 @@ const ProductsManagePage = () => {
                 value={bulkSaleDialog.value}
                 onChange={(e) => setBulkSaleDialog((s) => ({ ...s, value: e.target.value }))}
               />
-              <TextField
-                label="Sale Label"
-                size="small"
-                fullWidth
-                value={bulkSaleDialog.saleLabel}
-                onChange={(e) => setBulkSaleDialog((s) => ({ ...s, saleLabel: e.target.value }))}
-              />
+              <FormControl fullWidth size="small">
+                <InputLabel id="bulk-sale-label-select">Sale Label</InputLabel>
+                <Select
+                  labelId="bulk-sale-label-select"
+                  label="Sale Label"
+                  value={bulkSaleDialog.saleLabel}
+                  onChange={(e) => setBulkSaleDialog((s) => ({ ...s, saleLabel: e.target.value }))}
+                >
+                  <MenuItem value="">
+                    <em>None</em>
+                  </MenuItem>
+                  {saleLabels.map((label) => (
+                    <MenuItem key={label.id} value={label.id}>
+                      {label.name}
+                    </MenuItem>
+                  ))}
+                </Select>
+              </FormControl>
               {sales.allowScheduling !== false && (
                 <>
                   <TextField

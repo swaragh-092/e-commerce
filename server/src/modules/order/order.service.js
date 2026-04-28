@@ -24,7 +24,11 @@ const AuditService = require('../audit/audit.service');
 const CouponService = require('../coupon/coupon.service');
 const PaymentService = require('../payment/payment.service');
 const TaxService = require('../tax/tax.service');
+
 const defaultSettings = require('../../../../config/default.json');
+
+const NotificationService = require('../notification/notification.service');
+
 const { getPagination } = require('../../utils/pagination');
 const { ACTIONS, ENTITIES } = require('../../config/constants');
 const { getVariantUnitPrice } = require('../product/product.pricing');
@@ -39,12 +43,31 @@ const {
 
 const ADMIN_ORDER_LIST_USER_ATTRIBUTES = ['id', 'firstName', 'lastName', 'email'];
 const ADMIN_ORDER_PAYMENT_ATTRIBUTES = ['id', 'provider', 'status', 'amount', 'currency', 'transactionId', 'createdAt', 'updatedAt'];
+
 const FULFILLMENT_STATUS_TRANSITIONS = Object.freeze({
     pending: ['shipped', 'delivered'],
     shipped: ['delivered', 'returned'],
     delivered: ['returned'],
     returned: [],
 });
+
+const PAYMENT_METHODS = ['razorpay', 'stripe', 'payu', 'cashfree', 'cod'];
+const PAYMENT_METHOD_NAMES = {
+    razorpay: 'Razorpay',
+    stripe: 'Stripe',
+    payu: 'PayU',
+    cashfree: 'Cashfree',
+    cod: 'Cash on Delivery',
+};
+const DEFAULT_PAYMENT_SETTINGS = {
+    razorpayEnabled: true,
+    stripeEnabled: false,
+    payuEnabled: false,
+    cashfreeEnabled: false,
+    codEnabled: true,
+    defaultMethod: 'razorpay',
+};
+
 
 const HEAVY_ORDER_INCLUDE = [
     {
@@ -80,6 +103,7 @@ const getSetting = async (key, defaultVal) => {
     if (setting) return setting.value;
     return defaultVal;
 };
+
 
 const buildSettingsSnapshot = async (groups = ['tax', 'shipping']) => {
     const rows = await Setting.findAll({ where: { group: { [Op.in]: groups } } });
@@ -231,6 +255,40 @@ const releaseOrderReservationsAndCoupons = async (order, transaction) => {
             await Coupon.update(
                 { usedCount: sequelize.literal(`GREATEST(used_count - 1, 0)`) },
                 { where: { id: { [Op.in]: appliedCouponIds } }, transaction }
+
+const getPaymentSettings = async () => {
+    const rows = await Setting.findAll({ where: { group: 'payments' } });
+    return rows.reduce(
+        (settings, row) => {
+            let parsedValue = row.value;
+            if (parsedValue === 'true') parsedValue = true;
+            else if (parsedValue === 'false') parsedValue = false;
+            return { ...settings, [row.key]: parsedValue };
+        },
+        { ...DEFAULT_PAYMENT_SETTINGS }
+    );
+};
+
+const ensurePaymentMethodEnabled = async (paymentMethod) => {
+    if (!PAYMENT_METHODS.includes(paymentMethod)) {
+        throw new AppError('VALIDATION_ERROR', 400, 'Invalid payment method');
+    }
+
+    const paymentSettings = await getPaymentSettings();
+    const enabledKey = `${paymentMethod}Enabled`;
+    if (paymentSettings[enabledKey] !== true) {
+        throw new AppError('VALIDATION_ERROR', 400, 'Selected payment method is not available');
+    }
+
+    if (paymentMethod !== 'cod') {
+        const statuses = await PaymentService.getGatewayStatuses();
+        const gateway = statuses.find(s => s.id === paymentMethod);
+        if (gateway && !gateway.connected) {
+            throw new AppError(
+                'PAYMENT_UNAVAILABLE',
+                503,
+                `${PAYMENT_METHOD_NAMES[paymentMethod]} is enabled for display but its gateway integration is not connected yet`
+
             );
         }
     }
@@ -240,6 +298,8 @@ const placeOrder = async (userId, payload) => {
     const { shippingAddressId, couponCode, couponCodes = [], notes, buyNowItem = null, paymentMethod = 'razorpay' } = payload;
     let cart = null;
     let checkoutItems = [];
+
+    await ensurePaymentMethodEnabled(paymentMethod);
 
     if (buyNowItem?.productId) {
         const product = await Product.findByPk(buyNowItem.productId, {
@@ -570,6 +630,30 @@ const placeOrder = async (userId, payload) => {
             });
         }
     } catch (err) {}
+
+    // Send multi-channel notification for order placement
+    try {
+        if (NotificationService && NotificationService.sendToUser) {
+            const user = await User.findByPk(userId);
+            if (user) {
+                // Send to all enabled channels configured in settings
+                // Dispatcher will handle checking if channels are actually enabled
+                await NotificationService.sendToUser(
+                    'order_placed',
+                    ['email', 'sms', 'whatsapp'],
+                    user,
+                    {
+                        orderNumber: order.orderNumber,
+                        total: order.total,
+                        firstName: user.firstName || 'Customer',
+                    },
+                    order.id
+                );
+            }
+        }
+    } catch (err) {
+        logger.error('Failed to send order placement notifications', { orderId: order.id, error: err.message });
+    }
 
     return { order, clientSecret };
 };

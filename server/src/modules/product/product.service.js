@@ -15,6 +15,7 @@ const {
   Sequelize,
 } = require('../index');
 const { Op } = Sequelize;
+const salePriceIsDiscounted = Sequelize.where(Sequelize.col('sale_price'), Op.lt, Sequelize.col('price'));
 const { generateSlug } = require('../../utils/slugify');
 // Note: Although the ARCHITECTURE/STANDARDS refer to generateUniqueSlug(),
 // the slugify.js utility internally implements the collision-safe loop
@@ -26,6 +27,10 @@ const AppError = require('../../utils/AppError');
 const { ACTIONS, ENTITIES } = require('../../config/constants');
 const { getCategoryAndDescendantIds } = require('../category/category.service');
 const { normalizeSalePayload, serializeProductPricing } = require('./product.pricing');
+const { getSaleLabels } = require('../settings/saleLabel.service');
+
+// Fetch the active label catalog once per request (the service caches for 60 s)
+const getLabelPresets = () => getSaleLabels().catch(() => []);
 
 const sanitizeRichText = (html) => {
   if (!html) return html;
@@ -197,6 +202,7 @@ exports.getProducts = async (filters, page, limit, isAdmin = false) => {
       active: {
         [Op.and]: [
           { salePrice: { [Op.ne]: null } },
+          salePriceIsDiscounted,
           { [Op.or]: [{ saleStartAt: null }, { saleStartAt: { [Op.lte]: now } }] },
           { [Op.or]: [{ saleEndAt: null }, { saleEndAt: { [Op.gte]: now } }] },
         ],
@@ -223,6 +229,7 @@ exports.getProducts = async (filters, page, limit, isAdmin = false) => {
     where[Op.and] = [
       ...(where[Op.and] || []),
       { salePrice: { [Op.ne]: null } },
+      salePriceIsDiscounted,
       { [Op.or]: [{ saleStartAt: null }, { saleStartAt: { [Op.lte]: now } }] },
       { [Op.or]: [{ saleEndAt: null }, { saleEndAt: { [Op.gte]: now } }] },
     ];
@@ -293,7 +300,8 @@ exports.getProducts = async (filters, page, limit, isAdmin = false) => {
     distinct: true,
   });
 
-  return getPagingData(rows.map((row) => serializeProductPricing(row, { adminView: isAdmin })), count, page, queryLimit);
+  const labelPresets = await getLabelPresets();
+  return getPagingData(rows.map((row) => serializeProductPricing(row, { adminView: isAdmin }, labelPresets)), count, page, queryLimit);
 };
 
 exports.getProductBySlug = async (slug, { adminView = false } = {}) => {
@@ -314,7 +322,8 @@ exports.getProductBySlug = async (slug, { adminView = false } = {}) => {
     ],
   });
   if (!product) throw new AppError('NOT_FOUND', 404, 'Product not found');
-  return serializeProductPricing(product, { adminView });
+  const labelPresets = await getLabelPresets();
+  return serializeProductPricing(product, { adminView }, labelPresets);
 };
 
 exports.getProductById = async (id) => {
@@ -329,13 +338,15 @@ exports.getProductById = async (id) => {
     ],
   });
   if (!product) throw new AppError('NOT_FOUND', 404, 'Product not found');
-  return serializeProductPricing(product, { adminView: true });
+  const labelPresets = await getLabelPresets();
+  return serializeProductPricing(product, { adminView: true }, labelPresets);
 };
 
 exports.createProduct = async (data) => {
   const transaction = await Product.sequelize.transaction();
+  const labelPresets = await getLabelPresets();
   try {
-    data = normalizeSalePayload(data);
+    data = normalizeSalePayload(data, null, { labelPresets });
     const slug = data.slug ? await generateSlug(data.slug, Product) : await generateSlug(data.name, Product);
 
     if (data.description) data.description = sanitizeRichText(data.description);
@@ -394,8 +405,9 @@ exports.updateProduct = async (id, data) => {
   if (!product) throw new AppError('NOT_FOUND', 404, 'Product not found');
 
   const transaction = await Product.sequelize.transaction();
+  const labelPresets = await getLabelPresets();
   try {
-    data = normalizeSalePayload(data, product.price);
+    data = normalizeSalePayload(data, product.price, { labelPresets });
     
     if (data.slug && data.slug !== product.slug) {
       data.slug = await generateSlug(data.slug, Product);
@@ -494,6 +506,7 @@ exports.bulkUpdateSale = async (payload, actingUserId = null) => {
       throw new AppError('NOT_FOUND', 404, 'One or more products were not found');
     }
 
+    const labelPresets = await getLabelPresets();
     for (const product of products) {
       const updatePayload = action === 'clear'
         ? normalizeSalePayload({ salePrice: null, saleStartAt: null, saleEndAt: null, saleLabel: null }, product.price)
@@ -504,7 +517,7 @@ exports.bulkUpdateSale = async (payload, actingUserId = null) => {
             saleStartAt: saleStartAt || null,
             saleEndAt: saleEndAt || null,
             saleLabel: saleLabel || null,
-          }, product.price);
+          }, product.price, { labelPresets });
 
       await product.update(updatePayload, { transaction });
 

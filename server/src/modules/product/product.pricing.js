@@ -2,6 +2,27 @@
 
 const AppError = require('../../utils/AppError');
 
+// ─── Sale Label Resolution ────────────────────────────────────────────────────
+
+/**
+ * Resolves a stored saleLabel id/string against the preset catalog.
+ * Returns the full preset object ({ id, name, color, priority }) if found,
+ * or a minimal fallback object if the id is a raw string not in the catalog,
+ * or null if there is no label at all.
+ *
+ * @param {string|null} labelId     - The value stored on products.sale_label
+ * @param {Array}       [presets]   - The current sale label catalog
+ */
+const resolveSaleLabel = (labelId, presets = []) => {
+  if (!labelId) return null;
+
+  const found = presets.find((p) => p.id === labelId);
+  if (found) return found;
+
+  // Graceful fallback: raw legacy string — surface it without crashing
+  return { id: null, name: labelId, color: null };
+};
+
 const parseDateOrNull = (value) => {
   if (value === '' || value === null || value === undefined) return null;
   const parsed = new Date(value);
@@ -132,13 +153,26 @@ const serializeVariantPricing = (product, variant, referenceDate = new Date()) =
   };
 };
 
-const serializeProductPricing = (product, { adminView = false } = {}) => {
+/**
+ * Serializes a product for API output.
+ *
+ * @param {object}  product
+ * @param {object}  [options]
+ * @param {boolean} [options.adminView=false]
+ * @param {Array}   [labelPresets=[]]  - Pass the sale label catalog so the
+ *                                        label id is resolved to a full object.
+ */
+const serializeProductPricing = (product, { adminView = false } = {}, labelPresets = []) => {
   if (!product) return product;
 
   const plain = typeof product.toJSON === 'function' ? product.toJSON() : { ...product };
   const saleStatus = getSaleStatus(plain);
   const saleActive = saleStatus === 'active';
   const shouldExposeSaleMeta = adminView || saleStatus === 'active' || saleStatus === 'scheduled';
+
+  const saleLabelResolved = shouldExposeSaleMeta
+    ? resolveSaleLabel(plain.saleLabel, labelPresets)
+    : null;
 
   return {
     ...plain,
@@ -150,18 +184,27 @@ const serializeProductPricing = (product, { adminView = false } = {}) => {
     saleStatus,
     discountPercent: getDiscountPercent(plain),
     savingsAmount: getSavingsAmount(plain),
+    saleLabelResolved,
     ...(adminView
       ? {}
       : {
-          salePrice: shouldExposeSaleMeta ? plain.salePrice : null,
+          salePrice:  shouldExposeSaleMeta ? plain.salePrice  : null,
           saleStartAt: shouldExposeSaleMeta ? plain.saleStartAt : null,
-          saleEndAt: shouldExposeSaleMeta ? plain.saleEndAt : null,
-          saleLabel: shouldExposeSaleMeta ? plain.saleLabel : null,
+          saleEndAt:  shouldExposeSaleMeta ? plain.saleEndAt  : null,
+          saleLabel:  shouldExposeSaleMeta ? plain.saleLabel  : null,
         }),
   };
 };
 
-const normalizeSalePayload = (payload, currentPrice = null) => {
+/**
+ * Normalises and validates sale-related fields on a product payload.
+ *
+ * @param {object} payload
+ * @param {number|null} [currentPrice]   - Existing product price for comparison.
+ * @param {object} [options]
+ * @param {Array}  [options.labelPresets] - If supplied, saleLabel must be one of the active preset ids.
+ */
+const normalizeSalePayload = (payload, currentPrice = null, options = {}) => {
   const normalized = { ...payload };
   const effectivePrice = normalized.price !== undefined && normalized.price !== null && normalized.price !== ''
     ? Number(normalized.price)
@@ -186,6 +229,19 @@ const normalizeSalePayload = (payload, currentPrice = null) => {
 
   if ('saleLabel' in normalized) {
     normalized.saleLabel = normalized.saleLabel ? String(normalized.saleLabel).trim() : null;
+
+    // Strict enforcement: when the caller provides the preset catalog, the stored
+    // value MUST match one of the active preset ids (or be null to clear the label).
+    if (normalized.saleLabel !== null && Array.isArray(options?.labelPresets) && options.labelPresets.length > 0) {
+      const match = options.labelPresets.find((p) => p.id === normalized.saleLabel && p.isActive !== false);
+      if (!match) {
+        throw new AppError(
+          'VALIDATION_ERROR',
+          400,
+          `"${normalized.saleLabel}" is not a valid sale label. Please select a label from the configured list.`
+        );
+      }
+    }
   }
 
   if ('saleStartAt' in normalized) {
@@ -220,6 +276,7 @@ module.exports = {
   getSavingsAmount,
   isSaleActive,
   normalizeSalePayload,
+  resolveSaleLabel,
   serializeVariantPricing,
   serializeProductPricing,
 };

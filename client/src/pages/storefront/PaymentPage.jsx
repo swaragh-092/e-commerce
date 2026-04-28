@@ -1,27 +1,94 @@
 import React, { useState, useEffect } from 'react';
 import { Box, Container, Typography, CircularProgress, Alert, Button, Paper, Divider } from '@mui/material';
-import { useParams, useNavigate } from 'react-router-dom';
+import { useParams, useLocation, useNavigate } from 'react-router-dom';
 import paymentService from '../../services/paymentService';
 import { getOrderById } from '../../services/adminService';
 import PageSEO from '../../components/common/PageSEO';
 import CenteredLoader from '../../components/common/CenteredLoader';
 import { getApiErrorMessage } from '../../utils/apiErrors';
 
+const loadScript = (src, globalName) => new Promise((resolve, reject) => {
+    if (globalName && window[globalName]) {
+        resolve(window[globalName]);
+        return;
+    }
+
+    const existing = document.querySelector(`script[src="${src}"]`);
+    if (existing) {
+        if (globalName && window[globalName]) {
+            resolve(window[globalName]);
+            return;
+        }
+        if (existing.dataset.loaded === 'true') {
+            resolve(globalName ? window[globalName] : true);
+            return;
+        }
+        existing.addEventListener('load', () => resolve(globalName ? window[globalName] : true), { once: true });
+        existing.addEventListener('error', reject, { once: true });
+        return;
+    }
+
+    const script = document.createElement('script');
+    script.src = src;
+    script.async = true;
+    script.onload = () => {
+        script.dataset.loaded = 'true';
+        resolve(globalName ? window[globalName] : true);
+    };
+    script.onerror = reject;
+    document.body.appendChild(script);
+});
+
 const PaymentPage = () => {
     const { orderId } = useParams();
+    const location = useLocation();
     const navigate = useNavigate();
     const [orderData, setOrderData] = useState(null);
+    const [order, setOrder] = useState(null);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState(null);
     const [processing, setProcessing] = useState(false);
 
     useEffect(() => {
         if (!orderId) { navigate('/cart'); return; }
+        const query = new URLSearchParams(location.search);
+        const returnedProvider = query.get('provider');
+
+        if (returnedProvider === 'stripe') {
+            paymentService.verifyPayment(orderId, { provider: 'stripe', session_id: query.get('session_id') })
+                .then((res) => {
+                    const result = res.data?.data || res.data;
+                    if (result?.success) {
+                        navigate('/payment/success', { replace: true, state: { orderId } });
+                    } else {
+                        navigate('/payment/failure', { replace: true, state: { orderId, status: result?.status } });
+                    }
+                })
+                .catch((err) => setError(getApiErrorMessage(err, 'Payment verification failed.')))
+                .finally(() => setLoading(false));
+            return;
+        }
+
+        if (returnedProvider === 'cashfree') {
+            paymentService.verifyPayment(orderId, { provider: 'cashfree' })
+                .then((res) => {
+                    const result = res.data?.data || res.data;
+                    if (result?.success) {
+                        navigate('/payment/success', { replace: true, state: { orderId } });
+                    } else {
+                        navigate('/payment/failure', { replace: true, state: { orderId, status: result?.status } });
+                    }
+                })
+                .catch((err) => setError(getApiErrorMessage(err, 'Payment verification failed.')))
+                .finally(() => setLoading(false));
+            return;
+        }
 
         // First fetch the order to detect COD orders before touching Razorpay
         getOrderById(orderId)
             .then((res) => {
                 const order = res.data?.data || res.data;
+                setOrder(order);
 
                 // Guard: COD orders should never reach this page — redirect to success
                 if (order?.paymentMethod === 'cod') {
@@ -29,7 +96,6 @@ const PaymentPage = () => {
                     return;
                 }
 
-                // Razorpay flow: initialize the Razorpay order
                 return paymentService.createOrder(orderId)
                     .then((r) => setOrderData(r.data?.data || r.data));
             })
@@ -37,9 +103,9 @@ const PaymentPage = () => {
                 setError(getApiErrorMessage(err, 'Failed to initialize payment. Please contact support.'));
             })
             .finally(() => setLoading(false));
-    }, [orderId, navigate]);
+    }, [orderId, location.search, navigate]);
 
-    const handlePayment = () => {
+    const handleRazorpayPayment = () => {
         if (!orderData || !window.Razorpay) {
             setError('Payment system is not ready. Please try again.');
             return;
@@ -86,6 +152,89 @@ const PaymentPage = () => {
         rzp.open();
     };
 
+    
+    const handleStripePayment = () => {
+        if (!orderData?.url) {
+            setError('Stripe payment session is not ready. Please try again.');
+            return;
+        }
+        setProcessing(true);
+        window.location.href = orderData.url;
+    };
+
+    const handleCashfreePayment = async () => {
+        if (!orderData?.paymentSessionId) {
+            setError('Cashfree payment session is not ready. Please try again.');
+            return;
+        }
+
+        setProcessing(true);
+        try {
+            await loadScript('https://sdk.cashfree.com/js/v3/cashfree.js', 'Cashfree');
+            const cashfree = window.Cashfree({
+                mode: orderData.mode || 'sandbox',
+            });
+
+            await cashfree.checkout({
+                paymentSessionId: orderData.paymentSessionId,
+                redirectTarget: '_modal',
+            });
+
+            const res = await paymentService.verifyPayment(orderId, { provider: 'cashfree' });
+            const result = res.data?.data || res.data;
+            if (result?.success) {
+                navigate('/payment/success', { state: { orderId } });
+            } else {
+                setError(`Payment is not completed yet. Current status: ${result?.status || 'pending'}.`);
+                setProcessing(false);
+            }
+        } catch (err) {
+            setError(getApiErrorMessage(err, 'Cashfree payment failed. Please try again.'));
+            setProcessing(false);
+        }
+    };
+
+    
+    const handlePayUPayment = () => {
+        if (!orderData?.action || !orderData?.fields) {
+            setError('PayU payment session is not ready. Please try again.');
+            return;
+        }
+        setProcessing(true);
+        
+        const form = document.createElement('form');
+        form.method = 'POST';
+        form.action = orderData.action;
+
+        Object.keys(orderData.fields).forEach(key => {
+            const input = document.createElement('input');
+            input.type = 'hidden';
+            input.name = key;
+            input.value = orderData.fields[key];
+            form.appendChild(input);
+        });
+
+        document.body.appendChild(form);
+        form.submit();
+    };
+
+    const handlePayment = () => {
+        if (orderData?.provider === 'cashfree' || order?.paymentMethod === 'cashfree') {
+            handleCashfreePayment();
+            return;
+        }
+        if (orderData?.provider === 'stripe' || order?.paymentMethod === 'stripe') {
+            handleStripePayment();
+            return;
+        }
+        if (orderData?.provider === 'payu' || order?.paymentMethod === 'payu') {
+            handlePayUPayment();
+            return;
+        }
+
+        handleRazorpayPayment();
+    };
+
     if (loading) {
         return <CenteredLoader message="Loading payment details..." minHeight="50vh" />;
     }
@@ -106,7 +255,7 @@ const PaymentPage = () => {
             <Paper elevation={0} sx={{ border: '1px solid', borderColor: 'divider', borderRadius: 2, p: 4, textAlign: 'center' }}>
                 <Typography variant="h6" gutterBottom>Confirm your order</Typography>
                 <Typography variant="body2" color="text.secondary" mb={4}>
-                    Order #{orderId} — Total: {orderData.currency} {(orderData.amount / 100).toFixed(2)}
+                    Order #{orderId} — {orderData.provider === 'cashfree' ? 'Cashfree' : 'Razorpay'} — Total: {orderData.currency} {(orderData.amount / 100).toFixed(2)}
                 </Typography>
                 <Divider sx={{ mb: 4 }} />
 

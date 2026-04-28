@@ -19,6 +19,14 @@ export const SettingsProvider = ({ children }) => {
         theme: { primaryColor: '#1976d2', mode: 'light', fontFamily: 'Roboto' },
         general: { storeName: 'E-Commerce Store' },
         features: { wishlist: true, reviews: true, coupons: true, guestCheckout: true },
+        payments: {
+          razorpayEnabled: true,
+          stripeEnabled: false,
+          payuEnabled: false,
+          cashfreeEnabled: false,
+          codEnabled: true,
+          defaultMethod: 'razorpay',
+        },
         productPage: {
           showSKU: true,
           showStockBadge: true,
@@ -87,31 +95,60 @@ export const SettingsProvider = ({ children }) => {
 
   const t = settings?.theme || {};
   const radius = parseInt(t.borderRadius) || 8;
+  const mode = t.mode || 'light';
+  const isDark = mode === 'dark';
+  const fallbackPrimary = isDark ? '#4fd1a5' : '#0f766e';
+  const fallbackSecondary = isDark ? '#ffb86b' : '#f97316';
+  const fallbackBackground = isDark ? '#101514' : '#f7f3ec';
+  const fallbackSurface = isDark ? '#17211f' : '#fffaf2';
+  const fallbackText = isDark ? '#f8fafc' : '#1f2933';
+  const backgroundStyle = t.backgroundStyle || 'softGradient';
+  const buttonStyle = t.buttonStyle || 'solid';
+  const cardStyle = t.cardStyle || 'elevated';
+  const primaryMain = t.primaryColor || fallbackPrimary;
+  const secondaryMain = t.secondaryColor || fallbackSecondary;
+  const backgroundDefault = t.backgroundColor || fallbackBackground;
+  const surfaceColor = t.surfaceColor || fallbackSurface;
 
   const themeConfig = createTheme({
     palette: {
-      mode: t.mode || 'light',
+      mode,
       primary: {
-        main: t.primaryColor || '#1976d2',
+        main: primaryMain,
+        dark: isDark ? '#31a884' : '#0b4f49',
+        light: isDark ? '#7ee5c4' : '#ccfbf1',
+        contrastText: '#ffffff',
       },
       secondary: {
-        main: t.secondaryColor || '#9c27b0',
+        main: secondaryMain,
+        dark: isDark ? '#f59e0b' : '#c2410c',
+        light: isDark ? '#ffd39a' : '#fed7aa',
+        contrastText: isDark ? '#1f2933' : '#ffffff',
+      },
+      error: {
+        main: '#e11d48',
+      },
+      warning: {
+        main: '#d97706',
       },
       background: {
-        default: t.backgroundColor || (t.mode === 'dark' ? '#121212' : '#f5f5f5'),
-        paper: t.surfaceColor || (t.mode === 'dark' ? '#1e1e1e' : '#ffffff'),
+        default: backgroundDefault,
+        paper: surfaceColor,
       },
       text: {
-        primary: t.textColor || (t.mode === 'dark' ? '#ffffff' : '#212121'),
+        primary: t.textColor || fallbackText,
+        secondary: isDark ? '#cbd5e1' : '#64748b',
       },
+      divider: isDark ? 'rgba(148, 163, 184, 0.18)' : 'rgba(15, 118, 110, 0.14)',
     },
     typography: {
       fontFamily: t.fontFamily
         ? `"${t.fontFamily}", "Roboto", "Helvetica", "Arial", sans-serif`
         : '"Roboto", "Helvetica", "Arial", sans-serif',
-      h1: { fontSize: '2.5rem', fontWeight: 700 },
-      h2: { fontSize: '2rem', fontWeight: 600 },
-      button: { textTransform: 'none' },
+      h1: { fontSize: '2.5rem', fontWeight: 800, letterSpacing: 0 },
+      h2: { fontSize: '2rem', fontWeight: 800, letterSpacing: 0 },
+      h5: { fontWeight: 800, letterSpacing: 0 },
+      button: { textTransform: 'none', fontWeight: 700 },
     },
     shape: {
       borderRadius: radius,
@@ -119,31 +156,61 @@ export const SettingsProvider = ({ children }) => {
     components: {
       MuiButton: {
         styleOverrides: {
-          root: { borderRadius: radius },
+          root: {
+            borderRadius: radius,
+            boxShadow: 'none',
+            '&:hover': { boxShadow: 'none' },
+          },
+          containedPrimary: {
+            background: buttonStyle === 'soft' || buttonStyle === 'outline'
+              ? 'transparent'
+              : `linear-gradient(135deg, ${primaryMain} 0%, ${isDark ? secondaryMain : '#134e4a'} 100%)`,
+            color: buttonStyle === 'soft' || buttonStyle === 'outline' ? primaryMain : '#ffffff',
+            border: buttonStyle === 'outline' ? `1px solid ${primaryMain}` : '1px solid transparent',
+            ...(buttonStyle === 'soft' && { backgroundColor: `${primaryMain}22` }),
+          },
         },
       },
       MuiCard: {
         styleOverrides: {
           root: {
             borderRadius: radius + 4,
-            boxShadow: '0 4px 12px 0 rgba(0,0,0,0.05)',
+            border: cardStyle === 'flat'
+              ? '1px solid transparent'
+              : `1px solid ${isDark ? 'rgba(148, 163, 184, 0.16)' : 'rgba(15, 118, 110, 0.12)'}`,
+            boxShadow: cardStyle === 'elevated'
+              ? (isDark ? '0 18px 45px rgba(0, 0, 0, 0.22)' : '0 18px 45px rgba(31, 41, 51, 0.08)')
+              : 'none',
           },
         },
       },
       MuiPaper: {
         styleOverrides: {
-          root: { borderRadius: radius },
+          root: {
+            borderRadius: radius,
+            backgroundImage: 'none',
+          },
         },
       },
       MuiChip: {
         styleOverrides: {
-          root: { borderRadius: radius },
+          root: { borderRadius: radius, fontWeight: 700 },
         },
       },
       MuiTextField: {
         styleOverrides: {
           root: {
             '& .MuiOutlinedInput-root': { borderRadius: radius },
+          },
+        },
+      },
+      MuiCssBaseline: {
+        styleOverrides: {
+          body: {
+            background:
+              backgroundStyle === 'softGradient'
+                ? `linear-gradient(180deg, ${backgroundDefault} 0%, ${surfaceColor} 48%, ${backgroundDefault} 100%)`
+                : backgroundDefault,
           },
         },
       },

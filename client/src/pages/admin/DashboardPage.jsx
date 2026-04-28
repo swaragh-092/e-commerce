@@ -1,18 +1,10 @@
 import { useEffect, useState } from 'react';
-import {
-  Box, Grid, Typography, Paper, Table, TableBody, TableCell,
-  TableHead, TableRow, Chip, Alert, Skeleton,
-} from '@mui/material';
-import AttachMoneyIcon from '@mui/icons-material/AttachMoney';
-import ShoppingCartIcon from '@mui/icons-material/ShoppingCart';
-import PeopleIcon from '@mui/icons-material/People';
-import InventoryIcon from '@mui/icons-material/Inventory';
-import WarningIcon from '@mui/icons-material/Warning';
-import StatCard from '../../components/admin/StatCard';
-import SalesChart from '../../components/admin/SalesChart';
+import { Box, Grid, Typography } from '@mui/material';
 import { getStats, getLowStock, getRecentOrders } from '../../services/adminService';
 import { useSettings, useCurrency } from '../../hooks/useSettings';
-import { getOrderStatusColor, getOrderStatusLabel } from '../../utils/orderWorkflow';
+import { useAuth } from '../../hooks/useAuth';
+import { getEnabledDashboardWidgets, getOrderedDashboardWidgets } from '../../components/admin/dashboard/dashboardWidgets';
+import { densitySpacing, sizeToGrid } from '../../components/admin/dashboard/dashboardUtils';
 
 const DashboardPage = () => {
   const [stats, setStats] = useState(null);
@@ -33,106 +25,55 @@ const DashboardPage = () => {
 
   const { settings } = useSettings();
   const { formatPrice } = useCurrency();
+  const { hasAnyPermission } = useAuth();
+  const adminSettings = settings?.admin || {};
 
-  const checkBool = (val, fallback = true) => val === undefined || val === null ? fallback : val !== false && val !== 'false' && val !== '0';
-
-  const showStatCards = checkBool(settings?.admin?.['dashboard.showStatCards']);
-  const showRecentOrders = checkBool(settings?.admin?.['dashboard.showRecentOrders']);
-  const showLowStockAlerts = checkBool(settings?.admin?.['dashboard.showLowStockAlerts']);
-  const defaultChartPeriod = settings?.admin?.['dashboard.defaultChartPeriod'] || 'monthly';
+  const defaultChartPeriod = adminSettings['dashboard.defaultChartPeriod'] || 'monthly';
+  const dashboardLayout = adminSettings['dashboard.layout'] || 'balanced';
+  const dashboardDensity = adminSettings['dashboard.density'] || 'comfortable';
+  const spacing = densitySpacing[dashboardDensity] || densitySpacing.comfortable;
+  const salesChartSize = dashboardLayout === 'analytics' ? 'full' : (adminSettings['dashboard.salesChartSize'] || 'large');
+  const recentOrdersSize = dashboardLayout === 'compact' ? 'medium' : (adminSettings['dashboard.recentOrdersSize'] || 'medium');
+  const lowStockSize = adminSettings['dashboard.lowStockSize'] || 'full';
+  const operationsSummarySize = adminSettings['dashboard.operationsSummarySize'] || 'medium';
+  const inventoryWarningsSize = adminSettings['dashboard.inventoryWarningsSize'] || 'medium';
+  const storeHealthSize = adminSettings['dashboard.storeHealthSize'] || 'medium';
+  const widgetProps = {
+    stats,
+    lowStock,
+    recentOrders,
+    loading,
+    settings: adminSettings,
+    allSettings: settings,
+    formatPrice,
+    spacing,
+    defaultChartPeriod,
+    hasAnyPermission,
+  };
+  const widgetSizes = {
+    salesChart: salesChartSize,
+    recentOrders: recentOrdersSize,
+    lowStock: lowStockSize,
+    operationsSummary: operationsSummarySize,
+    inventoryWarnings: inventoryWarningsSize,
+    storeHealth: storeHealthSize,
+  };
 
   return (
     <Box>
-      <Typography variant="h5" fontWeight={700} mb={3}>Dashboard Overview</Typography>
+      <Typography variant="h5" fontWeight={700} mb={spacing.page}>Dashboard Overview</Typography>
 
-      {/* Stat Cards */}
-      {showStatCards && (
-        <Grid container spacing={3} mb={4}>
-          {[
-            { title: 'Total Revenue', value: formatPrice(stats?.totalRevenue), icon: <AttachMoneyIcon fontSize="inherit" />, color: 'success.main' },
-            { title: 'Total Orders', value: stats?.orderCount ?? 0, icon: <ShoppingCartIcon fontSize="inherit" />, color: 'primary.main' },
-            { title: 'Customers', value: stats?.customerCount ?? 0, icon: <PeopleIcon fontSize="inherit" />, color: 'info.main' },
-            { title: 'Published Products', value: stats?.productCount ?? 0, icon: <InventoryIcon fontSize="inherit" />, color: 'warning.main' },
-          ].map((card) => (
-            <Grid item xs={12} sm={6} lg={3} key={card.title}>
-              <StatCard {...card} loading={loading} />
-            </Grid>
-          ))}
-        </Grid>
-      )}
+      {getEnabledDashboardWidgets(adminSettings, 'top', hasAnyPermission).map(({ id, component: Widget }) => (
+        <Widget key={id} {...widgetProps} />
+      ))}
 
-      <Grid container spacing={3} mb={4}>
-        {/* Sales Chart */}
-        <Grid item xs={12} lg={showRecentOrders ? 8 : 12}>
-          <Paper elevation={0} sx={{ p: 3, borderRadius: 3, border: '1px solid', borderColor: 'divider' }}>
-            <SalesChart defaultPeriod={defaultChartPeriod} />
-          </Paper>
-        </Grid>
-
-        {/* Recent Orders */}
-        {showRecentOrders && (
-          <Grid item xs={12} lg={4}>
-            <Paper elevation={0} sx={{ p: 3, borderRadius: 3, border: '1px solid', borderColor: 'divider', height: '100%' }}>
-              <Typography variant="h6" fontWeight={600} mb={2}>Recent Orders</Typography>
-              {loading
-                ? Array.from({ length: 5 }).map((_, i) => <Skeleton key={i} height={48} sx={{ mb: 1 }} />)
-                : recentOrders.map((o) => (
-                    <Box key={o.id} sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 1.5 }}>
-                      <Box>
-                        <Typography variant="body2" fontWeight={600}>{o.orderNumber}</Typography>
-                        <Typography variant="caption" color="text.secondary">{o.customer?.name || 'Guest'}</Typography>
-                      </Box>
-                      <Box textAlign="right">
-                        <Chip label={getOrderStatusLabel(o.status)} size="small" color={getOrderStatusColor(o.status)} sx={{ mb: 0.25 }} />
-                        <Typography variant="caption" display="block">{formatPrice(o.total)}</Typography>
-                      </Box>
-                    </Box>
-                  ))
-              }
-            </Paper>
+      <Grid container spacing={spacing.grid} mb={spacing.page}>
+        {getOrderedDashboardWidgets(adminSettings, hasAnyPermission).map(({ id, component: Widget, defaultSize }) => (
+          <Grid item {...(sizeToGrid[widgetSizes[id] || defaultSize] || sizeToGrid.medium)} key={id}>
+            <Widget {...widgetProps} />
           </Grid>
-        )}
+        ))}
       </Grid>
-
-      {/* Low Stock Alerts */}
-      {showLowStockAlerts && (
-        <>
-          {lowStock.length > 0 ? (
-            <Paper elevation={0} sx={{ p: 3, borderRadius: 3, border: '1px solid', borderColor: 'divider' }}>
-              <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 2 }}>
-                <WarningIcon color="warning" />
-                <Typography variant="h6" fontWeight={600}>Low Stock Alerts ({lowStock.length})</Typography>
-              </Box>
-              <Table size="small">
-                <TableHead>
-                  <TableRow>
-                    <TableCell>Product</TableCell>
-                    <TableCell align="right">Total Qty</TableCell>
-                    <TableCell align="right">Reserved</TableCell>
-                    <TableCell align="right">Available</TableCell>
-                  </TableRow>
-                </TableHead>
-                <TableBody>
-                  {lowStock.map((p) => (
-                    <TableRow key={p.id}>
-                      <TableCell>{p.name}</TableCell>
-                      <TableCell align="right">{p.quantity}</TableCell>
-                      <TableCell align="right">{p.reservedQty}</TableCell>
-                      <TableCell align="right">
-                        <Chip label={p.availableQty} size="small" color={p.availableQty <= 0 ? 'error' : 'warning'} />
-                      </TableCell>
-                    </TableRow>
-                  ))}
-                </TableBody>
-              </Table>
-            </Paper>
-          ) : (
-            !loading && (
-              <Alert severity="success" sx={{ borderRadius: 2 }}>All products have adequate stock levels.</Alert>
-            )
-          )}
-        </>
-      )}
     </Box>
   );
 };

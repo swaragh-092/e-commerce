@@ -33,6 +33,7 @@ import {
   Accordion,
   AccordionSummary,
   AccordionDetails,
+  Switch,
 } from '@mui/material';
 import {
   Add as AddIcon,
@@ -52,6 +53,7 @@ import { getProductById, getProducts, createProduct, updateProduct } from '../..
 import { getCategoryTree } from '../../services/categoryService';
 import brandService from '../../services/brandService';
 import attributeService from '../../services/attributeService';
+import { getSaleLabels } from '../../services/adminService';
 import MediaUploader from '../../components/common/MediaUploader';
 import { useNotification } from '../../context/NotificationContext';
 import { useSettings } from '../../hooks/useSettings';
@@ -178,6 +180,7 @@ const ProductEditPage = () => {
     saleLabel: '',
     quantity: '',
     status: 'draft',
+    isEnabled: true,
     categoryIds: [],
     brandId: '',
     images: [],
@@ -192,6 +195,7 @@ const ProductEditPage = () => {
   const [errors, setErrors] = useState({});
   const [categories, setCategories] = useState([]);
   const [brands, setBrands] = useState([]);
+  const [saleLabels, setSaleLabels] = useState([]);
   const [saving, setSaving] = useState(false);
 
   useEffect(() => {
@@ -202,6 +206,14 @@ const ProductEditPage = () => {
 
         const brandRes = await brandService.getBrands({ limit: 100, isActive: 'true' });
         setBrands(brandRes?.data?.data || []);
+
+        try {
+          const labelsRes = await getSaleLabels();
+          const fetchedLabels = labelsRes.data?.data || [];
+          setSaleLabels(fetchedLabels.filter(l => l.isActive));
+        } catch (e) {
+          console.error('Failed to load sale labels', e);
+        }
 
         if (!isNew) {
           const prodRes = await getProductById(id);
@@ -220,6 +232,7 @@ const ProductEditPage = () => {
               saleLabel: p.saleLabel || '',
               quantity: p.quantity || 0,
               status: p.status || 'draft',
+              isEnabled: p.isEnabled ?? true,
               categoryIds: p.categories?.map((c) => c.id) || [],
               brandId: p.brandId || '',
               images: p.images || [],
@@ -468,16 +481,40 @@ const ProductEditPage = () => {
                   />
                 </Grid>
                 <Grid item xs={12}>
-                  <TextField
-                    fullWidth
-                    label="Sale Label"
-                    size="small"
-                    value={formData.saleLabel}
-                    onChange={(e) => setField('saleLabel', e.target.value)}
-                    disabled={!formData.salePrice}
-                    placeholder={sales.defaultSaleLabel || 'Limited Time Offer'}
-                    helperText={!formData.salePrice ? 'Add a sale price to enable scheduling.' : 'Optional label like Summer Sale or Flash Deal'}
-                  />
+                  <FormControl fullWidth size="small" disabled={!formData.salePrice}>
+                    <InputLabel id="sale-label-select">Sale Label</InputLabel>
+                    <Select
+                      labelId="sale-label-select"
+                      value={formData.saleLabel || ''}
+                      label="Sale Label"
+                      onChange={(e) => setField('saleLabel', e.target.value)}
+                    >
+                      <MenuItem value="">
+                        <em>None</em>
+                      </MenuItem>
+                      {saleLabels.map((lbl) => (
+                        <MenuItem key={lbl.id} value={lbl.id}>
+                          <Box sx={{ display: 'flex', alignItems: 'center' }}>
+                            <Box
+                              sx={{
+                                width: 12,
+                                height: 12,
+                                borderRadius: '50%',
+                                bgcolor: lbl.color || '#000',
+                                mr: 1,
+                              }}
+                            />
+                            {lbl.name}
+                          </Box>
+                        </MenuItem>
+                      ))}
+                    </Select>
+                    <FormHelperText>
+                      {!formData.salePrice
+                        ? 'Add a sale price to enable scheduling.'
+                        : 'Select a predefined sale label from your catalog.'}
+                    </FormHelperText>
+                  </FormControl>
                 </Grid>
                 {sales.allowScheduling !== false && (
                   <>
@@ -654,6 +691,17 @@ const ProductEditPage = () => {
                   <MenuItem value="published">Published</MenuItem>
                 </Select>
               </FormControl>
+              <FormControlLabel
+                control={
+                  <Switch
+                    checked={formData.isEnabled}
+                    onChange={(e) => setField('isEnabled', e.target.checked)}
+                    color="success"
+                  />
+                }
+                label="Enabled on storefront"
+                sx={{ mt: 2 }}
+              />
             </Paper>
             
             <TaxConfigSection 
