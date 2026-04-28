@@ -40,12 +40,34 @@ const ProductCard = ({ product, fromCategory }) => {
 
   return (
     <Card
-      sx={{ height: '100%', display: 'flex', flexDirection: 'column', textDecoration: 'none' }}
+      sx={{
+        height: '100%',
+        display: 'flex',
+        flexDirection: 'column',
+        textDecoration: 'none',
+        overflow: 'hidden',
+        transition: 'transform 0.22s ease, box-shadow 0.22s ease, border-color 0.22s ease',
+        '&:hover': {
+          transform: 'translateY(-6px)',
+          borderColor: 'primary.light',
+          boxShadow: '0 24px 54px rgba(31, 41, 51, 0.14)',
+        },
+        '&:hover img': {
+          transform: 'scale(1.045)',
+        },
+      }}
       component={Link}
       to={`/products/${product.slug}`}
       state={fromCategory ? { fromCategory } : undefined}
     >
-      <Box sx={{ position: 'relative', pt: '100%', backgroundColor: 'action.hover' }}>
+      <Box
+        sx={{
+          position: 'relative',
+          pt: '100%',
+          background: (theme) =>
+            `linear-gradient(135deg, ${theme.palette.action.hover} 0%, ${theme.palette.background.default} 100%)`,
+        }}
+      >
         {(hasSale || isScheduledSale) && sales.showDiscountPercent !== false && discountPercent > 0 && (
           <Chip
             label={hasSale ? `${discountPercent}% OFF` : 'Starts Soon'}
@@ -82,10 +104,17 @@ const ProductCard = ({ product, fromCategory }) => {
           component="img"
           image={primaryImage}
           alt={product.name}
-          sx={{ position: 'absolute', top: 0, width: '100%', height: '100%', objectFit: 'cover' }}
+          sx={{
+            position: 'absolute',
+            top: 0,
+            width: '100%',
+            height: '100%',
+            objectFit: 'cover',
+            transition: 'transform 0.45s ease',
+          }}
         />
       </Box>
-      <CardContent sx={{ flexGrow: 1 }}>
+      <CardContent sx={{ flexGrow: 1, p: 2.25 }}>
         {product.brand?.name && (
           <Typography variant="caption" color="primary" sx={{ display: 'block', fontWeight: 600, mb: 0.5 }}>
             {product.brand.name}
@@ -94,7 +123,7 @@ const ProductCard = ({ product, fromCategory }) => {
         <Typography variant="body2" color="text.secondary" noWrap gutterBottom>
           {product.categories?.[0]?.name}
         </Typography>
-        <Typography variant="h6" component="div" noWrap sx={{ fontWeight: 600 }}>
+        <Typography variant="h6" component="div" noWrap sx={{ fontWeight: 800, fontSize: '1rem', color: 'text.primary' }}>
           {product.name}
         </Typography>
         {hasRating && (
@@ -115,7 +144,7 @@ const ProductCard = ({ product, fromCategory }) => {
         <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
           {hasSale ? (
             <>
-              <Typography variant="h6" color="primary">
+              <Typography variant="h6" color="primary" sx={{ fontWeight: 900 }}>
                 {formatPrice(displayPrice)}
               </Typography>
               <Typography
@@ -127,7 +156,7 @@ const ProductCard = ({ product, fromCategory }) => {
               </Typography>
             </>
           ) : (
-            <Typography variant="h6">{formatPrice(displayPrice)}</Typography>
+            <Typography variant="h6" sx={{ fontWeight: 900 }}>{formatPrice(displayPrice)}</Typography>
           )}
         </Box>
         {(saleTiming || endingSoon) && (
