@@ -1,4 +1,4 @@
-import { Navigate, Outlet } from 'react-router-dom';
+import { Navigate, Outlet, useLocation } from 'react-router-dom';
 import { Box, CircularProgress } from '@mui/material';
 import { useAuth } from '../hooks/useAuth';
 
@@ -13,8 +13,13 @@ export const ProtectedRoute = ({ role, permission, permissions = [], requireAllP
     );
   }
 
+  const location = useLocation();
+
   if (!isAuthenticated) {
-    return <Navigate to="/login" replace />;
+    if (location.pathname.startsWith('/admin')) {
+      return <Navigate to="/admin/login" state={{ from: location }} replace />;
+    }
+    return <Navigate to="/login" state={{ from: location }} replace />;
   }
 
   // If a specific role is required

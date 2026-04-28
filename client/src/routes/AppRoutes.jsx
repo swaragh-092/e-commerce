@@ -31,6 +31,7 @@ const HomePage = lazy(() => import('../pages/storefront/HomePage'));
 const NotFoundPage = lazy(() => import('../pages/storefront/NotFoundPage'));
 
 // Admin pages
+const AdminLoginPage = lazy(() => import('../pages/admin/AdminLoginPage'));
 const DashboardPage = lazy(() => import('../pages/admin/DashboardPage'));
 const ProductsManagePage = lazy(() => import('../pages/admin/ProductsManagePage'));
 const ProductEditPage = lazy(() => import('../pages/admin/ProductEditPage'));
@@ -43,6 +44,7 @@ const CouponsPage = lazy(() => import('../pages/admin/CouponsPage'));
 const ReviewsPage = lazy(() => import('../pages/admin/ReviewsPage'));
 const MediaPage = lazy(() => import('../pages/admin/MediaPage'));
 const SettingsPage = lazy(() => import('../pages/admin/SettingsPage'));
+const SaleLabelsPage = lazy(() => import('../pages/admin/SaleLabelsPage'));
 const AuditLogPage = lazy(() => import('../pages/admin/AuditLogPage'));
 const NotificationLogsPage = lazy(() => import('../pages/admin/NotificationLogsPage'));
 const AttributesPage = lazy(() => import('../pages/admin/AttributesPage'));
@@ -115,6 +117,9 @@ const AppRoutes = () => (
         <Route path="*" element={<NotFoundPage />} />
       </Route>
 
+      {/* Admin Login Route */}
+      <Route path="/admin/login" element={<AdminLoginPage />} />
+
       {/* Admin Routes — permission-gated foundation */}
       <Route path="/admin" element={<ProtectedRoute permissions={ADMIN_ACCESS_PERMISSIONS} />}>
         {/* Standalone pages without AdminLayout */}
@@ -162,6 +167,7 @@ const AppRoutes = () => (
           </Route>
           <Route element={<ProtectedRoute permission={PERMISSIONS.SETTINGS_READ} />}>
             <Route path="settings" element={<SettingsPage />} />
+            <Route path="sale-labels" element={<SaleLabelsPage />} />
           </Route>
           <Route element={<ProtectedRoute permission={PERMISSIONS.AUDIT_READ} />}>
             <Route path="audit-log" element={<AuditLogPage />} />
