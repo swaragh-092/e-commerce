@@ -13,16 +13,13 @@ import {
   Paper,
   Select,
   Stack,
-  Step,
-  StepLabel,
-  Stepper,
   Typography,
 } from '@mui/material';
 import { useParams, useNavigate } from 'react-router-dom';
 import PrintIcon from '@mui/icons-material/Print';
 import LocalShippingIcon from '@mui/icons-material/LocalShipping';
 import { useCurrency } from '../../hooks/useSettings';
-import { getOrderById, updateOrderStatus, refundOrder, createFulfillment, updateFulfillmentStatus } from '../../services/adminService';
+import { getOrderById, updateOrderStatus, refundOrder, createFulfillment, updateFulfillmentStatus, confirmCodPayment } from '../../services/adminService';
 import { useNotification } from '../../context/NotificationContext';
 import {
   Dialog,
@@ -42,9 +39,11 @@ import { useAuth } from '../../hooks/useAuth';
 import { PERMISSIONS } from '../../utils/permissions';
 import { getApiErrorMessage } from '../../utils/apiErrors';
 import {
-  ORDER_STATUS_STEPPER,
+  getOrderProgressSteps,
   getOrderStatusColor,
   getOrderStatusLabel,
+  getPaymentStatusLabel,
+  getPaymentStatusColor,
   isOrderRefundableStatus,
   isOrderFulfillableStatus,
 } from '../../utils/orderWorkflow';
@@ -82,6 +81,86 @@ const MetricCard = ({ label, value, accent = 'text.primary' }) => (
     </Typography>
   </Paper>
 );
+
+const ProgressEntry = ({ label, status, occurredAt, last }) => {
+  const done = status === 'completed';
+  const active = status === 'active';
+  const terminal = status === 'terminal';
+
+  return (
+    <Box sx={{ display: 'flex', gap: 1.5, alignItems: 'flex-start' }}>
+      <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'center', pt: 0.25 }}>
+        <Box
+          sx={{
+            width: 18,
+            height: 18,
+            borderRadius: '50%',
+            border: '2px solid',
+            borderColor: done ? 'success.main' : active ? 'primary.main' : terminal ? 'text.secondary' : 'divider',
+            bgcolor: done ? 'success.main' : active ? 'primary.main' : terminal ? 'text.secondary' : 'background.paper',
+          }}
+        />
+        {!last && (
+          <Box sx={{ width: 1, minHeight: 28, mt: 0.5, bgcolor: done ? 'success.light' : 'divider' }} />
+        )}
+      </Box>
+      <Box sx={{ pb: last ? 0 : 1.5 }}>
+        <Typography variant="body2" fontWeight={done || active || terminal ? 700 : 500} color={done || active || terminal ? 'text.primary' : 'text.secondary'}>
+          {label}
+        </Typography>
+        {occurredAt && (
+          <Typography variant="caption" color="text.secondary">
+            {new Date(occurredAt).toLocaleString()}
+          </Typography>
+        )}
+      </Box>
+    </Box>
+  );
+};
+
+const getTaxRows = (order = {}) => {
+  const breakdown = order.taxBreakdown || {};
+  const rows = [
+    { label: 'CGST', value: breakdown.cgst },
+    { label: 'SGST', value: breakdown.sgst },
+    { label: 'IGST', value: breakdown.igst },
+    { label: 'Tax', value: breakdown.flatTax },
+  ].filter((row) => Number(row.value || 0) > 0);
+
+  if (rows.length > 0) return rows;
+  return Number(order.tax || 0) > 0 ? [{ label: 'Tax', value: order.tax }] : [];
+};
+
+const getFulfillmentProgress = (items = []) => {
+  const total = items.reduce((sum, item) => sum + Number(item.quantity || 0), 0);
+  const shipped = items.reduce((sum, item) => (
+    sum + (item.fulfillmentItems || []).reduce((itemSum, fulfillmentItem) => itemSum + Number(fulfillmentItem.quantity || 0), 0)
+  ), 0);
+  return {
+    total,
+    shipped,
+    remaining: Math.max(total - shipped, 0),
+  };
+};
+
+const FULFILLMENT_STATUS_LABELS = {
+  pending: 'Pending',
+  shipped: 'Shipped',
+  delivered: 'Delivered',
+  returned: 'Returned',
+};
+
+const FULFILLMENT_STATUS_TRANSITIONS = {
+  pending: ['shipped', 'delivered'],
+  shipped: ['delivered', 'returned'],
+  delivered: ['returned'],
+  returned: [],
+};
+
+const getFulfillmentStatusOptions = (currentStatus) => [
+  currentStatus,
+  ...(FULFILLMENT_STATUS_TRANSITIONS[currentStatus] || []),
+].filter(Boolean);
 
 const FulfillmentDialog = ({ open, onClose, orderItems, onSave, loading }) => {
   const [trackingNumber, setTrackingNumber] = useState('');
@@ -153,7 +232,6 @@ const FulfillmentDialog = ({ open, onClose, orderItems, onSave, loading }) => {
             <MenuItem value="pending">Pending</MenuItem>
             <MenuItem value="shipped">Shipped</MenuItem>
             <MenuItem value="delivered">Delivered</MenuItem>
-            <MenuItem value="returned">Returned</MenuItem>
           </TextField>
           <TextField
             label="Notes"
@@ -257,6 +335,8 @@ const OrderDetailPage = () => {
   }, [id]);
 
   const orderItems = useMemo(() => (order?.items || order?.OrderItems || []).filter(Boolean), [order]);
+  const taxRows = useMemo(() => getTaxRows(order || {}), [order]);
+  const fulfillmentProgress = useMemo(() => getFulfillmentProgress(orderItems), [orderItems]);
   const appliedDiscounts = useMemo(
     () => (Array.isArray(order?.appliedDiscounts) ? order.appliedDiscounts : []),
     [order]
@@ -268,21 +348,24 @@ const OrderDetailPage = () => {
 
   const availableStatuses = useMemo(() => {
     if (!order?.status) return [];
-    return [order.status, ...allowedNextStatuses];
+    return [order.status, ...allowedNextStatuses].filter((statusOption) => statusOption !== 'refunded');
   }, [order?.status, allowedNextStatuses]);
 
-  const currentStep = useMemo(() => {
-    const stepIndex = ORDER_STATUS_STEPPER.indexOf(order?.status);
-    return stepIndex >= 0 ? stepIndex : 0;
-  }, [order?.status]);
+  const progressSteps = useMemo(
+    () => getOrderProgressSteps({ ...(order || {}), Payment: payment }, fulfillmentProgress),
+    [fulfillmentProgress, order, payment]
+  );
+  const hasStatusTransitions = availableStatuses.length > 1;
 
   const customerName = useMemo(() => {
     const fullName = [order?.User?.firstName, order?.User?.lastName].filter(Boolean).join(' ');
     return fullName || address?.fullName || 'Customer unavailable';
   }, [address?.fullName, order?.User?.firstName, order?.User?.lastName]);
 
-  const canRefund = canRefundOrders && isRefundable;
+  const hasSettledPayment = ['completed', 'cod_collected'].includes(payment?.status);
+  const canRefund = canRefundOrders && isRefundable && hasSettledPayment;
   const canFulfill = canUpdateOrderStatus && isFulfillable;
+  const canConfirmCod = canUpdateOrderStatus && order?.paymentMethod === 'cod' && ['pending', 'cod_pending'].includes(payment?.status || 'pending') && ['pending_cod', 'processing'].includes(order?.status);
 
   const handleStatusUpdate = async () => {
     if (!canUpdateOrderStatus) {
@@ -323,6 +406,19 @@ const OrderDetailPage = () => {
     }
   };
 
+  const handleConfirmCodPayment = async () => {
+    setUpdating(true);
+    try {
+      await confirmCodPayment(id);
+      await fetchOrder();
+      notify('COD payment marked as collected.', 'success');
+    } catch (codError) {
+      notify(getApiErrorMessage(codError, 'Failed to confirm COD payment.'), 'error');
+    } finally {
+      setUpdating(false);
+    }
+  };
+
   const handleCreateFulfillment = async (data) => {
     setFulfillmentLoading(true);
     try {
@@ -338,6 +434,15 @@ const OrderDetailPage = () => {
   };
 
   const handleFulfillmentStatusUpdate = async (fulfillmentId, status) => {
+    const fulfillment = order?.fulfillments?.find((item) => item.id === fulfillmentId);
+    if (!fulfillment || fulfillment.status === status) return;
+
+    const allowedStatuses = getFulfillmentStatusOptions(fulfillment.status);
+    if (!allowedStatuses.includes(status)) {
+      notify(`Cannot change shipment status from ${FULFILLMENT_STATUS_LABELS[fulfillment.status] || fulfillment.status} to ${FULFILLMENT_STATUS_LABELS[status] || status}.`, 'error');
+      return;
+    }
+
     try {
       const response = await updateFulfillmentStatus(id, fulfillmentId, status);
       setOrder(response.data.data);
@@ -399,6 +504,11 @@ const OrderDetailPage = () => {
               {updating ? 'Processing…' : 'Issue Refund'}
             </Button>
           )}
+          {canConfirmCod && (
+            <Button variant="outlined" onClick={handleConfirmCodPayment} disabled={updating}>
+              {updating ? 'Saving…' : 'Mark COD Collected'}
+            </Button>
+          )}
           {canFulfill && (
              <Button 
                variant="contained" 
@@ -421,11 +531,12 @@ const OrderDetailPage = () => {
       <Stack direction={{ xs: 'column', md: 'row' }} spacing={2} mb={3}>
         <MetricCard label="Order total" value={formatPrice(order.total || 0)} accent="primary.main" />
         <MetricCard label="Items" value={orderItems.reduce((sum, item) => sum + Number(item.quantity || 0), 0)} />
+        <MetricCard label="Fulfilled" value={`${fulfillmentProgress.shipped}/${fulfillmentProgress.total}`} />
         <MetricCard label="Customer" value={customerName} />
         <MetricCard
           label="Payment"
-          value={payment ? getOrderStatusLabel(payment.status) : 'Not captured'}
-          accent={payment?.status === 'completed' ? 'success.main' : 'text.primary'}
+          value={getPaymentStatusLabel(payment?.status)}
+          accent={['completed', 'cod_collected'].includes(payment?.status) ? 'success.main' : payment?.status === 'refunded' ? 'text.secondary' : 'text.primary'}
         />
       </Stack>
 
@@ -502,7 +613,6 @@ const OrderDetailPage = () => {
               <Box>
                 {[
                   ['Subtotal', order.subtotal],
-                  ['Tax', order.tax],
                   ['Shipping', order.shippingCost],
                   ['Discount', order.discountAmount],
                 ].map(
@@ -523,6 +633,26 @@ const OrderDetailPage = () => {
                     )
                 )}
 
+                {taxRows.map(({ label, value }) => (
+                  <Box
+                    key={label}
+                    sx={{ display: 'flex', justifyContent: 'space-between', gap: 4 }}
+                  >
+                    <Typography variant="body2" color="text.secondary">
+                      {label}
+                    </Typography>
+                    <Typography variant="body2">
+                      {formatPrice(value || 0)}
+                    </Typography>
+                  </Box>
+                ))}
+
+                {order.taxBreakdown?.isInclusive && (
+                  <Typography variant="caption" color="text.secondary" sx={{ display: 'block', textAlign: 'right', mt: 0.5 }}>
+                    Prices include applicable tax.
+                  </Typography>
+                )}
+
                 <Box sx={{ display: 'flex', justifyContent: 'space-between', gap: 4, mt: 1 }}>
                   <Typography fontWeight={700}>Total</Typography>
                   <Typography fontWeight={700}>{formatPrice(order.total || 0)}</Typography>
@@ -538,9 +668,12 @@ const OrderDetailPage = () => {
                   <Typography variant="caption" color="text.secondary">
                     Status
                   </Typography>
-                  <Typography variant="body2" fontWeight={600}>
-                    {payment ? getOrderStatusLabel(payment.status) : 'Not captured'}
-                  </Typography>
+                  <Chip
+                    size="small"
+                    label={getPaymentStatusLabel(payment?.status)}
+                    color={getPaymentStatusColor(payment?.status)}
+                    sx={{ mt: 0.5 }}
+                  />
                 </Box>
                 <Box>
                   <Typography variant="caption" color="text.secondary">
@@ -589,10 +722,14 @@ const OrderDetailPage = () => {
             <Box sx={{ mt: 3 }}>
               <DetailCard title="Shipments / Sub-Orders">
                 <Stack spacing={2}>
-                  {order.fulfillments.map((f, index) => (
-                    <Paper 
-                      key={f.id} 
-                      elevation={0} 
+                  {order.fulfillments.map((f, index) => {
+                    const statusOptions = getFulfillmentStatusOptions(f.status);
+                    const isTerminalShipment = statusOptions.length <= 1;
+
+                    return (
+                    <Paper
+                      key={f.id}
+                      elevation={0}
                       sx={{ p: 2.5, border: '1px solid', borderColor: 'divider', borderRadius: 2, bgcolor: 'grey.50' }}
                     >
                       <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', mb: 2 }}>
@@ -604,6 +741,7 @@ const OrderDetailPage = () => {
                               <Select
                                 value={f.status}
                                 onChange={(e) => handleFulfillmentStatusUpdate(f.id, e.target.value)}
+                                disabled={!canUpdateOrderStatus || isTerminalShipment}
                                 sx={{ 
                                   fontSize: '0.75rem', 
                                   fontWeight: 600,
@@ -611,10 +749,11 @@ const OrderDetailPage = () => {
                                   '&:before, &:after': { display: 'none' }
                                 }}
                               >
-                                <MenuItem value="pending" sx={{ fontSize: '0.75rem' }}>Pending</MenuItem>
-                                <MenuItem value="shipped" sx={{ fontSize: '0.75rem' }}>Shipped</MenuItem>
-                                <MenuItem value="delivered" sx={{ fontSize: '0.75rem' }}>Delivered</MenuItem>
-                                <MenuItem value="returned" sx={{ fontSize: '0.75rem' }}>Returned</MenuItem>
+                                {statusOptions.map((statusOption) => (
+                                  <MenuItem key={statusOption} value={statusOption} sx={{ fontSize: '0.75rem' }}>
+                                    {FULFILLMENT_STATUS_LABELS[statusOption] || statusOption}
+                                  </MenuItem>
+                                ))}
                               </Select>
                             </FormControl>
                           </Box>
@@ -640,7 +779,8 @@ const OrderDetailPage = () => {
                         </Box>
                       )}
                     </Paper>
-                  ))}
+                    );
+                  })}
                 </Stack>
               </DetailCard>
             </Box>
@@ -683,7 +823,7 @@ const OrderDetailPage = () => {
             </DetailCard>
 
             
-            {canUpdateOrderStatus && (
+            {canUpdateOrderStatus && hasStatusTransitions && (
               <DetailCard title="Update Status">
                 <FormControl fullWidth size="small" sx={{ mb: 2 }}>
                   <InputLabel>Status</InputLabel>
@@ -713,13 +853,15 @@ const OrderDetailPage = () => {
             
 
             <DetailCard title="Order Progress">
-              <Stepper activeStep={currentStep} orientation="vertical">
-                {ORDER_STATUS_STEPPER.map((status) => (
-                  <Step key={status} completed={ORDER_STATUS_STEPPER.indexOf(status) <= currentStep}>
-                    <StepLabel>{getOrderStatusLabel(status)}</StepLabel>
-                  </Step>
-                ))}
-              </Stepper>
+              {progressSteps.map((step, index) => (
+                <ProgressEntry
+                  key={step.key}
+                  label={step.label}
+                  status={step.status}
+                  occurredAt={step.occurredAt}
+                  last={index === progressSteps.length - 1}
+                />
+              ))}
             </DetailCard>
 
             

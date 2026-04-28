@@ -11,10 +11,12 @@ const PaymentSuccessPage = () => {
     return (
         <Container maxWidth="sm" sx={{ py: 8, textAlign: 'center' }}>
             <CheckCircleOutlineIcon sx={{ fontSize: 96, color: 'success.main', mb: 2 }} />
-            <Typography variant="h4" fontWeight={700} gutterBottom>Payment Successful!</Typography>
+            <Typography variant="h4" fontWeight={700} gutterBottom>Order Placed!</Typography>
             <Typography color="text.secondary" sx={{ mb: 4 }}>
-                Thank you for your order! We've received your payment and will start processing your order shortly.
+                Thank you for your order! Your order has been placed successfully. <br />
+                We’re processing it now and will keep you updated on its status.
                 {orderId && ` Order reference: #${orderId}`}
+                
             </Typography>
             <Box sx={{ display: 'flex', gap: 2, justifyContent: 'center', flexWrap: 'wrap' }}>
                 <Button variant="contained" component={Link} to="/account">View Orders</Button>

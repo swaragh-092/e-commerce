@@ -1,7 +1,11 @@
 import { useState, useEffect } from 'react';
-import { Box, AppBar, Toolbar, Typography, Button, IconButton, Badge } from '@mui/material';
+import { Box, AppBar, Toolbar, Typography, Button, IconButton, Badge, Menu, MenuItem, Divider, Avatar } from '@mui/material';
 import ShoppingCartIcon from '@mui/icons-material/ShoppingCart';
 import CloseIcon from '@mui/icons-material/Close';
+import AccountCircleIcon from '@mui/icons-material/AccountCircle';
+import PersonIcon from '@mui/icons-material/Person';
+import ShoppingBagIcon from '@mui/icons-material/ShoppingBag';
+import LogoutIcon from '@mui/icons-material/Logout';
 import { Outlet, Link as RouterLink } from 'react-router-dom';
 import { useAuth } from '../hooks/useAuth';
 import { useSettings } from '../hooks/useSettings';
@@ -20,8 +24,22 @@ const StoreLayout = () => {
   const { wishlistCount } = useWishlist();
   const [announcementDismissed, setAnnouncementDismissed] = useState(false);
   const [topLinks, setTopLinks] = useState([]);
+  const [accountMenuAnchor, setAccountMenuAnchor] = useState(null);
   const adminEntryPath = getFirstAccessibleAdminPath(user);
   const canAccessAdmin = hasAnyPermission(ADMIN_ACCESS_PERMISSIONS);
+
+  const handleAccountMenuOpen = (event) => {
+    setAccountMenuAnchor(event.currentTarget);
+  };
+
+  const handleAccountMenuClose = () => {
+    setAccountMenuAnchor(null);
+  };
+
+  const handleLogout = () => {
+    handleAccountMenuClose();
+    logout();
+  };
 
   useEffect(() => {
     const fetchTopLinks = async () => {
@@ -135,11 +153,77 @@ const StoreLayout = () => {
                     </Badge>
                   </IconButton>
                 )}
-                {canAccessAdmin && adminEntryPath && (
-                  <Button color="inherit" component={RouterLink} to={adminEntryPath} sx={{ fontWeight: 700 }}>Admin Panel</Button>
-                )}
-                <Button color="inherit" component={RouterLink} to="/profile" sx={{ fontWeight: 700 }}>Profile</Button>
-                <Button color="inherit" onClick={logout} sx={{ fontWeight: 700 }}>Logout</Button>
+
+                
+                <IconButton color="inherit" onClick={handleAccountMenuOpen}>
+                  <AccountCircleIcon />
+                </IconButton>
+                <Menu
+                  anchorEl={accountMenuAnchor}
+                  open={Boolean(accountMenuAnchor)}
+                  onClose={handleAccountMenuClose}
+                  anchorOrigin={{ vertical: 'bottom', horizontal: 'right' }}
+                  transformOrigin={{ vertical: 'top', horizontal: 'right' }}
+                  PaperProps={{
+                    sx: {
+                      mt: 1.5,
+                      boxShadow: '0 8px 24px rgba(0,0,0,0.15)',
+                      borderRadius: '8px',
+                      minWidth: '220px',
+                      overflow: 'hidden',
+                    },
+                  }}
+                >
+                  <Box sx={{ px: 2, py: 1.5, bgcolor: 'background.paper' }}>
+                    <Typography variant="subtitle1" sx={{ fontWeight: 600, fontSize: '0.95rem' }}>
+                      {user?.firstName || 'My Account'}
+                    </Typography>
+                    <Typography variant="caption" color="text.secondary">
+                      {user?.email || ''}
+                    </Typography>
+                  </Box>
+                  <Divider />
+                  <MenuItem
+                    component={RouterLink}
+                    to="/profile"
+                    onClick={handleAccountMenuClose}
+                    sx={{
+                      py: 1.2,
+                      px: 2,
+                      '&:hover': { bgcolor: 'action.hover' },
+                    }}
+                  >
+                    <PersonIcon sx={{ mr: 1.5, fontSize: '1.2rem', color: 'primary.main' }} />
+                    <Typography sx={{ fontSize: '0.95rem' }}>Profile</Typography>
+                  </MenuItem>
+                  <MenuItem
+                    component={RouterLink}
+                    to="/orders"
+                    onClick={handleAccountMenuClose}
+                    sx={{
+                      py: 1.2,
+                      px: 2,
+                      '&:hover': { bgcolor: 'action.hover' },
+                    }}
+                  >
+                    <ShoppingBagIcon sx={{ mr: 1.5, fontSize: '1.2rem', color: 'primary.main' }} />
+                    <Typography sx={{ fontSize: '0.95rem' }}>Orders</Typography>
+                  </MenuItem>
+                  <Divider sx={{ my: 0.5 }} />
+                  <MenuItem
+                    onClick={handleLogout}
+                    sx={{
+                      py: 1.2,
+                      px: 2,
+                      color: 'error.main',
+                      '&:hover': { bgcolor: 'error.light', opacity: 0.8 },
+                    }}
+                  >
+                    <LogoutIcon sx={{ mr: 1.5, fontSize: '1.2rem' }} />
+                    <Typography sx={{ fontSize: '0.95rem' }}>Logout</Typography>
+                  </MenuItem>
+                </Menu>
+
               </>
             ) : (
               <>

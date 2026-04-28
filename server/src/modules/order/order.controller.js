@@ -36,6 +36,16 @@ const getOrderById = async (req, res, next) => {
   }
 };
 
+const getFulfillmentTracking = async (req, res, next) => {
+  try {
+    const isAdminSession = hasOrderAdminAccess(req.user);
+    const tracking = await OrderService.getFulfillmentTracking(req.params.id, req.user.id, isAdminSession);
+    return success(res, tracking);
+  } catch (err) {
+    next(err);
+  }
+};
+
 const updateStatus = async (req, res, next) => {
   try {
     if (!hasOrderAdminAccess(req.user)) {
@@ -98,6 +108,7 @@ module.exports = {
   placeOrder,
   getOrders,
   getOrderById,
+  getFulfillmentTracking,
   updateStatus,
   cancelOrder,
   refundOrder,

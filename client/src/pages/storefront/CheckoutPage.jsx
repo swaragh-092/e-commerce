@@ -1,14 +1,18 @@
 import React, { useState, useEffect, useContext } from 'react';
 import {
     Box, Container, Typography, Button, Divider, Paper, TextField,
-    CircularProgress, Alert, Stepper, Step, StepLabel, Radio, RadioGroup,
+    CircularProgress, Alert, Radio, RadioGroup,
     FormControlLabel, Chip, Dialog, DialogTitle, DialogContent, DialogActions,
-    Grid, IconButton, Checkbox,
+    Grid, IconButton, Checkbox, Collapse,
 } from '@mui/material';
 import LocalShippingIcon from '@mui/icons-material/LocalShipping';
 import LocalOfferIcon from '@mui/icons-material/LocalOffer';
 import AddIcon from '@mui/icons-material/Add';
 import EditIcon from '@mui/icons-material/Edit';
+import CheckCircleIcon from '@mui/icons-material/CheckCircle';
+import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
+import LocationOnIcon from '@mui/icons-material/LocationOn';
+import LockIcon from '@mui/icons-material/Lock';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { AuthContext } from '../../context/AuthContext';
 import { useSettings, useCurrency, useFeature } from '../../hooks/useSettings';
@@ -20,6 +24,7 @@ import { getCartItemUnitPrice } from '../../utils/variantPricing';
 import CenteredLoader from '../../components/common/CenteredLoader';
 import { getApiErrorMessage } from '../../utils/apiErrors';
 import { getVariantOptionLabel } from '../../utils/variantOptions';
+import {calculateTax} from '../../../../shared/calculations.js';
 
 const EMPTY_ADDR = {
     label: '', fullName: '', phone: '',
@@ -46,53 +51,96 @@ const DEFAULT_ENABLED_PAYMENT_METHODS = {
 
 const normalizeBuyNowQuantity = (value) => {
     const parsedQuantity = Number(value);
-
-    if (!Number.isFinite(parsedQuantity)) {
-        return 1;
-    }
-
+    if (!Number.isFinite(parsedQuantity)) return 1;
     return Math.max(1, Math.floor(parsedQuantity));
 };
 
 const normalizeBuyNowItem = (item) => {
-    if (!item?.productId) {
-        return null;
-    }
-
+    if (!item?.productId) return null;
     const product = item.product && typeof item.product === 'object' ? item.product : null;
     const variant = item.variant && typeof item.variant === 'object' ? item.variant : null;
     const hasProductIdentity = Boolean(product?.id || product?.name);
     const hasPriceData = Boolean(
         product && (
-            product.effectivePrice != null ||
-            product.price != null ||
-            product.salePrice != null ||
-            variant?.unitPrice != null ||
-            variant?.priceModifier != null
+            product.effectivePrice != null || product.price != null || product.salePrice != null ||
+            variant?.unitPrice != null || variant?.priceModifier != null
         )
     );
-
-    if (!hasProductIdentity || !hasPriceData) {
-        return null;
-    }
-
+    if (!hasProductIdentity || !hasPriceData) return null;
     return {
         id: item.id || `${item.productId}-${item.variantId || variant?.id || 'base'}`,
         productId: item.productId,
         variantId: item.variantId ?? variant?.id ?? null,
         quantity: normalizeBuyNowQuantity(item.quantity),
-        product: {
-            ...product,
-            id: product.id || item.productId,
-            name: product.name || 'Product',
-        },
-        variant: variant
-            ? {
-                ...variant,
-                id: variant.id || item.variantId || null,
-            }
-            : null,
+        product: { ...product, id: product.id || item.productId, name: product.name || 'Product' },
+        variant: variant ? { ...variant, id: variant.id || item.variantId || null } : null,
     };
+};
+
+// Section wrapper — shows locked/completed state when not active
+const Section = ({ step, activeSection, completedSections, title, icon, summary, onEdit, children }) => {
+    const isActive = activeSection === step;
+    const isCompleted = completedSections.includes(step);
+    const isLocked = !isActive && !isCompleted;
+
+    return (
+        <Paper
+            elevation={0}
+            sx={{
+                border: '1px solid',
+                borderColor: isActive ? 'primary.main' : 'divider',
+                borderRadius: 2,
+                overflow: 'hidden',
+                transition: 'border-color 0.2s',
+                mb: 1.5,
+                opacity: isLocked ? 0.55 : 1,
+            }}
+        >
+            {/* Header */}
+            <Box sx={{
+                display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+                px: 3, py: 2,
+                bgcolor: 'background.paper',
+            }}>
+                <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5 }}>
+                    {isCompleted && !isActive ? (
+                        <CheckCircleIcon sx={{ color: 'success.main', fontSize: 22 }} />
+                    ) : (
+                        <Box sx={{
+                            width: 22, height: 22, borderRadius: '50%',
+                            bgcolor: isActive ? 'primary.main' : 'text.disabled',
+                            color: 'background.paper', display: 'flex', alignItems: 'center',
+                            justifyContent: 'center', fontSize: 12, fontWeight: 700,
+                        }}>
+                            {step}
+                        </Box>
+                    )}
+                    <Typography variant="subtitle1" fontWeight={isActive ? 700 : 600} color={isLocked ? 'text.disabled' : 'text.primary'}>
+                        {title}
+                    </Typography>
+                </Box>
+                {isCompleted && !isActive && onEdit && (
+                    <Button size="small" variant="text" onClick={onEdit} sx={{ fontSize: 13, fontWeight: 600 }}>
+                        Change
+                    </Button>
+                )}
+            </Box>
+
+            {/* Completed summary (collapsed) */}
+            {isCompleted && !isActive && summary && (
+                <Box sx={{ px: 3, pb: 2, pt: 0 }}>
+                    {summary}
+                </Box>
+            )}
+
+            {/* Active content */}
+            <Collapse in={isActive} unmountOnExit={false}>
+                <Box sx={{ px: 3, pb: 3, pt: 1 }}>
+                    {children}
+                </Box>
+            </Collapse>
+        </Paper>
+    );
 };
 
 const CheckoutPage = () => {
@@ -102,6 +150,7 @@ const CheckoutPage = () => {
     const { settings } = useSettings();
     const { formatPrice } = useCurrency();
     const { cart, clearCart } = useCart();
+
     const buyNowItem = location.state?.fromBuyNow ? normalizeBuyNowItem(location.state?.buyNowItem) : null;
     const isBuyNowFlow = Boolean(buyNowItem);
     const couponsEnabled = settings?.features?.coupons !== false;
@@ -116,11 +165,21 @@ const CheckoutPage = () => {
         ? paymentSettings.defaultMethod
         : enabledPaymentMethods[0]?.id || '';
     const showAvailableCoupons = useFeature('showAvailableCoupons');
-    const STEPS = couponsEnabled
-        ? ['Shipping', 'Coupon', 'Review & Place Order']
-        : ['Shipping', 'Review & Place Order'];
-    const reviewStep = couponsEnabled ? 2 : 1;
-    const [activeStep, setActiveStep] = useState(0);
+
+    // Sections: 1=address, 2=coupon (optional), 3=payment
+    const SECTIONS = couponsEnabled ? [1, 2, 3] : [1, 3];
+    const [activeSection, setActiveSection] = useState(1);
+    const [completedSections, setCompletedSections] = useState([]);
+
+    const completeSection = (section, nextSection) => {
+        setCompletedSections((prev) => [...new Set([...prev, section])]);
+        setActiveSection(nextSection);
+    };
+
+    const editSection = (section) => {
+        setCompletedSections((prev) => prev.filter((s) => s !== section));
+        setActiveSection(section);
+    };
 
     // Addresses
     const [addresses, setAddresses] = useState([]);
@@ -135,10 +194,11 @@ const CheckoutPage = () => {
     const [publicCouponsLoading, setPublicCouponsLoading] = useState(false);
     const [eligibleCouponSummary, setEligibleCouponSummary] = useState(null);
 
-    // Notes
+    // Notes & Payment
     const [notes, setNotes] = useState('');
+    const [paymentMethod, setPaymentMethod] = useState('razorpay');
 
-    // Address add / edit dialog
+    // Address dialog
     const [addrDialog, setAddrDialog] = useState({ open: false, mode: 'add', addrId: null, form: EMPTY_ADDR, saving: false, errors: {} });
     const openAddAddrDialog = () =>
         setAddrDialog({ open: true, mode: 'add', addrId: null, form: { ...EMPTY_ADDR }, saving: false, errors: {} });
@@ -156,16 +216,14 @@ const CheckoutPage = () => {
         });
     const setAddrField = (field, val) =>
         setAddrDialog((s) => ({ ...s, form: { ...s.form, [field]: val } }));
+
     const handleAddrSave = async () => {
         const { mode, addrId, form } = addrDialog;
         setAddrDialog((s) => ({ ...s, saving: true, errors: {} }));
         try {
             let saved;
-            if (mode === 'add') {
-                saved = await userService.createAddress(form);
-            } else {
-                saved = await userService.updateAddress(addrId, form);
-            }
+            if (mode === 'add') saved = await userService.createAddress(form);
+            else saved = await userService.updateAddress(addrId, form);
             const list = await userService.getAddresses();
             const addrList = Array.isArray(list) ? list : list?.rows || [];
             setAddresses(addrList);
@@ -175,7 +233,7 @@ const CheckoutPage = () => {
             const errData = err?.response?.data?.error;
             if (errData?.code === 'VALIDATION_ERROR' && errData?.details) {
                 const validationErrors = {};
-                errData.details.forEach(d => { validationErrors[d.field] = d.message; });
+                errData.details.forEach((d) => { validationErrors[d.field] = d.message; });
                 setAddrDialog((s) => ({ ...s, saving: false, errors: validationErrors }));
             } else {
                 setAddrDialog((s) => ({ ...s, saving: false }));
@@ -184,9 +242,9 @@ const CheckoutPage = () => {
         }
     };
 
-    // Placing order
     const [placing, setPlacing] = useState(false);
     const [error, setError] = useState(null);
+
     const [paymentMethod, setPaymentMethod] = useState(defaultPaymentMethod || 'razorpay');
 
     useEffect(() => {
@@ -195,30 +253,28 @@ const CheckoutPage = () => {
         }
     }, [defaultPaymentMethod, enabledPaymentMethods, paymentMethod]);
 
+
     const items = isBuyNowFlow ? [buyNowItem] : (cart?.items || []);
+
     const subtotal = items.reduce((sum, item) => {
         const quantity = normalizeBuyNowQuantity(item?.quantity);
         const itemPrice = item?.product ? getCartItemUnitPrice(item) : 0;
         return sum + itemPrice * quantity;
     }, 0);
+
     const orderDiscount = couponResult?.orderDiscount || 0;
     const appliedCoupons = couponResult?.appliedCoupons || [];
 
-    // Shipping calculation (mirrors server logic)
     const shippingMethod = settings?.shipping?.method || 'flat_rate';
     const flatRate = parseFloat(settings?.shipping?.flatRate ?? 0);
     const freeThreshold = parseFloat(settings?.shipping?.freeThreshold ?? 0);
     let shippingCost = 0;
-    if (shippingMethod === 'flat_rate') {
-        shippingCost = flatRate;
-    } else if (shippingMethod === 'free_above_threshold') {
-        shippingCost = subtotal >= freeThreshold ? 0 : flatRate;
-    } // 'free' => 0
+    if (shippingMethod === 'flat_rate') shippingCost = flatRate;
+    else if (shippingMethod === 'free_above_threshold') shippingCost = subtotal >= freeThreshold ? 0 : flatRate;
+
     const shippingDiscount = couponResult?.shippingDiscount || (couponResult?.freeShipping ? shippingCost : 0);
     const effectiveShippingCost = Math.max(0, shippingCost - shippingDiscount);
 
-    // Tax calculation (supports CGST / SGST / IGST breakdown)
-    // GST components override the inclusive flag when enabled
     const enableCGST = settings?.tax?.enableCGST === true;
     const enableSGST = settings?.tax?.enableSGST === true;
     const enableIGST = settings?.tax?.enableIGST === true;
@@ -228,9 +284,8 @@ const CheckoutPage = () => {
     const sgstAmount = enableSGST ? subtotal * parseFloat(settings?.tax?.sgstRate ?? 0) : 0;
     const igstAmount = enableIGST ? subtotal * parseFloat(settings?.tax?.igstRate ?? 0) : 0;
     const taxRate = parseFloat(settings?.tax?.rate ?? 0);
-    const flatTaxAmount = (!taxInclusive && !useGST && taxRate > 0) ? subtotal * taxRate : 0;
+    const flatTaxAmount = (!taxInclusive && !useGST && taxRate > 0) ? calculateTax( subtotal, taxRate ) : 0;
     const taxAmount = useGST ? cgstAmount + sgstAmount + igstAmount : flatTaxAmount;
-
     const total = Math.max(0, subtotal + effectiveShippingCost + taxAmount - orderDiscount);
 
     useEffect(() => {
@@ -239,24 +294,28 @@ const CheckoutPage = () => {
                 const list = Array.isArray(data) ? data : data?.rows || [];
                 setAddresses(list);
                 const def = list.find((a) => a.isDefault);
-                if (def) setSelectedAddressId(def.id);
-                else if (list.length > 0) setSelectedAddressId(list[0].id);
+                // Auto-select default or first address and mark section complete
+                const autoSelected = def || list[0];
+                if (autoSelected) {
+                    setSelectedAddressId(autoSelected.id);
+                    setCompletedSections([1]);
+                    setActiveSection(couponsEnabled ? 2 : 3);
+                }
             })
             .catch(() => {})
             .finally(() => setLoadingAddresses(false));
     }, []);
 
     useEffect(() => {
-        if (activeStep === 1 && couponsEnabled && showAvailableCoupons) {
+        if (activeSection === 2 && couponsEnabled && showAvailableCoupons) {
             setPublicCouponsLoading(true);
             getEligibleCoupons({ subtotal, shippingCost })
                 .then((res) => {
                     const data = res.data?.data || {};
                     setPublicCoupons(data.eligibleCoupons || []);
                     setEligibleCouponSummary(data);
-
                     if (!couponResult && !couponCode && data.bestCombination?.appliedCoupons?.length) {
-                        const manualCoupon = data.bestCombination.appliedCoupons.find((coupon) => coupon.applicationMode !== 'auto');
+                        const manualCoupon = data.bestCombination.appliedCoupons.find((c) => c.applicationMode !== 'auto');
                         setCouponCode(manualCoupon?.code || data.bestCombination.appliedCoupons[0]?.code || '');
                         setCouponResult(data.bestCombination);
                     }
@@ -264,7 +323,7 @@ const CheckoutPage = () => {
                 .catch(() => {})
                 .finally(() => setPublicCouponsLoading(false));
         }
-    }, [activeStep, couponsEnabled, showAvailableCoupons, subtotal, shippingCost]);
+    }, [activeSection, couponsEnabled, showAvailableCoupons, subtotal, shippingCost]);
 
     const handleApplyCoupon = async (codeOverride) => {
         const code = codeOverride || couponCode;
@@ -293,7 +352,7 @@ const CheckoutPage = () => {
                 shippingAddressId: selectedAddressId,
                 paymentMethod,
                 ...(couponCode && couponResult && !couponResult.error && { couponCode }),
-                ...(appliedCoupons.length > 0 && { couponCodes: appliedCoupons.map((coupon) => coupon.code) }),
+                ...(appliedCoupons.length > 0 && { couponCodes: appliedCoupons.map((c) => c.code) }),
                 ...(notes && { notes }),
                 ...(isBuyNowFlow && {
                     buyNowItem: {
@@ -304,20 +363,16 @@ const CheckoutPage = () => {
                 }),
             });
             const orderId = res.data?.data?.order?.id;
-            if (!isBuyNowFlow) {
-                await clearCart();
-            }
-            if (paymentMethod === 'cod') {
-                // COD: skip the payment gateway, go straight to success
-                navigate('/payment/success', { state: { orderId, isCod: true } });
-            } else {
-                navigate(`/payment/${orderId}`);
-            }
+            if (!isBuyNowFlow) await clearCart();
+            if (paymentMethod === 'cod') navigate('/payment/success', { state: { orderId, isCod: true } });
+            else navigate(`/payment/${orderId}`);
         } catch (err) {
             setError(getApiErrorMessage(err, 'Failed to place order. Please try again.'));
             setPlacing(false);
         }
     };
+
+    const selectedAddress = addresses.find((a) => a.id === selectedAddressId);
 
     if (items.length === 0) {
         return (
@@ -328,89 +383,161 @@ const CheckoutPage = () => {
         );
     }
 
+    const totalSavings = orderDiscount + shippingDiscount;
+
     return (
         <Container maxWidth="lg" sx={{ py: 4 }}>
             <PageSEO title="Checkout" type="noindex" />
             <Typography variant="h4" fontWeight={700} mb={3}>Checkout</Typography>
 
-            <Stepper activeStep={activeStep} sx={{ mb: 4 }}>
-                {STEPS.map((label) => (
-                    <Step key={label}><StepLabel>{label}</StepLabel></Step>
-                ))}
-            </Stepper>
-
             {error && <Alert severity="error" onClose={() => setError(null)} sx={{ mb: 2 }}>{error}</Alert>}
 
-            <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', md: '1fr 320px' }, gap: 3 }}>
-                {/* Left panel */}
+            <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', md: '1fr 340px' }, gap: 3, alignItems: 'start' }}>
+
+                {/* ── Left: sections ── */}
                 <Box>
-                    {/* Step 0: Shipping */}
-                    {activeStep === 0 && (
-                        <Paper elevation={0} sx={{ border: '1px solid', borderColor: 'divider', borderRadius: 2, p: 3 }}>
-                            <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2 }}>
-                                <Typography variant="h6" fontWeight={600}>Select Shipping Address</Typography>
-                                <Button size="small" startIcon={<AddIcon />} onClick={openAddAddrDialog}>
-                                    Add New
+
+                    {/* ── Section 1: Delivery Address ── */}
+                    <Section
+                        step={1}
+                        activeSection={activeSection}
+                        completedSections={completedSections}
+                        title="Delivery Address"
+                        onEdit={() => editSection(1)}
+                        summary={
+                            selectedAddress && (
+                                <Box sx={{ display: 'flex', gap: 1, alignItems: 'flex-start' }}>
+                                    <LocationOnIcon sx={{ fontSize: 16, color: 'primary.main', mt: 0.2, flexShrink: 0 }} />
+                                    <Box>
+                                        <Typography variant="body2" fontWeight={600}>
+                                            {selectedAddress.fullName}
+                                            {selectedAddress.label ? ` · ${selectedAddress.label}` : ''}
+                                        </Typography>
+                                        <Typography variant="body2" color="text.secondary">
+                                            {selectedAddress.addressLine1}{selectedAddress.addressLine2 ? `, ${selectedAddress.addressLine2}` : ''},{' '}
+                                            {selectedAddress.city}{selectedAddress.state ? `, ${selectedAddress.state}` : ''} {selectedAddress.postalCode}, {selectedAddress.country}
+                                        </Typography>
+                                        {selectedAddress.phone && (
+                                            <Typography variant="body2" color="text.secondary">📞 {selectedAddress.phone}</Typography>
+                                        )}
+                                    </Box>
+                                </Box>
+                            )
+                        }
+                    >
+                        {loadingAddresses ? (
+                            <CenteredLoader message="Loading addresses..." minHeight="120px" />
+                        ) : (
+                            <>
+                                {addresses.length === 0 ? (
+                                    <Box sx={{ textAlign: 'center', py: 3 }}>
+                                        <Typography color="text.secondary" mb={2}>No saved addresses yet.</Typography>
+                                        <Button variant="outlined" startIcon={<AddIcon />} onClick={openAddAddrDialog}>
+                                            Add Your First Address
+                                        </Button>
+                                    </Box>
+                                ) : (
+                                    <RadioGroup value={selectedAddressId} onChange={(e) => setSelectedAddressId(e.target.value)}>
+                                        {addresses.map((addr) => (
+                                            <Paper
+                                                key={addr.id}
+                                                variant="outlined"
+                                                sx={{
+                                                    p: 2, mb: 1.5, cursor: 'pointer',
+                                                    borderColor: selectedAddressId === addr.id ? 'primary.main' : 'divider',
+                                                    bgcolor: selectedAddressId === addr.id ? 'action.selected' : 'background.paper',
+                                                    transition: 'all 0.15s',
+                                                    '&:hover': { borderColor: 'primary.main', bgcolor: 'action.hover' },
+                                                }}
+                                                onClick={() => setSelectedAddressId(addr.id)}
+                                            >
+                                                <Box sx={{ display: 'flex', alignItems: 'flex-start' }}>
+                                                    <Radio
+                                                        value={addr.id}
+                                                        checked={selectedAddressId === addr.id}
+                                                        size="small"
+                                                        sx={{ mt: -0.5, mr: 0.5 }}
+                                                    />
+                                                    <Box sx={{ flexGrow: 1 }}>
+                                                        <Box sx={{ display: 'flex', gap: 1, alignItems: 'center', mb: 0.5 }}>
+                                                            <Typography variant="body2" fontWeight={700}>{addr.fullName}</Typography>
+                                                            {addr.label && (
+                                                                <Chip label={addr.label} size="small" sx={{ height: 20, fontSize: 11 }} />
+                                                            )}
+                                                            {addr.isDefault && (
+                                                                <Chip label="Default" size="small" color="primary" sx={{ height: 20, fontSize: 11 }} />
+                                                            )}
+                                                        </Box>
+                                                        <Typography variant="body2" color="text.secondary">
+                                                            {addr.addressLine1}{addr.addressLine2 ? `, ${addr.addressLine2}` : ''},{' '}
+                                                            {addr.city}{addr.state ? `, ${addr.state}` : ''} {addr.postalCode}
+                                                        </Typography>
+                                                        <Typography variant="body2" color="text.secondary">{addr.country}</Typography>
+                                                        {addr.phone && (
+                                                            <Typography variant="body2" color="text.secondary" mt={0.5}>
+                                                                Mobile: <strong>{addr.phone}</strong>
+                                                            </Typography>
+                                                        )}
+                                                    </Box>
+                                                    <IconButton size="small" onClick={(e) => { e.stopPropagation(); openEditAddrDialog(addr); }}>
+                                                        <EditIcon fontSize="small" />
+                                                    </IconButton>
+                                                </Box>
+                                            </Paper>
+                                        ))}
+                                    </RadioGroup>
+                                )}
+
+                                <Button
+                                    startIcon={<AddIcon />}
+                                    variant="text"
+                                    size="small"
+                                    onClick={openAddAddrDialog}
+                                    sx={{ mb: 2, fontWeight: 600 }}
+                                >
+                                    Add a new address
                                 </Button>
-                            </Box>
-                            {loadingAddresses ? (
-                                <CenteredLoader message="Loading your saved addresses..." minHeight="160px" />
-                            ) : addresses.length === 0 ? (
-                                <Box sx={{ textAlign: 'center', py: 3 }}>
-                                    <Typography color="text.secondary" mb={2}>No saved addresses yet.</Typography>
-                                    <Button variant="outlined" startIcon={<AddIcon />} onClick={openAddAddrDialog}>
-                                        Add Your First Address
+
+                                <Box>
+                                    <Button
+                                        variant="contained"
+                                        disabled={!selectedAddressId}
+                                        onClick={() => completeSection(1, couponsEnabled ? 2 : 3)}
+                                        sx={{ px: 4 }}
+                                    >
+                                        Deliver to this address
                                     </Button>
                                 </Box>
-                            ) : (
-                                <RadioGroup value={selectedAddressId} onChange={(e) => setSelectedAddressId(e.target.value)}>
-                                    {addresses.map((addr) => (
-                                        <Paper key={addr.id} variant="outlined" sx={{ p: 2, mb: 1.5, borderColor: selectedAddressId === addr.id ? 'primary.main' : 'divider' }}>
-                                            <Box sx={{ display: 'flex', alignItems: 'flex-start' }}>
-                                                <FormControlLabel
-                                                    value={addr.id}
-                                                    control={<Radio />}
-                                                    label={
-                                                        <Box>
-                                                            <Box sx={{ display: 'flex', gap: 1, alignItems: 'center' }}>
-                                                                <Typography variant="body2" fontWeight={600}>{addr.label || 'Address'}</Typography>
-                                                                {addr.isDefault && <Chip label="Default" size="small" color="primary" />}
-                                                            </Box>
-                                                            <Typography variant="body2">
-                                                                {addr.fullName}{addr.phone ? ` · ${addr.phone}` : ''}
-                                                            </Typography>
-                                                            <Typography variant="body2" color="text.secondary">
-                                                                {addr.addressLine1}{addr.addressLine2 ? `, ${addr.addressLine2}` : ''},{' '}
-                                                                {addr.city}{addr.state ? `, ${addr.state}` : ''} {addr.postalCode}, {addr.country}
-                                                            </Typography>
-                                                        </Box>
-                                                    }
-                                                    sx={{ alignItems: 'flex-start', m: 0, flexGrow: 1 }}
-                                                />
-                                                <IconButton size="small" sx={{ ml: 1, mt: 0.25 }} onClick={() => openEditAddrDialog(addr)}>
-                                                    <EditIcon fontSize="small" />
-                                                </IconButton>
-                                            </Box>
-                                        </Paper>
-                                    ))}
-                                </RadioGroup>
-                            )}
-                            <Box sx={{ display: 'flex', justifyContent: 'flex-end', mt: 2 }}>
-                                <Button variant="contained" disabled={!selectedAddressId} onClick={() => setActiveStep(1)}>Continue</Button>
-                            </Box>
-                        </Paper>
-                    )}
+                            </>
+                        )}
+                    </Section>
 
-                    {/* Step 1: Coupon */}
-                    {activeStep === 1 && couponsEnabled && (
-                        <Paper elevation={0} sx={{ border: '1px solid', borderColor: 'divider', borderRadius: 2, p: 3 }}>
-                            <Typography variant="h6" fontWeight={600} mb={2}>Coupon Code (optional)</Typography>
-
-                            {/* Available coupons */}
+                    {/* ── Section 2: Coupons (optional) ── */}
+                    {couponsEnabled && (
+                        <Section
+                            step={2}
+                            activeSection={activeSection}
+                            completedSections={completedSections}
+                            title="Coupons & Offers"
+                            onEdit={() => editSection(2)}
+                            summary={
+                                couponResult && !couponResult.error ? (
+                                    <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                                        <LocalOfferIcon sx={{ fontSize: 16, color: 'success.main' }} />
+                                        <Typography variant="body2" color="success.main" fontWeight={600}>
+                                            Saving {formatPrice(couponResult.totalDiscount || couponResult.orderDiscount || 0)} with {appliedCoupons.length > 1 ? `${appliedCoupons.length} offers` : (couponCode || 'coupon')}
+                                        </Typography>
+                                    </Box>
+                                ) : (
+                                    <Typography variant="body2" color="text.secondary">No coupon applied</Typography>
+                                )
+                            }
+                        >
+                            {/* Available coupons chips */}
                             {showAvailableCoupons && (
-                                <Box sx={{ mb: 2.5 }}>
-                                    <Typography variant="body2" fontWeight={600} mb={1} color="text.secondary">
-                                        Available Coupons
+                                <Box sx={{ mb: 2 }}>
+                                    <Typography variant="caption" fontWeight={600} color="text.secondary" sx={{ display: 'block', mb: 1 }}>
+                                        AVAILABLE OFFERS
                                     </Typography>
                                     {publicCouponsLoading ? (
                                         <CircularProgress size={18} />
@@ -420,59 +547,67 @@ const CheckoutPage = () => {
                                                 const c = offer.coupon || offer;
                                                 const label = c.type === 'percentage'
                                                     ? `${Number(c.value)}% off`
-                                                    : c.type === 'free_shipping'
-                                                        ? 'Free shipping'
+                                                    : c.type === 'free_shipping' ? 'Free shipping'
                                                         : `${formatPrice(Number(c.value))} off`;
-                                                const minNote = Number(c.minOrderAmount) > 0
-                                                    ? ` · min ${formatPrice(Number(c.minOrderAmount))}`
-                                                    : '';
                                                 const applied = couponCode === c.code && couponResult && !couponResult.error;
                                                 return (
                                                     <Chip
                                                         key={c.code}
                                                         icon={<LocalOfferIcon />}
-                                                        label={`${c.code} — ${c.name || label}${minNote}`}
+                                                        label={`${c.code} — ${c.name || label}`}
                                                         onClick={() => handleApplyCoupon(c.code)}
                                                         color={applied ? 'success' : 'default'}
                                                         variant={applied ? 'filled' : 'outlined'}
                                                         clickable
                                                         disabled={couponLoading}
-                                                        size="small"
                                                     />
                                                 );
                                             })}
                                         </Box>
                                     ) : (
-                                        <Typography variant="caption" color="text.secondary">No coupons available right now.</Typography>
+                                        <Typography variant="caption" color="text.secondary">No offers available right now.</Typography>
                                     )}
                                     {eligibleCouponSummary?.bestCoupon && !couponResult?.error && (
-                                        <Typography variant="caption" color="success.main" sx={{ display: 'block', mt: 1 }}>
-                                            Best available offer saves {formatPrice(eligibleCouponSummary.bestCoupon.totalDiscount || 0)}.
-                                        </Typography>
+                                        <Alert severity="info" sx={{ mt: 1.5, py: 0.5 }}>
+                                            Best offer saves {formatPrice(eligibleCouponSummary.bestCoupon.totalDiscount || 0)}
+                                        </Alert>
                                     )}
                                 </Box>
                             )}
 
+                            {/* Manual entry */}
                             <Box sx={{ display: 'flex', gap: 1, mb: 1 }}>
                                 <TextField
                                     size="small"
-                                    label="Enter coupon code"
+                                    placeholder="Enter coupon code"
                                     value={couponCode}
                                     onChange={(e) => { setCouponCode(e.target.value.toUpperCase()); setCouponResult(null); }}
                                     sx={{ flexGrow: 1 }}
+                                    InputProps={{ sx: { fontFamily: 'monospace', fontWeight: 600, letterSpacing: 1 } }}
                                 />
-                                <Button variant="outlined" onClick={() => handleApplyCoupon()} disabled={!couponCode || couponLoading}>
-                                    {couponLoading ? <CircularProgress size={20} /> : 'Apply'}
+                                <Button
+                                    variant="outlined"
+                                    onClick={() => handleApplyCoupon()}
+                                    disabled={!couponCode || couponLoading}
+                                    sx={{ minWidth: 88 }}
+                                >
+                                    {couponLoading ? <CircularProgress size={18} /> : 'Apply'}
                                 </Button>
                             </Box>
+
                             {couponResult && (
-                                <Alert severity={couponResult.error ? 'error' : 'success'} sx={{ mb: 1 }}>
+                                <Alert
+                                    severity={couponResult.error ? 'error' : 'success'}
+                                    sx={{ mb: 1.5 }}
+                                    onClose={couponResult.error ? () => setCouponResult(null) : undefined}
+                                >
                                     {couponResult.message}
-                                    {!couponResult.error && ` — Saving ${formatPrice(couponResult.totalDiscount || couponResult.orderDiscount || 0)}`}
+                                    {!couponResult.error && ` — You save ${formatPrice(couponResult.totalDiscount || couponResult.orderDiscount || 0)}`}
                                 </Alert>
                             )}
+
                             {!couponResult?.error && appliedCoupons.length > 1 && (
-                                <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 1, mb: 1 }}>
+                                <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 1, mb: 1.5 }}>
                                     {appliedCoupons.map((coupon) => (
                                         <Chip
                                             key={coupon.code}
@@ -484,78 +619,133 @@ const CheckoutPage = () => {
                                     ))}
                                 </Box>
                             )}
-                            <Box sx={{ display: 'flex', justifyContent: 'space-between', mt: 3 }}>
-                                <Button onClick={() => setActiveStep(0)}>Back</Button>
-                                <Button variant="contained" onClick={() => setActiveStep(reviewStep)}>Continue</Button>
+
+                            <Box sx={{ display: 'flex', gap: 1, mt: 2 }}>
+                                <Button variant="contained" onClick={() => completeSection(2, 3)} sx={{ px: 4 }}>
+                                    Continue
+                                </Button>
+                                {(couponResult && !couponResult.error) && (
+                                    <Button
+                                        variant="text"
+                                        color="error"
+                                        onClick={() => { setCouponCode(''); setCouponResult(null); }}
+                                    >
+                                        Remove coupon
+                                    </Button>
+                                )}
                             </Box>
-                        </Paper>
+                        </Section>
                     )}
 
-                    {/* Step 2: Review & Place */}
-                    {activeStep === reviewStep && (
-                        <Paper elevation={0} sx={{ border: '1px solid', borderColor: 'divider', borderRadius: 2, p: 3 }}>
-                            <Typography variant="h6" fontWeight={600} mb={2}>Review Your Order</Typography>
-                            {items.map((item) => {
-                                const itemPrice = item?.product ? getCartItemUnitPrice(item) : 0;
-                                const quantity = normalizeBuyNowQuantity(item?.quantity);
-                                const itemName = item?.product?.name || 'Product';
-                                return (
-                                    <Box key={item.id || `${item.productId}-${item.variantId || 'base'}`} sx={{ display: 'flex', justifyContent: 'space-between', mb: 1 }}>
-                                        <Typography variant="body2">
-                                            {itemName} {item.variant ? `(${getVariantOptionLabel(item.variant)})` : ''} × {quantity}
-                                        </Typography>
-                                        <Typography variant="body2" fontWeight={600}>
-                                            {formatPrice(itemPrice * quantity)}
-                                        </Typography>
-                                    </Box>
-                                );
-                            })}
-                            <Divider sx={{ my: 2 }} />
-                            {couponResult && !couponResult.error && (
-                                <Alert severity="success" sx={{ mb: 2 }}>
-                                    {appliedCoupons.length > 1
-                                        ? `${appliedCoupons.length} promotions applied.`
-                                        : `${couponResult.coupon?.name || couponCode} applied.`}
-                                    {couponResult.coupon?.summary ? ` ${couponResult.coupon.summary}.` : ''}
-                                </Alert>
-                            )}
-                            {couponResult && !couponResult.error && appliedCoupons.length > 0 && (
-                                <Box sx={{ mb: 2 }}>
-                                    {appliedCoupons.map((coupon) => (
-                                        <Box key={coupon.code} sx={{ display: 'flex', justifyContent: 'space-between', mb: 0.5 }}>
-                                            <Typography variant="body2" color="text.secondary">
-                                                {coupon.code}{coupon.applicationMode === 'auto' ? ' (auto)' : ''}
-                                            </Typography>
-                                            <Typography variant="body2" color="success.main">
-                                                -{formatPrice(coupon.totalDiscount || 0)}
-                                            </Typography>
-                                        </Box>
-                                    ))}
-                                </Box>
-                            )}
-                            <TextField
-                                fullWidth
-                                size="small"
-                                label="Order notes (optional)"
-                                multiline
-                                rows={2}
-                                value={notes}
-                                onChange={(e) => setNotes(e.target.value)}
-                                sx={{ mb: 2 }}
-                            />
-                            {/* Payment Method Selection */}
+                    {/* ── Section 3: Payment ── */}
+                    <Section
+                        step={3}
+                        activeSection={activeSection}
+                        completedSections={completedSections}
+                        title="Payment Method"
+                        onEdit={() => editSection(3)}
+                        summary={
+                            <Typography variant="body2" color="text.secondary">
+                                {paymentMethod === 'cod' ? '💵 Cash on Delivery' : '💳 Pay Online (Razorpay)'}
+                            </Typography>
+                        }
+                    >
+                        <RadioGroup value={paymentMethod} onChange={(e) => setPaymentMethod(e.target.value)}>
+                            {/* Razorpay */}
                             <Paper
                                 variant="outlined"
+                                onClick={() => setPaymentMethod('razorpay')}
                                 sx={{
-                                    borderRadius: 2,
-                                    mb: 2,
-                                    overflow: 'hidden',
-                                    borderColor: 'divider',
+                                    p: 2, mb: 1.5, cursor: 'pointer',
+                                    borderColor: paymentMethod === 'razorpay' ? 'primary.main' : 'divider',
+                                    bgcolor: paymentMethod === 'razorpay' ? 'action.selected' : 'background.paper',
+                                    transition: 'all 0.15s',
                                 }}
                             >
-                                <Box sx={{ px: 2.5, py: 1.5, bgcolor: 'grey.50', borderBottom: '1px solid', borderColor: 'divider' }}>
-                                    <Typography variant="subtitle2" fontWeight={600}>Payment Method</Typography>
+                                <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                                    <Radio value="razorpay" checked={paymentMethod === 'razorpay'} size="small" />
+                                    <Box sx={{ flexGrow: 1 }}>
+                                        <Typography variant="body2" fontWeight={700}>Pay Online</Typography>
+                                        <Typography variant="caption" color="text.secondary">
+                                            Credit / Debit card · UPI · Netbanking · Wallets
+                                        </Typography>
+                                    </Box>
+                                    <Box sx={{ display: 'flex', gap: 0.5, alignItems: 'center' }}>
+                                        {['VISA', 'UPI', 'MC'].map((brand) => (
+                                            <Chip key={brand} label={brand} size="small" sx={{ fontSize: 10, height: 20 }} variant="outlined" />
+                                        ))}
+                                    </Box>
                                 </Box>
+                            </Paper>
+
+                            {/* COD */}
+                            <Paper
+                                variant="outlined"
+                                onClick={() => setPaymentMethod('cod')}
+                                sx={{
+                                    p: 2, cursor: 'pointer',
+                                    borderColor: paymentMethod === 'cod' ? 'primary.main' : 'divider',
+                                    bgcolor: paymentMethod === 'cod' ? 'action.selected' : 'background.paper',
+                                    transition: 'all 0.15s',
+                                }}
+                            >
+                                <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                                    <Radio value="cod" checked={paymentMethod === 'cod'} size="small" />
+                                    <Box>
+                                        <Typography variant="body2" fontWeight={700}>Cash on Delivery</Typography>
+                                        <Typography variant="caption" color="text.secondary">
+                                            Pay when your order arrives at your doorstep
+                                        </Typography>
+                                    </Box>
+                                </Box>
+
+                            </Paper>
+                        </RadioGroup>
+
+                        {/* Order notes */}
+                        <TextField
+                            fullWidth
+                            size="small"
+                            label="Order notes (optional)"
+                            placeholder="Special instructions for delivery..."
+                            multiline
+                            rows={2}
+                            value={notes}
+                            onChange={(e) => setNotes(e.target.value)}
+                            sx={{ mt: 2 }}
+                        />
+                    </Section>
+
+                    {/* ── Items summary (always visible at bottom of left col) ── */}
+                    <Paper elevation={0} sx={{ border: '1px solid', borderColor: 'divider', borderRadius: 2, p: 2.5, mt: 1.5 }}>
+                        <Typography variant="subtitle2" fontWeight={600} mb={1.5} color="text.secondary">
+                            ORDER ITEMS ({items.length})
+                        </Typography>
+                        {items.map((item) => {
+                            const itemPrice = item?.product ? getCartItemUnitPrice(item) : 0;
+                            const quantity = normalizeBuyNowQuantity(item?.quantity);
+                            return (
+                                <Box key={item.id || `${item.productId}-${item.variantId || 'base'}`}
+                                    sx={{ display: 'flex', justifyContent: 'space-between', mb: 1, alignItems: 'flex-start' }}>
+                                    <Box sx={{ flex: 1, pr: 2 }}>
+                                        <Typography variant="body2" fontWeight={500}>
+                                            {item?.product?.name || 'Product'}
+                                        </Typography>
+                                        {item.variant && (
+                                            <Typography variant="caption" color="text.secondary">
+                                                {getVariantOptionLabel(item.variant)}
+                                            </Typography>
+                                        )}
+                                        <Typography variant="caption" color="text.secondary" display="block">
+                                            Qty: {quantity}
+                                        </Typography>
+                                    </Box>
+                                    <Typography variant="body2" fontWeight={600}>{formatPrice(itemPrice * quantity)}</Typography>
+                                </Box>
+                            );
+                        })}
+                    </Paper>
+
                                 <RadioGroup
                                     value={paymentMethod}
                                     onChange={(e) => setPaymentMethod(e.target.value)}
@@ -605,105 +795,148 @@ const CheckoutPage = () => {
                             </Box>
                         </Paper>
                     )}
+
                 </Box>
 
-                {/* Right: order summary */}
-                <Paper elevation={0} sx={{ border: '1px solid', borderColor: 'divider', borderRadius: 2, p: 3, alignSelf: 'start', position: 'sticky', top: 80 }}>
-                    <Typography variant="h6" fontWeight={700} mb={2}>Summary</Typography>
+                {/* ── Right: Price breakdown + CTA ── */}
+                <Box sx={{ position: 'sticky', top: 80 }}>
+                    <Paper elevation={0} sx={{ border: '1px solid', borderColor: 'divider', borderRadius: 2, overflow: 'hidden' }}>
+                        <Box sx={{ px: 2.5, py: 2, borderBottom: '1px solid', borderColor: 'divider' }}>
+                            <Typography variant="subtitle2" fontWeight={700} color="text.secondary" letterSpacing={0.5}>
+                                PRICE DETAILS
+                            </Typography>
+                        </Box>
+                        <Box sx={{ px: 2.5, py: 2 }}>
+                            <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 1 }}>
+                                <Typography variant="body2" color="text.secondary">
+                                    Price ({items.reduce((s, i) => s + normalizeBuyNowQuantity(i?.quantity), 0)} items)
+                                </Typography>
+                                <Typography variant="body2">{formatPrice(subtotal)}</Typography>
+                            </Box>
 
-                    {/* Items */}
-                    <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 1 }}>
-                        <Typography color="text.secondary">Subtotal</Typography>
-                        <Typography>{formatPrice(subtotal)}</Typography>
-                    </Box>
+                            {/* Shipping */}
+                            <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 1 }}>
+                                <Typography variant="body2" color="text.secondary">Delivery Charges</Typography>
+                                {shippingCost === 0 ? (
+                                    <Typography variant="body2" color="success.main" fontWeight={600}>FREE</Typography>
+                                ) : shippingDiscount > 0 ? (
+                                    <Box sx={{ textAlign: 'right' }}>
+                                        <Typography variant="body2" sx={{ textDecoration: 'line-through', color: 'text.secondary' }}>
+                                            {formatPrice(shippingCost)}
+                                        </Typography>
+                                        <Typography variant="body2" color="success.main" fontWeight={600}>FREE</Typography>
+                                    </Box>
+                                ) : (
+                                    <Typography variant="body2">{formatPrice(shippingCost)}</Typography>
+                                )}
+                            </Box>
+                            {shippingMethod === 'free_above_threshold' && shippingCost > 0 && (
+                                <Typography variant="caption" color="success.main" display="block" mb={1}>
+                                    Add {formatPrice(freeThreshold - subtotal)} more for free delivery
+                                </Typography>
+                            )}
 
-                    {/* Shipping */}
-                    <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 1, alignItems: 'center' }}>
-                        <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
-                            <LocalShippingIcon sx={{ fontSize: 16, color: 'text.secondary' }} />
-                            <Typography color="text.secondary">Shipping</Typography>
-                        </Box>
-                        {shippingCost === 0 ? (
-                            <Chip label="Free" size="small" color="success" />
-                        ) : shippingDiscount > 0 ? (
-                            <Typography>{formatPrice(effectiveShippingCost)}</Typography>
-                        ) : (
-                            <Typography>{formatPrice(shippingCost)}</Typography>
-                        )}
-                    </Box>
-                    {shippingDiscount > 0 && (
-                        <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 1 }}>
-                            <Typography color="success.main">Shipping discount</Typography>
-                            <Typography color="success.main">-{formatPrice(shippingDiscount)}</Typography>
-                        </Box>
-                    )}
-                    {shippingMethod === 'free_above_threshold' && shippingCost > 0 && (
-                        <Typography variant="caption" color="success.main" display="block" mb={1} textAlign="right">
-                            Add {formatPrice(freeThreshold - subtotal)} more for free shipping
-                        </Typography>
-                    )}
+                            {/* GST breakdown */}
+                            {enableCGST && cgstAmount > 0 && (
+                                <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 0.5 }}>
+                                    <Typography variant="body2" color="text.secondary">CGST ({(parseFloat(settings?.tax?.cgstRate ?? 0) * 100).toFixed(1)}%)</Typography>
+                                    <Typography variant="body2">{formatPrice(cgstAmount)}</Typography>
+                                </Box>
+                            )}
+                            {enableSGST && sgstAmount > 0 && (
+                                <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 0.5 }}>
+                                    <Typography variant="body2" color="text.secondary">SGST ({(parseFloat(settings?.tax?.sgstRate ?? 0) * 100).toFixed(1)}%)</Typography>
+                                    <Typography variant="body2">{formatPrice(sgstAmount)}</Typography>
+                                </Box>
+                            )}
+                            {enableIGST && igstAmount > 0 && (
+                                <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 0.5 }}>
+                                    <Typography variant="body2" color="text.secondary">IGST ({(parseFloat(settings?.tax?.igstRate ?? 0) * 100).toFixed(1)}%)</Typography>
+                                    <Typography variant="body2">{formatPrice(igstAmount)}</Typography>
+                                </Box>
+                            )}
+                            {!useGST && flatTaxAmount > 0 && (
+                                <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 0.5 }}>
+                                    <Typography variant="body2" color="text.secondary">Tax ({(taxRate).toFixed(0)}%)</Typography>
+                                    <Typography variant="body2">{formatPrice(flatTaxAmount)}</Typography>
+                                </Box>
+                            )}
+                            {taxInclusive && (
+                                <Typography variant="caption" color="text.secondary" display="block" mb={1} textAlign="right">
+                                    Inclusive of all taxes
+                                </Typography>
+                            )}
 
-                    {/* GST breakdown */}
-                    {enableCGST && cgstAmount > 0 && (
-                        <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 0.5 }}>
-                            <Typography color="text.secondary" variant="body2">CGST ({(parseFloat(settings?.tax?.cgstRate ?? 0) * 100).toFixed(1)}%)</Typography>
-                            <Typography variant="body2">{formatPrice(cgstAmount)}</Typography>
-                        </Box>
-                    )}
-                    {enableSGST && sgstAmount > 0 && (
-                        <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 0.5 }}>
-                            <Typography color="text.secondary" variant="body2">SGST ({(parseFloat(settings?.tax?.sgstRate ?? 0) * 100).toFixed(1)}%)</Typography>
-                            <Typography variant="body2">{formatPrice(sgstAmount)}</Typography>
-                        </Box>
-                    )}
-                    {enableIGST && igstAmount > 0 && (
-                        <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 0.5 }}>
-                            <Typography color="text.secondary" variant="body2">IGST ({(parseFloat(settings?.tax?.igstRate ?? 0) * 100).toFixed(1)}%)</Typography>
-                            <Typography variant="body2">{formatPrice(igstAmount)}</Typography>
-                        </Box>
-                    )}
-                    {/* fallback flat tax */}
-                    {!useGST && flatTaxAmount > 0 && (
-                        <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 0.5 }}>
-                            <Typography color="text.secondary" variant="body2">Tax ({(taxRate * 100).toFixed(0)}%)</Typography>
-                            <Typography variant="body2">{formatPrice(flatTaxAmount)}</Typography>
-                        </Box>
-                    )}
-                    {/* inclusive note */}
-                    {taxInclusive && (
-                        <Typography variant="caption" color="text.secondary" display="block" mb={1} textAlign="right">
-                            Tax included in price
-                        </Typography>
-                    )}
-
-                    {/* Discount */}
-                    {orderDiscount > 0 && (
-                        <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 1 }}>
-                            <Typography color="success.main">Discount</Typography>
-                            <Typography color="success.main">-{formatPrice(orderDiscount)}</Typography>
-                        </Box>
-                    )}
-                    {appliedCoupons.length > 0 && (
-                        <Box sx={{ mb: 1 }}>
-                            {appliedCoupons.map((coupon) => (
+                            {/* Discount */}
+                            {orderDiscount > 0 && (
+                                <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 0.5 }}>
+                                    <Typography variant="body2" color="text.secondary">Coupon Discount</Typography>
+                                    <Typography variant="body2" color="success.main" fontWeight={600}>−{formatPrice(orderDiscount)}</Typography>
+                                </Box>
+                            )}
+                            {appliedCoupons.length > 0 && appliedCoupons.map((coupon) => (
                                 <Box key={coupon.code} sx={{ display: 'flex', justifyContent: 'space-between', mb: 0.5 }}>
-                                    <Typography color="text.secondary" variant="body2">
+                                    <Typography variant="caption" color="text.secondary">
                                         {coupon.code}{coupon.applicationMode === 'auto' ? ' (auto)' : ''}
                                     </Typography>
-                                    <Typography color="success.main" variant="body2">
-                                        -{formatPrice(coupon.totalDiscount || 0)}
+                                    <Typography variant="caption" color="success.main">
+                                        −{formatPrice(coupon.totalDiscount || 0)}
                                     </Typography>
                                 </Box>
                             ))}
-                        </Box>
-                    )}
 
-                    <Divider sx={{ my: 1.5 }} />
-                    <Box sx={{ display: 'flex', justifyContent: 'space-between' }}>
-                        <Typography fontWeight={700}>Total</Typography>
-                        <Typography fontWeight={700} color="primary.main">{formatPrice(total)}</Typography>
-                    </Box>
-                </Paper>
+                            <Divider sx={{ my: 1.5 }} />
+
+                            {/* Total */}
+                            <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 0.5 }}>
+                                <Typography variant="subtitle1" fontWeight={700}>Total Amount</Typography>
+                                <Typography variant="subtitle1" fontWeight={700}>{formatPrice(total)}</Typography>
+                            </Box>
+
+                            {totalSavings > 0 && (
+                                <Typography variant="body2" color="success.main" fontWeight={600} sx={{ textAlign: 'right', mt: 0.5 }}>
+                                    You save {formatPrice(totalSavings)} on this order 🎉
+                                </Typography>
+                            )}
+
+                            <Divider sx={{ my: 1.5 }} />
+
+                            {/* CTA */}
+                            <Button
+                                fullWidth
+                                variant="contained"
+                                size="large"
+                                onClick={handlePlaceOrder}
+                                disabled={placing || activeSection !== 3 || !selectedAddressId}
+                                sx={{
+                                    py: 1.5,
+                                    fontSize: 16,
+                                    fontWeight: 700,
+                                    borderRadius: 2,
+                                }}
+                            >
+                                {placing ? (
+                                    <CircularProgress size={22} color="inherit" />
+                                ) : paymentMethod === 'cod' ? (
+                                    'Place Order'
+                                ) : (
+                                    'Place Order & Pay'
+                                )}
+                            </Button>
+
+                            {activeSection !== 3 && (
+                                <Typography variant="caption" color="text.secondary" display="block" textAlign="center" mt={1}>
+                                    Complete the steps above to place your order
+                                </Typography>
+                            )}
+
+                            <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 0.5, mt: 1.5 }}>
+                                <LockIcon sx={{ fontSize: 13, color: 'text.disabled' }} />
+                                <Typography variant="caption" color="text.disabled">Safe and secure payments</Typography>
+                            </Box>
+                        </Box>
+                    </Paper>
+                </Box>
             </Box>
 
             {/* ── Add / Edit Address Dialog ── */}
@@ -719,102 +952,55 @@ const CheckoutPage = () => {
                 <DialogContent>
                     <Grid container spacing={2} sx={{ mt: 0.5 }}>
                         <Grid item xs={12} sm={6}>
-                            <TextField
-                                label="Label (e.g. Home, Work)"
-                                size="small" fullWidth
-                                value={addrDialog.form.label}
-                                onChange={(e) => setAddrField('label', e.target.value)}
-                                error={!!addrDialog.errors?.label}
-                                helperText={addrDialog.errors?.label}
-                            />
+                            <TextField label="Label (e.g. Home, Work)" size="small" fullWidth
+                                value={addrDialog.form.label} onChange={(e) => setAddrField('label', e.target.value)}
+                                error={!!addrDialog.errors?.label} helperText={addrDialog.errors?.label} />
                         </Grid>
                         <Grid item xs={12} sm={6}>
-                            <TextField
-                                label="Full Name *"
-                                size="small" fullWidth required
-                                value={addrDialog.form.fullName}
-                                onChange={(e) => setAddrField('fullName', e.target.value)}
-                                error={!!addrDialog.errors?.fullName}
-                                helperText={addrDialog.errors?.fullName}
-                            />
+                            <TextField label="Full Name *" size="small" fullWidth required
+                                value={addrDialog.form.fullName} onChange={(e) => setAddrField('fullName', e.target.value)}
+                                error={!!addrDialog.errors?.fullName} helperText={addrDialog.errors?.fullName} />
                         </Grid>
                         <Grid item xs={12} sm={6}>
-                            <TextField
-                                label="Phone"
-                                size="small" fullWidth
-                                value={addrDialog.form.phone}
-                                onChange={(e) => setAddrField('phone', e.target.value)}
-                                error={!!addrDialog.errors?.phone}
-                                helperText={addrDialog.errors?.phone}
-                            />
+                            <TextField label="Phone" size="small" fullWidth
+                                value={addrDialog.form.phone} onChange={(e) => setAddrField('phone', e.target.value)}
+                                error={!!addrDialog.errors?.phone} helperText={addrDialog.errors?.phone} />
                         </Grid>
                         <Grid item xs={12}>
-                            <TextField
-                                label="Address Line 1 *"
-                                size="small" fullWidth required
-                                value={addrDialog.form.addressLine1}
-                                onChange={(e) => setAddrField('addressLine1', e.target.value)}
-                                error={!!addrDialog.errors?.addressLine1}
-                                helperText={addrDialog.errors?.addressLine1}
-                            />
+                            <TextField label="Address Line 1 *" size="small" fullWidth required
+                                value={addrDialog.form.addressLine1} onChange={(e) => setAddrField('addressLine1', e.target.value)}
+                                error={!!addrDialog.errors?.addressLine1} helperText={addrDialog.errors?.addressLine1} />
                         </Grid>
                         <Grid item xs={12}>
-                            <TextField
-                                label="Address Line 2"
-                                size="small" fullWidth
-                                value={addrDialog.form.addressLine2}
-                                onChange={(e) => setAddrField('addressLine2', e.target.value)}
-                                error={!!addrDialog.errors?.addressLine2}
-                                helperText={addrDialog.errors?.addressLine2}
-                            />
+                            <TextField label="Address Line 2" size="small" fullWidth
+                                value={addrDialog.form.addressLine2} onChange={(e) => setAddrField('addressLine2', e.target.value)}
+                                error={!!addrDialog.errors?.addressLine2} helperText={addrDialog.errors?.addressLine2} />
                         </Grid>
                         <Grid item xs={12} sm={6}>
-                            <TextField
-                                label="City *"
-                                size="small" fullWidth required
-                                value={addrDialog.form.city}
-                                onChange={(e) => setAddrField('city', e.target.value)}
-                                error={!!addrDialog.errors?.city}
-                                helperText={addrDialog.errors?.city}
-                            />
+                            <TextField label="City *" size="small" fullWidth required
+                                value={addrDialog.form.city} onChange={(e) => setAddrField('city', e.target.value)}
+                                error={!!addrDialog.errors?.city} helperText={addrDialog.errors?.city} />
                         </Grid>
                         <Grid item xs={12} sm={6}>
-                            <TextField
-                                label="State / Province"
-                                size="small" fullWidth
-                                value={addrDialog.form.state}
-                                onChange={(e) => setAddrField('state', e.target.value)}
-                                error={!!addrDialog.errors?.state}
-                                helperText={addrDialog.errors?.state}
-                            />
+                            <TextField label="State / Province" size="small" fullWidth
+                                value={addrDialog.form.state} onChange={(e) => setAddrField('state', e.target.value)}
+                                error={!!addrDialog.errors?.state} helperText={addrDialog.errors?.state} />
                         </Grid>
                         <Grid item xs={12} sm={6}>
-                            <TextField
-                                label="Postal Code *"
-                                size="small" fullWidth required
-                                value={addrDialog.form.postalCode}
-                                onChange={(e) => setAddrField('postalCode', e.target.value)}
-                                error={!!addrDialog.errors?.postalCode}
-                                helperText={addrDialog.errors?.postalCode}
-                            />
+                            <TextField label="Postal Code *" size="small" fullWidth required
+                                value={addrDialog.form.postalCode} onChange={(e) => setAddrField('postalCode', e.target.value)}
+                                error={!!addrDialog.errors?.postalCode} helperText={addrDialog.errors?.postalCode} />
                         </Grid>
                         <Grid item xs={12} sm={6}>
-                            <TextField
-                                label="Country *"
-                                size="small" fullWidth required
-                                value={addrDialog.form.country}
-                                onChange={(e) => setAddrField('country', e.target.value)}
-                                error={!!addrDialog.errors?.country}
-                                helperText={addrDialog.errors?.country}
-                            />
+                            <TextField label="Country *" size="small" fullWidth required
+                                value={addrDialog.form.country} onChange={(e) => setAddrField('country', e.target.value)}
+                                error={!!addrDialog.errors?.country} helperText={addrDialog.errors?.country} />
                         </Grid>
                         <Grid item xs={12}>
                             <FormControlLabel
                                 control={
-                                    <Checkbox
-                                        checked={!!addrDialog.form.isDefault}
-                                        onChange={(e) => setAddrField('isDefault', e.target.checked)}
-                                    />
+                                    <Checkbox checked={!!addrDialog.form.isDefault}
+                                        onChange={(e) => setAddrField('isDefault', e.target.checked)} />
                                 }
                                 label="Set as default address"
                             />
@@ -822,10 +1008,7 @@ const CheckoutPage = () => {
                     </Grid>
                 </DialogContent>
                 <DialogActions sx={{ px: 3, pb: 2 }}>
-                    <Button
-                        onClick={() => setAddrDialog((s) => ({ ...s, open: false }))}
-                        disabled={addrDialog.saving}
-                    >
+                    <Button onClick={() => setAddrDialog((s) => ({ ...s, open: false }))} disabled={addrDialog.saving}>
                         Cancel
                     </Button>
                     <Button
@@ -850,4 +1033,6 @@ const CheckoutPage = () => {
     );
 };
 
+
 export default CheckoutPage;
+
