@@ -1,27 +1,32 @@
 import api from './api';
 
+// Admin route prefix — driven by VITE_ADMIN_ROUTE_PREFIX in .env.
+// Must match the ADMIN_ROUTE_PREFIX set on the server (without the leading /api/).
+// Example: if server has ADMIN_ROUTE_PREFIX=/api/mgmt-xK9mP2, set VITE_ADMIN_ROUTE_PREFIX=mgmt-xK9mP2
+const A = import.meta.env.VITE_ADMIN_ROUTE_PREFIX || 'admin';
+
 // Dashboard
-const getStats = () => api.get('/admin/dashboard/stats');
+const getStats = () => api.get(`/${A}/dashboard/stats`);
 const getSalesChart = ({ period = 'monthly', startDate, endDate } = {}) => {
   const params = new URLSearchParams({ period });
   if (startDate) params.set('startDate', startDate);
   if (endDate) params.set('endDate', endDate);
-  return api.get(`/admin/dashboard/sales-chart?${params.toString()}`);
+  return api.get(`/${A}/dashboard/sales-chart?${params.toString()}`);
 };
-const getLowStock = (threshold = 10) => api.get(`/admin/dashboard/low-stock?threshold=${threshold}`);
-const getRecentOrders = () => api.get('/admin/dashboard/recent-orders');
-const getAccessRoles = () => api.get('/admin/access-control/roles');
-const getAccessPermissions = () => api.get('/admin/access-control/permissions');
+const getLowStock = (threshold = 10) => api.get(`/${A}/dashboard/low-stock?threshold=${threshold}`);
+const getRecentOrders = () => api.get(`/${A}/dashboard/recent-orders`);
+const getAccessRoles = () => api.get(`/${A}/access-control/roles`);
+const getAccessPermissions = () => api.get(`/${A}/access-control/permissions`);
 const getAccessUsers = (params = {}) => {
   const query = new URLSearchParams(
     Object.fromEntries(Object.entries(params).filter(([, value]) => value != null && value !== ''))
   ).toString();
-  return api.get(`/admin/access-control/users${query ? `?${query}` : ''}`);
+  return api.get(`/${A}/access-control/users${query ? `?${query}` : ''}`);
 };
-const createAccessRole = (data) => api.post('/admin/access-control/roles', data);
-const updateAccessRole = (id, data) => api.put(`/admin/access-control/roles/${id}`, data);
-const updateAccessUserRole = (id, roleId) => api.put(`/admin/access-control/users/${id}/role`, { roleId });
-const createAccessUser = (data) => api.post('/admin/access-control/users', data);
+const createAccessRole = (data) => api.post(`/${A}/access-control/roles`, data);
+const updateAccessRole = (id, data) => api.put(`/${A}/access-control/roles/${id}`, data);
+const updateAccessUserRole = (id, roleId) => api.put(`/${A}/access-control/users/${id}/role`, { roleId });
+const createAccessUser = (data) => api.post(`/${A}/access-control/users`, data);
 
 // Audit Logs
 const getAuditLogs = (params = {}) => {
@@ -44,9 +49,9 @@ const getAdminReviews = (params = {}) => {
   const query = new URLSearchParams(params).toString();
   return api.get(`/reviews${query ? `?${query}` : ''}`);
 };
-// ✅ Correct route: PUT /admin/reviews/:id/moderate
-const updateReviewStatus = (id, status) => api.put(`/admin/reviews/${id}/moderate`, { status });
-const deleteReview = (id) => api.delete(`/admin/reviews/${id}`);
+// Route: PUT /{adminPrefix}/reviews/:id/moderate
+const updateReviewStatus = (id, status) => api.put(`/${A}/reviews/${id}/moderate`, { status });
+const deleteReview = (id) => api.delete(`/${A}/reviews/${id}`);
 
 // Coupons
 const getCoupons = (params = {}) => {

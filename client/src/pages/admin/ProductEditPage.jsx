@@ -33,6 +33,7 @@ import {
   Accordion,
   AccordionSummary,
   AccordionDetails,
+  Switch,
 } from '@mui/material';
 import {
   Add as AddIcon,
@@ -179,6 +180,7 @@ const ProductEditPage = () => {
     saleLabel: '',
     quantity: '',
     status: 'draft',
+    isEnabled: true,
     categoryIds: [],
     brandId: '',
     images: [],
@@ -230,6 +232,7 @@ const ProductEditPage = () => {
               saleLabel: p.saleLabel || '',
               quantity: p.quantity || 0,
               status: p.status || 'draft',
+              isEnabled: p.isEnabled ?? true,
               categoryIds: p.categories?.map((c) => c.id) || [],
               brandId: p.brandId || '',
               images: p.images || [],
@@ -688,6 +691,17 @@ const ProductEditPage = () => {
                   <MenuItem value="published">Published</MenuItem>
                 </Select>
               </FormControl>
+              <FormControlLabel
+                control={
+                  <Switch
+                    checked={formData.isEnabled}
+                    onChange={(e) => setField('isEnabled', e.target.checked)}
+                    color="success"
+                  />
+                }
+                label="Enabled on storefront"
+                sx={{ mt: 2 }}
+              />
             </Paper>
             
             <TaxConfigSection 

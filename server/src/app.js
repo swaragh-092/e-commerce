@@ -115,7 +115,11 @@ app.use('/api/payments', paymentRoutes);
 app.use('/api/wishlist', wishlistRoutes);
 app.use('/api', reviewRoutes);
 app.use('/api/audit-logs', auditRoutes);
-app.use('/api/admin', adminRoutes);
+// Admin route is mounted at a configurable secret path to prevent enumeration.
+// Set ADMIN_ROUTE_PREFIX in .env — e.g. /api/mgmt-xK9mP2 — to mask the endpoint.
+// Falls back to /api/admin in development if not set.
+const adminPrefix = process.env.ADMIN_ROUTE_PREFIX || '/api/admin';
+app.use(adminPrefix, adminRoutes);
 app.use('/api/attributes', attributeRoutes);
 app.use('/api/categories', categoryAttributeRoutes); // extends existing /api/categories with /:id/attributes sub-routes
 app.use('/api/products', productAttributeRoutes);   // extends existing /api/products with /:id/attributes sub-routes
