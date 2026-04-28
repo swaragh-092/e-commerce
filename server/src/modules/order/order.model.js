@@ -62,7 +62,7 @@ module.exports = (sequelize, DataTypes) => {
             allowNull: false,
             defaultValue: 'razorpay',
             validate: {
-                isIn: [['razorpay', 'cod']],
+                isIn: [['razorpay', 'stripe', 'payu', 'cashfree', 'cod']],
             },
             field: 'payment_method',
         },

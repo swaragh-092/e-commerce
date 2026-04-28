@@ -77,7 +77,7 @@ const SettingsPage = () => {
   const [templateTestEmail, setTemplateTestEmail] = useState('');
   const [templateTesting, setTemplateTesting] = useState({});
   const [templateExpanded, setTemplateExpanded] = useState(null);
-  const notify = useNotification();
+  const { notify } = useNotification();
   const { refreshSettings } = useContext(SettingsContext) || {};
   const { hasPermission } = useAuth();
   const canManageSettings = hasPermission(PERMISSIONS.SETTINGS_MANAGE);
@@ -1084,6 +1084,36 @@ const SettingsPage = () => {
           {toggle('features.showAvailableCoupons', 'Show available coupons to customers at checkout')}
         </>,
         ['checkout', 'guest checkout', 'coupons']
+      ),
+      section(
+        'Payment Gateways',
+        'Enable, disable and configure payment providers from the dedicated gateway manager.',
+        <Box
+          sx={{
+            display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+            p: 2, border: '1px solid', borderColor: 'primary.main', borderRadius: 2,
+            bgcolor: 'primary.main', color: '#fff',
+          }}
+        >
+          <Box>
+            <Typography variant="subtitle2" fontWeight={700} sx={{ color: '#fff' }}>
+              💳 Manage Payment Gateways
+            </Typography>
+            <Typography variant="body2" sx={{ color: 'rgba(255,255,255,0.85)', mt: 0.25 }}>
+              Configure Razorpay, Cashfree, Stripe, PayU, and Cash on Delivery — including API keys and connection status.
+            </Typography>
+          </Box>
+          <Button
+            component="a"
+            href="/admin/payment-gateways"
+            variant="contained"
+            size="small"
+            sx={{ bgcolor: '#fff', color: 'primary.main', flexShrink: 0, ml: 2, '&:hover': { bgcolor: 'rgba(255,255,255,0.9)' } }}
+          >
+            Open Gateway Manager →
+          </Button>
+        </Box>,
+        ['payment', 'gateway', 'razorpay', 'stripe', 'payu', 'cashfree', 'cod']
       ),
     ],
     [

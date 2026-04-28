@@ -15,6 +15,7 @@ const {
   Sequelize,
 } = require('../index');
 const { Op } = Sequelize;
+const salePriceIsDiscounted = Sequelize.where(Sequelize.col('sale_price'), Op.lt, Sequelize.col('price'));
 const { generateSlug } = require('../../utils/slugify');
 // Note: Although the ARCHITECTURE/STANDARDS refer to generateUniqueSlug(),
 // the slugify.js utility internally implements the collision-safe loop
@@ -201,6 +202,7 @@ exports.getProducts = async (filters, page, limit, isAdmin = false) => {
       active: {
         [Op.and]: [
           { salePrice: { [Op.ne]: null } },
+          salePriceIsDiscounted,
           { [Op.or]: [{ saleStartAt: null }, { saleStartAt: { [Op.lte]: now } }] },
           { [Op.or]: [{ saleEndAt: null }, { saleEndAt: { [Op.gte]: now } }] },
         ],
@@ -227,6 +229,7 @@ exports.getProducts = async (filters, page, limit, isAdmin = false) => {
     where[Op.and] = [
       ...(where[Op.and] || []),
       { salePrice: { [Op.ne]: null } },
+      salePriceIsDiscounted,
       { [Op.or]: [{ saleStartAt: null }, { saleStartAt: { [Op.lte]: now } }] },
       { [Op.or]: [{ saleEndAt: null }, { saleEndAt: { [Op.gte]: now } }] },
     ];

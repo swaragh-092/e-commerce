@@ -31,6 +31,7 @@ const getAll = async () => {
   const grouped = {
     theme: { ...defaultSettings.theme },
     features: { ...defaultSettings.features },
+    payments: { ...defaultSettings.payments },
     sales: { ...defaultSettings.sales },
     seo: { ...defaultSettings.seo },
     general: { ...defaultSettings.general },
@@ -47,9 +48,12 @@ const getAll = async () => {
     productPage: { ...defaultSettings.productPage },
     admin: { ...defaultSettings.admin },
     invoice: { ...defaultSettings.invoice },
+    // gateway_credentials is intentionally excluded — secrets must never be sent to the client
   };
 
   settings.forEach(s => {
+    // Skip gateway_credentials — they are server-side only and must not be exposed to the frontend
+    if (s.group === 'gateway_credentials') return;
     if (grouped[s.group]) {
       grouped[s.group][s.key] = s.value;
     }
@@ -59,7 +63,7 @@ const getAll = async () => {
 };
 
 const getByGroup = async (groupName) => {
-  const validGroups = ['theme', 'features', 'sales', 'seo', 'general', 'shipping', 'tax', 'sku', 'logo', 'hero', 'footer', 'announcement', 'nav', 'catalog', 'homepage', 'productPage', 'admin', 'invoice'];
+  const validGroups = ['theme', 'features', 'payments', 'sales', 'seo', 'general', 'shipping', 'tax', 'sku', 'logo', 'hero', 'footer', 'announcement', 'nav', 'catalog', 'homepage', 'productPage', 'admin', 'invoice', 'gateway_credentials'];
   if (!validGroups.includes(groupName)) {
     throw new AppError('VALIDATION_ERROR', 400, 'Invalid setting group');
   }
@@ -107,7 +111,7 @@ const updateKey = async (key, value, group, actingUserId) => {
 };
 
 const bulkUpdate = async (settingsInput, actingUserId) => {
-  const validGroups = ['theme', 'features', 'sales', 'seo', 'general', 'shipping', 'tax', 'sku', 'logo', 'hero', 'footer', 'announcement', 'nav', 'catalog', 'homepage', 'productPage', 'admin', 'invoice'];
+  const validGroups = ['theme', 'features', 'payments', 'sales', 'seo', 'general', 'shipping', 'tax', 'sku', 'logo', 'hero', 'footer', 'announcement', 'nav', 'catalog', 'homepage', 'productPage', 'admin', 'invoice', 'gateway_credentials'];
     
     // Normalize input to an array of { key, value, group }
     const settingsArray = Array.isArray(settingsInput) 

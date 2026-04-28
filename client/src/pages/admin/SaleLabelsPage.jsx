@@ -46,7 +46,7 @@ const SaleLabelsPage = () => {
     isActive: true,
   });
 
-  const notify = useNotification();
+  const { notify } = useNotification();
   const { hasPermission } = useAuth();
   const canManage = hasPermission(PERMISSIONS.SETTINGS_MANAGE);
 
@@ -112,6 +112,12 @@ const SaleLabelsPage = () => {
     // Hex color validation
     if (!/^#[0-9A-F]{6}$/i.test(form.color)) {
       notify('Color must be a valid 6-character hex code (e.g., #FF0000).', 'warning');
+      return;
+    }
+
+    // ID must only contain lowercase letters, digits, and hyphens (no spaces)
+    if (!editingId && !/^[a-z0-9-]+$/.test(form.id)) {
+      notify('Label ID may only contain lowercase letters, numbers, and hyphens (no spaces).', 'warning');
       return;
     }
 

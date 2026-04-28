@@ -7,7 +7,7 @@ const placeOrderSchema = Joi.object({
     couponCode: Joi.string().max(50).uppercase().optional().allow(null, ''),
     couponCodes: Joi.array().items(Joi.string().max(50).uppercase()).optional().default([]),
     notes: Joi.string().allow(null, ''),
-    paymentMethod: Joi.string().valid('razorpay', 'cod').default('razorpay'),
+    paymentMethod: Joi.string().valid('razorpay', 'stripe', 'payu', 'cashfree', 'cod').default('razorpay'),
     buyNowItem: Joi.object({
         productId: Joi.string().uuid().required(),
         variantId: Joi.string().uuid().allow(null),

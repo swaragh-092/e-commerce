@@ -3,7 +3,7 @@
 const Joi = require('joi');
 
 const updateSettingsGroupSchema = Joi.object({
-  group: Joi.string().valid('theme', 'features', 'sales', 'seo', 'general', 'shipping', 'tax', 'sku', 'logo', 'hero', 'footer', 'announcement', 'nav', 'catalog', 'homepage', 'productPage', 'admin').required(),
+  group: Joi.string().valid('theme', 'features', 'payments', 'sales', 'seo', 'general', 'shipping', 'tax', 'sku', 'logo', 'hero', 'footer', 'announcement', 'nav', 'catalog', 'homepage', 'productPage', 'admin', 'invoice', 'gateway_credentials').required(),
   settings: Joi.object().pattern(Joi.string(), Joi.any()).required()
 });
 

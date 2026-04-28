@@ -15,6 +15,7 @@ import {
 import { Link, useNavigate } from 'react-router-dom';
 import { getProducts, deleteProduct, updateProduct, bulkUpdateSale } from '../../services/productService';
 import { getCategoryTree } from '../../services/categoryService';
+import { getSaleLabels } from '../../services/adminService';
 import { getMediaUrl } from '../../utils/media';
 import { useCurrency, useSettings } from '../../hooks/useSettings';
 import { useNotification } from '../../context/NotificationContext';
@@ -58,6 +59,7 @@ const ProductsManagePage = () => {
   const [saleFilter, setSaleFilter] = useState('');
   const [categoryFilter, setCategoryFilter] = useState('');
   const [flatCategories, setFlatCategories] = useState([]);
+  const [saleLabels, setSaleLabels] = useState([]);
 
   // Bulk selection
   const [selectedIds, setSelectedIds] = useState([]);
@@ -188,6 +190,15 @@ const ProductsManagePage = () => {
       flatten(tree);
       setFlatCategories(flat);
     }).catch(() => {});
+  }, []);
+
+  useEffect(() => {
+    getSaleLabels()
+      .then((res) => {
+        const fetchedLabels = res.data?.data || [];
+        setSaleLabels(fetchedLabels.filter((label) => label.isActive !== false));
+      })
+      .catch(() => {});
   }, []);
 
   const fetchProducts = useCallback(() => {
@@ -379,6 +390,9 @@ const ProductsManagePage = () => {
     bulkSaleValue <= 0 ||
     (bulkSaleDialog.saleType === 'percentage' && bulkSaleValue >= 100) ||
     (bulkSaleDialog.saleStartAt && bulkSaleDialog.saleEndAt && new Date(bulkSaleDialog.saleEndAt) <= new Date(bulkSaleDialog.saleStartAt))
+  );
+  const hasUnknownEditSaleLabel = Boolean(
+    editDialog.saleLabel && !saleLabels.some((label) => label.id === editDialog.saleLabel)
   );
 
   // ── Columns ──────────────────────────────────────────────────
@@ -871,15 +885,29 @@ const ProductsManagePage = () => {
               value={editDialog.salePrice}
               onChange={(e) => setEditDialog((s) => ({ ...s, salePrice: e.target.value }))}
             />
-            <TextField
-              label="Sale Label"
-              size="small"
-              fullWidth
-              disabled={!editDialog.saleEnabled}
-              placeholder={sales.defaultSaleLabel || 'Limited Time Offer'}
-              value={editDialog.saleLabel}
-              onChange={(e) => setEditDialog((s) => ({ ...s, saleLabel: e.target.value }))}
-            />
+            <FormControl fullWidth size="small" disabled={!editDialog.saleEnabled}>
+              <InputLabel id="quick-edit-sale-label-select">Sale Label</InputLabel>
+              <Select
+                labelId="quick-edit-sale-label-select"
+                label="Sale Label"
+                value={editDialog.saleLabel}
+                onChange={(e) => setEditDialog((s) => ({ ...s, saleLabel: e.target.value }))}
+              >
+                <MenuItem value="">
+                  <em>None</em>
+                </MenuItem>
+                {hasUnknownEditSaleLabel && (
+                  <MenuItem value={editDialog.saleLabel} disabled>
+                    {editDialog.saleLabel}
+                  </MenuItem>
+                )}
+                {saleLabels.map((label) => (
+                  <MenuItem key={label.id} value={label.id}>
+                    {label.name}
+                  </MenuItem>
+                ))}
+              </Select>
+            </FormControl>
             {sales.allowScheduling !== false && (
               <>
                 <TextField
@@ -991,13 +1019,24 @@ const ProductsManagePage = () => {
                 value={bulkSaleDialog.value}
                 onChange={(e) => setBulkSaleDialog((s) => ({ ...s, value: e.target.value }))}
               />
-              <TextField
-                label="Sale Label"
-                size="small"
-                fullWidth
-                value={bulkSaleDialog.saleLabel}
-                onChange={(e) => setBulkSaleDialog((s) => ({ ...s, saleLabel: e.target.value }))}
-              />
+              <FormControl fullWidth size="small">
+                <InputLabel id="bulk-sale-label-select">Sale Label</InputLabel>
+                <Select
+                  labelId="bulk-sale-label-select"
+                  label="Sale Label"
+                  value={bulkSaleDialog.saleLabel}
+                  onChange={(e) => setBulkSaleDialog((s) => ({ ...s, saleLabel: e.target.value }))}
+                >
+                  <MenuItem value="">
+                    <em>None</em>
+                  </MenuItem>
+                  {saleLabels.map((label) => (
+                    <MenuItem key={label.id} value={label.id}>
+                      {label.name}
+                    </MenuItem>
+                  ))}
+                </Select>
+              </FormControl>
               {sales.allowScheduling !== false && (
                 <>
                   <TextField

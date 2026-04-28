@@ -27,6 +27,14 @@
         "requirePurchaseForReview": false,
         "showAvailableCoupons": true
     },
+    "payments": {
+        "razorpayEnabled": true,
+        "stripeEnabled": false,
+        "payuEnabled": false,
+        "cashfreeEnabled": false,
+        "codEnabled": true,
+        "defaultMethod": "razorpay"
+    },
     "sales": {
         "allowScheduling": true,
         "allowBulkSales": true,

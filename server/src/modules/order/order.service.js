@@ -38,6 +38,23 @@ const {
 
 const ADMIN_ORDER_LIST_USER_ATTRIBUTES = ['id', 'firstName', 'lastName', 'email'];
 const ADMIN_ORDER_PAYMENT_ATTRIBUTES = ['id', 'provider', 'status', 'amount', 'currency', 'transactionId', 'createdAt', 'updatedAt'];
+const PAYMENT_METHODS = ['razorpay', 'stripe', 'payu', 'cashfree', 'cod'];
+const CONNECTED_PAYMENT_METHODS = ['razorpay', 'cashfree', 'cod'];
+const PAYMENT_METHOD_NAMES = {
+    razorpay: 'Razorpay',
+    stripe: 'Stripe',
+    payu: 'PayU',
+    cashfree: 'Cashfree',
+    cod: 'Cash on Delivery',
+};
+const DEFAULT_PAYMENT_SETTINGS = {
+    razorpayEnabled: true,
+    stripeEnabled: false,
+    payuEnabled: false,
+    cashfreeEnabled: false,
+    codEnabled: true,
+    defaultMethod: 'razorpay',
+};
 
 const HEAVY_ORDER_INCLUDE = [
     {
@@ -74,10 +91,40 @@ const getSetting = async (key, defaultVal) => {
     return defaultVal;
 };
 
+const getPaymentSettings = async () => {
+    const rows = await Setting.findAll({ where: { group: 'payments' } });
+    return rows.reduce(
+        (settings, row) => ({ ...settings, [row.key]: row.value }),
+        { ...DEFAULT_PAYMENT_SETTINGS }
+    );
+};
+
+const ensurePaymentMethodEnabled = async (paymentMethod) => {
+    if (!PAYMENT_METHODS.includes(paymentMethod)) {
+        throw new AppError('VALIDATION_ERROR', 400, 'Invalid payment method');
+    }
+
+    const paymentSettings = await getPaymentSettings();
+    const enabledKey = `${paymentMethod}Enabled`;
+    if (paymentSettings[enabledKey] !== true) {
+        throw new AppError('VALIDATION_ERROR', 400, 'Selected payment method is not available');
+    }
+
+    if (!CONNECTED_PAYMENT_METHODS.includes(paymentMethod)) {
+        throw new AppError(
+            'PAYMENT_UNAVAILABLE',
+            503,
+            `${PAYMENT_METHOD_NAMES[paymentMethod]} is enabled for display but its gateway integration is not connected yet`
+        );
+    }
+};
+
 const placeOrder = async (userId, payload) => {
     const { shippingAddressId, couponCode, couponCodes = [], notes, buyNowItem = null, paymentMethod = 'razorpay' } = payload;
     let cart = null;
     let checkoutItems = [];
+
+    await ensurePaymentMethodEnabled(paymentMethod);
 
     if (buyNowItem?.productId) {
         const product = await Product.findByPk(buyNowItem.productId, {
@@ -885,5 +932,3 @@ module.exports = {
     updateFulfillmentStatus,
     getAllowedNextStatuses,
 };
-
-

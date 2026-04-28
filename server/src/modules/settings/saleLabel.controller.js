@@ -35,8 +35,10 @@ const create = async (req, res, next) => {
  */
 const replaceAll = async (req, res, next) => {
   try {
-    const labels = await SaleLabelService.replaceSaleLabels(req.body, req.user.id);
-    return success(res, labels, 'Sale labels updated');
+    // Client sends { labels: [...] }; accept both shapes for safety
+    const labels = Array.isArray(req.body) ? req.body : req.body.labels;
+    const result = await SaleLabelService.replaceSaleLabels(labels, req.user.id);
+    return success(res, result, 'Sale labels updated');
   } catch (err) {
     next(err);
   }

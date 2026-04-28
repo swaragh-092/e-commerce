@@ -28,6 +28,22 @@ const EMPTY_ADDR = {
     isDefault: false,
 };
 
+const PAYMENT_METHOD_OPTIONS = [
+    { id: 'razorpay', title: 'Pay Online (Razorpay)', description: 'Credit / Debit card, UPI, Netbanking' },
+    { id: 'stripe', title: 'Pay Online (Stripe)', description: 'Cards and supported Stripe payment methods' },
+    { id: 'payu', title: 'Pay Online (PayU)', description: 'Cards, UPI, Netbanking and wallets' },
+    { id: 'cashfree', title: 'Pay Online (Cashfree)', description: 'UPI, cards, netbanking and wallets' },
+    { id: 'cod', title: 'Cash on Delivery (COD)', description: 'Pay when your order arrives' },
+];
+
+const DEFAULT_ENABLED_PAYMENT_METHODS = {
+    razorpay: true,
+    stripe: false,
+    payu: false,
+    cashfree: false,
+    cod: true,
+};
+
 const normalizeBuyNowQuantity = (value) => {
     const parsedQuantity = Number(value);
 
@@ -89,6 +105,16 @@ const CheckoutPage = () => {
     const buyNowItem = location.state?.fromBuyNow ? normalizeBuyNowItem(location.state?.buyNowItem) : null;
     const isBuyNowFlow = Boolean(buyNowItem);
     const couponsEnabled = settings?.features?.coupons !== false;
+    const paymentSettings = settings?.payments || {};
+    const enabledPaymentMethods = PAYMENT_METHOD_OPTIONS.filter((method) => {
+        const settingValue = paymentSettings[`${method.id}Enabled`];
+        return settingValue === undefined
+            ? DEFAULT_ENABLED_PAYMENT_METHODS[method.id]
+            : settingValue !== false && settingValue !== 'false';
+    });
+    const defaultPaymentMethod = enabledPaymentMethods.some((method) => method.id === paymentSettings.defaultMethod)
+        ? paymentSettings.defaultMethod
+        : enabledPaymentMethods[0]?.id || '';
     const showAvailableCoupons = useFeature('showAvailableCoupons');
     const STEPS = couponsEnabled
         ? ['Shipping', 'Coupon', 'Review & Place Order']
@@ -161,7 +187,13 @@ const CheckoutPage = () => {
     // Placing order
     const [placing, setPlacing] = useState(false);
     const [error, setError] = useState(null);
-    const [paymentMethod, setPaymentMethod] = useState('razorpay');
+    const [paymentMethod, setPaymentMethod] = useState(defaultPaymentMethod || 'razorpay');
+
+    useEffect(() => {
+        if (!enabledPaymentMethods.some((method) => method.id === paymentMethod)) {
+            setPaymentMethod(defaultPaymentMethod);
+        }
+    }, [defaultPaymentMethod, enabledPaymentMethods, paymentMethod]);
 
     const items = isBuyNowFlow ? [buyNowItem] : (cart?.items || []);
     const subtotal = items.reduce((sum, item) => {
@@ -252,6 +284,7 @@ const CheckoutPage = () => {
 
     const handlePlaceOrder = async () => {
         if (!selectedAddressId) { setError('Please select a shipping address.'); return; }
+        if (!paymentMethod) { setError('No payment method is currently available.'); return; }
         setPlacing(true);
         setError(null);
         try {
@@ -527,32 +560,33 @@ const CheckoutPage = () => {
                                     value={paymentMethod}
                                     onChange={(e) => setPaymentMethod(e.target.value)}
                                 >
-                                    <FormControlLabel
-                                        value="razorpay"
-                                        control={<Radio size="small" />}
-                                        label={
-                                            <Box>
-                                                <Typography variant="body2" fontWeight={600}>Pay Online (Razorpay)</Typography>
-                                                <Typography variant="caption" color="text.secondary">
-                                                    Credit / Debit card, UPI, Netbanking
-                                                </Typography>
-                                            </Box>
-                                        }
-                                        sx={{ mx: 0, px: 2, py: 1.5, borderBottom: '1px solid', borderColor: 'divider', alignItems: 'center' }}
-                                    />
-                                    <FormControlLabel
-                                        value="cod"
-                                        control={<Radio size="small" />}
-                                        label={
-                                            <Box>
-                                                <Typography variant="body2" fontWeight={600}>Cash on Delivery (COD)</Typography>
-                                                <Typography variant="caption" color="text.secondary">
-                                                    Pay when your order arrives
-                                                </Typography>
-                                            </Box>
-                                        }
-                                        sx={{ mx: 0, px: 2, py: 1.5, alignItems: 'center' }}
-                                    />
+                                    {enabledPaymentMethods.length === 0 ? (
+                                        <Alert severity="warning" sx={{ m: 2 }}>
+                                            No payment methods are currently available.
+                                        </Alert>
+                                    ) : enabledPaymentMethods.map((method, index) => (
+                                        <FormControlLabel
+                                            key={method.id}
+                                            value={method.id}
+                                            control={<Radio size="small" />}
+                                            label={
+                                                <Box>
+                                                    <Typography variant="body2" fontWeight={600}>{method.title}</Typography>
+                                                    <Typography variant="caption" color="text.secondary">
+                                                        {method.description}
+                                                    </Typography>
+                                                </Box>
+                                            }
+                                            sx={{
+                                                mx: 0,
+                                                px: 2,
+                                                py: 1.5,
+                                                borderBottom: index < enabledPaymentMethods.length - 1 ? '1px solid' : 'none',
+                                                borderColor: 'divider',
+                                                alignItems: 'center',
+                                            }}
+                                        />
+                                    ))}
                                 </RadioGroup>
                             </Paper>
 
@@ -562,7 +596,7 @@ const CheckoutPage = () => {
                                     variant="contained"
                                     size="large"
                                     onClick={handlePlaceOrder}
-                                    disabled={placing}
+                                    disabled={placing || enabledPaymentMethods.length === 0}
                                 >
                                     {placing
                                         ? <CircularProgress size={22} color="inherit" />
@@ -817,6 +851,3 @@ const CheckoutPage = () => {
 };
 
 export default CheckoutPage;
-
-
-

@@ -19,6 +19,14 @@ export const SettingsProvider = ({ children }) => {
         theme: { primaryColor: '#1976d2', mode: 'light', fontFamily: 'Roboto' },
         general: { storeName: 'E-Commerce Store' },
         features: { wishlist: true, reviews: true, coupons: true, guestCheckout: true },
+        payments: {
+          razorpayEnabled: true,
+          stripeEnabled: false,
+          payuEnabled: false,
+          cashfreeEnabled: false,
+          codEnabled: true,
+          defaultMethod: 'razorpay',
+        },
         productPage: {
           showSKU: true,
           showStockBadge: true,

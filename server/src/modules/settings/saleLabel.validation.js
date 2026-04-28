@@ -3,6 +3,7 @@
 const Joi = require('joi');
 
 const saleLabelBodySchema = Joi.object({
+  id:       Joi.string().trim().lowercase().max(80).pattern(/^[a-z0-9-]+$/).allow('', null),
   name:     Joi.string().trim().max(80).required(),
   color:    Joi.string().pattern(/^#([0-9A-Fa-f]{3}|[0-9A-Fa-f]{6})$/).default('#EF4444'),
   priority: Joi.number().integer().min(0).default(0),
@@ -17,18 +18,20 @@ const updateSaleLabelBodySchema = Joi.object({
 }).min(1);
 
 /**
- * Full catalog replace — expects an array of label objects.
+ * Full catalog replace — client sends { labels: [...] }.
  * Each item may include an optional "id" (slug); if omitted it is derived from "name".
  */
-const replaceSaleLabelsBodySchema = Joi.array().items(
-  Joi.object({
-    id:       Joi.string().max(80).lowercase().allow('', null),
-    name:     Joi.string().trim().max(80).required(),
-    color:    Joi.string().pattern(/^#([0-9A-Fa-f]{3}|[0-9A-Fa-f]{6})$/).default('#EF4444'),
-    priority: Joi.number().integer().min(0).default(0),
-    isActive: Joi.boolean().default(true),
-  })
-).min(0);
+const replaceSaleLabelsBodySchema = Joi.object({
+  labels: Joi.array().items(
+    Joi.object({
+      id:       Joi.string().trim().lowercase().max(80).pattern(/^[a-z0-9-]+$/).allow('', null),
+      name:     Joi.string().trim().max(80).required(),
+      color:    Joi.string().pattern(/^#([0-9A-Fa-f]{3}|[0-9A-Fa-f]{6})$/).default('#EF4444'),
+      priority: Joi.number().integer().min(0).default(0),
+      isActive: Joi.boolean().default(true),
+    })
+  ).min(0).required(),
+});
 
 module.exports = {
   saleLabelBodySchema,
