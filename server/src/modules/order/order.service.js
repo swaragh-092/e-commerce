@@ -414,8 +414,13 @@ const getOrders = async (userId, isAdmin, page = 1, limit = 20, filters = {}) =>
     const normalizedStatus = typeof filters.status === 'string' ? filters.status.trim() : '';
     const normalizedSearch = typeof filters.search === 'string' ? filters.search.trim() : '';
 
+    // if (normalizedStatus) {
+    //     where.status = normalizedStatus;
+    // }
+
     if (normalizedStatus) {
-        where.status = normalizedStatus;
+        const statuses = normalizedStatus.split(',').map(s => s.trim()).filter(Boolean);
+        where.status = statuses.length === 1 ? statuses[0] : { [Op.in]: statuses };
     }
 
     const include = [];
@@ -435,13 +440,38 @@ const getOrders = async (userId, isAdmin, page = 1, limit = 20, filters = {}) =>
         if (normalizedSearch) {
             const searchPattern = `%${normalizedSearch}%`;
             where[Op.or] = [
-                { orderNumber: { [Op.iLike]: searchPattern } },
-                { '$User.firstName$': { [Op.iLike]: searchPattern } },
-                { '$User.lastName$': { [Op.iLike]: searchPattern } },
+                {  orderNumber: { [Op.iLike]: searchPattern } },
+                { '$User.first_name$': { [Op.iLike]: searchPattern } },
+                { '$User.last_name$': { [Op.iLike]: searchPattern } },
                 { '$User.email$': { [Op.iLike]: searchPattern } },
             ];
         }
+    } 
+
+    // Always include OrderItem → Product for the user's order list
+    include.push({
+        model: OrderItem,
+        as: 'items',
+        required: false,
+        include: [
+            {
+                model: Product,
+                as: 'product',          // adjust if your association alias differs
+                attributes: ['id', 'name'],
+                required: false,
+            },
+        ],
+    });
+
+    if (normalizedSearch) {
+        const searchPattern = `%${normalizedSearch}%`;
+        where[Op.or] = [
+            { orderNumber: { [Op.iLike]: searchPattern } },
+            { status: { [Op.iLike]: searchPattern } },
+            { '$items.product.name$': { [Op.iLike]: searchPattern } },
+        ];
     }
+    
 
     return Order.findAndCountAll({
         where,
