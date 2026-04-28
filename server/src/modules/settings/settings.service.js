@@ -55,7 +55,10 @@ const getAll = async () => {
     // Skip gateway_credentials — they are server-side only and must not be exposed to the frontend
     if (s.group === 'gateway_credentials') return;
     if (grouped[s.group]) {
-      grouped[s.group][s.key] = s.value;
+      let parsedValue = s.value;
+      if (parsedValue === 'true') parsedValue = true;
+      else if (parsedValue === 'false') parsedValue = false;
+      grouped[s.group][s.key] = parsedValue;
     }
   });
 
@@ -72,7 +75,10 @@ const getByGroup = async (groupName) => {
   
   const result = { ...(defaultSettings[groupName] || {}) };
   settings.forEach(s => {
-    result[s.key] = s.value;
+    let parsedValue = s.value;
+    if (parsedValue === 'true') parsedValue = true;
+    else if (parsedValue === 'false') parsedValue = false;
+    result[s.key] = parsedValue;
   });
 
   return result;
