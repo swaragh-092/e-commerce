@@ -13,9 +13,6 @@ import {
   Paper,
   Select,
   Stack,
-  Step,
-  StepLabel,
-  Stepper,
   Typography,
 } from '@mui/material';
 import { useParams, useNavigate } from 'react-router-dom';
@@ -42,9 +39,11 @@ import { useAuth } from '../../hooks/useAuth';
 import { PERMISSIONS } from '../../utils/permissions';
 import { getApiErrorMessage } from '../../utils/apiErrors';
 import {
-  ORDER_STATUS_STEPPER,
+  getOrderProgressSteps,
   getOrderStatusColor,
   getOrderStatusLabel,
+  getPaymentStatusLabel,
+  getPaymentStatusColor,
   isOrderRefundableStatus,
   isOrderFulfillableStatus,
 } from '../../utils/orderWorkflow';
@@ -82,6 +81,42 @@ const MetricCard = ({ label, value, accent = 'text.primary' }) => (
     </Typography>
   </Paper>
 );
+
+const ProgressEntry = ({ label, status, occurredAt, last }) => {
+  const done = status === 'completed';
+  const active = status === 'active';
+  const terminal = status === 'terminal';
+
+  return (
+    <Box sx={{ display: 'flex', gap: 1.5, alignItems: 'flex-start' }}>
+      <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'center', pt: 0.25 }}>
+        <Box
+          sx={{
+            width: 18,
+            height: 18,
+            borderRadius: '50%',
+            border: '2px solid',
+            borderColor: done ? 'success.main' : active ? 'primary.main' : terminal ? 'text.secondary' : 'divider',
+            bgcolor: done ? 'success.main' : active ? 'primary.main' : terminal ? 'text.secondary' : 'background.paper',
+          }}
+        />
+        {!last && (
+          <Box sx={{ width: 1, minHeight: 28, mt: 0.5, bgcolor: done ? 'success.light' : 'divider' }} />
+        )}
+      </Box>
+      <Box sx={{ pb: last ? 0 : 1.5 }}>
+        <Typography variant="body2" fontWeight={done || active || terminal ? 700 : 500} color={done || active || terminal ? 'text.primary' : 'text.secondary'}>
+          {label}
+        </Typography>
+        {occurredAt && (
+          <Typography variant="caption" color="text.secondary">
+            {new Date(occurredAt).toLocaleString()}
+          </Typography>
+        )}
+      </Box>
+    </Box>
+  );
+};
 
 const getTaxRows = (order = {}) => {
   const breakdown = order.taxBreakdown || {};
@@ -316,10 +351,11 @@ const OrderDetailPage = () => {
     return [order.status, ...allowedNextStatuses].filter((statusOption) => statusOption !== 'refunded');
   }, [order?.status, allowedNextStatuses]);
 
-  const currentStep = useMemo(() => {
-    const stepIndex = ORDER_STATUS_STEPPER.indexOf(order?.status);
-    return stepIndex >= 0 ? stepIndex : 0;
-  }, [order?.status]);
+  const progressSteps = useMemo(
+    () => getOrderProgressSteps({ ...(order || {}), Payment: payment }, fulfillmentProgress),
+    [fulfillmentProgress, order, payment]
+  );
+  const hasStatusTransitions = availableStatuses.length > 1;
 
   const customerName = useMemo(() => {
     const fullName = [order?.User?.firstName, order?.User?.lastName].filter(Boolean).join(' ');
@@ -499,8 +535,8 @@ const OrderDetailPage = () => {
         <MetricCard label="Customer" value={customerName} />
         <MetricCard
           label="Payment"
-          value={payment ? getOrderStatusLabel(payment.status) : 'Not captured'}
-          accent={payment?.status === 'completed' ? 'success.main' : 'text.primary'}
+          value={getPaymentStatusLabel(payment?.status)}
+          accent={['completed', 'cod_collected'].includes(payment?.status) ? 'success.main' : payment?.status === 'refunded' ? 'text.secondary' : 'text.primary'}
         />
       </Stack>
 
@@ -632,9 +668,12 @@ const OrderDetailPage = () => {
                   <Typography variant="caption" color="text.secondary">
                     Status
                   </Typography>
-                  <Typography variant="body2" fontWeight={600}>
-                    {payment ? getOrderStatusLabel(payment.status) : 'Not captured'}
-                  </Typography>
+                  <Chip
+                    size="small"
+                    label={getPaymentStatusLabel(payment?.status)}
+                    color={getPaymentStatusColor(payment?.status)}
+                    sx={{ mt: 0.5 }}
+                  />
                 </Box>
                 <Box>
                   <Typography variant="caption" color="text.secondary">
@@ -784,7 +823,7 @@ const OrderDetailPage = () => {
             </DetailCard>
 
             
-            {canUpdateOrderStatus && (
+            {canUpdateOrderStatus && hasStatusTransitions && (
               <DetailCard title="Update Status">
                 <FormControl fullWidth size="small" sx={{ mb: 2 }}>
                   <InputLabel>Status</InputLabel>
@@ -814,13 +853,15 @@ const OrderDetailPage = () => {
             
 
             <DetailCard title="Order Progress">
-              <Stepper activeStep={currentStep} orientation="vertical">
-                {ORDER_STATUS_STEPPER.map((status) => (
-                  <Step key={status} completed={ORDER_STATUS_STEPPER.indexOf(status) <= currentStep}>
-                    <StepLabel>{getOrderStatusLabel(status)}</StepLabel>
-                  </Step>
-                ))}
-              </Stepper>
+              {progressSteps.map((step, index) => (
+                <ProgressEntry
+                  key={step.key}
+                  label={step.label}
+                  status={step.status}
+                  occurredAt={step.occurredAt}
+                  last={index === progressSteps.length - 1}
+                />
+              ))}
             </DetailCard>
 
             

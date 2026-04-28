@@ -31,8 +31,11 @@ import AppliedDiscountsSummary from '../../components/orders/AppliedDiscountsSum
 import { useCurrency } from '../../hooks/useSettings';
 import { userService } from '../../services/userService';
 import {
+  getOrderProgressSteps,
   getOrderStatusColor,
   getOrderStatusLabel,
+  getPaymentStatusColor,
+  getPaymentStatusLabel,
 } from '../../utils/orderWorkflow';
 import { useOrderStatusTransitions } from '../../hooks/useOrderStatusTransitions';
 import { useNotification } from '../../context/NotificationContext';
@@ -95,11 +98,11 @@ const getTaxRows = (order = {}) => {
 };
 
 // ─── Timeline entry ───────────────────────────────────────────────────────────
-const TimelineEntry = ({ label, sub, done, active, last }) => (
+const TimelineEntry = ({ label, sub, done, active, terminal, last }) => (
   <Box sx={{ display: 'flex', gap: 1.5, alignItems: 'flex-start' }}>
     <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'center', pt: '2px' }}>
-      {done ? (
-        <CheckCircleOutlineIcon sx={{ fontSize: 15, color: 'success.main' }} />
+      {done || terminal ? (
+        <CheckCircleOutlineIcon sx={{ fontSize: 15, color: terminal ? 'text.secondary' : 'success.main' }} />
       ) : active ? (
         <Box sx={{
           width: 13, height: 13, borderRadius: '50%',
@@ -124,7 +127,7 @@ const TimelineEntry = ({ label, sub, done, active, last }) => (
       )}
     </Box>
     <Box sx={{ pb: last ? 0 : 2 }}>
-      <Typography sx={{ fontSize: '0.8rem', fontWeight: 600, color: active || done ? 'text.primary' : 'text.disabled' }}>
+      <Typography sx={{ fontSize: '0.8rem', fontWeight: 600, color: active || done || terminal ? 'text.primary' : 'text.disabled' }}>
         {label}
       </Typography>
       {sub && (
@@ -290,6 +293,7 @@ const OrderDetailPage = () => {
   );
   const appliedDiscounts = Array.isArray(order?.appliedDiscounts) ? order.appliedDiscounts : [];
   const address = order?.shippingAddressSnapshot;
+  const payment = order?.Payment || null;
   const { isCancelable } = useOrderStatusTransitions(order?.status);
   const canCancel = isCancelable;
 
@@ -322,16 +326,14 @@ const OrderDetailPage = () => {
     sub: entry.occurredAt ? new Date(entry.occurredAt).toLocaleString('en-US', { dateStyle: 'short', timeStyle: 'short' }) : undefined,
     done: entry.status === 'completed',
     active: entry.status === 'active',
-  })) || [
-    {
-      label: 'Order placed',
-      sub: new Date(order.createdAt).toLocaleString('en-US', { dateStyle: 'short', timeStyle: 'short' }),
-      done: true,
-    },
-    { label: 'Processing', done: ['processing', 'partially_shipped', 'shipped', 'delivered'].includes(order.status) },
-    { label: 'Shipped', done: ['shipped', 'delivered'].includes(order.status), active: order.status === 'partially_shipped' },
-    { label: 'Delivered', done: order.status === 'delivered' },
-  ];
+    terminal: entry.status === 'terminal',
+  })) || getOrderProgressSteps(order, trackingProgress).map((entry) => ({
+    label: entry.label,
+    sub: entry.occurredAt ? new Date(entry.occurredAt).toLocaleString('en-US', { dateStyle: 'short', timeStyle: 'short' }) : undefined,
+    done: entry.status === 'completed',
+    active: entry.status === 'active',
+    terminal: entry.status === 'terminal',
+  }));
 
   return (
     <Box sx={{ minHeight: '100vh', bgcolor: 'background.default' }}>
@@ -472,8 +474,8 @@ const OrderDetailPage = () => {
           />
           <MetaCard
             label="Payment"
-            value={order.paymentMethod}
-            sub={order.paymentStatus}
+            value={order.paymentMethod || payment?.provider || '—'}
+            sub={getPaymentStatusLabel(payment?.status)}
           />
           <MetaCard
             label="Order total"
@@ -741,6 +743,7 @@ const OrderDetailPage = () => {
                       sub={entry.sub}
                       done={entry.done}
                       active={entry.active}
+                      terminal={entry.terminal}
                       last={i === timelineEntries.length - 1}
                     />
                   ))}
@@ -751,26 +754,22 @@ const OrderDetailPage = () => {
               <Paper elevation={0} sx={sxCard}>
                 <SectionLabel icon={CreditCardOutlinedIcon}>Payment</SectionLabel>
                 <Stack spacing={1.25}>
-                  {[
-                    { label: 'Method', value: order.paymentMethod || 'Visa •••• 4291' },
-                    {
-                      label: 'Status',
-                      custom: (
-                        <Chip
-                          size="small"
-                          color={
-                            order.paymentStatus === 'captured' || order.paymentStatus === 'Captured'
-                              ? 'success'
-                              : 'warning'
-                          }
-                          label={order.paymentStatus || 'Captured'}
-                          sx={{ height: 20, fontSize: '0.67rem', fontWeight: 700 }}
-                        />
-                      ),
-                    },
-                    { label: 'Transaction ID', value: order.transactionId || '—', mono: true },
-                    { label: 'Charged', value: formatPrice(order.total || 0), bold: true },
-                  ].map(({ label, value, custom, mono, bold }) => (
+	                  {[
+	                    { label: 'Method', value: order.paymentMethod || 'Visa •••• 4291' },
+	                    {
+	                      label: 'Status',
+	                      custom: (
+	                        <Chip
+	                          size="small"
+	                          color={getPaymentStatusColor(payment?.status)}
+	                          label={getPaymentStatusLabel(payment?.status)}
+	                          sx={{ height: 20, fontSize: '0.67rem', fontWeight: 700 }}
+	                        />
+	                      ),
+	                    },
+	                    { label: 'Transaction ID', value: payment?.transactionId || '—', mono: true },
+	                    { label: payment?.status === 'refunded' ? 'Refunded' : 'Charged', value: formatPrice(payment?.amount || order.total || 0), bold: true },
+	                  ].map(({ label, value, custom, mono, bold }) => (
                     <Box key={label} sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                       <Typography variant="body2" color="text.secondary">{label}</Typography>
                       {custom || (
@@ -811,4 +810,3 @@ const OrderDetailPage = () => {
 };
 
 export default OrderDetailPage;
-

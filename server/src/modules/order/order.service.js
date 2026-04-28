@@ -126,6 +126,71 @@ const calculateFulfillmentProgress = (order) => {
     };
 };
 
+const buildOrderTimeline = (order, progress) => {
+    const payment = order.Payment || order.Payment?.toJSON?.() || null;
+    const paymentStatus = payment?.status;
+    const isCod = order.paymentMethod === 'cod';
+    const isCancelled = order.status === 'cancelled';
+    const isRefunded = order.status === 'refunded' || paymentStatus === 'refunded';
+    const isPaymentSettled = ['paid', 'processing', 'partially_shipped', 'shipped', 'delivered', 'refunded'].includes(order.status)
+        || ['completed', 'cod_collected', 'refunded'].includes(paymentStatus);
+    const isFullyFulfilled = order.status === 'delivered' || (progress.fulfilledQuantity > 0 && progress.remainingQuantity === 0);
+
+    const steps = [
+        {
+            key: 'placed',
+            label: 'Order placed',
+            status: 'completed',
+            occurredAt: order.createdAt,
+        },
+        {
+            key: isCod ? 'pending_cod' : 'pending_payment',
+            label: isCod ? 'Pending COD' : 'Pending payment',
+            status: isPaymentSettled || ['pending_cod', 'processing'].includes(order.status) ? 'completed' : 'active',
+        },
+        {
+            key: 'paid',
+            label: isCod ? 'COD collected' : 'Payment captured',
+            status: isPaymentSettled ? 'completed' : 'pending',
+        },
+        {
+            key: 'processing',
+            label: 'Processing',
+            status: ['processing', 'partially_shipped', 'shipped', 'delivered'].includes(order.status) ? 'completed' : 'pending',
+        },
+        {
+            key: 'shipped',
+            label: progress.remainingQuantity > 0 && progress.fulfilledQuantity > 0 ? 'Partially shipped' : 'Shipped',
+            status: progress.fulfilledQuantity > 0 ? (isFullyFulfilled ? 'completed' : 'active') : 'pending',
+        },
+        {
+            key: 'delivered',
+            label: 'Delivered',
+            status: order.status === 'delivered' ? 'completed' : 'pending',
+        },
+    ];
+
+    if (isCancelled || isRefunded) {
+        const terminalSteps = steps.filter((step) => {
+            if (['placed', isCod ? 'pending_cod' : 'pending_payment'].includes(step.key)) return true;
+            if (step.key === 'paid') return isPaymentSettled;
+            return false;
+        });
+
+        return [
+            ...terminalSteps,
+            {
+                key: order.status,
+                label: isRefunded ? 'Refunded' : 'Cancelled',
+                status: 'terminal',
+                occurredAt: order.updatedAt,
+            },
+        ];
+    }
+
+    return steps;
+};
+
 const releaseOrderReservationsAndCoupons = async (order, transaction) => {
     const orderItems = order.items || await OrderItem.findAll({
         where: { orderId: order.id },
@@ -1018,29 +1083,7 @@ const getFulfillmentTracking = async (orderId, userId, isAdmin) => {
         orderStatus: plainOrder.status,
         progress,
         fulfillments,
-        timeline: [
-            {
-                key: 'ordered',
-                label: 'Order placed',
-                status: 'completed',
-                occurredAt: plainOrder.createdAt,
-            },
-            {
-                key: 'processing',
-                label: 'Processing',
-                status: ['processing', 'partially_shipped', 'shipped', 'delivered'].includes(plainOrder.status) ? 'completed' : 'pending',
-            },
-            {
-                key: 'shipped',
-                label: progress.remainingQuantity > 0 ? 'Partially shipped' : 'Shipped',
-                status: progress.fulfilledQuantity > 0 ? (progress.remainingQuantity > 0 ? 'active' : 'completed') : 'pending',
-            },
-            {
-                key: 'delivered',
-                label: 'Delivered',
-                status: plainOrder.status === 'delivered' ? 'completed' : 'pending',
-            },
-        ],
+        timeline: buildOrderTimeline(plainOrder, progress),
     };
 };
 
