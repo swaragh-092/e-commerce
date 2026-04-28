@@ -13,6 +13,12 @@ router.post('/verify/:orderId', authenticate, paymentController.verifyPayment);
 // Provider webhooks are parsed as raw bodies by app.js
 router.post('/webhook/cashfree', paymentController.handleCashfreeWebhook);
 
+// Stripe webhook
+router.post('/webhook/stripe', paymentController.handleStripeWebhook);
+
+// PayU return
+router.post('/payu/return', paymentController.handlePayUReturn);
+
 // Razorpay webhook
 router.post('/webhook', paymentController.handleWebhook);
 

@@ -54,6 +54,21 @@ const PaymentPage = () => {
         const query = new URLSearchParams(location.search);
         const returnedProvider = query.get('provider');
 
+        if (returnedProvider === 'stripe') {
+            paymentService.verifyPayment(orderId, { provider: 'stripe', session_id: query.get('session_id') })
+                .then((res) => {
+                    const result = res.data?.data || res.data;
+                    if (result?.success) {
+                        navigate('/payment/success', { replace: true, state: { orderId } });
+                    } else {
+                        navigate('/payment/failure', { replace: true, state: { orderId, status: result?.status } });
+                    }
+                })
+                .catch((err) => setError(getApiErrorMessage(err, 'Payment verification failed.')))
+                .finally(() => setLoading(false));
+            return;
+        }
+
         if (returnedProvider === 'cashfree') {
             paymentService.verifyPayment(orderId, { provider: 'cashfree' })
                 .then((res) => {
@@ -137,6 +152,16 @@ const PaymentPage = () => {
         rzp.open();
     };
 
+    
+    const handleStripePayment = () => {
+        if (!orderData?.url) {
+            setError('Stripe payment session is not ready. Please try again.');
+            return;
+        }
+        setProcessing(true);
+        window.location.href = orderData.url;
+    };
+
     const handleCashfreePayment = async () => {
         if (!orderData?.paymentSessionId) {
             setError('Cashfree payment session is not ready. Please try again.');
@@ -169,9 +194,41 @@ const PaymentPage = () => {
         }
     };
 
+    
+    const handlePayUPayment = () => {
+        if (!orderData?.action || !orderData?.fields) {
+            setError('PayU payment session is not ready. Please try again.');
+            return;
+        }
+        setProcessing(true);
+        
+        const form = document.createElement('form');
+        form.method = 'POST';
+        form.action = orderData.action;
+
+        Object.keys(orderData.fields).forEach(key => {
+            const input = document.createElement('input');
+            input.type = 'hidden';
+            input.name = key;
+            input.value = orderData.fields[key];
+            form.appendChild(input);
+        });
+
+        document.body.appendChild(form);
+        form.submit();
+    };
+
     const handlePayment = () => {
         if (orderData?.provider === 'cashfree' || order?.paymentMethod === 'cashfree') {
             handleCashfreePayment();
+            return;
+        }
+        if (orderData?.provider === 'stripe' || order?.paymentMethod === 'stripe') {
+            handleStripePayment();
+            return;
+        }
+        if (orderData?.provider === 'payu' || order?.paymentMethod === 'payu') {
+            handlePayUPayment();
             return;
         }
 
