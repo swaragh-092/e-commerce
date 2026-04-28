@@ -179,6 +179,9 @@ exports.getProducts = async (filters, page, limit, isAdmin = false) => {
     if (filters.minPrice) where.price[Op.gte] = filters.minPrice;
     if (filters.maxPrice) where.price[Op.lte] = filters.maxPrice;
   }
+  if (filters.maxQty !== undefined && filters.maxQty !== null) {
+    where.quantity = { [Op.lte]: parseInt(filters.maxQty) };
+  }
   if (filters.brand) {
     const isUUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(filters.brand);
     if (isUUID) {
