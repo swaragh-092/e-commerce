@@ -107,7 +107,7 @@ const CustomersPage = () => {
       width: 90,
       sortable: false,
       renderCell: ({ row }) => (
-        <Tooltip title={row.status === 'banned' ? 'Unban' : 'Ban'}>
+        <Tooltip title={row.status === 'banned' ? 'Activate' : 'Suspend'}>
           <IconButton
             size="small"
             color={row.status === 'banned' ? 'success' : 'error'}

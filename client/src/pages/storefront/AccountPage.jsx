@@ -16,12 +16,8 @@ import AvatarUploader from '../../components/common/AvatarUploader';
 import PageSEO from '../../components/common/PageSEO';
 import { Link } from 'react-router-dom';
 import { useCurrency } from '../../hooks/useSettings';
-import AppliedDiscountsSummary from '../../components/orders/AppliedDiscountsSummary';
 import CenteredLoader from '../../components/common/CenteredLoader';
 import { getApiErrorMessage } from '../../utils/apiErrors';
-import {
-    isOrderCustomerCancelableStatus,
-} from '../../utils/orderWorkflow';
 import { useNotification } from '../../context/NotificationContext';
 
 function TabPanel(props) {
@@ -50,7 +46,6 @@ const AccountPage = () => {
                         <Tab label="Profile" />
                         <Tab label="Addresses" />
                         <Tab label="Password" />
-                        <Tab label="Orders" />
                     </Tabs>
                 </Box>
                 <TabPanel value={tab} index={0}>
@@ -61,9 +56,6 @@ const AccountPage = () => {
                 </TabPanel>
                 <TabPanel value={tab} index={2}>
                     <PasswordTab />
-                </TabPanel>
-                <TabPanel value={tab} index={3}>
-                    <OrdersTab />
                 </TabPanel>
             </Paper>
         </Container>
@@ -307,105 +299,4 @@ const PasswordTab = () => {
     );
 };
 
-/* ─── Orders Tab ──────────────────────────────────────────────────────── */
-const OrdersTab = () => {
-    const { formatPrice } = useCurrency();
-    const [orders, setOrders] = useState([]);
-    const [loading, setLoading] = useState(true);
-    const [alert, setAlert] = useState(null);
-
-    const fetchOrders = useCallback(async () => {
-        setLoading(true);
-        try {
-            const res = await userService.getMyOrders({ limit: 50 });
-            setOrders(res.rows || []);
-        } catch (err) {
-            setAlert({ type: 'error', message: 'Failed to load orders.' });
-        } finally {
-            setLoading(false);
-        }
-    }, []);
-
-    useEffect(() => { fetchOrders(); }, [fetchOrders]);
-
-    const handleCancel = async (id) => {
-        const confirmed = await confirm(
-            'Cancel Order',
-            'Are you sure you want to cancel this order? This action cannot be undone.',
-            'error'
-        );
-        if (!confirmed) return;
-        try {
-            await userService.cancelOrder(id);
-            setOrders((prev) => prev.map((o) => o.id === id ? { ...o, status: 'cancelled' } : o));
-        } catch (err) {
-            setAlert({ type: 'error', message: getApiErrorMessage(err, 'Failed to cancel order.') });
-        }
-    };
-
-    if (loading) return <CenteredLoader message="Loading your orders..." minHeight="220px" />;
-
-    return (
-        <Box>
-            {alert && <Alert severity={alert.type} onClose={() => setAlert(null)} sx={{ mb: 2 }}>{alert.message}</Alert>}
-            <Typography variant="h6" mb={2}>Order History</Typography>
-            {orders.length === 0 ? (
-                <Typography color="text.secondary">No orders yet. <Link to="/products">Start shopping!</Link></Typography>
-            ) : (
-                <TableContainer>
-                    <Table size="small">
-                        <TableHead>
-                            <TableRow>
-                                <TableCell>Order #</TableCell>
-                                <TableCell>Date</TableCell>
-                                <TableCell>Items</TableCell>
-                                <TableCell align="right">Total</TableCell>
-                                <TableCell>Status</TableCell>
-                                <TableCell />
-                            </TableRow>
-                        </TableHead>
-                        <TableBody>
-                            {orders.map((order) => (
-                                <TableRow key={order.id}>
-                                    <TableCell>
-                                        <Typography variant="body2" fontWeight={600}>{order.orderNumber}</Typography>
-                                    </TableCell>
-                                    <TableCell>
-                                        <Typography variant="body2">{new Date(order.createdAt).toLocaleDateString()}</Typography>
-                                    </TableCell>
-                                    <TableCell>
-                                        <Typography variant="body2">{order.OrderItems?.length ?? '—'} item(s)</Typography>
-                                    </TableCell>
-                                    <TableCell align="right">
-                                        <Typography variant="body2" fontWeight={600}>{formatPrice(order.total || 0)}</Typography>
-                                        <Box sx={{ mt: 0.75, display: 'flex', justifyContent: 'flex-end' }}>
-                                            <Box sx={{ maxWidth: 280 }}>
-                                                <AppliedDiscountsSummary
-                                                    discounts={order.appliedDiscounts}
-                                                    formatPrice={formatPrice}
-                                                    compact
-                                                />
-                                            </Box>
-                                        </Box>
-                                    </TableCell>
-                                    <TableCell>
-                                        <Chip label={getOrderStatusLabel(order.status)} size="small" color={getOrderStatusColor(order.status)} />
-                                    </TableCell>
-                                    <TableCell>
-                                        <Button size="small" component={Link} to={`/account/orders/${order.id}`} sx={{ mr: 1 }}>
-                                            View
-                                        </Button>
-                                        {isOrderCustomerCancelableStatus(order.status) && (
-                                            <Button size="small" color="error" onClick={() => handleCancel(order.id)}>Cancel</Button>
-                                        )}
-                                    </TableCell>
-                                </TableRow>
-                            ))}
-                        </TableBody>
-                    </Table>
-                </TableContainer>
-            )}
-        </Box>
-    );
-};
 export default AccountPage;

@@ -195,7 +195,7 @@ exports.getProducts = async (filters, page, limit, isAdmin = false) => {
       }
     }
   }
-  if (isAdmin && filters.saleStatus) {
+  if (filters.saleStatus) {
     const saleFilters = {
       none: { salePrice: null },
       scheduled: {
@@ -205,7 +205,7 @@ exports.getProducts = async (filters, page, limit, isAdmin = false) => {
       active: {
         [Op.and]: [
           { salePrice: { [Op.ne]: null } },
-          salePriceIsDiscounted,
+          Sequelize.where(Sequelize.col('sale_price'), Op.lt, Sequelize.col('price')),
           { [Op.or]: [{ saleStartAt: null }, { saleStartAt: { [Op.lte]: now } }] },
           { [Op.or]: [{ saleEndAt: null }, { saleEndAt: { [Op.gte]: now } }] },
         ],
@@ -219,7 +219,12 @@ exports.getProducts = async (filters, page, limit, isAdmin = false) => {
     };
 
     if (saleFilters[filters.saleStatus]) {
-      where[Op.and] = [...(where[Op.and] || []), saleFilters[filters.saleStatus]];
+      const filter = saleFilters[filters.saleStatus];
+      if (filter[Op.and]) {
+        where[Op.and] = [...(where[Op.and] || []), ...filter[Op.and]];
+      } else {
+        where[Op.and] = [...(where[Op.and] || []), filter];
+      }
     }
   }
 

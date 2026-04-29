@@ -88,7 +88,7 @@ const AttributesPage = () => {
   const [expanded, setExpanded] = useState({});
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editing, setEditing] = useState(null);
-  const [formData, setFormData] = useState({ name: '', type: 'select', isRequired: false });
+  const [formData, setFormData] = useState({ name: '' });
   const canManageAttributes = hasPermission(PERMISSIONS.ATTRIBUTES_MANAGE);
 
   const fetchAttributes = useCallback(async () => {
@@ -111,7 +111,7 @@ const AttributesPage = () => {
   const openCreate = () => {
     if (!canManageAttributes) return;
     setEditing(null);
-    setFormData({ name: '', type: 'select', isRequired: false });
+    setFormData({ name: '' });
     setDialogOpen(true);
   };
 
@@ -120,8 +120,6 @@ const AttributesPage = () => {
     setEditing(attribute);
     setFormData({
       name: attribute.name,
-      type: attribute.type || 'select',
-      isRequired: attribute.isRequired || false,
     });
     setDialogOpen(true);
   };
@@ -184,7 +182,6 @@ const AttributesPage = () => {
             <TableHead>
               <TableRow sx={{ bgcolor: 'background.paper' }}>
                 <TableCell sx={{ fontWeight: 'bold' }}>Name</TableCell>
-                <TableCell sx={{ fontWeight: 'bold' }}>Type</TableCell>
                 <TableCell sx={{ fontWeight: 'bold' }}>Values</TableCell>
                 <TableCell align="right" sx={{ fontWeight: 'bold' }}>Actions</TableCell>
               </TableRow>
@@ -201,9 +198,6 @@ const AttributesPage = () => {
                 <React.Fragment key={attribute.id}>
                   <TableRow hover>
                     <TableCell>{attribute.name}</TableCell>
-                    <TableCell>
-                      <Chip label={attribute.type || 'select'} size="small" variant="outlined" />
-                    </TableCell>
                     <TableCell>
                       <Button
                         size="small"
@@ -253,19 +247,6 @@ const AttributesPage = () => {
             sx={{ mb: 2 }}
             autoFocus
           />
-          <TextField
-            label="Type"
-            fullWidth
-            select
-            SelectProps={{ native: true }}
-            value={formData.type}
-            onChange={(event) => setFormData((current) => ({ ...current, type: event.target.value }))}
-          >
-            <option value="select">Select (dropdown)</option>
-            <option value="multiselect">Multi-select</option>
-            <option value="text">Text (free input)</option>
-            <option value="boolean">Boolean (yes/no)</option>
-          </TextField>
         </DialogContent>
         <DialogActions sx={{ px: 3, pb: 2 }}>
           <Button onClick={handleDialogClose}>Cancel</Button>

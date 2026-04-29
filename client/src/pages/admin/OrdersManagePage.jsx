@@ -288,7 +288,7 @@ const OrdersManagePage = () => {
       {
         field: 'actions',
         headerName: 'Actions',
-        width: 300,
+        width: 200,
         sortable: false,
         renderCell: ({ row }) => {
           const paymentStatus = row.Payment?.status;

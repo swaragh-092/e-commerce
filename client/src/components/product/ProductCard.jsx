@@ -42,15 +42,17 @@ const ProductCard = ({ product, fromCategory }) => {
     <Card
       sx={{
         height: '100%',
+        width: '100%',
         display: 'flex',
         flexDirection: 'column',
         textDecoration: 'none',
         overflow: 'hidden',
+        boxShadow: 'rgba(0, 0, 0, 0.1) 0px 4px 12px;',
         transition: 'transform 0.22s ease, box-shadow 0.22s ease, border-color 0.22s ease',
         '&:hover': {
           transform: 'translateY(-6px)',
-          borderColor: 'primary.light',
-          boxShadow: '0 24px 54px rgba(31, 41, 51, 0.14)',
+          // borderColor: 'primary.light',
+          // boxShadow: '0 24px 54px rgba(31, 41, 51, 0.14)',
         },
         '&:hover img': {
           transform: 'scale(1.045)',
@@ -114,18 +116,39 @@ const ProductCard = ({ product, fromCategory }) => {
           }}
         />
       </Box>
-      <CardContent sx={{ flexGrow: 1, p: 2.25 }}>
-        {product.brand?.name && (
-          <Typography variant="caption" color="primary" sx={{ display: 'block', fontWeight: 600, mb: 0.5 }}>
-            {product.brand.name}
+      <CardContent sx={{ flexGrow: 1, p: 2.25, display: 'flex', flexDirection: 'column' }}>
+        <Box sx={{ minHeight: 40, mb: 1 }}>
+          {product.brand?.name ? (
+            <Typography variant="caption" color="primary" sx={{ display: 'block', fontWeight: 600, mb: 0.5, textTransform: 'uppercase', letterSpacing: 1 }}>
+              {product.brand.name}
+            </Typography>
+          ) : (
+            <Box sx={{ height: 20 }} />
+          )}
+          <Typography variant="body2" color="text.secondary" noWrap>
+            {product.categories?.[0]?.name || 'Uncategorized'}
           </Typography>
-        )}
-        <Typography variant="body2" color="text.secondary" noWrap gutterBottom>
-          {product.categories?.[0]?.name}
-        </Typography>
-        <Typography variant="h6" component="div" noWrap sx={{ fontWeight: 800, fontSize: '1rem', color: 'text.primary' }}>
-          {product.name}
-        </Typography>
+        </Box>
+        
+        <Box sx={{ minHeight: 48, mb: 1.5 }}>
+          <Typography 
+            variant="h6" 
+            component="div" 
+            sx={{ 
+              fontWeight: 800, 
+              fontSize: '1rem', 
+              color: 'text.primary',
+              display: '-webkit-box',
+              WebkitLineClamp: 2,
+              WebkitBoxOrient: 'vertical',
+              overflow: 'hidden',
+              lineHeight: 1.2,
+              height: 40 // Fixed height for 2 lines
+            }}
+          >
+            {product.name}
+          </Typography>
+        </Box>
         {hasRating && (
           <Box sx={{ display: 'flex', alignItems: 'center', mb: 1 }}>
             <Rating
@@ -141,7 +164,8 @@ const ProductCard = ({ product, fromCategory }) => {
             )}
           </Box>
         )}
-        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+        <Box sx={{ flexGrow: 1 }} />
+        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mt: 'auto' }}>
           {hasSale ? (
             <>
               <Typography variant="h6" color="primary" sx={{ fontWeight: 900 }}>

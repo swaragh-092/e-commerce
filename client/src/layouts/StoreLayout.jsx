@@ -215,12 +215,11 @@ const StoreLayout = () => {
                     sx={{
                       py: 1.2,
                       px: 2,
-                      color: 'error.main',
-                      '&:hover': { bgcolor: 'error.light', opacity: 0.8 },
+                      '&:hover': { bgcolor: 'error.light', color: 'white', opacity: 0.8 },
                     }}
                   >
                     <LogoutIcon sx={{ mr: 1.5, fontSize: '1.2rem' }} />
-                    <Typography sx={{ fontSize: '0.95rem' }}>Logout</Typography>
+                    <Typography sx={{ fontSize: '0.95rem', }}>Logout</Typography>
                   </MenuItem>
                 </Menu>
 

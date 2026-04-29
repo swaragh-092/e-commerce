@@ -18,9 +18,11 @@ const ProductGrid = ({ products, loading, gridCols = 4, fromCategory }) => {
             <Grid container spacing={3}>
                 {[...Array(8)].map((_, i) => (
                     <Grid item xs={cols.xs} sm={cols.sm} md={cols.md} lg={cols.lg} key={i}>
-                        <Skeleton variant="rectangular" height={250} />
-                        <Skeleton height={30} sx={{ mt: 1 }} />
-                        <Skeleton width="60%" height={24} />
+                        <Box sx={{ position: 'relative', pt: '100%', mb: 2, bgcolor: 'action.hover', borderRadius: 2 }}>
+                            <Skeleton variant="rectangular" sx={{ position: 'absolute', top: 0, left: 0, width: '100%', height: '100%', borderRadius: 2 }} />
+                        </Box>
+                        <Skeleton width="80%" height={24} />
+                        <Skeleton width="60%" height={24} sx={{ mt: 1 }} />
                     </Grid>
                 ))}
             </Grid>
@@ -38,7 +40,7 @@ const ProductGrid = ({ products, loading, gridCols = 4, fromCategory }) => {
     return (
         <Grid container spacing={3}>
             {products.map(product => (
-                <Grid item xs={cols.xs} sm={cols.sm} md={cols.md} lg={cols.lg} key={product.id}>
+                <Grid item xs={cols.xs} sm={cols.sm} md={cols.md} lg={cols.lg} key={product.id} sx={{ display: 'flex' }}>
                     <ProductCard product={product} fromCategory={fromCategory} />
                 </Grid>
             ))}

@@ -30,11 +30,13 @@ const CategoryGrid = ({ title, categories = [], loading = false }) => {
                                 height: '100%',
                                 borderRadius: 2,
                                 overflow: 'visible',
-                                bgcolor: 'background.paper',
+                                // bgcolor: 'background.paper',
+                                border: 'none',
+                                boxShadow: 'none',
                                 transition: 'transform 0.24s ease, box-shadow 0.24s ease, border-color 0.24s ease',
                                 '&:hover': {
                                     transform: 'translateY(-6px)',
-                                    borderColor: 'primary.light',
+                                    // borderColor: 'primary.light',
                                     boxShadow: '0 22px 42px rgba(31, 41, 51, 0.14)',
                                     zIndex: 1,
                                 },
@@ -47,8 +49,8 @@ const CategoryGrid = ({ title, categories = [], loading = false }) => {
                                     height: '100%',
                                     display: 'block', // Crucial for transform on some elements
                                     textDecoration: 'none',
-                                    color: 'inherit',
-                                    borderRadius: 2,
+                                    // color: 'inherit',
+                                    // borderRadius: 2,
                                     overflow: 'hidden', // Keep rounding for internal content
                                     '& .MuiCardActionArea-focusHighlight': {
                                         backgroundColor: 'transparent',
@@ -56,7 +58,7 @@ const CategoryGrid = ({ title, categories = [], loading = false }) => {
                                 }}
                             >
                                 {cat.image ? (
-                                    <Box sx={{ overflow: 'hidden', height: 150, bgcolor: 'action.hover' }}>
+                                    <Box sx={{ overflow: 'hidden', height: 150 }}>
                                         <CardMedia
                                             component="img"
                                             image={getMediaUrl(cat.image)}
@@ -64,6 +66,7 @@ const CategoryGrid = ({ title, categories = [], loading = false }) => {
                                             sx={{
                                                 height: '100%',
                                                 objectFit: 'contain',
+                                                background: 'none',
                                                 transition: 'transform 0.5s ease',
                                             }}
                                         />
