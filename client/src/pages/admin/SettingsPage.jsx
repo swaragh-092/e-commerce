@@ -1476,9 +1476,22 @@ const SettingsPage = () => {
         </>,
         ['invoice', 'print', 'tax id', 'terms', 'notes', 'legal']
       ),
+    ],
     [
       section(
+        'SEO & Discovery',
+        'Set defaults for search engines, social sharing, and analytics snippets.',
+        <>
+          {field('seo.titleTemplate', 'Page Title Template (use %s for page name, e.g. %s | My Store)')}
+          {field('seo.defaultDescription', 'Default Meta Description')}
+          {imageField('seo.ogImage', 'Default OG / Social Share Image')}
+          {field('seo.googleAnalyticsId', 'Google Analytics ID (e.g. G-XXXXXXXX)')}
+        </>,
+        ['seo', 'analytics', 'meta description', 'og image']
+      ),
+      section(
         'Accounts & Authentication',
+        'Tighten customer account rules and decide which login experiences are enabled.',
         <>
           {toggle('features.emailVerification', 'Require email verification on signup')}
           {toggle('features.socialLogin', 'Social login (Google / GitHub)')}
