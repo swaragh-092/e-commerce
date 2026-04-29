@@ -14,6 +14,13 @@ exports.processWebhook = async (providerCode, payload, headers) => {
         }
 
         const adapter = resolveProvider(provider);
+
+        // Validate payload type to prevent type confusion via parameter tampering.
+        // Accept only Buffer (raw body) or JSON object payloads; reject arrays/primitives.
+        if (!(Buffer.isBuffer(payload) || (payload !== null && typeof payload === 'object' && !Array.isArray(payload)))) {
+            console.warn(`Invalid webhook payload type for provider: ${providerCode}. Type: ${typeof payload}`);
+            throw new Error('Invalid webhook payload type');
+        }
         
         // Authenticate webhook payload
         const signature = headers['x-provider-signature'] || headers['x-shiprocket-signature'] || headers['x-api-key'];
@@ -35,6 +42,9 @@ exports.processWebhook = async (providerCode, payload, headers) => {
         let parsedPayload;
         try {
             parsedPayload = Buffer.isBuffer(payload) ? JSON.parse(payload.toString('utf8')) : payload;
+            if (parsedPayload === null || typeof parsedPayload !== 'object' || Array.isArray(parsedPayload)) {
+                throw new Error('Parsed payload must be a JSON object');
+            }
         } catch (err) {
             console.error(`Malformed JSON payload received for provider: ${providerCode}. Length: ${payload?.length}, Type: ${typeof payload}`);
             throw new Error('Invalid JSON payload in webhook');
