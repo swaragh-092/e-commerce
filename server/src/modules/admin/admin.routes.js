@@ -39,4 +39,6 @@ router.get('/access-control/users', ...accessManageOnly, adminController.getAcce
 router.post('/access-control/users', ...accessManageOnly, validate(createStaffUserSchema), adminController.createStaffUser);
 router.put('/access-control/users/:id/role', ...accessManageOnly, validate(updateUserRoleSchema), adminController.updateUserRole);
 
+router.put('/access-control/users/:id/role', ...accessManageOnly, validate(updateUserRoleSchema), adminController.updateUserRole);
+
 module.exports = router;

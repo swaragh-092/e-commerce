@@ -255,6 +255,10 @@ const releaseOrderReservationsAndCoupons = async (order, transaction) => {
             await Coupon.update(
                 { usedCount: sequelize.literal(`GREATEST(used_count - 1, 0)`) },
                 { where: { id: { [Op.in]: appliedCouponIds } }, transaction }
+            );
+        }
+    }
+};
 
 const getPaymentSettings = async () => {
     const rows = await Setting.findAll({ where: { group: 'payments' } });
