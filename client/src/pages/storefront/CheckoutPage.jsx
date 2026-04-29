@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useContext } from 'react';
+import React, { useState, useEffect, useContext, useMemo } from 'react';
 import {
     Box, Container, Typography, Button, Divider, Paper, TextField,
     CircularProgress, Alert, Radio, RadioGroup,
@@ -19,6 +19,7 @@ import { useSettings, useCurrency, useFeature } from '../../hooks/useSettings';
 import { useCart } from '../../hooks/useCart';
 import { userService } from '../../services/userService';
 import { validateCoupon, getEligibleCoupons } from '../../services/adminService';
+import { calculateShipping } from '../../services/shippingService';
 import PageSEO from '../../components/common/PageSEO';
 import { getCartItemUnitPrice } from '../../utils/variantPricing';
 import CenteredLoader from '../../components/common/CenteredLoader';
@@ -75,6 +76,15 @@ const normalizeBuyNowItem = (item) => {
         product: { ...product, id: product.id || item.productId, name: product.name || 'Product' },
         variant: variant ? { ...variant, id: variant.id || item.variantId || null } : null,
     };
+};
+
+const createCheckoutSessionId = () => {
+    if (typeof crypto !== 'undefined' && crypto.randomUUID) return crypto.randomUUID();
+    return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, (char) => {
+        const rand = Math.random() * 16 | 0;
+        const value = char === 'x' ? rand : (rand & 0x3 | 0x8);
+        return value.toString(16);
+    });
 };
 
 // Section wrapper — shows locked/completed state when not active
@@ -151,8 +161,11 @@ const CheckoutPage = () => {
     const { formatPrice } = useCurrency();
     const { cart, clearCart } = useCart();
 
-    const buyNowItem = location.state?.fromBuyNow ? normalizeBuyNowItem(location.state?.buyNowItem) : null;
-    const isBuyNowFlow = Boolean(buyNowItem);
+    const buyNowItem = useMemo(() => {
+        return location.state?.fromBuyNow ? normalizeBuyNowItem(location.state?.buyNowItem) : null;
+    }, [location.state?.fromBuyNow, location.state?.buyNowItem]);
+
+    const isBuyNowFlow = useMemo(() => Boolean(buyNowItem), [buyNowItem]);
     const couponsEnabled = settings?.features?.coupons !== false;
     const paymentSettings = settings?.payments || {};
     const enabledPaymentMethods = PAYMENT_METHOD_OPTIONS.filter((method) => {
@@ -170,6 +183,7 @@ const CheckoutPage = () => {
     const SECTIONS = couponsEnabled ? [1, 2, 3] : [1, 3];
     const [activeSection, setActiveSection] = useState(1);
     const [completedSections, setCompletedSections] = useState([]);
+    const [checkoutSessionId] = useState(createCheckoutSessionId);
 
     const completeSection = (section, nextSection) => {
         setCompletedSections((prev) => [...new Set([...prev, section])]);
@@ -196,6 +210,9 @@ const CheckoutPage = () => {
 
     // Notes & Payment
     const [notes, setNotes] = useState('');
+    const [shippingQuote, setShippingQuote] = useState(null);
+    const [shippingLoading, setShippingLoading] = useState(false);
+    const [shippingError, setShippingError] = useState('');
 
     // Address dialog
     const [addrDialog, setAddrDialog] = useState({ open: false, mode: 'add', addrId: null, form: EMPTY_ADDR, saving: false, errors: {} });
@@ -253,7 +270,7 @@ const CheckoutPage = () => {
     }, [defaultPaymentMethod, enabledPaymentMethods, paymentMethod]);
 
 
-    const items = isBuyNowFlow ? [buyNowItem] : (cart?.items || []);
+    const items = useMemo(() => (isBuyNowFlow ? [buyNowItem] : (cart?.items || [])), [isBuyNowFlow, buyNowItem, cart?.items]);
 
     const subtotal = items.reduce((sum, item) => {
         const quantity = normalizeBuyNowQuantity(item?.quantity);
@@ -265,11 +282,8 @@ const CheckoutPage = () => {
     const appliedCoupons = couponResult?.appliedCoupons || [];
 
     const shippingMethod = settings?.shipping?.method || 'flat_rate';
-    const flatRate = parseFloat(settings?.shipping?.flatRate ?? 0);
     const freeThreshold = parseFloat(settings?.shipping?.freeThreshold ?? 0);
-    let shippingCost = 0;
-    if (shippingMethod === 'flat_rate') shippingCost = flatRate;
-    else if (shippingMethod === 'free_above_threshold') shippingCost = subtotal >= freeThreshold ? 0 : flatRate;
+    const shippingCost = Number(shippingQuote?.shippingCost ?? 0);
 
     const shippingDiscount = couponResult?.shippingDiscount || (couponResult?.freeShipping ? shippingCost : 0);
     const effectiveShippingCost = Math.max(0, shippingCost - shippingDiscount);
@@ -286,6 +300,65 @@ const CheckoutPage = () => {
     const flatTaxAmount = (!taxInclusive && !useGST && taxRate > 0) ? calculateTax( subtotal, taxRate ) : 0;
     const taxAmount = useGST ? cgstAmount + sgstAmount + igstAmount : flatTaxAmount;
     const total = Math.max(0, subtotal + effectiveShippingCost + taxAmount - orderDiscount);
+    const itemSignature = useMemo(() => (
+        items.map((item) => `${item?.productId || item?.product?.id}:${item?.variantId || item?.variant?.id || 'base'}:${normalizeBuyNowQuantity(item?.quantity)}`).join('|')
+    ), [items]);
+    const appliedCouponCodes = useMemo(() => appliedCoupons.map((coupon) => coupon.code).sort().join('|'), [appliedCoupons]);
+
+    useEffect(() => {
+        if (!selectedAddressId || items.length === 0) {
+            setShippingQuote(null);
+            setShippingError('');
+            return undefined;
+        }
+
+        let cancelled = false;
+        const timer = setTimeout(async () => {
+            setShippingLoading(true);
+            setShippingError('');
+            try {
+                const response = await calculateShipping({
+                    shippingAddressId: selectedAddressId,
+                    checkoutSessionId,
+                    paymentMethod,
+                    ...(couponCode && couponResult && !couponResult.error && { couponCode }),
+                    ...(appliedCouponCodes && { couponCodes: appliedCouponCodes.split('|') }),
+                    ...(isBuyNowFlow && {
+                        buyNowItem: {
+                            productId: buyNowItem.productId,
+                            variantId: buyNowItem.variantId || null,
+                            quantity: buyNowItem.quantity,
+                        },
+                    }),
+                });
+                if (cancelled) return;
+                const quote = response.data?.data || null;
+                setShippingQuote(quote);
+                if (!quote?.serviceable) {
+                    setShippingError(quote?.message || 'Delivery is not available for this address.');
+                }
+            } catch (err) {
+                if (!cancelled) {
+                    setShippingQuote(null);
+                    setShippingError(getApiErrorMessage(err, 'Could not calculate delivery for this address.'));
+                }
+            } finally {
+                if (!cancelled) setShippingLoading(false);
+            }
+        }, 350);
+
+        return () => {
+            cancelled = true;
+            clearTimeout(timer);
+        };
+    }, [selectedAddressId, checkoutSessionId, paymentMethod, couponCode, couponResult, appliedCouponCodes, itemSignature, isBuyNowFlow, buyNowItem]);
+
+    useEffect(() => {
+        if (paymentMethod === 'cod' && shippingQuote && shippingQuote.codAvailable === false) {
+            const fallback = enabledPaymentMethods.find((method) => method.id !== 'cod');
+            if (fallback) setPaymentMethod(fallback.id);
+        }
+    }, [paymentMethod, shippingQuote, enabledPaymentMethods]);
 
     useEffect(() => {
         userService.getAddresses()
@@ -343,12 +416,19 @@ const CheckoutPage = () => {
     const handlePlaceOrder = async () => {
         if (!selectedAddressId) { setError('Please select a shipping address.'); return; }
         if (!paymentMethod) { setError('No payment method is currently available.'); return; }
+        if (shippingLoading) { setError('Please wait while we confirm delivery availability.'); return; }
+        if (!shippingQuote?.quoteId || shippingQuote.serviceable === false) {
+            setError(shippingError || 'Delivery is not available for the selected address.');
+            return;
+        }
         setPlacing(true);
         setError(null);
         try {
             const { placeOrder } = await import('../../services/adminService');
             const res = await placeOrder({
                 shippingAddressId: selectedAddressId,
+                shippingQuoteId: shippingQuote.quoteId,
+                checkoutSessionId,
                 paymentMethod,
                 ...(couponCode && couponResult && !couponResult.error && { couponCode }),
                 ...(appliedCoupons.length > 0 && { couponCodes: appliedCoupons.map((c) => c.code) }),
@@ -497,10 +577,26 @@ const CheckoutPage = () => {
                                     Add a new address
                                 </Button>
 
+                                {selectedAddressId && (
+                                    <Box sx={{ mb: 2 }}>
+                                        {shippingLoading ? (
+                                            <Alert severity="info" icon={<CircularProgress size={16} />}>
+                                                Checking delivery availability...
+                                            </Alert>
+                                        ) : shippingError ? (
+                                            <Alert severity="warning">{shippingError}</Alert>
+                                        ) : shippingQuote?.serviceable ? (
+                                            <Alert severity="success">
+                                                Delivery available{shippingQuote.estimatedDeliveryDays ? ` in ${shippingQuote.estimatedDeliveryDays} days` : ''}.
+                                            </Alert>
+                                        ) : null}
+                                    </Box>
+                                )}
+
                                 <Box>
                                     <Button
                                         variant="contained"
-                                        disabled={!selectedAddressId}
+                                        disabled={!selectedAddressId || shippingLoading || !shippingQuote?.quoteId || shippingQuote?.serviceable === false}
                                         onClick={() => completeSection(1, couponsEnabled ? 2 : 3)}
                                         sx={{ px: 4 }}
                                     >
@@ -649,12 +745,22 @@ const CheckoutPage = () => {
                             </Typography>
                         }
                     >
-                        <RadioGroup value={paymentMethod} onChange={(e) => setPaymentMethod(e.target.value)}>
+                        <RadioGroup
+                            value={paymentMethod}
+                            onChange={(e) => {
+                                if (e.target.value === 'cod' && shippingQuote?.codAvailable === false) return;
+                                setPaymentMethod(e.target.value);
+                            }}
+                        >
                             {enabledPaymentMethods.map((method) => (
                                 <Paper
                                     key={method.id}
                                     variant="outlined"
-                                    onClick={() => setPaymentMethod(method.id)}
+                                    onClick={() => {
+                                        if (!(method.id === 'cod' && shippingQuote?.codAvailable === false)) {
+                                            setPaymentMethod(method.id);
+                                        }
+                                    }}
                                     sx={{
                                         p: 2, mb: 1.5, cursor: 'pointer',
                                         borderColor: paymentMethod === method.id ? 'primary.main' : 'divider',
@@ -663,11 +769,18 @@ const CheckoutPage = () => {
                                     }}
                                 >
                                     <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                                        <Radio value={method.id} checked={paymentMethod === method.id} size="small" />
+                                        <Radio
+                                            value={method.id}
+                                            checked={paymentMethod === method.id}
+                                            disabled={method.id === 'cod' && shippingQuote?.codAvailable === false}
+                                            size="small"
+                                        />
                                         <Box sx={{ flexGrow: 1 }}>
                                             <Typography variant="body2" fontWeight={700}>{method.title}</Typography>
                                             <Typography variant="caption" color="text.secondary">
-                                                {method.description}
+                                                {method.id === 'cod' && shippingQuote?.codAvailable === false
+                                                    ? 'COD is not available for this delivery address'
+                                                    : method.description}
                                             </Typography>
                                         </Box>
                                         {method.id !== 'cod' && (
@@ -749,7 +862,11 @@ const CheckoutPage = () => {
                             {/* Shipping */}
                             <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 1 }}>
                                 <Typography variant="body2" color="text.secondary">Delivery Charges</Typography>
-                                {shippingCost === 0 ? (
+                                {shippingLoading ? (
+                                    <CircularProgress size={16} />
+                                ) : shippingError ? (
+                                    <Typography variant="body2" color="warning.main" fontWeight={600}>Unavailable</Typography>
+                                ) : shippingCost === 0 ? (
                                     <Typography variant="body2" color="success.main" fontWeight={600}>FREE</Typography>
                                 ) : shippingDiscount > 0 ? (
                                     <Box sx={{ textAlign: 'right' }}>
@@ -839,7 +956,7 @@ const CheckoutPage = () => {
                                 variant="contained"
                                 size="large"
                                 onClick={handlePlaceOrder}
-                                disabled={placing || activeSection !== 3 || !selectedAddressId}
+                                disabled={placing || shippingLoading || !shippingQuote?.quoteId || shippingQuote?.serviceable === false || activeSection !== 3 || !selectedAddressId}
                                 sx={{
                                     py: 1.5,
                                     fontSize: 16,
@@ -967,4 +1084,3 @@ const CheckoutPage = () => {
 
 
 export default CheckoutPage;
-

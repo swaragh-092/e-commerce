@@ -8,6 +8,8 @@ const placeOrderSchema = Joi.object({
     couponCodes: Joi.array().items(Joi.string().max(50).uppercase()).optional().default([]),
     notes: Joi.string().allow(null, ''),
     paymentMethod: Joi.string().valid('razorpay', 'stripe', 'payu', 'cashfree', 'cod').default('razorpay'),
+    shippingQuoteId: Joi.string().uuid().optional(),
+    checkoutSessionId: Joi.string().uuid().optional(),
     buyNowItem: Joi.object({
         productId: Joi.string().uuid().required(),
         variantId: Joi.string().uuid().allow(null),
@@ -26,6 +28,7 @@ const createFulfillmentSchema = Joi.object({
     courier: Joi.string().max(100).allow(null, ''),
     notes: Joi.string().allow(null, ''),
     status: Joi.string().valid(...FULFILLMENT_STATUS_VALUES).default('pending'),
+    providerId: Joi.string().uuid().allow(null).optional(),
     items: Joi.array().items(Joi.object({
         orderItemId: Joi.string().uuid().required(),
         quantity: Joi.number().integer().min(1).required(),

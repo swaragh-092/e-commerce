@@ -19,7 +19,7 @@ import { useParams, useNavigate } from 'react-router-dom';
 import PrintIcon from '@mui/icons-material/Print';
 import LocalShippingIcon from '@mui/icons-material/LocalShipping';
 import { useCurrency } from '../../hooks/useSettings';
-import { getOrderById, updateOrderStatus, refundOrder, createFulfillment, updateFulfillmentStatus, confirmCodPayment } from '../../services/adminService';
+import { getOrderById, updateOrderStatus, refundOrder, createFulfillment, updateFulfillmentStatus, confirmCodPayment, getShippingProviders } from '../../services/adminService';
 import { useNotification } from '../../context/NotificationContext';
 import {
   Dialog,
@@ -168,6 +168,8 @@ const FulfillmentDialog = ({ open, onClose, orderItems, onSave, loading }) => {
   const [notes, setNotes] = useState('');
   const [status, setStatus] = useState('pending');
   const [items, setItems] = useState({});
+  const [providers, setProviders] = useState([]);
+  const [providerId, setProviderId] = useState('manual');
 
   useEffect(() => {
     if (open) {
@@ -184,6 +186,14 @@ const FulfillmentDialog = ({ open, onClose, orderItems, onSave, loading }) => {
       setCourier('');
       setNotes('');
       setStatus('pending');
+      setProviderId('manual');
+
+      getShippingProviders()
+        .then(res => {
+            const active = res.data.data.filter(p => p.enabled);
+            setProviders(active);
+        })
+        .catch(err => console.error(err));
     }
   }, [open, orderItems]);
 
@@ -198,7 +208,8 @@ const FulfillmentDialog = ({ open, onClose, orderItems, onSave, loading }) => {
       .map(([orderItemId, quantity]) => ({ orderItemId, quantity }));
 
     if (shipmentItems.length === 0) return;
-    onSave({ trackingNumber, courier, notes, status, items: shipmentItems });
+    const finalProviderId = providerId === 'manual' ? null : providerId;
+    onSave({ trackingNumber, courier, notes, status, providerId: finalProviderId, items: shipmentItems });
   };
 
   return (
@@ -207,13 +218,28 @@ const FulfillmentDialog = ({ open, onClose, orderItems, onSave, loading }) => {
       <DialogContent dividers>
         <Stack spacing={2} sx={{ mb: 3 }}>
           <TextField
-            label="Carrier / Courier"
+            select
+            label="Shipping Provider"
             fullWidth
             size="small"
-            value={courier}
-            onChange={(e) => setCourier(e.target.value)}
-            placeholder="e.g. FedEx, BlueDart"
-          />
+            value={providerId}
+            onChange={(e) => setProviderId(e.target.value)}
+          >
+            <MenuItem value="manual">Manual / Own Delivery</MenuItem>
+            {providers.map(p => (
+              <MenuItem key={p.id} value={p.id}>{p.name} ({p.code})</MenuItem>
+            ))}
+          </TextField>
+          {providerId === 'manual' && (
+            <TextField
+              label="Carrier / Courier"
+              fullWidth
+              size="small"
+              value={courier}
+              onChange={(e) => setCourier(e.target.value)}
+              placeholder="e.g. FedEx, BlueDart"
+            />
+          )}
           <TextField
             label="Tracking Number"
             fullWidth
@@ -761,8 +787,45 @@ const OrderDetailPage = () => {
                         <Box sx={{ textAlign: 'right' }}>
                           <Typography variant="body2" fontWeight={600}>{f.courier || 'Standard Courier'}</Typography>
                           <Typography variant="body2" color="primary" sx={{ fontWeight: 500 }}>{f.trackingNumber || 'No tracking'}</Typography>
+                          {f.shipments && f.shipments.length > 0 && f.shipments[0].trackingUrl && (
+                            <Typography variant="caption" sx={{ display: 'block', mt: 0.5 }}>
+                              <a href={f.shipments[0].trackingUrl} target="_blank" rel="noreferrer" style={{ color: 'inherit', textDecoration: 'underline' }}>
+                                Track Package
+                              </a>
+                            </Typography>
+                          )}
+                          {f.shipments && f.shipments.length > 0 && f.shipments[0].labelUrl && (
+                            <Typography variant="caption" sx={{ display: 'block', mt: 0.5 }}>
+                              <a href={f.shipments[0].labelUrl} target="_blank" rel="noreferrer" style={{ color: 'inherit', textDecoration: 'underline' }}>
+                                Download Label
+                              </a>
+                            </Typography>
+                          )}
                         </Box>
                       </Box>
+
+                      {f.shipments && f.shipments.length > 0 && Array.isArray(f.shipments[0].statusHistory) && f.shipments[0].statusHistory.length > 0 && (
+                        <Box sx={{ mt: 2, mb: 3, p: 2, bgcolor: 'background.default', borderRadius: 1 }}>
+                          <Typography variant="subtitle2" sx={{ mb: 1.5 }}>Tracking Timeline</Typography>
+                          <Stack spacing={1.5}>
+                            {[...f.shipments[0].statusHistory].reverse().map((event, idx) => (
+                              <Box key={idx} sx={{ display: 'flex', gap: 2 }}>
+                                <Box sx={{ minWidth: 120 }}>
+                                  <Typography variant="caption" color="text.secondary" sx={{ display: 'block' }}>
+                                    {new Date(event.timestamp).toLocaleString()}
+                                  </Typography>
+                                </Box>
+                                <Box>
+                                  <Typography variant="body2" fontWeight={600}>{event.status}</Typography>
+                                  {event.location && <Typography variant="caption" color="text.secondary">{event.location}</Typography>}
+                                  {event.message && <Typography variant="caption" color="text.secondary" sx={{ display: 'block' }}>{event.message}</Typography>}
+                                </Box>
+                              </Box>
+                            ))}
+                          </Stack>
+                        </Box>
+                      )}
+
                       <Divider sx={{ mb: 2 }} />
                       <Stack spacing={1.25} sx={{ mb: f.notes ? 2 : 0 }}>
                         {f.items?.map(item => (

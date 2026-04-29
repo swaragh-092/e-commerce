@@ -18,12 +18,17 @@ const {
     Payment,
     Fulfillment,
     FulfillmentItem,
+    Shipment,
+    ShipmentItem,
+    ShippingProvider,
 } = require('../index');
 const AppError = require('../../utils/AppError');
 const AuditService = require('../audit/audit.service');
 const CouponService = require('../coupon/coupon.service');
 const PaymentService = require('../payment/payment.service');
 const TaxService = require('../tax/tax.service');
+const ShippingService = require('../shipping/shipping.service');
+const { resolveProvider } = require('../shipping/providers');
 
 const defaultSettings = require('../../../../config/default.json');
 
@@ -91,6 +96,15 @@ const HEAVY_ORDER_INCLUDE = [
                 as: 'items',
                 include: [
                     { model: OrderItem, as: 'orderItem', attributes: ['id', 'snapshotName', 'snapshotSku', 'snapshotImage', 'variantInfo'] },
+                ],
+            },
+            {
+                model: Shipment,
+                as: 'shipments',
+                required: false,
+                include: [
+                    { model: ShipmentItem, as: 'items', required: false },
+                    { model: ShippingProvider, as: 'provider', attributes: ['id', 'code', 'name', 'type'], required: false },
                 ],
             },
         ],
@@ -452,16 +466,16 @@ const placeOrder = async (userId, payload) => {
             destinationState,
         });
 
-        const shippingMethod = getLocalSetting('shipping.method', 'flat_rate');
-        let shippingCost = 0;
-        if (shippingMethod === 'flat_rate') {
-             shippingCost = Number(getLocalSetting('shipping.flatRate', 5));
-        } else if (shippingMethod === 'free_above_threshold') {
-             const threshold = Number(getLocalSetting('shipping.freeThreshold', 50));
-             if (subtotal < threshold) {
-                 shippingCost = Number(getLocalSetting('shipping.flatRate', 5));
-             }
-        }
+        const shippingQuote = await ShippingService.validateQuoteForOrder(userId, {
+            ...payload,
+            shippingAddressId,
+            paymentMethod,
+            couponCode,
+            couponCodes,
+            buyNowItem,
+        });
+        let shippingCost = Number(shippingQuote.shippingCost || 0);
+        const shippingTaxAmount = Number(shippingQuote.taxAmount || 0);
 
         const requestedCouponCodes = [...new Set([
             ...couponCodes,
@@ -534,6 +548,26 @@ const placeOrder = async (userId, payload) => {
             tax: totalTax,
             taxBreakdown: orderTaxBreakdown,
             shippingCost,
+            shippingQuoteId: shippingQuote.quoteId || null,
+            shippingSnapshot: {
+                quoteId: shippingQuote.quoteId || null,
+                provider: shippingQuote.providerCode || shippingQuote.provider || 'manual',
+                providerName: shippingQuote.providerName || 'Manual Shipping',
+                shippingCost,
+                currency: shippingQuote.currency || 'INR',
+                taxIncluded: shippingQuote.taxIncluded === true,
+                taxAmount: shippingTaxAmount,
+                taxBreakdown: shippingQuote.taxBreakdown || null,
+                codAvailable: shippingQuote.codAvailable === true,
+                estimatedDeliveryDays: shippingQuote.estimatedDeliveryDays || null,
+                serviceable: shippingQuote.serviceable === true,
+            },
+            shipmentStatus: 'pending',
+            checkoutSessionId: shippingQuote.checkoutSessionId || payload.checkoutSessionId || null,
+            shippingCurrency: shippingQuote.currency || 'INR',
+            shippingTaxIncluded: shippingQuote.taxIncluded === true,
+            shippingTaxAmount,
+            shippingTaxBreakdown: shippingQuote.taxBreakdown || null,
             discountAmount,
             total,
             couponId: appliedCoupon ? appliedCoupon.id : null,
@@ -750,8 +784,8 @@ const getOrderById = async (id, userId, isAdmin) => {
 };
 
 const createFulfillment = async (orderId, payload, actingUserId) => {
-    // payload: { trackingNumber, courier, notes, status, items: [{ orderItemId, quantity }] }
-    const { trackingNumber, courier, notes, status, items } = payload;
+    // payload: { trackingNumber, courier, notes, status, items: [{ orderItemId, quantity }], providerId }
+    const { trackingNumber, courier, notes, status, items, providerId } = payload;
 
     if (!items || items.length === 0) {
         throw new AppError('VALIDATION_ERROR', 400, 'At least one item is required for a shipment');
@@ -798,6 +832,8 @@ const createFulfillment = async (orderId, payload, actingUserId) => {
                 remaining:     oi.quantity - alreadyShipped,
                 productId:     oi.productId,
                 snapshotName:  oi.snapshotName,
+                snapshotSku:   oi.snapshotSku,
+                snapshotPrice: oi.snapshotPrice,
             };
         }
 
@@ -883,14 +919,125 @@ const createFulfillment = async (orderId, payload, actingUserId) => {
             }
         }
 
+        // Determine Provider
+        let provider = null;
+        let adapter = null;
+        if (providerId) {
+            provider = await ShippingProvider.findByPk(providerId, { transaction: t });
+        }
+        if (!provider) {
+            provider = await ShippingProvider.findOne({ where: { code: 'manual' }, transaction: t });
+        }
+        if (provider) {
+            adapter = resolveProvider(provider);
+        }
+
+        let providerShipmentId = null;
+        let awbCode = trackingNumber || null;
+        let trackingUrl = null;
+        let labelUrl = null;
+        let finalStatus = status || 'pending';
+        let courierName = courier || (provider ? provider.name : 'Manual Shipping');
+        let rawResponse = null;
+
         // Create the fulfillment record
-        ensureValidFulfillmentTransition('pending', status || 'pending');
+        ensureValidFulfillmentTransition('pending', finalStatus);
         const fulfillment = await Fulfillment.create({
             orderId,
-            trackingNumber: trackingNumber || null,
-            courier:        courier || null,
+            trackingNumber: awbCode,
+            courier:        courierName,
             notes:          notes || null,
-            status:         status || 'pending',
+            status:         finalStatus,
+        }, { transaction: t });
+
+        // Hit Provider API if not manual
+        if (adapter && provider.code !== 'manual') {
+            const user = await User.findByPk(order.userId, { transaction: t });
+            order.user = user;
+
+            const address = order.shippingAddressSnapshot || {};
+            
+            // Calculate total weight of the fulfillment items
+            const productIds = items.map(reqItem => orderItemMap[reqItem.orderItemId]?.productId).filter(Boolean);
+            const products = await Product.findAll({
+                where: { id: productIds },
+                attributes: ['id', 'weight'],
+                transaction: t
+            });
+            const productWeightMap = products.reduce((map, p) => {
+                map[p.id] = parseFloat(p.weight) || 500; // Default to 500g if product weight is missing
+                return map;
+            }, {});
+
+            const totalWeightGrams = items.reduce((sum, reqItem) => {
+                const info = orderItemMap[reqItem.orderItemId];
+                const unitWeight = productWeightMap[info?.productId] || 500;
+                return sum + (unitWeight * Number(reqItem.quantity));
+            }, 0);
+
+            // 1. Mandatory Pre-Shipment Serviceability Revalidation
+            if (typeof adapter.getServiceability === 'function') {
+                const serviceability = await adapter.getServiceability({
+                    pincode: address.pincode,
+                    pickupPincode: provider.settings?.pickupPincode || null,
+                    weightGrams: totalWeightGrams,
+                    paymentMode: order.paymentMethod === 'cod' ? 'cod' : 'prepaid'
+                });
+
+                if (!serviceability.serviceable || (order.paymentMethod === 'cod' && !serviceability.codAvailable)) {
+                    throw new AppError('SHIPPING_UNAVAILABLE', 400, `Shipping provider ${provider.name} cannot fulfill this order at this time. Reason: ${serviceability.reason || 'Unserviceable location'}`);
+                }
+            }
+
+            const providerItems = items.map(reqItem => {
+                const info = orderItemMap[reqItem.orderItemId];
+                return {
+                    quantity: Number(reqItem.quantity),
+                    snapshotName: info.snapshotName,
+                    sku: info.snapshotSku || 'SKU',
+                    unitPrice: info.snapshotPrice || 0
+                };
+            });
+
+            try {
+                const providerResult = await adapter.createShipment({
+                    order,
+                    shipment: { actualWeightGrams: totalWeightGrams },
+                    address: order.shippingAddressSnapshot || {},
+                    items: providerItems
+                });
+
+                awbCode = providerResult.awbCode || awbCode;
+                providerShipmentId = providerResult.providerOrderId || null;
+                trackingUrl = providerResult.trackingUrl || null;
+                labelUrl = providerResult.label || null;
+                rawResponse = providerResult.rawResponse || null;
+
+                await fulfillment.update({ trackingNumber: awbCode, courier: provider.name }, { transaction: t });
+                courierName = provider.name;
+            } catch (err) {
+                // If API fails, rollback by throwing
+                throw new AppError('SHIPPING_API_ERROR', 500, `Shipping provider error: ${err.message}`);
+            }
+        }
+
+        const shipment = await Shipment.create({
+            orderId,
+            fulfillmentId: fulfillment.id,
+            providerId: provider?.id || null,
+            providerOrderId: providerShipmentId,
+            awb: awbCode,
+            courierName: courierName,
+            trackingNumber: awbCode,
+            trackingUrl: trackingUrl,
+            labelUrl: labelUrl,
+            status: finalStatus,
+            statusHistory: [{
+                status: finalStatus,
+                at: new Date().toISOString(),
+                source: 'admin',
+            }],
+            rawResponse: rawResponse,
         }, { transaction: t });
 
         // Create all fulfillment items
@@ -900,6 +1047,11 @@ const createFulfillment = async (orderId, payload, actingUserId) => {
                 fulfillmentId: fulfillment.id,
                 orderItemId:   item.orderItemId,
                 quantity:      qty,
+            }, { transaction: t });
+            await ShipmentItem.create({
+                shipmentId: shipment.id,
+                orderItemId: item.orderItemId,
+                quantity: qty,
             }, { transaction: t });
         }
 
@@ -911,7 +1063,7 @@ const createFulfillment = async (orderId, payload, actingUserId) => {
 
         // Only transition forward — never regress a delivered/cancelled/refunded order
         if (!['delivered', 'cancelled', 'refunded'].includes(order.status)) {
-            await order.update({ status: newStatus }, { transaction: t });
+            await order.update({ status: newStatus, shipmentStatus: newStatus }, { transaction: t });
         }
 
         try {
@@ -924,6 +1076,7 @@ const createFulfillment = async (orderId, payload, actingUserId) => {
                     changes:  {
                         orderId,
                         trackingNumber,
+                        shipmentId: shipment.id,
                         fulfillmentStatus: status || 'pending',
                         newOrderStatus:    newStatus,
                     },
@@ -931,6 +1084,7 @@ const createFulfillment = async (orderId, payload, actingUserId) => {
             }
         } catch (err) {}
 
+        fulfillment.setDataValue('shipments', [shipment]);
         return fulfillment;
     });
 };
@@ -1102,6 +1256,20 @@ const updateFulfillmentStatus = async (orderId, fulfillmentId, status, actingUse
         const oldStatus = fulfillment.status;
         ensureValidFulfillmentTransition(oldStatus, status);
         await fulfillment.update({ status }, { transaction: t });
+        const linkedShipments = await Shipment.findAll({
+            where: { fulfillmentId: fulfillment.id },
+            transaction: t,
+        });
+        for (const shipment of linkedShipments) {
+            const history = Array.isArray(shipment.statusHistory) ? shipment.statusHistory : [];
+            await shipment.update({
+                status,
+                statusHistory: [
+                    ...history,
+                    { status, at: new Date().toISOString(), source: 'admin' },
+                ],
+            }, { transaction: t });
+        }
 
         // Logic: if all items are fully fulfilled AND all fulfillments are "delivered", update the main order
         let shouldDeliverOrder = false;
@@ -1130,7 +1298,7 @@ const updateFulfillmentStatus = async (orderId, fulfillmentId, status, actingUse
         }
 
         if (shouldDeliverOrder && order.status !== 'delivered') {
-            await order.update({ status: 'delivered' }, { transaction: t });
+            await order.update({ status: 'delivered', shipmentStatus: 'delivered' }, { transaction: t });
         }
 
         try {
@@ -1159,10 +1327,12 @@ const getFulfillmentTracking = async (orderId, userId, isAdmin) => {
         status: fulfillment.status,
         courier: fulfillment.courier,
         trackingNumber: fulfillment.trackingNumber,
+        trackingUrl: fulfillment.shipments && fulfillment.shipments.length > 0 ? fulfillment.shipments[0].trackingUrl : null,
         notes: fulfillment.notes,
         createdAt: fulfillment.createdAt,
         updatedAt: fulfillment.updatedAt,
         items: fulfillment.items || [],
+        shipments: fulfillment.shipments || [],
     }));
 
     return {

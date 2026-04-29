@@ -31,6 +31,7 @@ import StoreIcon from '@mui/icons-material/Storefront';
 import ExitIcon from '@mui/icons-material/ExitToApp';
 import DescriptionIcon from '@mui/icons-material/Description';
 import PaymentIcon from '@mui/icons-material/Payment';
+import LocalShippingIcon from '@mui/icons-material/LocalShipping';
 import { useAuth } from '../hooks/useAuth';
 import { useSettings } from '../hooks/useSettings';
 import { PERMISSIONS } from '../utils/permissions';
@@ -52,6 +53,7 @@ const ALL_MENU_ITEMS = [
   { text: 'Media',      path: '/admin/media',      icon: <PhotoLibraryIcon />, permission: PERMISSIONS.MEDIA_READ },
   { text: 'Settings',       path: '/admin/settings',          icon: <SettingsIcon />, permission: PERMISSIONS.SETTINGS_READ },
   { text: 'Payment Gateways', path: '/admin/payment-gateways', icon: <PaymentIcon />, permission: PERMISSIONS.SETTINGS_READ },
+  { text: 'Shipping',         path: '/admin/shipping',         icon: <LocalShippingIcon />, permission: PERMISSIONS.SETTINGS_READ },
   { text: 'Pages',            path: '/admin/pages',            icon: <DescriptionIcon />, permission: PERMISSIONS.PAGES_READ },
   {
     text: 'Access Control',

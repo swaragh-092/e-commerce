@@ -41,6 +41,40 @@ module.exports = (sequelize, DataTypes) => {
             type: DataTypes.DECIMAL(10, 2),
             defaultValue: 0,
         },
+        shippingQuoteId: {
+            type: DataTypes.UUID,
+            allowNull: true,
+        },
+        shippingSnapshot: {
+            type: DataTypes.JSONB,
+            allowNull: true,
+            defaultValue: null,
+        },
+        shipmentStatus: {
+            type: DataTypes.STRING(50),
+            defaultValue: 'pending',
+        },
+        checkoutSessionId: {
+            type: DataTypes.UUID,
+            allowNull: true,
+        },
+        shippingCurrency: {
+            type: DataTypes.STRING(10),
+            defaultValue: 'INR',
+        },
+        shippingTaxIncluded: {
+            type: DataTypes.BOOLEAN,
+            defaultValue: false,
+        },
+        shippingTaxAmount: {
+            type: DataTypes.DECIMAL(10, 2),
+            defaultValue: 0,
+        },
+        shippingTaxBreakdown: {
+            type: DataTypes.JSONB,
+            allowNull: true,
+            defaultValue: null,
+        },
         discountAmount: {
             type: DataTypes.DECIMAL(10, 2),
             defaultValue: 0,
@@ -80,9 +114,11 @@ module.exports = (sequelize, DataTypes) => {
     Order.associate = (models) => {
         Order.belongsTo(models.User, { foreignKey: 'userId' });
         Order.belongsTo(models.Coupon, { foreignKey: 'couponId' });
+        Order.belongsTo(models.ShippingQuote, { foreignKey: 'shippingQuoteId', as: 'shippingQuote' });
         Order.hasMany(models.OrderItem, { foreignKey: 'orderId', as: 'items', onDelete: 'CASCADE' });
         Order.hasOne(models.Payment, { foreignKey: 'orderId' });
         Order.hasMany(models.Fulfillment, { foreignKey: 'orderId', as: 'fulfillments', onDelete: 'CASCADE' });
+        Order.hasMany(models.Shipment, { foreignKey: 'orderId', as: 'shipments', onDelete: 'CASCADE' });
     };
 
     return Order;

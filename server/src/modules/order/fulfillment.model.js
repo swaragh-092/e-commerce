@@ -33,6 +33,7 @@ module.exports = (sequelize, DataTypes) => {
     Fulfillment.associate = (models) => {
         Fulfillment.belongsTo(models.Order, { foreignKey: 'orderId', as: 'order', onDelete: 'CASCADE' });
         Fulfillment.hasMany(models.FulfillmentItem, { foreignKey: 'fulfillmentId', as: 'items', onDelete: 'CASCADE' });
+        Fulfillment.hasMany(models.Shipment, { foreignKey: 'fulfillmentId', as: 'shipments', onDelete: 'SET NULL' });
     };
 
     return Fulfillment;

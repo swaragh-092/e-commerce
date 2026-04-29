@@ -159,6 +159,32 @@ It should include:
 
 The customer does not choose between quotes. The backend returns one final checkout shipping decision.
 
+Quote expiry rules:
+
+- Default quote TTL should be 10 minutes.
+- For high-volatility partner rates, use 5 minutes.
+- `POST /orders` must reject expired `shippingQuoteId`.
+- If a quote expires while the customer is on checkout, the frontend must re-fetch the quote before allowing order placement.
+- Expired quotes should not be refreshed silently during order creation unless the request contains enough current checkout context (cartHash, addressHash, paymentMethod, shippingMethod, couponHash, and customerConsent flag) to safely recalculate and return a clear response.
+
+Quote stale-state protection:
+
+- Every quote should store `checkoutSessionId`.
+- Every quote should store `cartVersion` or a deterministic `cartHash`.
+- Every quote should store `addressVersion` or an address snapshot hash.
+- Every quote request must use an idempotency key generated from `checkoutSessionId + cartHash + addressHash + paymentMethod + couponHash`.
+- If an identical calculate request arrives within the active quote TTL, backend should return the existing quote instead of creating a duplicate row.
+- Backend validation must reject a quote if the cart, address, payment method, or coupon context no longer matches the current order request.
+- The frontend should ignore older `/shipping/calculate` responses if a newer request has already been sent.
+
+Quote pricing consistency:
+
+- A quote is authoritative until it expires.
+- If admin changes a shipping rule after the quote is created, existing unexpired quotes should still be accepted.
+- New quote requests after the rule change should use the new rule.
+- This gives the customer stable checkout pricing while still limiting exposure through the short quote TTL.
+- If the business needs immediate invalidation for emergency cases, add an explicit `invalidateActiveQuotes` admin action rather than invalidating all quotes on every rule edit.
+
 ### Shipping Snapshot
 
 When an order is created, save the final shipping decision into the order.
@@ -183,6 +209,300 @@ Example:
 }
 ```
 
+## Production Hardening Rules
+
+### Quote Expiry
+
+Shipping quotes must be short-lived.
+
+Recommended default:
+
+```txt
+Quote TTL: 10 minutes
+Partner live-rate quote TTL: 5 minutes
+```
+
+On expiry:
+
+- Frontend must call `/shipping/calculate` again.
+- Backend must reject expired `shippingQuoteId`.
+- Backend should return a specific error code such as `SHIPPING_QUOTE_EXPIRED`.
+
+### Checkout Concurrency
+
+Checkout can trigger overlapping shipping calls when a customer changes address, payment method, coupon, or cart quickly.
+
+Use both client and server protection:
+
+- Frontend should debounce shipping calculation calls.
+- Frontend should track a request sequence number and ignore stale responses.
+- Backend should attach each quote to `checkoutSessionId`.
+- Backend should validate `cartHash`, `addressHash`, `paymentMethod`, and coupon context during order placement.
+- Backend should make `/shipping/calculate` idempotent for identical active requests.
+
+Recommended quote identity fields:
+
+```txt
+checkout_session_id
+cart_hash
+address_hash
+payment_method
+coupon_hash
+idempotency_key
+```
+
+Recommended idempotency key:
+
+```txt
+checkoutSessionId + cartHash + addressHash + paymentMethod + couponHash
+```
+
+If the same key is received and the existing quote is not expired, return that quote.
+
+### Provider Fallback
+
+Shipping must still be recoverable if a provider is down.
+
+Fallback order:
+
+```txt
+1. Rule-selected primary provider
+2. Rule-selected secondary provider
+3. Store default provider
+4. Manual provider fallback
+```
+
+If all providers fail:
+
+- Checkout should show delivery unavailable or temporarily unavailable.
+- Admin should still be able to create a manual shipment after order review if the business allows it.
+- Vendor timeout/failure details should be logged for admin/debug use, not shown raw to the customer.
+
+### Rule Conflict Resolution
+
+Shipping rules must resolve deterministically.
+
+Resolution order:
+
+```txt
+1. Only enabled rules are considered.
+2. Rules must match zone and conditions.
+3. Highest priority wins.
+4. If same priority, a rule with strictOverride=true wins.
+5. If still tied, latest created rule wins.
+6. If still tied, fail validation in admin rule preview and require admin cleanup.
+```
+
+Admin UI should warn when two enabled rules have the same priority and overlapping conditions.
+
+### Serviceability Cache
+
+Partner serviceability calls can be expensive and rate-limited.
+
+Cache serviceability checks:
+
+```txt
+Cache key: provider + pickupPincode + deliveryPincode + paymentMethod
+TTL: 6-24 hours
+```
+
+Recommended TTL:
+
+- Manual/admin pincode rules: cache until settings version changes.
+- Partner serviceability: 6 hours.
+- Partner serviceability with rate estimate: 15-60 minutes.
+- Failed provider calls: 1-5 minutes to prevent repeated outages from hammering APIs.
+
+Cache must be invalidated when:
+
+- Shipping provider is disabled.
+- Pickup location changes.
+- Serviceable pincode list changes.
+- Shipping rule changes.
+- COD settings change.
+
+### Rate Limiting
+
+Shipping calculation APIs must be protected from abuse.
+
+Backend:
+
+- Rate limit by user ID for logged-in users.
+- Rate limit by IP for anonymous or failed-auth requests.
+- Use stricter limits for vendor-backed live rate calls.
+- Return `429` with a user-friendly retry message.
+
+Frontend:
+
+- Debounce address and pincode-driven calculate calls.
+- Do not call calculate on every keystroke until pincode is structurally valid.
+- Reuse the latest valid quote until checkout input changes.
+
+### Multi-Package And Split Shipments
+
+Do not assume one order always maps to one shipment.
+
+Target relationship:
+
+```txt
+order
+  └── fulfillments
+        └── shipments
+              └── shipment_items
+```
+
+This supports:
+
+- Multiple warehouses.
+- Partial fulfillment.
+- Backordered items.
+- Different couriers for different packages.
+- Replacement or return shipments.
+
+Initial implementation may create one fulfillment and one shipment per order, but the schema and service layer should not block multiple shipments later.
+
+### Payment Dependency
+
+Prepaid shipment creation must wait for successful payment.
+
+Rules:
+
+- Quote is created before payment.
+- Order stores locked shipping snapshot at order creation.
+- Prepaid shipment is created only after payment success.
+- Before creating prepaid shipment, backend must verify the order still has a valid shipping snapshot and serviceable destination. Note: Authoritative quote pricing remains locked after order placement and must not change, but physical serviceability (e.g., provider availability, blocked pincodes, outages) must be revalidated immediately before creating a prepaid shipment. Revalidation does not alter the locked customer charge. Admin should either use fallback provider or manual shipping.
+- If payment fails, no shipment should be created.
+- If payment is retried after a long delay, backend should re-check serviceability before final shipment creation.
+
+### Pricing Consistency
+
+Shipping quote pricing should be stable for the customer during the quote TTL.
+
+Recommended decision:
+
+```txt
+Quote is authoritative until expiry.
+```
+
+Example:
+
+```txt
+10:00 Customer receives quote: Rs. 49
+10:02 Admin changes matching rule to Rs. 99
+10:05 Customer places order with unexpired quote
+Result: order uses Rs. 49
+```
+
+Why:
+
+- Checkout remains predictable.
+- Customer does not see surprise price changes while placing the order.
+- Business exposure is limited by short TTL.
+- Emergency invalidation can still be handled through an explicit admin action.
+
+### Shipping Tax And Currency
+
+Shipping cost must be stored with currency and tax context.
+
+Every quote, order shipping snapshot, and shipment charge record should include:
+
+```txt
+shipping_cost
+currency
+tax_included
+tax_amount
+tax_breakdown
+```
+
+Rules:
+
+- `shipping_cost` should represent the customer-facing shipping charge.
+- `currency` should match the order currency.
+- `tax_included` tells whether the charge already includes shipping tax.
+- `tax_amount` stores the calculated tax component.
+- `tax_breakdown` stores GST or other tax details when applicable.
+- Backend must include shipping tax rules in the final order total calculation.
+
+### Provider Capabilities
+
+Shipping rules decide business behavior, but providers have their own operational limits.
+
+Provider configuration should include capability flags and limits:
+
+```txt
+supports_cod
+supports_returns
+supports_reverse_pickup
+supports_heavy_items
+supports_fragile_items
+max_weight_kg
+max_length_cm
+max_breadth_cm
+max_height_cm
+supported_regions
+blocked_regions
+```
+
+The rule engine must check both:
+
+```txt
+Admin rule allows shipment
+Provider capability allows shipment
+```
+
+If a rule selects a provider that cannot support the package, pincode, COD, return, or weight, the system should try fallback providers or return unavailable.
+
+### Webhook Idempotency
+
+Provider webhooks may be delivered more than once.
+
+Store provider event identity:
+
+```txt
+provider
+provider_event_id
+provider_shipment_id
+awb
+event_type
+event_timestamp
+payload_hash
+processed_at
+```
+
+Rules:
+
+- If the same `provider_event_id` is received again, ignore it.
+- If provider does not send a stable event ID, generate a dedupe key from provider, AWB, status, event timestamp, and payload hash.
+- Webhook processing should be safe to retry.
+- Status transitions should be idempotent.
+
+### Audit Trail
+
+Shipping rules affect price, COD, and delivery availability, so admin changes must be auditable.
+
+Track changes for:
+
+- Providers.
+- Zones.
+- Rules.
+- Pickup locations.
+- COD settings.
+- Rate tables.
+
+Minimum audit fields:
+
+```txt
+entity_type
+entity_id
+changed_by
+old_value
+new_value
+reason
+created_at
+```
+
+This can use the existing audit system if it supports JSON before/after values. If not, create dedicated `shipping_rule_history` and related history tables.
+
 ## Proposed Backend Structure
 
 ```txt
@@ -195,7 +515,10 @@ server/src/modules/shipping/
   shippingRule.model.js
   shippingZone.model.js
   shippingQuote.model.js
+  shippingServiceabilityCache.model.js
+  shippingRuleHistory.model.js
   shipment.model.js
+  shipmentItem.model.js
   providers/
     manual.provider.js
     shiprocket.provider.js
@@ -234,7 +557,8 @@ Response:
   "codAvailable": true,
   "estimatedDeliveryDays": "3-5",
   "message": "Delivery available",
-  "quoteId": "uuid"
+  "quoteId": "uuid",
+  "expiresAt": "2026-04-29T10:40:00.000Z"
 }
 ```
 
@@ -252,11 +576,12 @@ Add:
 {
   "shippingAddressId": "uuid",
   "paymentMethod": "razorpay",
-  "shippingQuoteId": "uuid"
+  "shippingQuoteId": "uuid",
+  "checkoutSessionId": "uuid"
 }
 ```
 
-Backend must revalidate the quote before creating the order.
+Backend must revalidate the quote before creating the order. It must reject expired, stale, mismatched, or unavailable quotes.
 
 ### Admin APIs
 
@@ -299,6 +624,17 @@ type
 enabled
 is_default
 mode
+supports_cod
+supports_returns
+supports_reverse_pickup
+supports_heavy_items
+supports_fragile_items
+max_weight_kg
+max_length_cm
+max_breadth_cm
+max_height_cm
+supported_regions
+blocked_regions
 credentials_encrypted
 settings
 created_at
@@ -389,9 +725,19 @@ provider_id
 rule_id
 serviceable
 shipping_cost
+currency
+tax_included
+tax_amount
+tax_breakdown
 cod_available
 estimated_min_days
 estimated_max_days
+checkout_session_id
+cart_hash
+address_hash
+payment_method
+coupon_hash
+idempotency_key
 input_snapshot
 decision_snapshot
 raw_response
@@ -425,6 +771,77 @@ updated_at
 
 The existing `fulfillments` table can still represent item-level fulfillment. The new `shipments` table stores vendor-specific delivery details.
 
+### shipment_events
+
+```txt
+id
+shipment_id
+provider_id
+provider_event_id
+awb
+event_type
+event_status
+event_timestamp
+payload_hash
+raw_payload
+processed_at
+created_at
+updated_at
+```
+
+Clarify and codify a preferred deduplication strategy:
+1.  **Primary Dedupe**: Use the composite key `provider_id` + `provider_event_id` when `provider_event_id` is present and stable. Enforce with a unique index constrained to rows where `provider_event_id IS NOT NULL`.
+2.  **Fallback Dedupe**: Use `provider_id` + `awb` + `event_status` + `event_timestamp` + `payload_hash` when `provider_event_id` is null or missing. Enforce with a separate unique index on these fields.
+
+Update the webhook ingestion logic to first attempt lookup/insert using `provider_event_id` and only fall back to the composite when `provider_event_id` is absent.
+
+### shipment_items
+
+```txt
+id
+shipment_id
+order_item_id
+quantity
+created_at
+updated_at
+```
+
+This table makes split shipments and multi-package fulfillment possible.
+
+### shipping_serviceability_cache
+
+```txt
+id
+cache_key
+provider_id
+pickup_pincode
+delivery_pincode
+payment_method
+serviceable
+cod_available
+estimated_min_days
+estimated_max_days
+raw_response
+expires_at
+created_at
+updated_at
+```
+
+### shipping_rule_history
+
+```txt
+id
+rule_id
+changed_by
+change_type
+old_value
+new_value
+reason
+created_at
+```
+
+If the existing audit log can capture this cleanly, use the shared audit system instead of a dedicated table.
+
 ### orders
 
 Add:
@@ -433,6 +850,11 @@ Add:
 shipping_quote_id
 shipping_snapshot
 shipment_status
+checkout_session_id
+shipping_currency
+shipping_tax_included
+shipping_tax_amount
+shipping_tax_breakdown
 ```
 
 The existing `shipping_cost` column should continue to store the final charged shipping amount.
@@ -466,6 +888,12 @@ Create the base shipping module without third-party integrations.
 
 - Create `shipping` module.
 - Add provider, zone, rule, quote, and shipment models.
+- Add shipment item model so split shipment support is not blocked later.
+- Add serviceability cache model.
+- Add shipping rule history or connect shipping entities to the existing audit system.
+- Add provider capability fields.
+- Add quote idempotency key and quote identity fields.
+- Add shipping currency/tax fields to quote and order shipping snapshot.
 - Add migrations.
 - Add validation schemas.
 - Add admin CRUD APIs for providers, zones, and rules.
@@ -494,6 +922,8 @@ Create the base shipping module without third-party integrations.
   - Check serviceability.
   - Show shipping cost.
   - Show COD availability.
+- Debounce shipping calculate requests.
+- Ignore stale calculate responses when a newer request is in flight.
 - Disable place order if delivery is unavailable.
 
 ### Acceptance Criteria
@@ -503,6 +933,9 @@ Create the base shipping module without third-party integrations.
 - Checkout displays backend-calculated shipping cost.
 - Order stores shipping snapshot.
 - No third-party API is required.
+- Quote responses include `quoteId` and `expiresAt`.
+- Expired quote handling is implemented.
+- Identical active quote requests return the same quote instead of creating duplicates.
 
 ## Phase 2: Order Integration
 
@@ -515,10 +948,17 @@ Make order placement depend on backend shipping quote validation.
 - Add `shippingQuoteId` to `POST /orders`.
 - Recalculate or revalidate quote in `OrderService.placeOrder`.
 - Reject expired, mismatched, or unavailable shipping quotes.
+- Reject quotes whose `checkoutSessionId`, `cartHash`, `addressHash`, payment method, or coupon context does not match.
+- Treat unexpired quote pricing as authoritative even if admin rules changed after quote creation.
 - Save:
   - `shippingCost`
+  - `shippingCurrency`
+  - `shippingTaxIncluded`
+  - `shippingTaxAmount`
+  - `shippingTaxBreakdown`
   - `shippingQuoteId`
   - `shippingSnapshot`
+  - `checkoutSessionId`
 - Pass final shipping cost into coupon resolution so free-shipping coupons work correctly.
 
 ### Frontend Tasks
@@ -529,14 +969,18 @@ Make order placement depend on backend shipping quote validation.
   - Payment method changes.
   - Coupon changes if shipping discount depends on coupon.
 - Include `shippingQuoteId` in `placeOrder`.
+- Include `checkoutSessionId` in quote and order requests.
 - If COD is not available for the selected pincode, hide or disable COD.
+- If backend returns `SHIPPING_QUOTE_EXPIRED`, re-fetch the quote and ask the customer to place the order again.
 
 ### Acceptance Criteria
 
 - Frontend no longer calculates authoritative shipping cost.
 - Backend rejects stale or invalid shipping quotes.
 - Orders have correct shipping cost snapshots.
+- Orders preserve quote currency and shipping tax details.
 - COD is blocked where not allowed.
+- Fast address/cart/payment changes cannot place an order using a stale quote.
 
 ## Phase 3: Admin Shipment Management
 
@@ -547,12 +991,14 @@ Allow admin to create and manage shipments manually.
 ### Backend Tasks
 
 - Add shipment creation API for admin.
+- Support one order with multiple fulfillments and shipments.
 - Support manual shipment:
   - Courier name.
   - Tracking number.
   - Tracking URL.
   - Notes.
 - Link shipment to fulfillment.
+- Link shipment items to order items.
 - Update fulfillment status.
 - Add shipment status history.
 
@@ -575,6 +1021,7 @@ Allow admin to create and manage shipments manually.
 - Admin can create a manual shipment.
 - Customer can see courier and tracking number.
 - Fulfillment status remains consistent.
+- Data model supports more than one shipment per order.
 
 ## Phase 4: Shiprocket Integration
 
@@ -601,11 +1048,15 @@ Add Shiprocket as a provider behind the shipping adapter interface.
 - Implement `shiprocket.provider.js`.
 - Add token caching and retry handling.
 - Add serviceability mapping.
+- Enforce provider capability flags such as COD, return support, max weight, and regions.
+- Add serviceability cache reads and writes.
 - Add shipment creation.
 - Add AWB assignment.
 - Add label generation.
 - Add webhook endpoint.
 - Normalize Shiprocket statuses into internal shipment statuses.
+- Add fallback behavior when Shiprocket times out or fails.
+- Add provider request timeout and retry limits.
 
 ### Frontend Admin Tasks
 
@@ -628,6 +1079,7 @@ Add Shiprocket as a provider behind the shipping adapter interface.
 - Admin can create Shiprocket shipment from an order.
 - AWB and label are stored.
 - Tracking updates update shipment/order status.
+- Shiprocket outage can fall back to secondary/manual provider according to admin settings.
 
 ## Phase 5: Ekart Integration
 
@@ -644,8 +1096,11 @@ Ekart usually requires merchant onboarding. API documentation and credentials ar
 - Add Ekart credentials to provider settings.
 - Implement `ekart.provider.js` using the official API docs received from Ekart.
 - Map serviceability, shipment creation, cancellation, labels, and tracking to the common provider interface.
+- Enforce provider capability flags such as COD, return support, max weight, and regions.
+- Use serviceability cache to reduce repeated Ekart calls.
 - Add Ekart webhook endpoint if supported.
 - Normalize Ekart statuses.
+- Add fallback behavior when Ekart times out or fails.
 
 ### Frontend Admin Tasks
 
@@ -672,6 +1127,11 @@ Make shipping fully customizable for real operations.
 ### Backend Tasks
 
 - Add priority-based rule engine.
+- Enforce deterministic rule conflict resolution:
+  - Highest priority wins.
+  - Same priority uses `strictOverride`.
+  - Remaining ties use latest created rule.
+  - Unsafe ties are rejected by admin validation.
 - Add rule preview/testing API.
 - Add partner selection strategy:
   - Manual only.
@@ -703,6 +1163,7 @@ Make shipping fully customizable for real operations.
 
 - Admin can define multiple shipping rules.
 - Highest-priority matching rule is applied.
+- Same-priority conflicts are handled deterministically or rejected before activation.
 - Admin can test rules before enabling them.
 - Shipping behavior is configurable without code changes.
 
@@ -715,6 +1176,7 @@ Improve post-shipment operations.
 ### Backend Tasks
 
 - Add tracking webhook processor.
+- Add webhook event table with `provider_event_id` dedupe.
 - Add scheduled tracking sync fallback.
 - Add shipment event table if needed.
 - Add statuses:
@@ -747,6 +1209,7 @@ Improve post-shipment operations.
 ### Acceptance Criteria
 
 - Tracking updates automatically.
+- Duplicate webhook events do not create duplicate timeline entries or invalid status transitions.
 - Failed deliveries and RTO are visible to admin.
 - Customer order detail shows current shipment status.
 
@@ -761,11 +1224,19 @@ Make shipping reliable in production.
 - Log all vendor API requests and responses safely.
 - Mask credentials and tokens.
 - Add retry policies for temporary vendor failures.
+- Add provider fallback priority:
+  - Primary provider.
+  - Secondary provider.
+  - Store default provider.
+  - Manual fallback.
 - Add idempotency keys for shipment creation.
 - Prevent duplicate AWB creation.
 - Add alerting for failed shipment creation.
 - Add webhook signature/token validation.
+- Add webhook idempotency by provider event ID or generated dedupe key.
 - Add rate limit handling.
+- Add serviceability and rate cache monitoring.
+- Add admin audit trail for shipping provider/rule/zone changes.
 
 ### Admin Tasks
 
@@ -778,6 +1249,8 @@ Make shipping reliable in production.
 - Duplicate shipment creation is prevented.
 - Vendor failures are visible and recoverable.
 - Admin can fall back to manual shipping.
+- Shipping rule changes are auditable.
+- Shipping calculate APIs are rate limited.
 
 ## Shipping Rule Examples
 
@@ -860,13 +1333,29 @@ Make shipping reliable in production.
 - Backend must validate pincode serviceability.
 - Backend must validate COD serviceability.
 - Backend must revalidate shipping quote during order placement.
-- Shipping quote must expire.
+- Shipping quote TTLs: Default quote TTL is 10 minutes; Partner live-rate quote TTL is 5 minutes.
+- Backend must reject expired quotes with a clear error code.
+- Backend must reject stale quotes when cart, address, payment method, or coupon context changes.
+- `/shipping/calculate` must be idempotent for identical active quote requests.
+- Unexpired quote pricing should remain authoritative even if admin changes shipping rules after quote creation.
 - Shipping cost must be calculated on backend.
+- Shipping cost must store currency, tax inclusion, tax amount, and tax breakdown.
+- Checkout must debounce shipping calculation requests.
+- Checkout must ignore stale calculate responses.
 - Vendor credentials must be encrypted.
 - Vendor APIs must only be called from backend.
+- Provider capability flags must be checked before selecting a provider.
 - Shipment creation must be idempotent.
+- Webhook processing must be idempotent by provider event ID or generated dedupe key.
 - Order should not create prepaid shipment before payment success.
+- Payment failure must not create any shipment.
+- Before prepaid shipment creation, backend must verify the order shipping snapshot is still serviceable or use an admin-approved fallback.
 - COD shipment can be created after order placement if COD is serviceable.
+- Serviceability should be cached by provider, pickup pincode, delivery pincode, and payment method.
+- Shipping APIs must be rate limited by IP/user.
+- Rule conflicts must be resolved deterministically.
+- Admin shipping changes must be audited.
+- The data model must allow multiple shipments per order.
 
 ## Recommended Build Order
 

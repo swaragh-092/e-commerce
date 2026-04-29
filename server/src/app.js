@@ -88,6 +88,7 @@ const cartRoutes = require('./modules/cart/cart.routes');
 const couponRoutes = require('./modules/coupon/coupon.routes');
 const orderRoutes = require('./modules/order/order.routes');
 const paymentRoutes = require('./modules/payment/payment.routes');
+const shippingRoutes = require('./modules/shipping/shipping.routes');
 const wishlistRoutes = require('./modules/wishlist/wishlist.routes');
 const reviewRoutes = require('./modules/review/review.routes');
 const auditRoutes = require('./modules/audit/audit.routes');
@@ -99,6 +100,8 @@ const productAttributeRoutes = require('./modules/attribute/productAttribute.rou
 const productVariantRoutes = require('./modules/attribute/productVariant.routes');
 const pageRoutes = require('./modules/page/page.routes');
 const notificationRoutes = require('./modules/notification/notification.routes');
+const shippingAdminRoutes = require('./modules/shipping/shipping.admin.routes');
+const shippingWebhookRoutes = require('./modules/shipping/shipping.webhook.routes');
 
 app.use('/api', seoRoutes);
 app.use('/api/settings', settingsRoutes);
@@ -112,6 +115,8 @@ app.use('/api/cart', cartRoutes);
 app.use('/api/coupons', couponRoutes);
 app.use('/api/orders', orderRoutes);
 app.use('/api/payments', paymentRoutes);
+app.use('/api/shipping', shippingRoutes);
+app.use('/api/webhook/shipping', shippingWebhookRoutes);
 app.use('/api/wishlist', wishlistRoutes);
 app.use('/api', reviewRoutes);
 app.use('/api/audit-logs', auditRoutes);
@@ -120,6 +125,7 @@ app.use('/api/audit-logs', auditRoutes);
 // Falls back to /api/admin in development if not set.
 const adminPrefix = process.env.ADMIN_ROUTE_PREFIX || '/api/admin';
 app.use(adminPrefix, adminRoutes);
+app.use(adminPrefix, shippingAdminRoutes);
 app.use('/api/attributes', attributeRoutes);
 app.use('/api/categories', categoryAttributeRoutes); // extends existing /api/categories with /:id/attributes sub-routes
 app.use('/api/products', productAttributeRoutes);   // extends existing /api/products with /:id/attributes sub-routes

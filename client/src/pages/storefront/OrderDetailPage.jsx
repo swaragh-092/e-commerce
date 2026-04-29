@@ -606,15 +606,33 @@ const OrderDetailPage = () => {
                             <Typography sx={{ fontSize: '0.82rem', fontWeight: 700, color: 'text.primary' }}>
                               {f.courier || 'Standard Courier'}
                             </Typography>
-                            <Typography
-                              sx={{
-                                fontSize: '0.72rem',
-                                fontWeight: 600,
-                                color: f.trackingNumber ? 'primary.main' : 'text.secondary',
-                              }}
-                            >
-                              {f.trackingNumber || 'Tracking pending'}
-                            </Typography>
+                            {f.trackingUrl ? (
+                              <Typography
+                                component="a"
+                                href={f.trackingUrl}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                sx={{
+                                  fontSize: '0.72rem',
+                                  fontWeight: 600,
+                                  color: 'primary.main',
+                                  textDecoration: 'none',
+                                  '&:hover': { textDecoration: 'underline' },
+                                }}
+                              >
+                                {f.trackingNumber || 'Track Package'}
+                              </Typography>
+                            ) : (
+                              <Typography
+                                sx={{
+                                  fontSize: '0.72rem',
+                                  fontWeight: 600,
+                                  color: f.trackingNumber ? 'primary.main' : 'text.secondary',
+                                }}
+                              >
+                                {f.trackingNumber || 'Tracking pending'}
+                              </Typography>
+                            )}
                           </Box>
                         </Box>
 

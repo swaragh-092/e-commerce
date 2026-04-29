@@ -75,6 +75,18 @@ const createFulfillment = (orderId, data) => api.post(`/orders/${orderId}/fulfil
 const updateFulfillmentStatus = (orderId, fulfillmentId, status) => api.patch(`/orders/${orderId}/fulfillments/${fulfillmentId}/status`, { status });
 const confirmCodPayment = (orderId) => api.post(`/payments/cod/confirm/${orderId}`);
 
+// Shipping administration
+const getShippingProviders = () => api.get(`/${A}/shipping/providers`);
+const updateShippingProvider = (id, data) => api.patch(`/${A}/shipping/providers/${id}`, data);
+const getShippingZones = () => api.get(`/${A}/shipping/zones`);
+const createShippingZone = (data) => api.post(`/${A}/shipping/zones`, data);
+const updateShippingZone = (id, data) => api.patch(`/${A}/shipping/zones/${id}`, data);
+const deleteShippingZone = (id) => api.delete(`/${A}/shipping/zones/${id}`);
+const getShippingRules = () => api.get(`/${A}/shipping/rules`);
+const createShippingRule = (data) => api.post(`/${A}/shipping/rules`, data);
+const updateShippingRule = (id, data) => api.patch(`/${A}/shipping/rules/${id}`, data);
+const deleteShippingRule = (id) => api.delete(`/${A}/shipping/rules/${id}`);
+
 // Settings bulk update
 const updateSettings = (settings) => api.put('/settings/bulk', settings);
 
@@ -126,6 +138,8 @@ export {
   getAdminReviews, updateReviewStatus, deleteReview,
   getCoupons, createCoupon, updateCoupon, deleteCoupon,
   getAllOrders, getOrderById, getOrderTracking, updateOrderStatus, refundOrder, createFulfillment, updateFulfillmentStatus, confirmCodPayment,
+  getShippingProviders, updateShippingProvider, getShippingZones, createShippingZone, updateShippingZone, deleteShippingZone,
+  getShippingRules, createShippingRule, updateShippingRule, deleteShippingRule,
   updateSettings,
   getEmailTemplates, updateEmailTemplate, sendTestEmail, sendTestNotification,
   validateCoupon, getPublicCoupons, getEligibleCoupons,
