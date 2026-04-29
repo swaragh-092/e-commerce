@@ -196,7 +196,6 @@ const CheckoutPage = () => {
 
     // Notes & Payment
     const [notes, setNotes] = useState('');
-    const [paymentMethod, setPaymentMethod] = useState('razorpay');
 
     // Address dialog
     const [addrDialog, setAddrDialog] = useState({ open: false, mode: 'add', addrId: null, form: EMPTY_ADDR, saving: false, errors: {} });
@@ -651,55 +650,36 @@ const CheckoutPage = () => {
                         }
                     >
                         <RadioGroup value={paymentMethod} onChange={(e) => setPaymentMethod(e.target.value)}>
-                            {/* Razorpay */}
-                            <Paper
-                                variant="outlined"
-                                onClick={() => setPaymentMethod('razorpay')}
-                                sx={{
-                                    p: 2, mb: 1.5, cursor: 'pointer',
-                                    borderColor: paymentMethod === 'razorpay' ? 'primary.main' : 'divider',
-                                    bgcolor: paymentMethod === 'razorpay' ? 'action.selected' : 'background.paper',
-                                    transition: 'all 0.15s',
-                                }}
-                            >
-                                <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                                    <Radio value="razorpay" checked={paymentMethod === 'razorpay'} size="small" />
-                                    <Box sx={{ flexGrow: 1 }}>
-                                        <Typography variant="body2" fontWeight={700}>Pay Online</Typography>
-                                        <Typography variant="caption" color="text.secondary">
-                                            Credit / Debit card · UPI · Netbanking · Wallets
-                                        </Typography>
+                            {enabledPaymentMethods.map((method) => (
+                                <Paper
+                                    key={method.id}
+                                    variant="outlined"
+                                    onClick={() => setPaymentMethod(method.id)}
+                                    sx={{
+                                        p: 2, mb: 1.5, cursor: 'pointer',
+                                        borderColor: paymentMethod === method.id ? 'primary.main' : 'divider',
+                                        bgcolor: paymentMethod === method.id ? 'action.selected' : 'background.paper',
+                                        transition: 'all 0.15s',
+                                    }}
+                                >
+                                    <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                                        <Radio value={method.id} checked={paymentMethod === method.id} size="small" />
+                                        <Box sx={{ flexGrow: 1 }}>
+                                            <Typography variant="body2" fontWeight={700}>{method.title}</Typography>
+                                            <Typography variant="caption" color="text.secondary">
+                                                {method.description}
+                                            </Typography>
+                                        </Box>
+                                        {method.id !== 'cod' && (
+                                            <Box sx={{ display: 'flex', gap: 0.5, alignItems: 'center' }}>
+                                                {['VISA', 'UPI', 'MC'].map((brand) => (
+                                                    <Chip key={brand} label={brand} size="small" sx={{ fontSize: 10, height: 20 }} variant="outlined" />
+                                                ))}
+                                            </Box>
+                                        )}
                                     </Box>
-                                    <Box sx={{ display: 'flex', gap: 0.5, alignItems: 'center' }}>
-                                        {['VISA', 'UPI', 'MC'].map((brand) => (
-                                            <Chip key={brand} label={brand} size="small" sx={{ fontSize: 10, height: 20 }} variant="outlined" />
-                                        ))}
-                                    </Box>
-                                </Box>
-                            </Paper>
-
-                            {/* COD */}
-                            <Paper
-                                variant="outlined"
-                                onClick={() => setPaymentMethod('cod')}
-                                sx={{
-                                    p: 2, cursor: 'pointer',
-                                    borderColor: paymentMethod === 'cod' ? 'primary.main' : 'divider',
-                                    bgcolor: paymentMethod === 'cod' ? 'action.selected' : 'background.paper',
-                                    transition: 'all 0.15s',
-                                }}
-                            >
-                                <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                                    <Radio value="cod" checked={paymentMethod === 'cod'} size="small" />
-                                    <Box>
-                                        <Typography variant="body2" fontWeight={700}>Cash on Delivery</Typography>
-                                        <Typography variant="caption" color="text.secondary">
-                                            Pay when your order arrives at your doorstep
-                                        </Typography>
-                                    </Box>
-                                </Box>
-
-                            </Paper>
+                                </Paper>
+                            ))}
                         </RadioGroup>
 
                         {/* Order notes */}
@@ -746,55 +726,7 @@ const CheckoutPage = () => {
                         })}
                     </Paper>
 
-                                <RadioGroup
-                                    value={paymentMethod}
-                                    onChange={(e) => setPaymentMethod(e.target.value)}
-                                >
-                                    {enabledPaymentMethods.length === 0 ? (
-                                        <Alert severity="warning" sx={{ m: 2 }}>
-                                            No payment methods are currently available.
-                                        </Alert>
-                                    ) : enabledPaymentMethods.map((method, index) => (
-                                        <FormControlLabel
-                                            key={method.id}
-                                            value={method.id}
-                                            control={<Radio size="small" />}
-                                            label={
-                                                <Box>
-                                                    <Typography variant="body2" fontWeight={600}>{method.title}</Typography>
-                                                    <Typography variant="caption" color="text.secondary">
-                                                        {method.description}
-                                                    </Typography>
-                                                </Box>
-                                            }
-                                            sx={{
-                                                mx: 0,
-                                                px: 2,
-                                                py: 1.5,
-                                                borderBottom: index < enabledPaymentMethods.length - 1 ? '1px solid' : 'none',
-                                                borderColor: 'divider',
-                                                alignItems: 'center',
-                                            }}
-                                        />
-                                    ))}
-                                </RadioGroup>
-                            </Paper>
 
-                            <Box sx={{ display: 'flex', justifyContent: 'space-between', mt: 2 }}>
-                                <Button onClick={() => setActiveStep(reviewStep - 1)}>Back</Button>
-                                <Button
-                                    variant="contained"
-                                    size="large"
-                                    onClick={handlePlaceOrder}
-                                    disabled={placing || enabledPaymentMethods.length === 0}
-                                >
-                                    {placing
-                                        ? <CircularProgress size={22} color="inherit" />
-                                        : paymentMethod === 'cod' ? 'Place COD Order' : 'Place Order & Pay'}
-                                </Button>
-                            </Box>
-                        </Paper>
-                    )}
 
                 </Box>
 

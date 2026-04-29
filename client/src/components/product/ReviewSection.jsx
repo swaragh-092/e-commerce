@@ -70,13 +70,11 @@ const ReviewSection = ({ slug, productId }) => {
 
             {isAuthenticated ? (
                 <>
-                    {requirePurchase && !hasPurchased ? 
-                    // (
-                    //     <Alert severity="warning" sx={{ mb: 2 }}>
-                    //         Only verified purchasers can leave a review for this product.
-                    //     </Alert>
-                    // )
-                    '' : (
+                    {requirePurchase && !hasPurchased ? (
+                        <Alert severity="warning" sx={{ mb: 2 }}>
+                            Only verified purchasers can leave a review for this product.
+                        </Alert>
+                    ) : (
                         <Button variant="outlined" onClick={() => setShowForm(!showForm)}>
                             {showForm ? 'Cancel' : 'Write a Review'}
                         </Button>
