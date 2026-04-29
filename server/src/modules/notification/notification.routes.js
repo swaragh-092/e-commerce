@@ -8,22 +8,53 @@ const {
   listTemplates,
   getTemplate,
   updateTemplate,
+  previewTemplate,
+  resetTemplate,
+  getDefaultTemplate,
   sendTestNotification,
 } = require('./notification.controller');
 
-// All notification endpoints require auth + settings manage permission
-router.use(authenticate, authorizePermissions(PERMISSIONS.SETTINGS_MANAGE));
+// All notification endpoints require authentication
+router.use(authenticate);
 
-// Template CRUD
-router.get('/templates',         listTemplates);
-router.get('/templates/:name',   getTemplate);
-router.put('/templates/:name',   updateTemplate);
+// Template READ — settings.read is enough (admins can view)
+router.get(
+  '/templates',
+  authorizePermissions(PERMISSIONS.SETTINGS_READ),
+  listTemplates
+);
+router.get(
+  '/templates/:name',
+  authorizePermissions(PERMISSIONS.SETTINGS_READ),
+  getTemplate
+);
+router.get(
+  '/templates/:name/default',
+  authorizePermissions(PERMISSIONS.SETTINGS_READ),
+  getDefaultTemplate
+);
 
-// Multi-channel test send (replaces /templates/test)
-// POST body: { templateName, recipient, channel }
-router.post('/test', sendTestNotification);
+// Template WRITE — require notifications.manage
+router.put(
+  '/templates/:name',
+  authorizePermissions(PERMISSIONS.NOTIFICATIONS_MANAGE),
+  updateTemplate
+);
+router.post(
+  '/templates/:name/preview',
+  authorizePermissions(PERMISSIONS.SETTINGS_READ),
+  previewTemplate
+);
+router.post(
+  '/templates/:name/reset',
+  authorizePermissions(PERMISSIONS.NOTIFICATIONS_MANAGE),
+  resetTemplate
+);
 
-// Backward-compatible alias — old clients calling /templates/test still work
-router.post('/templates/test', sendTestNotification);
+// Test send — require notifications.manage
+router.post('/test', authorizePermissions(PERMISSIONS.NOTIFICATIONS_MANAGE), sendTestNotification);
+
+// Backward-compatible alias
+router.post('/templates/test', authorizePermissions(PERMISSIONS.NOTIFICATIONS_MANAGE), sendTestNotification);
 
 module.exports = router;

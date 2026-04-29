@@ -39,6 +39,7 @@
     "WISHLIST_SELF": "wishlist.self",
     "CHECKOUT_SELF": "checkout.self",
     "REVIEWS_CREATE": "reviews.create",
+    "NOTIFICATIONS_MANAGE": "notifications.manage",
     "ROLES_READ": "roles.read",
     "ROLES_MANAGE": "roles.manage",
     "SYSTEM_ROLES_MANAGE": "system_roles.manage",
@@ -87,6 +88,7 @@
     "media.delete",
     "settings.read",
     "settings.manage",
+    "notifications.manage",
     "audit.read",
     "pages.read"
   ],

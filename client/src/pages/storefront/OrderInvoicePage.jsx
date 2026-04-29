@@ -193,7 +193,14 @@ const StorefrontOrderInvoicePage = () => {
                 )}
                 {item.variantInfo && (
                   <Typography variant="caption" sx={{ color: '#666' }}>
-                    {Object.entries(item.variantInfo).map(([key, value]) => `${key}: ${value}`).join(', ')}
+                    {Object.entries(item.variantInfo)
+                      .filter(([key]) => ![
+                        'id', 'productId', 'variantId', 'orderId', 'sku', 'price', 
+                        'isActive', 'stockQty', 'createdAt', 'updatedAt', 'deletedAt', 
+                        'sortOrder', 'version', 'isDefault'
+                      ].includes(key))
+                      .map(([key, value]) => `${key}: ${value}`)
+                      .join(', ')}
                   </Typography>
                 )}
               </Box>

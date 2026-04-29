@@ -29,7 +29,7 @@ import {
   Save as SaveIcon,
 } from '@mui/icons-material';
 import PageService from '../../services/pageService';
-import MediaUploader from '../../components/common/MediaUploader';
+import MediaPicker from '../../components/common/MediaPicker';
 import { getMediaUrl } from '../../utils/media';
 import { useNotification } from '../../context/NotificationContext';
 import { useAuth } from '../../hooks/useAuth';
@@ -144,6 +144,7 @@ const PageEditPage = () => {
   const [activeTab, setActiveTab] = useState(0); // 0: Visual, 1: Code, 2: Preview
   const [saveError, setSaveError] = useState('');
   const [slug, setSlug] = useState('');
+  const [mediaPickerOpen, setMediaPickerOpen] = useState(false);
 
   const [formData, setFormData] = useState({
     title: '',
@@ -205,6 +206,7 @@ const PageEditPage = () => {
     }
 
     setFormData((prev) => ({ ...prev, bannerUrl: media.url }));
+    setMediaPickerOpen(false);
   };
 
   const handleSave = async (e) => {
@@ -492,9 +494,23 @@ const PageEditPage = () => {
               </Box>
             )}
             {canUploadMedia ? (
-              <MediaUploader
-                onUploadSuccess={handleBannerUpload}
-              />
+              <Box>
+                <Button
+                  variant="outlined"
+                  fullWidth
+                  onClick={() => setMediaPickerOpen(true)}
+                  sx={{ py: 2, borderStyle: 'dashed', borderWidth: 2 }}
+                >
+                  {formData.bannerUrl ? 'Change Banner' : 'Select or Upload Banner'}
+                </Button>
+                <MediaPicker
+                  open={mediaPickerOpen}
+                  onClose={() => setMediaPickerOpen(false)}
+                  onSelect={handleBannerUpload}
+                  multiple={false}
+                  title="Select Page Banner"
+                />
+              </Box>
             ) : (
               <Alert severity="info" sx={{ mt: 1 }}>
                 Banner uploads require the media upload permission.

@@ -55,6 +55,7 @@ const AccessControlPage = lazy(() => import('../pages/admin/AccessControlPage'))
 const PagesManagePage = lazy(() => import('../pages/admin/PagesManagePage'));
 const PageEditPage = lazy(() => import('../pages/admin/PageEditPage'));
 const SeoOverridesPage = lazy(() => import('../pages/admin/SeoOverridesPage'));
+const EmailTemplatesPage = lazy(() => import('../pages/admin/EmailTemplatesPage'));
 const StaticPageView = lazy(() => import('../pages/storefront/StaticPageView'));
 
 const LoadingFallback = () => (
@@ -169,6 +170,7 @@ const AppRoutes = () => (
             <Route path="payment-gateways" element={<PaymentGatewaysPage />} />
             <Route path="shipping" element={<ShippingPage />} />
             <Route path="sale-labels" element={<SaleLabelsPage />} />
+            <Route path="email-templates" element={<EmailTemplatesPage />} />
           </Route>
           <Route element={<ProtectedRoute permission={PERMISSIONS.AUDIT_READ} />}>
             <Route path="audit-log" element={<AuditLogPage />} />

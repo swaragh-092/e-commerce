@@ -1,4 +1,5 @@
 import { useState, useEffect, useContext } from 'react';
+import { Link } from 'react-router-dom';
 import { DragDropContext, Draggable, Droppable } from '@hello-pangea/dnd';
 import {
   Alert,
@@ -35,6 +36,8 @@ import { useAuth } from '../../hooks/useAuth';
 import { PERMISSIONS } from '../../utils/permissions';
 import { DASHBOARD_PROFILES } from '../../components/admin/dashboard/dashboardWidgets';
 import MessagingSettingsPanel from '../../components/admin/settings/MessagingSettingsPanel';
+import MediaPicker from '../../components/common/MediaPicker';
+import { getMediaUrl } from '../../utils/media';
 
 const CURRENCIES = [
   { code: 'USD', symbol: '$',  name: 'US Dollar' },
@@ -161,6 +164,8 @@ const SettingsPage = () => {
   const [templateTestEmail, setTemplateTestEmail] = useState('');
   const [templateTesting, setTemplateTesting] = useState({});
   const [templateExpanded, setTemplateExpanded] = useState(null);
+  const [mediaPickerOpen, setMediaPickerOpen] = useState(false);
+  const [mediaPickerKey, setMediaPickerKey] = useState(null);
   const { notify } = useNotification();
   const { refreshSettings } = useContext(SettingsContext) || {};
   const { hasPermission } = useAuth();
@@ -261,6 +266,50 @@ const SettingsPage = () => {
       {...extra}
     />
   );
+
+  const imageField = (key, label) => (
+    <Box sx={{ mb: 2 }}>
+      <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mb: 0.5 }}>{label}</Typography>
+      <Box sx={{ display: 'flex', gap: 1, alignItems: 'center' }}>
+        <TextField
+          fullWidth
+          size="small"
+          value={form[key] ?? ''}
+          onChange={(e) => set(key, e.target.value)}
+          placeholder="Image URL..."
+          InputProps={{
+            startAdornment: form[key] && (
+              <InputAdornment position="start">
+                <Box 
+                  component="img" 
+                  src={getMediaUrl(form[key])} 
+                  sx={{ width: 24, height: 24, objectFit: 'contain', borderRadius: 0.5, border: '1px solid', borderColor: 'divider' }} 
+                />
+              </InputAdornment>
+            )
+          }}
+        />
+        <Button 
+          variant="outlined" 
+          size="small"
+          onClick={() => {
+            setMediaPickerKey(key);
+            setMediaPickerOpen(true);
+          }}
+          sx={{ flexShrink: 0, height: 40 }}
+        >
+          Pick Media
+        </Button>
+      </Box>
+    </Box>
+  );
+
+  const handleMediaSelect = (media) => {
+    if (!media) return;
+    if (mediaPickerKey) {
+      set(mediaPickerKey, media.url);
+    }
+  };
 
   const toggle = (key, label) => (
     <FormControlLabel
@@ -688,18 +737,8 @@ const SettingsPage = () => {
         'Brand Assets',
         'Upload or reference the logos customers see in the header and browser tab.',
         <>
-          {field('logo.main', 'Main Logo URL (used in header/navbar)')}
-          {form['logo.main'] && (
-            <Box sx={{ mb: 2 }}>
-              <img src={form['logo.main']} alt="Logo preview" style={{ maxHeight: 60, objectFit: 'contain', border: '1px solid #ddd', borderRadius: 8, padding: 4 }} onError={(e) => { e.target.style.display = 'none'; }} />
-            </Box>
-          )}
-          {field('logo.favicon', 'Favicon URL (16×16 or 32×32 .ico / .png)')}
-          {form['logo.favicon'] && (
-            <Box sx={{ mb: 2 }}>
-              <img src={form['logo.favicon']} alt="Favicon preview" style={{ maxHeight: 32, objectFit: 'contain', border: '1px solid #ddd', borderRadius: 4, padding: 2 }} onError={(e) => { e.target.style.display = 'none'; }} />
-            </Box>
-          )}
+          {imageField('logo.main', 'Main Logo (used in header/navbar)')}
+          {imageField('logo.favicon', 'Favicon (16×16 or 32×32 .ico / .png)')}
         </>,
         ['logo', 'favicon', 'brand assets']
       ),
@@ -1000,11 +1039,11 @@ const SettingsPage = () => {
           </FormControl>
           {(form['hero.backgroundType'] || 'gradient') === 'image' && (
             <>
-              {field('hero.backgroundImage', 'Image URL (paste a URL or /uploads/… path)')}
+              {imageField('hero.backgroundImage', 'Hero Background Image')}
               {form['hero.backgroundImage'] && (
                 <Box sx={{ mb: 2, borderRadius: 2, overflow: 'hidden', maxHeight: 160, border: '1px solid', borderColor: 'divider' }}>
                   <img
-                    src={form['hero.backgroundImage']}
+                    src={getMediaUrl(form['hero.backgroundImage'])}
                     alt="Hero preview"
                     style={{ width: '100%', maxHeight: 160, objectFit: 'cover', display: 'block' }}
                     onError={(e) => { e.target.style.display = 'none'; }}
@@ -1421,12 +1460,7 @@ const SettingsPage = () => {
           {toggle('invoice.showLogo', 'Show logo on printed invoices')}
           {form['invoice.showLogo'] !== false && (
             <>
-              {field('invoice.logoUrl', 'Specific Invoice Logo URL (Optional, falls back to store logo)')}
-              {form['invoice.logoUrl'] && (
-                <Box sx={{ mb: 2 }}>
-                  <img src={form['invoice.logoUrl']} alt="Invoice logo preview" style={{ maxHeight: 60, objectFit: 'contain', border: '1px solid #ddd', borderRadius: 8, padding: 4 }} />
-                </Box>
-              )}
+              {imageField('invoice.logoUrl', 'Specific Invoice Logo (Optional, falls back to store logo)')}
             </>
           )}
 
@@ -1442,11 +1476,9 @@ const SettingsPage = () => {
         </>,
         ['invoice', 'print', 'tax id', 'terms', 'notes', 'legal']
       ),
-    ],
     [
       section(
         'Accounts & Authentication',
-        'Tighten customer account rules and decide which login experiences are enabled.',
         <>
           {toggle('features.emailVerification', 'Require email verification on signup')}
           {toggle('features.socialLogin', 'Social login (Google / GitHub)')}
@@ -1749,117 +1781,47 @@ const SettingsPage = () => {
                   <Box>
                     <MessagingSettingsPanel form={form} set={set} />
                     <Divider sx={{ my: 4 }} />
-                    <Typography variant="h6" fontWeight={700} sx={{ mb: 1 }}>Message Templates</Typography>
-                    <Typography variant="body2" color="text.secondary" sx={{ mb: 3 }}>
-                      Customize the transactional emails your store sends. Use <code style={{ background: '#f4f4f4', padding: '1px 4px', borderRadius: 3 }}>{'{{variable}}'}</code> syntax for dynamic content. Changes apply immediately — no restart needed.
-                    </Typography>
-                    <Box sx={{ mb: 2.5, display: 'flex', gap: 1, alignItems: 'center' }}>
-                      <TextField
-                        size="small"
-                        label="Test email address"
-                        placeholder="you@example.com"
-                        value={templateTestEmail}
-                        onChange={(e) => setTemplateTestEmail(e.target.value)}
-                        sx={{ minWidth: 260 }}
-                        helperText="Enter an email to send test messages to"
-                      />
+                    <Box sx={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', mb: 2, flexWrap: 'wrap', gap: 2 }}>
+                      <Box>
+                        <Typography variant="h6" fontWeight={700} sx={{ mb: 0.5 }}>Email Templates</Typography>
+                        <Typography variant="body2" color="text.secondary">
+                          Manage transactional email templates — order confirmations, shipping updates, password resets, and more.
+                          Templates support Handlebars <code style={{ background: 'rgba(0,0,0,0.06)', padding: '1px 5px', borderRadius: 4 }}>{'{{variable}}'}</code> syntax and include a live preview.
+                        </Typography>
+                      </Box>
+                      <Button
+                        variant="contained"
+                        component={Link}
+                        to="/admin/email-templates"
+                        startIcon={<span style={{ fontSize: 18 }}>✉️</span>}
+                        sx={{ whiteSpace: 'nowrap', flexShrink: 0 }}
+                      >
+                        Manage Email Templates
+                      </Button>
                     </Box>
-                    {emailTemplates.length === 0 && (
-                      <Alert severity="info" sx={{ mb: 2 }}>No email templates found. Run the notification templates seeder to populate defaults.</Alert>
-                    )}
-                    {emailTemplates.map((tpl) => (
-                      <Paper key={tpl.name} variant="outlined" sx={{ mb: 2, borderRadius: 2, overflow: 'hidden' }}>
-                        <Box
-                          sx={{ p: 2, display: 'flex', alignItems: 'center', justifyContent: 'space-between', cursor: 'pointer', '&:hover': { bgcolor: 'action.hover' } }}
-                          onClick={() => setTemplateExpanded(templateExpanded === tpl.name ? null : tpl.name)}
-                        >
-                          <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
-                            <Box sx={{ width: 10, height: 10, borderRadius: '50%', bgcolor: tpl.isActive ? 'success.main' : 'text.disabled', flexShrink: 0 }} />
-                            <Box>
-                              <Typography variant="body2" fontWeight={700} sx={{ fontFamily: 'monospace' }}>{tpl.name}</Typography>
-                              <Typography variant="caption" color="text.secondary">{tpl.subject}</Typography>
-                            </Box>
-                          </Box>
-                          <Typography variant="caption" color="primary">{templateExpanded === tpl.name ? 'Collapse ▲' : 'Edit ▼'}</Typography>
+                    <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', sm: '1fr 1fr 1fr' }, gap: 2 }}>
+                      {[
+                        { icon: '🛍️', label: 'Order Placed' },
+                        { icon: '📦', label: 'Order Shipped' },
+                        { icon: '✅', label: 'Order Delivered' },
+                        { icon: '❌', label: 'Order Cancelled' },
+                        { icon: '💳', label: 'Order Refunded' },
+                        { icon: '👋', label: 'Welcome' },
+                        { icon: '✉️', label: 'Email Verification' },
+                        { icon: '🔑', label: 'Password Reset' },
+                        { icon: '⚠️', label: 'Low Stock Alert' },
+                      ].map(({ icon, label }) => (
+                        <Box key={label} sx={{ display: 'flex', alignItems: 'center', gap: 1.5, p: 1.5, border: '1px solid', borderColor: 'divider', borderRadius: 2 }}>
+                          <Typography fontSize={20}>{icon}</Typography>
+                          <Typography variant="body2" fontWeight={500}>{label}</Typography>
                         </Box>
-
-                        {templateExpanded === tpl.name && (
-                          <Box sx={{ p: 2.5, borderTop: '1px solid', borderColor: 'divider', display: 'flex', flexDirection: 'column', gap: 2 }}>
-                            <FormControlLabel
-                              control={
-                                <Switch
-                                  size="small"
-                                  checked={tpl.isActive}
-                                  onChange={(e) => setEmailTemplates((prev) => prev.map((t) => t.name === tpl.name ? { ...t, isActive: e.target.checked } : t))}
-                                />
-                              }
-                              label="Active — send this email"
-                            />
-                            <TextField
-                              fullWidth size="small" label="Subject line"
-                              helperText="Supports {{variables}}"
-                              value={tpl.subject}
-                              onChange={(e) => setEmailTemplates((prev) => prev.map((t) => t.name === tpl.name ? { ...t, subject: e.target.value } : t))}
-                            />
-                            <TextField
-                              fullWidth size="small" label="HTML Body"
-                              multiline rows={12}
-                              value={tpl.bodyHtml}
-                              onChange={(e) => setEmailTemplates((prev) => prev.map((t) => t.name === tpl.name ? { ...t, bodyHtml: e.target.value } : t))}
-                              inputProps={{ style: { fontFamily: 'monospace', fontSize: 12 } }}
-                              helperText="Full HTML email body. Use {{name}}, {{verify_url}}, {{reset_url}}, etc."
-                            />
-                            <TextField
-                              fullWidth size="small" label="Plain Text Body (fallback)"
-                              multiline rows={4}
-                              value={tpl.bodyText || ''}
-                              onChange={(e) => setEmailTemplates((prev) => prev.map((t) => t.name === tpl.name ? { ...t, bodyText: e.target.value } : t))}
-                              inputProps={{ style: { fontFamily: 'monospace', fontSize: 12 } }}
-                            />
-                            <Box sx={{ display: 'flex', gap: 1.5, flexWrap: 'wrap', pt: 0.5 }}>
-                              <Button
-                                variant="contained" size="small"
-                                disabled={templateSaving[tpl.name]}
-                                onClick={async () => {
-                                  setTemplateSaving((p) => ({ ...p, [tpl.name]: true }));
-                                  try {
-                                    await updateEmailTemplate(tpl.name, { subject: tpl.subject, bodyHtml: tpl.bodyHtml, bodyText: tpl.bodyText, isActive: tpl.isActive });
-                                    notify('Template saved!', 'success');
-                                  } catch {
-                                    notify('Failed to save template.', 'error');
-                                  } finally {
-                                    setTemplateSaving((p) => ({ ...p, [tpl.name]: false }));
-                                  }
-                                }}
-                              >
-                                {templateSaving[tpl.name] ? 'Saving…' : 'Save Template'}
-                              </Button>
-                              <Button
-                                variant="outlined" size="small"
-                                disabled={!templateTestEmail || templateTesting[tpl.name]}
-                                onClick={async () => {
-                                  setTemplateTesting((p) => ({ ...p, [tpl.name]: true }));
-                                  try {
-                                    await sendTestEmailApi(tpl.name, templateTestEmail);
-                                    notify(`Test email sent to ${templateTestEmail}`, 'success');
-                                  } catch {
-                                    notify('Failed to send test email. Check your SMTP config.', 'error');
-                                  } finally {
-                                    setTemplateTesting((p) => ({ ...p, [tpl.name]: false }));
-                                  }
-                                }}
-                              >
-                                {templateTesting[tpl.name] ? 'Sending…' : 'Send Test Email'}
-                              </Button>
-                            </Box>
-                          </Box>
-                        )}
-                      </Paper>
-                    ))}
+                      ))}
+                    </Box>
                   </Box>
                 ) : (
                   renderSections(panels[tab])
                 )}
+
               </Box>
             </Box>
           </Paper>
@@ -1879,6 +1841,13 @@ const SettingsPage = () => {
           </Box>
         </Grid>
       </Grid>
+      <MediaPicker
+        open={mediaPickerOpen}
+        onClose={() => setMediaPickerOpen(false)}
+        onSelect={handleMediaSelect}
+        multiple={false}
+        title="Select Asset"
+      />
     </Box>
   );
 };

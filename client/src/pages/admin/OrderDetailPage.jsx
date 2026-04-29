@@ -101,7 +101,7 @@ const ProgressEntry = ({ label, status, occurredAt, last }) => {
           }}
         />
         {!last && (
-          <Box sx={{ width: 1, minHeight: 28, mt: 0.5, bgcolor: done ? 'success.light' : 'divider' }} />
+          <Box sx={{ width: '2px', minHeight: 28, mt: 0.5, bgcolor: done ? 'success.light' : 'divider' }} />
         )}
       </Box>
       <Box sx={{ pb: last ? 0 : 1.5 }}>

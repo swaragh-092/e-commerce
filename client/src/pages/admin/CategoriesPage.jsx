@@ -23,7 +23,7 @@ import { useNotification } from '../../context/NotificationContext';
 import { useAuth } from '../../hooks/useAuth';
 import { PERMISSIONS } from '../../utils/permissions';
 import { getApiErrorMessage } from '../../utils/apiErrors';
-import MediaUploader from '../../components/common/MediaUploader';
+import MediaPicker from '../../components/common/MediaPicker';
 import { getMediaUrl } from '../../utils/media';
 import { useSettings } from '../../hooks/useSettings';
 
@@ -365,6 +365,7 @@ const CategoriesPage = () => {
         ogImage: ''
     });
     const [formErrors, setFormErrors] = useState({});
+    const [mediaPickerOpen, setMediaPickerOpen] = useState(false);
 
     const { notify, confirm } = useNotification();
     const { hasPermission } = useAuth();
@@ -500,6 +501,12 @@ const CategoriesPage = () => {
         } finally {
             setSaving(false);
         }
+    };
+
+    const handleMediaSelect = (media) => {
+        if (!media) return;
+        setFormData((f) => ({ ...f, image: media.url }));
+        setMediaPickerOpen(false);
     };
 
     const handleDelete = async (id) => {
@@ -647,12 +654,28 @@ const CategoriesPage = () => {
                                 </IconButton>
                             </Box>
                         ) : (
-                            <MediaUploader 
-                                multiple={false} 
-                                onUploadSuccess={(media) => {
-                                    setFormData(f => ({ ...f, image: media.url }));
-                                }} 
-                            />
+                            <Box>
+                                <Button
+                                    variant="outlined"
+                                    fullWidth
+                                    onClick={() => setMediaPickerOpen(true)}
+                                    sx={{
+                                        py: 3,
+                                        borderStyle: 'dashed',
+                                        borderWidth: 2,
+                                        '&:hover': { borderStyle: 'dashed', borderWidth: 2 }
+                                    }}
+                                >
+                                    Select or Upload Category Image
+                                </Button>
+                                <MediaPicker
+                                    open={mediaPickerOpen}
+                                    onClose={() => setMediaPickerOpen(false)}
+                                    onSelect={handleMediaSelect}
+                                    multiple={false}
+                                    title="Select Category Image"
+                                />
+                            </Box>
                         )}
                     </Box>
 

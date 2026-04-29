@@ -90,9 +90,12 @@ const deleteShippingRule = (id) => api.delete(`/${A}/shipping/rules/${id}`);
 // Settings bulk update
 const updateSettings = (settings) => api.put('/settings/bulk', settings);
 
-// Email / Notification templates
 const getEmailTemplates = () => api.get('/notifications/templates');
+const getEmailTemplate = (name) => api.get(`/notifications/templates/${name}`);
 const updateEmailTemplate = (name, data) => api.put(`/notifications/templates/${name}`, data);
+const previewEmailTemplate = (name, data) => api.post(`/notifications/templates/${name}/preview`, data);
+const resetEmailTemplate = (name, channel = 'email') => api.post(`/notifications/templates/${name}/reset`, { channel });
+const getEmailTemplateDefault = (name) => api.get(`/notifications/templates/${name}/default`);
 const sendTestEmail = (templateName, recipientEmail) => api.post('/notifications/templates/test', { templateName, recipientEmail });
 const sendTestNotification = (templateName, recipient, channel) => api.post('/notifications/test', { templateName, recipient, channel });
 
@@ -141,7 +144,7 @@ export {
   getShippingProviders, updateShippingProvider, getShippingZones, createShippingZone, updateShippingZone, deleteShippingZone,
   getShippingRules, createShippingRule, updateShippingRule, deleteShippingRule,
   updateSettings,
-  getEmailTemplates, updateEmailTemplate, sendTestEmail, sendTestNotification,
+  getEmailTemplates, getEmailTemplate, updateEmailTemplate, previewEmailTemplate, resetEmailTemplate, getEmailTemplateDefault, sendTestEmail, sendTestNotification,
   validateCoupon, getPublicCoupons, getEligibleCoupons,
   getMyOrders, getMyOrderById, cancelOrder, placeOrder,
   getAddresses, createAddress, updateAddress, deleteAddress, setDefaultAddress,

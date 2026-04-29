@@ -26,7 +26,7 @@ import {
 import brandService from '../../services/brandService';
 import { getMediaUrl } from '../../utils/media';
 import { useNotification } from '../../context/NotificationContext';
-import MediaUploader from '../../components/common/MediaUploader';
+import MediaPicker from '../../components/common/MediaPicker';
 import { useAuth } from '../../hooks/useAuth';
 import { PERMISSIONS } from '../../utils/permissions';
 import { getApiErrorMessage } from '../../utils/apiErrors';
@@ -61,6 +61,7 @@ const BrandsPage = () => {
   });
   const [errors, setErrors] = useState({});
   const [saving, setSaving] = useState(false);
+  const [mediaPickerOpen, setMediaPickerOpen] = useState(false);
 
   // Delete confirmation
   const [deleteConfirm, setDeleteConfirm] = useState({ open: false, id: null, name: '' });
@@ -175,12 +176,9 @@ const BrandsPage = () => {
     }
   };
 
-  const handleMediaUpload = (media) => {
-    if (!canUploadMedia) {
-      notify('You do not have permission to upload media.', 'error');
-      return;
-    }
 
+  const handleMediaSelect = (media) => {
+    if (!media) return;
     setFormData((prev) => ({ ...prev, image: media.url }));
   };
 
@@ -374,7 +372,28 @@ const BrandsPage = () => {
                 </Box>
               )}
               {canUploadMedia ? (
-                <MediaUploader onUploadSuccess={handleMediaUpload} multiple={false} />
+                <Box>
+                  <Button
+                    variant="outlined"
+                    fullWidth
+                    onClick={() => setMediaPickerOpen(true)}
+                    sx={{
+                      py: 1.5,
+                      borderStyle: 'dashed',
+                      borderWidth: 2,
+                      '&:hover': { borderStyle: 'dashed', borderWidth: 2 },
+                    }}
+                  >
+                    Select or Upload Logo
+                  </Button>
+                  <MediaPicker
+                    open={mediaPickerOpen}
+                    onClose={() => setMediaPickerOpen(false)}
+                    onSelect={handleMediaSelect}
+                    multiple={false}
+                    title="Select Brand Logo"
+                  />
+                </Box>
               ) : (
                 <Typography variant="caption" color="text.secondary">
                   Media upload permission is required to add or replace a brand logo.

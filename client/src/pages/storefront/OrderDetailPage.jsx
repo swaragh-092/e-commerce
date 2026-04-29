@@ -523,7 +523,13 @@ const OrderDetailPage = () => {
                         </Typography>
                         {item.variantInfo && (
                           <Typography variant="caption" color="text.secondary" display="block">
-                            {Object.entries(item.variantInfo).map(([k, v]) => `${k}: ${v}`).join(' · ')}
+                            {Object.entries(item.variantInfo)
+                              .filter(([key]) => ![
+                                'id', 'productId', 'variantId', 'orderId', 'sku', 'price', 
+                                'isActive', 'stockQty', 'createdAt', 'updatedAt', 'deletedAt', 
+                                'sortOrder', 'version', 'isDefault'
+                              ].includes(key))
+                              .map(([k, v]) => `${k}: ${v}`).join(' · ')}
                           </Typography>
                         )}
                         <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mt: 1, flexWrap: 'wrap' }}>

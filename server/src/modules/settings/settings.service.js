@@ -50,14 +50,30 @@ const getAll = async () => {
     admin: { ...defaultSettings.admin },
     invoice: { ...defaultSettings.invoice },
     messaging: { ...defaultSettings.messaging },
-    // gateway_credentials and messaging_credentials are intentionally excluded — secrets must never be sent to the client
+    gateway_credentials: { ...defaultSettings.gateway_credentials },
+    messaging_credentials: { ...defaultSettings.messaging_credentials },
   };
 
   settings.forEach(s => {
-    // Skip server-side-only credential groups — never expose to the frontend
-    if (s.group === 'gateway_credentials' || s.group === 'messaging_credentials') return;
     if (grouped[s.group]) {
       let parsedValue = s.value;
+
+      // Auto-decrypt if it's an encrypted object (credentials)
+      if (typeof parsedValue === 'object' && parsedValue !== null && parsedValue.ciphertext) {
+        try {
+          parsedValue = decrypt(parsedValue);
+        } catch (err) {
+          logger.error(`Failed to decrypt setting ${s.key}:`, err);
+          parsedValue = null;
+        }
+      }
+
+      // Mask sensitive values before sending to client
+      const isSensitive = /pass|token|secret|key_secret|private/i.test(s.key) && !/id|public|publishable/i.test(s.key);
+      if (isSensitive && parsedValue) {
+        parsedValue = '********';
+      }
+
       if (parsedValue === 'true') parsedValue = true;
       else if (parsedValue === 'false') parsedValue = false;
       grouped[s.group][s.key] = parsedValue;
@@ -91,6 +107,13 @@ const getByGroup = async (groupName) => {
 
     if (parsedValue === 'true') parsedValue = true;
     else if (parsedValue === 'false') parsedValue = false;
+    
+    // Mask sensitive values
+    const isSensitive = /pass|token|secret|key_secret|private/i.test(s.key) && !/id|public|publishable/i.test(s.key);
+    if (isSensitive && parsedValue) {
+        parsedValue = '********';
+    }
+
     result[s.key] = parsedValue;
   });
 
@@ -103,6 +126,8 @@ const updateKey = async (key, value, group, actingUserId) => {
   return sequelize.transaction(async (t) => {
     let setting = await Setting.findOne({ where: { key }, transaction: t });
     let before = setting ? setting.toJSON() : null;
+
+    if (value !== null && value !== undefined && String(value).trim() === '********') return null;
 
     // Auto-encrypt if it's a credential group and value is not empty
     let finalValue = value;
@@ -167,6 +192,9 @@ const bulkUpdate = async (settingsInput, actingUserId) => {
             if (credentialGroups.includes(resolvedGroup) && value !== null && value !== undefined && String(value).trim() !== '') {
                 finalValue = encrypt(String(value).trim());
             }
+
+            // Skip updating if the value is the sensitive placeholder (means it wasn't changed)
+            if (value === '********') continue;
 
             // Look up by (key, group) — not key alone — to avoid cross-group collisions
             let setting = await Setting.findOne({ where: { key, group: resolvedGroup }, transaction: t });

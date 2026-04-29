@@ -54,7 +54,7 @@ import { getCategoryTree } from '../../services/categoryService';
 import brandService from '../../services/brandService';
 import attributeService from '../../services/attributeService';
 import { getSaleLabels } from '../../services/adminService';
-import MediaUploader from '../../components/common/MediaUploader';
+import MediaPicker from '../../components/common/MediaPicker';
 import { useNotification } from '../../context/NotificationContext';
 import { useSettings } from '../../hooks/useSettings';
 import { getProductBasePrice } from '../../utils/variantPricing';
@@ -208,6 +208,7 @@ const ProductEditPage = () => {
   const [brands, setBrands] = useState([]);
   const [saleLabels, setSaleLabels] = useState([]);
   const [saving, setSaving] = useState(false);
+  const [mediaPickerOpen, setMediaPickerOpen] = useState(false);
 
   useEffect(() => {
     const load = async () => {
@@ -343,24 +344,28 @@ const ProductEditPage = () => {
     }
   };
 
-  const handleMediaUpload = (media) => {
-    if (!canSaveProduct || !canUploadMedia) {
-      notify('You do not have permission to upload product media.', 'error');
-      return;
-    }
 
-    setFormData((prev) => ({
-      ...prev,
-      images: [
-        ...prev.images,
-        {
-          url: media.url,
-          mediaId: media.id,
-          alt: 'Product Image',
-          isPrimary: prev.images.length === 0,
-        },
-      ],
-    }));
+  const handleMediaSelect = (selectedMedia) => {
+    if (!selectedMedia) return;
+    const mediaArray = Array.isArray(selectedMedia) ? selectedMedia : [selectedMedia];
+    
+    setFormData((prev) => {
+      const existingIds = new Set(prev.images.map(img => img.mediaId));
+      const filteredNew = mediaArray.filter(m => !existingIds.has(m.id));
+      
+      return {
+        ...prev,
+        images: [
+          ...prev.images,
+          ...filteredNew.map((media, index) => ({
+            url: media.url,
+            mediaId: media.id,
+            alt: media.originalName || 'Product Image',
+            isPrimary: prev.images.length === 0 && index === 0,
+          })),
+        ],
+      };
+    });
   };
 
   const handleRemoveImage = (index) => {
@@ -603,7 +608,34 @@ const ProductEditPage = () => {
                 Media / Images
               </Typography>
               {canUploadMedia ? (
-                <MediaUploader onUploadSuccess={handleMediaUpload} multiple />
+                <Box>
+                  <Button
+                    variant="outlined"
+                    fullWidth
+                    startIcon={<AddIcon />}
+                    onClick={() => setMediaPickerOpen(true)}
+                    sx={{
+                      py: 3,
+                      borderStyle: 'dashed',
+                      borderWidth: 2,
+                      borderRadius: 2,
+                      '&:hover': {
+                        borderStyle: 'dashed',
+                        borderWidth: 2,
+                        bgcolor: 'action.hover',
+                      },
+                    }}
+                  >
+                    Add Product Media
+                  </Button>
+                  <MediaPicker
+                    open={mediaPickerOpen}
+                    onClose={() => setMediaPickerOpen(false)}
+                    onSelect={handleMediaSelect}
+                    multiple={true}
+                    title="Select Product Images"
+                  />
+                </Box>
               ) : (
                 <Alert severity="info" sx={{ mb: 2 }}>
                   You can edit product details, but media upload requires the media upload permission.

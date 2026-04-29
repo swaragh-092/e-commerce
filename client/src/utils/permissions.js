@@ -30,6 +30,8 @@ export const ADMIN_ROUTE_PERMISSION_MAP = Object.freeze([
   { path: '/admin/reviews', permissions: [PERMISSIONS.REVIEWS_READ, PERMISSIONS.REVIEWS_MODERATE, PERMISSIONS.REVIEWS_DELETE] },
   { path: '/admin/media', permissions: [PERMISSIONS.MEDIA_READ, PERMISSIONS.MEDIA_UPLOAD, PERMISSIONS.MEDIA_DELETE] },
   { path: '/admin/settings', permissions: [PERMISSIONS.SETTINGS_READ, PERMISSIONS.SETTINGS_MANAGE, PERMISSIONS.SETTINGS_ADVANCED] },
+  // Settings read permission allows view-only access, while notifications manage allows editing.
+  { path: '/admin/email-templates', permissions: [PERMISSIONS.SETTINGS_READ, PERMISSIONS.NOTIFICATIONS_MANAGE] },
   { path: '/admin/pages', permissions: [PERMISSIONS.PAGES_READ, PERMISSIONS.PAGES_MANAGE] },
   { path: '/admin/access-control', permissions: [PERMISSIONS.ROLES_READ, PERMISSIONS.ROLES_MANAGE, PERMISSIONS.SYSTEM_ROLES_MANAGE, PERMISSIONS.USERS_ASSIGN_ROLES] },
   { path: '/admin/audit-log', permissions: [PERMISSIONS.AUDIT_READ] },
