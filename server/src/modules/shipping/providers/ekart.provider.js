@@ -34,7 +34,7 @@ class EkartProvider extends BaseShippingProvider {
         };
     }
 
-    async getRate(input) {
+    async calculateRate(input) {
         logger.info(`[Ekart] Getting rate for pincode ${input.pincode}`);
         // Mock Ekart Rate
         const weightKg = input.weightGrams ? input.weightGrams / 1000 : 0.5;
@@ -51,29 +51,31 @@ class EkartProvider extends BaseShippingProvider {
         }
 
         return {
-            amount: cost,
+            rate: cost,
             currency: 'INR',
             estimatedMinDays: 2,
             estimatedMaxDays: 5,
-            providerRateId: `ekart-rate-${Date.now()}`
+            rawResponse: { mock: true, baseRate: 45 }
         };
     }
 
-    async createShipment(orderData, fulfillmentData) {
+    async createShipment({ order, shipment, address, items }) {
+        // eslint-disable-next-line no-unused-vars
         const creds = this._getCredentials();
-        logger.info(`[Ekart] Creating shipment for Order ${orderData.id}`);
+        logger.info(`[Ekart] Creating shipment for Order ${order.id}`);
         
+        const timestamp = Date.now();
         return {
-            success: true,
-            providerShipmentId: `EKART-SHIP-${Date.now()}`,
-            trackingAwb: `EKT${Date.now()}`,
-            labelUrl: 'https://ekart.com/labels/mock-label.pdf',
+            awbCode: `EKT${timestamp}`,
+            providerOrderId: `EKART-ORD-${timestamp}`,
+            label: 'https://ekart.com/labels/mock-label.pdf',
+            trackingUrl: `https://ekart.com/track/EKT${timestamp}`,
             rawResponse: { message: 'Mock Ekart shipment created' }
         };
     }
 
-    async cancelShipment(shipmentId, reason) {
-        logger.info(`[Ekart] Cancelling shipment ${shipmentId} - reason: ${reason}`);
+    async cancelShipment({ awbCode }) {
+        logger.info(`[Ekart] Cancelling shipment ${awbCode}`);
         return {
             success: true,
             message: 'Cancelled successfully',
@@ -81,29 +83,47 @@ class EkartProvider extends BaseShippingProvider {
         };
     }
 
-    async getTracking(awb) {
-        logger.info(`[Ekart] Getting tracking for AWB ${awb}`);
+    async getTracking({ awbCode }) {
+        logger.info(`[Ekart] Getting tracking for AWB ${awbCode}`);
         return {
-            status: 'IN_TRANSIT',
+            status: 'in_transit',
             location: 'Ekart Sorting Hub',
-            timestamp: new Date().toISOString(),
+            timestamp: new Date(),
+            events: [
+                {
+                    status: 'in_transit',
+                    location: 'Sorting Hub',
+                    timestamp: new Date(),
+                    description: 'Package received at sorting facility'
+                }
+            ],
             rawResponse: { status: 'IN_TRANSIT', city: 'Bangalore' }
         };
     }
 
-    async extractWebhookEvent(payload) {
+    async handleWebhook(payload) {
         if (!payload || !payload.awb) {
             return null; // Ignore invalid payload
         }
 
         return {
-            providerEventId: payload.event_id || null, // Primary dedup key
-            awb: payload.awb,
-            status: payload.status,
+            providerEventId: payload.event_id ? String(payload.event_id) : null,
+            awbCode: payload.awb,
+            status: this._normalizeStatus(payload.status),
             location: payload.location || '',
             timestamp: payload.timestamp ? new Date(payload.timestamp) : new Date(),
             rawPayload: payload
         };
+    }
+
+    _normalizeStatus(status) {
+        const s = String(status || '').toLowerCase();
+        if (s.includes('deliver')) return 'delivered';
+        if (s.includes('out')) return 'out_for_delivery';
+        if (s.includes('transit')) return 'in_transit';
+        if (s.includes('return')) return 'returned';
+        if (s.includes('cancel')) return 'cancelled';
+        return 'in_transit';
     }
 }
 

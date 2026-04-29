@@ -266,7 +266,15 @@ class ShiprocketProvider extends BaseShippingProvider {
 
         const rawBody = Buffer.isBuffer(payload) ? payload : Buffer.from(JSON.stringify(payload));
         const computed = crypto.createHmac('sha256', secret).update(rawBody).digest('hex');
-        return computed === signature || signature === secret;
+        
+        try {
+            return crypto.timingSafeEqual(
+                Buffer.from(computed, 'hex'),
+                Buffer.from(signature, 'hex')
+            );
+        } catch (err) {
+            return false;
+        }
     }
 
     async verifyWebhookSignature(rawPayload, headers) {
@@ -282,12 +290,14 @@ class ShiprocketProvider extends BaseShippingProvider {
         const location = payload['current-city'] || payload.location || '';
         const providerEventId = payload.scan_id || payload.id || null;
 
+        const timestamp = payload.scan_date_time || payload.timestamp || payload.date || new Date();
+
         return {
             providerEventId: providerEventId ? String(providerEventId) : null,
             awbCode,
             status: this._normalizeStatus(status),
             location,
-            timestamp: new Date(),
+            timestamp: new Date(timestamp),
             rawPayload: payload,
         };
     }

@@ -169,4 +169,35 @@ const sendToUser = async (templateName, channels, user, variables = {}, orderId 
     return results.map((r) => r.status === 'fulfilled' && r.value === true);
 };
 
-module.exports = { send, sendToUser };
+/**
+ * Send a notification when a shipment's status changes (e.g. out for delivery, delivered).
+ *
+ * @param {string} userId - Recipient user ID
+ * @param {string} orderId - Related order ID
+ * @param {string} status - New shipment status (out_for_delivery, delivered, etc)
+ */
+const sendDeliveryUpdate = async (userId, orderId, status) => {
+    try {
+        const { User, Order } = require('../index');
+        const user = await User.findByPk(userId, { include: ['UserProfile'] });
+        const order = await Order.findByPk(orderId);
+
+        if (!user || !order) return false;
+
+        const templateName = status === 'delivered' ? 'order_delivered' : 'order_out_for_delivery';
+        
+        // Settings/Channels: usually we want Email + SMS for delivery updates
+        const channels = ['email', 'sms'];
+
+        return await sendToUser(templateName, channels, user, {
+            order_number: order.orderNumber,
+            status_label: status.replace(/_/g, ' '),
+            customer_name: user.UserProfile?.firstName || user.name || 'Customer'
+        }, orderId);
+    } catch (error) {
+        logger.error(`[notification.service] Failed to send delivery update:`, error);
+        return false;
+    }
+};
+
+module.exports = { send, sendToUser, sendDeliveryUpdate };

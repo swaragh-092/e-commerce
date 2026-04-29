@@ -168,11 +168,35 @@ exports.processWebhook = async (providerCode, payload, headers) => {
             }
 
             // Notify customer if it's out for delivery or delivered
-            if (['out_for_delivery', 'delivered'].includes(normalizedEvent.status) && shipment.order) {
+            if (['out_for_delivery', 'delivered'].includes(normalizedEvent.status) && shipment.orderId) {
                 try {
-                    await NotificationService.sendDeliveryUpdate(shipment.order.userId, shipment.order.id, normalizedEvent.status);
+                    await NotificationService.sendDeliveryUpdate(shipment.order.userId, shipment.orderId, normalizedEvent.status);
                 } catch (err) {
                     console.error('Failed to send delivery update notification', err);
+                }
+            }
+
+            // Propagate terminal status to Order if all fulfillments are terminal
+            if (['delivered', 'returned'].includes(normalizedEvent.status) && shipment.orderId) {
+                const order = await Order.findByPk(shipment.orderId, {
+                    include: [{ model: Fulfillment, as: 'fulfillments' }],
+                    transaction: t
+                });
+
+                if (order && !['delivered', 'cancelled', 'refunded', 'returned'].includes(order.status)) {
+                    const allTerminal = order.fulfillments.every(f => 
+                        ['delivered', 'returned', 'rto'].includes(f.status)
+                    );
+
+                    if (allTerminal) {
+                        const finalStatus = order.fulfillments.every(f => f.status === 'delivered') ? 'delivered' : 'returned';
+                        await order.update({ 
+                            status: finalStatus, 
+                            shipmentStatus: finalStatus 
+                        }, { transaction: t });
+                    } else {
+                        await order.update({ shipmentStatus: 'partially_delivered' }, { transaction: t });
+                    }
                 }
             }
         }
