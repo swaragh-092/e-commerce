@@ -101,41 +101,124 @@ class ShiprocketProvider extends BaseShippingProvider {
     /* Rate Calculation                                                       */
     /* ------------------------------------------------------------------ */
 
-    async calculateRate({ pincode, pickupPincode, weightGrams = 500, declaredValue, paymentMode = 'prepaid' }) {
-        const token = await this._getToken();
+    /**
+     * Calculate rate using Shiprocket API (with local fallback).
+     *
+     * Unified input per SHIPPING-RATE-ENGINE.md §6.
+     *
+     * @param {number} weightGrams         - Chargeable (already slab-rounded by service)
+     * @param {number} declaredValue        - Cart subtotal
+     * @param {'cod'|'prepaid'} paymentMode
+     * @param {'same_city'|'same_state'|'national'|'remote'} zone
+     * @param {number} packageCount
+     * @param {string} pincode
+     * @param {string} pickupPincode
+     */
+    async calculateRate({ pincode, pickupPincode, weightGrams = 500, declaredValue = 0, paymentMode = 'prepaid', zone = 'national', packageCount = 1 }) {
+        // If credentials are not configured, use local rate model (development/mock mode)
+        try {
+            if (!this._credentials?.email || !this._credentials?.password) {
+                return this._calculateLocalRate({ weightGrams, declaredValue, paymentMode, zone, packageCount });
+            }
 
-        const codMode = paymentMode === 'cod' ? 1 : 0;
-        const weightKg = Math.max(0.1, weightGrams / 1000);
+            const token = await this._getToken();
+            const codMode = paymentMode === 'cod' ? 1 : 0;
+            const weightKg = Math.max(0.1, weightGrams / 1000);
 
-        const { data } = await axios.get(`${SHIPROCKET_API_BASE}/courier/serviceability/`, {
-            headers: this._authHeader(token),
-            params: {
-                pickup_postcode: pickupPincode || this.settings.pickupPincode,
-                delivery_postcode: pincode,
-                weight: weightKg,
-                cod: codMode,
-                declared_value: declaredValue,
-            },
-        });
+            const { data } = await axios.get(`${SHIPROCKET_API_BASE}/courier/serviceability/`, {
+                headers: this._authHeader(token),
+                params: {
+                    pickup_postcode:   pickupPincode || this.settings.pickupPincode,
+                    delivery_postcode: pincode,
+                    weight:            weightKg,
+                    cod:               codMode,
+                    declared_value:    declaredValue,
+                },
+            });
 
-        const companies = data.data?.available_courier_companies || [];
-        if (companies.length === 0) {
-            return { rate: 0, currency: 'INR', estimatedMinDays: null, estimatedMaxDays: null, rawResponse: data };
+            const companies = data.data?.available_courier_companies || [];
+            if (companies.length === 0) {
+                return this._calculateLocalRate({ weightGrams, declaredValue, paymentMode, zone, packageCount });
+            }
+
+            const recommended = companies.find(c => c.is_recommended) || companies[0];
+            const rate        = Number(recommended.rate) || 0;
+            const days        = Number(recommended.estimated_delivery_days) || null;
+
+            return {
+                rate,
+                freight:               rate,   // Shiprocket returns bundled; no COD split from API
+                codFee:                0,
+                currency:              'INR',
+                estimatedMinDays:      days,
+                estimatedMaxDays:      days ? days + 1 : null,
+                chargeableWeightGrams: weightGrams,
+                zone,
+                packageCount,
+                rawResponse: { courierId: recommended.courier_company_id, courierName: recommended.courier_name },
+            };
+        } catch (_err) {
+            // API unavailable — fall back to local model so checkout doesn't break
+            console.warn('[ShiprocketProvider] calculateRate API error, using local fallback:', _err.message);
+            return this._calculateLocalRate({ weightGrams, declaredValue, paymentMode, zone, packageCount });
+        }
+    }
+
+    /**
+     * Local rate model — mirrors Shiprocket Zone A/B/C/D pricing.
+     * Used in dev/mock mode or when the live API is unreachable.
+     *
+     * Zone A = same_city, B = same_state, C = national, D = remote
+     */
+    _calculateLocalRate({ weightGrams = 500, declaredValue = 0, paymentMode = 'prepaid', zone = 'national', packageCount = 1 }) {
+        const baseByZone = { same_city: 40, same_state: 55, national: 70, remote: 110 };
+        const slabRate   = 20;    // per additional 500g
+        const fuelPct    = 3;     // fuel surcharge %
+        const codPct     = 2;     // COD % of order value
+        const codMin     = 30;    // COD minimum fee
+        const minCharge  = 40;
+
+        let freight = baseByZone[zone] || baseByZone.national;
+
+        if (weightGrams > 500) {
+            const extraSlabs = Math.ceil((weightGrams - 500) / 500);
+            freight += extraSlabs * slabRate;
         }
 
-        // Pick cheapest or use recommended
-        const recommended = companies.find(c => c.is_recommended) || companies[0];
+        // Fuel surcharge on freight only (FIX 6)
+        freight = freight + (freight * fuelPct / 100);
+
+        // Min charge floor (FIX 7)
+        freight = Math.max(freight, minCharge);
+        freight = Number(freight.toFixed(2));
+
+        // Multi-package (FIX 9)
+        const totalFreight = Number((freight * packageCount).toFixed(2));
+
+        // COD fee separate (FIX 3)
+        let codFee = 0;
+        if (paymentMode === 'cod') {
+            codFee = Math.max(codMin, declaredValue * codPct / 100);
+            codFee = Number(codFee.toFixed(2));
+        }
+
+        const estimatedDays = { same_city: [1,2], same_state: [2,3], national: [4,6], remote: [6,9] };
+        const [minDays, maxDays] = estimatedDays[zone] || estimatedDays.national;
 
         return {
-            rate: Number(recommended.rate) || 0,
-            currency: 'INR',
-            estimatedMinDays: Number(recommended.estimated_delivery_days) || null,
-            estimatedMaxDays: Number(recommended.estimated_delivery_days) ? Number(recommended.estimated_delivery_days) + 1 : null,
-            courierId: recommended.courier_company_id,
-            courierName: recommended.courier_name,
-            rawResponse: data,
+            rate:                  Number((totalFreight + codFee).toFixed(2)),
+            freight:               totalFreight,
+            codFee,
+            currency:              'INR',
+            estimatedMinDays:      minDays,
+            estimatedMaxDays:      maxDays,
+            chargeableWeightGrams: weightGrams,
+            zone,
+            packageCount,
+            rawResponse:           { mock: true, zone, weightGrams, packageCount },
         };
     }
+
 
     /* ------------------------------------------------------------------ */
     /* Create Shipment                                                        */
@@ -170,9 +253,9 @@ class ShiprocketProvider extends BaseShippingProvider {
             })),
             payment_method: order.paymentMethod === 'cod' ? 'COD' : 'Prepaid',
             sub_total: Number(order.subtotal || 0),
-            length: this.settings.defaultLengthCm || 10,
-            breadth: this.settings.defaultBreadthCm || 10,
-            height: this.settings.defaultHeightCm || 10,
+            length: Number(shipment.lengthCm || this.settings.defaultLengthCm || 10),
+            breadth: Number(shipment.breadthCm || this.settings.defaultBreadthCm || 10),
+            height: Number(shipment.heightCm || this.settings.defaultHeightCm || 10),
             weight: Math.max(0.1, (shipment.actualWeightGrams || 500) / 1000),
         };
 

@@ -957,23 +957,25 @@ const createFulfillment = async (orderId, payload, actingUserId) => {
 
             const address = order.shippingAddressSnapshot || {};
             
-            // Calculate total weight of the fulfillment items
+            // Calculate total weight and dimensions of the fulfillment items
             const productIds = items.map(reqItem => orderItemMap[reqItem.orderItemId]?.productId).filter(Boolean);
             const products = await Product.findAll({
                 where: { id: productIds },
-                attributes: ['id', 'weight'],
+                attributes: ['id', 'weightGrams', 'lengthCm', 'breadthCm', 'heightCm', 'requiresShipping'],
                 transaction: t
             });
-            const productWeightMap = products.reduce((map, p) => {
-                map[p.id] = parseFloat(p.weight) || 500; // Default to 500g if product weight is missing
+            const productMap = products.reduce((map, p) => {
+                map[p.id] = p;
                 return map;
             }, {});
 
-            const totalWeightGrams = items.reduce((sum, reqItem) => {
-                const info = orderItemMap[reqItem.orderItemId];
-                const unitWeight = productWeightMap[info?.productId] || 500;
-                return sum + (unitWeight * Number(reqItem.quantity));
-            }, 0);
+            const fulfillmentItemsForDims = items.map(reqItem => ({
+                product: productMap[orderItemMap[reqItem.orderItemId]?.productId],
+                quantity: reqItem.quantity
+            })).filter(i => i.product);
+
+            const dims = ShippingService.computePackageDimensions(fulfillmentItemsForDims);
+            const totalWeightGrams = dims.totalWeightGrams;
 
             // 1. Mandatory Pre-Shipment Serviceability Revalidation
             if (typeof adapter.getServiceability === 'function') {
@@ -1002,7 +1004,13 @@ const createFulfillment = async (orderId, payload, actingUserId) => {
             try {
                 const providerResult = await adapter.createShipment({
                     order,
-                    shipment: { actualWeightGrams: totalWeightGrams },
+                    shipment: { 
+                        actualWeightGrams: totalWeightGrams,
+                        lengthCm: dims.maxL,
+                        breadthCm: dims.maxB,
+                        heightCm: dims.totalH,
+                        volumetricWeightGrams: Math.ceil((dims.volumeCm3 / 5000) * 1000)
+                    },
                     address: order.shippingAddressSnapshot || {},
                     items: providerItems
                 });
@@ -1037,6 +1045,11 @@ const createFulfillment = async (orderId, payload, actingUserId) => {
                 at: new Date().toISOString(),
                 source: 'admin',
             }],
+            actualWeightGrams: totalWeightGrams,
+            volumetricWeightGrams: Math.ceil((dims.volumeCm3 / 5000) * 1000),
+            lengthCm: dims.maxL,
+            breadthCm: dims.maxB,
+            heightCm: dims.totalH,
             rawResponse: rawResponse,
         }, { transaction: t });
 

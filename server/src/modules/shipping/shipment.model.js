@@ -36,6 +36,12 @@ module.exports = (sequelize, DataTypes) => {
             type: DataTypes.JSONB,
             defaultValue: () => [],
         },
+        // Shipping Dimensions
+        lengthCm:    DataTypes.DECIMAL(10, 2),
+        breadthCm:   DataTypes.DECIMAL(10, 2),
+        heightCm:    DataTypes.DECIMAL(10, 2),
+        actualWeightGrams: DataTypes.INTEGER,
+        volumetricWeightGrams: DataTypes.INTEGER,
         rawResponse: {
             type: DataTypes.JSONB,
             defaultValue: null,

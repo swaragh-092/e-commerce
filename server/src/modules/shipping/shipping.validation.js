@@ -66,7 +66,14 @@ const ruleSchema = Joi.object({
     providerId: Joi.string().uuid().allow(null).optional(),
     conditionType: Joi.string().max(50).optional().default('all'),
     conditions: Joi.object().unknown(true).optional().default({}),
-    rateType: Joi.string().valid('free', 'flat', 'free_above_threshold').optional().default('flat'),
+    rateType: Joi.string().valid(
+        'free',
+        'flat',
+        'free_above_threshold',
+        'per_kg_slab',        // base charge + per-500g slabs with zone multiplier
+        'volumetric',         // alias for per_kg_slab emphasising volumetric billing
+        'percent_of_order'    // X% of cart subtotal
+    ).optional().default('flat'),
     rateConfig: Joi.object().unknown(true).optional().default({}),
     codAllowed: Joi.boolean().optional().default(true),
     codFee: Joi.number().min(0).optional().default(0),
@@ -88,7 +95,14 @@ const ruleUpdateSchema = Joi.object({
     providerId: Joi.string().uuid().allow(null).optional(),
     conditionType: Joi.string().max(50).optional(),
     conditions: Joi.object().unknown(true).optional(),
-    rateType: Joi.string().valid('free', 'flat', 'free_above_threshold').optional(),
+    rateType: Joi.string().valid(
+        'free',
+        'flat',
+        'free_above_threshold',
+        'per_kg_slab',
+        'volumetric',
+        'percent_of_order'
+    ).optional(),
     rateConfig: Joi.object().unknown(true).optional(),
     codAllowed: Joi.boolean().optional(),
     codFee: Joi.number().min(0).optional(),

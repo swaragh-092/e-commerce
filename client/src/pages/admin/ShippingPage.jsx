@@ -85,16 +85,36 @@ const ShippingPage = () => {
 
   // Form states
   const [zoneFormData, setZoneFormData] = useState({ name: '', pincodes: '', enabled: true });
-  const [ruleFormData, setRuleFormData] = useState({ 
-    name: '', 
-    priority: 100, 
-    zoneId: '', 
+  const EMPTY_RULE_FORM = {
+    name: '',
+    priority: 100,
+    zoneId: '',
     providerId: '',
     rateType: 'flat',
-    rateConfigAmount: 0,
     codAllowed: true,
-    enabled: true
-  });
+    enabled: true,
+    conditions: '{}',
+    // Structured rateConfig — built from these fields on submit
+    rc_baseCharge: 0,
+    rc_threshold: 0,
+    rc_percent: 0,
+    rc_firstSlabGrams: 500,
+    rc_additionalSlabGrams: 500,
+    rc_additionalSlabRate: 0,
+    rc_minCharge: 30,
+    rc_fuelSurchargePercent: 0,
+    rc_freeAboveSubtotal: '',
+    rc_zone_same_city: 1.0,
+    rc_zone_same_state: 1.3,
+    rc_zone_national: 1.6,
+    rc_zone_remote: 2.0,
+    rc_codFeeType: 'flat',
+    rc_codFeeValue: 0,
+    rc_codFeeMin: 0,
+    cond_weightGte: '',
+    cond_weightLte: '',
+  };
+  const [ruleFormData, setRuleFormData] = useState(EMPTY_RULE_FORM);
 
   const fetchData = async () => {
     setLoading(true);
@@ -215,69 +235,116 @@ const ShippingPage = () => {
   const handleOpenRuleDialog = (rule = null) => {
     if (rule) {
       setEditingRule(rule);
+      const rc = rule.rateConfig || {};
+      const cond = rule.conditions || {};
+      const zm = rc.zoneMultipliers || {};
       setRuleFormData({
-        name: rule.name,
-        priority: rule.priority,
-        zoneId: rule.zoneId || '',
-        providerId: rule.providerId || '',
-        rateType: rule.rateType,
-        rateConfigAmount: rule.rateConfig?.amount || 0,
-        codAllowed: rule.codAllowed,
-        enabled: rule.enabled,
-        conditions: JSON.stringify(rule.conditions || {}, null, 2)
+        name:                    rule.name,
+        priority:                rule.priority,
+        zoneId:                  rule.zoneId || '',
+        providerId:              rule.providerId || '',
+        rateType:                rule.rateType,
+        codAllowed:              rule.codAllowed,
+        enabled:                 rule.enabled,
+        conditions:              JSON.stringify(cond, null, 2),
+        rc_baseCharge:           rc.baseCharge ?? rc.flatRate ?? rc.amount ?? 0,
+        rc_threshold:            rc.threshold ?? 0,
+        rc_percent:              rc.percent ?? 0,
+        rc_firstSlabGrams:       rc.firstSlabGrams ?? 500,
+        rc_additionalSlabGrams:  rc.additionalSlabGrams ?? 500,
+        rc_additionalSlabRate:   rc.additionalSlabRate ?? 0,
+        rc_minCharge:            rc.minCharge ?? 30,
+        rc_fuelSurchargePercent: rc.fuelSurchargePercent ?? 0,
+        rc_freeAboveSubtotal:    rc.freeAboveSubtotal ?? '',
+        rc_zone_same_city:       zm.same_city  ?? 1.0,
+        rc_zone_same_state:      zm.same_state ?? 1.3,
+        rc_zone_national:        zm.national   ?? 1.6,
+        rc_zone_remote:          zm.remote     ?? 2.0,
+        rc_codFeeType:           rc.codFeeType  ?? 'flat',
+        rc_codFeeValue:          rc.codFeeValue ?? 0,
+        rc_codFeeMin:            rc.codFeeMin   ?? 0,
+        cond_weightGte:          cond.weightGte ?? '',
+        cond_weightLte:          cond.weightLte ?? '',
       });
     } else {
       setEditingRule(null);
-      setRuleFormData({ 
-        name: '', 
-        priority: 100, 
-        zoneId: '', 
-        providerId: '',
-        rateType: 'flat',
-        rateConfigAmount: 0,
-        codAllowed: true,
-        enabled: true,
-        conditions: '{}'
-      });
+      setRuleFormData({ ...EMPTY_RULE_FORM });
     }
     setRuleDialogOpen(true);
   };
 
   const handleSaveRule = async () => {
-    // Validate numeric fields
     const priority = parseInt(ruleFormData.priority, 10);
-    const rateAmount = parseFloat(ruleFormData.rateConfigAmount);
+    if (isNaN(priority)) { notify('Priority must be a valid number', 'error'); return; }
+    if (!ruleFormData.name.trim()) { notify('Rule name is required', 'error'); return; }
 
-    if (isNaN(priority) || !Number.isFinite(priority)) {
-      notify('Priority must be a valid number', 'error');
-      return;
-    }
-    if (ruleFormData.rateType !== 'free' && (isNaN(rateAmount) || !Number.isFinite(rateAmount))) {
-      notify('Rate amount must be a valid number', 'error');
-      return;
+    // Build rateConfig from structured fields
+    const rateConfig = {};
+    const rt = ruleFormData.rateType;
+
+    if (rt === 'flat') {
+      rateConfig.amount    = parseFloat(ruleFormData.rc_baseCharge) || 0;
+      rateConfig.baseCharge = rateConfig.amount;
+    } else if (rt === 'free_above_threshold') {
+      rateConfig.threshold = parseFloat(ruleFormData.rc_threshold) || 0;
+      rateConfig.amount    = parseFloat(ruleFormData.rc_baseCharge) || 0;
+    } else if (rt === 'percent_of_order') {
+      rateConfig.percent = parseFloat(ruleFormData.rc_percent) || 0;
+    } else if (rt === 'per_kg_slab' || rt === 'volumetric') {
+      rateConfig.baseCharge           = parseFloat(ruleFormData.rc_baseCharge) || 0;
+      rateConfig.firstSlabGrams       = parseFloat(ruleFormData.rc_firstSlabGrams) || 500;
+      rateConfig.additionalSlabGrams  = parseFloat(ruleFormData.rc_additionalSlabGrams) || 500;
+      rateConfig.additionalSlabRate   = parseFloat(ruleFormData.rc_additionalSlabRate) || 0;
+      rateConfig.minCharge            = parseFloat(ruleFormData.rc_minCharge) || 0;
+      rateConfig.fuelSurchargePercent = parseFloat(ruleFormData.rc_fuelSurchargePercent) || 0;
+      rateConfig.zoneMultipliers = {
+        same_city:  parseFloat(ruleFormData.rc_zone_same_city)  || 1.0,
+        same_state: parseFloat(ruleFormData.rc_zone_same_state) || 1.3,
+        national:   parseFloat(ruleFormData.rc_zone_national)   || 1.6,
+        remote:     parseFloat(ruleFormData.rc_zone_remote)     || 2.0,
+      };
     }
 
+    if (ruleFormData.rc_freeAboveSubtotal !== '' && ruleFormData.rc_freeAboveSubtotal !== null) {
+      rateConfig.freeAboveSubtotal = parseFloat(ruleFormData.rc_freeAboveSubtotal);
+    }
+
+    // COD fee config (all non-free rate types may carry COD fee)
+    if (rt !== 'free') {
+      rateConfig.codFeeType  = ruleFormData.rc_codFeeType;
+      rateConfig.codFeeValue = parseFloat(ruleFormData.rc_codFeeValue) || 0;
+      rateConfig.codFeeMin   = parseFloat(ruleFormData.rc_codFeeMin) || 0;
+    }
+
+    // Build conditions from structured + raw JSON
     let parsedConditions = {};
     try {
       parsedConditions = JSON.parse(ruleFormData.conditions || '{}');
-    } catch (err) {
+    } catch {
       notify('Conditions must be valid JSON', 'error');
       return;
+    }
+    if (ruleFormData.cond_weightGte !== '') {
+      const weightGte = parseFloat(ruleFormData.cond_weightGte);
+      if (!isNaN(weightGte)) parsedConditions.weightGte = weightGte;
+    }
+    if (ruleFormData.cond_weightLte !== '') {
+      const weightLte = parseFloat(ruleFormData.cond_weightLte);
+      if (!isNaN(weightLte)) parsedConditions.weightLte = weightLte;
     }
 
     try {
       const payload = {
-        name: ruleFormData.name,
-        priority: priority,
-        zoneId: ruleFormData.zoneId || null,
+        name:       ruleFormData.name,
+        priority,
+        zoneId:     ruleFormData.zoneId     || null,
         providerId: ruleFormData.providerId || null,
-        rateType: ruleFormData.rateType,
-        rateConfig: { amount: rateAmount || 0 },
+        rateType:   ruleFormData.rateType,
+        rateConfig,
         codAllowed: ruleFormData.codAllowed,
-        enabled: ruleFormData.enabled,
-        conditions: parsedConditions
+        enabled:    ruleFormData.enabled,
+        conditions: parsedConditions,
       };
-      
       if (editingRule) {
         await updateShippingRule(editingRule.id, payload);
         notify('Rule updated successfully', 'success');
@@ -470,7 +537,14 @@ const ShippingPage = () => {
                         <TableCell>{zone ? zone.name : 'All Zones'}</TableCell>
                         <TableCell>{provider ? provider.name : 'Auto/Default'}</TableCell>
                         <TableCell>{r.rateType}</TableCell>
-                        <TableCell>{r.rateType === 'flat' ? `₹${r.rateConfig?.amount || 0}` : '-'}</TableCell>
+                        <TableCell>
+                          {r.rateType === 'free' && <Chip size="small" label="Free" color="success" />}
+                          {r.rateType === 'flat' && `₹${r.rateConfig?.amount ?? r.rateConfig?.baseCharge ?? 0}`}
+                          {r.rateType === 'free_above_threshold' && `Free ≥₹${r.rateConfig?.threshold ?? 0}`}
+                          {r.rateType === 'percent_of_order' && `${r.rateConfig?.percent ?? 0}%`}
+                          {(r.rateType === 'per_kg_slab' || r.rateType === 'volumetric') &&
+                            `₹${r.rateConfig?.baseCharge ?? 0} + ₹${r.rateConfig?.additionalSlabRate ?? 0}/500g`}
+                        </TableCell>
                         <TableCell>{r.codAllowed ? 'Yes' : 'No'}</TableCell>
                         <TableCell>
                           <Chip size="small" color={r.enabled ? "success" : "default"} label={r.enabled ? "Active" : "Disabled"} />
@@ -669,29 +743,164 @@ const ShippingPage = () => {
               </TextField>
             </Box>
 
-            <Box sx={{ display: 'flex', gap: 2 }}>
-              <TextField 
+            <Box>
+              <TextField
                 select
-                label="Rate Type" 
-                fullWidth 
-                size="small" 
-                value={ruleFormData.rateType} 
-                onChange={(e) => setRuleFormData({...ruleFormData, rateType: e.target.value})} 
+                label="Rate Type"
+                fullWidth
+                size="small"
+                value={ruleFormData.rateType}
+                onChange={(e) => setRuleFormData({...ruleFormData, rateType: e.target.value})}
               >
                 <MenuItem value="flat">Flat Rate</MenuItem>
                 <MenuItem value="free">Free Shipping</MenuItem>
+                <MenuItem value="free_above_threshold">Free Above ₹X</MenuItem>
+                <MenuItem value="per_kg_slab">Per-kg Slab</MenuItem>
+                <MenuItem value="volumetric">Volumetric (Per-kg Slab)</MenuItem>
+                <MenuItem value="percent_of_order">% of Order Value</MenuItem>
               </TextField>
+            </Box>
 
-              {ruleFormData.rateType === 'flat' && (
-                <TextField 
-                  label="Shipping Cost Amount" 
-                  type="number"
-                  fullWidth 
-                  size="small" 
-                  value={ruleFormData.rateConfigAmount} 
-                  onChange={(e) => setRuleFormData({...ruleFormData, rateConfigAmount: e.target.value})} 
-                />
-              )}
+            {/* FLAT RATE fields */}
+            {ruleFormData.rateType === 'flat' && (
+              <TextField label="Shipping Charge (₹)" type="number" fullWidth size="small"
+                value={ruleFormData.rc_baseCharge}
+                onChange={(e) => setRuleFormData({...ruleFormData, rc_baseCharge: e.target.value})} />
+            )}
+
+            {/* FREE ABOVE THRESHOLD fields */}
+            {ruleFormData.rateType === 'free_above_threshold' && (
+              <Grid container spacing={2}>
+                <Grid item xs={6}>
+                  <TextField label="Free When Cart ≥ (₹)" type="number" fullWidth size="small"
+                    value={ruleFormData.rc_threshold}
+                    onChange={(e) => setRuleFormData({...ruleFormData, rc_threshold: e.target.value})} />
+                </Grid>
+                <Grid item xs={6}>
+                  <TextField label="Charge Below Threshold (₹)" type="number" fullWidth size="small"
+                    value={ruleFormData.rc_baseCharge}
+                    onChange={(e) => setRuleFormData({...ruleFormData, rc_baseCharge: e.target.value})} />
+                </Grid>
+              </Grid>
+            )}
+
+            {/* PERCENT OF ORDER fields */}
+            {ruleFormData.rateType === 'percent_of_order' && (
+              <TextField label="Percent of Cart Value (%)" type="number" fullWidth size="small"
+                inputProps={{ step: 0.5 }}
+                value={ruleFormData.rc_percent}
+                onChange={(e) => setRuleFormData({...ruleFormData, rc_percent: e.target.value})} />
+            )}
+
+            {/* PER-KG SLAB / VOLUMETRIC fields */}
+            {(ruleFormData.rateType === 'per_kg_slab' || ruleFormData.rateType === 'volumetric') && (
+              <Box sx={{ border: '1px solid', borderColor: 'divider', borderRadius: 1, p: 2 }}>
+                <Typography variant="subtitle2" fontWeight={600} mb={2}>Slab Pricing</Typography>
+                <Grid container spacing={2}>
+                  <Grid item xs={6} sm={3}>
+                    <TextField label="Base Charge (₹)" type="number" fullWidth size="small"
+                      value={ruleFormData.rc_baseCharge}
+                      onChange={(e) => setRuleFormData({...ruleFormData, rc_baseCharge: e.target.value})}
+                      helperText="For first slab" />
+                  </Grid>
+                  <Grid item xs={6} sm={3}>
+                    <TextField label="First Slab (g)" type="number" fullWidth size="small"
+                      value={ruleFormData.rc_firstSlabGrams}
+                      onChange={(e) => setRuleFormData({...ruleFormData, rc_firstSlabGrams: e.target.value})}
+                      helperText="Default 500g" />
+                  </Grid>
+                  <Grid item xs={6} sm={3}>
+                    <TextField label="Extra Slab Size (g)" type="number" fullWidth size="small"
+                      value={ruleFormData.rc_additionalSlabGrams}
+                      onChange={(e) => setRuleFormData({...ruleFormData, rc_additionalSlabGrams: e.target.value})}
+                      helperText="Default 500g" />
+                  </Grid>
+                  <Grid item xs={6} sm={3}>
+                    <TextField label="Per Slab Rate (₹)" type="number" fullWidth size="small"
+                      value={ruleFormData.rc_additionalSlabRate}
+                      onChange={(e) => setRuleFormData({...ruleFormData, rc_additionalSlabRate: e.target.value})}
+                      helperText="Per extra slab" />
+                  </Grid>
+                  <Grid item xs={6} sm={3}>
+                    <TextField label="Min Charge (₹)" type="number" fullWidth size="small"
+                      value={ruleFormData.rc_minCharge}
+                      onChange={(e) => setRuleFormData({...ruleFormData, rc_minCharge: e.target.value})} />
+                  </Grid>
+                  <Grid item xs={6} sm={3}>
+                    <TextField label="Fuel Surcharge (%)" type="number" fullWidth size="small"
+                      inputProps={{ step: 0.5 }}
+                      value={ruleFormData.rc_fuelSurchargePercent}
+                      onChange={(e) => setRuleFormData({...ruleFormData, rc_fuelSurchargePercent: e.target.value})} />
+                  </Grid>
+                  <Grid item xs={6} sm={3}>
+                    <TextField label="Free Above Subtotal (₹)" type="number" fullWidth size="small"
+                      value={ruleFormData.rc_freeAboveSubtotal}
+                      placeholder="Leave blank to disable"
+                      onChange={(e) => setRuleFormData({...ruleFormData, rc_freeAboveSubtotal: e.target.value})} />
+                  </Grid>
+                </Grid>
+
+                <Typography variant="subtitle2" fontWeight={600} mt={2} mb={1}>Zone Multipliers</Typography>
+                <Grid container spacing={2}>
+                  {[['same_city','Same City','rc_zone_same_city'],['same_state','Same State','rc_zone_same_state'],['national','National','rc_zone_national'],['remote','Remote (NE/J&K)','rc_zone_remote']].map(([,label,field]) => (
+                    <Grid item xs={6} sm={3} key={field}>
+                      <TextField label={label} type="number" fullWidth size="small"
+                        inputProps={{ step: 0.1 }}
+                        value={ruleFormData[field]}
+                        onChange={(e) => setRuleFormData({...ruleFormData, [field]: e.target.value})} />
+                    </Grid>
+                  ))}
+                </Grid>
+              </Box>
+            )}
+
+            {/* COD FEE — shown for all non-free rate types */}
+            {ruleFormData.rateType !== 'free' && (
+              <Box sx={{ border: '1px solid', borderColor: 'divider', borderRadius: 1, p: 2 }}>
+                <Typography variant="subtitle2" fontWeight={600} mb={2}>COD Fee</Typography>
+                <Grid container spacing={2}>
+                  <Grid item xs={12} sm={4}>
+                    <TextField select label="Fee Type" fullWidth size="small"
+                      value={ruleFormData.rc_codFeeType}
+                      onChange={(e) => setRuleFormData({...ruleFormData, rc_codFeeType: e.target.value})}>
+                      <MenuItem value="flat">Flat (₹)</MenuItem>
+                      <MenuItem value="percent">% of Order</MenuItem>
+                    </TextField>
+                  </Grid>
+                  <Grid item xs={6} sm={4}>
+                    <TextField label={ruleFormData.rc_codFeeType === 'percent' ? 'Percent (%)' : 'Amount (₹)'}
+                      type="number" fullWidth size="small"
+                      value={ruleFormData.rc_codFeeValue}
+                      onChange={(e) => setRuleFormData({...ruleFormData, rc_codFeeValue: e.target.value})} />
+                  </Grid>
+                  {ruleFormData.rc_codFeeType === 'percent' && (
+                    <Grid item xs={6} sm={4}>
+                      <TextField label="Min COD Fee (₹)" type="number" fullWidth size="small"
+                        value={ruleFormData.rc_codFeeMin}
+                        onChange={(e) => setRuleFormData({...ruleFormData, rc_codFeeMin: e.target.value})} />
+                    </Grid>
+                  )}
+                </Grid>
+              </Box>
+            )}
+
+            {/* WEIGHT CONDITIONS */}
+            <Box sx={{ border: '1px solid', borderColor: 'divider', borderRadius: 1, p: 2 }}>
+              <Typography variant="subtitle2" fontWeight={600} mb={2}>Weight Conditions (optional)</Typography>
+              <Grid container spacing={2}>
+                <Grid item xs={6}>
+                  <TextField label="Chargeable Weight ≥ (g)" type="number" fullWidth size="small"
+                    placeholder="Leave blank for no lower bound"
+                    value={ruleFormData.cond_weightGte}
+                    onChange={(e) => setRuleFormData({...ruleFormData, cond_weightGte: e.target.value})} />
+                </Grid>
+                <Grid item xs={6}>
+                  <TextField label="Chargeable Weight ≤ (g)" type="number" fullWidth size="small"
+                    placeholder="Leave blank for no upper bound"
+                    value={ruleFormData.cond_weightLte}
+                    onChange={(e) => setRuleFormData({...ruleFormData, cond_weightLte: e.target.value})} />
+                </Grid>
+              </Grid>
             </Box>
 
             <TextField 

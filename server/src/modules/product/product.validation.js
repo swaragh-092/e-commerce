@@ -14,7 +14,12 @@ const createProductSchema = Joi.object({
   saleEndAt: Joi.date().iso().allow(null).greater(Joi.ref('saleStartAt')),
   saleLabel: Joi.string().max(100).allow('', null),
   quantity: Joi.number().integer().min(0),
-  weight: Joi.number().precision(2).min(0).allow(null),
+  weight: Joi.number().precision(2).min(0).allow(null), // legacy field
+  requiresShipping: Joi.boolean().default(true),
+  weightGrams: Joi.number().integer().min(0).allow(null),
+  lengthCm: Joi.number().min(0).allow(null),
+  breadthCm: Joi.number().min(0).allow(null),
+  heightCm: Joi.number().min(0).allow(null),
   taxConfig: Joi.object({
     isCustom: Joi.boolean().required(),
     inclusive: Joi.boolean(),

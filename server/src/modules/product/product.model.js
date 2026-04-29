@@ -56,6 +56,27 @@ module.exports = (sequelize, DataTypes) => {
         weight: {
             type: DataTypes.DECIMAL(8, 2),
         },
+        // Shipping dimensions — used for volumetric weight calculation
+        weightGrams: {
+            type: DataTypes.DECIMAL(10, 2),
+            allowNull: true,
+            defaultValue: 500,
+        },
+        lengthCm: {
+            type: DataTypes.DECIMAL(8, 2),
+            allowNull: true,
+            defaultValue: 10,
+        },
+        breadthCm: {
+            type: DataTypes.DECIMAL(8, 2),
+            allowNull: true,
+            defaultValue: 10,
+        },
+        heightCm: {
+            type: DataTypes.DECIMAL(8, 2),
+            allowNull: true,
+            defaultValue: 10,
+        },
         taxConfig: {
             type: DataTypes.JSONB,
             allowNull: true,

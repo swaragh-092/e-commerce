@@ -57,6 +57,97 @@ const normalizeList = (value) => {
 
 const lower = (value) => String(value || '').trim().toLowerCase();
 
+// ─── Volumetric weight helpers ────────────────────────────────────────────────
+
+/**
+ * Compute package dimensions using a vertical-stacking model:
+ *   - Box footprint = max(L) × max(B)   (items share the same tray)
+ *   - Box height    = sum(H × qty)      (items stacked on top of each other)
+ * This is more realistic than L*B*H*qty per item.
+ *
+ * FIX 1: replaced naïve sum(L*B*H*qty) with max/max/sum stacking.
+ */
+const computePackageDimensions = (checkoutItems) => {
+    let maxL = 0;
+    let maxB = 0;
+    let totalH = 0;
+    let totalWeightGrams = 0;
+
+    for (const item of checkoutItems) {
+        const p = item.product;
+        // Skip digital or non-shippable items
+        if (p.requiresShipping === false) continue;
+        
+        const qty = Number(item.quantity || 1);
+        maxL = Math.max(maxL, Number(p.lengthCm  || 10));
+        maxB = Math.max(maxB, Number(p.breadthCm || 10));
+        totalH += Number(p.heightCm   || 10) * qty;
+        totalWeightGrams += Number(p.weightGrams || 500) * qty;
+    }
+
+    return { maxL, maxB, totalH, totalWeightGrams, volumeCm3: maxL * maxB * totalH };
+};
+
+/**
+ * Compute chargeable weight.
+ *
+ * FIX 2: rounds UP to the next 500-gram carrier slab — never undercharge.
+ * FIX 4: divisor comes from rateConfig.volumetricDivisor, not a hardcoded 5000.
+ */
+const computeChargeableWeight = (dims, divisor = 5000) => {
+    const SLAB_GRAMS = 500;
+    const volumetricGrams = (dims.volumeCm3 / divisor) * 1000;
+    const raw = Math.max(dims.totalWeightGrams, volumetricGrams);
+    // Round up to next 500-g slab (carrier billing unit)
+    return Math.ceil(raw / SLAB_GRAMS) * SLAB_GRAMS;
+};
+
+/**
+ * Detect a shipping zone tier from pincode proximity.
+ *
+ * FIX 5: kept as prefix matching for MVP — accurate for most metro codes.
+ * Production upgrade: replace with India Post pincode ↔ state mapping table.
+ *
+ * @param {string} warehousePincode - configured in settings.warehousePincode
+ * @param {string} deliveryPincode
+ * @param {string[]} remotePrefixes - 2-char pin prefixes for remote zones (NE + J&K)
+ * @returns {'same_city'|'same_state'|'remote'|'national'}
+ */
+const detectDeliveryZone = (warehousePincode, deliveryPincode, remotePrefixes = []) => {
+    const w = String(warehousePincode || '').trim();
+    const d = String(deliveryPincode  || '').trim();
+    if (!w || !d) return 'national';
+
+    // Remote zones: NE India (78-79, 83) + J&K (19)
+    const defaultRemote = ['78', '79', '83', '19'];
+    const remoteSet = [...defaultRemote, ...remotePrefixes];
+    if (remoteSet.some((prefix) => d.startsWith(prefix))) return 'remote';
+
+    // Same city: first 4 digits match (sub-district level)
+    if (w.length >= 4 && d.length >= 4 && w.substring(0, 4) === d.substring(0, 4)) return 'same_city';
+    // Same state: first 2 digits match
+    if (w.length >= 2 && d.length >= 2 && w.substring(0, 2) === d.substring(0, 2)) return 'same_state';
+    return 'national';
+};
+
+/**
+ * Split a single heavy package into multiple carrier-sized packages.
+ *
+ * FIX 9: multi-package splitting stub.
+ * When a shipment exceeds maxWeightKg, it becomes multiple packages.
+ * Carriers bill per package, so we multiply the charge.
+ *
+ * @returns {{ packageCount: number, chargeableWeightPerPackage: number }}
+ */
+const splitIntoPackages = (totalWeightGrams, maxWeightGrams) => {
+    if (!maxWeightGrams || maxWeightGrams <= 0) {
+        return { packageCount: 1, chargeableWeightPerPackage: totalWeightGrams };
+    }
+    const packageCount = Math.ceil(totalWeightGrams / maxWeightGrams);
+    const chargeableWeightPerPackage = Math.ceil(totalWeightGrams / packageCount);
+    return { packageCount, chargeableWeightPerPackage };
+};
+
 const pincodeMatches = (patterns, pincode) => {
     const normalized = String(pincode || '').trim();
     const items = normalizeList(patterns);
@@ -194,6 +285,8 @@ const buildCheckoutContext = async (userId, payload) => {
     const cartSnapshot = buildCartSnapshot(items);
     const couponCodes = normalizeCouponCodes(payload);
 
+    // Compute package dimensions from products (FIX 1: stacking model)
+    const dims = computePackageDimensions(checkoutItems);
 
     return {
         items,
@@ -202,6 +295,8 @@ const buildCheckoutContext = async (userId, payload) => {
         addressSnapshot,
         cartSnapshot,
         couponCodes,
+        // Volumetric shipping context
+        packageDims: dims,
         cartHash: hashObject(cartSnapshot),
         addressHash: hashObject(addressSnapshot),
         couponHash: couponCodes.length ? hashObject(couponCodes) : EMPTY_HASH,
@@ -260,7 +355,7 @@ const zoneMatches = (zone, addressSnapshot) => {
     return pincodeMatches(zone.pincodes, pincode);
 };
 
-const conditionsMatch = (conditions = {}, { subtotal, addressSnapshot, paymentMethod }) => {
+const conditionsMatch = (conditions = {}, { subtotal, chargeableWeightGrams = 0, addressSnapshot, paymentMethod }) => {
     const pincode = String(addressSnapshot.postalCode || '').trim();
     if (conditions.country && lower(conditions.country) !== lower(addressSnapshot.country)) return false;
     if (conditions.state && lower(conditions.state) !== lower(addressSnapshot.state)) return false;
@@ -270,16 +365,93 @@ const conditionsMatch = (conditions = {}, { subtotal, addressSnapshot, paymentMe
     if (conditions.subtotalGte != null && subtotal < Number(conditions.subtotalGte)) return false;
     if (conditions.subtotalLte != null && subtotal > Number(conditions.subtotalLte)) return false;
     if (conditions.paymentMethods && !normalizeList(conditions.paymentMethods).includes(paymentMethod)) return false;
+    // Weight-based condition matching
+    if (conditions.weightGte != null && chargeableWeightGrams < Number(conditions.weightGte)) return false;
+    if (conditions.weightLte != null && chargeableWeightGrams > Number(conditions.weightLte)) return false;
     return true;
 };
 
-const calculateRuleRate = (rule, subtotal) => {
+/**
+ * Calculate the shipping rate from a matched rule.
+ *
+ * FIX 2: uses pre-rounded chargeableWeightGrams (caller handles rounding)
+ * FIX 3: COD fee from rateConfig (percent or flat), with configurable minimum
+ * FIX 4: volumetricDivisor from config
+ * FIX 6: fuel surcharge on freight only — NOT applied on COD fee
+ * FIX 7: minimum charge enforcement
+ *
+ * @returns {{ freight: number, codFee: number, total: number }}
+ */
+const calculateRuleRate = (rule, { subtotal, chargeableWeightGrams = 0, paymentMethod = 'razorpay', zone = 'national' }) => {
     const config = rule.rateConfig || {};
-    if (rule.rateType === 'free') return 0;
-    if (rule.rateType === 'free_above_threshold') {
-        return subtotal >= Number(config.threshold || 0) ? 0 : Number(config.amount || config.flatRate || 0);
+
+    // ── Free shortcuts ────────────────────────────────────────────────────
+    if (rule.rateType === 'free') return { freight: 0, codFee: 0, total: 0 };
+
+    if (config.freeAboveSubtotal != null && subtotal >= Number(config.freeAboveSubtotal)) {
+        return { freight: 0, codFee: 0, total: 0 };
     }
-    return Number(config.amount || config.flatRate || 0);
+
+    if (rule.rateType === 'free_above_threshold') {
+        const thresholdFree = subtotal >= Number(config.threshold || 0);
+        const freight = thresholdFree ? 0 : Number(config.amount || config.flatRate || 0);
+        return { freight, codFee: 0, total: freight };
+    }
+
+    // ── Percent of order ──────────────────────────────────────────────────
+    if (rule.rateType === 'percent_of_order') {
+        const freight = normalizeMoney(subtotal * (Number(config.percent || 0) / 100));
+        return { freight, codFee: 0, total: freight };
+    }
+
+    // ── Flat rate ─────────────────────────────────────────────────────────
+    let freight = Number(config.baseCharge || config.flatRate || config.amount || 0);
+
+    // ── Per-kg slab (most common for Indian carriers) ─────────────────────
+    if (rule.rateType === 'per_kg_slab' || rule.rateType === 'volumetric') {
+        const firstSlabGrams      = Number(config.firstSlabGrams      || 500);
+        const additionalSlabGrams = Number(config.additionalSlabGrams || 500);
+        const additionalSlabRate  = Number(config.additionalSlabRate  || 0);
+
+        if (chargeableWeightGrams > firstSlabGrams) {
+            const extraGrams = chargeableWeightGrams - firstSlabGrams;
+            const extraSlabs = Math.ceil(extraGrams / additionalSlabGrams);
+            freight += extraSlabs * additionalSlabRate;
+        }
+
+        // Zone multiplier on base freight
+        const multipliers = config.zoneMultipliers || {};
+        const multiplier = Number(multipliers[zone] || multipliers['national'] || 1);
+        freight = freight * multiplier;
+    }
+
+    // FIX 6: Fuel surcharge on FREIGHT only (not COD fee)
+    if (config.fuelSurchargePercent) {
+        freight = freight + (freight * Number(config.fuelSurchargePercent) / 100);
+    }
+
+    // FIX 7: Minimum charge enforcement
+    if (config.minCharge != null) {
+        freight = Math.max(freight, Number(config.minCharge));
+    }
+
+    freight = normalizeMoney(freight);
+
+    // FIX 3: COD fee from rateConfig (separate from freight)
+    let codFee = 0;
+    if (paymentMethod === 'cod') {
+        if (config.codFeeType === 'percent' && config.codFeeValue) {
+            const pctFee = subtotal * (Number(config.codFeeValue) / 100);
+            codFee = normalizeMoney(Math.max(Number(config.codFeeMin || 0), pctFee));
+        } else if (config.codFeeValue) {
+            codFee = normalizeMoney(Number(config.codFeeValue));
+        } else if (rule.codFee) {
+            // Fallback to rule-level flat codFee column
+            codFee = normalizeMoney(Number(rule.codFee));
+        }
+    }
+
+    return { freight, codFee, total: normalizeMoney(freight + codFee) };
 };
 
 const providerSupportsDecision = (provider, { paymentMethod }) => {
@@ -288,7 +460,7 @@ const providerSupportsDecision = (provider, { paymentMethod }) => {
     return true;
 };
 
-const calculateRuleDecision = async ({ subtotal, addressSnapshot, paymentMethod }) => {
+const calculateRuleDecision = async ({ subtotal, chargeableWeightGrams = 0, packageCount = 1, zone = 'national', addressSnapshot, paymentMethod }) => {
     const settings = await getSettingMap(['general']);
     const currency = String(settings['general.currency'] || 'INR').toUpperCase();
     const rules = await ShippingRule.findAll({
@@ -306,20 +478,37 @@ const calculateRuleDecision = async ({ subtotal, addressSnapshot, paymentMethod 
 
     const matchedRule = rules.find((rule) => (
         (!rule.zone || zoneMatches(rule.zone, addressSnapshot)) &&
-        conditionsMatch(rule.conditions || {}, { subtotal, addressSnapshot, paymentMethod }) &&
+        conditionsMatch(rule.conditions || {}, { subtotal, chargeableWeightGrams, addressSnapshot, paymentMethod }) &&
         providerSupportsDecision(rule.provider, { paymentMethod })
     ));
 
     if (!matchedRule) return null;
 
     const provider = matchedRule.provider || await getManualProvider();
-    const baseCost = calculateRuleRate(matchedRule, subtotal);
-    const codFee = paymentMethod === 'cod' ? Number(matchedRule.codFee || 0) : 0;
+
+    // FIX 8: Reject if total weight exceeds provider's max
+    if (provider.maxWeightKg) {
+        const maxWeightGrams = Number(provider.maxWeightKg) * 1000;
+        if (chargeableWeightGrams > maxWeightGrams * packageCount) {
+            return null; // provider cannot handle this weight — fall through to next rule/manual
+        }
+    }
+
+    const rateBreakdown = calculateRuleRate(matchedRule, {
+        subtotal,
+        chargeableWeightGrams,
+        paymentMethod,
+        zone,
+    });
+
     const codAvailable = matchedRule.codAllowed !== false && provider.supportsCod !== false;
+    // Per-package pricing: multiply freight by package count (FIX 9)
+    const totalFreight = normalizeMoney(rateBreakdown.freight * packageCount);
+    const shippingCost = normalizeMoney(totalFreight + rateBreakdown.codFee);
 
     return {
         serviceable: true,
-        shippingCost: normalizeMoney(baseCost + codFee),
+        shippingCost,
         currency,
         taxIncluded: false,
         taxAmount: 0,
@@ -333,6 +522,8 @@ const calculateRuleDecision = async ({ subtotal, addressSnapshot, paymentMethod 
         providerId: provider.id,
         ruleId: matchedRule.id,
         ruleName: matchedRule.name,
+        // Expose breakdown for quote snapshot
+        rateBreakdown: { ...rateBreakdown, packageCount, chargeableWeightGrams, zone },
         paymentMethod,
     };
 };
@@ -365,6 +556,24 @@ const createQuote = async (userId, payload) => {
     const checkoutSessionId = payload.checkoutSessionId || uuidv4();
     const paymentMethod = payload.paymentMethod || 'razorpay';
     const context = await buildCheckoutContext(userId, payload);
+
+    // ── Compute volumetric + multi-package context ────────────────────────
+    const settings = await getSettingMap(['shipping']);
+    const warehousePincode = String(settings['shipping.warehousePincode'] || '').trim();
+    const deliveryPincode  = String(context.addressSnapshot.postalCode || '').trim();
+
+    // FIX 4: volumetric divisor comes from settings (per-provider override possible)
+    const volumetricDivisor = Number(settings['shipping.volumetricDivisor'] || 5000);
+    const chargeableWeightGrams = computeChargeableWeight(context.packageDims, volumetricDivisor);
+    const zone = detectDeliveryZone(warehousePincode, deliveryPincode);
+
+    // FIX 8+9: detect how many packages needed based on provider max weight
+    // We use 20 kg as a safe default when no provider max is configured
+    const DEFAULT_MAX_PACKAGE_WEIGHT_GRAMS = 20000;
+    const { packageCount, chargeableWeightPerPackage } = splitIntoPackages(
+        chargeableWeightGrams, DEFAULT_MAX_PACKAGE_WEIGHT_GRAMS
+    );
+
     const idempotencyKey = hashObject({
         checkoutSessionId,
         cartHash: context.cartHash,
@@ -385,11 +594,14 @@ const createQuote = async (userId, payload) => {
 
     const fallbackProvider = await getManualProvider();
     const decision = await calculateRuleDecision({
-        subtotal: context.subtotal,
-        addressSnapshot: context.addressSnapshot,
+        subtotal:             context.subtotal,
+        chargeableWeightGrams,            // FIX: volumetric-adjusted, slab-rounded
+        packageCount,                     // FIX: multi-package split count
+        zone,                             // FIX: same_city | same_state | national | remote
+        addressSnapshot:      context.addressSnapshot,
         paymentMethod,
     }) || await calculateManualDecision({
-        subtotal: context.subtotal,
+        subtotal:        context.subtotal,
         addressSnapshot: context.addressSnapshot,
         paymentMethod,
     });
