@@ -25,6 +25,8 @@ import {
 import DeleteOutlineIcon from '@mui/icons-material/DeleteOutline';
 import AddIcon from '@mui/icons-material/Add';
 import DragIndicatorIcon from '@mui/icons-material/DragIndicator';
+import PublicIcon from '@mui/icons-material/Public';
+import { Link } from 'react-router-dom';
 import { updateSettings, getEmailTemplates, updateEmailTemplate, sendTestEmail as sendTestEmailApi } from '../../services/adminService';
 import api from '../../services/api';
 import { useNotification } from '../../context/NotificationContext';
@@ -240,7 +242,7 @@ const SettingsPage = () => {
     }
   };
 
-  const tabs = ['Store', 'Branding', 'Layout', 'Homepage', 'Catalog', 'Checkout', 'Promotions', 'Invoice', 'Advanced', 'Notifications'];
+  const tabs = ['Store', 'SEO', 'Branding', 'Layout', 'Homepage', 'Catalog', 'Checkout', 'Promotions', 'Invoice', 'Advanced', 'Notifications'];
   const currentTab = tabs[tab];
   const isMessagingTab = currentTab === 'Notifications';
 
@@ -700,6 +702,57 @@ const SettingsPage = () => {
           )}
         </>,
         ['logo', 'favicon', 'brand assets']
+      ),
+    ],
+    [
+      section(
+        'SEO & Search Engine Control',
+        'Configure how your store appears in search results and social media shares globally.',
+        <>
+          {toggle('features.seo', 'Enable Storefront SEO Features')}
+          <Divider sx={{ my: 2 }} />
+          
+          <Box sx={{ opacity: bool(form['features.seo']) ? 1 : 0.5, pointerEvents: bool(form['features.seo']) ? 'auto' : 'none' }}>
+            <Alert severity="info" sx={{ mb: 2.5 }}>
+              These settings act as the global fallback. Individual products and categories can have their own SEO overrides.
+            </Alert>
+            {field('seo.titleSuffix', 'Title Suffix (e.g. | My Store Name)', 'text', { helperText: 'Appears after the page name in browser tabs.' })}
+            {field('seo.defaultTitle', 'Default Home Title', 'text', { helperText: 'Title for the homepage if no override exists.' })}
+            {field('seo.defaultDescription', 'Default Meta Description', 'text', { multiline: true, rows: 3 })}
+            {field('seo.defaultKeywords', 'Default Keywords (Internal)', 'text', { helperText: 'Separated by commas. Used for internal search fallback.' })}
+            {field('seo.canonicalBaseUrl', 'Canonical Base URL', 'text', { placeholder: 'https://mystore.com', helperText: 'Crucial for automatic canonical URL generation. Include https://' })}
+            {field('seo.ogImage', 'Default Social Share Image (URL)')}
+            {form['seo.ogImage'] && (
+              <Box sx={{ mb: 2 }}>
+                <img src={form['seo.ogImage']} alt="OG Preview" style={{ maxHeight: 100, borderRadius: 8, border: '1px solid #ddd' }} />
+              </Box>
+            )}
+            <Divider sx={{ my: 2 }} />
+            <Typography variant="subtitle2" sx={{ mb: 1 }}>Analytics & Tracking</Typography>
+            {field('seo.googleAnalyticsId', 'Google Analytics G-ID')}
+            {field('seo.facebookPixelId', 'Facebook Pixel ID')}
+            
+            <Divider sx={{ my: 3 }} />
+            <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+              <Box>
+                <Typography variant="subtitle2">URL-Specific Overrides</Typography>
+                <Typography variant="caption" color="text.secondary">
+                  Manage custom SEO for static paths like /, /about, or /contact.
+                </Typography>
+              </Box>
+              <Button 
+                variant="outlined" 
+                size="small" 
+                component={Link} 
+                to="/admin/seo-overrides"
+                startIcon={<PublicIcon fontSize="small" />}
+              >
+                Manage Overrides
+              </Button>
+            </Box>
+          </Box>
+        </>,
+        ['seo', 'search', 'google', 'analytics', 'meta', 'canonical', 'toggle']
       ),
     ],
     [
@@ -1391,17 +1444,6 @@ const SettingsPage = () => {
       ),
     ],
     [
-      section(
-        'SEO & Discovery',
-        'Set defaults for search engines, social sharing, and analytics snippets.',
-        <>
-          {field('seo.titleTemplate', 'Page Title Template (use %s for page name, e.g. %s | My Store)')}
-          {field('seo.defaultDescription', 'Default Meta Description')}
-          {field('seo.ogImage', 'Default OG / Social Share Image URL')}
-          {field('seo.googleAnalyticsId', 'Google Analytics ID (e.g. G-XXXXXXXX)')}
-        </>,
-        ['seo', 'analytics', 'meta description', 'og image']
-      ),
       section(
         'Accounts & Authentication',
         'Tighten customer account rules and decide which login experiences are enabled.',

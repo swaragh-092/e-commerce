@@ -197,6 +197,11 @@ const ProductEditPage = () => {
     lengthCm: '',
     breadthCm: '',
     heightCm: '',
+    // SEO Fields
+    metaTitle: '',
+    metaDescription: '',
+    metaKeywords: '',
+    ogImage: '',
   });
   const [errors, setErrors] = useState({});
   const [categories, setCategories] = useState([]);
@@ -255,6 +260,11 @@ const ProductEditPage = () => {
               lengthCm:    p.lengthCm    ?? '',
               breadthCm:   p.breadthCm   ?? '',
               heightCm:    p.heightCm    ?? '',
+              // SEO Fields
+              metaTitle: p.metaTitle || '',
+              metaDescription: p.metaDescription || '',
+              metaKeywords: p.metaKeywords || '',
+              ogImage: p.ogImage || '',
             });
           }
         }
@@ -304,6 +314,11 @@ const ProductEditPage = () => {
         lengthCm:    formData.lengthCm    !== '' ? parseInt(formData.lengthCm, 10)    : null,
         breadthCm:   formData.breadthCm   !== '' ? parseInt(formData.breadthCm, 10)   : null,
         heightCm:    formData.heightCm    !== '' ? parseInt(formData.heightCm, 10)    : null,
+        // SEO Fields
+        metaTitle: formData.metaTitle || null,
+        metaDescription: formData.metaDescription || null,
+        metaKeywords: formData.metaKeywords || null,
+        ogImage: formData.ogImage || null,
       };
       if (isNew) {
         const res = await createProduct(payload);
@@ -951,6 +966,103 @@ const ProductEditPage = () => {
                 </>
               )}
             </Paper>
+
+            {settings?.features?.seo !== false && (
+              <Paper sx={{ p: 3, mb: 3 }}>
+                <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 2 }}>
+                  <Typography variant="h6">
+                    SEO Configuration
+                  </Typography>
+                  <Chip label="SEO v2" size="small" color="primary" variant="outlined" />
+                </Box>
+                <Alert severity="info" sx={{ mb: 3 }}>
+                  Fine-tune how this product appears in search engines and social media. 
+                  If left blank, the system will auto-generate metadata.
+                </Alert>
+                
+                <TextField
+                  fullWidth
+                  label="Meta Title"
+                  margin="normal"
+                  size="small"
+                  value={formData.metaTitle}
+                  onChange={(e) => setField('metaTitle', e.target.value)}
+                  placeholder={formData.name}
+                  helperText="Appears as the clickable headline in search results."
+                />
+                <TextField
+                  fullWidth
+                  label="Meta Description"
+                  margin="normal"
+                  size="small"
+                  multiline
+                  rows={3}
+                  value={formData.metaDescription}
+                  onChange={(e) => setField('metaDescription', e.target.value)}
+                  placeholder={formData.shortDescription}
+                  helperText="A brief summary (150-160 chars) to entice clicks."
+                />
+                <TextField
+                  fullWidth
+                  label="Internal Keywords"
+                  margin="normal"
+                  size="small"
+                  value={formData.metaKeywords}
+                  onChange={(e) => setField('metaKeywords', e.target.value)}
+                  helperText="Used for internal search optimization. Separate with commas."
+                />
+                
+                <Box sx={{ mt: 2 }}>
+                  <Typography variant="subtitle2" gutterBottom>Social Sharing Image (OG Image)</Typography>
+                  {canUploadMedia && (
+                    <MediaUploader 
+                      onUploadSuccess={(media) => setField('ogImage', media.url)} 
+                      multiple={false}
+                    />
+                  )}
+                  {formData.ogImage && (
+                    <Box sx={{ mt: 2, position: 'relative', width: 'fit-content' }}>
+                      <img 
+                        src={getMediaUrl(formData.ogImage)} 
+                        alt="SEO Preview" 
+                        style={{ maxWidth: '100%', maxHeight: 200, borderRadius: 8, border: '1px solid #ddd' }} 
+                      />
+                      {canSaveProduct && (
+                        <IconButton 
+                          size="small" 
+                          color="error" 
+                          sx={{ position: 'absolute', top: -10, right: -10, bgcolor: 'background.paper', boxShadow: 1 }}
+                          onClick={() => setField('ogImage', '')}
+                        >
+                          <DeleteIcon fontSize="small" />
+                        </IconButton>
+                      )}
+                    </Box>
+                  )}
+                  {!canUploadMedia && !formData.ogImage && (
+                    <Typography variant="caption" color="text.secondary">
+                      You do not have permission to upload media.
+                    </Typography>
+                  )}
+                  <FormHelperText>Recommended size: 1200x630px</FormHelperText>
+                </Box>
+
+                <Box sx={{ mt: 3, p: 2, bgcolor: '#f8f9fa', borderRadius: 2, border: '1px solid #e0e0e0' }}>
+                  <Typography variant="caption" color="text.secondary" sx={{ fontWeight: 700, mb: 1, display: 'block' }}>
+                    GOOGLE SEARCH PREVIEW
+                  </Typography>
+                  <Typography variant="body1" sx={{ color: '#1a0dab', fontSize: '18px', '&:hover': { textDecoration: 'underline' }, cursor: 'pointer', mb: 0.5 }}>
+                    {formData.metaTitle || formData.name || 'Product Name'} {settings?.seo?.titleSuffix || ' | My Store'}
+                  </Typography>
+                  <Typography variant="body2" sx={{ color: '#006621', fontSize: '14px', mb: 0.5 }}>
+                    {window.location.origin}/product/{formData.slug || 'slug'}
+                  </Typography>
+                  <Typography variant="body2" sx={{ color: '#545454', fontSize: '13px', lineHeight: 1.4 }}>
+                    {formData.metaDescription || formData.shortDescription || 'Your product description will appear here...'}
+                  </Typography>
+                </Box>
+              </Paper>
+            )}
           </Grid>
         </Grid>
 

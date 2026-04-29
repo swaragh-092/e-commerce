@@ -25,6 +25,7 @@ import { PERMISSIONS } from '../../utils/permissions';
 import { getApiErrorMessage } from '../../utils/apiErrors';
 import MediaUploader from '../../components/common/MediaUploader';
 import { getMediaUrl } from '../../utils/media';
+import { useSettings } from '../../hooks/useSettings';
 
 // --- Helpers ---
 const flattenTree = (nodes, result = [], level = 0, path = []) => {
@@ -353,11 +354,21 @@ const CategoriesPage = () => {
     const [openDialog, setOpenDialog] = useState(false);
     const [saving, setSaving] = useState(false);
     const [editingCat, setEditingCat] = useState(null);
-    const [formData, setFormData] = useState({ name: '', description: '', parentId: '', image: '' });
+    const [formData, setFormData] = useState({ 
+        name: '', 
+        description: '', 
+        parentId: '', 
+        image: '',
+        metaTitle: '',
+        metaDescription: '',
+        metaKeywords: '',
+        ogImage: ''
+    });
     const [formErrors, setFormErrors] = useState({});
 
     const { notify, confirm } = useNotification();
     const { hasPermission } = useAuth();
+    const { settings } = useSettings();
     const canManageCategories = hasPermission(PERMISSIONS.CATEGORIES_MANAGE);
 
     const fetchCategories = async () => {
@@ -408,7 +419,16 @@ const CategoriesPage = () => {
             return;
         }
         setEditingCat(null);
-        setFormData({ name: '', description: '', parentId: parent?.id || '', image: '' });
+        setFormData({ 
+            name: '', 
+            description: '', 
+            parentId: parent?.id || '', 
+            image: '',
+            metaTitle: '',
+            metaDescription: '',
+            metaKeywords: '',
+            ogImage: ''
+        });
         setFormErrors({});
         setOpenDialog(true);
     };
@@ -424,6 +444,10 @@ const CategoriesPage = () => {
             description: cat.description || '',
             parentId: cat.parentId || '',
             image: cat.image || '',
+            metaTitle: cat.metaTitle || '',
+            metaDescription: cat.metaDescription || '',
+            metaKeywords: cat.metaKeywords || '',
+            ogImage: cat.ogImage || '',
         });
         setFormErrors({});
         setOpenDialog(true);
@@ -451,6 +475,10 @@ const CategoriesPage = () => {
         try {
             const data = { ...formData, parentId: formData.parentId || null };
             if (!data.image) data.image = null;
+            if (!data.ogImage) data.ogImage = null;
+            if (!data.metaTitle) data.metaTitle = null;
+            if (!data.metaDescription) data.metaDescription = null;
+            if (!data.metaKeywords) data.metaKeywords = null;
 
             if (editingCat) {
                 await updateCategory(editingCat.id, data);
@@ -665,6 +693,78 @@ const CategoriesPage = () => {
                                 </MenuItem>
                             ))}
                     </TextField>
+
+                    {settings?.features?.seo !== false && (
+                        <>
+                            <Divider sx={{ my: 1 }} />
+                            <Box>
+                                <Box sx={{ display: 'flex', alignItems: 'center', mb: 2 }}>
+                                    <Typography variant="subtitle2" sx={{ fontWeight: 600 }}>SEO Settings</Typography>
+                                    <Chip label="Optional" size="small" variant="outlined" sx={{ ml: 1, height: 20, fontSize: '0.65rem' }} />
+                                </Box>
+                                
+                                <Stack spacing={2}>
+                                    <TextField
+                                        label="Meta Title"
+                                        fullWidth
+                                        size="small"
+                                        value={formData.metaTitle}
+                                        onChange={(e) => setFormData(f => ({ ...f, metaTitle: e.target.value }))}
+                                        placeholder={formData.name}
+                                        helperText="Clickable title in search results"
+                                    />
+                                    <TextField
+                                        label="Meta Description"
+                                        fullWidth
+                                        size="small"
+                                        multiline
+                                        rows={2}
+                                        value={formData.metaDescription}
+                                        onChange={(e) => setFormData(f => ({ ...f, metaDescription: e.target.value }))}
+                                        placeholder={formData.description}
+                                        helperText="Brief summary for search engines"
+                                    />
+                                    <TextField
+                                        label="Keywords"
+                                        fullWidth
+                                        size="small"
+                                        value={formData.metaKeywords}
+                                        onChange={(e) => setFormData(f => ({ ...f, metaKeywords: e.target.value }))}
+                                        helperText="Internal search tags (comma separated)"
+                                    />
+                                    
+                                    <Box>
+                                        <Typography variant="caption" color="text.secondary" sx={{ fontWeight: 600, display: 'block', mb: 1 }}>
+                                            Social Share Image (OG Image)
+                                        </Typography>
+                                        {formData.ogImage ? (
+                                            <Box sx={{ position: 'relative', width: '100%', height: 120, borderRadius: 1.5, overflow: 'hidden', border: '1px solid', borderColor: 'divider' }}>
+                                                <CardMedia
+                                                    component="img"
+                                                    image={getMediaUrl(formData.ogImage)}
+                                                    sx={{ width: '100%', height: '100%', objectFit: 'cover' }}
+                                                />
+                                                <IconButton 
+                                                    size="small" 
+                                                    onClick={() => setFormData(f => ({ ...f, ogImage: '' }))}
+                                                    sx={{ position: 'absolute', top: 4, right: 4, bgcolor: 'background.paper', p: 0.5 }}
+                                                >
+                                                    <CloseIcon fontSize="inherit" />
+                                                </IconButton>
+                                            </Box>
+                                        ) : (
+                                            <MediaUploader 
+                                                multiple={false} 
+                                                onUploadSuccess={(media) => {
+                                                    setFormData(f => ({ ...f, ogImage: media.url }));
+                                                }} 
+                                            />
+                                        )}
+                                    </Box>
+                                </Stack>
+                            </Box>
+                        </>
+                    )}
                 </DialogContent>
                 <Divider />
                 <DialogActions sx={{ px: 3, py: 2 }}>

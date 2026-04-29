@@ -16,6 +16,7 @@ import StorefrontFooter from '../components/layout/StorefrontFooter';
 import { useWishlist } from '../context/WishlistContext';
 import PageService from '../services/pageService';
 import { ADMIN_ACCESS_PERMISSIONS, getFirstAccessibleAdminPath } from '../utils/permissions';
+import SEO from '../components/common/SEO';
 
 const StoreLayout = () => {
   const { isAuthenticated, logout, hasAnyPermission, user } = useAuth();
@@ -62,6 +63,7 @@ const StoreLayout = () => {
 
   return (
     <Box sx={{ display: 'flex', flexDirection: 'column', minHeight: '100vh' }}>
+      <SEO />
       {/* Announcement Bar */}
       {showAnnouncement && (
         <Box sx={{

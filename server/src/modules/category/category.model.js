@@ -29,6 +29,22 @@ module.exports = (sequelize, DataTypes) => {
             type: DataTypes.INTEGER,
             defaultValue: 0,
         },
+        metaTitle: {
+            type: DataTypes.STRING(255),
+            field: 'meta_title'
+        },
+        metaDescription: {
+            type: DataTypes.TEXT,
+            field: 'meta_description'
+        },
+        metaKeywords: {
+            type: DataTypes.STRING(500),
+            field: 'meta_keywords'
+        },
+        ogImage: {
+            type: DataTypes.STRING(500),
+            field: 'og_image'
+        },
     }, {
         tableName: 'categories',
         timestamps: true,

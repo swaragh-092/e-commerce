@@ -16,7 +16,8 @@ const auditLog = (entity) => (req, res, next) => {
 
   res.json = (data) => {
     // Only log on successful Admin mutations (2xx)
-    if (res.statusCode < 400 && req.user) {
+    // AND only if we haven't already logged for this request (prevents double logging with service-level calls)
+    if (res.statusCode < 400 && req.user && !req._auditLogged) {
       const method = req.method.toUpperCase();
       let action;
       if (method === 'POST') action = 'CREATE';
@@ -38,6 +39,8 @@ const auditLog = (entity) => (req, res, next) => {
         ipAddress: req.ip,
         userAgent: req.get('user-agent') || null,
       });
+
+      req._auditLogged = true;
     }
 
     return originalJson(data);

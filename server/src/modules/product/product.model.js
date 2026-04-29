@@ -112,6 +112,22 @@ module.exports = (sequelize, DataTypes) => {
             allowNull: true,
             field: 'brand_id'
         },
+        metaTitle: {
+            type: DataTypes.STRING(255),
+            field: 'meta_title'
+        },
+        metaDescription: {
+            type: DataTypes.TEXT,
+            field: 'meta_description'
+        },
+        metaKeywords: {
+            type: DataTypes.STRING(500),
+            field: 'meta_keywords'
+        },
+        ogImage: {
+            type: DataTypes.STRING(500),
+            field: 'og_image'
+        },
     }, {
         tableName: 'products',
         timestamps: true,

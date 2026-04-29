@@ -1,6 +1,6 @@
 'use strict';
 
-const { Product, Category } = require('../index');
+const { Product, Category, SeoOverride, Setting } = require('../index');
 
 class SeoService {
   async generateSitemap() {
@@ -46,9 +46,93 @@ class SeoService {
     return xml;
   }
 
-  async generateRobots() {
-    const clientUrl = process.env.CLIENT_URL || 'http://localhost:5173';
-    return `User-agent: *\nAllow: /\nDisallow: /admin/\nDisallow: /auth/\n\nSitemap: ${clientUrl}/api/seo/sitemap.xml`;
+  async getMetadataByPath(urlPath) {
+    // 1. Check for explicit overrides
+    const override = await SeoOverride.findOne({ where: { path: urlPath } });
+    if (override) {
+      return this._formatMetadata(override, 'general', urlPath);
+    }
+
+    // 2. Check for Entity Specific SEO (Products/Categories)
+    // Extract slug from common patterns: /product/slug or /category/slug
+    const productMatch = urlPath.match(/^\/product\/([^\/]+)/);
+    const categoryMatch = urlPath.match(/^\/category\/([^\/]+)/);
+
+    if (productMatch) {
+      let slug = productMatch[1];
+      try {
+        slug = decodeURIComponent(slug);
+      } catch (e) {
+        // Fallback to raw slug if decoding fails
+      }
+      const product = await Product.findOne({ where: { slug } });
+      if (product) {
+        return this._formatMetadata(product, 'product', urlPath);
+      }
+    }
+
+    if (categoryMatch) {
+      let slug = categoryMatch[1];
+      try {
+        slug = decodeURIComponent(slug);
+      } catch (e) {
+        // Fallback to raw slug if decoding fails
+      }
+      const category = await Category.findOne({ where: { slug } });
+      if (category) {
+        return this._formatMetadata(category, 'category', urlPath);
+      }
+    }
+
+    // 3. Fallback to Global Defaults
+    return this._getGlobalDefaults();
+  }
+
+  async _formatMetadata(entity, type = 'general', urlPath = '') {
+    const defaults = await this._getGlobalDefaults();
+    const baseUrl = process.env.CLIENT_URL || 'http://localhost:5173';
+    
+    const metadata = {
+      title: entity.metaTitle || (type === 'product' || type === 'category' ? entity.name : defaults.title),
+      description: entity.metaDescription || defaults.description,
+      keywords: entity.metaKeywords || defaults.keywords,
+      ogImage: entity.ogImage || defaults.ogImage,
+      canonicalUrl: entity.canonicalUrl || (urlPath ? `${baseUrl}${urlPath}` : null),
+      noIndex: entity.noIndex || false,
+      siteName: defaults.siteName,
+      titleSuffix: defaults.titleSuffix,
+      type: type === 'product' ? 'product' : 'website'
+    };
+
+    if (type === 'product') {
+      metadata.productData = {
+        price: entity.price,
+        availability: entity.quantity > 0 ? 'in stock' : 'out of stock',
+        currency: defaults.currency || 'USD'
+      };
+    }
+
+    return metadata;
+  }
+
+  async _getGlobalDefaults() {
+    const seoSettings = await Setting.findAll({ where: { group: 'seo' } });
+    const generalSettings = await Setting.findAll({ where: { group: 'general' } });
+    
+    const settingsMap = {};
+    seoSettings.forEach(s => settingsMap[s.key] = s.value);
+    generalSettings.forEach(s => settingsMap[s.key] = s.value);
+
+    return {
+      siteName: settingsMap['seo.siteName'] || settingsMap['general.siteName'] || 'E-Commerce Store',
+      title: settingsMap['seo.defaultTitle'] || 'Best Products Online',
+      titleSuffix: settingsMap['seo.titleSuffix'] || ' | My Store',
+      description: settingsMap['seo.defaultDescription'] || 'Shop the best products online at our store.',
+      keywords: settingsMap['seo.defaultKeywords'] || 'ecommerce, shop, online',
+      ogImage: settingsMap['seo.defaultOgImage'] || '',
+      twitterHandle: settingsMap['seo.twitterHandle'] || '',
+      currency: settingsMap['general.currency'] || 'USD'
+    };
   }
 }
 

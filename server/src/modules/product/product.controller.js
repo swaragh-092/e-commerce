@@ -45,7 +45,7 @@ exports.getById = async (req, res, next) => {
 
 exports.create = async (req, res, next) => {
   try {
-    const product = await productService.createProduct(req.body);
+    const product = await productService.createProduct(req.body, req);
     return success(res, product, 'Product created', 201);
   } catch (err) {
     next(err);
@@ -54,7 +54,7 @@ exports.create = async (req, res, next) => {
 
 exports.update = async (req, res, next) => {
   try {
-    const product = await productService.updateProduct(req.params.id, req.body);
+    const product = await productService.updateProduct(req.params.id, req.body, req);
     return success(res, product, 'Product updated');
   } catch (err) {
     if (err.message === 'Product not found') return error(res, err.message, 404, 'NOT_FOUND');
@@ -73,7 +73,7 @@ exports.bulkSale = async (req, res, next) => {
 
 exports.delete = async (req, res, next) => {
   try {
-    await productService.deleteProduct(req.params.id);
+    await productService.deleteProduct(req.params.id, req);
     return success(res, null, 'Product deleted');
   } catch (err) {
     if (err.message === 'Product not found') return error(res, err.message, 404, 'NOT_FOUND');

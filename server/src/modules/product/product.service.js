@@ -350,7 +350,7 @@ exports.getProductById = async (id) => {
   return serializeProductPricing(product, { adminView: true }, labelPresets);
 };
 
-exports.createProduct = async (data) => {
+exports.createProduct = async (data, req = null) => {
   const transaction = await Product.sequelize.transaction();
   const labelPresets = await getLabelPresets();
   try {
@@ -393,11 +393,11 @@ exports.createProduct = async (data) => {
 
     try {
       await AuditService.log({
-        userId: data.createdBy || null,
         action: ACTIONS.CREATE,
         entity: ENTITIES.PRODUCT,
         entityId: product.id,
         changes: { name: product.name, sku: product.sku },
+        req: req || null,
       });
     } catch (e) {}
 
@@ -408,7 +408,7 @@ exports.createProduct = async (data) => {
   }
 };
 
-exports.updateProduct = async (id, data) => {
+exports.updateProduct = async (id, data, req = null) => {
   const product = await Product.findByPk(id);
   if (!product) throw new AppError('NOT_FOUND', 404, 'Product not found');
 
@@ -462,11 +462,11 @@ exports.updateProduct = async (id, data) => {
 
     try {
       await AuditService.log({
-        userId: data.updatedBy || null,
         action: ACTIONS.UPDATE,
         entity: ENTITIES.PRODUCT,
         entityId: id,
         changes: data,
+        req,
       });
     } catch (e) {}
 
@@ -477,7 +477,7 @@ exports.updateProduct = async (id, data) => {
   }
 };
 
-exports.deleteProduct = async (id, actingUserId = null) => {
+exports.deleteProduct = async (id, req = null) => {
   const product = await Product.findByPk(id);
   if (!product) throw new AppError('NOT_FOUND', 404, 'Product not found');
 
@@ -486,11 +486,11 @@ exports.deleteProduct = async (id, actingUserId = null) => {
 
   try {
     await AuditService.log({
-      userId: actingUserId,
       action: ACTIONS.DELETE,
       entity: ENTITIES.PRODUCT,
       entityId: id,
       changes: snapshot,
+      req,
     });
   } catch (e) {}
 

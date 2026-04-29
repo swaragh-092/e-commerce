@@ -27,6 +27,20 @@ class SeoController {
       return error(res, 'INTERNAL_SERVER_ERROR', 500, 'Robots file generation failed');
     }
   }
+
+  async getMetadata(req, res, next) {
+    try {
+      const { path: urlPath } = req.query;
+      if (!urlPath) {
+        return error(res, 'BAD_REQUEST', 400, 'Path query parameter is required');
+      }
+      const metadata = await seoService.getMetadataByPath(urlPath);
+      return success(res, metadata);
+    } catch (err) {
+      logger.error('Metadata fetch error:', err);
+      return error(res, 'INTERNAL_SERVER_ERROR', 500, 'Failed to fetch SEO metadata');
+    }
+  }
 }
 
 module.exports = new SeoController();

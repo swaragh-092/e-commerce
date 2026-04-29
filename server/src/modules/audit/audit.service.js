@@ -19,14 +19,25 @@ const logger = require('../../utils/logger');
  * @param {import('sequelize').Transaction|null} [transaction]
  */
 const log = async (
-  { userId, action, entity, entityId, changes = null, ipAddress = null, userAgent = null },
+  { userId, action, entity, entityId, changes = null, ipAddress = null, userAgent = null, req = null },
   transaction = null,
 ) => {
   try {
+    // If request context is provided, enrich metadata and mark as logged to prevent double-logging via middleware
+    let finalIp = ipAddress;
+    let finalUA = userAgent;
+    let finalUserId = userId;
+
+    if (req) {
+      finalIp = finalIp || req.ip;
+      finalUA = finalUA || req.get?.('user-agent') || null;
+      finalUserId = finalUserId || req.user?.id;
+      req._auditLogged = true; // Mark as logged so middleware doesn't double-log
+    }
+
     await AuditLog.create(
-      { userId, action, entity, entityId: String(entityId || ''), changes, ipAddress, userAgent },
+      { userId: finalUserId, action, entity, entityId: String(entityId ?? ''), changes, ipAddress: finalIp, userAgent: finalUA },
       // audit log uses its own insert — never inherit the caller's transaction
-      // so a rolled-back checkout won't erase the audit trail
     );
   } catch (err) {
     // Audit failures must NEVER crash the main flow
@@ -34,9 +45,8 @@ const log = async (
       userId,
       action,
       entity,
-      entityId: String(entityId || ''),
+      entityId: String(entityId ?? ''),
       errorMessage: err.message,
-      stack: err.stack,
     });
   }
 };
