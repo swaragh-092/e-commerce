@@ -266,11 +266,18 @@
 
 ## Payments
 
-| Method | Endpoint                  | Auth | Role     | Description                                   |
-| ------ | ------------------------- | ---- | -------- | --------------------------------------------- |
-| POST   | `/payments/create-intent` | ✅    | Customer | Create Stripe intent (idempotent per orderId) |
-| POST   | `/payments/webhook`       | —    | —        | Stripe webhook (sig-verified, idempotent)     |
-| POST   | `/payments/:id/refund`    | ✅    | Admin    | Issue refund                                  |
+| Method | Endpoint                        | Auth | Role     | Description                                     |
+| ------ | ------------------------------- | ---- | -------- | ----------------------------------------------- |
+| POST   | `/payments/create-order`        | ✅    | Customer | Initialize session/order for selected gateway   |
+| POST   | `/payments/verify/:orderId`     | ✅    | Customer | Verify client-side payment completion           |
+| POST   | `/payments/webhook`             | —    | —        | Razorpay/Generic webhook (signature verified)   |
+| POST   | `/payments/webhook/stripe`      | —    | —        | Stripe specific webhook (sig-verified)         |
+| POST   | `/payments/webhook/cashfree`    | —    | —        | Cashfree specific webhook (sig-verified)       |
+| POST   | `/payments/payu/return`         | —    | —        | PayU return handler (form POST)                |
+| POST   | `/payments/cod/confirm/:orderId`| ✅    | Admin    | Confirm cash collection for COD orders         |
+| GET    | `/payments/gateways`            | ✅    | Admin    | List available gateways and connection status   |
+| POST   | `/payments/gateways/:id/configure` | ✅ | Admin    | Securely save encrypted gateway credentials    |
+| POST   | `/payments/:id/refund`          | ✅    | Admin    | Issue refund (Stripe/Razorpay supported)       |
 
 ---
 
@@ -354,10 +361,30 @@
 
 ## SEO
 
-| Method | Endpoint       | Auth | Description            |
-| ------ | -------------- | ---- | ---------------------- |
-| GET    | `/sitemap.xml` | —    | Auto-generated sitemap |
-| GET    | `/robots.txt`  | —    | Robots file            |
+| Method | Endpoint             | Auth | Role  | Description                        |
+| ------ | -------------------- | ---- | ----- | ---------------------------------- |
+| GET    | `/seo/metadata`      | —    | —     | Get metadata for a specific path   |
+| GET    | `/seo/overrides`     | ✅    | Admin | List all SEO overrides             |
+| POST   | `/seo/overrides`     | ✅    | Admin | Create a path override             |
+| PUT    | `/seo/overrides/:id` | ✅    | Admin | Update a path override             |
+| DELETE | `/seo/overrides/:id` | ✅    | Admin | Delete a path override             |
+| GET    | `/sitemap.xml`       | —    | —     | Auto-generated sitemap             |
+| GET    | `/robots.txt`        | —    | —     | Robots file                        |
+
+---
+
+## Shipping
+
+| Method | Endpoint                     | Auth | Role  | Description                            |
+| ------ | ---------------------------- | ---- | ----- | -------------------------------------- |
+| POST   | `/shipping/calculate`        | ✅    | —     | Calculate shipping rates for a cart    |
+| GET    | `/admin/shipping/providers`  | ✅    | Admin | List shipping providers & credentials  |
+| PATCH  | `/admin/shipping/providers/:id` | ✅ | Admin | Update provider (encrypts credentials) |
+| GET    | `/admin/shipping/zones`      | ✅    | Admin | List shipping zones                    |
+| POST   | `/admin/shipping/zones`      | ✅    | Admin | Create shipping zone                   |
+| GET    | `/admin/shipping/rules`      | ✅    | Admin | List shipping rules                    |
+| POST   | `/admin/shipping/rules`      | ✅    | Admin | Create shipping rule                   |
+| POST   | `/webhooks/shipping/:source` | —    | —     | Webhook for carrier status updates     |
 
 ---
 

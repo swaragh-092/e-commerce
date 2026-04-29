@@ -110,6 +110,9 @@ This platform is designed as a **single, production-ready codebase** that is clo
 │  │  ┌──────────┐ ┌───────┐ ┌───────┐ ┌──────────┐ │    │
 │  │  │ Settings │ │ Audit │ │ Media │ │ Notify   │ │    │
 │  │  └──────────┘ └───────┘ └───────┘ └──────────┘ │    │
+│  │  ┌──────┐ ┌──────────┐                         │    │
+│  │  │ SEO  │ │ Shipping │                         │    │
+│  │  └──────┘ └──────────┘                         │    │
 │  ├─────────────────────────────────────────────────┤    │
 │  │           Sequelize ORM + Transactions          │    │
 │  └──────────────────┬──────────────────────────────┘    │
@@ -730,17 +733,24 @@ pending_payment → paid → processing → shipped → delivered
 
 ---
 
-### Module 6 — Payment (Stripe)
+### Module 6 — Payment (Multi-Gateway System)
+
+**Features**:
+- **Gateway Manager**: Admin UI to toggle and configure multiple providers.
+- **Secure Storage**: API credentials stored in DB with AES-256-GCM encryption.
+- **Provider Adapters**: Standardized flow for Stripe, Razorpay, Cashfree, and PayU.
+- **Webhook Idempotency**: `webhook_events` table prevents double-processing.
+- **COD Support**: Manual confirmation workflow for cash on delivery.
 
 **Payment Model**:
 | Column          | Type              | Description                                  |
 | --------------- | ----------------- | -------------------------------------------- |
 | `id`            | UUID              | Primary key                                  |
-| `orderId`       | UUID (FK, unique) | Order reference                              |
-| `provider`      | STRING            | `stripe` (extensible)                        |
-| `transactionId` | STRING            | Provider's transaction ID                    |
+| `order_id`      | UUID (FK, unique) | Order reference                              |
+| `provider`      | STRING            | `stripe`, `razorpay`, `cashfree`, `payu`, `cod` |
+| `transaction_id`| STRING            | Provider's transaction ID                    |
 | `amount`        | DECIMAL(10,2)     | Amount charged (CHECK > 0)                   |
-| `currency`      | STRING            | e.g. `usd`, `inr`                            |
+| `currency`      | STRING            | e.g. `INR`, `USD`                            |
 | `status`        | ENUM              | `pending`, `completed`, `failed`, `refunded` |
 | `metadata`      | JSONB             | Provider-specific data                       |
 
@@ -1055,22 +1065,45 @@ const auditLog = (entity) => (req, res, next) => {
 
 ---
 
-### Module 15 — SEO
+### Module 15 — SEO (v2.1 Hardened)
 
 **Features**:
-- `react-helmet-async` for dynamic `<title>`, `<meta>` tags, Open Graph
-- **Sitemap endpoint**: `GET /api/sitemap.xml` — auto-generated from published products & categories
-- **JSON-LD structured data** injected per page type:
-  - `Product` schema on product detail pages
-  - `BreadcrumbList` on category/product pages
-  - `Organization` schema site-wide
-- `robots.txt` served statically
+- **Hierarchical Resolution**: URL Overrides > Entity Metadata > Global Defaults.
+- **Master Toggle**: Enable/disable all SEO features via Settings.
+- **URL Overrides**: Custom meta tags for arbitrary paths (e.g., `/search`, `/about`).
+- **Entity SEO**: Dedicated SEO fields for Products and Categories.
+- **Automatic Canonical Tags**: Prevents duplicate content issues.
+- **Social Graph Optimization**: Automatic OG tags for products including price and availability.
+- **Sitemap**: Auto-generated XML sitemap for search engines.
 
 **API Endpoints**:
-| Method | Endpoint           | Access | Description                    |
-| ------ | ------------------ | ------ | ------------------------------ |
-| GET    | `/api/sitemap.xml` | Public | Auto-generated sitemap         |
-| GET    | `/api/robots.txt`  | Public | Robots file                    |
+| Method | Endpoint             | Access | Description                      |
+| ------ | -------------------- | ------ | -------------------------------- |
+| GET    | `/api/seo/metadata`  | Public | Get metadata for specific path   |
+| GET    | `/api/seo/overrides` | Admin  | List all path overrides          |
+| POST   | `/api/seo/overrides` | Admin  | Create/Update overrides          |
+| GET    | `/api/sitemap.xml`   | Public | Auto-generated sitemap           |
+| GET    | `/api/robots.txt`    | Public | Robots file                      |
+
+---
+
+### Module 16 — Shipping Engine
+
+**Features**:
+- **Multi-Provider Support**: Supports manual rates and carrier integrations (Shiprocket, Ekart).
+- **Zone Management**: Define regions by country, state, or pincode.
+- **Flexible Rules**: Rules based on weight, order total, and destination zone.
+- **Encrypted Credentials**: Carrier API keys are stored with AES-256-GCM encryption.
+- **Tracking Integration**: Automated tracking URL generation and status updates via webhooks.
+- **Serviceability Checks**: Real-time validation of shipping availability for customer pincodes.
+
+**API Endpoints**:
+| Method | Endpoint                     | Access | Description                          |
+| ------ | ---------------------------- | ------ | ------------------------------------ |
+| POST   | `/api/shipping/calculate`    | Auth   | Calculate rates for current cart     |
+| GET    | `/api/admin/shipping/providers` | Admin | List carrier providers              |
+| PATCH  | `/api/admin/shipping/providers/:id` | Admin | Update provider credentials      |
+| POST   | `/api/webhooks/shipping/:src`| Public | Carrier webhook handler              |
 
 ---
 

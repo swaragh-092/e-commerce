@@ -151,6 +151,10 @@ CREATE TABLE categories (
   parent_id       UUID REFERENCES categories(id) ON DELETE SET NULL,
   image           VARCHAR(500),
   sort_order      INTEGER DEFAULT 0,
+  meta_title      VARCHAR(255),
+  meta_description TEXT,
+  meta_keywords   VARCHAR(500),
+  og_image        VARCHAR(500),
   created_at      TIMESTAMP DEFAULT NOW(),
   updated_at      TIMESTAMP DEFAULT NOW()
 );
@@ -173,6 +177,10 @@ CREATE TABLE products (
   created_at        TIMESTAMP DEFAULT NOW(),
   updated_at        TIMESTAMP DEFAULT NOW(),
   deleted_at        TIMESTAMP,                          -- soft delete
+  meta_title        VARCHAR(255),                       -- SEO title
+  meta_description  TEXT,                               -- SEO description
+  meta_keywords     VARCHAR(500),                       -- SEO keywords (internal)
+  og_image          VARCHAR(500),                       -- Social share image
 
   -- CHECK constraints
   CONSTRAINT chk_price_positive CHECK (price > 0),
@@ -374,10 +382,85 @@ CREATE TABLE payments (
 
 -- Webhook idempotency table
 CREATE TABLE webhook_events (
-  id              VARCHAR(255) PRIMARY KEY,               -- Stripe event ID (e.g. evt_xxx)
+  id              VARCHAR(255) PRIMARY KEY,               -- Provider event ID (e.g. evt_xxx, razorpay_id)
   event_type      VARCHAR(100) NOT NULL,
   processed_at    TIMESTAMP DEFAULT NOW()
 );
+
+---
+
+## Shipping *(NEW)*
+
+```sql
+CREATE TABLE shipping_providers (
+  id              UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  code            VARCHAR(50) UNIQUE NOT NULL,
+  name            VARCHAR(100) NOT NULL,
+  type            VARCHAR(50) DEFAULT 'manual',
+  enabled         BOOLEAN DEFAULT TRUE,
+  is_default      BOOLEAN DEFAULT FALSE,
+  credentials_encrypted TEXT,                         -- AES-256-GCM encrypted
+  settings        JSONB DEFAULT '{}',
+  created_at      TIMESTAMP DEFAULT NOW(),
+  updated_at      TIMESTAMP DEFAULT NOW()
+);
+
+CREATE TABLE shipping_zones (
+  id              UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  name            VARCHAR(100) NOT NULL,
+  country         VARCHAR(100),
+  state           VARCHAR(100),
+  pincodes        JSONB DEFAULT '[]',
+  enabled         BOOLEAN DEFAULT TRUE,
+  created_at      TIMESTAMP DEFAULT NOW()
+);
+
+CREATE TABLE shipping_rules (
+  id              UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  name            VARCHAR(150) NOT NULL,
+  priority        INTEGER DEFAULT 100,
+  enabled         BOOLEAN DEFAULT TRUE,
+  zone_id         UUID REFERENCES shipping_zones(id),
+  provider_id     UUID REFERENCES shipping_providers(id),
+  condition_type  VARCHAR(50) DEFAULT 'all',
+  conditions      JSONB DEFAULT '{}',                 -- min_weight, max_weight, min_order, etc.
+  rate_type       VARCHAR(50) DEFAULT 'flat',         -- 'flat' | 'percentage' | 'weight_based'
+  rate_config     JSONB DEFAULT '{}',
+  created_at      TIMESTAMP DEFAULT NOW()
+);
+
+CREATE TABLE shipments (
+  id                UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  order_id          UUID REFERENCES orders(id) ON DELETE CASCADE,
+  provider_id       UUID REFERENCES shipping_providers(id),
+  tracking_number   VARCHAR(255),
+  tracking_url      VARCHAR(500),
+  status            VARCHAR(50) DEFAULT 'pending',
+  status_history    JSONB DEFAULT '[]',
+  created_at        TIMESTAMP DEFAULT NOW()
+);
+```
+
+---
+
+## SEO *(NEW)*
+
+```sql
+CREATE TABLE seo_overrides (
+  id                UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  path              VARCHAR(255) UNIQUE NOT NULL,       -- e.g. '/about-us'
+  meta_title        VARCHAR(255),
+  meta_description  TEXT,
+  meta_keywords     VARCHAR(500),
+  og_image          VARCHAR(500),
+  canonical_url     VARCHAR(500),
+  no_index          BOOLEAN DEFAULT FALSE,
+  created_at        TIMESTAMP DEFAULT NOW(),
+  updated_at        TIMESTAMP DEFAULT NOW()
+);
+
+CREATE INDEX idx_seo_overrides_path ON seo_overrides(path);
+```
 ```
 
 ---
