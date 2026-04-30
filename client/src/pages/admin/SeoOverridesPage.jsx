@@ -61,7 +61,7 @@ const SeoOverridesPage = () => {
   const fetchOverrides = async () => {
     try {
       setLoading(true);
-      const response = await api.get('/overrides');
+      const response = await api.get('/seo/overrides');
       setOverrides(response.data.data || []);
     } catch (err) {
       console.error('Failed to fetch SEO overrides:', err);
@@ -112,10 +112,10 @@ const SeoOverridesPage = () => {
     try {
       setSubmitting(true);
       if (editingId) {
-        await api.put(`/overrides/${editingId}`, formData);
+        await api.put(`/seo/overrides/${editingId}`, formData);
         notify('SEO override updated successfully', 'success');
       } else {
-        await api.post('/overrides', formData);
+        await api.post('/seo/overrides', formData);
         notify('SEO override created successfully', 'success');
       }
       handleCloseDialog();
@@ -130,7 +130,7 @@ const SeoOverridesPage = () => {
   const handleDelete = async (id) => {
     if (await confirm('Are you sure you want to delete this SEO override?')) {
       try {
-        await api.delete(`/overrides/${id}`);
+        await api.delete(`/seo/overrides/${id}`);
         notify('SEO override deleted successfully', 'success');
         fetchOverrides();
       } catch (err) {

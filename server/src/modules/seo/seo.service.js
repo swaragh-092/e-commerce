@@ -46,6 +46,16 @@ class SeoService {
     return xml;
   }
 
+  async generateRobots() {
+    const clientUrl = process.env.CLIENT_URL || 'http://localhost:5173';
+    let robots = `User-agent: *\n`;
+    robots += `Allow: /\n`;
+    robots += `Disallow: /admin\n`;
+    robots += `Disallow: /api\n`;
+    robots += `\nSitemap: ${clientUrl}/sitemap.xml\n`;
+    return robots;
+  }
+
   async getMetadataByPath(urlPath) {
     // 1. Check for explicit overrides
     const override = await SeoOverride.findOne({ where: { path: urlPath } });

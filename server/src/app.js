@@ -107,7 +107,7 @@ const notificationRoutes = require('./modules/notification/notification.routes')
 const shippingAdminRoutes = require('./modules/shipping/shipping.admin.routes');
 const shippingWebhookRoutes = require('./modules/shipping/shipping.webhook.routes');
 
-app.use('/api', seoRoutes);
+app.use('/api/seo', seoRoutes);
 app.use('/api/settings', settingsRoutes);
 app.use('/api/auth', authRoutes);
 app.use('/api/users', userRoutes);
