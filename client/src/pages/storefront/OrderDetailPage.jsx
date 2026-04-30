@@ -384,14 +384,14 @@ const OrderDetailPage = () => {
           >
             Invoice
           </Button>
-          <Button
+          {/* <Button
             size="small"
             variant="outlined"
             startIcon={<FileDownloadOutlinedIcon sx={{ fontSize: '14px !important' }} />}
             sx={{ fontSize: '0.78rem', fontWeight: 600, borderColor: 'divider', color: 'text.secondary' }}
           >
             Export
-          </Button>
+          </Button> */}
           {canCancel && (
             <Button
               size="small"
@@ -404,7 +404,7 @@ const OrderDetailPage = () => {
               {actionLoading ? 'Cancelling…' : 'Cancel order'}
             </Button>
           )}
-          <Box
+          {/* <Box
             sx={{
               width: 32, height: 32,
               display: 'flex', alignItems: 'center', justifyContent: 'center',
@@ -414,7 +414,7 @@ const OrderDetailPage = () => {
             }}
           >
             <MoreHorizIcon sx={{ fontSize: 18 }} />
-          </Box>
+          </Box> */}
         </Box>
       </Paper>
 
@@ -691,17 +691,17 @@ const OrderDetailPage = () => {
                 }}
               >
                 <Tab label="Totals & discounts" />
-                <Tab label="Activity log" />
+                {/* <Tab label="Activity log" /> */}
                 <Tab label="Notes" />
               </Tabs>
 
               {activeTab === 0 && (
                 <TotalsPanel order={order} appliedDiscounts={appliedDiscounts} formatPrice={formatPrice} />
               )}
-              {activeTab === 1 && (
+              {/* {activeTab === 1 && (
                 <Typography variant="body2" color="text.secondary">No activity logged.</Typography>
-              )}
-              {activeTab === 2 && (
+              )} */}
+              {activeTab === 1 && (
                 order.notes
                   ? <Typography variant="body2" color="text.secondary">{order.notes}</Typography>
                   : <Typography variant="body2" color="text.secondary">No notes on this order.</Typography>
