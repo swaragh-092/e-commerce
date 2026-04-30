@@ -55,6 +55,7 @@ import brandService from '../../services/brandService';
 import attributeService from '../../services/attributeService';
 import { getSaleLabels } from '../../services/adminService';
 import MediaPicker from '../../components/common/MediaPicker';
+import MediaUploader from '../../components/common/MediaUploader';
 import { useNotification } from '../../context/NotificationContext';
 import { useSettings } from '../../hooks/useSettings';
 import { getProductBasePrice } from '../../utils/variantPricing';
@@ -738,6 +739,100 @@ const ProductEditPage = () => {
                 </Box>
               )}
             </Paper>
+
+            {/* ---- Shipping & Dimensions ---- */}
+            <Paper sx={{ p: 3, mb: 3, mt: 3 }}>
+              <Typography variant="h6" gutterBottom>
+                Shipping &amp; Dimensions
+              </Typography>
+              <FormControlLabel
+                control={
+                  <Switch
+                    checked={formData.requiresShipping}
+                    onChange={(e) => setField('requiresShipping', e.target.checked)}
+                  />
+                }
+                label="This product requires shipping"
+                sx={{ mb: 2 }}
+              />
+
+              {formData.requiresShipping && (
+                <>
+                  <TextField
+                    fullWidth
+                    label="Weight (grams)"
+                    type="number"
+                    margin="normal"
+                    size="small"
+                    inputProps={{ min: 0, step: 1 }}
+                    InputProps={{
+                      endAdornment: <InputAdornment position="end">g</InputAdornment>,
+                    }}
+                    value={formData.weightGrams}
+                    onChange={(e) => setField('weightGrams', e.target.value)}
+                    helperText="Actual product weight (packaging included)"
+                  />
+                  <Typography variant="subtitle2" sx={{ mt: 2, mb: 1 }}>Dimensions (cm)</Typography>
+                  <Grid container spacing={1.5}>
+                    <Grid item xs={4}>
+                      <TextField
+                        fullWidth label="Length" type="number" size="small"
+                        inputProps={{ min: 0, step: 0.5 }}
+                        InputProps={{ endAdornment: <InputAdornment position="end">cm</InputAdornment> }}
+                        value={formData.lengthCm}
+                        onChange={(e) => setField('lengthCm', e.target.value)}
+                      />
+                    </Grid>
+                    <Grid item xs={4}>
+                      <TextField
+                        fullWidth label="Breadth" type="number" size="small"
+                        inputProps={{ min: 0, step: 0.5 }}
+                        InputProps={{ endAdornment: <InputAdornment position="end">cm</InputAdornment> }}
+                        value={formData.breadthCm}
+                        onChange={(e) => setField('breadthCm', e.target.value)}
+                      />
+                    </Grid>
+                    <Grid item xs={4}>
+                      <TextField
+                        fullWidth label="Height" type="number" size="small"
+                        inputProps={{ min: 0, step: 0.5 }}
+                        InputProps={{ endAdornment: <InputAdornment position="end">cm</InputAdornment> }}
+                        value={formData.heightCm}
+                        onChange={(e) => setField('heightCm', e.target.value)}
+                      />
+                    </Grid>
+                  </Grid>
+
+                  {/* Live volumetric weight preview */}
+                  {formData.lengthCm && formData.breadthCm && formData.heightCm && (
+                    (() => {
+                      const volWeight = Math.ceil(
+                        (Number(formData.lengthCm) * Number(formData.breadthCm) * Number(formData.heightCm)) / 4000
+                      ) * 1000; // in grams, divisor 4000 → result in kg × 1000
+                      const actual = Number(formData.weightGrams) || 0;
+                      const chargeable = Math.ceil(Math.max(actual, volWeight) / 500) * 500;
+                      return (
+                        <Box sx={{
+                          mt: 2, p: 1.5, borderRadius: 1,
+                          bgcolor: 'action.hover',
+                          border: '1px dashed', borderColor: 'divider'
+                        }}>
+                          <Typography variant="caption" color="text.secondary" display="block">
+                            Volumetric weight: <strong>{volWeight} g</strong>
+                          </Typography>
+                          <Typography variant="caption" color="text.secondary" display="block">
+                            Actual weight: <strong>{actual} g</strong>
+                          </Typography>
+                          <Typography variant="caption" color="primary.main" fontWeight={700} display="block">
+                            Chargeable weight (rounded): {chargeable} g
+                          </Typography>
+                        </Box>
+                      );
+                    })()
+                  )}
+                </>
+              )}
+            </Paper>
           </Grid>
 
           <Grid item xs={12} md={4}>
@@ -905,99 +1000,7 @@ const ProductEditPage = () => {
               />
             </Paper>
 
-            {/* ---- Shipping & Dimensions ---- */}
-            <Paper sx={{ p: 3, mb: 3 }}>
-              <Typography variant="h6" gutterBottom>
-                Shipping &amp; Dimensions
-              </Typography>
-              <FormControlLabel
-                control={
-                  <Switch
-                    checked={formData.requiresShipping}
-                    onChange={(e) => setField('requiresShipping', e.target.checked)}
-                  />
-                }
-                label="This product requires shipping"
-                sx={{ mb: 2 }}
-              />
-
-              {formData.requiresShipping && (
-                <>
-                  <TextField
-                    fullWidth
-                    label="Weight (grams)"
-                    type="number"
-                    margin="normal"
-                    size="small"
-                    inputProps={{ min: 0, step: 1 }}
-                    InputProps={{
-                      endAdornment: <InputAdornment position="end">g</InputAdornment>,
-                    }}
-                    value={formData.weightGrams}
-                    onChange={(e) => setField('weightGrams', e.target.value)}
-                    helperText="Actual product weight (packaging included)"
-                  />
-                  <Typography variant="subtitle2" sx={{ mt: 2, mb: 1 }}>Dimensions (cm)</Typography>
-                  <Grid container spacing={1.5}>
-                    <Grid item xs={4}>
-                      <TextField
-                        fullWidth label="Length" type="number" size="small"
-                        inputProps={{ min: 0, step: 0.5 }}
-                        InputProps={{ endAdornment: <InputAdornment position="end">cm</InputAdornment> }}
-                        value={formData.lengthCm}
-                        onChange={(e) => setField('lengthCm', e.target.value)}
-                      />
-                    </Grid>
-                    <Grid item xs={4}>
-                      <TextField
-                        fullWidth label="Breadth" type="number" size="small"
-                        inputProps={{ min: 0, step: 0.5 }}
-                        InputProps={{ endAdornment: <InputAdornment position="end">cm</InputAdornment> }}
-                        value={formData.breadthCm}
-                        onChange={(e) => setField('breadthCm', e.target.value)}
-                      />
-                    </Grid>
-                    <Grid item xs={4}>
-                      <TextField
-                        fullWidth label="Height" type="number" size="small"
-                        inputProps={{ min: 0, step: 0.5 }}
-                        InputProps={{ endAdornment: <InputAdornment position="end">cm</InputAdornment> }}
-                        value={formData.heightCm}
-                        onChange={(e) => setField('heightCm', e.target.value)}
-                      />
-                    </Grid>
-                  </Grid>
-
-                  {/* Live volumetric weight preview */}
-                  {formData.lengthCm && formData.breadthCm && formData.heightCm && (
-                    (() => {
-                      const volWeight = Math.ceil(
-                        (Number(formData.lengthCm) * Number(formData.breadthCm) * Number(formData.heightCm)) / 4000
-                      ) * 1000; // in grams, divisor 4000 → result in kg × 1000
-                      const actual = Number(formData.weightGrams) || 0;
-                      const chargeable = Math.ceil(Math.max(actual, volWeight) / 500) * 500;
-                      return (
-                        <Box sx={{
-                          mt: 2, p: 1.5, borderRadius: 1,
-                          bgcolor: 'action.hover',
-                          border: '1px dashed', borderColor: 'divider'
-                        }}>
-                          <Typography variant="caption" color="text.secondary" display="block">
-                            Volumetric weight: <strong>{volWeight} g</strong>
-                          </Typography>
-                          <Typography variant="caption" color="text.secondary" display="block">
-                            Actual weight: <strong>{actual} g</strong>
-                          </Typography>
-                          <Typography variant="caption" color="primary.main" fontWeight={700} display="block">
-                            Chargeable weight (rounded): {chargeable} g
-                          </Typography>
-                        </Box>
-                      );
-                    })()
-                  )}
-                </>
-              )}
-            </Paper>
+            
 
             {settings?.features?.seo !== false && (
               <Paper sx={{ p: 3, mb: 3 }}>

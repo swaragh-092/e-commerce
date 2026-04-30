@@ -19,7 +19,7 @@ const PaymentSuccessPage = () => {
                 
             </Typography>
             <Box sx={{ display: 'flex', gap: 2, justifyContent: 'center', flexWrap: 'wrap' }}>
-                <Button variant="contained" component={Link} to="/account">View Orders</Button>
+                <Button variant="contained" component={Link} to="/orders">View Orders</Button>
                 <Button variant="outlined" component={Link} to="/products">Continue Shopping</Button>
             </Box>
         </Container>

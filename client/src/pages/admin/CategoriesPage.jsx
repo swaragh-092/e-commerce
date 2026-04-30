@@ -24,6 +24,7 @@ import { useAuth } from '../../hooks/useAuth';
 import { PERMISSIONS } from '../../utils/permissions';
 import { getApiErrorMessage } from '../../utils/apiErrors';
 import MediaPicker from '../../components/common/MediaPicker';
+import MediaUploader from '../../components/common/MediaUploader';
 import { getMediaUrl } from '../../utils/media';
 import { useSettings } from '../../hooks/useSettings';
 
