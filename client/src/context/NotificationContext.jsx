@@ -89,7 +89,7 @@ export const NotificationProvider = ({ children }) => {
           }
         }}
       >
-        <DialogTitle id="confirm-dialog-title" sx={{ pb: 1 }}>
+        <DialogTitle id="confirm-dialog-title" component="div" sx={{ pb: 1 }}>
           <Typography variant="h6" fontWeight="bold">
             {confirmDialog.title}
           </Typography>

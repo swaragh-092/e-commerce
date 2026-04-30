@@ -214,7 +214,7 @@ const FulfillmentDialog = ({ open, onClose, orderItems, onSave, loading }) => {
 
   return (
     <Dialog open={open} onClose={onClose} fullWidth maxWidth="sm">
-      <DialogTitle>Create Shipment</DialogTitle>
+      <DialogTitle component="div">Create Shipment</DialogTitle>
       <DialogContent dividers>
         <Stack spacing={2} sx={{ mb: 3 }}>
           <TextField

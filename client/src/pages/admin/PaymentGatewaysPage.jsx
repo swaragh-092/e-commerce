@@ -120,7 +120,7 @@ const SetupModal = ({ gateway, open, onClose, onSaved }) => {
 
   return (
     <Dialog open={open} onClose={onClose} maxWidth="sm" fullWidth>
-      <DialogTitle sx={{ display: 'flex', alignItems: 'center', gap: 1.5, pb: 1 }}>
+      <DialogTitle component="div" sx={{ display: 'flex', alignItems: 'center', gap: 1.5, pb: 1 }}>
         {GATEWAY_LOGOS[gateway.id]}
         <Box>
           <Typography variant="h6" fontWeight={700}>Configure {gateway.name}</Typography>

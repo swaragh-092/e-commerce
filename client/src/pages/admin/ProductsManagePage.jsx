@@ -833,7 +833,7 @@ const ProductsManagePage = () => {
         maxWidth="xs"
         fullWidth
       >
-        <DialogTitle sx={{ pb: 1.5 }}>
+        <DialogTitle component="div" sx={{ pb: 1.5 }}>
           <Stack direction="row" spacing={1.5} alignItems="center">
             <Avatar
               src={editDialog.row?.images?.[0]?.url ? getMediaUrl(editDialog.row.images[0].url) : undefined}

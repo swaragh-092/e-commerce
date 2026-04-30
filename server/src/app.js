@@ -74,7 +74,11 @@ app.use('/uploads', (req, res) => {
 });
 
 // Serve public statically for robots.txt
-app.use(express.static(path.join(__dirname, '../public')));
+app.use(express.static(path.join(__dirname, '../public'), {
+  setHeaders: (res) => {
+    res.setHeader('Cross-Origin-Resource-Policy', 'cross-origin');
+  }
+}));
 
 // Routes
 const seoRoutes = require('./modules/seo/seo.routes');

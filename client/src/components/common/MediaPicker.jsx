@@ -128,7 +128,7 @@ const MediaPicker = ({ open, onClose, onSelect, multiple = false, title = 'Selec
         },
       }}
     >
-      <DialogTitle sx={{ p: 2, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+      <DialogTitle component="div" sx={{ p: 2, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
         <Typography variant="h6" fontWeight={700}>
           {title}
         </Typography>

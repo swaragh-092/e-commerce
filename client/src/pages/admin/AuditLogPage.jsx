@@ -424,7 +424,7 @@ const AuditLogPage = () => {
           sx: { borderRadius: 4, boxShadow: theme.shadows[20] }
         }}
       >
-        <DialogTitle sx={{ p: 3, pb: 2 }}>
+        <DialogTitle component="div" sx={{ p: 3, pb: 2 }}>
           <Stack direction="row" justifyContent="space-between" alignItems="center">
             <Box>
               <Typography variant="h6" fontWeight={800}>
