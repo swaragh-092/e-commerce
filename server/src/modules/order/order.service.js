@@ -1120,6 +1120,41 @@ const updateStatus = async (id, status, actingUserId) => {
             await releaseOrderReservationsAndCoupons(order, t);
         }
         await order.update({ status }, { transaction: t });
+        
+        // Sync payment status if order is marked as paid
+        if (status === 'paid') {
+            const payment = await Payment.findOne({ 
+                where: { orderId: id }, 
+                transaction: t,
+                lock: t.LOCK.UPDATE 
+            });
+            if (payment && payment.status === 'pending') {
+                const nextPaymentStatus = payment.provider === 'cod' ? 'cod_collected' : 'completed';
+                await payment.update({ 
+                    status: nextPaymentStatus,
+                    metadata: {
+                        ...(payment.metadata || {}),
+                        manuallyMarkedPaidBy: actingUserId,
+                        manuallyMarkedPaidAt: new Date().toISOString()
+                    }
+                }, { transaction: t });
+            }
+        } else if (status === 'cancelled') {
+            const payment = await Payment.findOne({ 
+                where: { orderId: id }, 
+                transaction: t,
+                lock: t.LOCK.UPDATE 
+            });
+            if (payment && payment.status === 'pending') {
+                await payment.update({ 
+                    status: 'failed',
+                    metadata: {
+                        ...(payment.metadata || {}),
+                        cancelledAt: new Date().toISOString()
+                    }
+                }, { transaction: t });
+            }
+        }
 
         try {
             if (AuditService && AuditService.log) {
@@ -1222,6 +1257,23 @@ const cancelOrder = async (id, userId) => {
         ensureValidStatusTransition(previousStatus, 'cancelled');
         await releaseOrderReservationsAndCoupons(order, t);
         await order.update({ status: 'cancelled' }, { transaction: t });
+
+        // Sync payment status
+        const payment = await Payment.findOne({
+            where: { orderId: order.id },
+            transaction: t,
+            lock: t.LOCK.UPDATE
+        });
+        if (payment && payment.status === 'pending') {
+            await payment.update({
+                status: 'failed',
+                metadata: {
+                    ...(payment.metadata || {}),
+                    cancelledBy: 'customer',
+                    cancelledAt: new Date().toISOString()
+                }
+            }, { transaction: t });
+        }
 
         try {
             if (AuditService && AuditService.log) {
