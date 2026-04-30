@@ -143,9 +143,7 @@ const CouponsPage = () => {
     if (nextForm.startDate && nextForm.endDate && new Date(nextForm.endDate) <= new Date(nextForm.startDate)) {
       errs.endDate = 'End date must be after start date';
     }
-    if (nextForm.applicableTo !== 'all' && (!Array.isArray(nextForm.applicableIds) || nextForm.applicableIds.length === 0)) {
-      errs.applicableIds = 'Select at least one target';
-    }
+    // Note: Empty applicableIds allowed; defaults to all items in that scope.
 
     // Guard: an item that is both included and excluded will silently match nothing.
     // Catch this in the UI before the API call so the admin gets immediate feedback.
@@ -198,8 +196,8 @@ const CouponsPage = () => {
       ]);
 
       setProducts(productResponse?.data || []);
-      setCategories(flattenCategoryTree(categoryResponse?.data?.categories || []));
-      setBrands(brandResponse?.data?.data || []);
+      setCategories(flattenCategoryTree(categoryResponse?.data || []));
+      setBrands(brandResponse?.data?.data?.brands || []);
     } catch (error) {
       notify('Failed to load coupon targeting options.', 'error');
     } finally {
@@ -638,10 +636,19 @@ const CouponsPage = () => {
                       <MenuItem value="brand">Selected brands</MenuItem>
                     </Select>
                   </FormControl>
-                  {form.applicableTo !== 'all' && renderSelection('Included targets', 'applicableIds', getOptionsForScope())}
-                  {renderSelection('Excluded products', 'excludedProductIds', productOptions)}
-                  {renderSelection('Excluded categories', 'excludedCategoryIds', categories)}
-                  {renderSelection('Excluded brands', 'excludedBrandIds', brandOptions)}
+                  {form.applicableTo !== 'all' && renderSelection(
+                    form.applicableTo === 'product' ? 'Included Products (default as all products)' :
+                    form.applicableTo === 'category' ? 'Included Categories (default as all categories)' :
+                    'Included Brands (default as all brands)',
+                    'applicableIds',
+                    getOptionsForScope()
+                  )}
+                  {(form.applicableTo === 'all' || (form.applicableTo === 'product' && form.applicableIds.length === 0)) &&
+                    renderSelection('Excluded products', 'excludedProductIds', productOptions)}
+                  {(form.applicableTo === 'all' || (form.applicableTo === 'category' && form.applicableIds.length === 0)) &&
+                    renderSelection('Excluded categories', 'excludedCategoryIds', categories)}
+                  {(form.applicableTo === 'all' || (form.applicableTo === 'brand' && form.applicableIds.length === 0)) &&
+                    renderSelection('Excluded brands', 'excludedBrandIds', brandOptions)}
                   <FormControlLabel control={<Switch checked={Boolean(form.excludeSaleItems)} onChange={(e) => set('excludeSaleItems', e.target.checked)} />} label="Exclude products already on sale" />
                 </Stack>
               </Box>

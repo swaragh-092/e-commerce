@@ -285,8 +285,9 @@ const assertCouponRules = (coupon) => {
     if (coupon.startDate && coupon.endDate && new Date(coupon.endDate) <= new Date(coupon.startDate)) {
         throw new AppError('VALIDATION_ERROR', 400, 'End date must be after start date');
     }
-    if (coupon.applicableTo !== 'all' && ensureArray(coupon.applicableIds).length === 0) {
-        throw new AppError('VALIDATION_ERROR', 400, 'Select at least one target for this coupon');
+    // Note: Empty applicableIds now allowed; defaults to all items in that scope.
+    if (coupon.type === 'percentage' && toNumber(coupon.value) > 100) {
+        throw new AppError('VALIDATION_ERROR', 400, 'Percentage discount cannot exceed 100%');
     }
     if (!['manual', 'suggest', 'auto'].includes(coupon.applicationMode || 'manual')) {
         throw new AppError('VALIDATION_ERROR', 400, 'Invalid coupon application mode');
@@ -487,11 +488,11 @@ const matchesCouponTarget = (coupon, line) => {
 
     let included = true;
     if (coupon.applicableTo === 'product') {
-        included = applicableIds.includes(line.productId);
+        included = applicableIds.length === 0 || applicableIds.includes(line.productId);
     } else if (coupon.applicableTo === 'category') {
-        included = line.categoryIds.some((categoryId) => applicableIds.includes(categoryId));
+        included = applicableIds.length === 0 || line.categoryIds.some((categoryId) => applicableIds.includes(categoryId));
     } else if (coupon.applicableTo === 'brand') {
-        included = Boolean(line.brandId) && applicableIds.includes(line.brandId);
+        included = applicableIds.length === 0 || (Boolean(line.brandId) && applicableIds.includes(line.brandId));
     }
 
     if (!included) return false;
