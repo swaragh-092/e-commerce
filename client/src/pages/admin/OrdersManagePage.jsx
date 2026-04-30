@@ -207,9 +207,9 @@ const OrdersManagePage = () => {
               <Typography variant="body2" fontWeight={600} noWrap>
                 {customerName}
               </Typography>
-              <Typography variant="caption" color="text.secondary" noWrap>
+              {/* <Typography variant="caption" color="text.secondary" noWrap>
                 {customerEmail}
-              </Typography>
+              </Typography> */}
             </Box>
           );
         },
@@ -231,15 +231,15 @@ const OrdersManagePage = () => {
 
           return (
             <Stack spacing={0.5} sx={{ py: 1 }}>
+              <Typography variant="caption" color="text.secondary" noWrap>
+                {provider}
+              </Typography>
               <Chip
                 label={getOrderStatusLabel(paymentStatus)}
                 size="small"
                 variant="outlined"
                 color={paymentStatus === 'completed' ? 'success' : paymentStatus === 'failed' ? 'error' : 'default'}
               />
-              <Typography variant="caption" color="text.secondary" noWrap>
-                {provider}
-              </Typography>
             </Stack>
           );
         },
