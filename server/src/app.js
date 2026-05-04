@@ -106,6 +106,7 @@ const pageRoutes = require('./modules/page/page.routes');
 const notificationRoutes = require('./modules/notification/notification.routes');
 const shippingAdminRoutes = require('./modules/shipping/shipping.admin.routes');
 const shippingWebhookRoutes = require('./modules/shipping/shipping.webhook.routes');
+const enquiryRoutes = require('./modules/enquiry/enquiry.routes');
 
 app.use('/api/seo', seoRoutes);
 app.use('/api/settings', settingsRoutes);
@@ -136,6 +137,7 @@ app.use('/api/products', productAttributeRoutes);   // extends existing /api/pro
 app.use('/api/products', productVariantRoutes);     // extends existing /api/products with /:id/variants/* sub-routes
 app.use('/api/pages', pageRoutes);
 app.use('/api/notifications', notificationRoutes);
+app.use('/api/enquiries', enquiryRoutes);
 
 // Health check endpoint
 app.get('/health', async (req, res) => {

@@ -5,6 +5,7 @@ import {
 } from '@mui/material';
 import CartIcon from '@mui/icons-material/ShoppingCart';
 import FlashOnIcon from '@mui/icons-material/FlashOn';
+import HelpOutlineIcon from '@mui/icons-material/HelpOutline';
 import { getProduct } from '../../services/productService';
 import PageSEO from '../../components/common/PageSEO';
 import ProductImages from '../../components/product/ProductImages';
@@ -23,6 +24,7 @@ import {
     getVariantUnitPrice,
 } from '../../utils/variantPricing';
 import { getVariantOptionLabel } from '../../utils/variantOptions';
+import EnquiryModal from '../../components/storefront/EnquiryModal';
 
 const ProductDetailPage = () => {
     const { slug } = useParams();
@@ -34,6 +36,7 @@ const ProductDetailPage = () => {
     const [selectedVariant, setSelectedVariant] = useState(null);
     const [pendingAction, setPendingAction] = useState(null);
     const [cartMsg, setCartMsg] = useState(null);
+    const [enquiryOpen, setEnquiryOpen] = useState(false);
     const { addItem } = useCart();
     const { formatPrice } = useCurrency();
     const { settings } = useSettings();
@@ -416,6 +419,16 @@ const ProductDetailPage = () => {
                                 </Button>
                             )}
                         </Box>
+                        <Button
+                            variant="outlined"
+                            color="secondary"
+                            fullWidth
+                            startIcon={<HelpOutlineIcon />}
+                            onClick={() => setEnquiryOpen(true)}
+                            sx={{ py: 1.5, fontSize: '1.1rem', mt: 1.5 }}
+                        >
+                            Enquire Now
+                        </Button>
                     </Box>
 
                     {displayAttributes.length > 0 && (
@@ -465,6 +478,12 @@ const ProductDetailPage = () => {
                     <ReviewSection slug={product.slug} productId={product.id} />
                 </Grid>
             </Grid>
+
+            <EnquiryModal
+                open={enquiryOpen}
+                onClose={() => setEnquiryOpen(false)}
+                product={{ ...product, selectedVariant }}
+            />
         </Container>
     );
 };

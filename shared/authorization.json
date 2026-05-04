@@ -43,7 +43,9 @@
     "ROLES_READ": "roles.read",
     "ROLES_MANAGE": "roles.manage",
     "SYSTEM_ROLES_MANAGE": "system_roles.manage",
-    "USERS_ASSIGN_ROLES": "users.assign_roles"
+    "USERS_ASSIGN_ROLES": "users.assign_roles",
+    "ENQUIRIES_READ": "enquiries.read",
+    "ENQUIRIES_MANAGE": "enquiries.manage"
   },
   "systemRoleDefinitions": {
     "customer": {
@@ -90,7 +92,10 @@
     "settings.manage",
     "notifications.manage",
     "audit.read",
-    "pages.read"
+    "pages.read",
+    "pages.manage",
+    "enquiries.read",
+    "enquiries.manage"
   ],
   "customerPermissionKeys": [
     "account.self",
