@@ -21,7 +21,7 @@ const createLimiter = (windowMinutes, maxRequests, message) => {
 
 // Defined rate limiters based on Phase 1 requirements
 const loginLimiter = createLimiter(15, 5, 'Too many login attempts, please try again after 15 minutes');
-const registerLimiter = createLimiter(60, 3, 'Too many accounts created from this IP, please try again after an hour');
+const registerLimiter = createLimiter(60, 20, 'Too many accounts created from this IP, please try again after an hour');
 const forgotPasswordLimiter = createLimiter(60, 3, 'Too many password reset requests, please try again after an hour');
 const reviewLimiter = createLimiter(24 * 60, 5, 'You have reached the daily limit for reviews');
 const couponLimiter = createLimiter(1, 10, 'Too many coupon validation requests');

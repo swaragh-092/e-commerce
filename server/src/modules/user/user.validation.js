@@ -18,8 +18,15 @@ const changePasswordSchema = Joi.object({
   currentPassword: Joi.string().required(),
   newPassword: Joi.string()
     .min(8)
-    .pattern(new RegExp('^(?=.*[a-z])(?=.*[A-Z])(?=.*[0-9])'))
+    .pattern(new RegExp('^(?=.*[a-z])(?=.*[A-Z])(?=.*[0-9])(?=.*[!@#$%^&*])'))
+    .message('Password must be at least 8 characters long and include uppercase, lowercase, number, and special character (!@#$%^&*)')
+    .required(),
+  confirmPassword: Joi.string()
+    .valid(Joi.ref('newPassword'))
     .required()
+    .messages({
+      'any.only': 'Confirm password must match new password'
+    })
 });
 
 const updateStatusSchema = Joi.object({
