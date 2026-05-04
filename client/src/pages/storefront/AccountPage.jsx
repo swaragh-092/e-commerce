@@ -340,14 +340,15 @@ const PasswordTab = () => {
                 error={!!validationErrors[name]}
                 helperText={
                     isNewPassword ? (
-                        <>
+                        validationErrors[name] ? (
+                            // 🔴 Show backend error ONLY
+                            <Typography variant="caption" color="error">
+                                {validationErrors[name]}
+                            </Typography>
+                        ) : (
+                            // 🟢 Show checklist ONLY if no backend error
                             <PasswordChecklist password={passwords.newPassword} />
-                            {validationErrors[name] && (
-                                <Typography variant="caption" color="error">
-                                    {validationErrors[name]}
-                                </Typography>
-                            )}
-                        </>
+                        )
                     ) : (
                         validationErrors[name]
                     )
