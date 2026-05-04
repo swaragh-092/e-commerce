@@ -32,7 +32,7 @@ module.exports = (sequelize, DataTypes) => {
         type: DataTypes.ENUM('pending', 'responded', 'closed'),
         allowNull: false,
         defaultValue: 'pending',
-      },
+      }, 
       productId: {
         type: DataTypes.UUID,
         allowNull: true,
