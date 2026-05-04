@@ -45,7 +45,7 @@ const authenticate = async (req, res, next) => {
     }
 
     if (user.status !== 'active') {
-      throw new AppError('FORBIDDEN', 403, 'Your account is inactive or banned');
+      throw new AppError('FORBIDDEN', 403, 'Your account is inactive');
     }
 
     req.user = enrichUserAuthorization(user);
