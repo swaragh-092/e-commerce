@@ -1915,15 +1915,28 @@ const SettingsPage = () => {
                   <Box>
                     {/* ── Mode Context Banner ── */}
                     <Alert severity="info" sx={{ mb: 3 }}>
-                      <Typography variant="body2" fontWeight={700} sx={{ mb: 0.5 }}>
-                        Current Mode: <Box component="span" sx={{ textTransform: 'uppercase', fontWeight: 900 }}>{appMode}</Box>
-                        &nbsp;<Chip label="ENV" size="small" sx={{ height: 18, fontSize: 10, fontWeight: 700 }} />
-                      </Typography>
+                      <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 1 }}>
+                        <Typography variant="body2" fontWeight={700}>
+                          Current Mode: <Box component="span" sx={{ textTransform: 'uppercase', fontWeight: 900 }}>{appMode}</Box>
+                          &nbsp;<Chip label="DB" size="small" sx={{ height: 18, fontSize: 10, fontWeight: 700 }} />
+                        </Typography>
+                        {isSuperAdmin && (
+                           <FormControl size="small" sx={{ minWidth: 150 }}>
+                             <Select 
+                               value={form['mode'] || appMode} 
+                               onChange={(e) => set('mode', e.target.value)} 
+                               sx={{ height: 30, bgcolor: 'background.paper', fontSize: '0.8rem' }}
+                             >
+                               <MenuItem value="ecommerce">E-COMMERCE</MenuItem>
+                               <MenuItem value="catalog">CATALOG</MenuItem>
+                             </Select>
+                           </FormControl>
+                        )}
+                      </Box>
                       <Typography variant="body2">
-                        The store mode is set in <code>.env</code> as <code>APP_MODE={appMode}</code>.
-                        Tier 1 core features (pricing, cart, checkout, orders, payments, shipping) are
-                        locked to this mode and cannot be toggled here.
-                        Only the optional Tier 2 features below are controllable.
+                        The store mode is set in the database and controls Tier 1 core features (pricing, cart, checkout, orders, payments, shipping).
+                        These are locked to the mode and cannot be toggled here.
+                        Only the optional Tier 2 features below are controllable independently.
                       </Typography>
                     </Alert>
 

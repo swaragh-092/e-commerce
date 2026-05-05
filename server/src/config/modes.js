@@ -93,20 +93,20 @@ const TIER2_DEFAULTS = {
 // ─── Mode Resolution ──────────────────────────────────────────────────────────
 
 /**
- * Returns the validated current mode.
- * Defaults to 'ecommerce' if APP_MODE is missing or unrecognised —
- * this keeps existing deployments working without any ENV change.
+ * Returns the validated mode based on the passed parameter.
+ * Defaults to 'ecommerce' if mode is missing or unrecognised.
  *
+ * @param {string} modeParam
  * @returns {'ecommerce'|'catalog'}
  */
-const getMode = () => {
-  const raw = (process.env.APP_MODE || '').toLowerCase().trim();
+const getMode = (modeParam) => {
+  const raw = (modeParam || '').toLowerCase().trim();
   if (VALID_MODES.includes(raw)) return raw;
 
   if (raw && !warnedUnknownMode) {
     // eslint-disable-next-line no-console
     console.warn(
-      `[modes] Unknown APP_MODE="${process.env.APP_MODE}". Falling back to "ecommerce".`
+      `[modes] Unknown APP_MODE="${modeParam}". Falling back to "ecommerce".`
     );
     warnedUnknownMode = true;
   }
@@ -123,10 +123,11 @@ const getMode = () => {
  * Layer 3 — TIER1_FEATURES[mode]: mode-locked backbone; always applied last, never overridable
  *
  * @param {Record<string, boolean>} dbFeatures - Parsed feature settings from the DB
+ * @param {string} appMode - The active mode from the DB
  * @returns {Record<string, boolean>} Fully resolved feature map
  */
-const buildFeatures = (dbFeatures) => {
-  const mode = getMode();
+const buildFeatures = (dbFeatures, appMode) => {
+  const mode = getMode(appMode);
   const safeDb = dbFeatures || {};
 
   return {

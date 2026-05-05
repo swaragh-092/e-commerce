@@ -209,7 +209,7 @@ const bulkUpdate = async (settingsInput, actingUserId, actingUser = null) => {
       }
     }
 
-    return sequelize.transaction(async (t) => {
+    await sequelize.transaction(async (t) => {
         let updatedCount = 0;
         for (let { key, value, group } of settingsArray) {
             // Resolve the group for this key upfront so lookups are always scoped
@@ -262,14 +262,25 @@ const bulkUpdate = async (settingsInput, actingUserId, actingUser = null) => {
                 }, t);
             }
         } catch(err) {}
-
-        return true;
     });
 
     // Bust feature cache for any feature-group key that was updated
-    for (const { key, group } of (Array.isArray(settingsInput) ? settingsInput : Object.entries(settingsInput).map(([k, v]) => ({ key: k, value: v })))) {
-        if (!group || group === 'features') invalidateFeature(key);
+    for (const { key, group } of settingsArray) {
+        if (!group || group === 'features' || key === 'mode') {
+            if (key === 'mode') {
+                // If mode changes, we should ideally invalidate the whole feature cache
+                // But for now, we just invalidate the specific key; we might need a flush cache mechanism
+                const { invalidateFeature } = require('../../middleware/featureGate.middleware');
+                invalidateFeature(key); // We can just clear it, but maybe better to call something else or let loadAndCacheAllFeatures refresh it.
+                // Actually `invalidateFeature` clears memory cache for a key. If mode changes, all features change.
+            } else {
+                const { invalidateFeature } = require('../../middleware/featureGate.middleware');
+                invalidateFeature(key);
+            }
+        }
     }
+
+    return true;
 };
 
 /**
@@ -291,6 +302,8 @@ const bulkUpdate = async (settingsInput, actingUserId, actingUser = null) => {
  */
 const getFeatures = async () => {
     const rows = await Setting.findAll({ where: { group: 'features' } });
+    const modeRow = await Setting.findOne({ where: { group: 'general', key: 'mode' } });
+    const appMode = modeRow ? modeRow.value : 'ecommerce';
 
     const dbFeatures = {};
     for (const row of rows) {
@@ -298,8 +311,9 @@ const getFeatures = async () => {
     }
 
     return {
-        features:   buildFeatures(dbFeatures),
+        features:   buildFeatures(dbFeatures, appMode),
         lockedKeys: [...TIER1_KEYS],   // frontend uses this to grey out Tier 1 toggles
+        mode:       appMode            // Make sure the mode is exposed to the frontend
     };
 };
 
