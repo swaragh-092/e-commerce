@@ -48,6 +48,7 @@ const SettingsPage = lazy(() => import('../pages/admin/SettingsPage'));
 const PaymentGatewaysPage = lazy(() => import('../pages/admin/PaymentGatewaysPage'));
 const ShippingPage = lazy(() => import('../pages/admin/ShippingPage'));
 const SaleLabelsPage = lazy(() => import('../pages/admin/SaleLabelsPage'));
+const EnquiriesPage = lazy(() => import('../pages/admin/EnquiriesPage'));
 const AuditLogPage = lazy(() => import('../pages/admin/AuditLogPage'));
 const AttributesPage = lazy(() => import('../pages/admin/AttributesPage'));
 const BrandsPage = lazy(() => import('../pages/admin/BrandsPage'));
@@ -157,6 +158,9 @@ const AppRoutes = () => (
           </Route>
           <Route element={<ProtectedRoute permission={PERMISSIONS.COUPONS_READ} />}>
             <Route path="coupons" element={<CouponsPage />} />
+          </Route>
+          <Route element={<ProtectedRoute permission={PERMISSIONS.ENQUIRIES_READ} />}>
+            <Route path="enquiries" element={<EnquiriesPage />} />
           </Route>
           <Route element={<ProtectedRoute permission={PERMISSIONS.REVIEWS_READ} />}>
             <Route path="reviews" element={<ReviewsPage />} />

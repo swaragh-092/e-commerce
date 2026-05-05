@@ -259,6 +259,82 @@ const DEFAULTS = {
 `, ''),
     bodyText: 'Payment Failed — Order #{{order_number}} on {{store_name}}\n\nCustomer: {{customer_name}} ({{customer_email}})\nFailure Reason: {{failure_reason}}\nPayment Method: {{payment_method}}\nAmount: {{order_total}}\n\nView: {{website_url}}/admin/orders/{{order_id}}',
   },
+
+  new_enquiry_admin: {
+    subject: '[{{store_name}}] New Enquiry Received',
+    bodyHtml: EMAIL_WRAPPER(`
+    <h2>New Enquiry 📬</h2>
+    <p>A new enquiry has been submitted on <strong>{{store_name}}</strong>.</p>
+    <div class="info-box">
+      <p><strong>Customer:</strong> {{customerName}} ({{customerEmail}})</p>
+      <p><strong>Phone:</strong> {{customerPhone}}</p>
+      <p><strong>Subject:</strong> {{productName}} {{#if productSku}}(SKU: {{productSku}}){{/if}}</p>
+      {{^cartItems}}<p><strong>Quantity:</strong> {{quantity}}</p>{{/cartItems}}
+    </div>
+    {{#if cartItems}}
+    <table class="items">
+      <thead><tr><th>Product</th><th>Qty</th></tr></thead>
+      <tbody>
+        {{#each cartItems}}
+        <tr>
+          <td>{{this.product.name}}{{#if this.variant}}<br><small style="color:#999">{{this.variant.sku}}</small>{{/if}}</td>
+          <td>{{this.quantity}}</td>
+        </tr>
+        {{/each}}
+      </tbody>
+    </table>
+    {{/if}}
+    <div class="info-box">
+      <p><strong>Message:</strong></p>
+      <p style="white-space: pre-wrap;">{{message}}</p>
+    </div>
+    <a href="{{website_url}}/admin/enquiries" class="btn">View Enquiries</a>
+`, ''),
+    bodyText: 'New Enquiry on {{store_name}}\n\nCustomer: {{customerName}} ({{customerEmail}})\nSubject: {{productName}}\n{{#if cartItems}}\nItems:\n{{#each cartItems}}- {{this.quantity}}x {{this.product.name}}\n{{/each}}{{/if}}\nMessage:\n{{message}}\n\nView: {{website_url}}/admin/enquiries',
+  },
+
+  new_enquiry_customer: {
+    subject: 'We received your enquiry — {{store_name}}',
+    bodyHtml: EMAIL_WRAPPER(`
+    <h2>Hi {{customerName}},</h2>
+    <p>Thank you for getting in touch with us! We have received your enquiry regarding <strong>{{productName}}</strong> and our team will get back to you shortly.</p>
+    {{#if cartItems}}
+    <table class="items">
+      <thead><tr><th>Product</th><th>Qty</th></tr></thead>
+      <tbody>
+        {{#each cartItems}}
+        <tr>
+          <td>{{this.product.name}}{{#if this.variant}}<br><small style="color:#999">{{this.variant.sku}}</small>{{/if}}</td>
+          <td>{{this.quantity}}</td>
+        </tr>
+        {{/each}}
+      </tbody>
+    </table>
+    {{/if}}
+    <div class="info-box">
+      <p><strong>Your Message:</strong></p>
+      <p style="white-space: pre-wrap;">{{message}}</p>
+    </div>
+    <p>If you have any additional information to add, simply reply to this email.</p>
+`, ''),
+    bodyText: 'Hi {{customerName}},\n\nThank you for getting in touch! We have received your enquiry regarding {{productName}} and will get back to you shortly.\n\n{{#if cartItems}}Items:\n{{#each cartItems}}- {{this.quantity}}x {{this.product.name}}\n{{/each}}\n\n{{/if}}Your Message:\n{{message}}\n\n{{store_name}}',
+  },
+
+  enquiry_reply_customer: {
+    subject: 'Re: Your Enquiry regarding {{productName}} — {{store_name}}',
+    bodyHtml: EMAIL_WRAPPER(`
+    <h2>Hi {{customerName}},</h2>
+    <p style="white-space: pre-wrap; font-size: 16px;">{{replyMessage}}</p>
+    <br/>
+    <hr class="divider">
+    <p><strong>Your original message:</strong></p>
+    <div class="info-box" style="margin-top: 10px;">
+      <p style="white-space: pre-wrap; color: #555;">{{message}}</p>
+    </div>
+    <p>If you have any further questions, simply reply to this email.</p>
+`, ''),
+    bodyText: 'Hi {{customerName}},\n\n{{replyMessage}}\n\n---\nYour original message:\n{{message}}\n\n{{store_name}}',
+  },
 };
 
 const TEMPLATE_VARIABLES = {
@@ -275,12 +351,20 @@ const TEMPLATE_VARIABLES = {
   admin_new_order:      ['customer_name','customer_email','order_number','order_date','order_id','order_total','order_subtotal','shipping_total','tax_total','discount_total','payment_method','items','website_url','store_name','support_email'],
   admin_order_cancelled:['customer_name','customer_email','order_number','order_id','cancel_reason','refund_amount','items','order_total','website_url','store_name','support_email'],
   admin_order_failed:   ['customer_name','customer_email','order_number','order_date','order_id','order_total','payment_method','failure_reason','items','website_url','store_name','support_email'],
+  new_enquiry_admin:    ['customerName','customerEmail','customerPhone','productName','productSku','quantity','cartItems','message','website_url','store_name','support_email'],
+  new_enquiry_customer: ['customerName','productName','cartItems','message','website_url','store_name','support_email'],
+  enquiry_reply_customer: ['customerName','productName','message','replyMessage','website_url','store_name','support_email'],
 };
 
 const SAMPLE_VARIABLES = {
   customer_name: 'Jane Doe',
   customer_email: 'jane@example.com',
   name: 'Jane Doe',
+  customerName: 'Jane Doe',
+  customerEmail: 'jane@example.com',
+  customerPhone: '123-456-7890',
+  message: 'I am interested in buying this product in bulk. Do you offer any discounts?',
+  replyMessage: 'Thanks for reaching out! Yes, we offer a 15% discount on orders of 10 or more. Let me know how many you need.',
   order_number: 'ORD-2024-00123',
   order_date: new Date().toLocaleDateString(),
   order_id: 'preview-id',
@@ -299,8 +383,10 @@ const SAMPLE_VARIABLES = {
   verify_url: '#verify',
   reset_url: '#reset',
   productName: 'Wireless Headphones Pro',
+  productSku: 'WHP-001',
   sku: 'WHP-001',
   stock: 3,
+  quantity: 1,
   store_name: 'My Store',
   website_url: 'http://localhost:3000',
   support_email: 'support@example.com',
@@ -310,6 +396,10 @@ const SAMPLE_VARIABLES = {
   items: [
     { name: 'Wireless Headphones Pro', variant: 'Color: Black', quantity: 1, price: '₹899.00', subtotal: '₹899.00' },
     { name: 'USB-C Cable 2m', variant: null, quantity: 2, price: '₹100.00', subtotal: '₹200.00' },
+  ],
+  cartItems: [
+    { product: { name: 'Wireless Headphones Pro' }, variant: { sku: 'WHP-BLK-01' }, quantity: 1 },
+    { product: { name: 'USB-C Cable 2m' }, variant: null, quantity: 2 },
   ],
 };
 

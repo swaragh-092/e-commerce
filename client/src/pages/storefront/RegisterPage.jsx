@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { Box, Typography, TextField, Button, Alert, useTheme } from '@mui/material';
 import { useNavigate, Link as RouterLink } from 'react-router-dom';
 import { useAuth } from '../../hooks/useAuth';
-import { validateEmail, validatePassword, validateRequired } from '../../utils/authValidation';
+import { validateEmail, validatePassword, validateRequired, getPasswordChecks } from '../../utils/authValidation';
 import { getApiErrorMessage } from '../../utils/apiErrors';
 
 const RegisterPage = () => {
@@ -14,6 +14,7 @@ const RegisterPage = () => {
   const [fieldErrors, setFieldErrors] = useState({});
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
+  const [touched, setTouched] = useState({});
 
   const validateForm = (values) => ({
     firstName: validateRequired(values.firstName, 'First name'),
@@ -26,10 +27,43 @@ const RegisterPage = () => {
   });
 
   const handleChange = (e) => {
-    const nextFormData = { ...formData, [e.target.name]: e.target.value };
-    setFormData(nextFormData);
-    setFieldErrors(validateForm(nextFormData));
+    setFormData({ ...formData, [e.target.name]: e.target.value });
   };
+
+  const handleBlur = (e) => {
+    const { name } = e.target;
+    setTouched(prev => ({ ...prev, [name]: true }));
+
+    const errors = validateForm(formData);
+    setFieldErrors(errors);
+  };
+
+  const PasswordChecklist = ({ password }) => {
+    const checks = getPasswordChecks(password);
+
+    const Item = ({ valid, text }) => {
+      if (!valid) {
+        return (
+          <Typography variant="body2" color="error.main">
+            *  {text}
+          </Typography>
+        );
+      }
+    }
+      
+
+    return (
+      <Box sx={{ mt: 1 }}>
+        <Item valid={checks.length} text="At least 8 characters" />
+        <Item valid={checks.uppercase} text="1 uppercase letter" />
+        <Item valid={checks.lowercase} text="1 lowercase letter" />
+        <Item valid={checks.number} text="1 number" />
+        <Item valid={checks.symbol} text="1 special character" />
+      </Box>
+    );
+  };
+
+
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -37,9 +71,9 @@ const RegisterPage = () => {
     const nextErrors = validateForm(formData);
     setFieldErrors(nextErrors);
 
-    if (Object.values(nextErrors).some(Boolean)) {
-        return setError('Please fix the highlighted fields.');
-    }
+    // if (Object.values(nextErrors).some(Boolean)) {
+    //     return setError('Please fix the highlighted fields.');
+    // }
 
     setLoading(true);
 
@@ -48,12 +82,33 @@ const RegisterPage = () => {
           firstName: formData.firstName,
           lastName: formData.lastName,
           email: formData.email,
-          password: formData.password
+          password: formData.password,
+          confirmPassword: formData.confirmPassword
       });
       // register() auto-logs-in, redirect to home
       navigate('/');
     } catch (err) {
-      setError(getApiErrorMessage(err, 'Registration failed'));
+      const errData = err?.response?.data?.error;
+
+      if (errData?.code === 'VALIDATION_ERROR' && errData?.details) {
+        const errors = {};
+
+        errData.details.forEach((d) => {
+          errors[d.field] = d.message;
+        });
+
+        setFieldErrors(errors);
+
+        // mark those fields as touched so they show
+        const touchedFields = {};
+        Object.keys(errors).forEach((key) => {
+          touchedFields[key] = true;
+        });
+        setTouched(prev => ({ ...prev, ...touchedFields }));
+
+      } else {
+        setError(getApiErrorMessage(err, 'Registration failed'));
+      }
     } finally {
       setLoading(false);
     }
@@ -76,8 +131,9 @@ const RegisterPage = () => {
                 name="firstName"
                 value={formData.firstName}
                 onChange={handleChange}
-                error={Boolean(fieldErrors.firstName)}
-                helperText={fieldErrors.firstName}
+                error={Boolean(touched.firstName && fieldErrors.firstName)}
+                helperText={touched.firstName && fieldErrors.firstName}
+                onBlur={handleBlur}
                 required
             />
             <TextField
@@ -87,8 +143,9 @@ const RegisterPage = () => {
                 name="lastName"
                 value={formData.lastName}
                 onChange={handleChange}
-                error={Boolean(fieldErrors.lastName)}
-                helperText={fieldErrors.lastName}
+                error={Boolean(touched.lastName && fieldErrors.lastName)}
+                helperText={touched.lastName && fieldErrors.lastName}
+                onBlur={handleBlur}
                 required
             />
         </Box>
@@ -100,8 +157,9 @@ const RegisterPage = () => {
           type="email"
           value={formData.email}
           onChange={handleChange}
-          error={Boolean(fieldErrors.email)}
-          helperText={fieldErrors.email}
+          error={Boolean(touched.email && fieldErrors.email)}
+          helperText={touched.email && fieldErrors.email}
+          onBlur={handleBlur}
           required
         />
         <TextField
@@ -112,8 +170,11 @@ const RegisterPage = () => {
           type="password"
           value={formData.password}
           onChange={handleChange}
-          error={Boolean(fieldErrors.password)}
-          helperText={fieldErrors.password || 'Minimum 8 characters, at least 1 uppercase and 1 number'}
+          error={Boolean(touched.password && fieldErrors.password)}
+          helperText={
+            touched.password ? <PasswordChecklist password={formData.password} /> : ''
+          }
+          onBlur={handleBlur}
           required
         />
         <TextField
@@ -124,8 +185,9 @@ const RegisterPage = () => {
           type="password"
           value={formData.confirmPassword}
           onChange={handleChange}
-          error={Boolean(fieldErrors.confirmPassword)}
-          helperText={fieldErrors.confirmPassword}
+          error={Boolean(touched.confirmPassword && fieldErrors.confirmPassword)}
+          helperText={touched.confirmPassword && fieldErrors.confirmPassword}
+          onBlur={handleBlur}
           required
         />
 

@@ -25,6 +25,8 @@ import { getEligibleCoupons } from '../../services/adminService';
 import { getCartItemUnitPrice } from '../../utils/variantPricing';
 import { getVariantOptionLabel } from '../../utils/variantOptions';
 import {calculateTax} from '../../../../shared/calculations.js';
+import EnquiryModal from '../../components/storefront/EnquiryModal';
+import HelpOutlineIcon from '@mui/icons-material/HelpOutline';
 
 const row = (align = 'center', justify = 'flex-start') => ({
     display: 'flex', alignItems: align, justifyContent: justify,
@@ -209,7 +211,7 @@ const TrustBadge = ({ icon, title, sub }) => (
 );
 
 // ── Order Summary ─────────────────────────────────────────────────────────────
-const OrderSummary = ({ visibleCount, subtotal, shippingCost, shippingMethod, freeThreshold, taxRows, taxInclusive, estimatedTotal, offerSummary, formatPrice, onCheckout }) => {
+const OrderSummary = ({ visibleCount, subtotal, shippingCost, shippingMethod, freeThreshold, taxRows, taxInclusive, estimatedTotal, offerSummary, formatPrice, onCheckout, setEnquiryOpen }) => {
     const shippingFree = shippingMethod === 'free' || shippingCost === 0;
     const progressPct = freeThreshold > 0 ? Math.min((subtotal / freeThreshold) * 100, 100) : 0;
     return (
@@ -285,6 +287,11 @@ const OrderSummary = ({ visibleCount, subtotal, shippingCost, shippingMethod, fr
                         sx={{ mt: 2, py: 1.55, borderRadius: 1.5, fontWeight: 800, fontSize: '0.88rem', letterSpacing: 0.6, boxShadow: 'none', '&:hover': { boxShadow: 'none', filter: 'brightness(1.08)' } }}>
                         Proceed to Checkout
                     </Button>
+                    <Button variant="outlined" color="secondary" fullWidth size="large" onClick={() => setEnquiryOpen(true)}
+                        startIcon={<HelpOutlineIcon sx={{ fontSize: 16 }} />}
+                        sx={{ mt: 1, py: 1.55, borderRadius: 1.5, fontWeight: 700, fontSize: '0.88rem' }}>
+                        Enquire About Cart
+                    </Button>
                     <Button fullWidth component={Link} to="/products"
                         sx={{ mt: 0.75, fontSize: '0.78rem', fontWeight: 500, color: 'text.secondary', py: 0.75 }}>
                         ← Continue Shopping
@@ -332,7 +339,7 @@ const CartPage = () => {
     const navigate = useNavigate();
     const [offerSummary, setOfferSummary] = useState(null);
     const [clearing, setClearing] = useState(false);
-
+    const [enquiryOpen, setEnquiryOpen] = useState(false);
 
 
     const items = cart?.items || [];
@@ -464,8 +471,20 @@ const CartPage = () => {
                     taxRows={taxRows} taxInclusive={taxInclusive}
                     estimatedTotal={estimatedTotal} offerSummary={offerSummary}
                     formatPrice={formatPrice} onCheckout={() => navigate('/checkout')}
+                    setEnquiryOpen={setEnquiryOpen}
                 />
             </Box>
+
+            {clearing && (
+                <Box sx={{ position: 'fixed', inset: 0, bgcolor: 'rgba(255,255,255,0.7)', zIndex: 9999, ...row('center', 'center'), backdropFilter: 'blur(2px)' }}>
+                    <CircularProgress color="inherit" />
+                </Box>
+            )}
+            <EnquiryModal
+                open={enquiryOpen}
+                onClose={() => setEnquiryOpen(false)}
+                cartItems={items}
+            />
         </Container>
     );
 };

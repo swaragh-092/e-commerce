@@ -1,3 +1,4 @@
+import { v4 as uuidv4 } from 'uuid';
 import api from './api';
 
 // Guest cart: sessionId stored in localStorage
@@ -6,7 +7,7 @@ const SESSION_KEY = 'cartSessionId';
 export const getSessionId = () => {
   let id = localStorage.getItem(SESSION_KEY);
   if (!id) {
-    id = crypto.randomUUID();
+    id = uuidv4();
     localStorage.setItem(SESSION_KEY, id);
   }
   return id;

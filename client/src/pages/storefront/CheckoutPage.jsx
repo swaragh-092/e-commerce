@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useContext, useMemo } from 'react';
+import { v4 as uuidv4 } from 'uuid';
 import {
     Box, Container, Typography, Button, Divider, Paper, TextField,
     CircularProgress, Alert, Radio, RadioGroup,
@@ -79,12 +80,7 @@ const normalizeBuyNowItem = (item) => {
 };
 
 const createCheckoutSessionId = () => {
-    if (typeof crypto !== 'undefined' && crypto.randomUUID) return crypto.randomUUID();
-    return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, (char) => {
-        const rand = Math.random() * 16 | 0;
-        const value = char === 'x' ? rand : (rand & 0x3 | 0x8);
-        return value.toString(16);
-    });
+    return uuidv4();
 };
 
 // Section wrapper — shows locked/completed state when not active

@@ -3,7 +3,7 @@ import {
     Box, Typography, Tabs, Tab, Paper, Container, TextField, Button, Alert,
     List, ListItem, ListItemText, ListItemSecondaryAction, IconButton, Chip,
     Dialog, DialogTitle, DialogContent, DialogActions, Divider, CircularProgress,
-    Table, TableBody, TableCell, TableContainer, TableHead, TableRow, Tooltip,
+    Table, TableBody, TableCell, TableContainer, TableHead, TableRow, Tooltip, InputAdornment
 } from '@mui/material';
 import DeleteIcon from '@mui/icons-material/Delete';
 import EditIcon from '@mui/icons-material/Edit';
@@ -19,6 +19,8 @@ import { useCurrency } from '../../hooks/useSettings';
 import CenteredLoader from '../../components/common/CenteredLoader';
 import { getApiErrorMessage } from '../../utils/apiErrors';
 import { useNotification } from '../../context/NotificationContext';
+import { Visibility, VisibilityOff } from '@mui/icons-material';
+import { getPasswordChecks } from '../../utils/authValidation';
 
 function TabPanel(props) {
     const { children, value, index, ...other } = props;
@@ -261,9 +263,40 @@ const AddressesTab = () => {
 
 /* ─── Password Tab ────────────────────────────────────────────────────── */
 const PasswordTab = () => {
-    const [passwords, setPasswords] = useState({ currentPassword: '', newPassword: '' });
+    const [passwords, setPasswords] = useState({ currentPassword: '', newPassword: '', confirmPassword: ''});
     const [status, setStatus] = useState(null);
     const [validationErrors, setValidationErrors] = useState({});
+    const [showPassword, setShowPassword] = useState({
+        currentPassword: false,
+        newPassword: false,
+        confirmPassword: false
+    });
+
+    const PasswordChecklist = ({ password }) => {
+        const checks = getPasswordChecks(password);
+
+        const missingRules = [
+            !checks.length && 'At least 8 characters',
+            !checks.uppercase && '1 uppercase letter',
+            !checks.lowercase && '1 lowercase letter',
+            !checks.number && '1 number',
+            !checks.symbol && '1 special character',
+        ].filter(Boolean);
+
+        return (
+            <Box sx={{ mt: 1 }}>
+                {missingRules.map((rule, index) => (
+                    <Typography
+                        key={index}
+                        variant="caption"
+                        sx={{ display: 'block', color: 'error.main' }}
+                    >
+                        {rule}
+                    </Typography>
+                ))}
+            </Box>
+        );
+    };
 
     const handleSubmit = async (e) => {
         e.preventDefault();
@@ -272,7 +305,7 @@ const PasswordTab = () => {
         try {
             await userService.changePassword(passwords);
             setStatus({ type: 'success', message: 'Password changed successfully' });
-            setPasswords({ currentPassword: '', newPassword: '' });
+            setPasswords({ currentPassword: '', newPassword: '', confirmPassword: '' });
         } catch (error) {
             const errData = error?.response?.data?.error;
             if (errData?.code === 'VALIDATION_ERROR' && errData?.details) {
@@ -285,15 +318,64 @@ const PasswordTab = () => {
         }
     };
 
+    const handleToggle = (field) => {
+        setShowPassword(prev => ({
+            ...prev,
+            [field]: !prev[field]
+        }));
+    };
+
+    const renderPasswordField = (name, label) => {
+        const isNewPassword = name === 'newPassword';
+
+        return (
+            <TextField
+                fullWidth
+                type={showPassword[name] ? 'text' : 'password'}
+                label={label}
+                name={name}
+                value={passwords[name]}
+                onChange={(e) => setPasswords({ ...passwords, [name]: e.target.value })}
+                margin="normal"
+                error={!!validationErrors[name]}
+                helperText={
+                    isNewPassword ? (
+                        validationErrors[name] ? (
+                            // 🔴 Show backend error ONLY
+                            <Typography variant="caption" color="error">
+                                {validationErrors[name]}
+                            </Typography>
+                        ) : (
+                            // 🟢 Show checklist ONLY if no backend error
+                            <PasswordChecklist password={passwords.newPassword} />
+                        )
+                    ) : (
+                        validationErrors[name]
+                    )
+                }
+                InputProps={{
+                    endAdornment: (
+                        <InputAdornment position="end">
+                            <IconButton
+                                onClick={() => handleToggle(name)}
+                                onMouseDown={(e) => e.preventDefault()}
+                                edge="end"
+                            >
+                                {showPassword[name] ? <VisibilityOff /> : <Visibility />}
+                            </IconButton>
+                        </InputAdornment>
+                    )
+                }}
+            />
+        );
+    };
+
     return (
         <Box component="form" onSubmit={handleSubmit} sx={{ maxWidth: 400 }}>
             {status && <Alert severity={status.type} sx={{ mb: 2 }}>{status.message}</Alert>}
-            <TextField fullWidth type="password" label="Current Password" name="currentPassword"
-                value={passwords.currentPassword} onChange={(e) => setPasswords({ ...passwords, currentPassword: e.target.value })} margin="normal"  
-                error={!!validationErrors.currentPassword} helperText={validationErrors.currentPassword} />
-            <TextField fullWidth type="password" label="New Password" name="newPassword"
-                value={passwords.newPassword} onChange={(e) => setPasswords({ ...passwords, newPassword: e.target.value })} margin="normal"  
-                error={!!validationErrors.newPassword} helperText={validationErrors.newPassword} />
+            {renderPasswordField('currentPassword', 'Current Password')}
+            {renderPasswordField('newPassword', 'New Password')}
+            {renderPasswordField('confirmPassword', 'Confirm Password')}
             <Button type="submit" variant="contained" color="secondary" sx={{ mt: 2 }}>Update Password</Button>
         </Box>
     );
