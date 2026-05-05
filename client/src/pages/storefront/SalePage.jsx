@@ -3,13 +3,16 @@ import { Box, Container, Grid, Typography, Pagination, useTheme, useMediaQuery }
 import ProductGrid from '../../components/product/ProductGrid';
 import { getProducts } from '../../services/productService';
 import PageSEO from '../../components/common/PageSEO';
-import { useSettings } from '../../hooks/useSettings';
+import { useSettings, useFeature } from '../../hooks/useSettings';
+import { Navigate } from 'react-router-dom';
 
 const SalePage = () => {
     const [products, setProducts] = useState([]);
     const [loading, setLoading] = useState(true);
     const [meta, setMeta] = useState({ page: 1, totalPages: 1 });
     const [page, setPage] = useState(1);
+
+    const pricingEnabled = useFeature('pricing');
 
     const theme = useTheme();
     const { settings } = useSettings();
@@ -37,6 +40,10 @@ const SalePage = () => {
         };
         fetchProducts();
     }, [page, defaultLimit]);
+
+    if (!pricingEnabled) {
+        return <Navigate to="/404" replace />;
+    }
 
     return (
         <Container maxWidth="xl" sx={{ py: 6 }}>

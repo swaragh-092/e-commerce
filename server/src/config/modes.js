@@ -34,7 +34,6 @@ const TIER1_FEATURES = {
     orders:   true,
     payments: true,
     shipping: true,
-    enquiry:  false,   // enquiry-based flow is catalog-only
   },
   catalog: {
     pricing:  false,
@@ -43,7 +42,6 @@ const TIER1_FEATURES = {
     orders:   false,
     payments: false,
     shipping: false,
-    enquiry:  true,    // catalog mode forces enquiry ON
   },
 };
 
@@ -73,9 +71,10 @@ const TIER2_DEFAULTS = {
     showAvailableCoupons:     true,
     multiCurrency:            false,
     socialLogin:              false,
+    enquiry:                  false,  // Tier 2: defaults to false in ecommerce but admin can enable
   },
   catalog: {
-    wishlist:                 false,  // no personal features by default in catalog
+    wishlist:                 true,   // defaults to true so catalog users can save favorites
     reviews:                  true,
     coupons:                  false,  // coupons are ecommerce-centric by default
     guestCheckout:            true,   // toggleable but auto-hides in UI (checkout is off)
@@ -85,6 +84,7 @@ const TIER2_DEFAULTS = {
     showAvailableCoupons:     false,
     multiCurrency:            false,
     socialLogin:              false,
+    enquiry:                  true,   // Tier 2: defaults to true in catalog mode
   },
 };
 

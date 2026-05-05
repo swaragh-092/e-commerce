@@ -79,7 +79,7 @@ const ProductCard = ({ product, fromCategory }) => {
             sx={{ position: 'absolute', top: 8, right: 8, zIndex: 1 }}
           />
         )}
-        {endingSoon && (
+        {pricingEnabled && endingSoon && (
           <Chip
             label="Ending Soon"
             color="warning"
@@ -87,7 +87,7 @@ const ProductCard = ({ product, fromCategory }) => {
             sx={{ position: 'absolute', top: 8, left: 8, zIndex: 1, fontWeight: 700 }}
           />
         )}
-        {saleLabelText && (
+        {pricingEnabled && saleLabelText && (
           <Chip
             label={saleLabelText}
             size="small"
