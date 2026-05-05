@@ -16,17 +16,61 @@ concurrency:
 jobs:
   deploy:
     name: Deploy to EC2
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-latest   # 7 GB RAM — Vite builds here, not on EC2
 
     steps:
-      - name: Deploy via SSH
+      # ──────────────────────────────────────────────────────────
+      # STEP 1 — Checkout code on the GitHub Actions runner
+      # ──────────────────────────────────────────────────────────
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      # ──────────────────────────────────────────────────────────
+      # STEP 2 — Build frontend on the runner (7 GB RAM, no OOM)
+      # EC2 t3.micro never touches this build
+      # ──────────────────────────────────────────────────────────
+      - name: Setup Node 18
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: client/package-lock.json
+
+      - name: Install client dependencies
+        working-directory: client
+        run: npm ci
+
+      - name: Build frontend
+        working-directory: client
+        run: npm run build
+        env:
+          VITE_API_URL: http://${{ secrets.EC2_HOST }}:5000/api
+
+      # ──────────────────────────────────────────────────────────
+      # STEP 3 — Copy built dist/ to EC2 via SCP
+      # ──────────────────────────────────────────────────────────
+      - name: Copy dist to EC2
+        uses: appleboy/scp-action@v0.1.7
+        with:
+          host:     ${{ secrets.EC2_HOST }}
+          username: ${{ secrets.EC2_USER }}
+          key:      ${{ secrets.EC2_SSH_KEY }}
+          port:     22
+          source:   "client/dist/*"
+          target:   "${{ secrets.APP_DIR }}/client/dist"
+          strip_components: 2   # removes "client/dist" prefix from path
+
+      # ──────────────────────────────────────────────────────────
+      # STEP 4 — SSH into EC2: pull code, install, migrate, reload
+      # No frontend build here — dist was already uploaded above
+      # ──────────────────────────────────────────────────────────
+      - name: Deploy backend via SSH
         uses: appleboy/ssh-action@v1.0.3
         with:
           host:     ${{ secrets.EC2_HOST }}
           username: ${{ secrets.EC2_USER }}
           key:      ${{ secrets.EC2_SSH_KEY }}
           port:     22
-          # Fail the GitHub step if anything inside the script fails
           script_stop: true
 
           script: |
@@ -39,66 +83,42 @@ jobs:
             echo "🚀 Deploy started at $(date)"
             echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
 
-            # ── Error trap: print the failing command on exit ───────────
-            trap 'echo ""; echo "❌ DEPLOY FAILED on: $BASH_COMMAND"; echo "   Run: pm2 logs ecommerce-api --lines 50"' ERR
+            trap 'echo "❌ DEPLOY FAILED on: $BASH_COMMAND"; echo "Run: pm2 logs ecommerce-api --lines 50"' ERR
 
-            # ──────────────────────────────────────────────────────────
-            # STEP 1 — Pull latest code
-            # ──────────────────────────────────────────────────────────
+            # ── [1/3] Pull latest code ─────────────────────────────────
             echo ""
-            echo "── [1/5] git pull"
+            echo "── [1/3] git pull"
             git pull origin main \
-              || { echo "❌ git pull failed — resolve merge conflicts first"; exit 1; }
+              || { echo "❌ git pull failed"; exit 1; }
 
-            # ──────────────────────────────────────────────────────────
-            # STEP 2 — Backend dependencies
-            # npm ci is faster + deterministic (uses package-lock.json)
-            # ──────────────────────────────────────────────────────────
+            # ── [2/3] Backend dependencies ─────────────────────────────
+            # NOTE: server/.env already exists on EC2 — never touch it
             echo ""
-            echo "── [2/5] Backend: npm ci"
+            echo "── [2/3] Backend: npm ci"
             cd server
             npm ci --omit=dev \
               || { echo "❌ npm ci failed — check package-lock.json is committed"; exit 1; }
 
-
-            # ──────────────────────────────────────────────────────────
-            # STEP 4 — Frontend build
-            # CRITICAL ORDER: build BEFORE reloading pm2.
-            # If build fails here, backend keeps serving old (working) code.
-            # ──────────────────────────────────────────────────────────
+            # ── [3/3] Reload backend + migrate ─────────────────────────
             echo ""
-            echo "── [3/4] Frontend build (512 MB heap)"
-            cd ../client
-            npm ci \
-              || { echo "❌ client npm ci failed"; exit 1; }
-
-            NODE_OPTIONS=--max-old-space-size=512 npm run build \
-              || { echo "❌ Vite build failed — backend NOT reloaded, old site still live"; exit 1; }
-
-            # ──────────────────────────────────────────────────────────
-            # STEP 5 — Reload backend (only runs if all above passed)
-            # Use full path so pm2 finds index.js from any working dir
-            # ──────────────────────────────────────────────────────────
-            echo ""
-            echo "── [4/4] Reload backend via pm2"
-            cd "$APP_DIR/server"
+            echo "── [3/3] Reload backend via pm2"
             pm2 reload ecommerce-api \
               || pm2 start "$APP_DIR/server/index.js" --name ecommerce-api \
-              || { echo "❌ pm2 failed to start/reload"; exit 1; }
+              || { echo "❌ pm2 failed"; exit 1; }
 
-            # Optional: run DB migrations if sequelize-cli is installed
-            npx sequelize-cli db:migrate --env production 2>/dev/null \
+            # Run DB migrations
+            NODE_ENV=production npm run migrate \
               && echo "   ✅ Migrations applied" \
-              || echo "   ℹ️  No migrations to run"
+              || echo "   ℹ️  No new migrations to run"
 
             echo ""
             echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
             echo "✅ Deploy complete at $(date)"
             echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
 
-      # ── Smoke test — runs from the GitHub Actions runner ──────────
-      # Retries 5 times with 5-second gaps (pm2 may need a moment)
-      # Hits port 5000 directly — no Nginx assumption
+      # ──────────────────────────────────────────────────────────
+      # STEP 5 — Smoke test (retries 5x with 5s gap)
+      # ──────────────────────────────────────────────────────────
       - name: Smoke test — health check
         run: |
           echo "Waiting for pm2 to stabilise..."
