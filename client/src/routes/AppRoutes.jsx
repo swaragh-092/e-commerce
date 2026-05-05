@@ -1,7 +1,8 @@
 import React, { Suspense, lazy } from 'react';
 import { Routes, Route, Navigate } from 'react-router-dom';
 import { Box, CircularProgress } from '@mui/material';
-
+import { useFeature, useMode } from '../hooks/useSettings';
+import { Outlet } from 'react-router-dom';
 
 // Layouts
 import StoreLayout from '../layouts/StoreLayout';
@@ -9,6 +10,24 @@ import AdminLayout from '../layouts/AdminLayout';
 import { ProtectedRoute } from './ProtectedRoute';
 import { ADMIN_ACCESS_PERMISSIONS, PERMISSIONS, getFirstAccessibleAdminPath } from '../utils/permissions';
 import { useAuth } from '../hooks/useAuth';
+
+/**
+ * Redirects to /products if a feature is disabled in the current mode.
+ * Use this to guard storefront routes that don't apply in catalog mode.
+ */
+const FeatureRoute = ({ feature, redirectTo = '/products' }) => {
+  const enabled = useFeature(feature);
+  return enabled ? <Outlet /> : <Navigate to={redirectTo} replace />;
+};
+
+/**
+ * Redirects to redirectTo if the current APP_MODE doesn't match the required mode.
+ * Use this to guard admin routes that should not exist in catalog mode.
+ */
+const ModeRoute = ({ requiredMode, redirectTo = '/admin' }) => {
+  const currentMode = useMode();
+  return currentMode === requiredMode ? <Outlet /> : <Navigate to={redirectTo} replace />;
+};
 
 // Storefront pages
 const LoginPage = lazy(() => import('../pages/storefront/LoginPage'));
@@ -103,6 +122,17 @@ const AppRoutes = () => (
         <Route path="reset-password" element={<ResetPasswordPage />} />
         <Route path="verify-email" element={<VerifyEmailPage />} />
 
+        {/* Feature-gated: cart & checkout — hidden in catalog mode */}
+        <Route element={<FeatureRoute feature="cart" />}>
+          <Route path="cart" element={<CartPage />} />
+        </Route>
+        <Route element={<FeatureRoute feature="checkout" />}>
+          <Route path="checkout" element={<CheckoutPage />} />
+          <Route path="payment/:orderId" element={<PaymentPage />} />
+          <Route path="payment/success" element={<PaymentSuccessPage />} />
+          <Route path="payment/failure" element={<PaymentFailurePage />} />
+        </Route>
+
         {/* Protected Storefront */}
         <Route element={<ProtectedRoute />}>
           <Route path="account" element={<AccountPage />} />
@@ -110,11 +140,11 @@ const AppRoutes = () => (
           <Route path="account/orders/:id/invoice" element={<StorefrontOrderInvoicePage />} />
           <Route path="orders" element={<AllOrdersPage />} />
           <Route path="profile" element={<AccountPage />} />
-          <Route path="wishlist" element={<WishlistPage />} />
-          <Route path="checkout" element={<CheckoutPage />} />
-          <Route path="payment/:orderId" element={<PaymentPage />} />
-          <Route path="payment/success" element={<PaymentSuccessPage />} />
-          <Route path="payment/failure" element={<PaymentFailurePage />} />
+
+          {/* Wishlist — feature gated */}
+          <Route element={<FeatureRoute feature="wishlist" />}>
+            <Route path="wishlist" element={<WishlistPage />} />
+          </Route>
         </Route>
 
         {/* 404 catch-all */}
@@ -149,15 +179,21 @@ const AppRoutes = () => (
           <Route element={<ProtectedRoute permission={PERMISSIONS.ATTRIBUTES_READ} />}>
             <Route path="attributes" element={<AttributesPage />} />
           </Route>
-          <Route element={<ProtectedRoute permission={PERMISSIONS.ORDERS_READ} />}>
-            <Route path="orders" element={<OrdersManagePage />} />
-            <Route path="orders/:id" element={<OrderDetailPage />} />
+          {/* Orders — ecommerce only */}
+          <Route element={<ModeRoute requiredMode="ecommerce" />}>
+            <Route element={<ProtectedRoute permission={PERMISSIONS.ORDERS_READ} />}>
+              <Route path="orders" element={<OrdersManagePage />} />
+              <Route path="orders/:id" element={<OrderDetailPage />} />
+            </Route>
           </Route>
           <Route element={<ProtectedRoute permission={PERMISSIONS.CUSTOMERS_READ} />}>
             <Route path="customers" element={<CustomersPage />} />
           </Route>
-          <Route element={<ProtectedRoute permission={PERMISSIONS.COUPONS_READ} />}>
-            <Route path="coupons" element={<CouponsPage />} />
+          {/* Coupons — ecommerce only */}
+          <Route element={<ModeRoute requiredMode="ecommerce" />}>
+            <Route element={<ProtectedRoute permission={PERMISSIONS.COUPONS_READ} />}>
+              <Route path="coupons" element={<CouponsPage />} />
+            </Route>
           </Route>
           <Route element={<ProtectedRoute permission={PERMISSIONS.ENQUIRIES_READ} />}>
             <Route path="enquiries" element={<EnquiriesPage />} />
@@ -171,10 +207,15 @@ const AppRoutes = () => (
           <Route element={<ProtectedRoute permission={PERMISSIONS.SETTINGS_READ} />}>
             <Route path="settings" element={<SettingsPage />} />
             <Route path="seo-overrides" element={<SeoOverridesPage />} />
-            <Route path="payment-gateways" element={<PaymentGatewaysPage />} />
-            <Route path="shipping" element={<ShippingPage />} />
-            <Route path="sale-labels" element={<SaleLabelsPage />} />
             <Route path="email-templates" element={<EmailTemplatesPage />} />
+          </Route>
+          {/* Payment Gateways, Shipping, Sale Labels — ecommerce only */}
+          <Route element={<ModeRoute requiredMode="ecommerce" />}>
+            <Route element={<ProtectedRoute permission={PERMISSIONS.SETTINGS_READ} />}>
+              <Route path="payment-gateways" element={<PaymentGatewaysPage />} />
+              <Route path="shipping" element={<ShippingPage />} />
+              <Route path="sale-labels" element={<SaleLabelsPage />} />
+            </Route>
           </Route>
           <Route element={<ProtectedRoute permission={PERMISSIONS.AUDIT_READ} />}>
             <Route path="audit-log" element={<AuditLogPage />} />

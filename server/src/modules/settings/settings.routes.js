@@ -48,6 +48,11 @@ router.delete('/sale-labels/:id',
 
 // ─── Generic settings routes ─────────────────────────────────────────────────
 // Public endpoints
+
+// GET /api/features — fully resolved feature map (mode core + DB overrides).
+// Must be declared BEFORE /:group so Express doesn't treat "features" as a group param.
+router.get('/features', settingsController.getFeatures);
+
 router.get('/', settingsController.getAll);
 router.get('/:group', settingsController.getByGroup);
 

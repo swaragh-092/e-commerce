@@ -8,7 +8,7 @@ import ShoppingBagIcon from '@mui/icons-material/ShoppingBag';
 import LogoutIcon from '@mui/icons-material/Logout';
 import { Outlet, Link as RouterLink } from 'react-router-dom';
 import { useAuth } from '../hooks/useAuth';
-import { useSettings } from '../hooks/useSettings';
+import { useSettings, useFeature } from '../hooks/useSettings';
 import { useCart } from '../hooks/useCart';
 import FavoriteBorderIcon from '@mui/icons-material/FavoriteBorder';
 import CategoryNav from '../components/layout/CategoryNav';
@@ -23,6 +23,8 @@ const StoreLayout = () => {
   const { settings } = useSettings();
   const { cartCount } = useCart();
   const { wishlistCount } = useWishlist();
+  const cartEnabled     = useFeature('cart');
+  const wishlistEnabled = useFeature('wishlist');
   const [announcementDismissed, setAnnouncementDismissed] = useState(false);
   const [topLinks, setTopLinks] = useState([]);
   const [accountMenuAnchor, setAccountMenuAnchor] = useState(null);
@@ -141,14 +143,16 @@ const StoreLayout = () => {
             ))}
           </Box>
           <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
-            <IconButton color="inherit" component={RouterLink} to="/cart" sx={{ '&:hover': { bgcolor: 'rgba(255,255,255,0.12)' } }}>
-              <Badge badgeContent={cartCount || 0} color="error">
-                <ShoppingCartIcon />
-              </Badge>
-            </IconButton>
+            {cartEnabled && (
+              <IconButton color="inherit" component={RouterLink} to="/cart" sx={{ '&:hover': { bgcolor: 'rgba(255,255,255,0.12)' } }}>
+                <Badge badgeContent={cartCount || 0} color="error">
+                  <ShoppingCartIcon />
+                </Badge>
+              </IconButton>
+            )}
             {isAuthenticated ? (
               <>
-                {settings?.features?.wishlist !== false && (
+                {wishlistEnabled && (
                   <IconButton color="inherit" component={RouterLink} to="/wishlist" sx={{ '&:hover': { bgcolor: 'rgba(255,255,255,0.12)' } }}>
                     <Badge badgeContent={wishlistCount || 0} color="error">
                       <FavoriteBorderIcon />

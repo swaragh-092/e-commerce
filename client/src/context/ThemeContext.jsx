@@ -6,15 +6,28 @@ export const SettingsContext = createContext(null);
 
 export const SettingsProvider = ({ children }) => {
   const [settings, setSettings] = useState(null);
+  const [mode, setMode] = useState('ecommerce');           // APP_MODE from server
+  const [features, setFeatures] = useState(null);         // fully resolved feature map
+  const [lockedKeys, setLockedKeys] = useState([]);       // Tier 1 keys — greyed-out in Settings UI
   const [loading, setLoading] = useState(true);
 
   const fetchSettings = async () => {
     try {
-      const data = await settingsService.getAllSettings();
+      // Fetch settings and features in parallel — one round-trip each
+      const [data, featureData] = await Promise.all([
+        settingsService.getAllSettings(),
+        settingsService.getFeatures(),
+      ]);
+
       setSettings(data);
+      setMode(featureData?.mode || 'ecommerce');
+      // Merge: mode-resolved features override anything in settings.features
+      setFeatures({ ...data?.features, ...featureData?.features });
+      setLockedKeys(featureData?.lockedKeys || []);
       applyDocumentSettings(data);
     } catch (error) {
       console.error("Failed to load settings", error);
+      // Fallback defaults — safe for both modes
       setSettings({
         theme: { primaryColor: '#1976d2', mode: 'light', fontFamily: 'Roboto' },
         general: { storeName: 'E-Commerce Store' },
@@ -46,6 +59,11 @@ export const SettingsProvider = ({ children }) => {
           endingSoonHours: 24,
         },
       });
+      // On error, keep mode as ecommerce so the app doesn't silently hide features
+      setMode('ecommerce');
+      setFeatures({ wishlist: true, reviews: true, pricing: true, cart: true, checkout: true });
+      // Fallback: treat all known Tier 1 keys as locked so UI remains correct offline
+      setLockedKeys(['pricing','cart','checkout','orders','payments','shipping','enquiry']);
     } finally {
       setLoading(false);
     }
@@ -95,8 +113,8 @@ export const SettingsProvider = ({ children }) => {
 
   const t = settings?.theme || {};
   const radius = parseInt(t.borderRadius) || 8;
-  const mode = t.mode || 'light';
-  const isDark = mode === 'dark';
+  const themeMode = t.mode || 'light';
+  const isDark = themeMode === 'dark';
   const fallbackPrimary = isDark ? '#4fd1a5' : '#0f766e';
   const fallbackSecondary = isDark ? '#ffb86b' : '#f97316';
   const fallbackBackground = isDark ? '#101514' : '#f7f3ec';
@@ -112,7 +130,7 @@ export const SettingsProvider = ({ children }) => {
 
   const themeConfig = createTheme({
     palette: {
-      mode,
+      mode: themeMode,
       primary: {
         main: primaryMain,
         dark: isDark ? '#31a884' : '#0b4f49',
@@ -219,6 +237,9 @@ export const SettingsProvider = ({ children }) => {
 
   const value = {
     settings,
+    mode,        // 'ecommerce' | 'catalog'
+    features,    // fully resolved feature map — use useFeature() to read individual flags
+    lockedKeys,  // Tier 1 keys — use useIsFeatureLocked() to read
     loading,
     refreshSettings: fetchSettings,
   };

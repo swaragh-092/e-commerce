@@ -14,7 +14,7 @@ import WishlistButton from '../../components/common/WishlistButton';
 import ReviewSection from '../../components/product/ReviewSection';
 import DOMPurify from 'dompurify';
 import { useCart } from '../../hooks/useCart';
-import { useCurrency, useSettings } from '../../hooks/useSettings';
+import { useCurrency, useSettings, useFeature } from '../../hooks/useSettings';
 import { formatSaleDateTime, getCountdownText, getDiscountPercent, getSaleTimingMessage, getSavingsAmount, isEndingSoon } from '../../utils/pricing';
 import {
     getVariantDiscountPercent,
@@ -40,6 +40,9 @@ const ProductDetailPage = () => {
     const { addItem } = useCart();
     const { formatPrice } = useCurrency();
     const { settings } = useSettings();
+    const cartEnabled    = useFeature('cart');
+    const pricingEnabled = useFeature('pricing');
+    const wishlistEnabled = useFeature('wishlist');
     const pp = settings?.productPage || {};
     const sales = settings?.sales || {};
     const addToCartLabel = pp.addToCartLabel || 'Add to Cart';
@@ -271,7 +274,9 @@ const ProductDetailPage = () => {
                         <Typography variant="h4" fontWeight="bold">
                             {product.name}
                         </Typography>
-                        <WishlistButton productId={product.id} variantId={selectedVariant?.id || null} />
+                        {wishlistEnabled && (
+                            <WishlistButton productId={product.id} variantId={selectedVariant?.id || null} />
+                        )}
                     </Box>
 
                     {pp.showStockBadge !== false && (
@@ -293,21 +298,23 @@ const ProductDetailPage = () => {
                         </Typography>
                     )}
 
-                    <Box sx={{ display: 'flex', alignItems: 'center', gap: 2, mb: 3 }}>
-                        {hasSale ? (
-                            <>
-                                <Typography variant="h5" color="primary" fontWeight="bold">{formatPrice(currentPrice)}</Typography>
-                                <Typography variant="h6" color="text.secondary" sx={{ textDecoration: 'line-through' }}>
-                                    {formatPrice(regularPrice)}
-                                </Typography>
-                            </>
-                        ) : (
-                            <Typography variant="h5" fontWeight="bold">{formatPrice(currentPrice)}</Typography>
-                        )}
-                        {hasSale && showDiscountPercent && discountPercent > 0 && <Chip label={`${discountPercent}% OFF`} color="error" />}
-                        {isScheduledSale && <Chip label="Sale Starts Soon" color="warning" />}
-                        {endingSoon && <Chip label="Ending Soon" color="warning" variant="outlined" />}
-                    </Box>
+                    {pricingEnabled && (
+                        <Box sx={{ display: 'flex', alignItems: 'center', gap: 2, mb: 3 }}>
+                            {hasSale ? (
+                                <>
+                                    <Typography variant="h5" color="primary" fontWeight="bold">{formatPrice(currentPrice)}</Typography>
+                                    <Typography variant="h6" color="text.secondary" sx={{ textDecoration: 'line-through' }}>
+                                        {formatPrice(regularPrice)}
+                                    </Typography>
+                                </>
+                            ) : (
+                                <Typography variant="h5" fontWeight="bold">{formatPrice(currentPrice)}</Typography>
+                            )}
+                            {hasSale && showDiscountPercent && discountPercent > 0 && <Chip label={`${discountPercent}% OFF`} color="error" />}
+                            {isScheduledSale && <Chip label="Sale Starts Soon" color="warning" />}
+                            {endingSoon && <Chip label="Ending Soon" color="warning" variant="outlined" />}
+                        </Box>
+                    )}
 
                     {(hasSale || isScheduledSale) && (
                         <Box
@@ -392,40 +399,42 @@ const ProductDetailPage = () => {
                                 {cartMsg.text}
                             </Typography>
                         )}
-                        <Box sx={{ display: 'grid', gap: 1.5, gridTemplateColumns: showBuyNowButton ? { xs: '1fr', sm: '1fr 1fr' } : '1fr' }}>
-                            <Button
-                                variant="contained"
-                                size="large"
-                                fullWidth
-                                startIcon={<CartIcon />}
-                                disabled={!stockAvailable || pendingAction !== null}
-                                onClick={handleAddToCart}
-                                sx={{ py: 1.5, fontSize: '1.1rem' }}
-                            >
-                                {pendingAction === 'cart' ? 'Adding...' : stockAvailable ? addToCartLabel : 'Out of Stock'}
-                            </Button>
-                            {showBuyNowButton && (
+                        {cartEnabled && (
+                            <Box sx={{ display: 'grid', gap: 1.5, gridTemplateColumns: showBuyNowButton ? { xs: '1fr', sm: '1fr 1fr' } : '1fr' }}>
                                 <Button
-                                    variant="outlined"
-                                    color="primary"
+                                    variant="contained"
                                     size="large"
                                     fullWidth
-                                    startIcon={<FlashOnIcon />}
+                                    startIcon={<CartIcon />}
                                     disabled={!stockAvailable || pendingAction !== null}
-                                    onClick={handleBuyNow}
+                                    onClick={handleAddToCart}
                                     sx={{ py: 1.5, fontSize: '1.1rem' }}
                                 >
-                                    {pendingAction === 'buyNow' ? 'Redirecting...' : stockAvailable ? buyNowLabel : 'Out of Stock'}
+                                    {pendingAction === 'cart' ? 'Adding...' : stockAvailable ? addToCartLabel : 'Out of Stock'}
                                 </Button>
-                            )}
-                        </Box>
+                                {showBuyNowButton && (
+                                    <Button
+                                        variant="outlined"
+                                        color="primary"
+                                        size="large"
+                                        fullWidth
+                                        startIcon={<FlashOnIcon />}
+                                        disabled={!stockAvailable || pendingAction !== null}
+                                        onClick={handleBuyNow}
+                                        sx={{ py: 1.5, fontSize: '1.1rem' }}
+                                    >
+                                        {pendingAction === 'buyNow' ? 'Redirecting...' : stockAvailable ? buyNowLabel : 'Out of Stock'}
+                                    </Button>
+                                )}
+                            </Box>
+                        )}
                         <Button
                             variant="outlined"
                             color="secondary"
                             fullWidth
                             startIcon={<HelpOutlineIcon />}
                             onClick={() => setEnquiryOpen(true)}
-                            sx={{ py: 1.5, fontSize: '1.1rem', mt: 1.5 }}
+                            sx={{ py: 1.5, fontSize: '1.1rem', mt: cartEnabled ? 1.5 : 0 }}
                         >
                             Enquire Now
                         </Button>

@@ -16,6 +16,8 @@ import { getVariantOptionLabel } from '../../utils/variantOptions';
 
 const WishlistPage = () => {
     const wishlistEnabled = useFeature('wishlist');
+    const cartEnabled    = useFeature('cart');
+    const pricingEnabled = useFeature('pricing');
     const { formatPrice } = useCurrency();
     const { refreshWishlist } = useWishlist();
     const { fetchCart } = useCart();
@@ -117,9 +119,11 @@ const WishlistPage = () => {
                 <Typography variant="h4">My Wishlist ({filteredCount})</Typography>
                 {filteredCount > 0 && (
                     <Stack direction={{ xs: 'column', sm: 'row' }} spacing={1}>
-                        <Button variant="outlined" startIcon={<ShoppingCartIcon />} onClick={handleMoveAllToCart}>
-                            Move All to Cart
-                        </Button>
+                        {cartEnabled && (
+                            <Button variant="outlined" startIcon={<ShoppingCartIcon />} onClick={handleMoveAllToCart}>
+                                Move All to Cart
+                            </Button>
+                        )}
                         <Button variant="text" color="error" onClick={handleClearWishlist}>
                             Clear Wishlist
                         </Button>
@@ -170,19 +174,23 @@ const WishlistPage = () => {
                                             {product?.isSaleActive && discountPercent > 0 && <Chip size="small" label={`${discountPercent}% OFF`} color="error" variant="outlined" />}
                                             {variant && <Chip size="small" label={getVariantOptionLabel(variant)} variant="outlined" />}
                                         </Stack>
-                                        <Typography color="text.secondary">
-                                            {formatPrice(itemPrice)}
-                                            {product?.isSaleActive && regularPrice > 0 && itemPrice < regularPrice && (
-                                                <Box component="span" sx={{ ml: 1, textDecoration: 'line-through', color: 'text.disabled' }}>
-                                                    {formatPrice(regularPrice)}
-                                                </Box>
-                                            )}
-                                        </Typography>
+                                        {pricingEnabled && (
+                                            <Typography color="text.secondary">
+                                                {formatPrice(itemPrice)}
+                                                {product?.isSaleActive && regularPrice > 0 && itemPrice < regularPrice && (
+                                                    <Box component="span" sx={{ ml: 1, textDecoration: 'line-through', color: 'text.disabled' }}>
+                                                        {formatPrice(regularPrice)}
+                                                    </Box>
+                                                )}
+                                            </Typography>
+                                        )}
                                     </CardContent>
                                     <CardActions sx={{ justifyContent: 'space-between' }}>
-                                        <Button size="small" startIcon={<ShoppingCartIcon />} onClick={() => handleMoveToCart(item)} disabled={!inStock}>
-                                            Move to Cart
-                                        </Button>
+                                        {cartEnabled && (
+                                            <Button size="small" startIcon={<ShoppingCartIcon />} onClick={() => handleMoveToCart(item)} disabled={!inStock}>
+                                                Move to Cart
+                                            </Button>
+                                        )}
                                         <IconButton color="error" size="small" onClick={() => handleRemove(product?.id, variant?.id || null)}>
                                             <DeleteIcon />
                                         </IconButton>

@@ -4,6 +4,8 @@ const { sequelize, Setting } = require('../index');
 const AuditService = require('../audit/audit.service');
 const AppError = require('../../utils/AppError');
 const { ACTIONS, ENTITIES } = require('../../config/constants');
+const { buildFeatures, isTier1Feature, TIER1_KEYS } = require('../../config/modes');
+const { invalidateFeature } = require('../../middleware/featureGate.middleware');
 
 const fs = require('fs');
 const path = require('path');
@@ -123,7 +125,19 @@ const getByGroup = async (groupName) => {
 const updateKey = async (key, value, group, actingUserId) => {
   const credentialGroups = ['gateway_credentials', 'messaging_credentials'];
 
-  return sequelize.transaction(async (t) => {
+  // Tier 1 feature keys are mode-locked — reject any attempt to modify them via settings.
+  // This is the server-side enforcement regardless of who calls the API.
+  if (group === 'features' && isTier1Feature(key)) {
+    throw new AppError(
+      'FEATURE_LOCKED',
+      403,
+      `Feature '${key}' is controlled by APP_MODE and cannot be modified via settings.`
+    );
+  }
+
+  // Capture the transaction result so we can invalidate the feature cache
+  // AFTER it commits — ensuring we never bust the cache on a rollback.
+  const result = await sequelize.transaction(async (t) => {
     let setting = await Setting.findOne({ where: { key }, transaction: t });
     let before = setting ? setting.toJSON() : null;
 
@@ -160,6 +174,12 @@ const updateKey = async (key, value, group, actingUserId) => {
 
     return setting;
   });
+
+  // Bust the feature cache after the transaction commits so the next gated
+  // request immediately picks up the new value without waiting for TTL expiry.
+  if (group === 'features') invalidateFeature(key);
+
+  return result;
 };
 
 const bulkUpdate = async (settingsInput, actingUserId) => {
@@ -178,6 +198,11 @@ const bulkUpdate = async (settingsInput, actingUserId) => {
             // to (key + group) — prevents different groups sharing the same key name
             // from accidentally overwriting each other's DB row.
             let resolvedGroup = group || 'general';
+
+            // Tier 1 feature keys are mode-locked — silently skip them in bulk updates.
+            // We don't throw here because bulk saves include everything; the frontend
+            // should never send Tier 1 keys but we defend against it server-side.
+            if (resolvedGroup === 'features' && isTier1Feature(key)) continue;
             if (!group) {
                 for (const g of validGroups) {
                     if (defaultSettings[g] && defaultSettings[g][key] !== undefined) {
@@ -222,6 +247,42 @@ const bulkUpdate = async (settingsInput, actingUserId) => {
 
         return true;
     });
+
+    // Bust feature cache for any feature-group key that was updated
+    for (const { key, group } of (Array.isArray(settingsInput) ? settingsInput : Object.entries(settingsInput).map(([k, v]) => ({ key: k, value: v })))) {
+        if (!group || group === 'features') invalidateFeature(key);
+    }
 };
 
-module.exports = { getAll, getByGroup, updateKey, bulkUpdate };
+/**
+ * Returns the fully resolved feature map for the current APP_MODE.
+ * Combines DB feature settings (optional features) with the mode's
+ * non-overridable core features. Mode always wins.
+ *
+ * This is the authoritative source for GET /api/features.
+ *
+ * @returns {Promise<Record<string, boolean>>}
+ */
+/**
+ * Returns the fully resolved feature map for the current APP_MODE plus metadata
+ * the frontend needs to render locked vs. toggleable feature controls:
+ *   - features:   fully resolved map (Tier2Defaults + DB + Tier1)
+ *   - lockedKeys: array of Tier 1 key names (shown greyed-out in Settings UI)
+ *
+ * @returns {Promise<{ features: Record<string, boolean>, lockedKeys: string[] }>}
+ */
+const getFeatures = async () => {
+    const rows = await Setting.findAll({ where: { group: 'features' } });
+
+    const dbFeatures = {};
+    for (const row of rows) {
+        dbFeatures[row.key] = row.value === true || row.value === 'true';
+    }
+
+    return {
+        features:   buildFeatures(dbFeatures),
+        lockedKeys: [...TIER1_KEYS],   // frontend uses this to grey out Tier 1 toggles
+    };
+};
+
+module.exports = { getAll, getByGroup, updateKey, bulkUpdate, getFeatures };

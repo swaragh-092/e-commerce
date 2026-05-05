@@ -2,6 +2,7 @@
 
 const SettingsService = require('./settings.service');
 const { success } = require('../../utils/response');
+const { getMode } = require('../../config/modes');
 
 const getAll = async (req, res, next) => {
   try {
@@ -45,4 +46,19 @@ const updateBulk = async (req, res, next) => {
   }
 };
 
-module.exports = { getAll, getByGroup, updateSingle, updateBulk };
+/**
+ * GET /api/features
+ * Public endpoint — returns the fully resolved feature map for the current mode.
+ * Frontend uses this to conditionally render/hide UI elements.
+ * Includes the active mode name so clients can adapt their behaviour.
+ */
+const getFeatures = async (req, res, next) => {
+  try {
+    const { features, lockedKeys } = await SettingsService.getFeatures();
+    return success(res, { mode: getMode(), features, lockedKeys });
+  } catch (err) {
+    next(err);
+  }
+};
+
+module.exports = { getAll, getByGroup, updateSingle, updateBulk, getFeatures };
