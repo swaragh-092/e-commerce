@@ -60,22 +60,6 @@ jobs:
             npm ci --omit=dev \
               || { echo "❌ npm ci failed — check package-lock.json is committed"; exit 1; }
 
-            # ──────────────────────────────────────────────────────────
-            # STEP 3 — Swap guard (t3.micro = 1 GB RAM only)
-            # Must exist before the Vite build or it will OOM
-            # ──────────────────────────────────────────────────────────
-            echo ""
-            echo "── [3/5] Swap check (t3.micro safety net)"
-            if [ ! -f /swapfile ]; then
-              sudo fallocate -l 2G /swapfile \
-                && sudo chmod 600 /swapfile \
-                && sudo mkswap /swapfile \
-                && sudo swapon /swapfile \
-                && echo "   ✅ 2 GB swap created" \
-                || echo "   ⚠️  Swap creation failed — build may OOM"
-            else
-              echo "   ℹ️  Swap already active — skipping"
-            fi
 
             # ──────────────────────────────────────────────────────────
             # STEP 4 — Frontend build
@@ -83,7 +67,7 @@ jobs:
             # If build fails here, backend keeps serving old (working) code.
             # ──────────────────────────────────────────────────────────
             echo ""
-            echo "── [4/5] Frontend build (512 MB heap)"
+            echo "── [3/4] Frontend build (512 MB heap)"
             cd ../client
             npm ci \
               || { echo "❌ client npm ci failed"; exit 1; }
@@ -96,7 +80,7 @@ jobs:
             # Use full path so pm2 finds index.js from any working dir
             # ──────────────────────────────────────────────────────────
             echo ""
-            echo "── [5/5] Reload backend via pm2"
+            echo "── [4/4] Reload backend via pm2"
             cd "$APP_DIR/server"
             pm2 reload ecommerce-api \
               || pm2 start "$APP_DIR/server/index.js" --name ecommerce-api \
