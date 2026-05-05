@@ -8,3 +8,12 @@ export const useAuth = () => {
   }
   return context;
 };
+
+/**
+ * Returns true when the logged-in user is a Super Admin.
+ * Super Admins have exclusive access to platform-level settings (Tier 2 feature toggles).
+ */
+export const useIsSuperAdmin = () => {
+  const { hasRole } = useAuth();
+  return hasRole('super_admin');
+};

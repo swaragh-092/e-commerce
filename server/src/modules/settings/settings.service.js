@@ -182,14 +182,32 @@ const updateKey = async (key, value, group, actingUserId) => {
   return result;
 };
 
-const bulkUpdate = async (settingsInput, actingUserId) => {
+const bulkUpdate = async (settingsInput, actingUserId, actingUser = null) => {
   const validGroups = ['theme', 'features', 'payments', 'sales', 'seo', 'general', 'shipping', 'tax', 'sku', 'logo', 'hero', 'footer', 'announcement', 'nav', 'catalog', 'homepage', 'productPage', 'admin', 'invoice', 'gateway_credentials', 'messaging_credentials', 'messaging'];
   const credentialGroups = ['gateway_credentials', 'messaging_credentials'];
-    
+
     // Normalize input to an array of { key, value, group }
     const settingsArray = Array.isArray(settingsInput) 
         ? settingsInput 
         : Object.entries(settingsInput).map(([key, value]) => ({ key, value }));
+
+    // ── Superadmin guard ─────────────────────────────────────────────────────
+    // Tier 2 feature toggles (group === 'features', non-Tier-1 keys) may only
+    // be written by a super_admin. Regular admins can save everything else.
+    const hasFeatureKeys = settingsArray.some(
+      ({ key, group }) => (group || 'general') === 'features' && !isTier1Feature(key)
+    );
+    if (hasFeatureKeys) {
+      const actingRoles = actingUser?.roles || (actingUser?.role ? [actingUser.role] : []);
+      const isSuperAdmin = actingRoles.includes('super_admin');
+      if (!isSuperAdmin) {
+        throw new AppError(
+          'SUPERADMIN_REQUIRED',
+          403,
+          'Only Super Admins can modify platform feature toggles.'
+        );
+      }
+    }
 
     return sequelize.transaction(async (t) => {
         let updatedCount = 0;
