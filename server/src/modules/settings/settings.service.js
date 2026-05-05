@@ -131,7 +131,7 @@ const updateKey = async (key, value, group, actingUserId) => {
     throw new AppError(
       'FEATURE_LOCKED',
       403,
-      `Feature '${key}' is controlled by APP_MODE and cannot be modified via settings.`
+      `Feature '${key}' is controlled by store mode and cannot be modified via settings.`
     );
   }
 
