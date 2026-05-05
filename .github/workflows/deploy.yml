@@ -44,7 +44,7 @@ jobs:
         working-directory: client
         run: npm run build
         env:
-          VITE_API_URL: http://${{ secrets.EC2_HOST }}:5000/api
+          VITE_API_URL: /api
 
       # ──────────────────────────────────────────────────────────
       # STEP 3 — Copy built dist/ to EC2 via SCP
