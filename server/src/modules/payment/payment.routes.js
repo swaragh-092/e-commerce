@@ -7,6 +7,10 @@ const { validate } = require('../../middleware/validate.middleware');
 const { createOrderSchema } = require('./payment.validation');
 const { PERMISSIONS } = require('../../config/permissions');
 
+const { featureGate } = require('../../middleware/featureGate.middleware');
+
+router.use(featureGate('payments'));
+
 router.post('/create-order', authenticate, validate(createOrderSchema), paymentController.createOrder);
 router.post('/verify/:orderId', authenticate, paymentController.verifyPayment);
 

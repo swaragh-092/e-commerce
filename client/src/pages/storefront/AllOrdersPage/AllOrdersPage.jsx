@@ -439,6 +439,13 @@ const AllOrdersPage = () => {
     const theme = useTheme();
     const isMobile = useMediaQuery(theme.breakpoints.down('md'));
     const { formatPrice } = useCurrency();
+    const ordersEnabled = useFeature('orders');
+
+    useEffect(() => {
+        if (!ordersEnabled) {
+            navigate('/');
+        }
+    }, [ordersEnabled, navigate]);
 
     // Filter state
     const [searchInput, setSearchInput] = useState(searchParams.get('search') || '');

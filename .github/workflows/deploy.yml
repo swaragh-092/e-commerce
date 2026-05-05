@@ -1,0 +1,82 @@
+name: CD — Deploy to AWS EC2
+
+# ─────────────────────────────────────────────
+#  Only deploy when main is updated
+# ─────────────────────────────────────────────
+on:
+  push:
+    branches: [main]
+
+  # Also allow a manual "hotfix" trigger from the GitHub UI
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+# One deploy at a time — queue instead of cancel
+concurrency:
+  group: deploy-production
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    name: Deploy to EC2
+    runs-on: ubuntu-latest
+
+    steps:
+      # ── 1. SSH into EC2 and run the deploy script ──────────────────────
+      - name: Deploy via SSH
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host:     ${{ secrets.EC2_HOST }}
+          username: ${{ secrets.EC2_USER }}
+          key:      ${{ secrets.EC2_SSH_PRIVATE_KEY }}
+          port:     22
+          # ── Script that runs ON the EC2 instance ──────────────────────
+          script: |
+            set -euo pipefail
+
+            APP_DIR="${{ secrets.APP_DIR }}"   # e.g. /home/ubuntu/e-commerce
+            cd "$APP_DIR"
+
+            echo "──────────────────────────────────────"
+            echo " 🚀  Starting deploy at $(date)"
+            echo "──────────────────────────────────────"
+
+            # 1. Pull latest code
+            git pull origin main
+
+            # 2. Write the server .env from GitHub Secret
+            #    (the secret contains the entire .env file content)
+            echo "${{ secrets.SERVER_ENV }}" > server/.env
+
+            # 3. Build new images (no cache to catch stale deps)
+            docker compose build --no-cache
+
+            # 4. Zero-downtime restart:
+            #    Bring up new containers, then remove old ones
+            docker compose up -d --remove-orphans
+
+            # 5. Run DB migrations inside the new server container
+            docker compose exec -T server \
+              npx sequelize-cli db:migrate --env production \
+              || echo "⚠️  Migration step skipped (no sequelize-cli or up-to-date)"
+
+            # 6. Remove dangling images to keep disk clean
+            docker image prune -f
+
+            echo "✅  Deploy complete at $(date)"
+
+      # ── 2. Smoke-test: hit the health endpoint ─────────────────────────
+      - name: Smoke test — health check
+        run: |
+          echo "Waiting 15s for containers to stabilise…"
+          sleep 15
+          STATUS=$(curl -s -o /dev/null -w "%{http_code}" \
+            "http://${{ secrets.EC2_HOST }}/api/health" || echo "000")
+          echo "HTTP status: $STATUS"
+          if [ "$STATUS" != "200" ]; then
+            echo "❌ Health check failed (HTTP $STATUS)"
+            exit 1
+          fi
+          echo "✅ Server is healthy"

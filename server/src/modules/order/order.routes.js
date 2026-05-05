@@ -13,6 +13,10 @@ const { authorizePermissions } = require('../../middleware/role.middleware');
 const { auditLog } = require('../audit/audit.middleware');
 const { PERMISSIONS } = require('../../config/permissions');
 
+const { featureGate } = require('../../middleware/featureGate.middleware');
+
+router.use(featureGate('orders'));
+
 router.post('/', authenticate, validate(placeOrderSchema), orderController.placeOrder);
 router.get('/', authenticate, orderController.getOrders);
 router.get('/:id/tracking', authenticate, orderController.getFulfillmentTracking);

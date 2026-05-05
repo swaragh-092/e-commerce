@@ -211,7 +211,7 @@ const TrustBadge = ({ icon, title, sub }) => (
 );
 
 // ── Order Summary ─────────────────────────────────────────────────────────────
-const OrderSummary = ({ visibleCount, subtotal, shippingCost, shippingMethod, freeThreshold, taxRows, taxInclusive, estimatedTotal, offerSummary, formatPrice, onCheckout, setEnquiryOpen }) => {
+const OrderSummary = ({ visibleCount, subtotal, shippingCost, shippingMethod, freeThreshold, taxRows, taxInclusive, estimatedTotal, offerSummary, formatPrice, onCheckout, setEnquiryOpen, checkoutEnabled, enquiryEnabled }) => {
     const shippingFree = shippingMethod === 'free' || shippingCost === 0;
     const progressPct = freeThreshold > 0 ? Math.min((subtotal / freeThreshold) * 100, 100) : 0;
     return (
@@ -282,16 +282,20 @@ const OrderSummary = ({ visibleCount, subtotal, shippingCost, shippingMethod, fr
                         </Typography>
                     </Box>
 
-                    <Button variant="contained" fullWidth size="large" onClick={onCheckout}
-                        endIcon={<ArrowForwardIcon sx={{ fontSize: 16 }} />}
-                        sx={{ mt: 2, py: 1.55, borderRadius: 1.5, fontWeight: 800, fontSize: '0.88rem', letterSpacing: 0.6, boxShadow: 'none', '&:hover': { boxShadow: 'none', filter: 'brightness(1.08)' } }}>
-                        Proceed to Checkout
-                    </Button>
-                    <Button variant="outlined" color="secondary" fullWidth size="large" onClick={() => setEnquiryOpen(true)}
-                        startIcon={<HelpOutlineIcon sx={{ fontSize: 16 }} />}
-                        sx={{ mt: 1, py: 1.55, borderRadius: 1.5, fontWeight: 700, fontSize: '0.88rem' }}>
-                        Enquire About Cart
-                    </Button>
+                    {checkoutEnabled && (
+                        <Button variant="contained" fullWidth size="large" onClick={onCheckout}
+                            endIcon={<ArrowForwardIcon sx={{ fontSize: 16 }} />}
+                            sx={{ mt: 2, py: 1.55, borderRadius: 1.5, fontWeight: 800, fontSize: '0.88rem', letterSpacing: 0.6, boxShadow: 'none', '&:hover': { boxShadow: 'none', filter: 'brightness(1.08)' } }}>
+                            Proceed to Checkout
+                        </Button>
+                    )}
+                    {enquiryEnabled && (
+                        <Button variant="outlined" color="secondary" fullWidth size="large" onClick={() => setEnquiryOpen(true)}
+                            startIcon={<HelpOutlineIcon sx={{ fontSize: 16 }} />}
+                            sx={{ mt: checkoutEnabled ? 1 : 2, py: 1.55, borderRadius: 1.5, fontWeight: 700, fontSize: '0.88rem' }}>
+                            Enquire About Cart
+                        </Button>
+                    )}
                     <Button fullWidth component={Link} to="/products"
                         sx={{ mt: 0.75, fontSize: '0.78rem', fontWeight: 500, color: 'text.secondary', py: 0.75 }}>
                         ← Continue Shopping
@@ -339,8 +343,15 @@ const CartPage = () => {
     const navigate = useNavigate();
     const [offerSummary, setOfferSummary] = useState(null);
     const [clearing, setClearing] = useState(false);
-    const [enquiryOpen, setEnquiryOpen] = useState(false);
+    const cartEnabled = useFeature('cart');
+    const checkoutEnabled = useFeature('checkout');
+    const enquiryEnabled = useFeature('enquiry');
 
+    useEffect(() => {
+        if (!cartEnabled) {
+            navigate('/');
+        }
+    }, [cartEnabled, navigate]);
 
     const items = cart?.items || [];
     const { getQty, handleUpdate, handleRemove, removingIds, updatingIds } = useOptimisticCart(items, updateItem, removeItem);
@@ -472,6 +483,8 @@ const CartPage = () => {
                     estimatedTotal={estimatedTotal} offerSummary={offerSummary}
                     formatPrice={formatPrice} onCheckout={() => navigate('/checkout')}
                     setEnquiryOpen={setEnquiryOpen}
+                    checkoutEnabled={checkoutEnabled}
+                    enquiryEnabled={enquiryEnabled}
                 />
             </Box>
 

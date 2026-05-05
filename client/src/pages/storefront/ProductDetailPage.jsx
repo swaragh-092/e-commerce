@@ -43,6 +43,7 @@ const ProductDetailPage = () => {
     const cartEnabled    = useFeature('cart');
     const pricingEnabled = useFeature('pricing');
     const wishlistEnabled = useFeature('wishlist');
+    const enquiryEnabled = useFeature('enquiry');
     const pp = settings?.productPage || {};
     const sales = settings?.sales || {};
     const addToCartLabel = pp.addToCartLabel || 'Add to Cart';
@@ -316,7 +317,7 @@ const ProductDetailPage = () => {
                         </Box>
                     )}
 
-                    {(hasSale || isScheduledSale) && (
+                    {pricingEnabled && (hasSale || isScheduledSale) && (
                         <Box
                             sx={{
                                 mb: 3,
@@ -428,16 +429,18 @@ const ProductDetailPage = () => {
                                 )}
                             </Box>
                         )}
-                        <Button
-                            variant="outlined"
-                            color="secondary"
-                            fullWidth
-                            startIcon={<HelpOutlineIcon />}
-                            onClick={() => setEnquiryOpen(true)}
-                            sx={{ py: 1.5, fontSize: '1.1rem', mt: cartEnabled ? 1.5 : 0 }}
-                        >
-                            Enquire Now
-                        </Button>
+                        {enquiryEnabled && (
+                            <Button
+                                variant="outlined"
+                                color="secondary"
+                                fullWidth
+                                startIcon={<HelpOutlineIcon />}
+                                onClick={() => setEnquiryOpen(true)}
+                                sx={{ py: 1.5, fontSize: '1.1rem', mt: cartEnabled ? 1.5 : 0 }}
+                            >
+                                Enquire Now
+                            </Button>
+                        )}
                     </Box>
 
                     {displayAttributes.length > 0 && (

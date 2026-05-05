@@ -161,6 +161,15 @@ const CheckoutPage = () => {
         return location.state?.fromBuyNow ? normalizeBuyNowItem(location.state?.buyNowItem) : null;
     }, [location.state?.fromBuyNow, location.state?.buyNowItem]);
 
+    const checkoutEnabled = useFeature('checkout');
+    const cartEnabled = useFeature('cart');
+
+    useEffect(() => {
+        if (!checkoutEnabled || !cartEnabled) {
+            navigate('/');
+        }
+    }, [checkoutEnabled, cartEnabled, navigate]);
+
     const isBuyNowFlow = useMemo(() => Boolean(buyNowItem), [buyNowItem]);
     const couponsEnabled = settings?.features?.coupons !== false;
     const paymentSettings = settings?.payments || {};

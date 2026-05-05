@@ -25,6 +25,7 @@ const StoreLayout = () => {
   const { wishlistCount } = useWishlist();
   const cartEnabled     = useFeature('cart');
   const wishlistEnabled = useFeature('wishlist');
+  const ordersEnabled   = useFeature('orders');
   const [announcementDismissed, setAnnouncementDismissed] = useState(false);
   const [topLinks, setTopLinks] = useState([]);
   const [accountMenuAnchor, setAccountMenuAnchor] = useState(null);
@@ -202,19 +203,21 @@ const StoreLayout = () => {
                     <PersonIcon sx={{ mr: 1.5, fontSize: '1.2rem', color: 'primary.main' }} />
                     <Typography sx={{ fontSize: '0.95rem' }}>Profile</Typography>
                   </MenuItem>
-                  <MenuItem
-                    component={RouterLink}
-                    to="/orders"
-                    onClick={handleAccountMenuClose}
-                    sx={{
-                      py: 1.2,
-                      px: 2,
-                      '&:hover': { bgcolor: 'action.hover' },
-                    }}
-                  >
-                    <ShoppingBagIcon sx={{ mr: 1.5, fontSize: '1.2rem', color: 'primary.main' }} />
-                    <Typography sx={{ fontSize: '0.95rem' }}>Orders</Typography>
-                  </MenuItem>
+                  {ordersEnabled && (
+                    <MenuItem
+                      component={RouterLink}
+                      to="/orders"
+                      onClick={handleAccountMenuClose}
+                      sx={{
+                        py: 1.2,
+                        px: 2,
+                        '&:hover': { bgcolor: 'action.hover' },
+                      }}
+                    >
+                      <ShoppingBagIcon sx={{ mr: 1.5, fontSize: '1.2rem', color: 'primary.main' }} />
+                      <Typography sx={{ fontSize: '0.95rem' }}>Orders</Typography>
+                    </MenuItem>
+                  )}
                   <Divider sx={{ my: 0.5 }} />
                   <MenuItem
                     onClick={handleLogout}

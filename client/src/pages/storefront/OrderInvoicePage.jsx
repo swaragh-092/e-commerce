@@ -4,7 +4,7 @@ import { Box, Typography, Button, Divider, CircularProgress, Alert } from '@mui/
 import PrintIcon from '@mui/icons-material/Print';
 import ArrowBackIcon from '@mui/icons-material/ArrowBack';
 import { userService } from '../../services/userService';
-import { useCurrency } from '../../hooks/useSettings';
+import { useCurrency, useFeature } from '../../hooks/useSettings';
 import { SettingsContext } from '../../context/ThemeContext';
 
 const getTaxRows = (order = {}) => {
@@ -29,6 +29,13 @@ const StorefrontOrderInvoicePage = () => {
   const [order, setOrder] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
+  const ordersEnabled = useFeature('orders');
+
+  useEffect(() => {
+    if (!ordersEnabled) {
+      navigate('/');
+    }
+  }, [ordersEnabled, navigate]);
 
   useEffect(() => {
     userService.getMyOrderById(id)

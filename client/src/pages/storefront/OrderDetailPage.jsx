@@ -28,7 +28,7 @@ import CreditCardOutlinedIcon from '@mui/icons-material/CreditCardOutlined';
 import TimelineIcon from '@mui/icons-material/Timeline';
 import PageSEO from '../../components/common/PageSEO';
 import AppliedDiscountsSummary from '../../components/orders/AppliedDiscountsSummary';
-import { useCurrency } from '../../hooks/useSettings';
+import { useCurrency, useFeature } from '../../hooks/useSettings';
 import { userService } from '../../services/userService';
 import {
   getOrderProgressSteps,
@@ -245,6 +245,13 @@ const OrderDetailPage = () => {
   const [error, setError] = useState(null);
   const [activeTab, setActiveTab] = useState(0);
   const { confirm } = useNotification();
+  const ordersEnabled = useFeature('orders');
+
+  useEffect(() => {
+    if (!ordersEnabled) {
+      navigate('/');
+    }
+  }, [ordersEnabled, navigate]);
 
   useEffect(() => {
     const fetchOrder = async () => {
