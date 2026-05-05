@@ -36,30 +36,31 @@ import PublicIcon from '@mui/icons-material/Public';
 import MailOutlineIcon from '@mui/icons-material/MailOutline';
 import HelpOutlineIcon from '@mui/icons-material/HelpOutline';
 import { useAuth } from '../hooks/useAuth';
-import { useSettings } from '../hooks/useSettings';
+import { useSettings, useMode } from '../hooks/useSettings';
 import { PERMISSIONS } from '../utils/permissions';
 
 const drawerWidth = 240;
 
 // Items with a `feature` key are hidden when that feature is disabled in Settings.
+// Items with a `mode: 'ecommerce'` key are hidden entirely in catalog mode.
 const ALL_MENU_ITEMS = [
   { text: 'Dashboard',  path: '/admin',            icon: <DashboardIcon />, permission: PERMISSIONS.DASHBOARD_VIEW },
   { text: 'Products',   path: '/admin/products',   icon: <InventoryIcon />, permission: PERMISSIONS.PRODUCTS_READ },
   { text: 'Categories', path: '/admin/categories', icon: <CategoryIcon />, permission: PERMISSIONS.CATEGORIES_READ },
   { text: 'Brands',     path: '/admin/brands',     icon: <LocalOfferIcon />, permission: PERMISSIONS.PRODUCTS_READ },
   { text: 'Attributes', path: '/admin/attributes', icon: <TuneIcon />, permission: PERMISSIONS.ATTRIBUTES_READ },
-  { text: 'Orders',     path: '/admin/orders',     icon: <ShoppingCartIcon />, permission: PERMISSIONS.ORDERS_READ },
+  { text: 'Orders',     path: '/admin/orders',     icon: <ShoppingCartIcon />, permission: PERMISSIONS.ORDERS_READ,  mode: 'ecommerce' },
   { text: 'Enquiries',  path: '/admin/enquiries',  icon: <HelpOutlineIcon />, permission: PERMISSIONS.SETTINGS_READ },
   { text: 'Customers',  path: '/admin/customers',  icon: <PeopleIcon />, permission: PERMISSIONS.CUSTOMERS_READ },
-  { text: 'Coupons',    path: '/admin/coupons',    icon: <LocalOfferIcon />, feature: 'coupons', permission: PERMISSIONS.COUPONS_READ },
-  { text: 'Sale Labels',path: '/admin/sale-labels',icon: <LocalOfferIcon />, permission: PERMISSIONS.SETTINGS_READ },
+  { text: 'Coupons',    path: '/admin/coupons',    icon: <LocalOfferIcon />, feature: 'coupons', permission: PERMISSIONS.COUPONS_READ, mode: 'ecommerce' },
+  { text: 'Sale Labels',path: '/admin/sale-labels',icon: <LocalOfferIcon />, permission: PERMISSIONS.SETTINGS_READ, mode: 'ecommerce' },
   { text: 'Reviews',    path: '/admin/reviews',    icon: <StarIcon />, feature: 'reviews', permission: PERMISSIONS.REVIEWS_READ },
   { text: 'Media',      path: '/admin/media',      icon: <PhotoLibraryIcon />, permission: PERMISSIONS.MEDIA_READ },
   { text: 'SEO Overrides',path: '/admin/seo-overrides',icon: <PublicIcon />, feature: 'seo', permission: PERMISSIONS.SETTINGS_READ },
-  { text: 'Settings',       path: '/admin/settings',          icon: <SettingsIcon />, permission: PERMISSIONS.SETTINGS_READ },
-  { text: 'Email Templates',  path: '/admin/email-templates',   icon: <MailOutlineIcon />, permission: PERMISSIONS.SETTINGS_READ },
-  { text: 'Payment Gateways', path: '/admin/payment-gateways', icon: <PaymentIcon />, permission: PERMISSIONS.SETTINGS_READ },
-  { text: 'Shipping',         path: '/admin/shipping',         icon: <LocalShippingIcon />, permission: PERMISSIONS.SETTINGS_READ },
+  { text: 'Settings',         path: '/admin/settings',         icon: <SettingsIcon />, permission: PERMISSIONS.SETTINGS_READ },
+  { text: 'Email Templates',  path: '/admin/email-templates',  icon: <MailOutlineIcon />, permission: PERMISSIONS.SETTINGS_READ },
+  { text: 'Payment Gateways', path: '/admin/payment-gateways', icon: <PaymentIcon />, permission: PERMISSIONS.SETTINGS_READ, mode: 'ecommerce' },
+  { text: 'Shipping',         path: '/admin/shipping',         icon: <LocalShippingIcon />, permission: PERMISSIONS.SETTINGS_READ, mode: 'ecommerce' },
   { text: 'Pages',            path: '/admin/pages',            icon: <DescriptionIcon />, permission: PERMISSIONS.PAGES_READ },
   {
     text: 'Access Control',
@@ -78,16 +79,20 @@ const ALL_MENU_ITEMS = [
 const AdminLayout = () => {
   const { logout, user, hasAnyPermission, hasPermission } = useAuth();
   const location = useLocation();
-  const { settings } = useSettings();
+  const { settings, features } = useSettings();
+  const appMode = useMode(); // 'ecommerce' | 'catalog'
 
-  // Hide feature-gated items when the feature is explicitly disabled
-  const menuItems = ALL_MENU_ITEMS.filter(
-    (item) => (
-      (!item.feature || settings?.features?.[item.feature] !== false)
-      && (!item.permission || hasPermission(item.permission))
-      && (!item.permissions || hasAnyPermission(item.permissions))
-    )
-  );
+  // Filter sidebar items by:
+  //  1. mode — items with mode:'ecommerce' are hidden in catalog mode
+  //  2. feature flag — uses the resolved features map (mode core + DB), not raw settings
+  //  3. permission — user must have the required permission
+  const menuItems = ALL_MENU_ITEMS.filter((item) => {
+    if (item.mode && item.mode !== appMode) return false;
+    if (item.feature && features?.[item.feature] === false) return false;
+    if (item.permission && !hasPermission(item.permission)) return false;
+    if (item.permissions && !hasAnyPermission(item.permissions)) return false;
+    return true;
+  });
 
   const isActive = (path) =>
     path === '/admin' ? location.pathname === '/admin' : location.pathname.startsWith(path);

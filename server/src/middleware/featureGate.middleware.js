@@ -1,56 +1,120 @@
 'use strict';
 
 const AppError = require('../utils/AppError');
-const logger = require('../utils/logger');
+const logger   = require('../utils/logger');
+const { buildFeatures } = require('../config/modes');
 
-// In-memory TTL cache to avoid hitting DB on every featureGate'd request
-// TTL: 60 seconds — balances freshness vs performance
+// ─── In-memory TTL cache ──────────────────────────────────────────────────────
+// Stores the fully-resolved (mode + DB) boolean for each feature key.
+// TTL: 60 s — balances freshness vs. performance.
+// On a cache miss we load ALL feature settings in one DB query and populate
+// every key, so subsequent gates in the same window are free.
 const CACHE_TTL_MS = 60 * 1000;
 const featureCache = new Map(); // key → { value: bool, expiresAt: timestamp }
 
-const getCachedSetting = async (featureKey) => {
-    const now = Date.now();
-    const cached = featureCache.get(featureKey);
+/**
+ * Loads all feature settings from the DB, merges them with the current mode's
+ * core features, then stores every resolved key in the cache.
+ *
+ * @returns {Promise<Record<string, boolean>>} Fully resolved feature map
+ */
+const loadAndCacheAllFeatures = async () => {
+  const { Setting } = require('../modules');
+  const rows = await Setting.findAll({ where: { group: 'features' } });
 
-    if (cached && cached.expiresAt > now) {
-        return cached.value;
-    }
+  // Parse raw DB values to booleans
+  const dbFeatures = {};
+  for (const row of rows) {
+    dbFeatures[row.key] = row.value === true || row.value === 'true';
+  }
 
-    // Cache miss or expired — query DB
-    const { Setting } = require('../modules');
-    const featureSetting = await Setting.findOne({ where: { group: 'features', key: featureKey } });
-    
-    let isEnabled = false;
-    if (featureSetting) {
-        isEnabled = featureSetting.value === true || featureSetting.value === 'true';
-    }
+  // Mode-core features always win (spread order in buildFeatures)
+  const resolved = buildFeatures(dbFeatures);
 
-    featureCache.set(featureKey, { value: isEnabled, expiresAt: now + CACHE_TTL_MS });
-    return isEnabled;
+  // Populate cache for every key at once
+  const expiresAt = Date.now() + CACHE_TTL_MS;
+  for (const [key, value] of Object.entries(resolved)) {
+    featureCache.set(key, { value, expiresAt });
+  }
+
+  return resolved;
 };
 
 /**
- * Middleware to guard routes behind a feature flag.
- * Results are cached for 60 s to avoid DB round-trips on every request.
- * @param {string} featureKey - DB key in the features group (e.g. 'wishlistEnabled')
+ * Returns the final resolved boolean for a feature key.
+ * Cache hit → immediate return.  Cache miss → full DB reload.
+ *
+ * @param {string} featureKey
+ * @returns {Promise<boolean>}
  */
-const featureGate = (featureKey) => {
-    return async (req, res, next) => {
-        try {
-            const isEnabled = await getCachedSetting(featureKey);
-            if (!isEnabled) {
-                return next(new AppError('FEATURE_DISABLED', 404, `The feature '${featureKey}' is currently disabled`));
-            }
-            next();
-        } catch (err) {
-            logger.error(`Error checking feature gate for ${featureKey}:`, err);
-            // Fail closed — deny access when we can't check
-            next(new AppError('FEATURE_DISABLED', 404, `The feature '${featureKey}' is currently disabled`));
-        }
-    };
+const getResolvedFeature = async (featureKey) => {
+  const now    = Date.now();
+  const cached = featureCache.get(featureKey);
+
+  if (cached && cached.expiresAt > now) {
+    return cached.value;
+  }
+
+  // Cache miss or expired — reload everything from DB
+  const resolved = await loadAndCacheAllFeatures();
+
+  // If the key is not in DB or mode config, default to false (deny unknown features)
+  return resolved[featureKey] ?? false;
 };
 
-/** Test helper — clears the feature cache (useful in unit tests) */
+// ─── Public API ───────────────────────────────────────────────────────────────
+
+/**
+ * Express middleware factory.
+ * Guards a route behind a feature flag — uses final resolved value (mode + DB).
+ * Returns 403 Forbidden when the feature is disabled; semantically correct because
+ * the endpoint exists but access is not permitted in the current mode/config.
+ *
+ * @param {string} featureKey - Feature key to check (e.g. 'wishlist', 'cart')
+ */
+const featureGate = (featureKey) => {
+  return async (req, res, next) => {
+    try {
+      const isEnabled = await getResolvedFeature(featureKey);
+      if (!isEnabled) {
+        return next(
+          new AppError(
+            'FEATURE_DISABLED',
+            403,
+            `The feature '${featureKey}' is not available in the current mode`
+          )
+        );
+      }
+      next();
+    } catch (err) {
+      logger.error(`[featureGate] Error resolving feature "${featureKey}":`, err);
+      // Fail closed — deny access when we cannot verify
+      next(
+        new AppError(
+          'FEATURE_DISABLED',
+          403,
+          `The feature '${featureKey}' is not available in the current mode`
+        )
+      );
+    }
+  };
+};
+
+/**
+ * Invalidates a single feature key from the cache.
+ * Call this after a feature setting is updated in the DB so the next request
+ * immediately re-reads the fresh value instead of waiting for TTL expiry.
+ *
+ * @param {string} featureKey
+ */
+const invalidateFeature = (featureKey) => {
+  featureCache.delete(featureKey);
+};
+
+/**
+ * Clears the entire feature cache.
+ * Useful in tests and after a bulk settings update.
+ */
 const clearFeatureCache = () => featureCache.clear();
 
-module.exports = { featureGate, clearFeatureCache };
+module.exports = { featureGate, invalidateFeature, clearFeatureCache };

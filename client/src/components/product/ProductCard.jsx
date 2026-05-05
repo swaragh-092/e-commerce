@@ -2,12 +2,13 @@ import React from 'react';
 import { Card, CardMedia, CardContent, Typography, Box, Rating, Chip } from '@mui/material';
 import { Link } from 'react-router-dom';
 import { getMediaUrl } from '../../utils/media';
-import { useCurrency, useSettings } from '../../hooks/useSettings';
+import { useCurrency, useSettings, useFeature } from '../../hooks/useSettings';
 import { getDiscountPercent, getSaleTimingMessage, isEndingSoon } from '../../utils/pricing';
 
 const ProductCard = ({ product, fromCategory }) => {
   const { formatPrice } = useCurrency();
   const { settings } = useSettings();
+  const pricingEnabled = useFeature('pricing');
   const sales = settings?.sales || {};
   const primaryImage =
     getMediaUrl(product.images?.find((i) => i.isPrimary)?.url || product.images?.[0]?.url || '') || '/placeholder.png';
@@ -70,7 +71,7 @@ const ProductCard = ({ product, fromCategory }) => {
             `linear-gradient(135deg, ${theme.palette.action.hover} 0%, ${theme.palette.background.default} 100%)`,
         }}
       >
-        {(hasSale || isScheduledSale) && sales.showDiscountPercent !== false && discountPercent > 0 && (
+        {pricingEnabled && (hasSale || isScheduledSale) && sales.showDiscountPercent !== false && discountPercent > 0 && (
           <Chip
             label={hasSale ? `${discountPercent}% OFF` : 'Starts Soon'}
             color={hasSale ? 'error' : 'warning'}
@@ -165,24 +166,26 @@ const ProductCard = ({ product, fromCategory }) => {
           </Box>
         )}
         <Box sx={{ flexGrow: 1 }} />
-        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mt: 'auto' }}>
-          {hasSale ? (
-            <>
-              <Typography variant="h6" color="primary" sx={{ fontWeight: 900 }}>
-                {formatPrice(displayPrice)}
-              </Typography>
-              <Typography
-                variant="body1"
-                color="text.secondary"
-                sx={{ textDecoration: 'line-through' }}
-              >
-                {formatPrice(product.price)}
-              </Typography>
-            </>
-          ) : (
-            <Typography variant="h6" sx={{ fontWeight: 900 }}>{formatPrice(displayPrice)}</Typography>
-          )}
-        </Box>
+        {pricingEnabled && (
+          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mt: 'auto' }}>
+            {hasSale ? (
+              <>
+                <Typography variant="h6" color="primary" sx={{ fontWeight: 900 }}>
+                  {formatPrice(displayPrice)}
+                </Typography>
+                <Typography
+                  variant="body1"
+                  color="text.secondary"
+                  sx={{ textDecoration: 'line-through' }}
+                >
+                  {formatPrice(product.price)}
+                </Typography>
+              </>
+            ) : (
+              <Typography variant="h6" sx={{ fontWeight: 900 }}>{formatPrice(displayPrice)}</Typography>
+            )}
+          </Box>
+        )}
         {(saleTiming || endingSoon) && (
           <Box sx={{ mt: 1 }}>
             {saleTiming && (
