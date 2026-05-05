@@ -18,7 +18,7 @@ import { getProducts, deleteProduct, updateProduct, bulkUpdateSale } from '../..
 import { getCategoryTree } from '../../services/categoryService';
 import { getSaleLabels } from '../../services/adminService';
 import { getMediaUrl } from '../../utils/media';
-import { useCurrency, useSettings } from '../../hooks/useSettings';
+import { useCurrency, useSettings, useFeature } from '../../hooks/useSettings';
 import { useNotification } from '../../context/NotificationContext';
 import { formatSaleDateTime, isEndingSoon } from '../../utils/pricing';
 import { useAuth } from '../../hooks/useAuth';
@@ -42,6 +42,7 @@ const ProductsManagePage = () => {
   const { settings } = useSettings();
   const { notify } = useNotification();
   const { hasPermission } = useAuth();
+  const pricingEnabled = useFeature('pricing');
   const sales = settings?.sales || {};
   const canCreateProducts = hasPermission(PERMISSIONS.PRODUCTS_CREATE);
   const canUpdateProducts = hasPermission(PERMISSIONS.PRODUCTS_UPDATE);
@@ -457,16 +458,16 @@ const ProductsManagePage = () => {
           <Typography
             variant="body2"
             fontWeight={700}
-            color={row.isSaleActive ? 'error.main' : 'text.primary'}
+            color={pricingEnabled && row.isSaleActive ? 'error.main' : 'text.primary'}
           >
-            {formatPrice(row.effectivePrice ?? row.salePrice ?? row.price)}
+            {formatPrice(pricingEnabled && (row.effectivePrice ?? row.salePrice) ? (row.effectivePrice ?? row.salePrice) : row.price)}
           </Typography>
-          {row.salePrice && (
+          {pricingEnabled && row.salePrice && (
             <Typography variant="caption" color="text.secondary" sx={{ textDecoration: 'line-through', display: 'block' }}>
               {formatPrice(row.price)}
             </Typography>
           )}
-          {row.saleStatus && row.saleStatus !== 'none' && (
+          {pricingEnabled && row.saleStatus && row.saleStatus !== 'none' && (
             <Typography variant="caption" color={row.saleStatus === 'active' ? 'error.main' : 'text.secondary'} sx={{ display: 'block' }}>
               {row.saleStatus === 'active' ? 'Active sale' : row.saleStatus === 'scheduled' ? 'Scheduled sale' : 'Expired sale'}
             </Typography>
@@ -616,7 +617,10 @@ const ProductsManagePage = () => {
         </Stack>
       ),
     },
-  ];
+  ].filter(col => {
+    if (col.field === 'saleMeta' && !pricingEnabled) return false;
+    return true;
+  });
 
   return (
     <Box>
@@ -694,20 +698,22 @@ const ProductsManagePage = () => {
             <MenuItem value="draft">Draft</MenuItem>
           </Select>
         </FormControl>
-        <FormControl size="small" sx={{ minWidth: 160 }}>
-          <InputLabel>Sale</InputLabel>
-          <Select
-            value={saleFilter}
-            label="Sale"
-            onChange={(e) => { setSaleFilter(e.target.value); setPaginationModel((p) => ({ ...p, page: 0 })); }}
-          >
-            <MenuItem value="">All Sales</MenuItem>
-            <MenuItem value="active">Active</MenuItem>
-            <MenuItem value="scheduled">Scheduled</MenuItem>
-            <MenuItem value="expired">Expired</MenuItem>
-            <MenuItem value="none">No Sale</MenuItem>
-          </Select>
-        </FormControl>
+        {pricingEnabled && (
+          <FormControl size="small" sx={{ minWidth: 160 }}>
+            <InputLabel>Sale</InputLabel>
+            <Select
+              value={saleFilter}
+              label="Sale"
+              onChange={(e) => { setSaleFilter(e.target.value); setPaginationModel((p) => ({ ...p, page: 0 })); }}
+            >
+              <MenuItem value="">All Sales</MenuItem>
+              <MenuItem value="active">Active</MenuItem>
+              <MenuItem value="scheduled">Scheduled</MenuItem>
+              <MenuItem value="expired">Expired</MenuItem>
+              <MenuItem value="none">No Sale</MenuItem>
+            </Select>
+          </FormControl>
+        )}
         <FormControl size="small" sx={{ minWidth: 220 }}>
           <InputLabel>Category</InputLabel>
           <Select
@@ -776,7 +782,7 @@ const ProductsManagePage = () => {
               Delete
             </Button>
           )}
-          {sales.allowBulkSales !== false && canBulkSaleProducts && (
+          {pricingEnabled && sales.allowBulkSales !== false && canBulkSaleProducts && (
             <>
               <Button size="small" variant="outlined" onClick={() => setBulkSaleDialog({ open: true, mode: 'apply', saleType: 'percentage', value: '', saleLabel: '', saleStartAt: '', saleEndAt: '', saving: false })}>
                 Apply Sale
@@ -897,94 +903,98 @@ const ProductsManagePage = () => {
               value={editDialog.price}
               onChange={(e) => setEditDialog((s) => ({ ...s, price: e.target.value }))}
             />
-            <Stack direction="row" justifyContent="space-between" alignItems="center" sx={{ pt: 0.5 }}>
-              <Box>
-                <Typography variant="body2" fontWeight={600}>On Sale</Typography>
-                <Typography variant="caption" color="text.secondary">
-                  Turn this off to remove the sale price.
-                </Typography>
-              </Box>
-              <Button
-                size="small"
-                variant={editDialog.saleEnabled ? 'contained' : 'outlined'}
-                color={editDialog.saleEnabled ? 'error' : 'inherit'}
-                onClick={() => setEditDialog((s) => ({
-                  ...s,
-                  saleEnabled: !s.saleEnabled,
-                  salePrice: !s.saleEnabled ? (s.salePrice === '' ? s.row?.salePrice ?? s.price : s.salePrice) : '',
-                }))}
-              >
-                {editDialog.saleEnabled ? 'Sale Enabled' : 'No Sale'}
-              </Button>
-            </Stack>
-            <TextField
-              label="Sale Price"
-              type="number"
-              size="small"
-              fullWidth
-              disabled={!editDialog.saleEnabled}
-              error={hasInvalidSalePrice}
-              helperText={
-                !editDialog.saleEnabled
-                  ? 'Sale price is currently removed.'
-                  : hasInvalidSalePrice
-                    ? 'Sale price must be lower than the regular price.'
-                    : `Current sale price: ${editDialog.row?.salePrice ? formatPrice(editDialog.row.salePrice) : 'None'}`
-              }
-              InputProps={{
-                startAdornment: <InputAdornment position="start">{formatPrice(0).replace(/0.00|0/g, '').trim() || '$'}</InputAdornment>,
-              }}
-              inputProps={{ step: '0.01', min: 0 }}
-              value={editDialog.salePrice}
-              onChange={(e) => setEditDialog((s) => ({ ...s, salePrice: e.target.value }))}
-            />
-            <FormControl fullWidth size="small" disabled={!editDialog.saleEnabled}>
-              <InputLabel id="quick-edit-sale-label-select">Sale Label</InputLabel>
-              <Select
-                labelId="quick-edit-sale-label-select"
-                label="Sale Label"
-                value={editDialog.saleLabel}
-                onChange={(e) => setEditDialog((s) => ({ ...s, saleLabel: e.target.value }))}
-              >
-                <MenuItem value="">
-                  <em>None</em>
-                </MenuItem>
-                {hasUnknownEditSaleLabel && (
-                  <MenuItem value={editDialog.saleLabel} disabled>
-                    {editDialog.saleLabel}
-                  </MenuItem>
-                )}
-                {saleLabels.map((label) => (
-                  <MenuItem key={label.id} value={label.id}>
-                    {label.name}
-                  </MenuItem>
-                ))}
-              </Select>
-            </FormControl>
-            {sales.allowScheduling !== false && (
+            {pricingEnabled && (
               <>
+                <Stack direction="row" justifyContent="space-between" alignItems="center" sx={{ pt: 0.5 }}>
+                  <Box>
+                    <Typography variant="body2" fontWeight={600}>On Sale</Typography>
+                    <Typography variant="caption" color="text.secondary">
+                      Turn this off to remove the sale price.
+                    </Typography>
+                  </Box>
+                  <Button
+                    size="small"
+                    variant={editDialog.saleEnabled ? 'contained' : 'outlined'}
+                    color={editDialog.saleEnabled ? 'error' : 'inherit'}
+                    onClick={() => setEditDialog((s) => ({
+                      ...s,
+                      saleEnabled: !s.saleEnabled,
+                      salePrice: !s.saleEnabled ? (s.salePrice === '' ? s.row?.salePrice ?? s.price : s.salePrice) : '',
+                    }))}
+                  >
+                    {editDialog.saleEnabled ? 'Sale Enabled' : 'No Sale'}
+                  </Button>
+                </Stack>
                 <TextField
-                  label="Sale Starts"
-                  type="datetime-local"
+                  label="Sale Price"
+                  type="number"
                   size="small"
                   fullWidth
                   disabled={!editDialog.saleEnabled}
-                  InputLabelProps={{ shrink: true }}
-                  value={editDialog.saleStartAt}
-                  onChange={(e) => setEditDialog((s) => ({ ...s, saleStartAt: e.target.value }))}
+                  error={hasInvalidSalePrice}
+                  helperText={
+                    !editDialog.saleEnabled
+                      ? 'Sale price is currently removed.'
+                      : hasInvalidSalePrice
+                        ? 'Sale price must be lower than the regular price.'
+                        : `Current sale price: ${editDialog.row?.salePrice ? formatPrice(editDialog.row.salePrice) : 'None'}`
+                  }
+                  InputProps={{
+                    startAdornment: <InputAdornment position="start">{formatPrice(0).replace(/0.00|0/g, '').trim() || '$'}</InputAdornment>,
+                  }}
+                  inputProps={{ step: '0.01', min: 0 }}
+                  value={editDialog.salePrice}
+                  onChange={(e) => setEditDialog((s) => ({ ...s, salePrice: e.target.value }))}
                 />
-                <TextField
-                  label="Sale Ends"
-                  type="datetime-local"
-                  size="small"
-                  fullWidth
-                  disabled={!editDialog.saleEnabled}
-                  error={hasInvalidSaleDates}
-                  helperText={hasInvalidSaleDates ? 'Sale end must be after the start date.' : 'Leave blank for an open-ended sale'}
-                  InputLabelProps={{ shrink: true }}
-                  value={editDialog.saleEndAt}
-                  onChange={(e) => setEditDialog((s) => ({ ...s, saleEndAt: e.target.value }))}
-                />
+                <FormControl fullWidth size="small" disabled={!editDialog.saleEnabled}>
+                  <InputLabel id="quick-edit-sale-label-select">Sale Label</InputLabel>
+                  <Select
+                    labelId="quick-edit-sale-label-select"
+                    label="Sale Label"
+                    value={editDialog.saleLabel}
+                    onChange={(e) => setEditDialog((s) => ({ ...s, saleLabel: e.target.value }))}
+                  >
+                    <MenuItem value="">
+                      <em>None</em>
+                    </MenuItem>
+                    {hasUnknownEditSaleLabel && (
+                      <MenuItem value={editDialog.saleLabel} disabled>
+                        {editDialog.saleLabel}
+                      </MenuItem>
+                    )}
+                    {saleLabels.map((label) => (
+                      <MenuItem key={label.id} value={label.id}>
+                        {label.name}
+                      </MenuItem>
+                    ))}
+                  </Select>
+                </FormControl>
+                {sales.allowScheduling !== false && (
+                  <>
+                    <TextField
+                      label="Sale Starts"
+                      type="datetime-local"
+                      size="small"
+                      fullWidth
+                      disabled={!editDialog.saleEnabled}
+                      InputLabelProps={{ shrink: true }}
+                      value={editDialog.saleStartAt}
+                      onChange={(e) => setEditDialog((s) => ({ ...s, saleStartAt: e.target.value }))}
+                    />
+                    <TextField
+                      label="Sale Ends"
+                      type="datetime-local"
+                      size="small"
+                      fullWidth
+                      disabled={!editDialog.saleEnabled}
+                      error={hasInvalidSaleDates}
+                      helperText={hasInvalidSaleDates ? 'Sale end must be after the start date.' : 'Leave blank for an open-ended sale'}
+                      InputLabelProps={{ shrink: true }}
+                      value={editDialog.saleEndAt}
+                      onChange={(e) => setEditDialog((s) => ({ ...s, saleEndAt: e.target.value }))}
+                    />
+                  </>
+                )}
               </>
             )}
             <Stack direction="row" justifyContent="space-between" alignItems="center" sx={{ pt: 0.5 }}>

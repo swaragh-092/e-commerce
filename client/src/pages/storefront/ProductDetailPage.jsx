@@ -42,6 +42,7 @@ const ProductDetailPage = () => {
     const { settings } = useSettings();
     const cartEnabled    = useFeature('cart');
     const pricingEnabled = useFeature('pricing');
+    const showPrice = useFeature('showPrice');
     const wishlistEnabled = useFeature('wishlist');
     const enquiryEnabled = useFeature('enquiry');
     const pp = settings?.productPage || {};
@@ -299,7 +300,7 @@ const ProductDetailPage = () => {
                         </Typography>
                     )}
 
-                    {pricingEnabled && (
+                    {showPrice && (
                         <Box sx={{ display: 'flex', alignItems: 'center', gap: 2, mb: 3 }}>
                             {hasSale ? (
                                 <>
@@ -311,9 +312,9 @@ const ProductDetailPage = () => {
                             ) : (
                                 <Typography variant="h5" fontWeight="bold">{formatPrice(currentPrice)}</Typography>
                             )}
-                            {hasSale && showDiscountPercent && discountPercent > 0 && <Chip label={`${discountPercent}% OFF`} color="error" />}
-                            {isScheduledSale && <Chip label="Sale Starts Soon" color="warning" />}
-                            {endingSoon && <Chip label="Ending Soon" color="warning" variant="outlined" />}
+                            {pricingEnabled && hasSale && showDiscountPercent && discountPercent > 0 && <Chip label={`${discountPercent}% OFF`} color="error" />}
+                            {pricingEnabled && isScheduledSale && <Chip label="Sale Starts Soon" color="warning" />}
+                            {pricingEnabled && endingSoon && <Chip label="Ending Soon" color="warning" variant="outlined" />}
                         </Box>
                     )}
 
@@ -445,7 +446,6 @@ const ProductDetailPage = () => {
 
                     {displayAttributes.length > 0 && (
                         <>
-                            <Divider sx={{ my: 4 }} />
                             <Typography variant="h6" gutterBottom>Specifications</Typography>
                             <Box sx={{ display: 'grid', gap: 1.25 }}>
                                 {displayAttributes.map((attributeRow) => {
@@ -476,9 +476,9 @@ const ProductDetailPage = () => {
                         </>
                     )}
 
-                    <Divider sx={{ my: 4 }} />
+                   
 
-                    <Typography variant="h6" gutterBottom>Product Details</Typography>
+                    <Typography variant="h6" sx={{ mt: 4 }} gutterBottom>Product Details</Typography>
                     <Box dangerouslySetInnerHTML={{ __html: DOMPurify.sanitize(product.description || '') }} sx={{ typography: 'body2', color: 'text.secondary', '& p': { mt: 0, mb: 2 } }} />
 
                     {product.tags?.length > 0 && (

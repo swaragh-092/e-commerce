@@ -9,6 +9,7 @@ const ProductCard = ({ product, fromCategory }) => {
   const { formatPrice } = useCurrency();
   const { settings } = useSettings();
   const pricingEnabled = useFeature('pricing');
+  const showPrice = useFeature('showPrice');
   const sales = settings?.sales || {};
   const primaryImage =
     getMediaUrl(product.images?.find((i) => i.isPrimary)?.url || product.images?.[0]?.url || '') || '/placeholder.png';
@@ -166,7 +167,7 @@ const ProductCard = ({ product, fromCategory }) => {
           </Box>
         )}
         <Box sx={{ flexGrow: 1 }} />
-        {pricingEnabled && (
+        {showPrice && (
           <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mt: 'auto' }}>
             {hasSale ? (
               <>

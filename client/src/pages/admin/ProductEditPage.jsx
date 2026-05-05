@@ -57,7 +57,7 @@ import { getSaleLabels } from '../../services/adminService';
 import MediaPicker from '../../components/common/MediaPicker';
 import MediaUploader from '../../components/common/MediaUploader';
 import { useNotification } from '../../context/NotificationContext';
-import { useSettings } from '../../hooks/useSettings';
+import { useCurrency, useSettings, useFeature } from '../../hooks/useSettings';
 import { getProductBasePrice } from '../../utils/variantPricing';
 import { getVariantOptionLabel } from '../../utils/variantOptions';
 import { useAuth } from '../../hooks/useAuth';
@@ -76,36 +76,40 @@ const generateSlug = (text) => {
     .replace(/^-+/, '')
     .replace(/-+$/, '');
 };
-
 const validate = (formData) => {
   const errs = {};
   if (!formData.name?.trim()) errs.name = 'Product name is required.';
   else if (formData.name?.trim().length > 255)
     errs.name = 'Product name must be 255 characters or less.';
 
-  const rPrice = Number(formData.price);
-  if (formData.price === '' || formData.price === null || formData.price === undefined) {
-    errs.price = 'Price is required.';
-  } else if (isNaN(rPrice) || rPrice <= 0) {
-    errs.price = 'Price must be a positive number.';
-  }
+  // Only validate price/tax if their respective features are enabled
+  const pricingEnabled = window.__APP_FEATURES__?.pricing ?? true; // Fallback to true if unknown
+  const showPrice = window.__APP_FEATURES__?.showPrice ?? true;
 
-  if (formData.salePrice !== '' && formData.salePrice !== null) {
-    const sPrice = Number(formData.salePrice);
-    if (isNaN(sPrice) || sPrice <= 0) {
-      errs.salePrice = 'Sale price must be a positive number.';
-    } else if (!isNaN(rPrice) && rPrice > 0 && sPrice >= rPrice) {
-      errs.salePrice = 'Sale price must be less than the regular price.';
+  if (pricingEnabled || showPrice) {
+    const rPrice = Number(formData.price);
+    if (formData.price === '' || formData.price === null || formData.price === undefined) {
+      errs.price = 'Price is required.';
+    } else if (isNaN(rPrice) || rPrice <= 0) {
+      errs.price = 'Price must be a positive number.';
     }
-  }
 
-  // Only require sale price if a sale is actively being scheduled via dates
-  if ((formData.saleStartAt || formData.saleEndAt) && (formData.salePrice === '' || formData.salePrice === null)) {
-    errs.salePrice = 'Add a sale price before scheduling a sale.';
-  }
+    if (formData.salePrice !== '' && formData.salePrice !== null) {
+      const sPrice = Number(formData.salePrice);
+      if (isNaN(sPrice) || sPrice <= 0) {
+        errs.salePrice = 'Sale price must be a positive number.';
+      } else if (!isNaN(rPrice) && rPrice > 0 && sPrice >= rPrice) {
+        errs.salePrice = 'Sale price must be less than the regular price.';
+      }
+    }
 
-  if (formData.saleStartAt && formData.saleEndAt && new Date(formData.saleEndAt) <= new Date(formData.saleStartAt)) {
-    errs.saleEndAt = 'Sale end must be after the start date.';
+    if ((formData.saleStartAt || formData.saleEndAt) && (formData.salePrice === '' || formData.salePrice === null)) {
+      errs.salePrice = 'Add a sale price before scheduling a sale.';
+    }
+
+    if (formData.saleStartAt && formData.saleEndAt && new Date(formData.saleEndAt) <= new Date(formData.saleStartAt)) {
+      errs.saleEndAt = 'Sale end must be after the start date.';
+    }
   }
 
   if (
@@ -130,7 +134,7 @@ const validate = (formData) => {
   }
 
   // Tax Configuration Validation
-  if (formData.taxConfig?.isCustom) {
+  if (pricingEnabled && formData.taxConfig?.isCustom) {
     const { sgst, cgst, igst } = formData.taxConfig;
     if (isNaN(Number(sgst)) || sgst < 0 || sgst > 1) {
       errs.taxConfig = 'SGST must be between 0 and 100%.';
@@ -166,6 +170,8 @@ const ProductEditPage = () => {
   const canCreateProducts = hasPermission(PERMISSIONS.PRODUCTS_CREATE);
   const canUpdateProducts = hasPermission(PERMISSIONS.PRODUCTS_UPDATE);
   const canUploadMedia = hasPermission(PERMISSIONS.MEDIA_UPLOAD);
+  const pricingEnabled = useFeature('pricing');
+  const showPrice = useFeature('showPrice');
   const canSaveProduct = isNew ? canCreateProducts : canUpdateProducts;
 
   const [formData, setFormData] = useState({
@@ -289,7 +295,7 @@ const ProductEditPage = () => {
       return;
     }
 
-    const errs = validate(formData);
+    const errs = validate({ ...formData, _features: { pricing: pricingEnabled, showPrice } });
     if (Object.keys(errs).length > 0) {
       setErrors(errs);
       notify('Please fix the validation errors before saving.', 'warning');
@@ -488,121 +494,123 @@ const ProductEditPage = () => {
               </Typography>
             </Paper>
 
-            <Paper sx={{ p: 3, mb: 3 }}>
-              <Typography variant="h6" gutterBottom>
-                Pricing
-              </Typography>
-              <Grid container spacing={2}>
-                <Grid item xs={6}>
-                  <TextField
-                    fullWidth
-                    label="Price *"
-                    type="number"
-                    InputProps={{ startAdornment: <InputAdornment position="start">₹</InputAdornment> }}
-                    inputProps={{ step: '0.01', min: 0 }}
-                    value={formData.price}
-                    onChange={(e) => setField('price', e.target.value)}
-                    error={Boolean(errors.price)}
-                    helperText={errors.price}
-                  />
-                </Grid>
-                <Grid item xs={6}>
-                  <TextField
-                    fullWidth
-                    label="Sale Price"
-                    type="number"
-                    InputProps={{ startAdornment: <InputAdornment position="start">₹</InputAdornment> }}
-                    inputProps={{ step: '0.01', min: 0 }}
-                    value={formData.salePrice}
-                    onChange={(e) => setField('salePrice', e.target.value)}
-                    error={Boolean(errors.salePrice)}
-                    helperText={errors.salePrice || 'Must be less than regular price'}
-                  />
-                </Grid>
-                <Grid item xs={12}>
-                  <FormControl fullWidth size="small" disabled={!formData.salePrice}>
-                    <InputLabel id="sale-label-select">Sale Label</InputLabel>
-                    <Select
-                      labelId="sale-label-select"
-                      value={formData.saleLabel || ''}
-                      label="Sale Label"
-                      onChange={(e) => setField('saleLabel', e.target.value)}
-                    >
-                      <MenuItem value="">
-                        <em>None</em>
-                      </MenuItem>
-                      {saleLabels.map((lbl) => (
-                        <MenuItem key={lbl.id} value={lbl.id}>
-                          <Box sx={{ display: 'flex', alignItems: 'center' }}>
-                            <Box
-                              sx={{
-                                width: 12,
-                                height: 12,
-                                borderRadius: '50%',
-                                bgcolor: lbl.color || '#000',
-                                mr: 1,
-                              }}
-                            />
-                            {lbl.name}
-                          </Box>
+            {(pricingEnabled || showPrice) && (
+              <Paper sx={{ p: 3, mb: 3 }}>
+                <Typography variant="h6" gutterBottom>
+                  Pricing
+                </Typography>
+                <Grid container spacing={2}>
+                  <Grid item xs={6}>
+                    <TextField
+                      fullWidth
+                      label="Price *"
+                      type="number"
+                      InputProps={{ startAdornment: <InputAdornment position="start">₹</InputAdornment> }}
+                      inputProps={{ step: '0.01', min: 0 }}
+                      value={formData.price}
+                      onChange={(e) => setField('price', e.target.value)}
+                      error={Boolean(errors.price)}
+                      helperText={errors.price}
+                    />
+                  </Grid>
+                  <Grid item xs={6}>
+                    <TextField
+                      fullWidth
+                      label="Sale Price"
+                      type="number"
+                      InputProps={{ startAdornment: <InputAdornment position="start">₹</InputAdornment> }}
+                      inputProps={{ step: '0.01', min: 0 }}
+                      value={formData.salePrice}
+                      onChange={(e) => setField('salePrice', e.target.value)}
+                      error={Boolean(errors.salePrice)}
+                      helperText={errors.salePrice || 'Must be less than regular price'}
+                    />
+                  </Grid>
+                  <Grid item xs={12}>
+                    <FormControl fullWidth size="small" disabled={!formData.salePrice}>
+                      <InputLabel id="sale-label-select">Sale Label</InputLabel>
+                      <Select
+                        labelId="sale-label-select"
+                        value={formData.saleLabel || ''}
+                        label="Sale Label"
+                        onChange={(e) => setField('saleLabel', e.target.value)}
+                      >
+                        <MenuItem value="">
+                          <em>None</em>
                         </MenuItem>
-                      ))}
-                    </Select>
-                    <FormHelperText>
-                      {!formData.salePrice
-                        ? 'Add a sale price to enable scheduling.'
-                        : 'Select a predefined sale label from your catalog.'}
-                    </FormHelperText>
-                  </FormControl>
-                </Grid>
-                {sales.allowScheduling !== false && (
-                  <>
-                    <Grid item xs={12} md={6}>
-                      <TextField
-                        fullWidth
-                        label="Sale Starts"
-                        type="datetime-local"
+                        {saleLabels.map((lbl) => (
+                          <MenuItem key={lbl.id} value={lbl.id}>
+                            <Box sx={{ display: 'flex', alignItems: 'center' }}>
+                              <Box
+                                sx={{
+                                  width: 12,
+                                  height: 12,
+                                  borderRadius: '50%',
+                                  bgcolor: lbl.color || '#000',
+                                  mr: 1,
+                                }}
+                              />
+                              {lbl.name}
+                            </Box>
+                          </MenuItem>
+                        ))}
+                      </Select>
+                      <FormHelperText>
+                        {!formData.salePrice
+                          ? 'Add a sale price to enable scheduling.'
+                          : 'Select a predefined sale label from your catalog.'}
+                      </FormHelperText>
+                    </FormControl>
+                  </Grid>
+                  {sales.allowScheduling !== false && (
+                    <>
+                      <Grid item xs={12} md={6}>
+                        <TextField
+                          fullWidth
+                          label="Sale Starts"
+                          type="datetime-local"
+                          size="small"
+                          value={formData.saleStartAt}
+                          onChange={(e) => setField('saleStartAt', e.target.value)}
+                          disabled={!formData.salePrice}
+                          InputLabelProps={{ shrink: true }}
+                        />
+                      </Grid>
+                      <Grid item xs={12} md={6}>
+                        <TextField
+                          fullWidth
+                          label="Sale Ends"
+                          type="datetime-local"
+                          size="small"
+                          value={formData.saleEndAt}
+                          onChange={(e) => setField('saleEndAt', e.target.value)}
+                          disabled={!formData.salePrice}
+                          error={Boolean(errors.saleEndAt)}
+                          helperText={errors.saleEndAt || 'Leave blank for an open-ended sale'}
+                          InputLabelProps={{ shrink: true }}
+                        />
+                      </Grid>
+                    </>
+                  )}
+                  <Grid item xs={12}>
+                    <Box sx={{ display: 'flex', justifyContent: 'flex-end' }}>
+                      <Button
                         size="small"
-                        value={formData.saleStartAt}
-                        onChange={(e) => setField('saleStartAt', e.target.value)}
-                        disabled={!formData.salePrice}
-                        InputLabelProps={{ shrink: true }}
-                      />
-                    </Grid>
-                    <Grid item xs={12} md={6}>
-                      <TextField
-                        fullWidth
-                        label="Sale Ends"
-                        type="datetime-local"
-                        size="small"
-                        value={formData.saleEndAt}
-                        onChange={(e) => setField('saleEndAt', e.target.value)}
-                        disabled={!formData.salePrice}
-                        error={Boolean(errors.saleEndAt)}
-                        helperText={errors.saleEndAt || 'Leave blank for an open-ended sale'}
-                        InputLabelProps={{ shrink: true }}
-                      />
-                    </Grid>
-                  </>
-                )}
-                <Grid item xs={12}>
-                  <Box sx={{ display: 'flex', justifyContent: 'flex-end' }}>
-                    <Button
-                      size="small"
-                      onClick={() => {
-                        setField('salePrice', '');
-                        setField('saleStartAt', '');
-                        setField('saleEndAt', '');
-                        setField('saleLabel', '');
-                      }}
-                      disabled={!formData.salePrice && !formData.saleStartAt && !formData.saleEndAt && !formData.saleLabel}
-                    >
-                      Clear Sale
-                    </Button>
-                  </Box>
+                        onClick={() => {
+                          setField('salePrice', '');
+                          setField('saleStartAt', '');
+                          setField('saleEndAt', '');
+                          setField('saleLabel', '');
+                        }}
+                        disabled={!formData.salePrice && !formData.saleStartAt && !formData.saleEndAt && !formData.saleLabel}
+                      >
+                        Clear Sale
+                      </Button>
+                    </Box>
+                  </Grid>
                 </Grid>
-              </Grid>
-            </Paper>
+              </Paper>
+            )}
 
             <Paper sx={{ p: 3 }}>
               <Typography variant="h6" gutterBottom>
@@ -740,99 +748,100 @@ const ProductEditPage = () => {
               )}
             </Paper>
 
-            {/* ---- Shipping & Dimensions ---- */}
-            <Paper sx={{ p: 3, mb: 3, mt: 3 }}>
-              <Typography variant="h6" gutterBottom>
-                Shipping &amp; Dimensions
-              </Typography>
-              <FormControlLabel
-                control={
-                  <Switch
-                    checked={formData.requiresShipping}
-                    onChange={(e) => setField('requiresShipping', e.target.checked)}
-                  />
-                }
-                label="This product requires shipping"
-                sx={{ mb: 2 }}
-              />
+            {pricingEnabled && (
+              <Paper sx={{ p: 3, mb: 3, mt: 3 }}>
+                <Typography variant="h6" gutterBottom>
+                  Shipping &amp; Dimensions
+                </Typography>
+                <FormControlLabel
+                  control={
+                    <Switch
+                      checked={formData.requiresShipping}
+                      onChange={(e) => setField('requiresShipping', e.target.checked)}
+                    />
+                  }
+                  label="This product requires shipping"
+                  sx={{ mb: 2 }}
+                />
 
-              {formData.requiresShipping && (
-                <>
-                  <TextField
-                    fullWidth
-                    label="Weight (grams)"
-                    type="number"
-                    margin="normal"
-                    size="small"
-                    inputProps={{ min: 0, step: 1 }}
-                    InputProps={{
-                      endAdornment: <InputAdornment position="end">g</InputAdornment>,
-                    }}
-                    value={formData.weightGrams}
-                    onChange={(e) => setField('weightGrams', e.target.value)}
-                    helperText="Actual product weight (packaging included)"
-                  />
-                  <Typography variant="subtitle2" sx={{ mt: 2, mb: 1 }}>Dimensions (cm)</Typography>
-                  <Grid container spacing={1.5}>
-                    <Grid item xs={4}>
-                      <TextField
-                        fullWidth label="Length" type="number" size="small"
-                        inputProps={{ min: 0, step: 0.5 }}
-                        InputProps={{ endAdornment: <InputAdornment position="end">cm</InputAdornment> }}
-                        value={formData.lengthCm}
-                        onChange={(e) => setField('lengthCm', e.target.value)}
-                      />
+                {formData.requiresShipping && (
+                  <>
+                    <TextField
+                      fullWidth
+                      label="Weight (grams)"
+                      type="number"
+                      margin="normal"
+                      size="small"
+                      inputProps={{ min: 0, step: 1 }}
+                      InputProps={{
+                        endAdornment: <InputAdornment position="end">g</InputAdornment>,
+                      }}
+                      value={formData.weightGrams}
+                      onChange={(e) => setField('weightGrams', e.target.value)}
+                      helperText="Actual product weight (packaging included)"
+                    />
+                    <Typography variant="subtitle2" sx={{ mt: 2, mb: 1 }}>Dimensions (cm)</Typography>
+                    <Grid container spacing={1.5}>
+                      <Grid item xs={4}>
+                        <TextField
+                          fullWidth label="Length" type="number" size="small"
+                          inputProps={{ min: 0, step: 0.5 }}
+                          InputProps={{ endAdornment: <InputAdornment position="end">cm</InputAdornment> }}
+                          value={formData.lengthCm}
+                          onChange={(e) => setField('lengthCm', e.target.value)}
+                        />
+                      </Grid>
+                      <Grid item xs={4}>
+                        <TextField
+                          fullWidth label="Breadth" type="number" size="small"
+                          inputProps={{ min: 0, step: 0.5 }}
+                          InputProps={{ endAdornment: <InputAdornment position="end">cm</InputAdornment> }}
+                          value={formData.breadthCm}
+                          onChange={(e) => setField('breadthCm', e.target.value)}
+                        />
+                      </Grid>
+                      <Grid item xs={4}>
+                        <TextField
+                          fullWidth label="Height" type="number" size="small"
+                          inputProps={{ min: 0, step: 0.5 }}
+                          InputProps={{ endAdornment: <InputAdornment position="end">cm</InputAdornment> }}
+                          value={formData.heightCm}
+                          onChange={(e) => setField('heightCm', e.target.value)}
+                        />
+                      </Grid>
                     </Grid>
-                    <Grid item xs={4}>
-                      <TextField
-                        fullWidth label="Breadth" type="number" size="small"
-                        inputProps={{ min: 0, step: 0.5 }}
-                        InputProps={{ endAdornment: <InputAdornment position="end">cm</InputAdornment> }}
-                        value={formData.breadthCm}
-                        onChange={(e) => setField('breadthCm', e.target.value)}
-                      />
-                    </Grid>
-                    <Grid item xs={4}>
-                      <TextField
-                        fullWidth label="Height" type="number" size="small"
-                        inputProps={{ min: 0, step: 0.5 }}
-                        InputProps={{ endAdornment: <InputAdornment position="end">cm</InputAdornment> }}
-                        value={formData.heightCm}
-                        onChange={(e) => setField('heightCm', e.target.value)}
-                      />
-                    </Grid>
-                  </Grid>
 
-                  {/* Live volumetric weight preview */}
-                  {formData.lengthCm && formData.breadthCm && formData.heightCm && (
-                    (() => {
-                      const volWeight = Math.ceil(
-                        (Number(formData.lengthCm) * Number(formData.breadthCm) * Number(formData.heightCm)) / 4000
-                      ) * 1000; // in grams, divisor 4000 → result in kg × 1000
-                      const actual = Number(formData.weightGrams) || 0;
-                      const chargeable = Math.ceil(Math.max(actual, volWeight) / 500) * 500;
-                      return (
-                        <Box sx={{
-                          mt: 2, p: 1.5, borderRadius: 1,
-                          bgcolor: 'action.hover',
-                          border: '1px dashed', borderColor: 'divider'
-                        }}>
-                          <Typography variant="caption" color="text.secondary" display="block">
-                            Volumetric weight: <strong>{volWeight} g</strong>
-                          </Typography>
-                          <Typography variant="caption" color="text.secondary" display="block">
-                            Actual weight: <strong>{actual} g</strong>
-                          </Typography>
-                          <Typography variant="caption" color="primary.main" fontWeight={700} display="block">
-                            Chargeable weight (rounded): {chargeable} g
-                          </Typography>
-                        </Box>
-                      );
-                    })()
-                  )}
-                </>
-              )}
-            </Paper>
+                    {/* Live volumetric weight preview */}
+                    {formData.lengthCm && formData.breadthCm && formData.heightCm && (
+                      (() => {
+                        const volWeight = Math.ceil(
+                          (Number(formData.lengthCm) * Number(formData.breadthCm) * Number(formData.heightCm)) / 4000
+                        ) * 1000; // in grams, divisor 4000 → result in kg × 1000
+                        const actual = Number(formData.weightGrams) || 0;
+                        const chargeable = Math.ceil(Math.max(actual, volWeight) / 500) * 500;
+                        return (
+                          <Box sx={{
+                            mt: 2, p: 1.5, borderRadius: 1,
+                            bgcolor: 'action.hover',
+                            border: '1px dashed', borderColor: 'divider'
+                          }}>
+                            <Typography variant="caption" color="text.secondary" display="block">
+                              Volumetric weight: <strong>{volWeight} g</strong>
+                            </Typography>
+                            <Typography variant="caption" color="text.secondary" display="block">
+                              Actual weight: <strong>{actual} g</strong>
+                            </Typography>
+                            <Typography variant="caption" color="primary.main" fontWeight={700} display="block">
+                              Chargeable weight (rounded): {chargeable} g
+                            </Typography>
+                          </Box>
+                        );
+                      })()
+                    )}
+                  </>
+                )}
+              </Paper>
+            )}
           </Grid>
 
           <Grid item xs={12} md={4}>
@@ -864,13 +873,15 @@ const ProductEditPage = () => {
               />
             </Paper>
             
-            <TaxConfigSection 
-              taxConfig={formData.taxConfig} 
-              basePrice={formData.price}
-              setTaxConfig={(val) => setField('taxConfig', val)}
-              globalSettings={settings?.checkout || {}}
-              disabled={!canSaveProduct}
-            />
+            {pricingEnabled && (
+              <TaxConfigSection 
+                taxConfig={formData.taxConfig} 
+                basePrice={formData.price}
+                setTaxConfig={(val) => setField('taxConfig', val)}
+                globalSettings={settings?.checkout || {}}
+                disabled={!canSaveProduct}
+              />
+            )}
 
             <Paper sx={{ p: 3, mb: 3 }}>
               <Typography variant="h6" gutterBottom>
