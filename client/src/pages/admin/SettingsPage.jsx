@@ -250,8 +250,11 @@ const SettingsPage = () => {
     }
   };
 
-  const tabs = ['Store', 'SEO', 'Branding', 'Layout', 'Homepage', 'Catalog', 'Checkout', 'Promotions', 'Invoice', 'Advanced', 'Notifications'];
-  const currentTab = tabs[tab];
+  const allTabs = ['Store', 'SEO', 'Branding', 'Layout', 'Homepage', 'Catalog', 'Checkout', 'Promotions', 'Invoice', 'Advanced', 'Notifications'];
+  const visibleTabs = allTabs.filter(t => appMode === 'ecommerce' || !['Checkout', 'Promotions', 'Invoice'].includes(t));
+  const safeTabIndex = tab < visibleTabs.length ? tab : 0;
+  const currentTab = visibleTabs[safeTabIndex];
+  const originalIndex = allTabs.indexOf(currentTab);
   const isMessagingTab = currentTab === 'Notifications';
 
   // Current currency symbol — used in shipping adornments
@@ -1837,8 +1840,8 @@ const SettingsPage = () => {
             elevation={0}
             sx={{ borderRadius: 3, border: '1px solid', borderColor: 'divider', overflow: 'hidden' }}
           >
-            <Tabs value={tab} onChange={(_, v) => setTab(v)} variant="scrollable" scrollButtons="auto">
-              {tabs.map((t) => (
+            <Tabs value={safeTabIndex} onChange={(_, v) => setTab(v)} variant="scrollable" scrollButtons="auto">
+              {visibleTabs.map((t) => (
                 <Tab key={t} label={t} />
               ))}
             </Tabs>
@@ -1887,7 +1890,7 @@ const SettingsPage = () => {
                     </Box>
                   </Box>
                 ) : (
-                  renderSections(panels[tab])
+                  renderSections(panels[originalIndex])
                 )}
 
               </Box>
