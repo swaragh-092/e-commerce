@@ -320,8 +320,8 @@ const AccessControlPage = () => {
 
   return (
     <Box>
-      <Stack direction={{ xs: 'column', md: 'row' }} justifyContent="space-between" spacing={2} sx={{ mb: 3 }}>
-        <Box>
+      <Stack direction={{ xs: 'column', sm: 'row' }} justifyContent="space-between" spacing={2} sx={{ mb: 3 }}>
+        <Box sx={{ flex: 1, minWidth: 0 }}>
           <Typography variant="h4" fontWeight={700} gutterBottom>
             Access Control
           </Typography>
@@ -329,88 +329,137 @@ const AccessControlPage = () => {
             Super admins can edit system roles and assign roles to users. Delegated managers can create and edit custom roles when granted that permission.
           </Typography>
         </Box>
-        <Stack direction="row" spacing={1.5} alignItems="flex-start">
+        <Stack direction={{ xs: 'column', sm: 'row' }} spacing={1.5} alignItems={{ xs: 'stretch', sm: 'flex-start' }} sx={{ minWidth: { xs: '100%', sm: 'auto' } }}>
           {canAssignRoles && (
-            <Button variant="outlined" startIcon={<PersonAddIcon />} onClick={openCreateUserDialog}>
+            <Button variant="outlined" startIcon={<PersonAddIcon />} onClick={openCreateUserDialog} sx={{ whiteSpace: 'nowrap' }}>
               Create User
             </Button>
           )}
           {canManageCustomRoles && (
-            <Button variant="contained" startIcon={<AddIcon />} onClick={openCreateDialog}>
+            <Button variant="contained" startIcon={<AddIcon />} onClick={openCreateDialog} sx={{ whiteSpace: 'nowrap' }}>
               Create Role
             </Button>
           )}
         </Stack>
       </Stack>
 
-      <Alert severity="info" sx={{ mb: 3 }}>
+      <Alert severity="info" sx={{ mb: 3, borderRadius: 2 }}>
         Only super admins can edit system roles. Custom-role management can be delegated, while user role assignment stays super-admin-only.
       </Alert>
 
-      <Paper variant="outlined" sx={{ p: 2.5, borderRadius: 3, mb: 3 }}>
+      <Paper variant="outlined" sx={{ p: { xs: 2, sm: 2.5 }, borderRadius: 3, mb: 3 }}>
         <Typography variant="subtitle1" fontWeight={700} gutterBottom>
           Access Legend
         </Typography>
-        <Stack direction={{ xs: 'column', md: 'row' }} spacing={1.5} useFlexGap flexWrap="wrap">
-          <Chip label="System Role = protected default role" color="warning" variant="outlined" />
-          <Chip label="Custom Role = merchant-defined role" color="success" variant="outlined" />
-          <Chip label="Custom role edit can be delegated" color="info" variant="outlined" />
-          <Chip label="System role edit is super-admin-only" color="secondary" variant="outlined" />
-          <Chip label="User assignment is super-admin-only" color="secondary" variant="outlined" />
-        </Stack>
+        <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 1 }}>
+          <Chip label="System Role = protected default role" color="warning" variant="outlined" size="small" sx={{ borderRadius: 1.5 }} />
+          <Chip label="Custom Role = merchant-defined role" color="success" variant="outlined" size="small" sx={{ borderRadius: 1.5 }} />
+          <Chip label="Custom role edit can be delegated" color="info" variant="outlined" size="small" sx={{ borderRadius: 1.5 }} />
+          <Chip label="System role edit is super-admin-only" color="secondary" variant="outlined" size="small" sx={{ borderRadius: 1.5 }} />
+          <Chip label="User assignment is super-admin-only" color="secondary" variant="outlined" size="small" sx={{ borderRadius: 1.5 }} />
+        </Box>
       </Paper>
 
-      <Grid container spacing={3} sx={{ mb: 3 }}>
+      <Grid container spacing={{ xs: 2, md: 3 }} sx={{ mb: 3 }}>
         {roles.map((role) => (
-          <Grid item xs={12} md={6} lg={4} key={role.id}>
-            <Paper variant="outlined" sx={{ p: 3, borderRadius: 3, height: '100%' }}>
-              <Box sx={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 1.5, mb: 1.5 }}>
-                <Box sx={{ display: 'flex', gap: 1.5 }}>
-                  {role.baseRole === 'super_admin' ? (
-                    <AdminPanelSettingsIcon color="primary" />
-                  ) : role.baseRole === 'admin' ? (
-                    <SecurityIcon color="primary" />
-                  ) : (
-                    <VpnKeyIcon color="primary" />
-                  )}
-                  <Box>
-                    <Typography variant="h6" fontWeight={700}>{role.name}</Typography>
-                    <Stack direction="row" spacing={1} sx={{ mt: 0.75 }}>
+          <Grid item xs={12} sm={6} lg={4} key={role.id}>
+            <Paper
+              variant="outlined"
+              sx={{
+                p: { xs: 2, sm: 2.5, md: 3 },
+                borderRadius: 3,
+                height: '100%',
+                display: 'flex',
+                flexDirection: 'column',
+                transition: 'all 0.2s ease-in-out',
+                '&:hover': {
+                  boxShadow: (theme) => theme.palette.mode === 'dark' ? '0 4px 12px rgba(0,0,0,0.3)' : '0 4px 12px rgba(0,0,0,0.08)',
+                  borderColor: 'primary.main',
+                },
+              }}
+            >
+              <Box sx={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 1.5, mb: 2 }}>
+                <Box sx={{ display: 'flex', gap: 1.5, minWidth: 0 }}>
+                  <Box sx={{ mt: 0.25, flexShrink: 0 }}>
+                    {role.baseRole === 'super_admin' ? (
+                      <AdminPanelSettingsIcon color="primary" sx={{ fontSize: 28 }} />
+                    ) : role.baseRole === 'admin' ? (
+                      <SecurityIcon color="primary" sx={{ fontSize: 28 }} />
+                    ) : (
+                      <VpnKeyIcon color="primary" sx={{ fontSize: 28 }} />
+                    )}
+                  </Box>
+                  <Box sx={{ minWidth: 0 }}>
+                    <Typography variant="h6" fontWeight={700} noWrap>
+                      {role.name}
+                    </Typography>
+                    <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 0.75, mt: 0.75 }}>
                       <Chip
                         label={role.isSystem ? roleTypeChipProps.system.label : roleTypeChipProps.custom.label}
                         size="small"
                         color={role.isSystem ? roleTypeChipProps.system.color : roleTypeChipProps.custom.color}
                         variant="outlined"
+                        sx={{ height: 22, fontSize: '0.7rem', borderRadius: 1 }}
                       />
-                      <Chip label={role.baseRole} size="small" color={roleColors[role.baseRole] || 'default'} />
+                      <Chip
+                        label={role.baseRole}
+                        size="small"
+                        color={roleColors[role.baseRole] || 'default'}
+                        sx={{ height: 22, fontSize: '0.7rem', borderRadius: 1 }}
+                      />
                       {role.isSystem ? (
-                        <Chip label="Editable by super admin" size="small" color="secondary" variant="outlined" />
+                        <Chip label="Editable by super admin" size="small" color="secondary" variant="outlined" sx={{ height: 22, fontSize: '0.7rem', borderRadius: 1 }} />
                       ) : (
-                        <Chip label="Delegatable" size="small" color="info" variant="outlined" />
+                        <Chip label="Delegatable" size="small" color="info" variant="outlined" sx={{ height: 22, fontSize: '0.7rem', borderRadius: 1 }} />
                       )}
-                    </Stack>
+                    </Box>
                   </Box>
                 </Box>
                 {((role.isSystem && canManageSystemRoles) || (!role.isSystem && canManageCustomRoles)) && (
-                  <Button size="small" startIcon={<EditIcon />} onClick={() => openEditDialog(role)}>
-                    Edit
-                  </Button>
+                  <IconButton size="small" onClick={() => openEditDialog(role)} sx={{ mt: -0.5, mr: -0.5, flexShrink: 0 }} title="Edit Role">
+                    <EditIcon fontSize="small" />
+                  </IconButton>
                 )}
               </Box>
-              <Typography variant="body2" color="text.secondary" sx={{ mb: 1.5 }}>
+              <Typography variant="body2" color="text.secondary" sx={{ mb: 2, flex: 1 }}>
                 {role.description || 'No description provided.'}
               </Typography>
-              <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mb: 1 }}>
-                {role.permissions.length} permissions
-              </Typography>
-              <Stack direction="row" spacing={1} useFlexGap flexWrap="wrap">
-                {role.permissions.slice(0, 8).map((permission) => (
-                  <Chip key={permission.id} label={permission.key} size="small" variant="outlined" />
-                ))}
-                {role.permissions.length > 8 && (
-                  <Chip label={`+${role.permissions.length - 8} more`} size="small" />
-                )}
-              </Stack>
+              <Box sx={{ mb: 1.5, pt: 1.5, borderTop: '1px solid', borderColor: 'divider' }}>
+                <Typography variant="caption" color="text.secondary" fontWeight={600} sx={{ display: 'block', mb: 0.75, textTransform: 'uppercase', letterSpacing: '0.5px', fontSize: '0.7rem' }}>
+                  {role.permissions.length} permissions
+                </Typography>
+                <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 0.75 }}>
+                  {role.permissions.slice(0, 8).map((permission) => (
+                    <Chip
+                      key={permission.id}
+                      label={permission.key}
+                      size="small"
+                      variant="outlined"
+                      sx={{
+                        height: 24,
+                        fontSize: '0.75rem',
+                        borderRadius: 1,
+                        '& .MuiChip-label': {
+                          px: 1,
+                        },
+                        bgcolor: (theme) => theme.palette.mode === 'dark' ? 'rgba(255,255,255,0.03)' : 'rgba(0,0,0,0.02)',
+                      }}
+                    />
+                  ))}
+                  {role.permissions.length > 8 && (
+                    <Chip
+                      label={`+${role.permissions.length - 8} more`}
+                      size="small"
+                      sx={{
+                        height: 24,
+                        fontSize: '0.75rem',
+                        borderRadius: 1,
+                        fontWeight: 500,
+                      }}
+                    />
+                  )}
+                </Box>
+              </Box>
             </Paper>
           </Grid>
         ))}
