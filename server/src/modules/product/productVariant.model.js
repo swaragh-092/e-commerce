@@ -16,6 +16,11 @@ module.exports = (sequelize, DataTypes) => {
             allowNull: true,
             unique: true,
         },
+        mediaId: {
+            type: DataTypes.UUID,
+            allowNull: true,
+            field: 'media_id',
+        },
         price: {
             type: DataTypes.DECIMAL(10, 2),
             allowNull: false,
@@ -49,6 +54,11 @@ module.exports = (sequelize, DataTypes) => {
             foreignKey: 'variantId',
             as: 'options',
             onDelete: 'CASCADE',
+        });
+        ProductVariant.belongsTo(models.Media, {
+            foreignKey: 'mediaId',
+            as: 'media',
+            onDelete: 'SET NULL',
         });
     };
 

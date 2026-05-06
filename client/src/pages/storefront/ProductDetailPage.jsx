@@ -249,7 +249,10 @@ const ProductDetailPage = () => {
             />
             <Grid container spacing={6}>
                 <Grid item xs={12} md={6}>
-                    <ProductImages images={product.images} />
+                    <ProductImages 
+                        images={product.images} 
+                        variantImage={selectedVariant?.media?.url} 
+                    />
                 </Grid>
 
                 <Grid item xs={12} md={6}>

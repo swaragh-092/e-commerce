@@ -49,6 +49,7 @@ const addVariantSchema = Joi.object({
     stockQty: Joi.number().integer().min(0).default(0),
     isActive: Joi.boolean().default(true),
     sortOrder: Joi.number().integer().min(0).default(0),
+    mediaId: Joi.string().uuid().allow(null).optional(),
     options: Joi.array().items(
         Joi.object({
             attributeId: Joi.string().uuid().required(),
@@ -64,6 +65,7 @@ const updateVariantSchema = Joi.object({
     stockQty: Joi.number().integer().min(0),
     isActive: Joi.boolean(),
     sortOrder: Joi.number().integer().min(0),
+    mediaId: Joi.string().uuid().allow(null),
 }).min(1).messages({ 'object.min': 'At least one field is required to update' });
 
 module.exports = {

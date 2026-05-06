@@ -8,12 +8,14 @@ const { authorizePermissions } = require('../../middleware/role.middleware');
 const { PERMISSIONS } = require('../../config/permissions');
 
 const { featureGate } = require('../../middleware/featureGate.middleware');
+const { validate } = require('../../middleware/validate.middleware');
+const { createEnquirySchema, updateEnquiryStatusSchema, replyEnquirySchema } = require('./enquiry.validation');
 
 // Apply enquiry feature gate to all routes in this module
 router.use(featureGate('enquiry'));
 
 // Public route for customers to submit enquiries
-router.post('/', enquiryController.createEnquiry);
+router.post('/', validate(createEnquirySchema), enquiryController.createEnquiry);
 
 // Admin routes for managing enquiries
 router.get(
@@ -27,6 +29,7 @@ router.patch(
   '/admin/:id/status',
   authenticate,
   authorizePermissions(PERMISSIONS.ENQUIRIES_MANAGE),
+  validate(updateEnquiryStatusSchema),
   enquiryController.updateStatus
 );
 
@@ -34,6 +37,7 @@ router.post(
   '/admin/:id/reply',
   authenticate,
   authorizePermissions(PERMISSIONS.ENQUIRIES_MANAGE),
+  validate(replyEnquirySchema),
   enquiryController.replyEnquiry
 );
 
