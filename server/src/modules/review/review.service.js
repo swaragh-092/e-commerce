@@ -69,7 +69,7 @@ const create = async (userId, slug, payload) => {
     }
 
     // Enforce purchase requirement if enabled
-    const features = await SettingsService.getByGroup('features');
+    const { features } = await SettingsService.getFeatures();
     if (features.requirePurchaseForReview && !isVerifiedPurchase) {
         throw new AppError('FORBIDDEN', 403, 'You must purchase this product and have it delivered before leaving a review');
     }

@@ -28,6 +28,7 @@ const { ACTIONS, ENTITIES } = require('../../config/constants');
 const { getCategoryAndDescendantIds } = require('../category/category.service');
 const { normalizeSalePayload, serializeProductPricing } = require('./product.pricing');
 const { getSaleLabels } = require('../settings/saleLabel.service');
+const SettingsService = require('../settings/settings.service');
 
 // Fetch the active label catalog once per request (the service caches for 60 s)
 const getLabelPresets = () => getSaleLabels().catch(() => []);
@@ -309,7 +310,8 @@ exports.getProducts = async (filters, page, limit, isAdmin = false) => {
   });
 
   const labelPresets = await getLabelPresets();
-  return getPagingData(rows.map((row) => serializeProductPricing(row, { adminView: isAdmin }, labelPresets)), count, page, queryLimit);
+  const { features } = await SettingsService.getFeatures();
+  return getPagingData(rows.map((row) => serializeProductPricing(row, { adminView: isAdmin, features }, labelPresets)), count, page, queryLimit);
 };
 
 exports.getProductBySlug = async (slug, { adminView = false } = {}) => {
@@ -331,7 +333,8 @@ exports.getProductBySlug = async (slug, { adminView = false } = {}) => {
   });
   if (!product) throw new AppError('NOT_FOUND', 404, 'Product not found');
   const labelPresets = await getLabelPresets();
-  return serializeProductPricing(product, { adminView }, labelPresets);
+  const { features } = await SettingsService.getFeatures();
+  return serializeProductPricing(product, { adminView, features }, labelPresets);
 };
 
 exports.getProductById = async (id) => {
@@ -347,7 +350,8 @@ exports.getProductById = async (id) => {
   });
   if (!product) throw new AppError('NOT_FOUND', 404, 'Product not found');
   const labelPresets = await getLabelPresets();
-  return serializeProductPricing(product, { adminView: true }, labelPresets);
+  const { features } = await SettingsService.getFeatures();
+  return serializeProductPricing(product, { adminView: true, features }, labelPresets);
 };
 
 exports.createProduct = async (data, req = null) => {

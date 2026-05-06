@@ -11,14 +11,17 @@ const reviewController = require('./review.controller');
 const { createReviewSchema, moderateReviewSchema } = require('./review.validation');
 const { PERMISSIONS } = require('../../config/permissions');
 
+// Apply reviews feature gate to all routes in this module
+router.use(featureGate('reviews'));
+
 // Public read access for approved reviews
-router.get('/products/:slug/reviews', featureGate('reviews'), reviewController.list);
+router.get('/products/:slug/reviews', reviewController.list);
 
 // Admin read access for all reviews (global list)
 router.get('/reviews', authenticate, authorizePermissions(PERMISSIONS.REVIEWS_READ), reviewController.list);
 
 // Customer post reviews
-router.post('/products/:slug/reviews', authenticate, featureGate('reviews'), reviewLimiter, validate(createReviewSchema), reviewController.create);
+router.post('/products/:slug/reviews', authenticate, reviewLimiter, validate(createReviewSchema), reviewController.create);
 
 // Admin moderate reviews
 router.put('/admin/reviews/:id/moderate', authenticate, authorizePermissions(PERMISSIONS.REVIEWS_MODERATE), validate(moderateReviewSchema), reviewController.moderate);

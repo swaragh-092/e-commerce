@@ -343,6 +343,7 @@ const CartPage = () => {
     const navigate = useNavigate();
     const [offerSummary, setOfferSummary] = useState(null);
     const [clearing, setClearing] = useState(false);
+    const [enquiryOpen, setEnquiryOpen] = useState(false);
     const cartEnabled = useFeature('cart');
     const checkoutEnabled = useFeature('checkout');
     const enquiryEnabled = useFeature('enquiry');

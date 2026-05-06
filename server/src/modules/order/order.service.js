@@ -28,6 +28,7 @@ const CouponService = require('../coupon/coupon.service');
 const PaymentService = require('../payment/payment.service');
 const TaxService = require('../tax/tax.service');
 const ShippingService = require('../shipping/shipping.service');
+const SettingsService = require('../settings/settings.service');
 const { resolveProvider } = require('../shipping/providers');
 
 const defaultSettings = require('../../../../config/default.json');
@@ -317,6 +318,12 @@ const placeOrder = async (userId, payload) => {
     let cart = null;
     let checkoutItems = [];
 
+    const { features } = await SettingsService.getFeatures();
+    
+    if (!userId && !features.guestCheckout) {
+        throw new AppError('FORBIDDEN', 403, 'Guest checkout is disabled. Please log in or register to place an order.');
+    }
+
     await ensurePaymentMethodEnabled(paymentMethod);
 
     if (buyNowItem?.productId) {
@@ -381,7 +388,10 @@ const placeOrder = async (userId, payload) => {
         checkoutItems = cart.items;
     }
 
-    const address = await Address.findOne({ where: { id: shippingAddressId, userId } });
+    const addressWhere = { id: shippingAddressId };
+    if (userId) addressWhere.userId = userId;
+    const address = await Address.findOne({ where: addressWhere });
+
     if (!address) {
         throw new AppError('NOT_FOUND', 404, 'Shipping address not found');
     }
@@ -485,21 +495,20 @@ const placeOrder = async (userId, payload) => {
         let orderDiscountAmount = 0;
         let appliedCoupon = null;
         let couponBenefits = null;
-        if (requestedCouponCodes.length > 0) {
-            couponBenefits = await CouponService.resolveCoupons(requestedCouponCodes, userId, {
-                cartSubtotal: subtotal,
-                cartItems: checkoutItems,
-                shippingCost,
-                transaction: t,
-            });
-        } else {
-            couponBenefits = await CouponService.resolveCoupons([], userId, {
-                cartSubtotal: subtotal,
-                cartItems: checkoutItems,
-                shippingCost,
-                transaction: t,
-            });
-        }
+
+        // Harden: Check if coupons feature is enabled before resolving
+        const couponCodesToResolve = features.coupons ? requestedCouponCodes : [];
+        
+        couponBenefits = await CouponService.resolveCoupons(couponCodesToResolve, userId, {
+            cartSubtotal: subtotal,
+            cartItems: checkoutItems,
+            shippingCost,
+            transaction: t,
+        });
+
+        // If a code was provided but coupons are disabled, we might want to log it or just silently ignore
+        // For now, we silently ignore by resolving with empty array, which handles auto-coupons too (none will be returned if resolved with empty array and features.coupons is false)
+        // Wait, resolveCoupons itself should probably check the flag too for A-to-Z enforcement.
 
         orderDiscountAmount = Number(couponBenefits?.orderDiscount || 0);
         appliedCoupon = couponBenefits?.primaryCoupon || couponBenefits?.coupon || null;

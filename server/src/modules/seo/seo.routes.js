@@ -5,8 +5,12 @@ const { authenticate } = require('../../middleware/auth.middleware');
 const { authorizePermissions } = require('../../middleware/role.middleware');
 const { auditLog } = require('../audit/audit.middleware');
 const { PERMISSIONS } = require('../../config/permissions');
+const { featureGate } = require('../../middleware/featureGate.middleware');
 
 const router = express.Router();
+
+// Apply SEO feature gate to all routes in this module
+router.use(featureGate('seo'));
 
 // Public routes
 router.get('/sitemap.xml', seoController.getSitemap);

@@ -7,8 +7,12 @@ const { authenticate } = require('../../middleware/auth.middleware');
 const { authorizePermissions } = require('../../middleware/role.middleware');
 const { PERMISSIONS } = require('../../config/permissions');
 
-// Public route for customers to submit enquiries
+const { featureGate } = require('../../middleware/featureGate.middleware');
 
+// Apply enquiry feature gate to all routes in this module
+router.use(featureGate('enquiry'));
+
+// Public route for customers to submit enquiries
 router.post('/', enquiryController.createEnquiry);
 
 // Admin routes for managing enquiries

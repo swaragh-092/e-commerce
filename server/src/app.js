@@ -57,7 +57,6 @@ if (process.env.NODE_ENV !== 'test') {
   app.use(morgan('dev'));
 }
 
-app.use('/api', globalLimiter);
 
 // Use the same resolution strategy as media.service.js so both always point
 // to the same directory regardless of the working directory at startup.

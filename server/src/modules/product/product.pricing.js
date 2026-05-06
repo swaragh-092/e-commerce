@@ -162,7 +162,7 @@ const serializeVariantPricing = (product, variant, referenceDate = new Date()) =
  * @param {Array}   [labelPresets=[]]  - Pass the sale label catalog so the
  *                                        label id is resolved to a full object.
  */
-const serializeProductPricing = (product, { adminView = false } = {}, labelPresets = []) => {
+const serializeProductPricing = (product, { adminView = false, features = {} } = {}, labelPresets = []) => {
   if (!product) return product;
 
   const plain = typeof product.toJSON === 'function' ? product.toJSON() : { ...product };
@@ -173,6 +173,34 @@ const serializeProductPricing = (product, { adminView = false } = {}, labelPrese
   const saleLabelResolved = shouldExposeSaleMeta
     ? resolveSaleLabel(plain.saleLabel, labelPresets)
     : null;
+
+  // Enforce server-side price-stripping if pricing is disabled (Mode-locked) or showPrice is disabled (Admin)
+  if (!adminView && (features.pricing === false || features.showPrice === false)) {
+      delete plain.price;
+      delete plain.salePrice;
+      if (Array.isArray(plain.variants)) {
+          plain.variants = plain.variants.map((variant) => {
+              const v = serializeVariantPricing(product, variant);
+              delete v.price;
+              delete v.salePrice;
+              delete v.unitPrice;
+              return v;
+          });
+      }
+      return {
+          ...plain,
+          effectivePrice: null,
+          isSaleActive: false,
+          saleStatus: 'none',
+          discountPercent: 0,
+          savingsAmount: 0,
+          saleLabelResolved: null,
+          salePrice: null,
+          saleStartAt: null,
+          saleEndAt: null,
+          saleLabel: null,
+      };
+  }
 
   return {
     ...plain,

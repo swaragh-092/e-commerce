@@ -32,6 +32,7 @@ const FeaturesPage = () => {
   const { refreshSettings, features: resolvedFeatures } = useContext(SettingsContext) || {};
   const { hasPermission } = useAuth();
   const appMode = useMode();
+  const selectedMode = form['general.mode'] || appMode;
   const isSuperAdmin = useIsSuperAdmin();
   const canManageSettings = hasPermission(PERMISSIONS.SETTINGS_MANAGE);
   const [featureConfirmOpen, setFeatureConfirmOpen] = useState(false);
@@ -55,6 +56,27 @@ const FeaturesPage = () => {
       }));
     });
   }, [resolvedFeatures]);
+
+  // Reactive Mode Preview: Update Tier 1 dots when mode changes in dropdown
+  useEffect(() => {
+    if (!form['general.mode']) return;
+
+    const tier1Presets = {
+      ecommerce: { pricing: true, cart: true, checkout: true, orders: true, payments: true, shipping: true },
+      catalog: { pricing: false, cart: false, checkout: false, orders: false, payments: false, shipping: false }
+    };
+
+    const preset = tier1Presets[form['general.mode']];
+    if (preset) {
+      setForm(f => {
+        const next = { ...f };
+        Object.entries(preset).forEach(([k, v]) => {
+          next[`features.${k}`] = v;
+        });
+        return next;
+      });
+    }
+  }, [form['general.mode']]);
 
   const set = (key, value) => setForm((f) => ({ ...f, [key]: value }));
 
@@ -146,13 +168,23 @@ const FeaturesPage = () => {
         </Typography>
       </Box>
 
+      {!isSuperAdmin && (
+        <Alert severity="warning" sx={{ mb: 3 }}>
+          <strong>Read-Only Mode:</strong> Only Superadmins can modify Platform Features.
+        </Alert>
+      )}
+
       <Paper variant="outlined" sx={{ borderRadius: 3, p: 3, mb: 4 }}>
         {/* ── Mode Context Banner ── */}
         <Alert severity="info" sx={{ mb: 3 }}>
           <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 1 }}>
             <Typography variant="body2" fontWeight={700}>
-              Current Mode: <Box component="span" sx={{ textTransform: 'uppercase', fontWeight: 900 }}>{appMode}</Box>
-              &nbsp;<Chip label="DB" size="small" sx={{ height: 18, fontSize: 10, fontWeight: 700 }} />
+              Current Mode: <Box component="span" sx={{ textTransform: 'uppercase', fontWeight: 900 }}>{selectedMode}</Box>
+              {selectedMode === appMode ? (
+                 <Chip label="DB" size="small" sx={{ height: 18, ml: 1, fontSize: 10, fontWeight: 700 }} />
+              ) : (
+                 <Chip label="PREVIEW" color="warning" size="small" sx={{ height: 18, ml: 1, fontSize: 10, fontWeight: 700 }} />
+              )}
             </Typography>
             {isSuperAdmin && (
                <FormControl size="small" sx={{ minWidth: 150 }}>
@@ -217,8 +249,8 @@ const FeaturesPage = () => {
               if (item.key === 'features.requirePurchaseForReview' && appMode === 'catalog') return false;
               return true;
             }).map(({ key, label, desc, defaultE, defaultC }) => {
-              const modeDefault = appMode === 'catalog' ? defaultC : defaultE;
-              const isNA = key === 'features.guestCheckout' && appMode === 'catalog';
+              const modeDefault = selectedMode === 'catalog' ? defaultC : defaultE;
+              const isNA = key === 'features.guestCheckout' && selectedMode === 'catalog';
               const isDependent = key === 'features.requirePurchaseForReview';
               const parentDisabled = isDependent && !Boolean(form['features.reviews']);
               
@@ -257,7 +289,7 @@ const FeaturesPage = () => {
                   <Switch
                     checked={Boolean(form[key])}
                     onChange={(e) => set(key, e.target.checked)}
-                    disabled={isNA || parentDisabled}
+                    disabled={isNA || parentDisabled || !isSuperAdmin}
                     size="small"
                   />
                 </Box>
@@ -270,7 +302,7 @@ const FeaturesPage = () => {
           <Button
             variant="contained"
             color="warning"
-            disabled={saving || !canManageSettings}
+            disabled={saving || !isSuperAdmin}
             onClick={() => setFeatureConfirmOpen(true)}
             sx={{ fontWeight: 700, px: 4 }}
           >
