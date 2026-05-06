@@ -1,9 +1,11 @@
 import React, { createContext, useState, useEffect, useCallback } from 'react';
 import cartService from '../services/cartService';
+import { useFeature } from '../hooks/useSettings';
 
 export const CartContext = createContext(null);
 
 export const CartProvider = ({ children }) => {
+  const cartEnabled = useFeature('cart');
   const [cart, setCart] = useState(null);
   const [loading, setLoading] = useState(false);
 
@@ -22,8 +24,10 @@ export const CartProvider = ({ children }) => {
   }, []);
 
   useEffect(() => {
-    fetchCart();
-  }, [fetchCart]);
+    if (cartEnabled) {
+      fetchCart();
+    }
+  }, [fetchCart, cartEnabled]);
 
   const addItem = async (productId, quantity = 1, variantId = null) => {
     const res = await cartService.addItem(productId, quantity, variantId);

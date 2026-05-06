@@ -177,7 +177,7 @@ const updateKey = async (key, value, group, actingUserId) => {
 
   // Bust the feature cache after the transaction commits so the next gated
   // request immediately picks up the new value without waiting for TTL expiry.
-  if (group === 'features') invalidateFeature(key);
+  if (group === 'features' || key === 'mode') invalidateFeature(key);
 
   return result;
 };
@@ -267,16 +267,7 @@ const bulkUpdate = async (settingsInput, actingUserId, actingUser = null) => {
     // Bust feature cache for any feature-group key that was updated
     for (const { key, group } of settingsArray) {
         if (!group || group === 'features' || key === 'mode') {
-            if (key === 'mode') {
-                // If mode changes, we should ideally invalidate the whole feature cache
-                // But for now, we just invalidate the specific key; we might need a flush cache mechanism
-                const { invalidateFeature } = require('../../middleware/featureGate.middleware');
-                invalidateFeature(key); // We can just clear it, but maybe better to call something else or let loadAndCacheAllFeatures refresh it.
-                // Actually `invalidateFeature` clears memory cache for a key. If mode changes, all features change.
-            } else {
-                const { invalidateFeature } = require('../../middleware/featureGate.middleware');
-                invalidateFeature(key);
-            }
+            invalidateFeature(key);
         }
     }
 
