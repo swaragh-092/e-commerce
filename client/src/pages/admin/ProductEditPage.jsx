@@ -43,6 +43,7 @@ import {
   Star as StarIcon,
   StarBorder as StarBorderIcon,
   ExpandMore as ExpandMoreIcon,
+  Image as ImageIcon,
 } from '@mui/icons-material';
 import { getMediaUrl } from '../../utils/media';
 import useSKUGenerator from '../../hooks/useSKUGenerator';
@@ -165,7 +166,7 @@ const ProductEditPage = () => {
   const { settings } = useSettings();
   const { hasPermission } = useAuth();
   const isNew = !id || id === 'new';
-  const { generateProductSKU } = useSKUGenerator();
+  const { generateProductSKU, generateVariantSKU } = useSKUGenerator();
   const sales = settings?.sales || {};
   const canCreateProducts = hasPermission(PERMISSIONS.PRODUCTS_CREATE);
   const canUpdateProducts = hasPermission(PERMISSIONS.PRODUCTS_UPDATE);
@@ -1123,7 +1124,7 @@ const ProductEditPage = () => {
       </form>
 
       {/* Variants panel — only visible once the product has been saved and has a real ID */}
-      {!isNew && <VariantsPanel productId={id} baseSku={formData.sku} flatCatFiles={flatCatFiles} canManageVariants={canUpdateProducts} />}
+      {!isNew && <VariantsPanel productId={id} productName={formData.name} productSku={formData.sku} flatCatFiles={flatCatFiles} canManageVariants={canUpdateProducts} />}
     </Box>
   );
 };
@@ -1248,13 +1249,15 @@ const TaxConfigSection = ({ taxConfig, basePrice, setTaxConfig, globalSettings, 
 
 
 /* ─── Variants Panel ──────────────────────────────────────────────────────── */
-const VariantsPanel = ({ productId, flatCatFiles = [], canManageVariants = false }) => {
+const VariantsPanel = ({ productId, productName, productSku, flatCatFiles = [], canManageVariants = false }) => {
   const { notify, confirm } = useNotification();
+  const { generateProductSKU, generateVariantSKU } = useSKUGenerator();
   const [productAttributes, setProductAttributes] = useState([]);
   const [variants, setVariants] = useState([]);
   const [productBasePrice, setProductBasePrice] = useState(0);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+  const [variantMediaPickerOpen, setVariantMediaPickerOpen] = useState(null);
   const [attributes, setAttributes] = useState([]);
   const [selectedTemplate, setSelectedTemplate] = useState('');
   const [selectedValueIds, setSelectedValueIds] = useState([]);
@@ -1292,6 +1295,7 @@ const VariantsPanel = ({ productId, flatCatFiles = [], canManageVariants = false
       setProductAttributes(attrRows);
       setVariants(varData.map((variant) => ({
         ...variant,
+        mediaId: variant.mediaId || variant.media_id, // Handle both cases
         price: variant.price ?? product?.effectivePrice ?? product?.price ?? 0,
         stockQty: variant.stockQty ?? 0,
         _dirty: false,
@@ -1306,6 +1310,17 @@ const VariantsPanel = ({ productId, flatCatFiles = [], canManageVariants = false
   }, [productId, notify]);
 
   useEffect(() => { loadAll(); }, [loadAll]);
+
+  const handleVariantMediaSelect = (selectedMedia) => {
+    if (!selectedMedia || variantMediaPickerOpen === null) return;
+    const targetIndex = variantMediaPickerOpen;
+    const media = Array.isArray(selectedMedia) ? selectedMedia[0] : selectedMedia;
+    // Merge both fields in a single state update to avoid race condition
+    setVariants((current) => current.map((variant, i) =>
+      i === targetIndex ? { ...variant, mediaId: media.id, media, _dirty: true } : variant
+    ));
+    setVariantMediaPickerOpen(null);
+  };
 
   const selectedTemplateRecord = attributes.find((attribute) => attribute.id === selectedTemplate);
   const variantAttributeRows = productAttributes.filter((row) => row.isVariantAttr);
@@ -1426,6 +1441,7 @@ const VariantsPanel = ({ productId, flatCatFiles = [], canManageVariants = false
           stockQty: Number(variant.stockQty || 0),
           isActive: variant.isActive !== false,
           sortOrder: Number(variant.sortOrder || 0),
+          mediaId: variant.mediaId || null,
         });
       }
       notify('Variants updated.', 'success');
@@ -1729,75 +1745,178 @@ const VariantsPanel = ({ productId, flatCatFiles = [], canManageVariants = false
                 No variants yet. Add product attributes and mark the SKU-defining ones first, then click <strong>Generate Matrix</strong>.
               </Alert>
             ) : (
-              <Box sx={{ overflowX: 'auto' }}>
-                <Table size="small">
-                  <TableHead>
-                    <TableRow>
-                      <TableCell sx={{ fontWeight: 700 }}>Combination</TableCell>
-                      <TableCell sx={{ fontWeight: 700 }}>Price</TableCell>
-                      <TableCell sx={{ fontWeight: 700 }}>Stock Qty</TableCell>
-                      <TableCell sx={{ fontWeight: 700 }}>SKU</TableCell>
-                      <TableCell sx={{ fontWeight: 700 }}>Status</TableCell>
-                      <TableCell />
-                    </TableRow>
-                  </TableHead>
-                  <TableBody>
-                    {variants.map((variant, index) => (
-                      <TableRow key={variant.id}>
-                        <TableCell>
-                          <Typography variant="body2" fontWeight={600}>{getVariantOptionLabel(variant) || 'Variant SKU'}</Typography>
-                        </TableCell>
-                        <TableCell>
+              <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
+                {variants.map((variant, index) => (
+                  <Accordion key={variant.id} variant="outlined" sx={{ m: '0 !important' }}>
+                    <AccordionSummary
+                      expandIcon={<ExpandMoreIcon />}
+                      sx={{
+                        '& .MuiAccordionSummary-content': {
+                          display: 'flex',
+                          justifyContent: 'space-between',
+                          alignItems: 'center',
+                          mr: 1
+                        }
+                      }}
+                    >
+                      <Typography variant="body2" fontWeight={600}>
+                        {getVariantOptionLabel(variant) || 'Variant SKU'}
+                      </Typography>
+                      <IconButton
+                        size="small"
+                        color="error"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          handleDeleteVariant(variant.id);
+                        }}
+                        disabled={!canManageVariants}
+                      >
+                        <DeleteIcon fontSize="small" />
+                      </IconButton>
+                    </AccordionSummary>
+                    <AccordionDetails sx={{ pt: 0 }}>
+                      <Grid container spacing={2} alignItems="center">
+                        <Grid item xs={12} sm={1.5}>
+                          <Tooltip title={variant.media ? 'Change image' : 'Add image'} placement="bottom">
+                            <Box sx={{ position: 'relative', width: '100%', height: 48 }}>
+                              {/* clickable image / placeholder */}
+                              <Box
+                                sx={{
+                                  width: '100%',
+                                  height: '100%',
+                                  border: '2px dashed',
+                                  borderColor: 'divider',
+                                  display: 'flex',
+                                  alignItems: 'center',
+                                  justifyContent: 'center',
+                                  cursor: 'pointer',
+                                  overflow: 'hidden',
+                                  borderRadius: 1,
+                                  '&:hover': { borderColor: 'primary.main', bgcolor: 'action.hover' },
+                                }}
+                                onClick={() => setVariantMediaPickerOpen(index)}
+                              >
+                                {variant.media ? (
+                                  <img src={getMediaUrl(variant.media?.url)} alt="Variant" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                                ) : (
+                                  <ImageIcon color="disabled" />
+                                )}
+                              </Box>
+                              {/* delete overlay — only shown when an image is set */}
+                              {variant.media && canManageVariants && (
+                                <IconButton
+                                  size="small"
+                                  color="error"
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    // Clear both fields in one atomic update
+                                    setVariants((current) => current.map((v, i) =>
+                                      i === index ? { ...v, mediaId: null, media: null, _dirty: true } : v
+                                    ));
+                                  }}
+                                  sx={{
+                                    position: 'absolute',
+                                    top: -8,
+                                    right: -8,
+                                    bgcolor: 'background.paper',
+                                    boxShadow: 1,
+                                    p: '2px',
+                                    '&:hover': { bgcolor: 'error.light', color: 'white' },
+                                  }}
+                                >
+                                  <DeleteIcon sx={{ fontSize: 14 }} />
+                                </IconButton>
+                              )}
+                            </Box>
+                          </Tooltip>
+                        </Grid>
+                        <Grid item xs={12} sm={2}>
                           <TextField
+                            fullWidth
                             size="small"
+                            label="Price"
                             type="number"
                             value={variant.price}
                             onChange={(e) => handleVariantChange(index, 'price', e.target.value)}
                             disabled={!canManageVariants}
                             inputProps={{ min: 0, step: '0.01' }}
-                            sx={{ width: 120 }}
                           />
-                        </TableCell>
-                        <TableCell>
+                        </Grid>
+                        <Grid item xs={12} sm={2}>
                           <TextField
+                            fullWidth
                             size="small"
+                            label="Stock Qty"
                             type="number"
                             value={variant.stockQty}
                             onChange={(e) => handleVariantChange(index, 'stockQty', e.target.value)}
                             disabled={!canManageVariants}
                             inputProps={{ min: 0 }}
-                            sx={{ width: 100 }}
                           />
-                        </TableCell>
-                        <TableCell>
+                        </Grid>
+                        <Grid item xs={12} sm={4.5}>
                           <TextField
+                            fullWidth
                             size="small"
+                            label="SKU"
                             value={variant.sku || ''}
                             onChange={(e) => handleVariantChange(index, 'sku', e.target.value)}
                             disabled={!canManageVariants}
                             placeholder="Optional SKU"
-                            sx={{ width: 160 }}
+                            InputProps={{
+                              endAdornment: (
+                                <InputAdornment position="end">
+                                  <IconButton 
+                                    size="small" 
+                                    onClick={() => {
+                                      const baseSku = productSku || generateProductSKU(productName);
+                                      const generatedSku = generateVariantSKU(baseSku, null, getVariantOptionLabel(variant));
+                                      handleVariantChange(index, 'sku', generatedSku);
+                                    }}
+                                    title="Auto-generate variant SKU"
+                                  >
+                                    <ElectricBoltIcon fontSize="small" />
+                                  </IconButton>
+                                </InputAdornment>
+                              )
+                            }}
                           />
-                        </TableCell>
-                        <TableCell>
-                          <Button size="small" variant={variant.isActive === false ? 'outlined' : 'contained'} onClick={() => handleVariantChange(index, 'isActive', variant.isActive === false)} disabled={!canManageVariants}>
-                            {variant.isActive === false ? 'Inactive' : 'Active'}
-                          </Button>
-                        </TableCell>
-                        <TableCell>
-                          <IconButton size="small" color="error" onClick={() => handleDeleteVariant(variant.id)} disabled={!canManageVariants}>
-                            <DeleteIcon fontSize="small" />
-                          </IconButton>
-                        </TableCell>
-                      </TableRow>
-                    ))}
-                  </TableBody>
-                </Table>
+                        </Grid>
+                        <Grid item xs={12} sm={2} sx={{ display: 'flex', alignItems: 'center' }}>
+                          <FormControlLabel
+                            control={
+                              <Switch
+                                size="small"
+                                checked={variant.isActive !== false}
+                                onChange={(e) => handleVariantChange(index, 'isActive', e.target.checked)}
+                                disabled={!canManageVariants}
+                                color="success"
+                              />
+                            }
+                            label={
+                              <Typography variant="caption" color={variant.isActive !== false ? 'success.main' : 'text.disabled'}>
+                                {variant.isActive !== false ? 'Active' : 'Inactive'}
+                              </Typography>
+                            }
+                          />
+                        </Grid>
+                      </Grid>
+                    </AccordionDetails>
+                  </Accordion>
+                ))}
               </Box>
             )}
           </Paper>
         </Grid>
       </Grid>
+
+      <MediaPicker
+        open={variantMediaPickerOpen !== null}
+        onClose={() => setVariantMediaPickerOpen(null)}
+        onSelect={handleVariantMediaSelect}
+        multiple={false}
+        title="Select Variant Image"
+      />
 
       <Dialog open={cloneOpen} onClose={() => setCloneOpen(false)} maxWidth="sm" fullWidth>
         <DialogTitle>Clone Variants from Another Product</DialogTitle>

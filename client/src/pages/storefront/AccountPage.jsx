@@ -72,14 +72,31 @@ const ProfileTab = ({ user, updateProfile }) => {
         phone: user?.profile?.phone || '',
     });
     const [status, setStatus] = useState(null);
+    const [validationErrors, setValidationErrors] = useState({});
 
     const handleSubmit = async (e) => {
         e.preventDefault();
+        setValidationErrors({});
+        setStatus(null);
+
+        // Simple frontend validation
+        if (formData.phone && !/^\d{10,12}$/.test(formData.phone)) {
+            setValidationErrors({ phone: 'Phone number must be between 10 and 12 digits and contain only numbers' });
+            return;
+        }
+
         try {
             await updateProfile(formData);
             setStatus({ type: 'success', message: 'Profile updated successfully' });
         } catch (error) {
-            setStatus({ type: 'error', message: getApiErrorMessage(error, 'Update failed') });
+            const errData = error?.response?.data?.error;
+            if (errData?.code === 'VALIDATION_ERROR' && errData?.details) {
+                const errors = {};
+                errData.details.forEach(d => { errors[d.field] = d.message; });
+                setValidationErrors(errors);
+            } else {
+                setStatus({ type: 'error', message: getApiErrorMessage(error, 'Update failed') });
+            }
         }
     };
 
@@ -92,7 +109,8 @@ const ProfileTab = ({ user, updateProfile }) => {
             <TextField fullWidth label="Last Name" name="lastName" value={formData.lastName}
                 onChange={(e) => setFormData({ ...formData, lastName: e.target.value })} margin="normal" required />
             <TextField fullWidth label="Phone" name="phone" value={formData.phone}
-                onChange={(e) => setFormData({ ...formData, phone: e.target.value })} margin="normal" />
+                onChange={(e) => setFormData({ ...formData, phone: e.target.value })} margin="normal"
+                error={!!validationErrors.phone} helperText={validationErrors.phone} />
             <Button type="submit" variant="contained" color="primary" sx={{ mt: 2 }}>Save Changes</Button>
         </Box>
     );

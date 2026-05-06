@@ -2,7 +2,7 @@
 
 const {
     AttributeTemplate, AttributeValue, CategoryAttribute, Category,
-    Product, ProductAttribute, ProductVariant, VariantOption, sequelize,
+    Product, ProductAttribute, ProductVariant, VariantOption, Media, sequelize,
 } = require('../index');
 const { generateSlug } = require('../../utils/slugify');
 const AppError = require('../../utils/AppError');
@@ -16,6 +16,10 @@ const variantInclude = [
             { model: AttributeTemplate, as: 'attribute', attributes: ['id', 'name', 'slug'] },
             { model: AttributeValue,    as: 'value',     attributes: ['id', 'value', 'slug'] },
         ],
+    },
+    {
+        model: Media,
+        as: 'media',
     },
 ];
 
@@ -265,7 +269,7 @@ const bulkGenerateVariants = async (productId, { defaultPrice, defaultStockQty =
         // Track combinations that already exist so we don't recreate them
         const existingSignatures = new Set(
             existingVariants
-                .filter(v => !v.isSoftDeleted) // basic safety
+                .filter(v => !v.isSoftDeleted()) // Call the method properly
                 .map(v => v.options.map(o => o.valueId).sort().join(','))
         );
 
@@ -448,10 +452,17 @@ const updateProductVariant = async (productId, variantId, data) => {
     if (!variant) throw new AppError('NOT_FOUND', 404, 'Variant not found');
 
     // Whitelist updatable scalar fields (options/dimensions are immutable after creation)
-    const allowed = ['sku', 'price', 'stockQty', 'isActive', 'sortOrder'];
+    const allowed = ['sku', 'price', 'stockQty', 'isActive', 'sortOrder', 'mediaId', 'media_id'];
     const updates = {};
     for (const field of allowed) {
-        if (data[field] !== undefined) updates[field] = data[field];
+        if (data[field] !== undefined) {
+            // Map both mediaId and media_id to the model's mediaId property
+            if (field === 'media_id' || field === 'mediaId') {
+                updates.mediaId = data[field];
+            } else {
+                updates[field] = data[field];
+            }
+        }
     }
 
     await variant.update(updates);

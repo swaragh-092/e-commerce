@@ -9,7 +9,12 @@ const updateAvatarSchema = Joi.object({
 const updateProfileSchema = Joi.object({
   firstName: Joi.string().max(50),
   lastName: Joi.string().max(50),
-  phone: Joi.string().max(20).allow(null, ''),
+  phone: Joi.string()
+    .regex(/^\d{10,12}$/)
+    .allow(null, '')
+    .messages({
+      'string.pattern.base': 'Phone number must be between 10 and 12 digits and contain only numbers'
+    }),
   gender: Joi.string().valid('male', 'female', 'other', 'prefer_not_to_say').allow(null),
   dateOfBirth: Joi.date().iso().allow(null)
 });
@@ -36,7 +41,13 @@ const updateStatusSchema = Joi.object({
 const createAddressSchema = Joi.object({
   label: Joi.string().max(50).optional().allow(null, ''),
   fullName: Joi.string().max(255).required(),
-  phone: Joi.string().max(20).optional().allow(null, ''),
+  phone: Joi.string()
+    .regex(/^\d{10,12}$/)
+    .optional()
+    .allow(null, '')
+    .messages({
+      'string.pattern.base': 'Phone number must be between 10 and 12 digits and contain only numbers'
+    }),
   addressLine1: Joi.string().max(255).required(),
   addressLine2: Joi.string().max(255).optional().allow(null, ''),
   city: Joi.string().max(100).required(),
@@ -49,7 +60,13 @@ const createAddressSchema = Joi.object({
 const updateAddressSchema = Joi.object({
   label: Joi.string().max(50).optional().allow(null, ''),
   fullName: Joi.string().max(255).optional(),
-  phone: Joi.string().max(20).optional().allow(null, ''),
+  phone: Joi.string()
+    .regex(/^\d{10,12}$/)
+    .optional()
+    .allow(null, '')
+    .messages({
+      'string.pattern.base': 'Phone number must be between 10 and 12 digits and contain only numbers'
+    }),
   addressLine1: Joi.string().max(255).optional(),
   addressLine2: Joi.string().max(255).optional().allow(null, ''),
   city: Joi.string().max(100).optional(),
