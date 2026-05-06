@@ -20,7 +20,7 @@ const ProductImages = ({ images, variantImage }) => {
     } else {
       setSelectedImage(defaultImage);
     }
-  }, [variantImage, defaultImage]);
+  }, [variantImage, defaultImage]); 
 
   return (
     <Box>
