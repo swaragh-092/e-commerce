@@ -48,7 +48,6 @@ jobs:
 
       # ──────────────────────────────────────────────────────────
       # STEP 3 — Deploy backend + frontend to EC2 via SSH
-      # No SCP — SSH inline handles permissions and atomic swaps
       # ──────────────────────────────────────────────────────────
       - name: Deploy to EC2 via SSH
         uses: appleboy/ssh-action@v1.0.3
@@ -111,17 +110,23 @@ jobs:
             echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
 
       # ──────────────────────────────────────────────────────────
-      # STEP 4 — Rsync built dist files to EC2 (avoids SCP permission errors)
+      # STEP 4 — Copy dist files to EC2 via SSH tar (no SCP, no Docker)
       # ──────────────────────────────────────────────────────────
-      - name: Rsync dist/ to EC2 (handles nginx-owned files)
-        uses: burnett01/rsync-deployments@7.0.2
-        with:
-          switches: -avzr --delete --ignore-utime --no-o --no-g
-          path: client/dist/
-          remote_path: /var/www/e-commerce/client/dist
-          remote_host: ${{ secrets.EC2_HOST }}
-          remote_user: ${{ secrets.EC2_USER }}
-          remote_key: ${{ secrets.EC2_SSH_KEY }}
+      - name: Upload dist/ to EC2 via SSH tar
+        run: |
+          # Write SSH key to a temp file
+          mkdir -p ~/.ssh
+          echo "${{ secrets.EC2_SSH_KEY }}" > ~/.ssh/deploy_key
+          chmod 600 ~/.ssh/deploy_key
+
+          # SSH args with key
+          SSH="ssh -i ~/.ssh/deploy_key -o StrictHostKeyChecking=no -p 22"
+
+          # Tar the built dist, pipe over SSH, extract on EC2
+          cd client/dist
+          tar czf - . | $SSH ${{ secrets.EC2_USER }}@${{ secrets.EC2_HOST }} "cd ${{ secrets.APP_DIR }}/client/dist && tar xzf -"
+
+          echo "✅ Frontend dist uploaded to EC2"
 
       # ──────────────────────────────────────────────────────────
       # STEP 5 — Smoke test (retries 5x with 5s gap)
