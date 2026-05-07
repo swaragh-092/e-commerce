@@ -7,7 +7,6 @@ export const useOrderStatusTransitions = (currentStatus) => {
     const transitions = orderWorkflow.transitions?.order || {};
     const rules = orderWorkflow.rules || {};
     const normalizedStatus = ({
-      pending_payment: 'confirmed',
       pending_cod: 'confirmed',
       paid: 'processing',
       partially_shipped: 'processing',

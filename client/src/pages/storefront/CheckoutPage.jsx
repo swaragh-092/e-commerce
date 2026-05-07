@@ -447,9 +447,12 @@ const CheckoutPage = () => {
                 }),
             });
             const orderId = res.data?.data?.order?.id;
-            if (!isBuyNowFlow) await clearCart();
-            if (paymentMethod === 'cod') navigate('/payment/success', { state: { orderId, isCod: true } });
-            else navigate(`/payment/${orderId}`);
+            if (paymentMethod === 'cod') {
+                if (!isBuyNowFlow) await clearCart();
+                navigate('/payment/success', { state: { orderId, isCod: true } });
+            } else {
+                navigate(`/payment/${orderId}`);
+            }
         } catch (err) {
             setError(getApiErrorMessage(err, 'Failed to place order. Please try again.'));
             setPlacing(false);
@@ -974,7 +977,7 @@ const CheckoutPage = () => {
                                 ) : paymentMethod === 'cod' ? (
                                     'Place Order'
                                 ) : (
-                                    'Place Order & Pay'
+                                    'Proceed to Pay'
                                 )}
                             </Button>
 

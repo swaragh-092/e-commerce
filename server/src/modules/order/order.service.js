@@ -114,6 +114,16 @@ const ensureValidPaymentTransition = (currentStatus, nextStatus) => (
     ensureValidStatusTransition('payment', currentStatus, nextStatus)
 );
 
+const appendStatusHistoryEvent = (history = [], status, source = 'admin') => {
+    const entries = Array.isArray(history) ? history : [];
+    const lastEntry = entries[entries.length - 1];
+    if (lastEntry?.status === status) return entries;
+    return [
+        ...entries,
+        { status, at: new Date().toISOString(), source },
+    ];
+};
+
 const syncOrderShippingStatus = async (order, transaction, actingUserId = null) => {
     const shipments = await Shipment.findAll({
         where: { orderId: order.id },
@@ -145,25 +155,62 @@ const syncCodPaymentIfDelivered = async (order, transaction, actingUserId = null
     if (!payment || normalizePaymentStatus(payment.status, payment.provider) !== 'pending_cod') return;
     const shippingStatus = order.orderShippingStatus || await syncOrderShippingStatus(order, transaction, actingUserId);
     if (shippingStatus !== 'delivered') return;
-    const previous = payment.status;
-    await payment.update({
-        status: 'paid_cod',
-        metadata: {
-            ...(payment.metadata || {}),
-            autoCapturedOnDeliveryAt: new Date().toISOString(),
+    const existingEligibilityEvent = await OrderHistory.findOne({
+        where: {
+            orderId: order.id,
+            eventType: 'payment',
+            description: 'COD payment is eligible to be collected because delivery is complete.',
         },
-    }, { transaction });
-    await logOrderHistory({
-        orderId: order.id,
-        entityType: 'Payment',
-        entityId: payment.id,
-        statusGroup: 'payment',
-        fromStatus: previous,
-        toStatus: 'paid_cod',
-        changedBy: actingUserId,
-        metadata: { rule: 'cod_payment_completion' },
         transaction,
     });
+    if (existingEligibilityEvent) return;
+    await addOrderHistoryEvent({
+        orderId: order.id,
+        eventType: 'payment',
+        description: 'COD payment is eligible to be collected because delivery is complete.',
+        actorId: actingUserId,
+        actorType: actingUserId ? 'admin' : 'system',
+        metadata: { rule: 'cod_payment_completion', paymentStatus: payment.status },
+        transaction,
+    });
+};
+
+const syncOrderClosureIfComplete = async (order, transaction, actingUserId = null) => {
+    if (!order || ['closed', 'cancelled'].includes(order.status)) return false;
+
+    const payment = await Payment.findOne({
+        where: { orderId: order.id },
+        transaction,
+        lock: Transaction.LOCK.UPDATE,
+    });
+    const orderShippingStatus = order.orderShippingStatus || await syncOrderShippingStatus(order, transaction, actingUserId);
+
+    if (!canCloseOrder({ order, payment, orderShippingStatus })) return false;
+    if (!getAllowedNextStatuses('order', normalizeOrderStatus(order.status)).includes('closed')) return false;
+
+    const previousStatus = order.status;
+    await order.update({ status: 'closed' }, { transaction });
+    await logOrderHistory({
+        orderId: order.id,
+        entityType: 'Order',
+        entityId: order.id,
+        statusGroup: 'order',
+        fromStatus: previousStatus,
+        toStatus: 'closed',
+        changedBy: actingUserId,
+        metadata: { derived: true, reason: 'payment_settled_and_shipping_terminal' },
+        transaction,
+    });
+    await addOrderHistoryEvent({
+        orderId: order.id,
+        eventType: 'status_changed',
+        description: 'Order was closed automatically after payment settlement and delivery completion.',
+        actorId: actingUserId,
+        actorType: actingUserId ? 'admin' : 'system',
+        metadata: { previousStatus, orderShippingStatus, paymentStatus: payment?.status || null },
+        transaction,
+    });
+    return true;
 };
 
 const syncPutBackCache = async (order, transaction, actingUserId = null) => {
@@ -238,6 +285,21 @@ const repairInvalidClosedOrder = async (order, transaction = null) => {
         },
         transaction,
     });
+    return order;
+};
+
+const repairCompletableOrder = async (order, transaction = null) => {
+    if (!order || ['closed', 'cancelled'].includes(order.status)) return order;
+    const shipments = order.shipments || await Shipment.findAll({
+        where: { orderId: order.id },
+        attributes: ['id', 'status'],
+        transaction,
+    });
+    const derivedShippingStatus = deriveOrderShippingStatus(shipments);
+    if (order.orderShippingStatus !== derivedShippingStatus || order.shipmentStatus !== derivedShippingStatus) {
+        await order.update({ orderShippingStatus: derivedShippingStatus, shipmentStatus: derivedShippingStatus }, { transaction });
+    }
+    await syncOrderClosureIfComplete(order, transaction);
     return order;
 };
 
@@ -374,69 +436,126 @@ const ensureValidFulfillmentTransition = (currentStatus, nextStatus) => {
     }
 };
 
+const sumQuantityByOrderItem = (rows = []) => rows.reduce((map, row) => {
+    const orderItemId = row.orderItemId || row.order_item_id;
+    if (!orderItemId) return map;
+    map[orderItemId] = (map[orderItemId] || 0) + Number(row.quantity || 0);
+    return map;
+}, {});
+
 const calculateFulfillmentProgress = (order) => {
     const items = order?.items || [];
     const totalQuantity = items.reduce((sum, item) => sum + Number(item.quantity || 0), 0);
+    const dispatchedQuantity = items.reduce((sum, item) => (
+        sum + getDispatchedQuantityForOrderItem(item)
+    ), 0);
+    const deliveredShipmentItems = (order?.shipments || [])
+        .filter((shipment) => shipment.status === 'delivered')
+        .flatMap((shipment) => shipment.items || []);
+    const deliveredFulfillmentItems = (order?.fulfillments || [])
+        .filter((fulfillment) => fulfillment.status === 'delivered')
+        .flatMap((fulfillment) => fulfillment.items || []);
+    const deliveredShipmentMap = sumQuantityByOrderItem(deliveredShipmentItems);
+    const deliveredFulfillmentMap = sumQuantityByOrderItem(deliveredFulfillmentItems);
     const fulfilledQuantity = items.reduce((sum, item) => (
-        sum + (item.fulfillmentItems || []).reduce((itemSum, fulfillmentItem) => itemSum + Number(fulfillmentItem.quantity || 0), 0)
+        sum + Math.max(deliveredShipmentMap[item.id] || 0, deliveredFulfillmentMap[item.id] || 0)
     ), 0);
 
     return {
         totalQuantity,
+        dispatchedQuantity,
         fulfilledQuantity,
         remainingQuantity: Math.max(totalQuantity - fulfilledQuantity, 0),
         percent: totalQuantity > 0 ? Math.round((fulfilledQuantity / totalQuantity) * 100) : 0,
     };
 };
 
+const getDispatchedQuantityForOrderItem = (orderItem) => {
+    const shipmentQuantity = (orderItem.shipmentItems || [])
+        .reduce((sum, shipmentItem) => sum + Number(shipmentItem.quantity || 0), 0);
+    const fulfillmentQuantity = (orderItem.fulfillmentItems || [])
+        .reduce((sum, fulfillmentItem) => sum + Number(fulfillmentItem.quantity || 0), 0);
+
+    // New shipments create both fulfillment_items and shipment_items. Taking the
+    // larger value keeps legacy fulfillment-only or shipment-only rows counted
+    // without double-counting rows created by the current shipment flow.
+    return Math.max(shipmentQuantity, fulfillmentQuantity);
+};
+
 const buildOrderTimeline = (order, progress) => {
-    const payment = order.Payment || order.Payment?.toJSON?.() || null;
-    const paymentStatus = payment?.status;
+    const payment = order.Payment?.toJSON?.() || order.Payment || null;
+    const rawPaymentStatus = payment?.status;
+    const paymentStatus = normalizePaymentStatus(rawPaymentStatus, payment?.provider || order.paymentMethod);
+    const statusHistory = order.statusHistory || [];
+    const findStatusTime = (statusGroup, statuses) => {
+        const statusSet = Array.isArray(statuses) ? statuses : [statuses];
+        return [...statusHistory]
+            .reverse()
+            .find((entry) => entry.statusGroup === statusGroup && statusSet.includes(entry.toStatus))
+            ?.createdAt;
+    };
     const isCod = order.paymentMethod === 'cod';
+    const isPendingOnlinePayment = order.status === 'pending_payment' && !isCod;
     const isCancelled = order.status === 'cancelled';
-    const isRefunded = order.status === 'refunded' || paymentStatus === 'refunded';
-    const isPaymentSettled = ['paid', 'processing', 'partially_shipped', 'shipped', 'delivered', 'refunded'].includes(order.status)
-        || ['completed', 'cod_collected', 'refunded'].includes(paymentStatus);
-    const isFullyFulfilled = order.status === 'delivered' || (progress.fulfilledQuantity > 0 && progress.remainingQuantity === 0);
+    const isRefunded = order.status === 'refunded' || rawPaymentStatus === 'refunded';
+    const paymentSettled = ['paid_online', 'paid_cod', 'completed', 'cod_collected', 'refunded'].includes(paymentStatus);
+    const shippingStatus = order.orderShippingStatus || order.shipmentStatus || 'not_shipped';
+    const shipped = ['partially_shipped', 'shipped', 'partially_out_for_delivery', 'out_for_delivery', 'partially_delivered', 'delivered'].includes(shippingStatus);
+    const outForDelivery = ['partially_out_for_delivery', 'out_for_delivery', 'partially_delivered', 'delivered'].includes(shippingStatus);
+    const delivered = shippingStatus === 'delivered';
+    const partiallyDelivered = shippingStatus === 'partially_delivered';
+    const processing = ['processing', 'ready_for_shipment', 'closed'].includes(order.status) || shipped || delivered;
 
     const steps = [
         {
-            key: 'placed',
-            label: 'Order placed',
-            status: 'completed',
+            key: isPendingOnlinePayment ? 'pending_payment' : 'placed',
+            label: isPendingOnlinePayment ? 'Awaiting payment' : 'Order placed',
+            status: isPendingOnlinePayment ? 'active' : 'completed',
             occurredAt: order.createdAt,
         },
-        {
-            key: isCod ? 'pending_cod' : 'pending_payment',
-            label: isCod ? 'Pending COD' : 'Pending payment',
-            status: isPaymentSettled || ['pending_cod', 'processing'].includes(order.status) ? 'completed' : 'active',
-        },
-        {
-            key: 'paid',
-            label: isCod ? 'COD collected' : 'Payment captured',
-            status: isPaymentSettled ? 'completed' : 'pending',
-        },
+        ...(!isPendingOnlinePayment && !isCod ? [{
+            key: 'pending_payment',
+            label: paymentSettled ? 'Payment captured' : 'Pending payment',
+            status: paymentSettled ? 'completed' : 'active',
+            occurredAt: paymentSettled ? payment?.updatedAt : undefined,
+        }] : []),
         {
             key: 'processing',
             label: 'Processing',
-            status: ['processing', 'partially_shipped', 'shipped', 'delivered'].includes(order.status) ? 'completed' : 'pending',
+            status: processing ? 'completed' : 'pending',
+            occurredAt: findStatusTime('order', ['processing', 'ready_for_shipment', 'closed']),
         },
         {
             key: 'shipped',
-            label: progress.remainingQuantity > 0 && progress.fulfilledQuantity > 0 ? 'Partially shipped' : 'Shipped',
-            status: progress.fulfilledQuantity > 0 ? (isFullyFulfilled ? 'completed' : 'active') : 'pending',
+            label: shippingStatus === 'partially_shipped' ? 'Partially shipped' : 'Shipped',
+            status: shipped ? 'completed' : 'pending',
+            occurredAt: findStatusTime('order_shipping', ['partially_shipped', 'shipped', 'partially_out_for_delivery', 'out_for_delivery', 'partially_delivered', 'delivered']),
+        },
+        {
+            key: 'out_for_delivery',
+            label: 'Out for delivery',
+            status: outForDelivery ? 'completed' : 'pending',
+            occurredAt: findStatusTime('order_shipping', ['partially_out_for_delivery', 'out_for_delivery', 'partially_delivered', 'delivered']),
         },
         {
             key: 'delivered',
-            label: 'Delivered',
-            status: order.status === 'delivered' ? 'completed' : 'pending',
+            label: partiallyDelivered ? 'Partially delivered' : 'Delivered',
+            status: delivered ? 'completed' : partiallyDelivered ? 'active' : 'pending',
+            occurredAt: findStatusTime('order_shipping', ['partially_delivered', 'delivered']),
         },
+        ...(isCod ? [{
+            key: 'cod_payment',
+            label: paymentSettled ? 'COD collected' : delivered ? 'Collect COD payment' : 'Cash due on delivery',
+            status: paymentSettled ? 'completed' : delivered ? 'active' : 'pending',
+            occurredAt: paymentStatus === 'paid_cod' ? payment?.updatedAt : undefined,
+        }] : []),
     ];
 
     if (isCancelled || isRefunded) {
         const terminalSteps = steps.filter((step) => {
-            if (['placed', isCod ? 'pending_cod' : 'pending_payment'].includes(step.key)) return true;
-            if (step.key === 'paid') return isPaymentSettled;
+            if (step.key === 'placed') return true;
+            if (step.key === 'pending_payment') return !isCod;
+            if (step.key === 'cod_payment') return paymentSettled;
             return false;
         });
 
@@ -761,12 +880,13 @@ const placeOrder = async (userId, payload) => {
         const randStr = crypto.randomBytes(3).toString('hex').toUpperCase();
         const orderNumber = `ORD-${dateStr}-${randStr}`;
 
+        const initialOrderStatus = paymentMethod === 'cod' ? ORDER_DEFAULT_STATUS : 'pending_payment';
         const initialPaymentStatus = paymentMethod === 'cod' ? 'pending_cod' : 'payment_pending';
 
         const order = await Order.create({
             orderNumber,
             userId,
-            status: ORDER_DEFAULT_STATUS,
+            status: initialOrderStatus,
             orderShippingStatus: 'not_shipped',
             putBackStatus: null,
             putBackProcessingStatus: false,
@@ -849,56 +969,55 @@ const placeOrder = async (userId, payload) => {
             entityType: 'Order',
             entityId: order.id,
             statusGroup: 'order',
-            toStatus: ORDER_DEFAULT_STATUS,
+            toStatus: initialOrderStatus,
             changedBy: userId,
-            metadata: { notes },
+            metadata: { notes, paymentMethod },
             transaction: t,
         });
 
-        await addOrderHistoryEvent({
-            orderId: order.id,
-            eventType: 'order_placed',
-            description: 'Order was placed successfully.',
-            actorId: userId,
-            actorType: 'customer',
-            transaction: t,
-        });
+        if (paymentMethod === 'cod') {
+            await addOrderHistoryEvent({
+                orderId: order.id,
+                eventType: 'order_placed',
+                description: 'Order was placed successfully.',
+                actorId: userId,
+                actorType: 'customer',
+                transaction: t,
+            });
+        } else {
+            await addOrderHistoryEvent({
+                orderId: order.id,
+                eventType: 'payment',
+                description: 'Online payment was initiated. The order will be confirmed after payment succeeds.',
+                actorId: userId,
+                actorType: 'customer',
+                transaction: t,
+            });
+        }
 
         const appliedCouponIds = (couponBenefits?.appliedCoupons || []).map((coupon) => coupon.id);
-        for (const appliedItem of couponBenefits?.appliedCoupons || []) {
-            await CouponUsage.create({
-                couponId: appliedItem.id,
-                userId,
-                orderId: order.id
-            }, { transaction: t });
-        }
-        if (appliedCouponIds.length > 0) {
-            await Coupon.update(
-                { usedCount: sequelize.literal('used_count + 1') },
-                { where: { id: { [Op.in]: appliedCouponIds } }, transaction: t }
-            );
+        if (paymentMethod === 'cod') {
+            for (const appliedItem of couponBenefits?.appliedCoupons || []) {
+                await CouponUsage.create({
+                    couponId: appliedItem.id,
+                    userId,
+                    orderId: order.id
+                }, { transaction: t });
+            }
+            if (appliedCouponIds.length > 0) {
+                await Coupon.update(
+                    { usedCount: sequelize.literal('used_count + 1') },
+                    { where: { id: { [Op.in]: appliedCouponIds } }, transaction: t }
+                );
+            }
         }
 
-        if (cart) {
+        if (cart && paymentMethod === 'cod') {
             await cart.update({ status: 'converted' }, { transaction: t });
         }
 
         return order;
     });
-
-    // For COD orders skip the payment gateway entirely — order is already confirmed.
-    // For Razorpay orders, createIntent runs OUTSIDE the transaction so a gateway failure
-    // doesn't roll back the order — the order exists, payment can be retried.
-    let clientSecret = null;
-    if (paymentMethod !== 'cod') {
-        try {
-            const intent = await PaymentService.createIntent(order.userId, order.id);
-            clientSecret = intent.clientSecret;
-        } catch (err) {
-            // Log but don't fail — the order is saved; frontend can retry payment
-            clientSecret = null;
-        }
-    }
 
     try {
         if (AuditService && AuditService.log) {
@@ -916,31 +1035,30 @@ const placeOrder = async (userId, payload) => {
         }
     } catch (err) {}
 
-    // Send multi-channel notification for order placement
-    try {
-        if (NotificationService && NotificationService.sendToUser) {
-            const user = await User.findByPk(userId);
-            if (user) {
-                // Send to all enabled channels configured in settings
-                // Dispatcher will handle checking if channels are actually enabled
-                await NotificationService.sendToUser(
-                    'order_placed',
-                    ['email', 'sms', 'whatsapp'],
-                    user,
-                    {
-                        orderNumber: order.orderNumber,
-                        total: order.total,
-                        firstName: user.firstName || 'Customer',
-                    },
-                    order.id
-                );
+    if (paymentMethod === 'cod') {
+        try {
+            if (NotificationService && NotificationService.sendToUser) {
+                const user = await User.findByPk(userId);
+                if (user) {
+                    await NotificationService.sendToUser(
+                        'order_placed',
+                        ['email', 'sms', 'whatsapp'],
+                        user,
+                        {
+                            orderNumber: order.orderNumber,
+                            total: order.total,
+                            firstName: user.firstName || 'Customer',
+                        },
+                        order.id
+                    );
+                }
             }
+        } catch (err) {
+            logger.error('Failed to send order placement notifications', { orderId: order.id, error: err.message });
         }
-    } catch (err) {
-        logger.error('Failed to send order placement notifications', { orderId: order.id, error: err.message });
     }
 
-    return { order, clientSecret };
+    return { order };
 };
 
 const getOrders = async (userId, isAdmin, page = 1, limit = 20, filters = {}) => {
@@ -1037,6 +1155,16 @@ const getOrderById = async (id, userId, isAdmin) => {
         });
         order = await Order.findOne({ where, include: HEAVY_ORDER_INCLUDE });
     }
+    if (order.status !== 'closed' && order.status !== 'cancelled') {
+        await sequelize.transaction(async (t) => {
+            const lockedOrder = await Order.findByPk(order.id, {
+                transaction: t,
+                lock: Transaction.LOCK.UPDATE,
+            });
+            await repairCompletableOrder(lockedOrder, t);
+        });
+        order = await Order.findOne({ where, include: HEAVY_ORDER_INCLUDE });
+    }
     return order;
 };
 
@@ -1061,7 +1189,10 @@ const createFulfillment = async (orderId, payload, actingUserId) => {
         // Fetch items associated with the locked order
         const orderItems = await OrderItem.findAll({
             where: { orderId: order.id },
-            include: [{ model: FulfillmentItem, as: 'fulfillmentItems', required: false }],
+            include: [
+                { model: FulfillmentItem, as: 'fulfillmentItems', required: false },
+                { model: ShipmentItem, as: 'shipmentItems', required: false },
+            ],
             transaction: t,
         });
         
@@ -1093,9 +1224,7 @@ const createFulfillment = async (orderId, payload, actingUserId) => {
         // Build map: orderItemId → { totalQty, alreadyShipped, remaining, productId, snapshotName }
         const orderItemMap = {};
         for (const oi of order.items) {
-            const alreadyShipped = (oi.fulfillmentItems || []).reduce(
-                (sum, fi) => sum + fi.quantity, 0
-            );
+            const alreadyShipped = getDispatchedQuantityForOrderItem(oi);
             orderItemMap[oi.id] = {
                 totalQty:      oi.quantity,
                 alreadyShipped,
@@ -1205,7 +1334,7 @@ const createFulfillment = async (orderId, payload, actingUserId) => {
         const productIds = items.map(reqItem => orderItemMap[reqItem.orderItemId]?.productId).filter(Boolean);
         const products = await Product.findAll({
             where: { id: productIds },
-            attributes: ['id', 'weightGrams', 'lengthCm', 'breadthCm', 'heightCm', 'requiresShipping'],
+            attributes: ['id', 'weightGrams', 'lengthCm', 'breadthCm', 'heightCm'],
             transaction: t
         });
         const productMap = products.reduce((map, p) => {
@@ -1406,6 +1535,17 @@ const updateStatus = async (id, status, actingUserId) => {
                 'VALIDATION_ERROR',
                 400,
                 'Cannot close order until payment is settled and shipment lifecycle is delivered or RTO'
+            );
+        }
+        if (
+            status === 'processing' &&
+            order.paymentMethod !== 'cod' &&
+            (!payment || ['payment_pending', 'pending'].includes(payment.status))
+        ) {
+            throw new AppError(
+                'VALIDATION_ERROR',
+                400,
+                'Online orders can move to processing only after payment is completed'
             );
         }
         if (status === 'cancelled') {
@@ -1644,7 +1784,7 @@ const cancelOrder = async (id, userId) => {
 };
 
 const updateFulfillmentStatus = async (orderId, fulfillmentId, status, actingUserId) => {
-    return sequelize.transaction(async (t) => {
+    await sequelize.transaction(async (t) => {
         const order = await Order.findByPk(orderId, {
             transaction: t,
             lock: Transaction.LOCK.UPDATE,
@@ -1669,6 +1809,7 @@ const updateFulfillmentStatus = async (orderId, fulfillmentId, status, actingUse
 
         const nextShipmentStatus = status === 'pending' ? SHIPMENT_DEFAULT_STATUS : status;
         const oldStatus = fulfillment.status === 'pending' ? SHIPMENT_DEFAULT_STATUS : fulfillment.status;
+        if (oldStatus === nextShipmentStatus) return;
         ensureValidShipmentTransition(oldStatus, nextShipmentStatus);
         await fulfillment.update({ status: nextShipmentStatus === SHIPMENT_DEFAULT_STATUS ? 'pending' : nextShipmentStatus }, { transaction: t });
         const linkedShipments = await Shipment.findAll({
@@ -1679,10 +1820,7 @@ const updateFulfillmentStatus = async (orderId, fulfillmentId, status, actingUse
             const history = Array.isArray(shipment.statusHistory) ? shipment.statusHistory : [];
             await shipment.update({
                 status: nextShipmentStatus,
-                statusHistory: [
-                    ...history,
-                    { status: nextShipmentStatus, at: new Date().toISOString(), source: 'admin' },
-                ],
+                statusHistory: appendStatusHistoryEvent(history, nextShipmentStatus),
             }, { transaction: t });
             await logOrderHistory({
                 orderId: order.id,
@@ -1697,6 +1835,7 @@ const updateFulfillmentStatus = async (orderId, fulfillmentId, status, actingUse
         }
         const derivedShippingStatus = await syncOrderShippingStatus(order, t, actingUserId);
         await syncCodPaymentIfDelivered(order, t, actingUserId);
+        await syncOrderClosureIfComplete(order, t, actingUserId);
 
         try {
             if (AuditService && AuditService.log) {
@@ -1709,9 +1848,9 @@ const updateFulfillmentStatus = async (orderId, fulfillmentId, status, actingUse
                 }, t);
             }
         } catch (err) {}
-
-        return getOrderById(orderId, actingUserId, true);
     });
+
+    return getOrderById(orderId, actingUserId, true);
 };
 
 const getFulfillmentTracking = async (orderId, userId, isAdmin) => {
@@ -1746,7 +1885,7 @@ const createShipment = createFulfillment;
 
 const updateShipmentStatus = async (orderId, shipmentId, payload, actingUserId) => {
     const { status, trackingNumber, trackingUrl, courierName } = payload;
-    return sequelize.transaction(async (t) => {
+    await sequelize.transaction(async (t) => {
         const order = await Order.findByPk(orderId, { transaction: t, lock: Transaction.LOCK.UPDATE });
         if (!order) throw new AppError('NOT_FOUND', 404, 'Order not found');
 
@@ -1765,23 +1904,21 @@ const updateShipmentStatus = async (orderId, shipmentId, payload, actingUserId) 
             ...(trackingUrl !== undefined ? { trackingUrl } : {}),
             ...(courierName !== undefined ? { courierName } : {}),
         };
-        if (status) {
+        const statusChanged = status && status !== before;
+        if (statusChanged) {
             updates.status = status;
-            updates.statusHistory = [
-                ...history,
-                { status, at: new Date().toISOString(), source: 'admin' },
-            ];
+            updates.statusHistory = appendStatusHistoryEvent(history, status);
         }
         await shipment.update(updates, { transaction: t });
 
-        if (shipment.fulfillmentId && status) {
+        if (shipment.fulfillmentId && statusChanged) {
             await Fulfillment.update(
                 { status: status === SHIPMENT_DEFAULT_STATUS ? 'pending' : status },
                 { where: { id: shipment.fulfillmentId }, transaction: t }
             );
         }
 
-        if (status) {
+        if (statusChanged) {
             await logOrderHistory({
                 orderId,
                 entityType: 'Shipment',
@@ -1797,8 +1934,10 @@ const updateShipmentStatus = async (orderId, shipmentId, payload, actingUserId) 
 
         await syncOrderShippingStatus(order, t, actingUserId);
         await syncCodPaymentIfDelivered(order, t, actingUserId);
-        return getOrderById(orderId, actingUserId, true);
+        await syncOrderClosureIfComplete(order, t, actingUserId);
     });
+
+    return getOrderById(orderId, actingUserId, true);
 };
 
 const getDeliveredQuantityByOrderItem = async (orderId, transaction) => {

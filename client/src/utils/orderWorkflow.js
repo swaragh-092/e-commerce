@@ -6,6 +6,7 @@ const fallbackLabel = (status) =>
     .replace(/\b\w/g, (char) => char.toUpperCase());
 
 const colorMap = {
+  pending_payment: 'warning',
   confirmed: 'info',
   on_hold: 'warning',
   processing: 'primary',
@@ -65,7 +66,7 @@ export const ORDER_STATUS_STEPPER = ORDER_STATUS_OPTIONS;
 export const ORDER_TERMINAL_STATUSES = Object.freeze(['cancelled', 'closed']);
 export const ORDER_FULFILLMENT_STEPPER = Object.freeze(['not_shipped', 'partially_shipped', 'shipped', 'out_for_delivery', 'delivered']);
 export const ORDER_STATUS_SUMMARY_GROUPS = Object.freeze([
-  { key: 'active', label: 'Active', statuses: ['confirmed', 'on_hold', 'processing', 'ready_for_shipment'] },
+  { key: 'active', label: 'Active', statuses: ['pending_payment', 'confirmed', 'on_hold', 'processing', 'ready_for_shipment'] },
   { key: 'issues', label: 'Needs attention', statuses: ['cancelled'] },
   { key: 'closed', label: 'Closed', statuses: ['closed'] },
 ]);
@@ -109,20 +110,71 @@ export const getOrderProgressSteps = (order = {}, progress = {}) => {
   const orderStatus = order?.status;
   const shippingStatus = order?.orderShippingStatus || order?.shipmentStatus || 'not_shipped';
   const paymentStatus = order?.Payment?.status || order?.paymentStatus;
+  const statusHistory = order?.statusHistory || [];
+  const findStatusTime = (statusGroup, statuses) => {
+    const statusSet = Array.isArray(statuses) ? statuses : [statuses];
+    return [...statusHistory]
+      .reverse()
+      .find((entry) => entry.statusGroup === statusGroup && statusSet.includes(entry.toStatus))
+      ?.createdAt;
+  };
+  const paymentMethod = order?.paymentMethod || order?.Payment?.provider;
+  const isCod = paymentMethod === 'cod';
   const isCancelled = orderStatus === 'cancelled';
   const isClosed = orderStatus === 'closed';
+  const isPendingOnlinePayment = orderStatus === 'pending_payment' && !isCod;
   const paymentSettled = ['paid_online', 'paid_cod', 'completed', 'cod_collected'].includes(paymentStatus);
   const shipped = ['partially_shipped', 'shipped', 'partially_out_for_delivery', 'out_for_delivery', 'partially_delivered', 'delivered'].includes(shippingStatus);
   const outForDelivery = ['partially_out_for_delivery', 'out_for_delivery', 'partially_delivered', 'delivered'].includes(shippingStatus);
   const delivered = shippingStatus === 'delivered';
+  const partiallyDelivered = shippingStatus === 'partially_delivered';
+  const processing = ['processing', 'ready_for_shipment', 'closed'].includes(orderStatus) || shipped || delivered;
 
   const steps = [
-    { key: 'placed', label: 'Order placed', status: 'completed', occurredAt: order?.createdAt },
-    { key: 'payment', label: getPaymentStatusLabel(paymentStatus), status: paymentSettled ? 'completed' : 'active' },
-    { key: 'processing', label: 'Processing', status: ['processing', 'ready_for_shipment', 'closed'].includes(orderStatus) ? 'completed' : 'pending' },
-    { key: 'shipped', label: getShipmentStatusLabel(shippingStatus), status: shipped ? 'completed' : 'pending' },
-    { key: 'out_for_delivery', label: 'Out for delivery', status: outForDelivery ? 'completed' : 'pending' },
-    { key: 'delivered', label: 'Delivered', status: delivered ? 'completed' : 'pending' },
+    {
+      key: isPendingOnlinePayment ? 'pending_payment' : 'placed',
+      label: isPendingOnlinePayment ? 'Awaiting payment' : 'Order placed',
+      status: isPendingOnlinePayment ? 'active' : 'completed',
+      occurredAt: order?.createdAt,
+    },
+    ...(!isPendingOnlinePayment && !isCod ? [
+      {
+        key: 'payment',
+        label: paymentSettled ? 'Payment captured' : getPaymentStatusLabel(paymentStatus),
+        status: paymentSettled ? 'completed' : 'active',
+        occurredAt: paymentSettled ? order?.Payment?.updatedAt : undefined,
+      },
+    ] : []),
+    {
+      key: 'processing',
+      label: 'Processing',
+      status: processing ? 'completed' : 'pending',
+      occurredAt: findStatusTime('order', ['processing', 'ready_for_shipment', 'closed']),
+    },
+    {
+      key: 'shipped',
+      label: shippingStatus === 'partially_shipped' ? 'Partially shipped' : 'Shipped',
+      status: shipped ? 'completed' : 'pending',
+      occurredAt: findStatusTime('order_shipping', ['partially_shipped', 'shipped', 'partially_out_for_delivery', 'out_for_delivery', 'partially_delivered', 'delivered']),
+    },
+    {
+      key: 'out_for_delivery',
+      label: 'Out for delivery',
+      status: outForDelivery ? 'completed' : 'pending',
+      occurredAt: findStatusTime('order_shipping', ['partially_out_for_delivery', 'out_for_delivery', 'partially_delivered', 'delivered']),
+    },
+    {
+      key: 'delivered',
+      label: partiallyDelivered ? 'Partially delivered' : 'Delivered',
+      status: delivered ? 'completed' : partiallyDelivered ? 'active' : 'pending',
+      occurredAt: findStatusTime('order_shipping', ['partially_delivered', 'delivered']),
+    },
+    ...(isCod ? [{
+      key: 'cod_payment',
+      label: paymentSettled ? 'COD collected' : delivered ? 'Collect COD payment' : 'Cash due on delivery',
+      status: paymentSettled ? 'completed' : delivered ? 'active' : 'pending',
+      occurredAt: paymentStatus === 'paid_cod' ? order?.Payment?.updatedAt : undefined,
+    }] : []),
   ];
 
   if (isCancelled || isClosed) {

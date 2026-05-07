@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import {
   Alert,
+  Badge,
   Box,
   Button,
   Chip,
@@ -8,8 +9,8 @@ import {
   Divider,
   FormControl,
   Grid,
+  IconButton,
   InputLabel,
-  InputAdornment,
   MenuItem,
   Paper,
   Select,
@@ -29,6 +30,7 @@ import SmartToyIcon from '@mui/icons-material/SmartToy';
 import AdminPanelSettingsIcon from '@mui/icons-material/AdminPanelSettings';
 import SendIcon from '@mui/icons-material/Send';
 import HistoryIcon from '@mui/icons-material/History';
+import CloseIcon from '@mui/icons-material/Close';
 import { useCurrency } from '../../hooks/useSettings';
 import { getOrderById, updateOrderStatus, refundOrder, createFulfillment, updateFulfillmentStatus, confirmCodPayment, getShippingProviders, addOrderNote } from '../../services/adminService';
 import { useNotification } from '../../context/NotificationContext';
@@ -166,7 +168,7 @@ const HistoryEventRow = ({ event, isLast }) => {
   );
 };
 
-const OrderHistorySection = ({ history = [], onAddNote, addingNote }) => {
+const OrderHistorySection = ({ history = [], onAddNote, addingNote, inDialog = false }) => {
   const [note, setNote] = useState('');
   const textRef = useRef(null);
 
@@ -192,52 +194,55 @@ const OrderHistorySection = ({ history = [], onAddNote, addingNote }) => {
   return (
     <Paper
       elevation={0}
-      sx={{ p: 3, borderRadius: 3, border: '1px solid', borderColor: 'divider', mt: 3 }}
+      sx={{
+        p: 3,
+        borderRadius: inDialog ? 0 : 3,
+        border: inDialog ? 0 : '1px solid',
+        borderColor: 'divider',
+        mt: inDialog ? 0 : 3,
+      }}
     >
-      {/* Header */}
-      <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 2.5 }}>
-        <HistoryIcon sx={{ color: 'text.secondary', fontSize: 20 }} />
-        <Typography variant="h6" fontWeight={700}>
-          Order History
-        </Typography>
-        <Chip
-          label={history.length}
-          size="small"
-          sx={{ ml: 0.5, height: 20, fontSize: '0.7rem', bgcolor: 'action.selected' }}
-        />
-      </Box>
+      {!inDialog && (
+        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 2.5 }}>
+          <HistoryIcon sx={{ color: 'text.secondary', fontSize: 20 }} />
+          <Typography variant="h6" fontWeight={700}>
+            Order History
+          </Typography>
+          <Chip
+            label={history.length}
+            size="small"
+            sx={{ ml: 0.5, height: 20, fontSize: '0.7rem', bgcolor: 'action.selected' }}
+          />
+        </Box>
+      )}
 
       {/* Add note input */}
       <Box sx={{ mb: 3 }}>
-        <TextField
-          inputRef={textRef}
-          fullWidth
-          multiline
-          minRows={2}
-          maxRows={5}
-          size="small"
-          placeholder="Add an internal note… (Ctrl+Enter to submit)"
-          value={note}
-          onChange={(e) => setNote(e.target.value)}
-          onKeyDown={handleKey}
-          disabled={addingNote}
-          InputProps={{
-            endAdornment: (
-              <InputAdornment position="end" sx={{ alignSelf: 'flex-end', mb: 0.5 }}>
-                <Button
-                  size="small"
-                  variant="contained"
-                  onClick={handleSubmit}
-                  disabled={addingNote || !note.trim()}
-                  startIcon={addingNote ? <CircularProgress size={14} /> : <SendIcon />}
-                  sx={{ minWidth: 90 }}
-                >
-                  {addingNote ? 'Saving…' : 'Add Note'}
-                </Button>
-              </InputAdornment>
-            ),
-          }}
-        />
+        <Stack spacing={1} alignItems="flex-end">
+          <TextField
+            inputRef={textRef}
+            fullWidth
+            multiline
+            minRows={2}
+            maxRows={5}
+            size="small"
+            placeholder="Add an internal note... (Ctrl+Enter to submit)"
+            value={note}
+            onChange={(e) => setNote(e.target.value)}
+            onKeyDown={handleKey}
+            disabled={addingNote}
+          />
+          <Button
+            size="small"
+            variant="contained"
+            onClick={handleSubmit}
+            disabled={addingNote || !note.trim()}
+            startIcon={addingNote ? <CircularProgress size={14} color="inherit" /> : <SendIcon />}
+            sx={{ minWidth: 112 }}
+          >
+            {addingNote ? 'Saving...' : 'Add Note'}
+          </Button>
+        </Stack>
       </Box>
 
       <Divider sx={{ mb: 2.5 }} />
@@ -342,16 +347,29 @@ const getTaxRows = (order = {}) => {
   return Number(order.tax || 0) > 0 ? [{ label: 'Tax', value: order.tax }] : [];
 };
 
-const getFulfillmentProgress = (items = []) => {
+const getFulfillmentProgress = (items = [], fulfillments = []) => {
   const total = items.reduce((sum, item) => sum + Number(item.quantity || 0), 0);
-  const shipped = items.reduce((sum, item) => (
-    sum + (item.shipmentItems || item.fulfillmentItems || []).reduce((itemSum, fulfillmentItem) => itemSum + Number(fulfillmentItem.quantity || 0), 0)
-  ), 0);
+  const deliveredByItem = fulfillments
+    .filter((fulfillment) => fulfillment.status === 'delivered')
+    .flatMap((fulfillment) => fulfillment.items || [])
+    .reduce((map, item) => {
+      const orderItemId = item.orderItemId || item.orderItem?.id;
+      if (!orderItemId) return map;
+      map[orderItemId] = (map[orderItemId] || 0) + Number(item.quantity || 0);
+      return map;
+    }, {});
+  const shipped = items.reduce((sum, item) => sum + Number(deliveredByItem[item.id] || 0), 0);
   return {
     total,
     shipped,
     remaining: Math.max(total - shipped, 0),
   };
+};
+
+const getDispatchedQuantity = (item = {}) => {
+  const shipmentQty = (item.shipmentItems || []).reduce((sum, shipmentItem) => sum + Number(shipmentItem.quantity || 0), 0);
+  const fulfillmentQty = (item.fulfillmentItems || []).reduce((sum, fulfillmentItem) => sum + Number(fulfillmentItem.quantity || 0), 0);
+  return Math.max(shipmentQty, fulfillmentQty);
 };
 
 const FULFILLMENT_STATUS_LABELS = {
@@ -398,7 +416,7 @@ const FulfillmentDialog = ({ open, onClose, orderItems, onSave, loading }) => {
     if (open) {
       const initialItems = {};
       orderItems.forEach(oi => {
-        const shipped = (oi.shipmentItems || oi.fulfillmentItems || []).reduce((sum, fi) => sum + Number(fi.quantity || 0), 0);
+        const shipped = getDispatchedQuantity(oi);
         const remaining = oi.quantity - shipped;
         if (remaining > 0) {
           initialItems[oi.id] = remaining;
@@ -504,7 +522,7 @@ const FulfillmentDialog = ({ open, onClose, orderItems, onSave, loading }) => {
             </TableHead>
             <TableBody>
               {orderItems.map((oi) => {
-                const shipped = (oi.shipmentItems || oi.fulfillmentItems || []).reduce((sum, fi) => sum + Number(fi.quantity || 0), 0);
+                const shipped = getDispatchedQuantity(oi);
                 const remaining = oi.quantity - shipped;
                 if (remaining <= 0) return null;
 
@@ -560,6 +578,7 @@ const OrderDetailPage = () => {
   const [newStatus, setNewStatus] = useState('');
   const [updating, setUpdating] = useState(false);
   const [fulfillmentDialogOpen, setFulfillmentDialogOpen] = useState(false);
+  const [historyDialogOpen, setHistoryDialogOpen] = useState(false);
   const [fulfillmentLoading, setFulfillmentLoading] = useState(false);
   const [addingNote, setAddingNote] = useState(false);
 
@@ -586,7 +605,10 @@ const OrderDetailPage = () => {
 
   const orderItems = useMemo(() => (order?.items || order?.OrderItems || []).filter(Boolean), [order]);
   const taxRows = useMemo(() => getTaxRows(order || {}), [order]);
-  const fulfillmentProgress = useMemo(() => getFulfillmentProgress(orderItems), [orderItems]);
+  const fulfillmentProgress = useMemo(
+    () => getFulfillmentProgress(orderItems, order?.fulfillments || []),
+    [orderItems, order?.fulfillments]
+  );
   const appliedDiscounts = useMemo(
     () => (Array.isArray(order?.appliedDiscounts) ? order.appliedDiscounts : []),
     [order]
@@ -778,6 +800,23 @@ const OrderDetailPage = () => {
         </Box>
 
         <Stack direction="row" spacing={1}>
+          <Tooltip title="Order history">
+            <IconButton
+              aria-label="Open order history"
+              onClick={() => setHistoryDialogOpen(true)}
+              sx={{
+                width: 40,
+                height: 40,
+                border: '1px solid',
+                borderColor: 'divider',
+                bgcolor: 'background.paper',
+              }}
+            >
+              <Badge badgeContent={order?.history?.length || 0} color="primary" max={99}>
+                <HistoryIcon fontSize="small" />
+              </Badge>
+            </IconButton>
+          </Tooltip>
           <Button 
             variant="outlined" 
             startIcon={<PrintIcon />}
@@ -823,7 +862,7 @@ const OrderDetailPage = () => {
       <Stack direction={{ xs: 'column', md: 'row' }} spacing={2} mb={3}>
         <MetricCard label="Order total" value={formatPrice(order.total || 0)} accent="primary.main" />
         <MetricCard label="Items" value={orderItems.reduce((sum, item) => sum + Number(item.quantity || 0), 0)} />
-        <MetricCard label="Fulfilled" value={`${fulfillmentProgress.shipped}/${fulfillmentProgress.total}`} />
+        <MetricCard label="Delivered" value={`${fulfillmentProgress.shipped}/${fulfillmentProgress.total}`} />
         <MetricCard label="Customer" value={customerName} />
         <MetricCard
           label="Payment"
@@ -833,7 +872,7 @@ const OrderDetailPage = () => {
       </Stack>
 
       <Grid container spacing={3}>
-        <Grid item xs={12} md={8}>
+        <Grid item xs={12} md={8} >
           <DetailCard title="Items">
             {orderItems.map((item) => (
               <Box
@@ -1023,7 +1062,13 @@ const OrderDetailPage = () => {
                     <Paper
                       key={f.id}
                       elevation={0}
-                      sx={{ p: 2.5, border: '1px solid', borderColor: 'divider', borderRadius: 2, bgcolor: 'grey.50' }}
+                      sx={{
+                        p: 2.5,
+                        border: '1px solid',
+                        borderColor: 'divider',
+                        borderRadius: 2,
+                        bgcolor: 'background.paper',
+                      }}
                     >
                       <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', mb: 2 }}>
                         <Box sx={{ flexGrow: 1 }}>
@@ -1072,7 +1117,17 @@ const OrderDetailPage = () => {
                       </Box>
 
                       {f.shipments && f.shipments.length > 0 && Array.isArray(f.shipments[0].statusHistory) && f.shipments[0].statusHistory.length > 0 && (
-                        <Box sx={{ mt: 2, mb: 3, p: 2, bgcolor: 'background.default', borderRadius: 1 }}>
+                        <Box
+                          sx={{
+                            mt: 2,
+                            mb: 3,
+                            p: 2,
+                            bgcolor: 'action.hover',
+                            borderRadius: 1.5,
+                            border: '1px solid',
+                            borderColor: 'divider',
+                          }}
+                        >
                           <Typography variant="subtitle2" sx={{ mb: 1.5 }}>Tracking Timeline</Typography>
                           <Stack spacing={1.5}>
                             {[...f.shipments[0].statusHistory].reverse().map((event, idx) => (
@@ -1103,7 +1158,7 @@ const OrderDetailPage = () => {
                         ))}
                       </Stack>
                       {f.notes && (
-                        <Box sx={{ p: 1.5, bgcolor: 'background.paper', borderRadius: 1.5, border: '1px solid', borderColor: 'divider' }}>
+                        <Box sx={{ p: 1.5, bgcolor: 'action.hover', borderRadius: 1.5, border: '1px solid', borderColor: 'divider' }}>
                           <Typography variant="caption" color="text.secondary" sx={{ display: 'block' }}>Notes:</Typography>
                           <Typography variant="body2" sx={{ fontStyle: 'italic' }}>{f.notes}</Typography>
                         </Box>
@@ -1199,12 +1254,41 @@ const OrderDetailPage = () => {
         </Grid>
       </Grid>
 
-      {/* ── Full-width Order History ── */}
-      <OrderHistorySection
-        history={order?.history || []}
-        onAddNote={handleAddNote}
-        addingNote={addingNote}
-      />
+      <Dialog
+        open={historyDialogOpen}
+        onClose={() => setHistoryDialogOpen(false)}
+        maxWidth="md"
+        fullWidth
+      >
+        <DialogTitle
+          sx={{
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            gap: 2,
+            pr: 1,
+          }}
+        >
+          <Stack direction="row" spacing={1} alignItems="center">
+            <HistoryIcon fontSize="small" />
+            <Typography variant="h6" fontWeight={700}>
+              Order History
+            </Typography>
+            <Chip label={order?.history?.length || 0} size="small" />
+          </Stack>
+          <IconButton aria-label="Close order history" onClick={() => setHistoryDialogOpen(false)}>
+            <CloseIcon fontSize="small" />
+          </IconButton>
+        </DialogTitle>
+        <DialogContent dividers sx={{ p: 0 }}>
+          <OrderHistorySection
+            history={order?.history || []}
+            onAddNote={handleAddNote}
+            addingNote={addingNote}
+            inDialog
+          />
+        </DialogContent>
+      </Dialog>
 
       <FulfillmentDialog
         open={fulfillmentDialogOpen}

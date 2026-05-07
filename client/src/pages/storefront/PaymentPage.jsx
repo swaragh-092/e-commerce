@@ -6,6 +6,7 @@ import { getOrderById } from '../../services/adminService';
 import PageSEO from '../../components/common/PageSEO';
 import CenteredLoader from '../../components/common/CenteredLoader';
 import { getApiErrorMessage } from '../../utils/apiErrors';
+import { useCart } from '../../hooks/useCart';
 
 const loadScript = (src, globalName) => new Promise((resolve, reject) => {
     if (globalName && window[globalName]) {
@@ -48,6 +49,7 @@ const PaymentPage = () => {
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState(null);
     const [processing, setProcessing] = useState(false);
+    const { fetchCart } = useCart();
 
     useEffect(() => {
         if (!orderId) { navigate('/cart'); return; }
@@ -59,6 +61,7 @@ const PaymentPage = () => {
                 .then((res) => {
                     const result = res.data?.data || res.data;
                     if (result?.success) {
+                        fetchCart();
                         navigate('/payment/success', { replace: true, state: { orderId } });
                     } else {
                         navigate('/payment/failure', { replace: true, state: { orderId, status: result?.status } });
@@ -74,6 +77,7 @@ const PaymentPage = () => {
                 .then((res) => {
                     const result = res.data?.data || res.data;
                     if (result?.success) {
+                        fetchCart();
                         navigate('/payment/success', { replace: true, state: { orderId } });
                     } else {
                         navigate('/payment/failure', { replace: true, state: { orderId, status: result?.status } });
@@ -95,6 +99,14 @@ const PaymentPage = () => {
                     navigate('/payment/success', { replace: true, state: { orderId, isCod: true } });
                     return;
                 }
+                if (['paid_online', 'paid_cod', 'completed', 'cod_collected'].includes(order?.Payment?.status)) {
+                    navigate('/payment/success', { replace: true, state: { orderId } });
+                    return;
+                }
+                if (order?.status === 'cancelled') {
+                    setError('This payment reservation has expired or was cancelled. Please return to checkout to start again.');
+                    return;
+                }
 
                 return paymentService.createOrder(orderId)
                     .then((r) => setOrderData(r.data?.data || r.data));
@@ -103,7 +115,7 @@ const PaymentPage = () => {
                 setError(getApiErrorMessage(err, 'Failed to initialize payment. Please contact support.'));
             })
             .finally(() => setLoading(false));
-    }, [orderId, location.search, navigate]);
+    }, [orderId, location.search, navigate, fetchCart]);
 
     const handleRazorpayPayment = () => {
         if (!orderData || !window.Razorpay) {
@@ -127,6 +139,7 @@ const PaymentPage = () => {
                         razorpay_payment_id: response.razorpay_payment_id,
                         razorpay_signature: response.razorpay_signature
                     });
+                    fetchCart();
                     navigate('/payment/success', { state: { orderId } });
                 } catch (err) {
                     setError(getApiErrorMessage(err, 'Payment verification failed.'));
@@ -183,6 +196,7 @@ const PaymentPage = () => {
             const res = await paymentService.verifyPayment(orderId, { provider: 'cashfree' });
             const result = res.data?.data || res.data;
             if (result?.success) {
+                fetchCart();
                 navigate('/payment/success', { state: { orderId } });
             } else {
                 setError(`Payment is not completed yet. Current status: ${result?.status || 'pending'}.`);
@@ -243,7 +257,7 @@ const PaymentPage = () => {
         return (
             <Container maxWidth="sm" sx={{ py: 8, textAlign: 'center' }}>
                 <Alert severity="error" sx={{ mb: 3 }}>{error || 'Could not load payment details.'}</Alert>
-                <Button variant="outlined" onClick={() => navigate('/cart')}>Return to Cart</Button>
+                <Button variant="outlined" onClick={() => navigate('/checkout')}>Return to checkout</Button>
             </Container>
         );
     }

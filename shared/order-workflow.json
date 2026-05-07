@@ -10,6 +10,7 @@
     ],
 
     "order": [
+      "pending_payment",
       "confirmed",
       "on_hold",
       "processing",
@@ -92,6 +93,7 @@
     },
 
     "order": {
+      "pending_payment": ["processing", "cancelled"],
       "confirmed": ["on_hold", "processing", "cancelled"],
       "on_hold": ["processing", "cancelled"],
       "processing": ["ready_for_shipment", "cancelled"],
@@ -178,9 +180,11 @@
     },
 
     "cod_payment_completion": {
+      "description": "COD cash can be recorded only after delivery, through the admin payment action.",
       "condition": {
         "payment_status": "pending_cod",
-        "all_shipments": "delivered"
+        "order_shipping_status": "delivered",
+        "admin_action": "confirm_cod_payment"
       },
       "result": {
         "payment_status": "paid_cod"

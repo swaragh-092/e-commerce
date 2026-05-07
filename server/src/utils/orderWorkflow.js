@@ -37,7 +37,6 @@ const ACTIVE_PUT_BACK_STATUSES = Object.freeze(orderWorkflow.derived?.put_back_p
 const COMPLETED_PUT_BACK_STATUSES = Object.freeze(orderWorkflow.derived?.put_back_processing?.false_if_all || []);
 
 const legacyOrderStatusMap = Object.freeze({
-    pending_payment: 'confirmed',
     pending_cod: 'confirmed',
     paid: 'processing',
     partially_shipped: 'processing',
