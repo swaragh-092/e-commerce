@@ -19,6 +19,7 @@ import { AuthContext } from '../../context/AuthContext';
 import { useSettings, useCurrency, useFeature } from '../../hooks/useSettings';
 import { useCart } from '../../hooks/useCart';
 import { userService } from '../../services/userService';
+import { orderService } from '../../services/orderService';
 import { validateCoupon, getEligibleCoupons } from '../../services/adminService';
 import { calculateShipping } from '../../services/shippingService';
 import PageSEO from '../../components/common/PageSEO';
@@ -429,8 +430,7 @@ const CheckoutPage = () => {
         setPlacing(true);
         setError(null);
         try {
-            const { placeOrder } = await import('../../services/adminService');
-            const res = await placeOrder({
+            const res = await orderService.placeOrder({
                 shippingAddressId: selectedAddressId,
                 shippingQuoteId: shippingQuote.quoteId,
                 checkoutSessionId,
@@ -446,7 +446,7 @@ const CheckoutPage = () => {
                     },
                 }),
             });
-            const orderId = res.data?.data?.order?.id;
+            const orderId = res.order?.id;
             if (!isBuyNowFlow) await clearCart();
             if (paymentMethod === 'cod') navigate('/payment/success', { state: { orderId, isCod: true } });
             else navigate(`/payment/${orderId}`);
