@@ -1,6 +1,7 @@
 'use strict';
 
 const { sequelize, Review, Product, Order, OrderItem, User } = require('../index');
+const logger = require('../../utils/logger');
 const { Op } = require('sequelize');
 const AppError = require('../../utils/AppError');
 const AuditService = require('../audit/audit.service');
@@ -29,7 +30,7 @@ const refreshProductRatingCache = async (productId) => {
 };
 
 const create = async (userId, slug, payload) => {
-  return sequelize.transaction(async (t) => {
+  const review = await sequelize.transaction(async (t) => {
     const product = await Product.findOne({ where: { slug }, transaction: t });
     if (!product) throw new AppError('NOT_FOUND', 404, 'Product not found');
     const productId = product.id;
@@ -77,7 +78,7 @@ const create = async (userId, slug, payload) => {
     const title = sanitizePlainText(payload.title);
     const body = sanitizePlainText(payload.body);
 
-    const review = await Review.create({
+    return Review.create({
       userId,
       productId,
       orderId,
@@ -87,23 +88,31 @@ const create = async (userId, slug, payload) => {
       body,
       status: 'pending' // waits admin moderation
     }, { transaction: t });
-
-    try {
-      if (AuditService && AuditService.log) {
-        await AuditService.log({
-          userId,
-          action: ACTIONS.CREATE,
-          entity: ENTITIES.REVIEW,
-          entityId: review.id,
-          details: { productId, rating: payload.rating }
-        }, t);
-      }
-    } catch (err) {}
-
-    return review;
   });
-  // Note: rating cache is NOT refreshed here because the review is still 'pending'.
-  // Cache is updated when the review gets approved via moderate().
+
+  // Audit log outside transaction
+  try {
+    if (AuditService && AuditService.log) {
+      await AuditService.log({
+        userId,
+        action: ACTIONS.CREATE,
+        entity: ENTITIES.REVIEW,
+        entityId: review.id,
+        details: { productId: review.productId, rating: payload.rating }
+      });
+    }
+  } catch (err) {
+    logger.error('Review audit log failed', {
+      userId,
+      action: ACTIONS.CREATE,
+      entity: ENTITIES.REVIEW,
+      entityId: review.id,
+      error: err.message,
+      stack: err.stack
+    });
+  }
+
+  return review;
 };
 
 const list = async (slug, { page, limit, status }) => {
@@ -129,30 +138,40 @@ const list = async (slug, { page, limit, status }) => {
 };
 
 const moderate = async (id, status, adminId) => {
-  const productId = await sequelize.transaction(async (t) => {
+  const { productId, beforeStatus } = await sequelize.transaction(async (t) => {
     const review = await Review.findByPk(id, { transaction: t });
     if (!review) throw new AppError('NOT_FOUND', 404, 'Review not found');
 
     const before = review.toJSON();
     await review.update({ status }, { transaction: t });
 
-    try {
-      if (AuditService && AuditService.log) {
-        await AuditService.log({
-          userId: adminId,
-          action: ACTIONS.UPDATE,
-          entity: ENTITIES.REVIEW,
-          entityId: review.id,
-          changes: { before: before.status, after: status }
-        }, t);
-      }
-    } catch(err) {}
-
-    return review.productId;
+    return { productId: review.productId, beforeStatus: before.status };
   });
 
   // Refresh the cached avg/count outside the transaction
   await refreshProductRatingCache(productId);
+
+  // Audit log outside transaction
+  try {
+    if (AuditService && AuditService.log) {
+      await AuditService.log({
+        userId: adminId,
+        action: ACTIONS.UPDATE,
+        entity: ENTITIES.REVIEW,
+        entityId: id,
+        changes: { before: beforeStatus, after: status }
+      });
+    }
+  } catch (err) {
+    logger.error('Review moderate audit log failed', {
+      userId: adminId,
+      action: ACTIONS.UPDATE,
+      entity: ENTITIES.REVIEW,
+      entityId: id,
+      error: err.message,
+      stack: err.stack
+    });
+  }
 
   return Review.findByPk(id);
 };
@@ -165,22 +184,32 @@ const remove = async (id, adminId) => {
     const pid = review.productId;
     await review.destroy({ transaction: t });
 
-    try {
-      if (AuditService && AuditService.log) {
-        await AuditService.log({
-          userId: adminId,
-          action: ACTIONS.DELETE,
-          entity: ENTITIES.REVIEW,
-          entityId: review.id
-        }, t);
-      }
-    } catch(err) {}
-
     return pid;
   });
 
   // Refresh the cached avg/count outside the transaction
   await refreshProductRatingCache(productId);
+
+  // Audit log outside transaction
+  try {
+    if (AuditService && AuditService.log) {
+      await AuditService.log({
+        userId: adminId,
+        action: ACTIONS.DELETE,
+        entity: ENTITIES.REVIEW,
+        entityId: id
+      });
+    }
+  } catch (err) {
+    logger.error('Review delete audit log failed', {
+      userId: adminId,
+      action: ACTIONS.DELETE,
+      entity: ENTITIES.REVIEW,
+      entityId: id,
+      error: err.message,
+      stack: err.stack
+    });
+  }
 };
 
 module.exports = {
