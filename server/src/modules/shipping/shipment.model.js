@@ -30,7 +30,7 @@ module.exports = (sequelize, DataTypes) => {
         invoiceUrl: DataTypes.STRING(500),
         status: {
             type: DataTypes.STRING(50),
-            defaultValue: 'pending',
+            defaultValue: 'created',
         },
         statusHistory: {
             type: DataTypes.JSONB,

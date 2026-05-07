@@ -17,7 +17,7 @@ import HeadsetMicIcon from '@mui/icons-material/HeadsetMic';
 import CachedIcon from '@mui/icons-material/Cached';
 import { Link, useNavigate } from 'react-router-dom';
 import { useCart } from '../../hooks/useCart';
-import { useSettings, useCurrency, useFeatureFlag } from '../../hooks/useSettings';
+import { useSettings, useCurrency, useFeature, useFeatureFlag } from '../../hooks/useSettings';
 import { getMediaUrl } from '../../utils/media';
 import PageSEO from '../../components/common/PageSEO';
 import { AuthContext } from '../../context/AuthContext';
@@ -343,6 +343,7 @@ const CartPage = () => {
     const navigate = useNavigate();
     const [offerSummary, setOfferSummary] = useState(null);
     const [clearing, setClearing] = useState(false);
+    const [enquiryOpen, setEnquiryOpen] = useState(false);
     const cartEnabled = useFeature('cart');
     const checkoutEnabled = useFeature('checkout');
     const enquiryEnabled = useFeature('enquiry');

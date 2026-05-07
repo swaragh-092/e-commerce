@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import {
   Alert,
   Box,
@@ -9,17 +9,28 @@ import {
   FormControl,
   Grid,
   InputLabel,
+  InputAdornment,
   MenuItem,
   Paper,
   Select,
   Stack,
+  Tooltip,
   Typography,
 } from '@mui/material';
 import { useParams, useNavigate } from 'react-router-dom';
 import PrintIcon from '@mui/icons-material/Print';
 import LocalShippingIcon from '@mui/icons-material/LocalShipping';
+import ShoppingCartIcon from '@mui/icons-material/ShoppingCart';
+import PaymentIcon from '@mui/icons-material/Payment';
+import SwapHorizIcon from '@mui/icons-material/SwapHoriz';
+import NoteAddIcon from '@mui/icons-material/NoteAdd';
+import PersonIcon from '@mui/icons-material/Person';
+import SmartToyIcon from '@mui/icons-material/SmartToy';
+import AdminPanelSettingsIcon from '@mui/icons-material/AdminPanelSettings';
+import SendIcon from '@mui/icons-material/Send';
+import HistoryIcon from '@mui/icons-material/History';
 import { useCurrency } from '../../hooks/useSettings';
-import { getOrderById, updateOrderStatus, refundOrder, createFulfillment, updateFulfillmentStatus, confirmCodPayment, getShippingProviders } from '../../services/adminService';
+import { getOrderById, updateOrderStatus, refundOrder, createFulfillment, updateFulfillmentStatus, confirmCodPayment, getShippingProviders, addOrderNote } from '../../services/adminService';
 import { useNotification } from '../../context/NotificationContext';
 import {
   Dialog,
@@ -42,12 +53,212 @@ import {
   getOrderProgressSteps,
   getOrderStatusColor,
   getOrderStatusLabel,
+  getShipmentStatusLabel,
+  getShipmentStatusColor,
   getPaymentStatusLabel,
   getPaymentStatusColor,
-  isOrderRefundableStatus,
-  isOrderFulfillableStatus,
 } from '../../utils/orderWorkflow';
 import { useOrderStatusTransitions } from '../../hooks/useOrderStatusTransitions';
+
+// ─── Order History helpers ──────────────────────────────────────────────────
+
+const EVENT_META = {
+  order_placed:    { icon: ShoppingCartIcon,        color: '#6366f1', label: 'Order Placed' },
+  status_changed:  { icon: SwapHorizIcon,           color: '#0ea5e9', label: 'Status Changed' },
+  admin_note:      { icon: NoteAddIcon,             color: '#f59e0b', label: 'Admin Note' },
+  payment:         { icon: PaymentIcon,             color: '#10b981', label: 'Payment' },
+  shipment:        { icon: LocalShippingIcon,       color: '#8b5cf6', label: 'Shipment' },
+  return:          { icon: SwapHorizIcon,           color: '#ef4444', label: 'Return' },
+  refund:          { icon: PaymentIcon,             color: '#f97316', label: 'Refund' },
+};
+
+const getEventMeta = (eventType = '') => {
+  const key = Object.keys(EVENT_META).find((k) => eventType.startsWith(k));
+  return EVENT_META[key] || { icon: HistoryIcon, color: '#6b7280', label: eventType };
+};
+
+const ACTOR_META = {
+  system:   { icon: SmartToyIcon,              label: 'System',  bg: '#1e293b', fg: '#94a3b8' },
+  admin:    { icon: AdminPanelSettingsIcon,    label: 'Admin',   bg: '#1e3a5f', fg: '#60a5fa' },
+  customer: { icon: PersonIcon,               label: 'Customer',bg: '#1a2e1a', fg: '#4ade80' },
+};
+
+const getActorMeta = (actorType = 'system') => ACTOR_META[actorType] || ACTOR_META.system;
+
+const HistoryEventRow = ({ event, isLast }) => {
+  const meta = getEventMeta(event.eventType);
+  const actorMeta = getActorMeta(event.actorType);
+  const Icon = meta.icon;
+  const ActorIcon = actorMeta.icon;
+
+  return (
+    <Box sx={{ display: 'flex', gap: 2, alignItems: 'flex-start' }}>
+      {/* Left: icon column with connecting line */}
+      <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'center', flexShrink: 0, pt: 0.25 }}>
+        <Box
+          sx={{
+            width: 36,
+            height: 36,
+            borderRadius: '50%',
+            bgcolor: `${meta.color}18`,
+            border: `2px solid ${meta.color}44`,
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            flexShrink: 0,
+          }}
+        >
+          <Icon sx={{ fontSize: 16, color: meta.color }} />
+        </Box>
+        {!isLast && (
+          <Box sx={{ width: '2px', flexGrow: 1, minHeight: 24, mt: 0.5, bgcolor: 'divider' }} />
+        )}
+      </Box>
+
+      {/* Right: content */}
+      <Box sx={{ pb: isLast ? 0 : 2.5, flexGrow: 1, minWidth: 0 }}>
+        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, flexWrap: 'wrap', mb: 0.5 }}>
+          <Typography variant="body2" fontWeight={700} sx={{ color: meta.color }}>
+            {meta.label}
+          </Typography>
+          <Tooltip title={`Actor type: ${event.actorType || 'system'}`}>
+            <Box
+              sx={{
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: 0.4,
+                px: 0.75,
+                py: 0.2,
+                borderRadius: 1,
+                bgcolor: actorMeta.bg,
+                border: `1px solid ${actorMeta.fg}33`,
+                cursor: 'default',
+              }}
+            >
+              <ActorIcon sx={{ fontSize: 11, color: actorMeta.fg }} />
+              <Typography variant="caption" sx={{ fontSize: '0.65rem', color: actorMeta.fg, fontWeight: 600, lineHeight: 1 }}>
+                {event.actor ? `${event.actor.firstName || ''} ${event.actor.lastName || ''}`.trim() || actorMeta.label : actorMeta.label}
+              </Typography>
+            </Box>
+          </Tooltip>
+          <Typography variant="caption" color="text.disabled" sx={{ ml: 'auto', whiteSpace: 'nowrap' }}>
+            {new Date(event.createdAt).toLocaleString()}
+          </Typography>
+        </Box>
+        <Typography
+          variant="body2"
+          color={event.eventType === 'admin_note' ? 'text.primary' : 'text.secondary'}
+          sx={{
+            ...(event.eventType === 'admin_note' && {
+              p: 1.25,
+              bgcolor: 'action.hover',
+              borderRadius: 1.5,
+              border: '1px solid',
+              borderColor: 'divider',
+              fontStyle: 'italic',
+            }),
+          }}
+        >
+          {event.description}
+        </Typography>
+      </Box>
+    </Box>
+  );
+};
+
+const OrderHistorySection = ({ history = [], onAddNote, addingNote }) => {
+  const [note, setNote] = useState('');
+  const textRef = useRef(null);
+
+  const sorted = useMemo(
+    () => [...history].sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt)),
+    [history]
+  );
+
+  const handleSubmit = async () => {
+    const trimmed = note.trim();
+    if (!trimmed) return;
+    const ok = await onAddNote(trimmed);
+    if (ok) {
+      setNote('');
+      textRef.current?.blur();
+    }
+  };
+
+  const handleKey = (e) => {
+    if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) handleSubmit();
+  };
+
+  return (
+    <Paper
+      elevation={0}
+      sx={{ p: 3, borderRadius: 3, border: '1px solid', borderColor: 'divider', mt: 3 }}
+    >
+      {/* Header */}
+      <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 2.5 }}>
+        <HistoryIcon sx={{ color: 'text.secondary', fontSize: 20 }} />
+        <Typography variant="h6" fontWeight={700}>
+          Order History
+        </Typography>
+        <Chip
+          label={history.length}
+          size="small"
+          sx={{ ml: 0.5, height: 20, fontSize: '0.7rem', bgcolor: 'action.selected' }}
+        />
+      </Box>
+
+      {/* Add note input */}
+      <Box sx={{ mb: 3 }}>
+        <TextField
+          inputRef={textRef}
+          fullWidth
+          multiline
+          minRows={2}
+          maxRows={5}
+          size="small"
+          placeholder="Add an internal note… (Ctrl+Enter to submit)"
+          value={note}
+          onChange={(e) => setNote(e.target.value)}
+          onKeyDown={handleKey}
+          disabled={addingNote}
+          InputProps={{
+            endAdornment: (
+              <InputAdornment position="end" sx={{ alignSelf: 'flex-end', mb: 0.5 }}>
+                <Button
+                  size="small"
+                  variant="contained"
+                  onClick={handleSubmit}
+                  disabled={addingNote || !note.trim()}
+                  startIcon={addingNote ? <CircularProgress size={14} /> : <SendIcon />}
+                  sx={{ minWidth: 90 }}
+                >
+                  {addingNote ? 'Saving…' : 'Add Note'}
+                </Button>
+              </InputAdornment>
+            ),
+          }}
+        />
+      </Box>
+
+      <Divider sx={{ mb: 2.5 }} />
+
+      {/* Timeline */}
+      {sorted.length === 0 ? (
+        <Typography variant="body2" color="text.secondary">
+          No history events recorded yet.
+        </Typography>
+      ) : (
+        <Stack spacing={0}>
+          {sorted.map((event, idx) => (
+            <HistoryEventRow key={event.id} event={event} isLast={idx === sorted.length - 1} />
+          ))}
+        </Stack>
+      )}
+    </Paper>
+  );
+};
+
+// ─── Page components ─────────────────────────────────────────────────────────
 
 const DetailCard = ({ title, children, sx = {} }) => (
   <Paper
@@ -134,7 +345,7 @@ const getTaxRows = (order = {}) => {
 const getFulfillmentProgress = (items = []) => {
   const total = items.reduce((sum, item) => sum + Number(item.quantity || 0), 0);
   const shipped = items.reduce((sum, item) => (
-    sum + (item.fulfillmentItems || []).reduce((itemSum, fulfillmentItem) => itemSum + Number(fulfillmentItem.quantity || 0), 0)
+    sum + (item.shipmentItems || item.fulfillmentItems || []).reduce((itemSum, fulfillmentItem) => itemSum + Number(fulfillmentItem.quantity || 0), 0)
   ), 0);
   return {
     total,
@@ -144,22 +355,34 @@ const getFulfillmentProgress = (items = []) => {
 };
 
 const FULFILLMENT_STATUS_LABELS = {
-  pending: 'Pending',
+  created: 'Created',
+  packed: 'Packed',
   shipped: 'Shipped',
+  in_transit: 'In Transit',
+  out_for_delivery: 'Out for Delivery',
   delivered: 'Delivered',
-  returned: 'Returned',
+  delivery_failed: 'Delivery Failed',
+  rto_initiated: 'RTO Initiated',
+  rto_in_transit: 'RTO In Transit',
+  rto: 'RTO',
 };
 
 const FULFILLMENT_STATUS_TRANSITIONS = {
-  pending: ['shipped', 'delivered'],
-  shipped: ['delivered', 'returned'],
-  delivered: ['returned'],
-  returned: [],
+  created: ['packed'],
+  packed: ['shipped'],
+  shipped: ['in_transit', 'out_for_delivery'],
+  in_transit: ['out_for_delivery'],
+  out_for_delivery: ['delivered', 'delivery_failed'],
+  delivery_failed: ['out_for_delivery', 'rto_initiated'],
+  rto_initiated: ['rto_in_transit'],
+  rto_in_transit: ['rto'],
+  delivered: [],
+  rto: [],
 };
 
 const getFulfillmentStatusOptions = (currentStatus) => [
-  currentStatus,
-  ...(FULFILLMENT_STATUS_TRANSITIONS[currentStatus] || []),
+  currentStatus === 'pending' ? 'created' : currentStatus,
+  ...(FULFILLMENT_STATUS_TRANSITIONS[currentStatus === 'pending' ? 'created' : currentStatus] || []),
 ].filter(Boolean);
 
 const FulfillmentDialog = ({ open, onClose, orderItems, onSave, loading }) => {
@@ -175,7 +398,7 @@ const FulfillmentDialog = ({ open, onClose, orderItems, onSave, loading }) => {
     if (open) {
       const initialItems = {};
       orderItems.forEach(oi => {
-        const shipped = (oi.fulfillmentItems || []).reduce((sum, fi) => sum + fi.quantity, 0);
+        const shipped = (oi.shipmentItems || oi.fulfillmentItems || []).reduce((sum, fi) => sum + Number(fi.quantity || 0), 0);
         const remaining = oi.quantity - shipped;
         if (remaining > 0) {
           initialItems[oi.id] = remaining;
@@ -185,7 +408,7 @@ const FulfillmentDialog = ({ open, onClose, orderItems, onSave, loading }) => {
       setTrackingNumber('');
       setCourier('');
       setNotes('');
-      setStatus('pending');
+      setStatus('created');
       setProviderId('manual');
 
       getShippingProviders()
@@ -255,9 +478,9 @@ const FulfillmentDialog = ({ open, onClose, orderItems, onSave, loading }) => {
             value={status}
             onChange={(e) => setStatus(e.target.value)}
           >
-            <MenuItem value="pending">Pending</MenuItem>
+            <MenuItem value="created">Created</MenuItem>
+            <MenuItem value="packed">Packed</MenuItem>
             <MenuItem value="shipped">Shipped</MenuItem>
-            <MenuItem value="delivered">Delivered</MenuItem>
           </TextField>
           <TextField
             label="Notes"
@@ -281,7 +504,7 @@ const FulfillmentDialog = ({ open, onClose, orderItems, onSave, loading }) => {
             </TableHead>
             <TableBody>
               {orderItems.map((oi) => {
-                const shipped = (oi.fulfillmentItems || []).reduce((sum, fi) => sum + fi.quantity, 0);
+                const shipped = (oi.shipmentItems || oi.fulfillmentItems || []).reduce((sum, fi) => sum + Number(fi.quantity || 0), 0);
                 const remaining = oi.quantity - shipped;
                 if (remaining <= 0) return null;
 
@@ -338,6 +561,7 @@ const OrderDetailPage = () => {
   const [updating, setUpdating] = useState(false);
   const [fulfillmentDialogOpen, setFulfillmentDialogOpen] = useState(false);
   const [fulfillmentLoading, setFulfillmentLoading] = useState(false);
+  const [addingNote, setAddingNote] = useState(false);
 
   const fetchOrder = async () => {
     try {
@@ -372,26 +596,35 @@ const OrderDetailPage = () => {
 
   const { allowedNextStatuses, isRefundable, isFulfillable } = useOrderStatusTransitions(order?.status);
 
-  const availableStatuses = useMemo(() => {
-    if (!order?.status) return [];
-    return [order.status, ...allowedNextStatuses].filter((statusOption) => statusOption !== 'refunded');
-  }, [order?.status, allowedNextStatuses]);
-
   const progressSteps = useMemo(
     () => getOrderProgressSteps({ ...(order || {}), Payment: payment }, fulfillmentProgress),
     [fulfillmentProgress, order, payment]
   );
-  const hasStatusTransitions = availableStatuses.length > 1;
 
   const customerName = useMemo(() => {
     const fullName = [order?.User?.firstName, order?.User?.lastName].filter(Boolean).join(' ');
     return fullName || address?.fullName || 'Customer unavailable';
   }, [address?.fullName, order?.User?.firstName, order?.User?.lastName]);
 
-  const hasSettledPayment = ['completed', 'cod_collected'].includes(payment?.status);
+  const hasSettledPayment = ['paid_online', 'paid_cod', 'completed', 'cod_collected'].includes(payment?.status);
+  const orderShippingStatus = order?.orderShippingStatus || order?.shipmentStatus || 'not_shipped';
+  const hasTerminalShipping = ['delivered', 'rto'].includes(orderShippingStatus);
+  const canCloseOrder = hasSettledPayment && hasTerminalShipping;
+  const availableStatuses = useMemo(() => {
+    if (!order?.status) return [];
+    return [order.status, ...allowedNextStatuses].filter((statusOption) => {
+      if (statusOption === 'refunded') return false;
+      if (statusOption === 'closed' && !canCloseOrder) return false;
+      return true;
+    });
+  }, [order?.status, allowedNextStatuses, canCloseOrder]);
+  const hasStatusTransitions = availableStatuses.length > 1;
   const canRefund = canRefundOrders && isRefundable && hasSettledPayment;
   const canFulfill = canUpdateOrderStatus && isFulfillable;
-  const canConfirmCod = canUpdateOrderStatus && order?.paymentMethod === 'cod' && ['pending', 'cod_pending'].includes(payment?.status || 'pending') && ['pending_cod', 'processing'].includes(order?.status);
+  const canConfirmCod = canUpdateOrderStatus
+    && order?.paymentMethod === 'cod'
+    && ['pending_cod', 'pending'].includes(payment?.status || 'pending_cod')
+    && orderShippingStatus === 'delivered';
 
   const handleStatusUpdate = async () => {
     if (!canUpdateOrderStatus) {
@@ -445,6 +678,27 @@ const OrderDetailPage = () => {
     }
   };
 
+  const handleAddNote = async (note) => {
+    setAddingNote(true);
+    try {
+      const res = await addOrderNote(id, note);
+      const newEvent = res.data.data;
+      // Optimistically append into the local order state so the UI updates
+      // immediately without needing a full re-fetch.
+      setOrder((prev) => ({
+        ...prev,
+        history: [newEvent, ...(prev?.history || [])],
+      }));
+      notify('Note added to order history.', 'success');
+      return true;
+    } catch (err) {
+      notify(getApiErrorMessage(err, 'Failed to add note.'), 'error');
+      return false;
+    } finally {
+      setAddingNote(false);
+    }
+  };
+
   const handleCreateFulfillment = async (data) => {
     setFulfillmentLoading(true);
     try {
@@ -461,9 +715,10 @@ const OrderDetailPage = () => {
 
   const handleFulfillmentStatusUpdate = async (fulfillmentId, status) => {
     const fulfillment = order?.fulfillments?.find((item) => item.id === fulfillmentId);
-    if (!fulfillment || fulfillment.status === status) return;
+    const currentStatus = fulfillment?.status === 'pending' ? 'created' : fulfillment?.status;
+    if (!fulfillment || currentStatus === status) return;
 
-    const allowedStatuses = getFulfillmentStatusOptions(fulfillment.status);
+    const allowedStatuses = getFulfillmentStatusOptions(currentStatus);
     if (!allowedStatuses.includes(status)) {
       notify(`Cannot change shipment status from ${FULFILLMENT_STATUS_LABELS[fulfillment.status] || fulfillment.status} to ${FULFILLMENT_STATUS_LABELS[status] || status}.`, 'error');
       return;
@@ -511,6 +766,11 @@ const OrderDetailPage = () => {
               {order.orderNumber}
             </Typography>
             <Chip label={getOrderStatusLabel(order.status)} color={getOrderStatusColor(order.status)} />
+            <Chip
+              label={getShipmentStatusLabel(orderShippingStatus)}
+              color={getShipmentStatusColor(orderShippingStatus)}
+              variant="outlined"
+            />
           </Stack>
           <Typography variant="body2" color="text.secondary" sx={{ mt: 1 }}>
             Placed on {new Date(order.createdAt).toLocaleString()} • Last updated {new Date(order.updatedAt).toLocaleString()}
@@ -531,7 +791,7 @@ const OrderDetailPage = () => {
             </Button>
           )}
           {canConfirmCod && (
-            <Button variant="outlined" onClick={handleConfirmCodPayment} disabled={updating}>
+            <Button variant="contained" color="success" onClick={handleConfirmCodPayment} disabled={updating}>
               {updating ? 'Saving…' : 'Mark COD Collected'}
             </Button>
           )}
@@ -548,6 +808,12 @@ const OrderDetailPage = () => {
         </Stack>
       </Box>
 
+      {order.status === 'closed' && !hasSettledPayment && (
+        <Alert severity="warning" sx={{ mb: 3 }}>
+          This order was previously marked closed before payment and shipping were complete. It will be reopened automatically when refreshed.
+        </Alert>
+      )}
+
       {error && (
         <Alert severity="error" sx={{ mb: 3 }}>
           {error}
@@ -562,7 +828,7 @@ const OrderDetailPage = () => {
         <MetricCard
           label="Payment"
           value={getPaymentStatusLabel(payment?.status)}
-          accent={['completed', 'cod_collected'].includes(payment?.status) ? 'success.main' : payment?.status === 'refunded' ? 'text.secondary' : 'text.primary'}
+          accent={hasSettledPayment ? 'success.main' : payment?.status === 'refunded' ? 'text.secondary' : 'text.primary'}
         />
       </Stack>
 
@@ -749,7 +1015,8 @@ const OrderDetailPage = () => {
               <DetailCard title="Shipments / Sub-Orders">
                 <Stack spacing={2}>
                   {order.fulfillments.map((f, index) => {
-                    const statusOptions = getFulfillmentStatusOptions(f.status);
+                    const normalizedShipmentStatus = f.status === 'pending' ? 'created' : f.status;
+                    const statusOptions = getFulfillmentStatusOptions(normalizedShipmentStatus);
                     const isTerminalShipment = statusOptions.length <= 1;
 
                     return (
@@ -765,7 +1032,7 @@ const OrderDetailPage = () => {
                             <Typography variant="caption" color="text.secondary">Status:</Typography>
                             <FormControl size="small" variant="standard" sx={{ minWidth: 100 }}>
                               <Select
-                                value={f.status}
+                                value={normalizedShipmentStatus}
                                 onChange={(e) => handleFulfillmentStatusUpdate(f.id, e.target.value)}
                                 disabled={!canUpdateOrderStatus || isTerminalShipment}
                                 sx={{ 
@@ -777,7 +1044,7 @@ const OrderDetailPage = () => {
                               >
                                 {statusOptions.map((statusOption) => (
                                   <MenuItem key={statusOption} value={statusOption} sx={{ fontSize: '0.75rem' }}>
-                                    {FULFILLMENT_STATUS_LABELS[statusOption] || statusOption}
+                                    {FULFILLMENT_STATUS_LABELS[statusOption] || getShipmentStatusLabel(statusOption)}
                                   </MenuItem>
                                 ))}
                               </Select>
@@ -812,7 +1079,7 @@ const OrderDetailPage = () => {
                               <Box key={idx} sx={{ display: 'flex', gap: 2 }}>
                                 <Box sx={{ minWidth: 120 }}>
                                   <Typography variant="caption" color="text.secondary" sx={{ display: 'block' }}>
-                                    {new Date(event.timestamp).toLocaleString()}
+                                    {new Date(event.timestamp || event.at || event.createdAt).toLocaleString()}
                                   </Typography>
                                 </Box>
                                 <Box>
@@ -931,6 +1198,13 @@ const OrderDetailPage = () => {
           </Stack>
         </Grid>
       </Grid>
+
+      {/* ── Full-width Order History ── */}
+      <OrderHistorySection
+        history={order?.history || []}
+        onAddNote={handleAddNote}
+        addingNote={addingNote}
+      />
 
       <FulfillmentDialog
         open={fulfillmentDialogOpen}

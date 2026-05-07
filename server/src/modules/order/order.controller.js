@@ -104,6 +104,81 @@ const updateFulfillmentStatus = async (req, res, next) => {
   }
 };
 
+const updateShipmentStatus = async (req, res, next) => {
+  try {
+    const result = await OrderService.updateShipmentStatus(
+      req.params.id,
+      req.params.shipmentId,
+      req.validated,
+      req.user.id
+    );
+    return success(res, result, 'Shipment updated successfully');
+  } catch (err) {
+    next(err);
+  }
+};
+
+const createReturnRequest = async (req, res, next) => {
+  try {
+    const isAdmin = hasOrderAdminAccess(req.user);
+    const result = await OrderService.createReturnRequest(req.params.id, req.validated, req.user.id, isAdmin);
+    return success(res, result, 'Return request created', 201);
+  } catch (err) {
+    next(err);
+  }
+};
+
+const createReplacementRequest = async (req, res, next) => {
+  try {
+    const isAdmin = hasOrderAdminAccess(req.user);
+    const result = await OrderService.createReplacementRequest(req.params.id, req.validated, req.user.id, isAdmin);
+    return success(res, result, 'Replacement request created', 201);
+  } catch (err) {
+    next(err);
+  }
+};
+
+const updatePutBackStatus = async (req, res, next) => {
+  try {
+    const isAdmin = hasOrderAdminAccess(req.user);
+    if (!isAdmin) {
+      throw new AppError('FORBIDDEN', 403, 'You do not have permission to update return/replacement status');
+    }
+    const result = await OrderService.updatePutBackStatus(
+      req.params.id,
+      req.params.returnId,
+      req.validated.status,
+      req.user.id,
+      isAdmin
+    );
+    return success(res, result, 'Return/replacement status updated');
+  } catch (err) {
+    next(err);
+  }
+};
+
+const processRefund = async (req, res, next) => {
+  try {
+    const isAdmin = hasOrderAdminAccess(req.user);
+    const result = await OrderService.processRefund(req.params.id, req.validated, req.user.id, isAdmin);
+    return success(res, result, 'Refund processed', 201);
+  } catch (err) {
+    next(err);
+  }
+};
+
+const addNote = async (req, res, next) => {
+  try {
+    if (!hasOrderAdminAccess(req.user)) {
+      throw new AppError('FORBIDDEN', 403, 'You do not have permission to add notes to orders');
+    }
+    const event = await OrderService.addNote(req.params.id, req.validated.note, req.user.id);
+    return success(res, event, 'Note added to order history', 201);
+  } catch (err) {
+    next(err);
+  }
+};
+
 module.exports = {
   placeOrder,
   getOrders,
@@ -114,4 +189,10 @@ module.exports = {
   refundOrder,
   createFulfillment,
   updateFulfillmentStatus,
+  updateShipmentStatus,
+  createReturnRequest,
+  createReplacementRequest,
+  updatePutBackStatus,
+  processRefund,
+  addNote,
 };

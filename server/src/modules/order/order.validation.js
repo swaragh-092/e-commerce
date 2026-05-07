@@ -1,6 +1,11 @@
 'use strict';
 const Joi = require('joi');
-const { ORDER_STATUS_VALUES } = require('../../utils/orderWorkflow');
+const {
+    ORDER_STATUS_VALUES,
+    SHIPMENT_STATUS_VALUES,
+    PUT_BACK_RECORD_STATUS_VALUES,
+    REFUND_STATUS_VALUES,
+} = require('../../utils/orderWorkflow');
 
 const placeOrderSchema = Joi.object({
     shippingAddressId: Joi.string().uuid().required(),
@@ -21,7 +26,7 @@ const updateOrderStatusSchema = Joi.object({
     status: Joi.string().valid(...ORDER_STATUS_VALUES).required()
 });
 
-const FULFILLMENT_STATUS_VALUES = ['pending', 'shipped', 'delivered', 'returned'];
+const FULFILLMENT_STATUS_VALUES = ['pending', ...SHIPMENT_STATUS_VALUES];
 
 const createFulfillmentSchema = Joi.object({
     trackingNumber: Joi.string().max(255).allow(null, ''),
@@ -39,9 +44,52 @@ const updateFulfillmentStatusSchema = Joi.object({
     status: Joi.string().valid(...FULFILLMENT_STATUS_VALUES).required()
 });
 
+const updateShipmentStatusSchema = Joi.object({
+    status: Joi.string().valid(...SHIPMENT_STATUS_VALUES).optional(),
+    trackingNumber: Joi.string().max(255).allow(null, '').optional(),
+    trackingUrl: Joi.string().uri().max(500).allow(null, '').optional(),
+    courierName: Joi.string().max(100).allow(null, '').optional(),
+}).or('status', 'trackingNumber', 'trackingUrl', 'courierName');
+
+const putBackItemSchema = Joi.object({
+    orderItemId: Joi.string().uuid().required(),
+    shipmentItemId: Joi.string().uuid().allow(null).optional(),
+    quantity: Joi.number().integer().min(1).required(),
+    reason: Joi.string().allow(null, '').optional(),
+    metadata: Joi.object().unknown(true).optional(),
+});
+
+const createPutBackSchema = Joi.object({
+    reason: Joi.string().allow(null, '').optional(),
+    metadata: Joi.object().unknown(true).optional(),
+    items: Joi.array().items(putBackItemSchema).min(1).required(),
+});
+
+const updatePutBackStatusSchema = Joi.object({
+    status: Joi.string().valid(...PUT_BACK_RECORD_STATUS_VALUES).required(),
+});
+
+const processRefundSchema = Joi.object({
+    returnId: Joi.string().uuid().allow(null).optional(),
+    amount: Joi.number().positive().optional(),
+    status: Joi.string().valid(...REFUND_STATUS_VALUES).optional(),
+    providerRefundId: Joi.string().max(255).allow(null, '').optional(),
+    reason: Joi.string().allow(null, '').optional(),
+    metadata: Joi.object().unknown(true).optional(),
+});
+
+const addOrderNoteSchema = Joi.object({
+    note: Joi.string().max(1000).required(),
+});
+
 module.exports = {
     placeOrderSchema,
     updateOrderStatusSchema,
     createFulfillmentSchema,
     updateFulfillmentStatusSchema,
+    updateShipmentStatusSchema,
+    createPutBackSchema,
+    updatePutBackStatusSchema,
+    processRefundSchema,
+    addOrderNoteSchema,
 };

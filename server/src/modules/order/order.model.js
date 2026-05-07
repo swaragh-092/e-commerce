@@ -1,6 +1,12 @@
 'use strict';
 
-const { ORDER_DEFAULT_STATUS, ORDER_STATUS_VALUES } = require('../../utils/orderWorkflow');
+const {
+    ORDER_DEFAULT_STATUS,
+    ORDER_STATUS_VALUES,
+    ORDER_SHIPPING_STATUS_VALUES,
+    ORDER_DEFAULT_SHIPPING_STATUS,
+    PUT_BACK_STATUS_VALUES,
+} = require('../../utils/orderWorkflow');
 
 module.exports = (sequelize, DataTypes) => {
     const Order = sequelize.define('Order', {
@@ -23,6 +29,24 @@ module.exports = (sequelize, DataTypes) => {
             validate: {
                 isIn: [ORDER_STATUS_VALUES],
             },
+        },
+        orderShippingStatus: {
+            type: DataTypes.STRING(50),
+            defaultValue: ORDER_DEFAULT_SHIPPING_STATUS,
+            validate: {
+                isIn: [ORDER_SHIPPING_STATUS_VALUES],
+            },
+        },
+        putBackStatus: {
+            type: DataTypes.STRING(50),
+            allowNull: true,
+            validate: {
+                isIn: [[...PUT_BACK_STATUS_VALUES, null]],
+            },
+        },
+        putBackProcessingStatus: {
+            type: DataTypes.BOOLEAN,
+            defaultValue: false,
         },
         subtotal: {
             type: DataTypes.DECIMAL(10, 2),
@@ -119,6 +143,10 @@ module.exports = (sequelize, DataTypes) => {
         Order.hasOne(models.Payment, { foreignKey: 'orderId' });
         Order.hasMany(models.Fulfillment, { foreignKey: 'orderId', as: 'fulfillments', onDelete: 'CASCADE' });
         Order.hasMany(models.Shipment, { foreignKey: 'orderId', as: 'shipments', onDelete: 'CASCADE' });
+        Order.hasMany(models.OrderReturn, { foreignKey: 'orderId', as: 'returns', onDelete: 'CASCADE' });
+        Order.hasMany(models.OrderRefund, { foreignKey: 'orderId', as: 'refunds', onDelete: 'CASCADE' });
+        Order.hasMany(models.OrderStatusHistory, { foreignKey: 'orderId', as: 'statusHistory', onDelete: 'CASCADE' });
+        Order.hasMany(models.OrderHistory, { foreignKey: 'orderId', as: 'history', onDelete: 'CASCADE' });
     };
 
     return Order;

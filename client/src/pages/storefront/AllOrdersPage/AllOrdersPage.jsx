@@ -36,11 +36,11 @@ import {
 } from '@mui/icons-material';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import PageSEO from '../../../components/common/PageSEO';
-import { userService } from '../../services/userService';
-import { useCurrency } from '../../hooks/useSettings';
-import { getOrderStatusColor, getOrderStatusLabel } from '../../utils/orderWorkflow';
-import { getApiErrorMessage } from '../../utils/apiErrors';
-import { useNotification } from '../../context/NotificationContext';
+import { userService } from '../../../services/userService';
+import { useCurrency, useFeature } from '../../../hooks/useSettings';
+import { getOrderStatusColor, getOrderStatusLabel } from '../../../utils/orderWorkflow';
+import { getApiErrorMessage } from '../../../utils/apiErrors';
+import { useNotification } from '../../../context/NotificationContext';
 
 // ─── Constants ───────────────────────────────────────────────────────────────
 

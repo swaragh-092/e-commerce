@@ -1,6 +1,6 @@
 'use strict';
 const crypto = require('crypto');
-const { sequelize, Payment, Order, WebhookEvent, Setting, User } = require('../index');
+const { sequelize, Payment, Order, WebhookEvent, Setting, User, Shipment } = require('../index');
 const { encrypt, decrypt } = require('../../utils/crypto');
 const AppError = require('../../utils/AppError');
 const AuditService = require('../audit/audit.service');
@@ -123,7 +123,7 @@ const createRazorpayOrder = async (userId, order) => {
             transactionId: razorpayOrder.id,
             amount: order.total,
             currency,
-            status: 'pending',
+            status: 'payment_pending',
         });
 
         return {
@@ -175,7 +175,7 @@ const createCashfreeOrder = async (userId, order) => {
         transactionId: cashfreeOrder.order_id,
         amount: order.total,
         currency,
-        status: 'pending',
+        status: 'payment_pending',
         metadata: {
             cfOrderId: cashfreeOrder.cf_order_id,
             cashfreeOrderId: cashfreeOrder.order_id,
@@ -237,7 +237,7 @@ const createStripeOrder = async (userId, order) => {
             transactionId: session.id,
             amount: order.total,
             currency: currency.toUpperCase(),
-            status: 'pending',
+            status: 'payment_pending',
             metadata: { sessionId: session.id },
         });
 
@@ -336,7 +336,7 @@ const createPayUOrder = async (userId, order) => {
         transactionId: txnid,
         amount: order.total,
         currency: 'INR',
-        status: 'pending',
+        status: 'payment_pending',
         metadata: { payuTxnId: txnid },
     });
 
@@ -374,8 +374,8 @@ const handlePayUReturn = async (payload) => {
 const createOrder = async (userId, orderId) => {
     const order = await Order.findOne({ where: { id: orderId, userId } });
     if (!order) throw new AppError('NOT_FOUND', 404, 'Order not found');
-    if (order.status !== 'pending_payment') {
-        throw new AppError('VALIDATION_ERROR', 400, 'Order is not in pending_payment status');
+    if (order.status === 'cancelled' || order.status === 'closed') {
+        throw new AppError('VALIDATION_ERROR', 400, `Cannot create payment for a ${order.status} order`);
     }
 
     if (order.paymentMethod === 'razorpay') {
@@ -434,7 +434,9 @@ const verifyRazorpayPayment = async (userId, orderId, paymentData) => {
         }
 
         const previousOrderStatus = lockedOrder.status;
-        await lockedOrder.update({ status: 'paid' }, { transaction: t });
+        if (lockedOrder.status === 'confirmed' || lockedOrder.status === 'on_hold') {
+            await lockedOrder.update({ status: 'processing' }, { transaction: t });
+        }
         
         const payment = await Payment.findOne({ 
             where: { orderId: lockedOrder.id, transactionId: razorpay_order_id },
@@ -444,7 +446,7 @@ const verifyRazorpayPayment = async (userId, orderId, paymentData) => {
         
         if (payment) {
             await payment.update({ 
-                status: 'completed',
+                status: 'paid_online',
                 transactionId: razorpay_payment_id, // Link to actual payment ID
                 metadata: { razorpay_order_id }
             }, { transaction: t });
@@ -458,7 +460,7 @@ const verifyRazorpayPayment = async (userId, orderId, paymentData) => {
                     entity: ENTITIES.PAYMENT,
                     entityId: payment?.id || razorpay_payment_id,
                     changes: {
-                        orderStatus: { before: previousOrderStatus, after: 'paid' },
+                        orderStatus: { before: previousOrderStatus, after: lockedOrder.status },
                         paymentId: razorpay_payment_id,
                     },
                 }, t);
@@ -491,8 +493,8 @@ const markOrderPaid = async ({ orderId, provider, transactionId, metadata = {} }
         }
 
         const previousOrderStatus = lockedOrder.status;
-        if (lockedOrder.status === 'pending_payment') {
-            await lockedOrder.update({ status: 'paid' }, { transaction: t });
+        if (lockedOrder.status === 'confirmed' || lockedOrder.status === 'on_hold') {
+            await lockedOrder.update({ status: 'processing' }, { transaction: t });
         }
 
         const payment = await Payment.findOne({
@@ -501,9 +503,9 @@ const markOrderPaid = async ({ orderId, provider, transactionId, metadata = {} }
             lock: t.LOCK.UPDATE,
         });
 
-        if (payment && payment.status !== 'completed') {
+        if (payment && payment.status !== 'paid_online') {
             await payment.update({
-                status: 'completed',
+                status: 'paid_online',
                 transactionId: transactionId || payment.transactionId,
                 metadata: {
                     ...(payment.metadata || {}),
@@ -707,8 +709,8 @@ const handleWebhook = async (payload, signature) => {
                 if (!orderId) return;
 
                 const order = await Order.findByPk(orderId, { transaction: t, lock: t.LOCK.UPDATE });
-                if (order && order.status === 'pending_payment') {
-                    await order.update({ status: 'paid' }, { transaction: t });
+                if (order && (order.status === 'confirmed' || order.status === 'on_hold')) {
+                    await order.update({ status: 'processing' }, { transaction: t });
                 }
 
                 const payment = await Payment.findOne({
@@ -716,9 +718,9 @@ const handleWebhook = async (payload, signature) => {
                     transaction: t,
                     lock: t.LOCK.UPDATE,
                 });
-                if (payment && payment.status !== 'completed') {
+                if (payment && payment.status !== 'paid_online') {
                     await payment.update({
-                        status: 'completed',
+                        status: 'paid_online',
                         transactionId: paymentEntity.id,
                     }, { transaction: t });
                 }
@@ -737,8 +739,7 @@ const handleWebhook = async (payload, signature) => {
 
 /**
  * Confirms that cash was collected for a COD order (admin action).
- * Transitions order: pending_cod / processing → paid
- * Transitions payment: pending → cod_collected
+ * Transitions payment: pending_cod → paid_cod after delivery.
  */
 const confirmCodPayment = async (actingUserId, orderId) => {
     return sequelize.transaction(async (t) => {
@@ -751,16 +752,23 @@ const confirmCodPayment = async (actingUserId, orderId) => {
         if (order.paymentMethod !== 'cod') {
             throw new AppError('VALIDATION_ERROR', 400, 'This order is not a COD order');
         }
-        if (!['pending_cod', 'processing'].includes(order.status)) {
+        if (!['processing', 'ready_for_shipment'].includes(order.status)) {
             throw new AppError(
                 'VALIDATION_ERROR',
                 400,
                 `Cannot confirm COD collection for a ${order.status} order`
             );
         }
+        const shipments = await Shipment.findAll({
+            where: { orderId },
+            attributes: ['status'],
+            transaction: t,
+        });
+        if (shipments.length === 0 || !shipments.every((shipment) => shipment.status === 'delivered')) {
+            throw new AppError('VALIDATION_ERROR', 400, 'COD can be collected only after all shipments are delivered');
+        }
 
         const previousStatus = order.status;
-        await order.update({ status: 'paid' }, { transaction: t });
 
         const payment = await Payment.findOne({
             where: { orderId, provider: 'cod' },
@@ -769,8 +777,11 @@ const confirmCodPayment = async (actingUserId, orderId) => {
         });
 
         if (payment) {
+            if (!['pending_cod', 'pending'].includes(payment.status)) {
+                throw new AppError('VALIDATION_ERROR', 400, `Cannot confirm COD from ${payment.status} payment state`);
+            }
             await payment.update({
-                status: 'cod_collected',
+                status: 'paid_cod',
                 metadata: {
                     ...(payment.metadata || {}),
                     confirmedBy: actingUserId,
@@ -787,8 +798,8 @@ const confirmCodPayment = async (actingUserId, orderId) => {
                     entity: ENTITIES.PAYMENT,
                     entityId: payment?.id || orderId,
                     changes: {
-                        orderStatus: { before: previousStatus, after: 'paid' },
-                        paymentStatus: { before: 'pending', after: 'cod_collected' },
+                        orderStatus: { before: previousStatus, after: order.status },
+                        paymentStatus: { before: 'pending_cod', after: 'paid_cod' },
                     },
                 }, t);
             }
@@ -796,7 +807,7 @@ const confirmCodPayment = async (actingUserId, orderId) => {
             logger.error('COD confirmation audit log failed', { actingUserId, orderId, errorMessage: err.message });
         }
 
-        return { success: true, orderId, status: 'paid' };
+        return { success: true, orderId, status: order.status };
     });
 };
 

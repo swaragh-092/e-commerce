@@ -1,0 +1,52 @@
+{
+  "defaultStatus": "pending_payment",
+  "statuses": [
+    { "key": "pending_payment", "label": "Pending Payment", "muiColor": "warning" },
+    { "key": "pending_cod", "label": "Pending COD", "muiColor": "warning" },
+    { "key": "paid", "label": "Paid", "muiColor": "info" },
+    { "key": "processing", "label": "Processing", "muiColor": "info" },
+    { "key": "partially_shipped", "label": "Partially Shipped", "muiColor": "secondary" },
+    { "key": "shipped", "label": "Shipped", "muiColor": "primary" },
+    { "key": "delivered", "label": "Delivered", "muiColor": "success" },
+    { "key": "rto", "label": "RTO", "muiColor": "error" },
+    { "key": "returned", "label": "Returned", "muiColor": "default" },
+    { "key": "cancelled", "label": "Cancelled", "muiColor": "error" },
+    { "key": "refunded", "label": "Refunded", "muiColor": "default" }
+  ],
+  "transitions": {
+    "pending_payment": ["paid", "cancelled"],
+    "pending_cod": ["paid", "processing", "cancelled"],
+    "paid": ["processing", "partially_shipped", "shipped", "cancelled", "refunded"],
+    "processing": ["partially_shipped", "shipped", "cancelled", "refunded"],
+    "partially_shipped": ["shipped", "refunded", "rto"],
+    "shipped": ["delivered", "refunded", "rto"],
+    "delivered": ["refunded", "returned"],
+    "rto": ["refunded"],
+    "returned": ["refunded"],
+    "cancelled": [],
+    "refunded": []
+  },
+  "customerCancelableStatuses": ["pending_payment", "pending_cod", "processing"],
+  "adminRefundableStatuses": ["paid", "processing", "partially_shipped", "shipped", "delivered", "rto", "returned"],
+  "adminFulfillableStatuses": ["paid", "pending_cod", "processing", "partially_shipped"],
+  "adminSummaryGroups": [
+    {
+      "key": "pendingPayment",
+      "label": "Pending Payment",
+      "statuses": ["pending_payment", "pending_cod"],
+      "tone": "warning"
+    },
+    {
+      "key": "inTransit",
+      "label": "Processing / Shipped",
+      "statuses": ["processing", "partially_shipped", "shipped"],
+      "tone": "default"
+    },
+    {
+      "key": "issues",
+      "label": "Issues & Returns",
+      "statuses": ["cancelled", "refunded", "rto", "returned"],
+      "tone": "error"
+    }
+  ]
+}
