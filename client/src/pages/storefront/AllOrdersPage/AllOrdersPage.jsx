@@ -502,7 +502,7 @@ const AllOrdersPage = () => {
             };
 
             const res = await orderService.getMyOrders(params);
-            let fetched = res.data || [];
+            let fetched = res.data?.rows || res.data || [];
 
             // Client-side date filter (time filter applied locally)
             const { from, to, olderThan } = getDateRange(selectedTimeFilter);

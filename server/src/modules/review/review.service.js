@@ -172,7 +172,7 @@ const list = async (slug, { page, limit, status, search }) => {
     limit: lmt,
     offset,
     include,
-    subQuery: false,
+    subQuery: !!search,
     order: [['createdAt', 'DESC']]
   });
 
@@ -184,8 +184,8 @@ const list = async (slug, { page, limit, status, search }) => {
 
     const statusCounts = await Review.findAll({
       where: countWhere,
-      include,
-      attributes: ['status', [sequelize.fn('COUNT', sequelize.col('Review.id')), 'count']],
+      include: include.map(inc => ({ ...inc, attributes: [] })),
+      attributes: ['status', [sequelize.fn('COUNT', sequelize.fn('DISTINCT', sequelize.col('Review.id'))), 'count']],
       group: ['status'],
       raw: true
     });

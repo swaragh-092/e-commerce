@@ -712,9 +712,8 @@ const getOrders = async (userId, isAdmin, page = 1, limit = 20, filters = {}) =>
     const normalizedStatus = typeof filters.status === 'string' ? filters.status.trim() : '';
     const normalizedSearch = typeof filters.search === 'string' ? filters.search.trim() : '';
     const productId = filters.productId;
-    if (productId) {
-        where['$items.product_id$'] = productId;
-    }
+    // We'll apply productId filter inside the include to stay subQuery-safe
+
 
     // if (normalizedStatus) {
     //     where.status = normalizedStatus;
@@ -745,11 +744,12 @@ const getOrders = async (userId, isAdmin, page = 1, limit = 20, filters = {}) =>
     include.push({
         model: OrderItem,
         as: 'items',
-        required: false,
+        required: !!productId,
+        where: productId ? { productId } : undefined,
         include: [
             {
                 model: Product,
-                as: 'product',          // adjust if your association alias differs
+                as: 'product',
                 attributes: ['id', 'name'],
                 required: false,
             },
@@ -781,7 +781,9 @@ const getOrders = async (userId, isAdmin, page = 1, limit = 20, filters = {}) =>
         offset,
         order: [['createdAt', 'DESC']],
         distinct: true,
-        subQuery: false,
+        // Only use subQuery: false if we have a search that joins User or items, 
+        // as Sequelize root 'where' with '$' syntax requires it.
+        subQuery: !!normalizedSearch,
     });
 
     let counts = {};
@@ -789,10 +791,23 @@ const getOrders = async (userId, isAdmin, page = 1, limit = 20, filters = {}) =>
         const countWhere = { ...where };
         delete countWhere.status;
 
+        // Ensure we include items if productId filter is active or search is active
+        const countInclude = (normalizedSearch ? include : [])
+            .map(inc => ({ ...inc, attributes: [] }));
+        if (productId && !countInclude.some(inc => inc.as === 'items')) {
+            countInclude.push({
+                model: OrderItem,
+                as: 'items',
+                attributes: [],
+                required: true,
+                include: [{ model: Product, as: 'product', attributes: [] }]
+            });
+        }
+
         const statusCounts = await Order.findAll({
             where: countWhere,
-            include: searchClauses && searchClauses.length > 0 ? include : [],
-            attributes: ['status', [sequelize.fn('COUNT', sequelize.col('Order.id')), 'count']],
+            include: countInclude,
+            attributes: ['status', [sequelize.fn('COUNT', sequelize.fn('DISTINCT', sequelize.col('Order.id'))), 'count']],
             group: ['status'],
             raw: true
         });

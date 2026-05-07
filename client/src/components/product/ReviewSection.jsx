@@ -38,10 +38,13 @@ const ReviewSection = ({ slug, productId }) => {
         }
         try {
             const res = await reviewService.list(slug, { page: pageNum, limit: 10 });
+            const rawData = res.data || [];
+            const newReviews = Array.isArray(rawData) ? rawData : (rawData.rows || []);
+
             if (pageNum === 1) {
-                setReviews(res.data || []);
+                setReviews(newReviews);
             } else {
-                setReviews(prev => [...prev, ...(res.data || [])]);
+                setReviews(prev => [...prev, ...newReviews]);
             }
             const totalPages = res.meta?.totalPages || 1;
             setHasMore(pageNum < totalPages);
@@ -69,7 +72,9 @@ const ReviewSection = ({ slug, productId }) => {
         // even if it's beyond the last 50 generic orders.
         orderService.getMyOrders({ productId, status: 'delivered', limit: 1 })
             .then((res) => {
-                const orders = res.data || [];
+                const responseData = res.data || {};
+                const orders = Array.isArray(responseData) ? responseData : (responseData.rows || []);
+                
                 if (orders.length > 0) {
                     const order = orders[0];
                     setFormData(prev => ({ ...prev, orderId: order.id }));

@@ -316,17 +316,19 @@ exports.getProducts = async (filters, page, limit, isAdmin = false) => {
 
     // Use a simplified include that doesn't duplicate the primary key if not needed, 
     // but we need to include categories if we filter by them
-    const countInclude = include.map(inc => {
-      if (inc.model === Category) {
-        return { ...inc, attributes: [] };
-      }
-      return inc;
-    });
+    // For status counts, we only need to include categories if we are filtering by them
+    const countInclude = include
+      .filter(inc => inc.as === 'categories')
+      .map(inc => ({ 
+        ...inc, 
+        attributes: [],
+        through: { attributes: [] } // Essential for belongsToMany junction tables
+      }));
 
     const statusCounts = await Product.findAll({
       where: countWhere,
       include: countInclude,
-      attributes: ['status', [Sequelize.fn('COUNT', Sequelize.col('Product.id')), 'count']],
+      attributes: ['status', [Sequelize.fn('COUNT', Sequelize.fn('DISTINCT', Sequelize.col('Product.id'))), 'count']],
       group: ['status'],
       raw: true
     });
