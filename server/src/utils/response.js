@@ -42,9 +42,9 @@ const error = (res, message = 'Error', statusCode = 400, code = 'BAD_REQUEST', d
  * @param {number} limit - Page size
  * @param {string} message - Optional message
  */
-const paginated = (res, rows, count, page, limit, message = 'Success') => {
+const paginated = (res, rows, count, page, limit, message = 'Success', extra = null) => {
     const totalPages = Math.ceil(count / limit);
-    return res.status(200).json({
+    const response = {
         success: true,
         data: rows,
         message,
@@ -54,7 +54,16 @@ const paginated = (res, rows, count, page, limit, message = 'Success') => {
             totalPages,
             limit: Number(limit),
         },
-    });
+    };
+
+    if (extra) {
+        response.data = {
+            rows,
+            ...extra
+        };
+    }
+
+    return res.status(200).json(response);
 };
 
 module.exports = { success, error, paginated };

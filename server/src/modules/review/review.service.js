@@ -10,26 +10,47 @@ const { sanitizePlainText } = require('../../middleware/sanitize.middleware');
 const SettingsService = require('../settings/settings.service');
 const { ACTIONS, ENTITIES } = require('../../config/constants');
 
+const activeRefreshes = new Map();
+
 /**
  * F-13: Recomputes and stores avg_rating + review_count on the product row.
- * Should be called (outside any long transaction) after a review is created
- * or its status is changed.
+ * Uses a debounce/batching mechanism to prevent redundant queries during bulk moderation.
  */
 const refreshProductRatingCache = async (productId) => {
-    const result = await Review.findOne({
-        where: { productId, status: 'approved' },
-        attributes: [
-            [sequelize.fn('AVG', sequelize.col('rating')), 'avgRating'],
-            [sequelize.fn('COUNT', sequelize.col('id')), 'reviewCount'],
-        ],
-        raw: true,
+    if (activeRefreshes.has(productId)) {
+        return activeRefreshes.get(productId);
+    }
+
+    const promise = new Promise((resolve) => {
+        setTimeout(async () => {
+            activeRefreshes.delete(productId);
+            try {
+                const result = await Review.findOne({
+                    where: { productId, status: 'approved' },
+                    attributes: [
+                        [sequelize.fn('AVG', sequelize.col('rating')), 'avgRating'],
+                        [sequelize.fn('COUNT', sequelize.col('id')), 'reviewCount'],
+                    ],
+                    raw: true,
+                });
+                const avgRating = result && result.avgRating ? parseFloat(parseFloat(result.avgRating).toFixed(2)) : null;
+                const reviewCount = result ? parseInt(result.reviewCount, 10) : 0;
+                await Product.update({ avgRating, reviewCount }, { where: { id: productId } });
+            } catch (err) {
+                logger.error('Error refreshing product rating cache', { productId, error: err.message });
+            } finally {
+                resolve();
+            }
+        }, 500); // 500ms batching window
     });
-    const avgRating = result && result.avgRating ? parseFloat(parseFloat(result.avgRating).toFixed(2)) : null;
-    const reviewCount = result ? parseInt(result.reviewCount, 10) : 0;
-    await Product.update({ avgRating, reviewCount }, { where: { id: productId } });
+
+    activeRefreshes.set(productId, promise);
+    return promise;
 };
 
 const create = async (userId, slug, payload) => {
+  const { features } = await SettingsService.getFeatures();
+  
   const review = await sequelize.transaction(async (t) => {
     const product = await Product.findOne({ where: { slug }, transaction: t });
     if (!product) throw new AppError('NOT_FOUND', 404, 'Product not found');
@@ -70,7 +91,6 @@ const create = async (userId, slug, payload) => {
     }
 
     // Enforce purchase requirement if enabled
-    const { features } = await SettingsService.getFeatures();
     if (features.requirePurchaseForReview && !isVerifiedPurchase) {
         throw new AppError('FORBIDDEN', 403, 'You must purchase this product and have it delivered before leaving a review');
     }
@@ -91,6 +111,7 @@ const create = async (userId, slug, payload) => {
   });
 
   // Audit log outside transaction
+
   try {
     if (AuditService && AuditService.log) {
       await AuditService.log({
@@ -115,7 +136,7 @@ const create = async (userId, slug, payload) => {
   return review;
 };
 
-const list = async (slug, { page, limit, status }) => {
+const list = async (slug, { page, limit, status, search }) => {
   let where = {};
   
   if (slug) {
@@ -128,13 +149,58 @@ const list = async (slug, { page, limit, status }) => {
   
   if (status) where.status = status;
 
-  return Review.findAndCountAll({
+  let include = [
+    { model: User, attributes: ['id', 'firstName', 'lastName'] },
+    { model: Product, attributes: ['id', 'name'] }
+  ];
+
+  if (search && !slug) {
+    const searchEscaped = search.replace(/[%_]/g, '\\$&');
+    where = {
+      ...where,
+      [Op.or]: [
+        { '$User.firstName$': { [Op.iLike]: `%${searchEscaped}%` } },
+        { '$User.lastName$': { [Op.iLike]: `%${searchEscaped}%` } },
+        { '$Product.name$': { [Op.iLike]: `%${searchEscaped}%` } },
+        { title: { [Op.iLike]: `%${searchEscaped}%` } },
+      ]
+    };
+  }
+
+  const result = await Review.findAndCountAll({
     where,
     limit: lmt,
     offset,
-    include: [{ model: User, attributes: ['id', 'firstName', 'lastName'] }],
+    include,
+    subQuery: false,
     order: [['createdAt', 'DESC']]
   });
+
+  // If no slug, it's likely an admin list, so let's provide status counts
+  let counts = {};
+  if (!slug) {
+    const countWhere = { ...where };
+    delete countWhere.status;
+
+    const statusCounts = await Review.findAll({
+      where: countWhere,
+      include,
+      attributes: ['status', [sequelize.fn('COUNT', sequelize.col('Review.id')), 'count']],
+      group: ['status'],
+      raw: true
+    });
+    counts = statusCounts.reduce((acc, curr) => {
+      acc[curr.status] = parseInt(curr.count, 10);
+      return acc;
+    }, { pending: 0, approved: 0, rejected: 0 });
+    counts.total = Object.values(counts).reduce((a, b) => a + b, 0);
+  }
+
+  return {
+    rows: result.rows,
+    count: result.count,
+    counts
+  };
 };
 
 const moderate = async (id, status, adminId) => {

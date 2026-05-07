@@ -3,6 +3,7 @@ import AttachMoneyIcon from '@mui/icons-material/AttachMoney';
 import ShoppingCartIcon from '@mui/icons-material/ShoppingCart';
 import PeopleIcon from '@mui/icons-material/People';
 import InventoryIcon from '@mui/icons-material/Inventory';
+import RateReviewIcon from '@mui/icons-material/RateReview';
 import { useNavigate } from 'react-router-dom';
 import StatCard from '../StatCard';
 import { checkBool } from './dashboardUtils';
@@ -14,6 +15,7 @@ const KpiCardsWidget = ({ stats, loading, settings, formatPrice, spacing, hasAny
   const canViewOrders = typeof hasAnyPermission === 'function' ? hasAnyPermission([PERMISSIONS.ORDERS_READ]) : true;
   const canViewCustomers = typeof hasAnyPermission === 'function' ? hasAnyPermission([PERMISSIONS.CUSTOMERS_READ]) : true;
   const canViewProducts = typeof hasAnyPermission === 'function' ? hasAnyPermission([PERMISSIONS.PRODUCTS_READ]) : true;
+  const canViewReviews = typeof hasAnyPermission === 'function' ? hasAnyPermission([PERMISSIONS.REVIEWS_READ]) : true;
 
   const cards = [
     showStatCards && canViewOrders && checkBool(settings['dashboard.showRevenueCard']) && {
@@ -45,6 +47,13 @@ const KpiCardsWidget = ({ stats, loading, settings, formatPrice, spacing, hasAny
       color: 'warning.main',
       // Opens products page pre-filtered to published
       onClick: () => navigate('/admin/products?status=published'),
+    },
+    showStatCards && canViewReviews && stats?.totalReviewsCount !== undefined && {
+      title: 'Total Reviews',
+      value: stats?.totalReviewsCount ?? 0,
+      icon: <RateReviewIcon fontSize="inherit" />,
+      color: 'secondary.main',
+      onClick: () => navigate('/admin/reviews'),
     },
   ].filter(Boolean);
 

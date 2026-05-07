@@ -3,7 +3,7 @@
 const { Op, fn, col, literal } = require('sequelize');
 const slugify = require('slugify');
 const db = require('../index');
-const { Order, User, Product, Role, Permission } = db;
+const { Order, User, Product, Role, Permission, Review } = db;
 const AppError = require('../../utils/AppError');
 const AuditService = require('../audit/audit.service');
 const { ACTIONS, ENTITIES, ROLES } = require('../../config/constants');
@@ -78,6 +78,8 @@ const getStats = async () => {
     productCount,
     pendingOrders,
     lowStockCount,
+    pendingReviewsCount,
+    totalReviewsCount,
   ] = await Promise.all([
     // Total revenue from paid/processing/shipped/delivered orders
     Order.findOne({
@@ -92,6 +94,8 @@ const getStats = async () => {
     Product.count({
       where: literal('"Product".quantity - "Product".reserved_qty < 10'),
     }),
+    Review.count({ where: { status: 'pending' } }),
+    Review.count(),
   ]);
 
   return {
@@ -101,6 +105,8 @@ const getStats = async () => {
     productCount,
     pendingOrders,
     lowStockCount,
+    pendingReviewsCount,
+    totalReviewsCount,
   };
 };
 

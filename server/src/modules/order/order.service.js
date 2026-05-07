@@ -774,7 +774,7 @@ const getOrders = async (userId, isAdmin, page = 1, limit = 20, filters = {}) =>
     }
     
 
-    return Order.findAndCountAll({
+    const result = await Order.findAndCountAll({
         where,
         include,
         limit: lmt,
@@ -783,6 +783,30 @@ const getOrders = async (userId, isAdmin, page = 1, limit = 20, filters = {}) =>
         distinct: true,
         subQuery: false,
     });
+
+    let counts = {};
+    if (isAdmin) {
+        const countWhere = { ...where };
+        delete countWhere.status;
+
+        const statusCounts = await Order.findAll({
+            where: countWhere,
+            include: searchClauses && searchClauses.length > 0 ? include : [],
+            attributes: ['status', [sequelize.fn('COUNT', sequelize.col('Order.id')), 'count']],
+            group: ['status'],
+            raw: true
+        });
+        counts = statusCounts.reduce((acc, curr) => {
+            acc[curr.status] = parseInt(curr.count, 10);
+            return acc;
+        }, {});
+    }
+
+    return {
+        rows: result.rows,
+        count: result.count,
+        counts
+    };
 };
 
 const getOrderById = async (id, userId, isAdmin) => {

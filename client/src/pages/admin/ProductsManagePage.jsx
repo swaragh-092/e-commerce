@@ -35,6 +35,66 @@ const toDateTimeLocal = (value) => {
 };
 const toIsoOrNull = (value) => (value ? new Date(value).toISOString() : null);
 
+const SummaryCard = ({ label, value, tone = 'default' }) => (
+  <Paper
+    elevation={0}
+    sx={{
+      p: 2,
+      minWidth: 170,
+      flex: '1 1 0',
+      borderRadius: 3,
+      border: '1px solid',
+      borderColor: tone === 'warning' ? 'warning.light' : tone === 'error' ? 'error.light' : 'divider',
+      bgcolor: 'background.paper',
+    }}
+  >
+    <Typography variant="body2" color="text.secondary" sx={{ mb: 0.5 }}>
+      {label}
+    </Typography>
+    <Typography variant="h6" fontWeight={700}>
+      {value}
+    </Typography>
+  </Paper>
+);
+
+const ClickableSummaryCard = ({ label, value, tone = 'default', onClick, active }) => (
+  <Paper
+    elevation={0}
+    onClick={onClick}
+    onKeyDown={(e) => {
+      if (onClick && (e.key === 'Enter' || e.key === ' ')) {
+        e.preventDefault();
+        onClick(e);
+      }
+    }}
+    role={onClick ? "button" : undefined}
+    tabIndex={onClick ? 0 : undefined}
+    aria-pressed={onClick ? active : undefined}
+    sx={{
+      p: 2,
+      minWidth: 170,
+      flex: '1 1 0',
+      borderRadius: 3,
+      border: '1px solid',
+      borderColor: active ? 'primary.main' : 'divider',
+      bgcolor: active ? 'action.hover' : 'background.paper',
+      cursor: onClick ? 'pointer' : 'default',
+      transition: 'all 0.2s',
+      '&:hover': onClick ? {
+        borderColor: 'primary.main',
+        bgcolor: 'action.hover',
+      } : {},
+    }}
+  >
+    <Typography variant="body2" color="text.secondary" sx={{ mb: 0.5 }}>
+      {label}
+    </Typography>
+    <Typography variant="h6" fontWeight={700} color={tone === 'error' ? 'error.main' : tone === 'warning' ? 'warning.main' : 'text.primary'}>
+      {value}
+    </Typography>
+  </Paper>
+);
+
 const ProductsManagePage = () => {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
@@ -104,6 +164,7 @@ const ProductsManagePage = () => {
     saleEndAt: '',
     saving: false,
   });
+  const [counts, setCounts] = useState({ published: 0, draft: 0 });
 
   // Step amount for the stock stepper — persists between quick-edit opens
   const [editStepAmount, setEditStepAmount] = useState(1);
@@ -235,6 +296,9 @@ const ProductsManagePage = () => {
       .then((res) => {
         setRows(res?.data || []);
         setTotal(res?.meta?.total || 0);
+        if (res?.counts) {
+          setCounts(res.counts);
+        }
       })
       .catch(console.error)
       .finally(() => setLoading(false));
@@ -632,7 +696,49 @@ const ProductsManagePage = () => {
 
   return (
     <Box>
-      {/* ── Header ── */}
+      <Stack direction={{ xs: 'column', md: 'row' }} spacing={2} mb={3}>
+        <ClickableSummaryCard 
+          label="Total Products" 
+          value={total} 
+          active={status === '' && !lowStockOnly}
+          onClick={() => {
+            setStatus('');
+            setLowStockOnly(false);
+            setPaginationModel(p => ({ ...p, page: 0 }));
+          }}
+        />
+        <ClickableSummaryCard 
+          label="Published" 
+          value={counts.published || 0} 
+          tone="success"
+          active={status === 'published' && !lowStockOnly}
+          onClick={() => {
+            setStatus('published');
+            setLowStockOnly(false);
+            setPaginationModel(p => ({ ...p, page: 0 }));
+          }}
+        />
+        <ClickableSummaryCard 
+          label="Drafts" 
+          value={counts.draft || 0} 
+          active={status === 'draft' && !lowStockOnly}
+          onClick={() => {
+            setStatus('draft');
+            setLowStockOnly(false);
+            setPaginationModel(p => ({ ...p, page: 0 }));
+          }}
+        />
+        <ClickableSummaryCard 
+          label="Low Stock" 
+          value="≤ 10" 
+          tone="warning"
+          active={lowStockOnly}
+          onClick={() => {
+            setLowStockOnly(true);
+            setPaginationModel(p => ({ ...p, page: 0 }));
+          }}
+        />
+      </Stack>
       <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 3 }}>
         <Box>
           <Typography variant="h5" fontWeight={700}>Manage Products</Typography>

@@ -309,9 +309,42 @@ exports.getProducts = async (filters, page, limit, isAdmin = false) => {
     distinct: true,
   });
 
+  let counts = {};
+  if (isAdmin) {
+    const countWhere = { ...where };
+    delete countWhere.status;
+
+    // Use a simplified include that doesn't duplicate the primary key if not needed, 
+    // but we need to include categories if we filter by them
+    const countInclude = include.map(inc => {
+      if (inc.model === Category) {
+        return { ...inc, attributes: [] };
+      }
+      return inc;
+    });
+
+    const statusCounts = await Product.findAll({
+      where: countWhere,
+      include: countInclude,
+      attributes: ['status', [Sequelize.fn('COUNT', Sequelize.col('Product.id')), 'count']],
+      group: ['status'],
+      raw: true
+    });
+    counts = statusCounts.reduce((acc, curr) => {
+      acc[curr.status] = parseInt(curr.count, 10);
+      return acc;
+    }, {});
+  }
+
   const labelPresets = await getLabelPresets();
   const { features } = await SettingsService.getFeatures();
-  return getPagingData(rows.map((row) => serializeProductPricing(row, { adminView: isAdmin, features }, labelPresets)), count, page, queryLimit);
+  const serializedRows = rows.map((row) => serializeProductPricing(row, { adminView: isAdmin, features }, labelPresets));
+  
+  const pagingData = getPagingData(serializedRows, count, page, queryLimit);
+  if (isAdmin) {
+    pagingData.counts = counts;
+  }
+  return pagingData;
 };
 
 exports.getProductBySlug = async (slug, { adminView = false } = {}) => {

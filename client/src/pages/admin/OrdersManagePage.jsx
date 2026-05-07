@@ -62,6 +62,44 @@ const SummaryCard = ({ label, value, tone = 'default' }) => (
   </Paper>
 );
 
+const ClickableSummaryCard = ({ label, value, tone = 'default', onClick, active }) => (
+  <Paper
+    elevation={0}
+    onClick={onClick}
+    onKeyDown={(e) => {
+      if (onClick && (e.key === 'Enter' || e.key === ' ')) {
+        e.preventDefault();
+        onClick(e);
+      }
+    }}
+    role={onClick ? "button" : undefined}
+    tabIndex={onClick ? 0 : undefined}
+    aria-pressed={onClick ? active : undefined}
+    sx={{
+      p: 2,
+      minWidth: 170,
+      flex: '1 1 0',
+      borderRadius: 3,
+      border: '1px solid',
+      borderColor: active ? 'primary.main' : 'divider',
+      bgcolor: active ? 'action.hover' : 'background.paper',
+      cursor: onClick ? 'pointer' : 'default',
+      transition: 'all 0.2s',
+      '&:hover': onClick ? {
+        borderColor: 'primary.main',
+        bgcolor: 'action.hover',
+      } : {},
+    }}
+  >
+    <Typography variant="body2" color="text.secondary" sx={{ mb: 0.5 }}>
+      {label}
+    </Typography>
+    <Typography variant="h6" fontWeight={700} color={tone === 'error' ? 'error.main' : tone === 'warning' ? 'warning.main' : 'text.primary'}>
+      {value}
+    </Typography>
+  </Paper>
+);
+
 const OrdersManagePage = () => {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
@@ -80,6 +118,8 @@ const OrdersManagePage = () => {
   const [status, setStatus] = useState(() => searchParams.get('status') || '');
   const [searchInput, setSearchInput] = useState('');
   const [search, setSearch] = useState('');
+  const [counts, setCounts] = useState({});
+  const [pageRevenue, setPageRevenue] = useState(0);
 
   useEffect(() => {
     const timer = window.setTimeout(() => setSearch(searchInput.trim()), 350);
@@ -96,9 +136,15 @@ const OrdersManagePage = () => {
       ...(search && { search }),
     })
       .then((res) => {
-        const data = res.data;
-        setOrders(data.data?.rows || data.data || []);
-        setTotal(data.meta?.total || 0);
+        const responseData = res.data.data;
+        setOrders(responseData.rows || []);
+        setTotal(res.data.meta?.total || 0);
+        if (responseData.counts) {
+          setCounts(responseData.counts);
+        }
+        // Calculate revenue from visible rows for now, or update backend to return total revenue if needed
+        const rev = (responseData.rows || []).reduce((sum, order) => sum + Number(order.total || 0), 0);
+        setPageRevenue(rev);
       })
       .catch((fetchError) => {
         console.error(fetchError);
@@ -115,15 +161,13 @@ const OrdersManagePage = () => {
     fetchOrders();
   }, [paginationModel, status, search]);
 
-  const summary = useMemo(() => {
-    const revenue = orders.reduce((sum, order) => sum + Number(order.total || 0), 0);
-    const groups = ORDER_STATUS_SUMMARY_GROUPS.map((group) => ({
-      ...group,
-      count: countOrdersByStatuses(orders, group.statuses || []),
-    }));
-
-    return { revenue, groups };
-  }, [orders]);
+  const summaryGroups = useMemo(() => {
+    return ORDER_STATUS_SUMMARY_GROUPS.map((group) => {
+      // Sum counts for all statuses in the group from the backend counts
+      const count = (group.statuses || []).reduce((sum, s) => sum + (counts[s] || 0), 0);
+      return { ...group, count };
+    });
+  }, [counts]);
 
   const handleQuickStatusUpdate = async (order, nextStatus) => {
     if (!order || nextStatus === order.status) return;
@@ -352,11 +396,23 @@ const OrdersManagePage = () => {
       </Typography>
 
       <Stack direction={{ xs: 'column', md: 'row' }} spacing={2} mb={3}>
-        <SummaryCard label="Orders in current view" value={total} />
-        {summary.groups.map((group) => (
-          <SummaryCard key={group.key} label={group.label} value={group.count} tone={group.tone} />
+        <ClickableSummaryCard 
+          label="Total Orders" 
+          value={total} 
+          active={status === ''}
+          onClick={() => setStatus('')}
+        />
+        {summaryGroups.map((group) => (
+          <ClickableSummaryCard 
+            key={group.key} 
+            label={group.label} 
+            value={group.count} 
+            tone={group.tone} 
+            active={status && group.statuses && group.statuses.slice().sort().join(',') === status.split(',').sort().join(',')}
+            onClick={() => setStatus(group.statuses?.join(',') || '')}
+          />
         ))}
-        <SummaryCard label="Visible revenue" value={formatPrice(summary.revenue)} />
+        <SummaryCard label="Page Revenue" value={formatPrice(pageRevenue)} />
       </Stack>
 
       <Paper
