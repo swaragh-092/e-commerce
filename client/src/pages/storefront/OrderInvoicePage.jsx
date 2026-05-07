@@ -3,7 +3,7 @@ import { useParams, useNavigate } from 'react-router-dom';
 import { Box, Typography, Button, Divider, CircularProgress, Alert } from '@mui/material';
 import PrintIcon from '@mui/icons-material/Print';
 import ArrowBackIcon from '@mui/icons-material/ArrowBack';
-import { userService } from '../../services/userService';
+import { orderService } from '../../services/orderService';
 import { useCurrency, useFeature } from '../../hooks/useSettings';
 import { SettingsContext } from '../../context/ThemeContext';
 
@@ -38,9 +38,9 @@ const StorefrontOrderInvoicePage = () => {
   }, [ordersEnabled, navigate]);
 
   useEffect(() => {
-    userService.getMyOrderById(id)
+    orderService.getMyOrderById(id)
       .then((res) => {
-        // userService.getMyOrderById returns the data directly, not wrapped in axio's `data.data` usually.
+        // orderService.getMyOrderById returns the data directly, not wrapped in axio's `data.data` usually.
         // Wait, OrderDetailPage does: setOrder(orderData || null);
         setOrder(res);
       })

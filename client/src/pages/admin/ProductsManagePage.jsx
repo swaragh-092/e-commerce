@@ -43,6 +43,9 @@ const ProductsManagePage = () => {
   const { notify } = useNotification();
   const { hasPermission } = useAuth();
   const pricingEnabled = useFeature('pricing');
+  // Stock tracking is only meaningful in ecommerce mode (cart Tier-1 feature).
+  // In catalog mode cart=false, so we hide stock column + stepper entirely.
+  const cartEnabled = useFeature('cart');
   const sales = settings?.sales || {};
   const canCreateProducts = hasPermission(PERMISSIONS.PRODUCTS_CREATE);
   const canUpdateProducts = hasPermission(PERMISSIONS.PRODUCTS_UPDATE);
@@ -101,6 +104,9 @@ const ProductsManagePage = () => {
     saleEndAt: '',
     saving: false,
   });
+
+  // Step amount for the stock stepper — persists between quick-edit opens
+  const [editStepAmount, setEditStepAmount] = useState(1);
   const openEditDialog = (row) => {
     if (!canUpdateProducts) {
       notify('You do not have permission to update products.', 'error');
@@ -135,7 +141,7 @@ const ProductsManagePage = () => {
       const payload = {
         name: editDialog.name.trim(),
         slug: editDialog.slug.trim(),
-        quantity: parseInt(editDialog.quantity, 10) || 0,
+        ...(cartEnabled && { quantity: parseInt(editDialog.quantity, 10) || 0 }),
         price: parseFloat(editDialog.price),
         status: editDialog.status,
         isEnabled: editDialog.isEnabled,
@@ -395,7 +401,7 @@ const ProductsManagePage = () => {
     editSalePriceValue < 0 ||
     editSalePriceValue >= editPriceValue
   );
-  const hasInvalidQuantity = editDialog.open && (Number.isNaN(Number(editDialog.quantity)) || Number(editDialog.quantity) < 0);
+  const hasInvalidQuantity = cartEnabled && editDialog.open && (Number.isNaN(Number(editDialog.quantity)) || Number(editDialog.quantity) < 0);
   const hasInvalidSaleDates = editDialog.open && editDialog.saleEnabled && editDialog.saleStartAt && editDialog.saleEndAt && new Date(editDialog.saleEndAt) <= new Date(editDialog.saleStartAt);
   const bulkSaleValue = Number(bulkSaleDialog.value);
   const hasInvalidBulkSale = bulkSaleDialog.mode === 'apply' && (
@@ -619,6 +625,8 @@ const ProductsManagePage = () => {
     },
   ].filter(col => {
     if (col.field === 'saleMeta' && !pricingEnabled) return false;
+    // Hide the Stock column in catalog mode — inventory is irrelevant without a cart
+    if (col.field === 'quantity' && !cartEnabled) return false;
     return true;
   });
 
@@ -878,17 +886,117 @@ const ProductsManagePage = () => {
               onChange={(e) => setEditDialog((s) => ({ ...s, slug: e.target.value.toLowerCase().replace(/[^a-z0-9-]/g, '-') }))}
               helperText="URL-friendly name (e.g. apple-iphone-15)"
             />
-            <TextField
-              label="Stock Quantity"
-              type="number"
-              size="small"
-              fullWidth
-              error={hasInvalidQuantity}
-              helperText={hasInvalidQuantity ? 'Stock cannot be negative.' : `Current stock: ${editDialog.row?.quantity ?? 0}`}
-              inputProps={{ min: 0 }}
-              value={editDialog.quantity}
-              onChange={(e) => setEditDialog((s) => ({ ...s, quantity: e.target.value }))}
-            />
+            {/* ── Stock Stepper — only in ecommerce mode (cart Tier-1 feature) ── */}
+            {cartEnabled && (
+            <Box>
+              <Stack direction="row" alignItems="center" spacing={0.5} sx={{ mb: 0.75 }}>
+                <Typography variant="caption" color="text.secondary" fontWeight={600}>
+                  Stock Quantity
+                </Typography>
+                <Typography variant="caption" color="text.secondary">—</Typography>
+                <Typography variant="caption" color="text.secondary">
+                  current:&nbsp;
+                  <Box component="span" fontWeight={700} color="text.primary">
+                    {editDialog.row?.quantity ?? 0}
+                  </Box>
+                </Typography>
+              </Stack>
+
+              {/* Decrement | Input | Increment row */}
+              <Stack direction="row" alignItems="center" spacing={1}>
+                <Tooltip title={`− ${editStepAmount}`}>
+                  <span>
+                    <IconButton
+                      size="small"
+                      color="error"
+                      onClick={() =>
+                        setEditDialog((s) => ({
+                          ...s,
+                          quantity: Math.max(0, (Number(s.quantity) || 0) - editStepAmount),
+                        }))
+                      }
+                      disabled={Number(editDialog.quantity) <= 0}
+                      sx={{
+                        border: '1px solid',
+                        borderColor: 'divider',
+                        borderRadius: 1.5,
+                        '&:hover': { borderColor: 'error.main', bgcolor: 'error.50' },
+                      }}
+                    >
+                      <RemoveCircleIcon fontSize="small" />
+                    </IconButton>
+                  </span>
+                </Tooltip>
+
+                <TextField
+                  type="number"
+                  size="small"
+                  error={hasInvalidQuantity}
+                  inputProps={{ min: 0, style: { textAlign: 'center', fontWeight: 700, fontSize: '1rem', width: 64 } }}
+                  value={editDialog.quantity}
+                  onChange={(e) => setEditDialog((s) => ({ ...s, quantity: e.target.value }))}
+                  sx={{ width: 96 }}
+                />
+
+                <Tooltip title={`+ ${editStepAmount}`}>
+                  <IconButton
+                    size="small"
+                    color="success"
+                    onClick={() =>
+                      setEditDialog((s) => ({
+                        ...s,
+                        quantity: (Number(s.quantity) || 0) + editStepAmount,
+                      }))
+                    }
+                    sx={{
+                      border: '1px solid',
+                      borderColor: 'divider',
+                      borderRadius: 1.5,
+                      '&:hover': { borderColor: 'success.main', bgcolor: 'success.50' },
+                    }}
+                  >
+                    <AddIcon fontSize="small" />
+                  </IconButton>
+                </Tooltip>
+              </Stack>
+
+              {/* Step presets row */}
+              <Stack direction="row" spacing={0.5} alignItems="center" sx={{ mt: 1, flexWrap: 'wrap', gap: 0.5 }}>
+                <Typography variant="caption" color="text.secondary" sx={{ mr: 0.25, fontWeight: 600 }}>
+                  Step:
+                </Typography>
+                {[1, 5, 10, 50, 100].map((preset) => (
+                  <Chip
+                    key={preset}
+                    label={preset}
+                    size="small"
+                    variant={editStepAmount === preset ? 'filled' : 'outlined'}
+                    color={editStepAmount === preset ? 'primary' : 'default'}
+                    onClick={() => setEditStepAmount(preset)}
+                    sx={{ cursor: 'pointer', fontWeight: 600, fontSize: '0.7rem' }}
+                  />
+                ))}
+                <TextField
+                  type="number"
+                  size="small"
+                  value={editStepAmount}
+                  onChange={(e) => {
+                    const v = parseInt(e.target.value, 10);
+                    if (!Number.isNaN(v) && v > 0) setEditStepAmount(v);
+                  }}
+                  inputProps={{ min: 1, style: { textAlign: 'center', padding: '2px 6px', fontWeight: 700 } }}
+                  sx={{ width: 62 }}
+                  placeholder="custom"
+                />
+              </Stack>
+
+              {hasInvalidQuantity && (
+                <Typography variant="caption" color="error" sx={{ display: 'block', mt: 0.5 }}>
+                  Stock cannot be negative.
+                </Typography>
+              )}
+            </Box>
+            )}
             <TextField
               label="Price"
               type="number"

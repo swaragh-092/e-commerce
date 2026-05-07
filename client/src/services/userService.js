@@ -46,26 +46,4 @@ export const userService = {
     return response.data.data;
   },
 
-  getMyOrders: async (params = {}) => {
-    const response = await api.get('/orders', { params });
-    return {
-      data: response.data.data || [],
-      meta: response.data.meta || {},
-    };
-  },
-
-  getMyOrderById: async (id) => {
-    const response = await api.get(`/orders/${id}`);
-    return response.data.data;
-  },
-
-  getMyOrderTracking: async (id) => {
-    const response = await api.get(`/orders/${id}/tracking`);
-    return response.data.data;
-  },
-
-  cancelOrder: async (id) => {
-    const response = await api.post(`/orders/${id}/cancel`);
-    return response.data;
-  },
 };

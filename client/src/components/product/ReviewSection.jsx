@@ -1,8 +1,8 @@
 import React, { useState, useEffect } from 'react';
-import { Box, Typography, Button, Rating, TextField, Divider, Avatar, List, ListItem, ListItemAvatar, ListItemText, Alert } from '@mui/material';
+import { Box, Typography, Button, Rating, TextField, Divider, Avatar, List, ListItem, ListItemAvatar, ListItemText, Alert, CircularProgress } from '@mui/material';
 import { reviewService } from '../../services/reviewService';
 import { useAuth } from '../../hooks/useAuth';
-import { getMyOrders } from '../../services/adminService';
+import { orderService } from '../../services/orderService';
 import { useFeature } from '../../hooks/useSettings';
 
 const ReviewSection = ({ slug, productId }) => {
@@ -17,13 +17,18 @@ const ReviewSection = ({ slug, productId }) => {
     const { isAuthenticated } = useAuth();
     const [submitStatus, setSubmitStatus] = useState(null);
     const [hasPurchased, setHasPurchased] = useState(false);
+    const [loading, setLoading] = useState(false);
+    const [submitting, setSubmitting] = useState(false);
 
     const fetchReviews = async () => {
+        setLoading(true);
         try {
             const res = await reviewService.list(slug, { limit: 10 });
-            setReviews(res.data || res.rows || []);
+            setReviews(res.data || []);
         } catch (e) {
             console.error('Failed to load reviews', e);
+        } finally {
+            setLoading(false);
         }
     };
 
@@ -34,19 +39,15 @@ const ReviewSection = ({ slug, productId }) => {
     // Fetch user's orders to find a verified purchase orderId for this product
     useEffect(() => {
         if (!isAuthenticated || !productId) return;
-        getMyOrders({ limit: 50 })
+        // Call backend with productId and status filter to reliably find a purchase
+        // even if it's beyond the last 50 generic orders.
+        orderService.getMyOrders({ productId, status: 'delivered', limit: 1 })
             .then((res) => {
-                const orders = res.data?.data?.rows || res.data?.data || [];
-                for (const order of orders) {
-                    // Only count delivered orders as verified purchases for review purposes
-                    if (order.status === 'delivered') {
-                        const match = order.OrderItems?.find(item => item.productId === productId);
-                        if (match) {
-                            setFormData(prev => ({ ...prev, orderId: order.id }));
-                            setHasPurchased(true);
-                            break;
-                        }
-                    }
+                const orders = res.data || [];
+                if (orders.length > 0) {
+                    const order = orders[0];
+                    setFormData(prev => ({ ...prev, orderId: order.id }));
+                    setHasPurchased(true);
                 }
             })
             .catch(() => {});
@@ -54,13 +55,23 @@ const ReviewSection = ({ slug, productId }) => {
 
     const handleSubmit = async (e) => {
         e.preventDefault();
+        
+        if (!formData.title?.trim() && !formData.body?.trim()) {
+            setSubmitStatus({ type: 'error', message: 'Please provide either a title or a review body.' });
+            return;
+        }
+
         setSubmitStatus(null);
+        setSubmitting(true);
         try {
             await reviewService.create(slug, formData);
             setSubmitStatus({ type: 'success', message: 'Review submitted. Waiting for approval.' });
             setShowForm(false);
+            fetchReviews(); // refresh reviews list
         } catch (error) {
             setSubmitStatus({ type: 'error', message: error?.response?.data?.message || 'Review submission failed' });
+        } finally {
+            setSubmitting(false);
         }
     };
 
@@ -99,16 +110,40 @@ const ReviewSection = ({ slug, productId }) => {
                         value={formData.rating}
                         onChange={(event, newValue) => setFormData({ ...formData, rating: newValue })}
                     />
-                    <TextField fullWidth margin="normal" label="Review Title" value={formData.title} onChange={e => setFormData({ ...formData, title: e.target.value })} />
-                    <TextField fullWidth margin="normal" label="Your Review" multiline rows={4} value={formData.body} onChange={e => setFormData({ ...formData, body: e.target.value })} />
-                    <Button type="submit" variant="contained" color="primary" sx={{ mt: 2 }} disabled={!formData.rating}>
-                        Submit Review
+                    <TextField 
+                        fullWidth 
+                        margin="normal" 
+                        label="Review Title" 
+                        value={formData.title} 
+                        onChange={e => setFormData({ ...formData, title: e.target.value })} 
+                        inputProps={{ maxLength: 255 }}
+                    />
+                    <TextField 
+                        fullWidth 
+                        margin="normal" 
+                        label="Your Review" 
+                        multiline 
+                        rows={4} 
+                        value={formData.body} 
+                        onChange={e => setFormData({ ...formData, body: e.target.value })} 
+                        inputProps={{ maxLength: 5000 }}
+                    />
+                    <Button 
+                        type="submit" 
+                        variant="contained" 
+                        color="primary" 
+                        sx={{ mt: 2 }} 
+                        disabled={!formData.rating || submitting}
+                    >
+                        {submitting ? 'Submitting...' : 'Submit Review'}
                     </Button>
                 </Box>
             )}
 
             <List sx={{ mt: 2 }}>
-                {reviews.length === 0 ? (
+                {loading ? (
+                    <Box display="flex" justifyContent="center" py={4}><CircularProgress size={32} /></Box>
+                ) : reviews.length === 0 ? (
                     <Typography color="text.secondary">No reviews yet. Be the first to review this product.</Typography>
                 ) : (
                     reviews.map((r) => (

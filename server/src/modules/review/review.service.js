@@ -88,6 +88,18 @@ const create = async (userId, slug, payload) => {
       status: 'pending' // waits admin moderation
     }, { transaction: t });
 
+    try {
+      if (AuditService && AuditService.log) {
+        await AuditService.log({
+          userId,
+          action: ACTIONS.CREATE,
+          entity: ENTITIES.REVIEW,
+          entityId: review.id,
+          details: { productId, rating: payload.rating }
+        }, t);
+      }
+    } catch (err) {}
+
     return review;
   });
   // Note: rating cache is NOT refreshed here because the review is still 'pending'.
@@ -146,10 +158,11 @@ const moderate = async (id, status, adminId) => {
 };
 
 const remove = async (id, adminId) => {
-  return sequelize.transaction(async (t) => {
+  const productId = await sequelize.transaction(async (t) => {
     const review = await Review.findByPk(id, { transaction: t });
     if (!review) throw new AppError('NOT_FOUND', 404, 'Review not found');
 
+    const pid = review.productId;
     await review.destroy({ transaction: t });
 
     try {
@@ -162,7 +175,12 @@ const remove = async (id, adminId) => {
         }, t);
       }
     } catch(err) {}
+
+    return pid;
   });
+
+  // Refresh the cached avg/count outside the transaction
+  await refreshProductRatingCache(productId);
 };
 
 module.exports = {

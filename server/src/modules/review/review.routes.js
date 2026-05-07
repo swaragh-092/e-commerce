@@ -18,10 +18,10 @@ router.use(featureGate('reviews'));
 router.get('/products/:slug/reviews', reviewController.list);
 
 // Admin read access for all reviews (global list)
-router.get('/reviews', authenticate, authorizePermissions(PERMISSIONS.REVIEWS_READ), reviewController.list);
+router.get('/admin/reviews', authenticate, authorizePermissions(PERMISSIONS.REVIEWS_READ), reviewController.list);
 
 // Customer post reviews
-router.post('/products/:slug/reviews', authenticate, reviewLimiter, validate(createReviewSchema), reviewController.create);
+router.post('/products/:slug/reviews', authenticate, authorizePermissions(PERMISSIONS.REVIEWS_CREATE), reviewLimiter, validate(createReviewSchema), reviewController.create);
 
 // Admin moderate reviews
 router.put('/admin/reviews/:id/moderate', authenticate, authorizePermissions(PERMISSIONS.REVIEWS_MODERATE), validate(moderateReviewSchema), reviewController.moderate);

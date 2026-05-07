@@ -711,6 +711,10 @@ const getOrders = async (userId, isAdmin, page = 1, limit = 20, filters = {}) =>
 
     const normalizedStatus = typeof filters.status === 'string' ? filters.status.trim() : '';
     const normalizedSearch = typeof filters.search === 'string' ? filters.search.trim() : '';
+    const productId = filters.productId;
+    if (productId) {
+        where['$items.product_id$'] = productId;
+    }
 
     // if (normalizedStatus) {
     //     where.status = normalizedStatus;

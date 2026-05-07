@@ -36,7 +36,7 @@ import {
 } from '@mui/icons-material';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import PageSEO from '../../../components/common/PageSEO';
-import { userService } from '../../services/userService';
+import { orderService } from '../../services/orderService';
 import { useCurrency, useFeature } from '../../hooks/useSettings';
 import { getOrderStatusColor, getOrderStatusLabel } from '../../utils/orderWorkflow';
 import { getApiErrorMessage } from '../../utils/apiErrors';
@@ -501,7 +501,7 @@ const AllOrdersPage = () => {
                 ...(selectedStatuses.length > 0 && { status: selectedStatuses.join(',') }),
             };
 
-            const res = await userService.getMyOrders(params);
+            const res = await orderService.getMyOrders(params);
             let fetched = res.data || [];
 
             // Client-side date filter (time filter applied locally)

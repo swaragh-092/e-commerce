@@ -29,7 +29,7 @@ import TimelineIcon from '@mui/icons-material/Timeline';
 import PageSEO from '../../components/common/PageSEO';
 import AppliedDiscountsSummary from '../../components/orders/AppliedDiscountsSummary';
 import { useCurrency, useFeature } from '../../hooks/useSettings';
-import { userService } from '../../services/userService';
+import { orderService } from '../../services/orderService';
 import {
   getOrderProgressSteps,
   getOrderStatusColor,
@@ -259,8 +259,8 @@ const OrderDetailPage = () => {
       setError(null);
       try {
         const [orderData, trackingData] = await Promise.all([
-          userService.getMyOrderById(id),
-          userService.getMyOrderTracking(id).catch(() => null),
+          orderService.getMyOrderById(id),
+          orderService.getMyOrderTracking(id).catch(() => null),
         ]);
         setOrder(orderData || null);
         setTracking(trackingData || null);
@@ -284,7 +284,7 @@ const OrderDetailPage = () => {
     if (!confirmed) return;
     setActionLoading(true);
     try {
-      await userService.cancelOrder(id);
+      await orderService.cancelOrder(id);
       setOrder((current) => (current ? { ...current, status: 'cancelled' } : current));
       setTracking((current) => (current ? { ...current, orderStatus: 'cancelled' } : current));
     } catch (cancelError) {
