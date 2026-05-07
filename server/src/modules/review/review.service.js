@@ -185,8 +185,11 @@ const list = async (slug, { page, limit, status, search }) => {
     const statusCounts = await Review.findAll({
       where: countWhere,
       include: include.map(inc => ({ ...inc, attributes: [] })),
-      attributes: ['status', [sequelize.fn('COUNT', sequelize.fn('DISTINCT', sequelize.col('Review.id'))), 'count']],
-      group: ['status'],
+      attributes: [
+        [sequelize.col('Review.status'), 'status'],
+        [sequelize.fn('COUNT', sequelize.fn('DISTINCT', sequelize.col('Review.id'))), 'count']
+      ],
+      group: [sequelize.col('Review.status')],
       raw: true
     });
     counts = statusCounts.reduce((acc, curr) => {

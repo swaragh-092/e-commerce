@@ -116,17 +116,7 @@ const ReviewSection = ({ slug, productId }) => {
 
             {isAuthenticated ? (
                 <>
-                    {requirePurchase && !hasPurchased ? (
-                        purchaseCheckError ? (
-                            <Alert severity="error" sx={{ mb: 2 }}>
-                                We couldn't verify your purchase history at this time. Please try again later.
-                            </Alert>
-                        ) : (
-                            <Alert severity="warning" sx={{ mb: 2 }}>
-                                Only verified purchasers can leave a review for this product.
-                            </Alert>
-                        )
-                    ) : (
+                    {hasPurchased && (
                         <Button variant="outlined" onClick={() => setShowForm(!showForm)}>
                             {showForm ? 'Cancel' : 'Write a Review'}
                         </Button>

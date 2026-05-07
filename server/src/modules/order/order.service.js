@@ -807,8 +807,11 @@ const getOrders = async (userId, isAdmin, page = 1, limit = 20, filters = {}) =>
         const statusCounts = await Order.findAll({
             where: countWhere,
             include: countInclude,
-            attributes: ['status', [sequelize.fn('COUNT', sequelize.fn('DISTINCT', sequelize.col('Order.id'))), 'count']],
-            group: ['status'],
+            attributes: [
+                [sequelize.col('Order.status'), 'status'],
+                [sequelize.fn('COUNT', sequelize.fn('DISTINCT', sequelize.col('Order.id'))), 'count']
+            ],
+            group: [sequelize.col('Order.status')],
             raw: true
         });
         counts = statusCounts.reduce((acc, curr) => {

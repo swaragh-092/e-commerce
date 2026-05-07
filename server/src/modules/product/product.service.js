@@ -328,8 +328,11 @@ exports.getProducts = async (filters, page, limit, isAdmin = false) => {
     const statusCounts = await Product.findAll({
       where: countWhere,
       include: countInclude,
-      attributes: ['status', [Sequelize.fn('COUNT', Sequelize.fn('DISTINCT', Sequelize.col('Product.id'))), 'count']],
-      group: ['status'],
+      attributes: [
+        [Sequelize.col('Product.status'), 'status'],
+        [Sequelize.fn('COUNT', Sequelize.fn('DISTINCT', Sequelize.col('Product.id'))), 'count']
+      ],
+      group: [Sequelize.col('Product.status')],
       raw: true
     });
     counts = statusCounts.reduce((acc, curr) => {
