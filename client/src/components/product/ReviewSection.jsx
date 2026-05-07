@@ -127,12 +127,14 @@ const ReviewSection = ({ slug, productId }) => {
                                             )}
                                         </Box>
                                     }
+                                    primaryTypographyProps={{ component: 'div' }}
                                     secondary={
                                         <Box mt={1}>
                                             <Typography variant="subtitle1" fontWeight="bold">{r.title}</Typography>
                                             <Typography variant="body2" color="text.primary">{r.body}</Typography>
                                         </Box>
                                     }
+                                    secondaryTypographyProps={{ component: 'div' }}
                                 />
                             </ListItem>
                             <Divider component="li" />

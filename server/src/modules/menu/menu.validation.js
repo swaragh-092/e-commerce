@@ -4,7 +4,7 @@ const Joi = require('joi');
 
 const menuLocations = ['header', 'footer', 'mobile', 'sidebar'];
 const targetTypes = ['none', 'custom_url', 'page', 'category', 'product', 'collection', 'system_route'];
-const placements = ['left', 'center', 'right', 'quick_links', 'footer_column', 'mobile'];
+const placements = ['left', 'center', 'right', 'quick_links', 'footer_column', 'mobile', 'sidebar'];
 
 const createMenuSchema = Joi.object({
     name: Joi.string().max(120).required(),
@@ -26,8 +26,16 @@ const createMenuItemSchema = Joi.object({
     parentId: Joi.string().trim().uuid().empty('').allow(null),
     label: Joi.string().max(120).required(),
     targetType: Joi.string().valid(...targetTypes).default('custom_url'),
-    targetId: Joi.string().trim().uuid().empty('').allow(null),
-    url: Joi.string().trim().max(1000).empty('').allow(null),
+    targetId: Joi.string().trim().uuid().when('targetType', {
+        is: Joi.valid('page', 'category', 'product', 'collection'),
+        then: Joi.required(),
+        otherwise: Joi.allow(null, '')
+    }),
+    url: Joi.string().trim().max(1000).when('targetType', {
+        is: Joi.valid('custom_url', 'system_route'),
+        then: Joi.required(),
+        otherwise: Joi.allow(null, '')
+    }),
     placement: Joi.string().valid(...placements).default('center'),
     sortOrder: Joi.number().integer().default(0),
     isVisible: Joi.boolean().default(true),
@@ -38,8 +46,16 @@ const updateMenuItemSchema = Joi.object({
     parentId: Joi.string().trim().uuid().empty('').allow(null),
     label: Joi.string().max(120),
     targetType: Joi.string().valid(...targetTypes),
-    targetId: Joi.string().trim().uuid().empty('').allow(null),
-    url: Joi.string().trim().max(1000).empty('').allow(null),
+    targetId: Joi.string().trim().uuid().when('targetType', {
+        is: Joi.valid('page', 'category', 'product', 'collection'),
+        then: Joi.required(),
+        otherwise: Joi.allow(null, '')
+    }),
+    url: Joi.string().trim().max(1000).when('targetType', {
+        is: Joi.valid('custom_url', 'system_route'),
+        then: Joi.required(),
+        otherwise: Joi.allow(null, '')
+    }),
     placement: Joi.string().valid(...placements),
     sortOrder: Joi.number().integer(),
     isVisible: Joi.boolean(),
@@ -48,7 +64,7 @@ const updateMenuItemSchema = Joi.object({
 
 const reorderItemsSchema = Joi.object({
     items: Joi.array().items(Joi.object({
-        id: Joi.string().uuid().required(),
+        id: Joi.string().trim().uuid().required(),
         parentId: Joi.string().trim().uuid().empty('').allow(null),
         placement: Joi.string().valid(...placements),
         sortOrder: Joi.number().integer().required(),

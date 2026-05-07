@@ -30,7 +30,7 @@ const updatePageSchema = Joi.object({
 
 const queryPageSchema = Joi.object({
     page: Joi.number().integer().min(1),
-    limit: Joi.number().integer().min(1).max(100),
+    limit: Joi.number().integer().min(1).max(1000),
     status: Joi.string().valid('draft', 'published'),
     search: Joi.string().allow(''),
     linkPosition: Joi.string().valid('top', 'bottom', 'none')

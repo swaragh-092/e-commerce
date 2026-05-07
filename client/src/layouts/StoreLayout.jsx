@@ -32,6 +32,7 @@ const StoreLayout = () => {
   const [announcementDismissed, setAnnouncementDismissed] = useState(false);
   const [topLinks, setTopLinks] = useState([]);
   const [headerMenu, setHeaderMenu] = useState(null);
+  const [mobileMenu, setMobileMenu] = useState(null);
   const [menuAnchors, setMenuAnchors] = useState({});
   const [mobileMenuAnchor, setMobileMenuAnchor] = useState(null);
   const [logoLoadFailed, setLogoLoadFailed] = useState(false);
@@ -54,15 +55,22 @@ const StoreLayout = () => {
 
   useEffect(() => {
     const fetchTopLinks = async () => {
-      const [menuResult, pageResult] = await Promise.allSettled([
+      const [headerMenuResult, mobileMenuResult, pageResult] = await Promise.allSettled([
         MenuService.getPublicMenu('header'),
+        MenuService.getPublicMenu('mobile'),
         PageService.getPublicPages('top'),
       ]);
 
-      if (menuResult.status === 'fulfilled') {
-        setHeaderMenu(menuResult.value.data || null);
+      if (headerMenuResult.status === 'fulfilled') {
+        setHeaderMenu(headerMenuResult.value.data || null);
       } else {
-        console.error('Error fetching header menu:', menuResult.reason);
+        console.error('Error fetching header menu:', headerMenuResult.reason);
+      }
+
+      if (mobileMenuResult.status === 'fulfilled') {
+        setMobileMenu(mobileMenuResult.value.data || null);
+      } else {
+        console.error('Error fetching mobile menu:', mobileMenuResult.reason);
       }
 
       if (pageResult.status === 'fulfilled') {
@@ -101,6 +109,8 @@ const StoreLayout = () => {
     ...groupedHeaderItems.center,
     ...groupedHeaderItems.right,
   ];
+  const hasDedicatedMobileItems = Array.isArray(mobileMenu?.items) && mobileMenu.items.length > 0;
+  const mobileHeaderItems = hasDedicatedMobileItems ? mobileMenu.items : desktopHeaderItems;
 
   const isExternalUrl = (url = '') => /^https?:\/\//i.test(url) || url.startsWith('mailto:') || url.startsWith('tel:');
   const getLinkProps = (item) => {
@@ -138,11 +148,12 @@ const StoreLayout = () => {
 
   const renderDynamicMenuItems = (items = [], parentId, depth = 0) => items.map((item) => {
     const hasChildren = item.children?.length > 0;
+    const navigable = isNavigableItem(item);
     return (
       <Box key={item.id}>
         <MenuItem
-          {...getLinkProps(item)}
-          onClick={() => closeDynamicMenu(parentId)}
+          {...(navigable ? getLinkProps(item) : { component: 'div' })}
+          onClick={navigable ? () => closeDynamicMenu(parentId) : undefined}
           sx={{ pl: 2 + depth * 2 }}
         >
           {item.label}
@@ -321,7 +332,7 @@ const StoreLayout = () => {
 
           <Box sx={{ flexGrow: 1, minWidth: 8 }} />
 
-          {desktopHeaderItems.length > 0 && (
+          {mobileHeaderItems.length > 0 && (
             <>
               <IconButton
                 color="inherit"
@@ -339,7 +350,7 @@ const StoreLayout = () => {
                 transformOrigin={{ vertical: 'top', horizontal: 'right' }}
                 PaperProps={{ sx: { mt: 1, minWidth: 220 } }}
               >
-                {renderMobileMenuItems(desktopHeaderItems)}
+                {renderMobileMenuItems(mobileHeaderItems)}
               </Menu>
             </>
           )}

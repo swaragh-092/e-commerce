@@ -82,6 +82,36 @@ const formatValidationError = (error, fallback) => {
 
 const needsTarget = (targetType) => ['page', 'category', 'collection', 'product'].includes(targetType);
 const needsUrl = (targetType) => ['custom_url', 'system_route'].includes(targetType);
+const locationHelp = {
+  header: 'Shows in the desktop storefront header.',
+  footer: 'Shows in the storefront footer Quick Links column.',
+  mobile: 'Shows in the mobile hamburger menu. If empty, mobile uses the Header menu.',
+  sidebar: 'Shows on the products page sidebar above filters.',
+};
+const placementByLocation = {
+  header: [
+    { value: 'left', label: 'Header Left' },
+    { value: 'center', label: 'Header Center' },
+    { value: 'right', label: 'Header Right' },
+  ],
+  footer: [
+    { value: 'quick_links', label: 'Footer Quick Links' },
+    { value: 'footer_column', label: 'Footer Column' },
+  ],
+  mobile: [
+    { value: 'mobile', label: 'Mobile Menu' },
+  ],
+  sidebar: [
+    { value: 'sidebar', label: 'Sidebar' },
+  ],
+};
+
+const getDefaultPlacement = (location) => {
+  if (location === 'footer') return 'quick_links';
+  if (location === 'mobile') return 'mobile';
+  if (location === 'sidebar') return 'sidebar';
+  return 'center';
+};
 
 const MenuBuilderPage = () => {
   const [menus, setMenus] = useState([]);
@@ -96,7 +126,7 @@ const MenuBuilderPage = () => {
   const [pages, setPages] = useState([]);
   const [categories, setCategories] = useState([]);
   const [products, setProducts] = useState([]);
-  const { notify } = useNotification();
+  const { notify, confirm } = useNotification();
   const { hasPermission } = useAuth();
   const canManage = hasPermission(PERMISSIONS.MENUS_MANAGE);
 
@@ -143,9 +173,9 @@ const MenuBuilderPage = () => {
     const fetchTargets = async () => {
       try {
         const [pagesResponse, categoriesResponse, productsResponse] = await Promise.all([
-          PageService.adminGetPages({ page: 1, limit: 100, status: 'published' }),
+          PageService.adminGetPages({ page: 1, limit: 1000, status: 'published' }),
           getCategories(),
-          getProducts({ page: 1, limit: 100, status: 'published' }),
+          getProducts({ page: 1, limit: 1000, status: 'published' }),
         ]);
         setPages(pagesResponse.data || []);
         setCategories(categoriesResponse || []);
@@ -203,12 +233,12 @@ const MenuBuilderPage = () => {
   };
 
   const deleteSelectedMenu = async () => {
-    if (!selectedMenu || !window.confirm(`Delete "${selectedMenu.name}"?`)) return;
+    if (!selectedMenu || !(await confirm('Delete Menu', `Delete "${selectedMenu.name}"?`, 'danger'))) return;
     try {
       await MenuService.adminDeleteMenu(selectedMenu.id);
       notify('Menu deleted.', 'success');
       setSelectedMenuId('');
-      fetchMenus();
+      fetchMenus('');
     } catch (error) {
       notify(getApiErrorMessage(error, 'Failed to delete menu.'), 'error');
     }
@@ -226,7 +256,7 @@ const MenuBuilderPage = () => {
       sortOrder: item.sortOrder || 0,
       isVisible: item.isVisible !== false,
       openInNewTab: item.openInNewTab || false,
-    } : { ...emptyItemForm, placement: selectedMenu?.location === 'footer' ? 'quick_links' : 'center', sortOrder: rows.length * 10 });
+    } : { ...emptyItemForm, placement: getDefaultPlacement(selectedMenu?.location), sortOrder: rows.length * 10 });
     setItemDialogOpen(true);
   };
 
@@ -276,7 +306,7 @@ const MenuBuilderPage = () => {
   };
 
   const deleteItem = async (item) => {
-    if (!selectedMenu || !window.confirm(`Delete "${item.label}" and its children?`)) return;
+    if (!selectedMenu || !(await confirm('Delete Menu Item', `Delete "${item.label}" and its children?`, 'danger'))) return;
     try {
       await MenuService.adminDeleteMenuItem(selectedMenu.id, item.id);
       notify('Menu item deleted.', 'success');
@@ -311,6 +341,10 @@ const MenuBuilderPage = () => {
     if (itemForm.targetType === 'product') return products.map((product) => ({ id: product.id, label: product.name }));
     return [];
   }, [itemForm.targetType, pages, categoryOptions, products]);
+  const basePlacementOptions = placementByLocation[selectedMenu?.location || menuForm.location] || placementByLocation.header;
+  const placementOptions = itemForm.placement && !basePlacementOptions.some((option) => option.value === itemForm.placement)
+    ? [...basePlacementOptions, { value: itemForm.placement, label: `Current: ${itemForm.placement}` }]
+    : basePlacementOptions;
 
   const columns = [
     { field: 'displayLabel', headerName: 'Label', flex: 1, renderCell: (params) => (
@@ -407,6 +441,11 @@ const MenuBuilderPage = () => {
                     <IconButton color="error" disabled={!canManage} onClick={deleteSelectedMenu}><DeleteIcon /></IconButton>
                   </Stack>
                 </Grid>
+                <Grid item xs={12}>
+                  <Typography variant="body2" color="text.secondary">
+                    {locationHelp[selectedMenu.location] || locationHelp.header}
+                  </Typography>
+                </Grid>
               </Grid>
             ) : (
               <Typography color="text.secondary">Create a menu to begin.</Typography>
@@ -418,7 +457,7 @@ const MenuBuilderPage = () => {
               <Box>
                 <Typography variant="h6">Items</Typography>
                 <Typography variant="body2" color="text.secondary">
-                  Header supports left, center, and right placement. Footer quick links use the footer menu.
+                  {selectedMenu ? locationHelp[selectedMenu.location] || locationHelp.header : 'Create a menu to begin.'}
                 </Typography>
               </Box>
               <Button variant="contained" startIcon={<AddIcon />} disabled={!canManage || !selectedMenu} onClick={() => openItemDialog()}>
@@ -453,6 +492,9 @@ const MenuBuilderPage = () => {
                 <MenuItem value="sidebar">Sidebar</MenuItem>
               </Select>
             </FormControl>
+            <Typography variant="body2" color="text.secondary">
+              {locationHelp[menuForm.location] || locationHelp.header}
+            </Typography>
           </Stack>
         </DialogContent>
         <DialogActions>
@@ -535,12 +577,9 @@ const MenuBuilderPage = () => {
               <FormControl fullWidth>
                 <InputLabel>Placement</InputLabel>
                 <Select label="Placement" value={itemForm.placement} onChange={(e) => setItemForm({ ...itemForm, placement: e.target.value })}>
-                  <MenuItem value="left">Header Left</MenuItem>
-                  <MenuItem value="center">Header Center</MenuItem>
-                  <MenuItem value="right">Header Right</MenuItem>
-                  <MenuItem value="quick_links">Footer Quick Links</MenuItem>
-                  <MenuItem value="footer_column">Footer Column</MenuItem>
-                  <MenuItem value="mobile">Mobile</MenuItem>
+                  {placementOptions.map((option) => (
+                    <MenuItem key={option.value} value={option.value}>{option.label}</MenuItem>
+                  ))}
                 </Select>
               </FormControl>
             </Grid>

@@ -113,7 +113,7 @@ Run the Standards Checklist and output a pass/fail report.
 - [ ] Model: schema + associations only — no query logic
 - [ ] Validation schema in `<name>.validation.js`, not inline
 
-## 2. Database / Model Alignment
+### 2. Database / Model Alignment
 - [ ] Every column matches DATABASE.md (name, type, constraints)
 - [ ] `paranoid: true` on models with `deleted_at` (Product, User)
 - [ ] `timestamps: true` on all models
@@ -137,8 +137,8 @@ Run the Standards Checklist and output a pass/fail report.
 ### 4. Security Checklist
 - [ ] Rate limiting: auth routes use specific limiters, not global
 - [ ] Input validation: every user-facing route has Joi schema
-- [ ] Sanitization: HTML → `sanitizeRichText()`, plain → `sanitizePlainText()
-- [ ] JWT: always use `authenticate`` middleware, never check token manually
+- [ ] Sanitization: HTML → `sanitizeRichText()`, plain → `sanitizePlainText()`
+- [ ] JWT: always use `authenticate` middleware, never check token manually
 - [ ] Password: NEVER returned in any response
 - [ ] File upload: MIME via `file-type` package, not extension; SVG rejected
 - [ ] Inventory: `Sequelize.literal()` atomic updates only — never read-modify-write

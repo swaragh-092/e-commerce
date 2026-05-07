@@ -40,6 +40,13 @@ module.exports = (sequelize, DataTypes) => {
         paranoid: true,
     });
 
+    Menu.addHook('beforeDestroy', async (menu, options) => {
+        await sequelize.models.MenuItem.destroy({
+            where: { menuId: menu.id },
+            transaction: options.transaction,
+        });
+    });
+
     Menu.associate = (models) => {
         Menu.hasMany(models.MenuItem, { foreignKey: 'menuId', as: 'items', onDelete: 'CASCADE' });
     };

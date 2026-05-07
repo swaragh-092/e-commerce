@@ -219,14 +219,16 @@ const AddressesTab = () => {
                                             {addr.isDefault && <Chip label="Default" size="small" color="primary" />}
                                         </Box>
                                     }
+                                    primaryTypographyProps={{ component: 'div' }}
                                     secondary={
-                                        <>
-                                            <Typography variant="body2">{addr.fullName}</Typography>
-                                            <Typography variant="body2">{addr.addressLine1}{addr.addressLine2 ? `, ${addr.addressLine2}` : ''}</Typography>
-                                            <Typography variant="body2">{addr.city}, {addr.state} {addr.postalCode}, {addr.country}</Typography>
-                                            {addr.phone && <Typography variant="body2">{addr.phone}</Typography>}
-                                        </>
+                                        <Box component="span">
+                                            <Typography variant="body2" component="span" sx={{ display: 'block' }}>{addr.fullName}</Typography>
+                                            <Typography variant="body2" component="span" sx={{ display: 'block' }}>{addr.addressLine1}{addr.addressLine2 ? `, ${addr.addressLine2}` : ''}</Typography>
+                                            <Typography variant="body2" component="span" sx={{ display: 'block' }}>{addr.city}, {addr.state} {addr.postalCode}, {addr.country}</Typography>
+                                            {addr.phone && <Typography variant="body2" component="span" sx={{ display: 'block' }}>{addr.phone}</Typography>}
+                                        </Box>
                                     }
+                                    secondaryTypographyProps={{ component: 'div' }}
                                 />
                                 <ListItemSecondaryAction>
                                     <Tooltip title="Edit">
@@ -302,7 +304,7 @@ const PasswordTab = () => {
         ].filter(Boolean);
 
         return (
-            <Box sx={{ mt: 1 }}>
+            <Typography component="div" sx={{ mt: 1 }}>
                 {missingRules.map((rule, index) => (
                     <Typography
                         key={index}
@@ -312,7 +314,7 @@ const PasswordTab = () => {
                         {rule}
                     </Typography>
                 ))}
-            </Box>
+            </Typography>
         );
     };
 

@@ -34,6 +34,7 @@ import AddIcon from '@mui/icons-material/Add';
 import PersonAddIcon from '@mui/icons-material/PersonAdd';
 import Visibility from '@mui/icons-material/Visibility';
 import VisibilityOff from '@mui/icons-material/VisibilityOff';
+import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
 import { DataGrid } from '@mui/x-data-grid';
 import {
   createAccessRole,
@@ -321,7 +322,13 @@ const AccessControlPage = () => {
                   color: currentRole ? 'text.primary' : 'text.disabled',
                 },
               }}
-              endAdornment={updatingUserId === row.id ? <CircularProgress size={18} sx={{ mr: 1 }} /> : undefined}
+              IconComponent={(props) => (
+                updatingUserId === row.id ? (
+                  <CircularProgress size={18} sx={{ mr: 1 }} />
+                ) : (
+                  <ExpandMoreIcon {...props} />
+                )
+              )}
             >
               <MenuItem disabled value="">
                 <em>Select role…</em>
@@ -722,36 +729,25 @@ const AccessControlPage = () => {
               overflow: 'hidden',
             }}
           >
-            {loading ? (
-              <Box
-                sx={{
-                  minHeight: { xs: 400, sm: 520 },
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                }}
-              >
-                <CircularProgress />
-              </Box>
-            ) : (
-              <DataGrid
-                rows={rows}
-                columns={columns}
-                rowCount={total}
-                paginationMode="server"
-                paginationModel={paginationModel}
-                onPaginationModelChange={setPaginationModel}
-                disableRowSelectionOnClick
-                sx={{
-                  '& .MuiDataGrid-cell': {
-                    px: { xs: 1, sm: 2 },
-                  },
-                  '& .MuiDataGrid-columnHeaders': {
-                    bgcolor: 'background.default',
-                  },
-                }}
-              />
-            )}
+            <DataGrid
+              rows={rows}
+              columns={columns}
+              rowCount={total}
+              loading={loading}
+              paginationMode="server"
+              paginationModel={paginationModel}
+              onPaginationModelChange={setPaginationModel}
+              pageSizeOptions={[10, 25, 50]}
+              disableRowSelectionOnClick
+              sx={{
+                '& .MuiDataGrid-cell': {
+                  px: { xs: 1, sm: 2 },
+                },
+                '& .MuiDataGrid-columnHeaders': {
+                  bgcolor: 'background.default',
+                },
+              }}
+            />
           </Box>
         </Paper>
       )}

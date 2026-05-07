@@ -169,21 +169,23 @@ exports.reorderCategory = async (id, direction) => {
     const currentIndex = siblings.findIndex(c => c.id === id);
     if (currentIndex === -1) throw new AppError('NOT_FOUND', 404, 'Category not found');
 
-    if (direction === 'up') {
-        if (currentIndex === 0) throw new AppError('VALIDATION_ERROR', 400, 'Already at the top');
-        const swapWith = siblings[currentIndex - 1];
-        const tempSort = category.sortOrder;
-        await category.update({ sortOrder: swapWith.sortOrder });
-        await swapWith.update({ sortOrder: tempSort });
-    } else if (direction === 'down') {
-        if (currentIndex === siblings.length - 1) throw new AppError('VALIDATION_ERROR', 400, 'Already at the bottom');
-        const swapWith = siblings[currentIndex + 1];
-        const tempSort = category.sortOrder;
-        await category.update({ sortOrder: swapWith.sortOrder });
-        await swapWith.update({ sortOrder: tempSort });
-    } else {
-        throw new AppError('VALIDATION_ERROR', 400, 'Invalid direction. Use "up" or "down".');
-    }
+    await Category.sequelize.transaction(async (transaction) => {
+        if (direction === 'up') {
+            if (currentIndex === 0) throw new AppError('VALIDATION_ERROR', 400, 'Already at the top');
+            const swapWith = siblings[currentIndex - 1];
+            const tempSort = category.sortOrder;
+            await category.update({ sortOrder: swapWith.sortOrder }, { transaction });
+            await swapWith.update({ sortOrder: tempSort }, { transaction });
+        } else if (direction === 'down') {
+            if (currentIndex === siblings.length - 1) throw new AppError('VALIDATION_ERROR', 400, 'Already at the bottom');
+            const swapWith = siblings[currentIndex + 1];
+            const tempSort = category.sortOrder;
+            await category.update({ sortOrder: swapWith.sortOrder }, { transaction });
+            await swapWith.update({ sortOrder: tempSort }, { transaction });
+        } else {
+            throw new AppError('VALIDATION_ERROR', 400, 'Invalid direction. Use "up" or "down".');
+        }
+    });
 
     return true;
 };

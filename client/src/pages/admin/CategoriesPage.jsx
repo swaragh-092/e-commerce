@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo, useRef } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import {
   Box, Typography, Button, Paper, CircularProgress, IconButton,
   Dialog, DialogTitle, DialogContent, DialogActions, TextField,
@@ -6,7 +6,7 @@ import {
   List, ListItemButton, ListItemText, ListItemIcon, Collapse,
   Breadcrumbs, Link, ToggleButtonGroup, ToggleButton,
   Table, TableBody, TableCell, TableContainer, TableHead, TableRow,
-  Menu as MuiMenu, Popover, InputAdornment
+  Popover, InputAdornment
 } from '@mui/material';
 import {
   Add as AddIcon, Edit as EditIcon, Delete as DeleteIcon,
@@ -18,7 +18,6 @@ import {
   ArrowUpward as ArrowUpwardIcon,
   ArrowDownward as ArrowDownwardIcon,
   Search as SearchIcon,
-  MoreVert as MoreVertIcon,
   AddCircleOutline as AddCircleOutlineIcon,
 } from '@mui/icons-material';
 
@@ -69,7 +68,7 @@ const nodeMatchesSearch = (node, query) => {
 };
 
 // --- CategoryTreeItem Component (Left Panel Node) ---
-const CategoryTreeItem = ({ node, level, expandedIds, toggleNode, selectedId, onSelect, onReorder, onContextMenu, canManageCategories, searchQuery }) => {
+const CategoryTreeItem = ({ node, level, expandedIds, toggleNode, selectedId, onSelect, onReorder, onContextMenu, canManageCategories, searchQuery, reorderingId }) => {
     const isExpanded = expandedIds.includes(node.id);
     const isSelected = selectedId === node.id;
     const hasChildren = node.children && node.children.length > 0;
@@ -141,8 +140,9 @@ const CategoryTreeItem = ({ node, level, expandedIds, toggleNode, selectedId, on
                                 size="small"
                                 onClick={(e) => { e.stopPropagation(); onReorder(node.id, 'up'); }}
                                 sx={{ p: 0.3 }}
+                                disabled={reorderingId === node.id}
                             >
-                                <ArrowUpwardIcon sx={{ fontSize: 16 }} />
+                                {reorderingId === node.id ? <CircularProgress size={16} /> : <ArrowUpwardIcon sx={{ fontSize: 16 }} />}
                             </IconButton>
                         </Tooltip>
                         <Tooltip title="Move Down">
@@ -150,8 +150,9 @@ const CategoryTreeItem = ({ node, level, expandedIds, toggleNode, selectedId, on
                                 size="small"
                                 onClick={(e) => { e.stopPropagation(); onReorder(node.id, 'down'); }}
                                 sx={{ p: 0.3 }}
+                                disabled={reorderingId === node.id}
                             >
-                                <ArrowDownwardIcon sx={{ fontSize: 16 }} />
+                                {reorderingId === node.id ? <CircularProgress size={16} /> : <ArrowDownwardIcon sx={{ fontSize: 16 }} />}
                             </IconButton>
                         </Tooltip>
                     </Box>
@@ -172,6 +173,7 @@ const CategoryTreeItem = ({ node, level, expandedIds, toggleNode, selectedId, on
                             onContextMenu={onContextMenu}
                             canManageCategories={canManageCategories}
                             searchQuery={searchQuery}
+                            reorderingId={reorderingId}
                         />
                     ))}
                 </List>
@@ -506,7 +508,7 @@ const CategoriesPage = () => {
         setReorderingId(id);
         try {
             await reorderCategory(id, direction);
-            notify(`Category ${direction === 'up' ? 'moved up' : 'moved down'} `, 'success');
+            notify(`Category ${direction === 'up' ? 'moved up' : 'moved down'}`, 'success');
             fetchCategories();
         } catch (err) {
             notify(getApiErrorMessage(err), 'error');
@@ -734,6 +736,7 @@ const CategoriesPage = () => {
                                                 onContextMenu={handleContextMenu}
                                                 canManageCategories={canManageCategories}
                                                 searchQuery={searchQuery.toLowerCase()}
+                                                reorderingId={reorderingId}
                                             />
                                         ))}
                                     </List>

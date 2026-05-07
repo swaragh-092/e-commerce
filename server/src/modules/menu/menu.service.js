@@ -37,66 +37,92 @@ const buildTree = (items = []) => {
     return roots;
 };
 
-const resolveTargetUrl = async (item) => {
-    if (item.url) return item.url;
+const resolveTreeUrls = async (items) => {
+    if (!items.length) return [];
 
-    if (item.targetType === 'system_route') return item.url || '/';
-    if (!item.targetId) return '#';
+    const targets = { page: new Set(), category: new Set(), product: new Set() };
+    const collect = (list) => {
+        list.forEach((item) => {
+            if (!item.url && item.targetId) {
+                const type = item.targetType === 'collection' ? 'category' : item.targetType;
+                if (targets[type]) targets[type].add(item.targetId);
+            }
+            if (item.children?.length) collect(item.children);
+        });
+    };
+    collect(items);
 
-    if (item.targetType === 'page') {
-        const page = await Page.findByPk(item.targetId, { attributes: ['slug'] });
-        return page ? `/p/${page.slug}` : '#';
-    }
+    const [pages, categories, products] = await Promise.all([
+        targets.page.size ? Page.findAll({ where: { id: Array.from(targets.page) }, attributes: ['id', 'slug'], raw: true }) : [],
+        targets.category.size ? Category.findAll({ where: { id: Array.from(targets.category) }, attributes: ['id', 'slug'], raw: true }) : [],
+        targets.product.size ? Product.findAll({ where: { id: Array.from(targets.product) }, attributes: ['id', 'slug'], raw: true }) : [],
+    ]);
 
-    if (item.targetType === 'category' || item.targetType === 'collection') {
-        const category = await Category.findByPk(item.targetId, { attributes: ['slug'] });
-        return category ? `/products?category=${category.slug}` : '#';
-    }
+    const slugMap = {
+        page: new Map(pages.map((p) => [p.id, p.slug])),
+        category: new Map(categories.map((c) => [c.id, c.slug])),
+        collection: new Map(categories.map((c) => [c.id, c.slug])),
+        product: new Map(products.map((p) => [p.id, p.slug])),
+    };
 
-    if (item.targetType === 'product') {
-        const product = await Product.findByPk(item.targetId, { attributes: ['slug'] });
-        return product ? `/products/${product.slug}` : '#';
-    }
+    const resolve = (list) => list.map((item) => {
+        let url = item.url || '#';
+        if (!item.url) {
+            if (item.targetType === 'system_route') {
+                url = item.url || '/';
+            } else if (item.targetId) {
+                const slug = slugMap[item.targetType]?.get(item.targetId);
+                if (slug) {
+                    if (item.targetType === 'page') url = `/p/${slug}`;
+                    else if (item.targetType === 'category' || item.targetType === 'collection') url = `/products?category=${slug}`;
+                    else if (item.targetType === 'product') url = `/products/${slug}`;
+                }
+            }
+        }
+        return {
+            ...item,
+            url,
+            children: resolve(item.children || []),
+        };
+    });
 
-    return '#';
+    return resolve(items);
 };
 
-const resolveTreeUrls = async (items) => Promise.all(items.map(async (item) => ({
-    ...item,
-    url: await resolveTargetUrl(item),
-    children: await resolveTreeUrls(item.children || []),
-})));
-
-const getDescendantIds = async (itemId, menuId, collected = new Set()) => {
+const getDescendantIds = async (itemId, menuId, collected = new Set(), options = {}) => {
     const children = await MenuItem.findAll({
         where: { menuId, parentId: itemId },
         attributes: ['id'],
+        transaction: options.transaction,
     });
 
     for (const child of children) {
         if (!collected.has(child.id)) {
             collected.add(child.id);
-            await getDescendantIds(child.id, menuId, collected);
+            await getDescendantIds(child.id, menuId, collected, options);
         }
     }
 
     return collected;
 };
 
-const validateParent = async ({ menuId, itemId = null, parentId }) => {
+const validateParent = async ({ menuId, itemId = null, parentId }, options = {}) => {
     if (!parentId) return;
 
     if (parentId === itemId) {
         throw new AppError('INVALID_PARENT', 400, 'A menu item cannot be its own parent');
     }
 
-    const parent = await MenuItem.findOne({ where: { id: parentId, menuId } });
+    const parent = await MenuItem.findOne({
+        where: { id: parentId, menuId },
+        transaction: options.transaction,
+    });
     if (!parent) {
         throw new AppError('INVALID_PARENT', 400, 'Parent item must belong to the same menu');
     }
 
     if (itemId) {
-        const descendants = await getDescendantIds(itemId, menuId);
+        const descendants = await getDescendantIds(itemId, menuId, new Set(), options);
         if (descendants.has(parentId)) {
             throw new AppError('INVALID_PARENT', 400, 'A menu item cannot be moved under one of its children');
         }
@@ -163,8 +189,10 @@ exports.getMenuById = async (id) => {
 };
 
 exports.getPublicMenuByLocation = async (location) => {
+    if (typeof location !== 'string') throw new AppError('INVALID_INPUT', 400);
+    const sanitizedLocation = encodeURIComponent(location).replace(/['"*]/g, '');
     const menus = await Menu.findAll({
-        where: { location, isActive: true },
+        where: { location: sanitizedLocation, isActive: true },
         include: [{
             model: MenuItem,
             as: 'items',
@@ -253,7 +281,7 @@ exports.reorderItems = async (menuId, items) => {
     try {
         for (const item of items) {
             const parentId = normalizeEmpty(item.parentId);
-            await validateParent({ menuId, itemId: item.id, parentId });
+            await validateParent({ menuId, itemId: item.id, parentId }, { transaction });
             await MenuItem.update(
                 {
                     sortOrder: item.sortOrder,
