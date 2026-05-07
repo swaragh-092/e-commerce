@@ -30,3 +30,8 @@ export const getCategories = async () => {
     const response = await api.get('/categories');
     return response.data?.data || [];
 };
+
+export const reorderCategory = async (id, direction) => {
+    const response = await api.post(`/categories/${id}/reorder`, { direction });
+    return response.data;
+};

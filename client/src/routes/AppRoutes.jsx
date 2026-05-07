@@ -75,6 +75,7 @@ const BrandsPage = lazy(() => import('../pages/admin/BrandsPage'));
 const AccessControlPage = lazy(() => import('../pages/admin/AccessControlPage'));
 const PagesManagePage = lazy(() => import('../pages/admin/PagesManagePage'));
 const PageEditPage = lazy(() => import('../pages/admin/PageEditPage'));
+const MenuBuilderPage = lazy(() => import('../pages/admin/MenuBuilderPage'));
 const SeoOverridesPage = lazy(() => import('../pages/admin/SeoOverridesPage'));
 const EmailTemplatesPage = lazy(() => import('../pages/admin/EmailTemplatesPage'));
 const StaticPageView = lazy(() => import('../pages/storefront/StaticPageView'));
@@ -224,6 +225,9 @@ const AppRoutes = () => (
           </Route>
           <Route element={<ProtectedRoute permission={PERMISSIONS.PAGES_READ} />}>
             <Route path="pages" element={<PagesManagePage />} />
+          </Route>
+          <Route element={<ProtectedRoute permission={PERMISSIONS.MENUS_READ} />}>
+            <Route path="menus" element={<MenuBuilderPage />} />
           </Route>
           <Route element={<ProtectedRoute permission={PERMISSIONS.PAGES_MANAGE} />}>
             <Route path="pages/new" element={<PageEditPage />} />

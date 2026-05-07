@@ -29,6 +29,13 @@ router.put('/:id',
     categoryController.update
 );
 
+router.post('/:id/reorder',
+    authenticate,
+    authorizePermissions(PERMISSIONS.CATEGORIES_MANAGE),
+    auditLog('Category'),
+    categoryController.reorder
+);
+
 router.delete('/:id',
     authenticate,
     authorizePermissions(PERMISSIONS.CATEGORIES_MANAGE),

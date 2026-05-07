@@ -31,6 +31,18 @@ exports.create = async (req, res, next) => {
     }
 };
 
+exports.reorder = async (req, res, next) => {
+    try {
+        await categoryService.reorderCategory(req.params.id, req.body.direction);
+        return success(res, null, 'Category reordered');
+    } catch (err) {
+        if (err.message === 'Already at the top' || err.message === 'Already at the bottom') {
+            return error(res, err.message, 400, 'VALIDATION_ERROR');
+        }
+        next(err);
+    }
+};
+
 exports.update = async (req, res, next) => {
     try {
         const category = await categoryService.updateCategory(req.params.id, req.body);

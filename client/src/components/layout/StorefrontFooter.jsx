@@ -15,6 +15,7 @@ import LocationOnIcon from '@mui/icons-material/LocationOn';
 import { useSettings } from '../../hooks/useSettings';
 import { useTheme } from '@mui/material/styles';
 import PageService from '../../services/pageService';
+import MenuService from '../../services/menuService';
 
 const SOCIAL = [
   { key: 'facebook',  Icon: FacebookIcon,  label: 'Facebook'  },
@@ -28,14 +29,26 @@ const StorefrontFooter = () => {
   const { settings } = useSettings();
   const theme = useTheme();
   const [dynamicLinks, setDynamicLinks] = React.useState([]);
+  const [footerMenu, setFooterMenu] = React.useState(null);
+  const [logoLoadFailed, setLogoLoadFailed] = React.useState(false);
 
   React.useEffect(() => {
     const fetchDynamicLinks = async () => {
-      try {
-        const response = await PageService.getPublicPages('bottom');
-        setDynamicLinks(response.data || []);
-      } catch (error) {
-        console.error('Error fetching dynamic footer links:', error);
+      const [menuResult, pageResult] = await Promise.allSettled([
+        MenuService.getPublicMenu('footer'),
+        PageService.getPublicPages('bottom'),
+      ]);
+
+      if (menuResult.status === 'fulfilled') {
+        setFooterMenu(menuResult.value.data || null);
+      } else {
+        console.error('Error fetching footer menu:', menuResult.reason);
+      }
+
+      if (pageResult.status === 'fulfilled') {
+        setDynamicLinks(pageResult.value.data || []);
+      } else {
+        console.error('Error fetching dynamic footer links:', pageResult.reason);
       }
     };
     fetchDynamicLinks();
@@ -54,15 +67,48 @@ const StorefrontFooter = () => {
     .replace('{year}',      new Date().getFullYear())
     .replace('{storeName}', general.storeName || 'Store');
 
-  const staticLinks = Array.isArray(f.links) ? f.links : [];
-  // Merge static links from settings with dynamic links from the Pages module
-  const allLinks = [
-    ...staticLinks.map(l => ({ label: l.label, url: l.url })),
-    ...dynamicLinks.map(p => ({ label: p.title, url: `/p/${p.slug}` }))
-  ];
+  const flattenMenuItems = (items = [], acc = []) => {
+    items.forEach((item) => {
+      acc.push(item);
+      flattenMenuItems(item.children || [], acc);
+    });
+    return acc;
+  };
+  const isExternalUrl = (url = '') => /^https?:\/\//i.test(url) || url.startsWith('mailto:') || url.startsWith('tel:');
+  const toFooterLink = (link) => {
+    const label = link?.label || link?.title || link?.name || '';
+    const url = link?.url || (link?.slug ? `/p/${link.slug}` : '');
+    if (!label || !url || url === '#') return null;
+    return {
+      label,
+      url,
+      openInNewTab: Boolean(link?.openInNewTab),
+    };
+  };
+  const dedupeLinks = (links) => {
+    const seen = new Set();
+    return links.filter((link) => {
+      const key = `${link.label}|${link.url}`;
+      if (seen.has(key)) return false;
+      seen.add(key);
+      return true;
+    });
+  };
+  const menuLinks = flattenMenuItems(footerMenu?.items || [])
+    .filter((item) =>
+      item.targetType !== 'none' &&
+      (!item.placement || ['quick_links', 'footer_column', 'center', 'left', 'right'].includes(item.placement))
+    )
+    .map(toFooterLink)
+    .filter(Boolean);
+  const legacyLinks = [
+    ...(Array.isArray(f.links) ? f.links : []).map(toFooterLink),
+    ...dynamicLinks.map(toFooterLink),
+  ].filter(Boolean);
+  const allLinks = dedupeLinks(menuLinks.length ? menuLinks : legacyLinks);
 
   const hasSocial  = f.showSocial  && SOCIAL.some(({ key }) => f[key]);
-  const hasLinks   = (f.showLinks !== false && staticLinks.length > 0) || dynamicLinks.length > 0;
+  const hasLinks   = f.showLinks !== false && allLinks.length > 0;
   const hasContact = f.showContact && (f.email || f.phone || f.address);
 
   const activeCols = [true, hasLinks, hasContact].filter(Boolean).length;
@@ -87,13 +133,13 @@ const StorefrontFooter = () => {
 
           {/* ── Brand column ─────────────────────────────────── */}
           <Grid item xs={12} sm={6} md={brandMd}>
-            {settings?.logo?.main ? (
+            {settings?.logo?.main && !logoLoadFailed ? (
               <Box sx={{ mb: 1.5 }}>
                 <img
                   src={settings.logo.main}
                   alt={general.storeName || 'Store'}
                   style={{ maxHeight: 40, maxWidth: 160, objectFit: 'contain' }}
-                  onError={(e) => { e.target.style.display = 'none'; }}
+                  onError={() => setLogoLoadFailed(true)}
                 />
               </Box>
             ) : (
@@ -143,8 +189,10 @@ const StorefrontFooter = () => {
                 {allLinks.map((link, i) => (
                   <MuiLink
                     key={i}
-                    component={RouterLink}
-                    to={link.url || '/'}
+                    component={isExternalUrl(link.url) ? 'a' : RouterLink}
+                    {...(isExternalUrl(link.url)
+                      ? { href: link.url || '/', target: link.openInNewTab ? '_blank' : undefined, rel: link.openInNewTab ? 'noopener noreferrer' : undefined }
+                      : { to: link.url || '/' })}
                     underline="hover"
                     sx={{
                       color: fgColor,

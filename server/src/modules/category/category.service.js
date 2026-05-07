@@ -73,7 +73,30 @@ exports.getCategoryWithProducts = async (slug) => {
     return category;
 };
 
+/**
+ * Check if a root category with the same name already exists.
+ * Root categories are those with parentId === null.
+ * @param {string} name - category name to check
+ * @param {string|null} excludeId - optional id to exclude (used for updates)
+ */
+const checkDuplicateRootCategoryName = async (name, excludeId = null) => {
+    const existing = await Category.findOne({
+        where: {
+            name: name.trim(),
+            parentId: null,
+            ...(excludeId && { id: { [require('sequelize').Op.ne]: excludeId } }),
+        },
+    });
+    if (existing) {
+        throw new AppError('VALIDATION_ERROR', 400, 'A root category with this name already exists');
+    }
+};
+
 exports.createCategory = async (data) => {
+    // Prevent duplicate root category names
+    if (!data.parentId) {
+        await checkDuplicateRootCategoryName(data.name);
+    }
     const slug = await generateSlug(data.name, Category);
     return Category.create({ ...data, slug });
 };
@@ -81,6 +104,15 @@ exports.createCategory = async (data) => {
 exports.updateCategory = async (id, data) => {
     const category = await Category.findByPk(id);
     if (!category) throw new AppError('NOT_FOUND', 404, 'Category not found');
+
+    // Determine what the effective parentId and name will be after update
+    const newParentId = data.parentId !== undefined ? data.parentId : category.parentId;
+    const newName = data.name !== undefined ? data.name : category.name;
+
+    // Prevent duplicate root category names when updating
+    if (!newParentId && newName) {
+        await checkDuplicateRootCategoryName(newName, id);
+    }
 
     if (data.name && data.name !== category.name) {
         data.slug = await generateSlug(data.name, Category);
@@ -116,5 +148,42 @@ exports.deleteCategory = async (id) => {
     }
 
     await category.destroy();
+    return true;
+};
+
+/**
+ * Reorder a category relative to its siblings.
+ * @param {string} id - category id
+ * @param {string} direction - 'up' or 'down'
+ */
+exports.reorderCategory = async (id, direction) => {
+    const category = await Category.findByPk(id);
+    if (!category) throw new AppError('NOT_FOUND', 404, 'Category not found');
+
+    const parentId = category.parentId;
+    const siblings = await Category.findAll({
+        where: { parentId: parentId ?? null },
+        order: [['sortOrder', 'ASC'], ['name', 'ASC'], ['id', 'ASC']]
+    });
+
+    const currentIndex = siblings.findIndex(c => c.id === id);
+    if (currentIndex === -1) throw new AppError('NOT_FOUND', 404, 'Category not found');
+
+    if (direction === 'up') {
+        if (currentIndex === 0) throw new AppError('VALIDATION_ERROR', 400, 'Already at the top');
+        const swapWith = siblings[currentIndex - 1];
+        const tempSort = category.sortOrder;
+        await category.update({ sortOrder: swapWith.sortOrder });
+        await swapWith.update({ sortOrder: tempSort });
+    } else if (direction === 'down') {
+        if (currentIndex === siblings.length - 1) throw new AppError('VALIDATION_ERROR', 400, 'Already at the bottom');
+        const swapWith = siblings[currentIndex + 1];
+        const tempSort = category.sortOrder;
+        await category.update({ sortOrder: swapWith.sortOrder });
+        await swapWith.update({ sortOrder: tempSort });
+    } else {
+        throw new AppError('VALIDATION_ERROR', 400, 'Invalid direction. Use "up" or "down".');
+    }
+
     return true;
 };

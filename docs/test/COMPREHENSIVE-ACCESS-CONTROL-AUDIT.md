@@ -112,7 +112,31 @@ This audit provides a comprehensive analysis of the e-commerce platform's access
 
 ---
 
-## 4. Critical Security Findings
+## 4. Audit Logging
+
+### 4.1 Implementation Overview
+Audit logs are implemented via a centralized `AuditService` (`server/src/modules/audit/audit.service.js`) and a dedicated `audit_logs` table. The system captures atomic changes to entities by storing "before" and "after" snapshots as JSONB diffs.
+
+### 4.2 Event Coverage
+The system logs the following critical events:
+- **Authentication**: Successful logins, failed attempts, password resets, and email verifications.
+- **Authorization Decisions**: Role creations, permission updates, and role-user assignments.
+- **Admin Actions**: CRUD operations on Products, Orders, Coupons, Settings, and CMS Pages.
+- **Privilege Changes**: Modifications to user roles or sensitive system settings.
+
+### 4.3 Sensitive Data Handling
+- **Redaction**: Sensitive fields like `password`, `token`, and `secret` are automatically redacted or excluded from diffs before storage.
+- **Encryption**: API keys and secrets are stored encrypted (AES-256-GCM) and are never stored in plain text within audit logs.
+- **PII Exclusion**: Detailed customer PII is minimized in logs, focusing on entity IDs and action summaries.
+
+### 4.4 Retention & Integrity
+- **Access Controls**: Access to audit logs is restricted to the `audit.read` permission, reserved exclusively for the `super_admin` role.
+- **Integrity**: Every log entry includes a server-generated `createdAt` timestamp and is linked to a `userId` for non-repudiation. Tamper-evidence is maintained through restricted DB write access (only via the `AuditService`).
+- **Rotation/TTL**: Log rotation policies are currently managed at the database level (DBA-managed) with a recommended 90-day retention for operational logs and 1-year for security-critical events.
+
+---
+
+## 5. Critical Security Findings
 
 ### 🔴 HIGH — Unprotected Webhook Routes
 **File:** `server/src/modules/shipping/shipping.webhook.routes.js`
@@ -136,7 +160,7 @@ This audit provides a comprehensive analysis of the e-commerce platform's access
 
 ---
 
-## 5. Audit Remediation Status (May 2026)
+## 6. Audit Remediation Status (May 2026)
 
 | Finding | Resolution | Status |
 |---------|------------|:---:|
@@ -149,31 +173,5 @@ This audit provides a comprehensive analysis of the e-commerce platform's access
 | Enquiry Module Gating | `featureGate('enquiry')` applied to all routes | ✅ FIXED |
 | Review Module Gating | Global `featureGate('reviews')` module-level gating | ✅ FIXED |
 | Notification Auth Gating | `authenticate` middleware verified on all routes | ✅ FIXED |
-
----
-
-## 6. Audit Logging
-
-### 6.1 Implementation Overview
-Audit logs are implemented via a centralized `AuditService` (`server/src/modules/audit/audit.service.js`) and a dedicated `audit_logs` table. The system captures atomic changes to entities by storing "before" and "after" snapshots as JSONB diffs.
-
-### 6.2 Event Coverage
-The system logs the following critical events:
-- **Authentication**: Successful logins, failed attempts, password resets, and email verifications.
-- **Authorization Decisions**: Role creations, permission updates, and role-user assignments.
-- **Admin Actions**: CRUD operations on Products, Orders, Coupons, Settings, and CMS Pages.
-- **Privilege Changes**: Modifications to user roles or sensitive system settings.
-
-### 6.3 Sensitive Data Handling
-- **Redaction**: Sensitive fields like `password`, `token`, and `secret` are automatically redacted or excluded from diffs before storage.
-- **Encryption**: API keys and secrets are stored encrypted (AES-256-GCM) and are never stored in plain text within audit logs.
-- **PII Exclusion**: Detailed customer PII is minimized in logs, focusing on entity IDs and action summaries.
-
-### 6.4 Retention & Integrity
-- **Access Controls**: Access to audit logs is restricted to the `audit.read` permission, reserved exclusively for the `super_admin` role.
-- **Integrity**: Every log entry includes a server-generated `createdAt` timestamp and is linked to a `userId` for non-repudiation. Tamper-evidence is maintained through restricted DB write access (only via the `AuditService`).
-- **Rotation/TTL**: Log rotation policies are currently managed at the database level (DBA-managed) with a recommended 90-day retention for operational logs and 1-year for security-critical events.
-
----
 
 **CONCLUSION: All A-to-Z architectural enforcements for the Platform Feature Gating system have been successfully implemented and verified.**
