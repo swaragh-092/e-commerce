@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useState, useCallback, useRef } from 'react';
+import React, { createContext, useContext, useState, useCallback } from 'react';
 import { 
   Snackbar, 
   Alert, 
@@ -9,7 +9,6 @@ import {
   DialogContentText, 
   DialogActions, 
   Button,
-  Box,
   Typography
 } from '@mui/material';
 
@@ -29,8 +28,8 @@ export const NotificationProvider = ({ children }) => {
     severity: 'primary' 
   });
 
-  const notify = useCallback((message, severity = 'info') => {
-    setNotification({ message, severity, key: Date.now() });
+  const notify = useCallback((message, severity = 'info', action = null) => {
+    setNotification({ message, severity, action, key: Date.now() });
   }, []);
 
   const confirm = useCallback((title, message, severity = 'primary') => {
@@ -59,7 +58,7 @@ export const NotificationProvider = ({ children }) => {
       <Snackbar
         key={notification?.key}
         open={Boolean(notification)}
-        autoHideDuration={4000}
+        autoHideDuration={notification?.action ? 6000 : 4000}
         onClose={handleNotifyClose}
         TransitionComponent={SlideTransition}
         anchorOrigin={{ vertical: 'bottom', horizontal: 'center' }}
@@ -70,6 +69,19 @@ export const NotificationProvider = ({ children }) => {
           variant="filled"
           elevation={6}
           sx={{ width: '100%', minWidth: 300, borderRadius: '12px' }}
+          action={notification?.action ? (
+            <Button 
+              color="inherit" 
+              size="small" 
+              onClick={() => {
+                notification.action.callback();
+                handleNotifyClose();
+              }}
+              sx={{ fontWeight: 700 }}
+            >
+              {notification.action.label}
+            </Button>
+          ) : null}
         >
           {notification?.message}
         </Alert>

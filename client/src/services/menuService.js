@@ -45,11 +45,36 @@ const MenuService = {
     const response = await api.delete(`/menus/${menuId}/items/${itemId}`);
     return response.data;
   },
+ 
+  adminBulkDeleteMenuItems: async (menuId, itemIds) => {
+    const response = await api.delete(`/menus/${menuId}/items`, { data: { itemIds } });
+    return response.data;
+  },
+
 
   adminReorderMenuItems: async (menuId, items) => {
     const response = await api.put(`/menus/${menuId}/items/reorder`, { items });
     return response.data;
   },
+  adminReorderMenus: async (menus) => {
+    const response = await api.put('/menus/reorder', { menus });
+    return response.data;
+  },
+  adminMoveMenuItems: async (itemIds, targetMenuId) => {
+    const response = await api.put('/menus/move', { itemIds, targetMenuId });
+    return response.data;
+  },
+  adminRestoreMenu: async (id) => {
+    const response = await api.post(`/menus/${id}/restore`);
+    return response.data;
+  },
+  adminRestoreMenuItem: async (menuId, itemId) => {
+    const response = await api.post(`/menus/${menuId}/items/${itemId}/restore`);
+    return response.data;
+  },
 };
+
+
+
 
 export default MenuService;

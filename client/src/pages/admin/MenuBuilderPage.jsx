@@ -1,32 +1,6 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import {
-  Box,
-  Button,
-  Chip,
-  Dialog,
-  DialogActions,
-  DialogContent,
-  DialogTitle,
-  Divider,
-  FormControl,
-  Grid,
-  IconButton,
-  InputLabel,
-  MenuItem,
-  Paper,
-  Select,
-  Stack,
-  Switch,
-  TextField,
-  Tooltip,
-  Typography,
-} from '@mui/material';
-import { DataGrid } from '@mui/x-data-grid';
-import AddIcon from '@mui/icons-material/Add';
-import DeleteIcon from '@mui/icons-material/Delete';
-import EditIcon from '@mui/icons-material/Edit';
-import KeyboardArrowUpIcon from '@mui/icons-material/KeyboardArrowUp';
-import KeyboardArrowDownIcon from '@mui/icons-material/KeyboardArrowDown';
+import { Box, Button, Grid, Stack, Typography } from '@mui/material';
+
 import MenuService from '../../services/menuService';
 import PageService from '../../services/pageService';
 import { getCategories } from '../../services/categoryService';
@@ -36,82 +10,21 @@ import { useAuth } from '../../hooks/useAuth';
 import { PERMISSIONS } from '../../utils/permissions';
 import { getApiErrorMessage } from '../../utils/apiErrors';
 
-const emptyMenuForm = {
-  name: '',
-  slug: '',
-  location: 'header',
-  isActive: true,
-  sortOrder: 0,
-};
+import MenuSelector from './menu/MenuSelector';
+import MenuSettings from './menu/MenuSettings';
+import MenuItemGrid from './menu/MenuItemGrid';
+import MenuDialog from './menu/MenuDialog';
+import MenuItemDialog from './menu/MenuItemDialog';
 
-const emptyItemForm = {
-  parentId: '',
-  label: '',
-  targetType: 'none',
-  targetId: '',
-  url: '',
-  placement: 'center',
-  sortOrder: 0,
-  isVisible: true,
-  openInNewTab: false,
-};
-
-const flattenItems = (items = [], depth = 0, rows = []) => {
-  items.forEach((item) => {
-    rows.push({ ...item, depth, displayLabel: `${'  '.repeat(depth)}${item.label}` });
-    flattenItems(item.children || [], depth + 1, rows);
-  });
-  return rows;
-};
-
-const flattenCategories = (items = [], depth = 0, rows = []) => {
-  items.forEach((item) => {
-    rows.push({ ...item, displayName: `${'  '.repeat(depth)}${item.name}` });
-    flattenCategories(item.children || [], depth + 1, rows);
-  });
-  return rows;
-};
-
-const formatValidationError = (error, fallback) => {
-  const details = error?.response?.data?.error?.details;
-  if (Array.isArray(details) && details.length) {
-    return details.map((detail) => detail.message).join(' ');
-  }
-  return getApiErrorMessage(error, fallback);
-};
-
-const needsTarget = (targetType) => ['page', 'category', 'collection', 'product'].includes(targetType);
-const needsUrl = (targetType) => ['custom_url', 'system_route'].includes(targetType);
-const locationHelp = {
-  header: 'Shows in the desktop storefront header.',
-  footer: 'Shows in the storefront footer Quick Links column.',
-  mobile: 'Shows in the mobile hamburger menu. If empty, mobile uses the Header menu.',
-  sidebar: 'Shows on the products page sidebar above filters.',
-};
-const placementByLocation = {
-  header: [
-    { value: 'left', label: 'Header Left' },
-    { value: 'center', label: 'Header Center' },
-    { value: 'right', label: 'Header Right' },
-  ],
-  footer: [
-    { value: 'quick_links', label: 'Footer Quick Links' },
-    { value: 'footer_column', label: 'Footer Column' },
-  ],
-  mobile: [
-    { value: 'mobile', label: 'Mobile Menu' },
-  ],
-  sidebar: [
-    { value: 'sidebar', label: 'Sidebar' },
-  ],
-};
-
-const getDefaultPlacement = (location) => {
-  if (location === 'footer') return 'quick_links';
-  if (location === 'mobile') return 'mobile';
-  if (location === 'sidebar') return 'sidebar';
-  return 'center';
-};
+import {
+  emptyItemForm,
+  emptyMenuForm,
+  getDefaultPlacement,
+  needsTarget,
+  needsUrl,
+  placementByLocation,
+} from './menu/constants';
+import { flattenCategories, flattenItems, formatValidationError } from './menu/utils';
 
 const MenuBuilderPage = () => {
   const [menus, setMenus] = useState([]);
@@ -123,7 +36,9 @@ const MenuBuilderPage = () => {
   const [menuForm, setMenuForm] = useState(emptyMenuForm);
   const [itemForm, setItemForm] = useState(emptyItemForm);
   const [editingItem, setEditingItem] = useState(null);
+  const [selectedIds, setSelectedIds] = useState([]);
   const [pages, setPages] = useState([]);
+
   const [categories, setCategories] = useState([]);
   const [products, setProducts] = useState([]);
   const { notify, confirm } = useNotification();
@@ -183,6 +98,7 @@ const MenuBuilderPage = () => {
       } catch (error) {
         notify(formatValidationError(error, 'Failed to load menu target options.'), 'error');
       }
+
     };
 
     fetchTargets();
@@ -197,11 +113,14 @@ const MenuBuilderPage = () => {
       name: menu.name || '',
       slug: menu.slug || '',
       location: menu.location || 'header',
+      alignment: menu.alignment || 'left',
       isActive: menu.isActive !== false,
       sortOrder: menu.sortOrder || 0,
     } : emptyMenuForm);
+
     setMenuDialogOpen(true);
   };
+
 
   const saveMenu = async () => {
     try {
@@ -221,12 +140,19 @@ const MenuBuilderPage = () => {
         name: selectedMenu.name,
         slug: selectedMenu.slug,
         location: selectedMenu.location,
+        alignment: selectedMenu.alignment,
         isActive: selectedMenu.isActive,
         sortOrder: selectedMenu.sortOrder,
       });
+
       notify('Menu settings updated.', 'success');
-      fetchMenus();
-      fetchSelectedMenu();
+      const previousId = selectedMenuId;
+      await fetchMenus();
+      // If the ID didn't change, fetchMenus won't trigger the useEffect, so we refresh manually
+      if (previousId === selectedMenuId) {
+        fetchSelectedMenu();
+      }
+
     } catch (error) {
       notify(getApiErrorMessage(error, 'Failed to update menu.'), 'error');
     }
@@ -275,15 +201,9 @@ const MenuBuilderPage = () => {
       openInNewTab: needsUrl(targetType) ? Boolean(itemForm.openInNewTab) : false,
     };
 
-    if (!payload.label) {
-      throw new Error('Label is required.');
-    }
-    if (needsUrl(targetType) && !payload.url) {
-      throw new Error('URL is required for this link type.');
-    }
-    if (needsTarget(targetType) && !payload.targetId) {
-      throw new Error('Please choose a target.');
-    }
+    if (!payload.label) throw new Error('Label is required.');
+    if (needsUrl(targetType) && !payload.url) throw new Error('URL is required for this link type.');
+    if (needsTarget(targetType) && !payload.targetId) throw new Error('Please choose a target.');
 
     return payload;
   };
@@ -303,18 +223,67 @@ const MenuBuilderPage = () => {
     } catch (error) {
       notify(formatValidationError(error, 'Failed to save menu item.'), 'error');
     }
+
   };
 
   const deleteItem = async (item) => {
     if (!selectedMenu || !(await confirm('Delete Menu Item', `Delete "${item.label}" and its children?`, 'danger'))) return;
     try {
       await MenuService.adminDeleteMenuItem(selectedMenu.id, item.id);
-      notify('Menu item deleted.', 'success');
+      notify(`"${item.label}" deleted.`, 'success', {
+        label: 'Undo',
+        callback: async () => {
+          try {
+            await MenuService.adminRestoreMenuItem(selectedMenu.id, item.id);
+            notify('Item restored.', 'success');
+            fetchSelectedMenu();
+          } catch (error) {
+            notify('Failed to restore item.', 'error');
+          }
+        }
+      });
       fetchSelectedMenu();
     } catch (error) {
       notify(formatValidationError(error, 'Failed to delete menu item.'), 'error');
     }
+
   };
+
+
+  const bulkDeleteItems = async () => {
+    if (!selectedMenu || selectedIds.length === 0 || !(await confirm('Bulk Delete', `Delete ${selectedIds.length} items and their children?`, 'danger'))) return;
+    setLoading(true);
+    try {
+      await MenuService.adminBulkDeleteMenuItems(selectedMenu.id, selectedIds);
+      notify(`Deleted ${selectedIds.length} items.`, 'success');
+      setSelectedIds([]);
+      fetchSelectedMenu();
+    } catch (error) {
+      notify(getApiErrorMessage(error, 'Failed to delete items.'), 'error');
+      fetchSelectedMenu();
+    } finally {
+      setLoading(false);
+    }
+  };
+
+
+  const bulkMoveItems = async (targetMenuId) => {
+    if (!selectedMenu || selectedIds.length === 0 || targetMenuId === selectedMenu.id) return;
+    setLoading(true);
+    try {
+      await MenuService.adminMoveMenuItems(selectedIds, targetMenuId);
+      notify(`Moved ${selectedIds.length} items to the target menu.`, 'success');
+      setSelectedIds([]);
+      fetchSelectedMenu();
+    } catch (error) {
+      notify('Failed to move items.', 'error');
+      fetchSelectedMenu();
+    } finally {
+      setLoading(false);
+    }
+  };
+
+
 
   const nudgeItem = async (item, direction) => {
     const siblings = rows.filter((row) => (row.parentId || '') === (item.parentId || '') && row.placement === item.placement);
@@ -331,6 +300,7 @@ const MenuBuilderPage = () => {
     } catch (error) {
       notify(formatValidationError(error, 'Failed to reorder menu items.'), 'error');
     }
+
   };
 
   const targetOptions = useMemo(() => {
@@ -341,272 +311,82 @@ const MenuBuilderPage = () => {
     if (itemForm.targetType === 'product') return products.map((product) => ({ id: product.id, label: product.name }));
     return [];
   }, [itemForm.targetType, pages, categoryOptions, products]);
+
   const basePlacementOptions = placementByLocation[selectedMenu?.location || menuForm.location] || placementByLocation.header;
   const placementOptions = itemForm.placement && !basePlacementOptions.some((option) => option.value === itemForm.placement)
     ? [...basePlacementOptions, { value: itemForm.placement, label: `Current: ${itemForm.placement}` }]
     : basePlacementOptions;
-
-  const columns = [
-    { field: 'displayLabel', headerName: 'Label', flex: 1, renderCell: (params) => (
-      <Typography sx={{ pl: params.row.depth * 2, fontWeight: params.row.depth === 0 ? 700 : 400 }}>
-        {params.row.label}
-      </Typography>
-    ) },
-    { field: 'placement', headerName: 'Placement', width: 130 },
-    { field: 'targetType', headerName: 'Type', width: 130 },
-    { field: 'url', headerName: 'URL', flex: 1 },
-    { field: 'sortOrder', headerName: 'Order', width: 90 },
-    { field: 'isVisible', headerName: 'Visible', width: 100, renderCell: (params) => (
-      <Chip label={params.value ? 'Visible' : 'Hidden'} color={params.value ? 'success' : 'default'} size="small" />
-    ) },
-    { field: 'actions', headerName: 'Actions', width: 190, sortable: false, renderCell: (params) => (
-      <Box>
-        <Tooltip title="Move up"><span><IconButton disabled={!canManage} onClick={() => nudgeItem(params.row, -1)}><KeyboardArrowUpIcon /></IconButton></span></Tooltip>
-        <Tooltip title="Move down"><span><IconButton disabled={!canManage} onClick={() => nudgeItem(params.row, 1)}><KeyboardArrowDownIcon /></IconButton></span></Tooltip>
-        <Tooltip title="Edit"><span><IconButton disabled={!canManage} onClick={() => openItemDialog(params.row)}><EditIcon /></IconButton></span></Tooltip>
-        <Tooltip title="Delete"><span><IconButton disabled={!canManage} color="error" onClick={() => deleteItem(params.row)}><DeleteIcon /></IconButton></span></Tooltip>
-      </Box>
-    ) },
-  ];
 
   return (
     <Box p={3}>
       <Stack direction="row" justifyContent="space-between" alignItems="center" mb={3}>
         <Typography variant="h4">Menu Builder</Typography>
         {canManage && (
-          <Button variant="contained" startIcon={<AddIcon />} onClick={() => openMenuDialog()}>
-            New Menu
-          </Button>
+          <Button variant="contained" onClick={() => openMenuDialog()}>New Menu</Button>
         )}
       </Stack>
 
       <Grid container spacing={3}>
         <Grid item xs={12} md={3}>
-          <Paper sx={{ p: 2 }}>
-            <Typography variant="h6" mb={2}>Menus</Typography>
-            <Stack spacing={1}>
-              {menus.map((menu) => (
-                <Button
-                  key={menu.id}
-                  variant={menu.id === selectedMenuId ? 'contained' : 'outlined'}
-                  onClick={() => setSelectedMenuId(menu.id)}
-                  sx={{ justifyContent: 'space-between' }}
-                >
-                  <span>{menu.name}</span>
-                  <Chip label={menu.location} size="small" />
-                </Button>
-              ))}
-            </Stack>
-          </Paper>
+          <MenuSelector 
+            menus={menus} 
+            selectedMenuId={selectedMenuId} 
+            setSelectedMenuId={setSelectedMenuId} 
+            onRefresh={fetchMenus}
+          />
         </Grid>
 
-        <Grid item xs={12} md={9}>
-          <Paper sx={{ p: 2, mb: 2 }}>
-            {selectedMenu ? (
-              <Grid container spacing={2} alignItems="center">
-                <Grid item xs={12} md={3}>
-                  <TextField fullWidth label="Name" value={selectedMenu.name || ''} disabled={!canManage}
-                    onChange={(e) => setSelectedMenu({ ...selectedMenu, name: e.target.value })} />
-                </Grid>
-                <Grid item xs={12} md={2}>
-                  <TextField fullWidth label="Slug" value={selectedMenu.slug || ''} disabled={!canManage}
-                    onChange={(e) => setSelectedMenu({ ...selectedMenu, slug: e.target.value })} />
-                </Grid>
-                <Grid item xs={12} md={2}>
-                  <FormControl fullWidth>
-                    <InputLabel>Location</InputLabel>
-                    <Select label="Location" value={selectedMenu.location || 'header'} disabled={!canManage}
-                      onChange={(e) => setSelectedMenu({ ...selectedMenu, location: e.target.value })}>
-                      <MenuItem value="header">Header</MenuItem>
-                      <MenuItem value="footer">Footer</MenuItem>
-                      <MenuItem value="mobile">Mobile</MenuItem>
-                      <MenuItem value="sidebar">Sidebar</MenuItem>
-                    </Select>
-                  </FormControl>
-                </Grid>
-                <Grid item xs={6} md={1.5}>
-                  <TextField fullWidth label="Order" type="number" value={selectedMenu.sortOrder || 0} disabled={!canManage}
-                    onChange={(e) => setSelectedMenu({ ...selectedMenu, sortOrder: Number(e.target.value) })} />
-                </Grid>
-                <Grid item xs={6} md={1.5}>
-                  <Stack direction="row" alignItems="center">
-                    <Switch checked={selectedMenu.isActive !== false} disabled={!canManage}
-                      onChange={(e) => setSelectedMenu({ ...selectedMenu, isActive: e.target.checked })} />
-                    <Typography>Active</Typography>
-                  </Stack>
-                </Grid>
-                <Grid item xs={12} md={2}>
-                  <Stack direction="row" spacing={1}>
-                    <Button variant="contained" disabled={!canManage} onClick={saveSelectedMenu}>Save</Button>
-                    <IconButton color="error" disabled={!canManage} onClick={deleteSelectedMenu}><DeleteIcon /></IconButton>
-                  </Stack>
-                </Grid>
-                <Grid item xs={12}>
-                  <Typography variant="body2" color="text.secondary">
-                    {locationHelp[selectedMenu.location] || locationHelp.header}
-                  </Typography>
-                </Grid>
-              </Grid>
-            ) : (
-              <Typography color="text.secondary">Create a menu to begin.</Typography>
-            )}
-          </Paper>
 
-          <Paper sx={{ height: 560, width: '100%' }}>
-            <Stack direction="row" justifyContent="space-between" alignItems="center" p={2}>
-              <Box>
-                <Typography variant="h6">Items</Typography>
-                <Typography variant="body2" color="text.secondary">
-                  {selectedMenu ? locationHelp[selectedMenu.location] || locationHelp.header : 'Create a menu to begin.'}
-                </Typography>
-              </Box>
-              <Button variant="contained" startIcon={<AddIcon />} disabled={!canManage || !selectedMenu} onClick={() => openItemDialog()}>
-                Add Item
-              </Button>
-            </Stack>
-            <Divider />
-            <DataGrid
-              rows={rows}
-              columns={columns}
-              loading={loading}
-              disableRowSelectionOnClick
-              pageSizeOptions={[25, 50, 100]}
-              initialState={{ pagination: { paginationModel: { pageSize: 25 } } }}
-            />
-          </Paper>
+        <Grid item xs={12} md={9}>
+          <MenuSettings
+            selectedMenu={selectedMenu}
+            setSelectedMenu={setSelectedMenu}
+            canManage={canManage}
+            saveSelectedMenu={saveSelectedMenu}
+            deleteSelectedMenu={deleteSelectedMenu}
+          />
+
+          <MenuItemGrid
+            rows={rows}
+            loading={loading}
+            canManage={canManage}
+            selectedMenu={selectedMenu}
+            menus={menus}
+            openItemDialog={openItemDialog}
+            nudgeItem={nudgeItem}
+            deleteItem={deleteItem}
+            selectedIds={selectedIds}
+            setSelectedIds={setSelectedIds}
+            bulkDeleteItems={bulkDeleteItems}
+            bulkMoveItems={bulkMoveItems}
+            onRefresh={fetchSelectedMenu}
+          />
+
+
         </Grid>
       </Grid>
 
-      <Dialog open={menuDialogOpen} onClose={() => setMenuDialogOpen(false)} maxWidth="sm" fullWidth>
-        <DialogTitle>New Menu</DialogTitle>
-        <DialogContent>
-          <Stack spacing={2} mt={1}>
-            <TextField label="Name" value={menuForm.name} onChange={(e) => setMenuForm({ ...menuForm, name: e.target.value })} />
-            <TextField label="Slug" helperText="Optional. Leave empty to generate." value={menuForm.slug || ''} onChange={(e) => setMenuForm({ ...menuForm, slug: e.target.value })} />
-            <FormControl fullWidth>
-              <InputLabel>Location</InputLabel>
-              <Select label="Location" value={menuForm.location} onChange={(e) => setMenuForm({ ...menuForm, location: e.target.value })}>
-                <MenuItem value="header">Header</MenuItem>
-                <MenuItem value="footer">Footer</MenuItem>
-                <MenuItem value="mobile">Mobile</MenuItem>
-                <MenuItem value="sidebar">Sidebar</MenuItem>
-              </Select>
-            </FormControl>
-            <Typography variant="body2" color="text.secondary">
-              {locationHelp[menuForm.location] || locationHelp.header}
-            </Typography>
-          </Stack>
-        </DialogContent>
-        <DialogActions>
-          <Button onClick={() => setMenuDialogOpen(false)}>Cancel</Button>
-          <Button variant="contained" onClick={saveMenu}>Create</Button>
-        </DialogActions>
-      </Dialog>
+      <MenuDialog
+        open={menuDialogOpen}
+        onClose={() => setMenuDialogOpen(false)}
+        menuForm={menuForm}
+        setMenuForm={setMenuForm}
+        onSave={saveMenu}
+      />
 
-      <Dialog open={itemDialogOpen} onClose={() => setItemDialogOpen(false)} maxWidth="md" fullWidth>
-        <DialogTitle>{editingItem ? 'Edit Menu Item' : 'Add Menu Item'}</DialogTitle>
-        <DialogContent>
-          <Grid container spacing={2} mt={0.5}>
-            <Grid item xs={12} md={6}>
-              <TextField fullWidth label="Label" value={itemForm.label} onChange={(e) => setItemForm({ ...itemForm, label: e.target.value })} />
-            </Grid>
-            <Grid item xs={12} md={6}>
-              <FormControl fullWidth>
-                <InputLabel>Parent</InputLabel>
-                <Select label="Parent" value={itemForm.parentId || ''} onChange={(e) => setItemForm({ ...itemForm, parentId: e.target.value })}>
-                  <MenuItem value="">No parent</MenuItem>
-                  {parentOptions.map((item) => (
-                    <MenuItem key={item.id} value={item.id}>{item.displayLabel}</MenuItem>
-                  ))}
-                </Select>
-              </FormControl>
-            </Grid>
-            <Grid item xs={12} md={4}>
-              <FormControl fullWidth>
-                <InputLabel>Type</InputLabel>
-                <Select
-                  label="Type"
-                  value={itemForm.targetType}
-                  onChange={(e) => setItemForm({
-                    ...itemForm,
-                    targetType: e.target.value,
-                    targetId: '',
-                    url: '',
-                    openInNewTab: false,
-                  })}
-                >
-                  <MenuItem value="none">No Link / Parent</MenuItem>
-                  <MenuItem value="custom_url">Custom URL</MenuItem>
-                  <MenuItem value="system_route">System Route</MenuItem>
-                  <MenuItem value="page">Page</MenuItem>
-                  <MenuItem value="category">Category</MenuItem>
-                  <MenuItem value="product">Product</MenuItem>
-                  <MenuItem value="collection">Collection</MenuItem>
-                </Select>
-              </FormControl>
-            </Grid>
-            {needsTarget(itemForm.targetType) && (
-              <Grid item xs={12} md={4}>
-                <FormControl fullWidth>
-                  <InputLabel>Target</InputLabel>
-                  <Select
-                    label="Target"
-                    value={itemForm.targetId || ''}
-                    onChange={(e) => setItemForm({ ...itemForm, targetId: e.target.value })}
-                  >
-                    <MenuItem value="">Choose target</MenuItem>
-                    {targetOptions.map((target) => (
-                      <MenuItem key={target.id} value={target.id}>{target.label}</MenuItem>
-                    ))}
-                  </Select>
-                </FormControl>
-              </Grid>
-            )}
-            {needsUrl(itemForm.targetType) && (
-              <Grid item xs={12} md={4}>
-                <TextField
-                  fullWidth
-                  label={itemForm.targetType === 'system_route' ? 'Route' : 'URL'}
-                  placeholder={itemForm.targetType === 'system_route' ? '/products' : 'https://example.com or /products'}
-                  value={itemForm.url || ''}
-                  onChange={(e) => setItemForm({ ...itemForm, url: e.target.value })}
-                />
-              </Grid>
-            )}
-            <Grid item xs={12} md={4}>
-              <FormControl fullWidth>
-                <InputLabel>Placement</InputLabel>
-                <Select label="Placement" value={itemForm.placement} onChange={(e) => setItemForm({ ...itemForm, placement: e.target.value })}>
-                  {placementOptions.map((option) => (
-                    <MenuItem key={option.value} value={option.value}>{option.label}</MenuItem>
-                  ))}
-                </Select>
-              </FormControl>
-            </Grid>
-            <Grid item xs={12} md={2}>
-              <TextField fullWidth type="number" label="Order" value={itemForm.sortOrder} onChange={(e) => setItemForm({ ...itemForm, sortOrder: Number(e.target.value) })} />
-            </Grid>
-            <Grid item xs={6} md={3}>
-              <Stack direction="row" alignItems="center">
-                <Switch checked={itemForm.isVisible} onChange={(e) => setItemForm({ ...itemForm, isVisible: e.target.checked })} />
-                <Typography>Visible</Typography>
-              </Stack>
-            </Grid>
-            {needsUrl(itemForm.targetType) && (
-              <Grid item xs={6} md={3}>
-                <Stack direction="row" alignItems="center">
-                  <Switch checked={itemForm.openInNewTab} onChange={(e) => setItemForm({ ...itemForm, openInNewTab: e.target.checked })} />
-                  <Typography>New tab</Typography>
-                </Stack>
-              </Grid>
-            )}
-          </Grid>
-        </DialogContent>
-        <DialogActions>
-          <Button onClick={() => setItemDialogOpen(false)}>Cancel</Button>
-          <Button variant="contained" onClick={saveItem}>Save</Button>
-        </DialogActions>
-      </Dialog>
+      <MenuItemDialog
+        open={itemDialogOpen}
+        onClose={() => setItemDialogOpen(false)}
+        editingItem={editingItem}
+        itemForm={itemForm}
+        setItemForm={setItemForm}
+        parentOptions={parentOptions}
+        targetOptions={targetOptions}
+        placementOptions={placementOptions}
+        onSave={saveItem}
+        selectedMenu={selectedMenu}
+      />
+
     </Box>
   );
 };

@@ -26,6 +26,8 @@ const forgotPasswordLimiter = createLimiter(60, 3, 'Too many password reset requ
 const reviewLimiter = createLimiter(24 * 60, 5, 'You have reached the daily limit for reviews');
 const couponLimiter = createLimiter(1, 10, 'Too many coupon validation requests');
 const globalLimiter = createLimiter(15, 2000, 'Too many requests to this API, please try again later');
+const publicApiLimiter = createLimiter(15, 500, 'Too many requests to public endpoints, please try again later');
+
 
 module.exports = {
   loginLimiter,
@@ -34,4 +36,6 @@ module.exports = {
   reviewLimiter,
   couponLimiter,
   globalLimiter,
+  publicApiLimiter,
 };
+

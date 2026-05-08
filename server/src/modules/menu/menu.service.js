@@ -9,6 +9,31 @@ const SORT_ORDER = [['sortOrder', 'ASC'], ['createdAt', 'ASC']];
 
 const normalizeEmpty = (value) => (value === '' ? null : value);
 
+// Simple in-memory cache for public menus with TTL
+const CACHE_TTL = 5 * 60 * 1000; // 5 minutes
+const publicMenuCache = new Map();
+
+const setCache = (key, value) => {
+    publicMenuCache.set(key, {
+        data: value,
+        expiry: Date.now() + CACHE_TTL
+    });
+};
+
+const getCache = (key) => {
+    const cached = publicMenuCache.get(key);
+    if (!cached) return null;
+    if (Date.now() > cached.expiry) {
+        publicMenuCache.delete(key);
+        return null;
+    }
+    return cached.data;
+};
+
+const clearCache = () => publicMenuCache.clear();
+
+
+
 const toPlain = (record) => (typeof record?.toJSON === 'function' ? record.toJSON() : record);
 
 const buildTree = (items = []) => {
@@ -94,6 +119,7 @@ const getDescendantIds = async (itemId, menuId, collected = new Set(), options =
         where: { menuId, parentId: itemId },
         attributes: ['id'],
         transaction: options.transaction,
+        paranoid: options.paranoid !== undefined ? options.paranoid : true,
     });
 
     for (const child of children) {
@@ -105,6 +131,7 @@ const getDescendantIds = async (itemId, menuId, collected = new Set(), options =
 
     return collected;
 };
+
 
 const validateParent = async ({ menuId, itemId = null, parentId }, options = {}) => {
     if (!parentId) return;
@@ -191,6 +218,10 @@ exports.getMenuById = async (id) => {
 exports.getPublicMenuByLocation = async (location) => {
     if (typeof location !== 'string') throw new AppError('INVALID_INPUT', 400);
     const sanitizedLocation = encodeURIComponent(location).replace(/['"*]/g, '');
+    
+    const cached = getCache(sanitizedLocation);
+    if (cached) return cached;
+
     const menus = await Menu.findAll({
         where: { location: sanitizedLocation, isActive: true },
         include: [{
@@ -207,13 +238,21 @@ exports.getPublicMenuByLocation = async (location) => {
     const plainMenus = menus.map(toPlain);
     const plain = plainMenus.find((candidate) => candidate.items?.length > 0) || plainMenus[0];
     const tree = buildTree(plain.items || []);
-    return { ...plain, items: await resolveTreeUrls(tree) };
+    const result = { ...plain, items: await resolveTreeUrls(tree) };
+    
+    setCache(sanitizedLocation, result);
+    return result;
+
 };
+
 
 exports.createMenu = async (data) => {
     const slug = data.slug || await generateSlug(data.name, Menu);
-    return Menu.create({ ...data, slug });
+    const menu = await Menu.create({ ...data, slug });
+    clearCache();
+    return menu;
 };
+
 
 exports.updateMenu = async (id, data) => {
     const menu = await Menu.findByPk(id);
@@ -225,15 +264,19 @@ exports.updateMenu = async (id, data) => {
     }
 
     await menu.update(updates);
+    clearCache();
     return exports.getMenuById(id);
 };
+
 
 exports.deleteMenu = async (id) => {
     const menu = await Menu.findByPk(id);
     if (!menu) throw new AppError('NOT_FOUND', 404, 'Menu not found');
     await menu.destroy();
+    clearCache();
     return true;
 };
+
 
 exports.createMenuItem = async (menuId, data) => {
     const menu = await Menu.findByPk(menuId);
@@ -245,8 +288,10 @@ exports.createMenuItem = async (menuId, data) => {
 
     const item = await MenuItem.create({ ...itemData, menuId });
 
+    clearCache();
     return item;
 };
+
 
 exports.updateMenuItem = async (menuId, itemId, data) => {
     const item = await MenuItem.findOne({ where: { id: itemId, menuId } });
@@ -266,15 +311,45 @@ exports.updateMenuItem = async (menuId, itemId, data) => {
 
     await item.update(itemData);
 
+    clearCache();
     return item;
 };
+
 
 exports.deleteMenuItem = async (menuId, itemId) => {
     const item = await MenuItem.findOne({ where: { id: itemId, menuId } });
     if (!item) throw new AppError('NOT_FOUND', 404, 'Menu item not found');
-    await MenuItem.destroy({ where: { [Op.or]: [{ id: itemId }, { parentId: itemId }], menuId } });
+
+    const descendantIds = await getDescendantIds(itemId, menuId);
+    const idsToDelete = [itemId, ...Array.from(descendantIds)];
+
+    await MenuItem.destroy({ where: { id: idsToDelete, menuId } });
+    clearCache();
     return true;
 };
+ 
+exports.bulkDeleteMenuItems = async (menuId, itemIds) => {
+    const transaction = await MenuItem.sequelize.transaction();
+    try {
+        const allIdsToDelete = new Set(itemIds);
+        for (const id of itemIds) {
+            await getDescendantIds(id, menuId, allIdsToDelete, { transaction });
+        }
+
+        await MenuItem.destroy({
+            where: { id: Array.from(allIdsToDelete), menuId },
+            transaction
+        });
+        await transaction.commit();
+        clearCache();
+        return true;
+    } catch (error) {
+        await transaction.rollback();
+        throw error;
+    }
+};
+
+
 
 exports.reorderItems = async (menuId, items) => {
     const transaction = await MenuItem.sequelize.transaction();
@@ -292,9 +367,128 @@ exports.reorderItems = async (menuId, items) => {
             );
         }
         await transaction.commit();
+        clearCache();
         return exports.getMenuById(menuId);
+
     } catch (error) {
         await transaction.rollback();
         throw error;
     }
 };
+
+
+exports.reorderMenus = async (menus) => {
+    const transaction = await Menu.sequelize.transaction();
+    try {
+        const ids = menus.map(m => m.id);
+        const existingMenus = await Menu.findAll({
+            where: { id: ids },
+            attributes: ['id', 'location'],
+            transaction
+        });
+
+        if (existingMenus.length !== menus.length) {
+            throw new AppError('NOT_FOUND', 404, 'One or more menus not found');
+        }
+
+        const locations = new Set(existingMenus.map(m => m.location));
+        if (locations.size > 1) {
+            throw new AppError('INVALID_INPUT', 400, 'Cannot reorder menus across different locations');
+        }
+
+        for (const m of menus) {
+            await Menu.update(
+                { sortOrder: m.sortOrder },
+                { where: { id: m.id }, transaction }
+            );
+        }
+        await transaction.commit();
+        clearCache();
+        return true;
+    } catch (error) {
+        await transaction.rollback();
+        throw error;
+    }
+};
+
+
+
+exports.moveItems = async (itemIds, targetMenuId) => {
+    const transaction = await MenuItem.sequelize.transaction();
+    try {
+        const items = await MenuItem.findAll({
+            where: { id: itemIds },
+            attributes: ['id', 'parentId'],
+            transaction
+        });
+
+        for (const item of items) {
+            // Keep parent only if it's also being moved to the new menu
+            const isParentMoving = item.parentId && itemIds.includes(item.parentId);
+            
+            await MenuItem.update(
+                { 
+                    menuId: targetMenuId,
+                    parentId: isParentMoving ? item.parentId : null
+                },
+                { where: { id: item.id }, transaction }
+            );
+        }
+
+        await transaction.commit();
+        clearCache();
+        return true;
+    } catch (error) {
+        await transaction.rollback();
+        throw error;
+    }
+};
+
+
+
+exports.restoreMenu = async (id) => {
+    const menu = await Menu.findByPk(id, { paranoid: false });
+    if (!menu) throw new AppError('NOT_FOUND', 404, 'Menu not found');
+    await menu.restore();
+    clearCache();
+    return menu;
+};
+
+
+exports.restoreMenuItem = async (menuId, itemId) => {
+    // Find the item including deleted ones
+    const item = await MenuItem.findOne({
+        where: { id: itemId, menuId },
+        paranoid: false
+    });
+    
+    if (!item) throw new AppError('NOT_FOUND', 404, 'Menu item not found');
+
+    const transaction = await MenuItem.sequelize.transaction();
+    try {
+        // Restore the item itself
+        await item.restore({ transaction });
+
+        // We also want to restore descendants that were deleted at roughly the same time (or just all of them)
+        // Usually, if we undo a delete, we want everything back.
+        // For simplicity, we restore all descendants of this item in this menu.
+        const descendantIds = await getDescendantIds(itemId, menuId, new Set(), { paranoid: false, transaction });
+        if (descendantIds.size > 0) {
+            await MenuItem.restore({
+                where: { id: Array.from(descendantIds), menuId },
+                transaction
+            });
+        }
+
+
+        await transaction.commit();
+        clearCache();
+        return item;
+    } catch (error) {
+        await transaction.rollback();
+        throw error;
+    }
+};
+
+
+

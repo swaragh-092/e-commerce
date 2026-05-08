@@ -95,10 +95,12 @@ const StoreLayout = () => {
         id: link.id,
         label: link.title,
         url: `/p/${link.slug}`,
+        targetType: 'page',
         placement: 'center',
         sortOrder: index,
         children: [],
       }));
+
   const groupedHeaderItems = {
     left: headerItems.filter((item) => item.placement === 'left'),
     center: headerItems.filter((item) => !item.placement || item.placement === 'center'),
@@ -109,6 +111,9 @@ const StoreLayout = () => {
     ...groupedHeaderItems.center,
     ...groupedHeaderItems.right,
   ];
+
+  const headerAlignment = headerMenu?.alignment || 'left';
+
   const hasDedicatedMobileItems = Array.isArray(mobileMenu?.items) && mobileMenu.items.length > 0;
   const mobileHeaderItems = hasDedicatedMobileItems ? mobileMenu.items : desktopHeaderItems;
 
@@ -316,6 +321,9 @@ const StoreLayout = () => {
             )}
           </Box>
 
+          {headerAlignment === 'center' && <Box sx={{ flexGrow: 1, minWidth: 8 }} />}
+          {headerAlignment === 'right' && <Box sx={{ flexGrow: 1, minWidth: 8 }} />}
+
           <Box
             component="nav"
             aria-label="Main navigation"
@@ -325,12 +333,14 @@ const StoreLayout = () => {
               gap: 0.75,
               minWidth: 0,
               overflow: 'hidden',
+              ...(headerAlignment === 'center' && { position: 'absolute', left: '50%', transform: 'translateX(-50%)' }),
             }}
           >
             {renderHeaderLinks(desktopHeaderItems)}
           </Box>
 
-          <Box sx={{ flexGrow: 1, minWidth: 8 }} />
+          {(headerAlignment === 'left' || headerAlignment === 'center') && <Box sx={{ flexGrow: 1, minWidth: 8 }} />}
+
 
           {mobileHeaderItems.length > 0 && (
             <>

@@ -83,6 +83,16 @@ exports.adminDeleteMenuItem = async (req, res, next) => {
         next(err);
     }
 };
+ 
+exports.adminBulkDeleteMenuItems = async (req, res, next) => {
+    try {
+        await MenuService.bulkDeleteMenuItems(req.params.menuId, req.body.itemIds);
+        return success(res, null, 'Menu items deleted successfully');
+    } catch (err) {
+        next(err);
+    }
+};
+
 
 exports.adminReorderMenuItems = async (req, res, next) => {
     try {
@@ -92,3 +102,42 @@ exports.adminReorderMenuItems = async (req, res, next) => {
         next(err);
     }
 };
+
+exports.adminReorderMenus = async (req, res, next) => {
+    try {
+        await MenuService.reorderMenus(req.body.menus);
+        return success(res, null, 'Menus reordered successfully');
+    } catch (err) {
+        next(err);
+    }
+};
+
+exports.adminMoveMenuItems = async (req, res, next) => {
+    try {
+        await MenuService.moveItems(req.body.itemIds, req.body.targetMenuId);
+        return success(res, null, 'Menu items moved successfully');
+    } catch (err) {
+        next(err);
+    }
+};
+
+exports.adminRestoreMenu = async (req, res, next) => {
+    try {
+        const menu = await MenuService.restoreMenu(req.params.id);
+        return success(res, menu, 'Menu restored successfully');
+    } catch (err) {
+        next(err);
+    }
+};
+
+exports.adminRestoreMenuItem = async (req, res, next) => {
+    try {
+        const item = await MenuService.restoreMenuItem(req.params.menuId, req.params.itemId);
+        return success(res, item, 'Menu item restored successfully');
+    } catch (err) {
+        next(err);
+    }
+};
+
+
+

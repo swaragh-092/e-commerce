@@ -33,23 +33,28 @@ module.exports = (sequelize, DataTypes) => {
             defaultValue: 0,
             field: 'sort_order',
         },
+        alignment: {
+            type: DataTypes.STRING(20),
+            allowNull: false,
+            defaultValue: 'left',
+        },
     }, {
+
         tableName: 'menus',
         timestamps: true,
         underscored: true,
         paranoid: true,
     });
 
-    Menu.addHook('beforeDestroy', async (menu, options) => {
-        await sequelize.models.MenuItem.destroy({
-            where: { menuId: menu.id },
-            transaction: options.transaction,
-        });
-    });
-
     Menu.associate = (models) => {
-        Menu.hasMany(models.MenuItem, { foreignKey: 'menuId', as: 'items', onDelete: 'CASCADE' });
+        Menu.hasMany(models.MenuItem, { 
+            foreignKey: 'menuId', 
+            as: 'items', 
+            onDelete: 'CASCADE',
+            hooks: true 
+        });
     };
+
 
     return Menu;
 };

@@ -182,10 +182,25 @@ const StorefrontFooter = () => {
           {/* ── Quick Links column ───────────────────────────── */}
           {hasLinks && (
             <Grid item xs={12} sm={6} md={otherMd}>
-              <Typography variant="subtitle1" fontWeight={700} sx={{ mb: 2, color: fgColor }}>
+              <Typography 
+                variant="subtitle1" 
+                fontWeight={700} 
+                sx={{ 
+                  mb: 2, 
+                  color: fgColor,
+                  textAlign: footerMenu?.alignment || 'left'
+                }}
+              >
                 {f.linksTitle || 'Quick Links'}
               </Typography>
-              <Stack spacing={1}>
+              <Stack 
+                spacing={1}
+                alignItems={
+                  footerMenu?.alignment === 'center' ? 'center' : 
+                  footerMenu?.alignment === 'right' ? 'flex-end' : 
+                  'flex-start'
+                }
+              >
                 {allLinks.map((link, i) => (
                   <MuiLink
                     key={i}
@@ -198,6 +213,7 @@ const StorefrontFooter = () => {
                       color: fgColor,
                       opacity: 0.8,
                       fontSize: '0.875rem',
+                      textAlign: footerMenu?.alignment || 'left',
                       '&:hover': { opacity: 1 },
                     }}
                   >
@@ -207,6 +223,7 @@ const StorefrontFooter = () => {
               </Stack>
             </Grid>
           )}
+
 
           {/* ── Contact column ───────────────────────────────── */}
           {hasContact && (
