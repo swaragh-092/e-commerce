@@ -491,7 +491,7 @@ const StoreLayout = () => {
       </AppBar>
       {nav.showCategoryBar && <CategoryNav />}
 
-      {categoryError && (
+      {categoryError && nav.showCategoryBar && (
         <Alert 
           severity="warning" 
           variant="filled" 

@@ -185,7 +185,7 @@ const CategoryTreeItem = ({ node, level, expandedIds, toggleNode, selectedId, on
 };
 
 // --- CategoryDetailsPanel Component (Right Panel) ---
-const CategoryDetailsPanel = ({ categoryId, categories, onEdit, onDelete, onAddChild, onNavigateNode, onManageAttributes, canManageCategories }) => {
+const CategoryDetailsPanel = ({ categoryId, categories, onEdit, onDelete, onAddChild, onNavigateNode, onManageAttributes, canManageCategories, canManageAttributes }) => {
     const selectedPath = useMemo(() => getBreadcrumbPath(categories, categoryId) || [], [categories, categoryId]);
     const selectedCatNode = useMemo(() => {
         let found = null;
@@ -252,7 +252,7 @@ const CategoryDetailsPanel = ({ categoryId, categories, onEdit, onDelete, onAddC
                     </Box>
                 </Box>
                 <Stack direction="row" spacing={1}>
-                    <Button variant="outlined" startIcon={<SettingsIcon />} onClick={() => onManageAttributes(selectedCatNode)} disabled={!canManageCategories}>Attributes</Button>
+                    <Button variant="outlined" startIcon={<SettingsIcon />} onClick={() => onManageAttributes(selectedCatNode)} disabled={!canManageAttributes}>Attributes</Button>
                     <Button variant="outlined" startIcon={<EditIcon />} onClick={() => onEdit(selectedCatNode)} disabled={!canManageCategories}>Edit</Button>
                     <Button variant="outlined" color="error" startIcon={<DeleteIcon />} onClick={() => onDelete(selectedCatNode.id)} disabled={!canManageCategories}>Delete</Button>
                 </Stack>
@@ -779,7 +779,8 @@ const CategoriesPage = () => {
                                 onAddChild={openCreate}
                                 onNavigateNode={handleNavigateNode}
                                 onManageAttributes={handleOpenAttributes}
-                                canManageCategories={canManageCategories || canManageAttributes}
+                                canManageCategories={canManageCategories}
+                                canManageAttributes={canManageAttributes}
                             />
                         </Paper>
                         

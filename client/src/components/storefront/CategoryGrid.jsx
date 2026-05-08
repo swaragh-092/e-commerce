@@ -12,9 +12,12 @@ import { getMediaUrl } from '../../utils/media';
 const CategoryGrid = ({ title, categories = [], loading = false }) => {
     if (!loading && categories.length === 0) {
         return (
-            <Box sx={{ mb: 6, p: 4, textAlign: 'center', bgcolor: 'action.hover', borderRadius: 4 }}>
-                <Typography variant="h6" color="text.secondary">No Categories Available</Typography>
-                <Typography variant="body2" color="text.secondary">We are currently updating our collection. Please check back soon!</Typography>
+            <Box sx={{ mb: 6 }}>
+                {title && <Typography variant="h5" fontWeight={800} mb={3}>{title}</Typography>}
+                <Box sx={{ p: 8, textAlign: 'center', bgcolor: 'action.hover', borderRadius: 4, border: '1px dashed', borderColor: 'divider' }}>
+                    <Typography variant="h6" color="text.secondary" gutterBottom>No Categories Available</Typography>
+                    <Typography variant="body2" color="text.secondary">We are currently updating our collection. Please check back soon!</Typography>
+                </Box>
             </Box>
         );
     }

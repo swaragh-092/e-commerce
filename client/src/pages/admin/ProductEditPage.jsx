@@ -164,6 +164,7 @@ const ProductEditPage = () => {
   const navigate = useNavigate();
   const { notify, confirm } = useNotification();
   const { settings } = useSettings();
+  const { currency, symbol, formatPrice } = useCurrency();
   const { hasPermission } = useAuth();
   const isNew = !id || id === 'new';
   const { generateProductSKU, generateVariantSKU } = useSKUGenerator();
@@ -309,12 +310,12 @@ const ProductEditPage = () => {
         ...formData,
         price: parseFloat(formData.price),
         salePrice:
-          formData.salePrice !== '' && formData.salePrice !== null
+          formData.salePrice !== '' && formData.salePrice !== null && !isNaN(parseFloat(formData.salePrice))
             ? parseFloat(formData.salePrice)
             : null,
-        saleStartAt: formData.salePrice ? toIsoOrNull(formData.saleStartAt) : null,
-        saleEndAt: formData.salePrice ? toIsoOrNull(formData.saleEndAt) : null,
-        saleLabel: formData.salePrice ? (formData.saleLabel || null) : null,
+        saleStartAt: (formData.salePrice !== '' && formData.salePrice !== null) ? toIsoOrNull(formData.saleStartAt) : null,
+        saleEndAt: (formData.salePrice !== '' && formData.salePrice !== null) ? toIsoOrNull(formData.saleEndAt) : null,
+        saleLabel: (formData.salePrice !== '' && formData.salePrice !== null) ? (formData.saleLabel || null) : null,
         brandId: formData.brandId || null,
         quantity: parseInt(formData.quantity) || 0,
         // Shipping dimensions — null when blank so DB stores NULL cleanly
@@ -506,7 +507,7 @@ const ProductEditPage = () => {
                       fullWidth
                       label="Price *"
                       type="number"
-                      InputProps={{ startAdornment: <InputAdornment position="start">₹</InputAdornment> }}
+                      InputProps={{ startAdornment: <InputAdornment position="start">{symbol}</InputAdornment> }}
                       inputProps={{ step: '0.01', min: 0 }}
                       value={formData.price}
                       onChange={(e) => setField('price', e.target.value)}
@@ -519,7 +520,7 @@ const ProductEditPage = () => {
                       fullWidth
                       label="Sale Price"
                       type="number"
-                      InputProps={{ startAdornment: <InputAdornment position="start">₹</InputAdornment> }}
+                      InputProps={{ startAdornment: <InputAdornment position="start">{symbol}</InputAdornment> }}
                       inputProps={{ step: '0.01', min: 0 }}
                       value={formData.salePrice}
                       onChange={(e) => setField('salePrice', e.target.value)}
@@ -880,6 +881,7 @@ const ProductEditPage = () => {
                 basePrice={formData.price}
                 setTaxConfig={(val) => setField('taxConfig', val)}
                 globalSettings={settings?.checkout || {}}
+                formatPrice={formatPrice}
                 disabled={!canSaveProduct}
               />
             )}
@@ -1139,7 +1141,7 @@ const ProductEditPage = () => {
 };
 
 /* ─── Tax Configuration Section ────────────────────────────────────────────── */
-const TaxConfigSection = ({ taxConfig, basePrice, setTaxConfig, globalSettings, disabled }) => {
+const TaxConfigSection = ({ taxConfig, basePrice, setTaxConfig, globalSettings, formatPrice, disabled }) => {
   const handleChange = (field, value) => {
     setTaxConfig({ ...taxConfig, [field]: value });
   };
@@ -1239,16 +1241,16 @@ const TaxConfigSection = ({ taxConfig, basePrice, setTaxConfig, globalSettings, 
           </Typography>
           <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 0.5 }}>
             <Typography variant="body2">Subtotal:</Typography>
-            <Typography variant="body2" fontWeight={500}>₹{currentPrice.toFixed(2)}</Typography>
+            <Typography variant="body2" fontWeight={500}>{formatPrice(currentPrice)}</Typography>
           </Box>
           <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 0.5 }}>
             <Typography variant="body2">Tax (Estimated):</Typography>
-            <Typography variant="body2" fontWeight={500}>+ ₹{taxTotal.toFixed(2)}</Typography>
+            <Typography variant="body2" fontWeight={500}>+ {formatPrice(taxTotal)}</Typography>
           </Box>
           <Divider sx={{ my: 1 }} />
           <Box sx={{ display: 'flex', justifyContent: 'space-between' }}>
             <Typography variant="subtitle2">Total:</Typography>
-            <Typography variant="subtitle2" color="primary.main">₹{(currentPrice + taxTotal).toFixed(2)}</Typography>
+            <Typography variant="subtitle2" color="primary.main">{formatPrice(currentPrice + taxTotal)}</Typography>
           </Box>
         </Box>
       )}
@@ -1681,11 +1683,6 @@ const VariantsPanel = ({ productId, productName, productSku, categoryIds = [], f
                 />
 
                 <Box sx={{ display: 'flex', flexDirection: 'column', mt: -1 }}>
-                  {/* <FormControlLabel
-                    control={<Checkbox checked={true} disabled />}
-                    label={<Typography variant="body2">Visible on the product page</Typography>}
-                    sx={{ mb: -1 }}
-                  /> */}
                   <FormControlLabel
                     control={
                       <Checkbox

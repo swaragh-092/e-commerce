@@ -27,17 +27,15 @@ const CategoryAttributesDialog = ({ open, onClose, categoryId, categoryName }) =
   const [attributes, setAttributes] = useState([]);
   const [allTemplates, setAllTemplates] = useState([]);
   const [selectedTemplate, setSelectedTemplate] = useState(null);
+  const [attrSearchTerm, setAttrSearchTerm] = useState('');
+  const [attrSearching, setAttrSearching] = useState(false);
 
-  const fetchAttributes = useCallback(async () => {
+  const fetchLinkedAttributes = useCallback(async () => {
     if (!categoryId) return;
     try {
       setLoading(true);
-      const [linkedRes, allRes] = await Promise.all([
-        attributeService.getCategoryAttributes(categoryId, true),
-        attributeService.getAttributes({ page: 1, limit: 1000 })
-      ]);
-      setAttributes(linkedRes?.data?.data || []);
-      setAllTemplates(allRes?.data?.data?.rows || allRes?.data?.data || []);
+      const res = await attributeService.getCategoryAttributes(categoryId, true);
+      setAttributes(res?.data?.data || []);
     } catch (err) {
       notify(getApiErrorMessage(err), 'error');
     } finally {
@@ -45,11 +43,38 @@ const CategoryAttributesDialog = ({ open, onClose, categoryId, categoryName }) =
     }
   }, [categoryId, notify]);
 
+  const fetchTemplates = useCallback(async (search = '') => {
+    try {
+      setAttrSearching(true);
+      const res = await attributeService.getAttributes({ 
+        search: search || undefined,
+        limit: 50,
+        status: 'active'
+      });
+      const rows = res?.data?.data?.rows || res?.data?.data || [];
+      setAllTemplates(rows);
+    } catch (err) {
+      console.error('Failed to fetch templates:', err);
+    } finally {
+      setAttrSearching(false);
+    }
+  }, []);
+
   useEffect(() => {
     if (open && categoryId) {
-      fetchAttributes();
+      fetchLinkedAttributes();
     }
-  }, [open, categoryId, fetchAttributes]);
+  }, [open, categoryId, fetchLinkedAttributes]);
+
+  useEffect(() => {
+    let timer;
+    if (open) {
+      timer = setTimeout(() => {
+        fetchTemplates(attrSearchTerm);
+      }, 300);
+    }
+    return () => clearTimeout(timer);
+  }, [attrSearchTerm, open, fetchTemplates]);
 
   const handleLink = async () => {
     if (!selectedTemplate) return;
@@ -179,7 +204,24 @@ const CategoryAttributesDialog = ({ open, onClose, categoryId, categoryName }) =
               getOptionLabel={(option) => option.name}
               value={selectedTemplate}
               onChange={(_, val) => setSelectedTemplate(val)}
-              renderInput={(params) => <TextField {...params} label="Select Template" variant="outlined" />}
+              onInputChange={(_, val) => setAttrSearchTerm(val)}
+              loading={attrSearching}
+              renderInput={(params) => (
+                <TextField 
+                  {...params} 
+                  label="Select Template" 
+                  variant="outlined" 
+                  InputProps={{
+                    ...params.InputProps,
+                    endAdornment: (
+                      <>
+                        {attrSearching ? <CircularProgress color="inherit" size={20} /> : null}
+                        {params.InputProps.endAdornment}
+                      </>
+                    ),
+                  }}
+                />
+              )}
               sx={{ mb: 2 }}
             />
 

@@ -44,6 +44,7 @@ import {
   updateShippingRule,
   deleteShippingRule
 } from '../../services/adminService';
+import { useCurrency } from '../../hooks/useSettings';
 
 function TabPanel(props) {
   const { children, value, index, ...other } = props;
@@ -61,6 +62,7 @@ function TabPanel(props) {
 
 const ShippingPage = () => {
   const { notify } = useNotification();
+  const { symbol, formatPrice } = useCurrency();
   const [tabIndex, setTabIndex] = useState(0);
 
   // Data states
@@ -539,11 +541,11 @@ const ShippingPage = () => {
                         <TableCell>{r.rateType}</TableCell>
                         <TableCell>
                           {r.rateType === 'free' && <Chip size="small" label="Free" color="success" />}
-                          {r.rateType === 'flat' && `₹${r.rateConfig?.amount ?? r.rateConfig?.baseCharge ?? 0}`}
-                          {r.rateType === 'free_above_threshold' && `Free ≥₹${r.rateConfig?.threshold ?? 0}`}
+                          {r.rateType === 'flat' && `${symbol}${r.rateConfig?.amount ?? r.rateConfig?.baseCharge ?? 0}`}
+                          {r.rateType === 'free_above_threshold' && `Free ≥${symbol}${r.rateConfig?.threshold ?? 0}`}
                           {r.rateType === 'percent_of_order' && `${r.rateConfig?.percent ?? 0}%`}
                           {(r.rateType === 'per_kg_slab' || r.rateType === 'volumetric') &&
-                            `₹${r.rateConfig?.baseCharge ?? 0} + ₹${r.rateConfig?.additionalSlabRate ?? 0}/500g`}
+                            `${symbol}${r.rateConfig?.baseCharge ?? 0} + ${symbol}${r.rateConfig?.additionalSlabRate ?? 0}/500g`}
                         </TableCell>
                         <TableCell>{r.codAllowed ? 'Yes' : 'No'}</TableCell>
                         <TableCell>
@@ -754,7 +756,7 @@ const ShippingPage = () => {
               >
                 <MenuItem value="flat">Flat Rate</MenuItem>
                 <MenuItem value="free">Free Shipping</MenuItem>
-                <MenuItem value="free_above_threshold">Free Above ₹X</MenuItem>
+                <MenuItem value="free_above_threshold">Free Above {symbol}X</MenuItem>
                 <MenuItem value="per_kg_slab">Per-kg Slab</MenuItem>
                 <MenuItem value="volumetric">Volumetric (Per-kg Slab)</MenuItem>
                 <MenuItem value="percent_of_order">% of Order Value</MenuItem>
@@ -763,7 +765,7 @@ const ShippingPage = () => {
 
             {/* FLAT RATE fields */}
             {ruleFormData.rateType === 'flat' && (
-              <TextField label="Shipping Charge (₹)" type="number" fullWidth size="small"
+              <TextField label={`Shipping Charge (${symbol})`} type="number" fullWidth size="small"
                 value={ruleFormData.rc_baseCharge}
                 onChange={(e) => setRuleFormData({...ruleFormData, rc_baseCharge: e.target.value})} />
             )}
@@ -772,12 +774,12 @@ const ShippingPage = () => {
             {ruleFormData.rateType === 'free_above_threshold' && (
               <Grid container spacing={2}>
                 <Grid item xs={6}>
-                  <TextField label="Free When Cart ≥ (₹)" type="number" fullWidth size="small"
+                  <TextField label={`Free When Cart ≥ (${symbol})`} type="number" fullWidth size="small"
                     value={ruleFormData.rc_threshold}
                     onChange={(e) => setRuleFormData({...ruleFormData, rc_threshold: e.target.value})} />
                 </Grid>
                 <Grid item xs={6}>
-                  <TextField label="Charge Below Threshold (₹)" type="number" fullWidth size="small"
+                  <TextField label={`Charge Below Threshold (${symbol})`} type="number" fullWidth size="small"
                     value={ruleFormData.rc_baseCharge}
                     onChange={(e) => setRuleFormData({...ruleFormData, rc_baseCharge: e.target.value})} />
                 </Grid>
@@ -798,7 +800,7 @@ const ShippingPage = () => {
                 <Typography variant="subtitle2" fontWeight={600} mb={2}>Slab Pricing</Typography>
                 <Grid container spacing={2}>
                   <Grid item xs={6} sm={3}>
-                    <TextField label="Base Charge (₹)" type="number" fullWidth size="small"
+                    <TextField label={`Base Charge (${symbol})`} type="number" fullWidth size="small"
                       value={ruleFormData.rc_baseCharge}
                       onChange={(e) => setRuleFormData({...ruleFormData, rc_baseCharge: e.target.value})}
                       helperText="For first slab" />
@@ -816,13 +818,13 @@ const ShippingPage = () => {
                       helperText="Default 500g" />
                   </Grid>
                   <Grid item xs={6} sm={3}>
-                    <TextField label="Per Slab Rate (₹)" type="number" fullWidth size="small"
+                    <TextField label={`Per Slab Rate (${symbol})`} type="number" fullWidth size="small"
                       value={ruleFormData.rc_additionalSlabRate}
                       onChange={(e) => setRuleFormData({...ruleFormData, rc_additionalSlabRate: e.target.value})}
                       helperText="Per extra slab" />
                   </Grid>
                   <Grid item xs={6} sm={3}>
-                    <TextField label="Min Charge (₹)" type="number" fullWidth size="small"
+                    <TextField label={`Min Charge (${symbol})`} type="number" fullWidth size="small"
                       value={ruleFormData.rc_minCharge}
                       onChange={(e) => setRuleFormData({...ruleFormData, rc_minCharge: e.target.value})} />
                   </Grid>
@@ -833,7 +835,7 @@ const ShippingPage = () => {
                       onChange={(e) => setRuleFormData({...ruleFormData, rc_fuelSurchargePercent: e.target.value})} />
                   </Grid>
                   <Grid item xs={6} sm={3}>
-                    <TextField label="Free Above Subtotal (₹)" type="number" fullWidth size="small"
+                    <TextField label={`Free Above Subtotal (${symbol})`} type="number" fullWidth size="small"
                       value={ruleFormData.rc_freeAboveSubtotal}
                       placeholder="Leave blank to disable"
                       onChange={(e) => setRuleFormData({...ruleFormData, rc_freeAboveSubtotal: e.target.value})} />
@@ -863,19 +865,19 @@ const ShippingPage = () => {
                     <TextField select label="Fee Type" fullWidth size="small"
                       value={ruleFormData.rc_codFeeType}
                       onChange={(e) => setRuleFormData({...ruleFormData, rc_codFeeType: e.target.value})}>
-                      <MenuItem value="flat">Flat (₹)</MenuItem>
+                      <MenuItem value="flat">Flat ({symbol})</MenuItem>
                       <MenuItem value="percent">% of Order</MenuItem>
                     </TextField>
                   </Grid>
                   <Grid item xs={6} sm={4}>
-                    <TextField label={ruleFormData.rc_codFeeType === 'percent' ? 'Percent (%)' : 'Amount (₹)'}
+                    <TextField label={ruleFormData.rc_codFeeType === 'percent' ? 'Percent (%)' : `Amount (${symbol})`}
                       type="number" fullWidth size="small"
                       value={ruleFormData.rc_codFeeValue}
                       onChange={(e) => setRuleFormData({...ruleFormData, rc_codFeeValue: e.target.value})} />
                   </Grid>
                   {ruleFormData.rc_codFeeType === 'percent' && (
                     <Grid item xs={6} sm={4}>
-                      <TextField label="Min COD Fee (₹)" type="number" fullWidth size="small"
+                      <TextField label={`Min COD Fee (${symbol})`} type="number" fullWidth size="small"
                         value={ruleFormData.rc_codFeeMin}
                         onChange={(e) => setRuleFormData({...ruleFormData, rc_codFeeMin: e.target.value})} />
                     </Grid>

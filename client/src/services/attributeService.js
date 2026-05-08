@@ -19,6 +19,9 @@ const removeAttributeValue = (attributeId, valueId) =>
   api.delete(`/attributes/${attributeId}/values/${valueId}`);
 
 const getCategoryAttributes = (categoryId, inherit = false) => {
+  if (!categoryId || (Array.isArray(categoryId) && categoryId.length === 0)) {
+    return Promise.resolve({ data: { data: [] } });
+  }
   const ids = Array.isArray(categoryId) ? categoryId.join(',') : categoryId;
   return api.get(`/categories/${ids}/attributes${inherit ? '?inherit=true' : ''}`);
 };

@@ -38,7 +38,7 @@ const ProductCard = ({ product, fromCategory }) => {
   }
 
   const endingSoon = hasSale && sales.showCountdown !== false && isEndingSoon(product.saleEndAt, sales.endingSoonHours);
-  const hasRating = product.averageRating != null;
+  const hasRating = product.avgRating != null;
 
   return (
     <Card
@@ -154,7 +154,7 @@ const ProductCard = ({ product, fromCategory }) => {
         {hasRating && (
           <Box sx={{ display: 'flex', alignItems: 'center', mb: 1 }}>
             <Rating
-              value={parseFloat(product.averageRating)}
+              value={parseFloat(product.avgRating)}
               readOnly
               size="small"
               precision={0.5}

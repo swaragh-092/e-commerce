@@ -30,6 +30,7 @@ const TaxService = require('../tax/tax.service');
 const ShippingService = require('../shipping/shipping.service');
 const SettingsService = require('../settings/settings.service');
 const { resolveProvider } = require('../shipping/providers');
+const { events, PRODUCT_EVENTS, ORDER_EVENTS } = require('../../utils/events');
 
 const defaultSettings = require('../../../../config/default.json');
 
@@ -236,8 +237,20 @@ const releaseOrderReservationsAndCoupons = async (order, transaction) => {
         transaction,
     });
 
+    const eventBuffer = [];
     for (const item of orderItems) {
-        if (item.productId) {
+        if (item.variantId) {
+            await ProductVariant.update(
+                { reservedQty: sequelize.literal(`GREATEST(reserved_qty - ${item.quantity}, 0)`) },
+                {
+                    where: {
+                        id: item.variantId,
+                        reservedQty: { [Op.gt]: 0 },
+                    },
+                    transaction,
+                }
+            );
+        } else if (item.productId) {
             await Product.update(
                 { reservedQty: sequelize.literal(`GREATEST(reserved_qty - ${item.quantity}, 0)`) },
                 {
@@ -249,7 +262,18 @@ const releaseOrderReservationsAndCoupons = async (order, transaction) => {
                 }
             );
         }
+        
+        eventBuffer.push({
+            name: PRODUCT_EVENTS.STOCK_CHANGED,
+            payload: {
+                productId: item.productId,
+                variantId: item.variantId || null,
+                change: item.quantity,
+                type: 'release'
+            }
+        });
     }
+    return eventBuffer;
 
     const appliedCouponIds = Array.from(new Set([
         ...(Array.isArray(order.appliedDiscounts) ? order.appliedDiscounts.map((item) => item.couponId).filter(Boolean) : []),
@@ -523,21 +547,49 @@ const placeOrder = async (userId, payload) => {
 
         const total = Number(Math.max(0, subtotal + totalTax + shippingCost - discountAmount).toFixed(2));
 
+        const eventBuffer = [];
+
         for (const item of checkoutItems) {
             const product = item.currentProduct;
-            const updatedRows = await Product.update(
-                { reservedQty: sequelize.literal(`reserved_qty + ${item.quantity}`) },
-                { 
-                  where: { 
-                    id: product.id, 
-                    [Op.and]: sequelize.literal(`(quantity - reserved_qty) >= ${item.quantity}`)
-                  }, 
-                  transaction: t 
-                }
-            );
+            let updatedRows;
+            
+            if (item.variantId) {
+                updatedRows = await ProductVariant.update(
+                    { reservedQty: sequelize.literal(`reserved_qty + ${item.quantity}`) },
+                    {
+                        where: {
+                            id: item.variantId,
+                            [Op.and]: sequelize.literal(`(stock_qty - reserved_qty) >= ${item.quantity}`)
+                        },
+                        transaction: t
+                    }
+                );
+            } else {
+                updatedRows = await Product.update(
+                    { reservedQty: sequelize.literal(`reserved_qty + ${item.quantity}`) },
+                    { 
+                        where: { 
+                            id: product.id, 
+                            [Op.and]: sequelize.literal(`(quantity - reserved_qty) >= ${item.quantity}`)
+                        }, 
+                        transaction: t 
+                    }
+                );
+            }
+
             if (updatedRows[0] === 0) {
                  throw new AppError('CONFLICT', 409, `Insufficient stock for product ${product.name}`);
             }
+            
+            eventBuffer.push({
+                name: PRODUCT_EVENTS.STOCK_CHANGED,
+                payload: {
+                    productId: product.id,
+                    variantId: item.variantId || null,
+                    change: -item.quantity,
+                    type: 'reservation'
+                }
+            });
         }
 
         const crypto = require('crypto');
@@ -644,9 +696,22 @@ const placeOrder = async (userId, payload) => {
         if (cart) {
             await cart.update({ status: 'converted' }, { transaction: t });
         }
-
-        return order;
+        
+        // Finalize transaction
+        return { order, eventBuffer };
     });
+
+    // Emit all buffered events after commit
+    eventBuffer.forEach(evt => events.emit(evt.name, evt.payload));
+
+    events.emit(ORDER_EVENTS.PLACED, {
+        orderId: order.id,
+        orderNumber: order.orderNumber,
+        userId: order.userId,
+        total: order.total
+    });
+
+    return order;
 
     // For COD orders skip the payment gateway entirely — order is already confirmed.
     // For Razorpay orders, createIntent runs OUTSIDE the transaction so a gateway failure
@@ -886,6 +951,7 @@ const createFulfillment = async (orderId, payload, actingUserId) => {
                 alreadyShipped,
                 remaining:     oi.quantity - alreadyShipped,
                 productId:     oi.productId,
+                variantId:     oi.variantId,
                 snapshotName:  oi.snapshotName,
                 snapshotSku:   oi.snapshotSku,
                 snapshotPrice: oi.snapshotPrice,
@@ -922,55 +988,81 @@ const createFulfillment = async (orderId, payload, actingUserId) => {
             info.alreadyShipped += qty;
         }
 
-        // Group total deduction by productId
-        const productDeductions = new Map(); // productId → total qty to deduct
+        // Group total deduction by product/variant key
+        const stockDeductions = new Map(); // "productId:variantId" -> total qty to deduct
         for (const item of items) {
             const qty  = Number(item.quantity);
             const info = orderItemMap[item.orderItemId];
-            if (!info?.productId) continue; // skip soft-deleted products
-            productDeductions.set(
-                info.productId,
-                (productDeductions.get(info.productId) || 0) + qty
+            if (!info?.productId) continue; 
+            
+            const key = `${info.productId}:${info.variantId || ''}`;
+            stockDeductions.set(
+                key,
+                (stockDeductions.get(key) || 0) + qty
             );
         }
 
-        // Row-lock each product then perform strict atomic stock deduction
-        for (const [productId, qty] of productDeductions) {
-            // Acquire row-level lock — prevents concurrent deductions on the same product
-            const product = await Product.findByPk(productId, {
-                transaction: t,
-                lock:        Transaction.LOCK.UPDATE,
-            });
+        // Row-lock each product/variant then perform strict atomic stock deduction
+        for (const [key, qty] of stockDeductions) {
+            const [productId, variantIdStr] = key.split(':');
+            const variantId = variantIdStr || null;
 
-            if (!product) {
-                throw new AppError('NOT_FOUND', 404, `Product ${productId} not found during stock deduction`);
-            }
-
-            // Strict update — no GREATEST, no soft floor
-            // WHERE guards ensure we never go negative on quantity or reserved_qty
-            const [affectedRows] = await Product.update(
-                {
-                    quantity:    sequelize.literal(`quantity - ${qty}`),
-                    reservedQty: sequelize.literal(`reserved_qty - ${qty}`),
-                },
-                {
-                    where: {
-                        id:          productId,
-                        quantity:    { [Op.gte]: qty },   // actual stock must cover this shipment
-                        reservedQty: { [Op.gte]: qty },   // reserved must match (no phantom reserves)
-                    },
+            if (variantId) {
+                const variant = await ProductVariant.findByPk(variantId, {
                     transaction: t,
-                }
-            );
+                    lock: Transaction.LOCK.UPDATE,
+                });
 
-            // 0 affected rows means stock or reserved_qty is insufficient — hard fail, full rollback
-            if (affectedRows === 0) {
-                throw new AppError(
-                    'CONFLICT',
-                    409,
-                    `Stock deduction failed for "${product.name}": ` +
-                    `available quantity or reserved stock is insufficient. Shipment aborted.`
+                if (!variant) {
+                    throw new AppError('NOT_FOUND', 404, `Variant ${variantId} not found during stock deduction`);
+                }
+
+                const [affectedRows] = await ProductVariant.update(
+                    {
+                        stockQty: sequelize.literal(`stock_qty - ${qty}`),
+                        reservedQty: sequelize.literal(`reserved_qty - ${qty}`),
+                    },
+                    {
+                        where: {
+                            id: variantId,
+                            stockQty: { [Op.gte]: qty },
+                            reservedQty: { [Op.gte]: qty },
+                        },
+                        transaction: t,
+                    }
                 );
+
+                if (affectedRows === 0) {
+                    throw new AppError('CONFLICT', 409, `Stock deduction failed for variant ${variant.sku}: insufficient quantity or reserved stock.`);
+                }
+            } else {
+                const product = await Product.findByPk(productId, {
+                    transaction: t,
+                    lock: Transaction.LOCK.UPDATE,
+                });
+
+                if (!product) {
+                    throw new AppError('NOT_FOUND', 404, `Product ${productId} not found during stock deduction`);
+                }
+
+                const [affectedRows] = await Product.update(
+                    {
+                        quantity: sequelize.literal(`quantity - ${qty}`),
+                        reservedQty: sequelize.literal(`reserved_qty - ${qty}`),
+                    },
+                    {
+                        where: {
+                            id: productId,
+                            quantity: { [Op.gte]: qty },
+                            reservedQty: { [Op.gte]: qty },
+                        },
+                        transaction: t,
+                    }
+                );
+
+                if (affectedRows === 0) {
+                    throw new AppError('CONFLICT', 409, `Stock deduction failed for "${product.name}": insufficient quantity or reserved stock.`);
+                }
             }
         }
 
@@ -1159,20 +1251,22 @@ const createFulfillment = async (orderId, payload, actingUserId) => {
 
 
 const updateStatus = async (id, status, actingUserId) => {
-    return sequelize.transaction(async (t) => {
+    let orderRecord, beforeStatus, eventBuffer = [];
+
+    await sequelize.transaction(async (t) => {
         const order = await Order.findByPk(id, {
             transaction: t,
             lock: Transaction.LOCK.UPDATE,
         });
         if (!order) throw new AppError('NOT_FOUND', 404, 'Order not found');
 
-        const before = order.toJSON();
+        beforeStatus = order.status;
         if (status === 'refunded') {
             throw new AppError('VALIDATION_ERROR', 400, 'Use the refund action so payment state and audit metadata stay consistent');
         }
-        ensureValidStatusTransition(order.status, status);
+        ensureValidStatusTransition(beforeStatus, status);
         if (status === 'cancelled') {
-            await releaseOrderReservationsAndCoupons(order, t);
+            eventBuffer = await releaseOrderReservationsAndCoupons(order, t);
         }
         await order.update({ status }, { transaction: t });
         
@@ -1218,16 +1312,27 @@ const updateStatus = async (id, status, actingUserId) => {
                     action: 'STATUS_CHANGE',
                     entity: 'Order',
                     entityId: id,
-                    changes: { before: before.status, after: status }
+                    changes: { before: beforeStatus, after: status }
                 }, t);
             }
         } catch(err) {}
         
-        return Order.findByPk(id, {
+        orderRecord = await Order.findByPk(id, {
             include: HEAVY_ORDER_INCLUDE,
             transaction: t,
         });
     });
+
+    // Emit events after commit
+    eventBuffer.forEach(evt => events.emit(evt.name, evt.payload));
+
+    events.emit(ORDER_EVENTS.STATUS_CHANGED, {
+        orderId: id,
+        previousStatus: beforeStatus,
+        newStatus: status
+    });
+
+    return orderRecord;
 };
 
 const refundOrder = async (id, actingUserId, isAdmin) => {
@@ -1299,18 +1404,20 @@ const refundOrder = async (id, actingUserId, isAdmin) => {
 };
 
 const cancelOrder = async (id, userId) => {
-    return sequelize.transaction(async (t) => {
+    let orderRecord, prevStatus, eventsToEmit;
+
+    await sequelize.transaction(async (t) => {
         const order = await Order.findOne({ where: { id, userId }, include: [{ model: OrderItem, as: 'items' }], transaction: t });
         if (!order) throw new AppError('NOT_FOUND', 404, 'Order not found');
 
-        const previousStatus = order.status;
+        prevStatus = order.status;
 
         if (!isCustomerCancelableOrderStatus(order.status)) {
             throw new AppError('VALIDATION_ERROR', 400, 'Only pending or processing orders can be cancelled');
         }
 
-        ensureValidStatusTransition(previousStatus, 'cancelled');
-        await releaseOrderReservationsAndCoupons(order, t);
+        ensureValidStatusTransition(prevStatus, 'cancelled');
+        eventsToEmit = await releaseOrderReservationsAndCoupons(order, t);
         await order.update({ status: 'cancelled' }, { transaction: t });
 
         // Sync payment status
@@ -1337,16 +1444,29 @@ const cancelOrder = async (id, userId) => {
                     action: ACTIONS.STATUS_CHANGE,
                     entity: ENTITIES.ORDER,
                     entityId: order.id,
-                    changes: { before: previousStatus, after: 'cancelled' },
+                    changes: { before: prevStatus, after: 'cancelled' },
                 }, t);
             }
         } catch (err) {}
 
-        return Order.findByPk(id, {
+        orderRecord = await Order.findByPk(id, {
             include: HEAVY_ORDER_INCLUDE,
             transaction: t,
         });
     });
+
+    // Emit events after commit
+    if (eventsToEmit) {
+        eventsToEmit.forEach(evt => events.emit(evt.name, evt.payload));
+    }
+
+    events.emit(ORDER_EVENTS.STATUS_CHANGED, {
+        orderId: id,
+        previousStatus: prevStatus,
+        newStatus: 'cancelled'
+    });
+
+    return orderRecord;
 };
 
 const updateFulfillmentStatus = async (orderId, fulfillmentId, status, actingUserId) => {

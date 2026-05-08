@@ -18,6 +18,7 @@ import { getProducts, deleteProduct, updateProduct, bulkUpdateSale, bulkDeletePr
 import { getCategoryTree } from '../../services/categoryService';
 import { getSaleLabels } from '../../services/adminService';
 import { getMediaUrl } from '../../utils/media';
+import { LOW_STOCK_THRESHOLD } from '../../utils/constants';
 import { useCurrency, useSettings, useFeature } from '../../hooks/useSettings';
 import { useNotification } from '../../context/NotificationContext';
 import { formatSaleDateTime, isEndingSoon } from '../../utils/pricing';
@@ -98,7 +99,7 @@ const ClickableSummaryCard = ({ label, value, tone = 'default', onClick, active 
 const ProductsManagePage = () => {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
-  const { formatPrice } = useCurrency();
+  const { symbol, formatPrice } = useCurrency();
   const { settings } = useSettings();
   const { notify } = useNotification();
   const { hasPermission } = useAuth();
@@ -126,7 +127,7 @@ const ProductsManagePage = () => {
   const [categoryFilter, setCategoryFilter] = useState('');
   const [flatCategories, setFlatCategories] = useState([]);
   const [saleLabels, setSaleLabels] = useState([]);
-  // ?stock=low from dashboard → show only items with qty ≤ 10
+  // ?stock=low from dashboard → show only items with qty ≤ LOW_STOCK_THRESHOLD
   const [lowStockOnly, setLowStockOnly] = useState(() => searchParams.get('stock') === 'low');
 
   // Bulk selection
@@ -289,8 +290,8 @@ const ProductsManagePage = () => {
       ...(saleFilter && { saleStatus: saleFilter }),
       ...(categoryFilter && { categoryId: categoryFilter }),
       ...(sortModel[0] && { sortBy: sortModel[0].field, sortOrder: sortModel[0].sort }),
-      // Low-stock filter: pass maxQty=10 so the server returns only low-stock items
-      ...(lowStockOnly && { maxQty: 10 }),
+      // Low-stock filter: pass maxQty=LOW_STOCK_THRESHOLD so the server returns only low-stock items
+      ...(lowStockOnly && { maxQty: LOW_STOCK_THRESHOLD }),
     };
     getProducts(params)
       .then((res) => {
@@ -600,7 +601,7 @@ const ProductsManagePage = () => {
       sortable: true,
       renderCell: ({ value }) => {
         const v = Number(value);
-        const color = v === 0 ? 'error' : v <= 10 ? 'warning' : 'success';
+        const color = v === 0 ? 'error' : v <= LOW_STOCK_THRESHOLD ? 'warning' : 'success';
         return (
           <Chip
             label={v}
@@ -769,7 +770,7 @@ const ProductsManagePage = () => {
         >
           <InventoryIcon color="warning" fontSize="small" />
           <Typography variant="body2" fontWeight={600} color="warning.dark" sx={{ flexGrow: 1 }}>
-            Showing low-stock products (qty ≤ 10)
+            Showing low-stock products (qty ≤ {LOW_STOCK_THRESHOLD})
           </Typography>
           <Button
             size="small"
@@ -1291,7 +1292,7 @@ const ProductsManagePage = () => {
                 fullWidth
                 error={hasInvalidBulkSale}
                 helperText={bulkSaleDialog.saleType === 'percentage' ? 'Use a value below 100.' : 'This value becomes each selected product’s sale price.'}
-                InputProps={bulkSaleDialog.saleType === 'fixed' ? { startAdornment: <InputAdornment position="start">₹</InputAdornment> } : undefined}
+                InputProps={bulkSaleDialog.saleType === 'fixed' ? { startAdornment: <InputAdornment position="start">{symbol}</InputAdornment> } : undefined}
                 inputProps={{ min: 0, step: '0.01' }}
                 value={bulkSaleDialog.value}
                 onChange={(e) => setBulkSaleDialog((s) => ({ ...s, value: e.target.value }))}

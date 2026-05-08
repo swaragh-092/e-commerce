@@ -29,6 +29,7 @@ const logger = require('../../utils/logger');
 const { ACTIONS, ENTITIES } = require('../../config/constants');
 const { getCategoryAndDescendantIds } = require('../category/category.service');
 const { normalizeSalePayload, serializeProductPricing } = require('./product.pricing');
+const { events, PRODUCT_EVENTS } = require('../../utils/events');
 const { getSaleLabels } = require('../settings/saleLabel.service');
 const SettingsService = require('../settings/settings.service');
 
@@ -56,7 +57,28 @@ const sanitizeRichText = (html) => {
       'img',
     ],
     allowedAttributes: { a: ['href'], img: ['src', 'alt'] },
+    allowedSchemes: ['http', 'https', 'mailto', 'tel'],
+    allowedSchemesByTag: {
+      img: ['http', 'https'],
+    },
   });
+};
+
+const _syncProductTags = async (product, tagNames, transaction) => {
+  if (!tagNames || !Array.isArray(tagNames)) return;
+
+  const tagInstances = await Promise.all(
+    tagNames.map(async (tagName) => {
+      const tagSlug = await generateSlug(tagName, Tag, 'slug', { transaction });
+      const [tag] = await Tag.findOrCreate({
+        where: { name: tagName },
+        defaults: { slug: tagSlug },
+        transaction,
+      });
+      return tag;
+    })
+  );
+  await product.setTags(tagInstances, { transaction });
 };
 
 const getCommonAttributeIncludes = () => [
@@ -189,6 +211,7 @@ exports.getProducts = async (filters, page, limit, isAdmin = false) => {
   const order = [];
   const include = [
     { model: ProductImage, as: 'images' },
+    { model: Tag, as: 'tags' },
     { model: Brand, as: 'brand' },
   ];
   const now = new Date();
@@ -274,12 +297,11 @@ exports.getProducts = async (filters, page, limit, isAdmin = false) => {
   if (filters.tags) {
     const tagList = Array.isArray(filters.tags) ? filters.tags : filters.tags.split(',').map(t => t.trim()).filter(Boolean);
     if (tagList.length > 0) {
-      include.push({
-        model: Tag,
-        as: 'tags',
-        where: { name: { [Op.in]: tagList } },
-        required: true
-      });
+      const tagInclude = include.find(inc => inc.as === 'tags');
+      if (tagInclude) {
+        tagInclude.where = { name: { [Op.in]: tagList } };
+        tagInclude.required = true;
+      }
     }
   } else {
     include.push({ model: Tag, as: 'tags' });
@@ -315,7 +337,6 @@ exports.getProducts = async (filters, page, limit, isAdmin = false) => {
   else if (filters.sort === 'newest') order.push(['createdAt', 'DESC']);
   else if (filters.sort === 'name_asc') order.push(['name', 'ASC']);
   else order.push(['createdAt', 'DESC']);
-
 
 
   const requestedIncludes = filters.include && typeof filters.include === 'string' ? filters.include.split(',').map(s => s.trim()).filter(Boolean) : [];
@@ -373,29 +394,30 @@ exports.getProducts = async (filters, page, limit, isAdmin = false) => {
     const countWhere = { ...where };
     delete countWhere.status;
 
-    // Use a simplified include that doesn't duplicate the primary key if not needed, 
-    // but we need to include categories if we filter by them
-    // For status counts, we only need to include categories if we are filtering by them
+    // For status counts, we need to preserve any required includes (joins used for filtering)
+    // like categories or tags, but strip out attributes to keep it light.
     const countInclude = include
-      .filter(inc => inc.as === 'categories')
+      .filter(inc => inc.required)
       .map(inc => ({ 
         ...inc, 
         attributes: [],
-        through: { attributes: [] } // Essential for belongsToMany junction tables
+        ...(inc.through ? { through: { attributes: [] } } : {})
       }));
 
     const statusCounts = await Product.findAll({
       where: countWhere,
       include: countInclude,
       attributes: [
-        [Sequelize.col('Product.status'), 'status'],
-        [Sequelize.fn('COUNT', Sequelize.fn('DISTINCT', Sequelize.col('Product.id'))), 'count']
+        'status',
+        [Sequelize.fn('COUNT', Sequelize.col('Product.id')), 'count']
       ],
-      group: [Sequelize.col('Product.status')],
+      group: ['status'],
       raw: true
     });
+    
     counts = statusCounts.reduce((acc, curr) => {
-      acc[curr.status] = parseInt(curr.count, 10);
+      // Sequelize raw result with group often has count as a string
+      acc[curr.status] = parseInt(curr.count || 0, 10);
       return acc;
     }, {});
   }
@@ -483,34 +505,30 @@ exports.createProduct = async (data, req = null) => {
       await ProductImage.bulkCreate(tempImgs, { transaction });
     }
 
-    if (data.tags && data.tags.length) {
-      const tagInstances = await Promise.all(
-        data.tags.map(async (tagName) => {
-          const tagSlug = await generateSlug(tagName, Tag, 'slug', { transaction });
-          const [tag] = await Tag.findOrCreate({
-            where: { name: tagName },
-            defaults: { slug: tagSlug },
-            transaction,
-          });
-          return tag;
-        })
-      );
-      await product.setTags(tagInstances, { transaction });
+    if (data.tags) {
+      await _syncProductTags(product, data.tags, transaction);
     }
 
     await transaction.commit();
 
-    try {
-      await AuditService.log({
-        action: ACTIONS.CREATE,
-        entity: ENTITIES.PRODUCT,
-        entityId: product.id,
-        changes: { name: product.name, sku: product.sku },
-        req: req || null,
-      });
-    } catch (e) {
-      logger.error('Failed to log audit for product creation:', e);
-    }
+      try {
+        await AuditService.log({
+          action: ACTIONS.CREATE,
+          entity: ENTITIES.PRODUCT,
+          entityId: product.id,
+          changes: { name: product.name, sku: product.sku },
+          req: req || null,
+        });
+        
+        events.emit(PRODUCT_EVENTS.CREATED, {
+          productId: product.id,
+          name: product.name,
+          sku: product.sku,
+          actingUserId: req?.user?.id
+        });
+      } catch (e) {
+        logger.error('Failed to log audit or emit event for product creation:', e);
+      }
 
     return exports.getProductBySlug(slug, { adminView: true });
   } catch (error) {
@@ -563,18 +581,7 @@ exports.updateProduct = async (id, data, req = null) => {
     }
 
     if (data.tags) {
-      const tagInstances = await Promise.all(
-        data.tags.map(async (tagName) => {
-          const tagSlug = await generateSlug(tagName, Tag, 'slug', { transaction });
-          const [tag] = await Tag.findOrCreate({
-            where: { name: tagName },
-            defaults: { slug: tagSlug },
-            transaction,
-          });
-          return tag;
-        })
-      );
-      await product.setTags(tagInstances, { transaction });
+      await _syncProductTags(product, data.tags, transaction);
     }
 
     await transaction.commit();
@@ -587,8 +594,14 @@ exports.updateProduct = async (id, data, req = null) => {
         changes: data,
         req,
       });
+      
+      events.emit(PRODUCT_EVENTS.UPDATED, {
+        productId: id,
+        changes: data,
+        actingUserId: req?.user?.id
+      });
     } catch (e) {
-      logger.error('Failed to log audit for product update:', e);
+      logger.error('Failed to log audit or emit event for product update:', e);
     }
 
     return exports.getProductBySlug(data.slug || product.slug, { adminView: true });
@@ -613,8 +626,14 @@ exports.deleteProduct = async (id, req = null) => {
       changes: snapshot,
       req,
     });
+    
+    events.emit(PRODUCT_EVENTS.DELETED, {
+      productId: id,
+      snapshot,
+      actingUserId: req?.user?.id
+    });
   } catch (e) {
-    logger.error('Failed to log audit for product deletion:', e);
+    logger.error('Failed to log audit or emit event for product deletion:', e);
   }
 
   return true;
@@ -650,6 +669,11 @@ exports.bulkDeleteProducts = async (ids, actingUserId = null) => {
         logger.error(`Failed to log audit for product deletion (ID: ${product.id}):`, e);
       }
     }
+    
+    events.emit(PRODUCT_EVENTS.BULK_DELETED, {
+      productIds: ids,
+      actingUserId
+    });
 
     return { deletedCount: products.length };
   });
@@ -685,6 +709,12 @@ exports.bulkUpdateProducts = async (ids, data, actingUserId = null) => {
         logger.error(`Failed to log audit for product bulk update (ID: ${product.id}):`, e);
       }
     }
+    
+    events.emit(PRODUCT_EVENTS.BULK_UPDATED, {
+      productIds: ids,
+      changes: data,
+      actingUserId
+    });
 
     return { updatedCount: products.length };
   });
@@ -692,6 +722,10 @@ exports.bulkUpdateProducts = async (ids, data, actingUserId = null) => {
 
 exports.bulkUpdateSale = async (payload, actingUserId = null) => {
   const { action, productIds, saleType, value, saleStartAt, saleEndAt, saleLabel } = payload;
+
+  if (action === 'apply' && Number(value) <= 0) {
+    throw new AppError('VALIDATION_ERROR', 400, 'Discount value must be greater than zero');
+  }
 
   if (action === 'apply' && saleType === 'percentage' && Number(value) >= 100) {
     throw new AppError('VALIDATION_ERROR', 400, 'Percentage discount must be less than 100');
@@ -736,6 +770,13 @@ exports.bulkUpdateSale = async (payload, actingUserId = null) => {
         logger.error('Failed to log audit for bulk sale update:', e);
       }
     }
+    
+    events.emit(PRODUCT_EVENTS.BULK_UPDATED, {
+      productIds,
+      action,
+      saleData: action === 'apply' ? { saleType, value, saleStartAt, saleEndAt, saleLabel } : null,
+      actingUserId
+    });
 
     return {
       action,

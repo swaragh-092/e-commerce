@@ -29,6 +29,11 @@ module.exports = (sequelize, DataTypes) => {
             type: DataTypes.INTEGER,
             defaultValue: 0,
         },
+        reservedQty: {
+            type: DataTypes.INTEGER,
+            defaultValue: 0,
+            field: 'reserved_qty',
+        },
         isActive: {
             type: DataTypes.BOOLEAN,
             defaultValue: true,

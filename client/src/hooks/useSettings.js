@@ -70,13 +70,16 @@ export const useCurrency = () => {
   const { settings } = useSettings();
   const currency = settings?.general?.currency || 'USD';
 
-  const formatPrice = (amount) =>
-    new Intl.NumberFormat(undefined, {
-      style: 'currency',
-      currency,
-      minimumFractionDigits: 2,
-      maximumFractionDigits: 2,
-    }).format(Number(amount) || 0);
+  const formatter = new Intl.NumberFormat(undefined, {
+    style: 'currency',
+    currency,
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  });
 
-  return { currency, formatPrice };
+  const formatPrice = (amount) => formatter.format(Number(amount) || 0);
+
+  const symbol = formatter.formatToParts(0).find(part => part.type === 'currency')?.value || currency;
+
+  return { currency, symbol, formatPrice };
 };
