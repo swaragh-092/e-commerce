@@ -56,6 +56,11 @@ const sanitizeRichText = (html) => {
   });
 };
 
+const commonAttributeIncludes = [
+  { model: AttributeTemplate, as: 'attribute', attributes: ['id', 'name', 'slug'] },
+  { model: AttributeValue, as: 'value', attributes: ['id', 'value', 'slug'] },
+];
+
 const variantInclude = {
   model: ProductVariant,
   as: 'variants',
@@ -63,10 +68,7 @@ const variantInclude = {
     {
       model: VariantOption,
       as: 'options',
-      include: [
-        { model: AttributeTemplate, as: 'attribute', attributes: ['id', 'name', 'slug'] },
-        { model: AttributeValue, as: 'value', attributes: ['id', 'value', 'slug'] },
-      ],
+      include: commonAttributeIncludes,
     },
   ],
 };
@@ -74,10 +76,7 @@ const variantInclude = {
 const attributeInclude = {
   model: ProductAttribute,
   as: 'attributes',
-  include: [
-    { model: AttributeTemplate, as: 'attribute', attributes: ['id', 'name', 'slug'] },
-    { model: AttributeValue, as: 'value', attributes: ['id', 'value', 'slug'] },
-  ],
+  include: commonAttributeIncludes,
 };
 
 const validateVariantOptions = async (variants) => {
@@ -266,10 +265,21 @@ exports.getProducts = async (filters, page, limit, isAdmin = false) => {
 
   const include = [
     { model: ProductImage, as: 'images' },
-    { model: ProductVariant, as: 'variants' },
     { model: Tag, as: 'tags' },
     { model: Brand, as: 'brand' },
   ];
+
+  const requestedIncludes = filters.include && typeof filters.include === 'string' ? filters.include.split(',').map(s => s.trim()).filter(Boolean) : [];
+
+  if (requestedIncludes.includes('variants')) {
+    include.push(variantInclude);
+  } else {
+    include.push({ model: ProductVariant, as: 'variants' });
+  }
+
+  if (requestedIncludes.includes('attributes')) {
+    include.push(attributeInclude);
+  }
 
   if (filters.categoryId) {
     const categoryIds = await getCategoryAndDescendantIds(filters.categoryId);
