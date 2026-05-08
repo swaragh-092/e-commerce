@@ -18,7 +18,8 @@ const attrRead   = [authenticate, authorizePermissions(PERMISSIONS.ATTRIBUTES_RE
 const attrManage = [authenticate, authorizePermissions(PERMISSIONS.ATTRIBUTES_MANAGE)];
 
 // GET    /api/products/:id/attributes
-router.get('/:id/attributes', validate(idParamSchema, 'params'), ...attrRead, controller.getProductAttributes);
+router.get('/:id/attributes', ...attrRead, validate(idParamSchema, 'params'), controller.getProductAttributes);
+
 
 // POST   /api/products/:id/attributes
 router.post('/:id/attributes', ...attrManage, validate(idParamSchema, 'params'), validate(addProductAttributeSchema), controller.addProductAttribute);

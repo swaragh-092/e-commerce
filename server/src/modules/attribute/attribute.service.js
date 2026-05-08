@@ -534,6 +534,22 @@ const deleteProductVariant = async (productId, variantId) => {
 };
 
 const reorderValues = async (attributeId, valueIds) => {
+    if (!attributeId || !Array.isArray(valueIds) || valueIds.length === 0) {
+        throw new AppError('VALIDATION_ERROR', 400, 'Invalid attributeId or valueIds array');
+    }
+
+    // Verify all valueIds belong to this attribute
+    const count = await AttributeValue.count({
+        where: {
+            id: valueIds,
+            attributeId
+        }
+    });
+
+    if (count !== valueIds.length) {
+        throw new AppError('VALIDATION_ERROR', 400, 'One or more value IDs are invalid or do not belong to this attribute');
+    }
+
     const t = await sequelize.transaction();
     try {
         for (let i = 0; i < valueIds.length; i++) {
@@ -549,6 +565,7 @@ const reorderValues = async (attributeId, valueIds) => {
         throw err;
     }
 };
+
 
 module.exports = {
     createAttribute,

@@ -10,7 +10,7 @@ const { reviewLimiter } = require('../../middleware/rateLimiter.middleware');
 const reviewController = require('./review.controller');
 const { createReviewSchema, moderateReviewSchema } = require('./review.validation');
 const { PERMISSIONS } = require('../../config/permissions');
-const { idParamSchema, paginationQuerySchema } = require('../../utils/common.validation');
+const { idParamSchema, paginationQuerySchema, slugParamSchema } = require('../../utils/common.validation');
 
 
 
@@ -18,7 +18,7 @@ const { idParamSchema, paginationQuerySchema } = require('../../utils/common.val
 router.use(featureGate('reviews'));
 
 // Public read access for approved reviews
-router.get('/products/:slug/reviews', validate(paginationQuerySchema, 'query'), reviewController.list);
+router.get('/products/:slug/reviews', validate(paginationQuerySchema, 'query'), validate(slugParamSchema, 'params'), reviewController.list);
 
 // Admin read access for all reviews (global list)
 router.get('/admin/reviews', authenticate, authorizePermissions(PERMISSIONS.REVIEWS_READ), validate(paginationQuerySchema, 'query'), reviewController.list);

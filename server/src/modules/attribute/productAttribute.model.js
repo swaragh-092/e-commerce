@@ -1,6 +1,7 @@
-'use strict';
+const { Op } = require('sequelize');
 
 module.exports = (sequelize, DataTypes) => {
+
     const ProductAttribute = sequelize.define('ProductAttribute', {
         id: {
             type: DataTypes.UUID,
@@ -49,17 +50,20 @@ module.exports = (sequelize, DataTypes) => {
                 unique: true,
                 fields: ['product_id', 'attribute_id', 'value_id'],
                 where: {
-                    attribute_id: { [DataTypes.Op.ne]: null },
-                    value_id: { [DataTypes.Op.ne]: null }
+                    attribute_id: { [Op.ne]: null },
+                    value_id: { [Op.ne]: null }
                 }
             },
             {
                 unique: true,
                 fields: ['product_id', 'custom_name', 'custom_value'],
                 where: {
-                    attribute_id: null
+                    attribute_id: null,
+                    custom_name: { [Op.ne]: null },
+                    custom_value: { [Op.ne]: null }
                 }
             }
+
         ]
     });
 

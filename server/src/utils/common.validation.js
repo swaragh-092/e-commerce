@@ -57,6 +57,11 @@ const paginationQuerySchema = Joi.object({
     limit: Joi.number().integer().min(1).max(100).default(20),
 }).unknown();
 
+const slugParamSchema = Joi.object({
+    slug: Joi.string().required(),
+});
+
+
 
 module.exports = {
     uuidSchema,
@@ -71,7 +76,9 @@ module.exports = {
     productIdParamSchema,
     orderIdParamSchema,
     paginationQuerySchema,
+    slugParamSchema,
 };
+
 
 
 

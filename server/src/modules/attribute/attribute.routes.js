@@ -20,9 +20,10 @@ const attributeRead = [authenticate, authorizePermissions(PERMISSIONS.ATTRIBUTES
 const attributeManage = [authenticate, authorizePermissions(PERMISSIONS.ATTRIBUTES_MANAGE)];
 
 // --- Attribute Template CRUD ---
-router.get('/', validate(paginationQuerySchema, 'query'), controller.getAllAttributes);
+router.get('/', attributeRead, validate(paginationQuerySchema, 'query'), controller.getAllAttributes);
 
-router.get('/:id', validate(idParamSchema, 'params'), controller.getAttributeById);
+router.get('/:id', attributeRead, validate(idParamSchema, 'params'), controller.getAttributeById);
+
 router.post('/', ...attributeManage, validate(createAttributeSchema), controller.createAttribute);
 router.put('/:id', ...attributeManage, validate(idParamSchema, 'params'), validate(updateAttributeSchema), controller.updateAttribute);
 router.delete('/:id', ...attributeManage, validate(idParamSchema, 'params'), controller.deleteAttribute);
