@@ -90,7 +90,8 @@ const MenuItemGrid = ({
         {(provided) => (
           <div {...provided.droppableProps} ref={provided.innerRef}>
             {levelItems.map((item, index) => (
-              <Draggable key={item.id} draggableId={item.id} index={index}>
+              <Draggable key={item.id} draggableId={String(item.id)} index={index}>
+
                 {(dragProvided, snapshot) => (
                   <Box 
                     ref={dragProvided.innerRef}
@@ -268,7 +269,7 @@ const MenuItemGrid = ({
                 onClose={() => setMoveAnchor(null)}
               >
                 <ListSubheader>Move selected to:</ListSubheader>
-                {menus
+                {(menus || [])
                   .filter((m) => m.id !== selectedMenu?.id)
                   .map((m) => (
                     <MenuItem
@@ -281,6 +282,7 @@ const MenuItemGrid = ({
                       {m.name} ({m.location})
                     </MenuItem>
                   ))}
+
               </Menu>
             </>
           )}

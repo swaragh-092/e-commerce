@@ -317,18 +317,37 @@ exports.updateMenuItem = async (menuId, itemId, data) => {
 
 
 exports.deleteMenuItem = async (menuId, itemId) => {
-    const item = await MenuItem.findOne({ where: { id: itemId, menuId } });
-    if (!item) throw new AppError('NOT_FOUND', 404, 'Menu item not found');
+    const transaction = await MenuItem.sequelize.transaction();
+    try {
+        const item = await MenuItem.findOne({ where: { id: itemId, menuId }, transaction });
+        if (!item) throw new AppError('NOT_FOUND', 404, 'Menu item not found');
 
-    const descendantIds = await getDescendantIds(itemId, menuId);
-    const idsToDelete = [itemId, ...Array.from(descendantIds)];
+        const descendantIds = await getDescendantIds(itemId, menuId, new Set(), { transaction });
+        const idsToDelete = [itemId, ...Array.from(descendantIds)];
 
-    await MenuItem.destroy({ where: { id: idsToDelete, menuId } });
-    clearCache();
-    return true;
+        await MenuItem.destroy({ where: { id: idsToDelete, menuId }, transaction });
+        await transaction.commit();
+        clearCache();
+        return true;
+    } catch (error) {
+        await transaction.rollback();
+        throw error;
+    }
 };
+
  
 exports.bulkDeleteMenuItems = async (menuId, itemIds) => {
+    const existingItems = await MenuItem.findAll({
+        where: { id: itemIds, menuId },
+        attributes: ['id']
+    });
+
+    if (existingItems.length !== itemIds.length) {
+        const foundIds = existingItems.map(item => item.id);
+        const missingIds = itemIds.filter(id => !foundIds.includes(id));
+        throw new AppError('NOT_FOUND', 404, `Items not found: ${missingIds.join(', ')}`);
+    }
+
     const transaction = await MenuItem.sequelize.transaction();
     try {
         const allIdsToDelete = new Set(itemIds);
@@ -348,6 +367,7 @@ exports.bulkDeleteMenuItems = async (menuId, itemIds) => {
         throw error;
     }
 };
+
 
 
 
@@ -414,15 +434,23 @@ exports.reorderMenus = async (menus) => {
 
 
 exports.moveItems = async (itemIds, targetMenuId) => {
+    const targetMenu = await Menu.findByPk(targetMenuId);
+    if (!targetMenu) throw new AppError('NOT_FOUND', 404, 'Target menu not found');
+
+    const existingItems = await MenuItem.findAll({
+        where: { id: itemIds },
+        attributes: ['id', 'parentId']
+    });
+
+    if (existingItems.length !== itemIds.length) {
+        const foundIds = existingItems.map(item => item.id);
+        const missingIds = itemIds.filter(id => !foundIds.includes(id));
+        throw new AppError('NOT_FOUND', 404, `Items not found: ${missingIds.join(', ')}`);
+    }
+
     const transaction = await MenuItem.sequelize.transaction();
     try {
-        const items = await MenuItem.findAll({
-            where: { id: itemIds },
-            attributes: ['id', 'parentId'],
-            transaction
-        });
-
-        for (const item of items) {
+        for (const item of existingItems) {
             // Keep parent only if it's also being moved to the new menu
             const isParentMoving = item.parentId && itemIds.includes(item.parentId);
             
@@ -443,6 +471,7 @@ exports.moveItems = async (itemIds, targetMenuId) => {
         throw error;
     }
 };
+
 
 
 
@@ -469,9 +498,21 @@ exports.restoreMenuItem = async (menuId, itemId) => {
         // Restore the item itself
         await item.restore({ transaction });
 
+        // If item has a parent, check if it's still deleted
+        if (item.parentId) {
+            const parent = await MenuItem.findOne({
+                where: { id: item.parentId, menuId },
+                paranoid: false,
+                transaction
+            });
+            if (parent && parent.deletedAt) {
+                // Parent is still deleted, so orphan this item by setting parentId to null
+                item.parentId = null;
+                await item.save({ transaction });
+            }
+        }
+
         // We also want to restore descendants that were deleted at roughly the same time (or just all of them)
-        // Usually, if we undo a delete, we want everything back.
-        // For simplicity, we restore all descendants of this item in this menu.
         const descendantIds = await getDescendantIds(itemId, menuId, new Set(), { paranoid: false, transaction });
         if (descendantIds.size > 0) {
             await MenuItem.restore({
@@ -479,7 +520,6 @@ exports.restoreMenuItem = async (menuId, itemId) => {
                 transaction
             });
         }
-
 
         await transaction.commit();
         clearCache();
@@ -489,6 +529,7 @@ exports.restoreMenuItem = async (menuId, itemId) => {
         throw error;
     }
 };
+
 
 
 

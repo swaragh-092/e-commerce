@@ -26,11 +26,12 @@ const MenuSelector = ({ menus, selectedMenuId, setSelectedMenuId, onRefresh }) =
   const { notify } = useNotification();
 
   const filteredMenus = useMemo(() => 
-    menus.filter((menu) =>
-      menu.name.toLowerCase().includes(search.toLowerCase()) ||
-      menu.location.toLowerCase().includes(search.toLowerCase())
+    (menus || []).filter((menu) =>
+      (menu.name || '').toLowerCase().includes(search.toLowerCase()) ||
+      (menu.location || '').toLowerCase().includes(search.toLowerCase())
     ), [menus, search]
   );
+
 
   const groupedMenus = useMemo(() => {
     return filteredMenus.reduce((acc, menu) => {
@@ -118,7 +119,8 @@ const MenuSelector = ({ menus, selectedMenuId, setSelectedMenuId, onRefresh }) =
                       />
                     </ListSubheader>
                     {groupedMenus[location].map((menu, index) => (
-                      <Draggable key={menu.id} draggableId={menu.id} index={index} isDragDisabled={!!search}>
+                      <Draggable key={menu.id} draggableId={String(menu.id)} index={index} isDragDisabled={!!search}>
+
                         {(dragProvided, snapshot) => (
                           <ListItem
                             ref={dragProvided.innerRef}

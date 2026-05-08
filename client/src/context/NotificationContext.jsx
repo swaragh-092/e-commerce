@@ -29,8 +29,12 @@ export const NotificationProvider = ({ children }) => {
   });
 
   const notify = useCallback((message, severity = 'info', action = null) => {
-    setNotification({ message, severity, action, key: Date.now() });
+    const validatedAction = (action && typeof action.label === 'string' && typeof action.callback === 'function') 
+      ? action 
+      : null;
+    setNotification({ message, severity, action: validatedAction, key: Date.now() });
   }, []);
+
 
   const confirm = useCallback((title, message, severity = 'primary') => {
     return new Promise((resolve) => {
@@ -73,10 +77,18 @@ export const NotificationProvider = ({ children }) => {
             <Button 
               color="inherit" 
               size="small" 
-              onClick={() => {
-                notification.action.callback();
-                handleNotifyClose();
+              onClick={async () => {
+                try {
+                  if (notification?.action?.callback) {
+                    await notification.action.callback();
+                  }
+                } catch (err) {
+                  console.error('Notification action callback failed:', err);
+                } finally {
+                  handleNotifyClose(null, 'action');
+                }
               }}
+
               sx={{ fontWeight: 700 }}
             >
               {notification.action.label}

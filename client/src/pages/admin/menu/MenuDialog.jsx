@@ -22,11 +22,13 @@ const MenuDialog = ({ open, onClose, menuForm, setMenuForm, onSave }) => {
       <DialogContent>
         <Stack spacing={2} mt={1}>
           <TextField
+            fullWidth
             label="Name"
-            value={menuForm.name}
+            value={menuForm.name || ''}
             onChange={(e) => setMenuForm({ ...menuForm, name: e.target.value })}
           />
           <TextField
+            fullWidth
             label="Slug"
             helperText="Optional. Leave empty to generate."
             value={menuForm.slug || ''}
@@ -36,9 +38,10 @@ const MenuDialog = ({ open, onClose, menuForm, setMenuForm, onSave }) => {
             <InputLabel>Location</InputLabel>
             <Select
               label="Location"
-              value={menuForm.location}
+              value={menuForm.location || 'header'}
               onChange={(e) => setMenuForm({ ...menuForm, location: e.target.value })}
             >
+
               <MenuItem value="header">Header</MenuItem>
               <MenuItem value="footer">Footer</MenuItem>
               <MenuItem value="mobile">Mobile</MenuItem>

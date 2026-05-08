@@ -49,9 +49,13 @@ const MenuSettings = ({
             label="Slug"
             value={selectedMenu.slug || ''}
             disabled={!canManage}
-            onChange={(e) => setSelectedMenu({ ...selectedMenu, slug: e.target.value })}
+            onChange={(e) => {
+              const val = e.target.value.toLowerCase().replace(/[^a-z0-9-]/g, '');
+              setSelectedMenu({ ...selectedMenu, slug: val });
+            }}
           />
         </Grid>
+
         <Grid item xs={12} md={2}>
           <FormControl fullWidth>
             <InputLabel>Location</InputLabel>

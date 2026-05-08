@@ -37,6 +37,12 @@ module.exports = (sequelize, DataTypes) => {
             type: DataTypes.STRING(20),
             allowNull: false,
             defaultValue: 'left',
+            validate: {
+                isIn: {
+                    args: [['left', 'center', 'right']],
+                    msg: 'Alignment must be left, center, or right'
+                }
+            }
         },
     }, {
 
@@ -50,10 +56,10 @@ module.exports = (sequelize, DataTypes) => {
         Menu.hasMany(models.MenuItem, { 
             foreignKey: 'menuId', 
             as: 'items', 
-            onDelete: 'CASCADE',
-            hooks: true 
+            onDelete: 'CASCADE'
         });
     };
+
 
 
     return Menu;

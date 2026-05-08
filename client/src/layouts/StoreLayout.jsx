@@ -332,9 +332,20 @@ const StoreLayout = () => {
               alignItems: 'center',
               gap: 0.75,
               minWidth: 0,
-              overflow: 'hidden',
-              ...(headerAlignment === 'center' && { position: 'absolute', left: '50%', transform: 'translateX(-50%)' }),
+              ...(headerAlignment === 'center' 
+                ? { 
+                    position: 'absolute', 
+                    left: '50%', 
+                    transform: 'translateX(-50%)',
+                    maxWidth: 'calc(100% - 350px)',
+                    overflowX: 'auto',
+                    whiteSpace: 'nowrap',
+                    scrollbarWidth: 'none',
+                    '&::-webkit-scrollbar': { display: 'none' }
+                  } 
+                : { overflow: 'hidden' }),
             }}
+
           >
             {renderHeaderLinks(desktopHeaderItems)}
           </Box>

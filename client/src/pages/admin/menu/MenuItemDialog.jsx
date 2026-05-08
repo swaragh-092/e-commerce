@@ -182,10 +182,17 @@ const MenuItemDialog = ({
                   fullWidth
                   type="number"
                   label="Sort Order"
-                  value={itemForm.sortOrder}
-                  onChange={(e) => setItemForm({ ...itemForm, sortOrder: Number(e.target.value) })}
+                  value={itemForm.sortOrder ?? ''}
+                  onChange={(e) => {
+                    const val = e.target.value;
+                    setItemForm({ 
+                      ...itemForm, 
+                      sortOrder: val === '' ? '' : parseInt(val, 10) 
+                    });
+                  }}
                 />
               </Grid>
+
               <Grid item xs={6} md={3}>
                 <Stack direction="row" spacing={1} alignItems="center">
                   <Switch
