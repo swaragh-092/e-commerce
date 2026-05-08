@@ -92,3 +92,23 @@ exports.delete = async (req, res, next) => {
     next(err);
   }
 };
+
+exports.bulkDelete = async (req, res, next) => {
+  try {
+    const { productIds } = req.body;
+    const result = await productService.bulkDeleteProducts(productIds, req.user?.id || null);
+    return success(res, result, `${result.deletedCount} products deleted successfully`);
+  } catch (err) {
+    next(err);
+  }
+};
+
+exports.bulkUpdate = async (req, res, next) => {
+  try {
+    const { productIds, data } = req.body;
+    const result = await productService.bulkUpdateProducts(productIds, data, req.user?.id || null);
+    return success(res, result, `${result.updatedCount} products updated successfully`);
+  } catch (err) {
+    next(err);
+  }
+};

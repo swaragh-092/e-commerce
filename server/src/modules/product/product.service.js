@@ -24,11 +24,13 @@ const { getPagination, getPagingData } = require('../../utils/pagination');
 const sanitizeHtml = require('sanitize-html');
 const AuditService = require('../audit/audit.service');
 const AppError = require('../../utils/AppError');
+const logger = require('../../utils/logger');
 const { ACTIONS, ENTITIES } = require('../../config/constants');
 const { getCategoryAndDescendantIds } = require('../category/category.service');
 const { normalizeSalePayload, serializeProductPricing } = require('./product.pricing');
 const { getSaleLabels } = require('../settings/saleLabel.service');
 const SettingsService = require('../settings/settings.service');
+const { Media } = require('../index');
 
 // Fetch the active label catalog once per request (the service caches for 60 s)
 const getLabelPresets = () => getSaleLabels().catch(() => []);
@@ -100,6 +102,34 @@ const validateVariantOptions = async (variants) => {
         );
       }
     }
+  }
+};
+
+const validateProductImages = async (images) => {
+  if (!images?.length) return;
+
+  const mediaIds = images.map(img => img.mediaId).filter(Boolean);
+  if (mediaIds.length === 0) return;
+
+  const count = await Media.count({
+    where: { id: { [Op.in]: mediaIds } }
+  });
+
+  if (count !== mediaIds.length) {
+    throw new AppError('VALIDATION_ERROR', 400, 'One or more images reference an invalid media ID');
+  }
+};
+
+const validateProductStock = (data, currentProduct = null) => {
+  const qty = data.quantity !== undefined ? data.quantity : (currentProduct ? currentProduct.quantity : 0);
+  const reserved = data.reservedQty !== undefined ? data.reservedQty : (currentProduct ? currentProduct.reservedQty : 0);
+
+  if (reserved < 0) {
+    throw new AppError('VALIDATION_ERROR', 400, 'Reserved quantity cannot be negative');
+  }
+
+  if (reserved > qty) {
+    throw new AppError('VALIDATION_ERROR', 400, 'Reserved quantity cannot exceed total quantity');
   }
 };
 
@@ -230,6 +260,18 @@ exports.getProducts = async (filters, page, limit, isAdmin = false) => {
 
   if (filters.featured === 'true' || filters.featured === true) {
     where.isFeatured = true;
+  }
+  
+  if (filters.tags) {
+    const tagList = Array.isArray(filters.tags) ? filters.tags : filters.tags.split(',').map(t => t.trim()).filter(Boolean);
+    if (tagList.length > 0) {
+      include.push({
+        model: Tag,
+        as: 'tags',
+        where: { name: { [Op.in]: tagList } },
+        required: true
+      });
+    }
   }
 
   // sale: salePrice is set AND sale window is active (or no window defined)
@@ -407,9 +449,17 @@ exports.createProduct = async (data, req = null) => {
   const labelPresets = await getLabelPresets();
   try {
     data = normalizeSalePayload(data, null, { labelPresets });
-    const slug = data.slug ? await generateSlug(data.slug, Product) : await generateSlug(data.name, Product);
+    const slug = data.slug ? await generateSlug(data.slug, Product, 'slug', { transaction }) : await generateSlug(data.name, Product, 'slug', { transaction });
 
     if (data.description) data.description = sanitizeRichText(data.description);
+
+    if (data.brandId) {
+      const brand = await Brand.findByPk(data.brandId);
+      if (!brand) throw new AppError('NOT_FOUND', 404, 'Brand not found');
+    }
+
+    validateProductStock(data);
+    if (data.images) await validateProductImages(data.images);
 
     const product = await Product.create({ ...data, slug }, { transaction });
 
@@ -429,7 +479,7 @@ exports.createProduct = async (data, req = null) => {
     if (data.tags && data.tags.length) {
       const tagInstances = await Promise.all(
         data.tags.map(async (tagName) => {
-          const tagSlug = await generateSlug(tagName, Tag);
+          const tagSlug = await generateSlug(tagName, Tag, 'slug', { transaction });
           const [tag] = await Tag.findOrCreate({
             where: { name: tagName },
             defaults: { slug: tagSlug },
@@ -451,7 +501,9 @@ exports.createProduct = async (data, req = null) => {
         changes: { name: product.name, sku: product.sku },
         req: req || null,
       });
-    } catch (e) {}
+    } catch (e) {
+      logger.error('Failed to log audit for product creation:', e);
+    }
 
     return exports.getProductBySlug(slug, { adminView: true });
   } catch (error) {
@@ -470,14 +522,22 @@ exports.updateProduct = async (id, data, req = null) => {
     data = normalizeSalePayload(data, product.price, { labelPresets });
     
     if (data.slug && data.slug !== product.slug) {
-      data.slug = await generateSlug(data.slug, Product);
+      data.slug = await generateSlug(data.slug, Product, 'slug', { transaction });
     } else if (data.name && data.name !== product.name && !data.slug) {
-      data.slug = await generateSlug(data.name, Product);
+      data.slug = await generateSlug(data.name, Product, 'slug', { transaction });
     } else {
       delete data.slug;
     }
 
     if (data.description) data.description = sanitizeRichText(data.description);
+
+    if (data.brandId && data.brandId !== product.brandId) {
+      const brand = await Brand.findByPk(data.brandId);
+      if (!brand) throw new AppError('NOT_FOUND', 404, 'Brand not found');
+    }
+
+    validateProductStock(data, product);
+    if (data.images) await validateProductImages(data.images);
 
     await product.update(data, { transaction });
 
@@ -498,7 +558,7 @@ exports.updateProduct = async (id, data, req = null) => {
     if (data.tags) {
       const tagInstances = await Promise.all(
         data.tags.map(async (tagName) => {
-          const tagSlug = await generateSlug(tagName, Tag);
+          const tagSlug = await generateSlug(tagName, Tag, 'slug', { transaction });
           const [tag] = await Tag.findOrCreate({
             where: { name: tagName },
             defaults: { slug: tagSlug },
@@ -520,7 +580,9 @@ exports.updateProduct = async (id, data, req = null) => {
         changes: data,
         req,
       });
-    } catch (e) {}
+    } catch (e) {
+      logger.error('Failed to log audit for product update:', e);
+    }
 
     return exports.getProductBySlug(data.slug || product.slug, { adminView: true });
   } catch (error) {
@@ -544,9 +606,81 @@ exports.deleteProduct = async (id, req = null) => {
       changes: snapshot,
       req,
     });
-  } catch (e) {}
+  } catch (e) {
+    logger.error('Failed to log audit for product deletion:', e);
+  }
 
   return true;
+};
+
+exports.bulkDeleteProducts = async (ids, actingUserId = null) => {
+  return Product.sequelize.transaction(async (transaction) => {
+    const products = await Product.findAll({
+      where: { id: ids },
+      transaction,
+    });
+
+    if (products.length === 0) {
+      throw new AppError('NOT_FOUND', 404, 'No products found to delete');
+    }
+
+    await Product.destroy({
+      where: { id: ids },
+      transaction,
+    });
+
+    // Log individual audit logs for each deleted product
+    for (const product of products) {
+      try {
+        await AuditService.log({
+          userId: actingUserId,
+          action: ACTIONS.DELETE,
+          entity: ENTITIES.PRODUCT,
+          entityId: product.id,
+          changes: { name: product.name, sku: product.sku },
+        });
+      } catch (e) {
+        logger.error(`Failed to log audit for product deletion (ID: ${product.id}):`, e);
+      }
+    }
+
+    return { deletedCount: products.length };
+  });
+};
+
+exports.bulkUpdateProducts = async (ids, data, actingUserId = null) => {
+  return Product.sequelize.transaction(async (transaction) => {
+    const products = await Product.findAll({
+      where: { id: ids },
+      transaction,
+    });
+
+    if (products.length === 0) {
+      throw new AppError('NOT_FOUND', 404, 'No products found to update');
+    }
+
+    await Product.update(data, {
+      where: { id: ids },
+      transaction,
+    });
+
+    // Log individual audit logs for each updated product
+    for (const product of products) {
+      try {
+        await AuditService.log({
+          userId: actingUserId,
+          action: ACTIONS.UPDATE,
+          entity: ENTITIES.PRODUCT,
+          entityId: product.id,
+          changes: data,
+        });
+      } catch (e) {
+        logger.error(`Failed to log audit for product bulk update (ID: ${product.id}):`, e);
+      }
+    }
+
+    return { updatedCount: products.length };
+  });
 };
 
 exports.bulkUpdateSale = async (payload, actingUserId = null) => {
@@ -591,7 +725,9 @@ exports.bulkUpdateSale = async (payload, actingUserId = null) => {
             ? { salePrice: null, saleStartAt: null, saleEndAt: null, saleLabel: null }
             : { saleType, value, saleStartAt: saleStartAt || null, saleEndAt: saleEndAt || null, saleLabel: saleLabel || null },
         });
-      } catch (e) {}
+      } catch (e) {
+        logger.error('Failed to log audit for bulk sale update:', e);
+      }
     }
 
     return {

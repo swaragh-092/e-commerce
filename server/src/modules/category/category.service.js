@@ -1,6 +1,6 @@
 'use strict';
 
-const { Category, Product } = require('../index');
+const { Category, Product, ProductCategory, sequelize } = require('../index');
 const { generateSlug } = require('../../utils/slugify');
 const AppError = require('../../utils/AppError');
 
@@ -59,18 +59,46 @@ exports.getCategoryTree = async () => {
     return buildTree(categories);
 };
 
-exports.getCategoryWithProducts = async (slug) => {
+exports.getCategoryWithProducts = async (slug, page = 1, limit = 20) => {
     const category = await Category.findOne({
-        where: { slug },
-        include: [{
-            model: Product,
-            as: 'products',
-            where: { status: 'published', isEnabled: true },
-            required: false // LEFT JOIN so we still get category if no products
-        }]
+        where: { slug }
     });
     if (!category) throw new AppError('NOT_FOUND', 404, 'Category not found');
-    return category;
+
+    const offset = (page - 1) * limit;
+
+    const { count, rows: products } = await Product.findAndCountAll({
+        where: { status: 'published', isEnabled: true },
+        include: [{
+            model: Category,
+            as: 'categories',
+            where: { id: category.id },
+            through: { attributes: ['sortOrder'] }, 
+            required: true
+        }, {
+            model: require('../index').ProductImage,
+            as: 'images',
+            limit: 1 
+        }],
+        limit: parseInt(limit),
+        offset: parseInt(offset),
+        distinct: true,
+        order: [
+            [ { model: Category, as: 'categories' }, 'ProductCategory', 'sortOrder', 'ASC' ],
+            ['createdAt', 'DESC']
+        ]
+    });
+
+    return {
+        category,
+        products,
+        pagination: {
+            totalItems: count,
+            totalPages: Math.ceil(count / limit),
+            currentPage: parseInt(page),
+            limit: parseInt(limit)
+        }
+    };
 };
 
 /**
@@ -79,13 +107,14 @@ exports.getCategoryWithProducts = async (slug) => {
  * @param {string} name - category name to check
  * @param {string|null} excludeId - optional id to exclude (used for updates)
  */
-const checkDuplicateRootCategoryName = async (name, excludeId = null) => {
+const checkDuplicateRootCategoryName = async (name, transaction = null, excludeId = null) => {
     const existing = await Category.findOne({
         where: {
             name: name.trim(),
             parentId: null,
             ...(excludeId && { id: { [require('sequelize').Op.ne]: excludeId } }),
         },
+        transaction,
     });
     if (existing) {
         throw new AppError('VALIDATION_ERROR', 400, 'A root category with this name already exists');
@@ -93,43 +122,59 @@ const checkDuplicateRootCategoryName = async (name, excludeId = null) => {
 };
 
 exports.createCategory = async (data) => {
-    // Prevent duplicate root category names
-    if (!data.parentId) {
-        await checkDuplicateRootCategoryName(data.name);
+    const transaction = await sequelize.transaction();
+    try {
+        // Prevent duplicate root category names
+        if (!data.parentId) {
+            await checkDuplicateRootCategoryName(data.name, transaction);
+        }
+        const slug = await generateSlug(data.name, Category, 'slug', { transaction });
+        const category = await Category.create({ ...data, slug }, { transaction });
+        await transaction.commit();
+        return category;
+    } catch (error) {
+        await transaction.rollback();
+        throw error;
     }
-    const slug = await generateSlug(data.name, Category);
-    return Category.create({ ...data, slug });
 };
 
 exports.updateCategory = async (id, data) => {
-    const category = await Category.findByPk(id);
-    if (!category) throw new AppError('NOT_FOUND', 404, 'Category not found');
+    const transaction = await sequelize.transaction();
+    try {
+        const category = await Category.findByPk(id, { transaction });
+        if (!category) throw new AppError('NOT_FOUND', 404, 'Category not found');
 
-    // Determine what the effective parentId and name will be after update
-    const newParentId = data.parentId !== undefined ? data.parentId : category.parentId;
-    const newName = data.name !== undefined ? data.name : category.name;
+        // Determine what the effective parentId and name will be after update
+        const newParentId = data.parentId !== undefined ? data.parentId : category.parentId;
+        const newName = data.name !== undefined ? data.name : category.name;
 
-    // Prevent duplicate root category names when updating
-    if (!newParentId && newName) {
-        await checkDuplicateRootCategoryName(newName, id);
-    }
-
-    if (data.name && data.name !== category.name) {
-        data.slug = await generateSlug(data.name, Category);
-    }
-
-    if (data.parentId !== undefined) {
-        // F-09: exact self-parent guard
-        if (data.parentId === id) {
-            throw new AppError('VALIDATION_ERROR', 400, 'Category cannot be its own parent');
+        // Prevent duplicate root category names when updating
+        if (!newParentId && (newName !== category.name || category.parentId)) {
+            await checkDuplicateRootCategoryName(newName, transaction, id);
         }
-        // F-09: full cycle guard (e.g. A→B→C and trying to set A's parent to C)
-        if (await wouldCreateCycle(id, data.parentId)) {
-            throw new AppError('VALIDATION_ERROR', 400, 'Setting this parent would create a circular reference');
-        }
-    }
 
-    return category.update(data);
+        if (data.name && data.name !== category.name && !data.slug) {
+            data.slug = await generateSlug(data.name, Category, 'slug', { transaction });
+        }
+
+        if (data.parentId !== undefined) {
+            // F-09: exact self-parent guard
+            if (data.parentId === id) {
+                throw new AppError('VALIDATION_ERROR', 400, 'Category cannot be its own parent');
+            }
+            // F-09: full cycle guard (e.g. A→B→C and trying to set A's parent to C)
+            if (await wouldCreateCycle(id, data.parentId)) {
+                throw new AppError('VALIDATION_ERROR', 400, 'Setting this parent would create a circular reference');
+            }
+        }
+
+        await category.update(data, { transaction });
+        await transaction.commit();
+        return category;
+    } catch (error) {
+        await transaction.rollback();
+        throw error;
+    }
 };
 
 exports.deleteCategory = async (id) => {
@@ -184,6 +229,30 @@ exports.reorderCategory = async (id, direction) => {
             await swapWith.update({ sortOrder: tempSort }, { transaction });
         } else {
             throw new AppError('VALIDATION_ERROR', 400, 'Invalid direction. Use "up" or "down".');
+        }
+    });
+
+    return true;
+};
+
+/**
+ * Update the sort order of products within a category.
+ * @param {string} categoryId - category id
+ * @param {string[]} productIds - ordered list of product ids
+ */
+exports.reorderProducts = async (categoryId, productIds) => {
+    const category = await Category.findByPk(categoryId);
+    if (!category) throw new AppError('NOT_FOUND', 404, 'Category not found');
+
+    await sequelize.transaction(async (transaction) => {
+        for (let i = 0; i < productIds.length; i++) {
+            await ProductCategory.update(
+                { sortOrder: i },
+                { 
+                    where: { categoryId, productId: productIds[i] },
+                    transaction 
+                }
+            );
         }
     });
 

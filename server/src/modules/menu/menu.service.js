@@ -247,25 +247,39 @@ exports.getPublicMenuByLocation = async (location) => {
 
 
 exports.createMenu = async (data) => {
-    const slug = data.slug || await generateSlug(data.name, Menu);
-    const menu = await Menu.create({ ...data, slug });
-    clearCache();
-    return menu;
+    const transaction = await Menu.sequelize.transaction();
+    try {
+        const slug = data.slug || await generateSlug(data.name, Menu, 'slug', { transaction });
+        const menu = await Menu.create({ ...data, slug }, { transaction });
+        await transaction.commit();
+        clearCache();
+        return menu;
+    } catch (error) {
+        await transaction.rollback();
+        throw error;
+    }
 };
 
 
 exports.updateMenu = async (id, data) => {
-    const menu = await Menu.findByPk(id);
-    if (!menu) throw new AppError('NOT_FOUND', 404, 'Menu not found');
+    const transaction = await Menu.sequelize.transaction();
+    try {
+        const menu = await Menu.findByPk(id, { transaction });
+        if (!menu) throw new AppError('NOT_FOUND', 404, 'Menu not found');
 
-    const updates = { ...data };
-    if ((updates.name && updates.name !== menu.name) && !updates.slug) {
-        updates.slug = await generateSlug(updates.name, Menu);
+        const updates = { ...data };
+        if ((updates.name && updates.name !== menu.name) && !updates.slug) {
+            updates.slug = await generateSlug(updates.name, Menu, 'slug', { transaction });
+        }
+
+        await menu.update(updates, { transaction });
+        await transaction.commit();
+        clearCache();
+        return exports.getMenuById(id);
+    } catch (error) {
+        await transaction.rollback();
+        throw error;
     }
-
-    await menu.update(updates);
-    clearCache();
-    return exports.getMenuById(id);
 };
 
 

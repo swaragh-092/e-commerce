@@ -92,4 +92,16 @@ const bulkSaleSchema = Joi.object({
   }),
 });
 
-module.exports = { createProductSchema, updateProductSchema, bulkSaleSchema };
+const bulkDeleteSchema = Joi.object({
+  productIds: Joi.array().items(Joi.string().uuid()).min(1).required(),
+});
+
+const bulkUpdateSchema = Joi.object({
+  productIds: Joi.array().items(Joi.string().uuid()).min(1).required(),
+  data: Joi.object({
+    status: Joi.string().valid('draft', 'published'),
+    isEnabled: Joi.boolean(),
+  }).min(1).required(),
+});
+
+module.exports = { createProductSchema, updateProductSchema, bulkSaleSchema, bulkDeleteSchema, bulkUpdateSchema };

@@ -6,18 +6,27 @@ const { generateSlug } = require('../../utils/slugify');
 const AppError = require('../../utils/AppError');
 
 const createBrand = async (data) => {
-    const { name, slug, description, image, isActive } = data;
-    
-    // Use text from slug if provided, otherwise name, and ensure uniqueness
-    const finalSlug = await generateSlug(slug || name, Brand);
+    const transaction = await Brand.sequelize.transaction();
+    try {
+        const { name, slug, description, image, isActive } = data;
+        
+        // Use text from slug if provided, otherwise name, and ensure uniqueness
+        const finalSlug = await generateSlug(slug || name, Brand, 'slug', { transaction });
 
-    return await Brand.create({
-        name,
-        slug: finalSlug,
-        description,
-        image,
-        isActive: isActive !== undefined ? isActive : true,
-    });
+        const brand = await Brand.create({
+            name,
+            slug: finalSlug,
+            description,
+            image,
+            isActive: isActive !== undefined ? isActive : true,
+        }, { transaction });
+        
+        await transaction.commit();
+        return brand;
+    } catch (error) {
+        await transaction.rollback();
+        throw error;
+    }
 };
 
 const getBrands = async (query = {}) => {
@@ -64,31 +73,38 @@ const getBrandBySlug = async (slug) => {
 };
 
 const updateBrand = async (id, data) => {
-    const brand = await Brand.findByPk(id);
-    if (!brand) {
-        throw new AppError('BRAND_ERROR', 404, 'Brand not found');
+    const transaction = await Brand.sequelize.transaction();
+    try {
+        const brand = await Brand.findByPk(id, { transaction });
+        if (!brand) {
+            throw new AppError('BRAND_ERROR', 404, 'Brand not found');
+        }
+
+        const { name, slug, description, image, isActive } = data;
+        
+        let finalSlug = brand.slug;
+        if (slug && slug !== brand.slug) {
+            // If brand explicitly provides a new slug, ensure it's unique
+            finalSlug = await generateSlug(slug, Brand, 'slug', { transaction });
+        } else if (name && name !== brand.name && !slug) {
+            // If name changes but no slug provided, generate new unique slug from name
+            finalSlug = await generateSlug(name, Brand, 'slug', { transaction });
+        }
+
+        await brand.update({
+            name: name || brand.name,
+            slug: finalSlug,
+            description: description !== undefined ? description : brand.description,
+            image: image !== undefined ? image : brand.image,
+            isActive: isActive !== undefined ? isActive : brand.isActive,
+        }, { transaction });
+
+        await transaction.commit();
+        return brand;
+    } catch (error) {
+        await transaction.rollback();
+        throw error;
     }
-
-    const { name, slug, description, image, isActive } = data;
-    
-    let finalSlug = brand.slug;
-    if (slug && slug !== brand.slug) {
-        // If brand explicitly provides a new slug, ensure it's unique
-        finalSlug = await generateSlug(slug, Brand);
-    } else if (name && name !== brand.name && !slug) {
-        // If name changes but no slug provided, generate new unique slug from name
-        finalSlug = await generateSlug(name, Brand);
-    }
-
-    await brand.update({
-        name: name || brand.name,
-        slug: finalSlug,
-        description: description !== undefined ? description : brand.description,
-        image: image !== undefined ? image : brand.image,
-        isActive: isActive !== undefined ? isActive : brand.isActive,
-    });
-
-    return brand;
 };
 
 const deleteBrand = async (id) => {

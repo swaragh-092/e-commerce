@@ -6,6 +6,7 @@ const {
 } = require('../index');
 const { generateSlug } = require('../../utils/slugify');
 const AppError = require('../../utils/AppError');
+const logger = require('../../utils/logger');
 
 // ── Reusable include for variant detail ──────────────────────────────────────
 const variantInclude = [
@@ -104,33 +105,66 @@ const unlinkAttributeFromCategory = async (categoryId, attributeId) => {
 /**
  * Get attributes for a category with optional ancestor inheritance.
  */
-const getCategoryAttributes = async (categoryId, inherit = false) => {
-    const category = await Category.findByPk(categoryId);
-    if (!category) throw new AppError('NOT_FOUND', 404, 'Category not found');
+const getCategoryAttributes = async (categoryIdOrIds, inherit = false) => {
+    let ids = categoryIdOrIds;
+    if (typeof ids === 'string' && ids.includes(',')) {
+        ids = ids.split(',');
+    }
+    const categoryIdsInput = Array.isArray(ids) ? ids : [ids];
+    if (categoryIdsInput.length === 0) return [];
 
-    let categoryIds = [categoryId];
+    const categories = await Category.findAll({ where: { id: categoryIdsInput } });
+    if (categories.length === 0) return [];
+
+    let allCategoryIds = [...categoryIdsInput];
+    const catMap = {};
+    categories.forEach(c => {
+        catMap[c.id] = { name: c.name, isDirect: true };
+    });
 
     if (inherit) {
-        let current = category;
-        while (current.parentId) {
-            categoryIds.push(current.parentId);
-            current = await Category.findByPk(current.parentId);
-            if (!current) break;
+        // Build a unique set of all category IDs including parents
+        const processedIds = new Set(categoryIdsInput);
+        const queue = [...categories];
+        
+        while (queue.length > 0) {
+            const current = queue.shift();
+            if (current.parentId && !processedIds.has(current.parentId)) {
+                const parent = await Category.findByPk(current.parentId, { attributes: ['id', 'name', 'parentId'] });
+                if (parent) {
+                    allCategoryIds.push(parent.id);
+                    catMap[parent.id] = { name: parent.name, isDirect: false };
+                    processedIds.add(parent.id);
+                    queue.push(parent);
+                }
+            }
         }
     }
 
     const links = await CategoryAttribute.findAll({
-        where: { categoryId: categoryIds },
-        attributes: ['attributeId'],
+        where: { categoryId: allCategoryIds },
+        attributes: ['attributeId', 'categoryId'],
     });
 
     const uniqueAttrIds = [...new Set(links.map((l) => l.attributeId))];
     if (uniqueAttrIds.length === 0) return [];
 
-    return AttributeTemplate.findAll({
+    const templates = await AttributeTemplate.findAll({
         where: { id: uniqueAttrIds },
         include: [{ model: AttributeValue, as: 'values', attributes: ['id', 'value', 'slug', 'sortOrder'] }],
         order: [['sortOrder', 'ASC'], [{ model: AttributeValue, as: 'values' }, 'sortOrder', 'ASC']],
+    });
+
+    return templates.map(template => {
+        const json = template.get({ plain: true });
+        const sources = links
+            .filter(l => l.attributeId === template.id)
+            .map(l => ({
+                id: l.categoryId,
+                name: catMap[l.categoryId]?.name || 'Unknown',
+                isDirect: catMap[l.categoryId]?.isDirect || false
+            }));
+        return { ...json, sources };
     });
 };
 
@@ -149,7 +183,7 @@ const bulkGenerateVariants = async (productId, { defaultPrice, defaultStockQty =
     const product = await Product.findByPk(productId);
     if (!product) throw new AppError('NOT_FOUND', 404, 'Product not found');
 
-    console.log(`[bulkGenerateVariants] Starting for product: ${productId}`);
+    logger.debug(`[bulkGenerateVariants] Starting for product: ${productId}`);
 
     const t = await sequelize.transaction();
     try {
@@ -160,7 +194,7 @@ const bulkGenerateVariants = async (productId, { defaultPrice, defaultStockQty =
         });
 
         if (customVariantAttrs.length > 0) {
-            console.log(`[bulkGenerateVariants] Promoting ${customVariantAttrs.length} custom attributes to global templates.`);
+            logger.debug(`[bulkGenerateVariants] Promoting ${customVariantAttrs.length} custom attributes to global templates.`);
             for (const customAttr of customVariantAttrs) {
                 if (!customAttr.customName || !customAttr.customValue) continue;
 
@@ -169,7 +203,7 @@ const bulkGenerateVariants = async (productId, { defaultPrice, defaultStockQty =
                     transaction: t,
                 });
                 if (!template) {
-                    const slug = await generateSlug(customAttr.customName, AttributeTemplate);
+                    const slug = await generateSlug(customAttr.customName, AttributeTemplate, 'slug', { transaction: t });
                     template = await AttributeTemplate.create({ name: customAttr.customName, slug }, { transaction: t });
                 }
 
@@ -178,7 +212,7 @@ const bulkGenerateVariants = async (productId, { defaultPrice, defaultStockQty =
                     transaction: t,
                 });
                 if (!val) {
-                    const slug = await generateSlug(customAttr.customValue, AttributeValue);
+                    const slug = await generateSlug(customAttr.customValue, AttributeValue, 'slug', { transaction: t });
                     val = await AttributeValue.create({ attributeId: template.id, value: customAttr.customValue, slug }, { transaction: t });
                 }
 
@@ -202,7 +236,7 @@ const bulkGenerateVariants = async (productId, { defaultPrice, defaultStockQty =
             transaction: t,
         });
 
-        console.log(`[bulkGenerateVariants] Found ${variantAttrs.length} variant-forming attribute rows.`);
+        logger.debug(`[bulkGenerateVariants] Found ${variantAttrs.length} variant-forming attribute rows.`);
 
         if (variantAttrs.length === 0) {
             throw new AppError(
@@ -215,7 +249,7 @@ const bulkGenerateVariants = async (productId, { defaultPrice, defaultStockQty =
         const attrMap = new Map(); // attributeId → { attribute, values: [{valueId, label}] }
         for (const row of variantAttrs) {
             if (!row.attributeId || !row.valueId) {
-                console.warn(`[bulkGenerateVariants] Skipping row ${row.id}: attributeId or valueId is missing even after promotion.`);
+                logger.warn(`[bulkGenerateVariants] Skipping row ${row.id}: attributeId or valueId is missing even after promotion.`);
                 continue;
             }
             if (!attrMap.has(row.attributeId)) {
@@ -225,8 +259,8 @@ const bulkGenerateVariants = async (productId, { defaultPrice, defaultStockQty =
         }
 
         const attrGroups = Array.from(attrMap.values());
-        console.log(`[bulkGenerateVariants] Matrix dimensions: ${attrGroups.length}`);
-        attrGroups.forEach(g => console.log(`  - ${g.attribute?.name}: ${g.values.length} values`));
+        logger.debug(`[bulkGenerateVariants] Matrix dimensions: ${attrGroups.length}`);
+        attrGroups.forEach(g => logger.debug(`  - ${g.attribute?.name}: ${g.values.length} values`));
 
         if (attrGroups.length === 0) {
             throw new AppError(
@@ -237,7 +271,7 @@ const bulkGenerateVariants = async (productId, { defaultPrice, defaultStockQty =
 
         // Cartesian product → array of [{attributeId, valueId, label}] combos
         const combos = cartesian(attrGroups);
-        console.log(`[bulkGenerateVariants] Total generated combinations: ${combos.length}`);
+        logger.debug(`[bulkGenerateVariants] Total generated combinations: ${combos.length}`);
 
         const basePrice = defaultPrice ?? Number(product.price);
 
@@ -264,7 +298,7 @@ const bulkGenerateVariants = async (productId, { defaultPrice, defaultStockQty =
                 deletedCount++;
             }
         }
-        console.log(`[bulkGenerateVariants] Pruned ${deletedCount} obsolete variants.`);
+        logger.debug(`[bulkGenerateVariants] Pruned ${deletedCount} obsolete variants.`);
 
         // Track combinations that already exist so we don't recreate them
         const existingSignatures = new Set(
@@ -299,10 +333,10 @@ const bulkGenerateVariants = async (productId, { defaultPrice, defaultStockQty =
             }
             createdCount++;
         }
-        console.log(`[bulkGenerateVariants] Created ${createdCount} new variant combinations.`);
+        logger.debug(`[bulkGenerateVariants] Created ${createdCount} new variant combinations.`);
 
         await t.commit();
-        console.log(`[bulkGenerateVariants] Transaction committed successfully.`);
+        logger.debug(`[bulkGenerateVariants] Transaction committed successfully.`);
 
         // Return full detail with options
         return ProductVariant.findAll({
