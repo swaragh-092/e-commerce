@@ -13,6 +13,8 @@ const {
     ruleSchema,
     ruleUpdateSchema,
 } = require('./shipping.validation');
+const { idParamSchema } = require('../../utils/common.validation');
+
 
 const manageShipping = [
     authenticate,
@@ -20,16 +22,19 @@ const manageShipping = [
 ];
 
 router.get('/shipping/providers', ...manageShipping, shippingController.listProviders);
-router.patch('/shipping/providers/:id', ...manageShipping, validate(providerUpdateSchema), shippingController.updateProvider);
+router.patch('/shipping/providers/:id', ...manageShipping, validate(idParamSchema, 'params'), validate(providerUpdateSchema), shippingController.updateProvider);
+
 
 router.get('/shipping/zones', ...manageShipping, shippingController.listZones);
 router.post('/shipping/zones', ...manageShipping, validate(zoneSchema), shippingController.createZone);
-router.patch('/shipping/zones/:id', ...manageShipping, validate(zoneUpdateSchema), shippingController.updateZone);
-router.delete('/shipping/zones/:id', ...manageShipping, shippingController.deleteZone);
+router.patch('/shipping/zones/:id', ...manageShipping, validate(idParamSchema, 'params'), validate(zoneUpdateSchema), shippingController.updateZone);
+router.delete('/shipping/zones/:id', ...manageShipping, validate(idParamSchema, 'params'), shippingController.deleteZone);
+
 
 router.get('/shipping/rules', ...manageShipping, shippingController.listRules);
 router.post('/shipping/rules', ...manageShipping, validate(ruleSchema), shippingController.createRule);
-router.patch('/shipping/rules/:id', ...manageShipping, validate(ruleUpdateSchema), shippingController.updateRule);
-router.delete('/shipping/rules/:id', ...manageShipping, shippingController.deleteRule);
+router.patch('/shipping/rules/:id', ...manageShipping, validate(idParamSchema, 'params'), validate(ruleUpdateSchema), shippingController.updateRule);
+router.delete('/shipping/rules/:id', ...manageShipping, validate(idParamSchema, 'params'), shippingController.deleteRule);
+
 
 module.exports = router;

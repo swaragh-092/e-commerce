@@ -34,7 +34,9 @@ import {
   AccordionSummary,
   AccordionDetails,
   Switch,
+  LinearProgress,
 } from '@mui/material';
+
 import {
   Add as AddIcon,
   Delete as DeleteIcon,
@@ -1270,7 +1272,9 @@ const VariantsPanel = ({ productId, productName, productSku, categoryIds = [], f
   const [saving, setSaving] = useState(false);
   const [variantMediaPickerOpen, setVariantMediaPickerOpen] = useState(null);
   const [attributes, setAttributes] = useState([]);
+  const [saveProgress, setSaveProgress] = useState({ current: 0, total: 0 });
   const [selectedTemplate, setSelectedTemplate] = useState('');
+
   const [selectedValueIds, setSelectedValueIds] = useState([]);
   const [customName, setCustomName] = useState('');
   const [customValue, setCustomValue] = useState('');
@@ -1454,9 +1458,12 @@ const VariantsPanel = ({ productId, productName, productSku, categoryIds = [], f
 
   const handleSaveVariants = async () => {
     if (!canManageVariants || !hasVariantChanges) return;
+    const dirtyVariants = variants.filter((variant) => variant._dirty);
     setSaving(true);
+    setSaveProgress({ current: 0, total: dirtyVariants.length });
+    
     try {
-      const dirtyVariants = variants.filter((variant) => variant._dirty);
+      let count = 0;
       for (const variant of dirtyVariants) {
         await attributeService.updateProductVariant(productId, variant.id, {
           sku: variant.sku?.trim() || null,
@@ -1466,6 +1473,8 @@ const VariantsPanel = ({ productId, productName, productSku, categoryIds = [], f
           sortOrder: Number(variant.sortOrder || 0),
           mediaId: variant.mediaId || null,
         });
+        count++;
+        setSaveProgress(prev => ({ ...prev, current: count }));
       }
       notify('Variants updated.', 'success');
       loadAll();
@@ -1473,8 +1482,10 @@ const VariantsPanel = ({ productId, productName, productSku, categoryIds = [], f
       notify(err?.response?.data?.message || 'Failed to save variants.', 'error');
     } finally {
       setSaving(false);
+      setSaveProgress({ current: 0, total: 0 });
     }
   };
+
 
   const handleDeleteVariant = async (variantId) => {
     if (!canManageVariants) return;
@@ -1766,8 +1777,9 @@ const VariantsPanel = ({ productId, productName, productSku, categoryIds = [], f
                   Generate Matrix
                 </Button>
                 <Button variant="contained" size="small" onClick={handleSaveVariants} disabled={!canManageVariants || !hasVariantChanges || saving}>
-                  {saving ? 'Saving...' : 'Save Variant Changes'}
+                  {saving ? `Saving (${saveProgress.current}/${saveProgress.total})...` : 'Save Variant Changes'}
                 </Button>
+
               </Box>
             </Box>
 
@@ -1783,9 +1795,23 @@ const VariantsPanel = ({ productId, productName, productSku, categoryIds = [], f
               ))}
             </Box>
 
+            {saving && (
+              <Box sx={{ mb: 2 }}>
+                <LinearProgress 
+                  variant="determinate" 
+                  value={(saveProgress.current / saveProgress.total) * 100} 
+                  sx={{ height: 8, borderRadius: 4 }}
+                />
+                <Typography variant="caption" color="text.secondary" sx={{ mt: 0.5, display: 'block' }}>
+                  Saving {saveProgress.current} of {saveProgress.total} variants...
+                </Typography>
+              </Box>
+            )}
+
             {loading ? (
               <Box sx={{ display: 'flex', justifyContent: 'center', py: 4 }}><CircularProgress size={24} /></Box>
             ) : variants.length === 0 ? (
+
               <Alert severity="info">
                 No variants yet. Add product attributes and mark the SKU-defining ones first, then click <strong>Generate Matrix</strong>.
               </Alert>

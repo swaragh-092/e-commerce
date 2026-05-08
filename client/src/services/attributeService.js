@@ -62,6 +62,9 @@ const updateProductVariant = (productId, variantId, data) =>
 const deleteProductVariant = (productId, variantId) =>
   api.delete(`/products/${productId}/variants/${variantId}`);
 
+const reorderAttributeValues = (attributeId, valueIds) =>
+  api.put(`/attributes/${attributeId}/values/reorder`, { valueIds });
+
 const attributeService = {
   getAttributes,
   getAttributeById,
@@ -70,6 +73,7 @@ const attributeService = {
   deleteAttribute,
   addAttributeValue,
   removeAttributeValue,
+  reorderAttributeValues,
   getCategoryAttributes,
   linkAttributeToCategory,
   unlinkAttributeFromCategory,

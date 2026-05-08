@@ -10,6 +10,8 @@ const { PERMISSIONS } = require('../../config/permissions');
 const { featureGate } = require('../../middleware/featureGate.middleware');
 const { validate } = require('../../middleware/validate.middleware');
 const { createEnquirySchema, updateEnquiryStatusSchema, replyEnquirySchema } = require('./enquiry.validation');
+const { idParamSchema } = require('../../utils/common.validation');
+
 
 // Apply enquiry feature gate to all routes in this module
 router.use(featureGate('enquiry'));
@@ -29,16 +31,20 @@ router.patch(
   '/admin/:id/status',
   authenticate,
   authorizePermissions(PERMISSIONS.ENQUIRIES_MANAGE),
+  validate(idParamSchema, 'params'),
   validate(updateEnquiryStatusSchema),
   enquiryController.updateStatus
+
 );
 
 router.post(
   '/admin/:id/reply',
   authenticate,
   authorizePermissions(PERMISSIONS.ENQUIRIES_MANAGE),
+  validate(idParamSchema, 'params'),
   validate(replyEnquirySchema),
   enquiryController.replyEnquiry
+
 );
 
 module.exports = router;

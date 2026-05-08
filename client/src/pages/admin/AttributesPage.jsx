@@ -3,21 +3,28 @@ import {
   Box, Typography, Button, Paper, CircularProgress,
   IconButton, Dialog, DialogTitle, DialogContent, DialogActions,
   TextField, Table, TableHead, TableRow, TableCell, TableBody,
-  Chip, Collapse, Tooltip, Alert, Divider,
+  Chip, Collapse, Tooltip, Alert, Divider, TablePagination
 } from '@mui/material';
+
 import {
   Add as AddIcon, Edit as EditIcon, Delete as DeleteIcon,
   ExpandMore as ExpandMoreIcon, ExpandLess as ExpandLessIcon,
+  DragIndicator as DragIndicatorIcon
 } from '@mui/icons-material';
+import { DragDropContext, Droppable, Draggable } from '@hello-pangea/dnd';
+
 import attributeService from '../../services/attributeService';
 import { useAuth } from '../../hooks/useAuth';
 import { PERMISSIONS } from '../../utils/permissions';
 import { getApiErrorMessage } from '../../utils/apiErrors';
 import { useNotification } from '../../context/NotificationContext';
+import AppErrorBoundary from '../../components/common/AppErrorBoundary';
+
 
 const ValuesPanel = ({ attribute, onRefresh, canManage }) => {
-  const { notify } = useNotification();
+  const { notify, confirm } = useNotification();
   const [newValue, setNewValue] = useState('');
+
   const [saving, setSaving] = useState(false);
 
   const handleAdd = async () => {
@@ -37,7 +44,8 @@ const ValuesPanel = ({ attribute, onRefresh, canManage }) => {
 
   const handleRemove = async (valueId) => {
     if (!canManage) return;
-    if (!window.confirm('Remove this value?')) return;
+    const confirmed = await confirm('Remove Value', 'Are you sure you want to remove this attribute value?', 'error');
+    if (!confirmed) return;
     try {
       await attributeService.removeAttributeValue(attribute.id, valueId);
       onRefresh();
@@ -46,23 +54,92 @@ const ValuesPanel = ({ attribute, onRefresh, canManage }) => {
     }
   };
 
+
+  const handleDragEnd = async (result) => {
+    if (!result.destination || !canManage) return;
+    if (result.destination.index === result.source.index) return;
+
+    const items = Array.from(attribute.values || []);
+    const [reorderedItem] = items.splice(result.source.index, 1);
+    items.splice(result.destination.index, 0, reorderedItem);
+
+    const valueIds = items.map(item => item.id);
+    
+    try {
+      setSaving(true);
+      await attributeService.reorderAttributeValues(attribute.id, valueIds);
+      onRefresh();
+    } catch (err) {
+      notify(getApiErrorMessage(err), 'error');
+    } finally {
+      setSaving(false);
+    }
+  };
+
   return (
     <Box sx={{ p: 2, bgcolor: 'background.paper', borderTop: '1px solid', borderColor: 'divider' }}>
-      <Typography variant="subtitle2" gutterBottom>Values</Typography>
-      <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 1, mb: 2 }}>
-        {(attribute.values || []).length === 0 && (
-          <Typography variant="body2" color="text.secondary">No values yet.</Typography>
-        )}
-        {(attribute.values || []).map((value) => (
-          <Chip
-            key={value.id}
-            label={value.value}
-            size="small"
-            onDelete={canManage ? () => handleRemove(value.id) : undefined}
-          />
-        ))}
-      </Box>
+      <Typography variant="subtitle2" gutterBottom>Values (Drag to reorder)</Typography>
+      
+      <DragDropContext onDragEnd={handleDragEnd}>
+        <Droppable droppableId={`values-${attribute.id}`} direction="horizontal">
+          {(provided) => (
+            <Box 
+              ref={provided.innerRef} 
+              {...provided.droppableProps}
+              sx={{ display: 'flex', flexWrap: 'wrap', gap: 1, mb: 2 }}
+            >
+              {(attribute.values || []).length === 0 && (
+                <Typography variant="body2" color="text.secondary">No values yet.</Typography>
+              )}
+              {(attribute.values || []).map((value, index) => (
+                <Draggable 
+                  key={value.id} 
+                  draggableId={value.id} 
+                  index={index}
+                  isDragDisabled={!canManage || saving}
+                >
+                  {(provided, snapshot) => (
+                    <Box
+                      ref={provided.innerRef}
+                      {...provided.draggableProps}
+                      sx={{ 
+                        display: 'flex', 
+                        alignItems: 'center',
+                        bgcolor: snapshot.isDragging ? 'action.hover' : 'transparent',
+                        borderRadius: 1,
+                        opacity: snapshot.isDragging ? 0.8 : 1
+                      }}
+                    >
+                      <Chip
+                        label={
+                          <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
+                            {canManage && (
+                              <Box {...provided.dragHandleProps} sx={{ display: 'flex', cursor: 'grab' }}>
+                                <DragIndicatorIcon sx={{ fontSize: 16, color: 'text.secondary' }} />
+                              </Box>
+                            )}
+                            {value.value}
+                          </Box>
+                        }
+                        size="small"
+                        onDelete={canManage ? () => handleRemove(value.id) : undefined}
+                        sx={{ 
+                          cursor: 'default',
+                          '& .MuiChip-label': { pl: canManage ? 0.5 : 1 }
+                        }}
+                      />
+                    </Box>
+                  )}
+                </Draggable>
+              ))}
+              {provided.placeholder}
+            </Box>
+          )}
+        </Droppable>
+      </DragDropContext>
+
       <Box sx={{ display: 'flex', gap: 1, alignItems: 'center' }}>
+
         <TextField
           size="small"
           placeholder="New value…"
@@ -89,20 +166,30 @@ const AttributesPage = () => {
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editing, setEditing] = useState(null);
   const [formData, setFormData] = useState({ name: '' });
+  const [page, setPage] = useState(0);
+  const [rowsPerPage, setRowsPerPage] = useState(20);
+  const [totalItems, setTotalItems] = useState(0);
   const canManageAttributes = hasPermission(PERMISSIONS.ATTRIBUTES_MANAGE);
+
 
   const fetchAttributes = useCallback(async () => {
     try {
       setLoading(true);
       setError('');
-      const response = await attributeService.getAttributes({ page: 1, limit: 100 });
-      setAttributes(response?.data?.data?.rows || response?.data?.data || []);
+      const response = await attributeService.getAttributes({ 
+        page: page + 1, 
+        limit: rowsPerPage 
+      });
+      const data = response?.data?.data || {};
+      setAttributes(data.rows || []);
+      setTotalItems(data.count || 0);
     } catch (err) {
       setError(getApiErrorMessage(err, 'Failed to load attributes'));
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [page, rowsPerPage]);
+
 
   useEffect(() => {
     fetchAttributes();
@@ -146,7 +233,12 @@ const AttributesPage = () => {
 
   const handleDelete = async (id) => {
     if (!canManageAttributes) return;
-    if (!window.confirm('Delete this attribute template? This will also remove all its values and category links.')) return;
+    const confirmed = await confirm(
+      'Delete Attribute Template',
+      'Are you sure you want to delete this attribute template? This will also remove all its values and category links.',
+      'error'
+    );
+    if (!confirmed) return;
     try {
       await attributeService.deleteAttribute(id);
       fetchAttributes();
@@ -155,9 +247,20 @@ const AttributesPage = () => {
     }
   };
 
+
   const toggleExpanded = (id) => {
     setExpanded((prev) => ({ ...prev, [id]: !prev[id] }));
   };
+
+  const handleChangePage = (event, newPage) => {
+    setPage(newPage);
+  };
+
+  const handleChangeRowsPerPage = (event) => {
+    setRowsPerPage(parseInt(event.target.value, 10));
+    setPage(0);
+  };
+
 
   return (
     <Box sx={{ p: 3 }}>
@@ -182,9 +285,11 @@ const AttributesPage = () => {
             <TableHead>
               <TableRow sx={{ bgcolor: 'background.paper' }}>
                 <TableCell sx={{ fontWeight: 'bold' }}>Name</TableCell>
+                <TableCell sx={{ fontWeight: 'bold' }}>Slug</TableCell>
                 <TableCell sx={{ fontWeight: 'bold' }}>Values</TableCell>
                 <TableCell align="right" sx={{ fontWeight: 'bold' }}>Actions</TableCell>
               </TableRow>
+
             </TableHead>
             <TableBody>
               {attributes.length === 0 && (
@@ -197,7 +302,13 @@ const AttributesPage = () => {
               {attributes.map((attribute) => (
                 <React.Fragment key={attribute.id}>
                   <TableRow hover>
-                    <TableCell>{attribute.name}</TableCell>
+                    <TableCell sx={{ fontWeight: 600 }}>{attribute.name}</TableCell>
+                    <TableCell>
+                      <Typography variant="caption" sx={{ fontFamily: 'monospace', bgcolor: 'action.hover', px: 1, py: 0.5, borderRadius: 1 }}>
+                        {attribute.slug}
+                      </Typography>
+                    </TableCell>
+
                     <TableCell>
                       <Button
                         size="small"
@@ -232,7 +343,17 @@ const AttributesPage = () => {
               ))}
             </TableBody>
           </Table>
+          <TablePagination
+            component="div"
+            count={totalItems}
+            page={page}
+            onPageChange={handleChangePage}
+            rowsPerPage={rowsPerPage}
+            onRowsPerPageChange={handleChangeRowsPerPage}
+            rowsPerPageOptions={[10, 20, 50]}
+          />
         </Paper>
+
       )}
 
       <Dialog open={dialogOpen} onClose={handleDialogClose} maxWidth="xs" fullWidth>
@@ -259,4 +380,11 @@ const AttributesPage = () => {
   );
 };
 
-export default AttributesPage;
+const AttributesPageWithBoundary = () => (
+  <AppErrorBoundary>
+    <AttributesPage />
+  </AppErrorBoundary>
+);
+
+export default AttributesPageWithBoundary;
+

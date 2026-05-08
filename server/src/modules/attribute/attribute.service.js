@@ -123,22 +123,34 @@ const getCategoryAttributes = async (categoryIdOrIds, inherit = false) => {
     });
 
     if (inherit) {
-        // Build a unique set of all category IDs including parents
-        const processedIds = new Set(categoryIdsInput);
-        const queue = [...categories];
-        
-        while (queue.length > 0) {
-            const current = queue.shift();
-            if (current.parentId && !processedIds.has(current.parentId)) {
-                const parent = await Category.findByPk(current.parentId, { attributes: ['id', 'name', 'parentId'] });
-                if (parent) {
-                    allCategoryIds.push(parent.id);
-                    catMap[parent.id] = { name: parent.name, isDirect: false };
-                    processedIds.add(parent.id);
-                    queue.push(parent);
+        // Fetch all categories in the hierarchy using a Recursive CTE to avoid N+1
+        const results = await sequelize.query(`
+            WITH RECURSIVE CategoryPath AS (
+                SELECT id, name, parent_id
+                FROM categories
+                WHERE id IN (:ids)
+                
+                UNION ALL
+                
+                SELECT c.id, c.name, c.parent_id
+                FROM categories c
+                JOIN CategoryPath cp ON c.id = cp.parent_id
+                WHERE c.id IS NOT NULL
+            )
+            SELECT DISTINCT id, name, parent_id FROM CategoryPath
+        `, {
+            replacements: { ids: categoryIdsInput },
+            type: sequelize.QueryTypes.SELECT
+        });
+
+        results.forEach(c => {
+            if (!catMap[c.id]) {
+                catMap[c.id] = { name: c.name, isDirect: false };
+                if (!allCategoryIds.includes(c.id)) {
+                    allCategoryIds.push(c.id);
                 }
             }
-        }
+        });
     }
 
     const links = await CategoryAttribute.findAll({
@@ -302,9 +314,7 @@ const bulkGenerateVariants = async (productId, { defaultPrice, defaultStockQty =
 
         // Track combinations that already exist so we don't recreate them
         const existingSignatures = new Set(
-            existingVariants
-                .filter(v => !v.isSoftDeleted()) // Call the method properly
-                .map(v => v.options.map(o => o.valueId).sort().join(','))
+            existingVariants.map(v => v.options.map(o => o.valueId).sort().join(','))
         );
 
         let createdCount = 0;
@@ -367,6 +377,20 @@ const cloneVariants = async (targetProductId, sourceProductId) => {
     });
     if (sourceVariants.length === 0) {
         throw new AppError('VALIDATION_ERROR', 400, 'Source product has no variants to clone');
+    }
+
+    // Task 17: Source-attribute compatibility check
+    // Ensure target product has all SKU-defining attributes used by source variants
+    const sourceAttrIds = [...new Set(sourceVariants.flatMap(v => v.options.map(o => o.attributeId)))];
+    const targetAttrs = await ProductAttribute.findAll({
+        where: { productId: targetProductId, isVariantAttr: true },
+        attributes: ['attributeId']
+    });
+    const targetAttrIds = targetAttrs.map(a => a.attributeId);
+    
+    const missingAttrIds = sourceAttrIds.filter(id => !targetAttrIds.includes(id));
+    if (missingAttrIds.length > 0) {
+        throw new AppError('VALIDATION_ERROR', 400, 'Target product is missing SKU-defining attributes present in source variants. Please link the required attributes first.');
     }
 
     const t = await sequelize.transaction();
@@ -509,6 +533,23 @@ const deleteProductVariant = async (productId, variantId) => {
     await variant.destroy(); // paranoid soft-delete
 };
 
+const reorderValues = async (attributeId, valueIds) => {
+    const t = await sequelize.transaction();
+    try {
+        for (let i = 0; i < valueIds.length; i++) {
+            await AttributeValue.update(
+                { sortOrder: i },
+                { where: { id: valueIds[i], attributeId }, transaction: t }
+            );
+        }
+        await t.commit();
+        return true;
+    } catch (err) {
+        await t.rollback();
+        throw err;
+    }
+};
+
 module.exports = {
     createAttribute,
     getAllAttributes,
@@ -517,6 +558,7 @@ module.exports = {
     deleteAttribute,
     addValue,
     removeValue,
+    reorderValues,
     linkAttributeToCategory,
     unlinkAttributeFromCategory,
     getCategoryAttributes,

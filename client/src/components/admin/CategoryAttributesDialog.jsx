@@ -83,7 +83,8 @@ const CategoryAttributesDialog = ({ open, onClose, categoryId, categoryName }) =
       await attributeService.linkAttributeToCategory(categoryId, { attributeId: selectedTemplate.id });
       notify('Attribute linked successfully', 'success');
       setSelectedTemplate(null);
-      fetchAttributes();
+      fetchLinkedAttributes();
+
     } catch (err) {
       notify(getApiErrorMessage(err), 'error');
     } finally {
@@ -96,7 +97,8 @@ const CategoryAttributesDialog = ({ open, onClose, categoryId, categoryName }) =
       setSaving(true);
       await attributeService.unlinkAttributeFromCategory(categoryId, attributeId);
       notify('Attribute unlinked successfully', 'success');
-      fetchAttributes();
+      fetchLinkedAttributes();
+
     } catch (err) {
       notify(getApiErrorMessage(err), 'error');
     } finally {

@@ -29,6 +29,8 @@ const globalLimiter = createLimiter(15, 2000, 'Too many requests to this API, pl
 const publicApiLimiter = createLimiter(15, 500, 'Too many requests to public endpoints, please try again later');
 
 
+const bulkOperationLimiter = createLimiter(1, 5, 'Too many bulk operations, please try again in a minute');
+
 module.exports = {
   loginLimiter,
   registerLimiter,
@@ -37,5 +39,6 @@ module.exports = {
   couponLimiter,
   globalLimiter,
   publicApiLimiter,
+  bulkOperationLimiter,
 };
 

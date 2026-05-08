@@ -7,6 +7,8 @@ const { validate } = require('../../middleware/validate.middleware');
 const { authenticate } = require('../../middleware/auth.middleware');
 const { authorizeAnyPermission, authorizePermissions } = require('../../middleware/role.middleware');
 const { PERMISSIONS } = require('../../config/permissions');
+const { idParamSchema } = require('../../utils/common.validation');
+
 const sanitizeHtml = require('sanitize-html');
 
 const router = express.Router();
@@ -53,8 +55,10 @@ router.get(
     '/:id',
     authenticate,
     authorizeAnyPermission(PERMISSIONS.PAGES_READ, PERMISSIONS.PAGES_MANAGE),
+    validate(idParamSchema, 'params'),
     pageController.adminGetPageById
 );
+
 
 router.post(
     '/',
@@ -69,15 +73,18 @@ router.put(
     '/:id',
     authenticate,
     authorizePermissions(PERMISSIONS.PAGES_MANAGE),
+    validate(idParamSchema, 'params'),
     sanitizeBodyExceptContent,
     validate(pageValidation.updatePageSchema),
     pageController.adminUpdatePage
 );
 
+
 router.delete(
     '/:id',
     authenticate,
     authorizePermissions(PERMISSIONS.PAGES_MANAGE),
+    validate(idParamSchema, 'params'),
     pageController.adminDeletePage
 );
 

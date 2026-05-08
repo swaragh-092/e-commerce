@@ -7,6 +7,9 @@ const adminController = require('./admin.controller');
 const { PERMISSIONS } = require('../../config/permissions');
 const { validate } = require('../../middleware/validate.middleware');
 const { updateUserRoleSchema, createRoleSchema, updateRoleSchema, salesChartQuerySchema, lowStockQuerySchema, createStaffUserSchema } = require('./admin.validation');
+const { idParamSchema, paginationQuerySchema } = require('../../utils/common.validation');
+
+
 
 const adminOnly = [authenticate, authorizePermissions(PERMISSIONS.DASHBOARD_VIEW)];
 const accessReadOnly = [
@@ -34,11 +37,12 @@ router.get('/dashboard/recent-orders', ...adminOnly, adminController.getRecentOr
 router.get('/access-control/roles', ...accessReadOnly, adminController.getAccessRoles);
 router.get('/access-control/permissions', ...accessReadOnly, adminController.getAccessPermissions);
 router.post('/access-control/roles', ...roleManageOnly, validate(createRoleSchema), adminController.createAccessRole);
-router.put('/access-control/roles/:id', ...roleEditOnly, validate(updateRoleSchema), adminController.updateAccessRole);
-router.get('/access-control/users', ...accessManageOnly, adminController.getAccessUsers);
-router.post('/access-control/users', ...accessManageOnly, validate(createStaffUserSchema), adminController.createStaffUser);
-router.put('/access-control/users/:id/role', ...accessManageOnly, validate(updateUserRoleSchema), adminController.updateUserRole);
+router.put('/access-control/roles/:id', ...roleEditOnly, validate(idParamSchema, 'params'), validate(updateRoleSchema), adminController.updateAccessRole);
 
-router.put('/access-control/users/:id/role', ...accessManageOnly, validate(updateUserRoleSchema), adminController.updateUserRole);
+router.get('/access-control/users', ...accessManageOnly, validate(paginationQuerySchema, 'query'), adminController.getAccessUsers);
+
+router.post('/access-control/users', ...accessManageOnly, validate(createStaffUserSchema), adminController.createStaffUser);
+router.put('/access-control/users/:id/role', ...accessManageOnly, validate(idParamSchema, 'params'), validate(updateUserRoleSchema), adminController.updateUserRole);
+
 
 module.exports = router;

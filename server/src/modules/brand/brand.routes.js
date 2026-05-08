@@ -7,6 +7,8 @@ const { validate } = require('../../middleware/validate.middleware');
 const { authenticate } = require('../../middleware/auth.middleware');
 const { authorizePermissions } = require('../../middleware/role.middleware');
 const { PERMISSIONS } = require('../../config/permissions');
+const { idParamSchema } = require('../../utils/common.validation');
+
 
 const router = express.Router();
 
@@ -26,14 +28,17 @@ router.patch(
     '/:id',
     authenticate,
     authorizePermissions(PERMISSIONS.PRODUCTS_UPDATE),
+    validate(idParamSchema, 'params'),
     validate(brandValidation.updateBrandSchema),
     brandController.updateBrand
 );
+
 
 router.delete(
     '/:id',
     authenticate,
     authorizePermissions(PERMISSIONS.PRODUCTS_DELETE),
+    validate(idParamSchema, 'params'),
     brandController.deleteBrand
 );
 

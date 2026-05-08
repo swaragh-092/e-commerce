@@ -44,6 +44,23 @@ module.exports = (sequelize, DataTypes) => {
         tableName: 'product_attributes',
         timestamps: true,
         underscored: true,
+        indexes: [
+            {
+                unique: true,
+                fields: ['product_id', 'attribute_id', 'value_id'],
+                where: {
+                    attribute_id: { [DataTypes.Op.ne]: null },
+                    value_id: { [DataTypes.Op.ne]: null }
+                }
+            },
+            {
+                unique: true,
+                fields: ['product_id', 'custom_name', 'custom_value'],
+                where: {
+                    attribute_id: null
+                }
+            }
+        ]
     });
 
     ProductAttribute.associate = (models) => {

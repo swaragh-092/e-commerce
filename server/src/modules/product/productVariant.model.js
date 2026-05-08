@@ -33,6 +33,9 @@ module.exports = (sequelize, DataTypes) => {
             type: DataTypes.INTEGER,
             defaultValue: 0,
             field: 'reserved_qty',
+            validate: {
+                min: 0
+            }
         },
         isActive: {
             type: DataTypes.BOOLEAN,
