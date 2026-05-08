@@ -14,7 +14,7 @@ import {
   Inventory as InventoryIcon,
 } from '@mui/icons-material';
 import { Link, useNavigate, useSearchParams } from 'react-router-dom';
-import { getProducts, deleteProduct, updateProduct, bulkUpdateSale } from '../../services/productService';
+import { getProducts, deleteProduct, updateProduct, bulkUpdateSale, bulkDeleteProducts, bulkUpdateProducts } from '../../services/productService';
 import { getCategoryTree } from '../../services/categoryService';
 import { getSaleLabels } from '../../services/adminService';
 import { getMediaUrl } from '../../utils/media';
@@ -342,7 +342,7 @@ const ProductsManagePage = () => {
     setDeleteDialog({ open: false, id: null, name: '', bulk: false });
     try {
       if (bulk) {
-        await Promise.all(selectedIds.map((sid) => deleteProduct(sid)));
+        await bulkDeleteProducts(selectedIds);
         notify(`${selectedIds.length} products deleted successfully.`, 'success');
         setSelectedIds([]);
       } else {
@@ -362,14 +362,14 @@ const ProductsManagePage = () => {
     }
 
     try {
-      await Promise.all(selectedIds.map((sid) => updateProduct(sid, { status: newStatus })));
+      await bulkUpdateProducts(selectedIds, { status: newStatus });
       setRows((prev) =>
         prev.map((r) => selectedIds.includes(r.id) ? { ...r, status: newStatus } : r)
       );
       notify(`${selectedIds.length} products updated to ${newStatus} successfully.`, 'success');
       setSelectedIds([]);
     } catch (err) {
-      notify('Bulk update failed: ' + err.message, 'error');
+      notify('Bulk update failed: ' + getApiErrorMessage(err), 'error');
     }
   };
 
@@ -394,7 +394,7 @@ const ProductsManagePage = () => {
       return;
     }
     try {
-      await Promise.all(selectedIds.map((sid) => updateProduct(sid, { isEnabled: enable })));
+      await bulkUpdateProducts(selectedIds, { isEnabled: enable });
       setRows((prev) =>
         prev.map((r) => selectedIds.includes(r.id) ? { ...r, isEnabled: enable } : r)
       );

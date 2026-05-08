@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { Box, AppBar, Toolbar, Typography, Button, IconButton, Badge, Menu, MenuItem, Divider, Avatar } from '@mui/material';
+import { Box, AppBar, Toolbar, Typography, Button, IconButton, Badge, Menu, MenuItem, Divider, Avatar, Alert } from '@mui/material';
 import ShoppingCartIcon from '@mui/icons-material/ShoppingCart';
 import CloseIcon from '@mui/icons-material/Close';
 import AccountCircleIcon from '@mui/icons-material/AccountCircle';
@@ -16,6 +16,7 @@ import FavoriteBorderIcon from '@mui/icons-material/FavoriteBorder';
 import CategoryNav from '../components/layout/CategoryNav';
 import StorefrontFooter from '../components/layout/StorefrontFooter';
 import { useWishlist } from '../context/WishlistContext';
+import { useCategories } from '../context/CategoryContext';
 import PageService from '../services/pageService';
 import MenuService from '../services/menuService';
 import { ADMIN_ACCESS_PERMISSIONS, getFirstAccessibleAdminPath } from '../utils/permissions';
@@ -26,6 +27,7 @@ const StoreLayout = () => {
   const { settings } = useSettings();
   const { cartCount } = useCart();
   const { wishlistCount } = useWishlist();
+  const { error: categoryError } = useCategories();
   const cartEnabled     = useFeature('cart');
   const wishlistEnabled = useFeature('wishlist');
   const ordersEnabled   = useFeature('orders');
@@ -488,6 +490,22 @@ const StoreLayout = () => {
         </Toolbar>
       </AppBar>
       {nav.showCategoryBar && <CategoryNav />}
+
+      {categoryError && (
+        <Alert 
+          severity="warning" 
+          variant="filled" 
+          sx={{ 
+            borderRadius: 0, 
+            py: 0.5, 
+            fontSize: '0.8rem', 
+            justifyContent: 'center',
+            '& .MuiAlert-icon': { fontSize: '1rem' }
+          }}
+        >
+          {categoryError}
+        </Alert>
+      )}
 
       <Box component="main" sx={{ flexGrow: 1 }}>
         <Outlet />

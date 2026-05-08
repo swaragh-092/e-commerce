@@ -19,6 +19,7 @@ import {
   ArrowDownward as ArrowDownwardIcon,
   Search as SearchIcon,
   AddCircleOutline as AddCircleOutlineIcon,
+  Settings as SettingsIcon,
 } from '@mui/icons-material';
 
 import {
@@ -32,6 +33,7 @@ import MediaPicker from '../../components/common/MediaPicker';
 import MediaUploader from '../../components/common/MediaUploader';
 import { getMediaUrl } from '../../utils/media';
 import { useSettings } from '../../hooks/useSettings';
+import CategoryAttributesDialog from '../../components/admin/CategoryAttributesDialog';
 
 // --- Helpers ---
 const flattenTree = (nodes, result = [], level = 0, path = []) => {
@@ -183,7 +185,7 @@ const CategoryTreeItem = ({ node, level, expandedIds, toggleNode, selectedId, on
 };
 
 // --- CategoryDetailsPanel Component (Right Panel) ---
-const CategoryDetailsPanel = ({ categoryId, categories, onEdit, onDelete, onAddChild, onNavigateNode, canManageCategories }) => {
+const CategoryDetailsPanel = ({ categoryId, categories, onEdit, onDelete, onAddChild, onNavigateNode, onManageAttributes, canManageCategories }) => {
     const selectedPath = useMemo(() => getBreadcrumbPath(categories, categoryId) || [], [categories, categoryId]);
     const selectedCatNode = useMemo(() => {
         let found = null;
@@ -250,6 +252,7 @@ const CategoryDetailsPanel = ({ categoryId, categories, onEdit, onDelete, onAddC
                     </Box>
                 </Box>
                 <Stack direction="row" spacing={1}>
+                    <Button variant="outlined" startIcon={<SettingsIcon />} onClick={() => onManageAttributes(selectedCatNode)} disabled={!canManageCategories}>Attributes</Button>
                     <Button variant="outlined" startIcon={<EditIcon />} onClick={() => onEdit(selectedCatNode)} disabled={!canManageCategories}>Edit</Button>
                     <Button variant="outlined" color="error" startIcon={<DeleteIcon />} onClick={() => onDelete(selectedCatNode.id)} disabled={!canManageCategories}>Delete</Button>
                 </Stack>
@@ -437,6 +440,8 @@ const CategoriesPage = () => {
         metaKeywords: '',
         ogImage: ''
     });
+    const [attrDialogOpen, setAttrDialogOpen] = useState(false);
+    const [attrCategory, setAttrCategory] = useState(null);
     const [formErrors, setFormErrors] = useState({});
     const [mediaPickerOpen, setMediaPickerOpen] = useState(false);
 
@@ -444,6 +449,7 @@ const CategoriesPage = () => {
     const { hasPermission } = useAuth();
     const { settings } = useSettings();
     const canManageCategories = hasPermission(PERMISSIONS.CATEGORIES_MANAGE);
+    const canManageAttributes = hasPermission(PERMISSIONS.ATTRIBUTES_MANAGE);
 
     const fetchCategories = async () => {
         try {
@@ -630,8 +636,19 @@ const CategoriesPage = () => {
         }
     };
 
+    const handleOpenAttributes = (cat) => {
+        setAttrCategory(cat);
+        setAttrDialogOpen(true);
+    };
+
     const flatCategories = useMemo(() => flattenTree(categories), [categories]);
     const totalCount = flatCategories.length;
+
+    const visibleNodes = useMemo(() => {
+        if (!searchQuery) return categories;
+        const query = searchQuery.toLowerCase();
+        return categories.filter(node => nodeMatchesSearch(node, query));
+    }, [categories, searchQuery]);
 
     return (
         <Box sx={{ height: 'calc(100vh - 120px)', display: 'flex', flexDirection: 'column' }}>
@@ -721,9 +738,15 @@ const CategoriesPage = () => {
                                     <Box sx={{ textAlign: 'center', py: 4, color: 'text.secondary' }}>
                                         <Typography variant="body2">No categories found.</Typography>
                                     </Box>
+                                ) : visibleNodes.length === 0 ? (
+                                    <Box sx={{ textAlign: 'center', py: 4, color: 'text.secondary', px: 2 }}>
+                                        <SearchIcon sx={{ fontSize: 40, mb: 1, opacity: 0.2 }} />
+                                        <Typography variant="body2">No categories match "{searchQuery}"</Typography>
+                                        <Button size="small" onClick={() => setSearchQuery('')} sx={{ mt: 1 }}>Clear Search</Button>
+                                    </Box>
                                 ) : (
                                     <List component="nav" disablePadding>
-                                        {categories.map(cat => (
+                                        {visibleNodes.map(cat => (
                                             <CategoryTreeItem 
                                                 key={cat.id} 
                                                 node={cat} 
@@ -755,7 +778,8 @@ const CategoriesPage = () => {
                                 onDelete={handleDelete}
                                 onAddChild={openCreate}
                                 onNavigateNode={handleNavigateNode}
-                                canManageCategories={canManageCategories}
+                                onManageAttributes={handleOpenAttributes}
+                                canManageCategories={canManageCategories || canManageAttributes}
                             />
                         </Paper>
                         
@@ -958,6 +982,13 @@ const CategoriesPage = () => {
                     </Button>
                 </DialogActions>
             </Dialog>
+
+            <CategoryAttributesDialog 
+                open={attrDialogOpen} 
+                onClose={() => setAttrDialogOpen(false)} 
+                categoryId={attrCategory?.id}
+                categoryName={attrCategory?.name}
+            />
         </Box>
     );
 };

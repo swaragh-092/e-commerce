@@ -1,11 +1,12 @@
 import React, { createContext, useState, useEffect, useContext } from 'react';
 import { getCategoryTree } from '../services/categoryService';
 
-const CategoryContext = createContext({ categories: [], loading: true });
+const CategoryContext = createContext({ categories: [], loading: true, error: null });
 
 export const CategoryProvider = ({ children }) => {
   const [categories, setCategories] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
 
   useEffect(() => {
     let mounted = true;
@@ -13,12 +14,15 @@ export const CategoryProvider = ({ children }) => {
       try {
         const res = await getCategoryTree();
         if (mounted) {
-          // Handles both { categories: [...] } and direct array responses
           const data = res?.data?.categories ?? res?.data ?? [];
           setCategories(Array.isArray(data) ? data : []);
+          setError(null);
         }
       } catch (err) {
-        console.error('Failed to load categories:', err);
+        if (mounted) {
+          setError('Failed to load category menu. Please refresh or try again later.');
+          console.error('Failed to load categories:', err);
+        }
       } finally {
         if (mounted) setLoading(false);
       }
@@ -28,7 +32,7 @@ export const CategoryProvider = ({ children }) => {
   }, []);
 
   return (
-    <CategoryContext.Provider value={{ categories, loading }}>
+    <CategoryContext.Provider value={{ categories, loading, error }}>
       {children}
     </CategoryContext.Provider>
   );

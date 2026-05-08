@@ -18,8 +18,10 @@ const addAttributeValue = (attributeId, data) =>
 const removeAttributeValue = (attributeId, valueId) =>
   api.delete(`/attributes/${attributeId}/values/${valueId}`);
 
-const getCategoryAttributes = (categoryId) =>
-  api.get(`/categories/${categoryId}/attributes`);
+const getCategoryAttributes = (categoryId, inherit = false) => {
+  const ids = Array.isArray(categoryId) ? categoryId.join(',') : categoryId;
+  return api.get(`/categories/${ids}/attributes${inherit ? '?inherit=true' : ''}`);
+};
 
 const linkAttributeToCategory = (categoryId, data) =>
   api.post(`/categories/${categoryId}/attributes`, data);

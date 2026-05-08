@@ -1124,7 +1124,16 @@ const ProductEditPage = () => {
       </form>
 
       {/* Variants panel — only visible once the product has been saved and has a real ID */}
-      {!isNew && <VariantsPanel productId={id} productName={formData.name} productSku={formData.sku} flatCatFiles={flatCatFiles} canManageVariants={canUpdateProducts} />}
+      {!isNew && (
+        <VariantsPanel 
+          productId={id} 
+          productName={formData.name} 
+          productSku={formData.sku} 
+          categoryIds={formData.categoryIds}
+          flatCatFiles={flatCatFiles} 
+          canManageVariants={canUpdateProducts} 
+        />
+      )}
     </Box>
   );
 };
@@ -1249,7 +1258,7 @@ const TaxConfigSection = ({ taxConfig, basePrice, setTaxConfig, globalSettings, 
 
 
 /* ─── Variants Panel ──────────────────────────────────────────────────────── */
-const VariantsPanel = ({ productId, productName, productSku, flatCatFiles = [], canManageVariants = false }) => {
+const VariantsPanel = ({ productId, productName, productSku, categoryIds = [], flatCatFiles = [], canManageVariants = false }) => {
   const { notify, confirm } = useNotification();
   const { generateProductSKU, generateVariantSKU } = useSKUGenerator();
   const [productAttributes, setProductAttributes] = useState([]);
@@ -1277,6 +1286,8 @@ const VariantsPanel = ({ productId, productName, productSku, flatCatFiles = [], 
   const [cloneCatProducts, setCloneCatProducts] = useState([]);
   const [cloneCatProductsLoading, setCloneCatProductsLoading] = useState(false);
   const [cloneCatSelectedProduct, setCloneCatSelectedProduct] = useState(null);
+  const [suggestedAttributes, setSuggestedAttributes] = useState([]);
+  const [suggestedLoading, setSuggestedLoading] = useState(false);
   const cloneSearchTimer = useRef(null);
 
   const loadAll = useCallback(async () => {
@@ -1302,12 +1313,26 @@ const VariantsPanel = ({ productId, productName, productSku, flatCatFiles = [], 
       })));
       setAttributes(attrData);
       setProductBasePrice(getProductBasePrice(product));
+
+      // Load suggested attributes from categories
+      if (categoryIds.length > 0) {
+        setSuggestedLoading(true);
+        attributeService.getCategoryAttributes(categoryIds, true)
+          .then(res => {
+            const catAttrs = res?.data?.data || [];
+            // Filter out attributes already assigned to the product
+            const existingIds = new Set(attrRows.map(r => r.attributeId));
+            setSuggestedAttributes(catAttrs.filter(a => !existingIds.has(a.id)));
+          })
+          .catch(err => console.error('Failed to load suggested attributes', err))
+          .finally(() => setSuggestedLoading(false));
+      }
     } catch (error) {
       notify('Failed to load product options.', 'error');
     } finally {
       setLoading(false);
     }
-  }, [productId, notify]);
+  }, [productId, categoryIds, notify]);
 
   useEffect(() => { loadAll(); }, [loadAll]);
 
@@ -1543,6 +1568,33 @@ const VariantsPanel = ({ productId, productName, productSku, flatCatFiles = [], 
                 Product Attributes
               </Typography>
             </Box>
+
+            {suggestedAttributes.length > 0 && (
+              <Box sx={{ mb: 3, p: 2, bgcolor: 'primary.50', borderRadius: 2, border: '1px solid', borderColor: 'primary.100' }}>
+                <Typography variant="subtitle2" color="primary.700" fontWeight={700} gutterBottom sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
+                  <ElectricBoltIcon fontSize="small" /> Suggested from Categories
+                </Typography>
+                <Typography variant="caption" color="text.secondary" sx={{ mb: 1.5, display: 'block' }}>
+                  These attributes are linked to your selected categories. Click to add them.
+                </Typography>
+                <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 1 }}>
+                  {suggestedAttributes.map((attr) => (
+                    <Chip
+                      key={attr.id}
+                      label={attr.name}
+                      size="small"
+                      icon={<AddIcon />}
+                      onClick={() => {
+                        setSelectedTemplate(attr.id);
+                        setAttributeTab(1);
+                        setSelectedValueIds([]);
+                      }}
+                      sx={{ bgcolor: 'background.paper', '&:hover': { bgcolor: 'primary.100' } }}
+                    />
+                  ))}
+                </Box>
+              </Box>
+            )}
 
             <Tabs value={attributeTab} onChange={(e, val) => setAttributeTab(val)} sx={{ mb: 2 }}>
               <Tab label="Add new" />

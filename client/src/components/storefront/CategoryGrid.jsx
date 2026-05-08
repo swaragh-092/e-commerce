@@ -10,7 +10,14 @@ import { getMediaUrl } from '../../utils/media';
  * Shows category image + name cards in a responsive grid.
  */
 const CategoryGrid = ({ title, categories = [], loading = false }) => {
-    if (!loading && categories.length === 0) return null;
+    if (!loading && categories.length === 0) {
+        return (
+            <Box sx={{ mb: 6, p: 4, textAlign: 'center', bgcolor: 'action.hover', borderRadius: 4 }}>
+                <Typography variant="h6" color="text.secondary">No Categories Available</Typography>
+                <Typography variant="body2" color="text.secondary">We are currently updating our collection. Please check back soon!</Typography>
+            </Box>
+        );
+    }
 
     return (
         <Box sx={{ mb: 6 }}>
