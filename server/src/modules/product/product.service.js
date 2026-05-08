@@ -56,28 +56,28 @@ const sanitizeRichText = (html) => {
   });
 };
 
-const commonAttributeIncludes = [
+const getCommonAttributeIncludes = () => [
   { model: AttributeTemplate, as: 'attribute', attributes: ['id', 'name', 'slug'] },
   { model: AttributeValue, as: 'value', attributes: ['id', 'value', 'slug'] },
 ];
 
-const variantInclude = {
+const getVariantInclude = () => ({
   model: ProductVariant,
   as: 'variants',
   include: [
     {
       model: VariantOption,
       as: 'options',
-      include: commonAttributeIncludes,
+      include: getCommonAttributeIncludes(),
     },
   ],
-};
+});
 
-const attributeInclude = {
+const getAttributeInclude = () => ({
   model: ProductAttribute,
   as: 'attributes',
-  include: commonAttributeIncludes,
-};
+  include: getCommonAttributeIncludes(),
+});
 
 const validateVariantOptions = async (variants) => {
   if (!variants?.length) return;
@@ -272,13 +272,13 @@ exports.getProducts = async (filters, page, limit, isAdmin = false) => {
   const requestedIncludes = filters.include && typeof filters.include === 'string' ? filters.include.split(',').map(s => s.trim()).filter(Boolean) : [];
 
   if (requestedIncludes.includes('variants')) {
-    include.push(variantInclude);
+    include.push(getVariantInclude());
   } else {
     include.push({ model: ProductVariant, as: 'variants' });
   }
 
   if (requestedIncludes.includes('attributes')) {
-    include.push(attributeInclude);
+    include.push(getAttributeInclude());
   }
 
   if (filters.categoryId) {
@@ -372,8 +372,8 @@ exports.getProductBySlug = async (slug, { adminView = false } = {}) => {
     where,
     include: [
       { model: ProductImage, as: 'images' },
-      variantInclude,
-      attributeInclude,
+      getVariantInclude(),
+      getAttributeInclude(),
       { model: Category, as: 'categories' },
       { model: Tag, as: 'tags' },
       { model: Brand, as: 'brand' },
@@ -389,8 +389,8 @@ exports.getProductById = async (id) => {
   const product = await Product.findByPk(id, {
     include: [
       { model: ProductImage, as: 'images' },
-      variantInclude,
-      attributeInclude,
+      getVariantInclude(),
+      getAttributeInclude(),
       { model: Category, as: 'categories' },
       { model: Tag, as: 'tags' },
       { model: Brand, as: 'brand' },
