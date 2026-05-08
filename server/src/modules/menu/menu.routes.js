@@ -15,6 +15,7 @@ const { publicApiLimiter } = require('../../middleware/rateLimiter.middleware');
 const router = express.Router();
 
 router.get('/public/:location', publicApiLimiter, validate(menuValidation.getPublicMenuSchema, 'params'), menuController.getPublicMenu);
+router.get('/slug/public/:slug', publicApiLimiter, menuController.getPublicCustomMenu);
 
 
 

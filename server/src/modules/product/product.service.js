@@ -12,6 +12,7 @@ const {
   Category,
   Brand,
   OrderItem,
+  Media,
   Sequelize,
 } = require('../index');
 const { Op } = Sequelize;
@@ -71,6 +72,10 @@ const getVariantInclude = () => ({
       model: VariantOption,
       as: 'options',
       include: getCommonAttributeIncludes(),
+    },
+    {
+      model: Media,
+      as: 'media',
     },
   ],
 });

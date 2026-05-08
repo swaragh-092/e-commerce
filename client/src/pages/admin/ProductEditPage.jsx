@@ -1376,10 +1376,6 @@ const VariantsPanel = ({ productId, productName, productSku, flatCatFiles = [], 
 
   const handleToggleVariantAttribute = async (row) => {
     if (!canManageVariants) return;
-    if (!row.attributeId) {
-      notify('Only global attributes can be used to generate variant SKUs.', 'warning');
-      return;
-    }
 
     try {
       await attributeService.updateProductAttribute(productId, row.id, {

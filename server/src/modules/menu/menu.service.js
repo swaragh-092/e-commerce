@@ -215,11 +215,23 @@ exports.getMenuById = async (id) => {
     return { ...plain, items: buildTree(plain.items || []) };
 };
 
+const processPublicMenu = async (menu, cacheKey) => {
+    if (!menu) return null;
+
+    const plain = toPlain(menu);
+    const tree = buildTree(plain.items || []);
+    const result = { ...plain, items: await resolveTreeUrls(tree) };
+    
+    setCache(cacheKey, result);
+    return result;
+};
+
 exports.getPublicMenuByLocation = async (location) => {
     if (typeof location !== 'string') throw new AppError('INVALID_INPUT', 400);
     const sanitizedLocation = encodeURIComponent(location).replace(/['"*]/g, '');
     
-    const cached = getCache(sanitizedLocation);
+    const cacheKey = `location:${sanitizedLocation}`;
+    const cached = getCache(cacheKey);
     if (cached) return cached;
 
     const menus = await Menu.findAll({
@@ -237,12 +249,30 @@ exports.getPublicMenuByLocation = async (location) => {
 
     const plainMenus = menus.map(toPlain);
     const plain = plainMenus.find((candidate) => candidate.items?.length > 0) || plainMenus[0];
-    const tree = buildTree(plain.items || []);
-    const result = { ...plain, items: await resolveTreeUrls(tree) };
     
-    setCache(sanitizedLocation, result);
-    return result;
+    return processPublicMenu(plain, cacheKey);
+};
 
+exports.getPublicMenuBySlug = async (slug) => {
+    if (typeof slug !== 'string') throw new AppError('INVALID_INPUT', 400);
+    const sanitizedSlug = encodeURIComponent(slug).replace(/['"*]/g, '');
+    
+    const cacheKey = `slug:${sanitizedSlug}`;
+    const cached = getCache(cacheKey);
+    if (cached) return cached;
+
+    const menu = await Menu.findOne({
+        where: { slug: sanitizedSlug, isActive: true },
+        include: [{
+            model: MenuItem,
+            as: 'items',
+            required: false,
+            where: { isVisible: true },
+        }],
+        order: [[{ model: MenuItem, as: 'items' }, 'sortOrder', 'ASC']],
+    });
+
+    return processPublicMenu(menu, cacheKey);
 };
 
 
