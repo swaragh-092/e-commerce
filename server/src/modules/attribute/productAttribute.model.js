@@ -76,13 +76,14 @@ module.exports = (sequelize, DataTypes) => {
         ProductAttribute.belongsTo(models.AttributeTemplate, {
             foreignKey: 'attributeId',
             as: 'attribute',
-            onDelete: 'SET NULL',
+            onDelete: 'CASCADE',
         });
         ProductAttribute.belongsTo(models.AttributeValue, {
             foreignKey: 'valueId',
             as: 'value',
-            onDelete: 'SET NULL',
+            onDelete: 'CASCADE',
         });
+
     };
 
     return ProductAttribute;
