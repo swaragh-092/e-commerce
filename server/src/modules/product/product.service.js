@@ -31,7 +31,7 @@ const { getCategoryAndDescendantIds } = require('../category/category.service');
 const { normalizeSalePayload, serializeProductPricing } = require('./product.pricing');
 const { getSaleLabels } = require('../settings/saleLabel.service');
 const SettingsService = require('../settings/settings.service');
-const { Media } = require('../index');
+
 
 // Fetch the active label catalog once per request (the service caches for 60 s)
 const getLabelPresets = () => getSaleLabels().catch(() => []);
@@ -187,6 +187,10 @@ exports.getProducts = async (filters, page, limit, isAdmin = false) => {
   const { limit: queryLimit, offset } = getPagination(page, limit);
   const where = {};
   const order = [];
+  const include = [
+    { model: ProductImage, as: 'images' },
+    { model: Brand, as: 'brand' },
+  ];
   const now = new Date();
 
   // Always restrict to published + enabled products for storefront; admins can filter by any status
@@ -277,6 +281,8 @@ exports.getProducts = async (filters, page, limit, isAdmin = false) => {
         required: true
       });
     }
+  } else {
+    include.push({ model: Tag, as: 'tags' });
   }
 
   // sale: salePrice is set AND sale window is active (or no window defined)
@@ -310,11 +316,7 @@ exports.getProducts = async (filters, page, limit, isAdmin = false) => {
   else if (filters.sort === 'name_asc') order.push(['name', 'ASC']);
   else order.push(['createdAt', 'DESC']);
 
-  const include = [
-    { model: ProductImage, as: 'images' },
-    { model: Tag, as: 'tags' },
-    { model: Brand, as: 'brand' },
-  ];
+
 
   const requestedIncludes = filters.include && typeof filters.include === 'string' ? filters.include.split(',').map(s => s.trim()).filter(Boolean) : [];
 
