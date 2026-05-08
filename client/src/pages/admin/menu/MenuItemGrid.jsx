@@ -58,46 +58,82 @@ const MenuItemGrid = ({
     if (!result.destination) return;
     const { source, destination } = result;
 
-    if (source.droppableId !== destination.droppableId || source.index === destination.index) return;
+    if (source.droppableId === destination.droppableId && source.index === destination.index) return;
 
-    // Filter items belonging to this specific parent/level
-    const levelItems = rows.filter(r => (r.parentId || 'root') === source.droppableId);
-    const reordered = [...levelItems];
-    const [removed] = reordered.splice(source.index, 1);
-    reordered.splice(destination.index, 0, removed);
+    // 1. Identify the dragged item
+    const draggedItem = rows.find(r => String(r.id) === result.draggableId);
+    if (!draggedItem) return;
 
-    const updatedItems = reordered.map((item, index) => ({
+    // 2. Prepare the destination parent items
+    const destParentId = destination.droppableId === 'root' ? null : destination.droppableId;
+    const destItems = rows
+      .filter(r => (r.parentId || 'root') === destination.droppableId)
+      .filter(r => String(r.id) !== result.draggableId) // Remove from current position if it was already there
+      .sort((a, b) => a.sortOrder - b.sortOrder);
+
+    // 3. Insert into the new position
+    const reorderedDest = [...destItems];
+    const itemToInsert = { 
+      ...draggedItem, 
+      parentId: destParentId 
+    };
+    reorderedDest.splice(destination.index, 0, itemToInsert);
+
+    // 4. Map to update payload
+    const updatedItems = reorderedDest.map((item, index) => ({
       id: item.id,
       sortOrder: (index + 1) * 10,
       parentId: item.parentId,
     }));
 
+    // If we moved between parents, we should technically also update the source parent's siblings
+    // to maintain clean sorting, but strictly speaking, updating the destination group is enough
+    // for the backend to handle the move and position.
+
     try {
       await MenuService.adminReorderMenuItems(selectedMenu.id, updatedItems);
-      notify('Item order updated.', 'success');
+      notify('Item moved successfully.', 'success');
       if (onRefresh) onRefresh();
     } catch (error) {
-      notify('Failed to reorder items.', 'error');
+      notify('Failed to move item.', 'error');
     }
   };
 
+
   const renderSortableList = (parentId = 'root', depth = 0) => {
-    const levelItems = rows.filter(r => (r.parentId || 'root') === parentId);
-    if (levelItems.length === 0 && parentId !== 'root') return null;
+    const levelItems = rows
+      .filter(r => (r.parentId || 'root') === parentId)
+      .sort((a, b) => a.sortOrder - b.sortOrder);
+    
+    // Always render a Droppable for potential children, even if empty,
+    // to allow dragging items into it to create submenus.
+    // Except we limit depth for sanity.
+    if (depth > 3) return null;
 
     return (
       <Droppable droppableId={parentId} type="items">
-        {(provided) => (
-          <div {...provided.droppableProps} ref={provided.innerRef}>
+        {(provided, snapshot) => (
+          <Box 
+            {...provided.droppableProps} 
+            ref={provided.innerRef}
+            sx={{ 
+              minHeight: snapshot.isDraggingOver ? 40 : (parentId === 'root' ? 0 : 2),
+              transition: 'background-color 0.2s',
+              bgcolor: snapshot.isDraggingOver ? 'action.hover' : 'transparent',
+              borderRadius: 1,
+              mt: parentId === 'root' ? 0 : 1,
+              border: snapshot.isDraggingOver ? '2px dashed' : 'none',
+              borderColor: 'primary.light',
+            }}
+          >
             {levelItems.map((item, index) => (
               <Draggable key={item.id} draggableId={String(item.id)} index={index}>
-
                 {(dragProvided, snapshot) => (
                   <Box 
                     ref={dragProvided.innerRef}
                     {...dragProvided.draggableProps}
                     sx={{ 
-                      ml: depth * 4,
+                      ml: depth * 2, // Reduced margin for nested items
                       mb: 1,
                       border: '1px solid',
                       borderColor: snapshot.isDragging ? 'primary.main' : 'divider',
@@ -123,17 +159,26 @@ const MenuItemGrid = ({
                         <EditIcon fontSize="small" />
                       </IconButton>
                     </Stack>
-                    {renderSortableList(item.id, depth + 1)}
+                    {/* Render sub-items area */}
+                    <Box sx={{ pl: 2, pb: levelItems.length > 0 ? 1 : 0 }}>
+                      {renderSortableList(String(item.id), depth + 1)}
+                    </Box>
                   </Box>
                 )}
               </Draggable>
             ))}
             {provided.placeholder}
-          </div>
+            {levelItems.length === 0 && parentId !== 'root' && snapshot.isDraggingOver && (
+              <Typography variant="caption" color="primary" sx={{ display: 'block', textAlign: 'center', py: 1 }}>
+                Drop here to add as submenu
+              </Typography>
+            )}
+          </Box>
         )}
       </Droppable>
     );
   };
+
 
   const columns = [
     {
