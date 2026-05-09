@@ -15,6 +15,13 @@ import {
   PRODUCT_TRACKING_STEPS,
 } from './orderDetailUtils';
 
+const formatDateOnly = (value) => {
+  if (!value) return '';
+  const date = new Date(`${value}T00:00:00`);
+  if (Number.isNaN(date.getTime())) return value;
+  return date.toLocaleDateString('en-US', { dateStyle: 'medium' });
+};
+
 const ProductTrackingStepper = ({ product }) => {
   const currentIndex = PRODUCT_TRACKING_STEPS.findIndex((step) => step.key === product.currentStep);
   const resolvedCurrentIndex = currentIndex >= 0 ? currentIndex : 2;
@@ -81,12 +88,15 @@ const ProductTrackingStepper = ({ product }) => {
 
 const ProductTrackingCard = ({ product, formatPrice }) => {
   const { item, segments, statusMeta } = product;
+  const productLinkProps = product.productUrl
+    ? { component: 'a', href: product.productUrl, target: '_blank', rel: 'noopener noreferrer' }
+    : {};
   const milestones = [
     { label: 'Order placed', at: product.orderPlacedTime },
     { label: 'Payment confirmed', at: product.paymentStepTime },
     { label: 'Processing', at: product.processingTime },
   ].filter((milestone) => milestone.at);
-  const hasHistory = milestones.length > 0 || segments.some((segment) => segment.history?.length);
+  const hasHistory = milestones.length > 0 || segments.some((segment) => segment.history?.length || segment.expectedDeliveryHistory?.length);
   const primarySegment = segments[0];
   const totalPrice = Number(item.total ?? (Number(item.snapshotPrice || 0) * Number(item.quantity || 0)));
 
@@ -102,6 +112,7 @@ const ProductTrackingCard = ({ product, formatPrice }) => {
     >
       <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', sm: '72px minmax(0, 1fr) auto' }, gap: 2 }}>
         <Box
+          {...productLinkProps}
           sx={{
             width: 72,
             height: 72,
@@ -113,6 +124,8 @@ const ProductTrackingCard = ({ product, formatPrice }) => {
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'center',
+            cursor: product.productUrl ? 'pointer' : 'default',
+            textDecoration: 'none',
           }}
         >
           {product.imageUrl ? (
@@ -129,7 +142,17 @@ const ProductTrackingCard = ({ product, formatPrice }) => {
 
         <Box sx={{ minWidth: 0 }}>
           <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, flexWrap: 'wrap', mb: 0.5 }}>
-            <Typography sx={{ fontSize: '0.98rem', fontWeight: 800, color: 'text.primary' }}>
+            <Typography
+              {...productLinkProps}
+              sx={{
+                fontSize: '0.98rem',
+                fontWeight: 800,
+                color: 'text.primary',
+                textDecoration: 'none',
+                cursor: product.productUrl ? 'pointer' : 'default',
+                '&:hover': product.productUrl ? { color: 'primary.main' } : undefined,
+              }}
+            >
               {item.snapshotName}
             </Typography>
             <Chip
@@ -216,7 +239,7 @@ const ProductTrackingCard = ({ product, formatPrice }) => {
             {product.deliveredAt
               ? `Delivered ${formatCompactDateTime(product.deliveredAt)}`
               : product.estimate
-                ? `Est. ${formatCompactDateTime(product.estimate)}`
+                ? `Expected ${formatDateOnly(product.estimate)}`
                 : 'Estimate pending'}
           </Typography>
         </Box>
@@ -291,6 +314,16 @@ const ProductTrackingCard = ({ product, formatPrice }) => {
                     </Typography>
                   )}
                   <Stack spacing={0.6}>
+                    {segment.expectedDeliveryHistory?.map((event, index) => (
+                      <Box key={`${segment.id}-expected-${event.date}-${event.at}-${index}`} sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 1 }}>
+                        <Typography sx={{ fontSize: '0.75rem', color: 'text.secondary' }}>
+                          {formatDateTime(event.at) || 'Time pending'}
+                        </Typography>
+                        <Typography sx={{ fontSize: '0.75rem', fontWeight: 800, color: 'text.primary' }}>
+                          Expected {formatDateOnly(event.date)}
+                        </Typography>
+                      </Box>
+                    ))}
                     {segment.history.map((event, index) => (
                       <Box key={`${segment.id}-${event.status}-${event.at}-${index}`} sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 1 }}>
                         <Typography sx={{ fontSize: '0.75rem', color: 'text.secondary' }}>

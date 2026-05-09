@@ -64,7 +64,7 @@ const OrderRow = ({ order, onView, formatPrice }) => {
                         {paymentLabel}
                     </Typography>
                 </Box>
-                <StatusBadge status={order.status} />
+                <StatusBadge order={order} />
             </Box>
 
             {/* Row 2 — products */}

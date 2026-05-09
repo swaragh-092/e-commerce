@@ -16,7 +16,8 @@ import { DataGrid } from '@mui/x-data-grid';
 import VisibilityIcon from '@mui/icons-material/Visibility';
 import BlockIcon from '@mui/icons-material/Block';
 import CheckCircleIcon from '@mui/icons-material/CheckCircle';
-import { getUsers, getUserById } from '../../services/adminService';
+import { useNavigate } from 'react-router-dom';
+import { getUsers } from '../../services/adminService';
 import api from '../../services/api';
 import { useNotification } from '../../context/NotificationContext';
 import { useAuth } from '../../hooks/useAuth';
@@ -28,6 +29,7 @@ const CustomersPage = () => {
   const [loading, setLoading] = useState(true);
   const [paginationModel, setPaginationModel] = useState({ page: 0, pageSize: 20 });
   const [search, setSearch] = useState('');
+  const navigate = useNavigate();
   const { notify } = useNotification();
   const { hasPermission } = useAuth();
   const canManageCustomers = hasPermission(PERMISSIONS.CUSTOMERS_MANAGE);
@@ -104,23 +106,30 @@ const CustomersPage = () => {
     {
       field: 'actions',
       headerName: '',
-      width: 90,
+      width: 110,
       sortable: false,
       renderCell: ({ row }) => (
-        <Tooltip title={row.status === 'banned' ? 'Activate' : 'Suspend'}>
-          <IconButton
-            size="small"
-            color={row.status === 'banned' ? 'success' : 'error'}
-            onClick={() => handleBan(row.id, row.status)}
-            disabled={!canManageCustomers}
-          >
-            {row.status === 'banned' ? (
-              <CheckCircleIcon fontSize="small" />
-            ) : (
-              <BlockIcon fontSize="small" />
-            )}
-          </IconButton>
-        </Tooltip>
+        <Stack direction="row" spacing={0.5}>
+          <Tooltip title="View customer">
+            <IconButton size="small" color="primary" onClick={() => navigate(`/admin/customers/${row.id}`)}>
+              <VisibilityIcon fontSize="small" />
+            </IconButton>
+          </Tooltip>
+          <Tooltip title={row.status === 'banned' ? 'Activate' : 'Suspend'}>
+            <IconButton
+              size="small"
+              color={row.status === 'banned' ? 'success' : 'error'}
+              onClick={() => handleBan(row.id, row.status)}
+              disabled={!canManageCustomers}
+            >
+              {row.status === 'banned' ? (
+                <CheckCircleIcon fontSize="small" />
+              ) : (
+                <BlockIcon fontSize="small" />
+              )}
+            </IconButton>
+          </Tooltip>
+        </Stack>
       ),
     },
   ];
@@ -158,6 +167,7 @@ const CustomersPage = () => {
           paginationMode="server"
           paginationModel={paginationModel}
           onPaginationModelChange={setPaginationModel}
+          onRowDoubleClick={(params) => navigate(`/admin/customers/${params.row.id}`)}
           disableRowSelectionOnClick
         />
       </Box>

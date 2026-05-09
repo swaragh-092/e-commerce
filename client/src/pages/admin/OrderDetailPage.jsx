@@ -32,7 +32,7 @@ import SendIcon from '@mui/icons-material/Send';
 import HistoryIcon from '@mui/icons-material/History';
 import CloseIcon from '@mui/icons-material/Close';
 import { useCurrency } from '../../hooks/useSettings';
-import { getOrderById, updateOrderStatus, refundOrder, createFulfillment, updateFulfillmentStatus, confirmCodPayment, getShippingProviders, addOrderNote } from '../../services/adminService';
+import { getOrderById, updateOrderStatus, refundOrder, createFulfillment, updateFulfillmentStatus, updateShipment, confirmCodPayment, getShippingProviders, addOrderNote } from '../../services/adminService';
 import { useNotification } from '../../context/NotificationContext';
 import {
   Dialog,
@@ -406,6 +406,7 @@ const getFulfillmentStatusOptions = (currentStatus) => [
 const FulfillmentDialog = ({ open, onClose, orderItems, onSave, loading }) => {
   const [trackingNumber, setTrackingNumber] = useState('');
   const [courier, setCourier] = useState('');
+  const [expectedDeliveryDate, setExpectedDeliveryDate] = useState('');
   const [notes, setNotes] = useState('');
   const [status, setStatus] = useState('pending');
   const [items, setItems] = useState({});
@@ -425,6 +426,7 @@ const FulfillmentDialog = ({ open, onClose, orderItems, onSave, loading }) => {
       setItems(initialItems);
       setTrackingNumber('');
       setCourier('');
+      setExpectedDeliveryDate('');
       setNotes('');
       setStatus('created');
       setProviderId('manual');
@@ -450,7 +452,15 @@ const FulfillmentDialog = ({ open, onClose, orderItems, onSave, loading }) => {
 
     if (shipmentItems.length === 0) return;
     const finalProviderId = providerId === 'manual' ? null : providerId;
-    onSave({ trackingNumber, courier, notes, status, providerId: finalProviderId, items: shipmentItems });
+    onSave({
+      trackingNumber,
+      courier,
+      expectedDeliveryDate: expectedDeliveryDate || null,
+      notes,
+      status,
+      providerId: finalProviderId,
+      items: shipmentItems,
+    });
   };
 
   return (
@@ -487,6 +497,15 @@ const FulfillmentDialog = ({ open, onClose, orderItems, onSave, loading }) => {
             size="small"
             value={trackingNumber}
             onChange={(e) => setTrackingNumber(e.target.value)}
+          />
+          <TextField
+            label="Expected Delivery Date"
+            type="date"
+            fullWidth
+            size="small"
+            value={expectedDeliveryDate}
+            onChange={(e) => setExpectedDeliveryDate(e.target.value)}
+            InputLabelProps={{ shrink: true }}
           />
           <TextField
             select
@@ -560,6 +579,79 @@ const FulfillmentDialog = ({ open, onClose, orderItems, onSave, loading }) => {
         </Button>
       </DialogActions>
     </Dialog>
+  );
+};
+
+const formatDeliveryDate = (value) => {
+  if (!value) return 'Not set';
+  const date = new Date(`${value}T00:00:00`);
+  if (Number.isNaN(date.getTime())) return value;
+  return date.toLocaleDateString('en-US', { dateStyle: 'medium' });
+};
+
+const ShipmentExpectedDeliveryControl = ({ orderId, shipment, canUpdate, onSaved, notify }) => {
+  const [date, setDate] = useState('');
+  const [saving, setSaving] = useState(false);
+  const history = Array.isArray(shipment?.expectedDeliveryHistory) ? shipment.expectedDeliveryHistory : [];
+
+  const handleSave = async () => {
+    if (!date || !shipment?.id) return;
+    setSaving(true);
+    try {
+      const response = await updateShipment(orderId, shipment.id, { expectedDeliveryDate: date });
+      onSaved(response.data.data);
+      setDate('');
+      notify('Expected delivery date added.', 'success');
+    } catch (err) {
+      notify(getApiErrorMessage(err, 'Failed to update expected delivery date.'), 'error');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <Box sx={{ mt: 2, p: 2, bgcolor: 'action.hover', borderRadius: 1.5, border: '1px solid', borderColor: 'divider' }}>
+      <Box sx={{ display: 'flex', gap: 1, alignItems: 'flex-end', flexWrap: 'wrap' }}>
+        <Box sx={{ flex: '1 1 180px' }}>
+          <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mb: 0.5 }}>
+            Current expected delivery
+          </Typography>
+          <Typography variant="body2" fontWeight={700}>
+            {formatDeliveryDate(shipment?.expectedDeliveryDate)}
+          </Typography>
+        </Box>
+        {canUpdate && (
+          <>
+            <TextField
+              label="Add new expected date"
+              type="date"
+              size="small"
+              value={date}
+              onChange={(e) => setDate(e.target.value)}
+              InputLabelProps={{ shrink: true }}
+              sx={{ width: 190 }}
+            />
+            <Button size="small" variant="outlined" onClick={handleSave} disabled={saving || !date}>
+              {saving ? 'Saving...' : 'Add Date'}
+            </Button>
+          </>
+        )}
+      </Box>
+      {history.length > 0 && (
+        <Stack spacing={0.75} sx={{ mt: 1.5 }}>
+          {[...history].reverse().map((entry, idx) => (
+            <Box key={`${entry.date}-${entry.at}-${idx}`} sx={{ display: 'flex', justifyContent: 'space-between', gap: 1 }}>
+              <Typography variant="caption" color="text.secondary">
+                {entry.at ? new Date(entry.at).toLocaleString() : 'Time pending'}
+              </Typography>
+              <Typography variant="caption" fontWeight={700}>
+                {formatDeliveryDate(entry.date)}
+              </Typography>
+            </Box>
+          ))}
+        </Stack>
+      )}
+    </Box>
   );
 };
 
@@ -1057,6 +1149,7 @@ const OrderDetailPage = () => {
                     const normalizedShipmentStatus = f.status === 'pending' ? 'created' : f.status;
                     const statusOptions = getFulfillmentStatusOptions(normalizedShipmentStatus);
                     const isTerminalShipment = statusOptions.length <= 1;
+                    const shipment = f.shipments?.[0];
 
                     return (
                     <Paper
@@ -1115,6 +1208,16 @@ const OrderDetailPage = () => {
                           )}
                         </Box>
                       </Box>
+
+                      {shipment && (
+                        <ShipmentExpectedDeliveryControl
+                          orderId={id}
+                          shipment={shipment}
+                          canUpdate={canUpdateOrderStatus}
+                          onSaved={setOrder}
+                          notify={notify}
+                        />
+                      )}
 
                       {f.shipments && f.shipments.length > 0 && Array.isArray(f.shipments[0].statusHistory) && f.shipments[0].statusHistory.length > 0 && (
                         <Box
@@ -1180,7 +1283,21 @@ const OrderDetailPage = () => {
                   <Typography variant="caption" color="text.secondary">
                     Customer
                   </Typography>
-                  <Typography variant="body2" fontWeight={600}>
+                  <Typography
+                    variant="body2"
+                    fontWeight={600}
+                    component={order.User?.id ? 'button' : 'p'}
+                    onClick={order.User?.id ? () => navigate(`/admin/customers/${order.User.id}`) : undefined}
+                    sx={{
+                      p: 0,
+                      border: 0,
+                      bgcolor: 'transparent',
+                      color: order.User?.id ? 'primary.main' : 'text.primary',
+                      cursor: order.User?.id ? 'pointer' : 'default',
+                      textAlign: 'left',
+                      '&:hover': order.User?.id ? { textDecoration: 'underline' } : undefined,
+                    }}
+                  >
                     {customerName}
                   </Typography>
                 </Box>

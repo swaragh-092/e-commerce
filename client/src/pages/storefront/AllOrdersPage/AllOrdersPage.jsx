@@ -864,7 +864,7 @@ const AllOrdersPage = () => {
                                 <OrderRow
                                     key={order.id}
                                     order={order}
-                                    onView={(id) => navigate(`/account/orders/${id}`)}
+                                    onView={(id) => window.open(`/account/orders/${id}`, '_blank', 'noopener,noreferrer')}
                                     formatPrice={formatPrice}
                                 />
                             ))}

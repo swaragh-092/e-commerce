@@ -91,6 +91,11 @@ const getProductImageUrl = (item = {}) => {
   return getMediaUrl(rawImage);
 };
 
+const getProductUrl = (item = {}) => {
+  const slug = item.product?.slug || item.Product?.slug;
+  return slug ? `/products/${slug}` : '';
+};
+
 const findFulfillmentItem = (fulfillment = {}, item = {}) =>
   (fulfillment.items || fulfillment.FulfillmentItems || []).find((fulfillmentItem) => {
     const linkedOrderItemId =
@@ -129,6 +134,16 @@ const getShipmentTrackingUrl = (fulfillment = {}) => {
   return fulfillment.trackingUrl || shipment.trackingUrl || shipment.labelUrl || '';
 };
 
+const getShipmentExpectedDeliveryDate = (fulfillment = {}) => {
+  const shipment = fulfillment.shipment || fulfillment.Shipment || fulfillment.shipments?.[0] || {};
+  return shipment.expectedDeliveryDate || fulfillment.estimatedDeliveryDate || fulfillment.deliveryEstimate || '';
+};
+
+const getShipmentExpectedDeliveryHistory = (fulfillment = {}) => {
+  const shipment = fulfillment.shipment || fulfillment.Shipment || fulfillment.shipments?.[0] || {};
+  return Array.isArray(shipment.expectedDeliveryHistory) ? shipment.expectedDeliveryHistory : [];
+};
+
 const getStatusTime = (history = [], statuses = []) => {
   const statusSet = new Set(statuses);
   const event = [...history]
@@ -160,6 +175,7 @@ export const buildProductTrackingItems = ({ orderItems, fulfillments, order, pay
         if (!fulfillmentItem) return null;
 
         const history = getShipmentHistory(fulfillment);
+        const expectedDeliveryHistory = getShipmentExpectedDeliveryHistory(fulfillment);
         const rawStatus = normalizeShipmentStatus(fulfillment.status || fulfillment.shipment?.status);
         const quantity = Number(fulfillmentItem.quantity || 0);
         const deliveredAt = getStatusTime(history, ['delivered']) || (rawStatus === 'delivered' ? fulfillment.updatedAt : '');
@@ -175,7 +191,12 @@ export const buildProductTrackingItems = ({ orderItems, fulfillments, order, pay
           trackingUrl: getShipmentTrackingUrl(fulfillment),
           carrier: getShipmentCarrier(fulfillment),
           deliveredAt,
-          estimate: fulfillment.estimatedDeliveryDate || fulfillment.deliveryEstimate || '',
+          estimate: getShipmentExpectedDeliveryDate(fulfillment),
+          expectedDeliveryHistory: expectedDeliveryHistory.map((event) => ({
+            date: event.date,
+            previousDate: event.previousDate,
+            at: event.at || event.createdAt || event.timestamp,
+          })),
           updatedAt: getLatestHistoryTime(history) || fulfillment.updatedAt || fulfillment.createdAt,
           history: history.map((event) => ({
             status: event.status || event.toStatus,
@@ -222,6 +243,7 @@ export const buildProductTrackingItems = ({ orderItems, fulfillments, order, pay
     return {
       item,
       imageUrl: getProductImageUrl(item),
+      productUrl: getProductUrl(item),
       status: productStatus,
       statusMeta: meta,
       currentStep: meta.step,

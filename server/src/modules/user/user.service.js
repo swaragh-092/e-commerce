@@ -178,7 +178,14 @@ const getById = async (id) => {
     include: [
       { model: UserProfile, as: 'profile' },
       ...authzInclude,
-      // Recent orders excluded — load separately via GET /api/orders?userId=:id
+      { model: Address, separate: true, order: [['isDefault', 'DESC'], ['createdAt', 'DESC']] },
+      {
+        model: Order,
+        separate: true,
+        limit: 10,
+        order: [['createdAt', 'DESC']],
+        attributes: ['id', 'orderNumber', 'status', 'orderShippingStatus', 'shipmentStatus', 'total', 'paymentMethod', 'createdAt', 'updatedAt'],
+      },
     ],
     attributes: { exclude: ['password'] }
   });

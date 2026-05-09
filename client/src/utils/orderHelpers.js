@@ -25,3 +25,31 @@ export const formatOrderDate = (dateStr) =>
     new Date(dateStr).toLocaleDateString('en-IN', {
         day: 'numeric', month: 'short', year: 'numeric',
     });
+
+export const getCustomerOrderDisplayStatus = (order = {}) => {
+    const orderStatus = order.status;
+    const shippingStatus = order.orderShippingStatus || order.shipmentStatus || 'not_shipped';
+    const paymentStatus = order.Payment?.status || order.paymentStatus;
+    const paymentSettled = ['paid_online', 'paid_cod', 'completed', 'cod_collected'].includes(paymentStatus);
+
+    if (orderStatus === 'cancelled') return 'cancelled';
+    if (orderStatus === 'pending_payment') return 'pending_payment';
+    if (['delivered', 'partially_delivered'].includes(shippingStatus)) return 'delivered';
+    if (orderStatus === 'closed') return 'delivered';
+    if (['out_for_delivery', 'partially_out_for_delivery'].includes(shippingStatus)) return 'out_for_delivery';
+    if (['shipped', 'partially_shipped', 'in_transit'].includes(shippingStatus)) return 'shipped';
+    if (['created', 'packed'].includes(shippingStatus)) return shippingStatus;
+    if (paymentSettled || ['confirmed', 'processing', 'ready_for_shipment'].includes(orderStatus)) return 'processing';
+    return 'placed';
+};
+
+export const getCustomerOrderStatusLabel = (status) => ({
+    pending_payment: 'Pending Payment',
+    placed: 'Placed',
+    processing: 'Processing',
+    packed: 'Packed',
+    shipped: 'Shipped',
+    out_for_delivery: 'Out For Delivery',
+    delivered: 'Delivered',
+    cancelled: 'Cancelled',
+}[status] || 'Placed');
