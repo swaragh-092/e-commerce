@@ -657,9 +657,10 @@ exports.bulkDeleteProducts = async (ids, actingUserId = null, req = null) => {
 
     // Log individual audit logs for each deleted product
     for (const product of products) {
+      const resolvedUserId = req?.user?.id || actingUserId;
       try {
         await AuditService.log({
-          userId: actingUserId,
+          userId: resolvedUserId,
           action: ACTIONS.DELETE,
           entity: ENTITIES.PRODUCT,
           entityId: product.id,
@@ -698,9 +699,10 @@ exports.bulkUpdateProducts = async (ids, data, actingUserId = null, req = null) 
 
     // Log individual audit logs for each updated product
     for (const product of products) {
+      const resolvedUserId = req?.user?.id || actingUserId;
       try {
         await AuditService.log({
-          userId: actingUserId,
+          userId: resolvedUserId,
           action: ACTIONS.UPDATE,
           entity: ENTITIES.PRODUCT,
           entityId: product.id,
@@ -758,9 +760,10 @@ exports.bulkUpdateSale = async (payload, actingUserId = null, req = null) => {
 
       await product.update(updatePayload, { transaction });
 
+      const resolvedUserId = req?.user?.id || actingUserId;
       try {
         await AuditService.log({
-          userId: actingUserId,
+          userId: resolvedUserId,
           action: ACTIONS.UPDATE,
           entity: ENTITIES.PRODUCT,
           entityId: product.id,

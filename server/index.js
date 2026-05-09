@@ -19,6 +19,7 @@ validateEnvironment();
 
 
 const PORT = process.env.PORT || 5000;
+let poolStatsInterval = null;
 
 const startServer = async () => {
   try {
@@ -36,22 +37,49 @@ const startServer = async () => {
 
     // Log pool stats periodically in production
     if (process.env.NODE_ENV === 'production') {
-      setInterval(() => {
+      poolStatsInterval = setInterval(() => {
         const pool = sequelize.connectionManager.pool;
         if (pool) {
           logger.info('DB Pool Stats', {
-            size: pool.size,
-            available: pool.available,
-            pending: pool.pending,
-            borrowed: pool.borrowed
+            size: pool.size || 0,
+            available: pool.available || 0,
+            pending: pool.pending || 0,
+            borrowed: pool.borrowed || 0
           });
         }
       }, 60000);
     }
     
-    app.listen(PORT, () => {
+    const server = app.listen(PORT, () => {
       logger.info(`Server is running on port ${PORT} in ${process.env.NODE_ENV || 'development'} mode`);
     });
+
+    // Graceful shutdown
+    const shutdown = async (signal) => {
+      logger.info(`${signal} received. Starting graceful shutdown...`);
+      if (poolStatsInterval) clearInterval(poolStatsInterval);
+      
+      server.close(async () => {
+        logger.info('HTTP server closed.');
+        try {
+          await sequelize.close();
+          logger.info('Database connection closed.');
+          process.exit(0);
+        } catch (err) {
+          logger.error('Error during database shutdown:', err);
+          process.exit(1);
+        }
+      });
+
+      // Force close after 10s
+      setTimeout(() => {
+        logger.error('Could not close connections in time, forcefully shutting down');
+        process.exit(1);
+      }, 10000);
+    };
+
+    process.on('SIGTERM', () => shutdown('SIGTERM'));
+    process.on('SIGINT', () => shutdown('SIGINT'));
   } catch (error) {
     logger.error('Unable to connect to the database:', error);
     process.exit(1);

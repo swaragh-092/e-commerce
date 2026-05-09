@@ -70,7 +70,13 @@ const list = async ({ entity, action, userId, from, to, search, page = 1, limit 
   }
 
   if (search) {
-    const searchPattern = `%${search}%`;
+    // Escape LIKE wildcards: \ % _
+    const escapedSearch = search
+      .replace(/\\/g, '\\\\')
+      .replace(/%/g, '\\%')
+      .replace(/_/g, '\\_');
+
+    const searchPattern = `%${escapedSearch}%`;
     where[Op.or] = [
       { entity: { [Op.iLike]: searchPattern } },
       { entityId: { [Op.iLike]: searchPattern } },

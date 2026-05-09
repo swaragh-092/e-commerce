@@ -51,7 +51,8 @@ const updateStatus = async (req, res, next) => {
     if (!hasOrderAdminAccess(req.user)) {
       throw new AppError('FORBIDDEN', 403, 'You do not have permission to update order status');
     }
-    const order = await OrderService.updateStatus(req.params.id, req.validated.status, req.user.id, req);
+    const auditContext = { ip: req.ip, userAgent: req.get('User-Agent'), method: req.method, path: req.originalUrl };
+    const order = await OrderService.updateStatus(req.params.id, req.validated.status, req.user.id, auditContext);
     req._auditAction = 'STATUS_CHANGE';
     req._auditChanges = { status: req.validated.status };
     return success(res, order, 'Order status updated');
@@ -72,7 +73,8 @@ const cancelOrder = async (req, res, next) => {
 const refundOrder = async (req, res, next) => {
   try {
     const isAdmin = hasOrderAdminAccess(req.user);
-    const order = await OrderService.refundOrder(req.params.id, req.user.id, isAdmin, req);
+    const auditContext = { ip: req.ip, userAgent: req.get('User-Agent'), method: req.method, path: req.originalUrl };
+    const order = await OrderService.refundOrder(req.params.id, req.user.id, isAdmin, auditContext);
     req._auditAction = 'STATUS_CHANGE';
     req._auditChanges = { status: 'refunded' };
     return success(res, order, 'Order refunded successfully');
@@ -83,7 +85,8 @@ const refundOrder = async (req, res, next) => {
 
 const createFulfillment = async (req, res, next) => {
   try {
-    const fulfillment = await OrderService.createFulfillment(req.params.id, req.validated, req.user.id, req);
+    const auditContext = { ip: req.ip, userAgent: req.get('User-Agent'), method: req.method, path: req.originalUrl };
+    const fulfillment = await OrderService.createFulfillment(req.params.id, req.validated, req.user.id, auditContext);
     return success(res, fulfillment, 'Shipment created successfully', 201);
   } catch (err) {
     next(err);
@@ -97,7 +100,7 @@ const updateFulfillmentStatus = async (req, res, next) => {
       req.params.fulfillmentId,
       req.validated.status,
       req.user.id,
-      req
+      { ip: req.ip, userAgent: req.get('User-Agent'), method: req.method, path: req.originalUrl }
     );
     return success(res, result, 'Shipment status updated successfully');
   } catch (err) {

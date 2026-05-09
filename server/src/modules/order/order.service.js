@@ -1305,7 +1305,7 @@ const getOrderById = async (id, userId, isAdmin) => {
     return order;
 };
 
-const createFulfillment = async (orderId, payload, actingUserId, req = null) => {
+const createFulfillment = async (orderId, payload, actingUserId, auditContext = null) => {
     // payload: { trackingNumber, courier, notes, status, items: [{ orderItemId, quantity }], providerId }
     const { trackingNumber, courier, notes, status, items, providerId } = payload;
 
@@ -1664,8 +1664,11 @@ const createFulfillment = async (orderId, payload, actingUserId, req = null) => 
                         shipmentId: shipment.id,
                         fulfillmentStatus: status || 'pending',
                         newOrderShippingStatus: newStatus,
+                        method: auditContext?.method,
+                        path: auditContext?.path,
                     },
-                    req
+                    ipAddress: auditContext?.ip,
+                    userAgent: auditContext?.userAgent,
                 });
             }
         } catch (err) {}
@@ -1676,7 +1679,7 @@ const createFulfillment = async (orderId, payload, actingUserId, req = null) => 
 };
 
 
-const updateStatus = async (id, status, actingUserId, req = null) => {
+const updateStatus = async (id, status, actingUserId, auditContext = null) => {
     let orderRecord, beforeStatus, eventBuffer = [];
 
     await sequelize.transaction(async (t) => {
@@ -1782,8 +1785,14 @@ const updateStatus = async (id, status, actingUserId, req = null) => {
                     action: 'STATUS_CHANGE',
                     entity: 'Order',
                     entityId: id,
-                    changes: { before: beforeStatus, after: status },
-                    req
+                    changes: { 
+                        before: beforeStatus, 
+                        after: status,
+                        method: auditContext?.method,
+                        path: auditContext?.path
+                    },
+                    ipAddress: auditContext?.ip,
+                    userAgent: auditContext?.userAgent,
                 });
             }
         } catch(err) {}
@@ -1806,7 +1815,7 @@ const updateStatus = async (id, status, actingUserId, req = null) => {
     return orderRecord;
 };
 
-const refundOrder = async (id, actingUserId, isAdmin, req = null) => {
+const refundOrder = async (id, actingUserId, isAdmin, auditContext = null) => {
     if (!isAdmin) {
         throw new AppError('FORBIDDEN', 403, 'You do not have permission to refund orders');
     }
@@ -1885,8 +1894,14 @@ const refundOrder = async (id, actingUserId, isAdmin, req = null) => {
                     action: ACTIONS.STATUS_CHANGE,
                     entity: ENTITIES.ORDER,
                     entityId: id,
-                    changes: { refundId: refund.id, status: 'refunded' },
-                    req
+                    changes: { 
+                        orderId: id, 
+                        status: 'refunded',
+                        method: auditContext?.method,
+                        path: auditContext?.path
+                    },
+                    ipAddress: auditContext?.ip,
+                    userAgent: auditContext?.userAgent,
                 });
             }
         } catch (err) {}
@@ -1982,7 +1997,7 @@ const cancelOrder = async (id, userId) => {
     return orderRecord;
 };
 
-const updateFulfillmentStatus = async (orderId, fulfillmentId, status, actingUserId, req = null) => {
+const updateFulfillmentStatus = async (orderId, fulfillmentId, status, actingUserId, auditContext = null) => {
     await sequelize.transaction(async (t) => {
         const order = await Order.findByPk(orderId, {
             transaction: t,
@@ -2043,8 +2058,15 @@ const updateFulfillmentStatus = async (orderId, fulfillmentId, status, actingUse
                     action: 'STATUS_CHANGE',
                     entity: 'Fulfillment',
                     entityId: fulfillment.id,
-                    changes: { before: oldStatus, after: nextShipmentStatus, orderShippingStatus: derivedShippingStatus },
-                    req
+                    changes: { 
+                        before: oldStatus, 
+                        after: nextShipmentStatus, 
+                        orderShippingStatus: derivedShippingStatus,
+                        method: auditContext?.method,
+                        path: auditContext?.path
+                    },
+                    ipAddress: auditContext?.ip,
+                    userAgent: auditContext?.userAgent,
                 });
             }
         } catch (err) {}
