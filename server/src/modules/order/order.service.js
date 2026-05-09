@@ -1305,7 +1305,7 @@ const getOrderById = async (id, userId, isAdmin) => {
     return order;
 };
 
-const createFulfillment = async (orderId, payload, actingUserId) => {
+const createFulfillment = async (orderId, payload, actingUserId, req = null) => {
     // payload: { trackingNumber, courier, notes, status, items: [{ orderItemId, quantity }], providerId }
     const { trackingNumber, courier, notes, status, items, providerId } = payload;
 
@@ -1665,7 +1665,8 @@ const createFulfillment = async (orderId, payload, actingUserId) => {
                         fulfillmentStatus: status || 'pending',
                         newOrderShippingStatus: newStatus,
                     },
-                }, t);
+                    req
+                });
             }
         } catch (err) {}
 
@@ -1675,7 +1676,7 @@ const createFulfillment = async (orderId, payload, actingUserId) => {
 };
 
 
-const updateStatus = async (id, status, actingUserId) => {
+const updateStatus = async (id, status, actingUserId, req = null) => {
     let orderRecord, beforeStatus, eventBuffer = [];
 
     await sequelize.transaction(async (t) => {
@@ -1781,8 +1782,9 @@ const updateStatus = async (id, status, actingUserId) => {
                     action: 'STATUS_CHANGE',
                     entity: 'Order',
                     entityId: id,
-                    changes: { before: beforeStatus, after: status }
-                }, t);
+                    changes: { before: beforeStatus, after: status },
+                    req
+                });
             }
         } catch(err) {}
         
@@ -1804,7 +1806,7 @@ const updateStatus = async (id, status, actingUserId) => {
     return orderRecord;
 };
 
-const refundOrder = async (id, actingUserId, isAdmin) => {
+const refundOrder = async (id, actingUserId, isAdmin, req = null) => {
     if (!isAdmin) {
         throw new AppError('FORBIDDEN', 403, 'You do not have permission to refund orders');
     }
@@ -1884,7 +1886,8 @@ const refundOrder = async (id, actingUserId, isAdmin) => {
                     entity: ENTITIES.ORDER,
                     entityId: id,
                     changes: { refundId: refund.id, status: 'refunded' },
-                }, t);
+                    req
+                });
             }
         } catch (err) {}
 
@@ -1979,7 +1982,7 @@ const cancelOrder = async (id, userId) => {
     return orderRecord;
 };
 
-const updateFulfillmentStatus = async (orderId, fulfillmentId, status, actingUserId) => {
+const updateFulfillmentStatus = async (orderId, fulfillmentId, status, actingUserId, req = null) => {
     await sequelize.transaction(async (t) => {
         const order = await Order.findByPk(orderId, {
             transaction: t,
@@ -2041,7 +2044,8 @@ const updateFulfillmentStatus = async (orderId, fulfillmentId, status, actingUse
                     entity: 'Fulfillment',
                     entityId: fulfillment.id,
                     changes: { before: oldStatus, after: nextShipmentStatus, orderShippingStatus: derivedShippingStatus },
-                }, t);
+                    req
+                });
             }
         } catch (err) {}
     });

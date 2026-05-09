@@ -639,7 +639,7 @@ exports.deleteProduct = async (id, req = null) => {
   return true;
 };
 
-exports.bulkDeleteProducts = async (ids, actingUserId = null) => {
+exports.bulkDeleteProducts = async (ids, actingUserId = null, req = null) => {
   return Product.sequelize.transaction(async (transaction) => {
     const products = await Product.findAll({
       where: { id: ids },
@@ -664,6 +664,7 @@ exports.bulkDeleteProducts = async (ids, actingUserId = null) => {
           entity: ENTITIES.PRODUCT,
           entityId: product.id,
           changes: { name: product.name, sku: product.sku },
+          req,
         });
       } catch (e) {
         logger.error(`Failed to log audit for product deletion (ID: ${product.id}):`, e);
@@ -679,7 +680,7 @@ exports.bulkDeleteProducts = async (ids, actingUserId = null) => {
   });
 };
 
-exports.bulkUpdateProducts = async (ids, data, actingUserId = null) => {
+exports.bulkUpdateProducts = async (ids, data, actingUserId = null, req = null) => {
   return Product.sequelize.transaction(async (transaction) => {
     const products = await Product.findAll({
       where: { id: ids },
@@ -704,6 +705,7 @@ exports.bulkUpdateProducts = async (ids, data, actingUserId = null) => {
           entity: ENTITIES.PRODUCT,
           entityId: product.id,
           changes: data,
+          req,
         });
       } catch (e) {
         logger.error(`Failed to log audit for product bulk update (ID: ${product.id}):`, e);
@@ -720,7 +722,7 @@ exports.bulkUpdateProducts = async (ids, data, actingUserId = null) => {
   });
 };
 
-exports.bulkUpdateSale = async (payload, actingUserId = null) => {
+exports.bulkUpdateSale = async (payload, actingUserId = null, req = null) => {
   const { action, productIds, saleType, value, saleStartAt, saleEndAt, saleLabel } = payload;
 
   if (action === 'apply' && Number(value) <= 0) {
@@ -765,6 +767,7 @@ exports.bulkUpdateSale = async (payload, actingUserId = null) => {
           changes: action === 'clear'
             ? { salePrice: null, saleStartAt: null, saleEndAt: null, saleLabel: null }
             : { saleType, value, saleStartAt: saleStartAt || null, saleEndAt: saleEndAt || null, saleLabel: saleLabel || null },
+          req,
         });
       } catch (e) {
         logger.error('Failed to log audit for bulk sale update:', e);

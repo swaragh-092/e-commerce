@@ -22,6 +22,13 @@ const errorHandler = (err, req, res, next) => {
     details = err.errors.map(e => ({ field: e.path, message: e.message }));
   }
 
+  // Handle Sequelize connection pool exhaustion
+  if (err.name === 'SequelizeConnectionAcquireTimeoutError' || err.name === 'SequelizeConnectionError') {
+    statusCode = 503;
+    errorCode = 'DATABASE_TIMEOUT';
+    message = 'The server is under heavy load. Please try again in a moment.';
+  }
+
   // Log error if it's not operational (i.e. a bug) or if it's a 500
   if (!err.isOperational || statusCode >= 500) {
     logger.error('Unhandled server error', {

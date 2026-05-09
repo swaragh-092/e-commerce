@@ -76,7 +76,7 @@ exports.update = async (req, res, next) => {
 
 exports.bulkSale = async (req, res, next) => {
   try {
-    const result = await productService.bulkUpdateSale(req.body, req.user?.id || null);
+    const result = await productService.bulkUpdateSale(req.body, req.user?.id || null, req);
     return success(res, result, result.action === 'clear' ? 'Sale removed from products' : 'Sale applied to products');
   } catch (err) {
     next(err);
@@ -96,7 +96,7 @@ exports.delete = async (req, res, next) => {
 exports.bulkDelete = async (req, res, next) => {
   try {
     const { productIds } = req.body;
-    const result = await productService.bulkDeleteProducts(productIds, req.user?.id || null);
+    const result = await productService.bulkDeleteProducts(productIds, req.user?.id || null, req);
     return success(res, result, `${result.deletedCount} products deleted successfully`);
   } catch (err) {
     next(err);
@@ -106,7 +106,7 @@ exports.bulkDelete = async (req, res, next) => {
 exports.bulkUpdate = async (req, res, next) => {
   try {
     const { productIds, data } = req.body;
-    const result = await productService.bulkUpdateProducts(productIds, data, req.user?.id || null);
+    const result = await productService.bulkUpdateProducts(productIds, data, req.user?.id || null, req);
     return success(res, result, `${result.updatedCount} products updated successfully`);
   } catch (err) {
     next(err);

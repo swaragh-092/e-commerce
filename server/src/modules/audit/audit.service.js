@@ -37,7 +37,7 @@ const log = async (
 
     await AuditLog.create(
       { userId: finalUserId, action, entity, entityId: String(entityId ?? ''), changes, ipAddress: finalIp, userAgent: finalUA },
-      // audit log uses its own insert — never inherit the caller's transaction
+      transaction ? { transaction } : {},
     );
   } catch (err) {
     // Audit failures must NEVER crash the main flow
@@ -54,7 +54,7 @@ const log = async (
 /**
  * List audit logs with optional filters and pagination.
  */
-const list = async ({ entity, action, userId, from, to, page = 1, limit = 20 }) => {
+const list = async ({ entity, action, userId, from, to, search, page = 1, limit = 20 }) => {
   const { Op } = require('sequelize');
   const { User } = require('../index');
   const offset = (page - 1) * limit;
@@ -69,6 +69,17 @@ const list = async ({ entity, action, userId, from, to, page = 1, limit = 20 }) 
     if (to) where.createdAt[Op.lte] = new Date(to);
   }
 
+  if (search) {
+    const searchPattern = `%${search}%`;
+    where[Op.or] = [
+      { entity: { [Op.iLike]: searchPattern } },
+      { entityId: { [Op.iLike]: searchPattern } },
+      { '$User.firstName$': { [Op.iLike]: searchPattern } },
+      { '$User.lastName$': { [Op.iLike]: searchPattern } },
+      { '$User.email$': { [Op.iLike]: searchPattern } },
+    ];
+  }
+
   const { count, rows } = await AuditLog.findAndCountAll({
     where,
     include: [
@@ -81,6 +92,7 @@ const list = async ({ entity, action, userId, from, to, page = 1, limit = 20 }) 
     order: [['createdAt', 'DESC']],
     limit: parseInt(limit, 10),
     offset,
+    subQuery: false, // Set to false to allow joins in WHERE clause for searching
   });
 
   return { rows, count };

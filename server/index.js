@@ -26,11 +26,28 @@ const startServer = async () => {
     await sequelize.authenticate();
     logger.info('Database connection has been established successfully.');
 
+    const poolCfg = sequelize.config.pool;
+    logger.info(`DB pool config: max=${poolCfg.max} min=${poolCfg.min} acquire=${poolCfg.acquire}ms idle=${poolCfg.idle}ms`);
+
     // We do NOT sync database here; we depend on migrations.
     
     // Start background jobs
     startJobs();
 
+    // Log pool stats periodically in production
+    if (process.env.NODE_ENV === 'production') {
+      setInterval(() => {
+        const pool = sequelize.connectionManager.pool;
+        if (pool) {
+          logger.info('DB Pool Stats', {
+            size: pool.size,
+            available: pool.available,
+            pending: pool.pending,
+            borrowed: pool.borrowed
+          });
+        }
+      }, 60000);
+    }
     
     app.listen(PORT, () => {
       logger.info(`Server is running on port ${PORT} in ${process.env.NODE_ENV || 'development'} mode`);

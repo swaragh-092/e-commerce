@@ -5,13 +5,14 @@ const { paginated } = require('../../utils/response');
 
 const getAll = async (req, res, next) => {
   try {
-    const { entity, action, userId, from, to, page = 1, limit = 20 } = req.query;
+    const { entity, action, userId, from, to, search, page = 1, limit = 20 } = req.query;
     const { rows, count } = await AuditService.list({
       entity,
       action,
       userId,
       from,
       to,
+      search,
       page: parseInt(page, 10),
       limit: parseInt(limit, 10),
     });
