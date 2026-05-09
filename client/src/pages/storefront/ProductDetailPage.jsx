@@ -253,7 +253,7 @@ const ProductDetailPage = () => {
             <PageSEO
                 title={product.name}
                 description={product.shortDescription}
-                image={product.images?.[0]?.url}
+                image={product.ogImage || product.images?.[0]?.url}
                 type="product"
             />
             <Grid container spacing={6}>
@@ -295,6 +295,8 @@ const ProductDetailPage = () => {
                             <ShareButton 
                                 title={product.name}
                                 text={product.shortDescription}
+                                url={window.location.href}
+                                image={product.ogImage || product.images?.[0]?.url}
                             />
                         </Box>
                     </Box>

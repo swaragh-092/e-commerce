@@ -54,7 +54,7 @@ const orderIdParamSchema = Joi.object({
 
 const paginationQuerySchema = Joi.object({
     page: Joi.number().integer().min(1).default(1),
-    limit: Joi.number().integer().min(1).max(100).default(20),
+    limit: Joi.number().integer().min(1).max(1000).default(20),
 }).unknown();
 
 const slugParamSchema = Joi.object({

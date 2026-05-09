@@ -1,3 +1,4 @@
+import React, { useState } from 'react';
 import {
   Box,
   AppBar,
@@ -13,6 +14,8 @@ import {
   Avatar,
   Tooltip,
   IconButton,
+  useTheme,
+  useMediaQuery,
 } from '@mui/material';
 import { Outlet, Link as RouterLink, useLocation } from 'react-router-dom';
 import DashboardIcon from '@mui/icons-material/Dashboard';
@@ -36,6 +39,7 @@ import LocalShippingIcon from '@mui/icons-material/LocalShipping';
 import PublicIcon from '@mui/icons-material/Public';
 import MailOutlineIcon from '@mui/icons-material/MailOutline';
 import HelpOutlineIcon from '@mui/icons-material/HelpOutline';
+import MenuIcon from '@mui/icons-material/Menu';
 import { useAuth } from '../hooks/useAuth';
 import { useSettings, useMode } from '../hooks/useSettings';
 import { PERMISSIONS } from '../utils/permissions';
@@ -80,10 +84,18 @@ const ALL_MENU_ITEMS = [
 ];
 
 const AdminLayout = () => {
+  const theme = useTheme();
+  const isMobile = useMediaQuery(theme.breakpoints.down('md'));
+  const [mobileOpen, setMobileOpen] = useState(false);
+
   const { logout, user, hasAnyPermission, hasPermission } = useAuth();
   const location = useLocation();
   const { settings, features } = useSettings();
   const appMode = useMode(); // 'ecommerce' | 'catalog'
+
+  const handleDrawerToggle = () => {
+    setMobileOpen(!mobileOpen);
+  };
 
   // Filter sidebar items by:
   //  1. mode — items with mode:'ecommerce' are hidden in catalog mode
@@ -104,6 +116,15 @@ const AdminLayout = () => {
     <Box sx={{ display: 'flex' }}>
       <AppBar position="fixed" sx={{ zIndex: (t) => t.zIndex.drawer + 1, borderRadius: 0 }}>
         <Toolbar>
+          <IconButton
+            color="inherit"
+            aria-label="open drawer"
+            edge="start"
+            onClick={handleDrawerToggle}
+            sx={{ mr: 2, display: { md: 'none' } }}
+          >
+            <MenuIcon />
+          </IconButton>
           <Box sx={{ flexGrow: 1, display: 'flex', alignItems: 'center', gap: 1 }}>
             {settings?.logo?.main ? (
               <img
@@ -128,9 +149,76 @@ const AdminLayout = () => {
         </Toolbar>
       </AppBar>
 
+      {/* Mobile Drawer */}
+      <Drawer
+        variant="temporary"
+        open={mobileOpen}
+        onClose={handleDrawerToggle}
+        ModalProps={{
+          keepMounted: true, // Better open performance on mobile.
+        }}
+        sx={{
+          display: { xs: 'block', md: 'none' },
+          '& .MuiDrawer-paper': {
+            boxSizing: 'border-box',
+            width: drawerWidth,
+            borderRight: 'none',
+          },
+        }}
+      >
+        <Toolbar />
+        <Box sx={{ overflow: 'auto', py: 1 }}>
+          <List dense>
+            {menuItems.map((item) => (
+              <ListItem key={item.text} disablePadding>
+                <ListItemButton
+                  component={RouterLink}
+                  to={item.path}
+                  selected={isActive(item.path)}
+                  onClick={() => setMobileOpen(false)}
+                  sx={{
+                    mx: 1,
+                    borderRadius: 2,
+                    mb: 0.25,
+                    '&.Mui-selected': {
+                      bgcolor: 'primary.main',
+                      color: 'primary.contrastText',
+                      '& .MuiListItemIcon-root': { color: 'primary.contrastText' },
+                      '&:hover': { bgcolor: 'primary.dark' },
+                    },
+                  }}
+                >
+                  <ListItemIcon sx={{ minWidth: 36 }}>{item.icon}</ListItemIcon>
+                  <ListItemText primary={item.text} primaryTypographyProps={{ fontSize: 14 }} />
+                </ListItemButton>
+              </ListItem>
+            ))}
+          </List>
+          <Divider sx={{ my: 1 }} />
+          <List dense>
+            <ListItem disablePadding>
+              <ListItemButton 
+                onClick={() => {
+                  logout();
+                  setMobileOpen(false);
+                }} 
+                sx={{ mx: 1, borderRadius: 2 }}
+              >
+                <ListItemIcon sx={{ minWidth: 36 }}>
+                  <ExitIcon />
+                </ListItemIcon>
+                <ListItemText primary="Logout" primaryTypographyProps={{ fontSize: 14 }} />
+              </ListItemButton>
+            </ListItem>
+          </List>
+        </Box>
+      </Drawer>
+
+      {/* Desktop Drawer */}
       <Drawer
         variant="permanent"
         sx={{
+          display: { xs: 'none', md: 'block' },
           width: drawerWidth,
           flexShrink: 0,
           [`& .MuiDrawer-paper`]: {
@@ -184,7 +272,13 @@ const AdminLayout = () => {
 
       <Box
         component="main"
-        sx={{ flexGrow: 1, p: 3, bgcolor: 'background.default', minHeight: '100vh' }}
+        sx={{
+          flexGrow: 1,
+          p: { xs: 2, sm: 3 },
+          bgcolor: 'background.default',
+          minHeight: '100vh',
+          width: { md: `calc(100% - ${drawerWidth}px)` },
+        }}
       >
         <Toolbar />
         <Outlet />
