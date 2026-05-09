@@ -34,6 +34,7 @@ const EMPTY_ADDR = {
     addressLine1: '', addressLine2: '',
     city: '', state: '', postalCode: '', country: '',
     isDefault: false,
+    gstin: '',
 };
 
 const PAYMENT_METHOD_OPTIONS = [
@@ -233,6 +234,7 @@ const CheckoutPage = () => {
                 city: addr.city || '', state: addr.state || '',
                 postalCode: addr.postalCode || '', country: addr.country || '',
                 isDefault: !!addr.isDefault,
+                gstin: addr.gstin || '',
             },
             errors: {},
         });
@@ -506,6 +508,9 @@ const CheckoutPage = () => {
                                         {selectedAddress.phone && (
                                             <Typography variant="body2" color="text.secondary">📞 {selectedAddress.phone}</Typography>
                                         )}
+                                        {selectedAddress.gstin && (
+                                            <Typography variant="body2" color="text.secondary">GSTIN: {selectedAddress.gstin}</Typography>
+                                        )}
                                     </Box>
                                 </Box>
                             )
@@ -562,6 +567,11 @@ const CheckoutPage = () => {
                                                         {addr.phone && (
                                                             <Typography variant="body2" color="text.secondary" mt={0.5}>
                                                                 Mobile: <strong>{addr.phone}</strong>
+                                                            </Typography>
+                                                        )}
+                                                        {addr.gstin && (
+                                                            <Typography variant="body2" color="text.secondary" mt={0.5}>
+                                                                GSTIN: <strong>{addr.gstin}</strong>
                                                             </Typography>
                                                         )}
                                                     </Box>
@@ -1051,6 +1061,13 @@ const CheckoutPage = () => {
                             <TextField label="Country *" size="small" fullWidth required
                                 value={addrDialog.form.country} onChange={(e) => setAddrField('country', e.target.value)}
                                 error={!!addrDialog.errors?.country} helperText={addrDialog.errors?.country} />
+                        </Grid>
+                        <Grid item xs={12} sm={6}>
+                            <TextField label="GSTIN (for B2B)" size="small" fullWidth
+                                placeholder="e.g. 22AAAAA0000A1Z5"
+                                value={addrDialog.form.gstin} onChange={(e) => setAddrField('gstin', e.target.value.toUpperCase())}
+                                error={!!addrDialog.errors?.gstin} helperText={addrDialog.errors?.gstin}
+                                InputProps={{ sx: { fontFamily: 'monospace', letterSpacing: 1 } }} />
                         </Grid>
                         <Grid item xs={12}>
                             <FormControlLabel

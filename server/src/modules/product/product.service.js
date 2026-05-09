@@ -798,3 +798,52 @@ exports.bulkUpdateSale = async (payload, actingUserId = null, auditContext = nul
     };
   });
 };
+
+exports.getRelatedProducts = async (productId, limit = 6) => {
+  const baseQuery = (extraWhere = {}, categoryInclude = null) => ({
+    where: {
+      id: { [Op.ne]: productId },
+      status: 'published',
+      isEnabled: true,
+      ...extraWhere,
+    },
+    include: [
+      { model: ProductImage, as: 'images' },
+      { model: Brand, as: 'brand' },
+      ...(categoryInclude ? [categoryInclude] : [{ model: Category, as: 'categories' }]),
+      { model: Tag, as: 'tags' },
+    ],
+    order: [['createdAt', 'DESC']],
+    limit,
+    distinct: true,
+  });
+
+  const product = await Product.findByPk(productId, {
+    include: [{ model: Category, as: 'categories', attributes: ['id'] }],
+    attributes: ['id'],
+  });
+  if (!product) return [];
+
+  const categoryIds = (product.categories || []).map((c) => c.id);
+
+  let rows;
+
+  if (categoryIds.length > 0) {
+    const result = await Product.findAndCountAll(baseQuery({}, {
+      model: Category,
+      as: 'categories',
+      where: { id: { [Op.in]: categoryIds } },
+      required: true,
+    }));
+    rows = result.rows;
+  }
+
+  if (!rows || rows.length === 0) {
+    const result = await Product.findAndCountAll(baseQuery());
+    rows = result.rows;
+  }
+
+  const labelPresets = await getLabelPresets();
+  const { features } = await SettingsService.getFeatures();
+  return rows.map((p) => serializeProductPricing(p, { adminView: false, features }, labelPresets));
+};

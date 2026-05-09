@@ -8,13 +8,17 @@ const saleLabelBodySchema = Joi.object({
   color:    Joi.string().pattern(/^#([0-9A-Fa-f]{3}|[0-9A-Fa-f]{6})$/).default('#EF4444'),
   priority: Joi.number().integer().min(0).default(0),
   isActive: Joi.boolean().default(true),
+  startDate: Joi.date().iso().allow(null, ''),
+  endDate:   Joi.date().iso().allow(null, '').greater(Joi.ref('startDate')),
 });
 
 const updateSaleLabelBodySchema = Joi.object({
-  name:     Joi.string().trim().max(80),
-  color:    Joi.string().pattern(/^#([0-9A-Fa-f]{3}|[0-9A-Fa-f]{6})$/),
-  priority: Joi.number().integer().min(0),
-  isActive: Joi.boolean(),
+  name:      Joi.string().trim().max(80),
+  color:     Joi.string().pattern(/^#([0-9A-Fa-f]{3}|[0-9A-Fa-f]{6})$/),
+  priority:  Joi.number().integer().min(0),
+  isActive:  Joi.boolean(),
+  startDate: Joi.date().iso().allow(null, ''),
+  endDate:   Joi.date().iso().allow(null, '').greater(Joi.ref('startDate')),
 }).min(1);
 
 /**
@@ -24,11 +28,13 @@ const updateSaleLabelBodySchema = Joi.object({
 const replaceSaleLabelsBodySchema = Joi.object({
   labels: Joi.array().items(
     Joi.object({
-      id:       Joi.string().trim().lowercase().max(80).pattern(/^[a-z0-9-]+$/).allow('', null),
-      name:     Joi.string().trim().max(80).required(),
-      color:    Joi.string().pattern(/^#([0-9A-Fa-f]{3}|[0-9A-Fa-f]{6})$/).default('#EF4444'),
-      priority: Joi.number().integer().min(0).default(0),
-      isActive: Joi.boolean().default(true),
+      id:        Joi.string().trim().lowercase().max(80).pattern(/^[a-z0-9-]+$/).allow('', null),
+      name:      Joi.string().trim().max(80).required(),
+      color:     Joi.string().pattern(/^#([0-9A-Fa-f]{3}|[0-9A-Fa-f]{6})$/).default('#EF4444'),
+      priority:  Joi.number().integer().min(0).default(0),
+      isActive:  Joi.boolean().default(true),
+      startDate: Joi.date().iso().allow(null, ''),
+      endDate:   Joi.date().iso().allow(null, '').greater(Joi.ref('startDate')),
     })
   ).min(0).required(),
 });

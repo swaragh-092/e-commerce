@@ -173,6 +173,7 @@ const StorefrontOrderInvoicePage = () => {
                 <Typography variant="body2">{address.city}, {address.state} {address.postalCode}</Typography>
                 <Typography variant="body2">{address.country}</Typography>
                 {address.phone && <Typography variant="body2">Phone: {address.phone}</Typography>}
+                {address.gstin && <Typography variant="body2">GSTIN: {address.gstin}</Typography>}
               </Box>
             ) : (
               <Typography variant="body2" color="text.secondary">No shipping details</Typography>

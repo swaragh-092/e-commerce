@@ -19,6 +19,8 @@ router.get('/id/:id', authenticate, authorizePermissions(PERMISSIONS.PRODUCTS_RE
 router.post('/bulk-sale', authenticate, authorizePermissions(PERMISSIONS.PRODUCTS_BULK_SALE), validate(bulkSaleSchema), auditLog('Product'), productController.bulkSale);
 router.delete('/bulk', authenticate, authorizePermissions(PERMISSIONS.PRODUCTS_DELETE), validate(bulkDeleteSchema), auditLog('Product'), productController.bulkDelete);
 router.patch('/bulk', authenticate, authorizePermissions(PERMISSIONS.PRODUCTS_UPDATE), validate(bulkUpdateSchema), auditLog('Product'), productController.bulkUpdate);
+router.get('/id/:id/related', optionalAuth, productController.getRelated);
+
 router.get('/:slug', optionalAuth, productController.getBySlug);
 
 router.post(

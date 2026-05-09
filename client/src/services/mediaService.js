@@ -1,13 +1,14 @@
 import api from './api';
 
 export const mediaService = {
-  uploadMedia: async (file) => {
+  uploadMedia: async (file, signal) => {
     const formData = new FormData();
     formData.append('file', file);
     const response = await api.post('/media/upload', formData, {
       headers: {
         'Content-Type': 'multipart/form-data',
       },
+      signal,
     });
     return response.data;
   },
@@ -20,6 +21,11 @@ export const mediaService = {
 
   delete: async (id) => {
     const response = await api.delete(`/media/${id}`);
+    return response.data;
+  },
+
+  update: async (id, data) => {
+    const response = await api.patch(`/media/${id}`, data);
     return response.data;
   },
 };

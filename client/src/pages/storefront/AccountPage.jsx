@@ -117,7 +117,7 @@ const ProfileTab = ({ user, updateProfile }) => {
 };
 
 /* ─── Addresses Tab ───────────────────────────────────────────────────── */
-const emptyAddr = { label: '', fullName: '', phone: '', addressLine1: '', addressLine2: '', city: '', state: '', postalCode: '', country: '' };
+const emptyAddr = { label: '', fullName: '', phone: '', addressLine1: '', addressLine2: '', city: '', state: '', postalCode: '', country: '', gstin: '' };
 
 const AddressesTab = () => {
     const [addresses, setAddresses] = useState([]);
@@ -226,6 +226,7 @@ const AddressesTab = () => {
                                             <Typography variant="body2" component="span" sx={{ display: 'block' }}>{addr.addressLine1}{addr.addressLine2 ? `, ${addr.addressLine2}` : ''}</Typography>
                                             <Typography variant="body2" component="span" sx={{ display: 'block' }}>{addr.city}, {addr.state} {addr.postalCode}, {addr.country}</Typography>
                                             {addr.phone && <Typography variant="body2" component="span" sx={{ display: 'block' }}>{addr.phone}</Typography>}
+                                            {addr.gstin && <Typography variant="body2" component="span" sx={{ display: 'block' }}>GSTIN: {addr.gstin}</Typography>}
                                         </Box>
                                     }
                                     secondaryTypographyProps={{ component: 'div' }}
@@ -271,6 +272,9 @@ const AddressesTab = () => {
                         <TextField size="small" label="Postal Code" value={form.postalCode} onChange={(e) => set('postalCode', e.target.value)} required fullWidth error={!!validationErrors.postalCode} helperText={validationErrors.postalCode} />
                         <TextField size="small" label="Country" value={form.country} onChange={(e) => set('country', e.target.value)} required fullWidth error={!!validationErrors.country} helperText={validationErrors.country} />
                     </Box>
+                    <TextField size="small" label="GSTIN (for B2B)" value={form.gstin} onChange={(e) => set('gstin', e.target.value.toUpperCase())}
+                        placeholder="e.g. 22AAAAA0000A1Z5" error={!!validationErrors.gstin} helperText={validationErrors.gstin}
+                        InputProps={{ sx: { fontFamily: 'monospace', letterSpacing: 1 } }} />
                 </DialogContent>
                 <DialogActions>
                     <Button onClick={() => setDialogOpen(false)}>Cancel</Button>

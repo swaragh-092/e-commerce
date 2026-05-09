@@ -178,8 +178,10 @@ const BrandsPage = () => {
 
 
   const handleMediaSelect = (media) => {
-    if (!media) return;
-    setFormData((prev) => ({ ...prev, image: media.url }));
+    if (!media || !media.length) return;
+    const selected = media[0];
+    setFormData((prev) => ({ ...prev, image: selected.url }));
+    setMediaPickerOpen(false);
   };
 
   const columns = [

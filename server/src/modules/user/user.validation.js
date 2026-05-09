@@ -3,7 +3,7 @@
 const Joi = require('joi');
 
 const updateAvatarSchema = Joi.object({
-  mediaId: Joi.string().uuid().required()
+  mediaId: Joi.string().required()
 });
 
 const updateProfileSchema = Joi.object({
@@ -53,6 +53,13 @@ const createAddressSchema = Joi.object({
   city: Joi.string().max(100).required(),
   state: Joi.string().max(100).optional().allow(null, ''),
   postalCode: Joi.string().max(20).required(),
+  gstin: Joi.string()
+    .regex(/^[0-9]{2}[A-Z]{5}[0-9]{4}[A-Z]{1}[1-9A-Z]{1}Z[0-9A-Z]{1}$/)
+    .optional()
+    .allow(null, '')
+    .messages({
+      'string.pattern.base': 'Please enter a valid GSTIN (e.g., 22AAAAA0000A1Z5)'
+    }),
   country: Joi.string().max(100).required(),
   isDefault: Joi.boolean().default(false)
 });
@@ -73,6 +80,13 @@ const updateAddressSchema = Joi.object({
   state: Joi.string().max(100).optional().allow(null, ''),
   postalCode: Joi.string().max(20).optional(),
   country: Joi.string().max(100).optional(),
+  gstin: Joi.string()
+    .regex(/^[0-9]{2}[A-Z]{5}[0-9]{4}[A-Z]{1}[1-9A-Z]{1}Z[0-9A-Z]{1}$/)
+    .optional()
+    .allow(null, '')
+    .messages({
+      'string.pattern.base': 'Please enter a valid GSTIN (e.g., 22AAAAA0000A1Z5)'
+    }),
   isDefault: Joi.boolean().optional()
 });
 

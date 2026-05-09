@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
 import {
   Dialog,
   DialogTitle,
@@ -19,6 +19,13 @@ import {
   Paper,
   Divider,
   Fade,
+  FormControl,
+  Select,
+  MenuItem,
+  InputLabel,
+  ToggleButtonGroup,
+  ToggleButton,
+  Tooltip,
 } from '@mui/material';
 import {
   Search as SearchIcon,
@@ -26,10 +33,20 @@ import {
   PhotoLibrary as PhotoLibraryIcon,
   CheckCircle as CheckCircleIcon,
   Close as CloseIcon,
+  ArrowUpward as ArrowUpwardIcon,
+  ArrowDownward as ArrowDownwardIcon,
+  CalendarToday as CalendarTodayIcon,
+  Storage as StorageIcon,
+  Category as CategoryIcon,
 } from '@mui/icons-material';
 import { mediaService } from '../../services/mediaService';
 import MediaUploader from './MediaUploader';
 import { getMediaUrl } from '../../utils/media';
+
+// Global cache for media library to avoid redundant initial fetches across multiple picker instances
+let mediaCache = null;
+let mediaCacheTimestamp = 0;
+const CACHE_TTL = 30000; // 30 seconds
 
 /**
  * A WordPress-style media picker dialog.
@@ -47,29 +64,104 @@ const MediaPicker = ({ open, onClose, onSelect, multiple = false, title = 'Selec
   const [loading, setLoading] = useState(false);
   const [search, setSearch] = useState('');
   const [selected, setSelected] = useState([]); // Array of media objects
+  const [page, setPage] = useState(1);
+  const [hasMore, setHasMore] = useState(true);
+  const [loadingMore, setLoadingMore] = useState(false);
+  const [sortBy, setSortBy] = useState('date');
+  const [sortDir, setSortDir] = useState('desc');
+  const initialFetchRef = useRef(false);
+  const observerRef = useRef(null);
 
   // Reset state when opening
   useEffect(() => {
     if (open) {
       setSelected([]);
-      fetchMedia().then((data) => {
-        setTab(data.length > 0 ? 1 : 0);
-      });
+      
+      // Load from cache if fresh
+      if (mediaCache && (Date.now() - mediaCacheTimestamp < CACHE_TTL)) {
+        setMedia(mediaCache);
+        setTab(mediaCache.length > 0 ? 1 : 0);
+        // Refresh in background silently
+        fetchMedia(1, false, true);
+      } else {
+        fetchMedia(1);
+      }
     }
   }, [open]);
 
-  const fetchMedia = async () => {
-    setLoading(true);
+  // Refresh when sort changes
+  useEffect(() => {
+    if (open) {
+      fetchMedia(1);
+    }
+  }, [sortBy, sortDir]);
+
+  // Infinite scroll observer
+  useEffect(() => {
+    if (!hasMore || loading || loadingMore) return;
+
+    const observer = new IntersectionObserver(
+      (entries) => {
+        if (entries[0].isIntersecting) {
+          handleLoadMore();
+        }
+      },
+      { threshold: 0.1 }
+    );
+
+    const currentRef = observerRef.current;
+    if (currentRef) {
+      observer.observe(currentRef);
+    }
+
+    return () => {
+      if (currentRef) {
+        observer.unobserve(currentRef);
+      }
+      observer.disconnect();
+    };
+  }, [hasMore, loading, loadingMore]);
+
+  const fetchMedia = async (pageNum = 1, isLoadMore = false, isBackground = false) => {
+    if (isLoadMore) setLoadingMore(true);
+    else if (!isBackground) setLoading(true);
+
     try {
-      const res = await mediaService.list({ limit: 100 });
-      const newMedia = res.data?.rows || res.data || [];
-      setMedia(newMedia);
+      const res = await mediaService.list({ 
+        page: pageNum, 
+        limit: 30,
+        sortBy,
+        sortDir
+      });
+      const newMedia = res.data || [];
+      const meta = res.meta || {};
+      
+      if (pageNum === 1) {
+        setMedia(newMedia);
+        // Update global cache
+        mediaCache = newMedia;
+        mediaCacheTimestamp = Date.now();
+        // Automatically switch to library tab if there's media
+        if (newMedia.length > 0 && tab === 0) setTab(1);
+      } else {
+        setMedia((prev) => [...prev, ...newMedia]);
+      }
+
+      setHasMore(newMedia.length > 0 && (meta.page < meta.totalPages));
+      setPage(pageNum);
       return newMedia;
     } catch (err) {
       console.error('Failed to fetch media', err);
       return [];
     } finally {
       setLoading(false);
+      setLoadingMore(false);
+    }
+  };
+
+  const handleLoadMore = () => {
+    if (!loading && !loadingMore && hasMore) {
+      fetchMedia(page + 1, true);
     }
   };
 
@@ -97,20 +189,24 @@ const MediaPicker = ({ open, onClose, onSelect, multiple = false, title = 'Selec
   };
 
   const handleConfirm = () => {
-    onSelect(multiple ? selected : selected[0]);
+    onSelect(multiple ? selected : (selected[0] ? [selected[0]] : []));
     onClose();
   };
 
   const handleUploadSuccess = (newMedia) => {
     // If it's a single upload and we are in single mode, auto-select and close
     if (!multiple) {
-      onSelect(newMedia);
+      onSelect([newMedia]);
       onClose();
     } else {
-      // If multiple, just refresh library and switch tab
-      fetchMedia();
+      // If multiple, add to selection but don't refresh here (onAllUploadsComplete handles it)
+      setSelected((prev) => [...prev, newMedia]);
       setTab(1);
     }
+  };
+
+  const handleAllUploadsComplete = () => {
+    fetchMedia(1, false, true); // Refresh library in background
   };
 
   return (
@@ -160,6 +256,7 @@ const MediaPicker = ({ open, onClose, onSelect, multiple = false, title = 'Selec
             <Box sx={{ width: '100%', maxWidth: 500 }}>
               <MediaUploader
                 onUploadSuccess={handleUploadSuccess}
+                onAllUploadsComplete={handleAllUploadsComplete}
                 multiple={multiple}
                 autoUpload={true}
               />
@@ -169,10 +266,10 @@ const MediaPicker = ({ open, onClose, onSelect, multiple = false, title = 'Selec
 
         {tab === 1 && (
           <Box sx={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
-            {/* Search Bar */}
-            <Box sx={{ p: 2, bgcolor: 'background.paper', borderBottom: 1, borderColor: 'divider' }}>
+            {/* Toolbar */}
+            <Box sx={{ p: 2, bgcolor: 'background.paper', borderBottom: 1, borderColor: 'divider', display: 'flex', gap: 2, flexWrap: 'wrap', alignItems: 'center' }}>
               <TextField
-                fullWidth
+                sx={{ flex: 1, minWidth: 200 }}
                 size="small"
                 placeholder="Search media..."
                 value={search}
@@ -185,6 +282,35 @@ const MediaPicker = ({ open, onClose, onSelect, multiple = false, title = 'Selec
                   ),
                 }}
               />
+
+              <FormControl size="small" sx={{ minWidth: 120 }}>
+                <InputLabel id="media-sort-by-label">Sort by</InputLabel>
+                <Select
+                  labelId="media-sort-by-label"
+                  id="media-sort-by"
+                  value={sortBy}
+                  onChange={(e) => setSortBy(e.target.value)}
+                  label="Sort by"
+                >
+                  <MenuItem value="date"><Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}><CalendarTodayIcon fontSize="small" /> Date</Box></MenuItem>
+                  <MenuItem value="size"><Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}><StorageIcon fontSize="small" /> Size</Box></MenuItem>
+                  <MenuItem value="name"><Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}><CategoryIcon fontSize="small" /> Name</Box></MenuItem>
+                </Select>
+              </FormControl>
+
+              <ToggleButtonGroup
+                value={sortDir}
+                exclusive
+                onChange={(_, v) => v && setSortDir(v)}
+                size="small"
+              >
+                <ToggleButton value="asc" aria-label="ascending">
+                  <ArrowUpwardIcon fontSize="small" />
+                </ToggleButton>
+                <ToggleButton value="desc" aria-label="descending">
+                  <ArrowDownwardIcon fontSize="small" />
+                </ToggleButton>
+              </ToggleButtonGroup>
             </Box>
 
             {/* Media Grid */}
@@ -201,65 +327,81 @@ const MediaPicker = ({ open, onClose, onSelect, multiple = false, title = 'Selec
                   </Typography>
                 </Box>
               ) : (
-                <Grid container spacing={1.5}>
-                  {filteredMedia.map((item) => {
-                    const isSelected = selected.some((s) => s.id === item.id);
-                    return (
-                      <Grid item xs={4} sm={3} md={2.4} key={item.id}>
-                        <Card
-                          elevation={0}
-                          onClick={() => handleToggleSelect(item)}
-                          sx={{
-                            position: 'relative',
-                            pt: '100%',
-                            cursor: 'pointer',
-                            borderRadius: 2,
-                            border: '3px solid',
-                            borderColor: isSelected ? 'primary.main' : 'transparent',
-                            transition: 'all 0.2s',
-                            '&:hover': {
-                              transform: 'scale(1.02)',
-                              boxShadow: 2,
-                            },
-                          }}
-                        >
-                          <CardMedia
-                            component="img"
-                            image={getMediaUrl(item.url)}
-                            alt={item.label || item.name || item.originalName || 'media preview'}
+                <>
+                  <Grid container spacing={1.5}>
+                    {filteredMedia.map((item) => {
+                      const isSelected = selected.some((s) => s.id === item.id);
+                      return (
+                        <Grid item xs={4} sm={3} md={2.4} key={item.id}>
+                          <Card
+                            elevation={0}
+                            onClick={() => handleToggleSelect(item)}
                             sx={{
-                              position: 'absolute',
-                              top: 0,
-                              left: 0,
-                              width: '100%',
-                              height: '100%',
-                              objectFit: 'cover',
+                              position: 'relative',
+                              pt: '100%',
+                              cursor: 'pointer',
+                              borderRadius: 2,
+                              border: '3px solid',
+                              borderColor: isSelected ? 'primary.main' : 'transparent',
+                              transition: 'all 0.2s',
+                              '&:hover': {
+                                transform: 'scale(1.02)',
+                                boxShadow: 2,
+                              },
                             }}
-                          />
-                          {isSelected && (
-                            <Fade in={true}>
-                              <Box
-                                sx={{
-                                  position: 'absolute',
-                                  top: 0,
-                                  left: 0,
-                                  right: 0,
-                                  bottom: 0,
-                                  bgcolor: 'rgba(25, 118, 210, 0.2)',
-                                  display: 'flex',
-                                  alignItems: 'center',
-                                  justifyContent: 'center',
-                                }}
-                              >
-                                <CheckCircleIcon color="primary" sx={{ fontSize: 32, bgcolor: 'white', borderRadius: '50%' }} />
-                              </Box>
-                            </Fade>
-                          )}
-                        </Card>
-                      </Grid>
-                    );
-                  })}
-                </Grid>
+                          >
+                            <CardMedia
+                              component="img"
+                              image={getMediaUrl(item.url)}
+                              alt={item.alt || item.originalName || item.filename || 'media preview'}
+                              sx={{
+                                position: 'absolute',
+                                top: 0,
+                                left: 0,
+                                width: '100%',
+                                height: '100%',
+                                objectFit: 'cover',
+                              }}
+                            />
+                            {isSelected && (
+                              <Fade in={true}>
+                                <Box
+                                  sx={{
+                                    position: 'absolute',
+                                    top: 0,
+                                    left: 0,
+                                    right: 0,
+                                    bottom: 0,
+                                    bgcolor: 'rgba(25, 118, 210, 0.2)',
+                                    display: 'flex',
+                                    alignItems: 'center',
+                                    justifyContent: 'center',
+                                  }}
+                                >
+                                  <CheckCircleIcon color="primary" sx={{ fontSize: 32, bgcolor: 'white', borderRadius: '50%' }} />
+                                </Box>
+                              </Fade>
+                            )}
+                          </Card>
+                        </Grid>
+                      );
+                    })}
+                  </Grid>
+                  {hasMore && (
+                    <Box 
+                      sx={{ display: 'flex', justifyContent: 'center', mt: 4, mb: 2, py: 2 }}
+                      ref={observerRef}
+                    >
+                      {loadingMore ? (
+                        <CircularProgress size={32} />
+                      ) : (
+                        <Button variant="text" onClick={handleLoadMore} sx={{ opacity: 0.5 }}>
+                          Scroll for more
+                        </Button>
+                      )}
+                    </Box>
+                  )}
+                </>
               )}
             </Box>
           </Box>

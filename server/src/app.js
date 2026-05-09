@@ -61,15 +61,20 @@ if (process.env.NODE_ENV !== 'test') {
 // Use the same resolution strategy as media.service.js so both always point
 // to the same directory regardless of the working directory at startup.
 const UPLOADS_SERVE_DIR = path.resolve(process.env.UPLOAD_DIR || 'uploads');
-app.use('/uploads', (req, res, next) => {
-  res.setHeader('Cross-Origin-Resource-Policy', 'cross-origin');
-  next();
-});
-app.use('/uploads', express.static(UPLOADS_SERVE_DIR));
+app.use('/uploads', express.static(UPLOADS_SERVE_DIR, {
+  maxAge: '1y',
+  immutable: true,
+  setHeaders: (res) => {
+    res.setHeader('Cross-Origin-Resource-Policy', 'cross-origin');
+  }
+}));
+
 // Fallback: serve placeholder for any missing upload file
+// We return a 404 status code so that broken links are visible in dev tools/logs, 
+// while still providing a graceful image for the UI.
 app.use('/uploads', (req, res) => {
   res.setHeader('Cross-Origin-Resource-Policy', 'cross-origin');
-  res.sendFile(path.join(__dirname, '../public/no-image.png'));
+  res.status(404).sendFile(path.join(__dirname, '../public/no-image.png'));
 });
 
 // Serve public statically for robots.txt

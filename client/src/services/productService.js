@@ -44,3 +44,8 @@ export const bulkUpdateProducts = async (productIds, data) => {
   const response = await api.patch('/products/bulk', { productIds, data });
   return response.data;
 };
+
+export const getRelatedProducts = async (id, limit = 6) => {
+  const response = await api.get(`/products/id/${id}/related`, { params: { limit } });
+  return response.data;
+};

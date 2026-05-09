@@ -205,7 +205,10 @@ const PageEditPage = () => {
       return;
     }
 
-    setFormData((prev) => ({ ...prev, bannerUrl: media.url }));
+    if (!media || !media.length) return;
+    const selected = media[0];
+
+    setFormData((prev) => ({ ...prev, bannerUrl: selected.url }));
     setMediaPickerOpen(false);
   };
 

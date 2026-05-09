@@ -79,8 +79,8 @@ const isSaleActive = (product, referenceDate = new Date()) => {
   }
 
   const now = referenceDate instanceof Date ? referenceDate : new Date(referenceDate);
-  const saleStartAt = product.saleStartAt ? new Date(product.saleStartAt) : null;
-  const saleEndAt = product.saleEndAt ? new Date(product.saleEndAt) : null;
+  const saleStartAt = product.saleStartAt ? new Date(product.saleStartAt) : (product.saleLabelResolved?.startDate ? new Date(product.saleLabelResolved.startDate) : null);
+  const saleEndAt = product.saleEndAt ? new Date(product.saleEndAt) : (product.saleLabelResolved?.endDate ? new Date(product.saleLabelResolved.endDate) : null);
 
   if (saleStartAt && saleStartAt > now) return false;
   if (saleEndAt && saleEndAt < now) return false;
@@ -94,8 +94,8 @@ const getSaleStatus = (product, referenceDate = new Date()) => {
   }
 
   const now = referenceDate instanceof Date ? referenceDate : new Date(referenceDate);
-  const saleStartAt = product.saleStartAt ? new Date(product.saleStartAt) : null;
-  const saleEndAt = product.saleEndAt ? new Date(product.saleEndAt) : null;
+  const saleStartAt = product.saleStartAt ? new Date(product.saleStartAt) : (product.saleLabelResolved?.startDate ? new Date(product.saleLabelResolved.startDate) : null);
+  const saleEndAt = product.saleEndAt ? new Date(product.saleEndAt) : (product.saleLabelResolved?.endDate ? new Date(product.saleLabelResolved.endDate) : null);
 
   if (saleStartAt && saleStartAt > now) return 'scheduled';
   if (saleEndAt && saleEndAt < now) return 'expired';
@@ -166,13 +166,20 @@ const serializeProductPricing = (product, { adminView = false, features = {} } =
   if (!product) return product;
 
   const plain = typeof product.toJSON === 'function' ? product.toJSON() : { ...product };
+  
+  // Resolve label first because status/active checks depend on it for date fallback.
+  const saleLabelResolved = resolveSaleLabel(plain.saleLabel, labelPresets);
+  plain.saleLabelResolved = saleLabelResolved;
+
   const saleStatus = getSaleStatus(plain);
   const saleActive = saleStatus === 'active';
   const shouldExposeSaleMeta = adminView || saleStatus === 'active' || saleStatus === 'scheduled';
 
-  const saleLabelResolved = shouldExposeSaleMeta
-    ? resolveSaleLabel(plain.saleLabel, labelPresets)
-    : null;
+  // Effective dates for storefront — product override wins, label global dates as fallback.
+  const effectiveStartAt = plain.saleStartAt
+    || (saleLabelResolved?.startDate || null);
+  const effectiveEndAt = plain.saleEndAt
+    || (saleLabelResolved?.endDate || null);
 
   // Enforce server-side price-stripping if pricing is disabled (Mode-locked) or showPrice is disabled (Admin)
   if (!adminView && (features.pricing === false || features.showPrice === false)) {
@@ -212,13 +219,13 @@ const serializeProductPricing = (product, { adminView = false, features = {} } =
     saleStatus,
     discountPercent: getDiscountPercent(plain),
     savingsAmount: getSavingsAmount(plain),
-    saleLabelResolved,
+    saleLabelResolved: shouldExposeSaleMeta ? saleLabelResolved : null,
     ...(adminView
       ? {}
       : {
           salePrice:  shouldExposeSaleMeta ? plain.salePrice  : null,
-          saleStartAt: shouldExposeSaleMeta ? plain.saleStartAt : null,
-          saleEndAt:  shouldExposeSaleMeta ? plain.saleEndAt  : null,
+          saleStartAt: shouldExposeSaleMeta ? effectiveStartAt : null,
+          saleEndAt:  shouldExposeSaleMeta ? effectiveEndAt : null,
           saleLabel:  shouldExposeSaleMeta ? plain.saleLabel  : null,
         }),
   };

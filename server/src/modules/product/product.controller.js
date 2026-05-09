@@ -118,3 +118,13 @@ exports.bulkUpdate = async (req, res, next) => {
     next(err);
   }
 };
+
+exports.getRelated = async (req, res, next) => {
+  try {
+    const limit = Math.min(parseInt(req.query.limit) || 6, 12);
+    const products = await productService.getRelatedProducts(req.params.id, limit);
+    return success(res, products);
+  } catch (err) {
+    next(err);
+  }
+};

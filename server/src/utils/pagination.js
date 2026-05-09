@@ -34,6 +34,7 @@ const getPagingData = (data, totalItems, page, limit) => {
     data,
     totalPages,
     currentPage,
+    limit: parseInt(limit, 10),
   };
 };
 

@@ -47,6 +47,10 @@ module.exports = (sequelize, DataTypes) => {
             type: DataTypes.BOOLEAN,
             defaultValue: false,
         },
+        gstin: {
+            type: DataTypes.STRING(15),
+            allowNull: true,
+        },
     }, {
         tableName: 'addresses',
         timestamps: true,

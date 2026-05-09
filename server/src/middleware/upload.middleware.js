@@ -1,24 +1,8 @@
 'use strict';
 
 const multer = require('multer');
-const path = require('path');
 const AppError = require('../utils/AppError');
-const crypto = require('crypto');
 
-// Get upload directory from env or default
-const UPLOAD_DIR = process.env.UPLOAD_DIR || 'uploads';
-
-const storage = multer.diskStorage({
-  destination: function (req, file, cb) {
-    cb(null, UPLOAD_DIR);
-  },
-  filename: function (req, file, cb) {
-    // Generate UUID or random string instead of original name
-    const ext = path.extname(file.originalname);
-    const id = crypto.randomUUID();
-    cb(null, `${id}${ext}`);
-  }
-});
 
 const fileFilter = (req, file, cb) => {
   // Check basic extension mapping first, but we'll use file-type inside the media service for true validation
@@ -31,12 +15,13 @@ const fileFilter = (req, file, cb) => {
   }
 };
 
-const upload = multer({
-  storage: storage,
+const memoryUpload = multer({
+  storage: multer.memoryStorage(),
   limits: {
     fileSize: (parseInt(process.env.MAX_FILE_SIZE_MB) || 5) * 1024 * 1024 // default 5MB
   },
   fileFilter: fileFilter
 });
 
-module.exports = { upload };
+module.exports = { memoryUpload };
+

@@ -20,8 +20,24 @@ module.exports = (sequelize, DataTypes) => {
             allowNull: false,
         },
         size: {
-            type: DataTypes.INTEGER,
+            type: DataTypes.BIGINT,
             allowNull: false,
+        },
+        originalName: {
+            type: DataTypes.STRING(255),
+            allowNull: true,
+        },
+        alt: {
+            type: DataTypes.STRING(255),
+            allowNull: true,
+        },
+        description: {
+            type: DataTypes.TEXT,
+            allowNull: true,
+        },
+        caption: {
+            type: DataTypes.STRING(255),
+            allowNull: true,
         },
         provider: {
             type: DataTypes.STRING(50),

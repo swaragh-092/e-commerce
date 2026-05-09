@@ -3,7 +3,7 @@ import {
   Box, Typography, Button, Chip, IconButton, TextField,
   FormControl, InputLabel, Select, MenuItem, Stack, Tooltip,
   Avatar, Dialog, DialogTitle, DialogContent, DialogActions,
-  DialogContentText, InputAdornment, Paper, Switch,
+  DialogContentText, InputAdornment, Paper, Switch, FormHelperText,
 } from '@mui/material';
 import { DataGrid } from '@mui/x-data-grid';
 import {
@@ -467,7 +467,7 @@ const ProductsManagePage = () => {
     editSalePriceValue >= editPriceValue
   );
   const hasInvalidQuantity = cartEnabled && editDialog.open && (Number.isNaN(Number(editDialog.quantity)) || Number(editDialog.quantity) < 0);
-  const hasInvalidSaleDates = editDialog.open && editDialog.saleEnabled && editDialog.saleStartAt && editDialog.saleEndAt && new Date(editDialog.saleEndAt) <= new Date(editDialog.saleStartAt);
+  const hasInvalidSaleDates = Boolean(editDialog.open && editDialog.saleEnabled && editDialog.saleStartAt && editDialog.saleEndAt && new Date(editDialog.saleEndAt) <= new Date(editDialog.saleStartAt));
   const bulkSaleValue = Number(bulkSaleDialog.value);
   const hasInvalidBulkSale = bulkSaleDialog.mode === 'apply' && (
     !Number.isFinite(bulkSaleValue) ||
@@ -1183,6 +1183,17 @@ const ProductsManagePage = () => {
                       </MenuItem>
                     ))}
                   </Select>
+                  {(() => {
+                    const selected = saleLabels.find(l => l.id === editDialog.saleLabel);
+                    if (selected && (selected.startDate || selected.endDate)) {
+                      return (
+                        <FormHelperText sx={{ color: 'primary.main', fontWeight: 600 }}>
+                          Global schedule: {selected.startDate ? new Date(selected.startDate).toLocaleDateString() : 'Now'} - {selected.endDate ? new Date(selected.endDate).toLocaleDateString() : 'Indefinite'}
+                        </FormHelperText>
+                      );
+                    }
+                    return null;
+                  })()}
                 </FormControl>
                 {sales.allowScheduling !== false && (
                   <>
@@ -1314,6 +1325,17 @@ const ProductsManagePage = () => {
                     </MenuItem>
                   ))}
                 </Select>
+                {(() => {
+                  const selected = saleLabels.find(l => l.id === bulkSaleDialog.saleLabel);
+                  if (selected && (selected.startDate || selected.endDate)) {
+                    return (
+                      <FormHelperText sx={{ color: 'primary.main', fontWeight: 600 }}>
+                        Global schedule: {selected.startDate ? new Date(selected.startDate).toLocaleDateString() : 'Now'} - {selected.endDate ? new Date(selected.endDate).toLocaleDateString() : 'Indefinite'}
+                      </FormHelperText>
+                    );
+                  }
+                  return null;
+                })()}
               </FormControl>
               {sales.allowScheduling !== false && (
                 <>

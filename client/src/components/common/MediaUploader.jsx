@@ -1,4 +1,4 @@
-import React, { useCallback, useState } from 'react';
+import React, { useCallback, useState, useRef } from 'react';
 import { 
   Box, 
   Typography, 
@@ -11,38 +11,50 @@ import UploadIcon from '@mui/icons-material/CloudUpload';
 import CloseIcon from '@mui/icons-material/Close';
 import DeleteIcon from '@mui/icons-material/Delete';
 import SendIcon from '@mui/icons-material/Send';
-import api from '../../services/api';
+import { mediaService } from '../../services/mediaService';
 import { useNotification } from '../../context/NotificationContext';
 
-const MediaUploader = ({ onUploadSuccess, multiple = true, autoUpload = true }) => {
+const ALLOWED_MIMES = ['image/jpeg', 'image/png', 'image/webp', 'image/gif'];
+const MAX_FILE_SIZE = 5 * 1024 * 1024; // 5MB
+
+const MediaUploader = ({ onUploadSuccess, onAllUploadsComplete, multiple = true, autoUpload = true }) => {
   const [uploading, setUploading] = useState(false);
   const [selectedFiles, setSelectedFiles] = useState([]);
+  const abortControllerRef = useRef(null);
   const { notify } = useNotification();
 
-  const handleUpload = async (file) => {
-    if (!['image/jpeg', 'image/png', 'image/webp', 'image/gif'].includes(file.type)) {
+  const handleUpload = async (file, signal) => {
+    if (!ALLOWED_MIMES.includes(file.type)) {
       notify(`Invalid file type for ${file.name}. JPEG, PNG, WebP, or GIF only.`, 'error');
-      return;
+      return null;
     }
-    if (file.size > 5 * 1024 * 1024) {
+    if (file.size > MAX_FILE_SIZE) {
       notify(`File ${file.name} is too large. Max 5MB.`, 'error');
-      return;
+      return null;
     }
-
-    const formData = new FormData();
-    formData.append('file', file);
 
     try {
-      const res = await api.post('/media/upload', formData, {
-        headers: { 'Content-Type': 'multipart/form-data' },
-      });
-      if (res.data?.success && res.data?.data?.media) {
-        onUploadSuccess(res.data.data.media);
+      const res = await mediaService.uploadMedia(file, signal);
+      if (res?.success && res?.data?.media) {
+        onUploadSuccess(res.data.media);
+        return res.data.media;
       } else {
         notify(`Upload failed for ${file.name}: unexpected response.`, 'error');
+        return null;
       }
     } catch (err) {
+      if (err.name === 'AbortError' || err.code === 'ERR_CANCELED') {
+        return null; // Silent return on cancel
+      }
       notify(`Upload failed for ${file.name}: ` + (err.response?.data?.error?.message || err.message), 'error');
+      return null;
+    }
+  };
+
+  const cancelUpload = () => {
+    if (abortControllerRef.current) {
+      abortControllerRef.current.abort();
+      notify('Upload cancelled.', 'info');
     }
   };
 
@@ -54,10 +66,14 @@ const MediaUploader = ({ onUploadSuccess, multiple = true, autoUpload = true }) 
 
       if (autoUpload) {
         setUploading(true);
-        for (const file of newFiles) {
-          await handleUpload(file);
+        abortControllerRef.current = new AbortController();
+        try {
+          await Promise.all(newFiles.map(file => handleUpload(file, abortControllerRef.current.signal)));
+        } finally {
+          setUploading(false);
+          abortControllerRef.current = null;
         }
-        setUploading(false);
+        if (onAllUploadsComplete) onAllUploadsComplete();
       } else {
         setSelectedFiles((prev) => [...prev, ...newFiles]);
       }
@@ -68,13 +84,16 @@ const MediaUploader = ({ onUploadSuccess, multiple = true, autoUpload = true }) 
   );
 
   const startManualUpload = async () => {
-    if (selectedFiles.length === 0) return;
     setUploading(true);
-    for (const file of selectedFiles) {
-      await handleUpload(file);
+    abortControllerRef.current = new AbortController();
+    try {
+      await Promise.all(selectedFiles.map(file => handleUpload(file, abortControllerRef.current.signal)));
+    } finally {
+      setUploading(false);
+      abortControllerRef.current = null;
     }
-    setUploading(false);
     setSelectedFiles([]);
+    if (onAllUploadsComplete) onAllUploadsComplete();
   };
 
   const removeFile = (index) => {
@@ -105,7 +124,7 @@ const MediaUploader = ({ onUploadSuccess, multiple = true, autoUpload = true }) 
     >
       <input
         type="file"
-        accept="image/jpeg,image/png,image/webp,image/gif"
+        accept={ALLOWED_MIMES.join(',')}
         onChange={onDrop}
         style={{ display: 'none' }}
         multiple={multiple}
@@ -113,11 +132,23 @@ const MediaUploader = ({ onUploadSuccess, multiple = true, autoUpload = true }) 
       />
 
       {uploading ? (
-        <Stack spacing={2} alignItems="center">
-          <CircularProgress size={32} />
+        <Stack spacing={1.5} alignItems="center">
+          <CircularProgress size={32} thickness={5} />
           <Typography variant="body2" color="text.secondary" fontWeight={600}>
             Uploading images…
           </Typography>
+          <Button 
+            size="small" 
+            color="error" 
+            onClick={(e) => {
+              e.preventDefault();
+              e.stopPropagation();
+              cancelUpload();
+            }}
+            sx={{ fontWeight: 600 }}
+          >
+            Cancel Upload
+          </Button>
         </Stack>
       ) : (
         <>
@@ -126,7 +157,7 @@ const MediaUploader = ({ onUploadSuccess, multiple = true, autoUpload = true }) 
             {multiple ? 'Drop images here or click to select' : 'Drop image here or click to select'}
           </Typography>
           <Typography variant="caption" color="text.secondary">
-            JPEG, PNG, WEBP, GIF (Max 5MB each)
+            {ALLOWED_MIMES.map(m => m.split('/')[1].toUpperCase()).join(', ')} (Max 5MB each)
           </Typography>
         </>
       )}

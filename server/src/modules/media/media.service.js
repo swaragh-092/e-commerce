@@ -7,17 +7,11 @@ const { Media } = require('../index');
 const { getPagination, getPagingData } = require('../../utils/pagination');
 const AppError = require('../../utils/AppError');
 
-// Respect UPLOAD_DIR env var — works in both local dev and Docker
-const UPLOADS_DIR = path.resolve(process.env.UPLOAD_DIR || 'uploads');
+const logger = require('../../utils/logger');
 
-// Create directories if they don't exist
-const ensureDirs = async () => {
-  await fs.mkdir(UPLOADS_DIR, { recursive: true });
-  await fs.mkdir(path.join(UPLOADS_DIR, 'thumbnails'), { recursive: true });
-  await fs.mkdir(path.join(UPLOADS_DIR, 'medium'), { recursive: true });
-  await fs.mkdir(path.join(UPLOADS_DIR, 'large'), { recursive: true });
-};
-ensureDirs();
+const { getStorageProvider } = require('../../utils/storage');
+
+const storage = getStorageProvider();
 
 exports.uploadMedia = async (file) => {
   if (!file) throw new AppError('VALIDATION_ERROR', 400, 'No file provided');
@@ -35,66 +29,99 @@ exports.uploadMedia = async (file) => {
   const uniqueId = uuidv4();
   const ext = typeInfo.ext;
   const filename = `${uniqueId}.${ext}`;
+  const webpFilename = `${uniqueId}.webp`;
 
-  const originalPath = path.join(UPLOADS_DIR, filename);
-  await fs.writeFile(originalPath, file.buffer);
+  // Save original
+  const mediaUrl = await storage.save(file.buffer, filename);
 
-  // Create resized versions using sharp
-  await sharp(file.buffer)
-    .resize({ width: 150, withoutEnlargement: true })
-    .toFile(path.join(UPLOADS_DIR, 'thumbnails', filename));
+  // Create resized versions using sharp in parallel
+  // Convert JPEG/PNG to WebP for optimized storage/bandwidth
+  const shouldConvertToWebp = ['image/jpeg', 'image/png'].includes(typeInfo.mime);
+  const targetFilename = shouldConvertToWebp ? webpFilename : filename;
 
-  await sharp(file.buffer)
-    .resize({ width: 600, withoutEnlargement: true })
-    .toFile(path.join(UPLOADS_DIR, 'medium', filename));
+  const resizeAndSave = async (width, folder) => {
+    let pipeline = sharp(file.buffer).resize({ width, withoutEnlargement: true });
+    if (shouldConvertToWebp) {
+      pipeline = pipeline.toFormat('webp', { quality: 80 });
+    }
+    const buffer = await pipeline.toBuffer();
+    return storage.save(buffer, targetFilename, folder);
+  };
 
-  await sharp(file.buffer)
-    .resize({ width: 1200, withoutEnlargement: true })
-    .toFile(path.join(UPLOADS_DIR, 'large', filename));
-
-  const mediaUrl = `/uploads/${filename}`;
+  await Promise.all([
+    resizeAndSave(150, 'thumbnails'),
+    resizeAndSave(600, 'medium'),
+    resizeAndSave(1200, 'large')
+  ]);
 
   const media = await Media.create({
     url: mediaUrl,
     filename: filename,
+    originalName: file.originalname,
     mimeType: typeInfo.mime,
     size: file.size,
-    provider: 'local',
+    provider: process.env.STORAGE_PROVIDER || 'local',
   });
 
   return media;
 };
 
-exports.listMedia = async (page, limit) => {
+exports.listMedia = async (page, limit, sortBy = 'createdAt', sortDir = 'DESC') => {
   const { limit: queryLimit, offset } = getPagination(page, limit);
+  
+  // Map frontend sort names to database columns
+  const sortMap = {
+    date: 'created_at',
+    size: 'size',
+    name: 'original_name',
+    filename: 'filename',
+    createdAt: 'created_at'
+  };
+
+  const orderCol = sortMap[sortBy] || 'created_at';
+  const orderDir = sortDir.toUpperCase() === 'ASC' ? 'ASC' : 'DESC';
+
   const { rows, count } = await Media.findAndCountAll({
     limit: queryLimit,
     offset,
-    order: [['createdAt', 'DESC']],
+    order: [[orderCol, orderDir]],
   });
   return getPagingData(rows, count, page, queryLimit);
 };
 
 exports.deleteMedia = async (id) => {
+  const mediaRecord = await Media.findByPk(id);
+  if (!mediaRecord) throw new AppError('NOT_FOUND', 404, 'Media not found');
+
+  const filename = mediaRecord.filename;
+  const webpFilename = filename.split('.').slice(0, -1).join('.') + '.webp';
+
+  // Delete original
+  await storage.delete(filename);
+
+  // Delete resized versions (try both original ext and webp)
+  const folders = ['thumbnails', 'medium', 'large'];
+  for (const folder of folders) {
+    await storage.delete(filename, folder);
+    await storage.delete(webpFilename, folder);
+  }
+
+  await mediaRecord.destroy();
+  return true;
+};
+
+exports.updateMedia = async (id, data) => {
   const media = await Media.findByPk(id);
   if (!media) throw new AppError('NOT_FOUND', 404, 'Media not found');
 
-  const filename = media.filename;
+  const { alt, description, caption, originalName } = data;
+  
+  await media.update({ 
+    alt, 
+    description, 
+    caption,
+    originalName: originalName || media.originalName
+  });
 
-  const deleteFileSafe = async (filePath) => {
-    try {
-      await fs.access(filePath);
-      await fs.unlink(filePath);
-    } catch (e) {
-      /* ignore */
-    }
-  };
-
-  await deleteFileSafe(path.join(UPLOADS_DIR, filename));
-  await deleteFileSafe(path.join(UPLOADS_DIR, 'thumbnails', filename));
-  await deleteFileSafe(path.join(UPLOADS_DIR, 'medium', filename));
-  await deleteFileSafe(path.join(UPLOADS_DIR, 'large', filename));
-
-  await media.destroy();
-  return true;
+  return media;
 };

@@ -224,6 +224,7 @@ const CustomerDetailPage = () => {
                         </Typography>
                         <Typography variant="body2" color="text.secondary">{address.country}</Typography>
                         {address.phone && <Typography variant="body2" color="text.secondary">{address.phone}</Typography>}
+                        {address.gstin && <Typography variant="body2" color="text.secondary">GSTIN: {address.gstin}</Typography>}
                       </Box>
                     </Grid>
                   ))}

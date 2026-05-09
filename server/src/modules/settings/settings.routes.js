@@ -13,7 +13,7 @@ const {
 const settingsController = require('./settings.controller');
 const saleLabelController = require('./saleLabel.controller');
 const { PERMISSIONS } = require('../../config/permissions');
-const { idParamSchema } = require('../../utils/common.validation');
+const { idParamSchema, stringIdParamSchema } = require('../../utils/common.validation');
 
 
 // ─── Sale Label routes (must come BEFORE the /:group wildcard) ───────────────
@@ -38,7 +38,7 @@ router.put('/sale-labels',
 router.patch('/sale-labels/:id',
   authenticate,
   authorizePermissions(PERMISSIONS.SETTINGS_MANAGE),
-  validate(idParamSchema, 'params'),
+  validate(stringIdParamSchema, 'params'),
   validate(updateSaleLabelBodySchema),
   saleLabelController.update
 );
@@ -47,7 +47,7 @@ router.patch('/sale-labels/:id',
 router.delete('/sale-labels/:id',
   authenticate,
   authorizePermissions(PERMISSIONS.SETTINGS_MANAGE),
-  validate(idParamSchema, 'params'),
+  validate(stringIdParamSchema, 'params'),
   saleLabelController.remove
 );
 

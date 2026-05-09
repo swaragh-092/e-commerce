@@ -154,6 +154,7 @@ const validate = (formData) => {
 const toDateTimeLocal = (value) => {
   if (!value) return '';
   const date = new Date(value);
+  if (isNaN(date.getTime())) return '';
   const offset = date.getTimezoneOffset();
   const localDate = new Date(date.getTime() - (offset * 60 * 1000));
   return localDate.toISOString().slice(0, 16);
@@ -560,6 +561,24 @@ const ProductEditPage = () => {
                         ))}
                       </Select>
                       <FormHelperText>
+                        {(() => {
+                          const selected = saleLabels.find(l => l.id === formData.saleLabel);
+                          if (selected && (selected.startDate || selected.endDate)) {
+                            const start = selected.startDate ? new Date(selected.startDate) : null;
+                            const end = selected.endDate ? new Date(selected.endDate) : null;
+                            const isValidStart = start && !isNaN(start.getTime());
+                            const isValidEnd = end && !isNaN(end.getTime());
+
+                            if (isValidStart || isValidEnd) {
+                              return (
+                                <Typography component="div" variant="caption" color="primary.main" fontWeight={700} display="block">
+                                  Global schedule: {isValidStart ? start.toLocaleDateString() : 'Now'} - {isValidEnd ? end.toLocaleDateString() : 'Indefinite'}
+                                </Typography>
+                              );
+                            }
+                          }
+                          return null;
+                        })()}
                         {!formData.salePrice
                           ? 'Add a sale price to enable scheduling.'
                           : 'Select a predefined sale label from your catalog.'}

@@ -12,6 +12,10 @@ const idParamSchema = Joi.object({
     id: uuidSchema,
 });
 
+const stringIdParamSchema = Joi.object({
+    id: Joi.string().required(),
+});
+
 const attrIdParamSchema = Joi.object({
     attrId: uuidSchema,
 });
@@ -66,6 +70,7 @@ const slugParamSchema = Joi.object({
 module.exports = {
     uuidSchema,
     idParamSchema,
+    stringIdParamSchema,
     attrIdParamSchema,
     valueIdParamSchema,
     variantIdParamSchema,

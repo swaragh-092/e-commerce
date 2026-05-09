@@ -614,8 +614,9 @@ const CategoriesPage = () => {
     };
 
     const handleMediaSelect = (media) => {
-        if (!media) return;
-        setFormData((f) => ({ ...f, image: media.url }));
+        if (!media || !media.length) return;
+        const selected = media[0];
+        setFormData((f) => ({ ...f, image: selected.url }));
         setMediaPickerOpen(false);
     };
 

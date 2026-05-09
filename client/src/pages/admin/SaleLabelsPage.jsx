@@ -32,6 +32,15 @@ import { useNotification } from '../../context/NotificationContext';
 import { useAuth } from '../../hooks/useAuth';
 import { PERMISSIONS } from '../../utils/permissions';
 
+const toDateTimeLocal = (value) => {
+  if (!value) return '';
+  const date = new Date(value);
+  if (isNaN(date.getTime())) return '';
+  const offset = date.getTimezoneOffset();
+  const localDate = new Date(date.getTime() - (offset * 60 * 1000));
+  return localDate.toISOString().slice(0, 16);
+};
+
 const SaleLabelsPage = () => {
   const [labels, setLabels] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -44,6 +53,8 @@ const SaleLabelsPage = () => {
     name: '',
     color: '#000000',
     isActive: true,
+    startDate: '',
+    endDate: '',
   });
 
   const { notify } = useNotification();
@@ -77,6 +88,8 @@ const SaleLabelsPage = () => {
         name: label.name,
         color: label.color || '#000000',
         isActive: label.isActive ?? true,
+        startDate: toDateTimeLocal(label.startDate),
+        endDate: toDateTimeLocal(label.endDate),
       });
     } else {
       setEditingId(null);
@@ -85,6 +98,8 @@ const SaleLabelsPage = () => {
         name: '',
         color: '#EF4444',
         isActive: true,
+        startDate: '',
+        endDate: '',
       });
     }
     setOpen(true);
@@ -128,6 +143,8 @@ const SaleLabelsPage = () => {
           name: form.name,
           color: form.color,
           isActive: form.isActive,
+          startDate: form.startDate || null,
+          endDate: form.endDate || null,
         });
         notify('Sale label updated successfully.', 'success');
       } else {
@@ -136,6 +153,8 @@ const SaleLabelsPage = () => {
           name: form.name,
           color: form.color,
           isActive: form.isActive,
+          startDate: form.startDate || null,
+          endDate: form.endDate || null,
         });
         notify('Sale label created successfully.', 'success');
       }
@@ -258,6 +277,11 @@ const SaleLabelsPage = () => {
                           <Typography variant="caption" color="text.secondary" sx={{ display: 'block' }}>
                             ID: {label.id}
                           </Typography>
+                          {(label.startDate || label.endDate) && (
+                            <Typography variant="caption" color="primary.main" sx={{ display: 'block', fontWeight: 600 }}>
+                              Schedule: {label.startDate ? new Date(label.startDate).toLocaleDateString() : 'Now'} - {label.endDate ? new Date(label.endDate).toLocaleDateString() : 'Indefinite'}
+                            </Typography>
+                          )}
                         </Box>
 
                         <Box sx={{ display: 'flex', alignItems: 'center', width: 120 }}>
@@ -378,6 +402,33 @@ const SaleLabelsPage = () => {
                   label="Active"
                 />
               </Box>
+            </Grid>
+            <Grid item xs={12} sm={6}>
+              <TextField
+                fullWidth
+                label="Global Start Date"
+                name="startDate"
+                type="datetime-local"
+                value={form.startDate}
+                onChange={handleChange}
+                InputLabelProps={{ shrink: true }}
+                size="small"
+                helperText="Optional: Label applies automatically from this date."
+              />
+            </Grid>
+            <Grid item xs={12} sm={6}>
+              <TextField
+                fullWidth
+                label="Global End Date"
+                name="endDate"
+                type="datetime-local"
+                value={form.endDate}
+                onChange={handleChange}
+                InputLabelProps={{ shrink: true }}
+                size="small"
+                error={Boolean(form.startDate && form.endDate && new Date(form.endDate) <= new Date(form.startDate))}
+                helperText="Optional: Label expires automatically after this date."
+              />
             </Grid>
           </Grid>
         </DialogContent>

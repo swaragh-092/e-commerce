@@ -170,7 +170,6 @@ const SettingsPage = () => {
   const [templateSaving, setTemplateSaving] = useState({});
   const [templateTestEmail, setTemplateTestEmail] = useState('');
   const [templateTesting, setTemplateTesting] = useState({});
-  const [templateExpanded, setTemplateExpanded] = useState(null);
   const [mediaPickerOpen, setMediaPickerOpen] = useState(false);
   const [mediaPickerKey, setMediaPickerKey] = useState(null);
   const { notify } = useNotification();
@@ -329,9 +328,10 @@ const SettingsPage = () => {
   );
 
   const handleMediaSelect = (media) => {
-    if (!media) return;
+    if (!media || !media.length) return;
+    const selected = media[0];
     if (mediaPickerKey) {
-      set(mediaPickerKey, media.url);
+      set(mediaPickerKey, selected.url);
     }
   };
 

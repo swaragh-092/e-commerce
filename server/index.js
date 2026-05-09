@@ -35,6 +35,13 @@ const startServer = async () => {
     // Start background jobs
     startJobs();
 
+    // Ensure storage directories exist if using local storage
+    const { getStorageProvider } = require('./src/utils/storage');
+    const storage = getStorageProvider();
+    if (typeof storage.ensureDirs === 'function') {
+      await storage.ensureDirs();
+    }
+
     // Log pool stats periodically in production
     const logPoolStats = () => {
       try {

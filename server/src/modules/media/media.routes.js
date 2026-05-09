@@ -5,21 +5,18 @@ const mediaController = require('./media.controller');
 const { authenticate } = require('../../middleware/auth.middleware');
 const { authorizePermissions } = require('../../middleware/role.middleware');
 const { auditLog } = require('../audit/audit.middleware');
-const multer = require('multer');
+const { memoryUpload } = require('../../middleware/upload.middleware');
+const { mediaUploadLimiter } = require('../../middleware/rateLimiter.middleware');
 const { PERMISSIONS } = require('../../config/permissions');
 const { validate } = require('../../middleware/validate.middleware');
 const { idParamSchema } = require('../../utils/common.validation');
-
-
-const upload = multer({
-    storage: multer.memoryStorage(),
-    limits: { fileSize: 5 * 1024 * 1024 }
-});
+const { updateMediaSchema, listMediaSchema } = require('./media.validation');
 
 router.post('/upload',
     authenticate,
     authorizePermissions(PERMISSIONS.MEDIA_UPLOAD),
-    upload.single('file'),
+    mediaUploadLimiter,
+    memoryUpload.single('file'),
     auditLog('Media'),
     mediaController.upload
 );
@@ -27,7 +24,17 @@ router.post('/upload',
 router.get('/',
     authenticate,
     authorizePermissions(PERMISSIONS.MEDIA_READ),
+    validate(listMediaSchema, 'query'),
     mediaController.list
+);
+
+router.patch('/:id',
+    authenticate,
+    authorizePermissions(PERMISSIONS.MEDIA_UPDATE),
+    validate(idParamSchema, 'params'),
+    validate(updateMediaSchema),
+    auditLog('Media'),
+    mediaController.update
 );
 
 router.delete('/:id',
@@ -37,6 +44,5 @@ router.delete('/:id',
     auditLog('Media'),
     mediaController.delete
 );
-
 
 module.exports = router;

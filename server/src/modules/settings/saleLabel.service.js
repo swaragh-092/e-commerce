@@ -38,13 +38,22 @@ const validateLabelShape = (label, index) => {
   if (label.color && !/^#([0-9A-Fa-f]{3}|[0-9A-Fa-f]{6})$/.test(label.color)) {
     throw new AppError('VALIDATION_ERROR', 400, `Label at index ${index} has an invalid "color" (must be hex, e.g. #FF0000)`);
   }
+  if (label.startDate && isNaN(Date.parse(label.startDate))) {
+    throw new AppError('VALIDATION_ERROR', 400, `Label at index ${index} has an invalid "startDate"`);
+  }
+  if (label.endDate && isNaN(Date.parse(label.endDate))) {
+    throw new AppError('VALIDATION_ERROR', 400, `Label at index ${index} has an invalid "endDate"`);
+  }
+  if (label.startDate && label.endDate && new Date(label.endDate) <= new Date(label.startDate)) {
+    throw new AppError('VALIDATION_ERROR', 400, `Label at index ${index}: "endDate" must be after "startDate"`);
+  }
 };
 
 // ─── Public API ───────────────────────────────────────────────────────────────
 
 /**
  * Returns all sale label presets. Uses an in-memory cache.
- * @returns {Array<{id, name, color, priority, isActive}>}
+ * @returns {Array<{id, name, color, priority, isActive, startDate, endDate}>}
  */
 const getSaleLabels = async () => {
   const now = Date.now();
@@ -75,6 +84,8 @@ const replaceSaleLabels = async (labels, actingUserId) => {
       color:    label.color || '#EF4444',
       priority: Number.isFinite(label.priority) ? label.priority : i,
       isActive: label.isActive !== false,
+      startDate: label.startDate ? new Date(label.startDate).toISOString() : null,
+      endDate:   label.endDate ? new Date(label.endDate).toISOString() : null,
     };
   });
 
@@ -132,6 +143,8 @@ const createSaleLabel = async (labelData, actingUserId) => {
     color:    labelData.color || '#EF4444',
     priority: Number.isFinite(labelData.priority) ? labelData.priority : labels.length,
     isActive: labelData.isActive !== false,
+    startDate: labelData.startDate ? new Date(labelData.startDate).toISOString() : null,
+    endDate:   labelData.endDate ? new Date(labelData.endDate).toISOString() : null,
   };
 
   const updated = [...labels, newLabel];
@@ -160,6 +173,8 @@ const updateSaleLabel = async (id, patch, actingUserId) => {
       color:    patch.color    ? patch.color                                 : label.color,
       priority: Number.isFinite(patch.priority) ? patch.priority             : label.priority,
       isActive: patch.isActive !== undefined    ? Boolean(patch.isActive)    : label.isActive,
+      startDate: patch.startDate !== undefined  ? (patch.startDate ? new Date(patch.startDate).toISOString() : null) : label.startDate,
+      endDate:   patch.endDate   !== undefined  ? (patch.endDate ? new Date(patch.endDate).toISOString() : null)     : label.endDate,
     };
   });
 

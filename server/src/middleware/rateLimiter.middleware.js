@@ -30,6 +30,7 @@ const publicApiLimiter = createLimiter(15, 500, 'Too many requests to public end
 
 
 const bulkOperationLimiter = createLimiter(1, 5, 'Too many bulk operations, please try again in a minute');
+const mediaUploadLimiter = createLimiter(15, 50, 'Too many uploads, please try again after 15 minutes');
 
 module.exports = {
   loginLimiter,
@@ -40,5 +41,7 @@ module.exports = {
   globalLimiter,
   publicApiLimiter,
   bulkOperationLimiter,
+  mediaUploadLimiter,
 };
+
 

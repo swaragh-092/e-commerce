@@ -28,6 +28,7 @@ import {
 } from '../../utils/variantPricing';
 import { getVariantOptionLabel } from '../../utils/variantOptions';
 import EnquiryModal from '../../components/storefront/EnquiryModal';
+import RelatedProducts from '../../components/product/RelatedProducts';
 
 const ProductDetailPage = () => {
     const { slug } = useParams();
@@ -555,6 +556,8 @@ const ProductDetailPage = () => {
                     <ReviewSection slug={product.slug} productId={product.id} />
                 </Grid>
             </Grid>
+
+            <RelatedProducts productId={product.id} />
 
             <EnquiryModal
                 open={enquiryOpen}
