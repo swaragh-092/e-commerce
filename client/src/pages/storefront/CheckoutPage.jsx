@@ -455,7 +455,6 @@ const CheckoutPage = () => {
                 navigate(`/payment/${orderId}`);
             }
 
-            const orderId = res.order?.id;
             if (!isBuyNowFlow) await clearCart();
             if (paymentMethod === 'cod') navigate('/payment/success', { state: { orderId, isCod: true } });
             else navigate(`/payment/${orderId}`);
