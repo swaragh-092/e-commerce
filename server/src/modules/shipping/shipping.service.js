@@ -786,6 +786,8 @@ const validateQuoteForOrder = async (userId, payload) => {
 };
 
 module.exports = {
+    computePackageDimensions,
+    computeChargeableWeight,
     createQuote,
     validateQuoteForOrder,
     buildCheckoutContext,

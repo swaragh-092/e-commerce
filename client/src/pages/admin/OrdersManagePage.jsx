@@ -336,11 +336,12 @@ const OrdersManagePage = () => {
         sortable: false,
         renderCell: ({ row }) => {
           const paymentStatus = row.Payment?.status;
-          const hasSettledPayment = ['completed', 'cod_collected'].includes(paymentStatus);
+          const shippingStatus = row.orderShippingStatus || row.shipmentStatus || 'not_shipped';
+          const hasSettledPayment = ['paid_online', 'paid_cod', 'completed', 'cod_collected'].includes(paymentStatus);
           const canCollectCod = canUpdateStatus
             && row.paymentMethod === 'cod'
-            && ['pending_cod', 'processing'].includes(row.status)
-            && (paymentStatus || 'pending') === 'pending';
+            && shippingStatus === 'delivered'
+            && ['pending_cod', 'pending'].includes(paymentStatus || 'pending_cod');
           const canRefund = canRefundOrders && isOrderRefundableStatus(row.status) && hasSettledPayment;
 
           return (

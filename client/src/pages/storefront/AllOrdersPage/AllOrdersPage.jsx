@@ -36,15 +36,18 @@ import {
 } from '@mui/icons-material';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import PageSEO from '../../../components/common/PageSEO';
-import { orderService } from '../../services/orderService';
-import { useCurrency, useFeature } from '../../hooks/useSettings';
-import { getOrderStatusColor, getOrderStatusLabel } from '../../utils/orderWorkflow';
-import { getApiErrorMessage } from '../../utils/apiErrors';
-import { useNotification } from '../../context/NotificationContext';
+
+import { userService } from '../../../services/userService';
+import { useCurrency, useFeature } from '../../../hooks/useSettings';
+import { getOrderStatusColor, getOrderStatusLabel } from '../../../utils/orderWorkflow';
+import { getApiErrorMessage } from '../../../utils/apiErrors';
+import { useNotification } from '../../../context/NotificationContext';
+
 
 // ─── Constants ───────────────────────────────────────────────────────────────
 
 const ORDER_STATUSES = [
+    { value: 'pending_payment', label: 'Pending payment' },
     { value: 'placed',     label: 'Placed' },
     { value: 'confirmed',  label: 'Confirmed' },
     { value: 'processing', label: 'Processing' },
@@ -65,11 +68,13 @@ const LIMIT = 10;
 // ─── Status config ────────────────────────────────────────────────────────────
 
 const STATUS_CONFIG = {
+    pending_payment: { icon: ProcessingIcon, bg: '#FFFBEB', color: '#B45309', border: '#FDE68A' },
     placed:     { icon: PlacedIcon,     bg: '#FFF7ED', color: '#C2410C', border: '#FED7AA' },
     confirmed:  { icon: ConfirmedIcon,  bg: '#F0FDF4', color: '#15803D', border: '#BBF7D0' },
     processing: { icon: ProcessingIcon, bg: '#EFF6FF', color: '#1D4ED8', border: '#BFDBFE' },
     shipped:    { icon: ShippingIcon,   bg: '#F5F3FF', color: '#6D28D9', border: '#DDD6FE' },
     delivered:  { icon: CheckCircleIcon,bg: '#F0FDF4', color: '#15803D', border: '#BBF7D0' },
+    closed:     { icon: CheckCircleIcon,bg: '#052E16', color: '#BBF7D0', border: '#166534' },
     cancelled:  { icon: CancelIcon,     bg: '#FFF1F2', color: '#BE123C', border: '#FECDD3' },
 };
 

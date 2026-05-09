@@ -1,11 +1,13 @@
 'use strict';
 const crypto = require('crypto');
-const { sequelize, Payment, Order, WebhookEvent, Setting, User } = require('../index');
+const { Op } = require('sequelize');
+const { sequelize, Payment, Order, WebhookEvent, Setting, User, Cart, Coupon, CouponUsage, OrderHistory, OrderStatusHistory, Shipment } = require('../index');
 const { encrypt, decrypt } = require('../../utils/crypto');
 const AppError = require('../../utils/AppError');
 const AuditService = require('../audit/audit.service');
 const { ACTIONS, ENTITIES } = require('../../config/constants');
 const logger = require('../../utils/logger');
+const NotificationService = require('../notification/notification.service');
 
 let Razorpay;
 let razorpayClient = null;
@@ -123,7 +125,7 @@ const createRazorpayOrder = async (userId, order) => {
             transactionId: razorpayOrder.id,
             amount: order.total,
             currency,
-            status: 'pending',
+            status: 'payment_pending',
         });
 
         return {
@@ -148,7 +150,7 @@ const createCashfreeOrder = async (userId, order) => {
     const appUrl = process.env.CLIENT_URL?.split(',')?.[0] || process.env.APP_URL || 'http://localhost:3000';
     const apiUrl = process.env.API_PUBLIC_URL || process.env.SERVER_URL || 'http://localhost:5000/api';
 
-    const cashfreeOrderId = `cf_${order.id}`;
+    const cashfreeOrderId = `cf_${order.id}_${Date.now()}`;
     const cashfreeOrder = await cashfreeRequest('/orders', {
         method: 'POST',
         body: {
@@ -175,7 +177,7 @@ const createCashfreeOrder = async (userId, order) => {
         transactionId: cashfreeOrder.order_id,
         amount: order.total,
         currency,
-        status: 'pending',
+        status: 'payment_pending',
         metadata: {
             cfOrderId: cashfreeOrder.cf_order_id,
             cashfreeOrderId: cashfreeOrder.order_id,
@@ -237,7 +239,7 @@ const createStripeOrder = async (userId, order) => {
             transactionId: session.id,
             amount: order.total,
             currency: currency.toUpperCase(),
-            status: 'pending',
+            status: 'payment_pending',
             metadata: { sessionId: session.id },
         });
 
@@ -336,7 +338,7 @@ const createPayUOrder = async (userId, order) => {
         transactionId: txnid,
         amount: order.total,
         currency: 'INR',
-        status: 'pending',
+        status: 'payment_pending',
         metadata: { payuTxnId: txnid },
     });
 
@@ -374,8 +376,8 @@ const handlePayUReturn = async (payload) => {
 const createOrder = async (userId, orderId) => {
     const order = await Order.findOne({ where: { id: orderId, userId } });
     if (!order) throw new AppError('NOT_FOUND', 404, 'Order not found');
-    if (order.status !== 'pending_payment') {
-        throw new AppError('VALIDATION_ERROR', 400, 'Order is not in pending_payment status');
+    if (order.status === 'cancelled' || order.status === 'closed') {
+        throw new AppError('VALIDATION_ERROR', 400, `Cannot create payment for a ${order.status} order`);
     }
 
     if (order.paymentMethod === 'razorpay') {
@@ -422,64 +424,20 @@ const verifyRazorpayPayment = async (userId, orderId, paymentData) => {
         throw new AppError('PAYMENT_ERROR', 400, 'Invalid payment signature');
     }
 
-    // Success: Update Order and Payment status
-    await sequelize.transaction(async (t) => {
-        const lockedOrder = await Order.findByPk(order.id, {
-            transaction: t,
-            lock: t.LOCK.UPDATE,
-        });
-
-        if (!lockedOrder || lockedOrder.userId !== userId) {
-            throw new AppError('NOT_FOUND', 404, 'Order not found');
-        }
-
-        const previousOrderStatus = lockedOrder.status;
-        await lockedOrder.update({ status: 'paid' }, { transaction: t });
-        
-        const payment = await Payment.findOne({ 
-            where: { orderId: lockedOrder.id, transactionId: razorpay_order_id },
-            transaction: t,
-            lock: t.LOCK.UPDATE,
-        });
-        
-        if (payment) {
-            await payment.update({ 
-                status: 'completed',
-                transactionId: razorpay_payment_id, // Link to actual payment ID
-                metadata: { razorpay_order_id }
-            }, { transaction: t });
-        }
-
-        try {
-            if (AuditService && AuditService.log) {
-                await AuditService.log({
-                    userId,
-                    action: ACTIONS.STATUS_CHANGE,
-                    entity: ENTITIES.PAYMENT,
-                    entityId: payment?.id || razorpay_payment_id,
-                    changes: {
-                        orderStatus: { before: previousOrderStatus, after: 'paid' },
-                        paymentId: razorpay_payment_id,
-                    },
-                }, t);
-            }
-        } catch (err) {
-            logger.error('Payment verification audit log failed', {
-                userId,
-                action: ACTIONS.STATUS_CHANGE,
-                entity: ENTITIES.PAYMENT,
-                entityId: payment?.id || razorpay_payment_id,
-                operation: 'AuditService.log.paymentVerification',
-                errorMessage: err.message,
-                stack: err.stack,
-            });
-        }
+    await markOrderPaid({
+        orderId: order.id,
+        provider: 'razorpay',
+        transactionId: razorpay_payment_id,
+        metadata: { razorpay_order_id },
     });
 
     return { success: true };
 };
 
 const markOrderPaid = async ({ orderId, provider, transactionId, metadata = {} }) => {
+    let sendOrderPlacedNotification = false;
+    let notificationPayload = null;
+
     await sequelize.transaction(async (t) => {
         const lockedOrder = await Order.findByPk(orderId, {
             transaction: t,
@@ -491,8 +449,9 @@ const markOrderPaid = async ({ orderId, provider, transactionId, metadata = {} }
         }
 
         const previousOrderStatus = lockedOrder.status;
-        if (lockedOrder.status === 'pending_payment') {
-            await lockedOrder.update({ status: 'paid' }, { transaction: t });
+        const shouldFinalizePendingOrder = lockedOrder.status === 'pending_payment';
+        if (['pending_payment', 'confirmed', 'on_hold'].includes(lockedOrder.status)) {
+            await lockedOrder.update({ status: 'processing' }, { transaction: t });
         }
 
         const payment = await Payment.findOne({
@@ -500,16 +459,86 @@ const markOrderPaid = async ({ orderId, provider, transactionId, metadata = {} }
             transaction: t,
             lock: t.LOCK.UPDATE,
         });
+        const paymentWasAlreadyPaid = payment?.status === 'paid_online';
 
-        if (payment && payment.status !== 'completed') {
+        if (payment && payment.status !== 'paid_online') {
             await payment.update({
-                status: 'completed',
+                status: 'paid_online',
                 transactionId: transactionId || payment.transactionId,
                 metadata: {
                     ...(payment.metadata || {}),
                     ...metadata,
                 },
             }, { transaction: t });
+        }
+
+        if (shouldFinalizePendingOrder && !paymentWasAlreadyPaid) {
+            await OrderStatusHistory.create({
+                orderId: lockedOrder.id,
+                entityType: 'Order',
+                entityId: lockedOrder.id,
+                statusGroup: 'order',
+                fromStatus: previousOrderStatus,
+                toStatus: 'processing',
+                changedBy: lockedOrder.userId,
+                metadata: { paymentProvider: provider, paymentCaptured: true },
+            }, { transaction: t });
+
+            await OrderHistory.create({
+                orderId: lockedOrder.id,
+                eventType: 'order_placed',
+                description: 'Payment completed successfully. Order was placed successfully.',
+                actorId: lockedOrder.userId,
+                actorType: 'customer',
+                metadata: { paymentProvider: provider, transactionId },
+            }, { transaction: t });
+
+            const appliedCouponIds = Array.from(new Set(
+                (Array.isArray(lockedOrder.appliedDiscounts) ? lockedOrder.appliedDiscounts : [])
+                    .map((item) => item.couponId)
+                    .filter(Boolean)
+            ));
+
+            if (appliedCouponIds.length > 0) {
+                const existingUsages = await CouponUsage.count({
+                    where: { orderId: lockedOrder.id },
+                    transaction: t,
+                });
+
+                if (existingUsages === 0) {
+                    await CouponUsage.bulkCreate(
+                        appliedCouponIds.map((couponId) => ({
+                            couponId,
+                            userId: lockedOrder.userId,
+                            orderId: lockedOrder.id,
+                        })),
+                        { transaction: t }
+                    );
+                    await Coupon.update(
+                        { usedCount: sequelize.literal('used_count + 1') },
+                        { where: { id: { [Op.in]: appliedCouponIds } }, transaction: t }
+                    );
+                }
+            }
+
+            await Cart.update(
+                { status: 'converted' },
+                {
+                    where: {
+                        userId: lockedOrder.userId,
+                        status: 'active',
+                    },
+                    transaction: t,
+                }
+            );
+
+            sendOrderPlacedNotification = true;
+            notificationPayload = {
+                orderId: lockedOrder.id,
+                orderNumber: lockedOrder.orderNumber,
+                total: lockedOrder.total,
+                userId: lockedOrder.userId,
+            };
         }
 
         try {
@@ -534,6 +563,30 @@ const markOrderPaid = async ({ orderId, provider, transactionId, metadata = {} }
             });
         }
     });
+
+    if (sendOrderPlacedNotification && notificationPayload) {
+        try {
+            const user = await User.findByPk(notificationPayload.userId);
+            if (user && NotificationService?.sendToUser) {
+                await NotificationService.sendToUser(
+                    'order_placed',
+                    ['email', 'sms', 'whatsapp'],
+                    user,
+                    {
+                        orderNumber: notificationPayload.orderNumber,
+                        total: notificationPayload.total,
+                        firstName: user.firstName || 'Customer',
+                    },
+                    notificationPayload.orderId
+                );
+            }
+        } catch (err) {
+            logger.error('Failed to send order placement notifications after payment', {
+                orderId: notificationPayload.orderId,
+                error: err.message,
+            });
+        }
+    }
 };
 
 const verifyCashfreePayment = async (userId, orderId) => {
@@ -689,39 +742,16 @@ const handleWebhook = async (payload, signature) => {
         return { received: true, skipped: true };
     }
 
-    // ── Idempotency check — uses WebhookEvent PK as a deduplication fence ──
-    // This insert + order update are wrapped in a single transaction so concurrent
-    // duplicate webhook deliveries cannot both slip through the status check.
+    let capturedOrderId = null;
     try {
         await sequelize.transaction(async (t) => {
-            // INSERT will throw a unique-constraint error if this event was already processed.
-            // We catch that specific error below and return early.
             await WebhookEvent.create(
                 { id: razorpayEventId, eventType: event, processedAt: new Date() },
                 { transaction: t }
             );
 
-            // Only process recognized events
             if (event === 'payment.captured') {
-                const orderId = paymentEntity.notes?.orderId;
-                if (!orderId) return;
-
-                const order = await Order.findByPk(orderId, { transaction: t, lock: t.LOCK.UPDATE });
-                if (order && order.status === 'pending_payment') {
-                    await order.update({ status: 'paid' }, { transaction: t });
-                }
-
-                const payment = await Payment.findOne({
-                    where: { orderId },
-                    transaction: t,
-                    lock: t.LOCK.UPDATE,
-                });
-                if (payment && payment.status !== 'completed') {
-                    await payment.update({
-                        status: 'completed',
-                        transactionId: paymentEntity.id,
-                    }, { transaction: t });
-                }
+                capturedOrderId = paymentEntity.notes?.orderId || null;
             }
         });
     } catch (err) {
@@ -732,13 +762,21 @@ const handleWebhook = async (payload, signature) => {
         throw err;
     }
 
+    if (capturedOrderId) {
+        await markOrderPaid({
+            orderId: capturedOrderId,
+            provider: 'razorpay',
+            transactionId: paymentEntity.id,
+            metadata: { webhookEvent: event },
+        });
+    }
+
     return { received: true };
 };
 
 /**
  * Confirms that cash was collected for a COD order (admin action).
- * Transitions order: pending_cod / processing → paid
- * Transitions payment: pending → cod_collected
+ * Transitions payment: pending_cod → paid_cod only after delivery.
  */
 const confirmCodPayment = async (actingUserId, orderId) => {
     return sequelize.transaction(async (t) => {
@@ -751,16 +789,23 @@ const confirmCodPayment = async (actingUserId, orderId) => {
         if (order.paymentMethod !== 'cod') {
             throw new AppError('VALIDATION_ERROR', 400, 'This order is not a COD order');
         }
-        if (!['pending_cod', 'processing'].includes(order.status)) {
+        if (!['processing', 'ready_for_shipment'].includes(order.status)) {
             throw new AppError(
                 'VALIDATION_ERROR',
                 400,
                 `Cannot confirm COD collection for a ${order.status} order`
             );
         }
+        const shipments = await Shipment.findAll({
+            where: { orderId },
+            attributes: ['status'],
+            transaction: t,
+        });
+        if (shipments.length === 0 || !shipments.every((shipment) => shipment.status === 'delivered')) {
+            throw new AppError('VALIDATION_ERROR', 400, 'COD can be collected only after all shipments are delivered');
+        }
 
         const previousStatus = order.status;
-        await order.update({ status: 'paid' }, { transaction: t });
 
         const payment = await Payment.findOne({
             where: { orderId, provider: 'cod' },
@@ -768,14 +813,64 @@ const confirmCodPayment = async (actingUserId, orderId) => {
             lock: t.LOCK.UPDATE,
         });
 
+        if (!payment) {
+            throw new AppError('NOT_FOUND', 404, 'COD payment record not found for this order');
+        }
+
+        const previousPaymentStatus = payment.status;
         if (payment) {
+            if (!['pending_cod', 'pending'].includes(payment.status)) {
+                throw new AppError('VALIDATION_ERROR', 400, `Cannot confirm COD from ${payment.status} payment state`);
+            }
             await payment.update({
-                status: 'cod_collected',
+                status: 'paid_cod',
                 metadata: {
                     ...(payment.metadata || {}),
                     confirmedBy: actingUserId,
                     confirmedAt: new Date().toISOString(),
                 },
+            }, { transaction: t });
+        }
+
+        await OrderStatusHistory.create({
+            orderId: order.id,
+            entityType: 'Payment',
+            entityId: payment.id,
+            statusGroup: 'payment',
+            fromStatus: previousPaymentStatus,
+            toStatus: 'paid_cod',
+            changedBy: actingUserId,
+            metadata: { adminAction: 'confirm_cod_payment' },
+        }, { transaction: t });
+
+        await OrderHistory.create({
+            orderId: order.id,
+            eventType: 'payment',
+            description: 'COD payment was marked as collected.',
+            actorId: actingUserId,
+            actorType: 'admin',
+            metadata: { paymentStatus: 'paid_cod' },
+        }, { transaction: t });
+
+        if (order.status === 'ready_for_shipment') {
+            await order.update({ status: 'closed' }, { transaction: t });
+            await OrderStatusHistory.create({
+                orderId: order.id,
+                entityType: 'Order',
+                entityId: order.id,
+                statusGroup: 'order',
+                fromStatus: previousStatus,
+                toStatus: 'closed',
+                changedBy: actingUserId,
+                metadata: { derived: true, reason: 'cod_paid_and_all_shipments_delivered' },
+            }, { transaction: t });
+            await OrderHistory.create({
+                orderId: order.id,
+                eventType: 'status_changed',
+                description: 'Order was closed automatically after COD collection and delivery completion.',
+                actorId: actingUserId,
+                actorType: 'admin',
+                metadata: { previousStatus, paymentStatus: 'paid_cod' },
             }, { transaction: t });
         }
 
@@ -787,8 +882,8 @@ const confirmCodPayment = async (actingUserId, orderId) => {
                     entity: ENTITIES.PAYMENT,
                     entityId: payment?.id || orderId,
                     changes: {
-                        orderStatus: { before: previousStatus, after: 'paid' },
-                        paymentStatus: { before: 'pending', after: 'cod_collected' },
+                        orderStatus: { before: previousStatus, after: order.status },
+                        paymentStatus: { before: previousPaymentStatus, after: 'paid_cod' },
                     },
                 }, t);
             }
@@ -796,7 +891,7 @@ const confirmCodPayment = async (actingUserId, orderId) => {
             logger.error('COD confirmation audit log failed', { actingUserId, orderId, errorMessage: err.message });
         }
 
-        return { success: true, orderId, status: 'paid' };
+        return { success: true, orderId, status: order.status };
     });
 };
 

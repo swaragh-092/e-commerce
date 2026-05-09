@@ -1,12 +1,18 @@
-import React from 'react';
+import React, { useEffect } from 'react';
 import { Box, Container, Typography, Button } from '@mui/material';
 import CheckCircleOutlineIcon from '@mui/icons-material/CheckCircleOutline';
 import { Link, useLocation } from 'react-router-dom';
+import { useCart } from '../../hooks/useCart';
 
 const PaymentSuccessPage = () => {
     const location = useLocation();
+    const { fetchCart } = useCart();
     const query = new URLSearchParams(location.search);
     const orderId = location.state?.orderId || query.get('orderId');
+
+    useEffect(() => {
+        fetchCart();
+    }, [fetchCart]);
 
     return (
         <Container maxWidth="sm" sx={{ py: 8, textAlign: 'center' }}>

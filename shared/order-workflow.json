@@ -1,52 +1,298 @@
 {
-  "defaultStatus": "pending_payment",
-  "statuses": [
-    { "key": "pending_payment", "label": "Pending Payment", "muiColor": "warning" },
-    { "key": "pending_cod", "label": "Pending COD", "muiColor": "warning" },
-    { "key": "paid", "label": "Paid", "muiColor": "info" },
-    { "key": "processing", "label": "Processing", "muiColor": "info" },
-    { "key": "partially_shipped", "label": "Partially Shipped", "muiColor": "secondary" },
-    { "key": "shipped", "label": "Shipped", "muiColor": "primary" },
-    { "key": "delivered", "label": "Delivered", "muiColor": "success" },
-    { "key": "rto", "label": "RTO", "muiColor": "error" },
-    { "key": "returned", "label": "Returned", "muiColor": "default" },
-    { "key": "cancelled", "label": "Cancelled", "muiColor": "error" },
-    { "key": "refunded", "label": "Refunded", "muiColor": "default" }
-  ],
-  "transitions": {
-    "pending_payment": ["paid", "cancelled"],
-    "pending_cod": ["paid", "processing", "cancelled"],
-    "paid": ["processing", "partially_shipped", "shipped", "cancelled", "refunded"],
-    "processing": ["partially_shipped", "shipped", "cancelled", "refunded"],
-    "partially_shipped": ["shipped", "refunded", "rto"],
-    "shipped": ["delivered", "refunded", "rto"],
-    "delivered": ["refunded", "returned"],
-    "rto": ["refunded"],
-    "returned": ["refunded"],
-    "cancelled": [],
-    "refunded": []
+  "statuses": {
+    "payment": [
+      "payment_pending",
+      "pending_cod",
+      "payment_failed",
+      "payment_expired",
+      "paid_cod",
+      "paid_online"
+    ],
+
+    "order": [
+      "pending_payment",
+      "confirmed",
+      "on_hold",
+      "processing",
+      "ready_for_shipment",
+      "cancelled",
+      "closed"
+    ],
+
+    "shipment": [
+      "created",
+      "packed",
+      "shipped",
+      "in_transit",
+      "out_for_delivery",
+      "delivered",
+      "delivery_failed",
+      "rto_initiated",
+      "rto_in_transit",
+      "rto"
+    ],
+
+    "order_shipping": [
+      "not_shipped",
+      "partially_shipped",
+      "shipped",
+      "partially_out_for_delivery",
+      "out_for_delivery",
+      "partially_delivered",
+      "delivered",
+      "delivery_failed",
+      "partially_rto",
+      "rto_initiated",
+      "rto"
+    ],
+
+    "return": [
+      "return_requested",
+      "return_approved",
+      "return_rejected",
+      "pickup_scheduled",
+      "pickup_completed",
+      
+      "return_completed",
+      "replacement_requested",
+      "replacement_approved",
+      "replacement_rejected",
+      "replacement_processing",
+      "replacement_shipped",
+      "replacement_delivered",
+      "replacement_completed"
+    ],
+
+    "refund": [
+      "refund_initiated",
+      "refund_processing",
+      "refund_failed",
+      "refunded",
+      "partially_refunded"
+    ],
+
+    "put_back": [
+      "full_return",
+      "full_replacement",
+      "partial_return",
+      "partial_replacement"
+    ],
+
+    "put_back_processing": [true, false]
   },
-  "customerCancelableStatuses": ["pending_payment", "pending_cod", "processing"],
-  "adminRefundableStatuses": ["paid", "processing", "partially_shipped", "shipped", "delivered", "rto", "returned"],
-  "adminFulfillableStatuses": ["paid", "pending_cod", "processing", "partially_shipped"],
-  "adminSummaryGroups": [
-    {
-      "key": "pendingPayment",
-      "label": "Pending Payment",
-      "statuses": ["pending_payment", "pending_cod"],
-      "tone": "warning"
+
+  "transitions": {
+    "payment": {
+      "payment_pending": ["paid_online", "payment_failed", "payment_expired"],
+      "pending_cod": ["paid_cod"],
+      "payment_failed": ["payment_pending"],
+      "payment_expired": ["payment_pending"],
+      "paid_online": [],
+      "paid_cod": [],
+      "default": ["payment_pending"]
     },
-    {
-      "key": "inTransit",
-      "label": "Processing / Shipped",
-      "statuses": ["processing", "partially_shipped", "shipped"],
-      "tone": "default"
+
+    "order": {
+      "pending_payment": ["processing", "cancelled"],
+      "confirmed": ["on_hold", "processing", "cancelled"],
+      "on_hold": ["processing", "cancelled"],
+      "processing": ["ready_for_shipment", "cancelled"],
+      "ready_for_shipment": ["cancelled", "closed"],
+      "cancelled": [],
+      "closed": [],
+      "default": ["confirmed"]
     },
-    {
-      "key": "issues",
-      "label": "Issues & Returns",
-      "statuses": ["cancelled", "refunded", "rto", "returned"],
-      "tone": "error"
+
+    "shipment": {
+      "created": ["packed"],
+      "packed": ["shipped"],
+      "shipped": ["in_transit", "out_for_delivery"],
+      "in_transit": ["out_for_delivery"],
+      "out_for_delivery": ["delivered", "delivery_failed"],
+      "delivery_failed": ["out_for_delivery", "rto_initiated"],
+      "rto_initiated": ["rto_in_transit"],
+      "rto_in_transit": ["rto"],
+      "delivered": [],
+      "rto": [],
+      "default": ["created"]
+    },
+
+    "return": {
+      "return_requested": ["return_approved", "return_rejected"],
+      "return_approved": ["pickup_scheduled"],
+      "pickup_scheduled": ["pickup_completed"],
+      "pickup_completed": ["return_completed"],
+      "return_completed": [],
+
+      "replacement_requested": ["replacement_approved", "replacement_rejected"],
+      "replacement_approved": ["replacement_processing"],
+      "replacement_processing": ["replacement_shipped"],
+      "replacement_shipped": ["replacement_delivered"],
+      "replacement_delivered": ["replacement_completed"],
+      "replacement_completed": [],
+      "default": ["return_requested", "replacement_requested"]
+    },
+
+    "refund": {
+      "refund_initiated": ["refund_processing"],
+      "refund_processing": ["refunded", "refund_failed", "partially_refunded"],
+      "refunded": [],
+      "refund_failed": [],
+      "partially_refunded": [],
+      "default": ["refund_initiated"]
     }
+  },
+
+  "rules": {
+    "can_create_shipment": {
+      "order_status": ["processing", "ready_for_shipment"],
+      "payment_status": ["paid_online", "pending_cod"]
+    },
+
+    "can_move_to_out_for_delivery": {
+      "shipment_status": ["shipped", "in_transit"]
+    },
+
+    "can_deliver": {
+      "shipment_status": ["out_for_delivery"]
+    },
+
+    "can_return": {
+      "shipment_status": ["delivered"]
+    },
+
+    "can_replace": {
+      "return_status": ["return_approved"]
+    },
+
+    "can_refund": {
+      "return_status": ["pickup_completed", "returned"]
+    },
+
+    "cancel_allowed": {
+      "order_status": ["confirmed", "on_hold", "processing"],
+      "blocked_if_any_shipment": [
+        "shipped",
+        "in_transit",
+        "out_for_delivery",
+        "delivered"
+      ]
+    },
+
+    "cod_payment_completion": {
+      "description": "COD cash can be recorded only after delivery, through the admin payment action.",
+      "condition": {
+        "payment_status": "pending_cod",
+        "order_shipping_status": "delivered",
+        "admin_action": "confirm_cod_payment"
+      },
+      "result": {
+        "payment_status": "paid_cod"
+      }
+    }
+  },
+
+  "derived": {
+    "order_shipping_status": {
+      "description": "Derived from shipment statuses",
+
+      "rules": [
+        {
+          "condition": "no_shipments",
+          "result": "not_shipped"
+        },
+        {
+          "condition": "some_shipped && others_not",
+          "result": "partially_shipped"
+        },
+        {
+          "condition": "all_shipped_or_in_transit",
+          "result": "shipped"
+        },
+        {
+          "condition": "some_out_for_delivery && others_not",
+          "result": "partially_out_for_delivery"
+        },
+        {
+          "condition": "all_out_for_delivery",
+          "result": "out_for_delivery"
+        },
+        {
+          "condition": "some_delivered && others_not",
+          "result": "partially_delivered"
+        },
+        {
+          "condition": "all_delivered",
+          "result": "delivered"
+        },
+        {
+          "condition": "any_delivery_failed",
+          "result": "delivery_failed"
+        },
+        {
+          "condition": "some_rto && others_not",
+          "result": "partially_rto"
+        },
+        {
+          "condition": "any_rto_initiated",
+          "result": "rto_initiated"
+        },
+        {
+          "condition": "all_rto",
+          "result": "rto"
+        }
+      ]
+    },
+
+    "put_back_status": {
+      "rules": [
+        {
+          "condition": "all_items_returned",
+          "result": "full_return"
+        },
+        {
+          "condition": "some_items_returned",
+          "result": "partial_return"
+        },
+        {
+          "condition": "all_items_replaced",
+          "result": "full_replacement"
+        },
+        {
+          "condition": "some_items_replaced",
+          "result": "partial_replacement"
+        }
+      ]
+    },
+
+    "put_back_processing": {
+      "true_if_any": [
+        "return_requested",
+        "return_approved",
+        "pickup_scheduled",
+        "pickup_completed",
+        "replacement_requested",
+        "replacement_approved",
+        "replacement_processing",
+        "replacement_shipped"
+      ],
+      "false_if_all": [
+        "return_completed",
+        "replacement_completed"
+      ]
+    }
+  },
+
+  "priority": [
+    "delivery_failed",
+    "rto_initiated",
+    "partially_rto",
+    "partially_out_for_delivery",
+    "out_for_delivery",
+    "partially_delivered",
+    "delivered",
+    "partially_shipped",
+    "shipped",
+    "not_shipped"
   ]
 }

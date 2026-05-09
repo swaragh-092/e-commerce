@@ -27,10 +27,22 @@ module.exports = (sequelize, DataTypes) => {
             defaultValue: 'usd',
         },
         status: {
-            type: DataTypes.STRING(20),
+            type: DataTypes.STRING(60),
             defaultValue: 'pending',
             validate: {
-                isIn: [['pending', 'completed', 'failed', 'refunded', 'cod_collected']],
+                isIn: [[
+                    'pending',
+                    'completed',
+                    'failed',
+                    'refunded',
+                    'cod_collected',
+                    'payment_pending',
+                    'pending_cod',
+                    'payment_failed',
+                    'payment_expired',
+                    'paid_cod',
+                    'paid_online',
+                ]],
             },
         },
         metadata: {
