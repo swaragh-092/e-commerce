@@ -283,7 +283,7 @@ const EmailTemplatesPage = () => {
       {/* ── Page Header ── */}
       <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 3 }}>
         <Box>
-          <Typography variant="h5" fontWeight={700}>Email Templates</Typography>
+          <Typography variant="h5" fontWeight={700}>Templates</Typography>
           <Typography variant="body2" color="text.secondary">
             Customize transactional emails. Use <code style={{ background: 'rgba(0,0,0,0.06)', padding: '1px 5px', borderRadius: 4 }}>{'{{variable}}'}</code> for dynamic content.
           </Typography>
