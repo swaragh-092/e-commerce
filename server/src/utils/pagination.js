@@ -10,8 +10,8 @@ const getPagination = (page = 1, limit = 20) => {
   const parsedPage = Math.max(1, parseInt(page, 10) || 1);
   const parsedLimit = Math.max(1, parseInt(limit, 10) || 20);
   
-  // Cap max limit to 100 to prevent large queries
-  const finalLimit = Math.min(parsedLimit, 100);
+  // Cap max limit to 1000 to prevent large queries
+  const finalLimit = Math.min(parsedLimit, 1000);
   const offset = (parsedPage - 1) * finalLimit;
 
   return { limit: finalLimit, offset };

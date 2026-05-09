@@ -11,6 +11,7 @@ import ProductRow from '../../components/product/ProductRow';
 import CategoryGrid from '../../components/storefront/CategoryGrid';
 import BrandStrip from '../../components/storefront/BrandStrip';
 import PageSEO from '../../components/common/PageSEO';
+import { useFeature } from '../../hooks/useSettings';
 
 // ─── helpers ────────────────────────────────────────────────────────────────
 
@@ -25,6 +26,7 @@ const str  = (val, fallback = '')   => (val ?? fallback);
 
 const HomePage = () => {
     const { settings } = useSettings();
+    const pricingEnabled = useFeature('pricing');
     const theme = useTheme();
 
     // ── section config from settings.homepage (all customizable) ────────────
@@ -68,7 +70,7 @@ const HomePage = () => {
     const bestSellersLink   = str(hp.bestSellersLink,    '/products?sort=best-selling');
 
     // On Sale
-    const showOnSale        = bool(hp.showOnSale,        true);
+    const showOnSale        = pricingEnabled && bool(hp.showOnSale,        true);
     const onSaleTitle       = str(hp.onSaleTitle,        'On Sale');
     const onSaleCount       = num(hp.onSaleCount,        8);
     const onSaleLayout      = str(hp.onSaleLayout,       'carousel');

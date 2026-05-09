@@ -2,10 +2,11 @@
 
 const {
     AttributeTemplate, AttributeValue, CategoryAttribute, Category,
-    Product, ProductAttribute, ProductVariant, VariantOption, sequelize,
+    Product, ProductAttribute, ProductVariant, VariantOption, Media, sequelize,
 } = require('../index');
 const { generateSlug } = require('../../utils/slugify');
 const AppError = require('../../utils/AppError');
+const logger = require('../../utils/logger');
 
 // ── Reusable include for variant detail ──────────────────────────────────────
 const variantInclude = [
@@ -16,6 +17,10 @@ const variantInclude = [
             { model: AttributeTemplate, as: 'attribute', attributes: ['id', 'name', 'slug'] },
             { model: AttributeValue,    as: 'value',     attributes: ['id', 'value', 'slug'] },
         ],
+    },
+    {
+        model: Media,
+        as: 'media',
     },
 ];
 
@@ -100,33 +105,78 @@ const unlinkAttributeFromCategory = async (categoryId, attributeId) => {
 /**
  * Get attributes for a category with optional ancestor inheritance.
  */
-const getCategoryAttributes = async (categoryId, inherit = false) => {
-    const category = await Category.findByPk(categoryId);
-    if (!category) throw new AppError('NOT_FOUND', 404, 'Category not found');
+const getCategoryAttributes = async (categoryIdOrIds, inherit = false) => {
+    let ids = categoryIdOrIds;
+    if (typeof ids === 'string' && ids.includes(',')) {
+        ids = ids.split(',');
+    }
+    const categoryIdsInput = Array.isArray(ids) ? ids : [ids];
+    if (categoryIdsInput.length === 0) return [];
 
-    let categoryIds = [categoryId];
+    const categories = await Category.findAll({ where: { id: categoryIdsInput } });
+    if (categories.length === 0) return [];
+
+    let allCategoryIds = [...categoryIdsInput];
+    const catMap = {};
+    categories.forEach(c => {
+        catMap[c.id] = { name: c.name, isDirect: true };
+    });
 
     if (inherit) {
-        let current = category;
-        while (current.parentId) {
-            categoryIds.push(current.parentId);
-            current = await Category.findByPk(current.parentId);
-            if (!current) break;
-        }
+        // Fetch all categories in the hierarchy using a Recursive CTE to avoid N+1
+        const results = await sequelize.query(`
+            WITH RECURSIVE CategoryPath AS (
+                SELECT id, name, parent_id
+                FROM categories
+                WHERE id IN (:ids)
+                
+                UNION ALL
+                
+                SELECT c.id, c.name, c.parent_id
+                FROM categories c
+                JOIN CategoryPath cp ON c.id = cp.parent_id
+                WHERE c.id IS NOT NULL
+            )
+            SELECT DISTINCT id, name, parent_id FROM CategoryPath
+        `, {
+            replacements: { ids: categoryIdsInput },
+            type: sequelize.QueryTypes.SELECT
+        });
+
+        results.forEach(c => {
+            if (!catMap[c.id]) {
+                catMap[c.id] = { name: c.name, isDirect: false };
+                if (!allCategoryIds.includes(c.id)) {
+                    allCategoryIds.push(c.id);
+                }
+            }
+        });
     }
 
     const links = await CategoryAttribute.findAll({
-        where: { categoryId: categoryIds },
-        attributes: ['attributeId'],
+        where: { categoryId: allCategoryIds },
+        attributes: ['attributeId', 'categoryId'],
     });
 
     const uniqueAttrIds = [...new Set(links.map((l) => l.attributeId))];
     if (uniqueAttrIds.length === 0) return [];
 
-    return AttributeTemplate.findAll({
+    const templates = await AttributeTemplate.findAll({
         where: { id: uniqueAttrIds },
         include: [{ model: AttributeValue, as: 'values', attributes: ['id', 'value', 'slug', 'sortOrder'] }],
         order: [['sortOrder', 'ASC'], [{ model: AttributeValue, as: 'values' }, 'sortOrder', 'ASC']],
+    });
+
+    return templates.map(template => {
+        const json = template.get({ plain: true });
+        const sources = links
+            .filter(l => l.attributeId === template.id)
+            .map(l => ({
+                id: l.categoryId,
+                name: catMap[l.categoryId]?.name || 'Unknown',
+                isDirect: catMap[l.categoryId]?.isDirect || false
+            }));
+        return { ...json, sources };
     });
 };
 
@@ -145,7 +195,7 @@ const bulkGenerateVariants = async (productId, { defaultPrice, defaultStockQty =
     const product = await Product.findByPk(productId);
     if (!product) throw new AppError('NOT_FOUND', 404, 'Product not found');
 
-    console.log(`[bulkGenerateVariants] Starting for product: ${productId}`);
+    logger.debug(`[bulkGenerateVariants] Starting for product: ${productId}`);
 
     const t = await sequelize.transaction();
     try {
@@ -156,7 +206,7 @@ const bulkGenerateVariants = async (productId, { defaultPrice, defaultStockQty =
         });
 
         if (customVariantAttrs.length > 0) {
-            console.log(`[bulkGenerateVariants] Promoting ${customVariantAttrs.length} custom attributes to global templates.`);
+            logger.debug(`[bulkGenerateVariants] Promoting ${customVariantAttrs.length} custom attributes to global templates.`);
             for (const customAttr of customVariantAttrs) {
                 if (!customAttr.customName || !customAttr.customValue) continue;
 
@@ -165,7 +215,7 @@ const bulkGenerateVariants = async (productId, { defaultPrice, defaultStockQty =
                     transaction: t,
                 });
                 if (!template) {
-                    const slug = await generateSlug(customAttr.customName, AttributeTemplate);
+                    const slug = await generateSlug(customAttr.customName, AttributeTemplate, 'slug', { transaction: t });
                     template = await AttributeTemplate.create({ name: customAttr.customName, slug }, { transaction: t });
                 }
 
@@ -174,7 +224,7 @@ const bulkGenerateVariants = async (productId, { defaultPrice, defaultStockQty =
                     transaction: t,
                 });
                 if (!val) {
-                    const slug = await generateSlug(customAttr.customValue, AttributeValue);
+                    const slug = await generateSlug(customAttr.customValue, AttributeValue, 'slug', { transaction: t });
                     val = await AttributeValue.create({ attributeId: template.id, value: customAttr.customValue, slug }, { transaction: t });
                 }
 
@@ -198,7 +248,7 @@ const bulkGenerateVariants = async (productId, { defaultPrice, defaultStockQty =
             transaction: t,
         });
 
-        console.log(`[bulkGenerateVariants] Found ${variantAttrs.length} variant-forming attribute rows.`);
+        logger.debug(`[bulkGenerateVariants] Found ${variantAttrs.length} variant-forming attribute rows.`);
 
         if (variantAttrs.length === 0) {
             throw new AppError(
@@ -211,7 +261,7 @@ const bulkGenerateVariants = async (productId, { defaultPrice, defaultStockQty =
         const attrMap = new Map(); // attributeId → { attribute, values: [{valueId, label}] }
         for (const row of variantAttrs) {
             if (!row.attributeId || !row.valueId) {
-                console.warn(`[bulkGenerateVariants] Skipping row ${row.id}: attributeId or valueId is missing even after promotion.`);
+                logger.warn(`[bulkGenerateVariants] Skipping row ${row.id}: attributeId or valueId is missing even after promotion.`);
                 continue;
             }
             if (!attrMap.has(row.attributeId)) {
@@ -221,8 +271,8 @@ const bulkGenerateVariants = async (productId, { defaultPrice, defaultStockQty =
         }
 
         const attrGroups = Array.from(attrMap.values());
-        console.log(`[bulkGenerateVariants] Matrix dimensions: ${attrGroups.length}`);
-        attrGroups.forEach(g => console.log(`  - ${g.attribute?.name}: ${g.values.length} values`));
+        logger.debug(`[bulkGenerateVariants] Matrix dimensions: ${attrGroups.length}`);
+        attrGroups.forEach(g => logger.debug(`  - ${g.attribute?.name}: ${g.values.length} values`));
 
         if (attrGroups.length === 0) {
             throw new AppError(
@@ -233,7 +283,7 @@ const bulkGenerateVariants = async (productId, { defaultPrice, defaultStockQty =
 
         // Cartesian product → array of [{attributeId, valueId, label}] combos
         const combos = cartesian(attrGroups);
-        console.log(`[bulkGenerateVariants] Total generated combinations: ${combos.length}`);
+        logger.debug(`[bulkGenerateVariants] Total generated combinations: ${combos.length}`);
 
         const basePrice = defaultPrice ?? Number(product.price);
 
@@ -260,13 +310,11 @@ const bulkGenerateVariants = async (productId, { defaultPrice, defaultStockQty =
                 deletedCount++;
             }
         }
-        console.log(`[bulkGenerateVariants] Pruned ${deletedCount} obsolete variants.`);
+        logger.debug(`[bulkGenerateVariants] Pruned ${deletedCount} obsolete variants.`);
 
         // Track combinations that already exist so we don't recreate them
         const existingSignatures = new Set(
-            existingVariants
-                .filter(v => !v.isSoftDeleted) // basic safety
-                .map(v => v.options.map(o => o.valueId).sort().join(','))
+            existingVariants.map(v => v.options.map(o => o.valueId).sort().join(','))
         );
 
         let createdCount = 0;
@@ -295,10 +343,10 @@ const bulkGenerateVariants = async (productId, { defaultPrice, defaultStockQty =
             }
             createdCount++;
         }
-        console.log(`[bulkGenerateVariants] Created ${createdCount} new variant combinations.`);
+        logger.debug(`[bulkGenerateVariants] Created ${createdCount} new variant combinations.`);
 
         await t.commit();
-        console.log(`[bulkGenerateVariants] Transaction committed successfully.`);
+        logger.debug(`[bulkGenerateVariants] Transaction committed successfully.`);
 
         // Return full detail with options
         return ProductVariant.findAll({
@@ -329,6 +377,20 @@ const cloneVariants = async (targetProductId, sourceProductId) => {
     });
     if (sourceVariants.length === 0) {
         throw new AppError('VALIDATION_ERROR', 400, 'Source product has no variants to clone');
+    }
+
+    // Task 17: Source-attribute compatibility check
+    // Ensure target product has all SKU-defining attributes used by source variants
+    const sourceAttrIds = [...new Set(sourceVariants.flatMap(v => v.options.map(o => o.attributeId)))];
+    const targetAttrs = await ProductAttribute.findAll({
+        where: { productId: targetProductId, isVariantAttr: true },
+        attributes: ['attributeId']
+    });
+    const targetAttrIds = targetAttrs.map(a => a.attributeId);
+    
+    const missingAttrIds = sourceAttrIds.filter(id => !targetAttrIds.includes(id));
+    if (missingAttrIds.length > 0) {
+        throw new AppError('VALIDATION_ERROR', 400, 'Target product is missing SKU-defining attributes present in source variants. Please link the required attributes first.');
     }
 
     const t = await sequelize.transaction();
@@ -448,10 +510,17 @@ const updateProductVariant = async (productId, variantId, data) => {
     if (!variant) throw new AppError('NOT_FOUND', 404, 'Variant not found');
 
     // Whitelist updatable scalar fields (options/dimensions are immutable after creation)
-    const allowed = ['sku', 'price', 'stockQty', 'isActive', 'sortOrder'];
+    const allowed = ['sku', 'price', 'stockQty', 'isActive', 'sortOrder', 'mediaId', 'media_id'];
     const updates = {};
     for (const field of allowed) {
-        if (data[field] !== undefined) updates[field] = data[field];
+        if (data[field] !== undefined) {
+            // Map both mediaId and media_id to the model's mediaId property
+            if (field === 'media_id' || field === 'mediaId') {
+                updates.mediaId = data[field];
+            } else {
+                updates[field] = data[field];
+            }
+        }
     }
 
     await variant.update(updates);
@@ -464,6 +533,40 @@ const deleteProductVariant = async (productId, variantId) => {
     await variant.destroy(); // paranoid soft-delete
 };
 
+const reorderValues = async (attributeId, valueIds) => {
+    if (!attributeId || !Array.isArray(valueIds) || valueIds.length === 0) {
+        throw new AppError('VALIDATION_ERROR', 400, 'Invalid attributeId or valueIds array');
+    }
+
+    // Verify all valueIds belong to this attribute
+    const count = await AttributeValue.count({
+        where: {
+            id: valueIds,
+            attributeId
+        }
+    });
+
+    if (count !== valueIds.length) {
+        throw new AppError('VALIDATION_ERROR', 400, 'One or more value IDs are invalid or do not belong to this attribute');
+    }
+
+    const t = await sequelize.transaction();
+    try {
+        for (let i = 0; i < valueIds.length; i++) {
+            await AttributeValue.update(
+                { sortOrder: i },
+                { where: { id: valueIds[i], attributeId }, transaction: t }
+            );
+        }
+        await t.commit();
+        return true;
+    } catch (err) {
+        await t.rollback();
+        throw err;
+    }
+};
+
+
 module.exports = {
     createAttribute,
     getAllAttributes,
@@ -472,6 +575,7 @@ module.exports = {
     deleteAttribute,
     addValue,
     removeValue,
+    reorderValues,
     linkAttributeToCategory,
     unlinkAttributeFromCategory,
     getCategoryAttributes,

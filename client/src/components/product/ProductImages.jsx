@@ -1,16 +1,26 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Box, CardMedia, Grid } from '@mui/material';
 import { getMediaUrl } from '../../utils/media';
 
-const ProductImages = ({ images }) => {
+const ProductImages = ({ images, variantImage }) => {
   // Resolve all URLs to full absolute URLs once so every consumer is consistent
   const sortedImages = [...(images || [])]
     .sort((a, b) => a.sortOrder - b.sortOrder)
     .map((img) => ({ ...img, url: getMediaUrl(img.url) || '/placeholder.png' }));
+  
   const primaryImage = sortedImages.find((i) => i.isPrimary) || sortedImages[0];
   const defaultImage = primaryImage?.url || '/placeholder.png';
 
   const [selectedImage, setSelectedImage] = useState(defaultImage);
+
+  // Update selected image when variantImage or product images change
+  useEffect(() => {
+    if (variantImage) {
+      setSelectedImage(getMediaUrl(variantImage) || defaultImage);
+    } else {
+      setSelectedImage(defaultImage);
+    }
+  }, [variantImage, defaultImage]); 
 
   return (
     <Box>

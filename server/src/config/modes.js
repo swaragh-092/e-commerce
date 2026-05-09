@@ -34,7 +34,6 @@ const TIER1_FEATURES = {
     orders:   true,
     payments: true,
     shipping: true,
-    enquiry:  false,   // enquiry-based flow is catalog-only
   },
   catalog: {
     pricing:  false,
@@ -43,7 +42,6 @@ const TIER1_FEATURES = {
     orders:   false,
     payments: false,
     shipping: false,
-    enquiry:  true,    // catalog mode forces enquiry ON
   },
 };
 
@@ -73,9 +71,11 @@ const TIER2_DEFAULTS = {
     showAvailableCoupons:     true,
     multiCurrency:            false,
     socialLogin:              false,
+    enquiry:                  false,  // Tier 2: defaults to false in ecommerce but admin can enable
+    showPrice:                true,   // Tier 2: visibility of price on product cards/pages
   },
   catalog: {
-    wishlist:                 false,  // no personal features by default in catalog
+    wishlist:                 true,   // defaults to true so catalog users can save favorites
     reviews:                  true,
     coupons:                  false,  // coupons are ecommerce-centric by default
     guestCheckout:            true,   // toggleable but auto-hides in UI (checkout is off)
@@ -85,26 +85,28 @@ const TIER2_DEFAULTS = {
     showAvailableCoupons:     false,
     multiCurrency:            false,
     socialLogin:              false,
+    enquiry:                  true,   // Tier 2: defaults to true in catalog mode
+    showPrice:                false,  // Tier 2: visibility of price (defaults to off in catalog)
   },
 };
 
 // ─── Mode Resolution ──────────────────────────────────────────────────────────
 
 /**
- * Returns the validated current mode.
- * Defaults to 'ecommerce' if APP_MODE is missing or unrecognised —
- * this keeps existing deployments working without any ENV change.
+ * Returns the validated mode based on the passed parameter.
+ * Defaults to 'ecommerce' if mode is missing or unrecognised.
  *
+ * @param {string} modeParam
  * @returns {'ecommerce'|'catalog'}
  */
-const getMode = () => {
-  const raw = (process.env.APP_MODE || '').toLowerCase().trim();
+const getMode = (modeParam) => {
+  const raw = (modeParam || '').toLowerCase().trim();
   if (VALID_MODES.includes(raw)) return raw;
 
   if (raw && !warnedUnknownMode) {
     // eslint-disable-next-line no-console
     console.warn(
-      `[modes] Unknown APP_MODE="${process.env.APP_MODE}". Falling back to "ecommerce".`
+      `[modes] Unknown APP_MODE="${modeParam}". Falling back to "ecommerce".`
     );
     warnedUnknownMode = true;
   }
@@ -121,10 +123,11 @@ const getMode = () => {
  * Layer 3 — TIER1_FEATURES[mode]: mode-locked backbone; always applied last, never overridable
  *
  * @param {Record<string, boolean>} dbFeatures - Parsed feature settings from the DB
+ * @param {string} appMode - The active mode from the DB
  * @returns {Record<string, boolean>} Fully resolved feature map
  */
-const buildFeatures = (dbFeatures) => {
-  const mode = getMode();
+const buildFeatures = (dbFeatures, appMode) => {
+  const mode = getMode(appMode);
   const safeDb = dbFeatures || {};
 
   return {

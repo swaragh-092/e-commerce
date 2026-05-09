@@ -39,7 +39,7 @@ const updateSingle = async (req, res, next) => {
 
 const updateBulk = async (req, res, next) => {
   try {
-    await SettingsService.bulkUpdate(req.body, req.user.id);
+    await SettingsService.bulkUpdate(req.body, req.user.id, req.user);
     return success(res, null, 'Settings bulk updated successfully');
   } catch (err) {
     next(err);
@@ -54,8 +54,8 @@ const updateBulk = async (req, res, next) => {
  */
 const getFeatures = async (req, res, next) => {
   try {
-    const { features, lockedKeys } = await SettingsService.getFeatures();
-    return success(res, { mode: getMode(), features, lockedKeys });
+    const { features, lockedKeys, mode } = await SettingsService.getFeatures();
+    return success(res, { mode, features, lockedKeys });
   } catch (err) {
     next(err);
   }

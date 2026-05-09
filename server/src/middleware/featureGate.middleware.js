@@ -21,6 +21,8 @@ const featureCache = new Map(); // key → { value: bool, expiresAt: timestamp }
 const loadAndCacheAllFeatures = async () => {
   const { Setting } = require('../modules');
   const rows = await Setting.findAll({ where: { group: 'features' } });
+  const modeRow = await Setting.findOne({ where: { group: 'general', key: 'mode' } });
+  const appMode = modeRow ? modeRow.value : 'ecommerce';
 
   // Parse raw DB values to booleans
   const dbFeatures = {};
@@ -29,7 +31,7 @@ const loadAndCacheAllFeatures = async () => {
   }
 
   // Mode-core features always win (spread order in buildFeatures)
-  const resolved = buildFeatures(dbFeatures);
+  const resolved = buildFeatures(dbFeatures, appMode);
 
   // Populate cache for every key at once
   const expiresAt = Date.now() + CACHE_TTL_MS;
@@ -108,7 +110,11 @@ const featureGate = (featureKey) => {
  * @param {string} featureKey
  */
 const invalidateFeature = (featureKey) => {
-  featureCache.delete(featureKey);
+  if (featureKey === 'mode') {
+    featureCache.clear();
+  } else {
+    featureCache.delete(featureKey);
+  }
 };
 
 /**

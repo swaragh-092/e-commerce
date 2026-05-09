@@ -121,9 +121,9 @@ const addItem = async (userId, sessionId, payload) => {
             if (!variant) {
                 throw new AppError('NOT_FOUND', 404, 'Variant not found');
             }
-            availableStock = Number(variant.stockQty || 0);
+            availableStock = Number(variant.stockQty || 0) - Number(variant.reservedQty || 0);
         } else {
-            availableStock = product.quantity - (product.reservedQty || 0);
+            availableStock = Number(product.quantity || 0) - Number(product.reservedQty || 0);
         }
 
         let item = await CartItem.findOne({
@@ -156,6 +156,8 @@ const addItem = async (userId, sessionId, payload) => {
 const updateItem = async (userId, sessionId, itemId, quantity) => {
     return sequelize.transaction(async (t) => {
         const cart = await getActiveCartByOwner(userId, sessionId, t);
+        // Lock the cart to prevent concurrent updates
+        await Cart.findByPk(cart.id, { transaction: t, lock: Transaction.LOCK.UPDATE });
         
         const item = await CartItem.findOne({
             where: { id: itemId, cartId: cart.id },
@@ -163,10 +165,18 @@ const updateItem = async (userId, sessionId, itemId, quantity) => {
                 { model: Product, as: 'product' },
                 { model: ProductVariant, as: 'variant', required: false },
             ],
-            transaction: t
+            transaction: t,
+            lock: Transaction.LOCK.UPDATE // Lock the cart item itself
         });
 
         if (!item) throw new AppError('NOT_FOUND', 404, 'Cart item not found');
+
+        // Row-lock product and variant to ensure stock check is atomic
+        if (item.variantId) {
+            await ProductVariant.findByPk(item.variantId, { transaction: t, lock: Transaction.LOCK.UPDATE });
+        } else {
+            await Product.findByPk(item.productId, { transaction: t, lock: Transaction.LOCK.UPDATE });
+        }
 
         const product = item.product;
         if (!product || product.deletedAt !== null || !product.isEnabled) {
@@ -175,8 +185,8 @@ const updateItem = async (userId, sessionId, itemId, quantity) => {
         }
 
         const availableStock = item.variantId
-            ? Number(item.variant?.stockQty || 0)
-            : product.quantity - (product.reservedQty || 0);
+            ? Number(item.variant?.stockQty || 0) - Number(item.variant?.reservedQty || 0)
+            : Number(product.quantity || 0) - Number(product.reservedQty || 0);
         if (quantity > availableStock) {
              throw new AppError('CONFLICT', 409, 'Insufficient stock');
         }

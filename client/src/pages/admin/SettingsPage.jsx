@@ -22,6 +22,11 @@ import {
   InputAdornment,
   Autocomplete,
   IconButton,
+  Chip,
+  Dialog,
+  DialogTitle,
+  DialogContent,
+  DialogActions,
 } from '@mui/material';
 import DeleteOutlineIcon from '@mui/icons-material/DeleteOutline';
 import AddIcon from '@mui/icons-material/Add';
@@ -33,7 +38,8 @@ import api from '../../services/api';
 import { useNotification } from '../../context/NotificationContext';
 import { SettingsContext } from '../../context/ThemeContext';
 import { useAuth } from '../../hooks/useAuth';
-import { useIsFeatureLocked, useMode } from '../../hooks/useSettings';
+import { useIsSuperAdmin } from '../../hooks/useAuth';
+import { useMode } from '../../hooks/useSettings';
 import { PERMISSIONS } from '../../utils/permissions';
 import { DASHBOARD_PROFILES } from '../../components/admin/dashboard/dashboardWidgets';
 import MessagingSettingsPanel from '../../components/admin/settings/MessagingSettingsPanel';
@@ -168,10 +174,10 @@ const SettingsPage = () => {
   const [mediaPickerOpen, setMediaPickerOpen] = useState(false);
   const [mediaPickerKey, setMediaPickerKey] = useState(null);
   const { notify } = useNotification();
-  const { refreshSettings } = useContext(SettingsContext) || {};
+  const { refreshSettings, features: resolvedFeatures } = useContext(SettingsContext) || {};
   const { hasPermission } = useAuth();
   const appMode = useMode();
-  const isLocked = useIsFeatureLocked;
+  const isSuperAdmin = useIsSuperAdmin();
   const canManageSettings = hasPermission(PERMISSIONS.SETTINGS_MANAGE);
 
   useEffect(() => {
@@ -185,7 +191,15 @@ const SettingsPage = () => {
           });
         }
       });
-      setForm(flat);
+      setForm((f) => ({
+        ...flat,
+        // Patch features.* with the mode-resolved map from ThemeContext.
+        // This ensures features that are OFF by default in catalog mode render
+        // as OFF, not as whatever stale value default.json / DB had before.
+        ...Object.fromEntries(
+          Object.entries(resolvedFeatures || {}).map(([k, v]) => [`features.${k}`, v])
+        ),
+      }));
     });
     // Load email templates
     getEmailTemplates()
@@ -250,8 +264,12 @@ const SettingsPage = () => {
     }
   };
 
+
+
   const allTabs = ['Store', 'SEO', 'Branding', 'Layout', 'Homepage', 'Catalog', 'Checkout', 'Promotions', 'Invoice', 'Advanced', 'Notifications'];
-  const visibleTabs = allTabs.filter(t => appMode === 'ecommerce' || !['Checkout', 'Promotions', 'Invoice'].includes(t));
+  const visibleTabs = [
+    ...allTabs.filter(t => appMode === 'ecommerce' || !['Checkout', 'Promotions', 'Invoice'].includes(t))
+  ];
   const safeTabIndex = tab < visibleTabs.length ? tab : 0;
   const currentTab = visibleTabs[safeTabIndex];
   const originalIndex = allTabs.indexOf(currentTab);
@@ -326,52 +344,7 @@ const SettingsPage = () => {
     />
   );
 
-  /**
-   * Locked toggle — shown for Tier 1 features that are controlled by APP_MODE.
-   * Rendered disabled + greyed out with a chip indicating the lock reason.
-   */
-  const lockedToggle = (key, label, currentValue) => (
-    <Box key={key} sx={{ mb: 1, display: 'flex', alignItems: 'center', gap: 1.5, opacity: 0.65 }}>
-      <FormControlLabel
-        control={
-          <Switch
-            checked={Boolean(currentValue)}
-            disabled
-            sx={{ '& .MuiSwitch-thumb': { bgcolor: 'action.disabled' } }}
-          />
-        }
-        label={
-          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-            <Typography variant="body2" color="text.secondary">{label}</Typography>
-            <Box
-              component="span"
-              sx={{
-                px: 1, py: 0.2, borderRadius: 1, fontSize: 10, fontWeight: 700,
-                bgcolor: 'action.selected', color: 'text.secondary',
-                textTransform: 'uppercase', letterSpacing: 0.5,
-              }}
-            >
-              {appMode} mode • locked
-            </Box>
-          </Box>
-        }
-        sx={{ mb: 0 }}
-      />
-    </Box>
-  );
 
-  /**
-   * Smart toggle — auto-selects locked vs regular based on Tier 1 status.
-   * For features.* keys: extracts the feature name (e.g. 'features.cart' -> 'cart')
-   * and checks if it's Tier 1 locked. If so renders the locked version.
-   */
-  const featureToggle = (key, label) => {
-    const featureName = key.startsWith('features.') ? key.slice(9) : key;
-    if (isLocked(featureName)) {
-      return lockedToggle(key, label, form[key]);
-    }
-    return toggle(key, label);
-  };
 
   const section = (title, description, content, keywords = []) => ({ title, description, content, keywords });
 
@@ -1304,11 +1277,7 @@ const SettingsPage = () => {
           {field('productPage.addToCartLabel', 'Add to Cart button label (e.g. Add to Cart, Buy Now, Add to Bag)')}
           {toggle('productPage.showBuyNowButton', 'Show Buy Now button next to Add to Cart')}
           {field('productPage.buyNowLabel', 'Buy Now button label (e.g. Buy Now, Quick Checkout, Order Now)')}
-          <Divider sx={{ my: 2 }} />
-          <Typography variant="subtitle2" sx={{ mb: 1 }}>Customer Engagement</Typography>
-          {featureToggle('features.wishlist', 'Enable wishlist')}
-          {featureToggle('features.reviews', 'Enable reviews')}
-          {toggle('features.requirePurchaseForReview', 'Require purchase to leave a review')}
+
         </>,
         ['product page', 'wishlist', 'reviews', 'stock badge', 'sku']
       ),
@@ -1428,14 +1397,7 @@ const SettingsPage = () => {
         'Checkout Experience',
         'Decide how easy checkout is and which customer conveniences are available.',
         <>
-          {/* guestCheckout is Tier 2 but auto-hides in catalog mode because checkout
-              (Tier 1) is locked off there — the setting would be meaningless */}
-          {isLocked('checkout')
-            ? null
-            : toggle('features.guestCheckout', 'Guest checkout (no account required)')
-          }
-          {featureToggle('features.coupons', 'Enable coupon codes')}
-          {toggle('features.showAvailableCoupons', 'Show available coupons to customers at checkout')}
+
         </>,
         ['checkout', 'guest checkout', 'coupons']
       ),
@@ -1494,15 +1456,7 @@ const SettingsPage = () => {
         </>,
         ['sales', 'promotions', 'discount', 'countdown', 'ending soon']
       ),
-      section(
-        'Coupon Marketing',
-        'Choose whether customers can use and discover coupon campaigns during checkout.',
-        <>
-          {featureToggle('features.coupons', 'Enable coupon codes store-wide')}
-          {toggle('features.showAvailableCoupons', 'Show available coupons to customers at checkout')}
-        </>,
-        ['coupon', 'promotions', 'marketing']
-      ),
+
     ],
     [
       section(
@@ -1547,15 +1501,7 @@ const SettingsPage = () => {
         </>,
         ['seo', 'analytics', 'meta description', 'og image']
       ),
-      section(
-        'Accounts & Authentication',
-        'Tighten customer account rules and decide which login experiences are enabled.',
-        <>
-          {featureToggle('features.emailVerification', 'Require email verification on signup')}
-          {featureToggle('features.socialLogin', 'Social login (Google / GitHub)')}
-        </>,
-        ['auth', 'email verification', 'social login', 'accounts']
-      ),
+
       section(
         'Dashboard',
         'Control dashboard layout, density, default date period, and visible widgets.',
@@ -1790,14 +1736,7 @@ const SettingsPage = () => {
         </>,
         ['dashboard', 'admin', 'chart', 'widgets', 'layout', 'density']
       ),
-      section(
-        'Experimental Features',
-        'Keep lower-priority or upcoming capabilities here so the main settings stay focused.',
-        <>
-          {featureToggle('features.multiCurrency', 'Multi-currency support')}
-        </>,
-        ['advanced', 'multi currency', 'experimental']
-      ),
+
     ],
   ];
 
@@ -1842,7 +1781,10 @@ const SettingsPage = () => {
           >
             <Tabs value={safeTabIndex} onChange={(_, v) => setTab(v)} variant="scrollable" scrollButtons="auto">
               {visibleTabs.map((t) => (
-                <Tab key={t} label={t} />
+                <Tab
+                  key={t}
+                  label={t}
+                />
               ))}
             </Tabs>
             <Divider />
@@ -1912,6 +1854,7 @@ const SettingsPage = () => {
           </Box>
         </Grid>
       </Grid>
+
       <MediaPicker
         open={mediaPickerOpen}
         onClose={() => setMediaPickerOpen(false)}

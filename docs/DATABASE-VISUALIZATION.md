@@ -69,7 +69,7 @@ erDiagram
         DECIMAL sale_price
         INTEGER quantity
         DECIMAL weight
-        DECIMAL tax_rate
+        JSONB tax_config
         VARCHAR status
         BOOLEAN is_featured
     }

@@ -30,6 +30,7 @@ import AdminPanelSettingsIcon from '@mui/icons-material/AdminPanelSettings';
 import StoreIcon from '@mui/icons-material/Storefront';
 import ExitIcon from '@mui/icons-material/ExitToApp';
 import DescriptionIcon from '@mui/icons-material/Description';
+import AccountTreeIcon from '@mui/icons-material/AccountTree';
 import PaymentIcon from '@mui/icons-material/Payment';
 import LocalShippingIcon from '@mui/icons-material/LocalShipping';
 import PublicIcon from '@mui/icons-material/Public';
@@ -57,11 +58,13 @@ const ALL_MENU_ITEMS = [
   { text: 'Reviews',    path: '/admin/reviews',    icon: <StarIcon />, feature: 'reviews', permission: PERMISSIONS.REVIEWS_READ },
   { text: 'Media',      path: '/admin/media',      icon: <PhotoLibraryIcon />, permission: PERMISSIONS.MEDIA_READ },
   { text: 'SEO Overrides',path: '/admin/seo-overrides',icon: <PublicIcon />, feature: 'seo', permission: PERMISSIONS.SETTINGS_READ },
+  { text: 'Platform Features', path: '/admin/features', icon: <AdminPanelSettingsIcon />, permission: PERMISSIONS.SETTINGS_READ },
   { text: 'Settings',         path: '/admin/settings',         icon: <SettingsIcon />, permission: PERMISSIONS.SETTINGS_READ },
   { text: 'Email Templates',  path: '/admin/email-templates',  icon: <MailOutlineIcon />, permission: PERMISSIONS.SETTINGS_READ },
   { text: 'Payment Gateways', path: '/admin/payment-gateways', icon: <PaymentIcon />, permission: PERMISSIONS.SETTINGS_READ, mode: 'ecommerce' },
   { text: 'Shipping',         path: '/admin/shipping',         icon: <LocalShippingIcon />, permission: PERMISSIONS.SETTINGS_READ, mode: 'ecommerce' },
   { text: 'Pages',            path: '/admin/pages',            icon: <DescriptionIcon />, permission: PERMISSIONS.PAGES_READ },
+  { text: 'Menu Builder',     path: '/admin/menus',            icon: <AccountTreeIcon />, permission: PERMISSIONS.MENUS_READ },
   {
     text: 'Access Control',
     path: '/admin/access-control',

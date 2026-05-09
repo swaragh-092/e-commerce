@@ -18,6 +18,11 @@ module.exports = (sequelize, DataTypes) => {
                 key: 'id'
             }
         },
+        sortOrder: {
+            type: DataTypes.INTEGER,
+            defaultValue: 0,
+            field: 'sort_order'
+        },
     }, {
         tableName: 'product_categories',
         timestamps: false,

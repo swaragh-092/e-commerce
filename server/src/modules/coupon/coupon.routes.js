@@ -9,6 +9,9 @@ const { auditLog } = require('../audit/audit.middleware');
 const { couponLimiter } = require('../../middleware/rateLimiter.middleware');
 const { featureGate } = require('../../middleware/featureGate.middleware');
 const { PERMISSIONS } = require('../../config/permissions');
+const { idParamSchema, paginationQuerySchema } = require('../../utils/common.validation');
+
+
 
 router.use(featureGate('coupons'));
 
@@ -16,11 +19,13 @@ router.use(featureGate('coupons'));
 router.get('/public', authenticate, featureGate('showAvailableCoupons'), couponController.listPublic);
 router.post('/eligible', authenticate, featureGate('showAvailableCoupons'), validate(eligibleCouponsSchema), couponController.getEligibleCoupons);
 
-router.get('/', authenticate, authorizePermissions(PERMISSIONS.COUPONS_READ), couponController.list);
+router.get('/', authenticate, authorizePermissions(PERMISSIONS.COUPONS_READ), validate(paginationQuerySchema, 'query'), couponController.list);
+
 router.post('/', authenticate, authorizePermissions(PERMISSIONS.COUPONS_MANAGE), validate(createCouponSchema), auditLog('Coupon'), couponController.create);
-router.get('/:id', authenticate, authorizePermissions(PERMISSIONS.COUPONS_READ), couponController.getOne);
-router.put('/:id', authenticate, authorizePermissions(PERMISSIONS.COUPONS_MANAGE), validate(updateCouponSchema), auditLog('Coupon'), couponController.update);
-router.delete('/:id', authenticate, authorizePermissions(PERMISSIONS.COUPONS_MANAGE), auditLog('Coupon'), couponController.remove);
+router.get('/:id', authenticate, authorizePermissions(PERMISSIONS.COUPONS_READ), validate(idParamSchema, 'params'), couponController.getOne);
+router.put('/:id', authenticate, authorizePermissions(PERMISSIONS.COUPONS_MANAGE), validate(idParamSchema, 'params'), validate(updateCouponSchema), auditLog('Coupon'), couponController.update);
+router.delete('/:id', authenticate, authorizePermissions(PERMISSIONS.COUPONS_MANAGE), validate(idParamSchema, 'params'), auditLog('Coupon'), couponController.remove);
+
 
 router.post('/validate', authenticate, couponLimiter, validate(validateCouponSchema), couponController.validateCoupon);
 

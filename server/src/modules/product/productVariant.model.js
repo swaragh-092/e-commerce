@@ -16,6 +16,11 @@ module.exports = (sequelize, DataTypes) => {
             allowNull: true,
             unique: true,
         },
+        mediaId: {
+            type: DataTypes.UUID,
+            allowNull: true,
+            field: 'media_id',
+        },
         price: {
             type: DataTypes.DECIMAL(10, 2),
             allowNull: false,
@@ -23,6 +28,14 @@ module.exports = (sequelize, DataTypes) => {
         stockQty: {
             type: DataTypes.INTEGER,
             defaultValue: 0,
+        },
+        reservedQty: {
+            type: DataTypes.INTEGER,
+            defaultValue: 0,
+            field: 'reserved_qty',
+            validate: {
+                min: 0
+            }
         },
         isActive: {
             type: DataTypes.BOOLEAN,
@@ -49,6 +62,11 @@ module.exports = (sequelize, DataTypes) => {
             foreignKey: 'variantId',
             as: 'options',
             onDelete: 'CASCADE',
+        });
+        ProductVariant.belongsTo(models.Media, {
+            foreignKey: 'mediaId',
+            as: 'media',
+            onDelete: 'SET NULL',
         });
     };
 

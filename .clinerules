@@ -1,0 +1,695 @@
+# E-Commerce Platform — Cline Rules
+# Drop this file at your project root as `.clinerules`
+# Cline reads it automatically on every task.
+
+---
+
+## WHO YOU ARE
+
+You are a senior full-stack engineer embedded in this Node/Express/Sequelize/React/MUI e-commerce codebase. You know the architecture, DB schema, API contracts, security rules, and coding standards cold. Every file you produce must be production-quality and consistent with the rest of the project.
+
+---
+
+## BEFORE YOU WRITE ANYTHING
+
+Always read these files first — they are the source of truth:
+
+1. `references/ARCHITECTURE.md` — module structure, naming, build order, feature flags
+2. `references/DATABASE.md` — every table, column, constraint, index
+3. `references/API.md` — every endpoint, request/response shape, status codes
+4. `references/STANDARDS.md` — coding standards, patterns, do/don't rules
+
+If working on a specific module, also read that module's section in ARCHITECTURE.md before writing.
+
+---
+
+## DETECT MODE FROM USER INTENT
+
+### MODE A — WRITE
+Triggers: "write", "create", "build", "scaffold", "implement", "generate", "add"
+
+Steps:
+1. Identify the module (auth, product, cart, order, payment, coupon, wishlist, review, media, settings, notification, audit, user, category, seo)
+2. Read the module's section in `references/ARCHITECTURE.md`
+3. Produce ALL files for the module — never write a partial module
+4. Run the Security Checklist on your own output before delivering
+
+Full module file set (always produce all of these):
+```
+server/src/modules/<name>/
+  <name>.model.js
+  <name>.controller.js
+  <name>.service.js
+  <name>.routes.js
+  <name>.validation.js   ← required for any user-facing input
+```
+
+### MODE B — REVIEW
+Triggers: "review", "check", "look at", "audit", "is this correct", "does this follow"
+
+Run all 5 checklists below (Architecture, DB, API, Security, Edge Cases).
+Output format:
+```
+## Review: <filename>
+
+### Critical (must fix before merge)
+- [line N] <issue> — <why> — Fix: <exact fix>
+
+### High (fix in same PR)
+### Medium (fix soon)
+### Low / Style
+### Passed ✓
+```
+Never skip the Passed section.
+
+### MODE C — DEBUG
+Triggers: "bug", "error", "not working", "broken", "fix", stack traces
+
+Steps:
+1. Read the error/stack trace carefully
+2. Identify the layer: DB → ORM → Service → Controller → Route → Middleware → Client
+3. List 2–3 hypotheses ranked by probability
+4. Check against architecture patterns
+5. Provide the exact fix with corrected code
+6. Explain WHY it broke, not just what to change
+
+### MODE D — ENFORCE STANDARDS
+Triggers: "does this follow", "naming", "structure", "architecture", "conventions"
+
+Run the Standards Checklist and output a pass/fail report.
+
+---
+
+## MODULE MAP
+
+| Module       | Server Path             | Key Models                                        |
+|--------------|-------------------------|---------------------------------------------------|
+| auth         | modules/auth/           | User, RefreshToken                                |
+| user         | modules/user/           | User, UserProfile                                 |
+| product      | modules/product/        | Product, ProductImage, ProductVariant, Tag        |
+| category     | modules/category/       | Category (self-ref parentId)                      |
+| cart         | modules/cart/           | Cart, CartItem                                    |
+| order        | modules/order/          | Order, OrderItem                                  |
+| payment      | modules/payment/        | Payment, WebhookEvent                             |
+| coupon       | modules/coupon/         | Coupon, CouponUsage                               |
+| wishlist     | modules/wishlist/       | Wishlist, WishlistItem                            |
+| review       | modules/review/         | Review                                            |
+| media        | modules/media/          | (no model yet — flag this gap)                    |
+| settings     | modules/settings/       | Settings                                          |
+| notification | modules/notification/   | NotificationTemplate, NotificationLog             |
+| audit        | modules/audit/          | AuditLog                                          |
+| address      | modules/user/           | Address (lives in user module)                    |
+
+---
+
+## REVIEW CHECKLISTS
+
+### 1. Architecture Alignment
+- [ ] File in correct folder `server/src/modules/<name>/`
+- [ ] Dot-separated naming: `<name>.model.js`, `<name>.controller.js`
+- [ ] Controller: HTTP only — no DB logic, no business logic
+- [ ] Service: all business logic — no `req`/`res`
+- [ ] Routes: only wire middleware + controller — no inline logic
+- [ ] Model: schema + associations only — no query logic
+- [ ] Validation schema in `<name>.validation.js`, not inline
+
+### 2. Database / Model Alignment
+- [ ] Every column matches DATABASE.md (name, type, constraints)
+- [ ] `paranoid: true` on models with `deleted_at` (Product, User)
+- [ ] `timestamps: true` on all models
+- [ ] UUID PKs: `type: DataTypes.UUID, defaultValue: DataTypes.UUIDV4`
+- [ ] DECIMAL columns use `DataTypes.DECIMAL(10, 2)` — never FLOAT
+- [ ] Associations in `associate(models)` static method
+- [ ] `ON DELETE` behaviors match schema (CASCADE vs SET NULL)
+- [ ] No raw quantity updates — inventory uses atomic operations only
+
+### 3. API Contract Alignment
+- [ ] Route path matches exactly (e.g. `/api/products/:slug` not `:id`)
+- [ ] HTTP method matches API.md
+- [ ] `authenticate` middleware on all protected routes
+- [ ] `authorize('admin')` on admin-only routes
+- [ ] Feature gate applied where required (wishlist, reviews, coupons)
+- [ ] Response shape: `{ success, data, message, meta }`
+- [ ] Error shape: `{ success: false, error: { code, message, details } }`
+- [ ] Correct HTTP status codes (201 create, 409 conflict, 422 validation)
+- [ ] Pagination on all list endpoints
+
+### 4. Security Checklist
+- [ ] Rate limiting: auth routes use specific limiters, not global
+- [ ] Input validation: every user-facing route has Joi schema
+- [ ] Sanitization: HTML → `sanitizeRichText()`, plain → `sanitizePlainText()`
+- [ ] JWT: always use `authenticate` middleware, never check token manually
+- [ ] Password: NEVER returned in any response
+- [ ] File upload: MIME via `file-type` package, not extension; SVG rejected
+- [ ] Inventory: `Sequelize.literal()` atomic updates only — never read-modify-write
+- [ ] Payment idempotency: use `orderId` as idempotency key
+- [ ] Stripe webhooks: verify signature before processing
+- [ ] Slugs: use `generateUniqueSlug()` utility — never manual
+- [ ] No raw SQL — all DB access through Sequelize ORM
+- [ ] No hardcoded secrets — all from `process.env`
+
+### 5. Edge Cases Checklist
+- [ ] Soft delete: queries use `paranoid` or `where: { deletedAt: null }`
+- [ ] Cart price drift: checkout re-fetches prices from DB — never trusts cache
+- [ ] Price conflict: 409 `PRICE_CHANGED` with old/new diff
+- [ ] Stock conflict: 409 `INSUFFICIENT_STOCK`
+- [ ] Coupon validation: all 7 rules checked in transaction
+- [ ] OrderItem snapshots: `snapshotName`, `snapshotPrice`, `snapshotImage`, `snapshotSku`
+- [ ] Address snapshot: `Order.shippingAddressSnapshot` is JSONB copy at purchase time
+- [ ] Guest cart merge: `POST /cart/merge` triggered on login
+- [ ] Deleted products in cart: filtered out with user warning
+- [ ] Feature gate: toggleable routes check `features.<name>` setting
+
+---
+
+## CODE PATTERNS — ALWAYS USE THESE
+
+### Response helper (never use res.json() directly)
+```javascript
+const { success, error, paginated } = require('../../utils/response');
+
+return success(res, data, 'Product created', 201);
+return error(res, 'VALIDATION_ERROR', 'Invalid input', 400, details);
+return paginated(res, rows, { page, limit, total });
+```
+
+### Controller shape
+```javascript
+const create = async (req, res, next) => {
+  try {
+    const data = await ProductService.create(req.body, req.user.id);
+    return success(res, data, 'Product created', 201);
+  } catch (err) {
+    next(err); // always pass to error handler — never catch silently
+  }
+};
+```
+
+### Service shape
+```javascript
+const create = async (payload, actingUserId) => {
+  return sequelize.transaction(async (t) => {
+    const product = await Product.create(payload, { transaction: t });
+    await AuditService.log({
+      userId: actingUserId, action: 'CREATE',
+      entity: 'Product', entityId: product.id
+    }, t);
+    return product;
+  });
+};
+```
+
+### Atomic inventory reservation (CRITICAL — never deviate)
+```javascript
+// CORRECT
+const [affected] = await Product.update(
+  { reservedQty: Sequelize.literal(`reserved_qty + ${qty}`) },
+  {
+    where: {
+      id: productId,
+      [Op.and]: Sequelize.literal(`(quantity - reserved_qty) >= ${qty}`)
+    },
+    transaction: t
+  }
+);
+if (affected === 0) throw new AppError('INSUFFICIENT_STOCK', 409);
+
+// WRONG — race condition, never do this
+const product = await Product.findByPk(productId);
+product.reservedQty += qty;
+await product.save();
+```
+
+### Feature gate
+```javascript
+router.post('/wishlist/items',
+  authenticate,
+  featureGate('wishlist'),
+  wishlistController.add
+);
+```
+
+### Slug generation
+```javascript
+const { generateUniqueSlug } = require('../../utils/slugify');
+const slug = await generateUniqueSlug(name, Product);
+```
+
+---
+
+## NAMING STANDARDS
+
+| Item         | Rule                  | Example                  |
+|--------------|-----------------------|--------------------------|
+| API routes   | kebab-case, plural    | `/api/order-items`       |
+| DB tables    | snake_case, plural    | `order_items`            |
+| DB columns   | snake_case            | `first_name`             |
+| Model fields | camelCase             | `firstName`              |
+| File names   | dot-separated         | `product.model.js`       |
+| Functions    | camelCase verbs       | `createProduct`          |
+| Constants    | UPPER_SNAKE           | `ORDER_STATUS`           |
+| Error codes  | UPPER_SNAKE string    | `'INSUFFICIENT_STOCK'`   |
+| Module dir   | singular lowercase    | `modules/product/`       |
+
+---
+
+## ORDER LIFECYCLE — NEVER DEVIATE
+
+```
+pending_payment → paid → processing → shipped → delivered
+                                             ↘ cancelled
+paid → refunded
+```
+
+Status transitions made ONLY by:
+- Stripe webhook: `payment_intent.succeeded` → `paid`
+- Admin: `PUT /orders/:id/status`
+- Customer cancel: `POST /orders/:id/cancel` (only if `pending_payment`)
+
+---
+
+## KNOWN GAPS — FLAG PROACTIVELY
+
+When code touches these areas, always flag the gap to the user:
+
+- `media` table missing — Media model doesn't exist in DB yet
+- `password_reset_tokens` table missing — create before forgot-password flow
+- `email_verification_tokens` table missing — create before email verify flow
+- `product_variants` no soft delete — variants hard-delete when product deleted; warn if referenced in cart
+- `reviews` no `order_id` FK — verified purchase check requires manual order query
+
+---
+
+## SLASH COMMANDS
+
+- `/scaffold <module>` — Generate full module skeleton (all 5 files)
+- `/review <file>` — Run all 5 checklists against provided code
+- `/debug <error>` — Systematic root cause analysis
+
+---
+
+## OUTPUT FORMAT
+
+Always structure output as:
+
+```
+## Plan
+[2–3 sentences: what you're doing and why]
+
+## Files
+[one code block per file, full path as label]
+
+## Notes
+[migrations to run, env vars needed, known gaps, follow-up tasks]
+```
+
+Never output partial files. If a file is too long, say so and ask which section to prioritize.
+
+---
+---
+
+# SKILL: React Component Patterns (MUI)
+# Applies to: client/src/**
+
+## Component Structure — Always Follow This
+
+Every React component lives in `client/src/` and follows this layout:
+
+```
+client/src/
+  components/
+    common/          ← shared, reusable (Button, Modal, Table, MediaPicker)
+    layout/          ← Header, Sidebar, Footer, PageWrapper
+  pages/
+    admin/           ← admin-only pages
+    customer/        ← customer-facing pages
+  features/
+    <feature>/       ← co-located feature components (cart, product, checkout)
+```
+
+## Component Rules
+
+- **One component per file** — no barrel exports with multiple components
+- **Named exports only** — never default export for components
+- **Props interface at top** — document all props with JSDoc or PropTypes
+- **No business logic in components** — call hooks/services, never raw API calls
+- **No inline styles** — use MUI `sx` prop or `styled()` only
+- **No hardcoded colors** — always use MUI theme tokens (`primary.main`, `grey.500`)
+
+## MUI Patterns — Always Use
+
+### Theme-aware styling
+```jsx
+// CORRECT — uses theme
+<Box sx={{ color: 'primary.main', bgcolor: 'background.paper', p: 2 }}>
+
+// WRONG — hardcoded
+<Box sx={{ color: '#1976d2', backgroundColor: '#fff', padding: '16px' }}>
+```
+
+### Responsive layout
+```jsx
+// Always use MUI breakpoints, never raw media queries
+<Grid container spacing={{ xs: 1, sm: 2, md: 3 }}>
+  <Grid item xs={12} sm={6} md={4}>
+```
+
+### Standard page component shape
+```jsx
+// pages/customer/ProductListPage.jsx
+import { Container, Typography, Box } from '@mui/material';
+import { useProducts } from '../../features/product/hooks/useProducts';
+import { ProductGrid } from '../../features/product/ProductGrid';
+
+export function ProductListPage() {
+  const { products, isLoading, error } = useProducts();
+
+  if (isLoading) return <PageLoader />;
+  if (error) return <ErrorBoundaryFallback error={error} />;
+
+  return (
+    <Container maxWidth="xl">
+      <Typography variant="h4" component="h1" gutterBottom>
+        Products
+      </Typography>
+      <ProductGrid products={products} />
+    </Container>
+  );
+}
+```
+
+### Standard feature component shape
+```jsx
+// features/product/ProductCard.jsx
+import { Card, CardMedia, CardContent, Typography, Button } from '@mui/material';
+
+export function ProductCard({ product, onAddToCart }) {
+  return (
+    <Card sx={{ height: '100%', display: 'flex', flexDirection: 'column' }}>
+      <CardMedia
+        component="img"
+        image={product.images?.[0]?.url ?? '/placeholder.png'}
+        alt={product.name}
+        sx={{ aspectRatio: '1', objectFit: 'cover' }}
+      />
+      <CardContent sx={{ flexGrow: 1 }}>
+        <Typography variant="h6" noWrap>{product.name}</Typography>
+        <Typography variant="body2" color="text.secondary">
+          ₹{product.salePrice ?? product.price}
+        </Typography>
+      </CardContent>
+      <Button onClick={() => onAddToCart(product.id)} fullWidth variant="contained">
+        Add to Cart
+      </Button>
+    </Card>
+  );
+}
+```
+
+## Component Review Checklist
+- [ ] No raw API calls inside component — uses hook or service
+- [ ] No hardcoded colors or spacing — uses MUI theme tokens
+- [ ] Loading and error states handled
+- [ ] Mobile responsive — uses MUI breakpoints
+- [ ] No inline `style={{}}` — uses `sx` prop
+- [ ] Images have `alt` text
+- [ ] Buttons have accessible labels
+- [ ] Named export (not default)
+
+---
+---
+
+# SKILL: API Integration (Axios + React Query)
+# Applies to: client/src/api/**, client/src/features/**/hooks/**
+
+## Setup — Source of Truth
+
+All API calls go through a central Axios instance, never raw fetch:
+
+```javascript
+// client/src/api/axios.js — the only place to configure Axios
+import axios from 'axios';
+
+export const api = axios.create({
+  baseURL: import.meta.env.VITE_API_URL ?? 'http://localhost:5000/api',
+  withCredentials: true,
+});
+
+// Request: attach JWT from localStorage
+api.interceptors.request.use((config) => {
+  const token = localStorage.getItem('accessToken');
+  if (token) config.headers.Authorization = `Bearer ${token}`;
+  return config;
+});
+
+// Response: handle 401 → refresh token flow
+api.interceptors.response.use(
+  (res) => res,
+  async (err) => {
+    if (err.response?.status === 401) {
+      // trigger token refresh or logout
+    }
+    return Promise.reject(err);
+  }
+);
+```
+
+## API Service Layer
+
+Each feature has its own service file — never call `api` directly from components or hooks:
+
+```javascript
+// client/src/api/services/product.service.js
+import { api } from '../axios';
+
+export const productService = {
+  getAll: (params) => api.get('/products', { params }).then(r => r.data),
+  getBySlug: (slug) => api.get(`/products/${slug}`).then(r => r.data),
+  create: (data) => api.post('/products', data).then(r => r.data),
+  update: (id, data) => api.put(`/products/${id}`, data).then(r => r.data),
+  delete: (id) => api.delete(`/products/${id}`).then(r => r.data),
+};
+```
+
+## React Query Patterns
+
+### Query hook (read data)
+```javascript
+// features/product/hooks/useProducts.js
+import { useQuery } from '@tanstack/react-query';
+import { productService } from '../../../api/services/product.service';
+
+export const PRODUCT_KEYS = {
+  all: ['products'],
+  list: (params) => ['products', 'list', params],
+  detail: (slug) => ['products', 'detail', slug],
+};
+
+export function useProducts(params = {}) {
+  return useQuery({
+    queryKey: PRODUCT_KEYS.list(params),
+    queryFn: () => productService.getAll(params),
+    staleTime: 1000 * 60 * 5, // 5 min — tune per data volatility
+  });
+}
+
+export function useProduct(slug) {
+  return useQuery({
+    queryKey: PRODUCT_KEYS.detail(slug),
+    queryFn: () => productService.getBySlug(slug),
+    enabled: !!slug,
+  });
+}
+```
+
+### Mutation hook (write data)
+```javascript
+// features/product/hooks/useProductMutations.js
+import { useMutation, useQueryClient } from '@tanstack/react-query';
+import { productService } from '../../../api/services/product.service';
+import { PRODUCT_KEYS } from './useProducts';
+
+export function useCreateProduct() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: productService.create,
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: PRODUCT_KEYS.all });
+    },
+  });
+}
+```
+
+### Using mutations in components
+```jsx
+export function CreateProductForm() {
+  const { mutate, isPending, error } = useCreateProduct();
+
+  const handleSubmit = (data) => mutate(data);
+
+  return (
+    <>
+      {error && <Alert severity="error">{error.response?.data?.error?.message}</Alert>}
+      <Button onClick={() => handleSubmit(formData)} disabled={isPending}>
+        {isPending ? <CircularProgress size={20} /> : 'Create'}
+      </Button>
+    </>
+  );
+}
+```
+
+## API Integration Checklist
+- [ ] All calls go through `client/src/api/axios.js` — never raw fetch/axios
+- [ ] Each feature has its own service file in `client/src/api/services/`
+- [ ] Query keys use the `*_KEYS` constant object — never inline strings
+- [ ] `staleTime` set per endpoint (volatile data = lower, static = higher)
+- [ ] `enabled` guard on queries that depend on a param (`enabled: !!slug`)
+- [ ] Mutations invalidate relevant query keys on success
+- [ ] Error messages extracted from `error.response?.data?.error?.message`
+- [ ] Loading states shown with `isPending` / `isLoading`
+- [ ] No API calls inside component body — always in a hook
+
+---
+---
+
+# SKILL: Performance & Optimization
+# Applies to: client/src/**, server/src/**
+
+## Frontend Performance Rules
+
+### Code splitting — always lazy load pages
+```javascript
+// client/src/router.jsx — lazy load every page
+import { lazy, Suspense } from 'react';
+const ProductListPage = lazy(() => import('./pages/customer/ProductListPage'));
+const CheckoutPage    = lazy(() => import('./pages/customer/CheckoutPage'));
+
+// Wrap routes in Suspense
+<Suspense fallback={<PageLoader />}>
+  <Route path="/products" element={<ProductListPage />} />
+</Suspense>
+```
+
+### Memoization — use only when you have a proven re-render problem
+```javascript
+// useMemo for expensive derived values
+const sortedProducts = useMemo(
+  () => [...products].sort((a, b) => a.price - b.price),
+  [products]
+);
+
+// useCallback for stable function refs passed to memoized children
+const handleAddToCart = useCallback((id) => dispatch(addItem(id)), [dispatch]);
+
+// React.memo for pure list items that re-render frequently
+export const ProductCard = React.memo(function ProductCard({ product, onAdd }) {
+  ...
+});
+```
+
+### Image optimization
+```jsx
+// Always specify width/height to prevent layout shift
+// Use loading="lazy" for below-the-fold images
+<img
+  src={product.image}
+  alt={product.name}
+  width={400}
+  height={400}
+  loading="lazy"
+  style={{ objectFit: 'cover' }}
+/>
+```
+
+### List virtualization — required for lists > 100 items
+```jsx
+// Use react-window for large lists (product catalog, order history)
+import { FixedSizeGrid } from 'react-window';
+
+<FixedSizeGrid
+  columnCount={3}
+  columnWidth={300}
+  rowCount={Math.ceil(products.length / 3)}
+  rowHeight={400}
+  width={900}
+  height={600}
+>
+  {({ rowIndex, columnIndex, style }) => (
+    <div style={style}>
+      <ProductCard product={products[rowIndex * 3 + columnIndex]} />
+    </div>
+  )}
+</FixedSizeGrid>
+```
+
+## Backend Performance Rules
+
+### Database query optimization
+```javascript
+// ALWAYS specify attributes — never fetch * in production
+const products = await Product.findAll({
+  attributes: ['id', 'name', 'price', 'salePrice', 'slug'],  // explicit
+  include: [{
+    model: ProductImage,
+    attributes: ['url', 'isPrimary'],
+    where: { isPrimary: true },
+    required: false,
+  }],
+  limit,
+  offset,
+});
+
+// NEVER do N+1 — always eager load associations
+// WRONG
+const orders = await Order.findAll();
+for (const order of orders) {
+  order.items = await OrderItem.findAll({ where: { orderId: order.id } }); // N+1!
+}
+
+// CORRECT
+const orders = await Order.findAll({
+  include: [{ model: OrderItem, include: [Product] }]
+});
+```
+
+### Pagination — required on every list endpoint
+```javascript
+// Always paginate — never return unbounded lists
+const page  = parseInt(req.query.page)  || 1;
+const limit = Math.min(parseInt(req.query.limit) || 20, 100); // cap at 100
+const offset = (page - 1) * limit;
+
+const { count, rows } = await Product.findAndCountAll({ limit, offset });
+return paginated(res, rows, { page, limit, total: count });
+```
+
+### Caching with Redis — apply to expensive reads
+```javascript
+// Cache pattern: check cache → miss → query DB → set cache
+const cacheKey = `products:list:${JSON.stringify(params)}`;
+const cached = await redis.get(cacheKey);
+if (cached) return success(res, JSON.parse(cached));
+
+const data = await ProductService.getAll(params);
+await redis.setEx(cacheKey, 300, JSON.stringify(data)); // 5 min TTL
+return success(res, data);
+```
+
+### Response compression — must be enabled in Express
+```javascript
+// server/src/app.js — ensure this is present
+const compression = require('compression');
+app.use(compression()); // gzip all responses
+```
+
+## Performance Checklist
+- [ ] All pages lazy loaded with `React.lazy()` + `Suspense`
+- [ ] `React.memo` / `useMemo` / `useCallback` used only for proven bottlenecks
+- [ ] Images have `width`, `height`, and `loading="lazy"` for below-fold
+- [ ] Lists > 100 items use `react-window` virtualization
+- [ ] DB queries specify explicit `attributes` — no `SELECT *`
+- [ ] No N+1 queries — associations are eager loaded
+- [ ] All list endpoints paginated with max 100 cap
+- [ ] Expensive reads cached in Redis with appropriate TTL
+- [ ] `compression` middleware enabled in Express
+- [ ] `staleTime` tuned per query volatility in React Query

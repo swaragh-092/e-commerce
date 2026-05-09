@@ -9,6 +9,7 @@ const ProductCard = ({ product, fromCategory }) => {
   const { formatPrice } = useCurrency();
   const { settings } = useSettings();
   const pricingEnabled = useFeature('pricing');
+  const showPrice = useFeature('showPrice');
   const sales = settings?.sales || {};
   const primaryImage =
     getMediaUrl(product.images?.find((i) => i.isPrimary)?.url || product.images?.[0]?.url || '') || '/placeholder.png';
@@ -37,7 +38,7 @@ const ProductCard = ({ product, fromCategory }) => {
   }
 
   const endingSoon = hasSale && sales.showCountdown !== false && isEndingSoon(product.saleEndAt, sales.endingSoonHours);
-  const hasRating = product.averageRating != null;
+  const hasRating = product.avgRating != null;
 
   return (
     <Card
@@ -79,7 +80,7 @@ const ProductCard = ({ product, fromCategory }) => {
             sx={{ position: 'absolute', top: 8, right: 8, zIndex: 1 }}
           />
         )}
-        {endingSoon && (
+        {pricingEnabled && endingSoon && (
           <Chip
             label="Ending Soon"
             color="warning"
@@ -87,7 +88,7 @@ const ProductCard = ({ product, fromCategory }) => {
             sx={{ position: 'absolute', top: 8, left: 8, zIndex: 1, fontWeight: 700 }}
           />
         )}
-        {saleLabelText && (
+        {pricingEnabled && saleLabelText && (
           <Chip
             label={saleLabelText}
             size="small"
@@ -153,7 +154,7 @@ const ProductCard = ({ product, fromCategory }) => {
         {hasRating && (
           <Box sx={{ display: 'flex', alignItems: 'center', mb: 1 }}>
             <Rating
-              value={parseFloat(product.averageRating)}
+              value={parseFloat(product.avgRating)}
               readOnly
               size="small"
               precision={0.5}
@@ -166,7 +167,7 @@ const ProductCard = ({ product, fromCategory }) => {
           </Box>
         )}
         <Box sx={{ flexGrow: 1 }} />
-        {pricingEnabled && (
+        {showPrice && (
           <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mt: 'auto' }}>
             {hasSale ? (
               <>

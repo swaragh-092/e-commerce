@@ -5,8 +5,8 @@ export const getCategoryTree = async () => {
     return response.data;
 };
 
-export const getCategoryWithProducts = async (slug) => {
-    const response = await api.get(`/categories/${slug}`);
+export const getCategoryWithProducts = async (slug, page = 1, limit = 20) => {
+    const response = await api.get(`/categories/${slug}`, { params: { page, limit } });
     return response.data;
 };
 
@@ -29,4 +29,14 @@ export const deleteCategory = async (id) => {
 export const getCategories = async () => {
     const response = await api.get('/categories');
     return response.data?.data || [];
+};
+
+export const reorderCategory = async (id, direction) => {
+    const response = await api.post(`/categories/${id}/reorder`, { direction });
+    return response.data;
+};
+
+export const reorderCategoryProducts = async (id, productIds) => {
+    const response = await api.post(`/categories/${id}/products/reorder`, { productIds });
+    return response.data;
 };

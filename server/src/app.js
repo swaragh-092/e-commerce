@@ -26,7 +26,7 @@ app.use(
     origin: (origin, callback) => {
       const allowedOrigins = (
         process.env.CLIENT_URL ||
-        'http://localhost:5173,http://localhost:3000,http://localhost:3001'
+        'http://localhost:5173,http://localhost:3000,http://localhost:3001,http://localhost'
       ).split(',');
       if (!origin || allowedOrigins.includes(origin)) {
         callback(null, true);
@@ -57,7 +57,6 @@ if (process.env.NODE_ENV !== 'test') {
   app.use(morgan('dev'));
 }
 
-app.use('/api', globalLimiter);
 
 // Use the same resolution strategy as media.service.js so both always point
 // to the same directory regardless of the working directory at startup.
@@ -103,6 +102,7 @@ const categoryAttributeRoutes = require('./modules/attribute/categoryAttribute.r
 const productAttributeRoutes = require('./modules/attribute/productAttribute.routes');
 const productVariantRoutes = require('./modules/attribute/productVariant.routes');
 const pageRoutes = require('./modules/page/page.routes');
+const menuRoutes = require('./modules/menu/menu.routes');
 const notificationRoutes = require('./modules/notification/notification.routes');
 const shippingAdminRoutes = require('./modules/shipping/shipping.admin.routes');
 const shippingWebhookRoutes = require('./modules/shipping/shipping.webhook.routes');
@@ -136,6 +136,7 @@ app.use('/api/categories', categoryAttributeRoutes); // extends existing /api/ca
 app.use('/api/products', productAttributeRoutes);   // extends existing /api/products with /:id/attributes sub-routes
 app.use('/api/products', productVariantRoutes);     // extends existing /api/products with /:id/variants/* sub-routes
 app.use('/api/pages', pageRoutes);
+app.use('/api/menus', menuRoutes);
 app.use('/api/notifications', notificationRoutes);
 app.use('/api/enquiries', enquiryRoutes);
 

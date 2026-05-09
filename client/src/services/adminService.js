@@ -47,7 +47,7 @@ const updateUserStatus = (id, status) => api.put(`/users/${id}/status`, { status
 // Reviews (admin moderation)
 const getAdminReviews = (params = {}) => {
   const query = new URLSearchParams(params).toString();
-  return api.get(`/reviews${query ? `?${query}` : ''}`);
+  return api.get(`/${A}/reviews${query ? `?${query}` : ''}`);
 };
 // Route: PUT /{adminPrefix}/reviews/:id/moderate
 const updateReviewStatus = (id, status) => api.put(`/${A}/reviews/${id}/moderate`, { status });
@@ -116,15 +116,6 @@ const validateCoupon = (codeOrPayload, subtotal) => {
 const getPublicCoupons = () => api.get('/coupons/public');
 const getEligibleCoupons = (payload = {}) => api.post('/coupons/eligible', payload);
 
-// Storefront orders
-const getMyOrders = (params = {}) => {
-  const query = new URLSearchParams(params).toString();
-  return api.get(`/orders${query ? `?${query}` : ''}`);
-};
-const getMyOrderById = (id) => api.get(`/orders/${id}`);
-const cancelOrder = (id) => api.post(`/orders/${id}/cancel`);
-const placeOrder = (data) => api.post('/orders', data);
-
 // Storefront addresses
 const getAddresses = () => api.get('/users/me/addresses');
 const createAddress = (data) => api.post('/users/me/addresses', data);
@@ -153,7 +144,6 @@ export {
   updateSettings,
   getEmailTemplates, getEmailTemplate, updateEmailTemplate, previewEmailTemplate, resetEmailTemplate, getEmailTemplateDefault, sendTestEmail, sendTestNotification,
   validateCoupon, getPublicCoupons, getEligibleCoupons,
-  getMyOrders, getMyOrderById, cancelOrder, placeOrder,
   getAddresses, createAddress, updateAddress, deleteAddress, setDefaultAddress,
   getSaleLabels, createSaleLabel, updateSaleLabel, deleteSaleLabel, reorderSaleLabels,
 };

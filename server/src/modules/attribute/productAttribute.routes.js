@@ -11,20 +11,24 @@ const {
     updateProductAttributeSchema,
 } = require('./productAttribute.validation');
 const { PERMISSIONS } = require('../../config/permissions');
+const { idParamSchema, idAndAttrIdParamSchema } = require('../../utils/common.validation');
+
 
 const attrRead   = [authenticate, authorizePermissions(PERMISSIONS.ATTRIBUTES_READ)];
 const attrManage = [authenticate, authorizePermissions(PERMISSIONS.ATTRIBUTES_MANAGE)];
 
 // GET    /api/products/:id/attributes
-router.get('/:id/attributes', ...attrRead, controller.getProductAttributes);
+router.get('/:id/attributes', ...attrRead, validate(idParamSchema, 'params'), controller.getProductAttributes);
+
 
 // POST   /api/products/:id/attributes
-router.post('/:id/attributes', ...attrManage, validate(addProductAttributeSchema), controller.addProductAttribute);
+router.post('/:id/attributes', ...attrManage, validate(idParamSchema, 'params'), validate(addProductAttributeSchema), controller.addProductAttribute);
 
 // PUT    /api/products/:id/attributes/:attrId
-router.put('/:id/attributes/:attrId', ...attrManage, validate(updateProductAttributeSchema), controller.updateProductAttribute);
+router.put('/:id/attributes/:attrId', ...attrManage, validate(idAndAttrIdParamSchema, 'params'), validate(updateProductAttributeSchema), controller.updateProductAttribute);
 
 // DELETE /api/products/:id/attributes/:attrId
-router.delete('/:id/attributes/:attrId', ...attrManage, controller.deleteProductAttribute);
+router.delete('/:id/attributes/:attrId', ...attrManage, validate(idAndAttrIdParamSchema, 'params'), controller.deleteProductAttribute);
+
 
 module.exports = router;

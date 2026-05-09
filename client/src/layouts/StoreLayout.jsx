@@ -1,11 +1,13 @@
 import { useState, useEffect } from 'react';
-import { Box, AppBar, Toolbar, Typography, Button, IconButton, Badge, Menu, MenuItem, Divider, Avatar } from '@mui/material';
+import { Box, AppBar, Toolbar, Typography, Button, IconButton, Badge, Menu, MenuItem, Divider, Avatar, Alert } from '@mui/material';
 import ShoppingCartIcon from '@mui/icons-material/ShoppingCart';
 import CloseIcon from '@mui/icons-material/Close';
 import AccountCircleIcon from '@mui/icons-material/AccountCircle';
 import PersonIcon from '@mui/icons-material/Person';
 import ShoppingBagIcon from '@mui/icons-material/ShoppingBag';
 import LogoutIcon from '@mui/icons-material/Logout';
+import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
+import MenuIcon from '@mui/icons-material/Menu';
 import { Outlet, Link as RouterLink } from 'react-router-dom';
 import { useAuth } from '../hooks/useAuth';
 import { useSettings, useFeature } from '../hooks/useSettings';
@@ -14,7 +16,9 @@ import FavoriteBorderIcon from '@mui/icons-material/FavoriteBorder';
 import CategoryNav from '../components/layout/CategoryNav';
 import StorefrontFooter from '../components/layout/StorefrontFooter';
 import { useWishlist } from '../context/WishlistContext';
+import { useCategories } from '../context/CategoryContext';
 import PageService from '../services/pageService';
+import MenuService from '../services/menuService';
 import { ADMIN_ACCESS_PERMISSIONS, getFirstAccessibleAdminPath } from '../utils/permissions';
 import SEO from '../components/common/SEO';
 
@@ -23,11 +27,17 @@ const StoreLayout = () => {
   const { settings } = useSettings();
   const { cartCount } = useCart();
   const { wishlistCount } = useWishlist();
+  const { error: categoryError } = useCategories();
   const cartEnabled     = useFeature('cart');
   const wishlistEnabled = useFeature('wishlist');
   const ordersEnabled   = useFeature('orders');
   const [announcementDismissed, setAnnouncementDismissed] = useState(false);
   const [topLinks, setTopLinks] = useState([]);
+  const [headerMenu, setHeaderMenu] = useState(null);
+  const [mobileMenu, setMobileMenu] = useState(null);
+  const [menuAnchors, setMenuAnchors] = useState({});
+  const [mobileMenuAnchor, setMobileMenuAnchor] = useState(null);
+  const [logoLoadFailed, setLogoLoadFailed] = useState(false);
   const [accountMenuAnchor, setAccountMenuAnchor] = useState(null);
   const adminEntryPath = getFirstAccessibleAdminPath(user);
   const canAccessAdmin = hasAnyPermission(ADMIN_ACCESS_PERMISSIONS);
@@ -47,11 +57,28 @@ const StoreLayout = () => {
 
   useEffect(() => {
     const fetchTopLinks = async () => {
-      try {
-        const response = await PageService.getPublicPages('top');
-        setTopLinks(response.data || []);
-      } catch (error) {
-        console.error('Error fetching top links:', error);
+      const [headerMenuResult, mobileMenuResult, pageResult] = await Promise.allSettled([
+        MenuService.getPublicMenu('header'),
+        MenuService.getPublicMenu('mobile'),
+        PageService.getPublicPages('top'),
+      ]);
+
+      if (headerMenuResult.status === 'fulfilled') {
+        setHeaderMenu(headerMenuResult.value.data || null);
+      } else {
+        console.error('Error fetching header menu:', headerMenuResult.reason);
+      }
+
+      if (mobileMenuResult.status === 'fulfilled') {
+        setMobileMenu(mobileMenuResult.value.data || null);
+      } else {
+        console.error('Error fetching mobile menu:', mobileMenuResult.reason);
+      }
+
+      if (pageResult.status === 'fulfilled') {
+        setTopLinks(pageResult.value.data || []);
+      } else {
+        console.error('Error fetching top links:', pageResult.reason);
       }
     };
     fetchTopLinks();
@@ -63,6 +90,163 @@ const StoreLayout = () => {
   const showAnnouncement = announcement.enabled && !announcementDismissed;
   const navPosition  = nav.sticky !== false ? 'sticky' : 'static';
   const headerStyle = themeSettings.headerStyle || 'gradient';
+  const hasDynamicHeaderItems = Array.isArray(headerMenu?.items) && headerMenu.items.length > 0;
+  const headerItems = hasDynamicHeaderItems
+    ? headerMenu.items
+    : topLinks.map((link, index) => ({
+        id: link.id,
+        label: link.title,
+        url: `/p/${link.slug}`,
+        targetType: 'page',
+        placement: 'center',
+        sortOrder: index,
+        children: [],
+      }));
+
+  const groupedHeaderItems = {
+    left: headerItems.filter((item) => item.placement === 'left'),
+    center: headerItems.filter((item) => !item.placement || item.placement === 'center'),
+    right: headerItems.filter((item) => item.placement === 'right'),
+  };
+  const desktopHeaderItems = [
+    ...groupedHeaderItems.left,
+    ...groupedHeaderItems.center,
+    ...groupedHeaderItems.right,
+  ];
+
+  const headerAlignment = headerMenu?.alignment || 'left';
+
+  const hasDedicatedMobileItems = Array.isArray(mobileMenu?.items) && mobileMenu.items.length > 0;
+  const mobileHeaderItems = hasDedicatedMobileItems ? mobileMenu.items : desktopHeaderItems;
+
+  const isExternalUrl = (url = '') => /^https?:\/\//i.test(url) || url.startsWith('mailto:') || url.startsWith('tel:');
+  const getLinkProps = (item) => {
+    const url = item.url || '/';
+    if (item.targetType === 'none' || url === '#') {
+      return { component: 'button', type: 'button' };
+    }
+    if (isExternalUrl(url)) {
+      return {
+        component: 'a',
+        href: url,
+        target: item.openInNewTab ? '_blank' : undefined,
+        rel: item.openInNewTab ? 'noopener noreferrer' : undefined,
+      };
+    }
+    return { component: RouterLink, to: url };
+  };
+  const isNavigableItem = (item) => item.targetType !== 'none' && item.url && item.url !== '#';
+
+  const openDynamicMenu = (event, itemId) => {
+    setMenuAnchors((prev) => ({ ...prev, [itemId]: event.currentTarget }));
+  };
+
+  const closeDynamicMenu = (itemId) => {
+    setMenuAnchors((prev) => ({ ...prev, [itemId]: null }));
+  };
+
+  const openMobileMenu = (event) => {
+    setMobileMenuAnchor(event.currentTarget);
+  };
+
+  const closeMobileMenu = () => {
+    setMobileMenuAnchor(null);
+  };
+
+  const renderDynamicMenuItems = (items = [], parentId, depth = 0) => items.map((item) => {
+    const hasChildren = item.children?.length > 0;
+    const navigable = isNavigableItem(item);
+    return (
+      <Box key={item.id}>
+        <MenuItem
+          {...(navigable ? getLinkProps(item) : { component: 'div' })}
+          onClick={navigable ? () => closeDynamicMenu(parentId) : undefined}
+          sx={{ pl: 2 + depth * 2 }}
+        >
+          {item.label}
+        </MenuItem>
+        {hasChildren && renderDynamicMenuItems(item.children, parentId, depth + 1)}
+      </Box>
+    );
+  });
+
+  const renderHeaderLinks = (items = []) => items.map((item) => {
+    const hasChildren = item.children?.length > 0;
+    if (hasChildren) {
+      return (
+        <Box key={item.id}>
+          <Button
+            color="inherit"
+            endIcon={<ExpandMoreIcon />}
+            onClick={(event) => openDynamicMenu(event, item.id)}
+            sx={{
+              fontWeight: 700,
+              color: 'inherit',
+              whiteSpace: 'nowrap',
+              minWidth: 'auto',
+              opacity: 0.9,
+              px: 1.25,
+              '&:hover': { bgcolor: 'rgba(255,255,255,0.12)', opacity: 1 },
+            }}
+          >
+            {item.label}
+          </Button>
+          <Menu
+            anchorEl={menuAnchors[item.id]}
+            open={Boolean(menuAnchors[item.id])}
+            onClose={() => closeDynamicMenu(item.id)}
+          >
+            {isNavigableItem(item) && (
+              <MenuItem {...getLinkProps(item)} onClick={() => closeDynamicMenu(item.id)} sx={{ fontWeight: 700 }}>
+                All {item.label}
+              </MenuItem>
+            )}
+            {isNavigableItem(item) && <Divider />}
+            {renderDynamicMenuItems(item.children, item.id)}
+          </Menu>
+        </Box>
+      );
+    }
+
+    return (
+      <Button
+        key={item.id}
+        color="inherit"
+        {...getLinkProps(item)}
+        sx={{
+          flexShrink: 0,
+          fontWeight: 700,
+          color: 'inherit',
+          textDecoration: 'none',
+          whiteSpace: 'nowrap',
+          minWidth: 'auto',
+          opacity: 0.9,
+          px: 1.25,
+          '&:hover': { bgcolor: 'rgba(255,255,255,0.12)', opacity: 1 },
+        }}
+      >
+        {item.label}
+      </Button>
+    );
+  });
+
+  const renderMobileMenuItems = (items = [], depth = 0) => items.map((item) => {
+    const hasChildren = item.children?.length > 0;
+    const navigable = isNavigableItem(item);
+
+    return (
+      <Box key={item.id}>
+        <MenuItem
+          {...(navigable ? getLinkProps(item) : { component: 'div' })}
+          onClick={navigable ? closeMobileMenu : undefined}
+          sx={{ pl: 2 + depth * 2, fontWeight: depth === 0 ? 700 : 400 }}
+        >
+          {item.label}
+        </MenuItem>
+        {hasChildren && renderMobileMenuItems(item.children, depth + 1)}
+      </Box>
+    );
+  });
 
   return (
     <Box sx={{ display: 'flex', flexDirection: 'column', minHeight: '100vh' }}>
@@ -112,37 +296,88 @@ const StoreLayout = () => {
         }}
       >
         <Toolbar sx={{ minHeight: { xs: 64, md: 72 }, gap: 2 }}>
-          <Box component={RouterLink} to="/" sx={{ flexGrow: 1, display: 'flex', alignItems: 'center', textDecoration: 'none', color: 'inherit', gap: 1 }}>
-            {settings?.logo?.main ? (
+          <Box
+            component={RouterLink}
+            to="/"
+            sx={{
+              display: 'flex',
+              alignItems: 'center',
+              textDecoration: 'none',
+              color: 'inherit',
+              gap: 1,
+              flexShrink: 0,
+              minWidth: 0,
+            }}
+          >
+            {settings?.logo?.main && !logoLoadFailed ? (
               <img
                 src={settings.logo.main}
                 alt={settings?.general?.storeName || 'Store'}
                 style={{ maxHeight: 36, maxWidth: 140, objectFit: 'contain' }}
-                onError={(e) => { e.target.style.display = 'none'; }}
+                onError={() => setLogoLoadFailed(true)}
               />
             ) : (
-              <Typography variant="h6" sx={{ fontWeight: 700 }}>
+              <Typography variant="h6" noWrap sx={{ fontWeight: 700, maxWidth: 180 }}>
                 {settings?.general?.storeName || 'E-Commerce Store'}
               </Typography>
             )}
           </Box>
-          <Box sx={{ display: 'none', md: 'flex', alignItems: 'center', gap: 2, mr: 3 }}>
-            {topLinks.map((link) => (
-              <Button
-                key={link.id}
-                color="inherit"
-                component={RouterLink}
-                to={`/p/${link.slug}`}
-                sx={{
-                  fontWeight: 700,
-                  opacity: 0.9,
-                  '&:hover': { bgcolor: 'rgba(255,255,255,0.12)', opacity: 1 },
-                }}
-              >
-                {link.title}
-              </Button>
-            ))}
+
+          {headerAlignment === 'center' && <Box sx={{ flexGrow: 1, minWidth: 8 }} />}
+          {headerAlignment === 'right' && <Box sx={{ flexGrow: 1, minWidth: 8 }} />}
+
+          <Box
+            component="nav"
+            aria-label="Main navigation"
+            sx={{
+              display: { xs: 'none', md: 'flex' },
+              alignItems: 'center',
+              gap: 0.75,
+              minWidth: 0,
+              ...(headerAlignment === 'center' 
+                ? { 
+                    position: 'absolute', 
+                    left: '50%', 
+                    transform: 'translateX(-50%)',
+                    maxWidth: 'calc(100% - 350px)',
+                    overflowX: 'auto',
+                    whiteSpace: 'nowrap',
+                    scrollbarWidth: 'none',
+                    '&::-webkit-scrollbar': { display: 'none' }
+                  } 
+                : { overflow: 'hidden' }),
+            }}
+
+          >
+            {renderHeaderLinks(desktopHeaderItems)}
           </Box>
+
+          {(headerAlignment === 'left' || headerAlignment === 'center') && <Box sx={{ flexGrow: 1, minWidth: 8 }} />}
+
+
+          {mobileHeaderItems.length > 0 && (
+            <>
+              <IconButton
+                color="inherit"
+                onClick={openMobileMenu}
+                sx={{ display: { xs: 'inline-flex', md: 'none' }, '&:hover': { bgcolor: 'rgba(255,255,255,0.12)' } }}
+                aria-label="Open navigation menu"
+              >
+                <MenuIcon />
+              </IconButton>
+              <Menu
+                anchorEl={mobileMenuAnchor}
+                open={Boolean(mobileMenuAnchor)}
+                onClose={closeMobileMenu}
+                anchorOrigin={{ vertical: 'bottom', horizontal: 'right' }}
+                transformOrigin={{ vertical: 'top', horizontal: 'right' }}
+                PaperProps={{ sx: { mt: 1, minWidth: 220 } }}
+              >
+                {renderMobileMenuItems(mobileHeaderItems)}
+              </Menu>
+            </>
+          )}
+
           <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
             {cartEnabled && (
               <IconButton color="inherit" component={RouterLink} to="/cart" sx={{ '&:hover': { bgcolor: 'rgba(255,255,255,0.12)' } }}>
@@ -255,6 +490,22 @@ const StoreLayout = () => {
         </Toolbar>
       </AppBar>
       {nav.showCategoryBar && <CategoryNav />}
+
+      {categoryError && nav.showCategoryBar && (
+        <Alert 
+          severity="warning" 
+          variant="filled" 
+          sx={{ 
+            borderRadius: 0, 
+            py: 0.5, 
+            fontSize: '0.8rem', 
+            justifyContent: 'center',
+            '& .MuiAlert-icon': { fontSize: '1rem' }
+          }}
+        >
+          {categoryError}
+        </Alert>
+      )}
 
       <Box component="main" sx={{ flexGrow: 1 }}>
         <Outlet />

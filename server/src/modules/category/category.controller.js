@@ -14,10 +14,11 @@ exports.getTree = async (req, res, next) => {
 
 exports.getBySlug = async (req, res, next) => {
     try {
-        const category = await categoryService.getCategoryWithProducts(req.params.slug);
-        return success(res, category);
+        const { page = 1, limit = 20 } = req.query;
+        const result = await categoryService.getCategoryWithProducts(req.params.slug, page, limit);
+        return success(res, result);
     } catch (err) {
-        if (err.message === 'Category not found') return error(res, err.message, 404, 'NOT_FOUND');
+        if (err.statusCode === 404) return error(res, err.message, 404, 'NOT_FOUND');
         next(err);
     }
 };
@@ -27,6 +28,18 @@ exports.create = async (req, res, next) => {
         const category = await categoryService.createCategory(req.body);
         return success(res, category, 'Category created', 201);
     } catch (err) {
+        next(err);
+    }
+};
+
+exports.reorder = async (req, res, next) => {
+    try {
+        await categoryService.reorderCategory(req.params.id, req.body.direction);
+        return success(res, null, 'Category reordered');
+    } catch (err) {
+        if (err.message === 'Already at the top' || err.message === 'Already at the bottom') {
+            return error(res, err.message, 400, 'VALIDATION_ERROR');
+        }
         next(err);
     }
 };
@@ -49,6 +62,19 @@ exports.delete = async (req, res, next) => {
     } catch (err) {
         if (err.message === 'Category not found') return error(res, err.message, 404, 'NOT_FOUND');
         if (err.message === 'Cannot delete category with subcategories') return error(res, err.message, 400, 'BAD_REQUEST');
+        next(err);
+    }
+};
+
+exports.reorderProducts = async (req, res, next) => {
+    try {
+        const { productIds } = req.body;
+        if (!Array.isArray(productIds)) {
+            return error(res, 'productIds must be an array', 400, 'VALIDATION_ERROR');
+        }
+        await categoryService.reorderProducts(req.params.id, productIds);
+        return success(res, null, 'Product order updated');
+    } catch (err) {
         next(err);
     }
 };

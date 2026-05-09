@@ -13,6 +13,8 @@ const {
 const settingsController = require('./settings.controller');
 const saleLabelController = require('./saleLabel.controller');
 const { PERMISSIONS } = require('../../config/permissions');
+const { idParamSchema } = require('../../utils/common.validation');
+
 
 // ─── Sale Label routes (must come BEFORE the /:group wildcard) ───────────────
 // Public — used to populate dropdowns in the storefront & admin product forms
@@ -36,15 +38,19 @@ router.put('/sale-labels',
 router.patch('/sale-labels/:id',
   authenticate,
   authorizePermissions(PERMISSIONS.SETTINGS_MANAGE),
+  validate(idParamSchema, 'params'),
   validate(updateSaleLabelBodySchema),
   saleLabelController.update
 );
 
+
 router.delete('/sale-labels/:id',
   authenticate,
   authorizePermissions(PERMISSIONS.SETTINGS_MANAGE),
+  validate(idParamSchema, 'params'),
   saleLabelController.remove
 );
+
 
 // ─── Generic settings routes ─────────────────────────────────────────────────
 // Public endpoints

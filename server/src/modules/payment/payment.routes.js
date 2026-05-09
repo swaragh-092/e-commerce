@@ -6,13 +6,16 @@ const { authorizePermissions } = require('../../middleware/role.middleware');
 const { validate } = require('../../middleware/validate.middleware');
 const { createOrderSchema } = require('./payment.validation');
 const { PERMISSIONS } = require('../../config/permissions');
+const { idParamSchema, orderIdParamSchema } = require('../../utils/common.validation');
+
 
 const { featureGate } = require('../../middleware/featureGate.middleware');
 
 router.use(featureGate('payments'));
 
 router.post('/create-order', authenticate, validate(createOrderSchema), paymentController.createOrder);
-router.post('/verify/:orderId', authenticate, paymentController.verifyPayment);
+router.post('/verify/:orderId', authenticate, validate(orderIdParamSchema, 'params'), paymentController.verifyPayment);
+
 
 // Provider webhooks are parsed as raw bodies by app.js
 router.post('/webhook/cashfree', paymentController.handleCashfreeWebhook);
@@ -27,10 +30,12 @@ router.post('/payu/return', paymentController.handlePayUReturn);
 router.post('/webhook', paymentController.handleWebhook);
 
 // Admin: confirm cash was collected for a COD order
-router.post('/cod/confirm/:orderId', authenticate, authorizePermissions(PERMISSIONS.ORDERS_UPDATE_STATUS), paymentController.confirmCodPayment);
+router.post('/cod/confirm/:orderId', authenticate, authorizePermissions(PERMISSIONS.ORDERS_UPDATE_STATUS), validate(orderIdParamSchema, 'params'), paymentController.confirmCodPayment);
+
 
 // Admin: gateway manager — list statuses + save credentials
 router.get('/gateways', authenticate, authorizePermissions(PERMISSIONS.SETTINGS_READ), paymentController.getGatewayStatuses);
-router.post('/gateways/:id/configure', authenticate, authorizePermissions(PERMISSIONS.SETTINGS_MANAGE), paymentController.saveGatewayCredentials);
+router.post('/gateways/:id/configure', authenticate, authorizePermissions(PERMISSIONS.SETTINGS_MANAGE), validate(idParamSchema, 'params'), paymentController.saveGatewayCredentials);
+
 
 module.exports = router;

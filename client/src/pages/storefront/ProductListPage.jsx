@@ -4,6 +4,7 @@ import { Search as SearchIcon, FilterList as FilterIcon } from '@mui/icons-mater
 import { useSearchParams } from 'react-router-dom';
 import ProductGrid from '../../components/product/ProductGrid';
 import ProductFilters from '../../components/product/ProductFilters';
+import StorefrontSidebarMenu from '../../components/layout/StorefrontSidebarMenu';
 import { getProducts } from '../../services/productService';
 import { getCategoryTree } from '../../services/categoryService';
 import PageSEO from '../../components/common/PageSEO';
@@ -134,6 +135,7 @@ const ProductListPage = () => {
             <Grid container spacing={4}>
                 {showFilters && !isMobile && (
                     <Grid item md={3} lg={2.5} sx={{ position: 'sticky', top: 24, alignSelf: 'flex-start', height: 'fit-content' }}>
+                        <StorefrontSidebarMenu />
                         <ProductFilters filters={filters} onFilterChange={handleFilterChange} />
                     </Grid>
                 )}
@@ -157,6 +159,7 @@ const ProductListPage = () => {
 
             <Drawer anchor="left" open={mobileFilterOpen} onClose={() => setMobileFilterOpen(false)}>
                 <Box sx={{ width: 280, p: 3 }}>
+                    <StorefrontSidebarMenu onNavigate={() => setMobileFilterOpen(false)} />
                     <ProductFilters filters={filters} onFilterChange={(f) => { handleFilterChange(f); setMobileFilterOpen(false); }} />
                 </Box>
             </Drawer>

@@ -64,6 +64,7 @@ const CouponsPage = lazy(() => import('../pages/admin/CouponsPage'));
 const ReviewsPage = lazy(() => import('../pages/admin/ReviewsPage'));
 const MediaPage = lazy(() => import('../pages/admin/MediaPage'));
 const SettingsPage = lazy(() => import('../pages/admin/SettingsPage'));
+const FeaturesPage = lazy(() => import('../pages/admin/FeaturesPage'));
 const PaymentGatewaysPage = lazy(() => import('../pages/admin/PaymentGatewaysPage'));
 const ShippingPage = lazy(() => import('../pages/admin/ShippingPage'));
 const SaleLabelsPage = lazy(() => import('../pages/admin/SaleLabelsPage'));
@@ -74,6 +75,7 @@ const BrandsPage = lazy(() => import('../pages/admin/BrandsPage'));
 const AccessControlPage = lazy(() => import('../pages/admin/AccessControlPage'));
 const PagesManagePage = lazy(() => import('../pages/admin/PagesManagePage'));
 const PageEditPage = lazy(() => import('../pages/admin/PageEditPage'));
+const MenuBuilderPage = lazy(() => import('../pages/admin/MenuBuilderPage'));
 const SeoOverridesPage = lazy(() => import('../pages/admin/SeoOverridesPage'));
 const EmailTemplatesPage = lazy(() => import('../pages/admin/EmailTemplatesPage'));
 const StaticPageView = lazy(() => import('../pages/storefront/StaticPageView'));
@@ -206,6 +208,7 @@ const AppRoutes = () => (
           </Route>
           <Route element={<ProtectedRoute permission={PERMISSIONS.SETTINGS_READ} />}>
             <Route path="settings" element={<SettingsPage />} />
+            <Route path="features" element={<FeaturesPage />} />
             <Route path="seo-overrides" element={<SeoOverridesPage />} />
             <Route path="email-templates" element={<EmailTemplatesPage />} />
           </Route>
@@ -222,6 +225,9 @@ const AppRoutes = () => (
           </Route>
           <Route element={<ProtectedRoute permission={PERMISSIONS.PAGES_READ} />}>
             <Route path="pages" element={<PagesManagePage />} />
+          </Route>
+          <Route element={<ProtectedRoute permission={PERMISSIONS.MENUS_READ} />}>
+            <Route path="menus" element={<MenuBuilderPage />} />
           </Route>
           <Route element={<ProtectedRoute permission={PERMISSIONS.PAGES_MANAGE} />}>
             <Route path="pages/new" element={<PageEditPage />} />

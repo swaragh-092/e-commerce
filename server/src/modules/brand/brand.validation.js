@@ -22,7 +22,7 @@ const queryBrandSchema = Joi.object({
     search: Joi.string().optional(),
     isActive: Joi.boolean().optional(),
     page: Joi.number().integer().min(1).optional(),
-    limit: Joi.number().integer().min(1).max(100).optional(),
+    limit: Joi.number().integer().min(1).max(1000).optional(),
     sortBy: Joi.string().valid('name', 'created_at', 'updated_at').optional(),
     sortOrder: Joi.string().valid('ASC', 'DESC').optional(),
 });

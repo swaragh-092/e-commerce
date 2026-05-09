@@ -1,8 +1,10 @@
 import { useState, useEffect, useMemo } from 'react';
 import { useParams, useLocation, useNavigate } from 'react-router-dom';
 import {
-    Box, Button, Chip, CircularProgress, Container, Divider, Grid, Typography,
+    Box, Button, Chip, CircularProgress, Container, Divider, Grid, IconButton, Typography,
 } from '@mui/material';
+import AddIcon from '@mui/icons-material/Add';
+import RemoveIcon from '@mui/icons-material/Remove';
 import CartIcon from '@mui/icons-material/ShoppingCart';
 import FlashOnIcon from '@mui/icons-material/FlashOn';
 import HelpOutlineIcon from '@mui/icons-material/HelpOutline';
@@ -36,12 +38,14 @@ const ProductDetailPage = () => {
     const [selectedVariant, setSelectedVariant] = useState(null);
     const [pendingAction, setPendingAction] = useState(null);
     const [cartMsg, setCartMsg] = useState(null);
+    const [qty, setQty] = useState(1);
     const [enquiryOpen, setEnquiryOpen] = useState(false);
     const { addItem } = useCart();
     const { formatPrice } = useCurrency();
     const { settings } = useSettings();
     const cartEnabled    = useFeature('cart');
     const pricingEnabled = useFeature('pricing');
+    const showPrice = useFeature('showPrice');
     const wishlistEnabled = useFeature('wishlist');
     const enquiryEnabled = useFeature('enquiry');
     const pp = settings?.productPage || {};
@@ -50,6 +54,10 @@ const ProductDetailPage = () => {
     const buyNowLabel = pp.buyNowLabel || 'Buy Now';
     const showBuyNowButton = pp.showBuyNowButton !== false;
     const [countdownNow, setCountdownNow] = useState(Date.now());
+
+    useEffect(() => {
+        setQty(1);
+    }, [selectedVariant]);
 
     useEffect(() => {
         if (sales.showCountdown === false) return undefined;
@@ -177,7 +185,8 @@ const ProductDetailPage = () => {
     const showDiscountPercent = sales.showDiscountPercent !== false;
     const showSavingsAmount = sales.showSavingsAmount !== false;
     const endingSoon = hasSale && sales.showCountdown !== false && isEndingSoon(product.saleEndAt, sales.endingSoonHours);
-    const stockAvailable = selectedVariant ? Number(selectedVariant.stockQty || 0) > 0 : product.quantity > 0;
+    const maxStock = selectedVariant ? Number(selectedVariant.stockQty || 0) : Number(product.quantity || 0);
+    const stockAvailable = maxStock > 0;
     const selectedVariantLabel = selectedVariant ? getVariantOptionLabel(selectedVariant) : '';
     const displaySku = selectedVariant?.sku || product.sku;
 
@@ -185,7 +194,7 @@ const ProductDetailPage = () => {
         setPendingAction(action);
         setCartMsg(null);
         try {
-            await addItem(product.id, 1, selectedVariant?.id || null);
+            await addItem(product.id, Math.min(qty, maxStock), selectedVariant?.id || null);
             return true;
         } catch (err) {
             setCartMsg({ type: 'error', text: err?.response?.data?.message || 'Failed to add to cart' });
@@ -213,7 +222,7 @@ const ProductDetailPage = () => {
                 buyNowItem: {
                     productId: product.id,
                     variantId: selectedVariant?.id || null,
-                    quantity: 1,
+                    quantity: Math.min(qty, maxStock),
                     product: {
                         id: product.id,
                         name: product.name,
@@ -248,7 +257,10 @@ const ProductDetailPage = () => {
             />
             <Grid container spacing={6}>
                 <Grid item xs={12} md={6}>
-                    <ProductImages images={product.images} />
+                    <ProductImages 
+                        images={product.images} 
+                        variantImage={selectedVariant?.media?.url} 
+                    />
                 </Grid>
 
                 <Grid item xs={12} md={6}>
@@ -299,7 +311,7 @@ const ProductDetailPage = () => {
                         </Typography>
                     )}
 
-                    {pricingEnabled && (
+                    {showPrice && (
                         <Box sx={{ display: 'flex', alignItems: 'center', gap: 2, mb: 3 }}>
                             {hasSale ? (
                                 <>
@@ -311,9 +323,9 @@ const ProductDetailPage = () => {
                             ) : (
                                 <Typography variant="h5" fontWeight="bold">{formatPrice(currentPrice)}</Typography>
                             )}
-                            {hasSale && showDiscountPercent && discountPercent > 0 && <Chip label={`${discountPercent}% OFF`} color="error" />}
-                            {isScheduledSale && <Chip label="Sale Starts Soon" color="warning" />}
-                            {endingSoon && <Chip label="Ending Soon" color="warning" variant="outlined" />}
+                            {pricingEnabled && hasSale && showDiscountPercent && discountPercent > 0 && <Chip label={`${discountPercent}% OFF`} color="error" />}
+                            {pricingEnabled && isScheduledSale && <Chip label="Sale Starts Soon" color="warning" />}
+                            {pricingEnabled && endingSoon && <Chip label="Ending Soon" color="warning" variant="outlined" />}
                         </Box>
                     )}
 
@@ -401,32 +413,77 @@ const ProductDetailPage = () => {
                             </Typography>
                         )}
                         {cartEnabled && (
-                            <Box sx={{ display: 'grid', gap: 1.5, gridTemplateColumns: showBuyNowButton ? { xs: '1fr', sm: '1fr 1fr' } : '1fr' }}>
-                                <Button
-                                    variant="contained"
-                                    size="large"
-                                    fullWidth
-                                    startIcon={<CartIcon />}
-                                    disabled={!stockAvailable || pendingAction !== null}
-                                    onClick={handleAddToCart}
-                                    sx={{ py: 1.5, fontSize: '1.1rem' }}
-                                >
-                                    {pendingAction === 'cart' ? 'Adding...' : stockAvailable ? addToCartLabel : 'Out of Stock'}
-                                </Button>
-                                {showBuyNowButton && (
+                            <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1.5 }}>
+                                {/* Quantity stepper — only show when in stock */}
+                                {stockAvailable && (
+                                    <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                                        <Typography variant="body2" color="text.secondary" sx={{ minWidth: 60 }}>Qty:</Typography>
+                                        <Box
+                                            sx={{
+                                                display: 'inline-flex',
+                                                alignItems: 'center',
+                                                border: '1px solid',
+                                                borderColor: 'divider',
+                                                borderRadius: 2,
+                                                overflow: 'hidden',
+                                            }}
+                                        >
+                                            <IconButton
+                                                size="small"
+                                                onClick={() => setQty((q) => Math.max(1, q - 1))}
+                                                disabled={qty <= 1 || pendingAction !== null}
+                                                sx={{ borderRadius: 0, px: 1.5, py: 0.75 }}
+                                                aria-label="Decrease quantity"
+                                            >
+                                                <RemoveIcon fontSize="small" />
+                                            </IconButton>
+                                            <Typography
+                                                variant="body1"
+                                                fontWeight={600}
+                                                sx={{ px: 2.5, minWidth: 40, textAlign: 'center', userSelect: 'none' }}
+                                            >
+                                                {qty}
+                                            </Typography>
+                                            <IconButton
+                                                size="small"
+                                                onClick={() => setQty((q) => Math.min(q + 1, maxStock))}
+                                                disabled={pendingAction !== null || qty >= maxStock}
+                                                sx={{ borderRadius: 0, px: 1.5, py: 0.75 }}
+                                                aria-label="Increase quantity"
+                                            >
+                                                <AddIcon fontSize="small" />
+                                            </IconButton>
+                                        </Box>
+                                    </Box>
+                                )}
+
+                                <Box sx={{ display: 'grid', gap: 1.5, gridTemplateColumns: showBuyNowButton ? { xs: '1fr', sm: '1fr 1fr' } : '1fr' }}>
                                     <Button
-                                        variant="outlined"
-                                        color="primary"
+                                        variant="contained"
                                         size="large"
                                         fullWidth
-                                        startIcon={<FlashOnIcon />}
+                                        startIcon={<CartIcon />}
                                         disabled={!stockAvailable || pendingAction !== null}
-                                        onClick={handleBuyNow}
+                                        onClick={handleAddToCart}
                                         sx={{ py: 1.5, fontSize: '1.1rem' }}
                                     >
-                                        {pendingAction === 'buyNow' ? 'Redirecting...' : stockAvailable ? buyNowLabel : 'Out of Stock'}
+                                        {pendingAction === 'cart' ? 'Adding...' : stockAvailable ? addToCartLabel : 'Out of Stock'}
                                     </Button>
-                                )}
+                                    {showBuyNowButton && (
+                                        <Button
+                                            variant="outlined"
+                                            color="primary"
+                                            size="large"
+                                            fullWidth
+                                            startIcon={<FlashOnIcon />}
+                                            disabled={!stockAvailable || pendingAction !== null}
+                                            onClick={handleBuyNow}
+                                            sx={{ py: 1.5, fontSize: '1.1rem' }}
+                                        >
+                                            {pendingAction === 'buyNow' ? 'Redirecting...' : stockAvailable ? buyNowLabel : 'Out of Stock'}
+                                        </Button>
+                                    )}
+                                </Box>
                             </Box>
                         )}
                         {enquiryEnabled && (
@@ -445,7 +502,6 @@ const ProductDetailPage = () => {
 
                     {displayAttributes.length > 0 && (
                         <>
-                            <Divider sx={{ my: 4 }} />
                             <Typography variant="h6" gutterBottom>Specifications</Typography>
                             <Box sx={{ display: 'grid', gap: 1.25 }}>
                                 {displayAttributes.map((attributeRow) => {
@@ -476,9 +532,9 @@ const ProductDetailPage = () => {
                         </>
                     )}
 
-                    <Divider sx={{ my: 4 }} />
+                   
 
-                    <Typography variant="h6" gutterBottom>Product Details</Typography>
+                    <Typography variant="h6" sx={{ mt: 4 }} gutterBottom>Product Details</Typography>
                     <Box dangerouslySetInnerHTML={{ __html: DOMPurify.sanitize(product.description || '') }} sx={{ typography: 'body2', color: 'text.secondary', '& p': { mt: 0, mb: 2 } }} />
 
                     {product.tags?.length > 0 && (

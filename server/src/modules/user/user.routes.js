@@ -13,6 +13,8 @@ const {
   updateAddressSchema
 } = require('./user.validation');
 const { PERMISSIONS } = require('../../config/permissions');
+const { idParamSchema } = require('../../utils/common.validation');
+
 
 const userController = require('./user.controller');
 
@@ -25,13 +27,15 @@ router.put('/me/password', authenticate, validate(changePasswordSchema), userCon
 // Address Endpoints
 router.get('/me/addresses', authenticate, userController.getAddresses);
 router.post('/me/addresses', authenticate, validate(createAddressSchema), userController.createAddress);
-router.put('/me/addresses/:id', authenticate, validate(updateAddressSchema), userController.updateAddress);
-router.delete('/me/addresses/:id', authenticate, userController.deleteAddress);
-router.put('/me/addresses/:id/default', authenticate, userController.setDefaultAddress);
+router.put('/me/addresses/:id', authenticate, validate(idParamSchema, 'params'), validate(updateAddressSchema), userController.updateAddress);
+router.delete('/me/addresses/:id', authenticate, validate(idParamSchema, 'params'), userController.deleteAddress);
+router.put('/me/addresses/:id/default', authenticate, validate(idParamSchema, 'params'), userController.setDefaultAddress);
+
 
 // Admin Endpoints
 router.get('/', authenticate, authorizePermissions(PERMISSIONS.CUSTOMERS_READ), userController.list);
-router.get('/:id', authenticate, authorizePermissions(PERMISSIONS.CUSTOMERS_READ), userController.getOne);
-router.put('/:id/status', authenticate, authorizePermissions(PERMISSIONS.CUSTOMERS_MANAGE), validate(updateStatusSchema), userController.updateStatus);
+router.get('/:id', authenticate, authorizePermissions(PERMISSIONS.CUSTOMERS_READ), validate(idParamSchema, 'params'), userController.getOne);
+router.put('/:id/status', authenticate, authorizePermissions(PERMISSIONS.CUSTOMERS_MANAGE), validate(idParamSchema, 'params'), validate(updateStatusSchema), userController.updateStatus);
+
 
 module.exports = router;

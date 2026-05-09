@@ -32,6 +32,19 @@ const toNumber = (value, fallback = 0) => {
     return Number.isFinite(parsed) ? parsed : fallback;
 };
 
+// Helper to check if coupons feature is enabled
+const isCouponsEnabled = async () => {
+    const SettingsService = require('../settings/settings.service');
+    const { features } = await SettingsService.getFeatures();
+    return features.coupons === true;
+};
+
+const isShowAvailableCouponsEnabled = async () => {
+    const SettingsService = require('../settings/settings.service');
+    const { features } = await SettingsService.getFeatures();
+    return features.showAvailableCoupons === true;
+};
+
 const getEvaluationRewardTypes = (evaluation) => {
     const rewardTypes = [];
     if (toNumber(evaluation.orderDiscount) > 0) rewardTypes.push('order');
@@ -623,6 +636,9 @@ const evaluateCouponAgainstContext = async (coupon, userId, context) => {
 };
 
 const validateCoupon = async (code, userId, rawContext = {}) => {
+    if (!(await isCouponsEnabled())) {
+        throw new AppError('FORBIDDEN', 403, 'Coupons feature is currently disabled');
+    }
     const couponRecord = await Coupon.findOne({ where: { code: code.toUpperCase() } });
     if (!couponRecord) throw new AppError('NOT_FOUND', 404, 'Coupon not found');
 
@@ -665,6 +681,11 @@ const validateCoupon = async (code, userId, rawContext = {}) => {
 };
 
 const resolveCoupons = async (codes = [], userId, rawContext = {}) => {
+    if (!(await isCouponsEnabled())) {
+        // If disabled, return an empty result instead of throwing, 
+        // to allow checkout to proceed without discounts.
+        return buildCombinationResult([], await buildValidationContext(userId, rawContext), { source: 'auto' });
+    }
     const normalizedCodes = [...new Set((codes || [])
         .map((code) => String(code || '').trim().toUpperCase())
         .filter(Boolean))];
@@ -728,6 +749,16 @@ const resolveCoupons = async (codes = [], userId, rawContext = {}) => {
 };
 
 const getEligibleCoupons = async (userId, rawContext = {}) => {
+    if (!(await isCouponsEnabled()) || !(await isShowAvailableCouponsEnabled())) {
+        return {
+            eligibleCoupons: [],
+            suggestedCoupons: [],
+            bestCoupon: null,
+            autoAppliedCoupon: null,
+            bestCombination: buildCombinationResult([], await buildValidationContext(userId, rawContext), { source: 'auto' }),
+            autoAppliedCoupons: [],
+        };
+    }
     const context = await buildValidationContext(userId, rawContext);
     const candidateCoupons = await Coupon.findAll({
         where: {

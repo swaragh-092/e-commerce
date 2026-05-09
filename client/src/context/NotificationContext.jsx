@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useState, useCallback, useRef } from 'react';
+import React, { createContext, useContext, useState, useCallback } from 'react';
 import { 
   Snackbar, 
   Alert, 
@@ -9,7 +9,6 @@ import {
   DialogContentText, 
   DialogActions, 
   Button,
-  Box,
   Typography
 } from '@mui/material';
 
@@ -29,9 +28,13 @@ export const NotificationProvider = ({ children }) => {
     severity: 'primary' 
   });
 
-  const notify = useCallback((message, severity = 'info') => {
-    setNotification({ message, severity, key: Date.now() });
+  const notify = useCallback((message, severity = 'info', action = null) => {
+    const validatedAction = (action && typeof action.label === 'string' && typeof action.callback === 'function') 
+      ? action 
+      : null;
+    setNotification({ message, severity, action: validatedAction, key: Date.now() });
   }, []);
+
 
   const confirm = useCallback((title, message, severity = 'primary') => {
     return new Promise((resolve) => {
@@ -59,7 +62,7 @@ export const NotificationProvider = ({ children }) => {
       <Snackbar
         key={notification?.key}
         open={Boolean(notification)}
-        autoHideDuration={4000}
+        autoHideDuration={notification?.action ? 6000 : 4000}
         onClose={handleNotifyClose}
         TransitionComponent={SlideTransition}
         anchorOrigin={{ vertical: 'bottom', horizontal: 'center' }}
@@ -70,6 +73,27 @@ export const NotificationProvider = ({ children }) => {
           variant="filled"
           elevation={6}
           sx={{ width: '100%', minWidth: 300, borderRadius: '12px' }}
+          action={notification?.action ? (
+            <Button 
+              color="inherit" 
+              size="small" 
+              onClick={async () => {
+                try {
+                  if (notification?.action?.callback) {
+                    await notification.action.callback();
+                  }
+                } catch (err) {
+                  console.error('Notification action callback failed:', err);
+                } finally {
+                  handleNotifyClose(null, 'action');
+                }
+              }}
+
+              sx={{ fontWeight: 700 }}
+            >
+              {notification.action.label}
+            </Button>
+          ) : null}
         >
           {notification?.message}
         </Alert>

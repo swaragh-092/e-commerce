@@ -16,10 +16,15 @@ import VerifiedIcon from '@mui/icons-material/Verified';
 import HeadsetMicIcon from '@mui/icons-material/HeadsetMic';
 import CachedIcon from '@mui/icons-material/Cached';
 import { Link, useNavigate } from 'react-router-dom';
+
 import { useCart } from '../../hooks/useCart';
 import { useSettings, useCurrency, useFeature, useFeatureFlag } from '../../hooks/useSettings';
 import { getMediaUrl } from '../../utils/media';
+
+import { useCart } from "../../hooks/useCart";
+import { getMediaUrl } from "../../utils/media";
 import PageSEO from '../../components/common/PageSEO';
+import { useSettings, useCurrency, useFeature, useFeatureFlag } from "../../hooks/useSettings";
 import { AuthContext } from '../../context/AuthContext';
 import { getEligibleCoupons } from '../../services/adminService';
 import { getCartItemUnitPrice } from '../../utils/variantPricing';

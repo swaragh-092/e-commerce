@@ -36,11 +36,13 @@ import {
 } from '@mui/icons-material';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import PageSEO from '../../../components/common/PageSEO';
+
 import { userService } from '../../../services/userService';
 import { useCurrency, useFeature } from '../../../hooks/useSettings';
 import { getOrderStatusColor, getOrderStatusLabel } from '../../../utils/orderWorkflow';
 import { getApiErrorMessage } from '../../../utils/apiErrors';
 import { useNotification } from '../../../context/NotificationContext';
+
 
 // ─── Constants ───────────────────────────────────────────────────────────────
 
@@ -504,8 +506,8 @@ const AllOrdersPage = () => {
                 ...(selectedStatuses.length > 0 && { status: selectedStatuses.join(',') }),
             };
 
-            const res = await userService.getMyOrders(params);
-            let fetched = res.data || [];
+            const res = await orderService.getMyOrders(params);
+            let fetched = res.data?.rows || res.data || [];
 
             // Client-side date filter (time filter applied locally)
             const { from, to, olderThan } = getDateRange(selectedTimeFilter);

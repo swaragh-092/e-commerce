@@ -12,19 +12,27 @@ const {
     addValueSchema,
 } = require('./attribute.validation');
 const { PERMISSIONS } = require('../../config/permissions');
+const { idParamSchema, attrIdValueIdParamSchema, paginationQuerySchema } = require('../../utils/common.validation');
+
+
 
 const attributeRead = [authenticate, authorizePermissions(PERMISSIONS.ATTRIBUTES_READ)];
 const attributeManage = [authenticate, authorizePermissions(PERMISSIONS.ATTRIBUTES_MANAGE)];
 
 // --- Attribute Template CRUD ---
-router.get('/', controller.getAllAttributes);
-router.get('/:id', controller.getAttributeById);
+router.get('/', attributeRead, validate(paginationQuerySchema, 'query'), controller.getAllAttributes);
+
+router.get('/:id', attributeRead, validate(idParamSchema, 'params'), controller.getAttributeById);
+
 router.post('/', ...attributeManage, validate(createAttributeSchema), controller.createAttribute);
-router.put('/:id', ...attributeManage, validate(updateAttributeSchema), controller.updateAttribute);
-router.delete('/:id', ...attributeManage, controller.deleteAttribute);
+router.put('/:id', ...attributeManage, validate(idParamSchema, 'params'), validate(updateAttributeSchema), controller.updateAttribute);
+router.delete('/:id', ...attributeManage, validate(idParamSchema, 'params'), controller.deleteAttribute);
+
 
 // --- Attribute Values ---
-router.post('/:id/values', ...attributeManage, validate(addValueSchema), controller.addValue);
-router.delete('/:attrId/values/:valueId', ...attributeManage, controller.removeValue);
+router.post('/:id/values', ...attributeManage, validate(idParamSchema, 'params'), validate(addValueSchema), controller.addValue);
+router.put('/:id/values/reorder', ...attributeManage, validate(idParamSchema, 'params'), controller.reorderValues);
+router.delete('/:attrId/values/:valueId', ...attributeManage, validate(attrIdValueIdParamSchema, 'params'), controller.removeValue);
+
 
 module.exports = router;

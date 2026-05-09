@@ -7,6 +7,7 @@ const { getPagination, getPagingData } = require('../../utils/pagination');
 const { sanitizePageContent } = require('../../middleware/sanitize.middleware');
 const AppError = require('../../utils/AppError');
 const AuditService = require('../audit/audit.service');
+const logger = require('../../utils/logger');
 const { ACTIONS, ENTITIES } = require('../../config/constants');
 
 exports.getPages = async (filters, page, limit, isAdmin = false) => {
@@ -58,7 +59,7 @@ exports.getPageById = async (id) => {
 exports.createPage = async (data) => {
     const transaction = await Page.sequelize.transaction();
     try {
-        const slug = await generateSlug(data.title, Page);
+        const slug = await generateSlug(data.title, Page, 'slug', { transaction });
         
         if (data.content) data.content = sanitizePageContent(data.content);
 
@@ -74,7 +75,9 @@ exports.createPage = async (data) => {
                 entityId: page.id,
                 changes: { title: page.title, slug: page.slug },
             });
-        } catch (e) {}
+        } catch (e) {
+            logger.error('Failed to log audit for page creation:', e);
+        }
 
         return page;
     } catch (error) {
@@ -90,7 +93,7 @@ exports.updatePage = async (id, data) => {
     const transaction = await Page.sequelize.transaction();
     try {
         if (data.title && data.title !== page.title) {
-            data.slug = await generateSlug(data.title, Page);
+            data.slug = await generateSlug(data.title, Page, 'slug', { transaction });
         }
 
         if (data.content) data.content = sanitizePageContent(data.content);
@@ -107,7 +110,9 @@ exports.updatePage = async (id, data) => {
                 entityId: id,
                 changes: data,
             });
-        } catch (e) {}
+        } catch (e) {
+            logger.error('Failed to log audit for page update:', e);
+        }
 
         return page;
     } catch (error) {
@@ -135,7 +140,9 @@ exports.deletePage = async (id, actingUserId = null) => {
             entityId: id,
             changes: snapshot,
         });
-    } catch (e) {}
+    } catch (e) {
+        logger.error('Failed to log audit for page deletion:', e);
+    }
 
     return true;
 };

@@ -40,6 +40,13 @@ const OperationsSummaryWidget = ({ stats, spacing }) => {
       color: 'success.main',
       to: '/admin/products?status=published',
     },
+    {
+      label: 'Pending Reviews',
+      value: stats?.pendingReviewsCount ?? 0,
+      icon: <PeopleIcon />, // Using PeopleIcon or similar, reviews often related to users
+      color: 'secondary.main',
+      to: '/admin/reviews?status=pending',
+    },
   ];
 
   return (

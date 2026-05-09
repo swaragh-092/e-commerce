@@ -34,3 +34,13 @@ export const deleteProduct = async (id) => {
   const response = await api.delete(`/products/${id}`);
   return response.data;
 };
+
+export const bulkDeleteProducts = async (productIds) => {
+  const response = await api.delete('/products/bulk', { data: { productIds } });
+  return response.data;
+};
+
+export const bulkUpdateProducts = async (productIds, data) => {
+  const response = await api.patch('/products/bulk', { productIds, data });
+  return response.data;
+};

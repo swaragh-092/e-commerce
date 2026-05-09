@@ -12,6 +12,7 @@ const {
   Category,
   Brand,
   OrderItem,
+  Media,
   Sequelize,
 } = require('../index');
 const { Op } = Sequelize;
@@ -24,10 +25,14 @@ const { getPagination, getPagingData } = require('../../utils/pagination');
 const sanitizeHtml = require('sanitize-html');
 const AuditService = require('../audit/audit.service');
 const AppError = require('../../utils/AppError');
+const logger = require('../../utils/logger');
 const { ACTIONS, ENTITIES } = require('../../config/constants');
 const { getCategoryAndDescendantIds } = require('../category/category.service');
 const { normalizeSalePayload, serializeProductPricing } = require('./product.pricing');
+const { events, PRODUCT_EVENTS } = require('../../utils/events');
 const { getSaleLabels } = require('../settings/saleLabel.service');
+const SettingsService = require('../settings/settings.service');
+
 
 // Fetch the active label catalog once per request (the service caches for 60 s)
 const getLabelPresets = () => getSaleLabels().catch(() => []);
@@ -52,32 +57,56 @@ const sanitizeRichText = (html) => {
       'img',
     ],
     allowedAttributes: { a: ['href'], img: ['src', 'alt'] },
+    allowedSchemes: ['http', 'https', 'mailto', 'tel'],
+    allowedSchemesByTag: {
+      img: ['http', 'https'],
+    },
   });
 };
 
-const variantInclude = {
+const _syncProductTags = async (product, tagNames, transaction) => {
+  if (!tagNames || !Array.isArray(tagNames)) return;
+
+  const tagInstances = await Promise.all(
+    tagNames.map(async (tagName) => {
+      const tagSlug = await generateSlug(tagName, Tag, 'slug', { transaction });
+      const [tag] = await Tag.findOrCreate({
+        where: { name: tagName },
+        defaults: { slug: tagSlug },
+        transaction,
+      });
+      return tag;
+    })
+  );
+  await product.setTags(tagInstances, { transaction });
+};
+
+const getCommonAttributeIncludes = () => [
+  { model: AttributeTemplate, as: 'attribute', attributes: ['id', 'name', 'slug'] },
+  { model: AttributeValue, as: 'value', attributes: ['id', 'value', 'slug'] },
+];
+
+const getVariantInclude = () => ({
   model: ProductVariant,
   as: 'variants',
   include: [
     {
       model: VariantOption,
       as: 'options',
-      include: [
-        { model: AttributeTemplate, as: 'attribute', attributes: ['id', 'name', 'slug'] },
-        { model: AttributeValue, as: 'value', attributes: ['id', 'value', 'slug'] },
-      ],
+      include: getCommonAttributeIncludes(),
+    },
+    {
+      model: Media,
+      as: 'media',
     },
   ],
-};
+});
 
-const attributeInclude = {
+const getAttributeInclude = () => ({
   model: ProductAttribute,
   as: 'attributes',
-  include: [
-    { model: AttributeTemplate, as: 'attribute', attributes: ['id', 'name', 'slug'] },
-    { model: AttributeValue, as: 'value', attributes: ['id', 'value', 'slug'] },
-  ],
-};
+  include: getCommonAttributeIncludes(),
+});
 
 const validateVariantOptions = async (variants) => {
   if (!variants?.length) return;
@@ -100,6 +129,34 @@ const validateVariantOptions = async (variants) => {
         );
       }
     }
+  }
+};
+
+const validateProductImages = async (images) => {
+  if (!images?.length) return;
+
+  const mediaIds = images.map(img => img.mediaId).filter(Boolean);
+  if (mediaIds.length === 0) return;
+
+  const count = await Media.count({
+    where: { id: { [Op.in]: mediaIds } }
+  });
+
+  if (count !== mediaIds.length) {
+    throw new AppError('VALIDATION_ERROR', 400, 'One or more images reference an invalid media ID');
+  }
+};
+
+const validateProductStock = (data, currentProduct = null) => {
+  const qty = data.quantity !== undefined ? data.quantity : (currentProduct ? currentProduct.quantity : 0);
+  const reserved = data.reservedQty !== undefined ? data.reservedQty : (currentProduct ? currentProduct.reservedQty : 0);
+
+  if (reserved < 0) {
+    throw new AppError('VALIDATION_ERROR', 400, 'Reserved quantity cannot be negative');
+  }
+
+  if (reserved > qty) {
+    throw new AppError('VALIDATION_ERROR', 400, 'Reserved quantity cannot exceed total quantity');
   }
 };
 
@@ -152,6 +209,11 @@ exports.getProducts = async (filters, page, limit, isAdmin = false) => {
   const { limit: queryLimit, offset } = getPagination(page, limit);
   const where = {};
   const order = [];
+  const include = [
+    { model: ProductImage, as: 'images' },
+    { model: Tag, as: 'tags' },
+    { model: Brand, as: 'brand' },
+  ];
   const now = new Date();
 
   // Always restrict to published + enabled products for storefront; admins can filter by any status
@@ -231,6 +293,19 @@ exports.getProducts = async (filters, page, limit, isAdmin = false) => {
   if (filters.featured === 'true' || filters.featured === true) {
     where.isFeatured = true;
   }
+  
+  if (filters.tags) {
+    const tagList = Array.isArray(filters.tags) ? filters.tags : filters.tags.split(',').map(t => t.trim()).filter(Boolean);
+    if (tagList.length > 0) {
+      const tagInclude = include.find(inc => inc.as === 'tags');
+      if (tagInclude) {
+        tagInclude.where = { name: { [Op.in]: tagList } };
+        tagInclude.required = true;
+      }
+    }
+  } else {
+    include.push({ model: Tag, as: 'tags' });
+  }
 
   // sale: salePrice is set AND sale window is active (or no window defined)
   if (filters.onSale === 'true' || filters.onSale === true || filters.sale === 'true' || filters.sale === true) {
@@ -263,12 +338,18 @@ exports.getProducts = async (filters, page, limit, isAdmin = false) => {
   else if (filters.sort === 'name_asc') order.push(['name', 'ASC']);
   else order.push(['createdAt', 'DESC']);
 
-  const include = [
-    { model: ProductImage, as: 'images' },
-    { model: ProductVariant, as: 'variants' },
-    { model: Tag, as: 'tags' },
-    { model: Brand, as: 'brand' },
-  ];
+
+  const requestedIncludes = filters.include && typeof filters.include === 'string' ? filters.include.split(',').map(s => s.trim()).filter(Boolean) : [];
+
+  if (requestedIncludes.includes('variants')) {
+    include.push(getVariantInclude());
+  } else {
+    include.push({ model: ProductVariant, as: 'variants' });
+  }
+
+  if (requestedIncludes.includes('attributes')) {
+    include.push(getAttributeInclude());
+  }
 
   if (filters.categoryId) {
     const categoryIds = await getCategoryAndDescendantIds(filters.categoryId);
@@ -308,8 +389,48 @@ exports.getProducts = async (filters, page, limit, isAdmin = false) => {
     distinct: true,
   });
 
+  let counts = {};
+  if (isAdmin) {
+    const countWhere = { ...where };
+    delete countWhere.status;
+
+    // For status counts, we need to preserve any required includes (joins used for filtering)
+    // like categories or tags, but strip out attributes to keep it light.
+    const countInclude = include
+      .filter(inc => inc.required)
+      .map(inc => ({ 
+        ...inc, 
+        attributes: [],
+        ...(inc.through ? { through: { attributes: [] } } : {})
+      }));
+
+    const statusCounts = await Product.findAll({
+      where: countWhere,
+      include: countInclude,
+      attributes: [
+        'status',
+        [Sequelize.fn('COUNT', Sequelize.col('Product.id')), 'count']
+      ],
+      group: ['status'],
+      raw: true
+    });
+    
+    counts = statusCounts.reduce((acc, curr) => {
+      // Sequelize raw result with group often has count as a string
+      acc[curr.status] = parseInt(curr.count || 0, 10);
+      return acc;
+    }, {});
+  }
+
   const labelPresets = await getLabelPresets();
-  return getPagingData(rows.map((row) => serializeProductPricing(row, { adminView: isAdmin }, labelPresets)), count, page, queryLimit);
+  const { features } = await SettingsService.getFeatures();
+  const serializedRows = rows.map((row) => serializeProductPricing(row, { adminView: isAdmin, features }, labelPresets));
+  
+  const pagingData = getPagingData(serializedRows, count, page, queryLimit);
+  if (isAdmin) {
+    pagingData.counts = counts;
+  }
+  return pagingData;
 };
 
 exports.getProductBySlug = async (slug, { adminView = false } = {}) => {
@@ -322,8 +443,8 @@ exports.getProductBySlug = async (slug, { adminView = false } = {}) => {
     where,
     include: [
       { model: ProductImage, as: 'images' },
-      variantInclude,
-      attributeInclude,
+      getVariantInclude(),
+      getAttributeInclude(),
       { model: Category, as: 'categories' },
       { model: Tag, as: 'tags' },
       { model: Brand, as: 'brand' },
@@ -331,15 +452,16 @@ exports.getProductBySlug = async (slug, { adminView = false } = {}) => {
   });
   if (!product) throw new AppError('NOT_FOUND', 404, 'Product not found');
   const labelPresets = await getLabelPresets();
-  return serializeProductPricing(product, { adminView }, labelPresets);
+  const { features } = await SettingsService.getFeatures();
+  return serializeProductPricing(product, { adminView, features }, labelPresets);
 };
 
 exports.getProductById = async (id) => {
   const product = await Product.findByPk(id, {
     include: [
       { model: ProductImage, as: 'images' },
-      variantInclude,
-      attributeInclude,
+      getVariantInclude(),
+      getAttributeInclude(),
       { model: Category, as: 'categories' },
       { model: Tag, as: 'tags' },
       { model: Brand, as: 'brand' },
@@ -347,7 +469,8 @@ exports.getProductById = async (id) => {
   });
   if (!product) throw new AppError('NOT_FOUND', 404, 'Product not found');
   const labelPresets = await getLabelPresets();
-  return serializeProductPricing(product, { adminView: true }, labelPresets);
+  const { features } = await SettingsService.getFeatures();
+  return serializeProductPricing(product, { adminView: true, features }, labelPresets);
 };
 
 exports.createProduct = async (data, req = null) => {
@@ -355,9 +478,17 @@ exports.createProduct = async (data, req = null) => {
   const labelPresets = await getLabelPresets();
   try {
     data = normalizeSalePayload(data, null, { labelPresets });
-    const slug = data.slug ? await generateSlug(data.slug, Product) : await generateSlug(data.name, Product);
+    const slug = data.slug ? await generateSlug(data.slug, Product, 'slug', { transaction }) : await generateSlug(data.name, Product, 'slug', { transaction });
 
     if (data.description) data.description = sanitizeRichText(data.description);
+
+    if (data.brandId) {
+      const brand = await Brand.findByPk(data.brandId);
+      if (!brand) throw new AppError('NOT_FOUND', 404, 'Brand not found');
+    }
+
+    validateProductStock(data);
+    if (data.images) await validateProductImages(data.images);
 
     const product = await Product.create({ ...data, slug }, { transaction });
 
@@ -374,32 +505,30 @@ exports.createProduct = async (data, req = null) => {
       await ProductImage.bulkCreate(tempImgs, { transaction });
     }
 
-    if (data.tags && data.tags.length) {
-      const tagInstances = await Promise.all(
-        data.tags.map(async (tagName) => {
-          const tagSlug = await generateSlug(tagName, Tag);
-          const [tag] = await Tag.findOrCreate({
-            where: { name: tagName },
-            defaults: { slug: tagSlug },
-            transaction,
-          });
-          return tag;
-        })
-      );
-      await product.setTags(tagInstances, { transaction });
+    if (data.tags) {
+      await _syncProductTags(product, data.tags, transaction);
     }
 
     await transaction.commit();
 
-    try {
-      await AuditService.log({
-        action: ACTIONS.CREATE,
-        entity: ENTITIES.PRODUCT,
-        entityId: product.id,
-        changes: { name: product.name, sku: product.sku },
-        req: req || null,
-      });
-    } catch (e) {}
+      try {
+        await AuditService.log({
+          action: ACTIONS.CREATE,
+          entity: ENTITIES.PRODUCT,
+          entityId: product.id,
+          changes: { name: product.name, sku: product.sku },
+          req: req || null,
+        });
+        
+        events.emit(PRODUCT_EVENTS.CREATED, {
+          productId: product.id,
+          name: product.name,
+          sku: product.sku,
+          actingUserId: req?.user?.id
+        });
+      } catch (e) {
+        logger.error('Failed to log audit or emit event for product creation:', e);
+      }
 
     return exports.getProductBySlug(slug, { adminView: true });
   } catch (error) {
@@ -418,14 +547,22 @@ exports.updateProduct = async (id, data, req = null) => {
     data = normalizeSalePayload(data, product.price, { labelPresets });
     
     if (data.slug && data.slug !== product.slug) {
-      data.slug = await generateSlug(data.slug, Product);
+      data.slug = await generateSlug(data.slug, Product, 'slug', { transaction });
     } else if (data.name && data.name !== product.name && !data.slug) {
-      data.slug = await generateSlug(data.name, Product);
+      data.slug = await generateSlug(data.name, Product, 'slug', { transaction });
     } else {
       delete data.slug;
     }
 
     if (data.description) data.description = sanitizeRichText(data.description);
+
+    if (data.brandId && data.brandId !== product.brandId) {
+      const brand = await Brand.findByPk(data.brandId);
+      if (!brand) throw new AppError('NOT_FOUND', 404, 'Brand not found');
+    }
+
+    validateProductStock(data, product);
+    if (data.images) await validateProductImages(data.images);
 
     await product.update(data, { transaction });
 
@@ -444,18 +581,7 @@ exports.updateProduct = async (id, data, req = null) => {
     }
 
     if (data.tags) {
-      const tagInstances = await Promise.all(
-        data.tags.map(async (tagName) => {
-          const tagSlug = await generateSlug(tagName, Tag);
-          const [tag] = await Tag.findOrCreate({
-            where: { name: tagName },
-            defaults: { slug: tagSlug },
-            transaction,
-          });
-          return tag;
-        })
-      );
-      await product.setTags(tagInstances, { transaction });
+      await _syncProductTags(product, data.tags, transaction);
     }
 
     await transaction.commit();
@@ -468,7 +594,15 @@ exports.updateProduct = async (id, data, req = null) => {
         changes: data,
         req,
       });
-    } catch (e) {}
+      
+      events.emit(PRODUCT_EVENTS.UPDATED, {
+        productId: id,
+        changes: data,
+        actingUserId: req?.user?.id
+      });
+    } catch (e) {
+      logger.error('Failed to log audit or emit event for product update:', e);
+    }
 
     return exports.getProductBySlug(data.slug || product.slug, { adminView: true });
   } catch (error) {
@@ -492,13 +626,106 @@ exports.deleteProduct = async (id, req = null) => {
       changes: snapshot,
       req,
     });
-  } catch (e) {}
+    
+    events.emit(PRODUCT_EVENTS.DELETED, {
+      productId: id,
+      snapshot,
+      actingUserId: req?.user?.id
+    });
+  } catch (e) {
+    logger.error('Failed to log audit or emit event for product deletion:', e);
+  }
 
   return true;
 };
 
+exports.bulkDeleteProducts = async (ids, actingUserId = null) => {
+  return Product.sequelize.transaction(async (transaction) => {
+    const products = await Product.findAll({
+      where: { id: ids },
+      transaction,
+    });
+
+    if (products.length === 0) {
+      throw new AppError('NOT_FOUND', 404, 'No products found to delete');
+    }
+
+    await Product.destroy({
+      where: { id: ids },
+      transaction,
+    });
+
+    // Log individual audit logs for each deleted product
+    for (const product of products) {
+      try {
+        await AuditService.log({
+          userId: actingUserId,
+          action: ACTIONS.DELETE,
+          entity: ENTITIES.PRODUCT,
+          entityId: product.id,
+          changes: { name: product.name, sku: product.sku },
+        });
+      } catch (e) {
+        logger.error(`Failed to log audit for product deletion (ID: ${product.id}):`, e);
+      }
+    }
+    
+    events.emit(PRODUCT_EVENTS.BULK_DELETED, {
+      productIds: ids,
+      actingUserId
+    });
+
+    return { deletedCount: products.length };
+  });
+};
+
+exports.bulkUpdateProducts = async (ids, data, actingUserId = null) => {
+  return Product.sequelize.transaction(async (transaction) => {
+    const products = await Product.findAll({
+      where: { id: ids },
+      transaction,
+    });
+
+    if (products.length === 0) {
+      throw new AppError('NOT_FOUND', 404, 'No products found to update');
+    }
+
+    await Product.update(data, {
+      where: { id: ids },
+      transaction,
+    });
+
+    // Log individual audit logs for each updated product
+    for (const product of products) {
+      try {
+        await AuditService.log({
+          userId: actingUserId,
+          action: ACTIONS.UPDATE,
+          entity: ENTITIES.PRODUCT,
+          entityId: product.id,
+          changes: data,
+        });
+      } catch (e) {
+        logger.error(`Failed to log audit for product bulk update (ID: ${product.id}):`, e);
+      }
+    }
+    
+    events.emit(PRODUCT_EVENTS.BULK_UPDATED, {
+      productIds: ids,
+      changes: data,
+      actingUserId
+    });
+
+    return { updatedCount: products.length };
+  });
+};
+
 exports.bulkUpdateSale = async (payload, actingUserId = null) => {
   const { action, productIds, saleType, value, saleStartAt, saleEndAt, saleLabel } = payload;
+
+  if (action === 'apply' && Number(value) <= 0) {
+    throw new AppError('VALIDATION_ERROR', 400, 'Discount value must be greater than zero');
+  }
 
   if (action === 'apply' && saleType === 'percentage' && Number(value) >= 100) {
     throw new AppError('VALIDATION_ERROR', 400, 'Percentage discount must be less than 100');
@@ -539,8 +766,17 @@ exports.bulkUpdateSale = async (payload, actingUserId = null) => {
             ? { salePrice: null, saleStartAt: null, saleEndAt: null, saleLabel: null }
             : { saleType, value, saleStartAt: saleStartAt || null, saleEndAt: saleEndAt || null, saleLabel: saleLabel || null },
         });
-      } catch (e) {}
+      } catch (e) {
+        logger.error('Failed to log audit for bulk sale update:', e);
+      }
     }
+    
+    events.emit(PRODUCT_EVENTS.BULK_UPDATED, {
+      productIds,
+      action,
+      saleData: action === 'apply' ? { saleType, value, saleStartAt, saleEndAt, saleLabel } : null,
+      actingUserId
+    });
 
     return {
       action,

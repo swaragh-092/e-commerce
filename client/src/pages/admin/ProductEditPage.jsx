@@ -34,7 +34,9 @@ import {
   AccordionSummary,
   AccordionDetails,
   Switch,
+  LinearProgress,
 } from '@mui/material';
+
 import {
   Add as AddIcon,
   Delete as DeleteIcon,
@@ -43,6 +45,7 @@ import {
   Star as StarIcon,
   StarBorder as StarBorderIcon,
   ExpandMore as ExpandMoreIcon,
+  Image as ImageIcon,
 } from '@mui/icons-material';
 import { getMediaUrl } from '../../utils/media';
 import useSKUGenerator from '../../hooks/useSKUGenerator';
@@ -57,7 +60,7 @@ import { getSaleLabels } from '../../services/adminService';
 import MediaPicker from '../../components/common/MediaPicker';
 import MediaUploader from '../../components/common/MediaUploader';
 import { useNotification } from '../../context/NotificationContext';
-import { useSettings } from '../../hooks/useSettings';
+import { useCurrency, useSettings, useFeature } from '../../hooks/useSettings';
 import { getProductBasePrice } from '../../utils/variantPricing';
 import { getVariantOptionLabel } from '../../utils/variantOptions';
 import { useAuth } from '../../hooks/useAuth';
@@ -76,36 +79,40 @@ const generateSlug = (text) => {
     .replace(/^-+/, '')
     .replace(/-+$/, '');
 };
-
 const validate = (formData) => {
   const errs = {};
   if (!formData.name?.trim()) errs.name = 'Product name is required.';
   else if (formData.name?.trim().length > 255)
     errs.name = 'Product name must be 255 characters or less.';
 
-  const rPrice = Number(formData.price);
-  if (formData.price === '' || formData.price === null || formData.price === undefined) {
-    errs.price = 'Price is required.';
-  } else if (isNaN(rPrice) || rPrice <= 0) {
-    errs.price = 'Price must be a positive number.';
-  }
+  // Only validate price/tax if their respective features are enabled
+  const pricingEnabled = window.__APP_FEATURES__?.pricing ?? true; // Fallback to true if unknown
+  const showPrice = window.__APP_FEATURES__?.showPrice ?? true;
 
-  if (formData.salePrice !== '' && formData.salePrice !== null) {
-    const sPrice = Number(formData.salePrice);
-    if (isNaN(sPrice) || sPrice <= 0) {
-      errs.salePrice = 'Sale price must be a positive number.';
-    } else if (!isNaN(rPrice) && rPrice > 0 && sPrice >= rPrice) {
-      errs.salePrice = 'Sale price must be less than the regular price.';
+  if (pricingEnabled || showPrice) {
+    const rPrice = Number(formData.price);
+    if (formData.price === '' || formData.price === null || formData.price === undefined) {
+      errs.price = 'Price is required.';
+    } else if (isNaN(rPrice) || rPrice <= 0) {
+      errs.price = 'Price must be a positive number.';
     }
-  }
 
-  // Only require sale price if a sale is actively being scheduled via dates
-  if ((formData.saleStartAt || formData.saleEndAt) && (formData.salePrice === '' || formData.salePrice === null)) {
-    errs.salePrice = 'Add a sale price before scheduling a sale.';
-  }
+    if (formData.salePrice !== '' && formData.salePrice !== null) {
+      const sPrice = Number(formData.salePrice);
+      if (isNaN(sPrice) || sPrice <= 0) {
+        errs.salePrice = 'Sale price must be a positive number.';
+      } else if (!isNaN(rPrice) && rPrice > 0 && sPrice >= rPrice) {
+        errs.salePrice = 'Sale price must be less than the regular price.';
+      }
+    }
 
-  if (formData.saleStartAt && formData.saleEndAt && new Date(formData.saleEndAt) <= new Date(formData.saleStartAt)) {
-    errs.saleEndAt = 'Sale end must be after the start date.';
+    if ((formData.saleStartAt || formData.saleEndAt) && (formData.salePrice === '' || formData.salePrice === null)) {
+      errs.salePrice = 'Add a sale price before scheduling a sale.';
+    }
+
+    if (formData.saleStartAt && formData.saleEndAt && new Date(formData.saleEndAt) <= new Date(formData.saleStartAt)) {
+      errs.saleEndAt = 'Sale end must be after the start date.';
+    }
   }
 
   if (
@@ -130,7 +137,7 @@ const validate = (formData) => {
   }
 
   // Tax Configuration Validation
-  if (formData.taxConfig?.isCustom) {
+  if (pricingEnabled && formData.taxConfig?.isCustom) {
     const { sgst, cgst, igst } = formData.taxConfig;
     if (isNaN(Number(sgst)) || sgst < 0 || sgst > 1) {
       errs.taxConfig = 'SGST must be between 0 and 100%.';
@@ -159,13 +166,16 @@ const ProductEditPage = () => {
   const navigate = useNavigate();
   const { notify, confirm } = useNotification();
   const { settings } = useSettings();
+  const { currency, symbol, formatPrice } = useCurrency();
   const { hasPermission } = useAuth();
   const isNew = !id || id === 'new';
-  const { generateProductSKU } = useSKUGenerator();
+  const { generateProductSKU, generateVariantSKU } = useSKUGenerator();
   const sales = settings?.sales || {};
   const canCreateProducts = hasPermission(PERMISSIONS.PRODUCTS_CREATE);
   const canUpdateProducts = hasPermission(PERMISSIONS.PRODUCTS_UPDATE);
   const canUploadMedia = hasPermission(PERMISSIONS.MEDIA_UPLOAD);
+  const pricingEnabled = useFeature('pricing');
+  const showPrice = useFeature('showPrice');
   const canSaveProduct = isNew ? canCreateProducts : canUpdateProducts;
 
   const [formData, setFormData] = useState({
@@ -289,7 +299,7 @@ const ProductEditPage = () => {
       return;
     }
 
-    const errs = validate(formData);
+    const errs = validate({ ...formData, _features: { pricing: pricingEnabled, showPrice } });
     if (Object.keys(errs).length > 0) {
       setErrors(errs);
       notify('Please fix the validation errors before saving.', 'warning');
@@ -302,12 +312,12 @@ const ProductEditPage = () => {
         ...formData,
         price: parseFloat(formData.price),
         salePrice:
-          formData.salePrice !== '' && formData.salePrice !== null
+          formData.salePrice !== '' && formData.salePrice !== null && !isNaN(parseFloat(formData.salePrice))
             ? parseFloat(formData.salePrice)
             : null,
-        saleStartAt: formData.salePrice ? toIsoOrNull(formData.saleStartAt) : null,
-        saleEndAt: formData.salePrice ? toIsoOrNull(formData.saleEndAt) : null,
-        saleLabel: formData.salePrice ? (formData.saleLabel || null) : null,
+        saleStartAt: (formData.salePrice !== '' && formData.salePrice !== null) ? toIsoOrNull(formData.saleStartAt) : null,
+        saleEndAt: (formData.salePrice !== '' && formData.salePrice !== null) ? toIsoOrNull(formData.saleEndAt) : null,
+        saleLabel: (formData.salePrice !== '' && formData.salePrice !== null) ? (formData.saleLabel || null) : null,
         brandId: formData.brandId || null,
         quantity: parseInt(formData.quantity) || 0,
         // Shipping dimensions — null when blank so DB stores NULL cleanly
@@ -488,121 +498,123 @@ const ProductEditPage = () => {
               </Typography>
             </Paper>
 
-            <Paper sx={{ p: 3, mb: 3 }}>
-              <Typography variant="h6" gutterBottom>
-                Pricing
-              </Typography>
-              <Grid container spacing={2}>
-                <Grid item xs={6}>
-                  <TextField
-                    fullWidth
-                    label="Price *"
-                    type="number"
-                    InputProps={{ startAdornment: <InputAdornment position="start">₹</InputAdornment> }}
-                    inputProps={{ step: '0.01', min: 0 }}
-                    value={formData.price}
-                    onChange={(e) => setField('price', e.target.value)}
-                    error={Boolean(errors.price)}
-                    helperText={errors.price}
-                  />
-                </Grid>
-                <Grid item xs={6}>
-                  <TextField
-                    fullWidth
-                    label="Sale Price"
-                    type="number"
-                    InputProps={{ startAdornment: <InputAdornment position="start">₹</InputAdornment> }}
-                    inputProps={{ step: '0.01', min: 0 }}
-                    value={formData.salePrice}
-                    onChange={(e) => setField('salePrice', e.target.value)}
-                    error={Boolean(errors.salePrice)}
-                    helperText={errors.salePrice || 'Must be less than regular price'}
-                  />
-                </Grid>
-                <Grid item xs={12}>
-                  <FormControl fullWidth size="small" disabled={!formData.salePrice}>
-                    <InputLabel id="sale-label-select">Sale Label</InputLabel>
-                    <Select
-                      labelId="sale-label-select"
-                      value={formData.saleLabel || ''}
-                      label="Sale Label"
-                      onChange={(e) => setField('saleLabel', e.target.value)}
-                    >
-                      <MenuItem value="">
-                        <em>None</em>
-                      </MenuItem>
-                      {saleLabels.map((lbl) => (
-                        <MenuItem key={lbl.id} value={lbl.id}>
-                          <Box sx={{ display: 'flex', alignItems: 'center' }}>
-                            <Box
-                              sx={{
-                                width: 12,
-                                height: 12,
-                                borderRadius: '50%',
-                                bgcolor: lbl.color || '#000',
-                                mr: 1,
-                              }}
-                            />
-                            {lbl.name}
-                          </Box>
+            {(pricingEnabled || showPrice) && (
+              <Paper sx={{ p: 3, mb: 3 }}>
+                <Typography variant="h6" gutterBottom>
+                  Pricing
+                </Typography>
+                <Grid container spacing={2}>
+                  <Grid item xs={6}>
+                    <TextField
+                      fullWidth
+                      label="Price *"
+                      type="number"
+                      InputProps={{ startAdornment: <InputAdornment position="start">{symbol}</InputAdornment> }}
+                      inputProps={{ step: '0.01', min: 0 }}
+                      value={formData.price}
+                      onChange={(e) => setField('price', e.target.value)}
+                      error={Boolean(errors.price)}
+                      helperText={errors.price}
+                    />
+                  </Grid>
+                  <Grid item xs={6}>
+                    <TextField
+                      fullWidth
+                      label="Sale Price"
+                      type="number"
+                      InputProps={{ startAdornment: <InputAdornment position="start">{symbol}</InputAdornment> }}
+                      inputProps={{ step: '0.01', min: 0 }}
+                      value={formData.salePrice}
+                      onChange={(e) => setField('salePrice', e.target.value)}
+                      error={Boolean(errors.salePrice)}
+                      helperText={errors.salePrice || 'Must be less than regular price'}
+                    />
+                  </Grid>
+                  <Grid item xs={12}>
+                    <FormControl fullWidth size="small" disabled={!formData.salePrice}>
+                      <InputLabel id="sale-label-select">Sale Label</InputLabel>
+                      <Select
+                        labelId="sale-label-select"
+                        value={formData.saleLabel || ''}
+                        label="Sale Label"
+                        onChange={(e) => setField('saleLabel', e.target.value)}
+                      >
+                        <MenuItem value="">
+                          <em>None</em>
                         </MenuItem>
-                      ))}
-                    </Select>
-                    <FormHelperText>
-                      {!formData.salePrice
-                        ? 'Add a sale price to enable scheduling.'
-                        : 'Select a predefined sale label from your catalog.'}
-                    </FormHelperText>
-                  </FormControl>
-                </Grid>
-                {sales.allowScheduling !== false && (
-                  <>
-                    <Grid item xs={12} md={6}>
-                      <TextField
-                        fullWidth
-                        label="Sale Starts"
-                        type="datetime-local"
+                        {saleLabels.map((lbl) => (
+                          <MenuItem key={lbl.id} value={lbl.id}>
+                            <Box sx={{ display: 'flex', alignItems: 'center' }}>
+                              <Box
+                                sx={{
+                                  width: 12,
+                                  height: 12,
+                                  borderRadius: '50%',
+                                  bgcolor: lbl.color || '#000',
+                                  mr: 1,
+                                }}
+                              />
+                              {lbl.name}
+                            </Box>
+                          </MenuItem>
+                        ))}
+                      </Select>
+                      <FormHelperText>
+                        {!formData.salePrice
+                          ? 'Add a sale price to enable scheduling.'
+                          : 'Select a predefined sale label from your catalog.'}
+                      </FormHelperText>
+                    </FormControl>
+                  </Grid>
+                  {sales.allowScheduling !== false && (
+                    <>
+                      <Grid item xs={12} md={6}>
+                        <TextField
+                          fullWidth
+                          label="Sale Starts"
+                          type="datetime-local"
+                          size="small"
+                          value={formData.saleStartAt}
+                          onChange={(e) => setField('saleStartAt', e.target.value)}
+                          disabled={!formData.salePrice}
+                          InputLabelProps={{ shrink: true }}
+                        />
+                      </Grid>
+                      <Grid item xs={12} md={6}>
+                        <TextField
+                          fullWidth
+                          label="Sale Ends"
+                          type="datetime-local"
+                          size="small"
+                          value={formData.saleEndAt}
+                          onChange={(e) => setField('saleEndAt', e.target.value)}
+                          disabled={!formData.salePrice}
+                          error={Boolean(errors.saleEndAt)}
+                          helperText={errors.saleEndAt || 'Leave blank for an open-ended sale'}
+                          InputLabelProps={{ shrink: true }}
+                        />
+                      </Grid>
+                    </>
+                  )}
+                  <Grid item xs={12}>
+                    <Box sx={{ display: 'flex', justifyContent: 'flex-end' }}>
+                      <Button
                         size="small"
-                        value={formData.saleStartAt}
-                        onChange={(e) => setField('saleStartAt', e.target.value)}
-                        disabled={!formData.salePrice}
-                        InputLabelProps={{ shrink: true }}
-                      />
-                    </Grid>
-                    <Grid item xs={12} md={6}>
-                      <TextField
-                        fullWidth
-                        label="Sale Ends"
-                        type="datetime-local"
-                        size="small"
-                        value={formData.saleEndAt}
-                        onChange={(e) => setField('saleEndAt', e.target.value)}
-                        disabled={!formData.salePrice}
-                        error={Boolean(errors.saleEndAt)}
-                        helperText={errors.saleEndAt || 'Leave blank for an open-ended sale'}
-                        InputLabelProps={{ shrink: true }}
-                      />
-                    </Grid>
-                  </>
-                )}
-                <Grid item xs={12}>
-                  <Box sx={{ display: 'flex', justifyContent: 'flex-end' }}>
-                    <Button
-                      size="small"
-                      onClick={() => {
-                        setField('salePrice', '');
-                        setField('saleStartAt', '');
-                        setField('saleEndAt', '');
-                        setField('saleLabel', '');
-                      }}
-                      disabled={!formData.salePrice && !formData.saleStartAt && !formData.saleEndAt && !formData.saleLabel}
-                    >
-                      Clear Sale
-                    </Button>
-                  </Box>
+                        onClick={() => {
+                          setField('salePrice', '');
+                          setField('saleStartAt', '');
+                          setField('saleEndAt', '');
+                          setField('saleLabel', '');
+                        }}
+                        disabled={!formData.salePrice && !formData.saleStartAt && !formData.saleEndAt && !formData.saleLabel}
+                      >
+                        Clear Sale
+                      </Button>
+                    </Box>
+                  </Grid>
                 </Grid>
-              </Grid>
-            </Paper>
+              </Paper>
+            )}
 
             <Paper sx={{ p: 3 }}>
               <Typography variant="h6" gutterBottom>
@@ -740,99 +752,100 @@ const ProductEditPage = () => {
               )}
             </Paper>
 
-            {/* ---- Shipping & Dimensions ---- */}
-            <Paper sx={{ p: 3, mb: 3, mt: 3 }}>
-              <Typography variant="h6" gutterBottom>
-                Shipping &amp; Dimensions
-              </Typography>
-              <FormControlLabel
-                control={
-                  <Switch
-                    checked={formData.requiresShipping}
-                    onChange={(e) => setField('requiresShipping', e.target.checked)}
-                  />
-                }
-                label="This product requires shipping"
-                sx={{ mb: 2 }}
-              />
+            {pricingEnabled && (
+              <Paper sx={{ p: 3, mb: 3, mt: 3 }}>
+                <Typography variant="h6" gutterBottom>
+                  Shipping &amp; Dimensions
+                </Typography>
+                <FormControlLabel
+                  control={
+                    <Switch
+                      checked={formData.requiresShipping}
+                      onChange={(e) => setField('requiresShipping', e.target.checked)}
+                    />
+                  }
+                  label="This product requires shipping"
+                  sx={{ mb: 2 }}
+                />
 
-              {formData.requiresShipping && (
-                <>
-                  <TextField
-                    fullWidth
-                    label="Weight (grams)"
-                    type="number"
-                    margin="normal"
-                    size="small"
-                    inputProps={{ min: 0, step: 1 }}
-                    InputProps={{
-                      endAdornment: <InputAdornment position="end">g</InputAdornment>,
-                    }}
-                    value={formData.weightGrams}
-                    onChange={(e) => setField('weightGrams', e.target.value)}
-                    helperText="Actual product weight (packaging included)"
-                  />
-                  <Typography variant="subtitle2" sx={{ mt: 2, mb: 1 }}>Dimensions (cm)</Typography>
-                  <Grid container spacing={1.5}>
-                    <Grid item xs={4}>
-                      <TextField
-                        fullWidth label="Length" type="number" size="small"
-                        inputProps={{ min: 0, step: 0.5 }}
-                        InputProps={{ endAdornment: <InputAdornment position="end">cm</InputAdornment> }}
-                        value={formData.lengthCm}
-                        onChange={(e) => setField('lengthCm', e.target.value)}
-                      />
+                {formData.requiresShipping && (
+                  <>
+                    <TextField
+                      fullWidth
+                      label="Weight (grams)"
+                      type="number"
+                      margin="normal"
+                      size="small"
+                      inputProps={{ min: 0, step: 1 }}
+                      InputProps={{
+                        endAdornment: <InputAdornment position="end">g</InputAdornment>,
+                      }}
+                      value={formData.weightGrams}
+                      onChange={(e) => setField('weightGrams', e.target.value)}
+                      helperText="Actual product weight (packaging included)"
+                    />
+                    <Typography variant="subtitle2" sx={{ mt: 2, mb: 1 }}>Dimensions (cm)</Typography>
+                    <Grid container spacing={1.5}>
+                      <Grid item xs={4}>
+                        <TextField
+                          fullWidth label="Length" type="number" size="small"
+                          inputProps={{ min: 0, step: 0.5 }}
+                          InputProps={{ endAdornment: <InputAdornment position="end">cm</InputAdornment> }}
+                          value={formData.lengthCm}
+                          onChange={(e) => setField('lengthCm', e.target.value)}
+                        />
+                      </Grid>
+                      <Grid item xs={4}>
+                        <TextField
+                          fullWidth label="Breadth" type="number" size="small"
+                          inputProps={{ min: 0, step: 0.5 }}
+                          InputProps={{ endAdornment: <InputAdornment position="end">cm</InputAdornment> }}
+                          value={formData.breadthCm}
+                          onChange={(e) => setField('breadthCm', e.target.value)}
+                        />
+                      </Grid>
+                      <Grid item xs={4}>
+                        <TextField
+                          fullWidth label="Height" type="number" size="small"
+                          inputProps={{ min: 0, step: 0.5 }}
+                          InputProps={{ endAdornment: <InputAdornment position="end">cm</InputAdornment> }}
+                          value={formData.heightCm}
+                          onChange={(e) => setField('heightCm', e.target.value)}
+                        />
+                      </Grid>
                     </Grid>
-                    <Grid item xs={4}>
-                      <TextField
-                        fullWidth label="Breadth" type="number" size="small"
-                        inputProps={{ min: 0, step: 0.5 }}
-                        InputProps={{ endAdornment: <InputAdornment position="end">cm</InputAdornment> }}
-                        value={formData.breadthCm}
-                        onChange={(e) => setField('breadthCm', e.target.value)}
-                      />
-                    </Grid>
-                    <Grid item xs={4}>
-                      <TextField
-                        fullWidth label="Height" type="number" size="small"
-                        inputProps={{ min: 0, step: 0.5 }}
-                        InputProps={{ endAdornment: <InputAdornment position="end">cm</InputAdornment> }}
-                        value={formData.heightCm}
-                        onChange={(e) => setField('heightCm', e.target.value)}
-                      />
-                    </Grid>
-                  </Grid>
 
-                  {/* Live volumetric weight preview */}
-                  {formData.lengthCm && formData.breadthCm && formData.heightCm && (
-                    (() => {
-                      const volWeight = Math.ceil(
-                        (Number(formData.lengthCm) * Number(formData.breadthCm) * Number(formData.heightCm)) / 4000
-                      ) * 1000; // in grams, divisor 4000 → result in kg × 1000
-                      const actual = Number(formData.weightGrams) || 0;
-                      const chargeable = Math.ceil(Math.max(actual, volWeight) / 500) * 500;
-                      return (
-                        <Box sx={{
-                          mt: 2, p: 1.5, borderRadius: 1,
-                          bgcolor: 'action.hover',
-                          border: '1px dashed', borderColor: 'divider'
-                        }}>
-                          <Typography variant="caption" color="text.secondary" display="block">
-                            Volumetric weight: <strong>{volWeight} g</strong>
-                          </Typography>
-                          <Typography variant="caption" color="text.secondary" display="block">
-                            Actual weight: <strong>{actual} g</strong>
-                          </Typography>
-                          <Typography variant="caption" color="primary.main" fontWeight={700} display="block">
-                            Chargeable weight (rounded): {chargeable} g
-                          </Typography>
-                        </Box>
-                      );
-                    })()
-                  )}
-                </>
-              )}
-            </Paper>
+                    {/* Live volumetric weight preview */}
+                    {formData.lengthCm && formData.breadthCm && formData.heightCm && (
+                      (() => {
+                        const volWeight = Math.ceil(
+                          (Number(formData.lengthCm) * Number(formData.breadthCm) * Number(formData.heightCm)) / 4000
+                        ) * 1000; // in grams, divisor 4000 → result in kg × 1000
+                        const actual = Number(formData.weightGrams) || 0;
+                        const chargeable = Math.ceil(Math.max(actual, volWeight) / 500) * 500;
+                        return (
+                          <Box sx={{
+                            mt: 2, p: 1.5, borderRadius: 1,
+                            bgcolor: 'action.hover',
+                            border: '1px dashed', borderColor: 'divider'
+                          }}>
+                            <Typography variant="caption" color="text.secondary" display="block">
+                              Volumetric weight: <strong>{volWeight} g</strong>
+                            </Typography>
+                            <Typography variant="caption" color="text.secondary" display="block">
+                              Actual weight: <strong>{actual} g</strong>
+                            </Typography>
+                            <Typography variant="caption" color="primary.main" fontWeight={700} display="block">
+                              Chargeable weight (rounded): {chargeable} g
+                            </Typography>
+                          </Box>
+                        );
+                      })()
+                    )}
+                  </>
+                )}
+              </Paper>
+            )}
           </Grid>
 
           <Grid item xs={12} md={4}>
@@ -864,13 +877,16 @@ const ProductEditPage = () => {
               />
             </Paper>
             
-            <TaxConfigSection 
-              taxConfig={formData.taxConfig} 
-              basePrice={formData.price}
-              setTaxConfig={(val) => setField('taxConfig', val)}
-              globalSettings={settings?.checkout || {}}
-              disabled={!canSaveProduct}
-            />
+            {pricingEnabled && (
+              <TaxConfigSection 
+                taxConfig={formData.taxConfig} 
+                basePrice={formData.price}
+                setTaxConfig={(val) => setField('taxConfig', val)}
+                globalSettings={settings?.checkout || {}}
+                formatPrice={formatPrice}
+                disabled={!canSaveProduct}
+              />
+            )}
 
             <Paper sx={{ p: 3, mb: 3 }}>
               <Typography variant="h6" gutterBottom>
@@ -1112,13 +1128,22 @@ const ProductEditPage = () => {
       </form>
 
       {/* Variants panel — only visible once the product has been saved and has a real ID */}
-      {!isNew && <VariantsPanel productId={id} baseSku={formData.sku} flatCatFiles={flatCatFiles} canManageVariants={canUpdateProducts} />}
+      {!isNew && (
+        <VariantsPanel 
+          productId={id} 
+          productName={formData.name} 
+          productSku={formData.sku} 
+          categoryIds={formData.categoryIds}
+          flatCatFiles={flatCatFiles} 
+          canManageVariants={canUpdateProducts} 
+        />
+      )}
     </Box>
   );
 };
 
 /* ─── Tax Configuration Section ────────────────────────────────────────────── */
-const TaxConfigSection = ({ taxConfig, basePrice, setTaxConfig, globalSettings, disabled }) => {
+const TaxConfigSection = ({ taxConfig, basePrice, setTaxConfig, globalSettings, formatPrice, disabled }) => {
   const handleChange = (field, value) => {
     setTaxConfig({ ...taxConfig, [field]: value });
   };
@@ -1218,16 +1243,16 @@ const TaxConfigSection = ({ taxConfig, basePrice, setTaxConfig, globalSettings, 
           </Typography>
           <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 0.5 }}>
             <Typography variant="body2">Subtotal:</Typography>
-            <Typography variant="body2" fontWeight={500}>₹{currentPrice.toFixed(2)}</Typography>
+            <Typography variant="body2" fontWeight={500}>{formatPrice(currentPrice)}</Typography>
           </Box>
           <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 0.5 }}>
             <Typography variant="body2">Tax (Estimated):</Typography>
-            <Typography variant="body2" fontWeight={500}>+ ₹{taxTotal.toFixed(2)}</Typography>
+            <Typography variant="body2" fontWeight={500}>+ {formatPrice(taxTotal)}</Typography>
           </Box>
           <Divider sx={{ my: 1 }} />
           <Box sx={{ display: 'flex', justifyContent: 'space-between' }}>
             <Typography variant="subtitle2">Total:</Typography>
-            <Typography variant="subtitle2" color="primary.main">₹{(currentPrice + taxTotal).toFixed(2)}</Typography>
+            <Typography variant="subtitle2" color="primary.main">{formatPrice(currentPrice + taxTotal)}</Typography>
           </Box>
         </Box>
       )}
@@ -1237,15 +1262,19 @@ const TaxConfigSection = ({ taxConfig, basePrice, setTaxConfig, globalSettings, 
 
 
 /* ─── Variants Panel ──────────────────────────────────────────────────────── */
-const VariantsPanel = ({ productId, flatCatFiles = [], canManageVariants = false }) => {
+const VariantsPanel = ({ productId, productName, productSku, categoryIds = [], flatCatFiles = [], canManageVariants = false }) => {
   const { notify, confirm } = useNotification();
+  const { generateProductSKU, generateVariantSKU } = useSKUGenerator();
   const [productAttributes, setProductAttributes] = useState([]);
   const [variants, setVariants] = useState([]);
   const [productBasePrice, setProductBasePrice] = useState(0);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+  const [variantMediaPickerOpen, setVariantMediaPickerOpen] = useState(null);
   const [attributes, setAttributes] = useState([]);
+  const [saveProgress, setSaveProgress] = useState({ current: 0, total: 0 });
   const [selectedTemplate, setSelectedTemplate] = useState('');
+
   const [selectedValueIds, setSelectedValueIds] = useState([]);
   const [customName, setCustomName] = useState('');
   const [customValue, setCustomValue] = useState('');
@@ -1263,6 +1292,8 @@ const VariantsPanel = ({ productId, flatCatFiles = [], canManageVariants = false
   const [cloneCatProducts, setCloneCatProducts] = useState([]);
   const [cloneCatProductsLoading, setCloneCatProductsLoading] = useState(false);
   const [cloneCatSelectedProduct, setCloneCatSelectedProduct] = useState(null);
+  const [suggestedAttributes, setSuggestedAttributes] = useState([]);
+  const [suggestedLoading, setSuggestedLoading] = useState(false);
   const cloneSearchTimer = useRef(null);
 
   const loadAll = useCallback(async () => {
@@ -1281,20 +1312,46 @@ const VariantsPanel = ({ productId, flatCatFiles = [], canManageVariants = false
       setProductAttributes(attrRows);
       setVariants(varData.map((variant) => ({
         ...variant,
+        mediaId: variant.mediaId || variant.media_id, // Handle both cases
         price: variant.price ?? product?.effectivePrice ?? product?.price ?? 0,
         stockQty: variant.stockQty ?? 0,
         _dirty: false,
       })));
       setAttributes(attrData);
       setProductBasePrice(getProductBasePrice(product));
+
+      // Load suggested attributes from categories
+      if (categoryIds.length > 0) {
+        setSuggestedLoading(true);
+        attributeService.getCategoryAttributes(categoryIds, true)
+          .then(res => {
+            const catAttrs = res?.data?.data || [];
+            // Filter out attributes already assigned to the product
+            const existingIds = new Set(attrRows.map(r => r.attributeId));
+            setSuggestedAttributes(catAttrs.filter(a => !existingIds.has(a.id)));
+          })
+          .catch(err => console.error('Failed to load suggested attributes', err))
+          .finally(() => setSuggestedLoading(false));
+      }
     } catch (error) {
       notify('Failed to load product options.', 'error');
     } finally {
       setLoading(false);
     }
-  }, [productId, notify]);
+  }, [productId, categoryIds, notify]);
 
   useEffect(() => { loadAll(); }, [loadAll]);
+
+  const handleVariantMediaSelect = (selectedMedia) => {
+    if (!selectedMedia || variantMediaPickerOpen === null) return;
+    const targetIndex = variantMediaPickerOpen;
+    const media = Array.isArray(selectedMedia) ? selectedMedia[0] : selectedMedia;
+    // Merge both fields in a single state update to avoid race condition
+    setVariants((current) => current.map((variant, i) =>
+      i === targetIndex ? { ...variant, mediaId: media.id, media, _dirty: true } : variant
+    ));
+    setVariantMediaPickerOpen(null);
+  };
 
   const selectedTemplateRecord = attributes.find((attribute) => attribute.id === selectedTemplate);
   const variantAttributeRows = productAttributes.filter((row) => row.isVariantAttr);
@@ -1350,10 +1407,6 @@ const VariantsPanel = ({ productId, flatCatFiles = [], canManageVariants = false
 
   const handleToggleVariantAttribute = async (row) => {
     if (!canManageVariants) return;
-    if (!row.attributeId) {
-      notify('Only global attributes can be used to generate variant SKUs.', 'warning');
-      return;
-    }
 
     try {
       await attributeService.updateProductAttribute(productId, row.id, {
@@ -1405,9 +1458,12 @@ const VariantsPanel = ({ productId, flatCatFiles = [], canManageVariants = false
 
   const handleSaveVariants = async () => {
     if (!canManageVariants || !hasVariantChanges) return;
+    const dirtyVariants = variants.filter((variant) => variant._dirty);
     setSaving(true);
+    setSaveProgress({ current: 0, total: dirtyVariants.length });
+    
     try {
-      const dirtyVariants = variants.filter((variant) => variant._dirty);
+      let count = 0;
       for (const variant of dirtyVariants) {
         await attributeService.updateProductVariant(productId, variant.id, {
           sku: variant.sku?.trim() || null,
@@ -1415,7 +1471,10 @@ const VariantsPanel = ({ productId, flatCatFiles = [], canManageVariants = false
           stockQty: Number(variant.stockQty || 0),
           isActive: variant.isActive !== false,
           sortOrder: Number(variant.sortOrder || 0),
+          mediaId: variant.mediaId || null,
         });
+        count++;
+        setSaveProgress(prev => ({ ...prev, current: count }));
       }
       notify('Variants updated.', 'success');
       loadAll();
@@ -1423,8 +1482,10 @@ const VariantsPanel = ({ productId, flatCatFiles = [], canManageVariants = false
       notify(err?.response?.data?.message || 'Failed to save variants.', 'error');
     } finally {
       setSaving(false);
+      setSaveProgress({ current: 0, total: 0 });
     }
   };
+
 
   const handleDeleteVariant = async (variantId) => {
     if (!canManageVariants) return;
@@ -1521,6 +1582,33 @@ const VariantsPanel = ({ productId, flatCatFiles = [], canManageVariants = false
               </Typography>
             </Box>
 
+            {suggestedAttributes.length > 0 && (
+              <Box sx={{ mb: 3, p: 2, bgcolor: 'primary.50', borderRadius: 2, border: '1px solid', borderColor: 'primary.100' }}>
+                <Typography variant="subtitle2" color="primary.700" fontWeight={700} gutterBottom sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
+                  <ElectricBoltIcon fontSize="small" /> Suggested from Categories
+                </Typography>
+                <Typography variant="caption" color="text.secondary" sx={{ mb: 1.5, display: 'block' }}>
+                  These attributes are linked to your selected categories. Click to add them.
+                </Typography>
+                <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 1 }}>
+                  {suggestedAttributes.map((attr) => (
+                    <Chip
+                      key={attr.id}
+                      label={attr.name}
+                      size="small"
+                      icon={<AddIcon />}
+                      onClick={() => {
+                        setSelectedTemplate(attr.id);
+                        setAttributeTab(1);
+                        setSelectedValueIds([]);
+                      }}
+                      sx={{ bgcolor: 'background.paper', '&:hover': { bgcolor: 'primary.100' } }}
+                    />
+                  ))}
+                </Box>
+              </Box>
+            )}
+
             <Tabs value={attributeTab} onChange={(e, val) => setAttributeTab(val)} sx={{ mb: 2 }}>
               <Tab label="Add new" />
               <Tab label="Add existing" />
@@ -1606,11 +1694,6 @@ const VariantsPanel = ({ productId, flatCatFiles = [], canManageVariants = false
                 />
 
                 <Box sx={{ display: 'flex', flexDirection: 'column', mt: -1 }}>
-                  {/* <FormControlLabel
-                    control={<Checkbox checked={true} disabled />}
-                    label={<Typography variant="body2">Visible on the product page</Typography>}
-                    sx={{ mb: -1 }}
-                  /> */}
                   <FormControlLabel
                     control={
                       <Checkbox
@@ -1694,8 +1777,9 @@ const VariantsPanel = ({ productId, flatCatFiles = [], canManageVariants = false
                   Generate Matrix
                 </Button>
                 <Button variant="contained" size="small" onClick={handleSaveVariants} disabled={!canManageVariants || !hasVariantChanges || saving}>
-                  {saving ? 'Saving...' : 'Save Variant Changes'}
+                  {saving ? `Saving (${saveProgress.current}/${saveProgress.total})...` : 'Save Variant Changes'}
                 </Button>
+
               </Box>
             </Box>
 
@@ -1711,82 +1795,199 @@ const VariantsPanel = ({ productId, flatCatFiles = [], canManageVariants = false
               ))}
             </Box>
 
+            {saving && (
+              <Box sx={{ mb: 2 }}>
+                <LinearProgress 
+                  variant="determinate" 
+                  value={(saveProgress.current / saveProgress.total) * 100} 
+                  sx={{ height: 8, borderRadius: 4 }}
+                />
+                <Typography variant="caption" color="text.secondary" sx={{ mt: 0.5, display: 'block' }}>
+                  Saving {saveProgress.current} of {saveProgress.total} variants...
+                </Typography>
+              </Box>
+            )}
+
             {loading ? (
               <Box sx={{ display: 'flex', justifyContent: 'center', py: 4 }}><CircularProgress size={24} /></Box>
             ) : variants.length === 0 ? (
+
               <Alert severity="info">
                 No variants yet. Add product attributes and mark the SKU-defining ones first, then click <strong>Generate Matrix</strong>.
               </Alert>
             ) : (
-              <Box sx={{ overflowX: 'auto' }}>
-                <Table size="small">
-                  <TableHead>
-                    <TableRow>
-                      <TableCell sx={{ fontWeight: 700 }}>Combination</TableCell>
-                      <TableCell sx={{ fontWeight: 700 }}>Price</TableCell>
-                      <TableCell sx={{ fontWeight: 700 }}>Stock Qty</TableCell>
-                      <TableCell sx={{ fontWeight: 700 }}>SKU</TableCell>
-                      <TableCell sx={{ fontWeight: 700 }}>Status</TableCell>
-                      <TableCell />
-                    </TableRow>
-                  </TableHead>
-                  <TableBody>
-                    {variants.map((variant, index) => (
-                      <TableRow key={variant.id}>
-                        <TableCell>
-                          <Typography variant="body2" fontWeight={600}>{getVariantOptionLabel(variant) || 'Variant SKU'}</Typography>
-                        </TableCell>
-                        <TableCell>
+              <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
+                {variants.map((variant, index) => (
+                  <Accordion key={variant.id} variant="outlined" sx={{ m: '0 !important' }}>
+                    <AccordionSummary
+                      expandIcon={<ExpandMoreIcon />}
+                      sx={{
+                        '& .MuiAccordionSummary-content': {
+                          display: 'flex',
+                          justifyContent: 'space-between',
+                          alignItems: 'center',
+                          mr: 1
+                        }
+                      }}
+                    >
+                      <Typography variant="body2" fontWeight={600}>
+                        {getVariantOptionLabel(variant) || 'Variant SKU'}
+                      </Typography>
+                      <IconButton
+                        size="small"
+                        color="error"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          handleDeleteVariant(variant.id);
+                        }}
+                        disabled={!canManageVariants}
+                      >
+                        <DeleteIcon fontSize="small" />
+                      </IconButton>
+                    </AccordionSummary>
+                    <AccordionDetails sx={{ pt: 0 }}>
+                      <Grid container spacing={2} alignItems="center">
+                        <Grid item xs={12} sm={1.5}>
+                          <Tooltip title={variant.media ? 'Change image' : 'Add image'} placement="bottom">
+                            <Box sx={{ position: 'relative', width: '100%', height: 48 }}>
+                              {/* clickable image / placeholder */}
+                              <Box
+                                sx={{
+                                  width: '100%',
+                                  height: '100%',
+                                  border: '2px dashed',
+                                  borderColor: 'divider',
+                                  display: 'flex',
+                                  alignItems: 'center',
+                                  justifyContent: 'center',
+                                  cursor: 'pointer',
+                                  overflow: 'hidden',
+                                  borderRadius: 1,
+                                  '&:hover': { borderColor: 'primary.main', bgcolor: 'action.hover' },
+                                }}
+                                onClick={() => setVariantMediaPickerOpen(index)}
+                              >
+                                {variant.media ? (
+                                  <img src={getMediaUrl(variant.media?.url)} alt="Variant" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                                ) : (
+                                  <ImageIcon color="disabled" />
+                                )}
+                              </Box>
+                              {/* delete overlay — only shown when an image is set */}
+                              {variant.media && canManageVariants && (
+                                <IconButton
+                                  size="small"
+                                  color="error"
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    // Clear both fields in one atomic update
+                                    setVariants((current) => current.map((v, i) =>
+                                      i === index ? { ...v, mediaId: null, media: null, _dirty: true } : v
+                                    ));
+                                  }}
+                                  sx={{
+                                    position: 'absolute',
+                                    top: -8,
+                                    right: -8,
+                                    bgcolor: 'background.paper',
+                                    boxShadow: 1,
+                                    p: '2px',
+                                    '&:hover': { bgcolor: 'error.light', color: 'white' },
+                                  }}
+                                >
+                                  <DeleteIcon sx={{ fontSize: 14 }} />
+                                </IconButton>
+                              )}
+                            </Box>
+                          </Tooltip>
+                        </Grid>
+                        <Grid item xs={12} sm={2}>
                           <TextField
+                            fullWidth
                             size="small"
+                            label="Price"
                             type="number"
                             value={variant.price}
                             onChange={(e) => handleVariantChange(index, 'price', e.target.value)}
                             disabled={!canManageVariants}
                             inputProps={{ min: 0, step: '0.01' }}
-                            sx={{ width: 120 }}
                           />
-                        </TableCell>
-                        <TableCell>
+                        </Grid>
+                        <Grid item xs={12} sm={2}>
                           <TextField
+                            fullWidth
                             size="small"
+                            label="Stock Qty"
                             type="number"
                             value={variant.stockQty}
                             onChange={(e) => handleVariantChange(index, 'stockQty', e.target.value)}
                             disabled={!canManageVariants}
                             inputProps={{ min: 0 }}
-                            sx={{ width: 100 }}
                           />
-                        </TableCell>
-                        <TableCell>
+                        </Grid>
+                        <Grid item xs={12} sm={4.5}>
                           <TextField
+                            fullWidth
                             size="small"
+                            label="SKU"
                             value={variant.sku || ''}
                             onChange={(e) => handleVariantChange(index, 'sku', e.target.value)}
                             disabled={!canManageVariants}
                             placeholder="Optional SKU"
-                            sx={{ width: 160 }}
+                            InputProps={{
+                              endAdornment: (
+                                <InputAdornment position="end">
+                                  <IconButton 
+                                    size="small" 
+                                    onClick={() => {
+                                      const baseSku = productSku || generateProductSKU(productName);
+                                      const generatedSku = generateVariantSKU(baseSku, null, getVariantOptionLabel(variant));
+                                      handleVariantChange(index, 'sku', generatedSku);
+                                    }}
+                                    title="Auto-generate variant SKU"
+                                  >
+                                    <ElectricBoltIcon fontSize="small" />
+                                  </IconButton>
+                                </InputAdornment>
+                              )
+                            }}
                           />
-                        </TableCell>
-                        <TableCell>
-                          <Button size="small" variant={variant.isActive === false ? 'outlined' : 'contained'} onClick={() => handleVariantChange(index, 'isActive', variant.isActive === false)} disabled={!canManageVariants}>
-                            {variant.isActive === false ? 'Inactive' : 'Active'}
-                          </Button>
-                        </TableCell>
-                        <TableCell>
-                          <IconButton size="small" color="error" onClick={() => handleDeleteVariant(variant.id)} disabled={!canManageVariants}>
-                            <DeleteIcon fontSize="small" />
-                          </IconButton>
-                        </TableCell>
-                      </TableRow>
-                    ))}
-                  </TableBody>
-                </Table>
+                        </Grid>
+                        <Grid item xs={12} sm={2} sx={{ display: 'flex', alignItems: 'center' }}>
+                          <FormControlLabel
+                            control={
+                              <Switch
+                                size="small"
+                                checked={variant.isActive !== false}
+                                onChange={(e) => handleVariantChange(index, 'isActive', e.target.checked)}
+                                disabled={!canManageVariants}
+                                color="success"
+                              />
+                            }
+                            label={
+                              <Typography variant="caption" color={variant.isActive !== false ? 'success.main' : 'text.disabled'}>
+                                {variant.isActive !== false ? 'Active' : 'Inactive'}
+                              </Typography>
+                            }
+                          />
+                        </Grid>
+                      </Grid>
+                    </AccordionDetails>
+                  </Accordion>
+                ))}
               </Box>
             )}
           </Paper>
         </Grid>
       </Grid>
+
+      <MediaPicker
+        open={variantMediaPickerOpen !== null}
+        onClose={() => setVariantMediaPickerOpen(null)}
+        onSelect={handleVariantMediaSelect}
+        multiple={false}
+        title="Select Variant Image"
+      />
 
       <Dialog open={cloneOpen} onClose={() => setCloneOpen(false)} maxWidth="sm" fullWidth>
         <DialogTitle>Clone Variants from Another Product</DialogTitle>

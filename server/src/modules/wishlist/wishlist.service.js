@@ -16,6 +16,18 @@ const {
 const AppError = require('../../utils/AppError');
 const { getVariantUnitPrice, serializeProductPricing, serializeVariantPricing } = require('../product/product.pricing');
 
+const isWishlistEnabled = async () => {
+  const SettingsService = require('../settings/settings.service');
+  const { features } = await SettingsService.getFeatures();
+  return features.wishlist === true;
+};
+
+const isCartEnabled = async () => {
+  const SettingsService = require('../settings/settings.service');
+  const { features } = await SettingsService.getFeatures();
+  return features.cart === true;
+};
+
 const variantInclude = {
   model: ProductVariant,
   as: 'variant',
@@ -80,6 +92,9 @@ const addWishlistItemToCart = async (userId, item, transaction) => {
 };
 
 const getWishlist = async (userId) => {
+  if (!(await isWishlistEnabled())) {
+    throw new AppError('FORBIDDEN', 403, 'Wishlist feature is currently disabled');
+  }
   return sequelize.transaction(async (t) => {
     let wishlist = await Wishlist.findOne({ where: { userId }, transaction: t });
     if (!wishlist) {
@@ -138,6 +153,9 @@ const getWishlist = async (userId) => {
 };
 
 const addItem = async (userId, productId, variantId = null) => {
+  if (!(await isWishlistEnabled())) {
+    throw new AppError('FORBIDDEN', 403, 'Wishlist feature is currently disabled');
+  }
   return sequelize.transaction(async (t) => {
     let wishlist = await Wishlist.findOne({ where: { userId }, transaction: t });
     if (!wishlist) {
@@ -175,6 +193,12 @@ const removeItem = async (userId, productId, variantId = null) => {
 };
 
 const moveToCart = async (userId, productId, variantId = null) => {
+  if (!(await isWishlistEnabled())) {
+    throw new AppError('FORBIDDEN', 403, 'Wishlist feature is currently disabled');
+  }
+  if (!(await isCartEnabled())) {
+    throw new AppError('FORBIDDEN', 403, 'Cart feature is currently disabled');
+  }
   return sequelize.transaction(async (t) => {
     const wishlist = await Wishlist.findOne({ where: { userId }, transaction: t });
     if (!wishlist) throw new AppError('NOT_FOUND', 404, 'Wishlist not found');
@@ -191,6 +215,12 @@ const moveToCart = async (userId, productId, variantId = null) => {
 };
 
 const moveAllToCart = async (userId) => {
+  if (!(await isWishlistEnabled())) {
+    throw new AppError('FORBIDDEN', 403, 'Wishlist feature is currently disabled');
+  }
+  if (!(await isCartEnabled())) {
+    throw new AppError('FORBIDDEN', 403, 'Cart feature is currently disabled');
+  }
   return sequelize.transaction(async (t) => {
     const wishlist = await Wishlist.findOne({ where: { userId }, transaction: t });
     if (!wishlist) throw new AppError('NOT_FOUND', 404, 'Wishlist not found');

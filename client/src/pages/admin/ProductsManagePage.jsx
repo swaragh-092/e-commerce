@@ -14,11 +14,12 @@ import {
   Inventory as InventoryIcon,
 } from '@mui/icons-material';
 import { Link, useNavigate, useSearchParams } from 'react-router-dom';
-import { getProducts, deleteProduct, updateProduct, bulkUpdateSale } from '../../services/productService';
+import { getProducts, deleteProduct, updateProduct, bulkUpdateSale, bulkDeleteProducts, bulkUpdateProducts } from '../../services/productService';
 import { getCategoryTree } from '../../services/categoryService';
 import { getSaleLabels } from '../../services/adminService';
 import { getMediaUrl } from '../../utils/media';
-import { useCurrency, useSettings } from '../../hooks/useSettings';
+import { LOW_STOCK_THRESHOLD } from '../../utils/constants';
+import { useCurrency, useSettings, useFeature } from '../../hooks/useSettings';
 import { useNotification } from '../../context/NotificationContext';
 import { formatSaleDateTime, isEndingSoon } from '../../utils/pricing';
 import { useAuth } from '../../hooks/useAuth';
@@ -35,13 +36,77 @@ const toDateTimeLocal = (value) => {
 };
 const toIsoOrNull = (value) => (value ? new Date(value).toISOString() : null);
 
+const SummaryCard = ({ label, value, tone = 'default' }) => (
+  <Paper
+    elevation={0}
+    sx={{
+      p: 2,
+      minWidth: 170,
+      flex: '1 1 0',
+      borderRadius: 3,
+      border: '1px solid',
+      borderColor: tone === 'warning' ? 'warning.light' : tone === 'error' ? 'error.light' : 'divider',
+      bgcolor: 'background.paper',
+    }}
+  >
+    <Typography variant="body2" color="text.secondary" sx={{ mb: 0.5 }}>
+      {label}
+    </Typography>
+    <Typography variant="h6" fontWeight={700}>
+      {value}
+    </Typography>
+  </Paper>
+);
+
+const ClickableSummaryCard = ({ label, value, tone = 'default', onClick, active }) => (
+  <Paper
+    elevation={0}
+    onClick={onClick}
+    onKeyDown={(e) => {
+      if (onClick && (e.key === 'Enter' || e.key === ' ')) {
+        e.preventDefault();
+        onClick(e);
+      }
+    }}
+    role={onClick ? "button" : undefined}
+    tabIndex={onClick ? 0 : undefined}
+    aria-pressed={onClick ? active : undefined}
+    sx={{
+      p: 2,
+      minWidth: 170,
+      flex: '1 1 0',
+      borderRadius: 3,
+      border: '1px solid',
+      borderColor: active ? 'primary.main' : 'divider',
+      bgcolor: active ? 'action.hover' : 'background.paper',
+      cursor: onClick ? 'pointer' : 'default',
+      transition: 'all 0.2s',
+      '&:hover': onClick ? {
+        borderColor: 'primary.main',
+        bgcolor: 'action.hover',
+      } : {},
+    }}
+  >
+    <Typography variant="body2" color="text.secondary" sx={{ mb: 0.5 }}>
+      {label}
+    </Typography>
+    <Typography variant="h6" fontWeight={700} color={tone === 'error' ? 'error.main' : tone === 'warning' ? 'warning.main' : 'text.primary'}>
+      {value}
+    </Typography>
+  </Paper>
+);
+
 const ProductsManagePage = () => {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
-  const { formatPrice } = useCurrency();
+  const { symbol, formatPrice } = useCurrency();
   const { settings } = useSettings();
   const { notify } = useNotification();
   const { hasPermission } = useAuth();
+  const pricingEnabled = useFeature('pricing');
+  // Stock tracking is only meaningful in ecommerce mode (cart Tier-1 feature).
+  // In catalog mode cart=false, so we hide stock column + stepper entirely.
+  const cartEnabled = useFeature('cart');
   const sales = settings?.sales || {};
   const canCreateProducts = hasPermission(PERMISSIONS.PRODUCTS_CREATE);
   const canUpdateProducts = hasPermission(PERMISSIONS.PRODUCTS_UPDATE);
@@ -62,7 +127,7 @@ const ProductsManagePage = () => {
   const [categoryFilter, setCategoryFilter] = useState('');
   const [flatCategories, setFlatCategories] = useState([]);
   const [saleLabels, setSaleLabels] = useState([]);
-  // ?stock=low from dashboard → show only items with qty ≤ 10
+  // ?stock=low from dashboard → show only items with qty ≤ LOW_STOCK_THRESHOLD
   const [lowStockOnly, setLowStockOnly] = useState(() => searchParams.get('stock') === 'low');
 
   // Bulk selection
@@ -100,6 +165,10 @@ const ProductsManagePage = () => {
     saleEndAt: '',
     saving: false,
   });
+  const [counts, setCounts] = useState({ published: 0, draft: 0 });
+
+  // Step amount for the stock stepper — persists between quick-edit opens
+  const [editStepAmount, setEditStepAmount] = useState(1);
   const openEditDialog = (row) => {
     if (!canUpdateProducts) {
       notify('You do not have permission to update products.', 'error');
@@ -134,7 +203,7 @@ const ProductsManagePage = () => {
       const payload = {
         name: editDialog.name.trim(),
         slug: editDialog.slug.trim(),
-        quantity: parseInt(editDialog.quantity, 10) || 0,
+        ...(cartEnabled && { quantity: parseInt(editDialog.quantity, 10) || 0 }),
         price: parseFloat(editDialog.price),
         status: editDialog.status,
         isEnabled: editDialog.isEnabled,
@@ -221,13 +290,16 @@ const ProductsManagePage = () => {
       ...(saleFilter && { saleStatus: saleFilter }),
       ...(categoryFilter && { categoryId: categoryFilter }),
       ...(sortModel[0] && { sortBy: sortModel[0].field, sortOrder: sortModel[0].sort }),
-      // Low-stock filter: pass maxQty=10 so the server returns only low-stock items
-      ...(lowStockOnly && { maxQty: 10 }),
+      // Low-stock filter: pass maxQty=LOW_STOCK_THRESHOLD so the server returns only low-stock items
+      ...(lowStockOnly && { maxQty: LOW_STOCK_THRESHOLD }),
     };
     getProducts(params)
       .then((res) => {
         setRows(res?.data || []);
         setTotal(res?.meta?.total || 0);
+        if (res?.counts) {
+          setCounts(res.counts);
+        }
       })
       .catch(console.error)
       .finally(() => setLoading(false));
@@ -271,7 +343,7 @@ const ProductsManagePage = () => {
     setDeleteDialog({ open: false, id: null, name: '', bulk: false });
     try {
       if (bulk) {
-        await Promise.all(selectedIds.map((sid) => deleteProduct(sid)));
+        await bulkDeleteProducts(selectedIds);
         notify(`${selectedIds.length} products deleted successfully.`, 'success');
         setSelectedIds([]);
       } else {
@@ -291,14 +363,14 @@ const ProductsManagePage = () => {
     }
 
     try {
-      await Promise.all(selectedIds.map((sid) => updateProduct(sid, { status: newStatus })));
+      await bulkUpdateProducts(selectedIds, { status: newStatus });
       setRows((prev) =>
         prev.map((r) => selectedIds.includes(r.id) ? { ...r, status: newStatus } : r)
       );
       notify(`${selectedIds.length} products updated to ${newStatus} successfully.`, 'success');
       setSelectedIds([]);
     } catch (err) {
-      notify('Bulk update failed: ' + err.message, 'error');
+      notify('Bulk update failed: ' + getApiErrorMessage(err), 'error');
     }
   };
 
@@ -323,7 +395,7 @@ const ProductsManagePage = () => {
       return;
     }
     try {
-      await Promise.all(selectedIds.map((sid) => updateProduct(sid, { isEnabled: enable })));
+      await bulkUpdateProducts(selectedIds, { isEnabled: enable });
       setRows((prev) =>
         prev.map((r) => selectedIds.includes(r.id) ? { ...r, isEnabled: enable } : r)
       );
@@ -394,7 +466,7 @@ const ProductsManagePage = () => {
     editSalePriceValue < 0 ||
     editSalePriceValue >= editPriceValue
   );
-  const hasInvalidQuantity = editDialog.open && (Number.isNaN(Number(editDialog.quantity)) || Number(editDialog.quantity) < 0);
+  const hasInvalidQuantity = cartEnabled && editDialog.open && (Number.isNaN(Number(editDialog.quantity)) || Number(editDialog.quantity) < 0);
   const hasInvalidSaleDates = editDialog.open && editDialog.saleEnabled && editDialog.saleStartAt && editDialog.saleEndAt && new Date(editDialog.saleEndAt) <= new Date(editDialog.saleStartAt);
   const bulkSaleValue = Number(bulkSaleDialog.value);
   const hasInvalidBulkSale = bulkSaleDialog.mode === 'apply' && (
@@ -457,16 +529,16 @@ const ProductsManagePage = () => {
           <Typography
             variant="body2"
             fontWeight={700}
-            color={row.isSaleActive ? 'error.main' : 'text.primary'}
+            color={pricingEnabled && row.isSaleActive ? 'error.main' : 'text.primary'}
           >
-            {formatPrice(row.effectivePrice ?? row.salePrice ?? row.price)}
+            {formatPrice(pricingEnabled && (row.effectivePrice ?? row.salePrice) ? (row.effectivePrice ?? row.salePrice) : row.price)}
           </Typography>
-          {row.salePrice && (
+          {pricingEnabled && row.salePrice && (
             <Typography variant="caption" color="text.secondary" sx={{ textDecoration: 'line-through', display: 'block' }}>
               {formatPrice(row.price)}
             </Typography>
           )}
-          {row.saleStatus && row.saleStatus !== 'none' && (
+          {pricingEnabled && row.saleStatus && row.saleStatus !== 'none' && (
             <Typography variant="caption" color={row.saleStatus === 'active' ? 'error.main' : 'text.secondary'} sx={{ display: 'block' }}>
               {row.saleStatus === 'active' ? 'Active sale' : row.saleStatus === 'scheduled' ? 'Scheduled sale' : 'Expired sale'}
             </Typography>
@@ -529,7 +601,7 @@ const ProductsManagePage = () => {
       sortable: true,
       renderCell: ({ value }) => {
         const v = Number(value);
-        const color = v === 0 ? 'error' : v <= 10 ? 'warning' : 'success';
+        const color = v === 0 ? 'error' : v <= LOW_STOCK_THRESHOLD ? 'warning' : 'success';
         return (
           <Chip
             label={v}
@@ -616,11 +688,58 @@ const ProductsManagePage = () => {
         </Stack>
       ),
     },
-  ];
+  ].filter(col => {
+    if (col.field === 'saleMeta' && !pricingEnabled) return false;
+    // Hide the Stock column in catalog mode — inventory is irrelevant without a cart
+    if (col.field === 'quantity' && !cartEnabled) return false;
+    return true;
+  });
 
   return (
     <Box>
-      {/* ── Header ── */}
+      <Stack direction={{ xs: 'column', md: 'row' }} spacing={2} mb={3}>
+        <ClickableSummaryCard 
+          label="Total Products" 
+          value={total} 
+          active={status === '' && !lowStockOnly}
+          onClick={() => {
+            setStatus('');
+            setLowStockOnly(false);
+            setPaginationModel(p => ({ ...p, page: 0 }));
+          }}
+        />
+        <ClickableSummaryCard 
+          label="Published" 
+          value={counts.published || 0} 
+          tone="success"
+          active={status === 'published' && !lowStockOnly}
+          onClick={() => {
+            setStatus('published');
+            setLowStockOnly(false);
+            setPaginationModel(p => ({ ...p, page: 0 }));
+          }}
+        />
+        <ClickableSummaryCard 
+          label="Drafts" 
+          value={counts.draft || 0} 
+          active={status === 'draft' && !lowStockOnly}
+          onClick={() => {
+            setStatus('draft');
+            setLowStockOnly(false);
+            setPaginationModel(p => ({ ...p, page: 0 }));
+          }}
+        />
+        <ClickableSummaryCard 
+          label="Low Stock" 
+          value="≤ 10" 
+          tone="warning"
+          active={lowStockOnly}
+          onClick={() => {
+            setLowStockOnly(true);
+            setPaginationModel(p => ({ ...p, page: 0 }));
+          }}
+        />
+      </Stack>
       <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 3 }}>
         <Box>
           <Typography variant="h5" fontWeight={700}>Manage Products</Typography>
@@ -651,7 +770,7 @@ const ProductsManagePage = () => {
         >
           <InventoryIcon color="warning" fontSize="small" />
           <Typography variant="body2" fontWeight={600} color="warning.dark" sx={{ flexGrow: 1 }}>
-            Showing low-stock products (qty ≤ 10)
+            Showing low-stock products (qty ≤ {LOW_STOCK_THRESHOLD})
           </Typography>
           <Button
             size="small"
@@ -694,20 +813,22 @@ const ProductsManagePage = () => {
             <MenuItem value="draft">Draft</MenuItem>
           </Select>
         </FormControl>
-        <FormControl size="small" sx={{ minWidth: 160 }}>
-          <InputLabel>Sale</InputLabel>
-          <Select
-            value={saleFilter}
-            label="Sale"
-            onChange={(e) => { setSaleFilter(e.target.value); setPaginationModel((p) => ({ ...p, page: 0 })); }}
-          >
-            <MenuItem value="">All Sales</MenuItem>
-            <MenuItem value="active">Active</MenuItem>
-            <MenuItem value="scheduled">Scheduled</MenuItem>
-            <MenuItem value="expired">Expired</MenuItem>
-            <MenuItem value="none">No Sale</MenuItem>
-          </Select>
-        </FormControl>
+        {pricingEnabled && (
+          <FormControl size="small" sx={{ minWidth: 160 }}>
+            <InputLabel>Sale</InputLabel>
+            <Select
+              value={saleFilter}
+              label="Sale"
+              onChange={(e) => { setSaleFilter(e.target.value); setPaginationModel((p) => ({ ...p, page: 0 })); }}
+            >
+              <MenuItem value="">All Sales</MenuItem>
+              <MenuItem value="active">Active</MenuItem>
+              <MenuItem value="scheduled">Scheduled</MenuItem>
+              <MenuItem value="expired">Expired</MenuItem>
+              <MenuItem value="none">No Sale</MenuItem>
+            </Select>
+          </FormControl>
+        )}
         <FormControl size="small" sx={{ minWidth: 220 }}>
           <InputLabel>Category</InputLabel>
           <Select
@@ -776,7 +897,7 @@ const ProductsManagePage = () => {
               Delete
             </Button>
           )}
-          {sales.allowBulkSales !== false && canBulkSaleProducts && (
+          {pricingEnabled && sales.allowBulkSales !== false && canBulkSaleProducts && (
             <>
               <Button size="small" variant="outlined" onClick={() => setBulkSaleDialog({ open: true, mode: 'apply', saleType: 'percentage', value: '', saleLabel: '', saleStartAt: '', saleEndAt: '', saving: false })}>
                 Apply Sale
@@ -872,17 +993,117 @@ const ProductsManagePage = () => {
               onChange={(e) => setEditDialog((s) => ({ ...s, slug: e.target.value.toLowerCase().replace(/[^a-z0-9-]/g, '-') }))}
               helperText="URL-friendly name (e.g. apple-iphone-15)"
             />
-            <TextField
-              label="Stock Quantity"
-              type="number"
-              size="small"
-              fullWidth
-              error={hasInvalidQuantity}
-              helperText={hasInvalidQuantity ? 'Stock cannot be negative.' : `Current stock: ${editDialog.row?.quantity ?? 0}`}
-              inputProps={{ min: 0 }}
-              value={editDialog.quantity}
-              onChange={(e) => setEditDialog((s) => ({ ...s, quantity: e.target.value }))}
-            />
+            {/* ── Stock Stepper — only in ecommerce mode (cart Tier-1 feature) ── */}
+            {cartEnabled && (
+            <Box>
+              <Stack direction="row" alignItems="center" spacing={0.5} sx={{ mb: 0.75 }}>
+                <Typography variant="caption" color="text.secondary" fontWeight={600}>
+                  Stock Quantity
+                </Typography>
+                <Typography variant="caption" color="text.secondary">—</Typography>
+                <Typography variant="caption" color="text.secondary">
+                  current:&nbsp;
+                  <Box component="span" fontWeight={700} color="text.primary">
+                    {editDialog.row?.quantity ?? 0}
+                  </Box>
+                </Typography>
+              </Stack>
+
+              {/* Decrement | Input | Increment row */}
+              <Stack direction="row" alignItems="center" spacing={1}>
+                <Tooltip title={`− ${editStepAmount}`}>
+                  <span>
+                    <IconButton
+                      size="small"
+                      color="error"
+                      onClick={() =>
+                        setEditDialog((s) => ({
+                          ...s,
+                          quantity: Math.max(0, (Number(s.quantity) || 0) - editStepAmount),
+                        }))
+                      }
+                      disabled={Number(editDialog.quantity) <= 0}
+                      sx={{
+                        border: '1px solid',
+                        borderColor: 'divider',
+                        borderRadius: 1.5,
+                        '&:hover': { borderColor: 'error.main', bgcolor: 'error.50' },
+                      }}
+                    >
+                      <RemoveCircleIcon fontSize="small" />
+                    </IconButton>
+                  </span>
+                </Tooltip>
+
+                <TextField
+                  type="number"
+                  size="small"
+                  error={hasInvalidQuantity}
+                  inputProps={{ min: 0, style: { textAlign: 'center', fontWeight: 700, fontSize: '1rem', width: 64 } }}
+                  value={editDialog.quantity}
+                  onChange={(e) => setEditDialog((s) => ({ ...s, quantity: e.target.value }))}
+                  sx={{ width: 96 }}
+                />
+
+                <Tooltip title={`+ ${editStepAmount}`}>
+                  <IconButton
+                    size="small"
+                    color="success"
+                    onClick={() =>
+                      setEditDialog((s) => ({
+                        ...s,
+                        quantity: (Number(s.quantity) || 0) + editStepAmount,
+                      }))
+                    }
+                    sx={{
+                      border: '1px solid',
+                      borderColor: 'divider',
+                      borderRadius: 1.5,
+                      '&:hover': { borderColor: 'success.main', bgcolor: 'success.50' },
+                    }}
+                  >
+                    <AddIcon fontSize="small" />
+                  </IconButton>
+                </Tooltip>
+              </Stack>
+
+              {/* Step presets row */}
+              <Stack direction="row" spacing={0.5} alignItems="center" sx={{ mt: 1, flexWrap: 'wrap', gap: 0.5 }}>
+                <Typography variant="caption" color="text.secondary" sx={{ mr: 0.25, fontWeight: 600 }}>
+                  Step:
+                </Typography>
+                {[1, 5, 10, 50, 100].map((preset) => (
+                  <Chip
+                    key={preset}
+                    label={preset}
+                    size="small"
+                    variant={editStepAmount === preset ? 'filled' : 'outlined'}
+                    color={editStepAmount === preset ? 'primary' : 'default'}
+                    onClick={() => setEditStepAmount(preset)}
+                    sx={{ cursor: 'pointer', fontWeight: 600, fontSize: '0.7rem' }}
+                  />
+                ))}
+                <TextField
+                  type="number"
+                  size="small"
+                  value={editStepAmount}
+                  onChange={(e) => {
+                    const v = parseInt(e.target.value, 10);
+                    if (!Number.isNaN(v) && v > 0) setEditStepAmount(v);
+                  }}
+                  inputProps={{ min: 1, style: { textAlign: 'center', padding: '2px 6px', fontWeight: 700 } }}
+                  sx={{ width: 62 }}
+                  placeholder="custom"
+                />
+              </Stack>
+
+              {hasInvalidQuantity && (
+                <Typography variant="caption" color="error" sx={{ display: 'block', mt: 0.5 }}>
+                  Stock cannot be negative.
+                </Typography>
+              )}
+            </Box>
+            )}
             <TextField
               label="Price"
               type="number"
@@ -897,94 +1118,98 @@ const ProductsManagePage = () => {
               value={editDialog.price}
               onChange={(e) => setEditDialog((s) => ({ ...s, price: e.target.value }))}
             />
-            <Stack direction="row" justifyContent="space-between" alignItems="center" sx={{ pt: 0.5 }}>
-              <Box>
-                <Typography variant="body2" fontWeight={600}>On Sale</Typography>
-                <Typography variant="caption" color="text.secondary">
-                  Turn this off to remove the sale price.
-                </Typography>
-              </Box>
-              <Button
-                size="small"
-                variant={editDialog.saleEnabled ? 'contained' : 'outlined'}
-                color={editDialog.saleEnabled ? 'error' : 'inherit'}
-                onClick={() => setEditDialog((s) => ({
-                  ...s,
-                  saleEnabled: !s.saleEnabled,
-                  salePrice: !s.saleEnabled ? (s.salePrice === '' ? s.row?.salePrice ?? s.price : s.salePrice) : '',
-                }))}
-              >
-                {editDialog.saleEnabled ? 'Sale Enabled' : 'No Sale'}
-              </Button>
-            </Stack>
-            <TextField
-              label="Sale Price"
-              type="number"
-              size="small"
-              fullWidth
-              disabled={!editDialog.saleEnabled}
-              error={hasInvalidSalePrice}
-              helperText={
-                !editDialog.saleEnabled
-                  ? 'Sale price is currently removed.'
-                  : hasInvalidSalePrice
-                    ? 'Sale price must be lower than the regular price.'
-                    : `Current sale price: ${editDialog.row?.salePrice ? formatPrice(editDialog.row.salePrice) : 'None'}`
-              }
-              InputProps={{
-                startAdornment: <InputAdornment position="start">{formatPrice(0).replace(/0.00|0/g, '').trim() || '$'}</InputAdornment>,
-              }}
-              inputProps={{ step: '0.01', min: 0 }}
-              value={editDialog.salePrice}
-              onChange={(e) => setEditDialog((s) => ({ ...s, salePrice: e.target.value }))}
-            />
-            <FormControl fullWidth size="small" disabled={!editDialog.saleEnabled}>
-              <InputLabel id="quick-edit-sale-label-select">Sale Label</InputLabel>
-              <Select
-                labelId="quick-edit-sale-label-select"
-                label="Sale Label"
-                value={editDialog.saleLabel}
-                onChange={(e) => setEditDialog((s) => ({ ...s, saleLabel: e.target.value }))}
-              >
-                <MenuItem value="">
-                  <em>None</em>
-                </MenuItem>
-                {hasUnknownEditSaleLabel && (
-                  <MenuItem value={editDialog.saleLabel} disabled>
-                    {editDialog.saleLabel}
-                  </MenuItem>
-                )}
-                {saleLabels.map((label) => (
-                  <MenuItem key={label.id} value={label.id}>
-                    {label.name}
-                  </MenuItem>
-                ))}
-              </Select>
-            </FormControl>
-            {sales.allowScheduling !== false && (
+            {pricingEnabled && (
               <>
+                <Stack direction="row" justifyContent="space-between" alignItems="center" sx={{ pt: 0.5 }}>
+                  <Box>
+                    <Typography variant="body2" fontWeight={600}>On Sale</Typography>
+                    <Typography variant="caption" color="text.secondary">
+                      Turn this off to remove the sale price.
+                    </Typography>
+                  </Box>
+                  <Button
+                    size="small"
+                    variant={editDialog.saleEnabled ? 'contained' : 'outlined'}
+                    color={editDialog.saleEnabled ? 'error' : 'inherit'}
+                    onClick={() => setEditDialog((s) => ({
+                      ...s,
+                      saleEnabled: !s.saleEnabled,
+                      salePrice: !s.saleEnabled ? (s.salePrice === '' ? s.row?.salePrice ?? s.price : s.salePrice) : '',
+                    }))}
+                  >
+                    {editDialog.saleEnabled ? 'Sale Enabled' : 'No Sale'}
+                  </Button>
+                </Stack>
                 <TextField
-                  label="Sale Starts"
-                  type="datetime-local"
+                  label="Sale Price"
+                  type="number"
                   size="small"
                   fullWidth
                   disabled={!editDialog.saleEnabled}
-                  InputLabelProps={{ shrink: true }}
-                  value={editDialog.saleStartAt}
-                  onChange={(e) => setEditDialog((s) => ({ ...s, saleStartAt: e.target.value }))}
+                  error={hasInvalidSalePrice}
+                  helperText={
+                    !editDialog.saleEnabled
+                      ? 'Sale price is currently removed.'
+                      : hasInvalidSalePrice
+                        ? 'Sale price must be lower than the regular price.'
+                        : `Current sale price: ${editDialog.row?.salePrice ? formatPrice(editDialog.row.salePrice) : 'None'}`
+                  }
+                  InputProps={{
+                    startAdornment: <InputAdornment position="start">{formatPrice(0).replace(/0.00|0/g, '').trim() || '$'}</InputAdornment>,
+                  }}
+                  inputProps={{ step: '0.01', min: 0 }}
+                  value={editDialog.salePrice}
+                  onChange={(e) => setEditDialog((s) => ({ ...s, salePrice: e.target.value }))}
                 />
-                <TextField
-                  label="Sale Ends"
-                  type="datetime-local"
-                  size="small"
-                  fullWidth
-                  disabled={!editDialog.saleEnabled}
-                  error={hasInvalidSaleDates}
-                  helperText={hasInvalidSaleDates ? 'Sale end must be after the start date.' : 'Leave blank for an open-ended sale'}
-                  InputLabelProps={{ shrink: true }}
-                  value={editDialog.saleEndAt}
-                  onChange={(e) => setEditDialog((s) => ({ ...s, saleEndAt: e.target.value }))}
-                />
+                <FormControl fullWidth size="small" disabled={!editDialog.saleEnabled}>
+                  <InputLabel id="quick-edit-sale-label-select">Sale Label</InputLabel>
+                  <Select
+                    labelId="quick-edit-sale-label-select"
+                    label="Sale Label"
+                    value={editDialog.saleLabel}
+                    onChange={(e) => setEditDialog((s) => ({ ...s, saleLabel: e.target.value }))}
+                  >
+                    <MenuItem value="">
+                      <em>None</em>
+                    </MenuItem>
+                    {hasUnknownEditSaleLabel && (
+                      <MenuItem value={editDialog.saleLabel} disabled>
+                        {editDialog.saleLabel}
+                      </MenuItem>
+                    )}
+                    {saleLabels.map((label) => (
+                      <MenuItem key={label.id} value={label.id}>
+                        {label.name}
+                      </MenuItem>
+                    ))}
+                  </Select>
+                </FormControl>
+                {sales.allowScheduling !== false && (
+                  <>
+                    <TextField
+                      label="Sale Starts"
+                      type="datetime-local"
+                      size="small"
+                      fullWidth
+                      disabled={!editDialog.saleEnabled}
+                      InputLabelProps={{ shrink: true }}
+                      value={editDialog.saleStartAt}
+                      onChange={(e) => setEditDialog((s) => ({ ...s, saleStartAt: e.target.value }))}
+                    />
+                    <TextField
+                      label="Sale Ends"
+                      type="datetime-local"
+                      size="small"
+                      fullWidth
+                      disabled={!editDialog.saleEnabled}
+                      error={hasInvalidSaleDates}
+                      helperText={hasInvalidSaleDates ? 'Sale end must be after the start date.' : 'Leave blank for an open-ended sale'}
+                      InputLabelProps={{ shrink: true }}
+                      value={editDialog.saleEndAt}
+                      onChange={(e) => setEditDialog((s) => ({ ...s, saleEndAt: e.target.value }))}
+                    />
+                  </>
+                )}
               </>
             )}
             <Stack direction="row" justifyContent="space-between" alignItems="center" sx={{ pt: 0.5 }}>
@@ -1067,7 +1292,7 @@ const ProductsManagePage = () => {
                 fullWidth
                 error={hasInvalidBulkSale}
                 helperText={bulkSaleDialog.saleType === 'percentage' ? 'Use a value below 100.' : 'This value becomes each selected product’s sale price.'}
-                InputProps={bulkSaleDialog.saleType === 'fixed' ? { startAdornment: <InputAdornment position="start">₹</InputAdornment> } : undefined}
+                InputProps={bulkSaleDialog.saleType === 'fixed' ? { startAdornment: <InputAdornment position="start">{symbol}</InputAdornment> } : undefined}
                 inputProps={{ min: 0, step: '0.01' }}
                 value={bulkSaleDialog.value}
                 onChange={(e) => setBulkSaleDialog((s) => ({ ...s, value: e.target.value }))}

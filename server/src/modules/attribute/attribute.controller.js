@@ -70,6 +70,14 @@ exports.removeValue = async (req, res, next) => {
         next(err);
     }
 };
+exports.reorderValues = async (req, res, next) => {
+    try {
+        await attributeService.reorderValues(req.params.id, req.body.valueIds);
+        return success(res, null, 'Values reordered');
+    } catch (err) {
+        next(err);
+    }
+};
 
 // --- Category-Attribute linking ---
 

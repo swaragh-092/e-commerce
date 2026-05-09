@@ -7,6 +7,9 @@ const { authorizePermissions } = require('../../middleware/role.middleware');
 const { auditLog } = require('../audit/audit.middleware');
 const multer = require('multer');
 const { PERMISSIONS } = require('../../config/permissions');
+const { validate } = require('../../middleware/validate.middleware');
+const { idParamSchema } = require('../../utils/common.validation');
+
 
 const upload = multer({
     storage: multer.memoryStorage(),
@@ -30,8 +33,10 @@ router.get('/',
 router.delete('/:id',
     authenticate,
     authorizePermissions(PERMISSIONS.MEDIA_DELETE),
+    validate(idParamSchema, 'params'),
     auditLog('Media'),
     mediaController.delete
 );
+
 
 module.exports = router;

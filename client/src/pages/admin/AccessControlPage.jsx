@@ -22,6 +22,9 @@ import {
   Stack,
   TextField,
   Typography,
+  useTheme,
+  useMediaQuery,
+  Tooltip,
 } from '@mui/material';
 import SecurityIcon from '@mui/icons-material/Security';
 import AdminPanelSettingsIcon from '@mui/icons-material/AdminPanelSettings';
@@ -31,6 +34,7 @@ import AddIcon from '@mui/icons-material/Add';
 import PersonAddIcon from '@mui/icons-material/PersonAdd';
 import Visibility from '@mui/icons-material/Visibility';
 import VisibilityOff from '@mui/icons-material/VisibilityOff';
+import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
 import { DataGrid } from '@mui/x-data-grid';
 import {
   createAccessRole,
@@ -75,6 +79,8 @@ const emptyUserForm = {
 };
 
 const AccessControlPage = () => {
+  const theme = useTheme();
+  const isMobile = useMediaQuery(theme.breakpoints.down('sm'));
   const { notify } = useNotification();
   const { hasPermission } = useAuth();
   const [roles, setRoles] = useState([]);
@@ -302,192 +308,457 @@ const AccessControlPage = () => {
       headerName: 'Assigned Role',
       width: 240,
       sortable: false,
-      renderCell: ({ row }) => (
-        <FormControl size="small" fullWidth>
-          <Select
-            value={row.roleId || ''}
-            disabled={updatingUserId === row.id}
-            onChange={(event) => handleRoleAssignment(row.id, event.target.value)}
-          >
-            {roleOptions.map((role) => (
-              <MenuItem key={role.id} value={role.id}>{role.name}</MenuItem>
-            ))}
-          </Select>
-        </FormControl>
-      ),
+      renderCell: ({ row }) => {
+        const currentRole = roleOptions.find((r) => String(r.id) === String(row.roleId));
+        return (
+          <FormControl size="small" fullWidth>
+            <Select
+              value={row.roleId || ''}
+              disabled={updatingUserId === row.id}
+              onChange={(event) => handleRoleAssignment(row.id, event.target.value)}
+              displayEmpty
+              sx={{
+                '& .MuiSelect-select': {
+                  color: currentRole ? 'text.primary' : 'text.disabled',
+                },
+              }}
+              IconComponent={(props) => (
+                updatingUserId === row.id ? (
+                  <CircularProgress size={18} sx={{ mr: 1 }} />
+                ) : (
+                  <ExpandMoreIcon {...props} />
+                )
+              )}
+            >
+              <MenuItem disabled value="">
+                <em>Select role…</em>
+              </MenuItem>
+              {roleOptions.map((role) => (
+                <MenuItem key={role.id} value={role.id}>{role.name}</MenuItem>
+              ))}
+            </Select>
+          </FormControl>
+        );
+      },
     },
   ];
 
+  const getRoleIcon = (role) => {
+    if (role.baseRole === 'super_admin') {
+      return <AdminPanelSettingsIcon color="primary" sx={{ fontSize: 28 }} />;
+    }
+    if (role.baseRole === 'admin') {
+      return <SecurityIcon color="primary" sx={{ fontSize: 28 }} />;
+    }
+    return <VpnKeyIcon color="primary" sx={{ fontSize: 28 }} />;
+  };
+
+  const getRoleStatusChip = (role) => {
+    if (role.isSystem) {
+      return (
+        <Chip
+          label="Editable by super admin"
+          size="small"
+          color="secondary"
+          variant="outlined"
+          sx={{ height: 22, fontSize: '0.7rem', borderRadius: 1 }}
+        />
+      );
+    }
+    return (
+      <Chip
+        label="Delegatable"
+        size="small"
+        color="info"
+        variant="outlined"
+        sx={{ height: 22, fontSize: '0.7rem', borderRadius: 1 }}
+      />
+    );
+  };
+
+  const canEditRole = (role) =>
+    (role.isSystem && canManageSystemRoles) || (!role.isSystem && canManageCustomRoles);
+
   return (
     <Box>
-      <Stack direction={{ xs: 'column', md: 'row' }} justifyContent="space-between" spacing={2} sx={{ mb: 3 }}>
-        <Box>
+      {/* Header Section */}
+      <Stack
+        direction={{ xs: 'column', sm: 'row' }}
+        justifyContent="space-between"
+        spacing={2}
+        sx={{ mb: 3 }}
+      >
+        <Box sx={{ flex: 1, minWidth: 0 }}>
           <Typography variant="h4" fontWeight={700} gutterBottom>
             Access Control
           </Typography>
-          <Typography variant="body1" color="text.secondary">
-            Super admins can edit system roles and assign roles to users. Delegated managers can create and edit custom roles when granted that permission.
+          <Typography variant="body1" color="text.secondary" sx={{ lineHeight: 1.5 }}>
+            Super admins can edit system roles and assign roles to users. Delegated managers can
+            create and edit custom roles when granted that permission.
           </Typography>
         </Box>
-        <Stack direction="row" spacing={1.5} alignItems="flex-start">
+        <Stack
+          direction={{ xs: 'column', sm: 'row' }}
+          spacing={1.5}
+          alignItems={{ xs: 'stretch', sm: 'flex-start' }}
+          sx={{ minWidth: { xs: '100%', sm: 'auto' } }}
+        >
           {canAssignRoles && (
-            <Button variant="outlined" startIcon={<PersonAddIcon />} onClick={openCreateUserDialog}>
+            <Button
+              variant="outlined"
+              startIcon={<PersonAddIcon />}
+              onClick={openCreateUserDialog}
+              sx={{ whiteSpace: 'nowrap' }}
+              fullWidth={isMobile}
+            >
               Create User
             </Button>
           )}
           {canManageCustomRoles && (
-            <Button variant="contained" startIcon={<AddIcon />} onClick={openCreateDialog}>
+            <Button
+              variant="contained"
+              startIcon={<AddIcon />}
+              onClick={openCreateDialog}
+              sx={{ whiteSpace: 'nowrap' }}
+              fullWidth={isMobile}
+            >
               Create Role
             </Button>
           )}
         </Stack>
       </Stack>
 
-      <Alert severity="info" sx={{ mb: 3 }}>
-        Only super admins can edit system roles. Custom-role management can be delegated, while user role assignment stays super-admin-only.
+      {/* Info Alert */}
+      <Alert severity="info" sx={{ mb: 3, borderRadius: 2 }}>
+        Only super admins can edit system roles. Custom-role management can be delegated, while user
+        role assignment stays super-admin-only.
       </Alert>
 
-      <Paper variant="outlined" sx={{ p: 2.5, borderRadius: 3, mb: 3 }}>
+      {/* Legend Section */}
+      <Paper
+        variant="outlined"
+        sx={{
+          p: { xs: 2, sm: 2.5 },
+          borderRadius: 3,
+          mb: 3,
+        }}
+      >
         <Typography variant="subtitle1" fontWeight={700} gutterBottom>
           Access Legend
         </Typography>
-        <Stack direction={{ xs: 'column', md: 'row' }} spacing={1.5} useFlexGap flexWrap="wrap">
-          <Chip label="System Role = protected default role" color="warning" variant="outlined" />
-          <Chip label="Custom Role = merchant-defined role" color="success" variant="outlined" />
-          <Chip label="Custom role edit can be delegated" color="info" variant="outlined" />
-          <Chip label="System role edit is super-admin-only" color="secondary" variant="outlined" />
-          <Chip label="User assignment is super-admin-only" color="secondary" variant="outlined" />
-        </Stack>
+        <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 1 }}>
+          <Chip
+            label="System Role = protected default role"
+            color="warning"
+            variant="outlined"
+            size="small"
+            sx={{ borderRadius: 1.5 }}
+          />
+          <Chip
+            label="Custom Role = merchant-defined role"
+            color="success"
+            variant="outlined"
+            size="small"
+            sx={{ borderRadius: 1.5 }}
+          />
+          <Chip
+            label="Custom role edit can be delegated"
+            color="info"
+            variant="outlined"
+            size="small"
+            sx={{ borderRadius: 1.5 }}
+          />
+          <Chip
+            label="System role edit is super-admin-only"
+            color="secondary"
+            variant="outlined"
+            size="small"
+            sx={{ borderRadius: 1.5 }}
+          />
+          <Chip
+            label="User assignment is super-admin-only"
+            color="secondary"
+            variant="outlined"
+            size="small"
+            sx={{ borderRadius: 1.5 }}
+          />
+        </Box>
       </Paper>
 
-      <Grid container spacing={3} sx={{ mb: 3 }}>
+      {/* Role Cards Grid */}
+      <Grid container spacing={{ xs: 2, md: 3 }} sx={{ mb: 3 }}>
         {roles.map((role) => (
-          <Grid item xs={12} md={6} lg={4} key={role.id}>
-            <Paper variant="outlined" sx={{ p: 3, borderRadius: 3, height: '100%' }}>
-              <Box sx={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 1.5, mb: 1.5 }}>
-                <Box sx={{ display: 'flex', gap: 1.5 }}>
-                  {role.baseRole === 'super_admin' ? (
-                    <AdminPanelSettingsIcon color="primary" />
-                  ) : role.baseRole === 'admin' ? (
-                    <SecurityIcon color="primary" />
-                  ) : (
-                    <VpnKeyIcon color="primary" />
-                  )}
-                  <Box>
-                    <Typography variant="h6" fontWeight={700}>{role.name}</Typography>
-                    <Stack direction="row" spacing={1} sx={{ mt: 0.75 }}>
+          <Grid item xs={12} sm={6} lg={4} key={role.id}>
+            <Paper
+              variant="outlined"
+              sx={{
+                p: { xs: 2, sm: 2.5, md: 3 },
+                borderRadius: 3,
+                height: '100%',
+                display: 'flex',
+                flexDirection: 'column',
+                transition: 'all 0.2s ease-in-out',
+                '&:hover': {
+                  boxShadow:
+                    theme.palette.mode === 'dark'
+                      ? '0 4px 12px rgba(0,0,0,0.3)'
+                      : '0 4px 12px rgba(0,0,0,0.08)',
+                  borderColor: 'primary.main',
+                },
+              }}
+            >
+              {/* Card Header */}
+              <Box
+                sx={{
+                  display: 'flex',
+                  alignItems: 'flex-start',
+                  justifyContent: 'space-between',
+                  gap: 1.5,
+                  mb: 2,
+                }}
+              >
+                <Box sx={{ display: 'flex', gap: { xs: 1, sm: 1.5 }, minWidth: 0 }}>
+                  <Box sx={{ mt: 0.25, flexShrink: 0 }}>{getRoleIcon(role)}</Box>
+                  <Box sx={{ minWidth: 0 }}>
+                    <Typography
+                      variant="h6"
+                      fontWeight={700}
+                      noWrap
+                      sx={{ fontSize: { xs: '1.15rem', sm: '1.25rem' }, lineHeight: 1.3 }}
+                    >
+                      {role.name}
+                    </Typography>
+                    <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 0.75, mt: 0.75 }}>
                       <Chip
-                        label={role.isSystem ? roleTypeChipProps.system.label : roleTypeChipProps.custom.label}
+                        label={
+                          role.isSystem
+                            ? roleTypeChipProps.system.label
+                            : roleTypeChipProps.custom.label
+                        }
                         size="small"
-                        color={role.isSystem ? roleTypeChipProps.system.color : roleTypeChipProps.custom.color}
+                        color={
+                          role.isSystem
+                            ? roleTypeChipProps.system.color
+                            : roleTypeChipProps.custom.color
+                        }
                         variant="outlined"
+                        sx={{ height: 22, fontSize: '0.7rem', borderRadius: 1 }}
                       />
-                      <Chip label={role.baseRole} size="small" color={roleColors[role.baseRole] || 'default'} />
-                      {role.isSystem ? (
-                        <Chip label="Editable by super admin" size="small" color="secondary" variant="outlined" />
-                      ) : (
-                        <Chip label="Delegatable" size="small" color="info" variant="outlined" />
-                      )}
-                    </Stack>
+                      <Chip
+                        label={role.baseRole}
+                        size="small"
+                        color={roleColors[role.baseRole] || 'default'}
+                        sx={{ height: 22, fontSize: '0.7rem', borderRadius: 1 }}
+                      />
+                      {getRoleStatusChip(role)}
+                    </Box>
                   </Box>
                 </Box>
-                {((role.isSystem && canManageSystemRoles) || (!role.isSystem && canManageCustomRoles)) && (
-                  <Button size="small" startIcon={<EditIcon />} onClick={() => openEditDialog(role)}>
-                    Edit
-                  </Button>
+                {canEditRole(role) && (
+                  <Tooltip title="Edit Role">
+                    <IconButton
+                      size="small"
+                      onClick={() => openEditDialog(role)}
+                      sx={{ mt: -0.5, mr: -0.5, flexShrink: 0 }}
+                    >
+                      <EditIcon fontSize="small" />
+                    </IconButton>
+                  </Tooltip>
                 )}
               </Box>
-              <Typography variant="body2" color="text.secondary" sx={{ mb: 1.5 }}>
+
+              {/* Description */}
+              <Typography
+                variant="body2"
+                color="text.secondary"
+                sx={{
+                  mb: 2,
+                  flex: 1,
+                  lineHeight: 1.6,
+                  minHeight: 20,
+                }}
+              >
                 {role.description || 'No description provided.'}
               </Typography>
-              <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mb: 1 }}>
-                {role.permissions.length} permissions
-              </Typography>
-              <Stack direction="row" spacing={1} useFlexGap flexWrap="wrap">
-                {role.permissions.slice(0, 8).map((permission) => (
-                  <Chip key={permission.id} label={permission.key} size="small" variant="outlined" />
-                ))}
-                {role.permissions.length > 8 && (
-                  <Chip label={`+${role.permissions.length - 8} more`} size="small" />
-                )}
-              </Stack>
+
+              {/* Permissions Section */}
+              <Box
+                sx={{
+                  mb: 1.5,
+                  pt: 1.5,
+                  borderTop: '1px solid',
+                  borderColor: 'divider',
+                }}
+              >
+                <Typography
+                  variant="caption"
+                  color="text.secondary"
+                  fontWeight={600}
+                  sx={{
+                    display: 'block',
+                    mb: 0.75,
+                    textTransform: 'uppercase',
+                    letterSpacing: '0.5px',
+                    fontSize: '0.7rem',
+                  }}
+                >
+                  {role.permissions.length} permissions
+                </Typography>
+                <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 0.75 }}>
+                  {role.permissions.slice(0, 8).map((permission) => (
+                    <Chip
+                      key={permission.id}
+                      label={permission.key}
+                      size="small"
+                      variant="outlined"
+                      sx={{
+                        height: 24,
+                        fontSize: '0.75rem',
+                        borderRadius: 1,
+                        '& .MuiChip-label': {
+                          px: 1,
+                        },
+                        bgcolor:
+                          theme.palette.mode === 'dark'
+                            ? 'rgba(255,255,255,0.03)'
+                            : 'rgba(0,0,0,0.02)',
+                      }}
+                    />
+                  ))}
+                  {role.permissions.length > 8 && (
+                    <Chip
+                      label={`+${role.permissions.length - 8} more`}
+                      size="small"
+                      sx={{
+                        height: 24,
+                        fontSize: '0.75rem',
+                        borderRadius: 1,
+                        fontWeight: 500,
+                      }}
+                    />
+                  )}
+                </Box>
+              </Box>
             </Paper>
           </Grid>
         ))}
       </Grid>
 
+      {/* User Assignment Table */}
       {canAssignRoles && (
-      <Paper variant="outlined" sx={{ p: 3, borderRadius: 3 }}>
-        <Typography variant="h6" fontWeight={700} gutterBottom>
-          Assign Roles to Users
-        </Typography>
-        <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
-          By default this table shows only elevated-access users. Use search or enable customers when you want to promote a shopper into a managed role.
-        </Typography>
+        <Paper
+          variant="outlined"
+          sx={{
+            p: { xs: 2, sm: 3 },
+            borderRadius: 3,
+          }}
+        >
+          <Typography variant="h6" fontWeight={700} gutterBottom>
+            Assign Roles to Users
+          </Typography>
+          <Typography variant="body2" color="text.secondary" sx={{ mb: 2, lineHeight: 1.6 }}>
+            By default this table shows only elevated-access users. Use search or enable customers
+            when you want to promote a shopper into a managed role.
+          </Typography>
 
-        <Stack direction={{ xs: 'column', md: 'row' }} spacing={2} sx={{ mb: 2 }}>
-          <TextField
-            size="small"
-            label="Search users by name or email"
-            value={search}
-            onChange={(event) => {
-              setSearch(event.target.value);
-              setPaginationModel((current) => ({ ...current, page: 0 }));
-            }}
-            sx={{ minWidth: 240 }}
-          />
-          <FormControl size="small" sx={{ minWidth: 220 }}>
-            <InputLabel>Filter by role</InputLabel>
-            <Select
-              label="Filter by role"
-              value={roleFilter}
+          <Stack
+            direction={{ xs: 'column', md: 'row' }}
+            spacing={2}
+            sx={{ mb: 2 }}
+          >
+            <TextField
+              size="small"
+              label="Search users by name or email"
+              value={search}
               onChange={(event) => {
-                setRoleFilter(event.target.value);
+                setSearch(event.target.value);
                 setPaginationModel((current) => ({ ...current, page: 0 }));
               }}
+              sx={{
+                minWidth: { xs: 0, sm: 240 },
+                flex: { xs: 1, sm: '0 0 auto' },
+              }}
+              fullWidth={isMobile}
+            />
+            <FormControl
+              size="small"
+              sx={{
+                minWidth: { xs: 0, sm: 220 },
+                flex: { xs: 1, sm: '0 0 auto' },
+              }}
+              fullWidth={isMobile}
             >
-              <MenuItem value="">All roles</MenuItem>
-              {roleOptions.map((role) => (
-                <MenuItem key={role.id} value={role.id}>{role.name}</MenuItem>
-              ))}
-            </Select>
-          </FormControl>
-          <FormControlLabel
-            control={(
-              <Checkbox
-                checked={showCustomers}
+              <InputLabel>Filter by role</InputLabel>
+              <Select
+                label="Filter by role"
+                value={roleFilter}
                 onChange={(event) => {
-                  setShowCustomers(event.target.checked);
+                  setRoleFilter(event.target.value);
                   setPaginationModel((current) => ({ ...current, page: 0 }));
                 }}
-              />
-            )}
-            label="Show customers"
-          />
-        </Stack>
+              >
+                <MenuItem value="">All roles</MenuItem>
+                {roleOptions.map((role) => (
+                  <MenuItem key={role.id} value={role.id}>
+                    {role.name}
+                  </MenuItem>
+                ))}
+              </Select>
+            </FormControl>
+            <FormControlLabel
+              control={
+                <Checkbox
+                  checked={showCustomers}
+                  onChange={(event) => {
+                    setShowCustomers(event.target.checked);
+                    setPaginationModel((current) => ({ ...current, page: 0 }));
+                  }}
+                />
+              }
+              label="Show customers"
+              sx={{ whiteSpace: 'nowrap' }}
+            />
+          </Stack>
 
-        <Box sx={{ height: 520, border: '1px solid', borderColor: 'divider', borderRadius: 2 }}>
-          {loading ? (
-            <Box sx={{ minHeight: 520, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-              <CircularProgress />
-            </Box>
-          ) : (
+          <Box
+            sx={{
+              height: { xs: 400, sm: 520 },
+              border: '1px solid',
+              borderColor: 'divider',
+              borderRadius: 2,
+              overflow: 'hidden',
+            }}
+          >
             <DataGrid
               rows={rows}
               columns={columns}
               rowCount={total}
+              loading={loading}
               paginationMode="server"
               paginationModel={paginationModel}
               onPaginationModelChange={setPaginationModel}
+              pageSizeOptions={[10, 25, 50]}
               disableRowSelectionOnClick
+              sx={{
+                '& .MuiDataGrid-cell': {
+                  px: { xs: 1, sm: 2 },
+                },
+                '& .MuiDataGrid-columnHeaders': {
+                  bgcolor: 'background.default',
+                },
+              }}
             />
-          )}
-        </Box>
-      </Paper>
+          </Box>
+        </Paper>
       )}
 
       {/* Create User Dialog */}
-      <Dialog open={createUserDialogOpen} onClose={closeCreateUserDialog} fullWidth maxWidth="sm">
+      <Dialog
+        open={createUserDialogOpen}
+        onClose={closeCreateUserDialog}
+        fullWidth
+        maxWidth="sm"
+      >
         <DialogTitle>Create Staff Account</DialogTitle>
         <DialogContent dividers>
           <Stack spacing={2} sx={{ mt: 1 }}>
@@ -546,18 +817,28 @@ const AccessControlPage = () => {
                 onChange={setUserField('roleId')}
               >
                 {roleOptions.map((role) => (
-                  <MenuItem key={role.id} value={role.id}>{role.name}</MenuItem>
+                  <MenuItem key={role.id} value={role.id}>
+                    {role.name}
+                  </MenuItem>
                 ))}
               </Select>
             </FormControl>
             <Alert severity="info" sx={{ mt: 0.5 }}>
-              The account will be created as <strong>active</strong> with email pre-verified. Share the credentials with the staff member directly.
+              The account will be created as <strong>active</strong> with email pre-verified. Share
+              the credentials with the staff member directly.
             </Alert>
           </Stack>
         </DialogContent>
         <DialogActions>
-          <Button onClick={closeCreateUserDialog} disabled={savingUser}>Cancel</Button>
-          <Button onClick={handleCreateUser} variant="contained" startIcon={<PersonAddIcon />} disabled={savingUser}>
+          <Button onClick={closeCreateUserDialog} disabled={savingUser}>
+            Cancel
+          </Button>
+          <Button
+            onClick={handleCreateUser}
+            variant="contained"
+            startIcon={<PersonAddIcon />}
+            disabled={savingUser}
+          >
             {savingUser ? 'Creating…' : 'Create Account'}
           </Button>
         </DialogActions>
@@ -566,14 +847,20 @@ const AccessControlPage = () => {
       {/* Create / Edit Role Dialog */}
       <Dialog open={roleDialogOpen} onClose={closeRoleDialog} fullWidth maxWidth="md">
         <DialogTitle>
-          {roleForm.id ? (roleForm.isSystem ? 'Edit System Role' : 'Edit Custom Role') : 'Create Custom Role'}
+          {roleForm.id
+            ? roleForm.isSystem
+              ? 'Edit System Role'
+              : 'Edit Custom Role'
+            : 'Create Custom Role'}
         </DialogTitle>
         <DialogContent dividers>
           <Stack spacing={2} sx={{ mt: 1 }}>
             <TextField
               label="Role Name"
               value={roleForm.name}
-              onChange={(event) => setRoleForm((current) => ({ ...current, name: event.target.value }))}
+              onChange={(event) =>
+                setRoleForm((current) => ({ ...current, name: event.target.value }))
+              }
               fullWidth
               size="small"
               disabled={roleForm.isSystem}
@@ -581,7 +868,9 @@ const AccessControlPage = () => {
             <TextField
               label="Description"
               value={roleForm.description}
-              onChange={(event) => setRoleForm((current) => ({ ...current, description: event.target.value }))}
+              onChange={(event) =>
+                setRoleForm((current) => ({ ...current, description: event.target.value }))
+              }
               fullWidth
               size="small"
               multiline
@@ -592,7 +881,9 @@ const AccessControlPage = () => {
               <Select
                 label="Base Role"
                 value={roleForm.baseRole}
-                onChange={(event) => setRoleForm((current) => ({ ...current, baseRole: event.target.value }))}
+                onChange={(event) =>
+                  setRoleForm((current) => ({ ...current, baseRole: event.target.value }))
+                }
                 disabled={roleForm.isSystem}
               >
                 <MenuItem value="customer">Customer</MenuItem>
@@ -612,9 +903,16 @@ const AccessControlPage = () => {
               </Typography>
               <Grid container spacing={2}>
                 {Object.entries(groupedPermissions).map(([group, groupPermissions]) => (
-                  <Grid item xs={12} md={6} key={group}>
-                    <Paper variant="outlined" sx={{ p: 2, borderRadius: 2, height: '100%' }}>
-                      <Typography variant="subtitle2" fontWeight={700} sx={{ mb: 1.5, textTransform: 'capitalize' }}>
+                  <Grid item xs={12} sm={6} key={group}>
+                    <Paper
+                      variant="outlined"
+                      sx={{ p: 2, borderRadius: 2, height: '100%' }}
+                    >
+                      <Typography
+                        variant="subtitle2"
+                        fontWeight={700}
+                        sx={{ mb: 1.5, textTransform: 'capitalize' }}
+                      >
                         {group}
                       </Typography>
                       <Stack spacing={1}>
@@ -627,12 +925,20 @@ const AccessControlPage = () => {
                               color={selected ? 'primary' : 'inherit'}
                               disabled={!roleForm.isSystem && permission.reserved}
                               onClick={() => handleRolePermissionToggle(permission.id)}
-                              sx={{ justifyContent: 'flex-start', textAlign: 'left' }}
+                              sx={{
+                                justifyContent: 'flex-start',
+                                textAlign: 'left',
+                                py: 0.75,
+                                px: 1.5,
+                              }}
                             >
                               <Box>
-                                <Typography variant="body2" fontWeight={600}>{permission.name}</Typography>
+                                <Typography variant="body2" fontWeight={600}>
+                                  {permission.name}
+                                </Typography>
                                 <Typography variant="caption" sx={{ opacity: 0.8 }}>
-                                  {permission.key}{permission.reserved ? ' • super admin only' : ''}
+                                  {permission.key}
+                                  {permission.reserved ? ' • super admin only' : ''}
                                 </Typography>
                               </Box>
                             </Button>
@@ -647,7 +953,9 @@ const AccessControlPage = () => {
           </Stack>
         </DialogContent>
         <DialogActions>
-          <Button onClick={closeRoleDialog} disabled={savingRole}>Cancel</Button>
+          <Button onClick={closeRoleDialog} disabled={savingRole}>
+            Cancel
+          </Button>
           <Button onClick={handleSaveRole} variant="contained" disabled={savingRole}>
             {savingRole ? 'Saving…' : roleForm.id ? 'Update Role' : 'Create Role'}
           </Button>

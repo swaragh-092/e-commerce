@@ -25,8 +25,12 @@ import TotalsNotesCard from '../../components/orders/order-detail/TotalsNotesCar
 import { buildProductTrackingItems } from '../../components/orders/order-detail/orderDetailUtils';
 import { useNotification } from '../../context/NotificationContext';
 import { useCurrency, useFeature } from '../../hooks/useSettings';
+
 import { useOrderStatusTransitions } from '../../hooks/useOrderStatusTransitions';
 import { userService } from '../../services/userService';
+
+import { orderService } from '../../services/orderService';
+
 import {
   getOrderStatusColor,
   getOrderStatusLabel,
@@ -62,8 +66,8 @@ const OrderDetailPage = () => {
       setError(null);
       try {
         const [orderData, trackingData] = await Promise.all([
-          userService.getMyOrderById(id),
-          userService.getMyOrderTracking(id).catch(() => null),
+          orderService.getMyOrderById(id),
+          orderService.getMyOrderTracking(id).catch(() => null),
         ]);
         setOrder(orderData || null);
         setTracking(trackingData || null);
@@ -119,7 +123,7 @@ const OrderDetailPage = () => {
 
     setActionLoading(true);
     try {
-      await userService.cancelOrder(id);
+      await orderService.cancelOrder(id);
       setOrder((current) => (current ? { ...current, status: 'cancelled' } : current));
       setTracking((current) => (current ? { ...current, orderStatus: 'cancelled' } : current));
     } catch (cancelError) {

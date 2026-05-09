@@ -34,6 +34,8 @@
     "AUDIT_READ": "audit.read",
     "PAGES_READ": "pages.read",
     "PAGES_MANAGE": "pages.manage",
+    "MENUS_READ": "menus.read",
+    "MENUS_MANAGE": "menus.manage",
     "ACCOUNT_SELF": "account.self",
     "CART_SELF": "cart.self",
     "WISHLIST_SELF": "wishlist.self",
@@ -94,6 +96,8 @@
     "audit.read",
     "pages.read",
     "pages.manage",
+    "menus.read",
+    "menus.manage",
     "enquiries.read",
     "enquiries.manage"
   ],

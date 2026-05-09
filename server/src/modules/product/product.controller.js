@@ -7,9 +7,21 @@ const hasProductAdminView = (user) => getPermissionsForUser(user).includes(PERMI
 
 exports.list = async (req, res, next) => {
   try {
-    const { page, limit, search, brand, category, categoryId, minPrice, maxPrice, status, saleStatus, sort, sortBy, sortOrder, tags, maxQty } = req.query;
+    const { page, limit, search, brand, category, categoryId, minPrice, maxPrice, status, saleStatus, sort, sortBy, sortOrder, tags, maxQty, include } = req.query;
     const isAdmin = hasProductAdminView(req.user);
-    const filters = { search, brand, category, categoryId, minPrice, maxPrice, status, saleStatus, sort, sortBy, sortOrder, tags, maxQty };
+    
+    let sanitizedInclude = undefined;
+    if (include && typeof include === 'string') {
+      const allowedIncludes = ['attributes', 'variants'];
+      const tokens = include.split(',').map(s => s.trim()).filter(Boolean);
+      const validTokens = tokens.filter(t => allowedIncludes.includes(t));
+      
+      if (validTokens.length > 0) {
+        sanitizedInclude = validTokens.join(',');
+      }
+    }
+
+    const filters = { search, brand, category, categoryId, minPrice, maxPrice, status, saleStatus, sort, sortBy, sortOrder, tags, maxQty, include: sanitizedInclude };
     const result = await productService.getProducts(filters, page, limit, isAdmin);
     return success(res, result.data, 'Products found', 200, {
       total: result.totalItems,
@@ -77,6 +89,26 @@ exports.delete = async (req, res, next) => {
     return success(res, null, 'Product deleted');
   } catch (err) {
     if (err.message === 'Product not found') return error(res, err.message, 404, 'NOT_FOUND');
+    next(err);
+  }
+};
+
+exports.bulkDelete = async (req, res, next) => {
+  try {
+    const { productIds } = req.body;
+    const result = await productService.bulkDeleteProducts(productIds, req.user?.id || null);
+    return success(res, result, `${result.deletedCount} products deleted successfully`);
+  } catch (err) {
+    next(err);
+  }
+};
+
+exports.bulkUpdate = async (req, res, next) => {
+  try {
+    const { productIds, data } = req.body;
+    const result = await productService.bulkUpdateProducts(productIds, data, req.user?.id || null);
+    return success(res, result, `${result.updatedCount} products updated successfully`);
+  } catch (err) {
     next(err);
   }
 };

@@ -131,7 +131,7 @@ const updateKey = async (key, value, group, actingUserId) => {
     throw new AppError(
       'FEATURE_LOCKED',
       403,
-      `Feature '${key}' is controlled by APP_MODE and cannot be modified via settings.`
+      `Feature '${key}' is controlled by store mode and cannot be modified via settings.`
     );
   }
 
@@ -177,21 +177,39 @@ const updateKey = async (key, value, group, actingUserId) => {
 
   // Bust the feature cache after the transaction commits so the next gated
   // request immediately picks up the new value without waiting for TTL expiry.
-  if (group === 'features') invalidateFeature(key);
+  if (group === 'features' || key === 'mode') invalidateFeature(key);
 
   return result;
 };
 
-const bulkUpdate = async (settingsInput, actingUserId) => {
+const bulkUpdate = async (settingsInput, actingUserId, actingUser = null) => {
   const validGroups = ['theme', 'features', 'payments', 'sales', 'seo', 'general', 'shipping', 'tax', 'sku', 'logo', 'hero', 'footer', 'announcement', 'nav', 'catalog', 'homepage', 'productPage', 'admin', 'invoice', 'gateway_credentials', 'messaging_credentials', 'messaging'];
   const credentialGroups = ['gateway_credentials', 'messaging_credentials'];
-    
+
     // Normalize input to an array of { key, value, group }
     const settingsArray = Array.isArray(settingsInput) 
         ? settingsInput 
         : Object.entries(settingsInput).map(([key, value]) => ({ key, value }));
 
-    return sequelize.transaction(async (t) => {
+    // ── Superadmin guard ─────────────────────────────────────────────────────
+    // Tier 2 feature toggles (group === 'features', non-Tier-1 keys) may only
+    // be written by a super_admin. Regular admins can save everything else.
+    const hasFeatureKeys = settingsArray.some(
+      ({ key, group }) => (group || 'general') === 'features' && !isTier1Feature(key)
+    );
+    if (hasFeatureKeys) {
+      const actingRoles = actingUser?.roles || (actingUser?.role ? [actingUser.role] : []);
+      const isSuperAdmin = actingRoles.includes('super_admin');
+      if (!isSuperAdmin) {
+        throw new AppError(
+          'SUPERADMIN_REQUIRED',
+          403,
+          'Only Super Admins can modify platform feature toggles.'
+        );
+      }
+    }
+
+    await sequelize.transaction(async (t) => {
         let updatedCount = 0;
         for (let { key, value, group } of settingsArray) {
             // Resolve the group for this key upfront so lookups are always scoped
@@ -244,14 +262,16 @@ const bulkUpdate = async (settingsInput, actingUserId) => {
                 }, t);
             }
         } catch(err) {}
-
-        return true;
     });
 
     // Bust feature cache for any feature-group key that was updated
-    for (const { key, group } of (Array.isArray(settingsInput) ? settingsInput : Object.entries(settingsInput).map(([k, v]) => ({ key: k, value: v })))) {
-        if (!group || group === 'features') invalidateFeature(key);
+    for (const { key, group } of settingsArray) {
+        if (!group || group === 'features' || key === 'mode') {
+            invalidateFeature(key);
+        }
     }
+
+    return true;
 };
 
 /**
@@ -273,6 +293,8 @@ const bulkUpdate = async (settingsInput, actingUserId) => {
  */
 const getFeatures = async () => {
     const rows = await Setting.findAll({ where: { group: 'features' } });
+    const modeRow = await Setting.findOne({ where: { group: 'general', key: 'mode' } });
+    const appMode = modeRow ? modeRow.value : 'ecommerce';
 
     const dbFeatures = {};
     for (const row of rows) {
@@ -280,8 +302,9 @@ const getFeatures = async () => {
     }
 
     return {
-        features:   buildFeatures(dbFeatures),
+        features:   buildFeatures(dbFeatures, appMode),
         lockedKeys: [...TIER1_KEYS],   // frontend uses this to grey out Tier 1 toggles
+        mode:       appMode            // Make sure the mode is exposed to the frontend
     };
 };
 

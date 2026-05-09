@@ -1,6 +1,7 @@
-'use strict';
+const { Op } = require('sequelize');
 
 module.exports = (sequelize, DataTypes) => {
+
     const ProductAttribute = sequelize.define('ProductAttribute', {
         id: {
             type: DataTypes.UUID,
@@ -44,6 +45,26 @@ module.exports = (sequelize, DataTypes) => {
         tableName: 'product_attributes',
         timestamps: true,
         underscored: true,
+        indexes: [
+            {
+                unique: true,
+                fields: ['product_id', 'attribute_id', 'value_id'],
+                where: {
+                    attribute_id: { [Op.ne]: null },
+                    value_id: { [Op.ne]: null }
+                }
+            },
+            {
+                unique: true,
+                fields: ['product_id', 'custom_name', 'custom_value'],
+                where: {
+                    attribute_id: null,
+                    custom_name: { [Op.ne]: null },
+                    custom_value: { [Op.ne]: null }
+                }
+            }
+
+        ]
     });
 
     ProductAttribute.associate = (models) => {
@@ -55,13 +76,14 @@ module.exports = (sequelize, DataTypes) => {
         ProductAttribute.belongsTo(models.AttributeTemplate, {
             foreignKey: 'attributeId',
             as: 'attribute',
-            onDelete: 'SET NULL',
+            onDelete: 'CASCADE',
         });
         ProductAttribute.belongsTo(models.AttributeValue, {
             foreignKey: 'valueId',
             as: 'value',
-            onDelete: 'SET NULL',
+            onDelete: 'CASCADE',
         });
+
     };
 
     return ProductAttribute;

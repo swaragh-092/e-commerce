@@ -3,7 +3,7 @@
 > **ORM**: Sequelize 6+  
 > **Database**: PostgreSQL 15+  
 > **Conventions**: UUID primary keys, timestamps on all tables, soft delete where noted  
-> **Key Updates in v2**: CHECK constraints, coupon tables, notification tables, webhook_events, address snapshot in orders, weight + taxRate on products, DB-backed RBAC tables
+> **Key Updates in v2**: CHECK constraints, coupon tables, notification tables, webhook_events, address snapshot in orders, weight + taxConfig on products, DB-backed RBAC tables
 
 ## Table of Contents
 1. [Settings](#settings)
@@ -171,7 +171,7 @@ CREATE TABLE products (
   quantity          INTEGER DEFAULT 0,
   reserved_qty      INTEGER DEFAULT 0,
   weight            DECIMAL(8,2),                       -- grams (for shipping calc)
-  tax_rate          DECIMAL(5,4),                       -- per-product tax override (nullable)
+  tax_config        JSONB,                              -- per-product tax override: { cgst: 0.09, sgst: 0.09, igst: 0.18 }. Overrides global tax settings if present.
   status            VARCHAR(20) DEFAULT 'draft',
   is_featured       BOOLEAN DEFAULT FALSE,
   created_at        TIMESTAMP DEFAULT NOW(),
@@ -179,7 +179,7 @@ CREATE TABLE products (
   deleted_at        TIMESTAMP,                          -- soft delete
   meta_title        VARCHAR(255),                       -- SEO title
   meta_description  TEXT,                               -- SEO description
-  meta_keywords     VARCHAR(500),                       -- SEO keywords (internal)
+  meta_keywords     VARCHAR(500),                       -- Internal tags for search optimization
   og_image          VARCHAR(500),                       -- Social share image
 
   -- CHECK constraints

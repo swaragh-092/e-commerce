@@ -18,8 +18,13 @@ const addAttributeValue = (attributeId, data) =>
 const removeAttributeValue = (attributeId, valueId) =>
   api.delete(`/attributes/${attributeId}/values/${valueId}`);
 
-const getCategoryAttributes = (categoryId) =>
-  api.get(`/categories/${categoryId}/attributes`);
+const getCategoryAttributes = (categoryId, inherit = false) => {
+  if (!categoryId || (Array.isArray(categoryId) && categoryId.length === 0)) {
+    return Promise.resolve({ data: { data: [] } });
+  }
+  const ids = Array.isArray(categoryId) ? categoryId.join(',') : categoryId;
+  return api.get(`/categories/${ids}/attributes${inherit ? '?inherit=true' : ''}`);
+};
 
 const linkAttributeToCategory = (categoryId, data) =>
   api.post(`/categories/${categoryId}/attributes`, data);
@@ -57,6 +62,9 @@ const updateProductVariant = (productId, variantId, data) =>
 const deleteProductVariant = (productId, variantId) =>
   api.delete(`/products/${productId}/variants/${variantId}`);
 
+const reorderAttributeValues = (attributeId, valueIds) =>
+  api.put(`/attributes/${attributeId}/values/reorder`, { valueIds });
+
 const attributeService = {
   getAttributes,
   getAttributeById,
@@ -65,6 +73,7 @@ const attributeService = {
   deleteAttribute,
   addAttributeValue,
   removeAttributeValue,
+  reorderAttributeValues,
   getCategoryAttributes,
   linkAttributeToCategory,
   unlinkAttributeFromCategory,

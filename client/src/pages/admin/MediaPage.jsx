@@ -38,6 +38,7 @@ import { useNotification } from '../../context/NotificationContext';
 import { useAuth } from '../../hooks/useAuth';
 import { PERMISSIONS } from '../../utils/permissions';
 import MediaUploader from '../../components/common/MediaUploader';
+import { getMediaUrl } from '../../utils/media';
 
 // ─── Helpers ────────────────────────────────────────────────────────────────
 
@@ -80,8 +81,8 @@ const getTypeGroup = (mimeType) => {
 
 // ─── MediaCard ───────────────────────────────────────────────────────────────
 
-const MediaCard = ({ file, baseUrl, canDeleteMedia, onCopy, onDelete }) => {
-  const url = file.url?.startsWith('http') ? file.url : `${baseUrl}${file.url}`;
+const MediaCard = ({ file, canDeleteMedia, onCopy, onDelete }) => {
+  const url = getMediaUrl(file.url);
   return (
     <Card
       elevation={0}
@@ -154,8 +155,6 @@ const MediaPage = () => {
   const canDeleteMedia = hasPermission(PERMISSIONS.MEDIA_DELETE);
   const canUploadMedia = hasPermission(PERMISSIONS.MEDIA_UPLOAD);
 
-  const baseUrl = import.meta.env.VITE_API_BASE_URL || 'http://localhost:5000';
-
   const fetchMedia = () => {
     setLoading(true);
     api
@@ -222,7 +221,6 @@ const MediaPage = () => {
         <Grid item key={file.id} xs={6} sm={4} md={3} lg={2}>
           <MediaCard
             file={file}
-            baseUrl={baseUrl}
             canDeleteMedia={canDeleteMedia}
             onCopy={copyUrl}
             onDelete={handleDelete}

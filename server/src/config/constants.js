@@ -61,4 +61,6 @@ module.exports = {
     EMAIL_VERIFICATION_TTL_MS: 24 * 60 * 60 * 1000,
     PASSWORD_RESET_TTL_MS: 15 * 60 * 1000,
   }),
+  
+  LOW_STOCK_THRESHOLD: 10,
 };

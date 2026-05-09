@@ -5,7 +5,8 @@ import {
   Chip, Tooltip, Divider, Stack, MenuItem, CardMedia, Grid,
   List, ListItemButton, ListItemText, ListItemIcon, Collapse,
   Breadcrumbs, Link, ToggleButtonGroup, ToggleButton,
-  Table, TableBody, TableCell, TableContainer, TableHead, TableRow
+  Table, TableBody, TableCell, TableContainer, TableHead, TableRow,
+  Popover, InputAdornment
 } from '@mui/material';
 import {
   Add as AddIcon, Edit as EditIcon, Delete as DeleteIcon,
@@ -13,11 +14,16 @@ import {
   Close as CloseIcon, ChevronRight as ChevronRightIcon,
   ExpandMore as ExpandMoreIcon, ViewList as ViewListIcon,
   AccountTree as AccountTreeIcon, NavigateNext as NavigateNextIcon,
-  SubdirectoryArrowRight as SubdirectoryArrowRightIcon
+  SubdirectoryArrowRight as SubdirectoryArrowRightIcon,
+  ArrowUpward as ArrowUpwardIcon,
+  ArrowDownward as ArrowDownwardIcon,
+  Search as SearchIcon,
+  AddCircleOutline as AddCircleOutlineIcon,
+  Settings as SettingsIcon,
 } from '@mui/icons-material';
 
 import {
-  getCategoryTree, createCategory, updateCategory, deleteCategory,
+  getCategoryTree, createCategory, updateCategory, deleteCategory, reorderCategory,
 } from '../../services/categoryService';
 import { useNotification } from '../../context/NotificationContext';
 import { useAuth } from '../../hooks/useAuth';
@@ -27,6 +33,7 @@ import MediaPicker from '../../components/common/MediaPicker';
 import MediaUploader from '../../components/common/MediaUploader';
 import { getMediaUrl } from '../../utils/media';
 import { useSettings } from '../../hooks/useSettings';
+import CategoryAttributesDialog from '../../components/admin/CategoryAttributesDialog';
 
 // --- Helpers ---
 const flattenTree = (nodes, result = [], level = 0, path = []) => {
@@ -49,15 +56,36 @@ const getBreadcrumbPath = (nodes, targetId, path = []) => {
     return null;
 };
 
+// Check if node or any of its descendants match the search query
+const nodeMatchesSearch = (node, query) => {
+  const lowerName = node.name.toLowerCase();
+  const lowerDesc = (node.description || '').toLowerCase();
+  if (lowerName.includes(query) || lowerDesc.includes(query)) return true;
+  if (node.children) {
+    for (const child of node.children) {
+      if (nodeMatchesSearch(child, query)) return true;
+    }
+  }
+  return false;
+};
+
 // --- CategoryTreeItem Component (Left Panel Node) ---
-const CategoryTreeItem = ({ node, level, expandedIds, toggleNode, selectedId, onSelect }) => {
+const CategoryTreeItem = ({ node, level, expandedIds, toggleNode, selectedId, onSelect, onReorder, onContextMenu, canManageCategories, searchQuery, reorderingId }) => {
     const isExpanded = expandedIds.includes(node.id);
     const isSelected = selectedId === node.id;
     const hasChildren = node.children && node.children.length > 0;
+    const hasMatches = searchQuery ? nodeMatchesSearch(node, searchQuery) : true;
+    const [hovered, setHovered] = useState(false);
+
+    // If searching, show only nodes that match or have matching descendants
+    if (searchQuery && !hasMatches) return null;
+
+    // While searching, force expand everything so results are visible
+    const displayExpanded = searchQuery ? true : isExpanded;
 
     const handleRowClick = () => {
         onSelect(node.id);
-        if (!isExpanded && hasChildren) {
+        if (!displayExpanded && hasChildren) {
             toggleNode(node.id);
         }
     };
@@ -66,9 +94,13 @@ const CategoryTreeItem = ({ node, level, expandedIds, toggleNode, selectedId, on
         <React.Fragment>
             <ListItemButton
                 onClick={handleRowClick}
+                onContextMenu={(e) => onContextMenu && onContextMenu(e, node)}
+                onMouseEnter={() => setHovered(true)}
+                onMouseLeave={() => setHovered(false)}
                 sx={{
                     pl: 2 + level * 2,
                     py: 1,
+                    pr: 2,
                     bgcolor: isSelected ? 'action.selected' : 'transparent',
                     borderLeft: isSelected ? '3px solid' : '3px solid transparent',
                     borderColor: 'primary.main',
@@ -100,16 +132,50 @@ const CategoryTreeItem = ({ node, level, expandedIds, toggleNode, selectedId, on
                     }} 
                 />
                 {hasChildren && (
-                    <Chip label={node.children.length} size="small" sx={{ height: 16, fontSize: '0.65rem' }} />
+                    <Chip label={node.children.length} size="small" sx={{ height: 16, fontSize: '0.65rem', mr: 1 }} />
+                )}
+                {/* Up/Down reorder arrows on hover */}
+                {canManageCategories && hovered && !searchQuery && (
+                    <Box sx={{ display: 'flex', ml: 0.5 }}>
+                        <Tooltip title="Move Up">
+                            <IconButton
+                                size="small"
+                                onClick={(e) => { e.stopPropagation(); onReorder(node.id, 'up'); }}
+                                sx={{ p: 0.3 }}
+                                disabled={reorderingId === node.id}
+                            >
+                                {reorderingId === node.id ? <CircularProgress size={16} /> : <ArrowUpwardIcon sx={{ fontSize: 16 }} />}
+                            </IconButton>
+                        </Tooltip>
+                        <Tooltip title="Move Down">
+                            <IconButton
+                                size="small"
+                                onClick={(e) => { e.stopPropagation(); onReorder(node.id, 'down'); }}
+                                sx={{ p: 0.3 }}
+                                disabled={reorderingId === node.id}
+                            >
+                                {reorderingId === node.id ? <CircularProgress size={16} /> : <ArrowDownwardIcon sx={{ fontSize: 16 }} />}
+                            </IconButton>
+                        </Tooltip>
+                    </Box>
                 )}
             </ListItemButton>
-            <Collapse in={isExpanded} timeout="auto" unmountOnExit>
+            <Collapse in={displayExpanded} timeout="auto" unmountOnExit>
                 <List component="div" disablePadding>
                     {node.children?.map(child => (
                         <CategoryTreeItem 
-                            key={child.id} node={child} level={level + 1}
-                            expandedIds={expandedIds} toggleNode={toggleNode}
-                            selectedId={selectedId} onSelect={onSelect}
+                            key={child.id} 
+                            node={child} 
+                            level={level + 1}
+                            expandedIds={expandedIds} 
+                            toggleNode={toggleNode}
+                            selectedId={selectedId} 
+                            onSelect={onSelect}
+                            onReorder={onReorder}
+                            onContextMenu={onContextMenu}
+                            canManageCategories={canManageCategories}
+                            searchQuery={searchQuery}
+                            reorderingId={reorderingId}
                         />
                     ))}
                 </List>
@@ -119,7 +185,7 @@ const CategoryTreeItem = ({ node, level, expandedIds, toggleNode, selectedId, on
 };
 
 // --- CategoryDetailsPanel Component (Right Panel) ---
-const CategoryDetailsPanel = ({ categoryId, categories, onEdit, onDelete, onAddChild, onNavigateNode, canManageCategories }) => {
+const CategoryDetailsPanel = ({ categoryId, categories, onEdit, onDelete, onAddChild, onNavigateNode, onManageAttributes, canManageCategories, canManageAttributes }) => {
     const selectedPath = useMemo(() => getBreadcrumbPath(categories, categoryId) || [], [categories, categoryId]);
     const selectedCatNode = useMemo(() => {
         let found = null;
@@ -167,9 +233,13 @@ const CategoryDetailsPanel = ({ categoryId, categories, onEdit, onDelete, onAddC
 
             <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', mb: 4, flexWrap: 'wrap', gap: 2 }}>
                 <Box sx={{ display: 'flex', gap: 3, alignItems: 'center' }}>
-                    {selectedCatNode.image && (
+                    {selectedCatNode.image ? (
                         <Box sx={{ width: 80, height: 80, borderRadius: 2, overflow: 'hidden', flexShrink: 0, border: '1px solid', borderColor: 'divider' }}>
                             <img src={getMediaUrl(selectedCatNode.image)} alt={selectedCatNode.name} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                        </Box>
+                    ) : (
+                        <Box sx={{ width: 80, height: 80, borderRadius: 2, overflow: 'hidden', flexShrink: 0, border: '1px solid', borderColor: 'divider', display: 'flex', alignItems: 'center', justifyContent: 'center', bgcolor: 'background.default' }}>
+                            <FolderIcon sx={{ fontSize: 36, color: 'text.secondary', opacity: 0.5 }} />
                         </Box>
                     )}
                     <Box>
@@ -182,6 +252,7 @@ const CategoryDetailsPanel = ({ categoryId, categories, onEdit, onDelete, onAddC
                     </Box>
                 </Box>
                 <Stack direction="row" spacing={1}>
+                    <Button variant="outlined" startIcon={<SettingsIcon />} onClick={() => onManageAttributes(selectedCatNode)} disabled={!canManageAttributes}>Attributes</Button>
                     <Button variant="outlined" startIcon={<EditIcon />} onClick={() => onEdit(selectedCatNode)} disabled={!canManageCategories}>Edit</Button>
                     <Button variant="outlined" color="error" startIcon={<DeleteIcon />} onClick={() => onDelete(selectedCatNode.id)} disabled={!canManageCategories}>Delete</Button>
                 </Stack>
@@ -350,6 +421,10 @@ const CategoriesPage = () => {
     const [viewMode, setViewMode] = useState('tree'); // 'tree' or 'flat'
     const [selectedCategoryId, setSelectedCategoryId] = useState(null);
     const [expandedNodeIds, setExpandedNodeIds] = useState([]);
+    const [searchQuery, setSearchQuery] = useState('');
+    const [contextMenuAnchorEl, setContextMenuAnchorEl] = useState(null);
+    const [contextMenuCat, setContextMenuCat] = useState(null);
+    const [reorderingId, setReorderingId] = useState(null);
 
     // Dialog state
     const [openDialog, setOpenDialog] = useState(false);
@@ -365,6 +440,8 @@ const CategoriesPage = () => {
         metaKeywords: '',
         ogImage: ''
     });
+    const [attrDialogOpen, setAttrDialogOpen] = useState(false);
+    const [attrCategory, setAttrCategory] = useState(null);
     const [formErrors, setFormErrors] = useState({});
     const [mediaPickerOpen, setMediaPickerOpen] = useState(false);
 
@@ -372,16 +449,23 @@ const CategoriesPage = () => {
     const { hasPermission } = useAuth();
     const { settings } = useSettings();
     const canManageCategories = hasPermission(PERMISSIONS.CATEGORIES_MANAGE);
+    const canManageAttributes = hasPermission(PERMISSIONS.ATTRIBUTES_MANAGE);
 
     const fetchCategories = async () => {
         try {
             setLoading(true);
             const res = await getCategoryTree();
-            setCategories(res?.data || []);
+            const data = res?.data || [];
+            setCategories(data);
             
             // Auto expand root items on first load if not expanded yet
-            if (expandedNodeIds.length === 0 && res?.data) {
-                setExpandedNodeIds(res.data.map(c => c.id));
+            if (expandedNodeIds.length === 0 && data.length > 0) {
+                setExpandedNodeIds(data.map(c => c.id));
+            }
+            
+            // Auto-select first root category on first load
+            if (data.length > 0 && !selectedCategoryId) {
+                setSelectedCategoryId(data[0].id);
             }
         } catch {
             notify('Failed to load categories.', 'error');
@@ -412,6 +496,31 @@ const CategoriesPage = () => {
             const newExpanded = new Set([...prev, ...idsToExpand]);
             return Array.from(newExpanded);
         });
+    };
+
+    // Context menu handler
+    const handleContextMenu = (event, cat) => {
+        event.preventDefault();
+        setContextMenuCat(cat);
+        setContextMenuAnchorEl(event.currentTarget);
+    };
+
+    // Reorder handler
+    const handleReorder = async (id, direction) => {
+        if (!canManageCategories) {
+            notify('You do not have permission to reorder categories.', 'error');
+            return;
+        }
+        setReorderingId(id);
+        try {
+            await reorderCategory(id, direction);
+            notify(`Category ${direction === 'up' ? 'moved up' : 'moved down'}`, 'success');
+            fetchCategories();
+        } catch (err) {
+            notify(getApiErrorMessage(err), 'error');
+        } finally {
+            setReorderingId(null);
+        }
     };
 
     // Dialog actions
@@ -527,8 +636,19 @@ const CategoriesPage = () => {
         }
     };
 
+    const handleOpenAttributes = (cat) => {
+        setAttrCategory(cat);
+        setAttrDialogOpen(true);
+    };
+
     const flatCategories = useMemo(() => flattenTree(categories), [categories]);
     const totalCount = flatCategories.length;
+
+    const visibleNodes = useMemo(() => {
+        if (!searchQuery) return categories;
+        const query = searchQuery.toLowerCase();
+        return categories.filter(node => nodeMatchesSearch(node, query));
+    }, [categories, searchQuery]);
 
     return (
         <Box sx={{ height: 'calc(100vh - 120px)', display: 'flex', flexDirection: 'column' }}>
@@ -589,16 +709,44 @@ const CategoriesPage = () => {
                     <Grid item xs={12} md={4} lg={3} sx={{ height: '100%' }}>
                         <Paper variant="outlined" sx={{ height: '100%', overflow: 'hidden', display: 'flex', flexDirection: 'column', borderRadius: 2 }}>
                             <Box sx={{ p: 2, bgcolor: 'action.hover', borderBottom: '1px solid', borderColor: 'divider' }}>
-                                <Typography variant="subtitle2" fontWeight={600} color="text.secondary">CATEGORY HIERARCHY</Typography>
+                                <Typography variant="subtitle2" fontWeight={600} color="text.secondary" sx={{ mb: 1.5 }}>CATEGORY HIERARCHY</Typography>
+                                {/* Search Box */}
+                                <TextField
+                                    size="small"
+                                    fullWidth
+                                    placeholder="Search categories..."
+                                    value={searchQuery}
+                                    onChange={(e) => setSearchQuery(e.target.value)}
+                                    InputProps={{
+                                        startAdornment: (
+                                            <InputAdornment position="start">
+                                                <SearchIcon fontSize="small" color="action" />
+                                            </InputAdornment>
+                                        ),
+                                        endAdornment: searchQuery ? (
+                                            <InputAdornment position="end">
+                                                <IconButton size="small" onClick={() => setSearchQuery('')}>
+                                                    <CloseIcon fontSize="small" />
+                                                </IconButton>
+                                            </InputAdornment>
+                                        ) : null,
+                                    }}
+                                />
                             </Box>
                             <Box sx={{ flexGrow: 1, overflowY: 'auto', p: 1 }}>
                                 {categories.length === 0 ? (
                                     <Box sx={{ textAlign: 'center', py: 4, color: 'text.secondary' }}>
                                         <Typography variant="body2">No categories found.</Typography>
                                     </Box>
+                                ) : visibleNodes.length === 0 ? (
+                                    <Box sx={{ textAlign: 'center', py: 4, color: 'text.secondary', px: 2 }}>
+                                        <SearchIcon sx={{ fontSize: 40, mb: 1, opacity: 0.2 }} />
+                                        <Typography variant="body2">No categories match "{searchQuery}"</Typography>
+                                        <Button size="small" onClick={() => setSearchQuery('')} sx={{ mt: 1 }}>Clear Search</Button>
+                                    </Box>
                                 ) : (
                                     <List component="nav" disablePadding>
-                                        {categories.map(cat => (
+                                        {visibleNodes.map(cat => (
                                             <CategoryTreeItem 
                                                 key={cat.id} 
                                                 node={cat} 
@@ -607,6 +755,11 @@ const CategoriesPage = () => {
                                                 toggleNode={toggleNode}
                                                 selectedId={selectedCategoryId}
                                                 onSelect={setSelectedCategoryId}
+                                                onReorder={handleReorder}
+                                                onContextMenu={handleContextMenu}
+                                                canManageCategories={canManageCategories}
+                                                searchQuery={searchQuery.toLowerCase()}
+                                                reorderingId={reorderingId}
                                             />
                                         ))}
                                     </List>
@@ -625,9 +778,39 @@ const CategoriesPage = () => {
                                 onDelete={handleDelete}
                                 onAddChild={openCreate}
                                 onNavigateNode={handleNavigateNode}
+                                onManageAttributes={handleOpenAttributes}
                                 canManageCategories={canManageCategories}
+                                canManageAttributes={canManageAttributes}
                             />
                         </Paper>
+                        
+                        {/* Context Menu / Right Click */}
+                        <Popover
+                            open={Boolean(contextMenuAnchorEl)}
+                            anchorEl={contextMenuAnchorEl}
+                            onClose={() => { setContextMenuAnchorEl(null); setContextMenuCat(null); }}
+                            anchorOrigin={{ vertical: 'top', horizontal: 'left' }}
+                            transformOrigin={{ vertical: 'top', horizontal: 'left' }}
+                            PaperProps={{ sx: { width: 200, overflow: 'hidden' } }}
+                        >
+                            {contextMenuCat && (
+                                <>  
+                                    <MenuItem onClick={() => { openEdit(contextMenuCat); setContextMenuAnchorEl(null); setContextMenuCat(null); }}>
+                                        <ListItemIcon><EditIcon fontSize="small" /></ListItemIcon>
+                                        Edit
+                                    </MenuItem>
+                                    <MenuItem onClick={() => { openCreate(contextMenuCat); setContextMenuAnchorEl(null); setContextMenuCat(null); }}>
+                                        <ListItemIcon><AddCircleOutlineIcon fontSize="small" /></ListItemIcon>
+                                        Add Subcategory
+                                    </MenuItem>
+                                    <Divider />
+                                    <MenuItem onClick={() => { handleDelete(contextMenuCat.id); setContextMenuAnchorEl(null); setContextMenuCat(null); }} sx={{ color: 'error.main' }}>
+                                        <ListItemIcon><DeleteIcon fontSize="small" color="error" /></ListItemIcon>
+                                        Delete
+                                    </MenuItem>
+                                </>
+                            )}
+                        </Popover>
                     </Grid>
                 </Grid>
             )}
@@ -800,6 +983,13 @@ const CategoriesPage = () => {
                     </Button>
                 </DialogActions>
             </Dialog>
+
+            <CategoryAttributesDialog 
+                open={attrDialogOpen} 
+                onClose={() => setAttrDialogOpen(false)} 
+                categoryId={attrCategory?.id}
+                categoryName={attrCategory?.name}
+            />
         </Box>
     );
 };

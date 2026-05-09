@@ -23,7 +23,7 @@ import {
 } from '@mui/icons-material';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import PageSEO from '../../../components/common/PageSEO';
-import { userService } from '../../../services/userService';
+import { orderService } from '../../../services/orderService';
 import { useCurrency } from '../../../hooks/useSettings';
 import { getApiErrorMessage } from '../../../utils/apiErrors';
 
@@ -96,8 +96,8 @@ const AllOrdersPage = () => {
                 ...(selectedStatuses.length > 0 && { status: selectedStatuses.join(',') }),
             };
 
-            const res = await userService.getMyOrders(params);
-            let fetched = res.data || [];
+            const res = await orderService.getMyOrders(params);
+            let fetched = res.data?.rows || res.data || [];
 
             // Client-side date filter (time filter applied locally)
             const { from, to, olderThan } = getDateRange(selectedTimeFilter);

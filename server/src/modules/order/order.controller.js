@@ -17,10 +17,10 @@ const placeOrder = async (req, res, next) => {
 
 const getOrders = async (req, res, next) => {
   try {
-    const { page = 1, limit = 20, status, search } = req.query;
+    const { page = 1, limit = 20, status, search, productId } = req.query;
     const isAdminSession = hasOrderAdminAccess(req.user);
-    const result = await OrderService.getOrders(req.user.id, isAdminSession, page, limit, { status, search });
-    return paginated(res, result.rows, result.count, page, limit);
+    const result = await OrderService.getOrders(req.user.id, isAdminSession, page, limit, { status, search, productId });
+    return paginated(res, result.rows, result.count, page, limit, 'Success', { counts: result.counts || {} });
   } catch (err) {
     next(err);
   }
