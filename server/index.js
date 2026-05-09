@@ -36,18 +36,25 @@ const startServer = async () => {
     startJobs();
 
     // Log pool stats periodically in production
-    if (process.env.NODE_ENV === 'production') {
-      poolStatsInterval = setInterval(() => {
-        const pool = sequelize.connectionManager.pool;
+    const logPoolStats = () => {
+      try {
+        const pool = sequelize.connectionManager?.pool;
         if (pool) {
           logger.info('DB Pool Stats', {
-            size: pool.size || 0,
-            available: pool.available || 0,
-            pending: pool.pending || 0,
-            borrowed: pool.borrowed || 0
+            size: typeof pool.size === 'number' ? pool.size : 0,
+            available: typeof pool.available === 'number' ? pool.available : 0,
+            pending: typeof pool.pending === 'number' ? pool.pending : 0,
+            borrowed: typeof pool.borrowed === 'number' ? pool.borrowed : 0
           });
         }
-      }, 60000);
+      } catch (err) {}
+    };
+
+    // Log immediately on startup
+    logPoolStats();
+
+    if (process.env.NODE_ENV === 'production') {
+      poolStatsInterval = setInterval(logPoolStats, 60000);
     }
     
     const server = app.listen(PORT, () => {

@@ -473,7 +473,7 @@ exports.getProductById = async (id) => {
   return serializeProductPricing(product, { adminView: true, features }, labelPresets);
 };
 
-exports.createProduct = async (data, req = null) => {
+exports.createProduct = async (data, auditContext = null) => {
   const transaction = await Product.sequelize.transaction();
   const labelPresets = await getLabelPresets();
   try {
@@ -513,18 +513,20 @@ exports.createProduct = async (data, req = null) => {
 
       try {
         await AuditService.log({
+          userId: auditContext?.userId || null,
           action: ACTIONS.CREATE,
           entity: ENTITIES.PRODUCT,
           entityId: product.id,
           changes: { name: product.name, sku: product.sku },
-          req: req || null,
+          ipAddress: auditContext?.ip,
+          userAgent: auditContext?.userAgent,
         });
         
         events.emit(PRODUCT_EVENTS.CREATED, {
           productId: product.id,
           name: product.name,
           sku: product.sku,
-          actingUserId: req?.user?.id
+          actingUserId: auditContext?.userId
         });
       } catch (e) {
         logger.error('Failed to log audit or emit event for product creation:', e);
@@ -537,7 +539,7 @@ exports.createProduct = async (data, req = null) => {
   }
 };
 
-exports.updateProduct = async (id, data, req = null) => {
+exports.updateProduct = async (id, data, auditContext = null) => {
   const product = await Product.findByPk(id);
   if (!product) throw new AppError('NOT_FOUND', 404, 'Product not found');
 
@@ -588,17 +590,19 @@ exports.updateProduct = async (id, data, req = null) => {
 
     try {
       await AuditService.log({
+        userId: auditContext?.userId || null,
         action: ACTIONS.UPDATE,
         entity: ENTITIES.PRODUCT,
         entityId: id,
         changes: data,
-        req,
+        ipAddress: auditContext?.ip,
+        userAgent: auditContext?.userAgent,
       });
       
       events.emit(PRODUCT_EVENTS.UPDATED, {
         productId: id,
         changes: data,
-        actingUserId: req?.user?.id
+        actingUserId: auditContext?.userId
       });
     } catch (e) {
       logger.error('Failed to log audit or emit event for product update:', e);
@@ -611,7 +615,7 @@ exports.updateProduct = async (id, data, req = null) => {
   }
 };
 
-exports.deleteProduct = async (id, req = null) => {
+exports.deleteProduct = async (id, auditContext = null) => {
   const product = await Product.findByPk(id);
   if (!product) throw new AppError('NOT_FOUND', 404, 'Product not found');
 
@@ -620,17 +624,19 @@ exports.deleteProduct = async (id, req = null) => {
 
   try {
     await AuditService.log({
+      userId: auditContext?.userId || null,
       action: ACTIONS.DELETE,
       entity: ENTITIES.PRODUCT,
       entityId: id,
       changes: snapshot,
-      req,
+      ipAddress: auditContext?.ip,
+      userAgent: auditContext?.userAgent,
     });
     
     events.emit(PRODUCT_EVENTS.DELETED, {
       productId: id,
       snapshot,
-      actingUserId: req?.user?.id
+      actingUserId: auditContext?.userId
     });
   } catch (e) {
     logger.error('Failed to log audit or emit event for product deletion:', e);
@@ -639,7 +645,7 @@ exports.deleteProduct = async (id, req = null) => {
   return true;
 };
 
-exports.bulkDeleteProducts = async (ids, actingUserId = null, req = null) => {
+exports.bulkDeleteProducts = async (ids, actingUserId = null, auditContext = null) => {
   return Product.sequelize.transaction(async (transaction) => {
     const products = await Product.findAll({
       where: { id: ids },
@@ -657,15 +663,15 @@ exports.bulkDeleteProducts = async (ids, actingUserId = null, req = null) => {
 
     // Log individual audit logs for each deleted product
     for (const product of products) {
-      const resolvedUserId = req?.user?.id || actingUserId;
       try {
         await AuditService.log({
-          userId: resolvedUserId,
+          userId: actingUserId,
           action: ACTIONS.DELETE,
           entity: ENTITIES.PRODUCT,
           entityId: product.id,
           changes: { name: product.name, sku: product.sku },
-          req,
+          ipAddress: auditContext?.ip,
+          userAgent: auditContext?.userAgent,
         });
       } catch (e) {
         logger.error(`Failed to log audit for product deletion (ID: ${product.id}):`, e);
@@ -681,7 +687,7 @@ exports.bulkDeleteProducts = async (ids, actingUserId = null, req = null) => {
   });
 };
 
-exports.bulkUpdateProducts = async (ids, data, actingUserId = null, req = null) => {
+exports.bulkUpdateProducts = async (ids, data, actingUserId = null, auditContext = null) => {
   return Product.sequelize.transaction(async (transaction) => {
     const products = await Product.findAll({
       where: { id: ids },
@@ -699,15 +705,15 @@ exports.bulkUpdateProducts = async (ids, data, actingUserId = null, req = null) 
 
     // Log individual audit logs for each updated product
     for (const product of products) {
-      const resolvedUserId = req?.user?.id || actingUserId;
       try {
         await AuditService.log({
-          userId: resolvedUserId,
+          userId: actingUserId,
           action: ACTIONS.UPDATE,
           entity: ENTITIES.PRODUCT,
           entityId: product.id,
           changes: data,
-          req,
+          ipAddress: auditContext?.ip,
+          userAgent: auditContext?.userAgent,
         });
       } catch (e) {
         logger.error(`Failed to log audit for product bulk update (ID: ${product.id}):`, e);
@@ -724,7 +730,7 @@ exports.bulkUpdateProducts = async (ids, data, actingUserId = null, req = null) 
   });
 };
 
-exports.bulkUpdateSale = async (payload, actingUserId = null, req = null) => {
+exports.bulkUpdateSale = async (payload, actingUserId = null, auditContext = null) => {
   const { action, productIds, saleType, value, saleStartAt, saleEndAt, saleLabel } = payload;
 
   if (action === 'apply' && Number(value) <= 0) {
@@ -760,17 +766,17 @@ exports.bulkUpdateSale = async (payload, actingUserId = null, req = null) => {
 
       await product.update(updatePayload, { transaction });
 
-      const resolvedUserId = req?.user?.id || actingUserId;
       try {
         await AuditService.log({
-          userId: resolvedUserId,
+          userId: actingUserId,
           action: ACTIONS.UPDATE,
           entity: ENTITIES.PRODUCT,
           entityId: product.id,
           changes: action === 'clear'
             ? { salePrice: null, saleStartAt: null, saleEndAt: null, saleLabel: null }
             : { saleType, value, saleStartAt: saleStartAt || null, saleEndAt: saleEndAt || null, saleLabel: saleLabel || null },
-          req,
+          ipAddress: auditContext?.ip,
+          userAgent: auditContext?.userAgent,
         });
       } catch (e) {
         logger.error('Failed to log audit for bulk sale update:', e);

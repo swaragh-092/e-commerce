@@ -22,19 +22,22 @@ const errorHandler = (err, req, res, next) => {
     details = err.errors.map(e => ({ field: e.path, message: e.message }));
   }
 
-  // Handle Sequelize connection pool exhaustion (Transient)
+  // Handle Sequelize connection issues
   const transientErrorNames = [
     'SequelizeConnectionAcquireTimeoutError',
     'SequelizeConnectionTimedOutError',
-    'SequelizeHostNotFoundError',
-    'SequelizeHostNotReachableError'
+    'SequelizeTimeoutError',
   ];
 
   if (transientErrorNames.includes(err.name)) {
     statusCode = 503;
     errorCode = 'DATABASE_TIMEOUT';
-    message = 'The server is under heavy load. Please try again in a moment.';
-  } else if (err.name === 'SequelizeConnectionError') {
+    message = 'Database is temporarily busy. Please try again in a moment.';
+  } else if (err.name === 'SequelizeConnectionRefusedError') {
+    statusCode = 503;
+    errorCode = 'DATABASE_ERROR';
+    message = 'Database service is temporarily unavailable. Please try again in a moment.';
+  } else if (err.name === 'SequelizeConnectionError' || err.name === 'SequelizeAccessDeniedError') {
     statusCode = 500;
     errorCode = 'DATABASE_ERROR';
     message = isProduction ? 'A database connection error occurred.' : `Database connection error: ${err.message}`;

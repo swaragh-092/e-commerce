@@ -51,7 +51,7 @@ const updateStatus = async (req, res, next) => {
     if (!hasOrderAdminAccess(req.user)) {
       throw new AppError('FORBIDDEN', 403, 'You do not have permission to update order status');
     }
-    const auditContext = { ip: req.ip, userAgent: req.get('User-Agent'), method: req.method, path: req.originalUrl };
+    const auditContext = { userId: req.user?.id, ip: req.ip, userAgent: req.get('User-Agent'), method: req.method, path: req.originalUrl };
     const order = await OrderService.updateStatus(req.params.id, req.validated.status, req.user.id, auditContext);
     req._auditAction = 'STATUS_CHANGE';
     req._auditChanges = { status: req.validated.status };
@@ -73,7 +73,7 @@ const cancelOrder = async (req, res, next) => {
 const refundOrder = async (req, res, next) => {
   try {
     const isAdmin = hasOrderAdminAccess(req.user);
-    const auditContext = { ip: req.ip, userAgent: req.get('User-Agent'), method: req.method, path: req.originalUrl };
+    const auditContext = { userId: req.user?.id, ip: req.ip, userAgent: req.get('User-Agent'), method: req.method, path: req.originalUrl };
     const order = await OrderService.refundOrder(req.params.id, req.user.id, isAdmin, auditContext);
     req._auditAction = 'STATUS_CHANGE';
     req._auditChanges = { status: 'refunded' };
@@ -85,7 +85,7 @@ const refundOrder = async (req, res, next) => {
 
 const createFulfillment = async (req, res, next) => {
   try {
-    const auditContext = { ip: req.ip, userAgent: req.get('User-Agent'), method: req.method, path: req.originalUrl };
+    const auditContext = { userId: req.user?.id, ip: req.ip, userAgent: req.get('User-Agent'), method: req.method, path: req.originalUrl };
     const fulfillment = await OrderService.createFulfillment(req.params.id, req.validated, req.user.id, auditContext);
     return success(res, fulfillment, 'Shipment created successfully', 201);
   } catch (err) {
@@ -110,11 +110,13 @@ const updateFulfillmentStatus = async (req, res, next) => {
 
 const updateShipmentStatus = async (req, res, next) => {
   try {
+    const auditContext = { userId: req.user?.id, ip: req.ip, userAgent: req.get('User-Agent'), method: req.method, path: req.originalUrl };
     const result = await OrderService.updateShipmentStatus(
       req.params.id,
       req.params.shipmentId,
       req.validated,
-      req.user.id
+      req.user.id,
+      auditContext
     );
     return success(res, result, 'Shipment updated successfully');
   } catch (err) {
@@ -125,7 +127,8 @@ const updateShipmentStatus = async (req, res, next) => {
 const createReturnRequest = async (req, res, next) => {
   try {
     const isAdmin = hasOrderAdminAccess(req.user);
-    const result = await OrderService.createReturnRequest(req.params.id, req.validated, req.user.id, isAdmin);
+    const auditContext = { userId: req.user?.id, ip: req.ip, userAgent: req.get('User-Agent'), method: req.method, path: req.originalUrl };
+    const result = await OrderService.createReturnRequest(req.params.id, req.validated, req.user.id, isAdmin, auditContext);
     return success(res, result, 'Return request created', 201);
   } catch (err) {
     next(err);
@@ -135,7 +138,8 @@ const createReturnRequest = async (req, res, next) => {
 const createReplacementRequest = async (req, res, next) => {
   try {
     const isAdmin = hasOrderAdminAccess(req.user);
-    const result = await OrderService.createReplacementRequest(req.params.id, req.validated, req.user.id, isAdmin);
+    const auditContext = { userId: req.user?.id, ip: req.ip, userAgent: req.get('User-Agent'), method: req.method, path: req.originalUrl };
+    const result = await OrderService.createReplacementRequest(req.params.id, req.validated, req.user.id, isAdmin, auditContext);
     return success(res, result, 'Replacement request created', 201);
   } catch (err) {
     next(err);
@@ -148,12 +152,14 @@ const updatePutBackStatus = async (req, res, next) => {
     if (!isAdmin) {
       throw new AppError('FORBIDDEN', 403, 'You do not have permission to update return/replacement status');
     }
+    const auditContext = { userId: req.user?.id, ip: req.ip, userAgent: req.get('User-Agent'), method: req.method, path: req.originalUrl };
     const result = await OrderService.updatePutBackStatus(
       req.params.id,
       req.params.returnId,
       req.validated.status,
       req.user.id,
-      isAdmin
+      isAdmin,
+      auditContext
     );
     return success(res, result, 'Return/replacement status updated');
   } catch (err) {
@@ -164,7 +170,8 @@ const updatePutBackStatus = async (req, res, next) => {
 const processRefund = async (req, res, next) => {
   try {
     const isAdmin = hasOrderAdminAccess(req.user);
-    const result = await OrderService.processRefund(req.params.id, req.validated, req.user.id, isAdmin);
+    const auditContext = { userId: req.user?.id, ip: req.ip, userAgent: req.get('User-Agent'), method: req.method, path: req.originalUrl };
+    const result = await OrderService.processRefund(req.params.id, req.validated, req.user.id, isAdmin, auditContext);
     return success(res, result, 'Refund processed', 201);
   } catch (err) {
     next(err);
@@ -176,7 +183,8 @@ const addNote = async (req, res, next) => {
     if (!hasOrderAdminAccess(req.user)) {
       throw new AppError('FORBIDDEN', 403, 'You do not have permission to add notes to orders');
     }
-    const event = await OrderService.addNote(req.params.id, req.validated.note, req.user.id);
+    const auditContext = { ip: req.ip, userAgent: req.get('User-Agent'), method: req.method, path: req.originalUrl };
+    const event = await OrderService.addNote(req.params.id, req.validated.note, req.user.id, auditContext);
     return success(res, event, 'Note added to order history', 201);
   } catch (err) {
     next(err);

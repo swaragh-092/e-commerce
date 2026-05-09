@@ -24,6 +24,8 @@ module.exports = {
             },
         },
         dialectOptions: {
+            statement_timeout: 30000,
+            idle_in_transaction_session_timeout: 30000,
             options: '-c statement_timeout=30000 -c idle_in_transaction_session_timeout=30000',
             keepalive: true,
             keepaliveInitialDelayMillis: 10000,
@@ -65,6 +67,8 @@ module.exports = {
             },
         },
         dialectOptions: {
+            statement_timeout: 30000,
+            idle_in_transaction_session_timeout: 30000,
             options: '-c statement_timeout=30000 -c idle_in_transaction_session_timeout=30000',
             keepalive: true,
             keepaliveInitialDelayMillis: 10000,

@@ -1738,7 +1738,7 @@ const updateStatus = async (id, status, actingUserId, auditContext = null) => {
             entityType: 'Order',
             entityId: order.id,
             statusGroup: 'order',
-            fromStatus: before.status,
+            fromStatus: beforeStatus,
             toStatus: status,
             changedBy: actingUserId,
             transaction: t,
@@ -1747,7 +1747,7 @@ const updateStatus = async (id, status, actingUserId, auditContext = null) => {
         await addOrderHistoryEvent({
             orderId: order.id,
             eventType: 'status_changed',
-            description: `Order status changed from ${before.status} to ${status}.`,
+            description: `Order status changed from ${beforeStatus} to ${status}.`,
             actorId: actingUserId,
             actorType: 'admin',
             transaction: t,
@@ -2105,7 +2105,7 @@ const getFulfillmentTracking = async (orderId, userId, isAdmin) => {
 
 const createShipment = createFulfillment;
 
-const updateShipmentStatus = async (orderId, shipmentId, payload, actingUserId) => {
+const updateShipmentStatus = async (orderId, shipmentId, payload, actingUserId, auditContext = null) => {
     const { status, trackingNumber, trackingUrl, courierName } = payload;
     await sequelize.transaction(async (t) => {
         const order = await Order.findByPk(orderId, { transaction: t, lock: Transaction.LOCK.UPDATE });
@@ -2157,6 +2157,25 @@ const updateShipmentStatus = async (orderId, shipmentId, payload, actingUserId) 
         await syncOrderShippingStatus(order, t, actingUserId);
         await syncCodPaymentIfDelivered(order, t, actingUserId);
         await syncOrderClosureIfComplete(order, t, actingUserId);
+
+        try {
+            if (AuditService && AuditService.log) {
+                await AuditService.log({
+                    userId: actingUserId,
+                    action: 'STATUS_CHANGE',
+                    entity: 'Shipment',
+                    entityId: shipment.id,
+                    changes: { 
+                        before, 
+                        after: status,
+                        method: auditContext?.method,
+                        path: auditContext?.path
+                    },
+                    ipAddress: auditContext?.ip,
+                    userAgent: auditContext?.userAgent,
+                });
+            }
+        } catch (err) {}
     });
 
     return getOrderById(orderId, actingUserId, true);
@@ -2191,7 +2210,7 @@ const getActivePutBackQuantityByOrderItem = async (orderId, type, transaction, e
         }, {});
 };
 
-const createPutBackRequest = async (orderId, payload, actingUserId, isAdmin, type) => {
+const createPutBackRequest = async (orderId, payload, actingUserId, isAdmin, type, auditContext = null) => {
     const defaultStatus = type === 'replacement' ? REPLACEMENT_DEFAULT_STATUS : RETURN_DEFAULT_STATUS;
     return sequelize.transaction(async (t) => {
         const order = await Order.findByPk(orderId, { transaction: t, lock: Transaction.LOCK.UPDATE });
@@ -2253,6 +2272,27 @@ const createPutBackRequest = async (orderId, payload, actingUserId, isAdmin, typ
             transaction: t,
         });
         await syncPutBackCache(order, t, actingUserId);
+
+        try {
+            if (AuditService && AuditService.log) {
+                await AuditService.log({
+                    userId: actingUserId,
+                    action: 'CREATE',
+                    entity: type === 'replacement' ? 'Replacement' : 'Return',
+                    entityId: record.id,
+                    changes: { 
+                        orderId, 
+                        type, 
+                        reason: payload.reason,
+                        method: auditContext?.method,
+                        path: auditContext?.path
+                    },
+                    ipAddress: auditContext?.ip,
+                    userAgent: auditContext?.userAgent,
+                });
+            }
+        } catch (err) {}
+
         return OrderReturn.findByPk(record.id, {
             include: [{ model: OrderReturnItem, as: 'items' }],
             transaction: t,
@@ -2260,15 +2300,15 @@ const createPutBackRequest = async (orderId, payload, actingUserId, isAdmin, typ
     });
 };
 
-const createReturnRequest = (orderId, payload, actingUserId, isAdmin = false) => (
-    createPutBackRequest(orderId, payload, actingUserId, isAdmin, 'return')
+const createReturnRequest = (orderId, payload, actingUserId, isAdmin = false, auditContext = null) => (
+    createPutBackRequest(orderId, payload, actingUserId, isAdmin, 'return', auditContext)
 );
 
-const createReplacementRequest = (orderId, payload, actingUserId, isAdmin = false) => (
-    createPutBackRequest(orderId, payload, actingUserId, isAdmin, 'replacement')
+const createReplacementRequest = (orderId, payload, actingUserId, isAdmin = false, auditContext = null) => (
+    createPutBackRequest(orderId, payload, actingUserId, isAdmin, 'replacement', auditContext)
 );
 
-const updatePutBackStatus = async (orderId, returnId, status, actingUserId, isAdmin) => {
+const updatePutBackStatus = async (orderId, returnId, status, actingUserId, isAdmin, auditContext = null) => {
     return sequelize.transaction(async (t) => {
         const order = await Order.findByPk(orderId, { transaction: t, lock: Transaction.LOCK.UPDATE });
         if (!order) throw new AppError('NOT_FOUND', 404, 'Order not found');
@@ -2298,6 +2338,26 @@ const updatePutBackStatus = async (orderId, returnId, status, actingUserId, isAd
             transaction: t,
         });
         await syncPutBackCache(order, t, actingUserId);
+
+        try {
+            if (AuditService && AuditService.log) {
+                await AuditService.log({
+                    userId: actingUserId,
+                    action: 'STATUS_CHANGE',
+                    entity: record.type === 'replacement' ? 'Replacement' : 'Return',
+                    entityId: record.id,
+                    changes: { 
+                        before, 
+                        after: status,
+                        method: auditContext?.method,
+                        path: auditContext?.path
+                    },
+                    ipAddress: auditContext?.ip,
+                    userAgent: auditContext?.userAgent,
+                });
+            }
+        } catch (err) {}
+
         return OrderReturn.findByPk(record.id, {
             include: [{ model: OrderReturnItem, as: 'items' }],
             transaction: t,
@@ -2305,7 +2365,7 @@ const updatePutBackStatus = async (orderId, returnId, status, actingUserId, isAd
     });
 };
 
-const processRefund = async (orderId, payload, actingUserId, isAdmin) => {
+const processRefund = async (orderId, payload, actingUserId, isAdmin, auditContext = null) => {
     if (!isAdmin) throw new AppError('FORBIDDEN', 403, 'You do not have permission to refund orders');
     return sequelize.transaction(async (t) => {
         const order = await Order.findByPk(orderId, { transaction: t, lock: Transaction.LOCK.UPDATE });
@@ -2349,21 +2409,33 @@ const processRefund = async (orderId, payload, actingUserId, isAdmin) => {
                 },
             }, { transaction: t });
         }
-        await logOrderHistory({
-            orderId,
-            entityType: 'OrderRefund',
-            entityId: refund.id,
-            statusGroup: 'refund',
-            toStatus: refund.status,
-            changedBy: actingUserId,
-            metadata: { amount },
-            transaction: t,
-        });
+        await syncPutBackCache(order, t, actingUserId);
+
+        try {
+            if (AuditService && AuditService.log) {
+                await AuditService.log({
+                    userId: actingUserId,
+                    action: 'CREATE',
+                    entity: 'OrderRefund',
+                    entityId: refund.id,
+                    changes: { 
+                        orderId, 
+                        amount, 
+                        reason: payload.reason,
+                        method: auditContext?.method,
+                        path: auditContext?.path
+                    },
+                    ipAddress: auditContext?.ip,
+                    userAgent: auditContext?.userAgent,
+                });
+            }
+        } catch (err) {}
+
         return refund;
     });
 };
 
-const addNote = async (orderId, note, actorId) => {
+const addNote = async (orderId, note, actorId, auditContext = null) => {
     const order = await Order.findByPk(orderId, { attributes: ['id'] });
     if (!order) throw new AppError('NOT_FOUND', 404, 'Order not found');
 
@@ -2374,6 +2446,26 @@ const addNote = async (orderId, note, actorId) => {
         actorId,
         actorType: 'admin',
     });
+
+    try {
+        if (AuditService && AuditService.log) {
+            await AuditService.log({
+                userId: actorId,
+                action: 'CREATE',
+                entity: 'OrderNote',
+                entityId: event.id,
+                changes: { 
+                    orderId, 
+                    note,
+                    method: auditContext?.method,
+                    path: auditContext?.path
+                },
+                ipAddress: auditContext?.ip,
+                userAgent: auditContext?.userAgent,
+            });
+        }
+    } catch (err) {}
+
     return event;
 };
 

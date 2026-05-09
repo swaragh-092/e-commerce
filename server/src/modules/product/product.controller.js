@@ -57,7 +57,8 @@ exports.getById = async (req, res, next) => {
 
 exports.create = async (req, res, next) => {
   try {
-    const product = await productService.createProduct(req.body, req);
+    const auditContext = { userId: req.user?.id, ip: req.ip, userAgent: req.get('User-Agent'), method: req.method, path: req.originalUrl };
+    const product = await productService.createProduct(req.body, auditContext);
     return success(res, product, 'Product created', 201);
   } catch (err) {
     next(err);
@@ -66,7 +67,8 @@ exports.create = async (req, res, next) => {
 
 exports.update = async (req, res, next) => {
   try {
-    const product = await productService.updateProduct(req.params.id, req.body, req);
+    const auditContext = { userId: req.user?.id, ip: req.ip, userAgent: req.get('User-Agent'), method: req.method, path: req.originalUrl };
+    const product = await productService.updateProduct(req.params.id, req.body, auditContext);
     return success(res, product, 'Product updated');
   } catch (err) {
     if (err.message === 'Product not found') return error(res, err.message, 404, 'NOT_FOUND');
@@ -76,7 +78,8 @@ exports.update = async (req, res, next) => {
 
 exports.bulkSale = async (req, res, next) => {
   try {
-    const result = await productService.bulkUpdateSale(req.body, req.user?.id || null, req);
+    const auditContext = { userId: req.user?.id, ip: req.ip, userAgent: req.get('User-Agent'), method: req.method, path: req.originalUrl };
+    const result = await productService.bulkUpdateSale(req.body, req.user?.id || null, auditContext);
     return success(res, result, result.action === 'clear' ? 'Sale removed from products' : 'Sale applied to products');
   } catch (err) {
     next(err);
@@ -85,7 +88,8 @@ exports.bulkSale = async (req, res, next) => {
 
 exports.delete = async (req, res, next) => {
   try {
-    await productService.deleteProduct(req.params.id, req);
+    const auditContext = { userId: req.user?.id, ip: req.ip, userAgent: req.get('User-Agent'), method: req.method, path: req.originalUrl };
+    await productService.deleteProduct(req.params.id, auditContext);
     return success(res, null, 'Product deleted');
   } catch (err) {
     if (err.message === 'Product not found') return error(res, err.message, 404, 'NOT_FOUND');
@@ -96,7 +100,8 @@ exports.delete = async (req, res, next) => {
 exports.bulkDelete = async (req, res, next) => {
   try {
     const { productIds } = req.body;
-    const result = await productService.bulkDeleteProducts(productIds, req.user?.id || null, req);
+    const auditContext = { userId: req.user?.id, ip: req.ip, userAgent: req.get('User-Agent'), method: req.method, path: req.originalUrl };
+    const result = await productService.bulkDeleteProducts(productIds, req.user?.id || null, auditContext);
     return success(res, result, `${result.deletedCount} products deleted successfully`);
   } catch (err) {
     next(err);
@@ -106,7 +111,8 @@ exports.bulkDelete = async (req, res, next) => {
 exports.bulkUpdate = async (req, res, next) => {
   try {
     const { productIds, data } = req.body;
-    const result = await productService.bulkUpdateProducts(productIds, data, req.user?.id || null, req);
+    const auditContext = { ip: req.ip, userAgent: req.get('User-Agent'), method: req.method, path: req.originalUrl };
+    const result = await productService.bulkUpdateProducts(productIds, data, req.user?.id || null, auditContext);
     return success(res, result, `${result.updatedCount} products updated successfully`);
   } catch (err) {
     next(err);

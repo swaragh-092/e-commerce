@@ -19,24 +19,20 @@ const logger = require('../../utils/logger');
  * @param {import('sequelize').Transaction|null} [transaction]
  */
 const log = async (
-  { userId, action, entity, entityId, changes = null, ipAddress = null, userAgent = null, req = null },
+  { userId, action, entity, entityId, changes = null, ipAddress = null, userAgent = null },
   transaction = null,
 ) => {
   try {
-    // If request context is provided, enrich metadata and mark as logged to prevent double-logging via middleware
-    let finalIp = ipAddress;
-    let finalUA = userAgent;
-    let finalUserId = userId;
-
-    if (req) {
-      finalIp = finalIp || req.ip;
-      finalUA = finalUA || req.get?.('user-agent') || null;
-      finalUserId = finalUserId || req.user?.id;
-      req._auditLogged = true; // Mark as logged so middleware doesn't double-log
-    }
-
     await AuditLog.create(
-      { userId: finalUserId, action, entity, entityId: String(entityId ?? ''), changes, ipAddress: finalIp, userAgent: finalUA },
+      { 
+        userId, 
+        action, 
+        entity, 
+        entityId: String(entityId ?? ''), 
+        changes, 
+        ipAddress, 
+        userAgent 
+      },
       transaction ? { transaction } : {},
     );
   } catch (err) {
