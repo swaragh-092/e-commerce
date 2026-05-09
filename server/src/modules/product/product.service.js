@@ -401,7 +401,7 @@ exports.getProducts = async (filters, page, limit, isAdmin = false) => {
       .map(inc => ({ 
         ...inc, 
         attributes: [],
-        ...(inc.through ? { through: { attributes: [] } } : {})
+        through: { attributes: [] } // Ensure junction table columns aren't selected
       }));
 
     const statusCounts = await Product.findAll({
@@ -409,9 +409,10 @@ exports.getProducts = async (filters, page, limit, isAdmin = false) => {
       include: countInclude,
       attributes: [
         'status',
-        [Sequelize.fn('COUNT', Sequelize.col('Product.id')), 'count']
+        [Sequelize.fn('COUNT', Sequelize.literal('DISTINCT "Product"."id"')), 'count']
       ],
-      group: ['status'],
+      group: ['Product.status'],
+      subQuery: false, // Prevent complex subqueries that break GROUP BY
       raw: true
     });
     
