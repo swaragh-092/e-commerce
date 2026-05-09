@@ -119,6 +119,18 @@ const DEFAULTS = {
     bodyText: 'Hi {{customer_name}},\n\nYour order #{{order_number}} has been delivered!\n\nView order: {{website_url}}/account/orders/{{order_id}}\n\n{{store_name}}',
   },
 
+  order_out_for_delivery: {
+    subject: 'Order #{{order_number}} Is Out for Delivery',
+    bodyHtml: EMAIL_WRAPPER(`
+    <h2>Your order is arriving soon, {{customer_name}}!</h2>
+    <p>Order <strong>#{{order_number}}</strong> is out for delivery.</p>
+    <a href="{{website_url}}/account/orders/{{order_id}}" class="btn">View Order</a>
+    <hr class="divider">
+    <p style="font-size:13px;color:#888">Need help? <a href="mailto:{{support_email}}">{{support_email}}</a></p>
+`, ''),
+    bodyText: 'Hi {{customer_name}},\n\nYour order #{{order_number}} is out for delivery.\n\nView order: {{website_url}}/account/orders/{{order_id}}\n\n{{store_name}}',
+  },
+
   order_cancelled: {
     subject: 'Order #{{order_number}} Cancelled',
     bodyHtml: EMAIL_WRAPPER(`
@@ -269,7 +281,7 @@ const DEFAULTS = {
       <p><strong>Customer:</strong> {{customerName}} ({{customerEmail}})</p>
       <p><strong>Phone:</strong> {{customerPhone}}</p>
       <p><strong>Subject:</strong> {{productName}} {{#if productSku}}(SKU: {{productSku}}){{/if}}</p>
-      {{^cartItems}}<p><strong>Quantity:</strong> {{quantity}}</p>{{/cartItems}}
+      {{#unless cartItems}}<p><strong>Quantity:</strong> {{quantity}}</p>{{/unless}}
     </div>
     {{#if cartItems}}
     <table class="items">
@@ -341,6 +353,7 @@ const TEMPLATE_VARIABLES = {
   order_placed:      ['customer_name','order_number','order_date','order_id','order_total','order_subtotal','shipping_total','tax_total','discount_total','payment_method','items','website_url','store_name','support_email'],
   order_shipped:     ['customer_name','order_number','order_id','tracking_number','tracking_url','courier','items','order_total','website_url','store_name','support_email'],
   order_delivered:   ['customer_name','order_number','order_id','items','order_total','website_url','store_name','support_email'],
+  order_out_for_delivery: ['customer_name','order_number','order_id','items','order_total','website_url','store_name','support_email'],
   order_cancelled:   ['customer_name','order_number','cancel_reason','refund_amount','items','order_total','website_url','store_name','support_email'],
   order_refunded:    ['customer_name','order_number','order_id','refund_amount','items','order_total','website_url','store_name','support_email'],
   welcome:           ['name','website_url','store_name','support_email'],

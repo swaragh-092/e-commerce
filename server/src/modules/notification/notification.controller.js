@@ -6,6 +6,20 @@ const { success, error } = require('../../utils/response');
 const AppError = require('../../utils/AppError');
 const { DEFAULTS, TEMPLATE_VARIABLES, SAMPLE_VARIABLES } = require('./notification.defaults');
 
+const getDefaultForChannel = (name, channel = 'email') => {
+  const base = DEFAULTS[name];
+  if (!base) return null;
+  if (channel === 'email') return base;
+  const bodyText = channel === 'whatsapp'
+    ? `${base.bodyText || base.subject || name}\n\n- {{store_name}}`
+    : (base.bodyText || base.subject || name);
+  return {
+    subject: base.subject || name,
+    bodyHtml: '',
+    bodyText,
+  };
+};
+
 /**
  * GET /notifications/templates
  * List all templates with their available variables (admin only)
@@ -82,17 +96,19 @@ const updateTemplate = async (req, res, next) => {
  */
 const previewTemplate = async (req, res, next) => {
   try {
-    const { channel = 'email', customHtml, customSubject } = req.body;
+    const { channel = 'email', customHtml, customText, customSubject } = req.body;
 
     let bodyHtml = customHtml;
+    let bodyText = customText;
     let subject = customSubject;
 
-    if (!bodyHtml || !subject) {
+    if (!bodyHtml || !bodyText || !subject) {
       const template = await NotificationTemplate.findOne({
         where: { name: req.params.name, channel },
       });
       if (!template) throw new AppError('NOT_FOUND', 404, `Template '${req.params.name}' (${channel}) not found`);
       bodyHtml  = bodyHtml  || template.bodyHtml;
+      bodyText  = bodyText  || template.bodyText || '';
       subject   = subject   || template.subject;
     }
 
@@ -111,9 +127,10 @@ const previewTemplate = async (req, res, next) => {
     } catch (_) { /* use sample defaults */ }
 
     const renderedHtml    = handlebars.compile(bodyHtml)(vars);
+    const renderedText    = handlebars.compile(bodyText)(vars);
     const renderedSubject = handlebars.compile(subject)(vars);
 
-    return success(res, { html: renderedHtml, subject: renderedSubject });
+    return success(res, { html: renderedHtml, text: renderedText, subject: renderedSubject });
   } catch (err) {
     next(err);
   }
@@ -127,7 +144,7 @@ const previewTemplate = async (req, res, next) => {
 const resetTemplate = async (req, res, next) => {
   try {
     const { channel = 'email' } = req.body;
-    const defaultData = DEFAULTS[req.params.name];
+    const defaultData = getDefaultForChannel(req.params.name, channel);
 
     if (!defaultData) {
       throw new AppError('NOT_FOUND', 404, `No built-in default exists for template '${req.params.name}'`);
@@ -157,12 +174,14 @@ const resetTemplate = async (req, res, next) => {
  */
 const getDefaultTemplate = async (req, res, next) => {
   try {
-    const defaultData = DEFAULTS[req.params.name];
+    const channel = req.query.channel || 'email';
+    const defaultData = getDefaultForChannel(req.params.name, channel);
     if (!defaultData) {
       throw new AppError('NOT_FOUND', 404, `No built-in default exists for template '${req.params.name}'`);
     }
     return success(res, {
       name: req.params.name,
+      channel,
       subject: defaultData.subject,
       bodyHtml: defaultData.bodyHtml,
       bodyText: defaultData.bodyText || '',
@@ -191,21 +210,6 @@ const sendTestNotification = async (req, res, next) => {
       return error(res, `channel must be one of: ${validChannels.join(', ')}`, 400, 'VALIDATION_ERROR');
     }
 
-    if (templateName === 'test_notification') {
-      const Dispatcher = require('./notification.dispatcher');
-      let payload;
-      if (channel === 'email') {
-        payload = { to: finalRecipient, subject: 'Test Notification', text: 'This is a test notification.', html: '<p>This is a test notification from the system.</p>' };
-      } else {
-        payload = { to: finalRecipient, body: 'This is a test notification from the system.' };
-      }
-      const sent = await Dispatcher.dispatch(channel, payload);
-      if (!sent) {
-        return error(res, `Test ${channel} failed. Check your configuration.`, 500, 'SEND_FAILED');
-      }
-      return success(res, null, `Test ${channel} sent to ${finalRecipient}`);
-    }
-
     const NotificationService = require('./notification.service');
     const template = await NotificationTemplate.findOne({ where: { name: templateName, channel } });
     if (!template) {
@@ -214,10 +218,10 @@ const sendTestNotification = async (req, res, next) => {
 
     const sent = await NotificationService.send(templateName, finalRecipient, SAMPLE_VARIABLES, null, null, channel);
     if (!sent) {
-      return error(res, `Test ${channel} failed. Check your configuration.`, 500, 'SEND_FAILED');
+      return error(res, `Test ${channel} could not be queued. Check the template and recipient.`, 500, 'QUEUE_FAILED');
     }
 
-    return success(res, null, `Test ${channel} sent to ${finalRecipient}`);
+    return success(res, null, `Test ${channel} queued for ${finalRecipient}`);
   } catch (err) {
     next(err);
   }

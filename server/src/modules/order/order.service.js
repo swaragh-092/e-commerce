@@ -27,6 +27,7 @@ const {
     Shipment,
     ShipmentItem,
     ShippingProvider,
+    UserProfile,
 } = require('../index');
 const AppError = require('../../utils/AppError');
 const AuditService = require('../audit/audit.service');
@@ -66,6 +67,42 @@ const {
 
 const ADMIN_ORDER_LIST_USER_ATTRIBUTES = ['id', 'firstName', 'lastName', 'email'];
 const ADMIN_ORDER_PAYMENT_ATTRIBUTES = ['id', 'provider', 'status', 'amount', 'currency', 'transactionId', 'createdAt', 'updatedAt'];
+
+const queueShipmentNotification = async (orderId, shipmentStatus, shipment = {}) => {
+    if (!['shipped', 'out_for_delivery', 'delivered'].includes(shipmentStatus)) return;
+    try {
+        const order = await Order.findByPk(orderId);
+        if (!order) return;
+
+        if (['out_for_delivery', 'delivered'].includes(shipmentStatus)) {
+            await NotificationService.sendDeliveryUpdate(order.userId, order.id, shipmentStatus);
+            return;
+        }
+
+        const user = await User.findByPk(order.userId, {
+            include: [{ model: UserProfile, as: 'profile', required: false }],
+        });
+        if (!user) return;
+
+        await NotificationService.sendToUser(
+            'order_shipped',
+            ['email', 'sms', 'whatsapp'],
+            user,
+            {
+                order_number: order.orderNumber,
+                order_id: order.id,
+                customer_name: `${user.firstName || ''} ${user.lastName || ''}`.trim() || user.email,
+                tracking_number: shipment.trackingNumber || shipment.awb,
+                tracking_url: shipment.trackingUrl,
+                courier: shipment.courierName,
+                order_total: order.total,
+            },
+            order.id
+        );
+    } catch (err) {
+        logger.error('Failed to queue shipment notification', { orderId, shipmentStatus, error: err.message });
+    }
+};
 
 const logOrderHistory = async ({
     orderId,
@@ -1166,10 +1203,44 @@ const placeOrder = async (userId, payload) => {
         }
     } catch (err) {}
 
+    let notificationUser = null;
+    try {
+        notificationUser = await User.findByPk(userId, {
+            include: [{ model: UserProfile, as: 'profile', required: false }],
+        });
+    } catch (err) {}
+
+    try {
+        if (NotificationService && NotificationService.sendToAdmins) {
+            await NotificationService.sendToAdmins(
+                'admin_new_order',
+                ['email', 'sms', 'whatsapp'],
+                {
+                    customer_name: notificationUser
+                        ? `${notificationUser.firstName || ''} ${notificationUser.lastName || ''}`.trim() || notificationUser.email
+                        : 'Customer',
+                    customer_email: notificationUser?.email || '',
+                    order_number: order.orderNumber,
+                    order_date: order.createdAt,
+                    order_id: order.id,
+                    order_total: order.total,
+                    order_subtotal: order.subtotal,
+                    shipping_total: order.shippingCost,
+                    tax_total: order.tax,
+                    discount_total: order.discountAmount,
+                    payment_method: paymentMethod,
+                },
+                order.id
+            );
+        }
+    } catch (err) {
+        logger.error('Failed to queue admin new order notification', { orderId: order.id, error: err.message });
+    }
+
     if (paymentMethod === 'cod') {
         try {
             if (NotificationService && NotificationService.sendToUser) {
-                const user = await User.findByPk(userId);
+                const user = notificationUser;
                 if (user) {
                     await NotificationService.sendToUser(
                         'order_placed',
@@ -1357,7 +1428,7 @@ const createFulfillment = async (orderId, payload, actingUserId, auditContext = 
         throw new AppError('VALIDATION_ERROR', 400, 'At least one item is required for a shipment');
     }
 
-    return sequelize.transaction(async (t) => {
+    const fulfillment = await sequelize.transaction(async (t) => {
         // Lock the order row to prevent concurrent fulfillment races
         // We split this from item fetching because FOR UPDATE cannot be applied to outer joins in some DBs (e.g. Postgres)
         const order = await Order.findByPk(orderId, {
@@ -1736,6 +1807,10 @@ const createFulfillment = async (orderId, payload, actingUserId, auditContext = 
         fulfillment.setDataValue('shipments', [shipment]);
         return fulfillment;
     });
+
+    const createdShipment = fulfillment.get('shipments')?.[0];
+    await queueShipmentNotification(orderId, createdShipment?.status, createdShipment);
+    return fulfillment;
 };
 
 
@@ -1872,6 +1947,28 @@ const updateStatus = async (id, status, actingUserId, auditContext = null) => {
         newStatus: status
     });
 
+    if (status === 'cancelled') {
+        try {
+            const user = await User.findByPk(orderRecord.userId, {
+                include: [{ model: UserProfile, as: 'profile', required: false }],
+            });
+            if (user) {
+                const variables = {
+                    customer_name: `${user.firstName || ''} ${user.lastName || ''}`.trim() || user.email,
+                    customer_email: user.email,
+                    order_number: orderRecord.orderNumber,
+                    order_id: orderRecord.id,
+                    cancel_reason: 'Order cancelled by admin',
+                    order_total: orderRecord.total,
+                };
+                await NotificationService.sendToUser('order_cancelled', ['email', 'sms', 'whatsapp'], user, variables, orderRecord.id);
+                await NotificationService.sendToAdmins('admin_order_cancelled', ['email', 'sms', 'whatsapp'], variables, orderRecord.id);
+            }
+        } catch (err) {
+            logger.error('Failed to queue admin cancellation notifications', { orderId: id, error: err.message });
+        }
+    }
+
     return orderRecord;
 };
 
@@ -1969,7 +2066,31 @@ const refundOrder = async (id, actingUserId, isAdmin, auditContext = null) => {
         return order.id;
     });
 
-    return getOrderById(refundedOrderId, actingUserId, true);
+    const refundedOrder = await getOrderById(refundedOrderId, actingUserId, true);
+    try {
+        const user = await User.findByPk(refundedOrder.userId, {
+            include: [{ model: UserProfile, as: 'profile', required: false }],
+        });
+        if (user) {
+            await NotificationService.sendToUser(
+                'order_refunded',
+                ['email', 'sms', 'whatsapp'],
+                user,
+                {
+                    customer_name: `${user.firstName || ''} ${user.lastName || ''}`.trim() || user.email,
+                    order_number: refundedOrder.orderNumber,
+                    order_id: refundedOrder.id,
+                    refund_amount: refundedOrder.total,
+                    order_total: refundedOrder.total,
+                },
+                refundedOrder.id
+            );
+        }
+    } catch (err) {
+        logger.error('Failed to queue refund notification', { orderId: refundedOrderId, error: err.message });
+    }
+
+    return refundedOrder;
 };
 
 const cancelOrder = async (id, userId) => {
@@ -1993,7 +2114,7 @@ const cancelOrder = async (id, userId) => {
         }
 
 
-        ensureValidOrderTransition(previousStatus, 'cancelled');
+        ensureValidOrderTransition(prevStatus, 'cancelled');
         await releaseOrderReservationsAndCoupons(order, t);
 
         await order.update({ status: 'cancelled' }, { transaction: t });
@@ -2002,7 +2123,7 @@ const cancelOrder = async (id, userId) => {
             entityType: 'Order',
             entityId: order.id,
             statusGroup: 'order',
-            fromStatus: previousStatus,
+            fromStatus: prevStatus,
             toStatus: 'cancelled',
             changedBy: userId,
             transaction: t,
@@ -2053,6 +2174,26 @@ const cancelOrder = async (id, userId) => {
         previousStatus: prevStatus,
         newStatus: 'cancelled'
     });
+
+    try {
+        const user = await User.findByPk(userId, {
+            include: [{ model: UserProfile, as: 'profile', required: false }],
+        });
+        if (user) {
+            const variables = {
+                customer_name: `${user.firstName || ''} ${user.lastName || ''}`.trim() || user.email,
+                customer_email: user.email,
+                order_number: orderRecord.orderNumber,
+                order_id: orderRecord.id,
+                cancel_reason: 'Customer requested cancellation',
+                order_total: orderRecord.total,
+            };
+            await NotificationService.sendToUser('order_cancelled', ['email', 'sms', 'whatsapp'], user, variables, orderRecord.id);
+            await NotificationService.sendToAdmins('admin_order_cancelled', ['email', 'sms', 'whatsapp'], variables, orderRecord.id);
+        }
+    } catch (err) {
+        logger.error('Failed to queue order cancellation notifications', { orderId: id, error: err.message });
+    }
 
     return orderRecord;
 };
@@ -2168,6 +2309,8 @@ const createShipment = createFulfillment;
 
 const updateShipmentStatus = async (orderId, shipmentId, payload, actingUserId, auditContext = null) => {
     const { status, trackingNumber, trackingUrl, courierName, expectedDeliveryDate } = payload;
+    let queuedStatus = null;
+    let queuedShipment = null;
 
     await sequelize.transaction(async (t) => {
         const order = await Order.findByPk(orderId, { transaction: t, lock: Transaction.LOCK.UPDATE });
@@ -2207,8 +2350,10 @@ const updateShipmentStatus = async (orderId, shipmentId, payload, actingUserId, 
         if (statusChanged) {
             updates.status = status;
             updates.statusHistory = appendStatusHistoryEvent(history, status);
+            queuedStatus = status;
         }
         await shipment.update(updates, { transaction: t });
+        queuedShipment = shipment.get({ plain: true });
 
         if (shipment.fulfillmentId && statusChanged) {
             await Fulfillment.update(
@@ -2266,6 +2411,8 @@ const updateShipmentStatus = async (orderId, shipmentId, payload, actingUserId, 
             }
         } catch (err) {}
     });
+
+    await queueShipmentNotification(orderId, queuedStatus, queuedShipment || {});
 
     return getOrderById(orderId, actingUserId, true);
 };

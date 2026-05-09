@@ -2,7 +2,7 @@
 
 const cron = require('node-cron');
 const { Op } = require('sequelize');
-const { ProductVariant, Product, User, Setting } = require('../modules');
+const { ProductVariant, Product, Setting } = require('../modules');
 const notificationService = require('../modules/notification/notification.service');
 const logger = require('../utils/logger');
 
@@ -19,20 +19,16 @@ const run = () => {
       });
 
       if (lowStockVariants.length > 0) {
-        const admins = await User.findAll({ where: { role: 'admin' } });
-        
-        for (const admin of admins) {
-          for (const variant of lowStockVariants) {
-            await notificationService.sendNotification(
-              admin.id,
-              'low_stock_admin',
-              {
-                productName: variant.product.name,
-                sku: variant.sku,
-                stock: Number(variant.stockQty || 0)
-              }
-            );
-          }
+        for (const variant of lowStockVariants) {
+          await notificationService.sendToAdmins(
+            'low_stock_admin',
+            ['email', 'sms', 'whatsapp'],
+            {
+              productName: variant.product.name,
+              sku: variant.sku,
+              stock: Number(variant.stockQty || 0)
+            }
+          );
         }
         logger.info(`Sent low stock alerts for ${lowStockVariants.length} variants.`);
       }

@@ -15,11 +15,11 @@ let _currentSid = null;
 
 const getClient = async () => {
     const creds = await SettingsService.getByGroup('messaging_credentials');
-    const sid = creds.twilio_sid;
-    const token = creds.twilio_token;
+    const sid = creds.twilio_sid || process.env.TWILIO_ACCOUNT_SID;
+    const token = creds.twilio_token || process.env.TWILIO_AUTH_TOKEN;
 
     if (!sid || !token) {
-        throw new Error('twilio_sid and twilio_token must be set in messaging_credentials to send SMS.');
+        throw new Error('TWILIO_ACCOUNT_SID and TWILIO_AUTH_TOKEN must be set in env or messaging_credentials to send SMS.');
     }
 
     if (!_client || _currentSid !== sid) {
@@ -44,9 +44,9 @@ const send = async ({ to, body }) => {
     }
 
     const creds = await SettingsService.getByGroup('messaging_credentials');
-    const from = creds.twilio_from_number;
+    const from = creds.twilio_from_number || process.env.TWILIO_FROM_NUMBER;
     if (!from) {
-        throw new Error('twilio_from_number is not set in messaging_credentials.');
+        throw new Error('TWILIO_FROM_NUMBER must be set in env or messaging_credentials.');
     }
 
     const client = await getClient();
