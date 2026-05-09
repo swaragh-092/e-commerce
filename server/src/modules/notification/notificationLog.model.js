@@ -33,7 +33,7 @@ module.exports = (sequelize, DataTypes) => {
             type: DataTypes.STRING(20),
             defaultValue: 'sent',
             validate: {
-                isIn: [['sent', 'failed', 'bounced']],
+                isIn: [['sent', 'failed', 'bounced', 'skipped', 'queued']],
             },
         },
         error: {

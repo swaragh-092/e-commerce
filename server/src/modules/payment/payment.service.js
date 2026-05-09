@@ -1,7 +1,7 @@
 'use strict';
 const crypto = require('crypto');
 const { Op } = require('sequelize');
-const { sequelize, Payment, Order, WebhookEvent, Setting, User, Cart, Coupon, CouponUsage, OrderHistory, OrderStatusHistory, Shipment } = require('../index');
+const { sequelize, Payment, Order, WebhookEvent, Setting, User, UserProfile, Cart, Coupon, CouponUsage, OrderHistory, OrderStatusHistory, Shipment } = require('../index');
 const { encrypt, decrypt } = require('../../utils/crypto');
 const AppError = require('../../utils/AppError');
 const AuditService = require('../audit/audit.service');
@@ -566,7 +566,9 @@ const markOrderPaid = async ({ orderId, provider, transactionId, metadata = {} }
 
     if (sendOrderPlacedNotification && notificationPayload) {
         try {
-            const user = await User.findByPk(notificationPayload.userId);
+            const user = await User.findByPk(notificationPayload.userId, {
+                include: [{ model: UserProfile, as: 'profile', required: false }],
+            });
             if (user && NotificationService?.sendToUser) {
                 await NotificationService.sendToUser(
                     'order_placed',

@@ -118,7 +118,7 @@ const register = async (payload) => {
 
   try {
     if (NotificationService && NotificationService.send) {
-      await NotificationService.send('verify_email', registrationResult.verificationEmail.email, {
+      await NotificationService.send('email_verification', registrationResult.verificationEmail.email, {
         name: registrationResult.verificationEmail.firstName,
         verify_url: `${process.env.CLIENT_URL || 'http://localhost:5173'}/verify-email?token=${registrationResult.verificationEmail.verifyToken}`
       }, registrationResult.verificationEmail.userId);
@@ -126,7 +126,7 @@ const register = async (payload) => {
   } catch (e) {
     logger.error('Registration verification email failed', {
       userId: registrationResult.verificationEmail.userId,
-      operation: 'NotificationService.send.verify_email',
+      operation: 'NotificationService.send.email_verification',
       errorMessage: e.message,
       stack: e.stack,
     });
@@ -354,7 +354,7 @@ const resendVerification = async (email) => {
 
     try {
         if (NotificationService && NotificationService.send) {
-            await NotificationService.send('verify_email', user.email, {
+            await NotificationService.send('email_verification', user.email, {
                 name: user.firstName,
                 verify_url: `${process.env.CLIENT_URL || 'http://localhost:5173'}/verify-email?token=${verifyToken}`
             }, user.id, null, t);

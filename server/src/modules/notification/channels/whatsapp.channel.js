@@ -15,11 +15,11 @@ let _currentSid = null;
 
 const getClient = async () => {
     const creds = await SettingsService.getByGroup('messaging_credentials');
-    const sid = creds.twilio_sid;
-    const token = creds.twilio_token;
+    const sid = creds.twilio_sid || process.env.TWILIO_ACCOUNT_SID;
+    const token = creds.twilio_token || process.env.TWILIO_AUTH_TOKEN;
 
     if (!sid || !token) {
-        throw new Error('twilio_sid and twilio_token must be set in messaging_credentials to send WhatsApp.');
+        throw new Error('TWILIO_ACCOUNT_SID and TWILIO_AUTH_TOKEN must be set in env or messaging_credentials to send WhatsApp.');
     }
 
     if (!_client || _currentSid !== sid) {
@@ -48,9 +48,9 @@ const send = async ({ to, body }) => {
     }
 
     const creds = await SettingsService.getByGroup('messaging_credentials');
-    const fromRaw = creds.twilio_whatsapp_from;
+    const fromRaw = creds.twilio_whatsapp_from || process.env.TWILIO_WHATSAPP_FROM;
     if (!fromRaw) {
-        throw new Error('twilio_whatsapp_from is not set in messaging_credentials.');
+        throw new Error('TWILIO_WHATSAPP_FROM must be set in env or messaging_credentials.');
     }
 
     // Normalise: allow operator to set with or without the prefix
