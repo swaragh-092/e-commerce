@@ -768,7 +768,7 @@ const placeOrder = async (userId, payload) => {
     const settingsMap = await buildSettingsSnapshot(['tax', 'shipping']);
     const getLocalSetting = (key, defaultVal) => settingsMap[key] !== undefined ? settingsMap[key] : defaultVal;
 
-    const order = await sequelize.transaction(async (t) => {
+    const { order, eventBuffer } = await sequelize.transaction(async (t) => {
         let subtotal = 0;
 
         for (const item of checkoutItems) {
@@ -1092,8 +1092,6 @@ const placeOrder = async (userId, payload) => {
     });
 
 
-    return order;
-
     // For COD orders skip the payment gateway entirely — order is already confirmed.
     // For Razorpay orders, createIntent runs OUTSIDE the transaction so a gateway failure
     // doesn't roll back the order — the order exists, payment can be retried.
@@ -1148,7 +1146,10 @@ const placeOrder = async (userId, payload) => {
         }
     }
 
-    return { order };
+    return {
+        order,
+        ...(clientSecret ? { clientSecret } : {}),
+    };
 };
 
 const getOrders = async (userId, isAdmin, page = 1, limit = 20, filters = {}) => {

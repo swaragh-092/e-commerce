@@ -447,14 +447,7 @@ const CheckoutPage = () => {
                 }),
             });
 
-            const orderId = res.data?.data?.order?.id;
-            if (paymentMethod === 'cod') {
-                if (!isBuyNowFlow) await clearCart();
-                navigate('/payment/success', { state: { orderId, isCod: true } });
-            } else {
-                navigate(`/payment/${orderId}`);
-            }
-
+            const orderId = res?.order?.id;
             if (!isBuyNowFlow) await clearCart();
             if (paymentMethod === 'cod') navigate('/payment/success', { state: { orderId, isCod: true } });
             else navigate(`/payment/${orderId}`);
