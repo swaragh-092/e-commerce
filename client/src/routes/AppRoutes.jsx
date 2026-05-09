@@ -60,6 +60,7 @@ const OrdersManagePage = lazy(() => import('../pages/admin/OrdersManagePage'));
 const OrderDetailPage = lazy(() => import('../pages/admin/OrderDetailPage'));
 const OrderInvoicePage = lazy(() => import('../pages/admin/OrderInvoicePage'));
 const CustomersPage = lazy(() => import('../pages/admin/CustomersPage'));
+const CustomerDetailPage = lazy(() => import('../pages/admin/CustomerDetailPage'));
 const CouponsPage = lazy(() => import('../pages/admin/CouponsPage'));
 const ReviewsPage = lazy(() => import('../pages/admin/ReviewsPage'));
 const MediaPage = lazy(() => import('../pages/admin/MediaPage'));
@@ -190,6 +191,7 @@ const AppRoutes = () => (
           </Route>
           <Route element={<ProtectedRoute permission={PERMISSIONS.CUSTOMERS_READ} />}>
             <Route path="customers" element={<CustomersPage />} />
+            <Route path="customers/:id" element={<CustomerDetailPage />} />
           </Route>
           {/* Coupons — ecommerce only */}
           <Route element={<ModeRoute requiredMode="ecommerce" />}>

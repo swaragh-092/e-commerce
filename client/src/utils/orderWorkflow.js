@@ -10,6 +10,7 @@ const colorMap = {
   confirmed: 'info',
   on_hold: 'warning',
   processing: 'primary',
+  packed: 'secondary',
   ready_for_shipment: 'secondary',
   cancelled: 'error',
   closed: 'success',

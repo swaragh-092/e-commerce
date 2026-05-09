@@ -30,10 +30,10 @@ import { useOrderStatusTransitions } from '../../hooks/useOrderStatusTransitions
 import { userService } from '../../services/userService';
 
 import { orderService } from '../../services/orderService';
+import { getCustomerOrderDisplayStatus, getCustomerOrderStatusLabel } from '../../utils/orderHelpers';
 
 import {
   getOrderStatusColor,
-  getOrderStatusLabel,
   getPaymentStatusLabel,
 } from '../../utils/orderWorkflow';
 
@@ -112,6 +112,15 @@ const OrderDetailPage = () => {
   const deliveredProducts = productTrackingItems.filter((product) => product.status === 'delivered').length;
   const shipmentRecords = order?.fulfillments || [];
   const dispatchedShipments = shipmentRecords.filter((fulfillment) => fulfillment.status !== 'pending').length;
+  const customerDisplayStatus = getCustomerOrderDisplayStatus(order || {});
+  const expectedDeliveryDate = useMemo(() => {
+    const dates = shipmentRecords
+      .flatMap((fulfillment) => fulfillment.shipments || [])
+      .map((shipment) => shipment.expectedDeliveryDate)
+      .filter(Boolean)
+      .sort();
+    return dates[dates.length - 1] || '';
+  }, [shipmentRecords]);
 
   const handleCancel = async () => {
     const confirmed = await confirm(
@@ -269,8 +278,8 @@ const OrderDetailPage = () => {
             </Typography>
           </Box>
           <Chip
-            label={getOrderStatusLabel(order.status)}
-            color={getOrderStatusColor(order.status)}
+            label={getCustomerOrderStatusLabel(customerDisplayStatus)}
+            color={getOrderStatusColor(customerDisplayStatus)}
             size="small"
             sx={{ fontWeight: 700, fontSize: '0.75rem' }}
           />
@@ -305,11 +314,13 @@ const OrderDetailPage = () => {
               <ShippingAddressCard address={address} />
               <DeliverySummaryCard
                 order={order}
+                displayStatus={customerDisplayStatus}
                 trackingProgress={trackingProgress}
                 deliveredProducts={deliveredProducts}
                 productCount={productTrackingItems.length}
                 dispatchedShipments={dispatchedShipments}
                 shipmentCount={shipmentRecords.length}
+                expectedDeliveryDate={expectedDeliveryDate}
               />
               <PaymentSummaryCard
                 order={order}

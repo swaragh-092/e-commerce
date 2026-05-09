@@ -2,20 +2,31 @@ import { Box, Chip, Divider, Paper, Stack, Typography } from '@mui/material';
 import TimelineIcon from '@mui/icons-material/Timeline';
 import {
   getOrderStatusColor,
-  getOrderStatusLabel,
 } from '../../../utils/orderWorkflow';
+import { getCustomerOrderDisplayStatus, getCustomerOrderStatusLabel } from '../../../utils/orderHelpers';
 import SectionLabel from './SectionLabel';
 import { formatCompactDateTime } from './orderDetailUtils';
 import { sxCard } from './styles';
 
+const formatDateOnly = (value) => {
+  if (!value) return '';
+  const date = new Date(`${value}T00:00:00`);
+  if (Number.isNaN(date.getTime())) return value;
+  return date.toLocaleDateString('en-US', { dateStyle: 'medium' });
+};
+
 const DeliverySummaryCard = ({
   order,
+  displayStatus,
   trackingProgress,
   deliveredProducts,
   productCount,
   dispatchedShipments,
   shipmentCount,
-}) => (
+  expectedDeliveryDate,
+}) => {
+  const customerStatus = displayStatus || getCustomerOrderDisplayStatus(order);
+  return (
   <Paper elevation={0} sx={sxCard}>
     <SectionLabel icon={TimelineIcon}>Delivery summary</SectionLabel>
     {trackingProgress && (
@@ -33,8 +44,8 @@ const DeliverySummaryCard = ({
         <Typography variant="body2" color="text.secondary">Order status</Typography>
         <Chip
           size="small"
-          label={getOrderStatusLabel(order.status)}
-          color={getOrderStatusColor(order.status)}
+          label={getCustomerOrderStatusLabel(customerStatus)}
+          color={getOrderStatusColor(customerStatus)}
           sx={{ height: 20, fontSize: '0.67rem', fontWeight: 700 }}
         />
       </Box>
@@ -50,6 +61,12 @@ const DeliverySummaryCard = ({
           {dispatchedShipments}/{shipmentCount}
         </Typography>
       </Box>
+      <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 1 }}>
+        <Typography variant="body2" color="text.secondary">Expected delivery</Typography>
+        <Typography variant="body2" sx={{ fontWeight: 800 }}>
+          {expectedDeliveryDate ? formatDateOnly(expectedDeliveryDate) : '—'}
+        </Typography>
+      </Box>
       <Divider />
       <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 1 }}>
         <Typography variant="body2" color="text.secondary">Last updated</Typography>
@@ -59,6 +76,7 @@ const DeliverySummaryCard = ({
       </Box>
     </Stack>
   </Paper>
-);
+  );
+};
 
 export default DeliverySummaryCard;

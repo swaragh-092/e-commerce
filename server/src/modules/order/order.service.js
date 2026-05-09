@@ -7,6 +7,7 @@ const {
     Cart,
     CartItem,
     Product,
+    ProductImage,
     ProductVariant,
     Address,
     Coupon,
@@ -123,6 +124,34 @@ const appendStatusHistoryEvent = (history = [], status, source = 'admin') => {
     return [
         ...entries,
         { status, at: new Date().toISOString(), source },
+    ];
+};
+
+const normalizeDateOnly = (value) => {
+    if (!value) return null;
+    if (value instanceof Date) {
+        if (Number.isNaN(value.getTime())) return null;
+        return value.toISOString().slice(0, 10);
+    }
+    const date = new Date(value);
+    if (Number.isNaN(date.getTime())) return null;
+    return date.toISOString().slice(0, 10);
+};
+
+const appendExpectedDeliveryHistory = (history = [], nextDate, actingUserId = null, source = 'admin') => {
+    const date = normalizeDateOnly(nextDate);
+    if (!date) return Array.isArray(history) ? history : [];
+    const entries = Array.isArray(history) ? history : [];
+    const previousDate = entries[entries.length - 1]?.date || null;
+    return [
+        ...entries,
+        {
+            date,
+            previousDate,
+            at: new Date().toISOString(),
+            source,
+            changedBy: actingUserId,
+        },
     ];
 };
 
@@ -329,13 +358,25 @@ const DEFAULT_PAYMENT_SETTINGS = {
     defaultMethod: 'razorpay',
 };
 
+const getPrimaryProductImageUrl = (product = {}) => {
+    const images = Array.isArray(product.images) ? product.images : [];
+    const image = images.find((item) => item.isPrimary) || images[0];
+    return image?.url || null;
+};
+
 
 const HEAVY_ORDER_INCLUDE = [
     {
         model: OrderItem,
         as: 'items',
         include: [
-            { model: Product, as: 'product', attributes: ['id', 'name', 'slug'], required: false },
+            {
+                model: Product,
+                as: 'product',
+                attributes: ['id', 'name', 'slug'],
+                required: false,
+                include: [{ model: ProductImage, as: 'images', attributes: ['id', 'url', 'alt', 'sortOrder', 'isPrimary'], required: false }],
+            },
             { model: ProductVariant, as: 'variant', attributes: ['id', 'sku', 'price', 'stockQty', 'isActive'], required: false },
             { model: FulfillmentItem, as: 'fulfillmentItems', attributes: ['quantity'], required: false },
             { model: ShipmentItem, as: 'shipmentItems', attributes: ['quantity'], required: false },
@@ -699,6 +740,7 @@ const placeOrder = async (userId, payload) => {
             include: [
                 { model: Category, as: 'categories' },
                 { model: Brand, as: 'brand' },
+                { model: ProductImage, as: 'images' },
             ],
         });
 
@@ -742,6 +784,7 @@ const placeOrder = async (userId, payload) => {
                         include: [
                             { model: Category, as: 'categories' },
                             { model: Brand, as: 'brand' },
+                            { model: ProductImage, as: 'images' },
                         ],
                     },
                     { model: ProductVariant, as: 'variant' }
@@ -1016,7 +1059,7 @@ const placeOrder = async (userId, payload) => {
                 variantId: item.variantId || null,
                 snapshotName: item.currentProduct.name,
                 snapshotPrice: item.currentPrice,
-                snapshotImage: null,
+                snapshotImage: getPrimaryProductImageUrl(item.currentProduct),
                 snapshotSku: item.currentProduct.sku,
                 variantInfo: item.variant ? item.variant.toJSON() : null,
                 quantity: item.quantity,
@@ -1307,7 +1350,8 @@ const getOrderById = async (id, userId, isAdmin) => {
 
 const createFulfillment = async (orderId, payload, actingUserId) => {
     // payload: { trackingNumber, courier, notes, status, items: [{ orderItemId, quantity }], providerId }
-    const { trackingNumber, courier, notes, status, items, providerId } = payload;
+    const { trackingNumber, courier, expectedDeliveryDate, notes, status, items, providerId } = payload;
+    const normalizedExpectedDeliveryDate = normalizeDateOnly(expectedDeliveryDate);
 
     if (!items || items.length === 0) {
         throw new AppError('VALIDATION_ERROR', 400, 'At least one item is required for a shipment');
@@ -1598,6 +1642,10 @@ const createFulfillment = async (orderId, payload, actingUserId) => {
             courierName: courierName,
             trackingNumber: awbCode,
             trackingUrl: trackingUrl,
+            expectedDeliveryDate: normalizedExpectedDeliveryDate,
+            expectedDeliveryHistory: normalizedExpectedDeliveryDate
+                ? appendExpectedDeliveryHistory([], normalizedExpectedDeliveryDate, actingUserId)
+                : [],
             labelUrl: labelUrl,
             status: finalStatus,
             statusHistory: [{
@@ -1650,6 +1698,17 @@ const createFulfillment = async (orderId, payload, actingUserId) => {
             });
         }
         const newStatus = await syncOrderShippingStatus(order, t, actingUserId);
+        if (normalizedExpectedDeliveryDate) {
+            await addOrderHistoryEvent({
+                orderId,
+                eventType: 'shipment_expected_delivery',
+                description: `Expected delivery date set to ${normalizedExpectedDeliveryDate}.`,
+                actorId: actingUserId,
+                actorType: 'admin',
+                metadata: { shipmentId: shipment.id, expectedDeliveryDate: normalizedExpectedDeliveryDate },
+                transaction: t,
+            });
+        }
 
         try {
             if (AuditService && AuditService.log) {
@@ -1661,6 +1720,7 @@ const createFulfillment = async (orderId, payload, actingUserId) => {
                     changes:  {
                         orderId,
                         trackingNumber,
+                        expectedDeliveryDate: normalizedExpectedDeliveryDate,
                         shipmentId: shipment.id,
                         fulfillmentStatus: status || 'pending',
                         newOrderShippingStatus: newStatus,
@@ -2080,7 +2140,7 @@ const getFulfillmentTracking = async (orderId, userId, isAdmin) => {
 const createShipment = createFulfillment;
 
 const updateShipmentStatus = async (orderId, shipmentId, payload, actingUserId) => {
-    const { status, trackingNumber, trackingUrl, courierName } = payload;
+    const { status, trackingNumber, trackingUrl, courierName, expectedDeliveryDate } = payload;
     await sequelize.transaction(async (t) => {
         const order = await Order.findByPk(orderId, { transaction: t, lock: Transaction.LOCK.UPDATE });
         if (!order) throw new AppError('NOT_FOUND', 404, 'Order not found');
@@ -2095,11 +2155,26 @@ const updateShipmentStatus = async (orderId, shipmentId, payload, actingUserId) 
         const before = shipment.status;
         if (status) ensureValidShipmentTransition(before, status);
         const history = Array.isArray(shipment.statusHistory) ? shipment.statusHistory : [];
+        const expectedDeliveryChanged = expectedDeliveryDate !== undefined;
+        const normalizedExpectedDeliveryDate = expectedDeliveryChanged
+            ? normalizeDateOnly(expectedDeliveryDate)
+            : null;
         const updates = {
             ...(trackingNumber !== undefined ? { trackingNumber, awb: trackingNumber } : {}),
             ...(trackingUrl !== undefined ? { trackingUrl } : {}),
             ...(courierName !== undefined ? { courierName } : {}),
         };
+        if (expectedDeliveryChanged) {
+            if (!normalizedExpectedDeliveryDate) {
+                throw new AppError('VALIDATION_ERROR', 400, 'Expected delivery date must be a valid date');
+            }
+            updates.expectedDeliveryDate = normalizedExpectedDeliveryDate;
+            updates.expectedDeliveryHistory = appendExpectedDeliveryHistory(
+                shipment.expectedDeliveryHistory,
+                normalizedExpectedDeliveryDate,
+                actingUserId
+            );
+        }
         const statusChanged = status && status !== before;
         if (statusChanged) {
             updates.status = status;
@@ -2123,7 +2198,19 @@ const updateShipmentStatus = async (orderId, shipmentId, payload, actingUserId) 
                 fromStatus: before,
                 toStatus: status,
                 changedBy: actingUserId,
-                metadata: { trackingNumber, trackingUrl, courierName },
+                metadata: { trackingNumber, trackingUrl, courierName, expectedDeliveryDate: normalizedExpectedDeliveryDate },
+                transaction: t,
+            });
+        }
+
+        if (expectedDeliveryChanged) {
+            await addOrderHistoryEvent({
+                orderId,
+                eventType: 'shipment_expected_delivery',
+                description: `Expected delivery date set to ${normalizedExpectedDeliveryDate}.`,
+                actorId: actingUserId,
+                actorType: 'admin',
+                metadata: { shipmentId: shipment.id, expectedDeliveryDate: normalizedExpectedDeliveryDate },
                 transaction: t,
             });
         }

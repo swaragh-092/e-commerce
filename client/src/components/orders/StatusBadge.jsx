@@ -1,12 +1,13 @@
 import React from 'react';
 import { Box, Typography } from '@mui/material';
 import { STATUS_CONFIG } from '../../pages/storefront/AllOrdersPage/constants';
-import { getOrderStatusLabel } from '../../utils/orderWorkflow';
+import { getCustomerOrderDisplayStatus, getCustomerOrderStatusLabel } from '../../utils/orderHelpers';
 
-const StatusBadge = ({ status }) => {
-    const cfg = STATUS_CONFIG[status] || STATUS_CONFIG.placed;
+const StatusBadge = ({ status, order }) => {
+    const displayStatus = order ? getCustomerOrderDisplayStatus(order) : status;
+    const cfg = STATUS_CONFIG[displayStatus] || STATUS_CONFIG.placed;
     const Icon = cfg.icon;
-    const label = getOrderStatusLabel(status);
+    const label = getCustomerOrderStatusLabel(displayStatus);
 
     return (
         <Box

@@ -31,6 +31,7 @@ const FULFILLMENT_STATUS_VALUES = ['pending', ...SHIPMENT_STATUS_VALUES];
 const createFulfillmentSchema = Joi.object({
     trackingNumber: Joi.string().max(255).allow(null, ''),
     courier: Joi.string().max(100).allow(null, ''),
+    expectedDeliveryDate: Joi.date().iso().allow(null).optional(),
     notes: Joi.string().allow(null, ''),
     status: Joi.string().valid(...FULFILLMENT_STATUS_VALUES).default('pending'),
     providerId: Joi.string().uuid().allow(null).optional(),
@@ -49,7 +50,8 @@ const updateShipmentStatusSchema = Joi.object({
     trackingNumber: Joi.string().max(255).allow(null, '').optional(),
     trackingUrl: Joi.string().uri().max(500).allow(null, '').optional(),
     courierName: Joi.string().max(100).allow(null, '').optional(),
-}).or('status', 'trackingNumber', 'trackingUrl', 'courierName');
+    expectedDeliveryDate: Joi.date().iso().optional(),
+}).or('status', 'trackingNumber', 'trackingUrl', 'courierName', 'expectedDeliveryDate');
 
 const putBackItemSchema = Joi.object({
     orderItemId: Joi.string().uuid().required(),

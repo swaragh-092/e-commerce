@@ -25,6 +25,14 @@ module.exports = (sequelize, DataTypes) => {
         courierName: DataTypes.STRING(100),
         trackingNumber: DataTypes.STRING(255),
         trackingUrl: DataTypes.STRING(500),
+        expectedDeliveryDate: {
+            type: DataTypes.DATEONLY,
+            allowNull: true,
+        },
+        expectedDeliveryHistory: {
+            type: DataTypes.JSONB,
+            defaultValue: () => [],
+        },
         labelUrl: DataTypes.STRING(500),
         manifestUrl: DataTypes.STRING(500),
         invoiceUrl: DataTypes.STRING(500),
