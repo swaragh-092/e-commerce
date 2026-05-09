@@ -13,6 +13,7 @@ import PageSEO from '../../components/common/PageSEO';
 import ProductImages from '../../components/product/ProductImages';
 import VariantSelector from '../../components/product/VariantSelector';
 import WishlistButton from '../../components/common/WishlistButton';
+import ShareButton from '../../components/common/ShareButton';
 import ReviewSection from '../../components/product/ReviewSection';
 import DOMPurify from 'dompurify';
 import { useCart } from '../../hooks/useCart';
@@ -287,9 +288,15 @@ const ProductDetailPage = () => {
                         <Typography variant="h4" fontWeight="bold">
                             {product.name}
                         </Typography>
-                        {wishlistEnabled && (
-                            <WishlistButton productId={product.id} variantId={selectedVariant?.id || null} />
-                        )}
+                        <Box sx={{ display: 'flex', gap: 1 }}>
+                            {wishlistEnabled && (
+                                <WishlistButton productId={product.id} variantId={selectedVariant?.id || null} />
+                            )}
+                            <ShareButton 
+                                title={product.name}
+                                text={product.shortDescription}
+                            />
+                        </Box>
                     </Box>
 
                     {pp.showStockBadge !== false && (

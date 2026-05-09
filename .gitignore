@@ -36,7 +36,18 @@ desktop.ini
 # ── IDE / Editor ──
 .vscode/
 .idea/
+# ── Agent & AI Tooling ──
 .agent/
+.commandcode/
+.cline/
+.clinerules
+.codex/
+.opencode/
+.anthropic/
+.claude/
+.cursor/
+.windsurf/
+.aider*
 *.swp
 *.swo
 *~
