@@ -22,11 +22,15 @@ const authUserInclude = [
 
 const getRefreshTokenExpiryDate = () => new Date(Date.now() + AUTH_TIME.REFRESH_TOKEN_TTL_MS);
 
+let emailVerificationCache = { result: false, at: 0 };
+
 const isEmailVerificationRequired = async () => {
+  if (Date.now() - emailVerificationCache.at < 5000) return emailVerificationCache.result;
   try {
     const SettingsService = require('../settings/settings.service');
     const features = await SettingsService.getByGroup('features');
-    return features?.emailVerification === true;
+    emailVerificationCache = { result: features?.emailVerification === true, at: Date.now() };
+    return emailVerificationCache.result;
   } catch (error) {
     return false;
   }
@@ -34,8 +38,8 @@ const isEmailVerificationRequired = async () => {
 
 const generateTokens = (user) => {
   const payload = { id: user.id, role: user.role };
-  const accessToken = jwt.sign(payload, process.env.JWT_ACCESS_SECRET, { expiresIn: process.env.JWT_ACCESS_EXPIRES || '15m' });
-  const refreshToken = jwt.sign(payload, process.env.JWT_REFRESH_SECRET, { expiresIn: process.env.JWT_REFRESH_EXPIRES || '7d' });
+  const accessToken = jwt.sign(payload, process.env.JWT_ACCESS_SECRET, { expiresIn: process.env.JWT_ACCESS_EXPIRY || '15m' });
+  const refreshToken = jwt.sign(payload, process.env.JWT_REFRESH_SECRET, { expiresIn: process.env.JWT_REFRESH_EXPIRY || '7d' });
   return { accessToken, refreshToken };
 };
 
@@ -86,6 +90,20 @@ const register = async (payload) => {
       createdByIp: 'registration'
     }, { transaction: t });
 
+    // Audit log inside transaction
+    try {
+      if (AuditService && AuditService.log) {
+        await AuditService.log({
+          userId: user.id,
+          action: ACTIONS.CREATE,
+          entity: ENTITIES.USER,
+          entityId: user.id,
+        }, t);
+      }
+    } catch (e) {
+      logger.error('Registration audit log failed', { userId: user.id, error: e.message });
+    }
+
     return {
       user: enrichUserAuthorization(user),
       tokens,
@@ -109,24 +127,6 @@ const register = async (payload) => {
     logger.error('Registration verification email failed', {
       userId: registrationResult.verificationEmail.userId,
       operation: 'NotificationService.send.verify_email',
-      errorMessage: e.message,
-      stack: e.stack,
-    });
-  }
-
-  try {
-    if (AuditService && AuditService.log) {
-      await AuditService.log({
-        userId: registrationResult.user.id,
-        action: ACTIONS.CREATE,
-        entity: ENTITIES.USER,
-        entityId: registrationResult.user.id,
-      });
-    }
-  } catch (e) {
-    logger.error('Registration audit log failed', {
-      userId: registrationResult.user.id,
-      operation: 'AuditService.log.registration',
       errorMessage: e.message,
       stack: e.stack,
     });
@@ -236,7 +236,7 @@ const refresh = async (refreshTokenStr, ipAddress) => {
               entity: ENTITIES.USER,
               entityId: user.id,
               ipAddress,
-            });
+            }, t);
           }
         } catch (e) {
           logger.error('Refresh audit log failed', {
@@ -328,7 +328,7 @@ const resetPassword = async (token, newPassword) => {
           action: ACTIONS.PASSWORD_RESET,
           entity: ENTITIES.USER,
           entityId: user.id,
-        });
+        }, t);
       }
     } catch (e) {}
   });
@@ -368,7 +368,7 @@ const resendVerification = async (email) => {
           action: ACTIONS.VERIFICATION_RESENT,
           entity: ENTITIES.USER,
           entityId: user.id,
-        });
+        }, t);
       }
     } catch (e) {}
   });
@@ -395,7 +395,7 @@ const verifyEmail = async (token) => {
           action: ACTIONS.EMAIL_VERIFIED,
           entity: ENTITIES.USER,
           entityId: user.id,
-        });
+        }, t);
       }
     } catch (e) {}
   });

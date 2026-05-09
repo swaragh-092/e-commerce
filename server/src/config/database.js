@@ -13,6 +13,21 @@ module.exports = {
             timestamps: true,
             underscored: true,
         },
+        pool: {
+            max: 10,
+            min: 2,
+            acquire: 30000,
+            idle: 10000,
+            evict: 10000,
+            validate: (client) => {
+                return client.query('SELECT 1').then(() => true).catch(() => false);
+            },
+        },
+        dialectOptions: {
+            options: '-c statement_timeout=30000 -c idle_in_transaction_session_timeout=30000',
+            keepalive: true,
+            keepaliveInitialDelayMillis: 10000,
+        },
     },
     test: {
         username: process.env.DB_USER || 'postgres',
@@ -42,8 +57,17 @@ module.exports = {
         pool: {
             max: 20,
             min: 5,
-            acquire: 60000,
+            acquire: 30000,
             idle: 10000,
+            evict: 10000,
+            validate: (client) => {
+                return client.query('SELECT 1').then(() => true).catch(() => false);
+            },
+        },
+        dialectOptions: {
+            options: '-c statement_timeout=30000 -c idle_in_transaction_session_timeout=30000',
+            keepalive: true,
+            keepaliveInitialDelayMillis: 10000,
         },
     },
 };
