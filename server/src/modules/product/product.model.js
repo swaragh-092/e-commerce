@@ -155,6 +155,7 @@ module.exports = (sequelize, DataTypes) => {
         Product.hasMany(models.Review, { foreignKey: 'productId', onDelete: 'CASCADE' });
         Product.hasMany(models.CartItem, { foreignKey: 'productId' });
         Product.hasMany(models.WishlistItem, { foreignKey: 'productId', onDelete: 'CASCADE' });
+        Product.hasMany(models.ProductTab, { foreignKey: 'productId', as: 'tabs', onDelete: 'CASCADE' });
     };
 
     return Product;

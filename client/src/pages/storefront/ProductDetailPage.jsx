@@ -29,6 +29,7 @@ import {
 import { getVariantOptionLabel } from '../../utils/variantOptions';
 import EnquiryModal from '../../components/storefront/EnquiryModal';
 import RelatedProducts from '../../components/product/RelatedProducts';
+import ProductTabsAccordion from '../../components/storefront/ProductTabsAccordion';
 
 const ProductDetailPage = () => {
     const { slug } = useParams();
@@ -546,6 +547,14 @@ const ProductDetailPage = () => {
 
                     <Typography variant="h6" sx={{ mt: 4 }} gutterBottom>Product Details</Typography>
                     <Box dangerouslySetInnerHTML={{ __html: DOMPurify.sanitize(product.description || '') }} sx={{ typography: 'body2', color: 'text.secondary', '& p': { mt: 0, mb: 2 } }} />
+
+                    {/* Custom tabs accordion — rendered from product.tabs included in the API response */}
+                    {Array.isArray(product.tabs) && product.tabs.length > 0 && (
+                        <ProductTabsAccordion
+                            productId={product.id}
+                            tabs={product.tabs}
+                        />
+                    )}
 
                     {product.tags?.length > 0 && (
                         <Box sx={{ mt: 3, display: 'flex', gap: 1, flexWrap: 'wrap' }}>
