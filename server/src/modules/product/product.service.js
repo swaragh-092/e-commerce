@@ -13,6 +13,7 @@ const {
   Brand,
   OrderItem,
   Media,
+  ProductTab,
   Sequelize,
 } = require('../index');
 const { Op } = Sequelize;
@@ -449,6 +450,16 @@ exports.getProductBySlug = async (slug, { adminView = false } = {}) => {
       { model: Category, as: 'categories' },
       { model: Tag, as: 'tags' },
       { model: Brand, as: 'brand' },
+      // Only active tabs, sorted for storefront display
+      {
+        model: ProductTab,
+        as: 'tabs',
+        where: { isActive: true },
+        required: false,
+      },
+    ],
+    order: [
+      ['tabs', 'sort_order', 'ASC'],
     ],
   });
   if (!product) throw new AppError('NOT_FOUND', 404, 'Product not found');
@@ -466,6 +477,15 @@ exports.getProductById = async (id) => {
       { model: Category, as: 'categories' },
       { model: Tag, as: 'tags' },
       { model: Brand, as: 'brand' },
+      // All tabs (including inactive) for admin view
+      {
+        model: ProductTab,
+        as: 'tabs',
+        required: false,
+      },
+    ],
+    order: [
+      ['tabs', 'sort_order', 'ASC'],
     ],
   });
   if (!product) throw new AppError('NOT_FOUND', 404, 'Product not found');

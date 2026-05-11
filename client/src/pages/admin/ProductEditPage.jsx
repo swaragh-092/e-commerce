@@ -66,6 +66,7 @@ import { getVariantOptionLabel } from '../../utils/variantOptions';
 import { useAuth } from '../../hooks/useAuth';
 import { PERMISSIONS } from '../../utils/permissions';
 import { getApiErrorMessage } from '../../utils/apiErrors';
+import ProductCustomTabs from '../../components/admin/ProductCustomTabs';
 
 const generateSlug = (text) => {
   if (!text) return '';
@@ -1155,6 +1156,14 @@ const ProductEditPage = () => {
           categoryIds={formData.categoryIds}
           flatCatFiles={flatCatFiles} 
           canManageVariants={canUpdateProducts} 
+        />
+      )}
+
+      {/* Custom Tabs panel — only after product is saved */}
+      {!isNew && (
+        <ProductCustomTabs
+          productId={id}
+          canEdit={canUpdateProducts}
         />
       )}
     </Box>
