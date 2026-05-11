@@ -359,6 +359,7 @@ exports.getProducts = async (filters, page, limit, isAdmin = false) => {
       where: { id: { [Op.in]: categoryIds } },
       required: true,
     });
+    filters._categoryIds = categoryIds;
   } else if (filters.category) {
     const rootCat = await Category.findOne({
       where: { slug: filters.category },
@@ -372,6 +373,7 @@ exports.getProducts = async (filters, page, limit, isAdmin = false) => {
         where: { id: { [Op.in]: categoryIds } },
         required: true,
       });
+      filters._categoryIds = categoryIds;
     } else {
       where.id = null;
       include.push({ model: Category, as: 'categories' });
@@ -388,6 +390,43 @@ exports.getProducts = async (filters, page, limit, isAdmin = false) => {
     include,
     distinct: true,
   });
+
+  // Compute actual price range for the current filter context (excluding minPrice/maxPrice)
+  const priceRangeWhere = { ...where };
+  delete priceRangeWhere.price;
+
+  // Translate relationship includes into direct WHERE subqueries for the aggregation query
+  if (filters._categoryIds?.length) {
+    const escapedIds = filters._categoryIds.map(id => Sequelize.escape(id)).join(',');
+    priceRangeWhere[Op.and] = [
+      ...(priceRangeWhere[Op.and] || []),
+      Sequelize.literal(`"Product"."id" IN (SELECT "product_id" FROM "product_categories" WHERE "category_id" IN (${escapedIds}))`),
+    ];
+  }
+  if (filters.tags) {
+    const tagList = Array.isArray(filters.tags) ? filters.tags : filters.tags.split(',').map(t => t.trim()).filter(Boolean);
+    if (tagList.length > 0) {
+      const escapedTags = tagList.map(t => Sequelize.escape(t)).join(',');
+      priceRangeWhere[Op.and] = [
+        ...(priceRangeWhere[Op.and] || []),
+        Sequelize.literal(`"Product"."id" IN (SELECT "product_id" FROM "product_tags" pt JOIN "tags" t ON pt."tag_id" = t."id" WHERE t."name" IN (${escapedTags}))`),
+      ];
+    }
+  }
+
+  const priceRangeResult = await Product.findOne({
+    where: priceRangeWhere,
+    attributes: [
+      [Sequelize.fn('MIN', Sequelize.col('price')), 'min'],
+      [Sequelize.fn('MAX', Sequelize.col('price')), 'max'],
+    ],
+    raw: true,
+  });
+
+  const priceRange = {
+    min: priceRangeResult?.min != null ? Number(priceRangeResult.min) : 0,
+    max: priceRangeResult?.max != null ? Number(priceRangeResult.max) : 0,
+  };
 
   let counts = {};
   if (isAdmin) {
@@ -428,6 +467,7 @@ exports.getProducts = async (filters, page, limit, isAdmin = false) => {
   const serializedRows = rows.map((row) => serializeProductPricing(row, { adminView: isAdmin, features }, labelPresets));
   
   const pagingData = getPagingData(serializedRows, count, page, queryLimit);
+  pagingData.priceRange = priceRange;
   if (isAdmin) {
     pagingData.counts = counts;
   }

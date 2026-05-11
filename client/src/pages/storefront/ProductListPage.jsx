@@ -1,15 +1,15 @@
 import React, { useState, useEffect } from 'react';
-import { Box, Container, Grid, Typography, Pagination, TextField, InputAdornment, Drawer, IconButton, useTheme, useMediaQuery } from '@mui/material';
-import { Search as SearchIcon, FilterList as FilterIcon } from '@mui/icons-material';
+import { Box, Container, Grid, Typography, Pagination, TextField, InputAdornment, Drawer, IconButton, useTheme, useMediaQuery, FormControl, Select, MenuItem } from '@mui/material';
+import { Search as SearchIcon, FilterList as FilterIcon, Sort as SortIcon } from '@mui/icons-material';
 import { useSearchParams } from 'react-router-dom';
 import ProductGrid from '../../components/product/ProductGrid';
 import ProductFilters from '../../components/product/ProductFilters';
 import StorefrontSidebarMenu from '../../components/layout/StorefrontSidebarMenu';
 import { getProducts } from '../../services/productService';
 import { getCategoryTree } from '../../services/categoryService';
+import SearchWidget from '../../components/search/SearchWidget';
 import PageSEO from '../../components/common/PageSEO';
-import { useDebounce } from '../../hooks/useDebounce';
-import { useSettings } from '../../hooks/useSettings';
+import { useSettings, useFeature } from '../../hooks/useSettings';
 
 const ProductListPage = () => {
     const [searchParams, setSearchParams] = useSearchParams();
@@ -17,6 +17,7 @@ const ProductListPage = () => {
     const [loading, setLoading] = useState(true);
     const [mobileFilterOpen, setMobileFilterOpen] = useState(false);
     const [meta, setMeta] = useState({ page: 1, totalPages: 1 });
+    const [priceRange, setPriceRange] = useState(null);
     const [categoryName, setCategoryName] = useState('');
 
     const theme = useTheme();
@@ -27,23 +28,9 @@ const ProductListPage = () => {
     const defaultLimit = parseInt(catalog.defaultPageSize) || 20;
     const gridCols     = parseInt(catalog.gridColumns) || 4;
     const showFilters  = catalog.showFilters !== false;
+    const pricingEnabled = useFeature('pricing');
 
-    const [searchInput, setSearchInput] = useState(searchParams.get('search') || '');
-    const debouncedSearch = useDebounce(searchInput, 400);
 
-    // Sync debounced search into URL params
-    useEffect(() => {
-        const current = searchParams.get('search') || '';
-        if (debouncedSearch !== current) {
-            handleFilterChange({ ...filters, search: debouncedSearch, page: 1 });
-        }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [debouncedSearch]);
-
-    // Sync searchInput when URL changes externally (e.g. clear filters)
-    useEffect(() => {
-        setSearchInput(searchParams.get('search') || '');
-    }, [searchParams]);
 
     const filters = {
         search: searchParams.get('search') || '',
@@ -63,7 +50,12 @@ const ProductListPage = () => {
             try {
                 const res = await getProducts(filters);
                 setProducts(res.data || []);
-                if (res.meta) setMeta(res.meta);
+                if (res.meta) {
+                    setMeta(res.meta);
+                    setPriceRange(res.meta.priceRange || null);
+                } else {
+                    setPriceRange(null);
+                }
             } catch (err) {
                 console.error(err);
             } finally {
@@ -114,21 +106,34 @@ const ProductListPage = () => {
             <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 3 }}>
                 <Typography variant="h4" fontWeight="bold">Our Products</Typography>
 
-                <Box sx={{ display: 'flex', gap: 2 }}>
+                <Box sx={{ display: 'flex', gap: 2, alignItems: 'center' }}>
                     {showFilters && isMobile && (
                         <IconButton onClick={() => setMobileFilterOpen(true)} color="primary">
                             <FilterIcon />
                         </IconButton>
                     )}
-                    <TextField
-                        size="small"
+                    <SearchWidget
+                        variant="inline"
                         placeholder="Search products..."
-                        value={searchInput}
-                        onChange={(e) => setSearchInput(e.target.value)}
-                        InputProps={{
-                            startAdornment: <InputAdornment position="start"><SearchIcon /></InputAdornment>,
-                        }}
+                        initialValue={filters.search}
+                        onSearch={(q) => handleFilterChange({ ...filters, search: q, page: 1 })}
+                        sx={{ width: { xs: '100%', sm: 300 } }}
+                        fullWidth={isMobile}
                     />
+                    <FormControl size="small" sx={{ minWidth: 160 }}>
+                        <Select
+                            value={filters.sort || 'newest'}
+                            onChange={(e) => handleFilterChange({ ...filters, sort: e.target.value, page: 1 })}
+                            displayEmpty
+                            startAdornment={<SortIcon fontSize="small" sx={{ mr: 0.5, color: 'text.secondary' }} />}
+                            sx={{ borderRadius: 1.5, bgcolor: 'background.paper' }}
+                        >
+                            <MenuItem value="newest">Newest Arrivals</MenuItem>
+                            {pricingEnabled && <MenuItem value="price_asc">Price: Low to High</MenuItem>}
+                            {pricingEnabled && <MenuItem value="price_desc">Price: High to Low</MenuItem>}
+                            <MenuItem value="name_asc">Name: A to Z</MenuItem>
+                        </Select>
+                    </FormControl>
                 </Box>
             </Box>
 
@@ -136,7 +141,7 @@ const ProductListPage = () => {
                 {showFilters && !isMobile && (
                     <Grid item md={3} lg={2.5} sx={{ position: 'sticky', top: 24, alignSelf: 'flex-start', height: 'fit-content' }}>
                         <StorefrontSidebarMenu />
-                        <ProductFilters filters={filters} onFilterChange={handleFilterChange} />
+                        <ProductFilters filters={filters} onFilterChange={handleFilterChange} priceRange={priceRange} />
                     </Grid>
                 )}
 
@@ -160,7 +165,7 @@ const ProductListPage = () => {
             <Drawer anchor="left" open={mobileFilterOpen} onClose={() => setMobileFilterOpen(false)}>
                 <Box sx={{ width: 280, p: 3 }}>
                     <StorefrontSidebarMenu onNavigate={() => setMobileFilterOpen(false)} />
-                    <ProductFilters filters={filters} onFilterChange={(f) => { handleFilterChange(f); setMobileFilterOpen(false); }} />
+                    <ProductFilters filters={filters} onFilterChange={(f) => { handleFilterChange(f); setMobileFilterOpen(false); }} priceRange={priceRange} />
                 </Box>
             </Drawer>
         </Container>

@@ -4,12 +4,8 @@ import {
   Container,
   Typography,
   Pagination,
-  TextField,
-  InputAdornment,
   Chip,
   Paper,
-  Skeleton,
-  Grid,
   useTheme,
   alpha,
 } from '@mui/material';
@@ -17,16 +13,15 @@ import SearchIcon from '@mui/icons-material/Search';
 import SearchOffIcon from '@mui/icons-material/SearchOff';
 import { useSearchParams, useNavigate } from 'react-router-dom';
 import ProductGrid from '../../components/product/ProductGrid';
+import SearchWidget from '../../components/search/SearchWidget';
 import PageSEO from '../../components/common/PageSEO';
-import { useDebounce } from '../../hooks/useDebounce';
 import { useSettings } from '../../hooks/useSettings';
 import { searchProducts } from '../../services/searchService';
 
 /**
  * SearchResultsPage — renders full-text search results.
  *
- * Reads `q` from the URL query string, debounces local input changes,
- * and fetches paginated results from GET /api/search.
+ * Reads `q` from the URL query string and fetches paginated results from GET /api/search.
  */
 const SearchResultsPage = () => {
   const [searchParams, setSearchParams] = useSearchParams();
@@ -41,34 +36,12 @@ const SearchResultsPage = () => {
   const urlQuery = searchParams.get('q') || '';
   const urlPage = parseInt(searchParams.get('page')) || 1;
 
-  // Local input state (for debouncing)
-  const [searchInput, setSearchInput] = useState(urlQuery);
-  const debouncedInput = useDebounce(searchInput, 300);
-
   // Data state
   const [products, setProducts] = useState([]);
   const [meta, setMeta] = useState({ currentPage: 1, totalPages: 1, totalItems: 0 });
   const [loading, setLoading] = useState(false);
   const [hasSearched, setHasSearched] = useState(false);
   const [suggestion, setSuggestion] = useState(null);
-
-  // Sync debounced input → URL params
-  useEffect(() => {
-    if (debouncedInput !== urlQuery) {
-      if (debouncedInput.length >= 2) {
-        setSearchParams({ q: debouncedInput, page: '1' });
-      } else if (debouncedInput.length === 0 && urlQuery) {
-        // Clear search
-        setSearchParams({});
-      }
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [debouncedInput]);
-
-  // Sync URL → local input (browser back/forward)
-  useEffect(() => {
-    setSearchInput(urlQuery);
-  }, [urlQuery]);
 
   // Fetch results when URL params change
   useEffect(() => {
@@ -109,13 +82,6 @@ const SearchResultsPage = () => {
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
-  const handleSearchSubmit = (e) => {
-    e.preventDefault();
-    if (searchInput.trim().length >= 2) {
-      setSearchParams({ q: searchInput.trim(), page: '1' });
-    }
-  };
-
   return (
     <Container maxWidth="xl" sx={{ py: 4 }}>
       <PageSEO
@@ -135,8 +101,6 @@ const SearchResultsPage = () => {
         }}
       >
         <Box
-          component="form"
-          onSubmit={handleSearchSubmit}
           sx={{
             display: 'flex',
             flexDirection: { xs: 'column', sm: 'row' },
@@ -144,31 +108,13 @@ const SearchResultsPage = () => {
             gap: 2,
           }}
         >
-          <TextField
-            id="global-search-input"
-            fullWidth
-            size="medium"
+          <SearchWidget
+            key={urlQuery}
+            variant="inline"
             placeholder="Search products..."
-            value={searchInput}
-            onChange={(e) => setSearchInput(e.target.value)}
-            autoFocus
-            InputProps={{
-              startAdornment: (
-                <InputAdornment position="start">
-                  <SearchIcon color="action" />
-                </InputAdornment>
-              ),
-            }}
-            sx={{
-              maxWidth: { sm: 500 },
-              '& .MuiOutlinedInput-root': {
-                bgcolor: 'background.paper',
-                borderRadius: 2,
-                '&:hover .MuiOutlinedInput-notchedOutline': {
-                  borderColor: 'primary.main',
-                },
-              },
-            }}
+            initialValue={urlQuery}
+            onSearch={(q) => setSearchParams({ q, page: '1' })}
+            sx={{ maxWidth: { sm: 500 } }}
           />
 
           {urlQuery && hasSearched && !loading && (

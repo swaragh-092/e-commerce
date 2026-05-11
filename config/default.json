@@ -7,15 +7,15 @@
         "locale": "en-US"
     },
     "theme": {
-        "primaryColor": "#6C63FF",
-        "secondaryColor": "#FF6584",
-        "backgroundColor": "#0F0F1A",
-        "surfaceColor": "#1A1A2E",
-        "textColor": "#FFFFFF",
+        "primaryColor": "#0F766E",
+        "secondaryColor": "#F97316",
+        "backgroundColor": "#F7F3EC",
+        "surfaceColor": "#FFFFFF",
+        "textColor": "#1F2933",
         "fontFamily": "Inter",
-        "borderRadius": "12px",
-        "mode": "dark",
-        "headerStyle": "gradient",
+        "borderRadius": "8px",
+        "mode": "light",
+        "headerStyle": "glass",
         "buttonStyle": "solid",
         "cardStyle": "elevated",
         "backgroundStyle": "softGradient"
@@ -137,7 +137,7 @@
     },
     "nav": {
         "sticky": true,
-        "showCategoryBar": false
+        "showCategoryBar": true
     },
     "catalog": {
         "defaultSort": "newest",
@@ -148,27 +148,166 @@
         "categoryDepth": 3
     },
     "homepage": {
-        "showCategories": true,
-        "categoriesTitle": "Shop by Category",
-        "showNewArrivals": true,
-        "newArrivalsTitle": "New Arrivals",
-        "newArrivalsCount": 8,
-        "newArrivalsLayout": "grid",
-        "showFeatured": true,
-        "featuredTitle": "Featured Products",
-        "featuredCount": 8,
-        "featuredLayout": "carousel",
-        "showBestSellers": true,
-        "bestSellersTitle": "Best Sellers",
-        "bestSellersCount": 8,
-        "bestSellersLayout": "grid",
-        "showOnSale": true,
-        "onSaleTitle": "On Sale",
-        "onSaleCount": 8,
-        "onSaleLayout": "carousel",
-        "showBrands": true,
-        "brandsTitle": "Shop by Brand",
-        "brandsCount": 12
+        "seoTitle": "Home",
+        "seoDescription": "Shop fashion, lifestyle, electronics, daily essentials, and deals from a polished modern storefront.",
+        "sections": [
+            {
+                "id": "hero",
+                "type": "hero-carousel",
+                "enabled": true,
+                "autoPlay": true,
+                "interval": 6500
+            },
+            {
+                "id": "value-props",
+                "type": "value-props",
+                "enabled": true
+            },
+            {
+                "id": "categories",
+                "type": "category-shortcuts",
+                "enabled": false,
+                "dynamic": true,
+                "title": "Shop by Category",
+                "subtitle": "Quick paths to the collections your shoppers browse most.",
+                "count": 10
+            },
+            {
+                "id": "promo",
+                "type": "promo-banners",
+                "enabled": true,
+                "title": "Offers You Shouldn't Miss"
+            },
+            {
+                "id": "trending",
+                "type": "product-row",
+                "enabled": true,
+                "title": "Trending Now",
+                "source": "featured",
+                "count": 8,
+                "layout": "carousel",
+                "viewAllLabel": "View All",
+                "viewAllLink": "/products?featured=true"
+            },
+            {
+                "id": "deals",
+                "type": "product-row",
+                "enabled": true,
+                "title": "Deals of the Day",
+                "source": "sale",
+                "count": 8,
+                "layout": "grid",
+                "viewAllLabel": "All Deals",
+                "viewAllLink": "/products?onSale=true"
+            },
+            {
+                "id": "brands",
+                "type": "brand-showcase",
+                "enabled": true,
+                "title": "Featured Brands",
+                "count": 12
+            },
+            {
+                "id": "best-sellers",
+                "type": "product-row",
+                "enabled": true,
+                "title": "Best Sellers",
+                "source": "bestSellers",
+                "count": 8,
+                "layout": "carousel",
+                "viewAllLabel": "Explore",
+                "viewAllLink": "/products?sort=best-selling"
+            },
+            {
+                "id": "new-arrivals",
+                "type": "product-row",
+                "enabled": true,
+                "title": "New Arrivals",
+                "source": "newest",
+                "count": 8,
+                "layout": "grid",
+                "viewAllLabel": "New In",
+                "viewAllLink": "/products?sort=newest"
+            }
+        ],
+        "heroSlides": [
+            {
+                "eyebrow": "Mega Style Weekend",
+                "title": "Everything your cart has been waiting for",
+                "subtitle": "Fresh fashion, lifestyle picks, daily essentials, and deal-led discovery in one clean storefront.",
+                "buttonText": "Shop Now",
+                "buttonLink": "/products",
+                "secondaryButtonText": "Explore Deals",
+                "secondaryButtonLink": "/products?onSale=true",
+                "image": "https://images.unsplash.com/photo-1441986300917-64674bd600d8?auto=format&fit=crop&w=1800&q=80",
+                "position": "center",
+                "color": "#ffffff"
+            },
+            {
+                "eyebrow": "New Season Drops",
+                "title": "Fresh arrivals, handpicked for quick discovery",
+                "subtitle": "Put new products and curated edits in front of shoppers the moment they land.",
+                "buttonText": "New Arrivals",
+                "buttonLink": "/products?sort=newest",
+                "secondaryButtonText": "Best Sellers",
+                "secondaryButtonLink": "/products?sort=best-selling",
+                "image": "https://images.unsplash.com/photo-1490481651871-ab68de25d43d?auto=format&fit=crop&w=1800&q=80",
+                "position": "center",
+                "color": "#ffffff"
+            }
+        ],
+        "valueProps": [
+            {
+                "icon": "shipping",
+                "title": "Fast Delivery",
+                "text": "Reliable shipping on every order"
+            },
+            {
+                "icon": "offers",
+                "title": "Daily Offers",
+                "text": "Fresh deals across top categories"
+            },
+            {
+                "icon": "secure",
+                "title": "Secure Payments",
+                "text": "Protected checkout experience"
+            },
+            {
+                "icon": "support",
+                "title": "Easy Support",
+                "text": "Help when shoppers need it"
+            }
+        ],
+        "categoryTiles": [],
+        "promoBanners": [
+            {
+                "kicker": "Limited Time",
+                "title": "Flat 40% Off",
+                "subtitle": "Season-ready looks and daily essentials.",
+                "ctaText": "Grab Offers",
+                "link": "/products?onSale=true",
+                "color": "#FFF7ED",
+                "accentColor": "#F97316"
+            },
+            {
+                "kicker": "Curated",
+                "title": "New Brands Live",
+                "subtitle": "Fresh labels and collections added every week.",
+                "ctaText": "Explore Brands",
+                "link": "/brands",
+                "color": "#ECFEFF",
+                "accentColor": "#0891B2"
+            },
+            {
+                "kicker": "Smooth Shopping",
+                "title": "Wishlist to Checkout",
+                "subtitle": "Search, save, cart, and buy with fewer steps.",
+                "ctaText": "Start Shopping",
+                "link": "/products",
+                "color": "#F0FDF4",
+                "accentColor": "#16A34A"
+            }
+        ]
     },
     "productPage": {
         "showSKU": true,
