@@ -20,6 +20,7 @@ import { useSettings, useCurrency, useFeature } from '../../hooks/useSettings';
 import { useCart } from '../../hooks/useCart';
 import { userService } from '../../services/userService';
 import { orderService } from '../../services/orderService';
+import paymentService from '../../services/paymentService';
 import { validateCoupon, getEligibleCoupons } from '../../services/adminService';
 import { calculateShipping } from '../../services/shippingService';
 import PageSEO from '../../components/common/PageSEO';
@@ -83,6 +84,38 @@ const normalizeBuyNowItem = (item) => {
 const createCheckoutSessionId = () => {
     return uuidv4();
 };
+
+const loadScript = (src, globalName) => new Promise((resolve, reject) => {
+    if (globalName && window[globalName]) {
+        resolve(window[globalName]);
+        return;
+    }
+
+    const existing = document.querySelector(`script[src="${src}"]`);
+    if (existing) {
+        if (globalName && window[globalName]) {
+            resolve(window[globalName]);
+            return;
+        }
+        if (existing.dataset.loaded === 'true') {
+            resolve(globalName ? window[globalName] : true);
+            return;
+        }
+        existing.addEventListener('load', () => resolve(globalName ? window[globalName] : true), { once: true });
+        existing.addEventListener('error', reject, { once: true });
+        return;
+    }
+
+    const script = document.createElement('script');
+    script.src = src;
+    script.async = true;
+    script.onload = () => {
+        script.dataset.loaded = 'true';
+        resolve(globalName ? window[globalName] : true);
+    };
+    script.onerror = reject;
+    document.body.appendChild(script);
+});
 
 // Section wrapper — shows locked/completed state when not active
 const Section = ({ step, activeSection, completedSections, title, icon, summary, onEdit, children }) => {
@@ -419,6 +452,111 @@ const CheckoutPage = () => {
         }
     };
 
+    const openRazorpayPayment = async (orderId, paymentOrder) => {
+        await loadScript('https://checkout.razorpay.com/v1/checkout.js', 'Razorpay');
+
+        if (!window.Razorpay) {
+            throw new Error('Razorpay checkout is not available. Please try again.');
+        }
+
+        const options = {
+            key: import.meta.env.VITE_RAZORPAY_KEY_ID,
+            amount: paymentOrder.amount,
+            currency: paymentOrder.currency,
+            name: 'My Store',
+            description: `Order #${orderId}`,
+            order_id: paymentOrder.id,
+            handler: async (response) => {
+                try {
+                    await paymentService.verifyPayment(orderId, {
+                        razorpay_order_id: response.razorpay_order_id,
+                        razorpay_payment_id: response.razorpay_payment_id,
+                        razorpay_signature: response.razorpay_signature,
+                    });
+                    navigate('/payment/success', { state: { orderId } });
+                } catch (err) {
+                    setError(getApiErrorMessage(err, 'Payment verification failed.'));
+                    setPlacing(false);
+                }
+            },
+            prefill: {
+                name: selectedAddress?.fullName || '',
+                email: user?.email || '',
+                contact: selectedAddress?.phone || '',
+            },
+            theme: {
+                color: '#6C63FF',
+            },
+            modal: {
+                ondismiss: () => {
+                    setPlacing(false);
+                },
+            },
+        };
+
+        const rzp = new window.Razorpay(options);
+        rzp.open();
+    };
+
+    const startOnlinePayment = async (orderId) => {
+        const paymentResponse = await paymentService.createOrder(orderId);
+        const paymentOrder = paymentResponse.data?.data || paymentResponse.data;
+        const provider = paymentOrder?.provider || paymentMethod;
+
+        if (provider === 'stripe') {
+            if (!paymentOrder?.url) throw new Error('Stripe payment session is not ready. Please try again.');
+            window.location.href = paymentOrder.url;
+            return;
+        }
+
+        if (provider === 'cashfree') {
+            if (!paymentOrder?.paymentSessionId) throw new Error('Cashfree payment session is not ready. Please try again.');
+            await loadScript('https://sdk.cashfree.com/js/v3/cashfree.js', 'Cashfree');
+            const cashfree = window.Cashfree({
+                mode: paymentOrder.mode || 'sandbox',
+            });
+
+            await cashfree.checkout({
+                paymentSessionId: paymentOrder.paymentSessionId,
+                redirectTarget: '_modal',
+            });
+
+            const verificationResponse = await paymentService.verifyPayment(orderId, { provider: 'cashfree' });
+            const result = verificationResponse.data?.data || verificationResponse.data;
+            if (result?.success) {
+                navigate('/payment/success', { state: { orderId } });
+            } else {
+                setError(`Payment is not completed yet. Current status: ${result?.status || 'pending'}.`);
+                setPlacing(false);
+            }
+            return;
+        }
+
+        if (provider === 'payu') {
+            if (!paymentOrder?.action || !paymentOrder?.fields) {
+                throw new Error('PayU payment session is not ready. Please try again.');
+            }
+
+            const form = document.createElement('form');
+            form.method = 'POST';
+            form.action = paymentOrder.action;
+
+            Object.keys(paymentOrder.fields).forEach((key) => {
+                const input = document.createElement('input');
+                input.type = 'hidden';
+                input.name = key;
+                input.value = paymentOrder.fields[key];
+                form.appendChild(input);
+            });
+
+            document.body.appendChild(form);
+            form.submit();
+            return;
+        }
+
+        await openRazorpayPayment(orderId, paymentOrder);
+    };
+
     const handlePlaceOrder = async () => {
         if (!selectedAddressId) { setError('Please select a shipping address.'); return; }
         if (!paymentMethod) { setError('No payment method is currently available.'); return; }
@@ -429,6 +567,7 @@ const CheckoutPage = () => {
         }
         setPlacing(true);
         setError(null);
+        let orderPlaced = false;
         try {
             const res = await orderService.placeOrder({
                 shippingAddressId: selectedAddressId,
@@ -448,12 +587,18 @@ const CheckoutPage = () => {
             });
 
             const orderId = res?.order?.id;
+            orderPlaced = true;
             if (!isBuyNowFlow) await clearCart();
             if (paymentMethod === 'cod') navigate('/payment/success', { state: { orderId, isCod: true } });
-            else navigate(`/payment/${orderId}`);
+            else await startOnlinePayment(orderId);
 
         } catch (err) {
-            setError(getApiErrorMessage(err, 'Failed to place order. Please try again.'));
+            setError(getApiErrorMessage(
+                err,
+                orderPlaced
+                    ? 'Order placed, but payment could not be started. Please try again from your order details.'
+                    : 'Failed to place order. Please try again.'
+            ));
             setPlacing(false);
         }
     };
