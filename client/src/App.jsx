@@ -5,6 +5,7 @@ import { AuthProvider } from './context/AuthContext';
 import { CartProvider } from './context/CartContext';
 import { WishlistProvider } from './context/WishlistContext';
 import { CategoryProvider } from './context/CategoryContext';
+import { BrandProvider } from './context/BrandContext';
 import { NotificationProvider } from './context/NotificationContext';
 import AppErrorBoundary from './components/common/AppErrorBoundary';
 import AppRoutes from './routes/AppRoutes';
@@ -18,9 +19,11 @@ function App() {
             <AuthProvider>
               <CartProvider>
                 <CategoryProvider>
-                  <WishlistProvider>
-                    <AppRoutes />
-                  </WishlistProvider>
+                  <BrandProvider>
+                    <WishlistProvider>
+                      <AppRoutes />
+                    </WishlistProvider>
+                  </BrandProvider>
                 </CategoryProvider>
               </CartProvider>
             </AuthProvider>

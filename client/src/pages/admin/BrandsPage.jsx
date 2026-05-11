@@ -16,24 +16,46 @@ import {
   Paper,
   Switch,
   FormControlLabel,
+  InputAdornment,
+  Select,
+  MenuItem,
+  FormControl,
+  InputLabel,
 } from '@mui/material';
 import { DataGrid, GridActionsCellItem } from '@mui/x-data-grid';
 import {
   Add as AddIcon,
   Edit as EditIcon,
   Delete as DeleteIcon,
+  PhotoLibrary as PhotoLibraryIcon,
+  ElectricBolt as ElectricBoltIcon,
 } from '@mui/icons-material';
 import brandService from '../../services/brandService';
 import { getMediaUrl } from '../../utils/media';
 import { useNotification } from '../../context/NotificationContext';
 import MediaPicker from '../../components/common/MediaPicker';
 import { useAuth } from '../../hooks/useAuth';
+import { useBrands } from '../../context/BrandContext';
 import { PERMISSIONS } from '../../utils/permissions';
 import { getApiErrorMessage } from '../../utils/apiErrors';
+
+const generateSlug = (text) => {
+  if (!text) return '';
+  return text
+    .toString()
+    .toLowerCase()
+    .trim()
+    .replace(/\s+/g, '-')
+    .replace(/[^\w-]+/g, '')
+    .replace(/--+/g, '-')
+    .replace(/^-+/, '')
+    .replace(/-+$/, '');
+};
 
 const BrandsPage = () => {
   const { notify } = useNotification();
   const { hasPermission } = useAuth();
+  const { refreshBrands } = useBrands();
 
   const canCreateBrand = hasPermission(PERMISSIONS.PRODUCTS_CREATE);
   const canUpdateBrand = hasPermission(PERMISSIONS.PRODUCTS_UPDATE);
@@ -48,6 +70,7 @@ const BrandsPage = () => {
   // Filters
   const [search, setSearch] = useState('');
   const [searchInput, setSearchInput] = useState('');
+  const [statusFilter, setStatusFilter] = useState('all'); // all, active, inactive
 
   // Dialog state
   const [open, setOpen] = useState(false);
@@ -73,6 +96,7 @@ const BrandsPage = () => {
         page: paginationModel.page + 1,
         limit: paginationModel.pageSize,
         search: search || undefined,
+        isActive: statusFilter === 'all' ? undefined : statusFilter === 'active',
       });
       setRows(res.data.data || []);
       setTotal(res.data.meta?.total || 0);
@@ -81,7 +105,7 @@ const BrandsPage = () => {
     } finally {
       setLoading(false);
     }
-  }, [paginationModel, search, notify]);
+  }, [paginationModel, search, statusFilter, notify]);
 
   useEffect(() => {
     fetchBrands();
@@ -142,19 +166,37 @@ const BrandsPage = () => {
 
     if (!validate()) return;
 
+    const payload = {
+      ...formData,
+      slug: formData.slug.trim() || null,
+      description: formData.description.trim() || null,
+      image: formData.image || null,
+    };
+
     setSaving(true);
     try {
       if (editingBrand) {
-        await brandService.updateBrand(editingBrand.id, formData);
+        await brandService.updateBrand(editingBrand.id, payload);
         notify('Brand updated successfully.', 'success');
       } else {
-        await brandService.createBrand(formData);
+        await brandService.createBrand(payload);
         notify('Brand created successfully.', 'success');
       }
       handleCloseDialog();
       fetchBrands();
+      refreshBrands();
     } catch (err) {
-      notify(getApiErrorMessage(err, 'Failed to save brand'), 'error');
+      const apiError = err?.response?.data?.error;
+      if (apiError?.details && Array.isArray(apiError.details)) {
+        const fieldErrors = {};
+        apiError.details.forEach((d) => {
+          fieldErrors[d.field] = d.message;
+        });
+        setErrors(fieldErrors);
+        notify(apiError.message || 'Validation failed', 'error');
+      } else {
+        notify(getApiErrorMessage(err, 'Failed to save brand'), 'error');
+      }
     } finally {
       setSaving(false);
     }
@@ -171,6 +213,7 @@ const BrandsPage = () => {
       notify('Brand deleted successfully.', 'success');
       setDeleteConfirm({ open: false, id: null, name: '' });
       fetchBrands();
+      refreshBrands();
     } catch (err) {
       notify('Failed to delete brand', 'error');
     }
@@ -283,22 +326,35 @@ const BrandsPage = () => {
               onChange={(e) => setSearchInput(e.target.value)}
               sx={{ width: 300 }}
             />
+            <FormControl size="small" sx={{ width: 150 }}>
+              <InputLabel>Status</InputLabel>
+              <Select
+                value={statusFilter}
+                label="Status"
+                onChange={(e) => {
+                  setStatusFilter(e.target.value);
+                  setPaginationModel((prev) => ({ ...prev, page: 0 }));
+                }}
+              >
+                <MenuItem value="all">All Status</MenuItem>
+                <MenuItem value="active">Active Only</MenuItem>
+                <MenuItem value="inactive">Inactive Only</MenuItem>
+              </Select>
+            </FormControl>
             <Button type="submit" variant="outlined">
               Search
             </Button>
-            {search && (
-              <Button
-                variant="text"
-                color="inherit"
-                onClick={() => {
-                  setSearch('');
-                  setSearchInput('');
-                  setPaginationModel((p) => ({ ...p, page: 0 }));
-                }}
-              >
-                Clear
-              </Button>
-            )}
+            <Button 
+              variant="text" 
+              onClick={() => {
+                setSearchInput('');
+                setSearch('');
+                setStatusFilter('all');
+                setPaginationModel((prev) => ({ ...prev, page: 0 }));
+              }}
+            >
+              Reset
+            </Button>
           </Stack>
         </form>
       </Paper>
@@ -325,7 +381,17 @@ const BrandsPage = () => {
               fullWidth
               label="Brand Name *"
               value={formData.name}
-              onChange={(e) => setFormData({ ...formData, name: e.target.value })}
+              onChange={(e) => {
+                const newName = e.target.value;
+                setFormData((prev) => {
+                  const newData = { ...prev, name: newName };
+                  // Auto-update slug if it's a new brand and slug hasn't been manually edited
+                  if (!editingBrand && (!prev.slug || prev.slug === generateSlug(prev.name))) {
+                    newData.slug = generateSlug(newName);
+                  }
+                  return newData;
+                });
+              }}
               error={!!errors.name}
               helperText={errors.name}
             />
@@ -335,6 +401,33 @@ const BrandsPage = () => {
               placeholder="Auto-generated if empty"
               value={formData.slug}
               onChange={(e) => setFormData({ ...formData, slug: e.target.value })}
+              error={!!errors.slug}
+              helperText={
+                errors.slug || (
+                  formData.slug 
+                    ? 'Slug used in URLs' 
+                    : formData.name 
+                      ? `Preview: ${generateSlug(formData.name)}` 
+                      : 'Auto-generated from name if left blank'
+                )
+              }
+              InputProps={{
+                endAdornment: (
+                  <InputAdornment position="end">
+                    <Tooltip title="Regenerate slug from name">
+                      <span>
+                        <IconButton
+                          size="small"
+                          onClick={() => setFormData({ ...formData, slug: generateSlug(formData.name) })}
+                          disabled={!formData.name?.trim()}
+                        >
+                          <ElectricBoltIcon fontSize="small" color="warning" />
+                        </IconButton>
+                      </span>
+                    </Tooltip>
+                  </InputAdornment>
+                ),
+              }}
             />
             <TextField
               fullWidth
@@ -343,6 +436,9 @@ const BrandsPage = () => {
               rows={3}
               value={formData.description}
               onChange={(e) => setFormData({ ...formData, description: e.target.value })}
+              inputProps={{ maxLength: 2000 }}
+              helperText={`${formData.description?.length || 0}/2000 characters`}
+              error={!!errors.description}
             />
             
             <Box>

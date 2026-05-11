@@ -3,6 +3,10 @@
 const brandService = require('./brand.service');
 const { success, paginated } = require('../../utils/response');
 
+const { PERMISSIONS, getPermissionsForUser } = require('../../config/permissions');
+
+const hasBrandAdminView = (user) => getPermissionsForUser(user).includes(PERMISSIONS.PRODUCTS_READ);
+
 const createBrand = async (req, res, next) => {
     try {
         const brand = await brandService.createBrand(req.validated);
@@ -14,7 +18,8 @@ const createBrand = async (req, res, next) => {
 
 const getBrands = async (req, res, next) => {
     try {
-        const { brands, meta } = await brandService.getBrands(req.query);
+        const isAdmin = hasBrandAdminView(req.user);
+        const { brands, meta } = await brandService.getBrands(req.query, isAdmin);
         return paginated(res, brands, meta.total, meta.page, meta.limit, 'Brands retrieved successfully');
     } catch (err) {
         next(err);
@@ -23,7 +28,8 @@ const getBrands = async (req, res, next) => {
 
 const getBrandBySlug = async (req, res, next) => {
     try {
-        const brand = await brandService.getBrandBySlug(req.params.slug);
+        const isAdmin = hasBrandAdminView(req.user);
+        const brand = await brandService.getBrandBySlug(req.params.slug, isAdmin, req.query);
         return success(res, { brand }, 'Brand retrieved successfully');
     } catch (err) {
         next(err);

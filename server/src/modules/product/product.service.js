@@ -249,11 +249,10 @@ exports.getProducts = async (filters, page, limit, isAdmin = false) => {
     if (isUUID) {
       where.brandId = filters.brand;
     } else {
-      const b = await Brand.findOne({ where: { slug: filters.brand }, attributes: ['id'] });
-      if (b) {
-        where.brandId = b.id;
-      } else {
-        where.id = null;
+      const brandInclude = include.find((inc) => inc.as === 'brand');
+      if (brandInclude) {
+        brandInclude.where = { slug: filters.brand };
+        brandInclude.required = true;
       }
     }
   }

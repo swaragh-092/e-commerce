@@ -5,8 +5,8 @@ import {
 import { Link } from 'react-router-dom';
 import { getProducts } from '../../services/productService';
 import { getCategories } from '../../services/categoryService';
-import { getBrands } from '../../services/brandService';
 import { useSettings } from '../../hooks/useSettings';
+import { useBrands } from '../../context/BrandContext';
 import ProductRow from '../../components/product/ProductRow';
 import CategoryGrid from '../../components/storefront/CategoryGrid';
 import BrandStrip from '../../components/storefront/BrandStrip';
@@ -22,10 +22,30 @@ const num  = (val, fallback = 8)    => {
 };
 const str  = (val, fallback = '')   => (val ?? fallback);
 
+// Helper to extract array from paginated or standard success response
+const extractArray = (res, count) => {
+    if (!res || res.status !== 'fulfilled' || !res.value) return [];
+    
+    const val = res.value;
+    
+    // If the service already unwrapped it to an array (like categoryService)
+    if (Array.isArray(val)) {
+        return count ? val.slice(0, count) : val;
+    }
+
+    // If it's the API payload { success, data: [...], ... } (like productService)
+    if (val.data && Array.isArray(val.data)) {
+        return count ? val.data.slice(0, count) : val.data;
+    }
+    
+    return [];
+};
+
 // ─── component ──────────────────────────────────────────────────────────────
 
 const HomePage = () => {
     const { settings } = useSettings();
+    const { brands: contextBrands, loading: brandsLoading } = useBrands();
     const pricingEnabled = useFeature('pricing');
     const theme = useTheme();
 
@@ -88,7 +108,6 @@ const HomePage = () => {
         bestSellers: [],
         onSale: [],
         categories: [],
-        brands: [],
     });
     const [loading, setLoading] = useState(true);
 
@@ -100,18 +119,16 @@ const HomePage = () => {
             showBestSellers  ? getProducts({ sort: 'best-selling',  limit: bestSellersCount,  status: 'published' }) : Promise.resolve(null),
             showOnSale       ? getProducts({ sale: true,            limit: onSaleCount,       status: 'published' }) : Promise.resolve(null),
             showCategories   ? getCategories()                                                                        : Promise.resolve(null),
-            showBrands       ? getBrands({ limit: brandsCount, isActive: true }).then(r => r.data)                   : Promise.resolve(null),
         ];
 
         setLoading(true);
-        Promise.allSettled(fetches).then(([na, ft, bs, os, cats, brs]) => {
+        Promise.allSettled(fetches).then(([na, ft, bs, os, cats]) => {
             setData({
-                newArrivals:  na.status  === 'fulfilled' && na.value?.data  ? (na.value.data.slice  ? na.value.data.slice(0, newArrivalsCount)  : na.value.data)  : [],
-                featured:     ft.status  === 'fulfilled' && ft.value?.data  ? (ft.value.data.slice  ? ft.value.data.slice(0, featuredCount)     : ft.value.data)  : [],
-                bestSellers:  bs.status  === 'fulfilled' && bs.value?.data  ? (bs.value.data.slice  ? bs.value.data.slice(0, bestSellersCount)  : bs.value.data)  : [],
-                onSale:       os.status  === 'fulfilled' && os.value?.data  ? (os.value.data.slice  ? os.value.data.slice(0, onSaleCount)       : os.value.data)  : [],
-                categories:   cats.status === 'fulfilled' && Array.isArray(cats.value) ? cats.value.slice(0, categoriesCount) : [],
-                brands:       brs.status  === 'fulfilled' && Array.isArray(brs.value)  ? brs.value.slice(0, brandsCount)      : [],
+                newArrivals:  extractArray(na, newArrivalsCount),
+                featured:     extractArray(ft, featuredCount),
+                bestSellers:  extractArray(bs, bestSellersCount),
+                onSale:       extractArray(os, onSaleCount),
+                categories:   extractArray(cats, categoriesCount),
             });
         }).finally(() => setLoading(false));
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -121,7 +138,6 @@ const HomePage = () => {
         showBestSellers, bestSellersCount,
         showOnSale, onSaleCount,
         showCategories, categoriesCount,
-        showBrands, brandsCount,
     ]);
 
     // ── render ────────────────────────────────────────────────────────────
@@ -267,8 +283,8 @@ const HomePage = () => {
                 {showBrands && (
                     <BrandStrip
                         title={brandsTitle}
-                        brands={data.brands}
-                        loading={loading}
+                        brands={contextBrands.slice(0, brandsCount)}
+                        loading={brandsLoading}
                     />
                 )}
 

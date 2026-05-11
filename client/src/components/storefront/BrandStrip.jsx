@@ -1,7 +1,7 @@
 import React from 'react';
-import { Box, Typography, Chip, Skeleton } from '@mui/material';
+import { Box, Typography, Chip, Skeleton, Avatar } from '@mui/material';
 import { Link } from 'react-router-dom';
-import LocalOfferOutlinedIcon from '@mui/icons-material/LocalOfferOutlined';
+import { getMediaUrl } from '../../utils/media';
 
 /**
  * BrandStrip — horizontal brand chip strip for the homepage.
@@ -25,25 +25,37 @@ const BrandStrip = ({ title, brands = [], loading = false }) => {
                             component={Link}
                             to={`/products?brand=${brand.slug}`}
                             clickable
-                            icon={<LocalOfferOutlinedIcon fontSize="small" />}
+                            avatar={
+                                <Avatar 
+                                    src={brand.image ? getMediaUrl(brand.image) : ''} 
+                                    alt={brand.name}
+                                    sx={{ 
+                                        bgcolor: 'primary.light', 
+                                        color: 'primary.contrastText',
+                                        fontWeight: 800,
+                                        fontSize: '0.75rem'
+                                    }}
+                                >
+                                    {brand.name?.[0]?.toUpperCase()}
+                                </Avatar>
+                            }
                             variant="outlined"
                             size="medium"
                             sx={{
                                 fontSize: '0.875rem',
-                                py: 2,
+                                py: 2.5,
                                 px: 0.5,
                                 fontWeight: 700,
+                                borderRadius: '12px',
                                 bgcolor: 'background.paper',
                                 borderColor: 'divider',
-                                transition: 'background-color 0.2s ease, color 0.2s ease, border-color 0.2s ease, transform 0.2s ease',
+                                transition: 'all 0.2s ease',
                                 '&:hover': {
                                     bgcolor: 'primary.main',
                                     color: 'primary.contrastText',
                                     borderColor: 'primary.main',
                                     transform: 'translateY(-2px)',
-                                    '& .MuiChip-icon': {
-                                        color: 'inherit',
-                                    },
+                                    boxShadow: 2,
                                 },
                             }}
                         />

@@ -8,7 +8,7 @@ const AppError = require('../../utils/AppError');
 const createBrand = async (data) => {
     const transaction = await Brand.sequelize.transaction();
     try {
-        const { name, slug, description, image, isActive } = data;
+        const { name, slug, description, image, isActive = true } = data;
         
         // Use text from slug if provided, otherwise name, and ensure uniqueness
         const finalSlug = await generateSlug(slug || name, Brand, 'slug', { transaction });
@@ -18,7 +18,7 @@ const createBrand = async (data) => {
             slug: finalSlug,
             description,
             image,
-            isActive: isActive !== undefined ? isActive : true,
+            isActive,
         }, { transaction });
         
         await transaction.commit();
@@ -29,23 +29,41 @@ const createBrand = async (data) => {
     }
 };
 
-const getBrands = async (query = {}) => {
+const getBrands = async (query = {}, isAdmin = false) => {
     const { search, isActive, limit = 20, page = 1, sortBy = 'name', sortOrder = 'ASC' } = query;
     const offset = (page - 1) * limit;
 
     const where = {};
+
+    // For storefront, always only show active brands
+    if (!isAdmin) {
+        where.isActive = true;
+    } else if (isActive !== undefined) {
+        // For admin, allow filtering by isActive status if provided
+        where.isActive = isActive === 'true' || isActive === true;
+    }
+
     if (search) {
         where.name = { [Op.iLike]: `%${search}%` };
     }
-    if (isActive !== undefined) {
-        where.isActive = isActive === 'true' || isActive === true;
-    }
+
+    // Map frontend sort names to database columns/attributes
+    const sortMap = {
+        name: 'name',
+        createdAt: 'createdAt',
+        updatedAt: 'updatedAt',
+        created_at: 'createdAt', // fallback
+        updated_at: 'updatedAt', // fallback
+    };
+
+    const orderCol = sortMap[sortBy] || 'name';
+    const orderDir = sortOrder.toUpperCase() === 'DESC' ? 'DESC' : 'ASC';
 
     const { count, rows } = await Brand.findAndCountAll({
         where,
         limit: parseInt(limit),
         offset: parseInt(offset),
-        order: [[sortBy, sortOrder]],
+        order: [[orderCol, orderDir]],
     });
 
     return {
@@ -59,10 +77,33 @@ const getBrands = async (query = {}) => {
     };
 };
 
-const getBrandBySlug = async (slug) => {
+const getBrandBySlug = async (slug, isAdmin = false, query = {}) => {
+    const { productLimit } = query;
+    const where = { slug };
+    if (!isAdmin) {
+        where.isActive = true;
+    }
+
+    const productInclude = {
+        model: Product,
+        as: 'products',
+        required: false,
+    };
+
+    // If not admin, only show active/published products
+    if (!isAdmin) {
+        productInclude.where = { status: 'published', isEnabled: true };
+        productInclude.limit = parseInt(productLimit) || 10;
+    } else {
+        // For admin, allow configurable limit but default to no limit if not specified
+        if (productLimit) {
+            productInclude.limit = parseInt(productLimit);
+        }
+    }
+
     const brand = await Brand.findOne({
-        where: { slug },
-        include: [{ model: Product, as: 'products', where: { status: 'published', isEnabled: true }, required: false, limit: 10 }]
+        where,
+        include: [productInclude]
     });
 
     if (!brand) {
@@ -108,17 +149,20 @@ const updateBrand = async (id, data) => {
 };
 
 const deleteBrand = async (id) => {
-    const brand = await Brand.findByPk(id);
-    if (!brand) {
-        throw new AppError('BRAND_ERROR', 404, 'Brand not found');
-    }
+    const transaction = await sequelize.transaction();
+    try {
+        const brand = await Brand.findByPk(id, { transaction });
+        if (!brand) {
+            throw new AppError('BRAND_ERROR', 404, 'Brand not found');
+        }
 
-    // According to user preference: "set brand_id to null" on products
-    // Sequelize association with onDelete: 'SET NULL' handles this if we use queryInterface or raw deletes, 
-    // but for application level soft delete/logic we should be careful.
-    // Since we are doing a hard delete of the brand entry here:
-    await brand.destroy();
-    return true;
+        await brand.destroy({ transaction });
+        await transaction.commit();
+        return true;
+    } catch (error) {
+        await transaction.rollback();
+        throw error;
+    }
 };
 
 module.exports = {
