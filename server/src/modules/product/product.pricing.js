@@ -166,6 +166,11 @@ const serializeProductPricing = (product, { adminView = false, features = {} } =
   if (!product) return product;
 
   const plain = typeof product.toJSON === 'function' ? product.toJSON() : { ...product };
+
+  // Strip internal fields that should never appear in API responses
+  delete plain.searchVector;
+  delete plain.search_vector;
+  delete plain.relevance;
   
   // Resolve label first because status/active checks depend on it for date fallback.
   const saleLabelResolved = resolveSaleLabel(plain.saleLabel, labelPresets);

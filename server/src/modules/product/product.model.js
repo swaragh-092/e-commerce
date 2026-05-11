@@ -128,11 +128,21 @@ module.exports = (sequelize, DataTypes) => {
             type: DataTypes.STRING(500),
             field: 'og_image'
         },
+        // Full-Text Search vector — managed by PostgreSQL trigger, read-only in app code
+        searchVector: {
+            type: DataTypes.TSVECTOR,
+            allowNull: true,
+            field: 'search_vector',
+        },
     }, {
         tableName: 'products',
         timestamps: true,
         underscored: true,
         paranoid: true, // soft delete via deleted_at
+        defaultScope: {
+            // Exclude internal FTS column from API responses
+            attributes: { exclude: ['search_vector'] },
+        },
     });
 
     Product.associate = (models) => {

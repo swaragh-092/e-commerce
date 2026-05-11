@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { Box, AppBar, Toolbar, Typography, Button, IconButton, Badge, Menu, MenuItem, Divider, Avatar, Alert } from '@mui/material';
 import ShoppingCartIcon from '@mui/icons-material/ShoppingCart';
+import SearchIcon from '@mui/icons-material/Search';
 import CloseIcon from '@mui/icons-material/Close';
 import AccountCircleIcon from '@mui/icons-material/AccountCircle';
 import PersonIcon from '@mui/icons-material/Person';
@@ -17,6 +18,7 @@ import CategoryNav from '../components/layout/CategoryNav';
 import StorefrontFooter from '../components/layout/StorefrontFooter';
 import { useWishlist } from '../context/WishlistContext';
 import { useCategories } from '../context/CategoryContext';
+import GlobalSearchBar from '../components/search/GlobalSearchBar';
 import PageService from '../services/pageService';
 import MenuService from '../services/menuService';
 import { ADMIN_ACCESS_PERMISSIONS, getFirstAccessibleAdminPath } from '../utils/permissions';
@@ -354,6 +356,10 @@ const StoreLayout = () => {
 
           {(headerAlignment === 'left' || headerAlignment === 'center') && <Box sx={{ flexGrow: 1, minWidth: 8 }} />}
 
+          {/* Global Search Bar */}
+          <Box sx={{ display: { xs: 'none', md: 'flex' }, flexGrow: 1, maxWidth: 520, mx: 1 }}>
+            <GlobalSearchBar />
+          </Box>
 
           {mobileHeaderItems.length > 0 && (
             <>
@@ -379,6 +385,16 @@ const StoreLayout = () => {
           )}
 
           <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
+            {/* Mobile search icon — navigates to /search page */}
+            <IconButton
+              color="inherit"
+              component={RouterLink}
+              to="/search"
+              aria-label="Search products"
+              sx={{ display: { xs: 'inline-flex', md: 'none' }, '&:hover': { bgcolor: 'rgba(255,255,255,0.12)' } }}
+            >
+              <SearchIcon />
+            </IconButton>
             {cartEnabled && (
               <IconButton color="inherit" component={RouterLink} to="/cart" sx={{ '&:hover': { bgcolor: 'rgba(255,255,255,0.12)' } }}>
                 <Badge badgeContent={cartCount || 0} color="error">

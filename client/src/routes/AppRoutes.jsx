@@ -48,6 +48,7 @@ const PaymentPage = lazy(() => import('../pages/storefront/PaymentPage'));
 const PaymentSuccessPage = lazy(() => import('../pages/storefront/PaymentSuccessPage'));
 const PaymentFailurePage = lazy(() => import('../pages/storefront/PaymentFailurePage'));
 const HomePage = lazy(() => import('../pages/storefront/HomePage'));
+const SearchResultsPage = lazy(() => import('../pages/storefront/SearchResultsPage'));
 const NotFoundPage = lazy(() => import('../pages/storefront/NotFoundPage'));
 
 // Admin pages
@@ -116,6 +117,7 @@ const AppRoutes = () => (
         <Route path="product/:slug" element={<ProductDetailPage />} />
         <Route path="category/:categorySlug" element={<ProductListPage />} />
         <Route path="p/:slug" element={<StaticPageView />} />
+        <Route path="search" element={<SearchResultsPage />} />
         <Route path="cart" element={<CartPage />} />
 
         {/* Auth */}
