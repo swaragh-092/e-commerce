@@ -1,13 +1,12 @@
 import React, { useState, useEffect } from 'react';
-import { Box, Container, Grid, Typography, Pagination, TextField, InputAdornment, Drawer, IconButton, useTheme, useMediaQuery, FormControl, Select, MenuItem } from '@mui/material';
-import { Search as SearchIcon, FilterList as FilterIcon, Sort as SortIcon } from '@mui/icons-material';
+import { Box, Container, Grid, Typography, Pagination, Drawer, IconButton, useTheme, useMediaQuery, FormControl, Select, MenuItem } from '@mui/material';
+import { FilterList as FilterIcon, Sort as SortIcon } from '@mui/icons-material';
 import { useSearchParams } from 'react-router-dom';
 import ProductGrid from '../../components/product/ProductGrid';
 import ProductFilters from '../../components/product/ProductFilters';
 import StorefrontSidebarMenu from '../../components/layout/StorefrontSidebarMenu';
 import { getProducts } from '../../services/productService';
 import { getCategoryTree } from '../../services/categoryService';
-import SearchWidget from '../../components/search/SearchWidget';
 import PageSEO from '../../components/common/PageSEO';
 import { useSettings, useFeature } from '../../hooks/useSettings';
 
@@ -112,14 +111,6 @@ const ProductListPage = () => {
                             <FilterIcon />
                         </IconButton>
                     )}
-                    <SearchWidget
-                        variant="inline"
-                        placeholder="Search products..."
-                        initialValue={filters.search}
-                        onSearch={(q) => handleFilterChange({ ...filters, search: q, page: 1 })}
-                        sx={{ width: { xs: '100%', sm: 300 } }}
-                        fullWidth={isMobile}
-                    />
                     <FormControl size="small" sx={{ minWidth: 160 }}>
                         <Select
                             value={filters.sort || 'newest'}

@@ -297,9 +297,7 @@ const ProductsManagePage = () => {
       .then((res) => {
         setRows(res?.data || []);
         setTotal(res?.meta?.total || 0);
-        if (res?.counts) {
-          setCounts(res.counts);
-        }
+        setCounts(res?.counts || res?.meta?.counts || { published: 0, draft: 0 });
       })
       .catch(console.error)
       .finally(() => setLoading(false));
