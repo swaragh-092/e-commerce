@@ -8,12 +8,20 @@ const createProductSchema = Joi.object({
   description: Joi.string().allow('', null),
   shortDescription: Joi.string().max(500).allow('', null),
   sku: Joi.string().max(100).allow('', null),
-  price: Joi.number().precision(2).positive().required(),
+  price: Joi.number().precision(2).positive().when('type', {
+    is: 'variable',
+    then: Joi.forbidden(),
+    otherwise: Joi.required()
+  }),
   salePrice: Joi.number().precision(2).positive().allow(null).less(Joi.ref('price')),
   saleStartAt: Joi.date().iso().allow(null),
   saleEndAt: Joi.date().iso().allow(null).greater(Joi.ref('saleStartAt')),
   saleLabel: Joi.string().max(100).allow('', null),
-  quantity: Joi.number().integer().min(0),
+  quantity: Joi.number().integer().min(0).when('type', {
+    is: 'simple',
+    then: Joi.required(),
+    otherwise: Joi.forbidden()
+  }),
   weight: Joi.number().precision(2).min(0).allow(null), // legacy field
   requiresShipping: Joi.boolean().default(true),
   weightGrams: Joi.number().integer().min(0).allow(null),
@@ -27,6 +35,7 @@ const createProductSchema = Joi.object({
     cgst: Joi.number().min(0).max(1),
     igst: Joi.number().min(0).max(1),
   }).allow(null),
+  type: Joi.string().valid('simple', 'variable', 'combo').required(),
   status: Joi.string().valid('draft', 'published'),
   isFeatured: Joi.boolean(),
   categoryIds: Joi.array().items(Joi.string().uuid()),
@@ -46,7 +55,11 @@ const createProductSchema = Joi.object({
         })
       ).min(1).required(),
     })
-  ),
+  ).when('type', {
+    is: 'variable',
+    then: Joi.required(),
+    otherwise: Joi.forbidden()
+  }),
   images: Joi.array().items(
     Joi.object({
       url: Joi.string().allow('', null),
@@ -59,7 +72,7 @@ const createProductSchema = Joi.object({
 });
 
 const updateProductSchema = createProductSchema
-  .fork(['name', 'price'], (schema) => schema.optional())
+  .fork(['name', 'price', 'type'], (schema) => schema.optional())
   .min(1);
 
 const bulkSaleSchema = Joi.object({

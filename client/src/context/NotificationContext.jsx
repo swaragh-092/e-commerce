@@ -1,5 +1,5 @@
 import React, { createContext, useContext, useState, useCallback } from 'react';
-import { 
+import {
   Snackbar, 
   Alert, 
   Slide, 
@@ -13,6 +13,26 @@ import {
 } from '@mui/material';
 
 const NotificationContext = createContext(null);
+const DEFAULT_CONFIRM_TEXT = 'Confirm';
+const DEFAULT_CANCEL_TEXT = 'Cancel';
+
+const isRenderable = (value) => (
+  React.isValidElement(value) ||
+  ['string', 'number'].includes(typeof value)
+);
+
+const toRenderableText = (value, fallback = '') => {
+  if (isRenderable(value)) return value;
+  if (value == null || value === false) return fallback;
+  return String(value);
+};
+
+const getButtonColor = (severity) => {
+  if (severity === 'danger' || severity === 'error') return 'error';
+  if (severity === 'warning') return 'warning';
+  if (severity === 'success') return 'success';
+  return 'primary';
+};
 
 function SlideTransition(props) {
   return <Slide {...props} direction="up" />;
@@ -25,7 +45,9 @@ export const NotificationProvider = ({ children }) => {
     title: '', 
     message: '', 
     resolve: null,
-    severity: 'primary' 
+    severity: 'primary',
+    confirmText: DEFAULT_CONFIRM_TEXT,
+    cancelText: DEFAULT_CANCEL_TEXT,
   });
 
   const notify = useCallback((message, severity = 'info', action = null) => {
@@ -36,9 +58,21 @@ export const NotificationProvider = ({ children }) => {
   }, []);
 
 
-  const confirm = useCallback((title, message, severity = 'primary') => {
+  const confirm = useCallback((titleOrOptions, message, severity = 'primary') => {
     return new Promise((resolve) => {
-      setConfirmDialog({ open: true, title, message, resolve, severity });
+      const options = titleOrOptions && typeof titleOrOptions === 'object' && !React.isValidElement(titleOrOptions)
+        ? titleOrOptions
+        : { title: titleOrOptions, message, severity };
+
+      setConfirmDialog({
+        open: true,
+        title: toRenderableText(options.title, 'Confirm Action'),
+        message: toRenderableText(options.message),
+        resolve,
+        severity: options.severity || 'primary',
+        confirmText: toRenderableText(options.confirmText, DEFAULT_CONFIRM_TEXT),
+        cancelText: toRenderableText(options.cancelText, DEFAULT_CANCEL_TEXT),
+      });
     });
   }, []);
 
@@ -128,21 +162,21 @@ export const NotificationProvider = ({ children }) => {
             onClick={() => handleConfirmClose(false)} 
             sx={{ color: 'text.secondary', fontWeight: 600 }}
           >
-            Cancel
+            {confirmDialog.cancelText}
           </Button>
           <Button 
             onClick={() => handleConfirmClose(true)} 
             variant="contained" 
-            color={confirmDialog.severity === 'danger' ? 'error' : 'primary'}
+            color={getButtonColor(confirmDialog.severity)}
             autoFocus
             sx={{ 
               borderRadius: '8px',
               padding: '6px 24px',
               fontWeight: 600,
-              boxShadow: confirmDialog.severity === 'danger' ? '0 4px 14px 0 rgba(211, 47, 47, 0.39)' : '0 4px 14px 0 rgba(25, 118, 210, 0.39)'
+              boxShadow: getButtonColor(confirmDialog.severity) === 'error' ? '0 4px 14px 0 rgba(211, 47, 47, 0.39)' : '0 4px 14px 0 rgba(25, 118, 210, 0.39)'
             }}
           >
-            Confirm
+            {confirmDialog.confirmText}
           </Button>
         </DialogActions>
       </Dialog>

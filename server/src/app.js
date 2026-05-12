@@ -107,6 +107,7 @@ const categoryAttributeRoutes = require('./modules/attribute/categoryAttribute.r
 const productAttributeRoutes = require('./modules/attribute/productAttribute.routes');
 const productVariantRoutes = require('./modules/attribute/productVariant.routes');
 const productTabRoutes = require('./modules/product/productTab.routes');
+const productComboRoutes = require('./modules/product/productCombo.routes');
 const pageRoutes = require('./modules/page/page.routes');
 const menuRoutes = require('./modules/menu/menu.routes');
 const notificationRoutes = require('./modules/notification/notification.routes');
@@ -143,6 +144,7 @@ app.use('/api/categories', categoryAttributeRoutes); // extends existing /api/ca
 app.use('/api/products', productAttributeRoutes);   // extends existing /api/products with /:id/attributes sub-routes
 app.use('/api/products', productVariantRoutes);     // extends existing /api/products with /:id/variants/* sub-routes
 app.use('/api/products', productTabRoutes);        // Product custom tabs sub-resource
+app.use('/api/products', productComboRoutes);       // Product combo items sub-resource
 app.use('/api/pages', pageRoutes);
 app.use('/api/menus', menuRoutes);
 app.use('/api/notifications', notificationRoutes);
