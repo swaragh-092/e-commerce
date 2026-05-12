@@ -63,8 +63,9 @@ const validateCoupon = async (req, res, next) => {
 
 const listPublic = async (req, res, next) => {
   try {
-    const coupons = await CouponService.listPublic();
-    return success(res, coupons);
+    const { page = 1, limit = 20 } = req.query;
+    const result = await CouponService.listPublic({ page, limit });
+    return paginated(res, result.rows, result.count, page, limit);
   } catch (err) {
     next(err);
   }

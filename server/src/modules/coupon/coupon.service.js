@@ -298,10 +298,6 @@ const assertCouponRules = (coupon) => {
     if (coupon.startDate && coupon.endDate && new Date(coupon.endDate) <= new Date(coupon.startDate)) {
         throw new AppError('VALIDATION_ERROR', 400, 'End date must be after start date');
     }
-    // Note: Empty applicableIds now allowed; defaults to all items in that scope.
-    if (coupon.type === 'percentage' && toNumber(coupon.value) > 100) {
-        throw new AppError('VALIDATION_ERROR', 400, 'Percentage discount cannot exceed 100%');
-    }
     if (!['manual', 'suggest', 'auto'].includes(coupon.applicationMode || 'manual')) {
         throw new AppError('VALIDATION_ERROR', 400, 'Invalid coupon application mode');
     }
@@ -639,7 +635,11 @@ const validateCoupon = async (code, userId, rawContext = {}) => {
     if (!(await isCouponsEnabled())) {
         throw new AppError('FORBIDDEN', 403, 'Coupons feature is currently disabled');
     }
-    const couponRecord = await Coupon.findOne({ where: { code: code.toUpperCase() } });
+    const couponRecord = await Coupon.findOne({
+        where: { code: code.toUpperCase() },
+        transaction: rawContext.transaction,
+        lock: rawContext.transaction ? Transaction.LOCK.UPDATE : undefined
+    });
     if (!couponRecord) throw new AppError('NOT_FOUND', 404, 'Coupon not found');
 
     const coupon = serializeCoupon(couponRecord);
@@ -655,6 +655,9 @@ const validateCoupon = async (code, userId, rawContext = {}) => {
             ['priority', 'DESC'],
             ['createdAt', 'DESC'],
         ],
+        transaction: context.transaction,
+        lock: context.transaction ? Transaction.LOCK.UPDATE : undefined,
+        limit: 50
     });
 
     const autoEvaluations = [];
@@ -693,7 +696,11 @@ const resolveCoupons = async (codes = [], userId, rawContext = {}) => {
 
     const manualEvaluations = [];
     for (const code of normalizedCodes) {
-        const couponRecord = await Coupon.findOne({ where: { code } });
+        const couponRecord = await Coupon.findOne({
+            where: { code },
+            transaction: context.transaction,
+            lock: context.transaction ? Transaction.LOCK.UPDATE : undefined
+        });
         if (!couponRecord) {
             throw new AppError('NOT_FOUND', 404, `Coupon ${code} not found`);
         }
@@ -722,6 +729,9 @@ const resolveCoupons = async (codes = [], userId, rawContext = {}) => {
             ['priority', 'DESC'],
             ['createdAt', 'DESC'],
         ],
+        transaction: context.transaction,
+        lock: context.transaction ? Transaction.LOCK.UPDATE : undefined,
+        limit: 50
     });
 
     const autoEvaluations = [];
@@ -768,6 +778,7 @@ const getEligibleCoupons = async (userId, rawContext = {}) => {
             ['priority', 'DESC'],
             ['createdAt', 'DESC'],
         ],
+        limit: 100
     });
 
     const evaluations = await Promise.all(candidateCoupons.map(async (couponRecord) => {
@@ -808,8 +819,9 @@ const getEligibleCoupons = async (userId, rawContext = {}) => {
     };
 };
 
-const listPublic = async () => {
-    const activeCoupons = await Coupon.findAll({
+const listPublic = async ({ page = 1, limit = 20 } = {}) => {
+    const { limit: lmt, offset } = getPagination(page, limit);
+    const result = await Coupon.findAndCountAll({
         where: {
             visibility: 'public',
             isActive: true,
@@ -819,11 +831,11 @@ const listPublic = async () => {
             ['value', 'DESC'],
             ['createdAt', 'DESC'],
         ],
+        limit: lmt,
+        offset,
     });
 
-    // Serialize once, filter by computed status, then shape for public consumption.
-    // Avoid double-serialization by reusing the already-plain object.
-    return activeCoupons
+    const rows = result.rows
         .map((coupon) => serializeCoupon(coupon))
         .filter((coupon) => coupon.status === 'active')
         .map((plain) => ({
@@ -841,6 +853,11 @@ const listPublic = async () => {
             endDate: plain.endDate,
             summary: plain.summary,
         }));
+
+    return {
+        count: result.count,
+        rows
+    };
 };
 
 module.exports = { list, findById, create, update, remove, validateCoupon, resolveCoupons, listPublic, getEligibleCoupons };

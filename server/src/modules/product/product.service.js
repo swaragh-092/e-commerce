@@ -390,8 +390,6 @@ exports.getProducts = async (filters, page, limit, isAdmin = false) => {
         tagInclude.required = true;
       }
     }
-  } else {
-    include.push({ model: Tag, as: 'tags' });
   }
 
   // sale: salePrice is set AND sale window is active (or no window defined)
@@ -524,11 +522,17 @@ exports.getProducts = async (filters, page, limit, isAdmin = false) => {
     // like categories or tags, but strip out attributes to keep it light.
     const countInclude = include
       .filter(inc => inc.required)
-      .map(inc => ({ 
-        ...inc, 
-        attributes: [],
-        through: { attributes: [] } // Ensure junction table columns aren't selected
-      }));
+      .map(inc => {
+        const mapped = { 
+          ...inc, 
+          attributes: [],
+        };
+        // Only many-to-many relationships (tags, categories) have junction tables that need 'through' attribute stripping
+        if (['tags', 'categories'].includes(inc.as)) {
+          mapped.through = { attributes: [] };
+        }
+        return mapped;
+      });
 
     const statusCounts = await Product.findAll({
       where: countWhere,
