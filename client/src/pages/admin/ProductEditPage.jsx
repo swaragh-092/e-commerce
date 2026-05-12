@@ -1588,6 +1588,7 @@ const VariantsPanel = ({
   const hasVariantChanges = variants.some((variant) => variant._dirty);
 
   const renderValueSwatch = (valueRecord, size = 18) => {
+    if (!valueRecord) return null;
     const color = getSwatchColor(valueRecord);
     if (valueRecord?.imageUrl) {
       return (

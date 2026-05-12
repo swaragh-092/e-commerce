@@ -42,6 +42,7 @@ const inferValueType = (attribute = {}) => {
 };
 
 export const getSwatchColor = (value = {}) => {
+  if (!value) return null;
   if (value.swatchColor) return value.swatchColor;
   const raw = normalizeText(value.displayLabel || value.value);
   if (/^#([0-9a-f]{3}|[0-9a-f]{6}|[0-9a-f]{8})$/i.test(raw)) return raw;
@@ -49,6 +50,7 @@ export const getSwatchColor = (value = {}) => {
 };
 
 export const formatAttributeValue = (value = {}, attribute = {}) => {
+  if (!value) return '';
   const rawLabel = String(value.displayLabel || value.value || '').trim();
   const unit = String(value.unitLabel || attribute.unit || '').trim();
   if (!rawLabel || !unit) return rawLabel;
