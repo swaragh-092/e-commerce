@@ -89,6 +89,12 @@ module.exports = (sequelize, DataTypes) => {
                 isIn: [['draft', 'published']],
             },
         },
+        // Product type: simple (no variants), variable (has variants), combo (bundle of other products)
+        type: {
+            type: DataTypes.ENUM('simple', 'variable', 'combo'),
+            allowNull: false,
+            defaultValue: 'simple',
+        },
         isFeatured: {
             type: DataTypes.BOOLEAN,
             defaultValue: false,
@@ -156,6 +162,10 @@ module.exports = (sequelize, DataTypes) => {
         Product.hasMany(models.CartItem, { foreignKey: 'productId' });
         Product.hasMany(models.WishlistItem, { foreignKey: 'productId', onDelete: 'CASCADE' });
         Product.hasMany(models.ProductTab, { foreignKey: 'productId', as: 'tabs', onDelete: 'CASCADE' });
+        // Combo: items this product bundles (only populated when type === 'combo')
+        Product.hasMany(models.ProductComboItem, { foreignKey: 'comboProductId', as: 'comboItems', onDelete: 'CASCADE' });
+        // Reverse: which combos include this product as a constituent?
+        Product.hasMany(models.ProductComboItem, { foreignKey: 'itemProductId', as: 'partOfCombos', onDelete: 'CASCADE' });
     };
 
     return Product;

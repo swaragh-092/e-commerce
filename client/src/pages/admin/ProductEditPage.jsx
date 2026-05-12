@@ -68,6 +68,7 @@ import { useAuth } from '../../hooks/useAuth';
 import { PERMISSIONS } from '../../utils/permissions';
 import { getApiErrorMessage } from '../../utils/apiErrors';
 import ProductCustomTabs from '../../components/admin/ProductCustomTabs';
+import ProductComboBuilder from '../../components/admin/ProductComboBuilder';
 
 const generateSlug = (text) => {
   if (!text) return '';
@@ -205,6 +206,7 @@ const ProductEditPage = () => {
     saleLabel: '',
     quantity: '',
     status: 'draft',
+    type: 'simple',
     isEnabled: true,
     categoryIds: [],
     brandId: '',
@@ -234,6 +236,7 @@ const ProductEditPage = () => {
   const [saleLabels, setSaleLabels] = useState([]);
   const [saving, setSaving] = useState(false);
   const [mediaPickerOpen, setMediaPickerOpen] = useState(false);
+  const [dbProduct, setDbProduct] = useState(null); 
   const [hasVariants, setHasVariants] = useState(false);
   const [variantStockTotal, setVariantStockTotal] = useState(0);
   const [globalPrimaryVersion, setGlobalPrimaryVersion] = useState(0);
@@ -259,11 +262,15 @@ const ProductEditPage = () => {
           const prodRes = await getProductById(id);
           if (prodRes?.data) {
             const p = prodRes.data;
+
+            setDbProduct(p);
+
             const activeVariants = Array.isArray(p.variants) ? p.variants.filter((variant) => variant?.isActive !== false) : [];
             const nextHasVariants = activeVariants.length > 0;
             const nextVariantStockTotal = activeVariants.reduce((sum, variant) => sum + Number(variant.stockQty || 0), 0);
             setHasVariants(nextHasVariants);
             setVariantStockTotal(nextVariantStockTotal);
+
             setFormData({
               name: p.name || '',
               slug: p.slug || '',
@@ -277,6 +284,7 @@ const ProductEditPage = () => {
               saleLabel: p.saleLabel || '',
               quantity: nextHasVariants ? nextVariantStockTotal : (p.quantity || 0),
               status: p.status || 'draft',
+              type: p.type || 'simple',
               isEnabled: p.isEnabled ?? true,
               categoryIds: p.categories?.map((c) => c.id) || [],
               brandId: p.brandId || '',
@@ -334,9 +342,22 @@ const ProductEditPage = () => {
 
     const effectiveQuantity = hasVariants ? variantStockTotal : formData.quantity;
     const errs = validate({ ...formData, quantity: effectiveQuantity, _features: { pricing: pricingEnabled, showPrice } });
+
+    // Block type change if invariants are violated
+    if (!isNew && dbProduct && formData.type !== dbProduct.type) {
+        if (formData.type === 'combo' && dbProduct.variants?.length > 0) {
+            errs.type = 'Cannot change to Combo type: this product has existing variants. Delete them first.';
+        }
+        if (formData.type !== 'combo' && dbProduct.comboItems?.length > 0) {
+            errs.type = `Cannot change to ${formData.type} type: this product has combo items. Clear the bundle first.`;
+        }
+    }
+
+
     if (Object.keys(errs).length > 0) {
       setErrors(errs);
-      notify('Please fix the validation errors before saving.', 'warning');
+      if (errs.type) notify(errs.type, 'error');
+      else notify('Please fix the validation errors before saving.', 'warning');
       return;
     }
 
@@ -353,7 +374,8 @@ const ProductEditPage = () => {
         saleEndAt: (formData.salePrice !== '' && formData.salePrice !== null) ? toIsoOrNull(formData.saleEndAt) : null,
         saleLabel: (formData.salePrice !== '' && formData.salePrice !== null) ? (formData.saleLabel || null) : null,
         brandId: formData.brandId || null,
-        quantity: hasVariants ? variantStockTotal : (parseInt(formData.quantity) || 0),
+        quantity: formData.type === 'combo' ? 0 : (parseInt(formData.quantity) || 0),
+        type: formData.type || 'simple',
         // Shipping dimensions — null when blank so DB stores NULL cleanly
         requiresShipping: formData.requiresShipping,
         weightGrams: formData.weightGrams !== '' ? parseInt(formData.weightGrams, 10) : null,
@@ -379,7 +401,8 @@ const ProductEditPage = () => {
         notify('Product created successfully. You can now add variants below.', 'success');
         navigate(`/admin/products/${newId}/edit`, { replace: true });
       } else {
-        await updateProduct(id, payload);
+        const res = await updateProduct(id, payload);
+        if (res?.data) setDbProduct(res.data);
         notify('Product updated successfully.', 'success');
       }
     } catch (err) {
@@ -917,6 +940,35 @@ const ProductEditPage = () => {
                   <MenuItem value="published">Published</MenuItem>
                 </Select>
               </FormControl>
+
+              <FormControl fullWidth margin="normal" error={Boolean(errors.type)}>
+                <InputLabel>Product Type</InputLabel>
+                <Select
+                  value={formData.type}
+                  label="Product Type"
+                  onChange={async (e) => {
+                    const newType = e.target.value;
+                    if (newType === 'combo' && formData.type !== 'combo') {
+                        const ok = await confirm(
+                            'Switch to Combo Product?',
+                            'Changing to a Combo will clear the current stock quantity and SKU, as inventory will be managed via constituents. Existing variants will also be ignored. Continue?',
+                            'warning'
+                        );
+                        if (!ok) return;
+                        // Clear inventory fields for combo
+                        setFormData(prev => ({ ...prev, type: newType, quantity: 0, sku: '' }));
+                    } else {
+                        setField('type', newType);
+                    }
+                  }}
+                >
+                  <MenuItem value="simple">Simple Product</MenuItem>
+                  <MenuItem value="variable">Variable Product</MenuItem>
+                  <MenuItem value="combo">Combo / Bundle</MenuItem>
+                </Select>
+                {errors.type && <FormHelperText>{errors.type}</FormHelperText>}
+              </FormControl>
+
               <FormControlLabel
                 control={
                   <Switch
@@ -1026,54 +1078,69 @@ const ProductEditPage = () => {
               </FormControl>
             </Paper>
 
-            <Paper sx={{ p: 3, mb: 3 }}>
-              <Typography variant="h6" gutterBottom>
-                Inventory
-              </Typography>
-              <TextField
-                fullWidth
-                label="SKU"
-                margin="normal"
-                value={formData.sku}
-                onChange={(e) => setField('sku', e.target.value)}
-                error={Boolean(errors.sku)}
-                helperText={errors.sku}
-                InputProps={{
-                  endAdornment: (
-                    <InputAdornment position="end">
-                      <Tooltip title="Auto-generate SKU from product name (uses SKU settings)">
-                        <span>
-                        <IconButton
-                          size="small"
-                          onClick={() => setField('sku', generateProductSKU(formData.name))}
-                          disabled={!formData.name?.trim()}
-                        >
-                          <ElectricBoltIcon fontSize="small" color="warning" />
-                        </IconButton>
-                        </span>
-                      </Tooltip>
-                    </InputAdornment>
-                  ),
-                }}
-              />
-              <TextField
-                fullWidth
-                label={hasVariants ? 'Total Variant Stock' : 'Stock Quantity *'}
-                type="number"
-                margin="normal"
-                inputProps={{ min: 0 }}
-                value={hasVariants ? variantStockTotal : formData.quantity}
-                onChange={(e) => setField('quantity', e.target.value)}
-                disabled={hasVariants}
-                error={Boolean(errors.quantity)}
-                helperText={
-                  errors.quantity ||
-                  (hasVariants
-                    ? 'Managed by variant SKUs. This total is the sum of active variant stock.'
-                    : 'Editable because this product has no variants.')
-                }
-              />
-            </Paper>
+
+            {formData.type !== 'combo' && (
+              <Paper sx={{ p: 3, mb: 3 }}>
+                <Typography variant="h6" gutterBottom>
+                  Inventory
+                </Typography>
+                <TextField
+                  fullWidth
+                  label="SKU"
+                  margin="normal"
+                  value={formData.sku}
+                  onChange={(e) => setField('sku', e.target.value)}
+                  error={Boolean(errors.sku)}
+                  helperText={errors.sku}
+                  InputProps={{
+                    endAdornment: (
+                      <InputAdornment position="end">
+                        <Tooltip title="Auto-generate SKU from product name (uses SKU settings)">
+                          <span>
+                          <IconButton
+                            size="small"
+                            onClick={() => setField('sku', generateProductSKU(formData.name))}
+                            disabled={!formData.name?.trim()}
+                          >
+                            <ElectricBoltIcon fontSize="small" color="warning" />
+                          </IconButton>
+                          </span>
+                        </Tooltip>
+                      </InputAdornment>
+                    ),
+                  }}
+                />
+                <TextField
+                  fullWidth
+                  label="Stock Quantity *"
+                  type="number"
+                  margin="normal"
+                  inputProps={{ min: 0 }}
+                  value={formData.quantity}
+                  onChange={(e) => setField('quantity', e.target.value)}
+                  error={Boolean(errors.quantity)}
+                  helperText={errors.quantity}
+                />
+              </Paper>
+            )}
+
+            {/* Combo Builder — only after the product type is saved as combo */}
+            {!isNew && formData.type === 'combo' && dbProduct?.type !== 'combo' && (
+              <Alert severity="info" sx={{ mb: 3 }}>
+                Save the product as a combo before adding bundle items.
+              </Alert>
+            )}
+
+            {!isNew && formData.type === 'combo' && dbProduct?.type === 'combo' && (
+              <Paper sx={{ p: 3, mb: 3 }}>
+                <ProductComboBuilder 
+                  productId={id} 
+                  canEdit={canUpdateProducts}
+                  onSuggestedPrice={(price) => setField('price', price)}
+                />
+              </Paper>
+            )}
+
 
             
 
@@ -1187,7 +1254,8 @@ const ProductEditPage = () => {
       </form>
 
       {/* Variants panel — only visible once the product has been saved and has a real ID */}
-      {!isNew && (
+      {/* Variants panel — only visible once the product has been saved and has a real ID and is NOT a combo */}
+      {!isNew && formData.type !== 'combo' && (
         <VariantsPanel 
           productId={id} 
           productName={formData.name}

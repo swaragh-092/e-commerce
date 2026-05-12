@@ -46,6 +46,7 @@ const NotificationService = require('../notification/notification.service');
 const { getPagination } = require('../../utils/pagination');
 const { ACTIONS, ENTITIES } = require('../../config/constants');
 const { getVariantUnitPrice } = require('../product/product.pricing');
+const productComboService = require('../product/productCombo.service');
 const {
     ORDER_DEFAULT_STATUS,
     SHIPMENT_DEFAULT_STATUS,
@@ -988,6 +989,11 @@ const placeOrder = async (userId, payload) => {
                         transaction: t
                     }
                 );
+            } else if (product.type === 'combo') {
+                // Combo products: validate virtual stock against all constituents.
+                // Stock deduction happens per-constituent after OrderItem creation.
+                await productComboService.validateComboStock(product.id, item.quantity, t);
+                updatedRows = [1]; // sentinel — validation passed, skip standard reservation
             } else {
                 updatedRows = await Product.update(
                     { reservedQty: sequelize.literal(`reserved_qty + ${item.quantity}`) },
@@ -1090,6 +1096,12 @@ const placeOrder = async (userId, payload) => {
         }
 
         for (const item of checkoutItems) {
+            const isCombo = item.currentProduct?.type === 'combo';
+            // Capture immutable combo snapshot at order time
+            const comboSnapshot = isCombo
+                ? await productComboService.buildComboSnapshot(item.productId, t)
+                : null;
+
             await OrderItem.create({
                 orderId: order.id,
                 productId: item.productId,
@@ -1101,8 +1113,15 @@ const placeOrder = async (userId, payload) => {
                 variantInfo: item.variant ? item.variant.toJSON() : null,
                 quantity: item.quantity,
                 total: item.currentPrice * item.quantity,
-                taxBreakdown: item.taxBreakdown || null
+                taxBreakdown: item.taxBreakdown || null,
+                isCombo,
+                comboSnapshot,
             }, { transaction: t });
+
+            // Atomically deduct stock from each constituent for combo products
+            if (isCombo) {
+                await productComboService.deductComboStock(item.productId, item.quantity, t);
+            }
         }
 
         await logOrderHistory({
