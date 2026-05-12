@@ -281,9 +281,22 @@ const remove = async (id, adminId) => {
   }
 };
 
+const getUserReviewForProduct = async (userId, slug) => {
+  const product = await Product.findOne({ where: { slug } });
+  if (!product) return null;
+  return Review.findOne({
+    where: { userId, productId: product.id },
+    include: [
+      { model: User, attributes: ['id', 'firstName', 'lastName'] },
+      { model: Product, attributes: ['id', 'name'] }
+    ]
+  });
+};
+
 module.exports = {
   create,
   list,
   moderate,
-  remove
+  remove,
+  getUserReviewForProduct
 };

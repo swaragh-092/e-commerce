@@ -31,6 +31,20 @@ const list = async (req, res, next) => {
     const effectiveStatus = slug ? 'approved' : status || 'approved';
 
     const result = await ReviewService.list(slug, { page, limit, status: effectiveStatus, search });
+    
+    // If authenticated and viewing a specific product, also try to fetch the current user's review
+    // if it's pending, so they can see it even before approval.
+    if (slug && req.user && result.rows) {
+      const userReview = await ReviewService.getUserReviewForProduct(req.user.id, slug);
+      if (userReview && userReview.status === 'pending') {
+        // Prevent duplicate if it somehow was already included (shouldn't be due to effectiveStatus)
+        if (!result.rows.find(r => r.id === userReview.id)) {
+          result.rows = [userReview, ...result.rows];
+          result.count = (result.count || 0) + 1;
+        }
+      }
+    }
+
     return paginated(res, result.rows, result.count, page, limit, 'Success', { counts: result.counts || {} });
   } catch (err) {
     next(err);

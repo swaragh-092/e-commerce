@@ -578,10 +578,13 @@ const ProductDetailPage = () => {
                         </>
                     )}
 
-                   
 
-                    <Typography variant="h6" fontWeight={900} sx={{ mt: 4 }} gutterBottom>Product Details</Typography>
-                    <Box dangerouslySetInnerHTML={{ __html: DOMPurify.sanitize(product.description || '') }} sx={{ typography: 'body2', color: 'text.secondary', '& p': { mt: 0, mb: 2 } }} />
+                    {product.description && (
+                        <>
+                            <Typography variant="h6" fontWeight={900} sx={{ mt: 4 }} gutterBottom>Product Details</Typography>
+                            <Box dangerouslySetInnerHTML={{ __html: DOMPurify.sanitize(product.description || '') }} sx={{ typography: 'body2', color: 'text.secondary', '& p': { mt: 0, mb: 2 } }} />
+                        </>
+                    )}
 
                     {/* Custom tabs accordion — rendered from product.tabs included in the API response */}
                     {Array.isArray(product.tabs) && product.tabs.length > 0 && (

@@ -236,12 +236,12 @@ const FeaturesPage = () => {
             {[
               { key: 'features.wishlist', label: 'Wishlist', desc: 'Allow users to save products to a wishlist.', defaultE: true, defaultC: true },
               { key: 'features.reviews', label: 'Product Reviews', desc: 'Enable customer reviews on product pages.', defaultE: true, defaultC: true },
+              { key: 'features.requirePurchaseForReview', label: 'Verified Purchase Reviews', desc: 'Only allow reviews from customers who bought the product.', defaultE: false, defaultC: false },
               { key: 'features.enquiry', label: 'Enquire Now Button', desc: 'Show an enquiry button on the product detail page.', defaultE: false, defaultC: true },
               { key: 'features.coupons', label: 'Coupons & Discounts', desc: 'Enable coupon codes at checkout.', defaultE: true, defaultC: false },
               { key: 'features.guestCheckout', label: 'Guest Checkout', desc: 'Allow purchasing without creating an account.', defaultE: true, defaultC: null },
               { key: 'features.socialLogin', label: 'Social Login (OAuth)', desc: 'Enable Google / OAuth login providers.', defaultE: false, defaultC: false },
               { key: 'features.emailVerification', label: 'Email Verification', desc: 'Require email confirmation after registration.', defaultE: false, defaultC: false },
-              { key: 'features.requirePurchaseForReview', label: 'Verified Purchase Reviews', desc: 'Only allow reviews from customers who bought the product.', defaultE: false, defaultC: false },
               { key: 'features.showAvailableCoupons', label: 'Show Available Coupons', desc: 'Display applicable coupon codes on the cart page.', defaultE: true, defaultC: false },
               { key: 'features.multiCurrency', label: 'Multi-Currency', desc: 'Support multiple display currencies (experimental).', defaultE: false, defaultC: false },
               { key: 'features.showPrice', label: 'Show Product Prices', desc: 'Control whether prices are displayed on the storefront.', defaultE: true, defaultC: false },

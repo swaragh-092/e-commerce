@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Box, Typography, Button, Rating, TextField, Divider, Avatar, List, ListItem, ListItemAvatar, ListItemText, Alert, CircularProgress, Tooltip } from '@mui/material';
+import { Box, Typography, Button, Rating, TextField, Divider, Avatar, List, ListItem, ListItemAvatar, ListItemText, Alert, CircularProgress, Tooltip, Chip } from '@mui/material';
 import RateReviewIcon from '@mui/icons-material/RateReview';
 import { Link as RouterLink } from 'react-router-dom';
 import { reviewService } from '../../services/reviewService';
@@ -104,7 +104,10 @@ const ReviewSection = ({ slug, productId }) => {
             setShowForm(false);
             fetchReviews(1); // refresh reviews list
         } catch (error) {
-            setSubmitStatus({ type: 'error', message: error?.response?.data?.message || 'Review submission failed' });
+            setSubmitStatus({ 
+                type: 'error', 
+                message: error?.response?.data?.error?.message || error?.response?.data?.message || 'Review submission failed' 
+            });
         } finally {
             setSubmitting(false);
         }
@@ -116,7 +119,7 @@ const ReviewSection = ({ slug, productId }) => {
 
             {isAuthenticated ? (
                 <>
-                    {hasPurchased && (
+                    {canWriteReview && (
                         <Button variant="outlined" onClick={() => setShowForm(!showForm)}>
                             {showForm ? 'Cancel' : 'Write a Review'}
                         </Button>
@@ -217,6 +220,15 @@ const ReviewSection = ({ slug, productId }) => {
                                             <Rating value={r.rating} readOnly size="small" />
                                             {r.isVerifiedPurchase && (
                                                 <Typography variant="caption" sx={{ color: 'success.main', fontWeight: 600 }}>✓ Verified Purchase</Typography>
+                                            )}
+                                            {r.status === 'pending' && (
+                                                <Chip 
+                                                    label="Awaiting Approval" 
+                                                    size="small" 
+                                                    color="warning" 
+                                                    variant="outlined" 
+                                                    sx={{ height: 20, fontSize: '0.65rem', fontWeight: 700 }} 
+                                                />
                                             )}
                                         </Box>
                                     }
