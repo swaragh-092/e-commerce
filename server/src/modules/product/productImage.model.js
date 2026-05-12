@@ -13,6 +13,10 @@ module.exports = (sequelize, DataTypes) => {
         type: DataTypes.UUID,
         allowNull: false,
       },
+      variantId: {
+        type: DataTypes.UUID,
+        allowNull: true,
+      },
       url: {
         type: DataTypes.STRING(500),
         allowNull: false,
@@ -42,6 +46,7 @@ module.exports = (sequelize, DataTypes) => {
 
   ProductImage.associate = (models) => {
     ProductImage.belongsTo(models.Product, { foreignKey: 'productId', onDelete: 'CASCADE' });
+    ProductImage.belongsTo(models.ProductVariant, { foreignKey: 'variantId', as: 'variant', onDelete: 'CASCADE' });
     ProductImage.belongsTo(models.Media, { foreignKey: 'mediaId', as: 'media', onDelete: 'SET NULL' });
   };
 

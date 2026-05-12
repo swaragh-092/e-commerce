@@ -12,19 +12,24 @@ const SettingsService = require('../../settings/settings.service');
 
 let _client = null;
 let _currentSid = null;
+let _currentToken = null;
+
+const requireSetting = (value, label) => {
+    if (value === undefined || value === null || String(value).trim() === '') {
+        throw new Error(`${label} is required in Admin Settings > Notifications.`);
+    }
+    return String(value).trim();
+};
 
 const getClient = async () => {
-    const creds = await SettingsService.getByGroup('messaging_credentials');
-    const sid = creds.twilio_sid || process.env.TWILIO_ACCOUNT_SID;
-    const token = creds.twilio_token || process.env.TWILIO_AUTH_TOKEN;
+    const creds = await SettingsService.getByGroup('messaging_credentials', { maskSensitive: false });
+    const sid = requireSetting(creds.twilio_sid, 'Twilio Account SID');
+    const token = requireSetting(creds.twilio_token, 'Twilio Auth Token');
 
-    if (!sid || !token) {
-        throw new Error('TWILIO_ACCOUNT_SID and TWILIO_AUTH_TOKEN must be set in env or messaging_credentials to send SMS.');
-    }
-
-    if (!_client || _currentSid !== sid) {
+    if (!_client || _currentSid !== sid || _currentToken !== token) {
         _client = twilio(sid, token);
         _currentSid = sid;
+        _currentToken = token;
     }
     return _client;
 };
@@ -43,11 +48,8 @@ const send = async ({ to, body }) => {
         return true;
     }
 
-    const creds = await SettingsService.getByGroup('messaging_credentials');
-    const from = creds.twilio_from_number || process.env.TWILIO_FROM_NUMBER;
-    if (!from) {
-        throw new Error('TWILIO_FROM_NUMBER must be set in env or messaging_credentials.');
-    }
+    const creds = await SettingsService.getByGroup('messaging_credentials', { maskSensitive: false });
+    const from = requireSetting(creds.twilio_from_number, 'Twilio From Number');
 
     const client = await getClient();
     const message = await client.messages.create({ to, from, body });

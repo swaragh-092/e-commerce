@@ -1,9 +1,10 @@
 import React from 'react';
-import { Card, CardMedia, CardContent, Typography, Box, Rating, Chip } from '@mui/material';
+import { Card, CardMedia, CardContent, Typography, Box, Rating, Chip, CardActions } from '@mui/material';
 import { Link } from 'react-router-dom';
 import { getMediaUrl } from '../../utils/media';
 import { useCurrency, useSettings, useFeature } from '../../hooks/useSettings';
 import { getDiscountPercent, getSaleTimingMessage, isEndingSoon } from '../../utils/pricing';
+import WishlistButton from '../common/WishlistButton';
 
 const ProductCard = ({ product, fromCategory }) => {
   const { formatPrice } = useCurrency();
@@ -39,6 +40,7 @@ const ProductCard = ({ product, fromCategory }) => {
 
   const endingSoon = hasSale && sales.showCountdown !== false && isEndingSoon(product.saleEndAt, sales.endingSoonHours);
   const hasRating = product.avgRating != null;
+  const productPath = `/products/${product.slug}`;
 
   return (
     <Card
@@ -49,25 +51,28 @@ const ProductCard = ({ product, fromCategory }) => {
         flexDirection: 'column',
         textDecoration: 'none',
         overflow: 'hidden',
-        boxShadow: 'rgba(0, 0, 0, 0.1) 0px 4px 12px;',
+        boxShadow: 'rgba(15, 23, 42, 0.08) 0px 4px 14px',
         transition: 'transform 0.22s ease, box-shadow 0.22s ease, border-color 0.22s ease',
         '&:hover': {
-          transform: 'translateY(-6px)',
-          // borderColor: 'primary.light',
-          // boxShadow: '0 24px 54px rgba(31, 41, 51, 0.14)',
+          transform: 'translateY(-4px)',
+          boxShadow: 'rgba(15, 23, 42, 0.13) 0px 12px 28px',
         },
         '&:hover img': {
-          transform: 'scale(1.045)',
+          transform: 'scale(1.035)',
         },
       }}
-      component={Link}
-      to={`/products/${product.slug}`}
-      state={fromCategory ? { fromCategory } : undefined}
     >
+      <Box
+        component={Link}
+        to={productPath}
+        state={fromCategory ? { fromCategory } : undefined}
+        sx={{ color: 'inherit', textDecoration: 'none', display: 'flex', flexDirection: 'column', flexGrow: 1 }}
+      >
       <Box
         sx={{
           position: 'relative',
-          pt: '100%',
+          aspectRatio: { xs: '4 / 3.35', sm: '4 / 3.2' },
+          minHeight: { xs: 150, sm: 170 },
           background: (theme) =>
             `linear-gradient(135deg, ${theme.palette.action.hover} 0%, ${theme.palette.background.default} 100%)`,
         }}
@@ -118,41 +123,41 @@ const ProductCard = ({ product, fromCategory }) => {
           }}
         />
       </Box>
-      <CardContent sx={{ flexGrow: 1, p: 2.25, display: 'flex', flexDirection: 'column' }}>
-        <Box sx={{ minHeight: 40, mb: 1 }}>
+      <CardContent sx={{ flexGrow: 1, p: { xs: 1.5, sm: 1.75 }, display: 'flex', flexDirection: 'column' }}>
+        <Box sx={{ minHeight: 34, mb: 0.75 }}>
           {product.brand?.name ? (
-            <Typography variant="caption" color="primary" sx={{ display: 'block', fontWeight: 600, mb: 0.5, textTransform: 'uppercase', letterSpacing: 1 }}>
+            <Typography variant="caption" color="primary" sx={{ display: 'block', fontWeight: 700, mb: 0.25, textTransform: 'uppercase', letterSpacing: 0.4 }}>
               {product.brand.name}
             </Typography>
           ) : (
-            <Box sx={{ height: 20 }} />
+            <Box sx={{ height: 18 }} />
           )}
-          <Typography variant="body2" color="text.secondary" noWrap>
+          <Typography variant="caption" color="text.secondary" noWrap sx={{ display: 'block' }}>
             {product.categories?.[0]?.name || 'Uncategorized'}
           </Typography>
         </Box>
         
-        <Box sx={{ minHeight: 48, mb: 1.5 }}>
+        <Box sx={{ minHeight: 42, mb: 1 }}>
           <Typography 
             variant="h6" 
             component="div" 
             sx={{ 
               fontWeight: 800, 
-              fontSize: '1rem', 
+              fontSize: { xs: '0.92rem', sm: '0.96rem' }, 
               color: 'text.primary',
               display: '-webkit-box',
               WebkitLineClamp: 2,
               WebkitBoxOrient: 'vertical',
               overflow: 'hidden',
-              lineHeight: 1.2,
-              height: 40 // Fixed height for 2 lines
+              lineHeight: 1.22,
+              height: 38,
             }}
           >
             {product.name}
           </Typography>
         </Box>
         {hasRating && (
-          <Box sx={{ display: 'flex', alignItems: 'center', mb: 1 }}>
+          <Box sx={{ display: 'flex', alignItems: 'center', mb: 0.75 }}>
             <Rating
               value={parseFloat(product.avgRating)}
               readOnly
@@ -168,14 +173,14 @@ const ProductCard = ({ product, fromCategory }) => {
         )}
         <Box sx={{ flexGrow: 1 }} />
         {showPrice && (
-          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mt: 'auto' }}>
+          <Box sx={{ display: 'flex', alignItems: 'baseline', gap: 0.75, mt: 'auto', flexWrap: 'wrap' }}>
             {hasSale ? (
               <>
-                <Typography variant="h6" color="primary" sx={{ fontWeight: 900 }}>
+                <Typography variant="subtitle1" color="primary" sx={{ fontWeight: 900, lineHeight: 1.2 }}>
                   {formatPrice(displayPrice)}
                 </Typography>
                 <Typography
-                  variant="body1"
+                  variant="body2"
                   color="text.secondary"
                   sx={{ textDecoration: 'line-through' }}
                 >
@@ -183,7 +188,7 @@ const ProductCard = ({ product, fromCategory }) => {
                 </Typography>
               </>
             ) : (
-              <Typography variant="h6" sx={{ fontWeight: 900 }}>{formatPrice(displayPrice)}</Typography>
+              <Typography variant="subtitle1" sx={{ fontWeight: 900, lineHeight: 1.2 }}>{formatPrice(displayPrice)}</Typography>
             )}
           </Box>
         )}
@@ -202,6 +207,12 @@ const ProductCard = ({ product, fromCategory }) => {
           </Box>
         )}
       </CardContent>
+      </Box>
+      <CardActions sx={{ px: { xs: 1.25, sm: 1.5 }, pb: 1.25, pt: 0, gap: 0.75 }}>
+        <Box sx={{ '& .MuiIconButton-root': { width: 34, height: 34, bgcolor: 'action.hover' } }}>
+          <WishlistButton productId={product.id} />
+        </Box>
+      </CardActions>
     </Card>
   );
 };

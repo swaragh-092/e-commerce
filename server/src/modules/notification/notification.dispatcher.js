@@ -12,18 +12,19 @@ const CHANNELS = {
 
 const SettingsService = require('../settings/settings.service');
 
-const envBoolean = (name, fallback) => {
-    const value = process.env[name];
+const settingBoolean = (value, fallback = false) => {
     if (value === undefined || value === '') return fallback;
+    if (value === null) return fallback;
+    if (typeof value === 'boolean') return value;
     return ['1', 'true', 'yes', 'on'].includes(String(value).toLowerCase());
 };
 
 const isChannelEnabled = async (channel) => {
     const messagingConfig = await SettingsService.getByGroup('messaging');
     switch (channel) {
-        case 'email':    return messagingConfig.emailEnabled !== false && envBoolean('EMAIL_ENABLED', true);
-        case 'sms':      return messagingConfig.smsEnabled === true || envBoolean('SMS_ENABLED', false);
-        case 'whatsapp': return messagingConfig.whatsappEnabled === true || envBoolean('WHATSAPP_ENABLED', false);
+        case 'email':    return settingBoolean(messagingConfig.emailEnabled, true);
+        case 'sms':      return settingBoolean(messagingConfig.smsEnabled, false);
+        case 'whatsapp': return settingBoolean(messagingConfig.whatsappEnabled, false);
         default: return false;
     }
 };

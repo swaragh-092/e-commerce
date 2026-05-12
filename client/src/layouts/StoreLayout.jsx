@@ -18,7 +18,7 @@ import CategoryNav from '../components/layout/CategoryNav';
 import StorefrontFooter from '../components/layout/StorefrontFooter';
 import { useWishlist } from '../context/WishlistContext';
 import { useCategories } from '../context/CategoryContext';
-import GlobalSearchBar from '../components/search/GlobalSearchBar';
+import SearchWidget from '../components/search/SearchWidget';
 import PageService from '../services/pageService';
 import MenuService from '../services/menuService';
 import { ADMIN_ACCESS_PERMISSIONS, getFirstAccessibleAdminPath } from '../utils/permissions';
@@ -358,7 +358,7 @@ const StoreLayout = () => {
 
           {/* Global Search Bar */}
           <Box sx={{ display: { xs: 'none', md: 'flex' }, flexGrow: 1, maxWidth: 520, mx: 1 }}>
-            <GlobalSearchBar />
+            <SearchWidget variant="header" />
           </Box>
 
           {mobileHeaderItems.length > 0 && (

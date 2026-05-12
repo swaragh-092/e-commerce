@@ -1,5 +1,5 @@
-import React, { useState, useEffect } from 'react';
-import { Box, Container, Typography, CircularProgress, Alert, Button, Paper, Divider } from '@mui/material';
+import React, { useState, useEffect, useRef } from 'react';
+import { Container, Typography, CircularProgress, Alert, Button } from '@mui/material';
 import { useParams, useLocation, useNavigate } from 'react-router-dom';
 import paymentService from '../../services/paymentService';
 import { getOrderById } from '../../services/adminService';
@@ -49,6 +49,7 @@ const PaymentPage = () => {
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState(null);
     const [processing, setProcessing] = useState(false);
+    const paymentStartedRef = useRef(false);
     const { fetchCart } = useCart();
 
     useEffect(() => {
@@ -117,52 +118,59 @@ const PaymentPage = () => {
             .finally(() => setLoading(false));
     }, [orderId, location.search, navigate, fetchCart]);
 
-    const handleRazorpayPayment = () => {
-        if (!orderData || !window.Razorpay) {
-            setError('Payment system is not ready. Please try again.');
-            return;
-        }
-
+    const handleRazorpayPayment = async () => {
         setProcessing(true);
 
-        const options = {
-            key: import.meta.env.VITE_RAZORPAY_KEY_ID,
-            amount: orderData.amount,
-            currency: orderData.currency,
-            name: "My Store",
-            description: `Order #${orderId}`,
-            order_id: orderData.id,
-            handler: async (response) => {
-                try {
-                    await paymentService.verifyPayment(orderId, {
-                        razorpay_order_id: response.razorpay_order_id,
-                        razorpay_payment_id: response.razorpay_payment_id,
-                        razorpay_signature: response.razorpay_signature
-                    });
-                    fetchCart();
-                    navigate('/payment/success', { state: { orderId } });
-                } catch (err) {
-                    setError(getApiErrorMessage(err, 'Payment verification failed.'));
-                    setProcessing(false);
-                }
-            },
-            prefill: {
-                name: "",
-                email: "",
-                contact: ""
-            },
-            theme: {
-                color: "#6C63FF"
-            },
-            modal: {
-                ondismiss: () => {
-                    setProcessing(false);
-                }
+        try {
+            await loadScript('https://checkout.razorpay.com/v1/checkout.js', 'Razorpay');
+            if (!orderData || !window.Razorpay) {
+                setError('Payment system is not ready. Please try again.');
+                setProcessing(false);
+                return;
             }
-        };
 
-        const rzp = new window.Razorpay(options);
-        rzp.open();
+            const options = {
+                key: import.meta.env.VITE_RAZORPAY_KEY_ID,
+                amount: orderData.amount,
+                currency: orderData.currency,
+                name: "My Store",
+                description: `Order #${orderId}`,
+                order_id: orderData.id,
+                handler: async (response) => {
+                    try {
+                        await paymentService.verifyPayment(orderId, {
+                            razorpay_order_id: response.razorpay_order_id,
+                            razorpay_payment_id: response.razorpay_payment_id,
+                            razorpay_signature: response.razorpay_signature
+                        });
+                        fetchCart();
+                        navigate('/payment/success', { state: { orderId } });
+                    } catch (err) {
+                        setError(getApiErrorMessage(err, 'Payment verification failed.'));
+                        setProcessing(false);
+                    }
+                },
+                prefill: {
+                    name: "",
+                    email: "",
+                    contact: ""
+                },
+                theme: {
+                    color: "#6C63FF"
+                },
+                modal: {
+                    ondismiss: () => {
+                        setProcessing(false);
+                    }
+                }
+            };
+
+            const rzp = new window.Razorpay(options);
+            rzp.open();
+        } catch (err) {
+            setError(getApiErrorMessage(err, 'Payment system could not be loaded. Please try again.'));
+            setProcessing(false);
+        }
     };
 
     
@@ -249,6 +257,12 @@ const PaymentPage = () => {
         handleRazorpayPayment();
     };
 
+    useEffect(() => {
+        if (loading || error || !orderData || paymentStartedRef.current) return;
+        paymentStartedRef.current = true;
+        handlePayment();
+    }, [loading, error, orderData]);
+
     if (loading) {
         return <CenteredLoader message="Loading payment details..." minHeight="50vh" />;
     }
@@ -263,36 +277,18 @@ const PaymentPage = () => {
     }
 
     return (
-        <Container maxWidth="sm" sx={{ py: 4 }}>
+        <Container maxWidth="sm" sx={{ py: 8, textAlign: 'center' }}>
             <PageSEO title="Payment" type="noindex" />
-            <Typography variant="h4" fontWeight={700} mb={3}>Complete Payment</Typography>
-            <Paper elevation={0} sx={{ border: '1px solid', borderColor: 'divider', borderRadius: 2, p: 4, textAlign: 'center' }}>
-                <Typography variant="h6" gutterBottom>Confirm your order</Typography>
-                <Typography variant="body2" color="text.secondary" mb={4}>
-                    Order #{orderId} — {orderData.provider === 'cashfree' ? 'Cashfree' : 'Razorpay'} — Total: {orderData.currency} {(orderData.amount / 100).toFixed(2)}
-                </Typography>
-                <Divider sx={{ mb: 4 }} />
-
-                <Button
-                    variant="contained"
-                    fullWidth
-                    size="large"
-                    disabled={processing}
-                    onClick={handlePayment}
-                    sx={{ py: 1.5, mb: 2 }}
-                >
-                    {processing ? <CircularProgress size={24} color="inherit" /> : 'Pay Now'}
+            <CircularProgress sx={{ mb: 3 }} />
+            <Typography variant="h5" fontWeight={700} mb={1}>Opening secure payment...</Typography>
+            <Typography variant="body2" color="text.secondary" mb={3}>
+                Please complete the payment in the secure checkout window.
+            </Typography>
+            {!processing && (
+                <Button variant="contained" onClick={handlePayment}>
+                    Try payment again
                 </Button>
-
-                <Button
-                    fullWidth
-                    variant="text"
-                    onClick={() => navigate('/cart')}
-                    disabled={processing}
-                >
-                    Cancel and Return to Cart
-                </Button>
-            </Paper>
+            )}
         </Container>
     );
 };

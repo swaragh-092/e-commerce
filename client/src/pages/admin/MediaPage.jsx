@@ -277,9 +277,28 @@ const MediaPage = () => {
     }
   };
 
-  const copyUrl = (url) => {
-    navigator.clipboard.writeText(url);
-    notify('Media URL copied to clipboard successfully.', 'success');
+  const copyUrl = async (url) => {
+    try {
+      if (navigator.clipboard?.writeText && window.isSecureContext) {
+        await navigator.clipboard.writeText(url);
+      } else {
+        const textarea = document.createElement('textarea');
+        textarea.value = url;
+        textarea.setAttribute('readonly', '');
+        textarea.style.position = 'fixed';
+        textarea.style.top = '-9999px';
+        textarea.style.left = '-9999px';
+        document.body.appendChild(textarea);
+        textarea.select();
+        const copied = document.execCommand('copy');
+        document.body.removeChild(textarea);
+        if (!copied) throw new Error('Copy command was not available.');
+      }
+      notify('Media URL copied to clipboard successfully.', 'success');
+    } catch (err) {
+      console.error('Copy failed', err);
+      notify('Unable to copy automatically. Please copy the URL manually.', 'warning');
+    }
   };
 
   const toggleSortDir = () => setSortDir((d) => (d === 'asc' ? 'desc' : 'asc'));

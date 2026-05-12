@@ -61,9 +61,11 @@ const ProductRow = ({
 
   if (!loading && products.length === 0) return null;
 
+  const carouselCardWidth = { xs: '210px', sm: '230px', md: '248px', lg: '260px' };
+
   const carouselStyles = {
     display: 'flex',
-    gap: 2,
+    gap: { xs: 1.5, md: 2 },
     overflowX: 'auto',
     pb: 2,
     alignItems: 'stretch',
@@ -86,9 +88,9 @@ const ProductRow = ({
   };
 
   return (
-    <Box sx={{ mb: 6 }}>
+    <Box sx={{ mb: { xs: 4, md: 5 } }}>
       {/* Section header */}
-      <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 3 }}>
+      <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 2, mb: 2.25 }}>
         <Typography variant="h5" fontWeight={800}>
           {title}
         </Typography>
@@ -140,9 +142,9 @@ const ProductRow = ({
           <Box ref={scrollRef} sx={carouselStyles}>
             {loading
               ? Array.from({ length: count }).map((_, i) => (
-                <Box key={i} sx={{ width: { xs: '260px', sm: '280px', md: '300px' }, flexShrink: 0, display: 'flex' }}>
+                <Box key={i} sx={{ width: carouselCardWidth, flexShrink: 0, display: 'flex' }}>
                   <Box sx={{ width: '100%', display: 'flex', flexDirection: 'column' }}>
-                    <Box sx={{ position: 'relative', pt: '100%', mb: 1, bgcolor: 'action.hover', borderRadius: 2 }}>
+                    <Box sx={{ position: 'relative', aspectRatio: '4 / 3.2', mb: 1, bgcolor: 'action.hover', borderRadius: 2 }}>
                       <Skeleton variant="rectangular" sx={{ position: 'absolute', top: 0, left: 0, width: '100%', height: '100%', borderRadius: 2 }} />
                     </Box>
                     <Skeleton width="80%" />
@@ -151,7 +153,7 @@ const ProductRow = ({
                 </Box>
               ))
               : products.map((product) => (
-                <Box key={product.id} sx={{ width: { xs: '260px', sm: '280px', md: '300px' }, flexShrink: 0, display: 'flex' }}>
+                <Box key={product.id} sx={{ width: carouselCardWidth, flexShrink: 0, display: 'flex' }}>
                   <ProductCard product={product} />
                 </Box>
               ))
@@ -159,19 +161,19 @@ const ProductRow = ({
           </Box>
         </Box>
       ) : (
-        <Grid container spacing={2}>
+        <Grid container spacing={{ xs: 1.5, md: 2 }}>
           {loading
             ? Array.from({ length: count }).map((_, i) => (
-              <Grid item xs={12} sm={6} md={4} lg={3} key={i}>
-                <Box sx={{ position: 'relative', pt: '100%', mb: 2, bgcolor: 'action.hover', borderRadius: 2 }}>
-                  <Skeleton variant="rectangular" sx={{ position: 'absolute', top: 0, left: 0, width: '100%', height: '100%', borderRadius: 2 }} />
+              <Grid item xs={6} sm={4} md={3} lg={2.4} key={i}>
+                <Box sx={{ aspectRatio: '4 / 3.2', mb: 1.5, bgcolor: 'action.hover', borderRadius: 2 }}>
+                  <Skeleton variant="rectangular" sx={{ width: '100%', height: '100%', borderRadius: 2 }} />
                 </Box>
                 <Skeleton width="80%" />
                 <Skeleton width="60%" />
               </Grid>
             ))
             : products.map((product) => (
-              <Grid item xs={12} sm={6} md={4} lg={3} key={product.id} sx={{ display: 'flex' }}>
+              <Grid item xs={6} sm={4} md={3} lg={2.4} key={product.id} sx={{ display: 'flex' }}>
                 <ProductCard product={product} />
               </Grid>
             ))

@@ -43,6 +43,7 @@ export const SettingsProvider = ({ children }) => {
         productPage: {
           showSKU: true,
           showStockBadge: true,
+          imageAlignment: 'horizontal',
           addToCartLabel: 'Add to Cart',
           showBuyNowButton: true,
           buyNowLabel: 'Buy Now',

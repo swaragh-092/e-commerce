@@ -21,6 +21,20 @@ module.exports = (sequelize, DataTypes) => {
             type: DataTypes.INTEGER,
             defaultValue: 0,
         },
+        displayType: {
+            type: DataTypes.STRING(40),
+            allowNull: false,
+            defaultValue: 'auto',
+        },
+        valueType: {
+            type: DataTypes.STRING(40),
+            allowNull: false,
+            defaultValue: 'auto',
+        },
+        unit: {
+            type: DataTypes.STRING(20),
+            allowNull: true,
+        },
     }, {
         tableName: 'attribute_templates',
         timestamps: true,

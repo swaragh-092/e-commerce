@@ -12,6 +12,7 @@ import CategoryGrid from '../../components/storefront/CategoryGrid';
 import BrandStrip from '../../components/storefront/BrandStrip';
 import PageSEO from '../../components/common/PageSEO';
 import { useFeature } from '../../hooks/useSettings';
+import HomeExperience from './HomeExperience';
 
 // ─── helpers ────────────────────────────────────────────────────────────────
 
@@ -293,4 +294,4 @@ const HomePage = () => {
     );
 };
 
-export default HomePage;
+export default HomeExperience;

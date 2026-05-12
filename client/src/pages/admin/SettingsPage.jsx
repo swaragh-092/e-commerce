@@ -15,7 +15,6 @@ import {
   InputLabel,
   Select,
   MenuItem,
-  Slider,
   Button,
   Divider,
   Grid,
@@ -32,6 +31,8 @@ import DeleteOutlineIcon from '@mui/icons-material/DeleteOutline';
 import AddIcon from '@mui/icons-material/Add';
 import DragIndicatorIcon from '@mui/icons-material/DragIndicator';
 import PublicIcon from '@mui/icons-material/Public';
+import ArrowBackIosNewIcon from '@mui/icons-material/ArrowBackIosNew';
+import ArrowForwardIosIcon from '@mui/icons-material/ArrowForwardIos';
 // import { Link } from 'react-router-dom';
 import { updateSettings, getEmailTemplates, updateEmailTemplate, sendTestEmail as sendTestEmailApi } from '../../services/adminService';
 import api from '../../services/api';
@@ -147,6 +148,57 @@ const DASHBOARD_ORDER_WIDGETS = [
   { id: 'inventoryWarnings', label: 'Inventory Warnings', description: 'Critical and low inventory shortcuts' },
   { id: 'storeHealth', label: 'Store Health', description: 'Configuration and operational readiness checks' },
   { id: 'lowStock', label: 'Low Stock Alerts', description: 'Inventory items that need attention' },
+];
+
+const HOMEPAGE_SECTION_TYPES = [
+  { value: 'hero-carousel', label: 'Hero Carousel' },
+  { value: 'value-props', label: 'Trust / Value Props' },
+  { value: 'category-shortcuts', label: 'Category Shortcuts' },
+  { value: 'promo-banners', label: 'Promo Banners' },
+  { value: 'product-row', label: 'Product Row' },
+  { value: 'brand-showcase', label: 'Brand Showcase' },
+];
+
+const HOMEPAGE_PRODUCT_SOURCES = [
+  { value: 'featured', label: 'Featured Products' },
+  { value: 'sale', label: 'Deals / On Sale' },
+  { value: 'bestSellers', label: 'Best Sellers' },
+  { value: 'newest', label: 'New Arrivals' },
+  { value: 'recommended', label: 'Recommended' },
+];
+
+const HOMEPAGE_VALUE_ICONS = [
+  'shipping',
+  'offers',
+  'secure',
+  'support',
+  'fast',
+  'payment',
+  'verified',
+];
+
+const DEFAULT_HOMEPAGE_SECTIONS = [
+  { id: 'hero', type: 'hero-carousel', enabled: true, autoPlay: true, interval: 6500 },
+  { id: 'value-props', type: 'value-props', enabled: true },
+  { id: 'categories', type: 'category-shortcuts', enabled: true, title: 'Shop by Category', count: 10 },
+  { id: 'promo', type: 'promo-banners', enabled: true, title: 'Offers You Shouldn\'t Miss' },
+  { id: 'trending', type: 'product-row', enabled: true, title: 'Trending Now', source: 'featured', count: 8, layout: 'carousel', viewAllLabel: 'View All', viewAllLink: '/products?featured=true' },
+  { id: 'deals', type: 'product-row', enabled: true, title: 'Deals of the Day', source: 'sale', count: 8, layout: 'grid', viewAllLabel: 'All Deals', viewAllLink: '/products?onSale=true' },
+  { id: 'brands', type: 'brand-showcase', enabled: true, title: 'Featured Brands', count: 12 },
+  { id: 'new-arrivals', type: 'product-row', enabled: true, title: 'New Arrivals', source: 'newest', count: 8, layout: 'grid', viewAllLabel: 'New In', viewAllLink: '/products?sort=newest' },
+];
+
+const DEFAULT_HOMEPAGE_VALUE_PROPS = [
+  { id: 'vp-1', icon: 'shipping', title: 'Fast Delivery', text: 'Reliable shipping on every order' },
+  { id: 'vp-2', icon: 'offers', title: 'Daily Offers', text: 'Fresh deals across top categories' },
+  { id: 'vp-3', icon: 'secure', title: 'Secure Payments', text: 'Protected checkout experience' },
+  { id: 'vp-4', icon: 'support', title: 'Easy Support', text: 'Help when shoppers need it' },
+];
+
+const DEFAULT_HOMEPAGE_PROMOS = [
+  { id: 'pr-1', kicker: 'Limited Time', title: 'Flat 40% Off', subtitle: 'Season-ready looks and daily essentials.', ctaText: 'Grab Offers', link: '/products?onSale=true', color: '#FFF7ED', accentColor: '#F97316' },
+  { id: 'pr-2', kicker: 'Curated', title: 'New Brands Live', subtitle: 'Fresh labels and collections added every week.', ctaText: 'Explore Brands', link: '/brands', color: '#ECFEFF', accentColor: '#0891B2' },
+  { id: 'pr-3', kicker: 'Smooth Shopping', title: 'Wishlist to Checkout', subtitle: 'Search, save, cart, and buy with fewer steps.', ctaText: 'Start Shopping', link: '/products', color: '#F0FDF4', accentColor: '#16A34A' },
 ];
 
 const parseDashboardOrder = (value) => {
@@ -335,6 +387,141 @@ const SettingsPage = () => {
     }
   };
 
+  const getHomepageSections = () => {
+    if (Array.isArray(form['homepage.sections']) && form['homepage.sections'].length) {
+      return form['homepage.sections'];
+    }
+
+    return DEFAULT_HOMEPAGE_SECTIONS.map((section) => {
+      if (section.id === 'categories') {
+        return {
+          ...section,
+          enabled: bool(form['homepage.showCategories'], section.enabled),
+          title: form['homepage.categoriesTitle'] || section.title,
+          count: Number(form['homepage.categoriesCount'] || section.count),
+        };
+      }
+      if (section.id === 'new-arrivals') {
+        return {
+          ...section,
+          enabled: bool(form['homepage.showNewArrivals'], section.enabled),
+          title: form['homepage.newArrivalsTitle'] || section.title,
+          count: Number(form['homepage.newArrivalsCount'] || section.count),
+          layout: form['homepage.newArrivalsLayout'] || section.layout,
+          viewAllLink: form['homepage.newArrivalsLink'] || section.viewAllLink,
+        };
+      }
+      if (section.id === 'trending') {
+        return {
+          ...section,
+          enabled: bool(form['homepage.showFeatured'], section.enabled),
+          title: form['homepage.featuredTitle'] || section.title,
+          count: Number(form['homepage.featuredCount'] || section.count),
+          layout: form['homepage.featuredLayout'] || section.layout,
+          viewAllLink: form['homepage.featuredLink'] || section.viewAllLink,
+        };
+      }
+      if (section.id === 'deals') {
+        return {
+          ...section,
+          enabled: bool(form['homepage.showOnSale'], section.enabled),
+          title: form['homepage.onSaleTitle'] || section.title,
+          count: Number(form['homepage.onSaleCount'] || section.count),
+          layout: form['homepage.onSaleLayout'] || section.layout,
+          viewAllLink: form['homepage.onSaleLink'] || section.viewAllLink,
+        };
+      }
+      if (section.id === 'brands') {
+        return {
+          ...section,
+          enabled: bool(form['homepage.showBrands'], section.enabled),
+          title: form['homepage.brandsTitle'] || section.title,
+          count: Number(form['homepage.brandsCount'] || section.count),
+        };
+      }
+      return section;
+    });
+  };
+
+  const setHomepageSections = (sections) => set('homepage.sections', sections);
+  const updateHomepageSection = (index, patch) => {
+    const sections = getHomepageSections();
+    setHomepageSections(sections.map((item, itemIndex) => (itemIndex === index ? { ...item, ...patch } : item)));
+  };
+  const removeHomepageSection = (index) => {
+    setHomepageSections(getHomepageSections().filter((_, itemIndex) => itemIndex !== index));
+  };
+  const moveHomepageSection = (index, direction) => {
+    const sections = [...getHomepageSections()];
+    const nextIndex = index + direction;
+    if (nextIndex < 0 || nextIndex >= sections.length) return;
+    const [moved] = sections.splice(index, 1);
+    sections.splice(nextIndex, 0, moved);
+    setHomepageSections(sections);
+  };
+  const addHomepageSection = () => {
+    const nextIndex = getHomepageSections().length + 1;
+    setHomepageSections([
+      ...getHomepageSections(),
+      { id: `custom-${Date.now()}`, type: 'product-row', enabled: true, title: `Product Section ${nextIndex}`, source: 'newest', count: 8, layout: 'grid', viewAllLink: '/products' },
+    ]);
+  };
+
+  const getHeroSlides = () => {
+    if (Array.isArray(form['homepage.heroSlides']) && form['homepage.heroSlides'].length) {
+      return form['homepage.heroSlides'];
+    }
+    return [{
+      eyebrow: form['homepage.eyebrow'] || 'Mega Style Weekend',
+      title: form['hero.title'] || 'Shop the Latest',
+      subtitle: form['hero.subtitle'] || 'Discover thousands of products at great prices.',
+      buttonText: form['hero.buttonText'] || 'Shop Now',
+      buttonLink: form['hero.buttonLink'] || '/products',
+      secondaryButtonText: '',
+      secondaryButtonLink: '',
+      image: form['hero.backgroundImage'] || '',
+      position: 'center',
+      color: form['hero.color'] || '#ffffff',
+    }];
+  };
+  const setHeroSlides = (slides) => set('homepage.heroSlides', slides);
+  const updateHeroSlide = (index, patch) => {
+    setHeroSlides(getHeroSlides().map((item, itemIndex) => (itemIndex === index ? { ...item, ...patch } : item)));
+  };
+  const addHeroSlide = () => {
+    setHeroSlides([
+      ...getHeroSlides(),
+      { eyebrow: 'New Collection', title: 'Your next hero banner', subtitle: 'Promote a launch, sale, or category.', buttonText: 'Shop Now', buttonLink: '/products', secondaryButtonText: '', secondaryButtonLink: '', image: '', position: 'center', color: '#ffffff' },
+    ]);
+  };
+  const removeHeroSlide = (index) => setHeroSlides(getHeroSlides().filter((_, itemIndex) => itemIndex !== index));
+
+  const getHomepagePromos = () => {
+    const raw = Array.isArray(form['homepage.promoBanners']) && form['homepage.promoBanners'].length ? form['homepage.promoBanners'] : DEFAULT_HOMEPAGE_PROMOS;
+    return raw.map(p => ({ ...p, id: p.id || `promo-${Math.random().toString(36).substr(2, 9)}` }));
+  };
+  const setHomepagePromos = (promos) => set('homepage.promoBanners', promos);
+  const updateHomepagePromo = (index, patch) => {
+    setHomepagePromos(getHomepagePromos().map((item, itemIndex) => (itemIndex === index ? { ...item, ...patch } : item)));
+  };
+  const addHomepagePromo = () => {
+    setHomepagePromos([...getHomepagePromos(), { id: `promo-${Math.random().toString(36).substr(2, 9)}`, kicker: 'Offer', title: 'New Promo', subtitle: 'Add a short promotion message.', ctaText: 'Shop Now', link: '/products', color: '#F8FAFC', accentColor: brandPrimary }]);
+  };
+  const removeHomepagePromo = (index) => setHomepagePromos(getHomepagePromos().filter((_, itemIndex) => itemIndex !== index));
+
+  const getValueProps = () => {
+    const raw = Array.isArray(form['homepage.valueProps']) && form['homepage.valueProps'].length ? form['homepage.valueProps'] : DEFAULT_HOMEPAGE_VALUE_PROPS;
+    return raw.map(v => ({ ...v, id: v.id || `vp-${Math.random().toString(36).substr(2, 9)}` }));
+  };
+  const setValueProps = (items) => set('homepage.valueProps', items);
+  const updateValueProp = (index, patch) => {
+    setValueProps(getValueProps().map((item, itemIndex) => (itemIndex === index ? { ...item, ...patch } : item)));
+  };
+  const addValueProp = () => {
+    setValueProps([...getValueProps(), { id: `vp-${Math.random().toString(36).substr(2, 9)}`, icon: 'verified', title: 'New Benefit', text: 'Describe the shopper benefit.' }]);
+  };
+  const removeValueProp = (index) => setValueProps(getValueProps().filter((_, itemIndex) => itemIndex !== index));
+
   const toggle = (key, label) => (
     <FormControlLabel
       key={key}
@@ -411,7 +598,6 @@ const SettingsPage = () => {
   const showCategoryBar = Boolean(form['nav.showCategoryBar']);
   const footerEnabled = Boolean(form['footer.enabled']);
   const footerShowLinks = Boolean(form['footer.showLinks']);
-  const homepageShowCategories = Boolean(form['homepage.showCategories']);
   const showProductSku = Boolean(form['productPage.showSKU']);
   const showStockBadge = Boolean(form['productPage.showStockBadge']);
   const showBuyNowButton = form['productPage.showBuyNowButton'] !== false;
@@ -452,6 +638,11 @@ const SettingsPage = () => {
     borderColor: cardStyle === 'elevated' ? 'transparent' : 'divider',
     boxShadow: cardStyle === 'elevated' ? '0 16px 34px rgba(0,0,0,0.14)' : 'none',
   };
+  const homepageSections = getHomepageSections();
+  const heroSlides = getHeroSlides();
+  const homepagePromos = getHomepagePromos();
+  const homepageValueProps = getValueProps();
+  const primaryHeroSlide = heroSlides[0] || {};
 
   const formatMoney = (amount) => {
     try {
@@ -539,84 +730,40 @@ const SettingsPage = () => {
             sx={{
               p: 2.5,
               borderRadius: `${borderRadius + 4}px`,
-              color: heroTextColor,
-              background: form['hero.backgroundType'] === 'image' && form['hero.backgroundImage']
-                ? `linear-gradient(rgba(0,0,0,${Number(form['hero.overlayOpacity'] ?? 0.5)}), rgba(0,0,0,${Number(form['hero.overlayOpacity'] ?? 0.5)})), url(${form['hero.backgroundImage']}) center/cover`
+              color: primaryHeroSlide.color || heroTextColor,
+              background: primaryHeroSlide.image
+                ? `linear-gradient(rgba(0,0,0,0.52), rgba(0,0,0,0.52)), url(${primaryHeroSlide.image}) center/cover`
                 : `linear-gradient(135deg, ${brandPrimary}, ${brandSecondary})`,
             }}
           >
-            <Typography variant="h6" fontWeight={800} sx={{ color: heroTextColor }}>{heroTitle}</Typography>
-            <Typography variant="body2" sx={{ color: heroTextColor, opacity: 0.9, mt: 0.75, mb: 2 }}>{heroSubtitle}</Typography>
+            {primaryHeroSlide.eyebrow && (
+              <Typography variant="caption" fontWeight={800} sx={{ color: 'inherit', opacity: 0.9 }}>
+                {primaryHeroSlide.eyebrow}
+              </Typography>
+            )}
+            <Typography variant="h6" fontWeight={800} sx={{ color: 'inherit' }}>{primaryHeroSlide.title || heroTitle}</Typography>
+            <Typography variant="body2" sx={{ color: 'inherit', opacity: 0.9, mt: 0.75, mb: 2 }}>{primaryHeroSlide.subtitle || heroSubtitle}</Typography>
             <Box sx={{ display: 'inline-block', px: 1.5, py: 0.9, ...previewButtonSx, fontWeight: 700, fontSize: 13 }}>
-              {heroButtonText}
+              {primaryHeroSlide.buttonText || heroButtonText}
             </Box>
           </Box>
           <Box sx={{ mt: 2, display: 'flex', flexDirection: 'column', gap: 1.5 }}>
-            {homepageShowCategories && (
-              <Box>
-                <Typography variant="caption" fontWeight={700} sx={{ display: 'block', mb: 0.5 }}>{form['homepage.categoriesTitle'] || 'Categories'}</Typography>
-                <Box sx={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 1 }}>
-                  {[1, 2, 3].map((i) => (
-                    <Box key={i} sx={{ height: 40, bgcolor: surfaceColor, borderRadius: 1.5, border: '1px solid', borderColor: 'divider' }} />
+            {homepageSections.filter((item) => item.type !== 'hero-carousel' && bool(item.enabled)).slice(0, 7).map((item) => (
+              <Box key={item.id}>
+                <Typography variant="caption" fontWeight={700} sx={{ display: 'block', mb: 0.5 }}>
+                  {item.title || HOMEPAGE_SECTION_TYPES.find((type) => type.value === item.type)?.label || item.type}
+                </Typography>
+                <Box sx={{
+                  display: item.type === 'value-props' || item.type === 'brand-showcase' ? 'flex' : 'grid',
+                  gridTemplateColumns: item.type === 'category-shortcuts' ? 'repeat(3, 1fr)' : 'repeat(2, 1fr)',
+                  gap: 1,
+                }}>
+                  {Array.from({ length: item.type === 'value-props' || item.type === 'brand-showcase' ? 4 : item.type === 'category-shortcuts' ? 3 : 2 }).map((_, i) => (
+                    <Box key={i} sx={{ height: item.type === 'brand-showcase' ? 22 : item.type === 'category-shortcuts' ? 40 : 58, flex: 1, bgcolor: surfaceColor, borderRadius: 1.5, border: '1px solid', borderColor: 'divider' }} />
                   ))}
                 </Box>
               </Box>
-            )}
-
-            {bool(form['homepage.showNewArrivals']) && (
-              <Box>
-                <Typography variant="caption" fontWeight={700} sx={{ display: 'block', mb: 0.5 }}>{form['homepage.newArrivalsTitle'] || 'New Arrivals'}</Typography>
-                <Box sx={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: 1 }}>
-                  {[1, 2].map((i) => (
-                    <Box key={i} sx={{ height: 60, bgcolor: surfaceColor, borderRadius: 1.5, border: '1px solid', borderColor: 'divider' }} />
-                  ))}
-                </Box>
-              </Box>
-            )}
-
-            {bool(form['homepage.showFeatured']) && (
-              <Box>
-                <Typography variant="caption" fontWeight={700} sx={{ display: 'block', mb: 0.5 }}>{form['homepage.featuredTitle'] || 'Featured'}</Typography>
-                <Box sx={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: 1 }}>
-                  {[1, 2].map((i) => (
-                    <Box key={i} sx={{ height: 60, bgcolor: surfaceColor, borderRadius: 1.5, border: '1px solid', borderColor: 'divider' }} />
-                  ))}
-                </Box>
-              </Box>
-            )}
-
-            {bool(form['homepage.showBestSellers']) && (
-              <Box>
-                <Typography variant="caption" fontWeight={700} sx={{ display: 'block', mb: 0.5 }}>{form['homepage.bestSellersTitle'] || 'Best Sellers'}</Typography>
-                <Box sx={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: 1 }}>
-                  {[1, 2].map((i) => (
-                    <Box key={i} sx={{ height: 60, bgcolor: surfaceColor, borderRadius: 1.5, border: '1px solid', borderColor: 'divider' }} />
-                  ))}
-                </Box>
-              </Box>
-            )}
-
-            {bool(form['homepage.showOnSale']) && (
-              <Box>
-                <Typography variant="caption" fontWeight={700} sx={{ display: 'block', mb: 0.5 }}>{form['homepage.onSaleTitle'] || 'On Sale'}</Typography>
-                <Box sx={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: 1 }}>
-                  {[1, 2].map((i) => (
-                    <Box key={i} sx={{ height: 60, bgcolor: surfaceColor, borderRadius: 1.5, border: '1px solid', borderColor: 'divider' }} />
-                  ))}
-                </Box>
-              </Box>
-            )}
-
-            {bool(form['homepage.showBrands']) && (
-              <Box>
-                <Typography variant="caption" fontWeight={700} sx={{ display: 'block', mb: 0.5 }}>{form['homepage.brandsTitle'] || 'Brands'}</Typography>
-                <Box sx={{ display: 'flex', gap: 0.5 }}>
-                  {[1, 2, 3, 4].map((i) => (
-                    <Box key={i} sx={{ height: 20, width: 40, bgcolor: surfaceColor, borderRadius: 1, border: '1px solid', borderColor: 'divider' }} />
-                  ))}
-                </Box>
-              </Box>
-            )}
+            ))}
           </Box>
         </Box>
       );
@@ -730,6 +877,201 @@ const SettingsPage = () => {
       </Box>
     );
   };
+
+  const renderHomepageControls = () => (
+    <>
+      <Alert severity="info" sx={{ mb: 2.5 }}>
+        These controls now edit the same configurable homepage schema used by the storefront. Reorder sections, hide blocks, and update slide/banner content here, then click Save All.
+      </Alert>
+
+      <Typography variant="subtitle2" sx={{ mb: 1 }}>Hero Slides</Typography>
+      {heroSlides.map((slide, index) => (
+        <Paper key={`hero-slide-${index}`} variant="outlined" sx={{ p: 2, mb: 1.5, borderRadius: 2 }}>
+          <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 1.5 }}>
+            <Typography variant="body2" fontWeight={700}>Slide {index + 1}</Typography>
+            {heroSlides.length > 1 && (
+              <IconButton size="small" color="error" onClick={() => removeHeroSlide(index)} aria-label="Remove hero slide">
+                <DeleteOutlineIcon fontSize="small" />
+              </IconButton>
+            )}
+          </Box>
+          <Grid container spacing={2}>
+            <Grid item xs={12} sm={6}>
+              <TextField fullWidth size="small" label="Eyebrow" value={slide.eyebrow || ''} onChange={(e) => updateHeroSlide(index, { eyebrow: e.target.value })} sx={{ mb: 2 }} />
+            </Grid>
+            <Grid item xs={12} sm={6}>
+              <TextField fullWidth size="small" label="Text Color" type="color" value={slide.color || '#ffffff'} onChange={(e) => updateHeroSlide(index, { color: e.target.value })} sx={{ mb: 2 }} />
+            </Grid>
+          </Grid>
+          <TextField fullWidth size="small" label="Headline" value={slide.title || ''} onChange={(e) => updateHeroSlide(index, { title: e.target.value })} sx={{ mb: 2 }} />
+          <TextField fullWidth size="small" label="Subheading" value={slide.subtitle || ''} onChange={(e) => updateHeroSlide(index, { subtitle: e.target.value })} multiline rows={2} sx={{ mb: 2 }} />
+          <Grid container spacing={2}>
+            <Grid item xs={12} sm={6}>
+              <TextField fullWidth size="small" label="Primary Button Label" value={slide.buttonText || ''} onChange={(e) => updateHeroSlide(index, { buttonText: e.target.value })} sx={{ mb: 2 }} />
+            </Grid>
+            <Grid item xs={12} sm={6}>
+              <TextField fullWidth size="small" label="Primary Button Link" value={slide.buttonLink || ''} onChange={(e) => updateHeroSlide(index, { buttonLink: e.target.value })} sx={{ mb: 2 }} />
+            </Grid>
+            <Grid item xs={12} sm={6}>
+              <TextField fullWidth size="small" label="Secondary Button Label" value={slide.secondaryButtonText || ''} onChange={(e) => updateHeroSlide(index, { secondaryButtonText: e.target.value })} sx={{ mb: 2 }} />
+            </Grid>
+            <Grid item xs={12} sm={6}>
+              <TextField fullWidth size="small" label="Secondary Button Link" value={slide.secondaryButtonLink || ''} onChange={(e) => updateHeroSlide(index, { secondaryButtonLink: e.target.value })} sx={{ mb: 2 }} />
+            </Grid>
+          </Grid>
+          <TextField fullWidth size="small" label="Hero Image URL" value={slide.image || ''} onChange={(e) => updateHeroSlide(index, { image: e.target.value })} sx={{ mb: 2 }} />
+          <TextField fullWidth size="small" label="Image Position" value={slide.position || 'center'} onChange={(e) => updateHeroSlide(index, { position: e.target.value })} />
+        </Paper>
+      ))}
+      <Button startIcon={<AddIcon />} variant="outlined" size="small" onClick={addHeroSlide} sx={{ mb: 3 }}>
+        Add Hero Slide
+      </Button>
+
+      <Divider sx={{ my: 2 }} />
+      <Typography variant="subtitle2" sx={{ mb: 1 }}>Homepage Sections</Typography>
+      {homepageSections.map((item, index) => (
+        <Paper key={`${item.id}-${index}`} variant="outlined" sx={{ p: 2, mb: 1.5, borderRadius: 2 }}>
+          <Grid container spacing={1.5} alignItems="center">
+            <Grid item xs={12} md={3}>
+              <TextField fullWidth size="small" label="Section ID" value={item.id || ''} onChange={(e) => updateHomepageSection(index, { id: e.target.value })} />
+            </Grid>
+            <Grid item xs={12} md={3}>
+              <FormControl fullWidth size="small">
+                <InputLabel>Type</InputLabel>
+                <Select label="Type" value={item.type || 'product-row'} onChange={(e) => updateHomepageSection(index, { type: e.target.value })}>
+                  {HOMEPAGE_SECTION_TYPES.map((type) => (
+                    <MenuItem key={type.value} value={type.value}>{type.label}</MenuItem>
+                  ))}
+                </Select>
+              </FormControl>
+            </Grid>
+            <Grid item xs={12} md={3}>
+              <FormControlLabel
+                control={<Switch checked={bool(item.enabled)} onChange={(e) => updateHomepageSection(index, { enabled: e.target.checked })} />}
+                label="Visible"
+              />
+            </Grid>
+            <Grid item xs={12} md={3}>
+              <Box sx={{ display: 'flex', justifyContent: { xs: 'flex-start', md: 'flex-end' }, gap: 0.5 }}>
+                <IconButton size="small" disabled={index === 0} onClick={() => moveHomepageSection(index, -1)} aria-label="Move section up">
+                  <ArrowBackIosNewIcon fontSize="small" sx={{ transform: 'rotate(90deg)' }} />
+                </IconButton>
+                <IconButton size="small" disabled={index === homepageSections.length - 1} onClick={() => moveHomepageSection(index, 1)} aria-label="Move section down">
+                  <ArrowForwardIosIcon fontSize="small" sx={{ transform: 'rotate(90deg)' }} />
+                </IconButton>
+                <IconButton size="small" color="error" onClick={() => removeHomepageSection(index)} aria-label="Remove section">
+                  <DeleteOutlineIcon fontSize="small" />
+                </IconButton>
+              </Box>
+            </Grid>
+          </Grid>
+
+          {item.type !== 'hero-carousel' && item.type !== 'value-props' && (
+            <TextField fullWidth size="small" label="Section Title" value={item.title || ''} onChange={(e) => updateHomepageSection(index, { title: e.target.value })} sx={{ mt: 2 }} />
+          )}
+          {(item.type === 'category-shortcuts' || item.type === 'promo-banners') && (
+            <TextField fullWidth size="small" label="Subtitle" value={item.subtitle || ''} onChange={(e) => updateHomepageSection(index, { subtitle: e.target.value })} sx={{ mt: 2 }} />
+          )}
+          {(item.type === 'product-row' || item.type === 'category-shortcuts' || item.type === 'brand-showcase') && (
+            <Grid container spacing={2} sx={{ mt: 0 }}>
+              <Grid item xs={12} sm={4}>
+                <TextField fullWidth size="small" label="Count" type="number" value={item.count ?? 8} onChange={(e) => updateHomepageSection(index, { count: Number(e.target.value) })} sx={{ mt: 2 }} />
+              </Grid>
+              {item.type === 'product-row' && (
+                <>
+                  <Grid item xs={12} sm={4}>
+                    <FormControl fullWidth size="small" sx={{ mt: 2 }}>
+                      <InputLabel>Product Source</InputLabel>
+                      <Select label="Product Source" value={item.source || 'newest'} onChange={(e) => updateHomepageSection(index, { source: e.target.value })}>
+                        {HOMEPAGE_PRODUCT_SOURCES.map((source) => (
+                          <MenuItem key={source.value} value={source.value}>{source.label}</MenuItem>
+                        ))}
+                      </Select>
+                    </FormControl>
+                  </Grid>
+                  <Grid item xs={12} sm={4}>
+                    <FormControl fullWidth size="small" sx={{ mt: 2 }}>
+                      <InputLabel>Layout</InputLabel>
+                      <Select label="Layout" value={item.layout || 'grid'} onChange={(e) => updateHomepageSection(index, { layout: e.target.value })}>
+                        <MenuItem value="grid">Grid</MenuItem>
+                        <MenuItem value="carousel">Carousel</MenuItem>
+                      </Select>
+                    </FormControl>
+                  </Grid>
+                  <Grid item xs={12} sm={6}>
+                    <TextField fullWidth size="small" label="View All Label" value={item.viewAllLabel || ''} onChange={(e) => updateHomepageSection(index, { viewAllLabel: e.target.value })} sx={{ mt: 2 }} />
+                  </Grid>
+                  <Grid item xs={12} sm={6}>
+                    <TextField fullWidth size="small" label="View All Link" value={item.viewAllLink || ''} onChange={(e) => updateHomepageSection(index, { viewAllLink: e.target.value })} sx={{ mt: 2 }} />
+                  </Grid>
+                </>
+              )}
+            </Grid>
+          )}
+        </Paper>
+      ))}
+      <Button startIcon={<AddIcon />} variant="outlined" size="small" onClick={addHomepageSection} sx={{ mb: 3 }}>
+        Add Section
+      </Button>
+
+      <Divider sx={{ my: 2 }} />
+      <Typography variant="subtitle2" sx={{ mb: 1 }}>Value Props</Typography>
+      {homepageValueProps.map((item, index) => (
+        <Grid container spacing={1.5} key={item.id} sx={{ mb: 1 }}>
+          <Grid item xs={12} sm={2}>
+            <FormControl fullWidth size="small">
+              <InputLabel>Icon</InputLabel>
+              <Select label="Icon" value={item.icon || 'verified'} onChange={(e) => updateValueProp(index, { icon: e.target.value })}>
+                {HOMEPAGE_VALUE_ICONS.map((icon) => <MenuItem key={icon} value={icon}>{icon}</MenuItem>)}
+              </Select>
+            </FormControl>
+          </Grid>
+          <Grid item xs={12} sm={3}>
+            <TextField fullWidth size="small" label="Title" value={item.title || ''} onChange={(e) => updateValueProp(index, { title: e.target.value })} />
+          </Grid>
+          <Grid item xs={12} sm={6}>
+            <TextField fullWidth size="small" label="Text" value={item.text || ''} onChange={(e) => updateValueProp(index, { text: e.target.value })} />
+          </Grid>
+          <Grid item xs={12} sm={1}>
+            <IconButton color="error" onClick={() => removeValueProp(index)} aria-label="Remove value prop">
+              <DeleteOutlineIcon fontSize="small" />
+            </IconButton>
+          </Grid>
+        </Grid>
+      ))}
+      <Button startIcon={<AddIcon />} variant="outlined" size="small" onClick={addValueProp} sx={{ mb: 3 }}>
+        Add Value Prop
+      </Button>
+
+      <Divider sx={{ my: 2 }} />
+      <Typography variant="subtitle2" sx={{ mb: 1 }}>Promo Banners</Typography>
+      {homepagePromos.map((promo, index) => (
+        <Paper key={promo.id} variant="outlined" sx={{ p: 2, mb: 1.5, borderRadius: 2 }}>
+          <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 1.5 }}>
+            <Typography variant="body2" fontWeight={700}>Promo {index + 1}</Typography>
+            <IconButton size="small" color="error" onClick={() => removeHomepagePromo(index)} aria-label="Remove promo banner">
+              <DeleteOutlineIcon fontSize="small" />
+            </IconButton>
+          </Box>
+          <Grid container spacing={2}>
+            <Grid item xs={12} sm={4}><TextField fullWidth size="small" label="Kicker" value={promo.kicker || ''} onChange={(e) => updateHomepagePromo(index, { kicker: e.target.value })} sx={{ mb: 2 }} /></Grid>
+            <Grid item xs={12} sm={4}><TextField fullWidth size="small" label="Background" type="color" value={promo.color || '#ffffff'} onChange={(e) => updateHomepagePromo(index, { color: e.target.value })} sx={{ mb: 2 }} /></Grid>
+            <Grid item xs={12} sm={4}><TextField fullWidth size="small" label="Accent" type="color" value={promo.accentColor || brandPrimary} onChange={(e) => updateHomepagePromo(index, { accentColor: e.target.value })} sx={{ mb: 2 }} /></Grid>
+          </Grid>
+          <TextField fullWidth size="small" label="Title" value={promo.title || ''} onChange={(e) => updateHomepagePromo(index, { title: e.target.value })} sx={{ mb: 2 }} />
+          <TextField fullWidth size="small" label="Subtitle" value={promo.subtitle || ''} onChange={(e) => updateHomepagePromo(index, { subtitle: e.target.value })} sx={{ mb: 2 }} />
+          <Grid container spacing={2}>
+            <Grid item xs={12} sm={4}><TextField fullWidth size="small" label="CTA Text" value={promo.ctaText || ''} onChange={(e) => updateHomepagePromo(index, { ctaText: e.target.value })} sx={{ mb: 2 }} /></Grid>
+            <Grid item xs={12} sm={4}><TextField fullWidth size="small" label="Link" value={promo.link || ''} onChange={(e) => updateHomepagePromo(index, { link: e.target.value })} sx={{ mb: 2 }} /></Grid>
+            <Grid item xs={12} sm={4}><TextField fullWidth size="small" label="Image URL" value={promo.image || ''} onChange={(e) => updateHomepagePromo(index, { image: e.target.value })} sx={{ mb: 2 }} /></Grid>
+          </Grid>
+        </Paper>
+      ))}
+      <Button startIcon={<AddIcon />} variant="outlined" size="small" onClick={addHomepagePromo}>
+        Add Promo Banner
+      </Button>
+    </>
+  );
 
   const panels = [
     [
@@ -1039,178 +1381,10 @@ const SettingsPage = () => {
     ],
     [
       section(
-        'Hero Banner',
-        'Control the main landing banner content, button, and visual presentation.',
-        <>
-          <Typography variant="subtitle2" sx={{ mb: 1 }}>Content</Typography>
-          {field('hero.title', 'Headline')}
-          {field('hero.subtitle', 'Subheading')}
-          <Grid container spacing={2}>
-            <Grid item xs={12} sm={6}>{field('hero.buttonText', 'Button Label')}</Grid>
-            <Grid item xs={12} sm={6}>{field('hero.buttonLink', 'Button Link (e.g. /products)')}</Grid>
-          </Grid>
-
-          <Divider sx={{ my: 2 }} />
-          <Typography variant="subtitle2" sx={{ mb: 1 }}>Background</Typography>
-          <FormControl fullWidth size="small" sx={{ mb: 2 }}>
-            <InputLabel>Background Type</InputLabel>
-            <Select
-              label="Background Type"
-              value={form['hero.backgroundType'] || 'gradient'}
-              onChange={(e) => set('hero.backgroundType', e.target.value)}
-            >
-              <MenuItem value="gradient">Gradient — uses your brand colors</MenuItem>
-              <MenuItem value="image">Custom Image</MenuItem>
-            </Select>
-          </FormControl>
-          {(form['hero.backgroundType'] || 'gradient') === 'image' && (
-            <>
-              {imageField('hero.backgroundImage', 'Hero Background Image')}
-              {form['hero.backgroundImage'] && (
-                <Box sx={{ mb: 2, borderRadius: 2, overflow: 'hidden', maxHeight: 160, border: '1px solid', borderColor: 'divider' }}>
-                  <img
-                    src={getMediaUrl(form['hero.backgroundImage'])}
-                    alt="Hero preview"
-                    style={{ width: '100%', maxHeight: 160, objectFit: 'cover', display: 'block' }}
-                    onError={(e) => { e.target.style.display = 'none'; }}
-                  />
-                </Box>
-              )}
-              <Typography variant="subtitle2" sx={{ mb: 0.5, mt: 1 }}>
-                Dark Overlay: {Math.round(Number(form['hero.overlayOpacity'] ?? 0.5) * 100)}%
-              </Typography>
-              <Slider min={0} max={1} step={0.05} value={Number(form['hero.overlayOpacity'] ?? 0.5)} onChange={(_, v) => set('hero.overlayOpacity', v)} sx={{ mb: 2 }} />
-            </>
-          )}
-          <Grid container spacing={2}>
-            <Grid item xs={12} sm={4}>{field('hero.color', 'Text Color', 'color')}</Grid>
-          </Grid>
-        </>,
-        ['hero', 'homepage banner', 'headline']
-      ),
-      section(
-        'Homepage Sections',
-        'Control every content block that appears below the hero banner. All sections are fully customizable.',
-        <>
-          {/* ── Shop by Category ── */}
-          <Typography variant="subtitle2" sx={{ mb: 1 }}>Shop by Category</Typography>
-          {toggle('homepage.showCategories', 'Show categories section')}
-          {field('homepage.categoriesTitle', 'Section heading (e.g. Shop by Category)')}
-          {field('homepage.categoriesCount', 'Max categories to show (e.g. 12)', 'number')}
-
-          <Divider sx={{ my: 2 }} />
-
-          {/* ── New Arrivals ── */}
-          <Typography variant="subtitle2" sx={{ mb: 1 }}>New Arrivals</Typography>
-          {toggle('homepage.showNewArrivals', 'Show new arrivals section')}
-          {field('homepage.newArrivalsTitle', 'Section heading (e.g. New Arrivals)')}
-          <Grid container spacing={2}>
-            <Grid item xs={12} sm={6}>
-              {field('homepage.newArrivalsCount', 'Number of products to show', 'number')}
-            </Grid>
-            <Grid item xs={12} sm={6}>
-              <FormControl fullWidth size="small" sx={{ mb: 2 }}>
-                <InputLabel>Layout</InputLabel>
-                <Select
-                  label="Layout"
-                  value={form['homepage.newArrivalsLayout'] || 'grid'}
-                  onChange={(e) => set('homepage.newArrivalsLayout', e.target.value)}
-                >
-                  <MenuItem value="grid">Grid (Rows)</MenuItem>
-                  <MenuItem value="carousel">Carousel (Horizontal Scroll)</MenuItem>
-                </Select>
-              </FormControl>
-            </Grid>
-          </Grid>
-          {field('homepage.newArrivalsLink', '"View All" link (e.g. /products?sort=newest)')}
-
-          <Divider sx={{ my: 2 }} />
-
-          {/* ── Featured Products ── */}
-          <Typography variant="subtitle2" sx={{ mb: 1 }}>Featured Products</Typography>
-          {toggle('homepage.showFeatured', 'Show featured products section')}
-          {field('homepage.featuredTitle', 'Section heading (e.g. Featured Products)')}
-          <Grid container spacing={2}>
-            <Grid item xs={12} sm={6}>
-              {field('homepage.featuredCount', 'Number of products to show', 'number')}
-            </Grid>
-            <Grid item xs={12} sm={6}>
-              <FormControl fullWidth size="small" sx={{ mb: 2 }}>
-                <InputLabel>Layout</InputLabel>
-                <Select
-                  label="Layout"
-                  value={form['homepage.featuredLayout'] || 'carousel'}
-                  onChange={(e) => set('homepage.featuredLayout', e.target.value)}
-                >
-                  <MenuItem value="grid">Grid (Rows)</MenuItem>
-                  <MenuItem value="carousel">Carousel (Horizontal Scroll)</MenuItem>
-                </Select>
-              </FormControl>
-            </Grid>
-          </Grid>
-          {field('homepage.featuredLink', '"View All" link (e.g. /products?featured=true)')}
-
-          <Divider sx={{ my: 2 }} />
-
-          {/* ── Best Sellers ── */}
-          <Typography variant="subtitle2" sx={{ mb: 1 }}>Best Sellers</Typography>
-          {toggle('homepage.showBestSellers', 'Show best sellers section')}
-          {field('homepage.bestSellersTitle', 'Section heading (e.g. Best Sellers)')}
-          <Grid container spacing={2}>
-            <Grid item xs={12} sm={6}>
-              {field('homepage.bestSellersCount', 'Number of products to show', 'number')}
-            </Grid>
-            <Grid item xs={12} sm={6}>
-              <FormControl fullWidth size="small" sx={{ mb: 2 }}>
-                <InputLabel>Layout</InputLabel>
-                <Select
-                  label="Layout"
-                  value={form['homepage.bestSellersLayout'] || 'grid'}
-                  onChange={(e) => set('homepage.bestSellersLayout', e.target.value)}
-                >
-                  <MenuItem value="grid">Grid (Rows)</MenuItem>
-                  <MenuItem value="carousel">Carousel (Horizontal Scroll)</MenuItem>
-                </Select>
-              </FormControl>
-            </Grid>
-          </Grid>
-          {field('homepage.bestSellersLink', '"View All" link (e.g. /products?sort=best-selling)')}
-
-          <Divider sx={{ my: 2 }} />
-
-          {/* ── On Sale ── */}
-          <Typography variant="subtitle2" sx={{ mb: 1 }}>On Sale</Typography>
-          {toggle('homepage.showOnSale', 'Show on-sale products section')}
-          {field('homepage.onSaleTitle', 'Section heading (e.g. On Sale)')}
-          <Grid container spacing={2}>
-            <Grid item xs={12} sm={6}>
-              {field('homepage.onSaleCount', 'Number of products to show', 'number')}
-            </Grid>
-            <Grid item xs={12} sm={6}>
-              <FormControl fullWidth size="small" sx={{ mb: 2 }}>
-                <InputLabel>Layout</InputLabel>
-                <Select
-                  label="Layout"
-                  value={form['homepage.onSaleLayout'] || 'carousel'}
-                  onChange={(e) => set('homepage.onSaleLayout', e.target.value)}
-                >
-                  <MenuItem value="grid">Grid (Rows)</MenuItem>
-                  <MenuItem value="carousel">Carousel (Horizontal Scroll)</MenuItem>
-                </Select>
-              </FormControl>
-            </Grid>
-          </Grid>
-          {field('homepage.onSaleLink', '"View All" link (e.g. /products?onSale=true)')}
-
-          <Divider sx={{ my: 2 }} />
-
-          {/* ── Shop by Brand ── */}
-          <Typography variant="subtitle2" sx={{ mb: 1 }}>Shop by Brand</Typography>
-          {toggle('homepage.showBrands', 'Show brands strip')}
-          {field('homepage.brandsTitle', 'Section heading (e.g. Shop by Brand)')}
-          {field('homepage.brandsCount', 'Max brands to show (e.g. 12)', 'number')}
-        </>,
-        ['homepage', 'new arrivals', 'categories', 'featured', 'best sellers', 'on sale', 'brands', 'sections']
+        'Homepage Builder',
+        'Control the redesigned homepage: hero slides, section order, product rows, value props, and promo banners.',
+        renderHomepageControls(),
+        ['hero', 'homepage banner', 'headline', 'sections', 'promo', 'value props']
       ),
     ],
     [
@@ -1274,12 +1448,62 @@ const SettingsPage = () => {
         <>
           {toggle('productPage.showSKU', 'Show SKU code under product name')}
           {toggle('productPage.showStockBadge', 'Show In Stock / Out of Stock badge')}
+          <Divider sx={{ my: 2 }} />
+          <Typography variant="subtitle2" fontWeight={800} sx={{ mb: 1 }}>
+            Product Gallery
+          </Typography>
+          <Grid container spacing={2} sx={{ mb: 2 }}>
+            <Grid item xs={12} md={7}>
+              <FormControl fullWidth size="small">
+                <InputLabel>Thumbnail alignment</InputLabel>
+                <Select
+                  label="Thumbnail alignment"
+                  value={form['productPage.imageAlignment'] || 'horizontal'}
+                  onChange={(e) => set('productPage.imageAlignment', e.target.value)}
+                >
+                  <MenuItem value="horizontal">Horizontal below main image</MenuItem>
+                  <MenuItem value="vertical">Vertical beside main image</MenuItem>
+                </Select>
+              </FormControl>
+            </Grid>
+            <Grid item xs={12} md={5}>
+              <Box
+                sx={{
+                  display: 'flex',
+                  flexDirection: form['productPage.imageAlignment'] === 'vertical' ? 'row' : 'column',
+                  gap: 1,
+                  p: 1,
+                  border: '1px solid',
+                  borderColor: 'divider',
+                  borderRadius: 2,
+                  bgcolor: 'action.hover',
+                  minHeight: 90,
+                }}
+              >
+                {form['productPage.imageAlignment'] === 'vertical' && (
+                  <Box sx={{ display: 'flex', flexDirection: 'column', gap: 0.5 }}>
+                    {[1, 2, 3].map((i) => (
+                      <Box key={i} sx={{ width: 22, height: 22, borderRadius: 0.75, bgcolor: i === 1 ? 'primary.main' : 'divider' }} />
+                    ))}
+                  </Box>
+                )}
+                <Box sx={{ flex: 1, borderRadius: 1.25, bgcolor: 'background.paper', border: '1px solid', borderColor: 'divider' }} />
+                {form['productPage.imageAlignment'] !== 'vertical' && (
+                  <Box sx={{ display: 'flex', gap: 0.5 }}>
+                    {[1, 2, 3].map((i) => (
+                      <Box key={i} sx={{ width: 24, height: 24, borderRadius: 0.75, bgcolor: i === 1 ? 'primary.main' : 'divider' }} />
+                    ))}
+                  </Box>
+                )}
+              </Box>
+            </Grid>
+          </Grid>
           {field('productPage.addToCartLabel', 'Add to Cart button label (e.g. Add to Cart, Buy Now, Add to Bag)')}
           {toggle('productPage.showBuyNowButton', 'Show Buy Now button next to Add to Cart')}
           {field('productPage.buyNowLabel', 'Buy Now button label (e.g. Buy Now, Quick Checkout, Order Now)')}
 
         </>,
-        ['product page', 'wishlist', 'reviews', 'stock badge', 'sku']
+        ['product page', 'wishlist', 'reviews', 'stock badge', 'sku', 'image alignment', 'gallery thumbnails']
       ),
       section(
         'SKU Automation',
@@ -1773,6 +1997,63 @@ const SettingsPage = () => {
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
             />
+          </Paper>
+
+          <Paper variant="outlined" sx={{ p: 2.5, borderRadius: 3, mb: 3, boxShadow: 'none' }}>
+            <Grid container spacing={2.5} alignItems="center">
+              <Grid item xs={12} md={5}>
+                <Typography variant="subtitle1" fontWeight={800}>
+                  Product Gallery Layout
+                </Typography>
+                <Typography variant="body2" color="text.secondary" sx={{ mt: 0.5 }}>
+                  Choose how thumbnail images appear on product detail pages.
+                </Typography>
+              </Grid>
+              <Grid item xs={12} md={4}>
+                <FormControl fullWidth size="small">
+                  <InputLabel>Thumbnail alignment</InputLabel>
+                  <Select
+                    label="Thumbnail alignment"
+                    value={form['productPage.imageAlignment'] || 'horizontal'}
+                    onChange={(e) => set('productPage.imageAlignment', e.target.value)}
+                  >
+                    <MenuItem value="horizontal">Horizontal below main image</MenuItem>
+                    <MenuItem value="vertical">Vertical beside main image</MenuItem>
+                  </Select>
+                </FormControl>
+              </Grid>
+              <Grid item xs={12} md={3}>
+                <Box
+                  sx={{
+                    display: 'flex',
+                    flexDirection: form['productPage.imageAlignment'] === 'vertical' ? 'row' : 'column',
+                    gap: 0.75,
+                    p: 1,
+                    border: '1px solid',
+                    borderColor: 'divider',
+                    borderRadius: 2,
+                    bgcolor: 'action.hover',
+                    height: 82,
+                  }}
+                >
+                  {form['productPage.imageAlignment'] === 'vertical' && (
+                    <Box sx={{ display: 'flex', flexDirection: 'column', gap: 0.5 }}>
+                      {[1, 2, 3].map((i) => (
+                        <Box key={i} sx={{ width: 18, height: 18, borderRadius: 0.75, bgcolor: i === 1 ? 'primary.main' : 'divider' }} />
+                      ))}
+                    </Box>
+                  )}
+                  <Box sx={{ flex: 1, borderRadius: 1.25, bgcolor: 'background.paper', border: '1px solid', borderColor: 'divider' }} />
+                  {form['productPage.imageAlignment'] !== 'vertical' && (
+                    <Box sx={{ display: 'flex', gap: 0.5 }}>
+                      {[1, 2, 3].map((i) => (
+                        <Box key={i} sx={{ width: 20, height: 20, borderRadius: 0.75, bgcolor: i === 1 ? 'primary.main' : 'divider' }} />
+                      ))}
+                    </Box>
+                  )}
+                </Box>
+              </Grid>
+            </Grid>
           </Paper>
 
           <Paper
