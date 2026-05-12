@@ -557,6 +557,7 @@ const CouponsPage = () => {
           paginationModel={paginationModel}
           onPaginationModelChange={setPaginationModel}
           disableRowSelectionOnClick
+          onRowDoubleClick={(params) => openEdit(params.row)}
         />
       </Box>
 

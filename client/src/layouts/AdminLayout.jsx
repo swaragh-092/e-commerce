@@ -16,7 +16,13 @@ import {
   IconButton,
   useTheme,
   useMediaQuery,
+  Collapse,
+  TextField,
+  InputAdornment,
+  Badge,
 } from '@mui/material';
+import { alpha } from '@mui/material/styles';
+import SearchIcon from '@mui/icons-material/Search';
 import { Outlet, Link as RouterLink, useLocation } from 'react-router-dom';
 import DashboardIcon from '@mui/icons-material/Dashboard';
 import InventoryIcon from '@mui/icons-material/Inventory';
@@ -40,53 +46,92 @@ import PublicIcon from '@mui/icons-material/Public';
 import MailOutlineIcon from '@mui/icons-material/MailOutline';
 import HelpOutlineIcon from '@mui/icons-material/HelpOutline';
 import MenuIcon from '@mui/icons-material/Menu';
+import ExpandLess from '@mui/icons-material/ExpandLess';
+import ExpandMore from '@mui/icons-material/ExpandMore';
+import ChevronLeftIcon from '@mui/icons-material/ChevronLeft';
+import ChevronRightIcon from '@mui/icons-material/ChevronRight';
 import { useAuth } from '../hooks/useAuth';
 import { useSettings, useMode } from '../hooks/useSettings';
 import { PERMISSIONS } from '../utils/permissions';
 
 const drawerWidth = 240;
+const slimDrawerWidth = 72;
 
 // Items with a `feature` key are hidden when that feature is disabled in Settings.
 // Items with a `mode: 'ecommerce'` key are hidden entirely in catalog mode.
-const ALL_MENU_ITEMS = [
-  { text: 'Dashboard',  path: '/admin',            icon: <DashboardIcon />, permission: PERMISSIONS.DASHBOARD_VIEW },
-  { text: 'Products',   path: '/admin/products',   icon: <InventoryIcon />, permission: PERMISSIONS.PRODUCTS_READ },
-  { text: 'Categories', path: '/admin/categories', icon: <CategoryIcon />, permission: PERMISSIONS.CATEGORIES_READ },
-  { text: 'Brands',     path: '/admin/brands',     icon: <LocalOfferIcon />, permission: PERMISSIONS.PRODUCTS_READ },
-  { text: 'Attributes', path: '/admin/attributes', icon: <TuneIcon />, permission: PERMISSIONS.ATTRIBUTES_READ },
-  { text: 'Orders',     path: '/admin/orders',     icon: <ShoppingCartIcon />, permission: PERMISSIONS.ORDERS_READ,  mode: 'ecommerce' },
-  { text: 'Enquiries',  path: '/admin/enquiries',  icon: <HelpOutlineIcon />, permission: PERMISSIONS.SETTINGS_READ },
-  { text: 'Customers',  path: '/admin/customers',  icon: <PeopleIcon />, permission: PERMISSIONS.CUSTOMERS_READ },
-  { text: 'Coupons',    path: '/admin/coupons',    icon: <LocalOfferIcon />, feature: 'coupons', permission: PERMISSIONS.COUPONS_READ, mode: 'ecommerce' },
-  { text: 'Sale Labels',path: '/admin/sale-labels',icon: <LocalOfferIcon />, permission: PERMISSIONS.SETTINGS_READ, mode: 'ecommerce' },
-  { text: 'Reviews',    path: '/admin/reviews',    icon: <StarIcon />, feature: 'reviews', permission: PERMISSIONS.REVIEWS_READ },
-  { text: 'Media',      path: '/admin/media',      icon: <PhotoLibraryIcon />, permission: PERMISSIONS.MEDIA_READ },
-  { text: 'SEO Overrides',path: '/admin/seo-overrides',icon: <PublicIcon />, feature: 'seo', permission: PERMISSIONS.SETTINGS_READ },
-  { text: 'Platform Features', path: '/admin/features', icon: <AdminPanelSettingsIcon />, permission: PERMISSIONS.SETTINGS_READ },
-  { text: 'Settings',         path: '/admin/settings',         icon: <SettingsIcon />, permission: PERMISSIONS.SETTINGS_READ },
-  { text: 'Templates',  path: '/admin/email-templates',  icon: <MailOutlineIcon />, permission: PERMISSIONS.SETTINGS_READ },
-  { text: 'Payment Gateways', path: '/admin/payment-gateways', icon: <PaymentIcon />, permission: PERMISSIONS.SETTINGS_READ, mode: 'ecommerce' },
-  { text: 'Shipping',         path: '/admin/shipping',         icon: <LocalShippingIcon />, permission: PERMISSIONS.SETTINGS_READ, mode: 'ecommerce' },
-  { text: 'Pages',            path: '/admin/pages',            icon: <DescriptionIcon />, permission: PERMISSIONS.PAGES_READ },
-  { text: 'Menu Builder',     path: '/admin/menus',            icon: <AccountTreeIcon />, permission: PERMISSIONS.MENUS_READ },
+const MENU_STRUCTURE = [
+  { text: 'Dashboard', path: '/admin', icon: <DashboardIcon />, permission: PERMISSIONS.DASHBOARD_VIEW },
   {
-    text: 'Access Control',
-    path: '/admin/access-control',
-    icon: <AdminPanelSettingsIcon />,
-    permissions: [
-      PERMISSIONS.ROLES_READ,
-      PERMISSIONS.ROLES_MANAGE,
-      PERMISSIONS.SYSTEM_ROLES_MANAGE,
-      PERMISSIONS.USERS_ASSIGN_ROLES,
-    ],
+    title: 'Catalog',
+    icon: <InventoryIcon />,
+    items: [
+      { text: 'Products', path: '/admin/products', icon: <InventoryIcon />, permission: PERMISSIONS.PRODUCTS_READ },
+      { text: 'Categories', path: '/admin/categories', icon: <CategoryIcon />, permission: PERMISSIONS.CATEGORIES_READ },
+      { text: 'Brands', path: '/admin/brands', icon: <LocalOfferIcon />, permission: PERMISSIONS.PRODUCTS_READ },
+      { text: 'Attributes', path: '/admin/attributes', icon: <TuneIcon />, permission: PERMISSIONS.ATTRIBUTES_READ },
+    ]
   },
-  { text: 'Audit Log',  path: '/admin/audit-log',  icon: <HistoryIcon />, permission: PERMISSIONS.AUDIT_READ },
+  {
+    title: 'Sales',
+    icon: <ShoppingCartIcon />,
+    items: [
+      { text: 'Orders', path: '/admin/orders', icon: <ShoppingCartIcon />, permission: PERMISSIONS.ORDERS_READ, mode: 'ecommerce' },
+      { text: 'Enquiries', path: '/admin/enquiries', icon: <HelpOutlineIcon />, permission: PERMISSIONS.SETTINGS_READ },
+      { text: 'Customers', path: '/admin/customers', icon: <PeopleIcon />, permission: PERMISSIONS.CUSTOMERS_READ },
+      { text: 'Coupons', path: '/admin/coupons', icon: <LocalOfferIcon />, feature: 'coupons', permission: PERMISSIONS.COUPONS_READ, mode: 'ecommerce' },
+      { text: 'Sale Labels', path: '/admin/sale-labels', icon: <LocalOfferIcon />, permission: PERMISSIONS.SETTINGS_READ, mode: 'ecommerce' },
+      { text: 'Reviews', path: '/admin/reviews', icon: <StarIcon />, feature: 'reviews', permission: PERMISSIONS.REVIEWS_READ },
+    ]
+  },
+  {
+    title: 'Content',
+    icon: <DescriptionIcon />,
+    items: [
+      { text: 'Media', path: '/admin/media', icon: <PhotoLibraryIcon />, permission: PERMISSIONS.MEDIA_READ },
+      { text: 'Pages', path: '/admin/pages', icon: <DescriptionIcon />, permission: PERMISSIONS.PAGES_READ },
+      { text: 'Menu Builder', path: '/admin/menus', icon: <AccountTreeIcon />, permission: PERMISSIONS.MENUS_READ },
+      { text: 'SEO Overrides', path: '/admin/seo-overrides', icon: <PublicIcon />, feature: 'seo', permission: PERMISSIONS.SETTINGS_READ },
+    ]
+  },
+  {
+    title: 'Settings',
+    icon: <SettingsIcon />,
+    items: [
+      { text: 'Platform Features', path: '/admin/features', icon: <AdminPanelSettingsIcon />, permission: PERMISSIONS.SETTINGS_READ },
+      { text: 'General', path: '/admin/settings', icon: <SettingsIcon />, permission: PERMISSIONS.SETTINGS_READ },
+      { text: 'Templates', path: '/admin/email-templates', icon: <MailOutlineIcon />, permission: PERMISSIONS.SETTINGS_READ },
+      { text: 'Payment Gateways', path: '/admin/payment-gateways', icon: <PaymentIcon />, permission: PERMISSIONS.SETTINGS_READ, mode: 'ecommerce' },
+      { text: 'Shipping', path: '/admin/shipping', icon: <LocalShippingIcon />, permission: PERMISSIONS.SETTINGS_READ, mode: 'ecommerce' },
+    ]
+  },
+  {
+    title: 'Security',
+    icon: <AdminPanelSettingsIcon />,
+    items: [
+      {
+        text: 'Access Control',
+        path: '/admin/access-control',
+        icon: <AdminPanelSettingsIcon />,
+        permissions: [
+          PERMISSIONS.ROLES_READ,
+          PERMISSIONS.ROLES_MANAGE,
+          PERMISSIONS.SYSTEM_ROLES_MANAGE,
+          PERMISSIONS.USERS_ASSIGN_ROLES,
+        ],
+      },
+      { text: 'Audit Log', path: '/admin/audit-log', icon: <HistoryIcon />, permission: PERMISSIONS.AUDIT_READ },
+    ]
+  },
 ];
 
 const AdminLayout = () => {
   const theme = useTheme();
   const isMobile = useMediaQuery(theme.breakpoints.down('md'));
   const [mobileOpen, setMobileOpen] = useState(false);
+  const [isCollapsed, setIsCollapsed] = useState(false);
+  const [openGroups, setOpenGroups] = useState({});
+  const [searchQuery, setSearchQuery] = useState('');
+  const searchInputRef = React.useRef(null);
 
   const { logout, user, hasAnyPermission, hasPermission } = useAuth();
   const location = useLocation();
@@ -97,20 +142,327 @@ const AdminLayout = () => {
     setMobileOpen(!mobileOpen);
   };
 
-  // Filter sidebar items by:
-  //  1. mode — items with mode:'ecommerce' are hidden in catalog mode
-  //  2. feature flag — uses the resolved features map (mode core + DB), not raw settings
-  //  3. permission — user must have the required permission
-  const menuItems = ALL_MENU_ITEMS.filter((item) => {
+  const handleToggleCollapse = () => {
+    setIsCollapsed(!isCollapsed);
+  };
+
+  const handleGroupToggle = (title) => {
+    setOpenGroups((prev) => {
+      const isOpen = prev[title];
+      // Accordion: Close others when opening one. Toggle if already open.
+      return isOpen ? {} : { [title]: true };
+    });
+  };
+
+  const isActive = (path) =>
+    path === '/admin' ? location.pathname === '/admin' : location.pathname.startsWith(path);
+
+  // Keyboard shortcut for search (Ctrl + /)
+  React.useEffect(() => {
+    const handleKeyDown = (e) => {
+      if ((e.ctrlKey || e.metaKey) && e.key === '/') {
+        e.preventDefault();
+        searchInputRef.current?.focus();
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, []);
+
+  // Filter and check if group should be visible
+  const isItemVisible = (item) => {
+    // Mode and Feature flags
     if (item.mode && item.mode !== appMode) return false;
     if (item.feature && features?.[item.feature] === false) return false;
     if (item.permission && !hasPermission(item.permission)) return false;
     if (item.permissions && !hasAnyPermission(item.permissions)) return false;
-    return true;
-  });
+    
+    // Search query filter
+    if (searchQuery) {
+      const query = searchQuery.toLowerCase();
+      const matchesText = item.text?.toLowerCase().includes(query);
+      const matchesTitle = item.title?.toLowerCase().includes(query);
+      const hasMatchingChild = item.items?.some(child => 
+        child.text.toLowerCase().includes(query) && isItemVisible(child)
+      );
+      return matchesText || matchesTitle || hasMatchingChild;
+    }
 
-  const isActive = (path) =>
-    path === '/admin' ? location.pathname === '/admin' : location.pathname.startsWith(path);
+    return true;
+  };
+
+  // Automatically expand group containing the active item OR matching search
+  React.useEffect(() => {
+    let newOpenGroups = {};
+    
+    MENU_STRUCTURE.forEach(item => {
+      if (item.items) {
+        const hasActiveChild = item.items.some(child => isActive(child.path));
+        const hasMatchingChild = searchQuery && item.items.some(child => 
+          child.text.toLowerCase().includes(searchQuery.toLowerCase())
+        );
+        
+        if (hasActiveChild || hasMatchingChild) {
+          newOpenGroups[item.title] = true;
+        }
+      }
+    });
+
+    // If we found a group to open, set it. 
+    // For search, we might want multiple open, so we only clear others if not searching.
+    if (Object.keys(newOpenGroups).length > 0) {
+      setOpenGroups(prev => {
+        if (searchQuery) return { ...prev, ...newOpenGroups };
+        return newOpenGroups; // Accordion behavior for navigation
+      });
+    }
+  }, [location.pathname, searchQuery]);
+
+  const renderMenuItem = (item, isNested = false) => {
+    if (!isItemVisible(item)) return null;
+
+    const active = isActive(item.path);
+
+    return (
+      <ListItem key={item.text} disablePadding sx={{ position: 'relative', px: 1 }}>
+        {/* Professional Active Indicator Bar */}
+        {active && !isCollapsed && (
+          <Box
+            sx={{
+              position: 'absolute',
+              left: 4, // Slightly inset for a modern look
+              top: '20%',
+              bottom: '20%',
+              width: 4,
+              bgcolor: 'primary.main',
+              borderRadius: 4,
+              zIndex: 2,
+              boxShadow: (theme) => `0 0 10px ${theme.palette.primary.main}40`,
+            }}
+          />
+        )}
+        <Tooltip title={isCollapsed ? item.text : ""} placement="right">
+          <ListItemButton
+            component={RouterLink}
+            to={item.path}
+            selected={active}
+            onClick={() => isMobile && setMobileOpen(false)}
+            sx={{
+              borderRadius: '12px', // More modern rounded corners
+              mb: 0.5,
+              py: 1.25,
+              pl: isNested ? (isCollapsed ? 1.5 : 4.5) : 2.5,
+              justifyContent: isCollapsed ? 'center' : 'initial',
+              transition: 'all 0.25s cubic-bezier(0.4, 0, 0.2, 1)',
+              '&:hover': {
+                bgcolor: (theme) => alpha(theme.palette.primary.main, 0.04),
+                '& .MuiListItemIcon-root': {
+                  transform: 'translateX(3px)',
+                  color: 'primary.main',
+                },
+              },
+              '&.Mui-selected': {
+                bgcolor: (theme) => alpha(theme.palette.primary.main, 0.08),
+                color: 'primary.main',
+                boxShadow: 'none',
+                '& .MuiListItemIcon-root': { 
+                  color: 'primary.main',
+                  transform: 'scale(1.1)',
+                },
+                '& .MuiListItemText-primary': {
+                  color: 'primary.main',
+                  fontWeight: 700,
+                },
+                '&:hover': { 
+                  bgcolor: (theme) => alpha(theme.palette.primary.main, 0.12),
+                },
+              },
+            }}
+          >
+            <ListItemIcon sx={{ 
+              minWidth: isCollapsed ? 0 : 38, 
+              mr: isCollapsed ? 0 : 0,
+              transition: 'all 0.25s cubic-bezier(0.4, 0, 0.2, 1)',
+              color: active ? 'primary.main' : 'text.secondary',
+              display: 'flex',
+              justifyContent: 'center',
+            }}>
+              {item.icon}
+            </ListItemIcon>
+            {!isCollapsed && (
+              <ListItemText 
+                primary={item.text} 
+                primaryTypographyProps={{ 
+                  fontSize: 14, 
+                  fontWeight: active ? 700 : 500,
+                  transition: 'all 0.2s ease',
+                  letterSpacing: '0.01em',
+                }} 
+              />
+            )}
+          </ListItemButton>
+        </Tooltip>
+      </ListItem>
+    );
+  };
+
+  const renderMenuSection = (section) => {
+    if (section.items) {
+      const visibleItems = section.items.filter(isItemVisible);
+      if (visibleItems.length === 0) return null;
+
+      const isOpen = openGroups[section.title];
+
+      return (
+        <React.Fragment key={section.title}>
+          <ListItem disablePadding>
+            <Tooltip title={isCollapsed ? section.title : ""} placement="right">
+              <ListItemButton
+                onClick={() => handleGroupToggle(section.title)}
+                sx={{
+                  mx: 1,
+                  borderRadius: 2,
+                  mb: 0.25,
+                  justifyContent: isCollapsed ? 'center' : 'initial',
+                }}
+              >
+                <ListItemIcon sx={{ 
+                  minWidth: isCollapsed ? 0 : 36, 
+                  mr: isCollapsed ? 0 : 0,
+                  transition: 'all 0.3s ease',
+                  transform: isOpen ? 'scale(1.1)' : 'none',
+                  color: isOpen ? 'primary.main' : 'inherit',
+                }}>
+                  {section.icon}
+                </ListItemIcon>
+                {!isCollapsed && (
+                  <>
+                    <ListItemText 
+                      primary={section.title} 
+                      primaryTypographyProps={{ 
+                        fontSize: 12, 
+                        fontWeight: 700, 
+                        letterSpacing: 1,
+                        textTransform: 'uppercase',
+                        color: isOpen ? 'primary.main' : 'text.secondary',
+                        opacity: 0.8,
+                      }} 
+                    />
+                    <Box sx={{ 
+                      display: 'flex', 
+                      alignItems: 'center',
+                      transition: 'transform 0.3s ease',
+                      transform: isOpen ? 'rotate(0deg)' : 'rotate(-90deg)',
+                    }}>
+                      <ExpandMore fontSize="small" sx={{ opacity: 0.5 }} />
+                    </Box>
+                  </>
+                )}
+              </ListItemButton>
+            </Tooltip>
+          </ListItem>
+          <Collapse in={(isOpen || !!searchQuery) && !isCollapsed} timeout="auto" unmountOnExit>
+            <List component="div" disablePadding>
+              {section.items.map(item => renderMenuItem(item, true))}
+            </List>
+          </Collapse>
+        </React.Fragment>
+      );
+    }
+    return renderMenuItem(section);
+  };
+
+  const drawerContent = (
+    <Box sx={{ height: '100%', display: 'flex', flexDirection: 'column' }}>
+      <Box sx={{ p: 2, pb: 1, display: isCollapsed ? 'none' : 'block' }}>
+        <TextField
+          fullWidth
+          size="small"
+          placeholder="Quick find... (Ctrl+/)"
+          value={searchQuery}
+          onChange={(e) => setSearchQuery(e.target.value)}
+          inputRef={searchInputRef}
+          InputProps={{
+            startAdornment: (
+              <InputAdornment position="start">
+                <SearchIcon fontSize="small" sx={{ color: 'text.secondary' }} />
+              </InputAdornment>
+            ),
+            sx: { 
+              borderRadius: 2, 
+              bgcolor: 'action.hover',
+              '& fieldset': { border: 'none' },
+              '& input': { fontSize: 13 },
+            }
+          }}
+        />
+      </Box>
+
+      <Box sx={{ flexGrow: 1, overflowY: 'auto', overflowX: 'hidden', py: 1 }}>
+        <List dense>
+          {MENU_STRUCTURE.map(section => renderMenuSection(section))}
+        </List>
+        <Divider sx={{ my: 1, opacity: 0.6 }} />
+        <List dense>
+          <ListItem disablePadding>
+            <ListItemButton 
+              onClick={() => {
+                logout();
+                isMobile && setMobileOpen(false);
+              }} 
+              sx={{ 
+                mx: 1, 
+                borderRadius: 2,
+                justifyContent: isCollapsed ? 'center' : 'initial',
+                color: 'error.main',
+                '&:hover': {
+                  bgcolor: 'error.lighter',
+                }
+              }}
+            >
+              <ListItemIcon sx={{ 
+                minWidth: isCollapsed ? 0 : 36, 
+                mr: isCollapsed ? 0 : 0,
+                color: 'inherit'
+              }}>
+                <ExitIcon />
+              </ListItemIcon>
+              {!isCollapsed && <ListItemText primary="Logout" primaryTypographyProps={{ fontSize: 14, fontWeight: 500 }} />}
+            </ListItemButton>
+          </ListItem>
+        </List>
+      </Box>
+
+      <Box sx={{ mt: 'auto', borderTop: '1px solid', borderColor: 'divider', p: 1, bgcolor: 'background.paper' }}>
+        {!isCollapsed && (
+          <Box sx={{ px: 2, py: 1, mb: 1, display: 'flex', alignItems: 'center', gap: 1.5, bgcolor: 'action.hover', borderRadius: 2 }}>
+            <Avatar sx={{ width: 32, height: 32, bgcolor: 'secondary.main', fontSize: 13 }}>
+              {user?.firstName?.[0]?.toUpperCase() || 'A'}
+            </Avatar>
+            <Box sx={{ overflow: 'hidden' }}>
+              <Typography variant="caption" sx={{ fontWeight: 700, display: 'block', noWrap: true }}>
+                {user?.firstName} {user?.lastName}
+              </Typography>
+              <Typography variant="caption" sx={{ color: 'text.secondary', display: 'block', noWrap: true, fontSize: 10 }}>
+                {user?.email}
+              </Typography>
+            </Box>
+          </Box>
+        )}
+        <IconButton 
+          onClick={handleToggleCollapse} 
+          sx={{ 
+            width: '100%', 
+            borderRadius: 1,
+            transition: 'all 0.2s',
+            '&:hover': { bgcolor: 'primary.lighter', color: 'primary.main' }
+          }}
+        >
+          {isCollapsed ? <ChevronRightIcon /> : <ChevronLeftIcon />}
+        </IconButton>
+      </Box>
+    </Box>
+  );
 
   return (
     <Box sx={{ display: 'flex' }}>
@@ -155,7 +507,7 @@ const AdminLayout = () => {
         open={mobileOpen}
         onClose={handleDrawerToggle}
         ModalProps={{
-          keepMounted: true, // Better open performance on mobile.
+          keepMounted: true,
         }}
         sx={{
           display: { xs: 'block', md: 'none' },
@@ -167,51 +519,7 @@ const AdminLayout = () => {
         }}
       >
         <Toolbar />
-        <Box sx={{ overflow: 'auto', py: 1 }}>
-          <List dense>
-            {menuItems.map((item) => (
-              <ListItem key={item.text} disablePadding>
-                <ListItemButton
-                  component={RouterLink}
-                  to={item.path}
-                  selected={isActive(item.path)}
-                  onClick={() => setMobileOpen(false)}
-                  sx={{
-                    mx: 1,
-                    borderRadius: 2,
-                    mb: 0.25,
-                    '&.Mui-selected': {
-                      bgcolor: 'primary.main',
-                      color: 'primary.contrastText',
-                      '& .MuiListItemIcon-root': { color: 'primary.contrastText' },
-                      '&:hover': { bgcolor: 'primary.dark' },
-                    },
-                  }}
-                >
-                  <ListItemIcon sx={{ minWidth: 36 }}>{item.icon}</ListItemIcon>
-                  <ListItemText primary={item.text} primaryTypographyProps={{ fontSize: 14 }} />
-                </ListItemButton>
-              </ListItem>
-            ))}
-          </List>
-          <Divider sx={{ my: 1 }} />
-          <List dense>
-            <ListItem disablePadding>
-              <ListItemButton 
-                onClick={() => {
-                  logout();
-                  setMobileOpen(false);
-                }} 
-                sx={{ mx: 1, borderRadius: 2 }}
-              >
-                <ListItemIcon sx={{ minWidth: 36 }}>
-                  <ExitIcon />
-                </ListItemIcon>
-                <ListItemText primary="Logout" primaryTypographyProps={{ fontSize: 14 }} />
-              </ListItemButton>
-            </ListItem>
-          </List>
-        </Box>
+        {drawerContent}
       </Drawer>
 
       {/* Desktop Drawer */}
@@ -219,55 +527,29 @@ const AdminLayout = () => {
         variant="permanent"
         sx={{
           display: { xs: 'none', md: 'block' },
-          width: drawerWidth,
+          width: isCollapsed ? slimDrawerWidth : drawerWidth,
+          transition: theme.transitions.create('width', {
+            easing: theme.transitions.easing.sharp,
+            duration: theme.transitions.duration.enteringScreen,
+          }),
           flexShrink: 0,
           [`& .MuiDrawer-paper`]: {
-            width: drawerWidth,
+            width: isCollapsed ? slimDrawerWidth : drawerWidth,
+            transition: theme.transitions.create('width', {
+              easing: theme.transitions.easing.sharp,
+              duration: theme.transitions.duration.enteringScreen,
+            }),
             boxSizing: 'border-box',
             borderRight: '1px solid',
             borderColor: 'divider',
+            overflowX: 'hidden',
+            bgcolor: (theme) => theme.palette.mode === 'light' ? 'rgba(255, 255, 255, 0.8)' : 'rgba(20, 20, 20, 0.8)',
+            backdropFilter: 'blur(10px)',
           },
         }}
       >
         <Toolbar />
-        <Box sx={{ overflow: 'auto', py: 1 }}>
-          <List dense>
-            {menuItems.map((item) => (
-              <ListItem key={item.text} disablePadding>
-                <ListItemButton
-                  component={RouterLink}
-                  to={item.path}
-                  selected={isActive(item.path)}
-                  sx={{
-                    mx: 1,
-                    borderRadius: 2,
-                    mb: 0.25,
-                    '&.Mui-selected': {
-                      bgcolor: 'primary.main',
-                      color: 'primary.contrastText',
-                      '& .MuiListItemIcon-root': { color: 'primary.contrastText' },
-                      '&:hover': { bgcolor: 'primary.dark' },
-                    },
-                  }}
-                >
-                  <ListItemIcon sx={{ minWidth: 36 }}>{item.icon}</ListItemIcon>
-                  <ListItemText primary={item.text} primaryTypographyProps={{ fontSize: 14 }} />
-                </ListItemButton>
-              </ListItem>
-            ))}
-          </List>
-          <Divider sx={{ my: 1 }} />
-          <List dense>
-            <ListItem disablePadding>
-              <ListItemButton onClick={logout} sx={{ mx: 1, borderRadius: 2 }}>
-                <ListItemIcon sx={{ minWidth: 36 }}>
-                  <ExitIcon />
-                </ListItemIcon>
-                <ListItemText primary="Logout" primaryTypographyProps={{ fontSize: 14 }} />
-              </ListItemButton>
-            </ListItem>
-          </List>
-        </Box>
+        {drawerContent}
       </Drawer>
 
       <Box
@@ -277,7 +559,11 @@ const AdminLayout = () => {
           p: { xs: 2, sm: 3 },
           bgcolor: 'background.default',
           minHeight: '100vh',
-          width: { md: `calc(100% - ${drawerWidth}px)` },
+          width: { md: `calc(100% - ${isCollapsed ? slimDrawerWidth : drawerWidth}px)` },
+          transition: theme.transitions.create(['width', 'margin'], {
+            easing: theme.transitions.easing.sharp,
+            duration: theme.transitions.duration.enteringScreen,
+          }),
         }}
       >
         <Toolbar />
