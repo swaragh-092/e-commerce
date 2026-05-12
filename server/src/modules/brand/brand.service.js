@@ -8,7 +8,7 @@ const AppError = require('../../utils/AppError');
 const createBrand = async (data) => {
     const transaction = await Brand.sequelize.transaction();
     try {
-        const { name, slug, description, image, isActive = true } = data;
+        const { name, slug, description, image, isActive = true, isPromoted = false } = data;
         
         // Use text from slug if provided, otherwise name, and ensure uniqueness
         const finalSlug = await generateSlug(slug || name, Brand, 'slug', { transaction });
@@ -19,6 +19,7 @@ const createBrand = async (data) => {
             description,
             image,
             isActive,
+            isPromoted,
         }, { transaction });
         
         await transaction.commit();
@@ -30,10 +31,20 @@ const createBrand = async (data) => {
 };
 
 const getBrands = async (query = {}, isAdmin = false) => {
-    const { search, isActive, limit = 20, page = 1, sortBy = 'name', sortOrder = 'ASC' } = query;
+    const {
+        search,
+        isActive,
+        isPromoted,
+        withPublishedProducts,
+        limit = 20,
+        page = 1,
+        sortBy = 'name',
+        sortOrder = 'ASC',
+    } = query;
     const offset = (page - 1) * limit;
 
     const where = {};
+    const include = [];
 
     // For storefront, always only show active brands
     if (!isAdmin) {
@@ -45,6 +56,23 @@ const getBrands = async (query = {}, isAdmin = false) => {
 
     if (search) {
         where.name = { [Op.iLike]: `%${search}%` };
+    }
+
+    if (isPromoted !== undefined) {
+        where.isPromoted = isPromoted === 'true' || isPromoted === true;
+    }
+
+    if (withPublishedProducts === 'true' || withPublishedProducts === true) {
+        include.push({
+            model: Product,
+            as: 'products',
+            attributes: [],
+            required: true,
+            where: {
+                status: 'published',
+                isEnabled: true,
+            },
+        });
     }
 
     // Map frontend sort names to database columns/attributes
@@ -59,12 +87,19 @@ const getBrands = async (query = {}, isAdmin = false) => {
     const orderCol = sortMap[sortBy] || 'name';
     const orderDir = sortOrder.toUpperCase() === 'DESC' ? 'DESC' : 'ASC';
 
-    const { count, rows } = await Brand.findAndCountAll({
+    const queryOptions = {
         where,
         limit: parseInt(limit),
         offset: parseInt(offset),
         order: [[orderCol, orderDir]],
-    });
+    };
+
+    if (include.length > 0) {
+        queryOptions.include = include;
+        queryOptions.distinct = true;
+    }
+
+    const { count, rows } = await Brand.findAndCountAll(queryOptions);
 
     return {
         brands: rows,
@@ -121,7 +156,7 @@ const updateBrand = async (id, data) => {
             throw new AppError('BRAND_ERROR', 404, 'Brand not found');
         }
 
-        const { name, slug, description, image, isActive } = data;
+        const { name, slug, description, image, isActive, isPromoted } = data;
         
         let finalSlug = brand.slug;
         if (slug && slug !== brand.slug) {
@@ -138,6 +173,7 @@ const updateBrand = async (id, data) => {
             description: description !== undefined ? description : brand.description,
             image: image !== undefined ? image : brand.image,
             isActive: isActive !== undefined ? isActive : brand.isActive,
+            isPromoted: isPromoted !== undefined ? isPromoted : brand.isPromoted,
         }, { transaction });
 
         await transaction.commit();

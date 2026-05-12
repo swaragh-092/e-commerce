@@ -1,4 +1,4 @@
-import React, { useContext, useEffect, useState, useCallback, useRef } from 'react';
+import React, { useContext, useEffect, useState, useCallback, useMemo, useRef } from 'react';
 import {
     Box, Container, Typography, Button, Divider, IconButton,
     Paper, Chip, CircularProgress, Alert, Skeleton, Tooltip,
@@ -60,6 +60,13 @@ const useOptimisticCart = (items, updateItem, removeItem) => {
     }, [removeItem]);
     return { getQty, handleUpdate, handleRemove, removingIds, updatingIds };
 };
+
+const sortCartItems = (items = []) => [...items].sort((a, b) => {
+    const aTime = new Date(a.createdAt || 0).getTime();
+    const bTime = new Date(b.createdAt || 0).getTime();
+    if (aTime !== bTime) return aTime - bTime;
+    return String(a.id || '').localeCompare(String(b.id || ''));
+});
 
 // ── Skeleton ──────────────────────────────────────────────────────────────────
 const CartSkeleton = () => (
@@ -357,7 +364,7 @@ const CartPage = () => {
         }
     }, [cartEnabled, navigate]);
 
-    const items = cart?.items || [];
+    const items = useMemo(() => sortCartItems(cart?.items || []), [cart?.items]);
     const { getQty, handleUpdate, handleRemove, removingIds, updatingIds } = useOptimisticCart(items, updateItem, removeItem);
 
     const subtotal = items.reduce((sum, item) => sum + getCartItemUnitPrice(item) * getQty(item), 0);

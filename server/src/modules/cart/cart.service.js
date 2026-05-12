@@ -57,6 +57,8 @@ const fetchCartWithItems = async (cartId, transaction) => {
         include: [{
             model: CartItem,
             as: 'items',
+            separate: true,
+            order: [['createdAt', 'ASC'], ['id', 'ASC']],
             include: [
                 {
                     model: Product,
@@ -164,31 +166,39 @@ const updateItem = async (userId, sessionId, itemId, quantity) => {
         
         const item = await CartItem.findOne({
             where: { id: itemId, cartId: cart.id },
-            include: [
-                { model: Product, as: 'product' },
-                { model: ProductVariant, as: 'variant', required: false },
-            ],
             transaction: t,
             lock: Transaction.LOCK.UPDATE // Lock the cart item itself
         });
 
         if (!item) throw new AppError('NOT_FOUND', 404, 'Cart item not found');
 
-        // Row-lock product and variant to ensure stock check is atomic
+        // Fetch associations separately: Postgres can reject FOR UPDATE on nullable outer joins.
+        const product = await Product.findByPk(item.productId, {
+            transaction: t,
+            lock: Transaction.LOCK.UPDATE,
+        });
+
+        let variant = null;
         if (item.variantId) {
-            await ProductVariant.findByPk(item.variantId, { transaction: t, lock: Transaction.LOCK.UPDATE });
-        } else {
-            await Product.findByPk(item.productId, { transaction: t, lock: Transaction.LOCK.UPDATE });
+            variant = await ProductVariant.findOne({
+                where: { id: item.variantId, productId: item.productId },
+                transaction: t,
+                lock: Transaction.LOCK.UPDATE,
+            });
         }
 
-        const product = item.product;
         if (!product || product.deletedAt !== null || !product.isEnabled) {
             await item.destroy({ transaction: t });
             throw new AppError('NOT_FOUND', 404, 'Product no longer available and removed from cart');
         }
 
+        if (item.variantId && (!variant || variant.deletedAt !== null || variant.isActive === false)) {
+            await item.destroy({ transaction: t });
+            throw new AppError('NOT_FOUND', 404, 'Variant no longer available and removed from cart');
+        }
+
         const availableStock = item.variantId
-            ? Number(item.variant?.stockQty || 0) - Number(item.variant?.reservedQty || 0)
+            ? Number(variant.stockQty || 0) - Number(variant.reservedQty || 0)
             : Number(product.quantity || 0) - Number(product.reservedQty || 0);
         if (quantity > availableStock) {
              throw new AppError('CONFLICT', 409, 'Insufficient stock');

@@ -15,8 +15,13 @@ export const BrandProvider = ({ children }) => {
 
   const fetchBrands = useCallback(async () => {
     try {
-      // Fetch active brands for storefront use
-      const res = await brandService.getBrands({ isActive: true, limit: 100 });
+      // Fetch promoted active brands for the homepage showcase.
+      const res = await brandService.getBrands({
+        isActive: true,
+        isPromoted: true,
+        withPublishedProducts: true,
+        limit: 100,
+      });
       const data = res?.data?.data ?? res?.data ?? [];
       setBrands(Array.isArray(data) ? data : []);
       setError(null);

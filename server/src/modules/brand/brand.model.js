@@ -27,6 +27,11 @@ module.exports = (sequelize, DataTypes) => {
             defaultValue: true,
             field: 'is_active',
         },
+        isPromoted: {
+            type: DataTypes.BOOLEAN,
+            defaultValue: false,
+            field: 'is_promoted',
+        },
     }, {
         tableName: 'brands',
         timestamps: true,
