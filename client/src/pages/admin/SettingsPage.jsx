@@ -1999,7 +1999,7 @@ const SettingsPage = () => {
             />
           </Paper>
 
-          <Paper variant="outlined" sx={{ p: 2.5, borderRadius: 3, mb: 3, boxShadow: 'none' }}>
+          {/* <Paper variant="outlined" sx={{ p: 2.5, borderRadius: 3, mb: 3, boxShadow: 'none' }}>
             <Grid container spacing={2.5} alignItems="center">
               <Grid item xs={12} md={5}>
                 <Typography variant="subtitle1" fontWeight={800}>
@@ -2054,7 +2054,7 @@ const SettingsPage = () => {
                 </Box>
               </Grid>
             </Grid>
-          </Paper>
+          </Paper> */}
 
           <Paper
             elevation={0}

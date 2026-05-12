@@ -29,6 +29,7 @@ exports.list = async (req, res, next) => {
       totalPages: result.totalPages,
       limit: parseInt(limit) || 20,
       priceRange: result.priceRange,
+      counts: result.counts || {},
     });
   } catch (err) {
     next(err);

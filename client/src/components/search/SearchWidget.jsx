@@ -27,7 +27,7 @@ import HistoryIcon from '@mui/icons-material/History';
 import ArrowForwardIcon from '@mui/icons-material/ArrowForward';
 import CloseIcon from '@mui/icons-material/Close';
 import DeleteOutlineIcon from '@mui/icons-material/DeleteOutline';
-import { useNavigate } from 'react-router-dom';
+import { useLocation, useNavigate } from 'react-router-dom';
 import { useDebounce } from '../../hooks/useDebounce';
 import { searchProducts } from '../../services/searchService';
 
@@ -57,9 +57,11 @@ const SearchWidget = ({
   fullWidth = true,
 }) => {
   const navigate = useNavigate();
+  const location = useLocation();
   const theme = useTheme();
 
-  const [query, setQuery] = useState(initialValue);
+  const routeSearchValue = new URLSearchParams(location.search).get('search') || '';
+  const [query, setQuery] = useState(initialValue || (variant === 'header' ? routeSearchValue : ''));
   const [results, setResults] = useState(null);
   const [suggestion, setSuggestion] = useState(null);
   const [loading, setLoading] = useState(false);
@@ -112,8 +114,8 @@ const SearchWidget = ({
 
   // Sync initial value
   useEffect(() => {
-    setQuery(initialValue);
-  }, [initialValue]);
+    setQuery(initialValue || (variant === 'header' ? routeSearchValue : ''));
+  }, [initialValue, routeSearchValue, variant]);
 
   // Fetch results when debounced query changes
   useEffect(() => {
@@ -163,7 +165,6 @@ const SearchWidget = ({
     }
     saveRecentSearch(searchTrimmed);
     closeDropdown();
-    if (variant === 'header') setQuery('');
   };
 
   const handleKeyDown = (e) => {
@@ -173,7 +174,6 @@ const SearchWidget = ({
         const item = allItems[selectedIndex];
         navigate(item.to);
         closeDropdown();
-        if (variant === 'header') setQuery('');
         inputRef.current?.blur();
       } else {
         executeSearch(query);
@@ -207,7 +207,6 @@ const SearchWidget = ({
       navigate(item.to);
       if (item.type === 'product') saveRecentSearch(item.label);
       closeDropdown();
-      if (variant === 'header') setQuery('');
     }
   };
 
@@ -256,6 +255,7 @@ const SearchWidget = ({
     };
   };
 
+  const hasRecentSearches = !query && recentSearches.length > 0;
   const hasAnyResults =
     (results?.products?.data?.length || 0) > 0 ||
     (results?.brands?.length || 0) > 0 ||
@@ -332,22 +332,28 @@ const SearchWidget = ({
 
         {showSuggestions && (
           <Popper
-            open={open && hasAnyResults}
+            open={open && (hasAnyResults || hasRecentSearches)}
             anchorEl={inputRef.current}
             placement="bottom-start"
-            style={{ zIndex: 1400, width: inputRef.current?.offsetWidth }}
+            style={{
+              zIndex: 1400,
+              width: variant === 'header'
+                ? Math.max(inputRef.current?.offsetWidth || 0, 420)
+                : inputRef.current?.offsetWidth,
+            }}
             modifiers={[{ name: 'offset', options: { offset: [0, 8] } }]}
           >
             <Paper
-              elevation={12}
+              elevation={0}
               sx={{
                 mt: 1,
-                borderRadius: 3,
+                borderRadius: 2,
                 overflow: 'hidden',
-                maxHeight: 450,
+                maxHeight: 460,
                 overflowY: 'auto',
-                border: `1px solid ${theme.palette.divider}`,
-                boxShadow: theme.shadows[10],
+                bgcolor: 'background.paper',
+                border: `1px solid ${alpha(theme.palette.common.black, 0.08)}`,
+                boxShadow: '0 14px 40px rgba(15, 23, 42, 0.18)',
               }}
             >
               {/* Results List */}
@@ -368,14 +374,19 @@ const SearchWidget = ({
 
         {/* No Results Popper */}
         {showSuggestions && open && !loading && debouncedQuery.length >= MIN_QUERY_LENGTH && !hasAnyResults && (
-           <Popper
+        <Popper
            open={true}
            anchorEl={inputRef.current}
            placement="bottom-start"
-           style={{ zIndex: 1400, width: inputRef.current?.offsetWidth }}
+           style={{
+             zIndex: 1400,
+             width: variant === 'header'
+               ? Math.max(inputRef.current?.offsetWidth || 0, 420)
+               : inputRef.current?.offsetWidth,
+           }}
            modifiers={[{ name: 'offset', options: { offset: [0, 8] } }]}
          >
-           <Paper elevation={12} sx={{ mt: 1, borderRadius: 3, p: 3, textAlign: 'center' }}>
+           <Paper elevation={0} sx={{ mt: 1, borderRadius: 2, p: 3, textAlign: 'center', border: `1px solid ${alpha(theme.palette.common.black, 0.08)}`, boxShadow: '0 14px 40px rgba(15, 23, 42, 0.18)' }}>
              <SearchOffIcon sx={{ fontSize: 40, color: 'text.disabled', mb: 1.5 }} />
              <Typography variant="body2" color="text.secondary" sx={{ mb: 1 }}>
                No matching results for <strong>"{debouncedQuery}"</strong>
@@ -416,7 +427,7 @@ const ResultsList = ({
   // If no query and has recent searches, show them
   if (!query && recentSearches.length > 0) {
     return (
-      <Box sx={{ pb: 1 }}>
+      <Box sx={{ py: 0.75 }}>
         <SectionHeader 
           title="Recent Searches" 
           onAction={clearAllRecent}
@@ -431,11 +442,18 @@ const ResultsList = ({
                 selected={selectedIndex === currentIdx}
                 onClick={() => handleItemClick({ type: 'recent', label: term })}
                 onMouseEnter={() => setSelectedIndex(currentIdx)}
-                sx={{ py: 1, px: 2 }}
+                sx={{
+                  mx: 0.75,
+                  my: 0.25,
+                  py: 1,
+                  px: 1.25,
+                  borderRadius: 1.5,
+                  '&.Mui-selected, &:hover': { bgcolor: alpha(theme.palette.primary.main, 0.08) },
+                }}
               >
                 <ListItemAvatar sx={{ minWidth: 44 }}>
-                  <Avatar sx={{ width: 32, height: 32, bgcolor: 'action.hover' }}>
-                    <HistoryIcon sx={{ fontSize: 18, color: 'text.secondary' }} />
+                  <Avatar sx={{ width: 34, height: 34, bgcolor: alpha(theme.palette.primary.main, 0.08) }}>
+                    <HistoryIcon sx={{ fontSize: 18, color: 'primary.main' }} />
                   </Avatar>
                 </ListItemAvatar>
                 <ListItemText
@@ -461,7 +479,7 @@ const ResultsList = ({
     <>
       {/* Products Section */}
       {results?.products?.data?.length > 0 && (
-        <Box sx={{ mb: 1 }}>
+        <Box sx={{ py: 0.75 }}>
           <SectionHeader title="Products" count={results.products.totalItems} />
           <List dense disablePadding>
             {results.products.data.map((product) => {
@@ -473,13 +491,23 @@ const ResultsList = ({
                   selected={selectedIndex === currentIdx}
                   onClick={() => handleItemClick({ type: 'product', to: `/products/${product.slug}`, label: product.name })}
                   onMouseEnter={() => setSelectedIndex(currentIdx)}
-                  sx={{ py: 1, px: 2 }}
+                  sx={{
+                    mx: 0.75,
+                    my: 0.25,
+                    py: 1.1,
+                    px: 1.25,
+                    borderRadius: 1.5,
+                    transition: 'background-color 0.15s, transform 0.15s',
+                    '&.Mui-selected, &:hover': {
+                      bgcolor: alpha(theme.palette.primary.main, 0.08),
+                    },
+                  }}
                 >
-                  <ListItemAvatar sx={{ minWidth: 52 }}>
+                  <ListItemAvatar sx={{ minWidth: 58 }}>
                     <Avatar
                       variant="rounded"
                       src={primaryImage?.url}
-                      sx={{ width: 40, height: 40, bgcolor: alpha(theme.palette.primary.main, 0.05), borderRadius: 1.5 }}
+                      sx={{ width: 46, height: 46, bgcolor: alpha(theme.palette.primary.main, 0.05), borderRadius: 1.25 }}
                     >
                       <SearchIcon fontSize="small" color="disabled" />
                     </Avatar>
@@ -487,9 +515,10 @@ const ResultsList = ({
                   <ListItemText
                     primary={product.name}
                     secondary={`₹${product.effectivePrice ?? product.price}`}
-                    primaryTypographyProps={{ variant: 'body2', fontWeight: 600, noWrap: true }}
-                    secondaryTypographyProps={{ variant: 'caption', fontWeight: 700, color: 'primary.main' }}
+                    primaryTypographyProps={{ variant: 'body2', fontWeight: 800, noWrap: true, color: 'text.primary' }}
+                    secondaryTypographyProps={{ variant: 'caption', fontWeight: 800, color: 'primary.main' }}
                   />
+                  <ArrowForwardIcon sx={{ fontSize: 17, color: 'text.disabled', ml: 1 }} />
                 </ListItemButton>
               );
             })}
@@ -511,8 +540,15 @@ const ResultsList = ({
                   selected={selectedIndex === currentIdx}
                   onClick={() => handleItemClick({ type: 'brand', to: `/products?brand=${brand.slug}`, label: brand.name })}
                   onMouseEnter={() => setSelectedIndex(currentIdx)}
-                  sx={{ py: 1, px: 2 }}
-                >
+                sx={{
+                  mx: 0.75,
+                  my: 0.25,
+                  py: 1,
+                  px: 1.25,
+                  borderRadius: 1.5,
+                  '&.Mui-selected, &:hover': { bgcolor: alpha(theme.palette.primary.main, 0.08) },
+                }}
+              >
                   <ListItemAvatar sx={{ minWidth: 52 }}>
                     <Avatar
                       variant="rounded"
@@ -547,8 +583,15 @@ const ResultsList = ({
                   selected={selectedIndex === currentIdx}
                   onClick={() => handleItemClick({ type: 'category', to: `/products?category=${cat.slug}`, label: cat.name })}
                   onMouseEnter={() => setSelectedIndex(currentIdx)}
-                  sx={{ py: 1, px: 2 }}
-                >
+                sx={{
+                  mx: 0.75,
+                  my: 0.25,
+                  py: 1,
+                  px: 1.25,
+                  borderRadius: 1.5,
+                  '&.Mui-selected, &:hover': { bgcolor: alpha(theme.palette.primary.main, 0.08) },
+                }}
+              >
                   <ListItemAvatar sx={{ minWidth: 52 }}>
                     <Avatar
                       variant="rounded"
@@ -589,8 +632,8 @@ const ResultsList = ({
 };
 
 const SectionHeader = ({ title, count, onAction, actionLabel }) => (
-  <Box sx={{ px: 2, pt: 1.5, pb: 0.5, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-    <Typography variant="caption" sx={{ fontWeight: 800, color: 'text.secondary', textTransform: 'uppercase', letterSpacing: 1, fontSize: '0.65rem' }}>
+  <Box sx={{ px: 2, pt: 1.25, pb: 0.75, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+    <Typography variant="caption" sx={{ fontWeight: 900, color: 'text.secondary', textTransform: 'uppercase', letterSpacing: 0.8, fontSize: '0.68rem' }}>
       {title} {count !== undefined && `(${count})`}
     </Typography>
     {onAction && (

@@ -172,12 +172,12 @@ const ProductImages = ({ images, variantImages = [], selectedVariantId, thumbnai
         sx={{
           display: { xs: 'none', md: zoom.active ? 'block' : 'none' },
           position: 'absolute',
-          left: isVertical ? 'calc(100% + 20px)' : 'calc(100% + 20px)',
+          left: 'calc(100% + 20px)',
           top: 0,
-          width: { md: 360, lg: 480 },
-          height: { md: 420, lg: 520 },
-          zIndex: 30,
-          borderRadius: 1,
+          width: { md: 360, lg: 420 },
+          height: { md: 460, lg: 560 },
+          zIndex: 20,
+          borderRadius: 1.5,
           border: '1px solid',
           borderColor: 'divider',
           bgcolor: 'background.paper',
@@ -185,7 +185,7 @@ const ProductImages = ({ images, variantImages = [], selectedVariantId, thumbnai
           backgroundRepeat: 'no-repeat',
           backgroundSize: '260% 260%',
           backgroundPosition: `${zoom.x}% ${zoom.y}%`,
-          boxShadow: '0 24px 70px rgba(0,0,0,0.35)',
+          boxShadow: '0 24px 70px rgba(15, 23, 42, 0.28)',
           pointerEvents: 'none',
         }}
       />
