@@ -27,8 +27,8 @@ import {
   Add as AddIcon,
   Edit as EditIcon,
   Delete as DeleteIcon,
-  PhotoLibrary as PhotoLibraryIcon,
   ElectricBolt as ElectricBoltIcon,
+  Campaign as CampaignIcon,
 } from '@mui/icons-material';
 import brandService from '../../services/brandService';
 import { getMediaUrl } from '../../utils/media';
@@ -81,6 +81,7 @@ const BrandsPage = () => {
     description: '',
     image: '',
     isActive: true,
+    isPromoted: false,
   });
   const [errors, setErrors] = useState({});
   const [saving, setSaving] = useState(false);
@@ -131,6 +132,7 @@ const BrandsPage = () => {
         description: brand.description || '',
         image: brand.image || '',
         isActive: brand.isActive,
+        isPromoted: Boolean(brand.isPromoted),
       });
     } else {
       setEditingBrand(null);
@@ -140,6 +142,7 @@ const BrandsPage = () => {
         description: '',
         image: '',
         isActive: true,
+        isPromoted: false,
       });
     }
     setErrors({});
@@ -253,6 +256,20 @@ const BrandsPage = () => {
         <Chip
           label={params.value ? 'Active' : 'Inactive'}
           color={params.value ? 'success' : 'default'}
+          size="small"
+        />
+      ),
+    },
+    {
+      field: 'isPromoted',
+      headerName: 'Promotion',
+      width: 150,
+      renderCell: (params) => (
+        <Chip
+          icon={params.value ? <CampaignIcon /> : undefined}
+          label={params.value ? 'Promoted' : 'Not promoted'}
+          color={params.value ? 'primary' : 'default'}
+          variant={params.value ? 'filled' : 'outlined'}
           size="small"
         />
       ),
@@ -508,6 +525,18 @@ const BrandsPage = () => {
               }
               label="Active"
             />
+            <FormControlLabel
+              control={
+                <Switch
+                  checked={formData.isPromoted}
+                  onChange={(e) => setFormData({ ...formData, isPromoted: e.target.checked })}
+                />
+              }
+              label="Promote this brand"
+            />
+            <Typography variant="caption" color="text.secondary" sx={{ mt: -2 }}>
+              Promoted brands appear in Featured Brands only when they have at least one published product.
+            </Typography>
           </Stack>
         </DialogContent>
         <DialogActions sx={{ px: 3, py: 2 }}>
