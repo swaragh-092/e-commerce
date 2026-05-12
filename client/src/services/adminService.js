@@ -101,7 +101,7 @@ const getEmailTemplate = (name) => api.get(`/notifications/templates/${name}`);
 const updateEmailTemplate = (name, data) => api.put(`/notifications/templates/${name}`, data);
 const previewEmailTemplate = (name, data) => api.post(`/notifications/templates/${name}/preview`, data);
 const resetEmailTemplate = (name, channel = 'email') => api.post(`/notifications/templates/${name}/reset`, { channel });
-const getEmailTemplateDefault = (name) => api.get(`/notifications/templates/${name}/default`);
+const getEmailTemplateDefault = (name, channel = 'email') => api.get(`/notifications/templates/${name}/default`, { params: { channel } });
 const sendTestEmail = (templateName, recipientEmail) => api.post('/notifications/templates/test', { templateName, recipientEmail });
 const sendTestNotification = (templateName, recipient, channel) => api.post('/notifications/test', { templateName, recipient, channel });
 

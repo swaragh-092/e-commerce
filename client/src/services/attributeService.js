@@ -15,6 +15,9 @@ const deleteAttribute = (id) => api.delete(`/attributes/${id}`);
 const addAttributeValue = (attributeId, data) =>
   api.post(`/attributes/${attributeId}/values`, data);
 
+const updateAttributeValue = (attributeId, valueId, data) =>
+  api.put(`/attributes/${attributeId}/values/${valueId}`, data);
+
 const removeAttributeValue = (attributeId, valueId) =>
   api.delete(`/attributes/${attributeId}/values/${valueId}`);
 
@@ -72,6 +75,7 @@ const attributeService = {
   updateAttribute,
   deleteAttribute,
   addAttributeValue,
+  updateAttributeValue,
   removeAttributeValue,
   reorderAttributeValues,
   getCategoryAttributes,

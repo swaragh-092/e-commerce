@@ -1274,12 +1274,62 @@ const SettingsPage = () => {
         <>
           {toggle('productPage.showSKU', 'Show SKU code under product name')}
           {toggle('productPage.showStockBadge', 'Show In Stock / Out of Stock badge')}
+          <Divider sx={{ my: 2 }} />
+          <Typography variant="subtitle2" fontWeight={800} sx={{ mb: 1 }}>
+            Product Gallery
+          </Typography>
+          <Grid container spacing={2} sx={{ mb: 2 }}>
+            <Grid item xs={12} md={7}>
+              <FormControl fullWidth size="small">
+                <InputLabel>Thumbnail alignment</InputLabel>
+                <Select
+                  label="Thumbnail alignment"
+                  value={form['productPage.imageAlignment'] || 'horizontal'}
+                  onChange={(e) => set('productPage.imageAlignment', e.target.value)}
+                >
+                  <MenuItem value="horizontal">Horizontal below main image</MenuItem>
+                  <MenuItem value="vertical">Vertical beside main image</MenuItem>
+                </Select>
+              </FormControl>
+            </Grid>
+            <Grid item xs={12} md={5}>
+              <Box
+                sx={{
+                  display: 'flex',
+                  flexDirection: form['productPage.imageAlignment'] === 'vertical' ? 'row' : 'column',
+                  gap: 1,
+                  p: 1,
+                  border: '1px solid',
+                  borderColor: 'divider',
+                  borderRadius: 2,
+                  bgcolor: 'action.hover',
+                  minHeight: 90,
+                }}
+              >
+                {form['productPage.imageAlignment'] === 'vertical' && (
+                  <Box sx={{ display: 'flex', flexDirection: 'column', gap: 0.5 }}>
+                    {[1, 2, 3].map((i) => (
+                      <Box key={i} sx={{ width: 22, height: 22, borderRadius: 0.75, bgcolor: i === 1 ? 'primary.main' : 'divider' }} />
+                    ))}
+                  </Box>
+                )}
+                <Box sx={{ flex: 1, borderRadius: 1.25, bgcolor: 'background.paper', border: '1px solid', borderColor: 'divider' }} />
+                {form['productPage.imageAlignment'] !== 'vertical' && (
+                  <Box sx={{ display: 'flex', gap: 0.5 }}>
+                    {[1, 2, 3].map((i) => (
+                      <Box key={i} sx={{ width: 24, height: 24, borderRadius: 0.75, bgcolor: i === 1 ? 'primary.main' : 'divider' }} />
+                    ))}
+                  </Box>
+                )}
+              </Box>
+            </Grid>
+          </Grid>
           {field('productPage.addToCartLabel', 'Add to Cart button label (e.g. Add to Cart, Buy Now, Add to Bag)')}
           {toggle('productPage.showBuyNowButton', 'Show Buy Now button next to Add to Cart')}
           {field('productPage.buyNowLabel', 'Buy Now button label (e.g. Buy Now, Quick Checkout, Order Now)')}
 
         </>,
-        ['product page', 'wishlist', 'reviews', 'stock badge', 'sku']
+        ['product page', 'wishlist', 'reviews', 'stock badge', 'sku', 'image alignment', 'gallery thumbnails']
       ),
       section(
         'SKU Automation',
@@ -1773,6 +1823,63 @@ const SettingsPage = () => {
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
             />
+          </Paper>
+
+          <Paper variant="outlined" sx={{ p: 2.5, borderRadius: 3, mb: 3, boxShadow: 'none' }}>
+            <Grid container spacing={2.5} alignItems="center">
+              <Grid item xs={12} md={5}>
+                <Typography variant="subtitle1" fontWeight={800}>
+                  Product Gallery Layout
+                </Typography>
+                <Typography variant="body2" color="text.secondary" sx={{ mt: 0.5 }}>
+                  Choose how thumbnail images appear on product detail pages.
+                </Typography>
+              </Grid>
+              <Grid item xs={12} md={4}>
+                <FormControl fullWidth size="small">
+                  <InputLabel>Thumbnail alignment</InputLabel>
+                  <Select
+                    label="Thumbnail alignment"
+                    value={form['productPage.imageAlignment'] || 'horizontal'}
+                    onChange={(e) => set('productPage.imageAlignment', e.target.value)}
+                  >
+                    <MenuItem value="horizontal">Horizontal below main image</MenuItem>
+                    <MenuItem value="vertical">Vertical beside main image</MenuItem>
+                  </Select>
+                </FormControl>
+              </Grid>
+              <Grid item xs={12} md={3}>
+                <Box
+                  sx={{
+                    display: 'flex',
+                    flexDirection: form['productPage.imageAlignment'] === 'vertical' ? 'row' : 'column',
+                    gap: 0.75,
+                    p: 1,
+                    border: '1px solid',
+                    borderColor: 'divider',
+                    borderRadius: 2,
+                    bgcolor: 'action.hover',
+                    height: 82,
+                  }}
+                >
+                  {form['productPage.imageAlignment'] === 'vertical' && (
+                    <Box sx={{ display: 'flex', flexDirection: 'column', gap: 0.5 }}>
+                      {[1, 2, 3].map((i) => (
+                        <Box key={i} sx={{ width: 18, height: 18, borderRadius: 0.75, bgcolor: i === 1 ? 'primary.main' : 'divider' }} />
+                      ))}
+                    </Box>
+                  )}
+                  <Box sx={{ flex: 1, borderRadius: 1.25, bgcolor: 'background.paper', border: '1px solid', borderColor: 'divider' }} />
+                  {form['productPage.imageAlignment'] !== 'vertical' && (
+                    <Box sx={{ display: 'flex', gap: 0.5 }}>
+                      {[1, 2, 3].map((i) => (
+                        <Box key={i} sx={{ width: 20, height: 20, borderRadius: 0.75, bgcolor: i === 1 ? 'primary.main' : 'divider' }} />
+                      ))}
+                    </Box>
+                  )}
+                </Box>
+              </Grid>
+            </Grid>
           </Paper>
 
           <Paper

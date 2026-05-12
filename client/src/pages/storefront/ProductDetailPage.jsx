@@ -27,6 +27,7 @@ import {
     getVariantUnitPrice,
 } from '../../utils/variantPricing';
 import { getVariantOptionLabel } from '../../utils/variantOptions';
+import { formatAttributeValue } from '../../utils/attributePresentation';
 import EnquiryModal from '../../components/storefront/EnquiryModal';
 
 const ProductDetailPage = () => {
@@ -54,6 +55,7 @@ const ProductDetailPage = () => {
     const addToCartLabel = pp.addToCartLabel || 'Add to Cart';
     const buyNowLabel = pp.buyNowLabel || 'Buy Now';
     const showBuyNowButton = pp.showBuyNowButton !== false;
+    const imageAlignment = pp.imageAlignment === 'vertical' ? 'vertical' : 'horizontal';
     const [countdownNow, setCountdownNow] = useState(Date.now());
 
     useEffect(() => {
@@ -102,7 +104,9 @@ const ProductDetailPage = () => {
         const groups = {};
         product.attributes.forEach((attr) => {
             const label = attr.attribute?.name || attr.customName;
-            const value = attr.value?.value || attr.customValue;
+            const value = attr.value
+                ? formatAttributeValue(attr.value, attr.attribute)
+                : attr.customValue;
             if (!label || !value) return;
 
             if (!groups[label]) {
@@ -249,23 +253,44 @@ const ProductDetailPage = () => {
     };
 
     return (
-        <Container maxWidth="lg" sx={{ py: 6 }}>
+        <Container
+            maxWidth={false}
+            sx={{
+                maxWidth: 1520,
+                mx: 'auto',
+                px: { xs: 2, sm: 3, lg: 5 },
+                py: { xs: 3, md: 5 },
+            }}
+        >
             <PageSEO
                 title={product.name}
                 description={product.shortDescription}
                 image={product.images?.[0]?.url}
                 type="product"
             />
-            <Grid container spacing={6}>
-                <Grid item xs={12} md={6}>
-                    <ProductImages 
-                        images={product.images} 
-                        variantImage={selectedVariant?.media?.url} 
-                    />
+            <Grid container spacing={{ xs: 3, md: 4, lg: 5 }} alignItems="flex-start">
+                <Grid item xs={12} md={5}>
+                    <Box sx={{ position: { md: 'sticky' }, top: { md: 96 } }}>
+                        <ProductImages
+                            images={product.images}
+                            variantImages={selectedVariant?.images || []}
+                            selectedVariantId={selectedVariant?.id}
+                            thumbnailAlignment={imageAlignment}
+                        />
+                    </Box>
                 </Grid>
 
-                <Grid item xs={12} md={6}>
-                    <Typography variant="body2" color="text.secondary" gutterBottom>
+                <Grid item xs={12} md={4}>
+                    <Box
+                        sx={{
+                            p: { xs: 2, sm: 0 },
+                        }}
+                    >
+                    <Typography
+                        variant="caption"
+                        color="text.secondary"
+                        sx={{ display: 'block', mb: 1, fontWeight: 700, textTransform: 'uppercase', letterSpacing: 0 }}
+                    >
                         {(() => {
                             if (location.state?.fromCategory) return location.state.fromCategory;
 
@@ -284,8 +309,8 @@ const ProductDetailPage = () => {
                         })()}
                     </Typography>
 
-                    <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 1 }}>
-                        <Typography variant="h4" fontWeight="bold">
+                    <Box sx={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 2, mb: 1.5 }}>
+                        <Typography variant="h2" fontWeight={900} sx={{ fontSize: { xs: '2.1rem', md: '2.6rem', lg: '3rem' }, lineHeight: 1.04 }}>
                             {product.name}
                         </Typography>
                         <Box sx={{ display: 'flex', gap: 1 }}>
@@ -299,36 +324,34 @@ const ProductDetailPage = () => {
                         </Box>
                     </Box>
 
-                    {pp.showStockBadge !== false && (
-                        <Chip
-                            label={stockAvailable ? 'In Stock' : 'Out of Stock'}
-                            color={stockAvailable ? 'success' : 'default'}
-                            size="small"
-                            sx={{ mb: 1.5 }}
-                        />
-                    )}
-                    {pp.showSKU !== false && displaySku && (
-                        <Typography variant="body2" color="text.secondary" sx={{ mb: 1 }}>
-                            SKU: <strong>{displaySku}</strong>
-                        </Typography>
-                    )}
-                    {selectedVariantLabel && (
-                        <Typography variant="body2" color="text.secondary" sx={{ mb: 1.5 }}>
-                            Selected: <strong>{selectedVariantLabel}</strong>
-                        </Typography>
-                    )}
+                    <Box sx={{ display: 'flex', gap: 1, flexWrap: 'wrap', alignItems: 'center', mb: 2.5 }}>
+                        {pp.showStockBadge !== false && (
+                            <Chip
+                                label={stockAvailable ? 'In Stock' : 'Out of Stock'}
+                                color={stockAvailable ? 'success' : 'default'}
+                                size="small"
+                                sx={{ fontWeight: 800 }}
+                            />
+                        )}
+                        {pp.showSKU !== false && displaySku && (
+                            <Chip label={`SKU: ${displaySku}`} size="small" variant="outlined" />
+                        )}
+                        {selectedVariantLabel && (
+                            <Chip label={`Selected: ${selectedVariantLabel}`} size="small" variant="outlined" />
+                        )}
+                    </Box>
 
                     {showPrice && (
-                        <Box sx={{ display: 'flex', alignItems: 'center', gap: 2, mb: 3 }}>
+                        <Box sx={{ display: 'flex', alignItems: 'baseline', gap: 2, mb: 2.5, flexWrap: 'wrap' }}>
                             {hasSale ? (
                                 <>
-                                    <Typography variant="h5" color="primary" fontWeight="bold">{formatPrice(currentPrice)}</Typography>
+                                    <Typography variant="h3" color="primary" fontWeight={900} sx={{ fontSize: { xs: '2rem', lg: '2.4rem' } }}>{formatPrice(currentPrice)}</Typography>
                                     <Typography variant="h6" color="text.secondary" sx={{ textDecoration: 'line-through' }}>
                                         {formatPrice(regularPrice)}
                                     </Typography>
                                 </>
                             ) : (
-                                <Typography variant="h5" fontWeight="bold">{formatPrice(currentPrice)}</Typography>
+                                <Typography variant="h3" fontWeight={900} sx={{ fontSize: { xs: '2rem', lg: '2.4rem' } }}>{formatPrice(currentPrice)}</Typography>
                             )}
                             {pricingEnabled && hasSale && showDiscountPercent && discountPercent > 0 && <Chip label={`${discountPercent}% OFF`} color="error" />}
                             {pricingEnabled && isScheduledSale && <Chip label="Sale Starts Soon" color="warning" />}
@@ -341,10 +364,11 @@ const ProductDetailPage = () => {
                             sx={{
                                 mb: 3,
                                 p: 2,
-                                borderRadius: 2,
+                                borderRadius: 2.5,
                                 border: '1px solid',
                                 borderColor: hasSale ? 'error.light' : 'warning.light',
                                 bgcolor: hasSale ? 'error.50' : 'warning.50',
+                                boxShadow: 'inset 0 1px 0 rgba(255,255,255,0.06)',
                             }}
                         >
                             <Box sx={{ display: 'flex', gap: 1, flexWrap: 'wrap', alignItems: 'center', mb: 1 }}>
@@ -401,7 +425,7 @@ const ProductDetailPage = () => {
                         </Box>
                     )}
 
-                    <Typography variant="body1" color="text.secondary" paragraph>
+                    <Typography variant="body1" color="text.secondary" paragraph sx={{ lineHeight: 1.75, mb: 3 }}>
                         {product.shortDescription}
                     </Typography>
 
@@ -413,14 +437,25 @@ const ProductDetailPage = () => {
                         />
                     )}
 
-                    <Box sx={{ mb: 4, mt: 3 }}>
+                    <Box sx={{ display: { xs: 'block', md: 'none' }, mb: 4, mt: 3 }}>
                         {cartMsg && (
                             <Typography color={cartMsg.type === 'error' ? 'error' : 'success.main'} variant="body2" sx={{ mb: 1 }}>
                                 {cartMsg.text}
                             </Typography>
                         )}
                         {cartEnabled && (
-                            <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1.5 }}>
+                            <Box
+                                sx={{
+                                    display: 'flex',
+                                    flexDirection: 'column',
+                                    gap: 1.5,
+                                    p: 2,
+                                    borderRadius: 2.5,
+                                    border: '1px solid',
+                                    borderColor: 'divider',
+                                    bgcolor: 'action.hover',
+                                }}
+                            >
                                 {/* Quantity stepper — only show when in stock */}
                                 {stockAvailable && (
                                     <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
@@ -472,7 +507,7 @@ const ProductDetailPage = () => {
                                         startIcon={<CartIcon />}
                                         disabled={!stockAvailable || pendingAction !== null}
                                         onClick={handleAddToCart}
-                                        sx={{ py: 1.5, fontSize: '1.1rem' }}
+                                        sx={{ py: 1.55, fontSize: '1.05rem', borderRadius: 2, fontWeight: 900 }}
                                     >
                                         {pendingAction === 'cart' ? 'Adding...' : stockAvailable ? addToCartLabel : 'Out of Stock'}
                                     </Button>
@@ -485,7 +520,7 @@ const ProductDetailPage = () => {
                                             startIcon={<FlashOnIcon />}
                                             disabled={!stockAvailable || pendingAction !== null}
                                             onClick={handleBuyNow}
-                                            sx={{ py: 1.5, fontSize: '1.1rem' }}
+                                            sx={{ py: 1.55, fontSize: '1.05rem', borderRadius: 2, fontWeight: 900 }}
                                         >
                                             {pendingAction === 'buyNow' ? 'Redirecting...' : stockAvailable ? buyNowLabel : 'Out of Stock'}
                                         </Button>
@@ -509,7 +544,7 @@ const ProductDetailPage = () => {
 
                     {displayAttributes.length > 0 && (
                         <>
-                            <Typography variant="h6" gutterBottom>Specifications</Typography>
+                            <Typography variant="h6" fontWeight={900} gutterBottom>Specifications</Typography>
                             <Box sx={{ display: 'grid', gap: 1.25 }}>
                                 {displayAttributes.map((attributeRow) => {
                                     const label = attributeRow.displayLabel;
@@ -541,7 +576,7 @@ const ProductDetailPage = () => {
 
                    
 
-                    <Typography variant="h6" sx={{ mt: 4 }} gutterBottom>Product Details</Typography>
+                    <Typography variant="h6" fontWeight={900} sx={{ mt: 4 }} gutterBottom>Product Details</Typography>
                     <Box dangerouslySetInnerHTML={{ __html: DOMPurify.sanitize(product.description || '') }} sx={{ typography: 'body2', color: 'text.secondary', '& p': { mt: 0, mb: 2 } }} />
 
                     {product.tags?.length > 0 && (
@@ -551,6 +586,154 @@ const ProductDetailPage = () => {
                     )}
 
                     <ReviewSection slug={product.slug} productId={product.id} />
+                    </Box>
+                </Grid>
+
+                <Grid item xs={12} md={3} sx={{ display: { xs: 'none', md: 'block' } }}>
+                    <Box
+                        sx={{
+                            position: 'sticky',
+                            top: 96,
+                            border: '1px solid',
+                            borderColor: 'divider',
+                            borderRadius: 2,
+                            bgcolor: 'background.paper',
+                            boxShadow: '0 14px 40px rgba(15, 23, 42, 0.10)',
+                            p: 2.25,
+                        }}
+                    >
+                        {showPrice && (
+                            <Box sx={{ mb: 2 }}>
+                                {hasSale ? (
+                                    <>
+                                        <Typography variant="body2" color="error.main" fontWeight={800}>
+                                            -{discountPercent}% deal
+                                        </Typography>
+                                        <Typography variant="h4" fontWeight={900} sx={{ lineHeight: 1.15 }}>
+                                            {formatPrice(currentPrice)}
+                                        </Typography>
+                                        <Typography variant="caption" color="text.secondary" sx={{ textDecoration: 'line-through' }}>
+                                            M.R.P. {formatPrice(regularPrice)}
+                                        </Typography>
+                                    </>
+                                ) : (
+                                    <Typography variant="h4" fontWeight={900}>{formatPrice(currentPrice)}</Typography>
+                                )}
+                            </Box>
+                        )}
+
+                        <Divider sx={{ my: 1.5 }} />
+
+                        <Typography variant="body2" color="success.main" fontWeight={900} sx={{ mb: 0.75 }}>
+                            {stockAvailable ? 'In stock' : 'Currently unavailable'}
+                        </Typography>
+                        <Typography variant="body2" color="text.secondary" sx={{ mb: 1.5 }}>
+                            Ships from <strong>My Store</strong>
+                        </Typography>
+                        <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
+                            Sold by <strong>My Store</strong>
+                        </Typography>
+
+                        {cartMsg && (
+                            <Typography color={cartMsg.type === 'error' ? 'error' : 'success.main'} variant="body2" sx={{ mb: 1.5 }}>
+                                {cartMsg.text}
+                            </Typography>
+                        )}
+
+                        {cartEnabled && stockAvailable && (
+                            <Box sx={{ mb: 1.5 }}>
+                                <Typography variant="body2" color="text.secondary" sx={{ mb: 0.75 }}>
+                                    Quantity
+                                </Typography>
+                                <Box
+                                    sx={{
+                                        display: 'inline-flex',
+                                        alignItems: 'center',
+                                        width: '100%',
+                                        justifyContent: 'space-between',
+                                        border: '1px solid',
+                                        borderColor: 'divider',
+                                        borderRadius: 999,
+                                        overflow: 'hidden',
+                                        bgcolor: 'action.hover',
+                                    }}
+                                >
+                                    <IconButton
+                                        size="small"
+                                        onClick={() => setQty((q) => Math.max(1, q - 1))}
+                                        disabled={qty <= 1 || pendingAction !== null}
+                                        aria-label="Decrease quantity"
+                                    >
+                                        <RemoveIcon fontSize="small" />
+                                    </IconButton>
+                                    <Typography variant="body1" fontWeight={800}>{qty}</Typography>
+                                    <IconButton
+                                        size="small"
+                                        onClick={() => setQty((q) => Math.min(q + 1, maxStock))}
+                                        disabled={pendingAction !== null || qty >= maxStock}
+                                        aria-label="Increase quantity"
+                                    >
+                                        <AddIcon fontSize="small" />
+                                    </IconButton>
+                                </Box>
+                            </Box>
+                        )}
+
+                        {cartEnabled && (
+                            <Box sx={{ display: 'grid', gap: 1.25 }}>
+                                <Button
+                                    variant="contained"
+                                    fullWidth
+                                    startIcon={<CartIcon />}
+                                    disabled={!stockAvailable || pendingAction !== null}
+                                    onClick={handleAddToCart}
+                                    sx={{ py: 1.25, borderRadius: 999, fontWeight: 900 }}
+                                >
+                                    {pendingAction === 'cart' ? 'Adding...' : stockAvailable ? addToCartLabel : 'Out of Stock'}
+                                </Button>
+                                {showBuyNowButton && (
+                                    <Button
+                                        variant="contained"
+                                        color="secondary"
+                                        fullWidth
+                                        startIcon={<FlashOnIcon />}
+                                        disabled={!stockAvailable || pendingAction !== null}
+                                        onClick={handleBuyNow}
+                                        sx={{ py: 1.25, borderRadius: 999, fontWeight: 900 }}
+                                    >
+                                        {pendingAction === 'buyNow' ? 'Redirecting...' : stockAvailable ? buyNowLabel : 'Out of Stock'}
+                                    </Button>
+                                )}
+                            </Box>
+                        )}
+
+                        {enquiryEnabled && (
+                            <Button
+                                variant="outlined"
+                                color="secondary"
+                                fullWidth
+                                startIcon={<HelpOutlineIcon />}
+                                onClick={() => setEnquiryOpen(true)}
+                                sx={{ py: 1.15, borderRadius: 999, fontWeight: 800, mt: cartEnabled ? 1.25 : 0 }}
+                            >
+                                Enquire Now
+                            </Button>
+                        )}
+
+                        <Divider sx={{ my: 2 }} />
+                        <Box sx={{ display: 'grid', gap: 1 }}>
+                            {[
+                                ['Delivery', 'Fast dispatch after confirmation'],
+                                ['Payment', 'Secure transaction'],
+                                ['Support', 'Order updates available'],
+                            ].map(([label, value]) => (
+                                <Box key={label} sx={{ display: 'grid', gridTemplateColumns: '82px 1fr', gap: 1 }}>
+                                    <Typography variant="caption" color="text.secondary">{label}</Typography>
+                                    <Typography variant="caption" fontWeight={700}>{value}</Typography>
+                                </Box>
+                            ))}
+                        </Box>
+                    </Box>
                 </Grid>
             </Grid>
 

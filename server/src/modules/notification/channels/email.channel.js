@@ -4,23 +4,33 @@ const nodemailer = require('nodemailer');
 const logger = require('../../../utils/logger');
 const SettingsService = require('../../settings/settings.service');
 
-// Startup check — warn in production if SMTP credentials are missing
-if (process.env.NODE_ENV === 'production' && (!process.env.SMTP_USER || !process.env.SMTP_PASS)) {
-    logger.warn('WARNING: SMTP_USER or SMTP_PASS is missing in production. Emails may silently fail unless configured in DB.');
-}
+const toBoolean = (value, fallback = false) => {
+    if (value === undefined || value === null || value === '') return fallback;
+    if (typeof value === 'boolean') return value;
+    return ['1', 'true', 'yes', 'on'].includes(String(value).toLowerCase());
+};
+
+const requireSetting = (value, label) => {
+    if (value === undefined || value === null || String(value).trim() === '') {
+        throw new Error(`${label} is required in Admin Settings > Notifications.`);
+    }
+    return String(value).trim();
+};
 
 const createTransporter = async () => {
-    const creds = await SettingsService.getByGroup('messaging_credentials');
-    const config = await SettingsService.getByGroup('messaging');
+    const creds = await SettingsService.getByGroup('messaging_credentials', { maskSensitive: false });
+    const host = requireSetting(creds.smtp_host, 'SMTP Host');
+    const port = Number.parseInt(creds.smtp_port, 10) || 587;
+    const user = requireSetting(creds.smtp_user, 'SMTP User');
+    const pass = requireSetting(creds.smtp_pass, 'SMTP Password');
 
     return nodemailer.createTransport({
-        host: creds.smtp_host || process.env.SMTP_HOST || 'smtp.mailtrap.io',
-        port: parseInt(creds.smtp_port) || parseInt(process.env.SMTP_PORT) || 2525,
-        // true only for port 465 (implicit TLS)
-        secure: (creds.smtp_secure !== undefined ? creds.smtp_secure === 'true' || creds.smtp_secure === true : process.env.SMTP_SECURE === 'true'),
+        host,
+        port,
+        secure: toBoolean(creds.smtp_secure, port === 465),
         auth: {
-            user: creds.smtp_user || process.env.SMTP_USER,
-            pass: creds.smtp_pass || process.env.SMTP_PASS,
+            user,
+            pass,
         },
     });
 };
@@ -44,14 +54,14 @@ const send = async ({ to, subject, html, text }) => {
 
     const transporter = await createTransporter();
     const config = await SettingsService.getByGroup('messaging');
-    const creds = await SettingsService.getByGroup('messaging_credentials');
+    const creds = await SettingsService.getByGroup('messaging_credentials', { maskSensitive: false });
     const general = await SettingsService.getByGroup('general');
 
     const storeName = general.storeName || 'E-Commerce Store';
-    const defaultFrom = `"${storeName}" <noreply@example.com>`;
+    const defaultFrom = creds.smtp_user ? `"${storeName}" <${creds.smtp_user}>` : null;
 
     await transporter.sendMail({
-        from: config.emailFrom || creds.email_from || process.env.EMAIL_FROM || defaultFrom,
+        from: config.emailFrom || defaultFrom || requireSetting(creds.smtp_user, 'Sender Email'),
         to,
         subject,
         text,

@@ -2,11 +2,28 @@
 
 const {
     AttributeTemplate, AttributeValue, CategoryAttribute, Category,
-    Product, ProductAttribute, ProductVariant, VariantOption, Media, sequelize,
+    Product, ProductImage, ProductAttribute, ProductVariant, VariantOption, Media, sequelize,
 } = require('../index');
 const { generateSlug } = require('../../utils/slugify');
 const AppError = require('../../utils/AppError');
 const logger = require('../../utils/logger');
+
+const ATTRIBUTE_TEMPLATE_FIELDS = ['id', 'name', 'slug', 'sortOrder', 'displayType', 'valueType', 'unit'];
+const ATTRIBUTE_VALUE_FIELDS = ['id', 'value', 'slug', 'sortOrder', 'displayLabel', 'swatchColor', 'imageUrl', 'unitLabel', 'metadata'];
+
+const syncProductVariantStock = async (productId, transaction = null) => {
+    const total = await ProductVariant.sum('stockQty', {
+        where: { productId, isActive: true },
+        transaction,
+    });
+
+    await Product.update(
+        { quantity: Number(total || 0) },
+        { where: { id: productId }, transaction }
+    );
+
+    return Number(total || 0);
+};
 
 // ── Reusable include for variant detail ──────────────────────────────────────
 const variantInclude = [
@@ -14,15 +31,67 @@ const variantInclude = [
         model: VariantOption,
         as: 'options',
         include: [
-            { model: AttributeTemplate, as: 'attribute', attributes: ['id', 'name', 'slug'] },
-            { model: AttributeValue,    as: 'value',     attributes: ['id', 'value', 'slug'] },
+            { model: AttributeTemplate, as: 'attribute', attributes: ATTRIBUTE_TEMPLATE_FIELDS },
+            { model: AttributeValue,    as: 'value',     attributes: ATTRIBUTE_VALUE_FIELDS },
         ],
     },
     {
         model: Media,
         as: 'media',
     },
+    {
+        model: ProductImage,
+        as: 'images',
+        required: false,
+        include: [{ model: Media, as: 'media', required: false }],
+    },
 ];
+
+const validateImageRows = async (images = []) => {
+    const mediaIds = Array.from(new Set(images.map((img) => img.mediaId || img.media_id || img.media?.id).filter(Boolean)));
+    if (mediaIds.length === 0) return;
+
+    const count = await Media.count({ where: { id: mediaIds } });
+    if (count !== mediaIds.length) {
+        throw new AppError('VALIDATION_ERROR', 400, 'One or more images reference an invalid media ID');
+    }
+};
+
+const normalizeImageRows = (images = [], { productId, variantId } = {}) => (
+    images.map((img, index) => ({
+        productId,
+        variantId,
+        url: img.url || img.media?.url,
+        alt: img.alt || null,
+        mediaId: img.mediaId || img.media_id || img.media?.id || null,
+        sortOrder: Number(img.sortOrder ?? index),
+        isPrimary: Boolean(img.isPrimary),
+    })).filter((img) => img.url || img.mediaId)
+);
+
+const replaceVariantImageRows = async ({ productId, variantId, images = [], transaction }) => {
+    const rows = normalizeImageRows(images, { productId, variantId });
+    const hasPrimary = rows.some((img) => img.isPrimary);
+
+    await ProductImage.destroy({ where: { productId, variantId }, transaction });
+
+    if (hasPrimary) {
+        await ProductImage.update(
+            { isPrimary: false },
+            { where: { productId }, transaction }
+        );
+    }
+
+    if (rows.length > 0) {
+        await ProductImage.bulkCreate(rows, { transaction });
+    }
+
+    const primaryOrFirst = rows.find((img) => img.isPrimary) || rows[0] || null;
+    await ProductVariant.update(
+        { mediaId: primaryOrFirst?.mediaId || null },
+        { where: { id: variantId, productId }, transaction }
+    );
+};
 
 /**
  * Attribute Template CRUD
@@ -36,7 +105,8 @@ const getAllAttributes = async (page = 1, limit = 20) => {
     const offset = (Math.max(1, parseInt(page, 10)) - 1) * Math.min(100, Math.max(1, parseInt(limit, 10)));
     const safeLimit = Math.min(100, Math.max(1, parseInt(limit, 10)));
     return AttributeTemplate.findAndCountAll({
-        include: [{ model: AttributeValue, as: 'values', attributes: ['id', 'value', 'slug', 'sortOrder'] }],
+        attributes: ATTRIBUTE_TEMPLATE_FIELDS,
+        include: [{ model: AttributeValue, as: 'values', attributes: ATTRIBUTE_VALUE_FIELDS }],
         order: [['sortOrder', 'ASC'], [{ model: AttributeValue, as: 'values' }, 'sortOrder', 'ASC']],
         limit: safeLimit,
         offset,
@@ -46,7 +116,8 @@ const getAllAttributes = async (page = 1, limit = 20) => {
 
 const getAttributeById = async (id) => {
     const attr = await AttributeTemplate.findByPk(id, {
-        include: [{ model: AttributeValue, as: 'values', attributes: ['id', 'value', 'slug', 'sortOrder'] }],
+        attributes: ATTRIBUTE_TEMPLATE_FIELDS,
+        include: [{ model: AttributeValue, as: 'values', attributes: ATTRIBUTE_VALUE_FIELDS }],
     });
     if (!attr) throw new AppError('NOT_FOUND', 404, 'Attribute not found');
     return attr;
@@ -73,6 +144,19 @@ const addValue = async (attributeId, data) => {
     await getAttributeById(attributeId);
     const slug = await generateSlug(data.value, AttributeValue);
     return AttributeValue.create({ ...data, attributeId, slug });
+};
+
+const updateValue = async (attributeId, valueId, data) => {
+    const val = await AttributeValue.findOne({ where: { id: valueId, attributeId } });
+    if (!val) throw new AppError('NOT_FOUND', 404, 'Attribute value not found');
+
+    const updates = { ...data };
+    if (updates.value && updates.value !== val.value) {
+        updates.slug = await generateSlug(updates.value, AttributeValue);
+    }
+
+    await val.update(updates);
+    return val;
 };
 
 const removeValue = async (attributeId, valueId) => {
@@ -163,7 +247,8 @@ const getCategoryAttributes = async (categoryIdOrIds, inherit = false) => {
 
     const templates = await AttributeTemplate.findAll({
         where: { id: uniqueAttrIds },
-        include: [{ model: AttributeValue, as: 'values', attributes: ['id', 'value', 'slug', 'sortOrder'] }],
+        attributes: ATTRIBUTE_TEMPLATE_FIELDS,
+        include: [{ model: AttributeValue, as: 'values', attributes: ATTRIBUTE_VALUE_FIELDS }],
         order: [['sortOrder', 'ASC'], [{ model: AttributeValue, as: 'values' }, 'sortOrder', 'ASC']],
     });
 
@@ -242,7 +327,7 @@ const bulkGenerateVariants = async (productId, { defaultPrice, defaultStockQty =
             where: { productId, isVariantAttr: true },
             include: [
                 { model: AttributeTemplate, as: 'attribute', attributes: ['id', 'name'] },
-                { model: AttributeValue,    as: 'value',     attributes: ['id', 'value'] },
+                { model: AttributeValue,    as: 'value',     attributes: ['id', 'value', 'displayLabel'] },
             ],
             order: [['sortOrder', 'ASC']],
             transaction: t,
@@ -344,6 +429,7 @@ const bulkGenerateVariants = async (productId, { defaultPrice, defaultStockQty =
             createdCount++;
         }
         logger.debug(`[bulkGenerateVariants] Created ${createdCount} new variant combinations.`);
+        await syncProductVariantStock(productId, t);
 
         await t.commit();
         logger.debug(`[bulkGenerateVariants] Transaction committed successfully.`);
@@ -417,6 +503,7 @@ const cloneVariants = async (targetProductId, sourceProductId) => {
             cloned.push(variant);
         }
 
+        await syncProductVariantStock(targetProductId, t);
         await t.commit();
         return ProductVariant.findAll({
             where: { productId: targetProductId },
@@ -477,6 +564,9 @@ const addProductVariant = async (productId, data) => {
             );
         }
     }
+    if (Array.isArray(data.images)) {
+        await validateImageRows(data.images);
+    }
 
     const t = await sequelize.transaction();
     try {
@@ -496,7 +586,16 @@ const addProductVariant = async (productId, data) => {
                 valueId: opt.valueId,
             }, { transaction: t });
         }
+        if (Array.isArray(data.images)) {
+            await replaceVariantImageRows({
+                productId,
+                variantId: variant.id,
+                images: data.images,
+                transaction: t,
+            });
+        }
 
+        await syncProductVariantStock(productId, t);
         await t.commit();
         return ProductVariant.findByPk(variant.id, { include: variantInclude });
     } catch (err) {
@@ -508,6 +607,9 @@ const addProductVariant = async (productId, data) => {
 const updateProductVariant = async (productId, variantId, data) => {
     const variant = await ProductVariant.findOne({ where: { id: variantId, productId } });
     if (!variant) throw new AppError('NOT_FOUND', 404, 'Variant not found');
+    if (Array.isArray(data.images)) {
+        await validateImageRows(data.images);
+    }
 
     // Whitelist updatable scalar fields (options/dimensions are immutable after creation)
     const allowed = ['sku', 'price', 'stockQty', 'isActive', 'sortOrder', 'mediaId', 'media_id'];
@@ -523,7 +625,18 @@ const updateProductVariant = async (productId, variantId, data) => {
         }
     }
 
-    await variant.update(updates);
+    await sequelize.transaction(async (t) => {
+        await variant.update(updates, { transaction: t });
+        if (Array.isArray(data.images)) {
+            await replaceVariantImageRows({
+                productId,
+                variantId,
+                images: data.images,
+                transaction: t,
+            });
+        }
+        await syncProductVariantStock(productId, t);
+    });
     return ProductVariant.findByPk(variantId, { include: variantInclude });
 };
 
@@ -531,6 +644,7 @@ const deleteProductVariant = async (productId, variantId) => {
     const variant = await ProductVariant.findOne({ where: { id: variantId, productId } });
     if (!variant) throw new AppError('NOT_FOUND', 404, 'Variant not found');
     await variant.destroy(); // paranoid soft-delete
+    await syncProductVariantStock(productId);
 };
 
 const reorderValues = async (attributeId, valueIds) => {
@@ -574,6 +688,7 @@ module.exports = {
     updateAttribute,
     deleteAttribute,
     addValue,
+    updateValue,
     removeValue,
     reorderValues,
     linkAttributeToCategory,
@@ -585,4 +700,5 @@ module.exports = {
     addProductVariant,
     updateProductVariant,
     deleteProductVariant,
+    syncProductVariantStock,
 };

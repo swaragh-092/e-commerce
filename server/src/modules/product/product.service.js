@@ -81,9 +81,12 @@ const _syncProductTags = async (product, tagNames, transaction) => {
   await product.setTags(tagInstances, { transaction });
 };
 
+const ATTRIBUTE_TEMPLATE_FIELDS = ['id', 'name', 'slug', 'sortOrder', 'displayType', 'valueType', 'unit'];
+const ATTRIBUTE_VALUE_FIELDS = ['id', 'value', 'slug', 'sortOrder', 'displayLabel', 'swatchColor', 'imageUrl', 'unitLabel', 'metadata'];
+
 const getCommonAttributeIncludes = () => [
-  { model: AttributeTemplate, as: 'attribute', attributes: ['id', 'name', 'slug'] },
-  { model: AttributeValue, as: 'value', attributes: ['id', 'value', 'slug'] },
+  { model: AttributeTemplate, as: 'attribute', attributes: ATTRIBUTE_TEMPLATE_FIELDS },
+  { model: AttributeValue, as: 'value', attributes: ATTRIBUTE_VALUE_FIELDS },
 ];
 
 const getVariantInclude = () => ({
@@ -99,6 +102,12 @@ const getVariantInclude = () => ({
       model: Media,
       as: 'media',
     },
+    {
+      model: ProductImage,
+      as: 'images',
+      required: false,
+      include: [{ model: Media, as: 'media', required: false }],
+    },
   ],
 });
 
@@ -106,6 +115,14 @@ const getAttributeInclude = () => ({
   model: ProductAttribute,
   as: 'attributes',
   include: getCommonAttributeIncludes(),
+});
+
+const getGlobalImageInclude = () => ({
+  model: ProductImage,
+  as: 'images',
+  required: false,
+  where: { variantId: null },
+  include: [{ model: Media, as: 'media', required: false }],
 });
 
 const validateVariantOptions = async (variants) => {
@@ -135,7 +152,7 @@ const validateVariantOptions = async (variants) => {
 const validateProductImages = async (images) => {
   if (!images?.length) return;
 
-  const mediaIds = images.map(img => img.mediaId).filter(Boolean);
+  const mediaIds = Array.from(new Set(images.map(img => img.mediaId || img.media_id || img.media?.id).filter(Boolean)));
   if (mediaIds.length === 0) return;
 
   const count = await Media.count({
@@ -144,6 +161,39 @@ const validateProductImages = async (images) => {
 
   if (count !== mediaIds.length) {
     throw new AppError('VALIDATION_ERROR', 400, 'One or more images reference an invalid media ID');
+  }
+};
+
+const normalizeImageRows = (images = [], { productId, variantId = null } = {}) => (
+  images.map((img, index) => ({
+    productId,
+    variantId,
+    url: img.url || img.media?.url,
+    alt: img.alt || null,
+    mediaId: img.mediaId || img.media_id || img.media?.id || null,
+    sortOrder: Number(img.sortOrder ?? index),
+    isPrimary: Boolean(img.isPrimary),
+  })).filter((img) => img.url || img.mediaId)
+);
+
+const replaceImageRows = async ({ productId, variantId = null, images = [], transaction }) => {
+  const rows = normalizeImageRows(images, { productId, variantId });
+  const hasPrimary = rows.some((img) => img.isPrimary);
+
+  await ProductImage.destroy({
+    where: { productId, variantId },
+    transaction,
+  });
+
+  if (hasPrimary) {
+    await ProductImage.update(
+      { isPrimary: false },
+      { where: { productId }, transaction }
+    );
+  }
+
+  if (rows.length > 0) {
+    await ProductImage.bulkCreate(rows, { transaction });
   }
 };
 
@@ -158,6 +208,28 @@ const validateProductStock = (data, currentProduct = null) => {
   if (reserved > qty) {
     throw new AppError('VALIDATION_ERROR', 400, 'Reserved quantity cannot exceed total quantity');
   }
+};
+
+const getVariantStockTotal = async (productId, transaction = null) => {
+  const total = await ProductVariant.sum('stockQty', {
+    where: { productId, isActive: true },
+    transaction,
+  });
+  return Number(total || 0);
+};
+
+const productHasVariants = async (productId, transaction = null) => {
+  const count = await ProductVariant.count({
+    where: { productId },
+    transaction,
+  });
+  return count > 0;
+};
+
+const syncProductVariantStock = async (productId, transaction = null) => {
+  const quantity = await getVariantStockTotal(productId, transaction);
+  await Product.update({ quantity }, { where: { id: productId }, transaction });
+  return quantity;
 };
 
 const createVariantsWithOptions = async (productId, variants, transaction) => {
@@ -185,6 +257,20 @@ const createVariantsWithOptions = async (productId, variants, transaction) => {
     }));
 
     await VariantOption.bulkCreate(optionRows, { transaction });
+
+    if (Array.isArray(variant.images) && variant.images.length > 0) {
+      await replaceImageRows({
+        productId,
+        variantId: createdVariant.id,
+        images: variant.images,
+        transaction,
+      });
+      const primaryOrFirst = normalizeImageRows(variant.images, { productId, variantId: createdVariant.id })
+        .find((img) => img.isPrimary) || normalizeImageRows(variant.images, { productId, variantId: createdVariant.id })[0];
+      if (primaryOrFirst?.mediaId) {
+        await createdVariant.update({ mediaId: primaryOrFirst.mediaId }, { transaction });
+      }
+    }
   }
 };
 
@@ -210,7 +296,7 @@ exports.getProducts = async (filters, page, limit, isAdmin = false) => {
   const where = {};
   const order = [];
   const include = [
-    { model: ProductImage, as: 'images' },
+    getGlobalImageInclude(),
     { model: Tag, as: 'tags' },
     { model: Brand, as: 'brand' },
   ];
@@ -443,7 +529,7 @@ exports.getProductBySlug = async (slug, { adminView = false } = {}) => {
   const product = await Product.findOne({
     where,
     include: [
-      { model: ProductImage, as: 'images' },
+      getGlobalImageInclude(),
       getVariantInclude(),
       getAttributeInclude(),
       { model: Category, as: 'categories' },
@@ -460,7 +546,7 @@ exports.getProductBySlug = async (slug, { adminView = false } = {}) => {
 exports.getProductById = async (id) => {
   const product = await Product.findByPk(id, {
     include: [
-      { model: ProductImage, as: 'images' },
+      getGlobalImageInclude(),
       getVariantInclude(),
       getAttributeInclude(),
       { model: Category, as: 'categories' },
@@ -499,11 +585,11 @@ exports.createProduct = async (data, auditContext = null) => {
 
     if (data.variants && data.variants.length) {
       await createVariantsWithOptions(product.id, data.variants, transaction);
+      await syncProductVariantStock(product.id, transaction);
     }
 
     if (data.images && data.images.length) {
-      const tempImgs = data.images.map((img) => ({ ...img, productId: product.id }));
-      await ProductImage.bulkCreate(tempImgs, { transaction });
+      await replaceImageRows({ productId: product.id, images: data.images, transaction });
     }
 
     if (data.tags) {
@@ -564,6 +650,11 @@ exports.updateProduct = async (id, data, auditContext = null) => {
       if (!brand) throw new AppError('NOT_FOUND', 404, 'Brand not found');
     }
 
+    const variantsExist = await productHasVariants(id, transaction);
+    if ((variantsExist || (Array.isArray(data.variants) && data.variants.length > 0)) && data.quantity !== undefined) {
+      delete data.quantity;
+    }
+
     validateProductStock(data, product);
     if (data.images) await validateProductImages(data.images);
 
@@ -575,12 +666,13 @@ exports.updateProduct = async (id, data, auditContext = null) => {
 
     if (data.variants) {
       await replaceVariantsWithOptions(id, data.variants, transaction);
+      await syncProductVariantStock(id, transaction);
+    } else if (variantsExist) {
+      await syncProductVariantStock(id, transaction);
     }
 
     if (data.images) {
-      await ProductImage.destroy({ where: { productId: id }, transaction });
-      const tempImgs = data.images.map((img) => ({ ...img, productId: id }));
-      await ProductImage.bulkCreate(tempImgs, { transaction });
+      await replaceImageRows({ productId: id, images: data.images, transaction });
     }
 
     if (data.tags) {
