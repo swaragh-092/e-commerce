@@ -19,17 +19,17 @@ const { idParamSchema } = require('../../utils/common.validation');
 const userController = require('./user.controller');
 
 // Profile Endpoints
-router.get('/me', authenticate, userController.getMe);
-router.put('/me', authenticate, validate(updateProfileSchema), userController.updateMe);
-router.post('/me/avatar', authenticate, validate(updateAvatarSchema), userController.updateAvatar);
-router.put('/me/password', authenticate, validate(changePasswordSchema), userController.changePassword);
+router.get('/me', authenticate, authorizePermissions(PERMISSIONS.ACCOUNT_SELF), userController.getMe);
+router.put('/me', authenticate, authorizePermissions(PERMISSIONS.ACCOUNT_SELF), validate(updateProfileSchema), userController.updateMe);
+router.post('/me/avatar', authenticate, authorizePermissions(PERMISSIONS.ACCOUNT_SELF), validate(updateAvatarSchema), userController.updateAvatar);
+router.put('/me/password', authenticate, authorizePermissions(PERMISSIONS.ACCOUNT_SELF), validate(changePasswordSchema), userController.changePassword);
 
 // Address Endpoints
-router.get('/me/addresses', authenticate, userController.getAddresses);
-router.post('/me/addresses', authenticate, validate(createAddressSchema), userController.createAddress);
-router.put('/me/addresses/:id', authenticate, validate(idParamSchema, 'params'), validate(updateAddressSchema), userController.updateAddress);
-router.delete('/me/addresses/:id', authenticate, validate(idParamSchema, 'params'), userController.deleteAddress);
-router.put('/me/addresses/:id/default', authenticate, validate(idParamSchema, 'params'), userController.setDefaultAddress);
+router.get('/me/addresses', authenticate, authorizePermissions(PERMISSIONS.ACCOUNT_SELF), userController.getAddresses);
+router.post('/me/addresses', authenticate, authorizePermissions(PERMISSIONS.ACCOUNT_SELF), validate(createAddressSchema), userController.createAddress);
+router.put('/me/addresses/:id', authenticate, authorizePermissions(PERMISSIONS.ACCOUNT_SELF), validate(idParamSchema, 'params'), validate(updateAddressSchema), userController.updateAddress);
+router.delete('/me/addresses/:id', authenticate, authorizePermissions(PERMISSIONS.ACCOUNT_SELF), validate(idParamSchema, 'params'), userController.deleteAddress);
+router.put('/me/addresses/:id/default', authenticate, authorizePermissions(PERMISSIONS.ACCOUNT_SELF), validate(idParamSchema, 'params'), userController.setDefaultAddress);
 
 
 // Admin Endpoints

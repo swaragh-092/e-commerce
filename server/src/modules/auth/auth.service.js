@@ -259,7 +259,7 @@ const refresh = async (refreshTokenStr, ipAddress) => {
 const logout = async (refreshTokenStr, userId) => {
   const tokenRecord = await RefreshToken.findOne({ where: { token: refreshTokenStr } });
   if (tokenRecord) {
-    if (userId && tokenRecord.userId !== userId) {
+    if (!userId || tokenRecord.userId !== userId) {
       throw new AppError('FORBIDDEN', 403, 'You do not have permission to revoke this token');
     }
 

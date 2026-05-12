@@ -150,7 +150,17 @@
     "brandsPage": {
         "gridColumns": 4,
         "showDescriptions": true,
-        "cardStyle": "inherit"
+        "cardStyle": "inherit",
+        "heroTitle": "Shop by Brand",
+        "heroSubtitle": "Discover products grouped by your favorite brands.",
+        "cardLayout": "standard",
+        "showAlphabeticalFilter": true,
+        "imageAspectRatio": "square",
+        "cardBorderRadius": 12,
+        "showProductCount": false,
+        "showFeaturedSection": true,
+        "featuredLayout": "banner",
+        "featuredCount": 3
     },
     "homepage": {
         "seoTitle": "Home",

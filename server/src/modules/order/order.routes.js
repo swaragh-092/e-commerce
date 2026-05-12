@@ -26,14 +26,14 @@ const { featureGate } = require('../../middleware/featureGate.middleware');
 
 router.use(featureGate('orders'));
 
-router.post('/', authenticate, validate(placeOrderSchema), orderController.placeOrder);
+router.post('/', authenticate, authorizePermissions(PERMISSIONS.CHECKOUT_SELF), validate(placeOrderSchema), orderController.placeOrder);
 
-router.get('/', authenticate, validate(listOrdersQuerySchema, 'query'), orderController.getOrders);
-router.get('/:id/tracking', authenticate, validate(idParamSchema, 'params'), orderController.getFulfillmentTracking);
-router.get('/:id', authenticate, validate(idParamSchema, 'params'), orderController.getOrderById);
-router.post('/:id/cancel', authenticate, validate(idParamSchema, 'params'), orderController.cancelOrder);
-router.post('/:id/returns', authenticate, validate(createPutBackSchema), orderController.createReturnRequest);
-router.post('/:id/replacements', authenticate, validate(createPutBackSchema), orderController.createReplacementRequest);
+router.get('/', authenticate, authorizePermissions(PERMISSIONS.ACCOUNT_SELF), validate(listOrdersQuerySchema, 'query'), orderController.getOrders);
+router.get('/:id/tracking', authenticate, authorizePermissions(PERMISSIONS.ACCOUNT_SELF), validate(idParamSchema, 'params'), orderController.getFulfillmentTracking);
+router.get('/:id', authenticate, authorizePermissions(PERMISSIONS.ACCOUNT_SELF), validate(idParamSchema, 'params'), orderController.getOrderById);
+router.post('/:id/cancel', authenticate, authorizePermissions(PERMISSIONS.ACCOUNT_SELF), validate(idParamSchema, 'params'), orderController.cancelOrder);
+router.post('/:id/returns', authenticate, authorizePermissions(PERMISSIONS.ACCOUNT_SELF), validate(createPutBackSchema), orderController.createReturnRequest);
+router.post('/:id/replacements', authenticate, authorizePermissions(PERMISSIONS.ACCOUNT_SELF), validate(createPutBackSchema), orderController.createReplacementRequest);
 
 // Admin
 router.put('/:id/status', authenticate, authorizePermissions(PERMISSIONS.ORDERS_UPDATE_STATUS), validate(idParamSchema, 'params'), validate(updateOrderStatusSchema), auditLog('Order'), orderController.updateStatus);

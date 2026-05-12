@@ -2,9 +2,11 @@
 const router = require('express').Router();
 const cartController = require('./cart.controller');
 const { validate } = require('../../middleware/validate.middleware');
+const { authorizePermissions } = require('../../middleware/role.middleware');
 const { addItemSchema, updateItemSchema, mergeCartSchema } = require('./cart.validation');
 const { authenticate, optionalAuth } = require('../../middleware/auth.middleware');
 const { idParamSchema } = require('../../utils/common.validation');
+const { PERMISSIONS } = require('../../config/permissions');
 
 
 const { featureGate } = require('../../middleware/featureGate.middleware');
@@ -19,6 +21,6 @@ router.delete('/items/:id', optionalAuth, validate(idParamSchema, 'params'), car
 router.delete('/', optionalAuth, cartController.clearCart);
 
 // Merge cart requires actual authentication
-router.post('/merge', authenticate, validate(mergeCartSchema), cartController.mergeGuestCart);
+router.post('/merge', authenticate, authorizePermissions(PERMISSIONS.CART_SELF), validate(mergeCartSchema), cartController.mergeGuestCart);
 
 module.exports = router;

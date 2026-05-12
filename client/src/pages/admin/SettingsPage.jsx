@@ -1507,8 +1507,23 @@ const SettingsPage = () => {
       ),
       section(
         'Brands Page',
-        'Customize how the /brands storefront page displays brand cards.',
+        'Customize how the /brands storefront page looks and behaves.',
         <>
+          {field('brandsPage.heroTitle', 'Page title (e.g. Shop by Brand, Our Partners)', 'text')}
+          {field('brandsPage.heroSubtitle', 'Page subtitle', 'text')}
+          <Divider sx={{ my: 2 }} />
+          <FormControl fullWidth size="small" sx={{ mb: 2 }}>
+            <InputLabel>Card Layout</InputLabel>
+            <Select
+              label="Card Layout"
+              value={form['brandsPage.cardLayout'] || 'standard'}
+              onChange={(e) => set('brandsPage.cardLayout', e.target.value)}
+            >
+              <MenuItem value="standard">Standard — image top, content below</MenuItem>
+              <MenuItem value="overlay">Overlay — full-bleed image with text overlay</MenuItem>
+              <MenuItem value="minimal">Minimal — compact logo + name</MenuItem>
+            </Select>
+          </FormControl>
           <FormControl fullWidth size="small" sx={{ mb: 2 }}>
             <InputLabel>Grid Columns (desktop)</InputLabel>
             <Select
@@ -1522,7 +1537,18 @@ const SettingsPage = () => {
               <MenuItem value={5}>5 — Dense grid</MenuItem>
             </Select>
           </FormControl>
-          {toggle('brandsPage.showDescriptions', 'Show brand descriptions on cards')}
+          <FormControl fullWidth size="small" sx={{ mb: 2 }}>
+            <InputLabel>Image Aspect Ratio</InputLabel>
+            <Select
+              label="Image Aspect Ratio"
+              value={form['brandsPage.imageAspectRatio'] || 'square'}
+              onChange={(e) => set('brandsPage.imageAspectRatio', e.target.value)}
+            >
+              <MenuItem value="square">Square (1:1)</MenuItem>
+              <MenuItem value="landscape">Landscape (16:10)</MenuItem>
+              <MenuItem value="portrait">Portrait (3:4)</MenuItem>
+            </Select>
+          </FormControl>
           <FormControl fullWidth size="small" sx={{ mb: 2 }}>
             <InputLabel>Card Style</InputLabel>
             <Select
@@ -1536,8 +1562,31 @@ const SettingsPage = () => {
               <MenuItem value="flat">Flat</MenuItem>
             </Select>
           </FormControl>
+          {field('brandsPage.cardBorderRadius', 'Card border radius (px)', 'number')}
+          <Divider sx={{ my: 2 }} />
+          {toggle('brandsPage.showDescriptions', 'Show brand descriptions on cards')}
+          {toggle('brandsPage.showProductCount', 'Show product count badge on cards')}
+          {toggle('brandsPage.showAlphabeticalFilter', 'Show A–Z alphabetical filter bar')}
+          <Divider sx={{ my: 2 }} />
+          <Typography variant="subtitle2" fontWeight={700} gutterBottom sx={{ color: 'text.secondary' }}>
+            Featured Brands
+          </Typography>
+          {toggle('brandsPage.showFeaturedSection', 'Show featured brands hero section at top')}
+          <FormControl fullWidth size="small" sx={{ mb: 2 }}>
+            <InputLabel>Featured Layout</InputLabel>
+            <Select
+              label="Featured Layout"
+              value={form['brandsPage.featuredLayout'] || 'banner'}
+              onChange={(e) => set('brandsPage.featuredLayout', e.target.value)}
+            >
+              <MenuItem value="banner">Banner — large hero cards with overlay</MenuItem>
+              <MenuItem value="carousel">Carousel — horizontal scroll cards</MenuItem>
+              <MenuItem value="grid">Grid — same cards as main grid</MenuItem>
+            </Select>
+          </FormControl>
+          {field('brandsPage.featuredCount', 'Max featured brands to show', 'number')}
         </>,
-        ['brands', 'brands page', 'brand grid']
+        ['brands', 'brands page', 'brand grid', 'card layout', 'hero', 'featured']
       ),
       section(
         'SKU Automation',

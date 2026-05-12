@@ -13,8 +13,8 @@ const { featureGate } = require('../../middleware/featureGate.middleware');
 
 router.use(featureGate('payments'));
 
-router.post('/create-order', authenticate, validate(createOrderSchema), paymentController.createOrder);
-router.post('/verify/:orderId', authenticate, validate(orderIdParamSchema, 'params'), paymentController.verifyPayment);
+router.post('/create-order', authenticate, authorizePermissions(PERMISSIONS.CHECKOUT_SELF), validate(createOrderSchema), paymentController.createOrder);
+router.post('/verify/:orderId', authenticate, authorizePermissions(PERMISSIONS.CHECKOUT_SELF), validate(orderIdParamSchema, 'params'), paymentController.verifyPayment);
 
 
 // Provider webhooks are parsed as raw bodies by app.js

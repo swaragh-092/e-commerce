@@ -2,14 +2,17 @@
 
 const router = require('express').Router();
 const { authenticate } = require('../../middleware/auth.middleware');
+const { authorizePermissions } = require('../../middleware/role.middleware');
 const { validate } = require('../../middleware/validate.middleware');
 const { featureGate } = require('../../middleware/featureGate.middleware');
 const wishlistController = require('./wishlist.controller');
 const { addItemSchema, moveToCartSchema } = require('./wishlist.validation');
 const { productIdParamSchema } = require('../../utils/common.validation');
+const { PERMISSIONS } = require('../../config/permissions');
 
 
 router.use(authenticate);
+router.use(authorizePermissions(PERMISSIONS.WISHLIST_SELF));
 router.use(featureGate('wishlist'));
 
 router.get('/', wishlistController.getWishlist);

@@ -114,7 +114,9 @@ const notificationRoutes = require('./modules/notification/notification.routes')
 const shippingAdminRoutes = require('./modules/shipping/shipping.admin.routes');
 const shippingWebhookRoutes = require('./modules/shipping/shipping.webhook.routes');
 const enquiryRoutes = require('./modules/enquiry/enquiry.routes');
+const enquiryAdminRoutes = require('./modules/enquiry/enquiry.admin.routes');
 const searchRoutes = require('./modules/search/search.routes');
+const reviewAdminRoutes = require('./modules/review/review.admin.routes');
 
 app.use('/api/seo', seoRoutes);
 app.use('/api/settings', settingsRoutes);
@@ -132,13 +134,15 @@ app.use('/api/shipping', shippingRoutes);
 app.use('/api/webhook/shipping', shippingWebhookRoutes);
 app.use('/api/wishlist', wishlistRoutes);
 app.use('/api', reviewRoutes);
-app.use('/api/audit-logs', auditRoutes);
 // Admin route is mounted at a configurable secret path to prevent enumeration.
 // Set ADMIN_ROUTE_PREFIX in .env — e.g. /api/mgmt-xK9mP2 — to mask the endpoint.
 // Falls back to /api/admin in development if not set.
 const adminPrefix = process.env.ADMIN_ROUTE_PREFIX || '/api/admin';
 app.use(adminPrefix, adminRoutes);
 app.use(adminPrefix, shippingAdminRoutes);
+app.use(`${adminPrefix}/reviews`, reviewAdminRoutes);
+app.use(`${adminPrefix}/enquiries`, enquiryAdminRoutes);
+app.use(`${adminPrefix}/audit-logs`, auditRoutes);
 app.use('/api/attributes', attributeRoutes);
 app.use('/api/categories', categoryAttributeRoutes); // extends existing /api/categories with /:id/attributes sub-routes
 app.use('/api/products', productAttributeRoutes);   // extends existing /api/products with /:id/attributes sub-routes
