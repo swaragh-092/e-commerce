@@ -85,7 +85,8 @@ const getAll = async () => {
   return grouped;
 };
 
-const getByGroup = async (groupName) => {
+const getByGroup = async (groupName, options = {}) => {
+  const { maskSensitive = true } = options;
   const validGroups = ['theme', 'features', 'payments', 'sales', 'seo', 'general', 'shipping', 'tax', 'sku', 'logo', 'hero', 'footer', 'announcement', 'nav', 'catalog', 'homepage', 'productPage', 'admin', 'invoice', 'gateway_credentials', 'messaging_credentials', 'messaging'];
   if (!validGroups.includes(groupName)) {
     throw new AppError('VALIDATION_ERROR', 400, 'Invalid setting group');
@@ -110,9 +111,10 @@ const getByGroup = async (groupName) => {
     if (parsedValue === 'true') parsedValue = true;
     else if (parsedValue === 'false') parsedValue = false;
     
-    // Mask sensitive values
+    // Mask sensitive values for client-facing reads. Internal services can opt
+    // out so encrypted credentials remain usable by SMTP/Twilio senders.
     const isSensitive = /pass|token|secret|key_secret|private/i.test(s.key) && !/id|public|publishable/i.test(s.key);
-    if (isSensitive && parsedValue) {
+    if (maskSensitive && isSensitive && parsedValue) {
         parsedValue = '********';
     }
 

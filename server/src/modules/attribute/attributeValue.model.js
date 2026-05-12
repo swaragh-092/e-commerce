@@ -23,6 +23,26 @@ module.exports = (sequelize, DataTypes) => {
             type: DataTypes.INTEGER,
             defaultValue: 0,
         },
+        displayLabel: {
+            type: DataTypes.STRING(100),
+            allowNull: true,
+        },
+        swatchColor: {
+            type: DataTypes.STRING(32),
+            allowNull: true,
+        },
+        imageUrl: {
+            type: DataTypes.STRING(500),
+            allowNull: true,
+        },
+        unitLabel: {
+            type: DataTypes.STRING(20),
+            allowNull: true,
+        },
+        metadata: {
+            type: DataTypes.JSONB,
+            defaultValue: {},
+        },
     }, {
         tableName: 'attribute_values',
         timestamps: true,

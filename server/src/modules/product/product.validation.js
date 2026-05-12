@@ -39,6 +39,15 @@ const createProductSchema = Joi.object({
       stockQty: Joi.number().integer().min(0).default(0),
       isActive: Joi.boolean().default(true),
       sortOrder: Joi.number().integer().min(0).default(0),
+      images: Joi.array().items(
+        Joi.object({
+          url: Joi.string().allow('', null),
+          alt: Joi.string().max(255).allow('', null),
+          mediaId: Joi.string().uuid().allow(null),
+          sortOrder: Joi.number().integer().default(0),
+          isPrimary: Joi.boolean().default(false),
+        })
+      ),
       options: Joi.array().items(
         Joi.object({
           attributeId: Joi.string().uuid().required(),

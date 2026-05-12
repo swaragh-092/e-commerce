@@ -12,19 +12,24 @@ const SettingsService = require('../../settings/settings.service');
 
 let _client = null;
 let _currentSid = null;
+let _currentToken = null;
+
+const requireSetting = (value, label) => {
+    if (value === undefined || value === null || String(value).trim() === '') {
+        throw new Error(`${label} is required in Admin Settings > Notifications.`);
+    }
+    return String(value).trim();
+};
 
 const getClient = async () => {
-    const creds = await SettingsService.getByGroup('messaging_credentials');
-    const sid = creds.twilio_sid || process.env.TWILIO_ACCOUNT_SID;
-    const token = creds.twilio_token || process.env.TWILIO_AUTH_TOKEN;
+    const creds = await SettingsService.getByGroup('messaging_credentials', { maskSensitive: false });
+    const sid = requireSetting(creds.twilio_sid, 'Twilio Account SID');
+    const token = requireSetting(creds.twilio_token, 'Twilio Auth Token');
 
-    if (!sid || !token) {
-        throw new Error('TWILIO_ACCOUNT_SID and TWILIO_AUTH_TOKEN must be set in env or messaging_credentials to send WhatsApp.');
-    }
-
-    if (!_client || _currentSid !== sid) {
+    if (!_client || _currentSid !== sid || _currentToken !== token) {
         _client = twilio(sid, token);
         _currentSid = sid;
+        _currentToken = token;
     }
     return _client;
 };
@@ -47,11 +52,8 @@ const send = async ({ to, body }) => {
         return true;
     }
 
-    const creds = await SettingsService.getByGroup('messaging_credentials');
-    const fromRaw = creds.twilio_whatsapp_from || process.env.TWILIO_WHATSAPP_FROM;
-    if (!fromRaw) {
-        throw new Error('TWILIO_WHATSAPP_FROM must be set in env or messaging_credentials.');
-    }
+    const creds = await SettingsService.getByGroup('messaging_credentials', { maskSensitive: false });
+    const fromRaw = requireSetting(creds.twilio_whatsapp_from, 'Twilio WhatsApp Sender');
 
     // Normalise: allow operator to set with or without the prefix
     const from = fromRaw.startsWith('whatsapp:') ? fromRaw : `whatsapp:${fromRaw}`;

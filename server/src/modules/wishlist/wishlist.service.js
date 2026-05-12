@@ -16,6 +16,9 @@ const {
 const AppError = require('../../utils/AppError');
 const { getVariantUnitPrice, serializeProductPricing, serializeVariantPricing } = require('../product/product.pricing');
 
+const ATTRIBUTE_TEMPLATE_FIELDS = ['id', 'name', 'slug', 'sortOrder', 'displayType', 'valueType', 'unit'];
+const ATTRIBUTE_VALUE_FIELDS = ['id', 'value', 'slug', 'sortOrder', 'displayLabel', 'swatchColor', 'imageUrl', 'unitLabel', 'metadata'];
+
 const isWishlistEnabled = async () => {
   const SettingsService = require('../settings/settings.service');
   const { features } = await SettingsService.getFeatures();
@@ -36,8 +39,8 @@ const variantInclude = {
     model: VariantOption,
     as: 'options',
     include: [
-      { model: AttributeTemplate, as: 'attribute', attributes: ['id', 'name', 'slug'] },
-      { model: AttributeValue, as: 'value', attributes: ['id', 'value', 'slug'] },
+      { model: AttributeTemplate, as: 'attribute', attributes: ATTRIBUTE_TEMPLATE_FIELDS },
+      { model: AttributeValue, as: 'value', attributes: ATTRIBUTE_VALUE_FIELDS },
     ],
   }],
 };

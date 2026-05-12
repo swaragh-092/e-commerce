@@ -10,6 +10,7 @@ const {
     createAttributeSchema,
     updateAttributeSchema,
     addValueSchema,
+    updateValueSchema,
 } = require('./attribute.validation');
 const { PERMISSIONS } = require('../../config/permissions');
 const { idParamSchema, attrIdValueIdParamSchema, paginationQuerySchema } = require('../../utils/common.validation');
@@ -32,6 +33,7 @@ router.delete('/:id', ...attributeManage, validate(idParamSchema, 'params'), con
 // --- Attribute Values ---
 router.post('/:id/values', ...attributeManage, validate(idParamSchema, 'params'), validate(addValueSchema), controller.addValue);
 router.put('/:id/values/reorder', ...attributeManage, validate(idParamSchema, 'params'), controller.reorderValues);
+router.put('/:attrId/values/:valueId', ...attributeManage, validate(attrIdValueIdParamSchema, 'params'), validate(updateValueSchema), controller.updateValue);
 router.delete('/:attrId/values/:valueId', ...attributeManage, validate(attrIdValueIdParamSchema, 'params'), controller.removeValue);
 
 

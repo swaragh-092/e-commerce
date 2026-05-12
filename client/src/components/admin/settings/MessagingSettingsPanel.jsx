@@ -49,8 +49,8 @@ const MessagingSettingsPanel = ({ form, set }) => {
   return (
     <Box>
       <Typography variant="body2" color="text.secondary" sx={{ mb: 3 }}>
-        Configure the messaging channels used by the notification system. 
-        Changes made here require saving the overall settings.
+        Configure the messaging channels used by the notification system.
+        Saved values here are used directly for email, SMS, and WhatsApp delivery.
       </Typography>
 
       {/* Email Section */}
@@ -70,7 +70,7 @@ const MessagingSettingsPanel = ({ form, set }) => {
             sx={{ mb: 2 }}
           />
           <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
-            Configure your SMTP server details below. If left empty, the system will fallback to environment variables.
+            Configure your SMTP server details below. Save the settings before sending a test with newly changed credentials.
           </Typography>
           <Box sx={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 2, mb: 2 }}>
             <TextField

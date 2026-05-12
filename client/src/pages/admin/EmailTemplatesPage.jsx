@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef, useCallback } from 'react';
+import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import {
   Box, Typography, Paper, Grid, TextField, Button, Chip,
   Switch, FormControlLabel, CircularProgress, Alert, Divider,
@@ -39,6 +39,14 @@ const TEMPLATE_LABELS = {
   password_reset:     { label: 'Password Reset',     desc: 'Sent when a user requests a password reset',      icon: '🔑' },
   low_stock_alert:    { label: 'Low Stock Alert',    desc: 'Sent to admins when inventory drops below threshold', icon: '⚠️' },
 };
+
+const CHANNELS = [
+  { value: 'email', label: 'Email', icon: '📧', testLabel: 'Send Test Email', placeholder: 'you@example.com' },
+  { value: 'sms', label: 'SMS', icon: '💬', testLabel: 'Send Test SMS', placeholder: '+1234567890' },
+  { value: 'whatsapp', label: 'WhatsApp', icon: '🟢', testLabel: 'Send Test WhatsApp', placeholder: 'whatsapp:+1234567890' },
+];
+
+const getDraftKey = (channel, name) => `${channel}:${name}`;
 
 // ── Variable Chip ──────────────────────────────────────────────────────────────
 const VarChip = ({ varName, onClick }) => (
@@ -95,6 +103,7 @@ const EmailTemplatesPage = () => {
 
   const [templates, setTemplates]           = useState([]);
   const [loading, setLoading]               = useState(true);
+  const [activeChannel, setActiveChannel]   = useState('email');
   const [selected, setSelected]             = useState(null);   // template name
   const [editorTab, setEditorTab]           = useState(0);       // 0=Editor 1=Preview
   const [draft, setDraft]                   = useState({});      // name → { subject, bodyHtml, bodyText, isActive, _dirty }
@@ -114,27 +123,46 @@ const EmailTemplatesPage = () => {
     getEmailTemplates()
       .then(res => {
         const tpls = res.data?.data || [];
-        // Only email channel for this page; SMS handled elsewhere
-        const emailTpls = tpls.filter(t => t.channel === 'email');
-        setTemplates(emailTpls);
-        if (emailTpls.length && !selected) {
-          setSelected(emailTpls[0].name);
+        setTemplates(tpls);
+        const initialTpl = tpls.find(t => t.channel === activeChannel) || tpls[0];
+        if (initialTpl && !selected) {
+          setSelected(initialTpl.name);
+          setActiveChannel(initialTpl.channel || 'email');
         }
       })
-      .catch(() => notify('Failed to load email templates', 'error'))
+      .catch(() => notify('Failed to load notification templates', 'error'))
       .finally(() => setLoading(false));
   }, []);
 
+  const channelTemplates = useMemo(
+    () => templates.filter(t => t.channel === activeChannel),
+    [templates, activeChannel]
+  );
+
+  useEffect(() => {
+    if (loading) return;
+    if (channelTemplates.length === 0) {
+      setSelected(null);
+      return;
+    }
+
+    if (!channelTemplates.some(t => t.name === selected)) {
+      setSelected(channelTemplates[0].name);
+    }
+  }, [activeChannel, channelTemplates, loading, selected]);
+
   // Sync draft when template changes (only if not yet dirty)
-  const currentTemplate = templates.find(t => t.name === selected);
+  const currentTemplate = templates.find(t => t.name === selected && t.channel === activeChannel);
+  const draftKey = selected ? getDraftKey(activeChannel, selected) : null;
   useEffect(() => {
     if (!currentTemplate) return;
     setDraft(prev => {
-      const d = prev[currentTemplate.name];
+      const key = getDraftKey(currentTemplate.channel, currentTemplate.name);
+      const d = prev[key];
       if (!d || (!d._dirty && (d.subject !== currentTemplate.subject || d.bodyHtml !== currentTemplate.bodyHtml || d.bodyText !== (currentTemplate.bodyText || '') || d.isActive !== currentTemplate.isActive))) {
         return {
           ...prev,
-          [currentTemplate.name]: {
+          [key]: {
             subject:  currentTemplate.subject,
             bodyHtml: currentTemplate.bodyHtml,
             bodyText: currentTemplate.bodyText || '',
@@ -147,11 +175,12 @@ const EmailTemplatesPage = () => {
     });
   }, [currentTemplate]);
 
-  const cur = draft[selected] || {};
+  const cur = draftKey ? (draft[draftKey] || {}) : {};
   const setField = (field, value) => {
+    if (!draftKey) return;
     setDraft(d => ({
       ...d,
-      [selected]: { ...d[selected], [field]: value, _dirty: true },
+      [draftKey]: { ...d[draftKey], [field]: value, _dirty: true },
     }));
   };
 
@@ -176,16 +205,22 @@ const EmailTemplatesPage = () => {
 
   // ── Live Preview ───────────────────────────────────────────────────────────
   useEffect(() => {
-    if (editorTab !== 1 || !selected) return;
+    const isPreviewTab = activeChannel === 'email' ? editorTab === 1 : editorTab === 0;
+    if (!isPreviewTab || !selected) return;
     const timer = setTimeout(() => {
       setPreviewLoading(true);
-      previewEmailTemplate(selected, { channel: 'email', customHtml: cur.bodyHtml, customSubject: cur.subject })
-        .then(res => setPreviewHtml(res.data?.data?.html || ''))
+      previewEmailTemplate(selected, {
+        channel: activeChannel,
+        customHtml: activeChannel === 'email' ? cur.bodyHtml : undefined,
+        customText: activeChannel !== 'email' ? cur.bodyText : undefined,
+        customSubject: cur.subject,
+      })
+        .then(res => setPreviewHtml(activeChannel === 'email' ? (res.data?.data?.html || '') : (res.data?.data?.text || '')))
         .catch(() => setPreviewHtml('<p style="color:red;padding:20px">Preview failed — check your template for Handlebars syntax errors.</p>'))
         .finally(() => setPreviewLoading(false));
     }, 500);
     return () => clearTimeout(timer);
-  }, [editorTab, cur.bodyHtml, cur.subject, selected]);
+  }, [editorTab, cur.bodyHtml, cur.bodyText, cur.subject, selected, activeChannel]);
 
   // ── Save ───────────────────────────────────────────────────────────────────
   const handleSave = async () => {
@@ -193,15 +228,15 @@ const EmailTemplatesPage = () => {
     setSaving(true);
     try {
       await updateEmailTemplate(selected, {
-        channel:  'email',
+        channel:  activeChannel,
         subject:  cur.subject,
         bodyHtml: cur.bodyHtml,
         bodyText: cur.bodyText,
         isActive: cur.isActive,
       });
-      setDraft(d => ({ ...d, [selected]: { ...d[selected], _dirty: false } }));
+      setDraft(d => ({ ...d, [draftKey]: { ...d[draftKey], _dirty: false } }));
       // Update local templates list
-      setTemplates(prev => prev.map(t => t.name === selected ? { ...t, subject: cur.subject, isActive: cur.isActive, bodyHtml: cur.bodyHtml, bodyText: cur.bodyText } : t));
+      setTemplates(prev => prev.map(t => t.name === selected && t.channel === activeChannel ? { ...t, subject: cur.subject, isActive: cur.isActive, bodyHtml: cur.bodyHtml, bodyText: cur.bodyText } : t));
       setSnack({ open: true, msg: 'Template saved successfully!', severity: 'success' });
     } catch {
       setSnack({ open: true, msg: 'Failed to save template.', severity: 'error' });
@@ -212,13 +247,13 @@ const EmailTemplatesPage = () => {
 
   // ── Send Test ──────────────────────────────────────────────────────────────
   const handleSendTest = async () => {
-    if (!testEmail) { notify('Enter a test email address first.', 'warning'); return; }
+    if (!testEmail) { notify('Enter a test recipient first.', 'warning'); return; }
     setTestSending(true);
     try {
-      await sendTestNotification(selected, testEmail, 'email');
-      setSnack({ open: true, msg: `Test email sent to ${testEmail}`, severity: 'success' });
+      await sendTestNotification(selected, testEmail, activeChannel);
+      setSnack({ open: true, msg: `Test ${activeChannel} queued for ${testEmail}`, severity: 'success' });
     } catch {
-      setSnack({ open: true, msg: 'Failed to send test email. Check your SMTP config.', severity: 'error' });
+      setSnack({ open: true, msg: `Failed to send test ${activeChannel}. Check your messaging config.`, severity: 'error' });
     } finally {
       setTestSending(false);
     }
@@ -227,7 +262,7 @@ const EmailTemplatesPage = () => {
   // ── Reset to Default ───────────────────────────────────────────────────────
   const openResetDialog = async () => {
     try {
-      const res = await getEmailTemplateDefault(selected);
+      const res = await getEmailTemplateDefault(selected, activeChannel);
       setResetDialog({ open: true, name: selected, defaultData: res.data?.data });
     } catch {
       notify('No built-in default for this template.', 'warning');
@@ -239,11 +274,11 @@ const EmailTemplatesPage = () => {
     setResetDialog({ open: false, name: null, defaultData: null });
     setDraft(d => ({
       ...d,
-      [name]: {
-        subject:  d[name]?.subject ?? defaultData.subject,
+      [getDraftKey(activeChannel, name)]: {
+        subject:  d[getDraftKey(activeChannel, name)]?.subject ?? defaultData.subject,
         bodyHtml: defaultData.bodyHtml,
         bodyText: defaultData.bodyText || '',
-        isActive: d[name]?.isActive ?? true,
+        isActive: d[getDraftKey(activeChannel, name)]?.isActive ?? true,
         _dirty:   true,
       },
     }));
@@ -251,13 +286,14 @@ const EmailTemplatesPage = () => {
   };
 
   // ── Filtered Template List ─────────────────────────────────────────────────
-  const filteredTemplates = templates.filter(t => {
+  const filteredTemplates = channelTemplates.filter(t => {
     const meta = TEMPLATE_LABELS[t.name] || {};
     const q = searchQuery.toLowerCase();
     return !q || t.name.includes(q) || (meta.label || '').toLowerCase().includes(q) || (meta.desc || '').toLowerCase().includes(q);
   });
 
   const meta = TEMPLATE_LABELS[selected] || { label: selected, desc: '', icon: '📧' };
+  const channelMeta = CHANNELS.find(channel => channel.value === activeChannel) || CHANNELS[0];
 
   if (loading) {
     return (
@@ -271,7 +307,7 @@ const EmailTemplatesPage = () => {
     return (
       <Box sx={{ p: 4 }}>
         <Alert severity="info">
-          No email templates found in the database. Run the notification templates seeder to populate defaults:
+          No notification templates found in the database. Run the notification templates seeder to populate defaults:
           <br /><code>npx sequelize-cli db:seed --seed 20240101-notification-templates</code>
         </Alert>
       </Box>
@@ -285,7 +321,7 @@ const EmailTemplatesPage = () => {
         <Box>
           <Typography variant="h5" fontWeight={700}>Templates</Typography>
           <Typography variant="body2" color="text.secondary">
-            Customize transactional emails. Use <code style={{ background: 'rgba(0,0,0,0.06)', padding: '1px 5px', borderRadius: 4 }}>{'{{variable}}'}</code> for dynamic content.
+            Customize transactional Email, SMS, and WhatsApp templates. Use <code style={{ background: 'rgba(0,0,0,0.06)', padding: '1px 5px', borderRadius: 4 }}>{'{{variable}}'}</code> for dynamic content.
           </Typography>
         </Box>
         {!canEdit && (
@@ -298,6 +334,26 @@ const EmailTemplatesPage = () => {
         {/* ── Left: Template List ── */}
         <Grid item xs={12} md={3}>
           <Paper elevation={0} sx={{ border: '1px solid', borderColor: 'divider', borderRadius: 2, height: '100%', display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
+            <Box sx={{ px: 1.5, pt: 1.5, borderBottom: '1px solid', borderColor: 'divider' }}>
+              <Tabs
+                value={activeChannel}
+                onChange={(_, value) => {
+                  setActiveChannel(value);
+                  setEditorTab(value === 'email' ? 0 : 2);
+                }}
+                variant="fullWidth"
+                sx={{ minHeight: 36 }}
+              >
+                {CHANNELS.map(channel => (
+                  <Tab
+                    key={channel.value}
+                    value={channel.value}
+                    label={`${channel.icon} ${channel.label}`}
+                    sx={{ minHeight: 36, fontSize: 12, textTransform: 'none' }}
+                  />
+                ))}
+              </Tabs>
+            </Box>
             {/* Search */}
             <Box sx={{ p: 1.5, borderBottom: '1px solid', borderColor: 'divider' }}>
               <TextField
@@ -311,9 +367,16 @@ const EmailTemplatesPage = () => {
 
             {/* List */}
             <List dense sx={{ flex: 1, overflowY: 'auto', py: 0.5 }}>
+              {filteredTemplates.length === 0 && (
+                <Box sx={{ p: 2 }}>
+                  <Alert severity="info" sx={{ fontSize: 13 }}>
+                    No {channelMeta.label} templates found.
+                  </Alert>
+                </Box>
+              )}
               {filteredTemplates.map(tpl => {
                 const m    = TEMPLATE_LABELS[tpl.name] || { label: tpl.name, icon: '📧' };
-                const d    = draft[tpl.name];
+                const d    = draft[getDraftKey(activeChannel, tpl.name)];
                 const dirty = d?._dirty;
                 const active = d?.isActive ?? tpl.isActive;
                 return (
@@ -366,8 +429,11 @@ const EmailTemplatesPage = () => {
                 <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5 }}>
                   <Typography fontSize={22}>{meta.icon}</Typography>
                   <Box>
-                    <Typography variant="subtitle1" fontWeight={700}>{meta.label}</Typography>
-                    <Typography variant="caption" color="text.secondary">{meta.desc}</Typography>
+                    <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, flexWrap: 'wrap' }}>
+                      <Typography variant="subtitle1" fontWeight={700}>{meta.label}</Typography>
+                      <Chip label={channelMeta.label} size="small" variant="outlined" />
+                    </Box>
+                    <Typography variant="caption" color="text.secondary">{meta.desc || currentTemplate?.name}</Typography>
                   </Box>
                 </Box>
                 <Box sx={{ display: 'flex', gap: 1, flexWrap: 'wrap', alignItems: 'center' }}>
@@ -416,9 +482,11 @@ const EmailTemplatesPage = () => {
               {/* Tabs: Editor / Preview */}
               <Box sx={{ px: 3, borderBottom: '1px solid', borderColor: 'divider' }}>
                 <Tabs value={editorTab} onChange={(_, v) => setEditorTab(v)} sx={{ minHeight: 40 }}>
-                  <Tab label="HTML Editor" icon={<EditIcon sx={{ fontSize: 14 }} />} iconPosition="start" sx={{ minHeight: 40, fontSize: 13 }} />
-                  <Tab label="Live Preview" icon={<PreviewIcon sx={{ fontSize: 14 }} />} iconPosition="start" sx={{ minHeight: 40, fontSize: 13 }} />
-                  <Tab label="Plain Text" iconPosition="start" sx={{ minHeight: 40, fontSize: 13 }} />
+                  {activeChannel === 'email' && (
+                    <Tab label="HTML Editor" icon={<EditIcon sx={{ fontSize: 14 }} />} iconPosition="start" sx={{ minHeight: 40, fontSize: 13 }} />
+                  )}
+                  <Tab label={activeChannel === 'email' ? 'Live Preview' : 'Rendered Preview'} icon={<PreviewIcon sx={{ fontSize: 14 }} />} iconPosition="start" sx={{ minHeight: 40, fontSize: 13 }} />
+                  <Tab label={activeChannel === 'email' ? 'Plain Text' : 'Message Body'} iconPosition="start" sx={{ minHeight: 40, fontSize: 13 }} />
                 </Tabs>
               </Box>
 
@@ -426,7 +494,7 @@ const EmailTemplatesPage = () => {
               <Box sx={{ flex: 1, overflowY: 'auto', p: 3, display: 'flex', flexDirection: 'column', gap: 2 }}>
 
                 {/* ── Editor Tab ── */}
-                {editorTab === 0 && (
+                {activeChannel === 'email' && editorTab === 0 && (
                   <>
                     {/* Variable Helper */}
                     {currentTemplate?.availableVariables?.length > 0 && (
@@ -460,36 +528,56 @@ const EmailTemplatesPage = () => {
                 )}
 
                 {/* ── Preview Tab ── */}
-                {editorTab === 1 && (
+                {((activeChannel === 'email' && editorTab === 1) || (activeChannel !== 'email' && editorTab === 0)) && (
                   <>
                     <Alert severity="info" sx={{ py: 0.5 }}>
                       Preview uses sample data — rendered output will differ with real order/user data.
                     </Alert>
-                    <EmailPreviewFrame html={previewHtml} loading={previewLoading} />
+                    {activeChannel === 'email' ? (
+                      <EmailPreviewFrame html={previewHtml} loading={previewLoading} />
+                    ) : (
+                      <Paper variant="outlined" sx={{ p: 2, borderRadius: 2, bgcolor: 'background.paper', whiteSpace: 'pre-wrap', fontFamily: 'monospace', minHeight: 220 }}>
+                        {previewLoading ? 'Rendering...' : (previewHtml || 'Preview will appear here.')}
+                      </Paper>
+                    )}
                   </>
                 )}
 
                 {/* ── Plain Text Tab ── */}
-                {editorTab === 2 && (
-                  <TextField
-                    fullWidth multiline
-                    minRows={20}
-                    label="Plain Text Fallback"
-                    value={cur.bodyText || ''}
-                    onChange={e => setField('bodyText', e.target.value)}
-                    disabled={!canEdit}
-                    inputProps={{ style: { fontFamily: 'monospace', fontSize: 12, lineHeight: 1.6 } }}
-                    helperText="Used by email clients that don't render HTML. Supports {{variables}}."
-                  />
+                {((activeChannel === 'email' && editorTab === 2) || (activeChannel !== 'email' && editorTab === 1)) && (
+                  <>
+                    {currentTemplate?.availableVariables?.length > 0 && activeChannel !== 'email' && (
+                      <Box>
+                        <Typography variant="caption" color="text.secondary" fontWeight={600} display="block" mb={0.75}>
+                          Click a variable to append:
+                        </Typography>
+                        <Box sx={{ display: 'flex', gap: 0.75, flexWrap: 'wrap' }}>
+                          {currentTemplate.availableVariables.map(v => (
+                            <VarChip key={v} varName={v} onClick={(token) => setField('bodyText', `${cur.bodyText || ''}${token}`)} />
+                          ))}
+                        </Box>
+                      </Box>
+                    )}
+                    <TextField
+                      fullWidth multiline
+                      minRows={20}
+                      label={activeChannel === 'email' ? 'Plain Text Fallback' : `${channelMeta.label} Message Body`}
+                      value={cur.bodyText || ''}
+                      onChange={e => setField('bodyText', e.target.value)}
+                      disabled={!canEdit}
+                      inputProps={{ style: { fontFamily: 'monospace', fontSize: 12, lineHeight: 1.6 } }}
+                      helperText={activeChannel === 'email' ? "Used by email clients that don't render HTML. Supports {{variables}}." : `${channelMeta.label} messages use this text body and support {{variables}}.`}
+                    />
+                  </>
                 )}
               </Box>
 
-              {/* ── Footer: Test Email ── */}
+              {/* ── Footer: Test Notification ── */}
               <Box sx={{ px: 3, py: 2, borderTop: '1px solid', borderColor: 'divider', display: 'flex', gap: 1.5, alignItems: 'center', flexWrap: 'wrap', bgcolor: 'action.hover' }}>
-                <EmailIcon sx={{ color: 'text.secondary', fontSize: 18 }} />
+                <Typography sx={{ fontSize: 18 }}>{channelMeta.icon}</Typography>
                 <TextField
-                  size="small" label="Send test to"
-                  placeholder="you@example.com"
+                  size="small" label={`Send test ${channelMeta.label} to`}
+                  placeholder={channelMeta.placeholder}
                   value={testEmail}
                   onChange={e => setTestEmail(e.target.value)}
                   sx={{ minWidth: 260 }}
@@ -501,10 +589,10 @@ const EmailTemplatesPage = () => {
                   onClick={handleSendTest}
                   disabled={!canEdit || !testEmail || testSending || cur._dirty}
                 >
-                  {testSending ? 'Sending…' : 'Send Test Email'}
+                  {testSending ? 'Sending…' : channelMeta.testLabel}
                 </Button>
                 <Typography variant="caption" color={cur._dirty ? "warning.main" : "text.secondary"}>
-                  {cur._dirty ? "Save your changes first to test them" : "Sends using current saved version + your SMTP config"}
+                  {cur._dirty ? "Save your changes first to test them" : `Sends using current saved version + your ${channelMeta.label} config`}
                 </Typography>
               </Box>
             </Paper>

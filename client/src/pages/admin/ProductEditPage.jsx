@@ -63,6 +63,7 @@ import { useNotification } from '../../context/NotificationContext';
 import { useCurrency, useSettings, useFeature } from '../../hooks/useSettings';
 import { getProductBasePrice } from '../../utils/variantPricing';
 import { getVariantOptionLabel } from '../../utils/variantOptions';
+import { formatAttributeValue, getSwatchColor } from '../../utils/attributePresentation';
 import { useAuth } from '../../hooks/useAuth';
 import { PERMISSIONS } from '../../utils/permissions';
 import { getApiErrorMessage } from '../../utils/apiErrors';
@@ -222,6 +223,9 @@ const ProductEditPage = () => {
   const [saleLabels, setSaleLabels] = useState([]);
   const [saving, setSaving] = useState(false);
   const [mediaPickerOpen, setMediaPickerOpen] = useState(false);
+  const [hasVariants, setHasVariants] = useState(false);
+  const [variantStockTotal, setVariantStockTotal] = useState(0);
+  const [globalPrimaryVersion, setGlobalPrimaryVersion] = useState(0);
 
   useEffect(() => {
     const load = async () => {
@@ -244,6 +248,11 @@ const ProductEditPage = () => {
           const prodRes = await getProductById(id);
           if (prodRes?.data) {
             const p = prodRes.data;
+            const activeVariants = Array.isArray(p.variants) ? p.variants.filter((variant) => variant?.isActive !== false) : [];
+            const nextHasVariants = activeVariants.length > 0;
+            const nextVariantStockTotal = activeVariants.reduce((sum, variant) => sum + Number(variant.stockQty || 0), 0);
+            setHasVariants(nextHasVariants);
+            setVariantStockTotal(nextVariantStockTotal);
             setFormData({
               name: p.name || '',
               slug: p.slug || '',
@@ -255,7 +264,7 @@ const ProductEditPage = () => {
               saleStartAt: toDateTimeLocal(p.saleStartAt),
               saleEndAt: toDateTimeLocal(p.saleEndAt),
               saleLabel: p.saleLabel || '',
-              quantity: p.quantity || 0,
+              quantity: nextHasVariants ? nextVariantStockTotal : (p.quantity || 0),
               status: p.status || 'draft',
               isEnabled: p.isEnabled ?? true,
               categoryIds: p.categories?.map((c) => c.id) || [],
@@ -294,6 +303,17 @@ const ProductEditPage = () => {
     if (errors[key]) setErrors((prev) => ({ ...prev, [key]: undefined }));
   };
 
+  const handleVariantStockChange = useCallback((total, count, fallbackQuantity) => {
+    setVariantStockTotal(total);
+    setHasVariants(count > 0);
+    if (count > 0) {
+      setFormData((prev) => ({ ...prev, quantity: total }));
+      setErrors((prev) => ({ ...prev, quantity: undefined }));
+    } else if (fallbackQuantity !== undefined) {
+      setFormData((prev) => ({ ...prev, quantity: fallbackQuantity }));
+    }
+  }, []);
+
   const handleSave = async (e) => {
     e.preventDefault();
     if (!canSaveProduct) {
@@ -301,7 +321,8 @@ const ProductEditPage = () => {
       return;
     }
 
-    const errs = validate({ ...formData, _features: { pricing: pricingEnabled, showPrice } });
+    const effectiveQuantity = hasVariants ? variantStockTotal : formData.quantity;
+    const errs = validate({ ...formData, quantity: effectiveQuantity, _features: { pricing: pricingEnabled, showPrice } });
     if (Object.keys(errs).length > 0) {
       setErrors(errs);
       notify('Please fix the validation errors before saving.', 'warning');
@@ -321,7 +342,7 @@ const ProductEditPage = () => {
         saleEndAt: (formData.salePrice !== '' && formData.salePrice !== null) ? toIsoOrNull(formData.saleEndAt) : null,
         saleLabel: (formData.salePrice !== '' && formData.salePrice !== null) ? (formData.saleLabel || null) : null,
         brandId: formData.brandId || null,
-        quantity: parseInt(formData.quantity) || 0,
+        quantity: hasVariants ? variantStockTotal : (parseInt(formData.quantity) || 0),
         // Shipping dimensions — null when blank so DB stores NULL cleanly
         requiresShipping: formData.requiresShipping,
         weightGrams: formData.weightGrams !== '' ? parseInt(formData.weightGrams, 10) : null,
@@ -406,6 +427,7 @@ const ProductEditPage = () => {
         isPrimary: i === index,
       })),
     }));
+    setGlobalPrimaryVersion((current) => current + 1);
   };
 
   // Build a flat list of every category node with depth + full breadcrumb path.
@@ -1025,14 +1047,20 @@ const ProductEditPage = () => {
               />
               <TextField
                 fullWidth
-                label="Stock Quantity *"
+                label={hasVariants ? 'Total Variant Stock' : 'Stock Quantity *'}
                 type="number"
                 margin="normal"
                 inputProps={{ min: 0 }}
-                value={formData.quantity}
+                value={hasVariants ? variantStockTotal : formData.quantity}
                 onChange={(e) => setField('quantity', e.target.value)}
+                disabled={hasVariants}
                 error={Boolean(errors.quantity)}
-                helperText={errors.quantity}
+                helperText={
+                  errors.quantity ||
+                  (hasVariants
+                    ? 'Managed by variant SKUs. This total is the sum of active variant stock.'
+                    : 'Editable because this product has no variants.')
+                }
               />
             </Paper>
 
@@ -1151,11 +1179,17 @@ const ProductEditPage = () => {
       {!isNew && (
         <VariantsPanel 
           productId={id} 
-          productName={formData.name} 
-          productSku={formData.sku} 
-          categoryIds={formData.categoryIds}
+          productName={formData.name}
+          productSku={formData.sku}
+          categoryIds={formData.categoryIds} 
           flatCatFiles={flatCatFiles} 
           canManageVariants={canUpdateProducts} 
+          onStockTotalChange={handleVariantStockChange}
+          globalPrimaryVersion={globalPrimaryVersion}
+          onVariantPrimarySelected={() => setFormData((prev) => ({
+            ...prev,
+            images: prev.images.map((img) => ({ ...img, isPrimary: false })),
+          }))}
         />
       )}
 
@@ -1290,7 +1324,17 @@ const TaxConfigSection = ({ taxConfig, basePrice, setTaxConfig, globalSettings, 
 
 
 /* ─── Variants Panel ──────────────────────────────────────────────────────── */
-const VariantsPanel = ({ productId, productName, productSku, categoryIds = [], flatCatFiles = [], canManageVariants = false }) => {
+const VariantsPanel = ({
+  productId,
+  productName,
+  productSku,
+  categoryIds = [],
+  flatCatFiles = [],
+  canManageVariants = false,
+  onStockTotalChange,
+  globalPrimaryVersion = 0,
+  onVariantPrimarySelected,
+}) => {
   const { notify, confirm } = useNotification();
   const { generateProductSKU, generateVariantSKU } = useSKUGenerator();
   const [productAttributes, setProductAttributes] = useState([]);
@@ -1304,6 +1348,7 @@ const VariantsPanel = ({ productId, productName, productSku, categoryIds = [], f
   const [selectedTemplate, setSelectedTemplate] = useState('');
 
   const [selectedValueIds, setSelectedValueIds] = useState([]);
+  const [colorDraft, setColorDraft] = useState({ label: '', hex: '#38bdf8' });
   const [customName, setCustomName] = useState('');
   const [customValue, setCustomValue] = useState('');
   const [customIsVariant, setCustomIsVariant] = useState(false);
@@ -1337,16 +1382,20 @@ const VariantsPanel = ({ productId, productName, productSku, categoryIds = [], f
       const varData = varRes?.data?.data || [];
       const attrData = attrRes?.data?.data?.rows || attrRes?.data?.data || [];
       const product = productRes?.data || null;
+      const activeVariantRows = varData.filter((variant) => variant?.isActive !== false);
+      const stockTotal = activeVariantRows.reduce((sum, variant) => sum + Number(variant.stockQty || 0), 0);
       setProductAttributes(attrRows);
       setVariants(varData.map((variant) => ({
         ...variant,
         mediaId: variant.mediaId || variant.media_id, // Handle both cases
+        images: Array.isArray(variant.images) ? variant.images : [],
         price: variant.price ?? product?.effectivePrice ?? product?.price ?? 0,
         stockQty: variant.stockQty ?? 0,
         _dirty: false,
       })));
       setAttributes(attrData);
       setProductBasePrice(getProductBasePrice(product));
+      onStockTotalChange?.(stockTotal, activeVariantRows.length, Number(product?.quantity || 0));
 
       // Load suggested attributes from categories
       if (categoryIds.length > 0) {
@@ -1366,25 +1415,156 @@ const VariantsPanel = ({ productId, productName, productSku, categoryIds = [], f
     } finally {
       setLoading(false);
     }
-  }, [productId, categoryIds, notify]);
+  }, [productId, categoryIds, notify, onStockTotalChange]);
 
   useEffect(() => { loadAll(); }, [loadAll]);
+
+  useEffect(() => {
+    const activeVariantRows = variants.filter((variant) => variant?.isActive !== false);
+    const stockTotal = activeVariantRows.reduce((sum, variant) => sum + Number(variant.stockQty || 0), 0);
+    onStockTotalChange?.(stockTotal, activeVariantRows.length);
+  }, [variants, onStockTotalChange]);
+
+  useEffect(() => {
+    if (!globalPrimaryVersion) return;
+    setVariants((current) => current.map((variant) => (
+      (variant.images || []).some((img) => img.isPrimary)
+        ? {
+            ...variant,
+            images: variant.images.map((img) => ({ ...img, isPrimary: false })),
+            _dirty: true,
+          }
+        : variant
+    )));
+  }, [globalPrimaryVersion]);
 
   const handleVariantMediaSelect = (selectedMedia) => {
     if (!selectedMedia || variantMediaPickerOpen === null) return;
     const targetIndex = variantMediaPickerOpen;
-    const media = Array.isArray(selectedMedia) ? selectedMedia[0] : selectedMedia;
-    // Merge both fields in a single state update to avoid race condition
-    setVariants((current) => current.map((variant, i) =>
-      i === targetIndex ? { ...variant, mediaId: media.id, media, _dirty: true } : variant
-    ));
+    const mediaItems = Array.isArray(selectedMedia) ? selectedMedia : [selectedMedia];
+    setVariants((current) => current.map((variant, i) => {
+      if (i !== targetIndex) return variant;
+      const currentImages = Array.isArray(variant.images) ? variant.images : [];
+      const existingIds = new Set(currentImages.map((img) => img.mediaId || img.media_id).filter(Boolean));
+      const newImages = mediaItems
+        .filter((media) => media?.id && !existingIds.has(media.id))
+        .map((media, offset) => ({
+          url: media.url,
+          mediaId: media.id,
+          alt: media.originalName || getVariantOptionLabel(variant) || 'Variant image',
+          sortOrder: currentImages.length + offset,
+          isPrimary: false,
+        }));
+      const nextImages = [...currentImages, ...newImages];
+      const representative = nextImages.find((img) => img.isPrimary) || nextImages[0] || null;
+      return {
+        ...variant,
+        images: nextImages,
+        mediaId: representative?.mediaId || null,
+        media: representative?.media || mediaItems.find((media) => media.id === representative?.mediaId) || variant.media,
+        _dirty: true,
+      };
+    }));
     setVariantMediaPickerOpen(null);
   };
 
+  const handleRemoveVariantImage = (variantIndex, imageIndex) => {
+    if (!canManageVariants) return;
+    setVariants((current) => current.map((variant, i) => {
+      if (i !== variantIndex) return variant;
+      const nextImages = (variant.images || []).filter((_, idx) => idx !== imageIndex)
+        .map((img, idx) => ({ ...img, sortOrder: idx }));
+      const representative = nextImages.find((img) => img.isPrimary) || nextImages[0] || null;
+      return {
+        ...variant,
+        images: nextImages,
+        mediaId: representative?.mediaId || null,
+        _dirty: true,
+      };
+    }));
+  };
+
+  const handleSetVariantPrimaryImage = (variantIndex, imageIndex) => {
+    if (!canManageVariants) return;
+    setVariants((current) => current.map((variant, i) => ({
+      ...variant,
+      images: (variant.images || []).map((img, idx) => ({
+        ...img,
+        isPrimary: i === variantIndex && idx === imageIndex,
+      })),
+      mediaId: i === variantIndex
+        ? (variant.images || [])[imageIndex]?.mediaId || variant.mediaId || null
+        : variant.mediaId,
+      _dirty: i === variantIndex || (variant.images || []).some((img) => img.isPrimary),
+    })));
+    onVariantPrimarySelected?.();
+  };
+
   const selectedTemplateRecord = attributes.find((attribute) => attribute.id === selectedTemplate);
+  const selectedTemplateText = `${selectedTemplateRecord?.name || ''} ${selectedTemplateRecord?.slug || ''}`.toLowerCase();
+  const isColorAttribute = selectedTemplateRecord?.valueType === 'color' || /colou?r|shade/.test(selectedTemplateText);
+  const isValidHexColor = /^#([0-9a-f]{3}|[0-9a-f]{6}|[0-9a-f]{8})$/i.test(colorDraft.hex);
   const variantAttributeRows = productAttributes.filter((row) => row.isVariantAttr);
   const canGenerateMatrix = variantAttributeRows.some((row) => row.attributeId) && variantAttributeRows.length > 0;
   const hasVariantChanges = variants.some((variant) => variant._dirty);
+
+  const renderValueSwatch = (valueRecord, size = 18) => {
+    const color = getSwatchColor(valueRecord);
+    if (valueRecord?.imageUrl) {
+      return (
+        <Box
+          component="img"
+          src={valueRecord.imageUrl}
+          alt=""
+          sx={{ width: size, height: size, borderRadius: 0.75, objectFit: 'cover', flexShrink: 0 }}
+        />
+      );
+    }
+    if (!color) return null;
+    return (
+      <Box
+        sx={{
+          width: size,
+          height: size,
+          borderRadius: '50%',
+          bgcolor: color,
+          border: '1px solid',
+          borderColor: color === '#ffffff' ? 'divider' : 'transparent',
+          boxShadow: 'inset 0 0 0 1px rgba(0,0,0,0.08)',
+          flexShrink: 0,
+        }}
+      />
+    );
+  };
+
+  const renderValueLabel = (valueRecord, attributeRecord = selectedTemplateRecord) => (
+    formatAttributeValue(valueRecord || {}, attributeRecord || {}) || valueRecord?.value || ''
+  );
+
+  const handleCreateColorValue = async () => {
+    if (!canManageVariants || !selectedTemplate || !colorDraft.label.trim() || !isValidHexColor) return;
+
+    try {
+      const response = await attributeService.addAttributeValue(selectedTemplate, {
+        value: colorDraft.label.trim(),
+        displayLabel: colorDraft.label.trim(),
+        swatchColor: colorDraft.hex,
+      });
+      const createdValue = response?.data?.data || response?.data;
+      if (createdValue?.id) {
+        setAttributes((current) => current.map((attribute) => (
+          attribute.id === selectedTemplate
+            ? { ...attribute, values: [...(attribute.values || []), createdValue] }
+            : attribute
+        )));
+        setSelectedValueIds((current) => [...new Set([...current, createdValue.id])]);
+        setColorDraft({ label: '', hex: '#38bdf8' });
+        notify('Color value created and selected.', 'success');
+      }
+    } catch (error) {
+      notify(getApiErrorMessage(error, 'Failed to create color value.'), 'error');
+    }
+  };
 
   const handleAddGlobalAttributes = async () => {
     if (!canManageVariants || !selectedTemplate || selectedValueIds.length === 0) {
@@ -1500,6 +1680,13 @@ const VariantsPanel = ({ productId, productName, productSku, categoryIds = [], f
           isActive: variant.isActive !== false,
           sortOrder: Number(variant.sortOrder || 0),
           mediaId: variant.mediaId || null,
+          images: (variant.images || []).map((img, index) => ({
+            url: img.url,
+            alt: img.alt || null,
+            mediaId: img.mediaId || img.media_id || img.media?.id || null,
+            sortOrder: Number(img.sortOrder ?? index),
+            isPrimary: Boolean(img.isPrimary),
+          })),
         });
         count++;
         setSaveProgress(prev => ({ ...prev, current: count }));
@@ -1652,6 +1839,7 @@ const VariantsPanel = ({ productId, productName, productSku, categoryIds = [], f
                     onChange={(e) => {
                       setSelectedTemplate(e.target.value);
                       setSelectedValueIds([]);
+                      setColorDraft({ label: '', hex: '#38bdf8' });
                     }}
                   >
                     <MenuItem value=""><em>Select attribute</em></MenuItem>
@@ -1673,16 +1861,126 @@ const VariantsPanel = ({ productId, productName, productSku, categoryIds = [], f
                       <Box sx={{ display: 'flex', gap: 0.5, flexWrap: 'wrap' }}>
                         {selected.map((valueId) => {
                           const valueRecord = selectedTemplateRecord?.values?.find((value) => value.id === valueId);
-                          return <Chip key={valueId} size="small" label={valueRecord?.value || valueId} />;
+                          return (
+                            <Chip
+                              key={valueId}
+                              size="small"
+                              label={
+                                <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.6 }}>
+                                  {renderValueSwatch(valueRecord, 14)}
+                                  <span>{valueRecord ? renderValueLabel(valueRecord) : valueId}</span>
+                                </Box>
+                              }
+                              sx={{ '& .MuiChip-label': { px: 0.75 } }}
+                            />
+                          );
                         })}
                       </Box>
                     )}
                   >
                     {(selectedTemplateRecord?.values || []).map((value) => (
-                      <MenuItem key={value.id} value={value.id}>{value.value}</MenuItem>
+                      <MenuItem key={value.id} value={value.id}>
+                        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                          {renderValueSwatch(value)}
+                          <Box>
+                            <Typography variant="body2" fontWeight={600}>{renderValueLabel(value)}</Typography>
+                            {value.swatchColor && (
+                              <Typography variant="caption" color="text.secondary" sx={{ fontFamily: 'monospace' }}>
+                                {value.swatchColor}
+                              </Typography>
+                            )}
+                          </Box>
+                        </Box>
+                      </MenuItem>
                     ))}
                   </Select>
                 </FormControl>
+
+                {isColorAttribute && (
+                  <Paper
+                    variant="outlined"
+                    sx={{
+                      p: 1.5,
+                      borderRadius: 2,
+                      bgcolor: 'action.hover',
+                      borderColor: 'primary.main',
+                    }}
+                  >
+                    <Typography variant="subtitle2" fontWeight={800} sx={{ mb: 0.5 }}>
+                      Create exact color
+                    </Typography>
+                    <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mb: 1.5 }}>
+                      Pick the exact hex color and label it the way customers should see it, like Sky Blue or Apple Red.
+                    </Typography>
+                    <Box
+                      sx={{
+                        display: 'grid',
+                        gridTemplateColumns: { xs: '1fr', sm: '44px 1fr 120px' },
+                        gap: 1,
+                        alignItems: 'center',
+                      }}
+                    >
+                      <TextField
+                        type="color"
+                        size="small"
+                        value={isValidHexColor ? colorDraft.hex : '#000000'}
+                        onChange={(e) => setColorDraft((current) => ({ ...current, hex: e.target.value }))}
+                        disabled={!canManageVariants}
+                        inputProps={{ 'aria-label': 'Pick exact color' }}
+                        sx={{
+                          '& input': {
+                            p: 0.5,
+                            height: 34,
+                            cursor: 'pointer',
+                          },
+                        }}
+                      />
+                      <TextField
+                        size="small"
+                        label="Customer label"
+                        placeholder="Sky Blue, Apple Red..."
+                        value={colorDraft.label}
+                        onChange={(e) => setColorDraft((current) => ({ ...current, label: e.target.value }))}
+                        disabled={!canManageVariants}
+                      />
+                      <TextField
+                        size="small"
+                        label="Hex"
+                        value={colorDraft.hex}
+                        onChange={(e) => setColorDraft((current) => ({ ...current, hex: e.target.value }))}
+                        error={Boolean(colorDraft.hex) && !isValidHexColor}
+                        disabled={!canManageVariants}
+                        inputProps={{ style: { fontFamily: 'monospace' } }}
+                      />
+                    </Box>
+                    <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 1, mt: 1.5 }}>
+                      <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, minWidth: 0 }}>
+                        <Box
+                          sx={{
+                            width: 28,
+                            height: 28,
+                            borderRadius: '50%',
+                            bgcolor: isValidHexColor ? colorDraft.hex : 'transparent',
+                            border: '1px solid',
+                            borderColor: 'divider',
+                            flexShrink: 0,
+                          }}
+                        />
+                        <Typography variant="caption" color="text.secondary" noWrap>
+                          Preview: {colorDraft.label || 'Color label'} {isValidHexColor ? colorDraft.hex : ''}
+                        </Typography>
+                      </Box>
+                      <Button
+                        variant="contained"
+                        size="small"
+                        onClick={handleCreateColorValue}
+                        disabled={!canManageVariants || !selectedTemplate || !colorDraft.label.trim() || !isValidHexColor}
+                      >
+                        Create & Select
+                      </Button>
+                    </Box>
+                  </Paper>
+                )}
 
                 <FormControlLabel
                   control={
@@ -1760,12 +2058,15 @@ const VariantsPanel = ({ productId, productName, productSku, categoryIds = [], f
                     </AccordionSummary>
                     <AccordionDetails sx={{ display: 'grid', gap: 1, p: 2, pt: 0 }}>
                       {rows.map((row) => {
-                        const value = row.value?.value || row.customValue;
+                        const value = row.value ? renderValueLabel(row.value, row.attribute) : row.customValue;
                         return (
                           <Paper key={row.id} variant="outlined" sx={{ p: 1.5 }}>
                             <Box sx={{ display: 'flex', justifyContent: 'space-between', gap: 1, alignItems: 'flex-start' }}>
                               <Box>
-                                <Typography variant="body2" color="text.secondary" fontWeight={500}>{value}</Typography>
+                                <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                                  {renderValueSwatch(row.value)}
+                                  <Typography variant="body2" color="text.secondary" fontWeight={700}>{value}</Typography>
+                                </Box>
                                 <Box sx={{ display: 'flex', gap: 0.75, flexWrap: 'wrap', mt: 1 }}>
                                   <Chip size="small" label={row.attributeId ? 'Global' : 'Custom'} variant="outlined" />
                                   <Chip size="small" label={row.isVariantAttr ? 'Variant SKU attribute' : 'Display only'} color={row.isVariantAttr ? 'primary' : 'default'} />
@@ -1798,6 +2099,12 @@ const VariantsPanel = ({ productId, productName, productSku, categoryIds = [], f
                 Variant SKUs
               </Typography>
               <Box sx={{ display: 'flex', gap: 1, flexWrap: 'wrap' }}>
+                <Chip
+                  size="small"
+                  variant="outlined"
+                  color="success"
+                  label={`Total stock: ${variants.filter((variant) => variant?.isActive !== false).reduce((sum, variant) => sum + Number(variant.stockQty || 0), 0)}`}
+                />
                 <Button variant="outlined" size="small" startIcon={<ContentCopyIcon fontSize="small" />} onClick={() => setCloneOpen(true)} disabled={!canManageVariants}>
                   Clone from Product
                 </Button>
@@ -1875,59 +2182,92 @@ const VariantsPanel = ({ productId, productName, productSku, categoryIds = [], f
                     </AccordionSummary>
                     <AccordionDetails sx={{ pt: 0 }}>
                       <Grid container spacing={2} alignItems="center">
-                        <Grid item xs={12} sm={1.5}>
-                          <Tooltip title={variant.media ? 'Change image' : 'Add image'} placement="bottom">
-                            <Box sx={{ position: 'relative', width: '100%', height: 48 }}>
-                              {/* clickable image / placeholder */}
+                        <Grid item xs={12}>
+                          <Box sx={{ display: 'flex', gap: 1, flexWrap: 'wrap', alignItems: 'center' }}>
+                            {(variant.images || []).map((img, imageIndex) => (
                               <Box
+                                key={img.id || img.mediaId || imageIndex}
                                 sx={{
-                                  width: '100%',
-                                  height: '100%',
-                                  border: '2px dashed',
-                                  borderColor: 'divider',
-                                  display: 'flex',
-                                  alignItems: 'center',
-                                  justifyContent: 'center',
-                                  cursor: 'pointer',
-                                  overflow: 'hidden',
+                                  position: 'relative',
+                                  width: 64,
+                                  height: 64,
                                   borderRadius: 1,
-                                  '&:hover': { borderColor: 'primary.main', bgcolor: 'action.hover' },
+                                  overflow: 'hidden',
+                                  border: '2px solid',
+                                  borderColor: img.isPrimary ? 'primary.main' : 'divider',
+                                  '&:hover .variant-image-actions': { opacity: 1 },
                                 }}
-                                onClick={() => setVariantMediaPickerOpen(index)}
                               >
-                                {variant.media ? (
-                                  <img src={getMediaUrl(variant.media?.url)} alt="Variant" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
-                                ) : (
-                                  <ImageIcon color="disabled" />
-                                )}
-                              </Box>
-                              {/* delete overlay — only shown when an image is set */}
-                              {variant.media && canManageVariants && (
-                                <IconButton
-                                  size="small"
-                                  color="error"
-                                  onClick={(e) => {
-                                    e.stopPropagation();
-                                    // Clear both fields in one atomic update
-                                    setVariants((current) => current.map((v, i) =>
-                                      i === index ? { ...v, mediaId: null, media: null, _dirty: true } : v
-                                    ));
-                                  }}
+                                <img
+                                  src={getMediaUrl(img.url || img.media?.url)}
+                                  alt={img.alt || 'Variant'}
+                                  style={{ width: '100%', height: '100%', objectFit: 'cover' }}
+                                />
+                                <Box
+                                  className="variant-image-actions"
                                   sx={{
                                     position: 'absolute',
-                                    top: -8,
-                                    right: -8,
-                                    bgcolor: 'background.paper',
-                                    boxShadow: 1,
-                                    p: '2px',
-                                    '&:hover': { bgcolor: 'error.light', color: 'white' },
+                                    inset: 0,
+                                    bgcolor: 'rgba(0,0,0,0.35)',
+                                    display: 'flex',
+                                    alignItems: 'center',
+                                    justifyContent: 'center',
+                                    gap: 0.5,
+                                    opacity: 0,
+                                    transition: 'opacity 0.2s',
                                   }}
                                 >
-                                  <DeleteIcon sx={{ fontSize: 14 }} />
-                                </IconButton>
-                              )}
-                            </Box>
-                          </Tooltip>
+                                  <Tooltip title={img.isPrimary ? 'Primary image' : 'Set as primary'}>
+                                    <IconButton
+                                      size="small"
+                                      sx={{ bgcolor: 'background.paper' }}
+                                      color={img.isPrimary ? 'warning' : 'default'}
+                                      onClick={() => handleSetVariantPrimaryImage(index, imageIndex)}
+                                      disabled={!canManageVariants}
+                                    >
+                                      {img.isPrimary ? <StarIcon sx={{ fontSize: 16 }} /> : <StarBorderIcon sx={{ fontSize: 16 }} />}
+                                    </IconButton>
+                                  </Tooltip>
+                                  <Tooltip title="Remove image">
+                                    <IconButton
+                                      size="small"
+                                      sx={{ bgcolor: 'background.paper' }}
+                                      color="error"
+                                      onClick={() => handleRemoveVariantImage(index, imageIndex)}
+                                      disabled={!canManageVariants}
+                                    >
+                                      <DeleteIcon sx={{ fontSize: 16 }} />
+                                    </IconButton>
+                                  </Tooltip>
+                                </Box>
+                                {img.isPrimary && (
+                                  <Chip
+                                    size="small"
+                                    label="Primary"
+                                    color="primary"
+                                    sx={{
+                                      position: 'absolute',
+                                      left: 4,
+                                      bottom: 4,
+                                      height: 18,
+                                      fontSize: 10,
+                                      '& .MuiChip-label': { px: 0.6 },
+                                    }}
+                                  />
+                                )}
+                              </Box>
+                            ))}
+                            <Button
+                              variant="outlined"
+                              size="small"
+                              startIcon={<ImageIcon />}
+                              onClick={() => setVariantMediaPickerOpen(index)}
+                              disabled={!canManageVariants}
+                              sx={{ height: 64, borderStyle: 'dashed' }}
+                            >
+                              Add Images
+                            </Button>
+                          </Box>
                         </Grid>
                         <Grid item xs={12} sm={2}>
                           <TextField
@@ -2013,8 +2353,8 @@ const VariantsPanel = ({ productId, productName, productSku, categoryIds = [], f
         open={variantMediaPickerOpen !== null}
         onClose={() => setVariantMediaPickerOpen(null)}
         onSelect={handleVariantMediaSelect}
-        multiple={false}
-        title="Select Variant Image"
+        multiple={true}
+        title="Select Variant Images"
       />
 
       <Dialog open={cloneOpen} onClose={() => setCloneOpen(false)} maxWidth="sm" fullWidth>
@@ -2122,4 +2462,3 @@ const VariantsPanel = ({ productId, productName, productSku, categoryIds = [], f
 };
 
 export default ProductEditPage;
-

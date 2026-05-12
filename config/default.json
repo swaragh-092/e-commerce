@@ -312,6 +312,7 @@
     "productPage": {
         "showSKU": true,
         "showStockBadge": true,
+        "imageAlignment": "vertical",
         "addToCartLabel": "Add to Cart",
         "showBuyNowButton": true,
         "buyNowLabel": "Buy Now"

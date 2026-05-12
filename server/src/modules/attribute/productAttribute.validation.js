@@ -42,6 +42,14 @@ const generateVariantsSchema = Joi.object({
     defaultStockQty: Joi.number().integer().min(0).default(0),
 });
 
+const variantImageSchema = Joi.object({
+    url: Joi.string().allow('', null),
+    alt: Joi.string().max(255).allow('', null),
+    mediaId: Joi.string().uuid().allow(null),
+    sortOrder: Joi.number().integer().min(0).default(0),
+    isPrimary: Joi.boolean().default(false),
+});
+
 const addVariantSchema = Joi.object({
     sku: Joi.string().max(100).allow('', null).optional(),
     price: Joi.number().precision(2).min(0).required()
@@ -50,6 +58,7 @@ const addVariantSchema = Joi.object({
     isActive: Joi.boolean().default(true),
     sortOrder: Joi.number().integer().min(0).default(0),
     mediaId: Joi.string().uuid().allow(null).optional(),
+    images: Joi.array().items(variantImageSchema).default([]),
     options: Joi.array().items(
         Joi.object({
             attributeId: Joi.string().uuid().required(),
@@ -66,6 +75,7 @@ const updateVariantSchema = Joi.object({
     isActive: Joi.boolean(),
     sortOrder: Joi.number().integer().min(0),
     mediaId: Joi.string().uuid().allow(null),
+    images: Joi.array().items(variantImageSchema),
 }).min(1).messages({ 'object.min': 'At least one field is required to update' });
 
 module.exports = {

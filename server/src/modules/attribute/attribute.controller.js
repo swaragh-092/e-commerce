@@ -62,6 +62,15 @@ exports.addValue = async (req, res, next) => {
     }
 };
 
+exports.updateValue = async (req, res, next) => {
+    try {
+        const result = await attributeService.updateValue(req.params.attrId, req.params.valueId, req.body);
+        return success(res, result, 'Value updated');
+    } catch (err) {
+        next(err);
+    }
+};
+
 exports.removeValue = async (req, res, next) => {
     try {
         await attributeService.removeValue(req.params.attrId, req.params.valueId);

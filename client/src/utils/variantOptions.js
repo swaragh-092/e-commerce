@@ -1,3 +1,5 @@
+import { formatAttributeValue } from './attributePresentation';
+
 export const getVariantOptionEntries = (variant) => {
   if (!Array.isArray(variant?.options)) {
     return [];
@@ -17,8 +19,10 @@ export const getVariantOptionEntries = (variant) => {
       return {
         attributeId,
         attributeName,
+        attribute: option?.attribute || null,
         valueId,
         valueLabel,
+        value: option?.value || null,
       };
     })
     .filter(Boolean);
@@ -30,7 +34,7 @@ export const getVariantOptionLabel = (variant) => {
   }
 
   return getVariantOptionEntries(variant)
-    .map((entry) => `${entry.attributeName}: ${entry.valueLabel}`)
+    .map((entry) => `${entry.attributeName}: ${formatAttributeValue(entry.value || { value: entry.valueLabel }, entry.attribute)}`)
     .join(', ');
 };
 
@@ -43,6 +47,7 @@ export const getVariantAttributeGroups = (variants = []) => {
         groups.set(entry.attributeId, {
           attributeId: entry.attributeId,
           attributeName: entry.attributeName,
+          attribute: entry.attribute,
           values: [],
         });
       }
@@ -52,6 +57,7 @@ export const getVariantAttributeGroups = (variants = []) => {
         group.values.push({
           valueId: entry.valueId,
           valueLabel: entry.valueLabel,
+          ...(entry.value || {}),
         });
       }
     });
