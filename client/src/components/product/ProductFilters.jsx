@@ -76,6 +76,13 @@ const FilterChip = ({ label, selected, onClick, count }) => (
     />
 );
 
+const hasSelectedDescendant = (cat, selectedSlug) => {
+    if (!selectedSlug || !cat.children) return false;
+    return cat.children.some(child =>
+        child.slug === selectedSlug || hasSelectedDescendant(child, selectedSlug)
+    );
+};
+
 const CategoryTree = ({ cats, depth, maxDepth, filters, onFilterChange, parentSlug = '' }) => {
     if (!cats?.length) return null;
     return (
@@ -108,7 +115,7 @@ const CategoryTree = ({ cats, depth, maxDepth, filters, onFilterChange, parentSl
                             {cat.name}
                         </Button>
                         {hasChildren && (
-                            <Collapse in={isSelected || (!filters.category && depth < 2)}>
+                            <Collapse in={isSelected || hasSelectedDescendant(cat, filters.category) || (!filters.category && depth < 2)}>
                                 <CategoryTree
                                     cats={cat.children}
                                     depth={depth + 1}

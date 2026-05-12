@@ -15,6 +15,7 @@ const {
   Media,
   ProductTab,
   Sequelize,
+  sequelize,
 } = require('../index');
 const { Op } = Sequelize;
 const salePriceIsDiscounted = Sequelize.where(Sequelize.col('sale_price'), Op.lt, Sequelize.col('price'));
@@ -483,7 +484,7 @@ exports.getProducts = async (filters, page, limit, isAdmin = false) => {
 
   // Translate relationship includes into direct WHERE subqueries for the aggregation query
   if (filters._categoryIds?.length) {
-    const escapedIds = filters._categoryIds.map(id => Sequelize.escape(id)).join(',');
+    const escapedIds = filters._categoryIds.map(id => sequelize.escape(id)).join(',');
     priceRangeWhere[Op.and] = [
       ...(priceRangeWhere[Op.and] || []),
       Sequelize.literal(`"Product"."id" IN (SELECT "product_id" FROM "product_categories" WHERE "category_id" IN (${escapedIds}))`),
@@ -492,7 +493,7 @@ exports.getProducts = async (filters, page, limit, isAdmin = false) => {
   if (filters.tags) {
     const tagList = Array.isArray(filters.tags) ? filters.tags : filters.tags.split(',').map(t => t.trim()).filter(Boolean);
     if (tagList.length > 0) {
-      const escapedTags = tagList.map(t => Sequelize.escape(t)).join(',');
+      const escapedTags = tagList.map(t => sequelize.escape(t)).join(',');
       priceRangeWhere[Op.and] = [
         ...(priceRangeWhere[Op.and] || []),
         Sequelize.literal(`"Product"."id" IN (SELECT "product_id" FROM "product_tags" pt JOIN "tags" t ON pt."tag_id" = t."id" WHERE t."name" IN (${escapedTags}))`),
