@@ -73,7 +73,6 @@ const ReviewSection = ({ slug, productId }) => {
         orderService.getMyOrders({ 
             productId, 
             orderShippingStatus: 'delivered,partially_delivered',
-            status: 'processing,closed',
             limit: 1 
         })
             .then((res) => {

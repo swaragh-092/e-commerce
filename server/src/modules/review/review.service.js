@@ -68,7 +68,10 @@ const create = async (userId, slug, payload) => {
         const orders = await Order.findAll({
         where: { 
             userId, 
-            orderShippingStatus: { [Op.in]: ['delivered', 'partially_delivered'] },
+            [Op.or]: [
+                { orderShippingStatus: { [Op.in]: ['delivered', 'partially_delivered'] } },
+                { status: 'closed' },
+            ],
             status: { [Op.notIn]: ['cancelled', 'refunded'] },
             putBackStatus: { [Op.or]: [{ [Op.is]: null }, { [Op.notIn]: ['full_return'] }] }
         },
@@ -92,7 +95,10 @@ const create = async (userId, slug, payload) => {
             where: { 
                 id: orderId, 
                 userId, 
-                orderShippingStatus: { [Op.in]: ['delivered', 'partially_delivered'] },
+                [Op.or]: [
+                    { orderShippingStatus: { [Op.in]: ['delivered', 'partially_delivered'] } },
+                    { status: 'closed' },
+                ],
                 status: { [Op.notIn]: ['cancelled', 'refunded'] },
                 putBackStatus: { [Op.or]: [{ [Op.is]: null }, { [Op.notIn]: ['full_return'] }] }
             },
