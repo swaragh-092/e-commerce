@@ -85,6 +85,9 @@ const addOrderNoteSchema = Joi.object({
     note: Joi.string().max(1000).required(),
 });
 
+// Include storefront display statuses (delivered, shipped, placed) that the customer-facing UI uses as filters
+const ALLOWED_STATUS_FILTER_VALUES = [...ORDER_STATUS_VALUES, 'delivered', 'shipped', 'placed', 'out_for_delivery'];
+
 const csvEnum = (allowed) => Joi.string().max(200).custom((value, helpers) => {
     const items = value.split(',').map(s => s.trim()).filter(Boolean);
     const invalid = items.filter(s => !allowed.includes(s));
@@ -95,7 +98,7 @@ const csvEnum = (allowed) => Joi.string().max(200).custom((value, helpers) => {
 const listOrdersQuerySchema = Joi.object({
     page: Joi.number().integer().min(1).default(1),
     limit: Joi.number().integer().min(1).max(100).default(20),
-    status: csvEnum(ORDER_STATUS_VALUES).optional(),
+    status: csvEnum(ALLOWED_STATUS_FILTER_VALUES).optional(),
     orderShippingStatus: csvEnum(ORDER_SHIPPING_STATUS_VALUES).optional(),
     search: Joi.string().max(200).trim().optional(),
     productId: Joi.string().uuid().optional(),
