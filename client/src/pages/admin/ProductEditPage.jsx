@@ -58,7 +58,6 @@ import brandService from '../../services/brandService';
 import attributeService from '../../services/attributeService';
 import { getSaleLabels } from '../../services/adminService';
 import MediaPicker from '../../components/common/MediaPicker';
-import MediaUploader from '../../components/common/MediaUploader';
 import { useNotification } from '../../context/NotificationContext';
 import { useCurrency, useSettings, useFeature } from '../../hooks/useSettings';
 import { getProductBasePrice } from '../../utils/variantPricing';
@@ -236,6 +235,7 @@ const ProductEditPage = () => {
   const [saleLabels, setSaleLabels] = useState([]);
   const [saving, setSaving] = useState(false);
   const [mediaPickerOpen, setMediaPickerOpen] = useState(false);
+  const [ogPickerOpen, setOgPickerOpen] = useState(false);
   const [dbProduct, setDbProduct] = useState(null); 
   const [hasVariants, setHasVariants] = useState(false);
   const [variantStockTotal, setVariantStockTotal] = useState(0);
@@ -1192,10 +1192,27 @@ const ProductEditPage = () => {
                 <Box sx={{ mt: 2 }}>
                   <Typography variant="subtitle2" gutterBottom>Social Sharing Image (OG Image)</Typography>
                   {canUploadMedia && (
-                    <MediaUploader 
-                      onUploadSuccess={(media) => setField('ogImage', media.url)} 
-                      multiple={false}
-                    />
+                    <>
+                      <Button
+                        variant="outlined"
+                        size="small"
+                        onClick={() => setOgPickerOpen(true)}
+                        startIcon={<ImageIcon />}
+                      >
+                        Select from Media Library
+                      </Button>
+                      <MediaPicker
+                        open={ogPickerOpen}
+                        onClose={() => setOgPickerOpen(false)}
+                        onSelect={(selected) => {
+                          const media = Array.isArray(selected) ? selected[0] : selected;
+                          if (media?.url) setField('ogImage', media.url);
+                          setOgPickerOpen(false);
+                        }}
+                        multiple={false}
+                        title="Select OG Image"
+                      />
+                    </>
                   )}
                   {formData.ogImage && (
                     <Box sx={{ mt: 2, position: 'relative', width: 'fit-content' }}>

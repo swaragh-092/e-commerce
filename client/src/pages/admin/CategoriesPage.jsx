@@ -30,7 +30,6 @@ import { useAuth } from '../../hooks/useAuth';
 import { PERMISSIONS } from '../../utils/permissions';
 import { getApiErrorMessage } from '../../utils/apiErrors';
 import MediaPicker from '../../components/common/MediaPicker';
-import MediaUploader from '../../components/common/MediaUploader';
 import { getMediaUrl } from '../../utils/media';
 import { useSettings } from '../../hooks/useSettings';
 import CategoryAttributesDialog from '../../components/admin/CategoryAttributesDialog';
@@ -444,6 +443,7 @@ const CategoriesPage = () => {
     const [attrCategory, setAttrCategory] = useState(null);
     const [formErrors, setFormErrors] = useState({});
     const [mediaPickerOpen, setMediaPickerOpen] = useState(false);
+    const [ogPickerOpen, setOgPickerOpen] = useState(false);
 
     const { notify, confirm } = useNotification();
     const { hasPermission } = useAuth();
@@ -961,12 +961,26 @@ const CategoriesPage = () => {
                                                 </IconButton>
                                             </Box>
                                         ) : (
-                                            <MediaUploader 
-                                                multiple={false} 
-                                                onUploadSuccess={(media) => {
-                                                    setFormData(f => ({ ...f, ogImage: media.url }));
-                                                }} 
-                                            />
+                                            <>
+                                              <Button
+                                                variant="outlined"
+                                                size="small"
+                                                onClick={() => setOgPickerOpen(true)}
+                                              >
+                                                Select from Media Library
+                                              </Button>
+                                              <MediaPicker
+                                                open={ogPickerOpen}
+                                                onClose={() => setOgPickerOpen(false)}
+                                                onSelect={(selected) => {
+                                                  const media = Array.isArray(selected) ? selected[0] : selected;
+                                                  if (media?.url) setFormData(f => ({ ...f, ogImage: media.url }));
+                                                  setOgPickerOpen(false);
+                                                }}
+                                                multiple={false}
+                                                title="Select OG Image"
+                                              />
+                                            </>
                                         )}
                                     </Box>
                                 </Stack>
