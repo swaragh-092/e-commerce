@@ -2,7 +2,7 @@
 
 const cron = require('node-cron');
 const { Op, Transaction } = require('sequelize');
-const { Order, OrderItem, Product, ProductVariant, sequelize } = require('../modules');
+const { Order, OrderItem, Product, ProductVariant, Coupon, CouponUsage, sequelize } = require('../modules');
 const AuditService = require('../modules/audit/audit.service');
 const logger = require('../utils/logger');
 
@@ -66,6 +66,30 @@ const run = () => {
                 },
                 transaction,
               }
+            );
+          }
+        }
+
+        // Release coupons if any
+        const appliedCouponIds = Array.from(new Set([
+          order.couponId,
+          ...(Array.isArray(order.appliedDiscounts) ? order.appliedDiscounts.map(d => d.couponId) : [])
+        ].filter(Boolean)));
+
+        if (appliedCouponIds.length > 0) {
+          const usages = await CouponUsage.findAll({
+            where: { orderId: order.id, couponId: { [Op.in]: appliedCouponIds } },
+            transaction
+          });
+          const actualCouponIds = [...new Set(usages.map(u => u.couponId))];
+          if (actualCouponIds.length > 0) {
+            await CouponUsage.destroy({ 
+              where: { orderId: order.id, couponId: { [Op.in]: actualCouponIds } }, 
+              transaction 
+            });
+            await Coupon.update(
+              { usedCount: sequelize.literal('GREATEST(used_count - 1, 0)') },
+              { where: { id: { [Op.in]: actualCouponIds } }, transaction }
             );
           }
         }

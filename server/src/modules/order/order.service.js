@@ -1156,20 +1156,18 @@ const placeOrder = async (userId, payload) => {
         }
 
         const appliedCouponIds = (couponBenefits?.appliedCoupons || []).map((coupon) => coupon.id);
-        if (paymentMethod === 'cod') {
-            for (const appliedItem of couponBenefits?.appliedCoupons || []) {
-                await CouponUsage.create({
-                    couponId: appliedItem.id,
-                    userId,
-                    orderId: order.id
-                }, { transaction: t });
-            }
-            if (appliedCouponIds.length > 0) {
-                await Coupon.update(
-                    { usedCount: sequelize.literal('used_count + 1') },
-                    { where: { id: { [Op.in]: appliedCouponIds } }, transaction: t }
-                );
-            }
+        for (const appliedItem of couponBenefits?.appliedCoupons || []) {
+            await CouponUsage.create({
+                couponId: appliedItem.id,
+                userId,
+                orderId: order.id
+            }, { transaction: t });
+        }
+        if (appliedCouponIds.length > 0) {
+            await Coupon.update(
+                { usedCount: sequelize.literal('used_count + 1') },
+                { where: { id: { [Op.in]: appliedCouponIds } }, transaction: t }
+            );
         }
 
         if (cart && paymentMethod === 'cod') {

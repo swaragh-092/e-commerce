@@ -11,11 +11,11 @@ const run = () => {
     logger.info('Running couponExpiry job...');
     try {
       const [updatedCount] = await Coupon.update(
-        { is_active: false },
+        { isActive: false },
         { 
           where: { 
-            is_active: true,
-            end_date: { [Op.lt]: new Date() }
+            isActive: true,
+            endDate: { [Op.lt]: new Date() }
           }
         }
       );

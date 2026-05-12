@@ -17,7 +17,7 @@ const run = () => {
         { 
           where: { 
             status: 'active',
-            updated_at: { [Op.lt]: thirtyDaysAgo }
+            updatedAt: { [Op.lt]: thirtyDaysAgo }
           }
         }
       );
