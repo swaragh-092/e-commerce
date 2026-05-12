@@ -1,4 +1,5 @@
 import orderWorkflow from '../../../shared/order-workflow.json';
+import { PAYMENT_SETTLED_STATUSES } from './constants';
 
 const fallbackLabel = (status) =>
   String(status || 'unknown')
@@ -124,7 +125,7 @@ export const getOrderProgressSteps = (order = {}, progress = {}) => {
   const isCancelled = orderStatus === 'cancelled';
   const isClosed = orderStatus === 'closed';
   const isPendingOnlinePayment = orderStatus === 'pending_payment' && !isCod;
-  const paymentSettled = ['paid_online', 'paid_cod', 'completed', 'cod_collected'].includes(paymentStatus);
+  const paymentSettled = PAYMENT_SETTLED_STATUSES.includes(paymentStatus);
   const shipped = ['partially_shipped', 'shipped', 'partially_out_for_delivery', 'out_for_delivery', 'partially_delivered', 'delivered'].includes(shippingStatus);
   const outForDelivery = ['partially_out_for_delivery', 'out_for_delivery', 'partially_delivered', 'delivered'].includes(shippingStatus);
   const delivered = shippingStatus === 'delivered';

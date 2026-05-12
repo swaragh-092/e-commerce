@@ -32,6 +32,7 @@ import SendIcon from '@mui/icons-material/Send';
 import HistoryIcon from '@mui/icons-material/History';
 import CloseIcon from '@mui/icons-material/Close';
 import { useCurrency } from '../../hooks/useSettings';
+import { PAYMENT_SETTLED_STATUSES } from '../../utils/constants';
 import { getOrderById, updateOrderStatus, refundOrder, createFulfillment, updateFulfillmentStatus, updateShipment, confirmCodPayment, getShippingProviders, addOrderNote } from '../../services/adminService';
 import { useNotification } from '../../context/NotificationContext';
 import {
@@ -720,8 +721,9 @@ const OrderDetailPage = () => {
     return fullName || address?.fullName || 'Customer unavailable';
   }, [address?.fullName, order?.User?.firstName, order?.User?.lastName]);
 
-  const hasSettledPayment = ['paid_online', 'paid_cod', 'completed', 'cod_collected'].includes(payment?.status);
-  const orderShippingStatus = order?.orderShippingStatus || order?.shipmentStatus || 'not_shipped';
+  const hasSettledPayment = PAYMENT_SETTLED_STATUSES.includes(payment?.status);
+  // TODO: Remove shipmentStatus fallback once all orders are backfilled to orderShippingStatus
+  const orderShippingStatus = order?.orderShippingStatus ?? order?.shipmentStatus ?? 'not_shipped';
   const hasTerminalShipping = ['delivered', 'rto'].includes(orderShippingStatus);
   const canCloseOrder = hasSettledPayment && hasTerminalShipping;
   const availableStatuses = useMemo(() => {

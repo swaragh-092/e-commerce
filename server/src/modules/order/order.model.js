@@ -74,10 +74,6 @@ module.exports = (sequelize, DataTypes) => {
             allowNull: true,
             defaultValue: null,
         },
-        shipmentStatus: {
-            type: DataTypes.STRING(50),
-            defaultValue: 'pending',
-        },
         checkoutSessionId: {
             type: DataTypes.UUID,
             allowNull: true,

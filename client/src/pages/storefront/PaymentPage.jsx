@@ -7,6 +7,7 @@ import PageSEO from '../../components/common/PageSEO';
 import CenteredLoader from '../../components/common/CenteredLoader';
 import { getApiErrorMessage } from '../../utils/apiErrors';
 import { useCart } from '../../hooks/useCart';
+import { PAYMENT_SETTLED_STATUSES } from '../../utils/constants';
 
 const loadScript = (src, globalName) => new Promise((resolve, reject) => {
     if (globalName && window[globalName]) {
@@ -97,11 +98,11 @@ const PaymentPage = () => {
 
                 // Guard: COD orders should never reach this page — redirect to success
                 if (order?.paymentMethod === 'cod') {
-                    navigate('/payment/success', { replace: true, state: { orderId, isCod: true } });
+                    navigate('/payment/success', { replace: true, state: { orderId, orderNumber: order?.orderNumber, isCod: true } });
                     return;
                 }
-                if (['paid_online', 'paid_cod', 'completed', 'cod_collected'].includes(order?.Payment?.status)) {
-                    navigate('/payment/success', { replace: true, state: { orderId } });
+                if (PAYMENT_SETTLED_STATUSES.includes(order?.Payment?.status)) {
+                    navigate('/payment/success', { replace: true, state: { orderId, orderNumber: order?.orderNumber } });
                     return;
                 }
                 if (order?.status === 'cancelled') {
@@ -144,7 +145,7 @@ const PaymentPage = () => {
                             razorpay_signature: response.razorpay_signature
                         });
                         fetchCart();
-                        navigate('/payment/success', { state: { orderId } });
+                        navigate('/payment/success', { state: { orderId, orderNumber: order?.orderNumber } });
                     } catch (err) {
                         setError(getApiErrorMessage(err, 'Payment verification failed.'));
                         setProcessing(false);

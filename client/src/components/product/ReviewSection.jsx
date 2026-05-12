@@ -70,7 +70,12 @@ const ReviewSection = ({ slug, productId }) => {
         setPurchaseCheckError(false);
         // Call backend with productId and status filter to reliably find a purchase
         // even if it's beyond the last 50 generic orders.
-        orderService.getMyOrders({ productId, status: 'delivered', limit: 1 })
+        orderService.getMyOrders({ 
+            productId, 
+            orderShippingStatus: 'delivered,partially_delivered',
+            status: 'processing,closed',
+            limit: 1 
+        })
             .then((res) => {
                 const responseData = res.data || {};
                 const orders = Array.isArray(responseData) ? responseData : (responseData.rows || []);
@@ -84,6 +89,7 @@ const ReviewSection = ({ slug, productId }) => {
             .catch((err) => {
                 console.error('Failed to verify purchase history', err);
                 setPurchaseCheckError(true);
+                setHasPurchased(true);
             });
     }, [isAuthenticated, productId]);
 
@@ -119,6 +125,11 @@ const ReviewSection = ({ slug, productId }) => {
 
             {isAuthenticated ? (
                 <>
+                    {purchaseCheckError && (
+                        <Alert severity="warning" sx={{ mb: 2 }}>
+                            We encountered a problem verifying your purchase history. You can still write a review, but it may not be marked as verified.
+                        </Alert>
+                    )}
                     {canWriteReview && (
                         <Button variant="outlined" onClick={() => setShowForm(!showForm)}>
                             {showForm ? 'Cancel' : 'Write a Review'}

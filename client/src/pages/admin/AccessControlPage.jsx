@@ -46,7 +46,8 @@ import {
   updateAccessUserRole,
 } from '../../services/adminService';
 import { useAuth } from '../../hooks/useAuth';
-import { PERMISSIONS } from '../../utils/permissions';
+import { PERMISSIONS, IMPLIES } from '../../utils/permissions';
+import authorizationSchema from '../../../../shared/authorization.json';
 import { useNotification } from '../../context/NotificationContext';
 import { getApiErrorMessage } from '../../utils/apiErrors';
 
@@ -118,6 +119,20 @@ const AccessControlPage = () => {
     }, {});
   }, [permissions]);
 
+  const impliedPermissionKeys = useMemo(() => {
+    const selectedKeys = permissions
+      .filter((p) => roleForm.permissionIds.includes(p.id))
+      .map((p) => p.key);
+    const implied = new Set();
+    for (const key of selectedKeys) {
+      const targets = IMPLIES[key];
+      if (targets) targets.forEach((t) => implied.add(t));
+    }
+    // Remove keys that are already explicitly selected
+    for (const key of selectedKeys) implied.delete(key);
+    return implied;
+  }, [permissions, roleForm.permissionIds]);
+
   useEffect(() => {
     const timeoutId = window.setTimeout(() => {
       setDebouncedSearch(search.trim());
@@ -188,6 +203,18 @@ const AccessControlPage = () => {
       permissionIds: current.permissionIds.includes(permissionId)
         ? current.permissionIds.filter((id) => id !== permissionId)
         : [...current.permissionIds, permissionId],
+    }));
+  };
+
+  const handleGroupSelectAll = (groupPermissions, checked) => {
+    const toggleableIds = groupPermissions
+      .filter((p) => roleForm.isSystem || !p.reserved)
+      .map((p) => p.id);
+    setRoleForm((current) => ({
+      ...current,
+      permissionIds: checked
+        ? [...new Set([...current.permissionIds, ...toggleableIds])]
+        : current.permissionIds.filter((id) => !toggleableIds.includes(id)),
     }));
   };
 
@@ -901,54 +928,74 @@ const AccessControlPage = () => {
               <Typography variant="subtitle1" fontWeight={700} gutterBottom>
                 Permissions
               </Typography>
-              <Grid container spacing={2}>
-                {Object.entries(groupedPermissions).map(([group, groupPermissions]) => (
-                  <Grid item xs={12} sm={6} key={group}>
+              <Stack spacing={1.5}>
+                {Object.entries(groupedPermissions).map(([group, groupPermissions]) => {
+                  const toggleableIds = groupPermissions
+                    .filter((p) => roleForm.isSystem || !p.reserved)
+                    .map((p) => p.id);
+                  const allSelected = toggleableIds.length > 0 && toggleableIds.every((id) => roleForm.permissionIds.includes(id));
+                  const someSelected = toggleableIds.some((id) => roleForm.permissionIds.includes(id));
+                  return (
                     <Paper
+                      key={group}
                       variant="outlined"
-                      sx={{ p: 2, borderRadius: 2, height: '100%' }}
+                      sx={{ p: 1.5, borderRadius: 2 }}
                     >
-                      <Typography
-                        variant="subtitle2"
-                        fontWeight={700}
-                        sx={{ mb: 1.5, textTransform: 'capitalize' }}
-                      >
-                        {group}
-                      </Typography>
-                      <Stack spacing={1}>
+                      <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 1 }}>
+                        <FormControlLabel
+                          control={
+                            <Checkbox
+                              size="small"
+                              checked={allSelected}
+                              indeterminate={someSelected && !allSelected}
+                              onChange={(e) => handleGroupSelectAll(groupPermissions, e.target.checked)}
+                            />
+                          }
+                          label={
+                            <Typography variant="subtitle2" fontWeight={700} sx={{ textTransform: 'capitalize' }}>
+                              {group}
+                            </Typography>
+                          }
+                          sx={{ mr: 0 }}
+                        />
+                        <Chip
+                          label={`${toggleableIds.filter((id) => roleForm.permissionIds.includes(id)).length}/${toggleableIds.length}`}
+                          size="small"
+                          variant="outlined"
+                          sx={{ height: 20, fontSize: '0.7rem' }}
+                        />
+                      </Box>
+                      <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 0.75, pl: 1 }}>
                         {groupPermissions.map((permission) => {
                           const selected = roleForm.permissionIds.includes(permission.id);
+                          const isImplied = impliedPermissionKeys.has(permission.key);
+                          const description = authorizationSchema.permissionDescriptions?.[permission.key];
+                          const tooltipText = isImplied
+                            ? 'Auto-granted by a higher permission'
+                            : description || '';
                           return (
-                            <Button
-                              key={permission.id}
-                              variant={selected ? 'contained' : 'outlined'}
-                              color={selected ? 'primary' : 'inherit'}
-                              disabled={!roleForm.isSystem && permission.reserved}
-                              onClick={() => handleRolePermissionToggle(permission.id)}
-                              sx={{
-                                justifyContent: 'flex-start',
-                                textAlign: 'left',
-                                py: 0.75,
-                                px: 1.5,
-                              }}
-                            >
-                              <Box>
-                                <Typography variant="body2" fontWeight={600}>
-                                  {permission.name}
-                                </Typography>
-                                <Typography variant="caption" sx={{ opacity: 0.8 }}>
-                                  {permission.key}
-                                  {permission.reserved ? ' • super admin only' : ''}
-                                </Typography>
-                              </Box>
-                            </Button>
+                            <Tooltip key={permission.id} title={tooltipText} arrow placement="top">
+                              <Chip
+                                label={`${permission.name}${isImplied ? ' 🔒' : ''}`}
+                                size="small"
+                                variant={selected || isImplied ? 'filled' : 'outlined'}
+                                color={isImplied ? 'success' : selected ? 'primary' : 'default'}
+                                disabled={isImplied || (!roleForm.isSystem && permission.reserved)}
+                                onClick={() => !isImplied && handleRolePermissionToggle(permission.id)}
+                                sx={{
+                                  cursor: isImplied ? 'default' : 'pointer',
+                                  fontWeight: selected || isImplied ? 600 : 400,
+                                  opacity: isImplied ? 0.85 : 1,
+                                }}
+                              />
+                            </Tooltip>
                           );
                         })}
-                      </Stack>
+                      </Box>
                     </Paper>
-                  </Grid>
-                ))}
-              </Grid>
+                  );
+                })}
+              </Stack>
             </Box>
           </Stack>
         </DialogContent>

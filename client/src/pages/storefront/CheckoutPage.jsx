@@ -454,7 +454,7 @@ const CheckoutPage = () => {
         }
     };
 
-    const openRazorpayPayment = async (orderId, paymentOrder) => {
+    const openRazorpayPayment = async (orderId, paymentOrder, orderNumber) => {
         await loadScript('https://checkout.razorpay.com/v1/checkout.js', 'Razorpay');
 
         if (!window.Razorpay) {
@@ -475,7 +475,7 @@ const CheckoutPage = () => {
                         razorpay_payment_id: response.razorpay_payment_id,
                         razorpay_signature: response.razorpay_signature,
                     });
-                    navigate('/payment/success', { state: { orderId } });
+                    navigate('/payment/success', { state: { orderId, orderNumber } });
                 } catch (err) {
                     setError(getApiErrorMessage(err, 'Payment verification failed.'));
                     setPlacing(false);
@@ -500,7 +500,7 @@ const CheckoutPage = () => {
         rzp.open();
     };
 
-    const startOnlinePayment = async (orderId) => {
+    const startOnlinePayment = async (orderId, orderNumber) => {
         const paymentResponse = await paymentService.createOrder(orderId);
         const paymentOrder = paymentResponse.data?.data || paymentResponse.data;
         const provider = paymentOrder?.provider || paymentMethod;
@@ -526,10 +526,9 @@ const CheckoutPage = () => {
             const verificationResponse = await paymentService.verifyPayment(orderId, { provider: 'cashfree' });
             const result = verificationResponse.data?.data || verificationResponse.data;
             if (result?.success) {
-                navigate('/payment/success', { state: { orderId } });
+                navigate('/payment/success', { state: { orderId, orderNumber } });
             } else {
-                setError(`Payment is not completed yet. Current status: ${result?.status || 'pending'}.`);
-                setPlacing(false);
+                navigate('/payment/failure', { state: { orderId, orderNumber, status: result?.status } });
             }
             return;
         }
@@ -556,7 +555,7 @@ const CheckoutPage = () => {
             return;
         }
 
-        await openRazorpayPayment(orderId, paymentOrder);
+        await openRazorpayPayment(orderId, paymentOrder, orderNumber);
     };
 
     const handlePlaceOrder = async () => {
@@ -589,10 +588,11 @@ const CheckoutPage = () => {
             });
 
             const orderId = res?.order?.id;
+            const orderNumber = res?.order?.orderNumber;
             orderPlaced = true;
             if (!isBuyNowFlow) await clearCart();
-            if (paymentMethod === 'cod') navigate('/payment/success', { state: { orderId, isCod: true } });
-            else await startOnlinePayment(orderId);
+            if (paymentMethod === 'cod') navigate('/payment/success', { state: { orderId, orderNumber, isCod: true } });
+            else await startOnlinePayment(orderId, orderNumber);
 
         } catch (err) {
             setError(getApiErrorMessage(

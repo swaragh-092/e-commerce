@@ -147,6 +147,11 @@
         "gridColumns": 4,
         "categoryDepth": 3
     },
+    "brandsPage": {
+        "gridColumns": 4,
+        "showDescriptions": true,
+        "cardStyle": "inherit"
+    },
     "homepage": {
         "seoTitle": "Home",
         "seoDescription": "Shop fashion, lifestyle, electronics, daily essentials, and deals from a polished modern storefront.",

@@ -84,6 +84,22 @@ const addOrderNoteSchema = Joi.object({
     note: Joi.string().max(1000).required(),
 });
 
+const csvEnum = (allowed) => Joi.string().max(200).custom((value, helpers) => {
+    const items = value.split(',').map(s => s.trim()).filter(Boolean);
+    const invalid = items.filter(s => !allowed.includes(s));
+    if (invalid.length) return helpers.error('any.invalid');
+    return value;
+});
+
+const listOrdersQuerySchema = Joi.object({
+    page: Joi.number().integer().min(1).default(1),
+    limit: Joi.number().integer().min(1).max(100).default(20),
+    status: csvEnum(ORDER_STATUS_VALUES).optional(),
+    orderShippingStatus: csvEnum([...SHIPMENT_STATUS_VALUES, 'not_shipped']).optional(),
+    search: Joi.string().max(200).trim().optional(),
+    productId: Joi.string().uuid().optional(),
+});
+
 module.exports = {
     placeOrderSchema,
     updateOrderStatusSchema,
@@ -94,4 +110,5 @@ module.exports = {
     updatePutBackStatusSchema,
     processRefundSchema,
     addOrderNoteSchema,
+    listOrdersQuerySchema,
 };

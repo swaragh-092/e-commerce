@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import {
   Box,
   Button,
@@ -15,10 +15,36 @@ import { Link as RouterLink } from 'react-router-dom';
 import brandService from '../../services/brandService';
 import { getMediaUrl } from '../../utils/media';
 import PageSEO from '../../components/common/PageSEO';
+import { useSettings } from '../../hooks/useSettings';
+
+const COLS_MAP = {
+  2: { xs: 6, sm: 6, md: 6, lg: 6 },
+  3: { xs: 6, sm: 6, md: 4, lg: 4 },
+  4: { xs: 6, sm: 4, md: 3, lg: 3 },
+  5: { xs: 6, sm: 4, md: 3, lg: 2.4 },
+};
 
 const BrandsPage = () => {
   const [brands, setBrands] = useState([]);
   const [loading, setLoading] = useState(true);
+  const { settings } = useSettings();
+  const brandsPage = settings?.brandsPage || {};
+  const gridCols = parseInt(brandsPage.gridColumns) || 4;
+  const showDescriptions = brandsPage.showDescriptions !== false;
+  const cardStyle = brandsPage.cardStyle || 'inherit';
+  const cols = COLS_MAP[gridCols] || COLS_MAP[4];
+
+  const cardSx = useMemo(() => ({
+    height: '100%',
+    display: 'flex',
+    flexDirection: 'column',
+    borderRadius: 3,
+    ...(cardStyle !== 'inherit' && {
+      boxShadow: cardStyle === 'elevated' ? '0 18px 45px rgba(31,41,51,0.08)' : 'none',
+      border: cardStyle === 'flat' ? '1px solid transparent' : '1px solid',
+      borderColor: cardStyle === 'outlined' ? 'divider' : 'transparent',
+    }),
+  }), [cardStyle]);
 
   useEffect(() => {
     const fetchBrands = async () => {
@@ -51,7 +77,7 @@ const BrandsPage = () => {
       <Grid container spacing={3}>
         {loading
           ? Array.from({ length: 8 }).map((_, index) => (
-              <Grid item xs={12} sm={6} md={4} lg={3} key={index}>
+              <Grid item {...cols} key={index}>
                 <Skeleton variant="rectangular" height={200} sx={{ borderRadius: 3 }} />
                 <Skeleton sx={{ mt: 1 }} height={32} />
                 <Skeleton width="70%" />
@@ -61,8 +87,8 @@ const BrandsPage = () => {
               const imageUrl = brand.image ? getMediaUrl(brand.image) : null;
 
               return (
-                <Grid item xs={12} sm={6} md={4} lg={3} key={brand.id}>
-                  <Card sx={{ height: '100%', display: 'flex', flexDirection: 'column', borderRadius: 3 }}>
+                <Grid item {...cols} key={brand.id}>
+                  <Card sx={cardSx}>
                     {imageUrl ? (
                       <CardMedia component="img" height="200" image={imageUrl} alt={brand.name} />
                     ) : (
@@ -84,9 +110,11 @@ const BrandsPage = () => {
                       <Typography variant="h6" fontWeight={700} gutterBottom>
                         {brand.name}
                       </Typography>
-                      <Typography variant="body2" color="text.secondary" sx={{ mb: 2, flexGrow: 1 }}>
-                        {brand.description || 'Explore products from this brand.'}
-                      </Typography>
+                      {showDescriptions && (
+                        <Typography variant="body2" color="text.secondary" sx={{ mb: 2, flexGrow: 1 }}>
+                          {brand.description || 'Explore products from this brand.'}
+                        </Typography>
+                      )}
                       <Stack direction="row" spacing={1}>
                         <Button component={RouterLink} to={`/brands/${brand.slug}`} variant="contained" size="small">
                           View Brand

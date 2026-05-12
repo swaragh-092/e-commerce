@@ -12,12 +12,13 @@ const {
   updatePutBackStatusSchema,
   processRefundSchema,
   addOrderNoteSchema,
+  listOrdersQuerySchema,
 } = require('./order.validation');
 const { authenticate } = require('../../middleware/auth.middleware');
 const { authorizePermissions } = require('../../middleware/role.middleware');
 const { auditLog } = require('../audit/audit.middleware');
 const { PERMISSIONS } = require('../../config/permissions');
-const { idParamSchema, idAndFulfillmentIdParamSchema, paginationQuerySchema } = require('../../utils/common.validation');
+const { idParamSchema, idAndFulfillmentIdParamSchema } = require('../../utils/common.validation');
 
 
 
@@ -27,7 +28,7 @@ router.use(featureGate('orders'));
 
 router.post('/', authenticate, validate(placeOrderSchema), orderController.placeOrder);
 
-router.get('/', authenticate, validate(paginationQuerySchema, 'query'), orderController.getOrders);
+router.get('/', authenticate, validate(listOrdersQuerySchema, 'query'), orderController.getOrders);
 router.get('/:id/tracking', authenticate, validate(idParamSchema, 'params'), orderController.getFulfillmentTracking);
 router.get('/:id', authenticate, validate(idParamSchema, 'params'), orderController.getOrderById);
 router.post('/:id/cancel', authenticate, validate(idParamSchema, 'params'), orderController.cancelOrder);

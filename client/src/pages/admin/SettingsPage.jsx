@@ -1506,6 +1506,40 @@ const SettingsPage = () => {
         ['product page', 'wishlist', 'reviews', 'stock badge', 'sku', 'image alignment', 'gallery thumbnails']
       ),
       section(
+        'Brands Page',
+        'Customize how the /brands storefront page displays brand cards.',
+        <>
+          <FormControl fullWidth size="small" sx={{ mb: 2 }}>
+            <InputLabel>Grid Columns (desktop)</InputLabel>
+            <Select
+              label="Grid Columns (desktop)"
+              value={Number(form['brandsPage.gridColumns']) || 4}
+              onChange={(e) => set('brandsPage.gridColumns', e.target.value)}
+            >
+              <MenuItem value={2}>2 — Wide cards</MenuItem>
+              <MenuItem value={3}>3 columns</MenuItem>
+              <MenuItem value={4}>4 columns (default)</MenuItem>
+              <MenuItem value={5}>5 — Dense grid</MenuItem>
+            </Select>
+          </FormControl>
+          {toggle('brandsPage.showDescriptions', 'Show brand descriptions on cards')}
+          <FormControl fullWidth size="small" sx={{ mb: 2 }}>
+            <InputLabel>Card Style</InputLabel>
+            <Select
+              label="Card Style"
+              value={form['brandsPage.cardStyle'] || 'inherit'}
+              onChange={(e) => set('brandsPage.cardStyle', e.target.value)}
+            >
+              <MenuItem value="inherit">Inherit from theme</MenuItem>
+              <MenuItem value="elevated">Elevated</MenuItem>
+              <MenuItem value="outlined">Outlined</MenuItem>
+              <MenuItem value="flat">Flat</MenuItem>
+            </Select>
+          </FormControl>
+        </>,
+        ['brands', 'brands page', 'brand grid']
+      ),
+      section(
         'SKU Automation',
         'Set up how product and variant SKUs are auto-generated for the catalog.',
         <>

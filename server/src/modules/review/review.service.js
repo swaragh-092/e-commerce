@@ -66,13 +66,19 @@ const create = async (userId, slug, payload) => {
     if (!orderId) {
         // Auto-detect order if not provided
         const orders = await Order.findAll({
-        where: { userId, status: 'delivered' },
+        where: { 
+            userId, 
+            orderShippingStatus: { [Op.in]: ['delivered', 'partially_delivered'] },
+            status: { [Op.notIn]: ['cancelled', 'refunded'] },
+            putBackStatus: { [Op.or]: [{ [Op.is]: null }, { [Op.notIn]: ['full_return'] }] }
+        },
         include: [{
             model: OrderItem,
             as: 'items',
             where: { productId }
         }],
-        transaction: t
+        transaction: t,
+        limit: 1
         });
 
         if (orders && orders.length > 0) {
@@ -81,12 +87,27 @@ const create = async (userId, slug, payload) => {
     }
     
     if (orderId) {
-        // Validate it really exists and belongs to user
-        const order = await Order.findOne({ where: { id: orderId, userId, status: 'delivered' }, transaction: t });
+        // Validate it really exists, belongs to user, and contains this product
+        const order = await Order.findOne({ 
+            where: { 
+                id: orderId, 
+                userId, 
+                orderShippingStatus: { [Op.in]: ['delivered', 'partially_delivered'] },
+                status: { [Op.notIn]: ['cancelled', 'refunded'] },
+                putBackStatus: { [Op.or]: [{ [Op.is]: null }, { [Op.notIn]: ['full_return'] }] }
+            },
+            include: [{
+                model: OrderItem,
+                as: 'items',
+                where: { productId }
+            }],
+            transaction: t 
+        });
+
         if (order) {
             isVerifiedPurchase = true;
         } else {
-            orderId = null; // invalid order id given
+            orderId = null; // invalid order id given or product not in order
         }
     }
 
@@ -172,7 +193,7 @@ const list = async (slug, { page, limit, status, search }) => {
     limit: lmt,
     offset,
     include,
-    subQuery: !!search,
+    subQuery: false,
     order: [['createdAt', 'DESC']]
   });
 
@@ -184,7 +205,7 @@ const list = async (slug, { page, limit, status, search }) => {
 
     const statusCounts = await Review.findAll({
       where: countWhere,
-      include: include.map(inc => ({ ...inc, attributes: [] })),
+      include: (search && !slug) ? include.map(inc => ({ ...inc, attributes: [] })) : [],
       attributes: [
         [sequelize.col('Review.status'), 'status'],
         [sequelize.fn('COUNT', sequelize.fn('DISTINCT', sequelize.col('Review.id'))), 'count']

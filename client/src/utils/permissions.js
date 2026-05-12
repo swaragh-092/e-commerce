@@ -42,7 +42,18 @@ export const ADMIN_ACCESS_PERMISSIONS = Object.freeze(
   [...new Set(ADMIN_ROUTE_PERMISSION_MAP.flatMap((item) => item.permissions))]
 );
 
+const IMPLIES = Object.freeze(authorizationSchema.implies || {});
+
 const unique = (items = []) => [...new Set(items.filter(Boolean))];
+
+const expandImplied = (permissions) => {
+  const expanded = new Set(permissions);
+  for (const perm of permissions) {
+    const implied = IMPLIES[perm];
+    if (implied) implied.forEach((p) => expanded.add(p));
+  }
+  return [...expanded];
+};
 
 export const getRolesForUser = (user) => {
   const safeUser = user || {};
@@ -62,15 +73,17 @@ export const getPermissionsForUser = (user) => {
   const safeUser = user || {};
 
   if (Array.isArray(safeUser.permissions) && safeUser.permissions.length) {
-    return unique(safeUser.permissions);
+    return expandImplied(unique(safeUser.permissions));
   }
 
-  return unique(getRolesForUser(safeUser).flatMap((role) => ROLE_PERMISSIONS[role] || []));
+  return expandImplied(unique(getRolesForUser(safeUser).flatMap((role) => ROLE_PERMISSIONS[role] || [])));
 };
 
 export const hasPermission = (user, permission) => getPermissionsForUser(user).includes(permission);
 export const hasAnyPermission = (user, permissions = []) => permissions.some((permission) => hasPermission(user, permission));
 export const hasAllPermissions = (user, permissions = []) => permissions.every((permission) => hasPermission(user, permission));
+
+export { IMPLIES };
 
 export const getFirstAccessibleAdminPath = (user) => {
   const permissions = getPermissionsForUser(user);

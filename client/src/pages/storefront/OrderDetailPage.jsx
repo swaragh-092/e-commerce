@@ -36,9 +36,8 @@ import {
   getOrderStatusColor,
   getPaymentStatusLabel,
 } from '../../utils/orderWorkflow';
+import { PAYMENT_SETTLED_STATUSES, RETRYABLE_PAYMENT_STATUSES } from '../../utils/constants';
 
-const PAYMENT_SETTLED_STATUSES = ['paid_online', 'paid_cod', 'completed', 'cod_collected'];
-const RETRYABLE_PAYMENT_STATUSES = ['payment_pending', 'payment_failed', 'payment_expired', 'pending', undefined, null];
 
 const OrderDetailPage = () => {
   const { id } = useParams();

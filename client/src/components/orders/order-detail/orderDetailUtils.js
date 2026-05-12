@@ -3,6 +3,7 @@ import {
   getShipmentStatusColor,
   getShipmentStatusLabel,
 } from '../../../utils/orderWorkflow';
+import { PAYMENT_SETTLED_STATUSES } from '../../../utils/constants';
 
 export const PRODUCT_TRACKING_STEPS = [
   { key: 'placed', label: 'Placed' },
@@ -158,7 +159,7 @@ const getLatestHistoryTime = (history = []) => {
 };
 
 export const buildProductTrackingItems = ({ orderItems, fulfillments, order, payment }) => {
-  const paymentSettled = ['paid_online', 'paid_cod', 'completed', 'cod_collected'].includes(payment?.status);
+  const paymentSettled = PAYMENT_SETTLED_STATUSES.includes(payment?.status);
   const paymentStepTime = paymentSettled ? payment?.updatedAt || payment?.createdAt : '';
   const orderPlacedTime = order?.createdAt;
   const processingTime = order?.statusHistory

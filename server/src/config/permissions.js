@@ -23,7 +23,18 @@ const ROLE_PERMISSIONS = Object.freeze({
 
 const RESERVED_SUPER_ADMIN_PERMISSIONS = Object.freeze([...authorizationSchema.reservedSuperAdminPermissions]);
 
+const IMPLIES = Object.freeze(authorizationSchema.implies || {});
+
 const unique = (items = []) => [...new Set(items.filter(Boolean))];
+
+const expandImplied = (permissions) => {
+  const expanded = new Set(permissions);
+  for (const perm of permissions) {
+    const implied = IMPLIES[perm];
+    if (implied) implied.forEach((p) => expanded.add(p));
+  }
+  return [...expanded];
+};
 
 const getRolesForUser = (user) => {
   const safeUser = user || {};
@@ -62,18 +73,18 @@ const getPermissionsForUser = (user) => {
   const safeUser = user || {};
 
   if (Array.isArray(safeUser.permissions) && safeUser.permissions.length) {
-    return unique(safeUser.permissions);
+    return expandImplied(unique(safeUser.permissions));
   }
 
   if (Array.isArray(safeUser.roles) && safeUser.roles.length) {
-    return unique(
+    return expandImplied(unique(
       safeUser.roles.flatMap((role) =>
         typeof role === 'string' ? getPermissionsForRole(role) : getPermissionKeysFromRoleObject(role)
       )
-    );
+    ));
   }
 
-  return unique(getRolesForUser(safeUser).flatMap((role) => getPermissionsForRole(role)));
+  return expandImplied(unique(getRolesForUser(safeUser).flatMap((role) => getPermissionsForRole(role))));
 };
 
 const enrichUserAuthorization = (user) => {

@@ -200,9 +200,9 @@ const syncOrderShippingStatus = async (order, transaction, actingUserId = null) 
         transaction,
     });
     const nextStatus = deriveOrderShippingStatus(shipments);
-    if (order.orderShippingStatus !== nextStatus || order.shipmentStatus !== nextStatus) {
+    if (order.orderShippingStatus !== nextStatus) {
         const previous = order.orderShippingStatus;
-        await order.update({ orderShippingStatus: nextStatus, shipmentStatus: nextStatus }, { transaction });
+        await order.update({ orderShippingStatus: nextStatus }, { transaction });
         await logOrderHistory({
             orderId: order.id,
             entityType: 'Order',
@@ -328,7 +328,7 @@ const repairInvalidClosedOrder = async (order, transaction = null) => {
 
     if (canCloseOrder({ order, payment, orderShippingStatus: derivedShippingStatus })) {
         if (order.orderShippingStatus !== derivedShippingStatus) {
-            await order.update({ orderShippingStatus: derivedShippingStatus, shipmentStatus: derivedShippingStatus }, { transaction });
+            await order.update({ orderShippingStatus: derivedShippingStatus }, { transaction });
         }
         return order;
     }
@@ -337,7 +337,6 @@ const repairInvalidClosedOrder = async (order, transaction = null) => {
     await order.update({
         status: nextStatus,
         orderShippingStatus: derivedShippingStatus,
-        shipmentStatus: derivedShippingStatus,
     }, { transaction });
     await logOrderHistory({
         orderId: order.id,
@@ -365,8 +364,8 @@ const repairCompletableOrder = async (order, transaction = null) => {
         transaction,
     });
     const derivedShippingStatus = deriveOrderShippingStatus(shipments);
-    if (order.orderShippingStatus !== derivedShippingStatus || order.shipmentStatus !== derivedShippingStatus) {
-        await order.update({ orderShippingStatus: derivedShippingStatus, shipmentStatus: derivedShippingStatus }, { transaction });
+    if (order.orderShippingStatus !== derivedShippingStatus) {
+        await order.update({ orderShippingStatus: derivedShippingStatus }, { transaction });
     }
     await syncOrderClosureIfComplete(order, transaction);
     return order;
@@ -580,7 +579,7 @@ const buildOrderTimeline = (order, progress) => {
     const isCancelled = order.status === 'cancelled';
     const isRefunded = order.status === 'refunded' || rawPaymentStatus === 'refunded';
     const paymentSettled = ['paid_online', 'paid_cod', 'completed', 'cod_collected', 'refunded'].includes(paymentStatus);
-    const shippingStatus = order.orderShippingStatus || order.shipmentStatus || 'not_shipped';
+    const shippingStatus = order.orderShippingStatus || 'not_shipped';
     const shipped = ['partially_shipped', 'shipped', 'partially_out_for_delivery', 'out_for_delivery', 'partially_delivered', 'delivered'].includes(shippingStatus);
     const outForDelivery = ['partially_out_for_delivery', 'out_for_delivery', 'partially_delivered', 'delivered'].includes(shippingStatus);
     const delivered = shippingStatus === 'delivered';
@@ -696,7 +695,6 @@ const releaseOrderReservationsAndCoupons = async (order, transaction) => {
             }
         });
     }
-    return eventBuffer;
 
     const appliedCouponIds = Array.from(new Set([
         ...(Array.isArray(order.appliedDiscounts) ? order.appliedDiscounts.map((item) => item.couponId).filter(Boolean) : []),
@@ -720,6 +718,8 @@ const releaseOrderReservationsAndCoupons = async (order, transaction) => {
             );
         }
     }
+
+    return eventBuffer;
 };
 
 const getPaymentSettings = async () => {
@@ -1056,7 +1056,7 @@ const placeOrder = async (userId, payload) => {
                 estimatedDeliveryDays: shippingQuote.estimatedDeliveryDays || null,
                 serviceable: shippingQuote.serviceable === true,
             },
-            shipmentStatus: 'not_shipped',
+            orderShippingStatus: 'not_shipped',
             checkoutSessionId: shippingQuote.checkoutSessionId || payload.checkoutSessionId || null,
             shippingCurrency: shippingQuote.currency || 'INR',
             shippingTaxIncluded: shippingQuote.taxIncluded === true,
@@ -1290,6 +1290,7 @@ const getOrders = async (userId, isAdmin, page = 1, limit = 20, filters = {}) =>
     const where = isAdmin ? {} : { userId };
 
     const normalizedStatus = typeof filters.status === 'string' ? filters.status.trim() : '';
+    const normalizedShippingStatus = typeof filters.orderShippingStatus === 'string' ? filters.orderShippingStatus.trim() : '';
     const normalizedSearch = typeof filters.search === 'string' ? filters.search.trim() : '';
     const productId = filters.productId;
     // We'll apply productId filter inside the include to stay subQuery-safe
@@ -1302,6 +1303,11 @@ const getOrders = async (userId, isAdmin, page = 1, limit = 20, filters = {}) =>
     if (normalizedStatus) {
         const statuses = normalizedStatus.split(',').map(s => s.trim()).filter(Boolean);
         where.status = statuses.length === 1 ? statuses[0] : { [Op.in]: statuses };
+    }
+
+    if (normalizedShippingStatus) {
+        const shippingStatuses = normalizedShippingStatus.split(',').map(s => s.trim()).filter(Boolean);
+        where.orderShippingStatus = shippingStatuses.length === 1 ? shippingStatuses[0] : { [Op.in]: shippingStatuses };
     }
 
     const include = [];

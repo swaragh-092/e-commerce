@@ -25,6 +25,7 @@ import UndoOutlinedIcon from '@mui/icons-material/UndoOutlined';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 
 import { useCurrency } from '../../hooks/useSettings';
+import { PAYMENT_SETTLED_STATUSES } from '../../utils/constants';
 import { confirmCodPayment, getAllOrders, refundOrder, updateOrderStatus } from '../../services/adminService';
 import { useNotification } from '../../context/NotificationContext';
 import { useAuth } from '../../hooks/useAuth';
@@ -337,7 +338,7 @@ const OrdersManagePage = () => {
         renderCell: ({ row }) => {
           const paymentStatus = row.Payment?.status;
           const shippingStatus = row.orderShippingStatus || row.shipmentStatus || 'not_shipped';
-          const hasSettledPayment = ['paid_online', 'paid_cod', 'completed', 'cod_collected'].includes(paymentStatus);
+          const hasSettledPayment = PAYMENT_SETTLED_STATUSES.includes(paymentStatus);
           const canCollectCod = canUpdateStatus
             && row.paymentMethod === 'cod'
             && shippingStatus === 'delivered'

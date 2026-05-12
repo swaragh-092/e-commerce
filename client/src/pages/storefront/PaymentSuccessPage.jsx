@@ -74,11 +74,23 @@ const PaymentSuccessPage = () => {
     const query = new URLSearchParams(location.search);
     const orderId = location.state?.orderId || query.get('orderId');
     const isCod = location.state?.isCod;
+    
+    const [order, setOrder] = React.useState(null);
+    const [fetchingOrder, setFetchingOrder] = React.useState(!!orderId && !location.state?.orderNumber);
+
+    const orderNumber = location.state?.orderNumber || order?.orderNumber;
     const orderDetailPath = orderId ? `/account/orders/${orderId}` : '/orders';
 
     useEffect(() => {
         fetchCart();
-    }, [fetchCart]);
+        
+        if (orderId && !location.state?.orderNumber) {
+            orderService.getMyOrderById(orderId)
+                .then(setOrder)
+                .catch(console.error)
+                .finally(() => setFetchingOrder(false));
+        }
+    }, [fetchCart, orderId, location.state?.orderNumber]);
 
     return (
         <Container maxWidth="md" sx={{ py: { xs: 5, md: 8 } }}>
@@ -167,7 +179,7 @@ const PaymentSuccessPage = () => {
                 </Typography>
                 <Typography color="text.secondary" sx={{ maxWidth: 560, mx: 'auto', mb: 3, lineHeight: 1.7 }}>
                     Thank you for your order. We are getting it ready now and will keep you updated as it moves forward.
-                    {orderId && ` Order reference: #${orderId}`}
+                    {orderNumber ? ` Order reference: #${orderNumber}` : orderId ? ` Order reference: #${orderId}` : ''}
                 </Typography>
 
                 <Stack

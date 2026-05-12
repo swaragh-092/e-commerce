@@ -49,6 +49,8 @@ const PaymentSuccessPage = lazy(() => import('../pages/storefront/PaymentSuccess
 const PaymentFailurePage = lazy(() => import('../pages/storefront/PaymentFailurePage'));
 const HomePage = lazy(() => import('../pages/storefront/HomePage'));
 const SearchResultsPage = lazy(() => import('../pages/storefront/SearchResultsPage'));
+const StoreBrandsPage = lazy(() => import('../pages/storefront/BrandsPage'));
+const BrandDetailPage = lazy(() => import('../pages/storefront/BrandDetailPage'));
 const NotFoundPage = lazy(() => import('../pages/storefront/NotFoundPage'));
 
 // Admin pages
@@ -118,6 +120,8 @@ const AppRoutes = () => (
         <Route path="category/:categorySlug" element={<ProductListPage />} />
         <Route path="p/:slug" element={<StaticPageView />} />
         <Route path="search" element={<SearchResultsPage />} />
+        <Route path="brands" element={<StoreBrandsPage />} />
+        <Route path="brands/:slug" element={<BrandDetailPage />} />
         <Route path="cart" element={<CartPage />} />
 
         {/* Auth */}

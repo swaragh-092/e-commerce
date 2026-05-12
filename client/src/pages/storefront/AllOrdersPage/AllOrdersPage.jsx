@@ -33,6 +33,7 @@ import {
     HourglassEmpty as ProcessingIcon,
     Inventory2 as PlacedIcon,
     Done as ConfirmedIcon,
+    UndoOutlined as UndoOutlinedIcon,
 } from '@mui/icons-material';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import PageSEO from '../../../components/common/PageSEO';
@@ -53,6 +54,7 @@ const ORDER_STATUSES = [
     { value: 'processing', label: 'Processing' },
     { value: 'shipped',    label: 'On the way' },
     { value: 'delivered',  label: 'Delivered' },
+    { value: 'closed',     label: 'Closed' },
     { value: 'cancelled',  label: 'Cancelled' },
 ];
 
@@ -70,12 +72,15 @@ const LIMIT = 10;
 const STATUS_CONFIG = {
     pending_payment: { icon: ProcessingIcon, bg: '#FFFBEB', color: '#B45309', border: '#FDE68A' },
     placed:     { icon: PlacedIcon,     bg: '#FFF7ED', color: '#C2410C', border: '#FED7AA' },
+    on_hold:    { icon: ScheduleIcon,   bg: '#FFFBEB', color: '#92400E', border: '#FDE68A' },
     confirmed:  { icon: ConfirmedIcon,  bg: '#F0FDF4', color: '#15803D', border: '#BBF7D0' },
     processing: { icon: ProcessingIcon, bg: '#EFF6FF', color: '#1D4ED8', border: '#BFDBFE' },
+    ready_for_shipment: { icon: ShippingIcon, bg: '#F5F3FF', color: '#6D28D9', border: '#DDD6FE' },
     shipped:    { icon: ShippingIcon,   bg: '#F5F3FF', color: '#6D28D9', border: '#DDD6FE' },
     delivered:  { icon: CheckCircleIcon,bg: '#F0FDF4', color: '#15803D', border: '#BBF7D0' },
-    closed:     { icon: CheckCircleIcon,bg: '#052E16', color: '#BBF7D0', border: '#166534' },
+    closed:     { icon: CheckCircleIcon,bg: '#ECFDF5', color: '#065F46', border: '#A7F3D0' },
     cancelled:  { icon: CancelIcon,     bg: '#FFF1F2', color: '#BE123C', border: '#FECDD3' },
+    rto:        { icon: UndoOutlinedIcon,bg: '#F8FAFC', color: '#475569', border: '#CBD5E1' },
 };
 
 // ─── Hooks ────────────────────────────────────────────────────────────────────
