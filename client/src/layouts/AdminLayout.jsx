@@ -23,6 +23,10 @@ import {
 } from '@mui/material';
 import { alpha } from '@mui/material/styles';
 import SearchIcon from '@mui/icons-material/Search';
+import PushPinIcon from '@mui/icons-material/PushPin';
+import PushPinOutlinedIcon from '@mui/icons-material/PushPinOutlined';
+import DragIndicatorIcon from '@mui/icons-material/DragIndicator';
+import { DragDropContext, Droppable, Draggable } from '@hello-pangea/dnd';
 import { Outlet, Link as RouterLink, useLocation } from 'react-router-dom';
 import DashboardIcon from '@mui/icons-material/Dashboard';
 import InventoryIcon from '@mui/icons-material/Inventory';
@@ -131,6 +135,15 @@ const AdminLayout = () => {
   const [isCollapsed, setIsCollapsed] = useState(false);
   const [openGroups, setOpenGroups] = useState({});
   const [searchQuery, setSearchQuery] = useState('');
+  const [favorites, setFavorites] = useState(() => {
+    const saved = localStorage.getItem('admin_sidebar_favorites');
+    return saved ? JSON.parse(saved) : [];
+  });
+  const [groupOrder, setGroupOrder] = useState(() => {
+    const saved = localStorage.getItem('admin_sidebar_group_order');
+    return saved ? JSON.parse(saved) : MENU_STRUCTURE.filter(i => i.title).map(i => i.title);
+  });
+
   const searchInputRef = React.useRef(null);
 
   const { logout, user, hasAnyPermission, hasPermission } = useAuth();
@@ -149,9 +162,27 @@ const AdminLayout = () => {
   const handleGroupToggle = (title) => {
     setOpenGroups((prev) => {
       const isOpen = prev[title];
-      // Accordion: Close others when opening one. Toggle if already open.
       return isOpen ? {} : { [title]: true };
     });
+  };
+
+  const toggleFavorite = (e, path) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setFavorites(prev => {
+      const next = prev.includes(path) ? prev.filter(p => p !== path) : [...prev, path];
+      localStorage.setItem('admin_sidebar_favorites', JSON.stringify(next));
+      return next;
+    });
+  };
+
+  const onDragEnd = (result) => {
+    if (!result.destination) return;
+    const newOrder = Array.from(groupOrder);
+    const [reorderedItem] = newOrder.splice(result.source.index, 1);
+    newOrder.splice(result.destination.index, 0, reorderedItem);
+    setGroupOrder(newOrder);
+    localStorage.setItem('admin_sidebar_group_order', JSON.stringify(newOrder));
   };
 
   const isActive = (path) =>
@@ -222,15 +253,24 @@ const AdminLayout = () => {
     if (!isItemVisible(item)) return null;
 
     const active = isActive(item.path);
+    const isFavorited = favorites.includes(item.path);
 
     return (
-      <ListItem key={item.text} disablePadding sx={{ position: 'relative', px: 1 }}>
+      <ListItem 
+        key={item.text} 
+        disablePadding 
+        sx={{ 
+          position: 'relative', 
+          px: 1,
+          '&:hover .pin-action': { opacity: 1 }
+        }}
+      >
         {/* Professional Active Indicator Bar */}
         {active && !isCollapsed && (
           <Box
             sx={{
               position: 'absolute',
-              left: 4, // Slightly inset for a modern look
+              left: 4,
               top: '20%',
               bottom: '20%',
               width: 4,
@@ -248,10 +288,11 @@ const AdminLayout = () => {
             selected={active}
             onClick={() => isMobile && setMobileOpen(false)}
             sx={{
-              borderRadius: '12px', // More modern rounded corners
+              borderRadius: '12px',
               mb: 0.5,
-              py: 1.25,
+              py: 1,
               pl: isNested ? (isCollapsed ? 1.5 : 4.5) : 2.5,
+              pr: isCollapsed ? 0 : 4,
               justifyContent: isCollapsed ? 'center' : 'initial',
               transition: 'all 0.25s cubic-bezier(0.4, 0, 0.2, 1)',
               '&:hover': {
@@ -264,24 +305,13 @@ const AdminLayout = () => {
               '&.Mui-selected': {
                 bgcolor: (theme) => alpha(theme.palette.primary.main, 0.08),
                 color: 'primary.main',
-                boxShadow: 'none',
-                '& .MuiListItemIcon-root': { 
-                  color: 'primary.main',
-                  transform: 'scale(1.1)',
-                },
-                '& .MuiListItemText-primary': {
-                  color: 'primary.main',
-                  fontWeight: 700,
-                },
-                '&:hover': { 
-                  bgcolor: (theme) => alpha(theme.palette.primary.main, 0.12),
-                },
+                '& .MuiListItemIcon-root': { color: 'primary.main', transform: 'scale(1.1)' },
+                '& .MuiListItemText-primary': { color: 'primary.main', fontWeight: 700 },
               },
             }}
           >
             <ListItemIcon sx={{ 
               minWidth: isCollapsed ? 0 : 38, 
-              mr: isCollapsed ? 0 : 0,
               transition: 'all 0.25s cubic-bezier(0.4, 0, 0.2, 1)',
               color: active ? 'primary.main' : 'text.secondary',
               display: 'flex',
@@ -293,12 +323,29 @@ const AdminLayout = () => {
               <ListItemText 
                 primary={item.text} 
                 primaryTypographyProps={{ 
-                  fontSize: 14, 
+                  fontSize: 13, 
                   fontWeight: active ? 700 : 500,
-                  transition: 'all 0.2s ease',
-                  letterSpacing: '0.01em',
                 }} 
               />
+            )}
+            
+            {/* Pin Toggle */}
+            {!isCollapsed && (
+              <IconButton
+                className="pin-action"
+                size="small"
+                onClick={(e) => toggleFavorite(e, item.path)}
+                sx={{
+                  position: 'absolute',
+                  right: 8,
+                  opacity: isFavorited ? 0.8 : 0,
+                  transition: 'opacity 0.2s',
+                  color: isFavorited ? 'primary.main' : 'text.disabled',
+                  '&:hover': { color: 'primary.main' }
+                }}
+              >
+                {isFavorited ? <PushPinIcon sx={{ fontSize: 14 }} /> : <PushPinOutlinedIcon sx={{ fontSize: 14 }} />}
+              </IconButton>
             )}
           </ListItemButton>
         </Tooltip>
@@ -306,7 +353,7 @@ const AdminLayout = () => {
     );
   };
 
-  const renderMenuSection = (section) => {
+  const renderMenuSection = (section, draggableProps = {}, dragHandleProps = {}) => {
     if (section.items) {
       const visibleItems = section.items.filter(isItemVisible);
       if (visibleItems.length === 0) return null;
@@ -315,20 +362,35 @@ const AdminLayout = () => {
 
       return (
         <React.Fragment key={section.title}>
-          <ListItem disablePadding>
+          <ListItem disablePadding {...draggableProps} sx={{ mb: 0.5 }}>
             <Tooltip title={isCollapsed ? section.title : ""} placement="right">
               <ListItemButton
                 onClick={() => handleGroupToggle(section.title)}
                 sx={{
                   mx: 1,
                   borderRadius: 2,
-                  mb: 0.25,
                   justifyContent: isCollapsed ? 'center' : 'initial',
+                  '&:hover .drag-handle': { opacity: 0.5 }
                 }}
               >
+                {!isCollapsed && (
+                  <Box 
+                    className="drag-handle" 
+                    {...dragHandleProps} 
+                    sx={{ 
+                      mr: 1, 
+                      opacity: 0, 
+                      transition: 'opacity 0.2s',
+                      display: 'flex',
+                      cursor: 'grab',
+                      '&:active': { cursor: 'grabbing' }
+                    }}
+                  >
+                    <DragIndicatorIcon sx={{ fontSize: 18, color: 'text.disabled' }} />
+                  </Box>
+                )}
                 <ListItemIcon sx={{ 
-                  minWidth: isCollapsed ? 0 : 36, 
-                  mr: isCollapsed ? 0 : 0,
+                  minWidth: isCollapsed ? 0 : 30, 
                   transition: 'all 0.3s ease',
                   transform: isOpen ? 'scale(1.1)' : 'none',
                   color: isOpen ? 'primary.main' : 'inherit',
@@ -340,7 +402,7 @@ const AdminLayout = () => {
                     <ListItemText 
                       primary={section.title} 
                       primaryTypographyProps={{ 
-                        fontSize: 12, 
+                        fontSize: 11, 
                         fontWeight: 700, 
                         letterSpacing: 1,
                         textTransform: 'uppercase',
@@ -399,9 +461,54 @@ const AdminLayout = () => {
       </Box>
 
       <Box sx={{ flexGrow: 1, overflowY: 'auto', overflowX: 'hidden', py: 1 }}>
-        <List dense>
-          {MENU_STRUCTURE.map(section => renderMenuSection(section))}
-        </List>
+        {/* Favorites Section */}
+        {favorites.length > 0 && (
+          <>
+            <Box sx={{ px: 2, py: 1, display: isCollapsed ? 'none' : 'block' }}>
+              <Typography variant="caption" sx={{ fontWeight: 800, color: 'primary.main', letterSpacing: 1.5, textTransform: 'uppercase', fontSize: 10 }}>
+                Favorites
+              </Typography>
+            </Box>
+            <List dense disablePadding>
+              {MENU_STRUCTURE.flatMap(s => s.items || [s])
+                .filter(i => favorites.includes(i.path))
+                .map(item => renderMenuItem(item, false))}
+            </List>
+            <Divider sx={{ my: 1.5, mx: 2, opacity: 0.5 }} />
+          </>
+        )}
+
+        <DragDropContext onDragEnd={onDragEnd}>
+          <Droppable droppableId="sidebar-groups">
+            {(provided) => (
+              <List dense {...provided.droppableProps} ref={provided.innerRef}>
+                {/* Top level items (like Dashboard) */}
+                {MENU_STRUCTURE.filter(i => !i.title).map(item => renderMenuItem(item))}
+
+                {/* Reorderable Groups */}
+                {groupOrder.map((groupTitle, index) => {
+                  const section = MENU_STRUCTURE.find(s => s.title === groupTitle);
+                  if (!section) return null;
+                  
+                  return (
+                    <Draggable key={groupTitle} draggableId={groupTitle} index={index}>
+                      {(provided) => (
+                        <Box
+                          ref={provided.innerRef}
+                          {...provided.draggableProps}
+                        >
+                          {renderMenuSection(section, {}, provided.dragHandleProps)}
+                        </Box>
+                      )}
+                    </Draggable>
+                  );
+                })}
+                {provided.placeholder}
+              </List>
+            )}
+          </Droppable>
+        </DragDropContext>
+
         <Divider sx={{ my: 1, opacity: 0.6 }} />
         <List dense>
           <ListItem disablePadding>
