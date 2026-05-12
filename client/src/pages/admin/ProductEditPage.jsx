@@ -164,6 +164,17 @@ const toDateTimeLocal = (value) => {
 
 const toIsoOrNull = (value) => (value ? new Date(value).toISOString() : null);
 
+const getAttributeRowName = (row) => (
+  row?.attribute?.name || row?.customName || 'Attribute'
+);
+
+const getAttributeRowValue = (row) => (
+  row?.value?.displayLabel
+  || row?.value?.value
+  || row?.customValue
+  || 'Default'
+);
+
 const ProductEditPage = () => {
   const { id } = useParams();
   const navigate = useNavigate();
@@ -2046,7 +2057,7 @@ const VariantsPanel = ({
               <Box sx={{ display: 'grid', gap: 1 }}>
                 {Object.entries(
                   productAttributes.reduce((acc, row) => {
-                    const label = row.attribute?.name || row.customName || 'Other';
+                    const label = getAttributeRowName(row);
                     if (!acc[label]) acc[label] = [];
                     acc[label].push(row);
                     return acc;
@@ -2126,7 +2137,7 @@ const VariantsPanel = ({
               {variantAttributeRows.length === 0 ? (
                 <Chip size="small" label="No variant-forming attributes selected yet" variant="outlined" />
               ) : variantAttributeRows.map((row) => (
-                <Chip key={row.id} size="small" color="primary" label={`${row.attribute?.name || row.customName}: ${row.value?.value || row.customValue}`} />
+                <Chip key={row.id} size="small" color="primary" label={`${getAttributeRowName(row)}: ${getAttributeRowValue(row)}`} />
               ))}
             </Box>
 
