@@ -3,6 +3,7 @@ const Joi = require('joi');
 const {
     ORDER_STATUS_VALUES,
     SHIPMENT_STATUS_VALUES,
+    ORDER_SHIPPING_STATUS_VALUES,
     PUT_BACK_RECORD_STATUS_VALUES,
     REFUND_STATUS_VALUES,
 } = require('../../utils/orderWorkflow');
@@ -95,7 +96,7 @@ const listOrdersQuerySchema = Joi.object({
     page: Joi.number().integer().min(1).default(1),
     limit: Joi.number().integer().min(1).max(100).default(20),
     status: csvEnum(ORDER_STATUS_VALUES).optional(),
-    orderShippingStatus: csvEnum([...SHIPMENT_STATUS_VALUES, 'not_shipped']).optional(),
+    orderShippingStatus: csvEnum(ORDER_SHIPPING_STATUS_VALUES).optional(),
     search: Joi.string().max(200).trim().optional(),
     productId: Joi.string().uuid().optional(),
 });
