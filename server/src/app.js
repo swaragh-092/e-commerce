@@ -26,7 +26,7 @@ app.use(
     origin: (origin, callback) => {
       const allowedOrigins = (
         process.env.CLIENT_URL ||
-        'http://localhost:5173,http://localhost:3000,http://localhost:3001,http://localhost'
+        'http://localhost:5173,http://localhost:3000,http://localhost:3001,http://localhost,https://d5ozzq0sqe1pj.cloudfront.net'
       ).split(',');
       if (!origin || allowedOrigins.includes(origin)) {
         callback(null, true);
