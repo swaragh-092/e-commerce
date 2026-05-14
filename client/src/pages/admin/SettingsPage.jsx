@@ -1799,6 +1799,17 @@ const SettingsPage = () => {
     ],
     [
       section(
+        'API Builder',
+        'Control whether admins can create public custom APIs from catalog, content, menu, and setting data.',
+        <>
+          {toggle('features.apiBuilder', 'Enable API Builder')}
+          <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mt: 0.5 }}>
+            When disabled, saved custom API URLs stop responding and the admin builder is hidden from the sidebar.
+          </Typography>
+        </>,
+        ['api builder', 'custom api', 'dynamic api', 'public api']
+      ),
+      section(
         'SEO & Discovery',
         'Set defaults for search engines, social sharing, and analytics snippets.',
         <>

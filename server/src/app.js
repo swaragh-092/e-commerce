@@ -117,6 +117,7 @@ const enquiryRoutes = require('./modules/enquiry/enquiry.routes');
 const enquiryAdminRoutes = require('./modules/enquiry/enquiry.admin.routes');
 const searchRoutes = require('./modules/search/search.routes');
 const reviewAdminRoutes = require('./modules/review/review.admin.routes');
+const apiBuilderRoutes = require('./modules/apiBuilder/apiBuilder.routes');
 
 app.use('/api/seo', seoRoutes);
 app.use('/api/settings', settingsRoutes);
@@ -154,6 +155,7 @@ app.use('/api/menus', menuRoutes);
 app.use('/api/notifications', notificationRoutes);
 app.use('/api/enquiries', enquiryRoutes);
 app.use('/api/search', searchRoutes);
+app.use('/api/api-builder', apiBuilderRoutes);
 
 // Health check endpoint
 app.get('/health', async (req, res) => {
