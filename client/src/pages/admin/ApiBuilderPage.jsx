@@ -185,6 +185,57 @@ const parseQueryText = (text = '') => {
   return Object.fromEntries(new URLSearchParams(trimmed).entries());
 };
 
+const idsFrom = (items = []) => new Set(items.filter(Boolean));
+
+const getRelatedOptionIds = (parentNode, relationMeta, allOptions) => {
+  if (!parentNode || !relationMeta || parentNode.mode !== 'selected') return null;
+  const parentIds = idsFrom(parentNode.selectedIds || []);
+  if (!parentIds.size) return new Set();
+
+  if (parentNode.resource === 'categories' && relationMeta.key === 'products') {
+    return new Set((allOptions.products || [])
+      .filter((product) => (product.categories || []).some((category) => parentIds.has(category.id)))
+      .map((product) => product.id));
+  }
+
+  if (parentNode.resource === 'products' && relationMeta.key === 'categories') {
+    return new Set((allOptions.products || [])
+      .filter((product) => parentIds.has(product.id))
+      .flatMap((product) => product.categories || [])
+      .map((category) => category.id));
+  }
+
+  if (parentNode.resource === 'products' && relationMeta.key === 'brand') {
+    return new Set((allOptions.products || [])
+      .filter((product) => parentIds.has(product.id) && product.brandId)
+      .map((product) => product.brandId));
+  }
+
+  if (parentNode.resource === 'brands' && relationMeta.key === 'products') {
+    return new Set((allOptions.products || [])
+      .filter((product) => parentIds.has(product.brandId))
+      .map((product) => product.id));
+  }
+
+  return null;
+};
+
+const pruneRelatedSelections = (node, allOptions) => {
+  if (!Array.isArray(node.relations) || node.relations.length === 0) return node;
+
+  const relations = node.relations.map((relationNode) => {
+    const relationMeta = (RESOURCE_RELATIONS[node.resource] || []).find((item) => item.key === relationNode.relation);
+    const relatedIds = getRelatedOptionIds(node, relationMeta, allOptions);
+    const selectedIds = relationNode.mode === 'selected' && relatedIds
+      ? (relationNode.selectedIds || []).filter((id) => relatedIds.has(id))
+      : relationNode.selectedIds;
+
+    return pruneRelatedSelections({ ...relationNode, selectedIds }, allOptions);
+  });
+
+  return { ...node, relations };
+};
+
 const ApiBuilderPage = () => {
   const [definitions, setDefinitions] = useState([]);
   const [selectedId, setSelectedId] = useState(null);
@@ -253,7 +304,7 @@ const ApiBuilderPage = () => {
   const updateNode = (blockIndex, path, patch) => {
     const blocks = [...(form.config.blocks || [])];
     if (!path.length) {
-      blocks[blockIndex] = { ...blocks[blockIndex], ...patch };
+      blocks[blockIndex] = pruneRelatedSelections({ ...blocks[blockIndex], ...patch }, options);
       setBlocks(blocks);
       return;
     }
@@ -262,7 +313,7 @@ const ApiBuilderPage = () => {
       const relationIndex = path[depth];
       const relations = [...(node.relations || [])];
       if (depth === path.length - 1) {
-        relations[relationIndex] = { ...relations[relationIndex], ...patch };
+        relations[relationIndex] = pruneRelatedSelections({ ...relations[relationIndex], ...patch }, options);
       } else {
         relations[relationIndex] = visit(relations[relationIndex], depth + 1);
       }
@@ -533,8 +584,16 @@ const ApiBuilderPage = () => {
     </Box>
   );
 
-  const renderSelectedPicker = (node, onPatch) => {
-    const resourceOptions = options[node.resource] || [];
+  const renderSelectedPicker = (node, onPatch, relationMeta = null, parentNode = null) => {
+    const baseOptions = options[node.resource] || [];
+    const relatedIds = getRelatedOptionIds(parentNode, relationMeta, options);
+    const resourceOptions = relatedIds
+      ? baseOptions.filter((option) => relatedIds.has(option.id))
+      : baseOptions;
+    const scopedOutSelectedIds = relatedIds
+      ? (node.selectedIds || []).filter((id) => !relatedIds.has(id))
+      : [];
+
     if (!resourceOptions.length) {
       return (
         <TextField
@@ -543,20 +602,34 @@ const ApiBuilderPage = () => {
           label="Selected IDs"
           value={(node.selectedIds || []).join(', ')}
           onChange={(event) => onPatch({ selectedIds: event.target.value.split(',').map((id) => id.trim()).filter(Boolean) })}
-          helperText="Enter comma-separated IDs for resources that do not have a picker."
+          helperText={relatedIds ? 'No related records found for the selected parent records.' : 'Enter comma-separated IDs for resources that do not have a picker.'}
         />
       );
     }
     return (
-      <Autocomplete
-        multiple
-        size="small"
-        options={resourceOptions}
-        getOptionLabel={(option) => option.label || option.name || option.title || option.filename || option.slug || option.id}
-        value={resourceOptions.filter((option) => (node.selectedIds || []).includes(option.id))}
-        onChange={(_, value) => onPatch({ selectedIds: value.map((item) => item.id) })}
-        renderInput={(params) => <TextField {...params} label={`Pick ${RESOURCE_LABELS[node.resource]}`} placeholder="Search and select" />}
-      />
+      <Box>
+        <Autocomplete
+          multiple
+          size="small"
+          options={resourceOptions}
+          getOptionLabel={(option) => option.label || option.name || option.title || option.filename || option.slug || option.id}
+          value={resourceOptions.filter((option) => (node.selectedIds || []).includes(option.id))}
+          onChange={(_, value) => onPatch({ selectedIds: value.map((item) => item.id) })}
+          renderInput={(params) => (
+            <TextField
+              {...params}
+              label={`Pick ${RESOURCE_LABELS[node.resource]}`}
+              placeholder="Search and select"
+              helperText={relatedIds ? `Showing only records related to the selected ${RESOURCE_LABELS[parentNode.resource] || parentNode.resource}.` : undefined}
+            />
+          )}
+        />
+        {scopedOutSelectedIds.length > 0 && (
+          <Alert severity="warning" sx={{ mt: 1 }}>
+            {scopedOutSelectedIds.length} previously selected item(s) are not related to the selected parent and will not appear in this include.
+          </Alert>
+        )}
+      </Box>
     );
   };
 
@@ -722,7 +795,7 @@ const ApiBuilderPage = () => {
                     {renderPaginationControls(relationNode, childPatch)}
                   </Grid>
                   {relationNode.mode === 'selected' && (
-                    <Grid item xs={12}>{renderSelectedPicker(relationNode, childPatch)}</Grid>
+                    <Grid item xs={12}>{renderSelectedPicker(relationNode, childPatch, relationMeta, node)}</Grid>
                   )}
                   <Grid item xs={12}>{renderFieldPicker(relationNode, childPatch)}</Grid>
                   <Grid item xs={12}>
