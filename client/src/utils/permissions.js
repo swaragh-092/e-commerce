@@ -34,6 +34,7 @@ export const ADMIN_ROUTE_PERMISSION_MAP = Object.freeze([
   { path: '/admin/email-templates', permissions: [PERMISSIONS.SETTINGS_READ, PERMISSIONS.NOTIFICATIONS_MANAGE] },
   { path: '/admin/pages', permissions: [PERMISSIONS.PAGES_READ, PERMISSIONS.PAGES_MANAGE] },
   { path: '/admin/menus', permissions: [PERMISSIONS.MENUS_READ, PERMISSIONS.MENUS_MANAGE] },
+  { path: '/admin/api-builder', permissions: [PERMISSIONS.SETTINGS_READ, PERMISSIONS.SETTINGS_MANAGE] },
   { path: '/admin/access-control', permissions: [PERMISSIONS.ROLES_READ, PERMISSIONS.ROLES_MANAGE, PERMISSIONS.SYSTEM_ROLES_MANAGE, PERMISSIONS.USERS_ASSIGN_ROLES] },
   { path: '/admin/audit-log', permissions: [PERMISSIONS.AUDIT_READ] },
 ]);

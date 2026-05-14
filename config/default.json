@@ -29,7 +29,8 @@
         "guestCheckout": true,
         "emailVerification": false,
         "requirePurchaseForReview": false,
-        "showAvailableCoupons": true
+        "showAvailableCoupons": true,
+        "apiBuilder": true
     },
     "payments": {
         "razorpayEnabled": true,
