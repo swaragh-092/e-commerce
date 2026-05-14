@@ -241,6 +241,11 @@ const CategoryDetailsPanel = ({ categoryId, categories, onEdit, onDelete, onAddC
                             <FolderIcon sx={{ fontSize: 36, color: 'text.secondary', opacity: 0.5 }} />
                         </Box>
                     )}
+                    {selectedCatNode.icon && (
+                        <Box sx={{ width: 40, height: 40, borderRadius: 1.5, overflow: 'hidden', flexShrink: 0, border: '1px solid', borderColor: 'divider', ml: -1.5, mt: 4, zIndex: 1, bgcolor: 'background.paper' }}>
+                            <img src={getMediaUrl(selectedCatNode.icon)} alt={`${selectedCatNode.name} icon`} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                        </Box>
+                    )}
                     <Box>
                         <Typography variant="h4" fontWeight={700} gutterBottom>{selectedCatNode.name}</Typography>
                         {selectedCatNode.description && (
@@ -434,6 +439,7 @@ const CategoriesPage = () => {
         description: '', 
         parentId: '', 
         image: '',
+        icon: '',
         metaTitle: '',
         metaDescription: '',
         metaKeywords: '',
@@ -443,6 +449,7 @@ const CategoriesPage = () => {
     const [attrCategory, setAttrCategory] = useState(null);
     const [formErrors, setFormErrors] = useState({});
     const [mediaPickerOpen, setMediaPickerOpen] = useState(false);
+    const [iconPickerOpen, setIconPickerOpen] = useState(false);
     const [ogPickerOpen, setOgPickerOpen] = useState(false);
 
     const { notify, confirm } = useNotification();
@@ -535,6 +542,7 @@ const CategoriesPage = () => {
             description: '', 
             parentId: parent?.id || '', 
             image: '',
+            icon: '',
             metaTitle: '',
             metaDescription: '',
             metaKeywords: '',
@@ -555,6 +563,7 @@ const CategoriesPage = () => {
             description: cat.description || '',
             parentId: cat.parentId || '',
             image: cat.image || '',
+            icon: cat.icon || '',
             metaTitle: cat.metaTitle || '',
             metaDescription: cat.metaDescription || '',
             metaKeywords: cat.metaKeywords || '',
@@ -586,6 +595,7 @@ const CategoriesPage = () => {
         try {
             const data = { ...formData, parentId: formData.parentId || null };
             if (!data.image) data.image = null;
+            if (!data.icon) data.icon = null;
             if (!data.ogImage) data.ogImage = null;
             if (!data.metaTitle) data.metaTitle = null;
             if (!data.metaDescription) data.metaDescription = null;
@@ -863,6 +873,47 @@ const CategoriesPage = () => {
                             </Box>
                         )}
                     </Box>
+            
+            <Box>
+                <Typography variant="subtitle2" sx={{ mb: 1.5, fontWeight: 600 }}>Category Icon</Typography>
+                {formData.icon ? (
+                    <Box sx={{ position: 'relative', width: 80, height: 80, borderRadius: 2, overflow: 'hidden', border: '1px solid', borderColor: 'divider' }}>
+                        <CardMedia
+                            component="img"
+                            image={getMediaUrl(formData.icon)}
+                            sx={{ width: '100%', height: '100%', objectFit: 'cover' }}
+                        />
+                        <IconButton 
+                            size="small" 
+                            onClick={() => setFormData(f => ({ ...f, icon: '' }))}
+                            sx={{ position: 'absolute', top: 4, right: 4, bgcolor: 'background.paper', p: 0.5 }}
+                        >
+                            <CloseIcon fontSize="inherit" />
+                        </IconButton>
+                    </Box>
+                ) : (
+                    <Box>
+                        <Button
+                            variant="outlined"
+                            size="small"
+                            onClick={() => setIconPickerOpen(true)}
+                        >
+                            Select Category Icon
+                        </Button>
+                        <MediaPicker
+                            open={iconPickerOpen}
+                            onClose={() => setIconPickerOpen(false)}
+                            onSelect={(selected) => {
+                                const media = Array.isArray(selected) ? selected[0] : selected;
+                                if (media?.url) setFormData(f => ({ ...f, icon: media.url }));
+                                setIconPickerOpen(false);
+                            }}
+                            multiple={false}
+                            title="Select Category Icon"
+                        />
+                    </Box>
+                )}
+            </Box>
 
                     <TextField
                         autoFocus

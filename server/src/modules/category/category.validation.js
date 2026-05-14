@@ -7,6 +7,7 @@ const createCategorySchema = Joi.object({
     description: Joi.string().allow('', null),
     parentId: Joi.string().uuid().allow(null),
     image: Joi.string().max(500).allow('', null),
+    icon: Joi.string().max(500).allow('', null),
     sortOrder: Joi.number().integer().default(0)
 });
 
@@ -15,6 +16,7 @@ const updateCategorySchema = Joi.object({
     description: Joi.string().allow('', null),
     parentId: Joi.string().uuid().allow(null),
     image: Joi.string().max(500).allow('', null),
+    icon: Joi.string().max(500).allow('', null),
     sortOrder: Joi.number().integer()
 }).min(1);
 

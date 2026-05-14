@@ -140,6 +140,7 @@
         "showCategoryBar": true
     },
     "catalog": {
+        "showCategoryIcon": false,
         "defaultSort": "newest",
         "defaultPageSize": 20,
         "priceRangeMax": 2000,

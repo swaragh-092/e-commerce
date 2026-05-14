@@ -25,6 +25,9 @@ module.exports = (sequelize, DataTypes) => {
         image: {
             type: DataTypes.STRING(500),
         },
+        icon: {
+            type: DataTypes.STRING(500),
+        },
         sortOrder: {
             type: DataTypes.INTEGER,
             defaultValue: 0,

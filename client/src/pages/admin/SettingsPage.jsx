@@ -1439,8 +1439,9 @@ const SettingsPage = () => {
               <MenuItem value={5}>5 levels deep</MenuItem>
             </Select>
           </FormControl>
+          {toggle('catalog.showCategoryIcon', 'Show category icons in storefront (if uploaded)')}
         </>,
-        ['catalog', 'sort', 'filters', 'grid', 'category depth']
+        ['catalog', 'sort', 'filters', 'grid', 'category depth', 'icon']
       ),
       section(
         'Product Page Experience',
