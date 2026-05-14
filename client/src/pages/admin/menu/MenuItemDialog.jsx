@@ -88,15 +88,26 @@ const MenuItemDialog = ({
                   <Select
                     label="Link Type"
                     value={itemForm.targetType}
-                    onChange={(e) =>
-                      setItemForm({
+                    onChange={(e) => {
+                      const newType = e.target.value;
+                      const oldTargetOption = targetOptions.find((opt) => opt.id === itemForm.targetId);
+                      const currentLabel = itemForm.label.trim();
+
+                      const updates = {
                         ...itemForm,
-                        targetType: e.target.value,
+                        targetType: newType,
                         targetId: '',
                         url: '',
                         openInNewTab: false,
-                      })
-                    }
+                      };
+
+                      // If label was auto-filled from the current target, clear it to allow the next target selection to auto-fill
+                      if (oldTargetOption && currentLabel === oldTargetOption.label) {
+                        updates.label = '';
+                      }
+
+                      setItemForm(updates);
+                    }}
                   >
                     <MenuItem value="none">Label Only (Category Header)</MenuItem>
                     <MenuItem value="custom_url">Custom URL</MenuItem>
@@ -115,7 +126,23 @@ const MenuItemDialog = ({
                     <Select
                       label="Select Target"
                       value={itemForm.targetId || ''}
-                      onChange={(e) => setItemForm({ ...itemForm, targetId: e.target.value })}
+                      onChange={(e) => {
+                        const newTargetId = e.target.value;
+                        const oldTargetOption = targetOptions.find((opt) => opt.id === itemForm.targetId);
+                        const newTargetOption = targetOptions.find((opt) => opt.id === newTargetId);
+
+                        const updates = { ...itemForm, targetId: newTargetId };
+
+                        // Auto-fill label if it's empty or matches the previously selected target's label
+                        const currentLabel = itemForm.label.trim();
+                        if (!currentLabel || (oldTargetOption && currentLabel === oldTargetOption.label)) {
+                          if (newTargetOption) {
+                            updates.label = newTargetOption.label;
+                          }
+                        }
+
+                        setItemForm(updates);
+                      }}
                     >
                       <MenuItem value=""><em>Choose an option...</em></MenuItem>
                       {targetOptions.map((target) => (
