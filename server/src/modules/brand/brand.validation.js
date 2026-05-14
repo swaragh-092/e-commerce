@@ -9,6 +9,7 @@ const createBrandSchema = Joi.object({
     image: Joi.string().max(500).allow('', null).optional(),
     isActive: Joi.boolean().optional(),
     isPromoted: Joi.boolean().optional(),
+    isFeatured: Joi.boolean().optional(),
 });
 
 const updateBrandSchema = Joi.object({
@@ -18,12 +19,14 @@ const updateBrandSchema = Joi.object({
     image: Joi.string().max(500).allow('', null).optional(),
     isActive: Joi.boolean().optional(),
     isPromoted: Joi.boolean().optional(),
+    isFeatured: Joi.boolean().optional(),
 });
 
 const queryBrandSchema = Joi.object({
     search: Joi.string().optional(),
     isActive: Joi.boolean().optional(),
     isPromoted: Joi.boolean().optional(),
+    isFeatured: Joi.boolean().optional(),
     withPublishedProducts: Joi.boolean().optional(),
     page: Joi.number().integer().min(1).optional(),
     limit: Joi.number().integer().min(1).max(1000).optional(),

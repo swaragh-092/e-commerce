@@ -8,7 +8,7 @@ const AppError = require('../../utils/AppError');
 const createBrand = async (data) => {
     const transaction = await Brand.sequelize.transaction();
     try {
-        const { name, slug, description, image, isActive = true, isPromoted = false } = data;
+        const { name, slug, description, image, isActive = true, isPromoted = false, isFeatured = false } = data;
         
         // Use text from slug if provided, otherwise name, and ensure uniqueness
         const finalSlug = await generateSlug(slug || name, Brand, 'slug', { transaction });
@@ -20,6 +20,7 @@ const createBrand = async (data) => {
             image,
             isActive,
             isPromoted,
+            isFeatured,
         }, { transaction });
         
         await transaction.commit();
@@ -35,6 +36,7 @@ const getBrands = async (query = {}, isAdmin = false) => {
         search,
         isActive,
         isPromoted,
+        isFeatured,
         withPublishedProducts,
         limit = 20,
         page = 1,
@@ -60,6 +62,10 @@ const getBrands = async (query = {}, isAdmin = false) => {
 
     if (isPromoted !== undefined) {
         where.isPromoted = isPromoted === 'true' || isPromoted === true;
+    }
+
+    if (isFeatured !== undefined) {
+        where.isFeatured = isFeatured === 'true' || isFeatured === true;
     }
 
     if (withPublishedProducts === 'true' || withPublishedProducts === true) {
@@ -156,7 +162,7 @@ const updateBrand = async (id, data) => {
             throw new AppError('BRAND_ERROR', 404, 'Brand not found');
         }
 
-        const { name, slug, description, image, isActive, isPromoted } = data;
+        const { name, slug, description, image, isActive, isPromoted, isFeatured } = data;
         
         let finalSlug = brand.slug;
         if (slug && slug !== brand.slug) {
@@ -174,6 +180,7 @@ const updateBrand = async (id, data) => {
             image: image !== undefined ? image : brand.image,
             isActive: isActive !== undefined ? isActive : brand.isActive,
             isPromoted: isPromoted !== undefined ? isPromoted : brand.isPromoted,
+            isFeatured: isFeatured !== undefined ? isFeatured : brand.isFeatured,
         }, { transaction });
 
         await transaction.commit();
