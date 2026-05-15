@@ -1,7 +1,6 @@
 import { useState, useEffect } from 'react';
 import { Box, AppBar, Toolbar, Typography, Button, IconButton, Badge, Menu, MenuItem, Divider, Avatar, Alert } from '@mui/material';
 import ShoppingCartIcon from '@mui/icons-material/ShoppingCart';
-import SearchIcon from '@mui/icons-material/Search';
 import CloseIcon from '@mui/icons-material/Close';
 import AccountCircleIcon from '@mui/icons-material/AccountCircle';
 import PersonIcon from '@mui/icons-material/Person';
@@ -299,7 +298,7 @@ const StoreLayout = () => {
           boxShadow: headerStyle === 'glass' ? '0 12px 28px rgba(15, 23, 42, 0.08)' : '0 14px 32px rgba(15, 23, 42, 0.18)',
         }}
       >
-        <Toolbar sx={{ minHeight: { xs: 64, md: 72 }, gap: 2 }}>
+        <Toolbar sx={{ minHeight: { xs: 64, md: 72 }, gap: 2, position: 'relative' }}>
           <Box
             component={RouterLink}
             to="/"
@@ -337,19 +336,23 @@ const StoreLayout = () => {
               display: { xs: 'none', md: 'flex' },
               alignItems: 'center',
               gap: 0.75,
-              minWidth: 0,
+              overflowX: 'auto',
+              whiteSpace: 'nowrap',
+              scrollbarWidth: 'thin',
+              '&::-webkit-scrollbar': { height: 4 },
+              '&::-webkit-scrollbar-thumb': { bgcolor: 'rgba(255,255,255,0.25)', borderRadius: 1 },
               ...(headerAlignment === 'center' 
                 ? { 
                     position: 'absolute', 
                     left: '50%', 
                     transform: 'translateX(-50%)',
-                    maxWidth: 'calc(100% - 350px)',
-                    overflowX: 'auto',
-                    whiteSpace: 'nowrap',
-                    scrollbarWidth: 'none',
-                    '&::-webkit-scrollbar': { display: 'none' }
+                    maxWidth: {
+                      md: 'calc(100% - 560px)',
+                      lg: 'calc(100% - 680px)',
+                      xl: 'calc(100% - 720px)',
+                    },
                   } 
-                : { overflow: 'hidden' }),
+                : { minWidth: { md: 120, lg: 200 }, flexShrink: 1 }),
             }}
 
           >
@@ -359,7 +362,7 @@ const StoreLayout = () => {
           {(headerAlignment === 'left' || headerAlignment === 'center') && <Box sx={{ flexGrow: 1, minWidth: 8 }} />}
 
           {/* Global Search Bar */}
-          <Box sx={{ display: { xs: 'none', md: 'flex' }, flexGrow: 1, maxWidth: 520, mx: 1 }}>
+          <Box sx={{ display: { xs: 'none', md: 'flex' }, width: { md: 200, lg: 320 }, flexShrink: 0, mx: 1 }}>
             <SearchWidget variant="header" />
           </Box>
 
@@ -387,16 +390,10 @@ const StoreLayout = () => {
           )}
 
           <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
-            {/* Mobile search icon — navigates to /search page */}
-            <IconButton
-              color="inherit"
-              component={RouterLink}
-              to="/search"
-              aria-label="Search products"
-              sx={{ display: { xs: 'inline-flex', md: 'none' }, '&:hover': { bgcolor: 'rgba(255,255,255,0.12)' } }}
-            >
-              <SearchIcon />
-            </IconButton>
+            {/* Mobile inline search — expandable SearchWidget */}
+            <Box sx={{ display: { xs: 'flex', md: 'none' }, alignItems: 'center' }}>
+              <SearchWidget variant="header" placeholder="Search..." sx={{ width: 160 }} />
+            </Box>
             {cartEnabled && (
               <IconButton color="inherit" component={RouterLink} to="/cart" sx={{ '&:hover': { bgcolor: 'rgba(255,255,255,0.12)' } }}>
                 <Badge badgeContent={cartCount || 0} color="error">

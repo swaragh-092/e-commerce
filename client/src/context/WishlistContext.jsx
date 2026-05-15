@@ -10,12 +10,12 @@ const WishlistContext = createContext({
   wishlistKeys: new Set(),
   wishlistCount: 0,
   isInWishlist: () => false,
+  setWishlistItem: () => {},
   refreshWishlist: async () => ({ items: [], meta: {} }),
 });
 
 export const WishlistProvider = ({ children }) => {
   const [wishlistKeys, setWishlistKeys] = useState(new Set());
-  const [wishlistCount, setWishlistCount] = useState(0);
   const { isAuthenticated } = useAuth();
   const { settings } = useSettings();
   const { notify } = useNotification();
@@ -24,7 +24,6 @@ export const WishlistProvider = ({ children }) => {
   const refreshWishlist = useCallback(async () => {
     if (!isAuthenticated || !wishlistEnabled) {
       setWishlistKeys(new Set());
-      setWishlistCount(0);
       return { items: [], meta: {} };
     }
     try {
@@ -43,14 +42,12 @@ export const WishlistProvider = ({ children }) => {
         })
       );
       setWishlistKeys(keys);
-      setWishlistCount(validItems.length);
       if (meta.unavailableRemovedCount > 0) {
         notify(`${meta.unavailableRemovedCount} unavailable wishlist item${meta.unavailableRemovedCount > 1 ? 's were' : ' was'} removed automatically.`, 'info');
       }
       return { items: validItems, meta };
     } catch (_) {
       setWishlistKeys(new Set());
-      setWishlistCount(0);
       return { items: [], meta: {} };
     }
   }, [isAuthenticated, wishlistEnabled, notify]);
@@ -61,8 +58,26 @@ export const WishlistProvider = ({ children }) => {
 
   const isInWishlist = useCallback((productId, variantId = null) => wishlistKeys.has(getWishlistKey(productId, variantId)), [wishlistKeys]);
 
+  const setWishlistItem = useCallback((productId, variantId = null, shouldExist) => {
+    const key = getWishlistKey(productId, variantId);
+    setWishlistKeys((currentKeys) => {
+      const alreadyExists = currentKeys.has(key);
+      if (alreadyExists === shouldExist) return currentKeys;
+
+      const nextKeys = new Set(currentKeys);
+      if (shouldExist) {
+        nextKeys.add(key);
+      } else {
+        nextKeys.delete(key);
+      }
+      return nextKeys;
+    });
+  }, []);
+
+  const wishlistCount = wishlistKeys.size;
+
   return (
-    <WishlistContext.Provider value={{ wishlistKeys, wishlistCount, isInWishlist, refreshWishlist }}>
+    <WishlistContext.Provider value={{ wishlistKeys, wishlistCount, isInWishlist, setWishlistItem, refreshWishlist }}>
       {children}
     </WishlistContext.Provider>
   );

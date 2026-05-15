@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { Box, CardMedia, Grid, Typography } from '@mui/material';
 import { getMediaUrl } from '../../utils/media';
 
-const ProductImages = ({ images, variantImages = [], selectedVariantId, thumbnailAlignment = 'horizontal' }) => {
+const ProductImages = ({ images, variantImages = [], selectedVariantId, thumbnailAlignment = 'horizontal', productName }) => {
   const clamp = (value) => Math.min(100, Math.max(0, value));
   const imageKey = (img) => img.id || img.mediaId || img.media?.id || img.url;
   const isVertical = thumbnailAlignment === 'vertical';
@@ -90,6 +90,7 @@ const ProductImages = ({ images, variantImages = [], selectedVariantId, thumbnai
               <CardMedia
                 component="img"
                 image={img.url}
+                alt={`${productName || 'Product'} thumbnail${img.scope === 'variant' ? ' (variant)' : ''}`}
                 sx={{
                   width: '100%',
                   height: '100%',
@@ -123,6 +124,7 @@ const ProductImages = ({ images, variantImages = [], selectedVariantId, thumbnai
         <CardMedia
           component="img"
           image={selectedImage}
+          alt={productName || 'Product image'}
           sx={{
             position: 'absolute',
             top: 0,
@@ -174,8 +176,8 @@ const ProductImages = ({ images, variantImages = [], selectedVariantId, thumbnai
           position: 'absolute',
           left: 'calc(100% + 20px)',
           top: 0,
-          width: { md: 360, lg: 420 },
-          height: { md: 460, lg: 560 },
+          width: { md: 'clamp(280px, 30vw, 360px)', lg: 'clamp(320px, 32vw, 420px)' },
+          height: { md: 'clamp(380px, 42vw, 460px)', lg: 'clamp(460px, 48vw, 560px)' },
           zIndex: 20,
           borderRadius: 1.5,
           border: '1px solid',
@@ -211,6 +213,7 @@ const ProductImages = ({ images, variantImages = [], selectedVariantId, thumbnai
                 <CardMedia
                   component="img"
                   image={img.url}
+                  alt={`${productName || 'Product'} thumbnail${img.scope === 'variant' ? ' (variant)' : ''}`}
                   sx={{
                     width: '100%',
                     height: '100%',

@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { Box, Button, Container, Pagination, Skeleton, Stack, Typography } from '@mui/material';
+import { Box, Breadcrumbs, Button, Container, Link as MuiLink, Pagination, Skeleton, Stack, Typography } from '@mui/material';
 import { Link as RouterLink, useParams } from 'react-router-dom';
 import PageSEO from '../../components/common/PageSEO';
 import ProductGrid from '../../components/product/ProductGrid';
@@ -21,43 +21,56 @@ const BrandDetailPage = () => {
   const [page, setPage] = useState(1);
 
   useEffect(() => {
-    const fetchBrand = async () => {
-      setLoadingBrand(true);
-      try {
-        const response = await brandService.getBrandBySlug(slug);
-        setBrand(response?.data?.data?.brand || null);
-      } catch (error) {
-        setBrand(null);
-      } finally {
-        setLoadingBrand(false);
+    const fetchData = async () => {
+      // On initial load (page 1), we fetch both brand info and the first page of products in one request
+      if (page === 1) {
+        setLoadingBrand(true);
+        setLoadingProducts(true);
+        try {
+          // Optimized: Fetch brand along with serialized products and metadata
+          const response = await brandService.getBrandBySlug(slug, {
+            productLimit: parseInt(catalog.defaultPageSize) || 20,
+            productOffset: 0,
+            // Map catalog sort to product fields if possible
+            productSortBy: catalog.defaultSort === 'newest' ? 'createdAt' : (catalog.defaultSort?.split('_')[0] || 'createdAt'),
+            productSortOrder: catalog.defaultSort?.endsWith('desc') ? 'DESC' : 'DESC' 
+          });
+          
+          const brandData = response?.data?.data?.brand;
+          setBrand(brandData || null);
+          setProducts(brandData?.products || []);
+          setMeta(brandData?.productMeta || { page: 1, totalPages: 1, total: 0 });
+        } catch (error) {
+          setBrand(null);
+          setProducts([]);
+          setMeta({ page: 1, totalPages: 1, total: 0 });
+        } finally {
+          setLoadingBrand(false);
+          setLoadingProducts(false);
+        }
+      } else {
+        // For subsequent pages, we fetch products independently
+        setLoadingProducts(true);
+        try {
+          const response = await getProducts({
+            brand: slug,
+            page,
+            limit: parseInt(catalog.defaultPageSize) || 20,
+            status: 'published',
+            sort: catalog.defaultSort || 'newest',
+          });
+          setProducts(response?.data || []);
+          setMeta(response?.meta || { page: 1, totalPages: 1, total: 0 });
+        } catch (error) {
+          setProducts([]);
+          setMeta({ page: 1, totalPages: 1, total: 0 });
+        } finally {
+          setLoadingProducts(false);
+        }
       }
     };
 
-    fetchBrand();
-  }, [slug]);
-
-  useEffect(() => {
-    const fetchProducts = async () => {
-      setLoadingProducts(true);
-      try {
-        const response = await getProducts({
-          brand: slug,
-          page,
-          limit: parseInt(catalog.defaultPageSize) || 20,
-          status: 'published',
-          sort: catalog.defaultSort || 'newest',
-        });
-        setProducts(response?.data || []);
-        setMeta(response?.meta || { page: 1, totalPages: 1, total: 0 });
-      } catch (error) {
-        setProducts([]);
-        setMeta({ page: 1, totalPages: 1, total: 0 });
-      } finally {
-        setLoadingProducts(false);
-      }
-    };
-
-    fetchProducts();
+    fetchData();
   }, [catalog.defaultPageSize, catalog.defaultSort, page, slug]);
 
   useEffect(() => {
@@ -83,9 +96,15 @@ const BrandDetailPage = () => {
     <Container maxWidth="xl" sx={{ py: 6 }}>
       <PageSEO
         title={brand?.name || 'Brand'}
-        description={brand?.description || 'Brand products'}
+        description={brand?.description || meta.total > 0 ? `Shop ${meta.total} products from ${brand?.name}` : 'Brand products'}
         image={brand?.image || undefined}
       />
+
+      <Breadcrumbs aria-label="breadcrumb" sx={{ mb: 3 }}>
+        <MuiLink component={RouterLink} underline="hover" color="inherit" to="/">Home</MuiLink>
+        <MuiLink component={RouterLink} underline="hover" color="inherit" to="/brands">Brands</MuiLink>
+        <Typography color="text.primary">{brand?.name || 'Brand'}</Typography>
+      </Breadcrumbs>
 
       <Box
         sx={{

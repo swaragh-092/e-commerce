@@ -1,7 +1,7 @@
 'use strict';
 
-const { Brand, Product } = require('../index');
-const { Op } = require('sequelize');
+const { Brand, Product, ProductImage, Tag, Media } = require('../index');
+const { Op, literal } = require('sequelize');
 const { generateSlug } = require('../../utils/slugify');
 const AppError = require('../../utils/AppError');
 
@@ -95,6 +95,11 @@ const getBrands = async (query = {}, isAdmin = false) => {
 
     const queryOptions = {
         where,
+        attributes: {
+            include: [
+                [literal('(SELECT COUNT(*) FROM "products" WHERE "products"."brand_id" = "Brand"."id" AND "products"."status" = \'published\' AND "products"."is_enabled" = true AND "products"."deleted_at" IS NULL)'), 'productCount'],
+            ],
+        },
         limit: parseInt(limit),
         offset: parseInt(offset),
         order: [[orderCol, orderDir]],
@@ -125,6 +130,9 @@ const getBrandBySlug = async (slug, isAdmin = false, query = {}) => {
         where.isActive = true;
     }
 
+    const productLimitNum = parseInt(productLimit) || 10;
+    const productOffsetNum = parseInt(query.productOffset) || 0;
+
     const productInclude = {
         model: Product,
         as: 'products',
@@ -134,16 +142,38 @@ const getBrandBySlug = async (slug, isAdmin = false, query = {}) => {
     // If not admin, only show active/published products
     if (!isAdmin) {
         productInclude.where = { status: 'published', isEnabled: true };
-        productInclude.limit = parseInt(productLimit) || 10;
-    } else {
-        // For admin, allow configurable limit but default to no limit if not specified
-        if (productLimit) {
-            productInclude.limit = parseInt(productLimit);
+    }
+
+    productInclude.include = [
+        {
+            model: ProductImage,
+            as: 'images',
+            required: false,
+            where: { variantId: null },
+            include: [{ model: Media, as: 'media', required: false }]
+        },
+        {
+            model: Tag,
+            as: 'tags',
+            through: { attributes: [] }
         }
+    ];
+
+    productInclude.limit = productLimitNum;
+    productInclude.offset = productOffsetNum;
+
+    // Add sorting for products if provided
+    if (query.productSortBy && query.productSortOrder) {
+        productInclude.order = [[query.productSortBy, query.productSortOrder]];
     }
 
     const brand = await Brand.findOne({
         where,
+        attributes: {
+            include: [
+                [literal('(SELECT COUNT(*) FROM "products" WHERE "products"."brand_id" = "Brand"."id" AND "products"."status" = \'published\' AND "products"."is_enabled" = true AND "products"."deleted_at" IS NULL)'), 'productCount'],
+            ],
+        },
         include: [productInclude]
     });
 
@@ -151,7 +181,17 @@ const getBrandBySlug = async (slug, isAdmin = false, query = {}) => {
         throw new AppError('BRAND_ERROR', 404, 'Brand not found');
     }
 
-    return brand;
+    const brandJson = brand.toJSON();
+    const productCount = parseInt(brandJson.productCount || 0);
+    
+    brandJson.productMeta = {
+        total: productCount,
+        page: Math.floor(productOffsetNum / productLimitNum) + 1,
+        limit: productLimitNum,
+        totalPages: Math.ceil(productCount / productLimitNum)
+    };
+
+    return brandJson;
 };
 
 const updateBrand = async (id, data) => {
@@ -168,9 +208,6 @@ const updateBrand = async (id, data) => {
         if (slug && slug !== brand.slug) {
             // If brand explicitly provides a new slug, ensure it's unique
             finalSlug = await generateSlug(slug, Brand, 'slug', { transaction });
-        } else if (name && name !== brand.name && !slug) {
-            // If name changes but no slug provided, generate new unique slug from name
-            finalSlug = await generateSlug(name, Brand, 'slug', { transaction });
         }
 
         await brand.update({
@@ -192,7 +229,7 @@ const updateBrand = async (id, data) => {
 };
 
 const deleteBrand = async (id) => {
-    const transaction = await sequelize.transaction();
+    const transaction = await Brand.sequelize.transaction();
     try {
         const brand = await Brand.findByPk(id, { transaction });
         if (!brand) {

@@ -14,6 +14,9 @@ import CheckCircleIcon from '@mui/icons-material/CheckCircle';
 import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
 import LocationOnIcon from '@mui/icons-material/LocationOn';
 import LockIcon from '@mui/icons-material/Lock';
+import PhoneIcon from '@mui/icons-material/Phone';
+import PaymentsIcon from '@mui/icons-material/Payments';
+import CreditCardIcon from '@mui/icons-material/CreditCard';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { AuthContext } from '../../context/AuthContext';
 import { useSettings, useCurrency, useFeature } from '../../hooks/useSettings';
@@ -140,7 +143,7 @@ const Section = ({ step, activeSection, completedSections, title, icon, summary,
             {/* Header */}
             <Box sx={{
                 display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-                px: 3, py: 2,
+                px: { xs: 2.5, md: 3 }, py: 2,
                 bgcolor: 'background.paper',
             }}>
                 <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5 }}>
@@ -176,7 +179,7 @@ const Section = ({ step, activeSection, completedSections, title, icon, summary,
 
             {/* Active content */}
             <Collapse in={isActive} unmountOnExit={false}>
-                <Box sx={{ px: 3, pb: 3, pt: 1 }}>
+                <Box sx={{ px: { xs: 2.5, md: 3 }, pb: 3, pt: 1 }}>
                     {children}
                 </Box>
             </Collapse>
@@ -440,7 +443,7 @@ const CheckoutPage = () => {
 
     const handleApplyCoupon = async (codeOverride) => {
         const code = codeOverride || couponCode;
-        if (!code) return;
+        if (!code || couponLoading) return;
         if (codeOverride) setCouponCode(codeOverride);
         setCouponLoading(true);
         setCouponResult(null);
@@ -621,7 +624,7 @@ const CheckoutPage = () => {
     return (
         <Container maxWidth="lg" sx={{ py: 4 }}>
             <PageSEO title="Checkout" type="noindex" />
-            <Typography variant="h4" fontWeight={700} mb={3}>Checkout</Typography>
+            <Typography variant="h4" component="h1" fontWeight={700} mb={3}>Checkout</Typography>
 
             {error && <Alert severity="error" onClose={() => setError(null)} sx={{ mb: 2 }}>{error}</Alert>}
 
@@ -651,7 +654,9 @@ const CheckoutPage = () => {
                                             {selectedAddress.city}{selectedAddress.state ? `, ${selectedAddress.state}` : ''} {selectedAddress.postalCode}, {selectedAddress.country}
                                         </Typography>
                                         {selectedAddress.phone && (
-                                            <Typography variant="body2" color="text.secondary">📞 {selectedAddress.phone}</Typography>
+                                            <Typography variant="body2" color="text.secondary" sx={{ display: 'flex', alignItems: 'center', gap: 0.5, mt: 0.25 }}>
+                                                <PhoneIcon sx={{ fontSize: 16 }} /> {selectedAddress.phone}
+                                            </Typography>
                                         )}
                                         {selectedAddress.gstin && (
                                             <Typography variant="body2" color="text.secondary">GSTIN: {selectedAddress.gstin}</Typography>
@@ -902,8 +907,16 @@ const CheckoutPage = () => {
                         title="Payment Method"
                         onEdit={() => editSection(3)}
                         summary={
-                            <Typography variant="body2" color="text.secondary">
-                                {paymentMethod === 'cod' ? '💵 Cash on Delivery' : '💳 Pay Online (Razorpay)'}
+                            <Typography variant="body2" color="text.secondary" sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
+                                {paymentMethod === 'cod' ? (
+                                    <>
+                                        <PaymentsIcon sx={{ fontSize: 16 }} /> Cash on Delivery
+                                    </>
+                                ) : (
+                                    <>
+                                        <CreditCardIcon sx={{ fontSize: 16 }} /> Pay Online
+                                    </>
+                                )}
                             </Typography>
                         }
                     >
@@ -1106,7 +1119,7 @@ const CheckoutPage = () => {
 
                             {totalSavings > 0 && (
                                 <Typography variant="body2" color="success.main" fontWeight={600} sx={{ textAlign: 'right', mt: 0.5 }}>
-                                    You save {formatPrice(totalSavings)} on this order 🎉
+                                    You save {formatPrice(totalSavings)} on this order
                                 </Typography>
                             )}
 
@@ -1168,42 +1181,42 @@ const CheckoutPage = () => {
                                 error={!!addrDialog.errors?.label} helperText={addrDialog.errors?.label} />
                         </Grid>
                         <Grid item xs={12} sm={6}>
-                            <TextField label="Full Name *" size="small" fullWidth required
+                            <TextField label="Full Name *" size="small" fullWidth required autoComplete="name"
                                 value={addrDialog.form.fullName} onChange={(e) => setAddrField('fullName', e.target.value)}
                                 error={!!addrDialog.errors?.fullName} helperText={addrDialog.errors?.fullName} />
                         </Grid>
                         <Grid item xs={12} sm={6}>
-                            <TextField label="Phone" size="small" fullWidth
+                            <TextField label="Phone" size="small" fullWidth autoComplete="tel"
                                 value={addrDialog.form.phone} onChange={(e) => setAddrField('phone', e.target.value)}
                                 error={!!addrDialog.errors?.phone} helperText={addrDialog.errors?.phone} />
                         </Grid>
                         <Grid item xs={12}>
-                            <TextField label="Address Line 1 *" size="small" fullWidth required
+                            <TextField label="Address Line 1 *" size="small" fullWidth required autoComplete="address-line1"
                                 value={addrDialog.form.addressLine1} onChange={(e) => setAddrField('addressLine1', e.target.value)}
                                 error={!!addrDialog.errors?.addressLine1} helperText={addrDialog.errors?.addressLine1} />
                         </Grid>
                         <Grid item xs={12}>
-                            <TextField label="Address Line 2" size="small" fullWidth
+                            <TextField label="Address Line 2" size="small" fullWidth autoComplete="address-line2"
                                 value={addrDialog.form.addressLine2} onChange={(e) => setAddrField('addressLine2', e.target.value)}
                                 error={!!addrDialog.errors?.addressLine2} helperText={addrDialog.errors?.addressLine2} />
                         </Grid>
                         <Grid item xs={12} sm={6}>
-                            <TextField label="City *" size="small" fullWidth required
+                            <TextField label="City *" size="small" fullWidth required autoComplete="address-level2"
                                 value={addrDialog.form.city} onChange={(e) => setAddrField('city', e.target.value)}
                                 error={!!addrDialog.errors?.city} helperText={addrDialog.errors?.city} />
                         </Grid>
                         <Grid item xs={12} sm={6}>
-                            <TextField label="State / Province" size="small" fullWidth
+                            <TextField label="State / Province" size="small" fullWidth autoComplete="address-level1"
                                 value={addrDialog.form.state} onChange={(e) => setAddrField('state', e.target.value)}
                                 error={!!addrDialog.errors?.state} helperText={addrDialog.errors?.state} />
                         </Grid>
                         <Grid item xs={12} sm={6}>
-                            <TextField label="Postal Code *" size="small" fullWidth required
+                            <TextField label="Postal Code *" size="small" fullWidth required autoComplete="postal-code"
                                 value={addrDialog.form.postalCode} onChange={(e) => setAddrField('postalCode', e.target.value)}
                                 error={!!addrDialog.errors?.postalCode} helperText={addrDialog.errors?.postalCode} />
                         </Grid>
                         <Grid item xs={12} sm={6}>
-                            <TextField label="Country *" size="small" fullWidth required
+                            <TextField label="Country *" size="small" fullWidth required autoComplete="country-name"
                                 value={addrDialog.form.country} onChange={(e) => setAddrField('country', e.target.value)}
                                 error={!!addrDialog.errors?.country} helperText={addrDialog.errors?.country} />
                         </Grid>

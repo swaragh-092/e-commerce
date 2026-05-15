@@ -1,6 +1,6 @@
 import React, { useRef, useState, useEffect } from 'react';
 import {
-  Box, Typography, Button, Grid, Skeleton, IconButton,
+  Box, Typography, Button, Grid, Skeleton, IconButton, alpha,
 } from '@mui/material';
 import { Link } from 'react-router-dom';
 import ProductCard from './ProductCard';
@@ -87,6 +87,21 @@ const ProductRow = ({
     height: 44,
   };
 
+  const getOverlayStyles = (theme) => ({
+    '&::after': canScrollRight ? {
+      content: '""',
+      display: { xs: 'block', md: 'none' },
+      position: 'absolute',
+      top: 0,
+      bottom: 0,
+      right: 0,
+      width: theme.spacing(4),
+      background: `linear-gradient(to left, ${alpha(theme.palette.background.default, 0.95)}, transparent)`,
+      pointerEvents: 'none',
+      zIndex: 1,
+    } : {},
+  });
+
   return (
     <Box sx={{ mb: { xs: 4, md: 5 } }}>
       {/* Section header */}
@@ -116,7 +131,11 @@ const ProductRow = ({
 
       {/* Product content */}
       {layout === 'carousel' ? (
-        <Box sx={{ position: 'relative', mx: { xs: 0, md: -1 } }}>
+        <Box sx={(theme) => ({ 
+          position: 'relative', 
+          mx: { xs: 0, md: -1 },
+          ...getOverlayStyles(theme)
+        })}>
           {/* Previous Button (Fades in when moved) */}
           {canScrollLeft && (
             <IconButton

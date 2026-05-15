@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
-import { Box, Container, Grid, Typography, Pagination, Drawer, IconButton, useTheme, useMediaQuery, FormControl, Select, MenuItem } from '@mui/material';
+import { Box, Breadcrumbs, Container, Grid, Link as MuiLink, Typography, Pagination, Drawer, IconButton, useTheme, useMediaQuery, FormControl, Select, MenuItem } from '@mui/material';
 import { FilterList as FilterIcon, Sort as SortIcon } from '@mui/icons-material';
-import { useSearchParams } from 'react-router-dom';
+import { Link as RouterLink, useSearchParams } from 'react-router-dom';
 import ProductGrid from '../../components/product/ProductGrid';
 import ProductFilters from '../../components/product/ProductFilters';
 import StorefrontSidebarMenu from '../../components/layout/StorefrontSidebarMenu';
@@ -99,15 +99,45 @@ const ProductListPage = () => {
         setSearchParams(params);
     };
 
+    const categoryBreadcrumbs = categoryName ? categoryName.split(' > ') : [];
+    const hasActiveFilters = Boolean(
+        filters.search
+        || filters.category
+        || filters.brand
+        || filters.minPrice
+        || filters.maxPrice
+    );
+
     return (
         <Container maxWidth="xl" sx={{ py: 4 }}>
             <PageSEO title="Products" description="Browse our products" />
+            <Breadcrumbs aria-label="breadcrumb" sx={{ mb: 2 }}>
+                <MuiLink component={RouterLink} underline="hover" color="inherit" to="/">
+                    Home
+                </MuiLink>
+                {categoryBreadcrumbs.length > 0 ? (
+                    <MuiLink component={RouterLink} underline="hover" color="inherit" to="/products">
+                        Products
+                    </MuiLink>
+                ) : (
+                    <Typography color="text.primary">Products</Typography>
+                )}
+                {categoryBreadcrumbs.map((name, index) => (
+                    <Typography key={`${name}-${index}`} color={index === categoryBreadcrumbs.length - 1 ? 'text.primary' : 'text.secondary'}>
+                        {name}
+                    </Typography>
+                ))}
+            </Breadcrumbs>
             <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 3 }}>
                 <Typography variant="h4" fontWeight="bold">Our Products</Typography>
 
                 <Box sx={{ display: 'flex', gap: 2, alignItems: 'center' }}>
                     {showFilters && isMobile && (
-                        <IconButton onClick={() => setMobileFilterOpen(true)} color="primary">
+                        <IconButton 
+                            onClick={() => setMobileFilterOpen(true)} 
+                            color="primary"
+                            aria-label="Open filter menu"
+                        >
                             <FilterIcon />
                         </IconButton>
                     )}
@@ -116,6 +146,7 @@ const ProductListPage = () => {
                             value={filters.sort || 'newest'}
                             onChange={(e) => handleFilterChange({ ...filters, sort: e.target.value, page: 1 })}
                             displayEmpty
+                            inputProps={{ 'aria-label': 'Sort products' }}
                             startAdornment={<SortIcon fontSize="small" sx={{ mr: 0.5, color: 'text.secondary' }} />}
                             sx={{ borderRadius: 1.5, bgcolor: 'background.paper' }}
                         >
@@ -137,7 +168,14 @@ const ProductListPage = () => {
                 )}
 
                 <Grid item xs={12} md={showFilters ? 9 : 12} lg={showFilters ? 9.5 : 12}>
-                    <ProductGrid products={products} loading={loading} gridCols={gridCols} fromCategory={categoryName} />
+                    <ProductGrid
+                        products={products}
+                        loading={loading}
+                        gridCols={gridCols}
+                        fromCategory={categoryName}
+                        hasActiveFilters={hasActiveFilters}
+                        onClearFilters={() => setSearchParams(new URLSearchParams())}
+                    />
 
                     {meta.totalPages > 1 && (
                         <Box sx={{ display: 'flex', justifyContent: 'center', mt: 6 }}>
@@ -154,7 +192,7 @@ const ProductListPage = () => {
             </Grid>
 
             <Drawer anchor="left" open={mobileFilterOpen} onClose={() => setMobileFilterOpen(false)}>
-                <Box sx={{ width: 280, p: 3 }}>
+                <Box sx={{ width: { xs: '85vw', sm: 320 }, maxWidth: 380, p: 3 }}>
                     <StorefrontSidebarMenu onNavigate={() => setMobileFilterOpen(false)} />
                     <ProductFilters filters={filters} onFilterChange={(f) => { handleFilterChange(f); setMobileFilterOpen(false); }} priceRange={priceRange} />
                 </Box>

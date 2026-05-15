@@ -50,6 +50,7 @@ const getAll = async () => {
     catalog: { ...defaultSettings.catalog },
     homepage: { ...defaultSettings.homepage },
     productPage: { ...defaultSettings.productPage },
+    brandsPage: { ...defaultSettings.brandsPage },
     admin: { ...defaultSettings.admin },
     invoice: { ...defaultSettings.invoice },
     messaging: { ...defaultSettings.messaging },

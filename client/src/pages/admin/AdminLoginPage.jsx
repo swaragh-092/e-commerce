@@ -1,6 +1,10 @@
 import React, { useState } from 'react';
-import { Box, Typography, TextField, Button, Alert, useTheme, IconButton, InputAdornment } from '@mui/material';
-import { useNavigate, Navigate, Link as RouterLink } from 'react-router-dom';
+
+import { Box, Typography, TextField, Button, Alert, useTheme, Paper, IconButton, InputAdornment } from '@mui/material';
+import Visibility from '@mui/icons-material/Visibility';
+import VisibilityOff from '@mui/icons-material/VisibilityOff';
+import { useNavigate, useLocation, Navigate, Link as RouterLink } from 'react-router-dom';
+
 import { useAuth } from '../../hooks/useAuth';
 import { getFirstAccessibleAdminPath } from '../../utils/permissions';
 import { validateEmail, validateRequired } from '../../utils/authValidation';
@@ -137,13 +141,17 @@ const AdminLoginPage = () => {
             fullWidth
             name="password"
             type={showPassword ? 'text' : 'password'}
+
             placeholder="Enter your password"
+
+
             value={formData.password}
             onChange={handleChange}
             error={Boolean(fieldErrors.password)}
             helperText={fieldErrors.password}
             required
             autoComplete="current-password"
+
             sx={inputSx}
             InputProps={{
               startAdornment: (
@@ -154,6 +162,17 @@ const AdminLoginPage = () => {
               endAdornment: (
                 <InputAdornment position="end">
                   <IconButton edge="end" onClick={() => setShowPassword((value) => !value)} aria-label={showPassword ? 'Hide password' : 'Show password'}>
+
+            InputProps={{
+              endAdornment: (
+                <InputAdornment position="end">
+                  <IconButton
+                    aria-label="toggle password visibility"
+                    onClick={() => setShowPassword((prev) => !prev)}
+                    onMouseDown={(e) => e.preventDefault()}
+                    edge="end"
+                  >
+
                     {showPassword ? <VisibilityOff /> : <Visibility />}
                   </IconButton>
                 </InputAdornment>

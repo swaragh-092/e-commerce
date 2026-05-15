@@ -166,6 +166,7 @@ const ProductsManagePage = () => {
     saving: false,
   });
   const [counts, setCounts] = useState({ published: 0, draft: 0 });
+  const hasActiveFilters = Boolean(search || status || saleFilter || categoryFilter || lowStockOnly);
 
   // Step amount for the stock stepper — persists between quick-edit opens
   const [editStepAmount, setEditStepAmount] = useState(1);
@@ -693,6 +694,44 @@ const ProductsManagePage = () => {
     return true;
   });
 
+  const EmptyProductsOverlay = () => (
+    <Stack alignItems="center" justifyContent="center" spacing={1.5} sx={{ height: '100%', minHeight: 240, px: 3, textAlign: 'center' }}>
+      <Avatar sx={{ width: 64, height: 64, bgcolor: 'action.hover', color: 'text.disabled' }}>
+        <InventoryIcon />
+      </Avatar>
+      <Box>
+        <Typography variant="h6" fontWeight={700}>
+          {hasActiveFilters ? 'No products match these filters' : 'No products yet'}
+        </Typography>
+        <Typography color="text.secondary" sx={{ mt: 0.5, maxWidth: 360 }}>
+          {hasActiveFilters
+            ? 'Try clearing filters or changing your search to find more products.'
+            : 'Create your first product to start building the catalog.'}
+        </Typography>
+      </Box>
+      {hasActiveFilters ? (
+        <Button
+          variant="outlined"
+          onClick={() => {
+            setSearchInput('');
+            setSearch('');
+            setStatus('');
+            setSaleFilter('');
+            setCategoryFilter('');
+            setLowStockOnly(false);
+            setPaginationModel((p) => ({ ...p, page: 0 }));
+          }}
+        >
+          Clear filters
+        </Button>
+      ) : canCreateProducts ? (
+        <Button variant="contained" startIcon={<AddIcon />} component={Link} to="/admin/products/new">
+          Add first product
+        </Button>
+      ) : null}
+    </Stack>
+  );
+
   return (
     <Box>
       <Stack direction={{ xs: 'column', md: 'row' }} spacing={2} mb={3}>
@@ -912,7 +951,14 @@ const ProductsManagePage = () => {
       )}
 
       {/* ── Data Grid ── */}
-      <Box sx={{ bgcolor: 'background.paper', borderRadius: 2, border: '1px solid', borderColor: 'divider' }}>
+      <Box sx={{ 
+        bgcolor: 'background.paper', 
+        borderRadius: 2, 
+        border: '1px solid', 
+        borderColor: 'divider',
+        overflowX: 'auto',
+        '& .MuiDataGrid-root': { minWidth: 700 },
+      }}>
         <DataGrid
           rows={rows}
           columns={columns}
@@ -935,11 +981,16 @@ const ProductsManagePage = () => {
           getRowHeight={() => 'auto'}
           getEstimatedRowHeight={() => 80}
           pagination
+          autoHeight
+          slots={{ noRowsOverlay: EmptyProductsOverlay }}
           sx={{
             border: 0,
             '& .MuiDataGrid-cell': {
               display: 'flex',
               alignItems: 'center',
+            },
+            '& .MuiDataGrid-overlayWrapper': {
+              minHeight: 260,
             },
           }}
         />

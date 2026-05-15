@@ -185,12 +185,30 @@ const HeroCarousel = ({ section, slides }) => {
       sx={{
         position: 'relative',
         overflow: 'hidden',
-        minHeight: { xs: 480, md: 560 },
+        minHeight: { xs: 380, sm: 480, md: 560 },
         display: 'flex',
         alignItems: 'center',
         color: slide.color || '#ffffff',
       }}
     >
+      <Typography
+        component="p"
+        aria-live="polite"
+        aria-atomic="true"
+        sx={{
+          border: 0,
+          clip: 'rect(0 0 0 0)',
+          height: 1,
+          margin: -1,
+          overflow: 'hidden',
+          padding: 0,
+          position: 'absolute',
+          whiteSpace: 'nowrap',
+          width: 1,
+        }}
+      >
+        {`Slide ${active + 1} of ${visibleSlides.length}: ${slide.title || 'Homepage promotion'}`}
+      </Typography>
       {visibleSlides.map((s = {}, index) => (
         <Box key={index} sx={{ height: '100%', position: 'absolute', inset: 0, opacity: active === index ? 1 : 0, transition: 'opacity 0.5s ease-in-out' }}>
           <Box sx={{ 
@@ -455,7 +473,7 @@ const HomeExperience = () => {
         if (section.type === 'hero-carousel') return rendered;
 
         const isFirstNonHero = index === (visibleSections[0]?.type === 'hero-carousel' ? 1 : 0);
-        const sectionPadding = isFirstNonHero ? { pt: { xs: 4, md: 8 }, pb: { xs: 2, md: 3 } } : { py: { xs: 2, md: 3 } };
+        const sectionPadding = isFirstNonHero ? { pt: { xs: 5, md: 7 }, pb: { xs: 2, md: 3 } } : { py: { xs: 2, md: 3 } };
 
         return (
           <Container key={section.id || index} maxWidth="xl" sx={sectionPadding}>

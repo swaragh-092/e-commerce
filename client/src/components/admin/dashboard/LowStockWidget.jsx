@@ -31,8 +31,9 @@ const LowStockWidget = ({ lowStock, loading, spacing }) => {
         <WarningIcon color="warning" />
         <Typography variant="h6" fontWeight={600}>Low Stock Alerts ({lowStock.length})</Typography>
       </Box>
-      <Table size="small">
-        <TableHead>
+      <Box sx={{ overflowX: 'auto' }}>
+        <Table size="small" sx={{ minWidth: 400 }}>
+          <TableHead>
           <TableRow>
             <TableCell>Product</TableCell>
             <TableCell align="right">Total Qty</TableCell>
@@ -58,6 +59,7 @@ const LowStockWidget = ({ lowStock, loading, spacing }) => {
           ))}
         </TableBody>
       </Table>
+      </Box>
     </Paper>
   );
 };

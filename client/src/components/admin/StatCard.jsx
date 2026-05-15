@@ -25,8 +25,8 @@ const StatCard = ({ title, value, icon, loading = false, trend, color = 'primary
   >
     <Box
       sx={{
-        width: 56,
-        height: 56,
+        width: { xs: 44, sm: 56 },
+        height: { xs: 44, sm: 56 },
         borderRadius: 2,
         bgcolor: `${color}22`,
         display: 'flex',
@@ -34,7 +34,7 @@ const StatCard = ({ title, value, icon, loading = false, trend, color = 'primary
         justifyContent: 'center',
         color,
         flexShrink: 0,
-        fontSize: 28,
+        fontSize: { xs: 22, sm: 28 },
       }}
     >
       {icon}

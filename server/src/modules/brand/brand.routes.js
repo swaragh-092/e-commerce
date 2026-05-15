@@ -14,13 +14,13 @@ const { idParamSchema } = require('../../utils/common.validation');
 const router = express.Router();
 
 router.get('/', optionalAuth, validate(brandValidation.queryBrandSchema, 'query'), brandController.getBrands);
-router.get('/:slug', optionalAuth, validate(brandValidation.getBrandBySlugSchema, 'query'), brandController.getBrandBySlug);
+router.get('/:slug', optionalAuth, validate(brandValidation.slugParamSchema, 'params'), validate(brandValidation.getBrandBySlugSchema, 'query'), brandController.getBrandBySlug);
 
 // Protected Admin Routes
 router.post(
     '/',
     authenticate,
-    authorizePermissions(PERMISSIONS.PRODUCTS_CREATE),
+    authorizePermissions(PERMISSIONS.BRANDS_MANAGE),
     validate(brandValidation.createBrandSchema),
     auditLog('Brand'),
     brandController.createBrand
@@ -29,7 +29,7 @@ router.post(
 router.patch(
     '/:id',
     authenticate,
-    authorizePermissions(PERMISSIONS.PRODUCTS_UPDATE),
+    authorizePermissions(PERMISSIONS.BRANDS_MANAGE),
     validate(idParamSchema, 'params'),
     validate(brandValidation.updateBrandSchema),
     auditLog('Brand'),
@@ -40,7 +40,7 @@ router.patch(
 router.delete(
     '/:id',
     authenticate,
-    authorizePermissions(PERMISSIONS.PRODUCTS_DELETE),
+    authorizePermissions(PERMISSIONS.BRANDS_MANAGE),
     validate(idParamSchema, 'params'),
     auditLog('Brand'),
     brandController.deleteBrand

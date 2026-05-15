@@ -13,6 +13,8 @@
 const generateSlug = async (text, Model = null, field = 'slug', options = {}) => {
     let slug = text
         .toString()
+        .normalize('NFD')
+        .replace(/[\u0300-\u036f]/g, '')
         .toLowerCase()
         .trim()
         .replace(/\s+/g, '-')       // spaces → hyphens

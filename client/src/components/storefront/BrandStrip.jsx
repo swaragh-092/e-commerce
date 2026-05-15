@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { Avatar, Box, ButtonBase, IconButton, Skeleton, Stack, Typography } from '@mui/material';
+import { Avatar, Box, ButtonBase, IconButton, Skeleton, Stack, Typography, alpha } from '@mui/material';
 import { Link } from 'react-router-dom';
 import ArrowForwardIcon from '@mui/icons-material/ArrowForward';
 import ChevronLeftIcon from '@mui/icons-material/ChevronLeft';
@@ -48,7 +48,7 @@ const BrandStrip = ({ title, brands = [], loading = false }) => {
                 sx={{
                     position: 'relative',
                     display: 'grid',
-                    gridTemplateColumns: { xs: '1fr', md: '260px minmax(0, 1fr)' },
+                    gridTemplateColumns: { xs: '1fr', md: 'minmax(200px, 260px) minmax(0, 1fr)' },
                     gap: { xs: 2, md: 2.5 },
                     alignItems: 'center',
                     bgcolor: 'rgba(255, 252, 246, 0.92)',
@@ -105,7 +105,23 @@ const BrandStrip = ({ title, brands = [], loading = false }) => {
                         <ArrowForwardIcon sx={{ fontSize: 17 }} />
                     </Stack>
                 </Box>
-                <Box sx={{ position: 'relative', minWidth: 0, px: { xs: 0, md: canScroll ? 4 : 0 } }}>
+                <Box sx={(theme) => ({ 
+                    position: 'relative', 
+                    minWidth: 0, 
+                    px: { xs: 0, md: canScroll ? 4 : 0 },
+                    '&::after': canScroll ? { 
+                        content: '""', 
+                        display: 'block', 
+                        position: 'absolute', 
+                        top: 0, 
+                        bottom: 0, 
+                        right: 0, 
+                        width: theme.spacing(4), 
+                        background: `linear-gradient(to left, ${alpha(theme.palette.background.paper, 0.95)}, transparent)`, 
+                        pointerEvents: 'none', 
+                        zIndex: 1 
+                    } : {},
+                })}>
                 {canScroll && (
                     <IconButton
                         size="small"

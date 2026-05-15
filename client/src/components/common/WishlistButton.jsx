@@ -10,7 +10,7 @@ import { useFeature } from '../../hooks/useSettings';
 
 const WishlistButton = ({ productId, variantId = null }) => {
   const wishlistEnabled = useFeature('wishlist');
-  const { isInWishlist, refreshWishlist } = useWishlist();
+  const { isInWishlist, setWishlistItem, refreshWishlist } = useWishlist();
   const [inWishlist, setInWishlist] = useState(false);
   const [loading, setLoading] = useState(false);
   const [snackbar, setSnackbar] = useState(null);
@@ -31,7 +31,11 @@ const WishlistButton = ({ productId, variantId = null }) => {
       return;
     }
 
+    const nextInWishlist = !inWishlist;
     setLoading(true);
+    setInWishlist(nextInWishlist);
+    setWishlistItem(productId, variantId, nextInWishlist);
+
     try {
       if (inWishlist) {
         await wishlistService.removeItem(productId, variantId);
@@ -43,6 +47,8 @@ const WishlistButton = ({ productId, variantId = null }) => {
       // Refresh the global set so all other WishlistButton instances update too
       await refreshWishlist();
     } catch (error) {
+      setInWishlist(inWishlist);
+      setWishlistItem(productId, variantId, inWishlist);
       setSnackbar({
         severity: 'error',
         message: error?.response?.data?.message || 'Wishlist update failed',

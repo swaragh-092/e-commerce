@@ -25,6 +25,7 @@ const {
   Tag,
   Sequelize,
 } = require('../index');
+const logger = require('../../utils/logger');
 
 const { Op } = Sequelize;
 
@@ -160,8 +161,8 @@ const searchProducts = async (queryText, limit, offset) => {
       rows: merged.slice(0, limit),
       count: Math.max(ftsResults.count, trigramResults.count),
     };
-  } catch (_err) {
-    // pg_trgm extension may not be installed — return FTS results as-is
+  } catch (err) {
+    logger.error('Trigram fallback search failed (pg_trgm may be missing):', err);
     return { rows: ftsResults.rows, count: ftsResults.count };
   }
 };
@@ -187,7 +188,8 @@ const searchBrands = async (queryText, limit = 5) => {
       limit,
       bind: { queryText },
     });
-  } catch (_err) {
+  } catch (err) {
+    logger.error('Brand search failed:', err);
     return [];
   }
 };
@@ -210,7 +212,8 @@ const searchCategories = async (queryText, limit = 5) => {
       limit,
       bind: { queryText },
     });
-  } catch (_err) {
+  } catch (err) {
+    logger.error('Category search failed:', err);
     return [];
   }
 };
@@ -281,7 +284,8 @@ const suggestCorrection = async (queryText) => {
     }
 
     return null;
-  } catch (_err) {
+  } catch (err) {
+    logger.error('Correction suggestion failed:', err);
     return null;
   }
 };

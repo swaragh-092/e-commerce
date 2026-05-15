@@ -25,7 +25,7 @@ const CategoryGrid = ({ title, categories = [], loading = false }) => {
     return (
         <Box sx={{ mb: 6 }}>
             <Typography variant="h5" fontWeight={800} mb={3}>{title}</Typography>
-            <Grid container spacing={2}>
+            <Grid container spacing={{ xs: 1.5, md: 2 }}>
                 {loading
                     ? Array.from({ length: 6 }).map((_, i) => (
                         <Grid item xs={6} sm={4} md={2} key={i}>
@@ -68,7 +68,7 @@ const CategoryGrid = ({ title, categories = [], loading = false }) => {
                                 }}
                             >
                                 {cat.image ? (
-                                    <Box sx={{ overflow: 'hidden', height: 150 }}>
+                                    <Box sx={{ overflow: 'hidden', height: { xs: 130, md: 150 } }}>
                                         <CardMedia
                                             component="img"
                                             image={getMediaUrl(cat.image)}

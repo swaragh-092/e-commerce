@@ -1,26 +1,46 @@
 import { useEffect, useState } from 'react';
-import { Box, Grid, Typography } from '@mui/material';
+import { Alert, Box, Button, Grid, Typography } from '@mui/material';
 import { getStats, getLowStock, getRecentOrders } from '../../services/adminService';
 import { useSettings, useCurrency } from '../../hooks/useSettings';
 import { useAuth } from '../../hooks/useAuth';
 import { getEnabledDashboardWidgets, getOrderedDashboardWidgets } from '../../components/admin/dashboard/dashboardWidgets';
 import { densitySpacing, sizeToGrid } from '../../components/admin/dashboard/dashboardUtils';
+import { getApiErrorMessage } from '../../utils/apiErrors';
 
 const DashboardPage = () => {
   const [stats, setStats] = useState(null);
   const [lowStock, setLowStock] = useState([]);
   const [recentOrders, setRecentOrders] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState('');
+  const [sectionErrors, setSectionErrors] = useState({});
+
+  const loadDashboard = () => {
+    setLoading(true);
+    setError('');
+    setSectionErrors({});
+    Promise.allSettled([getStats(), getLowStock(10), getRecentOrders()])
+      .then(([s, ls, ro]) => {
+        const errors = {};
+        if (s.status === 'fulfilled') setStats(s.value.data.data);
+        else errors.stats = getApiErrorMessage(s.reason, 'Failed to load stats.');
+
+        if (ls.status === 'fulfilled') setLowStock(ls.value.data.data || []);
+        else errors.lowStock = getApiErrorMessage(ls.reason, 'Failed to load low stock.');
+
+        if (ro.status === 'fulfilled') setRecentOrders(ro.value.data.data || []);
+        else errors.recentOrders = getApiErrorMessage(ro.reason, 'Failed to load recent orders.');
+
+        if (Object.keys(errors).length === 3) {
+          setError('Failed to load dashboard data.');
+        }
+        setSectionErrors(errors);
+      })
+      .finally(() => setLoading(false));
+  };
 
   useEffect(() => {
-    Promise.all([getStats(), getLowStock(10), getRecentOrders()])
-      .then(([s, ls, ro]) => {
-        setStats(s.data.data);
-        setLowStock(ls.data.data || []);
-        setRecentOrders(ro.data.data || []);
-      })
-      .catch(console.error)
-      .finally(() => setLoading(false));
+    loadDashboard();
   }, []);
 
   const { settings } = useSettings();
@@ -43,6 +63,7 @@ const DashboardPage = () => {
     lowStock,
     recentOrders,
     loading,
+    sectionErrors,
     settings: adminSettings,
     allSettings: settings,
     formatPrice,
@@ -62,6 +83,34 @@ const DashboardPage = () => {
   return (
     <Box>
       <Typography variant="h5" fontWeight={700} mb={spacing.page}>Dashboard Overview</Typography>
+
+      {error && (
+        <Alert
+          severity="error"
+          sx={{ mb: spacing.page }}
+          action={(
+            <Button color="inherit" size="small" onClick={loadDashboard}>
+              Retry
+            </Button>
+          )}
+        >
+          {error}
+        </Alert>
+      )}
+
+      {!error && Object.keys(sectionErrors).length > 0 && (
+        <Alert
+          severity="warning"
+          sx={{ mb: spacing.page }}
+          action={(
+            <Button color="inherit" size="small" onClick={loadDashboard}>
+              Retry
+            </Button>
+          )}
+        >
+          Some sections failed to load: {Object.values(sectionErrors).join(' ')}
+        </Alert>
+      )}
 
       {getEnabledDashboardWidgets(adminSettings, 'top', hasAnyPermission).map(({ id, component: Widget }) => (
         <Widget key={id} {...widgetProps} />
