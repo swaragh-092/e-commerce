@@ -1,6 +1,7 @@
 import { Box, Paper, Typography, useTheme } from '@mui/material';
-import ShoppingBagOutlinedIcon from '@mui/icons-material/ShoppingBagOutlined';
 import PersonAddAltOutlinedIcon from '@mui/icons-material/PersonAddAltOutlined';
+import AdminPanelSettingsOutlinedIcon from '@mui/icons-material/AdminPanelSettingsOutlined';
+import LockPersonIcon from '@mui/icons-material/LockPerson';
 import { useSettings } from '../../hooks/useSettings';
 import { getMediaUrl } from '../../utils/media';
 
@@ -19,26 +20,38 @@ const defaults = {
     formTitle: 'Create Account',
     formSubtitle: 'Join us today. Please enter your details.',
   },
+  admin: {
+    title: 'Manage Your Store With Confidence',
+    description: 'Sign in to review orders, update products and keep daily operations moving.',
+    formTitle: 'Staff Portal',
+    formSubtitle: 'Sign in to access the administrative dashboard.',
+  },
 };
 
-const AuthPageShell = ({ type = 'login', children }) => {
+const AuthPageShell = ({ type = 'login', fullHeight = false, children }) => {
   const theme = useTheme();
   const { settings } = useSettings();
   const authSettings = settings?.auth || {};
   const copy = defaults[type] || defaults.login;
   const image = authSettings.image || DEFAULT_AUTH_IMAGE;
   const accent = theme.palette.primary.main;
+  const headingColor = authSettings[`${type}HeadingColor`] || authSettings.headingColor || theme.palette.primary.main;
+  const descriptionColor = authSettings[`${type}DescriptionColor`] || authSettings.descriptionColor || theme.palette.primary.main;
 
   const heading = authSettings[`${type}Heading`] || copy.title;
   const description = authSettings[`${type}Description`] || copy.description;
   const formTitle = authSettings[`${type}FormTitle`] || copy.formTitle;
   const formSubtitle = authSettings[`${type}FormSubtitle`] || copy.formSubtitle;
-  const Icon = type === 'register' ? PersonAddAltOutlinedIcon : ShoppingBagOutlinedIcon;
+  const Icon = type === 'register'
+    ? PersonAddAltOutlinedIcon
+    : type === 'admin'
+      ? AdminPanelSettingsOutlinedIcon
+      : LockPersonIcon;
 
   return (
     <Box
       sx={{
-        minHeight: { xs: 'calc(100svh - 64px)', md: 'calc(100svh - 72px)' },
+        minHeight: fullHeight ? '100svh' : { xs: 'calc(100svh - 64px)', md: 'calc(100svh - 72px)' },
         display: 'flex',
         alignItems: 'center',
         bgcolor: '#fffaf2',
@@ -70,7 +83,7 @@ const AuthPageShell = ({ type = 'login', children }) => {
               fontSize: { xs: 36, sm: 44, md: 48, xl: 56 },
               lineHeight: 1.04,
               fontWeight: 900,
-              color: '#0f4f49',
+              color: headingColor,
               letterSpacing: 0,
               textShadow: '0 2px 18px rgba(255, 250, 242, 0.7)',
             }}
@@ -80,7 +93,7 @@ const AuthPageShell = ({ type = 'login', children }) => {
           <Box sx={{ width: 18, height: 2, bgcolor: accent, my: 3, mx: { xs: 'auto', md: 0 } }} />
           <Typography
             sx={{
-              color: 'rgba(15, 79, 73, 0.86)',
+              color: descriptionColor,
               lineHeight: 1.7,
               fontSize: { xs: 15, md: 16, xl: 17 },
               fontWeight: 500,

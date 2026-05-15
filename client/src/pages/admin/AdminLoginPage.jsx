@@ -1,20 +1,21 @@
 import React, { useState } from 'react';
+
 import { Box, Typography, TextField, Button, Alert, useTheme, Paper, IconButton, InputAdornment } from '@mui/material';
 import Visibility from '@mui/icons-material/Visibility';
 import VisibilityOff from '@mui/icons-material/VisibilityOff';
 import { useNavigate, useLocation, Navigate, Link as RouterLink } from 'react-router-dom';
+
 import { useAuth } from '../../hooks/useAuth';
 import { getFirstAccessibleAdminPath } from '../../utils/permissions';
 import { validateEmail, validateRequired } from '../../utils/authValidation';
 import { getApiErrorMessage } from '../../utils/apiErrors';
-import { useSettings } from '../../hooks/useSettings';
+import { EmailOutlined, LockOutlined, Visibility, VisibilityOff } from '@mui/icons-material';
+import AuthPageShell from '../../components/storefront/AuthPageShell';
 
 const AdminLoginPage = () => {
   const theme = useTheme();
   const navigate = useNavigate();
-  const location = useLocation();
-  const { login, isAuthenticated, user, hasRole, hasAnyPermission } = useAuth();
-  const { settings } = useSettings();
+  const { login, isAuthenticated, user, hasRole } = useAuth();
   
   const [formData, setFormData] = useState({ email: '', password: '' });
   const [fieldErrors, setFieldErrors] = useState({});
@@ -39,6 +40,27 @@ const AdminLoginPage = () => {
     const nextFormData = { ...formData, [e.target.name]: e.target.value };
     setFormData(nextFormData);
     setFieldErrors(validateForm(nextFormData));
+  };
+
+  const inputSx = {
+    mb: 2.25,
+    '& .MuiOutlinedInput-root': {
+      height: 48,
+      borderRadius: '8px',
+      bgcolor: '#fff',
+      '& fieldset': { borderColor: 'rgba(100, 116, 139, 0.24)' },
+      '&:hover fieldset': { borderColor: 'rgba(15, 118, 110, 0.42)' },
+      '&.Mui-focused fieldset': { borderColor: theme.palette.primary.main, borderWidth: 1 },
+    },
+    '& .MuiInputBase-input': { fontSize: 14 },
+  };
+
+  const fieldLabelSx = {
+    display: 'block',
+    mb: 0.75,
+    color: '#334155',
+    fontWeight: 700,
+    fontSize: 13,
   };
 
   const handleSubmit = async (e) => {
@@ -81,58 +103,66 @@ const AdminLoginPage = () => {
   };
 
   return (
-    <Box sx={{ minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', bgcolor: 'background.default', p: 3 }}>
-      <Paper elevation={4} sx={{ maxWidth: 400, width: '100%', p: 4, borderRadius: 3 }}>
-        
-        <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'center', mb: 4 }}>
-           {settings?.logo?.main ? (
-              <img
-                src={settings.logo.main}
-                alt={settings?.general?.storeName || 'Store Admin'}
-                style={{ maxHeight: 40, maxWidth: 180, objectFit: 'contain', marginBottom: 16 }}
-                onError={(e) => { e.target.style.display = 'none'; }}
-              />
-            ) : (
-              <Box sx={{ width: 48, height: 48, bgcolor: 'primary.main', borderRadius: 2, mb: 2 }} />
-            )}
-          <Typography variant="h5" component="h1" gutterBottom textAlign="center" fontWeight={700}>
-            Staff Portal
-          </Typography>
-          <Typography variant="body2" color="text.secondary" textAlign="center">
-            Sign in to access the administrative dashboard.
-          </Typography>
-        </Box>
-        
+    <AuthPageShell type="admin" fullHeight>
         {error && (
           <Alert severity="error" sx={{ mb: 3 }}>{error}</Alert>
         )}
 
         <Box component="form" onSubmit={handleSubmit}>
+          <Typography component="label" htmlFor="admin-login-email" sx={fieldLabelSx}>
+            Email Address
+          </Typography>
           <TextField
+            id="admin-login-email"
             fullWidth
-            margin="normal"
-            label="Email Address"
             name="email"
             type="email"
+            placeholder="Enter your email"
             value={formData.email}
             onChange={handleChange}
             error={Boolean(fieldErrors.email)}
             helperText={fieldErrors.email}
             required
             autoComplete="email"
+            sx={inputSx}
+            InputProps={{
+              startAdornment: (
+                <InputAdornment position="start">
+                  <EmailOutlined fontSize="small" />
+                </InputAdornment>
+              ),
+            }}
           />
+          <Typography component="label" htmlFor="admin-login-password" sx={fieldLabelSx}>
+            Password
+          </Typography>
           <TextField
+            id="admin-login-password"
             fullWidth
-            margin="normal"
-            label="Password"
             name="password"
             type={showPassword ? 'text' : 'password'}
+
+            placeholder="Enter your password"
+
+
             value={formData.password}
             onChange={handleChange}
             error={Boolean(fieldErrors.password)}
             helperText={fieldErrors.password}
             required
             autoComplete="current-password"
+
+            sx={inputSx}
+            InputProps={{
+              startAdornment: (
+                <InputAdornment position="start">
+                  <LockOutlined fontSize="small" />
+                </InputAdornment>
+              ),
+              endAdornment: (
+                <InputAdornment position="end">
+                  <IconButton edge="end" onClick={() => setShowPassword((value) => !value)} aria-label={showPassword ? 'Hide password' : 'Show password'}>
+
             InputProps={{
               endAdornment: (
                 <InputAdornment position="end">
@@ -142,6 +172,7 @@ const AdminLoginPage = () => {
                     onMouseDown={(e) => e.preventDefault()}
                     edge="end"
                   >
+
                     {showPassword ? <VisibilityOff /> : <Visibility />}
                   </IconButton>
                 </InputAdornment>
@@ -160,7 +191,7 @@ const AdminLoginPage = () => {
             type="submit"
             variant="contained"
             size="large"
-            sx={{ mt: 4, mb: 2, py: 1.5, fontWeight: 600 }}
+            sx={{ mt: 2.5, mb: 2, py: 1.45, borderRadius: '8px', fontWeight: 800 }}
             disabled={loading}
           >
             {loading ? 'Authenticating...' : 'Sign In'}
@@ -172,8 +203,7 @@ const AdminLoginPage = () => {
             </Typography>
           </Box>
         </Box>
-      </Paper>
-    </Box>
+    </AuthPageShell>
   );
 };
 
