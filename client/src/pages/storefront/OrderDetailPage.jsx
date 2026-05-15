@@ -9,6 +9,11 @@ import {
   Grid,
   Paper,
   Stack,
+  Dialog,
+  DialogActions,
+  DialogContent,
+  DialogTitle,
+  TextField,
   Typography,
 } from '@mui/material';
 import { useNavigate, useParams } from 'react-router-dom';
@@ -52,6 +57,8 @@ const OrderDetailPage = () => {
   const [actionLoading, setActionLoading] = useState(false);
   const [error, setError] = useState(null);
   const [activeTab, setActiveTab] = useState(0);
+  const [putBackDialog, setPutBackDialog] = useState(null);
+  const [putBackReason, setPutBackReason] = useState('');
 
   useEffect(() => {
     if (!ordersEnabled) {
@@ -108,6 +115,25 @@ const OrderDetailPage = () => {
     }),
     [orderItems, order, payment]
   );
+  const requestedPutBackQty = useMemo(() => {
+    const requests = order?.returns || order?.Returns || [];
+    return requests
+      .filter((request) => !['return_rejected', 'replacement_rejected'].includes(request.status))
+      .flatMap((request) => request.items || [])
+      .reduce((map, item) => {
+        const orderItemId = item.orderItemId || item.orderItem?.id;
+        if (!orderItemId) return map;
+        map[orderItemId] = (map[orderItemId] || 0) + Number(item.quantity || 0);
+        return map;
+      }, {});
+  }, [order?.returns, order?.Returns]);
+  const returnableProducts = productTrackingItems
+    .map((product) => ({
+      ...product,
+      returnableQuantity: Math.max(Number(product.deliveredQuantity || 0) - Number(requestedPutBackQty[product.item.id] || 0), 0),
+    }))
+    .filter((product) => product.returnableQuantity > 0 && payment?.status !== 'refunded');
+  const putBackRequests = order?.returns || order?.Returns || [];
   const deliveredProducts = productTrackingItems.filter((product) => product.status === 'delivered').length;
   const shipmentRecords = order?.fulfillments || [];
   const dispatchedShipments = shipmentRecords.filter((fulfillment) => fulfillment.status !== 'pending').length;
@@ -143,6 +169,34 @@ const OrderDetailPage = () => {
 
   const handleRetryPayment = () => {
     navigate(`/payment/${order.id}`);
+  };
+
+  const handleCreatePutBackRequest = async () => {
+    if (!putBackDialog) return;
+    setActionLoading(true);
+    try {
+      const payload = {
+        reason: putBackReason,
+        items: [{
+          orderItemId: putBackDialog.product.item.id,
+          quantity: putBackDialog.product.returnableQuantity,
+          reason: putBackReason,
+        }],
+      };
+      if (putBackDialog.type === 'replacement') {
+        await orderService.createReplacementRequest(id, payload);
+      } else {
+        await orderService.createReturnRequest(id, payload);
+      }
+      const orderData = await orderService.getMyOrderById(id);
+      setOrder(orderData || null);
+      setPutBackDialog(null);
+      setPutBackReason('');
+    } catch (putBackError) {
+      setError(putBackError?.response?.data?.error?.message || 'Failed to create request.');
+    } finally {
+      setActionLoading(false);
+    }
   };
 
   if (loading) {
@@ -299,6 +353,78 @@ const OrderDetailPage = () => {
               deliveredProducts={deliveredProducts}
               formatPrice={formatPrice}
             />
+            {returnableProducts.length > 0 && (
+              <Paper
+                elevation={0}
+                sx={{
+                  mt: 2.5,
+                  p: { xs: 2, sm: 2.5 },
+                  border: '1px solid',
+                  borderColor: 'divider',
+                  borderRadius: 2,
+                  bgcolor: 'background.paper',
+                }}
+              >
+                <Typography sx={{ fontSize: '0.86rem', fontWeight: 800, textTransform: 'uppercase', color: 'text.secondary', mb: 1.5 }}>
+                  Return or replacement
+                </Typography>
+                <Stack spacing={1.5}>
+                  {returnableProducts.map((product) => (
+                    <Box
+                      key={product.item.id}
+                      sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 1.5, flexWrap: 'wrap' }}
+                    >
+                      <Box>
+                        <Typography sx={{ fontWeight: 800 }}>{product.item.snapshotName}</Typography>
+                        <Typography variant="caption" color="text.secondary">
+                          {product.returnableQuantity} delivered unit available
+                        </Typography>
+                      </Box>
+                      <Stack direction="row" spacing={1}>
+                        <Button size="small" variant="outlined" onClick={() => setPutBackDialog({ type: 'return', product })}>
+                          Return
+                        </Button>
+                        <Button size="small" variant="outlined" onClick={() => setPutBackDialog({ type: 'replacement', product })}>
+                          Replace
+                        </Button>
+                      </Stack>
+                    </Box>
+                  ))}
+                </Stack>
+              </Paper>
+            )}
+            {putBackRequests.length > 0 && (
+              <Paper
+                elevation={0}
+                sx={{
+                  mt: 2.5,
+                  p: { xs: 2, sm: 2.5 },
+                  border: '1px solid',
+                  borderColor: 'divider',
+                  borderRadius: 2,
+                  bgcolor: 'background.paper',
+                }}
+              >
+                <Typography sx={{ fontSize: '0.86rem', fontWeight: 800, textTransform: 'uppercase', color: 'text.secondary', mb: 1.5 }}>
+                  Requests
+                </Typography>
+                <Stack spacing={1}>
+                  {putBackRequests.map((request) => (
+                    <Box key={request.id} sx={{ display: 'flex', justifyContent: 'space-between', gap: 1.5 }}>
+                      <Box>
+                        <Typography sx={{ fontWeight: 800 }}>
+                          {request.type === 'replacement' ? 'Replacement' : 'Return'}
+                        </Typography>
+                        <Typography variant="caption" color="text.secondary">
+                          {request.reason || 'No reason provided'}
+                        </Typography>
+                      </Box>
+                      <Chip size="small" label={String(request.status || '').replace(/_/g, ' ')} />
+                    </Box>
+                  ))}
+                </Stack>
+              </Paper>
+            )}
             <TotalsNotesCard
               activeTab={activeTab}
               onTabChange={setActiveTab}
@@ -336,6 +462,35 @@ const OrderDetailPage = () => {
           </Grid>
         </Grid>
       </Container>
+      <Dialog open={Boolean(putBackDialog)} onClose={() => !actionLoading && setPutBackDialog(null)} maxWidth="xs" fullWidth>
+        <DialogTitle>
+          {putBackDialog?.type === 'replacement' ? 'Request Replacement' : 'Request Return'}
+        </DialogTitle>
+        <DialogContent>
+          <Stack spacing={2} sx={{ pt: 1 }}>
+            <Box>
+              <Typography sx={{ fontWeight: 800 }}>{putBackDialog?.product?.item?.snapshotName}</Typography>
+              <Typography variant="body2" color="text.secondary">
+                Quantity: {putBackDialog?.product?.returnableQuantity || 0}
+              </Typography>
+            </Box>
+            <TextField
+              label="Reason"
+              value={putBackReason}
+              onChange={(event) => setPutBackReason(event.target.value)}
+              multiline
+              minRows={3}
+              fullWidth
+            />
+          </Stack>
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setPutBackDialog(null)} disabled={actionLoading}>Cancel</Button>
+          <Button variant="contained" onClick={handleCreatePutBackRequest} disabled={actionLoading || !putBackReason.trim()}>
+            {actionLoading ? 'Submitting...' : 'Submit Request'}
+          </Button>
+        </DialogActions>
+      </Dialog>
     </Box>
   );
 };

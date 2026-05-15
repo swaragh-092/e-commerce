@@ -60,7 +60,7 @@ export const ORDER_STATUS_OPTIONS = Object.freeze(statuses.order || []);
 export const PAYMENT_STATUS_OPTIONS = Object.freeze(statuses.payment || []);
 export const SHIPMENT_STATUS_OPTIONS = Object.freeze(statuses.shipment || []);
 export const ORDER_SHIPPING_STATUS_OPTIONS = Object.freeze(statuses.order_shipping || []);
-export const RETURN_STATUS_OPTIONS = Object.freeze((statuses.return || []).filter((status) => status.startsWith('return_')));
+export const RETURN_STATUS_OPTIONS = Object.freeze((statuses.return || []).filter((status) => !status.startsWith('replacement_')));
 export const REPLACEMENT_STATUS_OPTIONS = Object.freeze((statuses.return || []).filter((status) => status.startsWith('replacement_')));
 export const REFUND_STATUS_OPTIONS = Object.freeze(statuses.refund || []);
 export const ORDER_STATUS_DEFAULT = transitions.order?.default?.[0] || 'confirmed';

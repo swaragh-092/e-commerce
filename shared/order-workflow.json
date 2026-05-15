@@ -6,7 +6,9 @@
       "payment_failed",
       "payment_expired",
       "paid_cod",
-      "paid_online"
+      "paid_online",
+      "partially_refunded",
+      "refunded"
     ],
 
     "order": [
@@ -88,6 +90,8 @@
       "payment_failed": ["payment_pending"],
       "payment_expired": ["payment_pending"],
       "paid_online": [],
+      "partially_refunded": ["refunded"],
+      "refunded": [],
       "paid_cod": [],
       "default": ["payment_pending"]
     },

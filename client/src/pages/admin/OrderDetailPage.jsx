@@ -33,7 +33,7 @@ import HistoryIcon from '@mui/icons-material/History';
 import CloseIcon from '@mui/icons-material/Close';
 import { useCurrency } from '../../hooks/useSettings';
 import { PAYMENT_SETTLED_STATUSES } from '../../utils/constants';
-import { getOrderById, updateOrderStatus, refundOrder, createFulfillment, updateFulfillmentStatus, updateShipment, confirmCodPayment, getShippingProviders, addOrderNote } from '../../services/adminService';
+import { getOrderById, updateOrderStatus, createFulfillment, updateFulfillmentStatus, updateShipment, confirmCodPayment, getShippingProviders, addOrderNote, updateReturnStatus, processRefund } from '../../services/adminService';
 import { useNotification } from '../../context/NotificationContext';
 import {
   Dialog,
@@ -367,6 +367,25 @@ const getFulfillmentProgress = (items = [], fulfillments = []) => {
   };
 };
 
+const getDeliveredItemsAmount = (items = [], fulfillments = []) => {
+  const deliveredByItem = fulfillments
+    .filter((fulfillment) => fulfillment.status === 'delivered')
+    .flatMap((fulfillment) => fulfillment.items || [])
+    .reduce((map, item) => {
+      const orderItemId = item.orderItemId || item.orderItem?.id;
+      if (!orderItemId) return map;
+      map[orderItemId] = (map[orderItemId] || 0) + Number(item.quantity || 0);
+      return map;
+    }, {});
+
+  return items.reduce((sum, item) => {
+    const orderedQty = Number(item.quantity || 0);
+    if (orderedQty <= 0) return sum;
+    const deliveredQty = Math.min(Number(deliveredByItem[item.id] || 0), orderedQty);
+    return sum + (Number(item.total || 0) * (deliveredQty / orderedQty));
+  }, 0);
+};
+
 const getDispatchedQuantity = (item = {}) => {
   const shipmentQty = (item.shipmentItems || []).reduce((sum, shipmentItem) => sum + Number(shipmentItem.quantity || 0), 0);
   const fulfillmentQty = (item.fulfillmentItems || []).reduce((sum, fulfillmentItem) => sum + Number(fulfillmentItem.quantity || 0), 0);
@@ -403,6 +422,95 @@ const getFulfillmentStatusOptions = (currentStatus) => [
   currentStatus === 'pending' ? 'created' : currentStatus,
   ...(FULFILLMENT_STATUS_TRANSITIONS[currentStatus === 'pending' ? 'created' : currentStatus] || []),
 ].filter(Boolean);
+
+const RETURN_STATUS_TRANSITIONS = {
+  return_requested: ['return_approved', 'return_rejected'],
+  return_approved: ['pickup_scheduled'],
+  pickup_scheduled: ['pickup_completed'],
+  pickup_completed: ['return_completed'],
+  return_completed: [],
+  replacement_requested: ['replacement_approved', 'replacement_rejected'],
+  replacement_approved: ['replacement_processing'],
+  replacement_processing: ['replacement_shipped'],
+  replacement_shipped: ['replacement_delivered'],
+  replacement_delivered: ['replacement_completed'],
+  replacement_completed: [],
+  return_rejected: [],
+  replacement_rejected: [],
+};
+
+const RETURN_STATUS_LABELS = {
+  requested: 'Requested',
+  approved: 'Approved',
+  rejected: 'Rejected',
+  scheduled: 'Pickup scheduled',
+  picked_up: 'Pickup completed',
+  returned: 'Return completed',
+  processing: 'Processing',
+  shipped: 'Shipped',
+  delivered: 'Delivered',
+  completed: 'Completed',
+  return_requested: 'Return requested',
+  return_approved: 'Return approved',
+  return_rejected: 'Return rejected',
+  pickup_scheduled: 'Pickup scheduled',
+  pickup_completed: 'Pickup completed',
+  return_completed: 'Return completed',
+  replacement_requested: 'Replacement requested',
+  replacement_approved: 'Replacement approved',
+  replacement_rejected: 'Replacement rejected',
+  replacement_processing: 'Replacement processing',
+  replacement_shipped: 'Replacement shipped',
+  replacement_delivered: 'Replacement delivered',
+  replacement_completed: 'Replacement completed',
+};
+
+const normalizeReturnRequestStatus = (status, type = 'return') => {
+  if (RETURN_STATUS_TRANSITIONS[status] || RETURN_STATUS_LABELS[status]) {
+    if (!['requested', 'approved', 'rejected', 'scheduled', 'picked_up', 'returned', 'processing', 'shipped', 'delivered', 'completed'].includes(status)) {
+      return status;
+    }
+  }
+  const prefix = type === 'replacement' ? 'replacement' : 'return';
+  const legacyMap = {
+    requested: `${prefix}_requested`,
+    approved: `${prefix}_approved`,
+    rejected: `${prefix}_rejected`,
+    scheduled: 'pickup_scheduled',
+    picked_up: 'pickup_completed',
+    returned: 'return_completed',
+    processing: 'replacement_processing',
+    shipped: 'replacement_shipped',
+    delivered: 'replacement_delivered',
+    completed: type === 'replacement' ? 'replacement_completed' : 'return_completed',
+  };
+  return legacyMap[status] || status;
+};
+
+const getReturnRequestAmount = (request = {}) => (
+  request.items?.reduce((sum, item) => {
+    const orderItem = item.orderItem || {};
+    const orderedQty = Number(orderItem.quantity || 1);
+    const itemTotal = Number(orderItem.total || 0);
+    return sum + (orderedQty > 0 ? itemTotal * (Number(item.quantity || 0) / orderedQty) : 0);
+  }, 0) || 0
+);
+
+const getRefundedAmountForReturnRequest = (order = {}, returnId) => (
+  (order.refunds || order.Refunds || [])
+    .filter((refund) => refund.returnId === returnId && ['refunded', 'partially_refunded'].includes(refund.status))
+    .reduce((sum, refund) => sum + Number(refund.amount || 0), 0)
+);
+
+const hasFullRefundForReturnRequest = (order = {}, request = {}) => {
+  const refunds = (order.refunds || order.Refunds || [])
+    .filter((refund) => refund.returnId === request.id && ['refunded', 'partially_refunded'].includes(refund.status));
+  if (refunds.some((refund) => refund.status === 'refunded')) return true;
+  const requestAmount = getReturnRequestAmount(request);
+  if (requestAmount <= 0) return false;
+  const refundedAmount = refunds.reduce((sum, refund) => sum + Number(refund.amount || 0), 0);
+  return refundedAmount >= requestAmount;
+};
 
 const FulfillmentDialog = ({ open, onClose, orderItems, onSave, loading }) => {
   const [trackingNumber, setTrackingNumber] = useState('');
@@ -672,6 +780,8 @@ const OrderDetailPage = () => {
   const [updating, setUpdating] = useState(false);
   const [fulfillmentDialogOpen, setFulfillmentDialogOpen] = useState(false);
   const [historyDialogOpen, setHistoryDialogOpen] = useState(false);
+  const [codCollectionDialogOpen, setCodCollectionDialogOpen] = useState(false);
+  const [codCollectionAmount, setCodCollectionAmount] = useState('');
   const [fulfillmentLoading, setFulfillmentLoading] = useState(false);
   const [addingNote, setAddingNote] = useState(false);
 
@@ -702,6 +812,10 @@ const OrderDetailPage = () => {
     () => getFulfillmentProgress(orderItems, order?.fulfillments || []),
     [orderItems, order?.fulfillments]
   );
+  const deliveredItemsAmount = useMemo(
+    () => getDeliveredItemsAmount(orderItems, order?.fulfillments || []),
+    [orderItems, order?.fulfillments]
+  );
   const appliedDiscounts = useMemo(
     () => (Array.isArray(order?.appliedDiscounts) ? order.appliedDiscounts : []),
     [order]
@@ -709,7 +823,7 @@ const OrderDetailPage = () => {
   const address = order?.shippingAddressSnapshot;
   const payment = order?.Payment || null;
 
-  const { allowedNextStatuses, isRefundable, isFulfillable } = useOrderStatusTransitions(order?.status);
+  const { allowedNextStatuses, isFulfillable } = useOrderStatusTransitions(order?.status);
 
   const progressSteps = useMemo(
     () => getOrderProgressSteps({ ...(order || {}), Payment: payment }, fulfillmentProgress),
@@ -722,10 +836,11 @@ const OrderDetailPage = () => {
   }, [address?.fullName, order?.User?.firstName, order?.User?.lastName]);
 
   const hasSettledPayment = PAYMENT_SETTLED_STATUSES.includes(payment?.status);
+  const hasResolvedPayment = hasSettledPayment || payment?.status === 'refunded';
   // TODO: Remove shipmentStatus fallback once all orders are backfilled to orderShippingStatus
   const orderShippingStatus = order?.orderShippingStatus ?? order?.shipmentStatus ?? 'not_shipped';
   const hasTerminalShipping = ['delivered', 'rto'].includes(orderShippingStatus);
-  const canCloseOrder = hasSettledPayment && hasTerminalShipping;
+  const canCloseOrder = hasResolvedPayment && hasTerminalShipping;
   const availableStatuses = useMemo(() => {
     if (!order?.status) return [];
     return [order.status, ...allowedNextStatuses].filter((statusOption) => {
@@ -735,12 +850,31 @@ const OrderDetailPage = () => {
     });
   }, [order?.status, allowedNextStatuses, canCloseOrder]);
   const hasStatusTransitions = availableStatuses.length > 1;
-  const canRefund = canRefundOrders && isRefundable && hasSettledPayment;
   const canFulfill = canUpdateOrderStatus && isFulfillable;
+  const codCollectedAmount = Number(
+    payment?.metadata?.codCollectedAmount
+    || (order?.paymentMethod === 'cod' && payment?.status !== 'paid_cod' && Number(payment?.amount || 0) < Number(order?.total || 0)
+      ? payment?.amount
+      : 0)
+  );
+  const codDueAmount = Math.max(Number(order?.total || 0) - codCollectedAmount, 0);
+  const defaultCodCollectionAmount = Math.min(deliveredItemsAmount, codDueAmount);
   const canConfirmCod = canUpdateOrderStatus
     && order?.paymentMethod === 'cod'
-    && ['pending_cod', 'pending'].includes(payment?.status || 'pending_cod')
-    && orderShippingStatus === 'delivered';
+    && ['pending_cod', 'pending', 'partially_refunded', 'refunded'].includes(payment?.status || 'pending_cod')
+    && ['partially_delivered', 'delivered'].includes(orderShippingStatus)
+    && codDueAmount > 0;
+  const refundedAmount = Number(payment?.metadata?.refundedAmount || 0);
+  const legacyCodCapturedAmount = order?.paymentMethod === 'cod'
+    && payment?.status !== 'paid_cod'
+    && Number(payment?.amount || 0) > 0
+    && Number(payment?.amount || 0) < Number(order?.total || 0)
+    ? Number(payment?.amount || 0)
+    : 0;
+  const capturedPaymentAmount = order?.paymentMethod === 'cod'
+    ? (codCollectedAmount || legacyCodCapturedAmount || (payment?.status === 'paid_cod' ? Number(payment?.amount || order?.total || 0) : 0))
+    : Number(payment?.amount || order?.total || 0);
+  const refundableAmount = Math.max(capturedPaymentAmount - refundedAmount, 0);
 
   const handleStatusUpdate = async () => {
     if (!canUpdateOrderStatus) {
@@ -760,33 +894,28 @@ const OrderDetailPage = () => {
     }
   };
 
-  const handleRefund = async () => {
-    if (!canRefundOrders) {
-      notify('You do not have permission to refund orders.', 'error');
-      return;
-    }
-
-    if (!window.confirm('Issue a full refund for this order?')) return;
-
-    setUpdating(true);
-    try {
-      const response = await refundOrder(id);
-      setOrder(response.data.data);
-      setNewStatus('refunded');
-      notify('Refund recorded successfully.', 'success');
-    } catch (refundError) {
-      notify(getApiErrorMessage(refundError, 'Failed to refund order.'), 'error');
-    } finally {
-      setUpdating(false);
-    }
+  const openCodCollectionDialog = () => {
+    setCodCollectionAmount(defaultCodCollectionAmount > 0 ? String(defaultCodCollectionAmount.toFixed(2)) : '');
+    setCodCollectionDialogOpen(true);
   };
 
   const handleConfirmCodPayment = async () => {
+    const amount = Number(codCollectionAmount);
+    if (!Number.isFinite(amount) || amount <= 0) {
+      notify('Enter a valid COD amount to collect.', 'error');
+      return;
+    }
+    if (amount > codDueAmount) {
+      notify(`COD amount cannot exceed pending balance ${formatPrice(codDueAmount)}.`, 'error');
+      return;
+    }
+
     setUpdating(true);
     try {
-      await confirmCodPayment(id);
+      await confirmCodPayment(id, { amount });
+      setCodCollectionDialogOpen(false);
       await fetchOrder();
-      notify('COD payment marked as collected.', 'success');
+      notify('COD payment collection recorded.', 'success');
     } catch (codError) {
       notify(getApiErrorMessage(codError, 'Failed to confirm COD payment.'), 'error');
     } finally {
@@ -812,6 +941,52 @@ const OrderDetailPage = () => {
       return false;
     } finally {
       setAddingNote(false);
+    }
+  };
+
+  const handleReturnStatusUpdate = async (returnId, status) => {
+    setUpdating(true);
+    try {
+      await updateReturnStatus(id, returnId, status);
+      await fetchOrder();
+      notify('Return/replacement status updated.', 'success');
+    } catch (err) {
+      notify(getApiErrorMessage(err, 'Failed to update return/replacement status.'), 'error');
+    } finally {
+      setUpdating(false);
+    }
+  };
+
+  const handleReturnRefund = async (returnRequest) => {
+    const returnRequestAmount = getReturnRequestAmount(returnRequest);
+    const refundedForReturn = getRefundedAmountForReturnRequest(order, returnRequest.id);
+    const remainingReturnAmount = Math.max(returnRequestAmount - refundedForReturn, 0);
+    const suggestedAmount = remainingReturnAmount || refundableAmount;
+    const maxAmount = Math.min(refundableAmount, suggestedAmount);
+    if (maxAmount <= 0) {
+      notify('No captured payment is available to refund for this return.', 'error');
+      return;
+    }
+    const enteredAmount = window.prompt(
+      `Enter refund amount. Returned product limit: ${formatPrice(suggestedAmount)}. Captured payment available: ${formatPrice(refundableAmount)}.`,
+      maxAmount > 0 ? maxAmount.toFixed(2) : ''
+    );
+    if (enteredAmount === null) return;
+    const amount = Number(enteredAmount);
+    if (!Number.isFinite(amount) || amount <= 0 || amount > maxAmount) {
+      notify(`Enter an amount between 0 and ${formatPrice(maxAmount)}.`, 'error');
+      return;
+    }
+
+    setUpdating(true);
+    try {
+      await processRefund(id, { returnId: returnRequest.id, amount, reason: returnRequest.reason || 'Return refund' });
+      await fetchOrder();
+      notify('Return refund recorded.', 'success');
+    } catch (err) {
+      notify(getApiErrorMessage(err, 'Failed to process return refund.'), 'error');
+    } finally {
+      setUpdating(false);
     }
   };
 
@@ -918,14 +1093,9 @@ const OrderDetailPage = () => {
           >
             Print Invoice
           </Button>
-          {canRefund && (
-            <Button variant="outlined" color="error" onClick={handleRefund} disabled={updating}>
-              {updating ? 'Processing…' : 'Issue Refund'}
-            </Button>
-          )}
           {canConfirmCod && (
-            <Button variant="contained" color="success" onClick={handleConfirmCodPayment} disabled={updating}>
-              {updating ? 'Saving…' : 'Mark COD Collected'}
+            <Button variant="contained" color="success" onClick={openCodCollectionDialog} disabled={updating}>
+              {updating ? 'Saving…' : codCollectedAmount > 0 ? `Collect COD Balance ${formatPrice(codDueAmount)}` : 'Collect COD'}
             </Button>
           )}
           {canFulfill && (
@@ -941,7 +1111,7 @@ const OrderDetailPage = () => {
         </Stack>
       </Box>
 
-      {order.status === 'closed' && !hasSettledPayment && (
+      {order.status === 'closed' && !hasResolvedPayment && (
         <Alert severity="warning" sx={{ mb: 3 }}>
           This order was previously marked closed before payment and shipping were complete. It will be reopened automatically when refreshed.
         </Alert>
@@ -1114,12 +1284,38 @@ const OrderDetailPage = () => {
                 </Box>
                 <Box>
                   <Typography variant="caption" color="text.secondary">
-                    Amount
+                    Order amount
                   </Typography>
                   <Typography variant="body2">
-                    {payment ? formatPrice(payment.amount || 0) : formatPrice(order.total || 0)}
+                    {formatPrice(order.total || payment?.amount || 0)}
                   </Typography>
                 </Box>
+                {order?.paymentMethod === 'cod' && (
+                  <>
+                    <Box>
+                      <Typography variant="caption" color="text.secondary">
+                        Collected so far
+                      </Typography>
+                      <Typography variant="body2">{formatPrice(codCollectedAmount)}</Typography>
+                    </Box>
+                    <Box>
+                      <Typography variant="caption" color="text.secondary">
+                        Pending balance
+                      </Typography>
+                      <Typography variant="body2">{formatPrice(codDueAmount)}</Typography>
+                    </Box>
+                  </>
+                )}
+                {refundedAmount > 0 && (
+                  <>
+                    <Box>
+                      <Typography variant="caption" color="text.secondary">
+                        Item refunds
+                      </Typography>
+                      <Typography variant="body2">{formatPrice(refundedAmount)}</Typography>
+                    </Box>
+                  </>
+                )}
               </Stack>
             </DetailCard>
 
@@ -1275,6 +1471,79 @@ const OrderDetailPage = () => {
               </DetailCard>
             </Box>
           )}
+
+          {order.returns && order.returns.length > 0 && (
+            <Box sx={{ mt: 3 }}>
+              <DetailCard title="Returns / Replacements">
+                <Stack spacing={2}>
+                  {order.returns.map((request) => {
+                    const currentReturnStatus = normalizeReturnRequestStatus(request.status, request.type);
+                    const nextStatuses = RETURN_STATUS_TRANSITIONS[currentReturnStatus] || [];
+                    const statusOptions = [currentReturnStatus, ...nextStatuses];
+                    const returnRequestAmount = getReturnRequestAmount(request);
+                    const refundedForReturn = getRefundedAmountForReturnRequest(order, request.id);
+                    const isReturnFullyRefunded = hasFullRefundForReturnRequest(order, request);
+                    const remainingReturnRefundable = Math.max(returnRequestAmount - refundedForReturn, 0);
+                    const canRefundReturn = request.type === 'return'
+                      && ['pickup_completed', 'return_completed'].includes(currentReturnStatus)
+                      && !isReturnFullyRefunded
+                      && remainingReturnRefundable > 0
+                      && refundableAmount > 0;
+
+                    return (
+                      <Paper
+                        key={request.id}
+                        elevation={0}
+                        sx={{ p: 2, border: '1px solid', borderColor: 'divider', borderRadius: 2 }}
+                      >
+                        <Box sx={{ display: 'flex', justifyContent: 'space-between', gap: 2, flexWrap: 'wrap', mb: 1.5 }}>
+                          <Box>
+                            <Typography variant="subtitle2" fontWeight={800}>
+                              {request.type === 'replacement' ? 'Replacement' : 'Return'} request
+                            </Typography>
+                            <Typography variant="caption" color="text.secondary">
+                              {request.reason || 'No reason provided'}
+                            </Typography>
+                          </Box>
+                          <Stack direction="row" spacing={1} alignItems="center">
+                            <FormControl size="small" sx={{ minWidth: 190 }}>
+                              <Select
+                                value={currentReturnStatus}
+                                disabled={!canUpdateOrderStatus || nextStatuses.length === 0 || updating}
+                                onChange={(event) => handleReturnStatusUpdate(request.id, event.target.value)}
+                              >
+                                {statusOptions.map((statusOption) => (
+                                  <MenuItem key={statusOption} value={statusOption}>
+                                    {RETURN_STATUS_LABELS[statusOption] || statusOption}
+                                  </MenuItem>
+                                ))}
+                              </Select>
+                            </FormControl>
+                            {canRefundReturn && (
+                              <Button size="small" variant="outlined" color="error" onClick={() => handleReturnRefund(request)} disabled={updating}>
+                                Refund
+                              </Button>
+                            )}
+                            {request.type === 'return' && isReturnFullyRefunded && (
+                              <Chip size="small" color="success" label="Refunded" sx={{ fontWeight: 800 }} />
+                            )}
+                          </Stack>
+                        </Box>
+                        <Stack spacing={0.75}>
+                          {request.items?.map((item) => (
+                            <Box key={item.id} sx={{ display: 'flex', justifyContent: 'space-between', gap: 2 }}>
+                              <Typography variant="body2">{item.orderItem?.snapshotName || 'Order item'}</Typography>
+                              <Typography variant="body2" fontWeight={700}>Qty: {item.quantity}</Typography>
+                            </Box>
+                          ))}
+                        </Stack>
+                      </Paper>
+                    );
+                  })}
+                </Stack>
+              </DetailCard>
+            </Box>
+          )}
         </Grid>
 
         <Grid item xs={12} md={4}>
@@ -1372,6 +1641,55 @@ const OrderDetailPage = () => {
           </Stack>
         </Grid>
       </Grid>
+
+      <Dialog
+        open={codCollectionDialogOpen}
+        onClose={() => !updating && setCodCollectionDialogOpen(false)}
+        maxWidth="xs"
+        fullWidth
+      >
+        <DialogTitle>Collect COD Payment</DialogTitle>
+        <DialogContent>
+          <Stack spacing={2} sx={{ pt: 1 }}>
+            <Box sx={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 1.5 }}>
+              <Box>
+                <Typography variant="caption" color="text.secondary">Delivered product amount</Typography>
+                <Typography variant="subtitle1" fontWeight={800}>{formatPrice(deliveredItemsAmount)}</Typography>
+              </Box>
+              <Box>
+                <Typography variant="caption" color="text.secondary">Pending balance</Typography>
+                <Typography variant="subtitle1" fontWeight={800}>{formatPrice(codDueAmount)}</Typography>
+              </Box>
+              <Box>
+                <Typography variant="caption" color="text.secondary">Collected so far</Typography>
+                <Typography variant="body2" fontWeight={700}>{formatPrice(codCollectedAmount)}</Typography>
+              </Box>
+              <Box>
+                <Typography variant="caption" color="text.secondary">Order total</Typography>
+                <Typography variant="body2" fontWeight={700}>{formatPrice(order?.total || 0)}</Typography>
+              </Box>
+            </Box>
+            <TextField
+              autoFocus
+              label="Amount customer paid"
+              type="number"
+              value={codCollectionAmount}
+              onChange={(event) => setCodCollectionAmount(event.target.value)}
+              inputProps={{ min: 0, max: codDueAmount, step: '0.01' }}
+              helperText={`Enter any amount up to ${formatPrice(codDueAmount)}.`}
+              fullWidth
+            />
+          </Stack>
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setCodCollectionDialogOpen(false)} disabled={updating}>
+            Cancel
+          </Button>
+          <Button variant="contained" onClick={handleConfirmCodPayment} disabled={updating}>
+            {updating ? 'Saving…' : 'Record Payment'}
+          </Button>
+        </DialogActions>
+      </Dialog>
 
       <Dialog
         open={historyDialogOpen}

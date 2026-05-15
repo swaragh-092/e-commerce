@@ -59,6 +59,7 @@ const {
     isFulfillableOrderStatus,
     normalizeOrderStatus,
     normalizePaymentStatus,
+    normalizePutBackRecordStatus,
     ensureValidStatusTransition,
     deriveOrderShippingStatus,
     derivePutBackCache,
@@ -67,7 +68,7 @@ const {
 } = require('../../utils/orderWorkflow');
 
 const ADMIN_ORDER_LIST_USER_ATTRIBUTES = ['id', 'firstName', 'lastName', 'email'];
-const ADMIN_ORDER_PAYMENT_ATTRIBUTES = ['id', 'provider', 'status', 'amount', 'currency', 'transactionId', 'createdAt', 'updatedAt'];
+const ADMIN_ORDER_PAYMENT_ATTRIBUTES = ['id', 'provider', 'status', 'amount', 'currency', 'transactionId', 'metadata', 'createdAt', 'updatedAt'];
 
 const queueShipmentNotification = async (orderId, shipmentStatus, shipment = {}) => {
     if (!['shipped', 'out_for_delivery', 'delivered'].includes(shipmentStatus)) return;
@@ -197,9 +198,15 @@ const syncOrderShippingStatus = async (order, transaction, actingUserId = null) 
     const shipments = await Shipment.findAll({
         where: { orderId: order.id },
         attributes: ['id', 'status'],
+        include: [{ model: ShipmentItem, as: 'items' }],
         transaction,
     });
-    const nextStatus = deriveOrderShippingStatus(shipments);
+    const orderItems = await OrderItem.findAll({
+        where: { orderId: order.id },
+        attributes: ['id', 'quantity'],
+        transaction,
+    });
+    const nextStatus = deriveQuantityAwareOrderShippingStatus(orderItems, shipments);
     if (order.orderShippingStatus !== nextStatus) {
         const previous = order.orderShippingStatus;
         await order.update({ orderShippingStatus: nextStatus }, { transaction });
@@ -216,6 +223,21 @@ const syncOrderShippingStatus = async (order, transaction, actingUserId = null) 
         });
     }
     return nextStatus;
+};
+
+const deriveQuantityAwareOrderShippingStatus = (orderItems = [], shipments = []) => {
+    const fallbackStatus = deriveOrderShippingStatus(shipments);
+    const totalQuantity = orderItems.reduce((sum, item) => sum + Number(item.quantity || 0), 0);
+    if (totalQuantity <= 0) return fallbackStatus;
+
+    const deliveredQuantity = shipments
+        .filter((shipment) => shipment.status === 'delivered')
+        .flatMap((shipment) => shipment.items || [])
+        .reduce((sum, item) => sum + Number(item.quantity || 0), 0);
+
+    if (deliveredQuantity >= totalQuantity) return 'delivered';
+    if (deliveredQuantity > 0) return 'partially_delivered';
+    return fallbackStatus === 'delivered' ? 'partially_delivered' : fallbackStatus;
 };
 
 const syncCodPaymentIfDelivered = async (order, transaction, actingUserId = null) => {
@@ -322,9 +344,15 @@ const repairInvalidClosedOrder = async (order, transaction = null) => {
     const shipments = order.shipments || await Shipment.findAll({
         where: { orderId: order.id },
         attributes: ['id', 'status'],
+        include: [{ model: ShipmentItem, as: 'items' }],
         transaction,
     });
-    const derivedShippingStatus = deriveOrderShippingStatus(shipments);
+    const orderItems = await OrderItem.findAll({
+        where: { orderId: order.id },
+        attributes: ['id', 'quantity'],
+        transaction,
+    });
+    const derivedShippingStatus = deriveQuantityAwareOrderShippingStatus(orderItems, shipments);
 
     if (canCloseOrder({ order, payment, orderShippingStatus: derivedShippingStatus })) {
         if (order.orderShippingStatus !== derivedShippingStatus) {
@@ -361,9 +389,15 @@ const repairCompletableOrder = async (order, transaction = null) => {
     const shipments = order.shipments || await Shipment.findAll({
         where: { orderId: order.id },
         attributes: ['id', 'status'],
+        include: [{ model: ShipmentItem, as: 'items' }],
         transaction,
     });
-    const derivedShippingStatus = deriveOrderShippingStatus(shipments);
+    const orderItems = await OrderItem.findAll({
+        where: { orderId: order.id },
+        attributes: ['id', 'quantity'],
+        transaction,
+    });
+    const derivedShippingStatus = deriveQuantityAwareOrderShippingStatus(orderItems, shipments);
     if (order.orderShippingStatus !== derivedShippingStatus) {
         await order.update({ orderShippingStatus: derivedShippingStatus }, { transaction });
     }
@@ -430,7 +464,7 @@ const HEAVY_ORDER_INCLUDE = [
                 model: FulfillmentItem,
                 as: 'items',
                 include: [
-                    { model: OrderItem, as: 'orderItem', attributes: ['id', 'snapshotName', 'snapshotSku', 'snapshotImage', 'variantInfo'] },
+                    { model: OrderItem, as: 'orderItem', attributes: ['id', 'snapshotName', 'snapshotSku', 'snapshotImage', 'variantInfo', 'quantity', 'total'] },
                 ],
             },
             {
@@ -467,7 +501,7 @@ const HEAVY_ORDER_INCLUDE = [
                 model: OrderReturnItem,
                 as: 'items',
                 include: [
-                    { model: OrderItem, as: 'orderItem', attributes: ['id', 'snapshotName', 'snapshotSku', 'snapshotImage', 'variantInfo'] },
+                    { model: OrderItem, as: 'orderItem', attributes: ['id', 'snapshotName', 'snapshotSku', 'snapshotImage', 'variantInfo', 'quantity', 'total'] },
                     { model: ShipmentItem, as: 'shipmentItem', required: false },
                 ],
             },
@@ -720,6 +754,207 @@ const releaseOrderReservationsAndCoupons = async (order, transaction) => {
     }
 
     return eventBuffer;
+};
+
+const FINAL_REFUND_STATUSES = Object.freeze(['refunded', 'partially_refunded']);
+const money = (value) => Number(Number(value || 0).toFixed(2));
+
+const getCapturedPaymentAmount = (payment, order = {}) => {
+    if (!payment) return 0;
+    if (payment.provider === 'cod') {
+        const collected = money(payment.metadata?.codCollectedAmount);
+        if (collected > 0) return collected;
+        const paymentAmount = money(payment.amount);
+        const orderTotal = money(order.total);
+        if (normalizePaymentStatus(payment.status, payment.provider) === 'paid_cod') {
+            return paymentAmount || orderTotal;
+        }
+        if (paymentAmount > 0 && paymentAmount < orderTotal) {
+            return paymentAmount;
+        }
+        return 0;
+    }
+    return money(payment.amount || order.total);
+};
+
+const canRefundCapturedPayment = (payment, order) => {
+    if (!payment) return false;
+    if (payment.provider === 'cod') return getCapturedPaymentAmount(payment, order) > 0;
+    const normalizedStatus = normalizePaymentStatus(payment.status, payment.provider);
+    return isPaymentSettled(payment.status, payment.provider) || ['partially_refunded', 'refunded'].includes(normalizedStatus);
+};
+
+const getRestoredPaymentStatusAfterPartialRefund = (payment, order = {}) => {
+    const provider = payment?.provider || order?.paymentMethod;
+    if (provider === 'cod') {
+        const orderTotal = money(order?.total);
+        const collectedAmount = money(
+            payment?.metadata?.codCollectedAmount
+            || (money(payment?.metadata?.codDueAmount) === 0 ? payment?.amount : 0)
+        );
+        return orderTotal > 0 && collectedAmount >= orderTotal ? 'paid_cod' : 'pending_cod';
+    }
+    return 'paid_online';
+};
+
+const repairItemScopedPartialRefundPaymentStatus = async (order, transaction = null) => {
+    if (!order) return order;
+    const payment = order.Payment || await Payment.findOne({
+        where: { orderId: order.id },
+        transaction,
+    });
+    if (!payment || payment.status !== 'partially_refunded') return order;
+
+    const refundedAmount = money(payment.metadata?.refundedAmount);
+    const orderTotal = money(order.total);
+    if (orderTotal <= 0 || refundedAmount >= orderTotal) return order;
+
+    await payment.update({
+        status: getRestoredPaymentStatusAfterPartialRefund(payment, order),
+        metadata: {
+            ...(payment.metadata || {}),
+            itemScopedRefundAmount: refundedAmount,
+            refundDueAmount: 0,
+            orderRefundBalanceAmount: 0,
+        },
+    }, { transaction });
+    return order;
+};
+
+const isCodPaymentShippable = (payment, order) => {
+    const normalizedPaymentStatus = normalizePaymentStatus(payment?.status, payment?.provider || order?.paymentMethod);
+    if (['pending_cod', 'paid_cod'].includes(normalizedPaymentStatus)) return true;
+    if (['refunded', 'partially_refunded'].includes(payment?.status)) {
+        const refundedAmount = money(payment?.metadata?.refundedAmount);
+        const orderTotal = money(order?.total);
+        return orderTotal > 0 && refundedAmount < orderTotal;
+    }
+    return false;
+};
+
+const getRefundedAmount = async (orderId, transaction) => {
+    const refunds = await OrderRefund.findAll({
+        where: {
+            orderId,
+            status: { [Op.in]: FINAL_REFUND_STATUSES },
+        },
+        attributes: ['amount'],
+        transaction,
+    });
+    return refunds.reduce((sum, refund) => sum + Number(refund.amount || 0), 0);
+};
+
+const getRefundedAmountForReturn = async (returnId, transaction) => {
+    if (!returnId) return 0;
+    const refunds = await OrderRefund.findAll({
+        where: {
+            returnId,
+            status: { [Op.in]: FINAL_REFUND_STATUSES },
+        },
+        attributes: ['amount'],
+        transaction,
+    });
+    return money(refunds.reduce((sum, refund) => sum + Number(refund.amount || 0), 0));
+};
+
+const getReturnRequestItemAmount = (returnRequest) => {
+    const items = returnRequest?.items || [];
+    return money(items.reduce((sum, item) => {
+        const orderItem = item.orderItem || {};
+        const orderedQty = Number(orderItem.quantity || 0);
+        const returnedQty = Number(item.quantity || 0);
+        const itemTotal = Number(orderItem.total || 0);
+        if (orderedQty <= 0 || returnedQty <= 0 || itemTotal <= 0) return sum;
+        return sum + (itemTotal * (returnedQty / orderedQty));
+    }, 0));
+};
+
+const createRefundRecord = async ({
+    order,
+    payment,
+    amount,
+    reason,
+    actingUserId,
+    returnId = null,
+    refundScopeAmount = null,
+    metadata = {},
+    transaction,
+}) => {
+    const capturedAmount = getCapturedPaymentAmount(payment, order);
+    const refundedAmount = await getRefundedAmount(order.id, transaction);
+    const remainingRefundable = money(Math.max(capturedAmount - refundedAmount, 0));
+    const refundAmount = money(amount ?? remainingRefundable);
+
+    if (!Number.isFinite(refundAmount) || refundAmount <= 0) {
+        throw new AppError('VALIDATION_ERROR', 400, 'Refund amount must be greater than 0');
+    }
+    if (refundAmount > remainingRefundable) {
+        throw new AppError('VALIDATION_ERROR', 400, `Refund amount cannot exceed remaining refundable amount ${remainingRefundable.toFixed(2)}`);
+    }
+
+    const orderTotal = money(order.total);
+    const nextTotalRefunded = money(refundedAmount + refundAmount);
+    const fullRefundBasis = orderTotal > 0 ? orderTotal : capturedAmount;
+    const isFullOrderRefund = fullRefundBasis > 0 && nextTotalRefunded >= fullRefundBasis;
+    const scopedRefundBasis = money(refundScopeAmount || refundAmount);
+    const refundStatus = scopedRefundBasis > 0 && refundAmount >= scopedRefundBasis ? 'refunded' : 'partially_refunded';
+    const nextPaymentStatus = isFullOrderRefund
+        ? 'refunded'
+        : getRestoredPaymentStatusAfterPartialRefund(payment, order);
+    const refund = await OrderRefund.create({
+        orderId: order.id,
+        returnId,
+        paymentId: payment.id,
+        amount: refundAmount,
+        currency: payment.currency || 'INR',
+        status: refundStatus,
+        reason,
+        processedAt: new Date(),
+        metadata: {
+            ...metadata,
+            totalRefundedAmount: nextTotalRefunded,
+            capturedAmount,
+            refundScopeAmount: scopedRefundBasis,
+            itemScoped: Boolean(returnId),
+        },
+    }, { transaction });
+
+    await payment.update({
+        status: nextPaymentStatus,
+        metadata: {
+            ...(payment.metadata || {}),
+            refundedAmount: nextTotalRefunded,
+            refundDueAmount: returnId || isFullOrderRefund ? 0 : money(Math.max(capturedAmount - nextTotalRefunded, 0)),
+            orderRefundBalanceAmount: returnId || isFullOrderRefund ? 0 : money(Math.max(fullRefundBasis - nextTotalRefunded, 0)),
+            itemScopedRefundAmount: returnId ? nextTotalRefunded : payment.metadata?.itemScopedRefundAmount,
+            lastRefundedBy: actingUserId,
+            lastRefundedAt: new Date().toISOString(),
+            fullyRefundedAt: isFullOrderRefund ? new Date().toISOString() : payment.metadata?.fullyRefundedAt,
+        },
+    }, { transaction });
+
+    await logOrderHistory({
+        orderId: order.id,
+        entityType: 'OrderRefund',
+        entityId: refund.id,
+        statusGroup: 'refund',
+        toStatus: refundStatus,
+        changedBy: actingUserId,
+        metadata: { amount: refundAmount, totalRefundedAmount: nextTotalRefunded, reason },
+        transaction,
+    });
+
+    await addOrderHistoryEvent({
+        orderId: order.id,
+        eventType: 'refund',
+        description: `${refundStatus === 'refunded' ? 'Full' : 'Partial'} refund of ${refundAmount.toFixed(2)} recorded.`,
+        actorId: actingUserId,
+        actorType: 'admin',
+        metadata: { refundId: refund.id, amount: refundAmount, status: refundStatus },
+        transaction,
+    });
+
+    return refund;
 };
 
 const getPaymentSettings = async () => {
@@ -1436,6 +1671,16 @@ const getOrderById = async (id, userId, isAdmin) => {
                 lock: Transaction.LOCK.UPDATE,
             });
             await repairCompletableOrder(lockedOrder, t);
+            await repairItemScopedPartialRefundPaymentStatus(lockedOrder, t);
+        });
+        order = await Order.findOne({ where, include: HEAVY_ORDER_INCLUDE });
+    } else {
+        await sequelize.transaction(async (t) => {
+            const lockedOrder = await Order.findByPk(order.id, {
+                transaction: t,
+                lock: Transaction.LOCK.UPDATE,
+            });
+            await repairItemScopedPartialRefundPaymentStatus(lockedOrder, t);
         });
         order = await Order.findOne({ where, include: HEAVY_ORDER_INCLUDE });
     }
@@ -1492,7 +1737,7 @@ const createFulfillment = async (orderId, payload, actingUserId, auditContext = 
         if (order.paymentMethod !== 'cod' && !isPaymentSettled(normalizedPaymentStatus, payment?.provider)) {
             throw new AppError('VALIDATION_ERROR', 400, 'Cannot ship an unpaid online order');
         }
-        if (order.paymentMethod === 'cod' && normalizedPaymentStatus !== 'pending_cod' && normalizedPaymentStatus !== 'paid_cod') {
+        if (order.paymentMethod === 'cod' && !isCodPaymentShippable(payment, order)) {
             throw new AppError('VALIDATION_ERROR', 400, 'COD shipment requires pending COD or paid COD payment state');
         }
 
@@ -1925,7 +2170,16 @@ const updateStatus = async (id, status, actingUserId, auditContext = null) => {
                 }, { transaction: t });
             }
         } else if (status === 'cancelled') {
-            if (payment && ['payment_pending', 'pending_cod', 'pending'].includes(payment.status)) {
+            if (payment && isPaymentSettled(payment.status, payment.provider)) {
+                await createRefundRecord({
+                    order,
+                    payment,
+                    reason: 'Order cancelled before shipment',
+                    actingUserId,
+                    metadata: { cancellationRefund: true },
+                    transaction: t,
+                });
+            } else if (payment && ['payment_pending', 'pending_cod', 'pending'].includes(payment.status)) {
                 await payment.update({ 
                     status: 'payment_failed',
                     metadata: {
@@ -2138,7 +2392,7 @@ const cancelOrder = async (id, userId) => {
 
 
         ensureValidOrderTransition(prevStatus, 'cancelled');
-        await releaseOrderReservationsAndCoupons(order, t);
+        eventsToEmit = await releaseOrderReservationsAndCoupons(order, t);
 
         await order.update({ status: 'cancelled' }, { transaction: t });
         await logOrderHistory({
@@ -2167,6 +2421,15 @@ const cancelOrder = async (id, userId) => {
                     cancelledAt: new Date().toISOString()
                 }
             }, { transaction: t });
+        } else if (payment && isPaymentSettled(payment.status, payment.provider)) {
+            await createRefundRecord({
+                order,
+                payment,
+                reason: 'Order cancelled before shipment',
+                actingUserId: userId,
+                metadata: { cancellationRefund: true, cancelledBy: 'customer' },
+                transaction: t,
+            });
         }
 
         try {
@@ -2453,7 +2716,8 @@ const getDeliveredQuantityByOrderItem = async (orderId, transaction) => {
 };
 
 const getActivePutBackQuantityByOrderItem = async (orderId, type, transaction, excludeId = null) => {
-    const where = { orderId, type };
+    const where = { orderId };
+    if (type) where.type = type;
     if (excludeId) where.id = { [Op.ne]: excludeId };
     const records = await OrderReturn.findAll({
         where,
@@ -2479,10 +2743,10 @@ const createPutBackRequest = async (orderId, payload, actingUserId, isAdmin, typ
             throw new AppError('VALIDATION_ERROR', 400, 'At least one item is required');
         }
 
-        const orderItems = await OrderItem.findAll({ where: { orderId }, transaction });
+        const orderItems = await OrderItem.findAll({ where: { orderId }, transaction: t });
         const itemIds = new Set(orderItems.map((item) => item.id));
         const deliveredQty = await getDeliveredQuantityByOrderItem(orderId, t);
-        const existingQty = await getActivePutBackQuantityByOrderItem(orderId, type, t);
+        const existingQty = await getActivePutBackQuantityByOrderItem(orderId, null, t);
         const requestedByItem = {};
 
         for (const item of payload.items) {
@@ -2574,17 +2838,17 @@ const updatePutBackStatus = async (orderId, returnId, status, actingUserId, isAd
         if (!isAdmin && order.userId !== actingUserId) throw new AppError('FORBIDDEN', 403, 'You cannot access this order');
         const record = await OrderReturn.findOne({
             where: { id: returnId, orderId },
-            include: [{ model: OrderReturnItem, as: 'items' }],
             transaction: t,
             lock: Transaction.LOCK.UPDATE,
         });
         if (!record) throw new AppError('NOT_FOUND', 404, 'Return/replacement request not found');
-        const before = record.status;
-        ensureValidStatusTransition('return', before, status);
-        const updates = { status };
-        if (status.endsWith('_approved')) updates.approvedAt = new Date();
-        if (status.endsWith('_rejected')) updates.rejectedAt = new Date();
-        if (status.endsWith('_completed')) updates.completedAt = new Date();
+        const before = normalizePutBackRecordStatus(record.status, record.type);
+        const nextStatus = normalizePutBackRecordStatus(status, record.type);
+        ensureValidStatusTransition('return', before, nextStatus);
+        const updates = { status: nextStatus };
+        if (nextStatus.endsWith('_approved')) updates.approvedAt = new Date();
+        if (nextStatus.endsWith('_rejected')) updates.rejectedAt = new Date();
+        if (nextStatus.endsWith('_completed')) updates.completedAt = new Date();
         await record.update(updates, { transaction: t });
         await logOrderHistory({
             orderId,
@@ -2592,7 +2856,7 @@ const updatePutBackStatus = async (orderId, returnId, status, actingUserId, isAd
             entityId: record.id,
             statusGroup: record.type,
             fromStatus: before,
-            toStatus: status,
+            toStatus: nextStatus,
             changedBy: actingUserId,
             transaction: t,
         });
@@ -2607,7 +2871,7 @@ const updatePutBackStatus = async (orderId, returnId, status, actingUserId, isAd
                     entityId: record.id,
                     changes: { 
                         before, 
-                        after: status,
+                        after: nextStatus,
                         method: auditContext?.method,
                         path: auditContext?.path
                     },
@@ -2630,44 +2894,60 @@ const processRefund = async (orderId, payload, actingUserId, isAdmin, auditConte
         const order = await Order.findByPk(orderId, { transaction: t, lock: Transaction.LOCK.UPDATE });
         if (!order) throw new AppError('NOT_FOUND', 404, 'Order not found');
         const payment = await Payment.findOne({ where: { orderId }, transaction: t, lock: Transaction.LOCK.UPDATE });
-        if (!payment || !['paid_online', 'paid_cod', 'completed', 'cod_collected'].includes(payment.status)) {
+        if (!canRefundCapturedPayment(payment, order)) {
             throw new AppError('VALIDATION_ERROR', 400, 'Cannot refund before payment has been captured');
         }
         let returnRequest = null;
+        let refundAmount = payload.amount;
         if (payload.returnId) {
-            returnRequest = await OrderReturn.findOne({ where: { id: payload.returnId, orderId }, transaction: t });
+            returnRequest = await OrderReturn.findOne({
+                where: { id: payload.returnId, orderId },
+                include: [{
+                    model: OrderReturnItem,
+                    as: 'items',
+                    include: [{
+                        model: OrderItem,
+                        as: 'orderItem',
+                        attributes: ['id', 'quantity', 'total', 'snapshotName'],
+                    }],
+                }],
+                transaction: t,
+            });
             if (!returnRequest) throw new AppError('NOT_FOUND', 404, 'Return/replacement request not found');
-            if (!['pickup_completed', 'return_completed'].includes(returnRequest.status)) {
+            if (returnRequest.type !== 'return') {
+                throw new AppError('VALIDATION_ERROR', 400, 'Refunds can be linked only to return requests');
+            }
+            const returnStatus = normalizePutBackRecordStatus(returnRequest.status, returnRequest.type);
+            if (!['pickup_completed', 'return_completed'].includes(returnStatus)) {
                 throw new AppError('VALIDATION_ERROR', 400, 'Cannot refund before pickup or return completion');
             }
+            const returnItemAmount = getReturnRequestItemAmount(returnRequest);
+            const returnRefundedAmount = await getRefundedAmountForReturn(returnRequest.id, t);
+            const remainingReturnRefundable = money(Math.max(returnItemAmount - returnRefundedAmount, 0));
+            if (remainingReturnRefundable <= 0) {
+                throw new AppError('VALIDATION_ERROR', 400, 'This return request has already been fully refunded');
+            }
+            refundAmount = money(refundAmount ?? remainingReturnRefundable);
+            if (refundAmount > remainingReturnRefundable) {
+                throw new AppError('VALIDATION_ERROR', 400, `Refund amount cannot exceed returned product amount ${remainingReturnRefundable.toFixed(2)}`);
+            }
         }
-        const amount = Number(payload.amount || payment.amount);
-        if (!Number.isFinite(amount) || amount <= 0 || amount > Number(payment.amount)) {
-            throw new AppError('VALIDATION_ERROR', 400, 'Refund amount must be greater than 0 and cannot exceed payment amount');
-        }
-        const refundStatus = payload.status || (amount < Number(payment.amount) ? 'partially_refunded' : 'refunded');
-        const refund = await OrderRefund.create({
-            orderId,
+        const refund = await createRefundRecord({
+            order,
+            payment,
+            amount: refundAmount,
+            reason: payload.reason || (returnRequest ? 'Return refund' : 'Manual refund'),
+            actingUserId,
             returnId: returnRequest?.id || null,
-            paymentId: payment.id,
-            amount,
-            currency: payment.currency || 'INR',
-            status: refundStatus,
-            reason: payload.reason || null,
-            providerRefundId: payload.providerRefundId || null,
-            processedAt: ['refunded', 'partially_refunded'].includes(refundStatus) ? new Date() : null,
-            metadata: payload.metadata || {},
-        }, { transaction: t });
-        if (refundStatus === 'refunded') {
-            await payment.update({
-                status: 'refunded',
-                metadata: {
-                    ...(payment.metadata || {}),
-                    refundedBy: actingUserId,
-                    refundedAt: new Date().toISOString(),
-                },
-            }, { transaction: t });
-        }
+            refundScopeAmount: returnRequest ? getReturnRequestItemAmount(returnRequest) : null,
+            metadata: {
+                ...(payload.metadata || {}),
+                providerRefundId: payload.providerRefundId || null,
+                requestedStatus: payload.status || null,
+                returnItemAmount: returnRequest ? getReturnRequestItemAmount(returnRequest) : null,
+            },
+            transaction: t,
+        });
         await syncPutBackCache(order, t, actingUserId);
 
         try {
@@ -2679,7 +2959,7 @@ const processRefund = async (orderId, payload, actingUserId, isAdmin, auditConte
                     entityId: refund.id,
                     changes: { 
                         orderId, 
-                        amount, 
+                        amount: refund.amount, 
                         reason: payload.reason,
                         method: auditContext?.method,
                         path: auditContext?.path

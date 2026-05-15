@@ -23,16 +23,20 @@ const formatDateOnly = (value) => {
 };
 
 const ProductTrackingStepper = ({ product }) => {
-  const currentIndex = PRODUCT_TRACKING_STEPS.findIndex((step) => step.key === product.currentStep);
+  const trackingSteps = product.isCod
+    ? PRODUCT_TRACKING_STEPS.filter((step) => step.key !== 'payment')
+    : PRODUCT_TRACKING_STEPS;
+  const currentIndex = trackingSteps.findIndex((step) => step.key === product.currentStep);
   const resolvedCurrentIndex = currentIndex >= 0 ? currentIndex : 2;
 
   return (
     <Box sx={{ mt: 1.75 }}>
       <Box sx={{ display: 'flex', alignItems: 'center', minWidth: 0 }}>
-        {PRODUCT_TRACKING_STEPS.map((step, index) => {
+        {trackingSteps.map((step, index) => {
           const paymentDone = step.key !== 'payment' || product.paymentSettled;
-          const isCompleted = step.key === 'placed' || (index < resolvedCurrentIndex && paymentDone) || (product.status === 'delivered' && paymentDone);
-          const isCurrent = index === resolvedCurrentIndex && product.status !== 'delivered';
+          const isTerminalProductStatus = ['delivered', 'refunded', 'partially_refunded'].includes(product.status);
+          const isCompleted = step.key === 'placed' || (index < resolvedCurrentIndex && paymentDone) || (isTerminalProductStatus && paymentDone);
+          const isCurrent = index === resolvedCurrentIndex && !isTerminalProductStatus;
           const isMuted = step.key === 'payment' && !product.paymentSettled;
           const dotColor = isCompleted ? 'success.main' : isCurrent ? 'primary.main' : 'transparent';
           const borderColor = isCompleted ? 'success.main' : isCurrent ? 'primary.main' : 'divider';
@@ -52,7 +56,7 @@ const ProductTrackingStepper = ({ product }) => {
                     flexShrink: 0,
                   }}
                 />
-                {index < PRODUCT_TRACKING_STEPS.length - 1 && (
+                {index < trackingSteps.length - 1 && (
                   <Box
                     sx={{
                       height: 2,
@@ -188,6 +192,11 @@ const ProductTrackingCard = ({ product, formatPrice }) => {
           <Typography sx={{ mt: 0.75, fontSize: '0.72rem', color: 'text.secondary' }}>
             {product.deliveredQuantity}/{product.totalQuantity} delivered
           </Typography>
+          {product.refundedAmount > 0 && (
+            <Typography sx={{ mt: 0.35, fontSize: '0.72rem', color: 'success.main', fontWeight: 800 }}>
+              Refunded {formatPrice(product.refundedAmount)}
+            </Typography>
+          )}
         </Box>
       </Box>
 

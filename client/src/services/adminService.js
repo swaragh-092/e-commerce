@@ -70,7 +70,6 @@ const getAllOrders = (params = {}) => {
 const getOrderById = (id) => api.get(`/orders/${id}`);
 const getOrderTracking = (id) => api.get(`/orders/${id}/tracking`);
 const updateOrderStatus = (id, status) => api.put(`/orders/${id}/status`, { status });
-const refundOrder = (id) => api.post(`/orders/${id}/refund`);
 const createFulfillment = (orderId, data) => api.post(`/orders/${orderId}/fulfillments`, data);
 const updateFulfillmentStatus = (orderId, fulfillmentId, status) => api.patch(`/orders/${orderId}/fulfillments/${fulfillmentId}/status`, { status });
 const updateShipment = (orderId, shipmentId, data) => api.patch(`/orders/${orderId}/shipments/${shipmentId}`, data);
@@ -78,7 +77,7 @@ const createReturnRequest = (orderId, data) => api.post(`/orders/${orderId}/retu
 const createReplacementRequest = (orderId, data) => api.post(`/orders/${orderId}/replacements`, data);
 const updateReturnStatus = (orderId, returnId, status) => api.patch(`/orders/${orderId}/returns/${returnId}/status`, { status });
 const processRefund = (orderId, data = {}) => api.post(`/orders/${orderId}/refund`, data);
-const confirmCodPayment = (orderId) => api.post(`/payments/cod/confirm/${orderId}`);
+const confirmCodPayment = (orderId, data = {}) => api.post(`/payments/cod/confirm/${orderId}`, data);
 const addOrderNote = (orderId, note) => api.post(`/orders/${orderId}/history/notes`, { note });
 
 // Shipping administration
@@ -137,7 +136,7 @@ export {
   getUsers, getUserById, updateUserStatus,
   getAdminReviews, updateReviewStatus, deleteReview,
   getCoupons, createCoupon, updateCoupon, deleteCoupon,
-  getAllOrders, getOrderById, getOrderTracking, updateOrderStatus, refundOrder, createFulfillment, updateFulfillmentStatus,
+  getAllOrders, getOrderById, getOrderTracking, updateOrderStatus, createFulfillment, updateFulfillmentStatus,
   updateShipment, createReturnRequest, createReplacementRequest, updateReturnStatus, processRefund, confirmCodPayment, addOrderNote,
   getShippingProviders, updateShippingProvider, getShippingZones, createShippingZone, updateShippingZone, deleteShippingZone,
   getShippingRules, createShippingRule, updateShippingRule, deleteShippingRule,
