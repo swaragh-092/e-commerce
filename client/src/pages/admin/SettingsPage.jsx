@@ -1310,6 +1310,10 @@ const SettingsPage = () => {
         <>
           {imageField('auth.image', 'Login/Register Background Image')}
           {field('auth.imagePosition', 'Image Position (e.g. center, left, right, 50% 40%)')}
+          <Grid container spacing={2}>
+            <Grid item xs={12} sm={6}>{field('auth.headingColor', 'Heading Color', 'color')}</Grid>
+            <Grid item xs={12} sm={6}>{field('auth.descriptionColor', 'Description Color', 'color')}</Grid>
+          </Grid>
           <Divider sx={{ my: 2 }} />
           <Typography variant="subtitle2" sx={{ mb: 1 }}>Login Copy</Typography>
           {field('auth.loginHeading', 'Login Heading')}
@@ -1340,8 +1344,23 @@ const SettingsPage = () => {
           />
           {field('auth.registerFormTitle', 'Register Form Title')}
           {field('auth.registerFormSubtitle', 'Register Form Subtitle')}
+          <Divider sx={{ my: 2 }} />
+          <Typography variant="subtitle2" sx={{ mb: 1 }}>Admin Login Copy</Typography>
+          {field('auth.adminHeading', 'Admin Login Heading')}
+          <TextField
+            fullWidth
+            size="small"
+            label="Admin Login Description"
+            value={form['auth.adminDescription'] ?? ''}
+            onChange={(e) => set('auth.adminDescription', e.target.value)}
+            multiline
+            rows={2}
+            sx={{ mb: 2 }}
+          />
+          {field('auth.adminFormTitle', 'Admin Login Form Title')}
+          {field('auth.adminFormSubtitle', 'Admin Login Form Subtitle')}
         </>,
-        ['login', 'register', 'auth', 'customer account', 'image', 'heading', 'description']
+        ['login', 'register', 'admin login', 'auth', 'customer account', 'image', 'heading', 'description']
       ),
       section(
         'Footer',
