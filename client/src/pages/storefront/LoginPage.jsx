@@ -1,12 +1,12 @@
 import { useState } from 'react';
-import { Box, Typography, TextField, Button, Alert, useTheme, IconButton, InputAdornment } from '@mui/material';
+import { Box, Typography, TextField, Button, Alert, useTheme, IconButton, InputAdornment, Divider, Checkbox } from '@mui/material';
 import { useNavigate, Link as RouterLink, useLocation } from 'react-router-dom';
 import { useAuth } from '../../hooks/useAuth';
-import { getFirstAccessibleAdminPath } from '../../utils/permissions';
 import { validateEmail, validateRequired } from '../../utils/authValidation';
 import { getApiErrorMessage } from '../../utils/apiErrors';
 import authService from '../../services/authService';
-import { Visibility, VisibilityOff } from '@mui/icons-material';
+import { EmailOutlined, LockOutlined, Visibility, VisibilityOff } from '@mui/icons-material';
+import AuthPageShell from '../../components/storefront/AuthPageShell';
 
 const LoginPage = () => {
   const theme = useTheme();
@@ -23,6 +23,7 @@ const LoginPage = () => {
   const [resending, setResending] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
   const [touched, setTouched] = useState({});
+  const [rememberMe, setRememberMe] = useState(false);
 
   const validateForm = (values) => ({
     email: validateEmail(values.email),
@@ -33,6 +34,27 @@ const LoginPage = () => {
     const nextFormData = { ...formData, [e.target.name]: e.target.value };
     setFormData(nextFormData);
     // setFieldErrors(validateForm(nextFormData));
+  };
+
+  const inputSx = {
+    mb: 2.25,
+    '& .MuiOutlinedInput-root': {
+      height: 48,
+      borderRadius: '8px',
+      bgcolor: '#fff',
+      '& fieldset': { borderColor: 'rgba(100, 116, 139, 0.24)' },
+      '&:hover fieldset': { borderColor: 'rgba(15, 118, 110, 0.42)' },
+      '&.Mui-focused fieldset': { borderColor: theme.palette.primary.main, borderWidth: 1 },
+    },
+    '& .MuiInputBase-input': { fontSize: 14 },
+  };
+
+  const fieldLabelSx = {
+    display: 'block',
+    mb: 0.75,
+    color: '#334155',
+    fontWeight: 700,
+    fontSize: 13,
   };
 
   const handleBlur = (e) => {
@@ -107,11 +129,7 @@ const LoginPage = () => {
 
 
   return (
-    <Box sx={{ maxWidth: 400, mx: 'auto', mt: 8 }}>
-      {/* <Typography variant="h4" component="h1" gutterBottom textAlign="center" fontWeight={600}>
-        Welcome Back
-      </Typography> */}
-      
+    <AuthPageShell type="login">
       {error && (
         <Box sx={{ mb: 2 }}>
           <Alert severity="error">{error}</Alert>
@@ -133,32 +151,52 @@ const LoginPage = () => {
       {successMsg && <Alert severity="success" sx={{ mb: 2 }}>{successMsg}</Alert>}
 
       <Box component="form" onSubmit={handleSubmit}>
+        <Typography component="label" htmlFor="login-email" sx={fieldLabelSx}>
+          Email Address
+        </Typography>
         <TextField
+          id="login-email"
           fullWidth
-          margin="normal"
-          label="Email Address"
           name="email"
           type="email"
+          placeholder="Enter your email"
           value={formData.email}
           onChange={handleChange}
           onBlur={handleBlur}
           error={Boolean(touched.email && fieldErrors.email)}
           helperText={touched.email && fieldErrors.email}
           required
+          sx={inputSx}
+          InputProps={{
+            startAdornment: (
+              <InputAdornment position="start">
+                <EmailOutlined fontSize="small" />
+              </InputAdornment>
+            )
+          }}
         />
+        <Typography component="label" htmlFor="login-password" sx={fieldLabelSx}>
+          Password
+        </Typography>
         <TextField
+            id="login-password"
             fullWidth
-            margin="normal"
-            label="Password"
             name="password"
             type={showPassword ? 'text' : 'password'}
+            placeholder="Enter your password"
             value={formData.password}
             onChange={handleChange}
             onBlur={handleBlur}
             error={Boolean(touched.password && fieldErrors.password)}
             helperText={touched.password && fieldErrors.password}
             required
+            sx={{ ...inputSx, mb: 1.5 }}
             InputProps={{
+              startAdornment: (
+                <InputAdornment position="start">
+                  <LockOutlined fontSize="small" />
+                </InputAdornment>
+              ),
               endAdornment: (
                 <InputAdornment position="end">
                   <IconButton
@@ -173,7 +211,19 @@ const LoginPage = () => {
             }}
           />
         
-        <Box sx={{ display: 'flex', justifyContent: 'flex-end', mt: 1 }}>
+        <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mt: 0.5, mb: 2.5, gap: 2 }}>
+          <Box
+            component="label"
+            sx={{ display: 'inline-flex', alignItems: 'center', gap: 0.75, color: '#334155', fontSize: 13, fontWeight: 700, cursor: 'pointer' }}
+          >
+            <Checkbox
+              size="small"
+              checked={rememberMe}
+              onChange={(e) => setRememberMe(e.target.checked)}
+              sx={{ p: 0, color: 'rgba(100, 116, 139, 0.45)' }}
+            />
+            Remember me
+          </Box>
           <Typography variant="body2" component={RouterLink} to="/forgot-password" sx={{ textDecoration: 'none', color: theme.palette.primary.main }}>
             Forgot password?
           </Typography>
@@ -184,11 +234,15 @@ const LoginPage = () => {
           type="submit"
           variant="contained"
           size="large"
-          sx={{ mt: 3, mb: 2 }}
+          sx={{ mt: 0, mb: 2, height: 52, borderRadius: '8px' }}
           disabled={loading}
         >
           {loading ? 'Logging in...' : 'Log In'}
         </Button>
+
+        <Divider sx={{ my: 2.5 }}>
+          <Typography variant="caption" color="text.secondary">or</Typography>
+        </Divider>
         
         <Typography textAlign="center" variant="body2">
           Don't have an account?{' '}
@@ -197,7 +251,7 @@ const LoginPage = () => {
           </Box>
         </Typography>
       </Box>
-    </Box>
+    </AuthPageShell>
   );
 };
 

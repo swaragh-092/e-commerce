@@ -85,6 +85,18 @@
         "overlayOpacity": 0.5,
         "color": "#ffffff"
     },
+    "auth": {
+        "image": "https://images.unsplash.com/photo-1603252109303-2751441dd157?auto=format&fit=crop&w=1400&q=80",
+        "imagePosition": "center",
+        "loginHeading": "Step Back Into Your Favorites",
+        "loginDescription": "Log in to access your orders, wishlist and personalized picks.",
+        "loginFormTitle": "Log In",
+        "loginFormSubtitle": "Welcome back! Please enter your details.",
+        "registerHeading": "Start Your Shopping Story",
+        "registerDescription": "Create an account to save favorites, track orders and checkout faster.",
+        "registerFormTitle": "Create Account",
+        "registerFormSubtitle": "Join us today. Please enter your details."
+    },
     "sku": {
         "prefix": "",
         "separator": "-",

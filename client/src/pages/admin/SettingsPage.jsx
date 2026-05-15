@@ -1305,6 +1305,45 @@ const SettingsPage = () => {
         ['header', 'nav', 'navigation', 'sticky']
       ),
       section(
+        'Login & Register Pages',
+        'Control the shared visual panel and page copy shown on customer authentication screens.',
+        <>
+          {imageField('auth.image', 'Login/Register Background Image')}
+          {field('auth.imagePosition', 'Image Position (e.g. center, left, right, 50% 40%)')}
+          <Divider sx={{ my: 2 }} />
+          <Typography variant="subtitle2" sx={{ mb: 1 }}>Login Copy</Typography>
+          {field('auth.loginHeading', 'Login Heading')}
+          <TextField
+            fullWidth
+            size="small"
+            label="Login Description"
+            value={form['auth.loginDescription'] ?? ''}
+            onChange={(e) => set('auth.loginDescription', e.target.value)}
+            multiline
+            rows={2}
+            sx={{ mb: 2 }}
+          />
+          {field('auth.loginFormTitle', 'Login Form Title')}
+          {field('auth.loginFormSubtitle', 'Login Form Subtitle')}
+          <Divider sx={{ my: 2 }} />
+          <Typography variant="subtitle2" sx={{ mb: 1 }}>Register Copy</Typography>
+          {field('auth.registerHeading', 'Register Heading')}
+          <TextField
+            fullWidth
+            size="small"
+            label="Register Description"
+            value={form['auth.registerDescription'] ?? ''}
+            onChange={(e) => set('auth.registerDescription', e.target.value)}
+            multiline
+            rows={2}
+            sx={{ mb: 2 }}
+          />
+          {field('auth.registerFormTitle', 'Register Form Title')}
+          {field('auth.registerFormSubtitle', 'Register Form Subtitle')}
+        </>,
+        ['login', 'register', 'auth', 'customer account', 'image', 'heading', 'description']
+      ),
+      section(
         'Footer',
         'Customize footer layout, links, social icons, and contact information in one place.',
         <>

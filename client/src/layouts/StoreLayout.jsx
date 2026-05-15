@@ -9,7 +9,7 @@ import ShoppingBagIcon from '@mui/icons-material/ShoppingBag';
 import LogoutIcon from '@mui/icons-material/Logout';
 import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
 import MenuIcon from '@mui/icons-material/Menu';
-import { Outlet, Link as RouterLink } from 'react-router-dom';
+import { Outlet, Link as RouterLink, useLocation } from 'react-router-dom';
 import { useAuth } from '../hooks/useAuth';
 import { useSettings, useFeature } from '../hooks/useSettings';
 import { useCart } from '../hooks/useCart';
@@ -27,6 +27,7 @@ import SEO from '../components/common/SEO';
 const StoreLayout = () => {
   const { isAuthenticated, logout, hasAnyPermission, user } = useAuth();
   const { settings } = useSettings();
+  const location = useLocation();
   const { cartCount } = useCart();
   const { wishlistCount } = useWishlist();
   const { error: categoryError } = useCategories();
@@ -43,6 +44,7 @@ const StoreLayout = () => {
   const [accountMenuAnchor, setAccountMenuAnchor] = useState(null);
   const adminEntryPath = getFirstAccessibleAdminPath(user);
   const canAccessAdmin = hasAnyPermission(ADMIN_ACCESS_PERMISSIONS);
+  const isAuthPage = ['/login', '/register'].includes(location.pathname);
 
   const handleAccountMenuOpen = (event) => {
     setAccountMenuAnchor(event.currentTarget);
@@ -527,7 +529,7 @@ const StoreLayout = () => {
         <Outlet />
       </Box>
 
-      <StorefrontFooter />
+      {!isAuthPage && <StorefrontFooter />}
     </Box>
   );
 };
