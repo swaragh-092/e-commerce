@@ -1,9 +1,11 @@
 import { useState } from 'react';
-import { Box, Typography, TextField, Button, Alert, useTheme } from '@mui/material';
+import { Box, Typography, TextField, Button, Alert, useTheme, InputAdornment, Divider } from '@mui/material';
 import { useNavigate, Link as RouterLink } from 'react-router-dom';
 import { useAuth } from '../../hooks/useAuth';
 import { validateEmail, validatePassword, validateRequired, getPasswordChecks } from '../../utils/authValidation';
 import { getApiErrorMessage } from '../../utils/apiErrors';
+import { EmailOutlined, LockOutlined, PersonOutline } from '@mui/icons-material';
+import AuthPageShell from '../../components/storefront/AuthPageShell';
 
 const RegisterPage = () => {
   const theme = useTheme();
@@ -63,6 +65,27 @@ const RegisterPage = () => {
     );
   };
 
+  const inputSx = {
+    mb: 2.25,
+    '& .MuiOutlinedInput-root': {
+      height: 48,
+      borderRadius: '8px',
+      bgcolor: '#fff',
+      '& fieldset': { borderColor: 'rgba(100, 116, 139, 0.24)' },
+      '&:hover fieldset': { borderColor: 'rgba(15, 118, 110, 0.42)' },
+      '&.Mui-focused fieldset': { borderColor: theme.palette.primary.main, borderWidth: 1 },
+    },
+    '& .MuiInputBase-input': { fontSize: 14 },
+  };
+
+  const fieldLabelSx = {
+    display: 'block',
+    mb: 0.75,
+    color: '#334155',
+    fontWeight: 700,
+    fontSize: 13,
+  };
+
 
 
   const handleSubmit = async (e) => {
@@ -115,59 +138,95 @@ const RegisterPage = () => {
   };
 
   return (
-    <Box sx={{ maxWidth: 400, mx: 'auto', mt: 6 }}>
-      <Typography variant="h4" component="h1" gutterBottom textAlign="center" fontWeight={600}>
-        Create an Account
-      </Typography>
-      
+    <AuthPageShell type="register">
       {error && <Alert severity="error" sx={{ mb: 2 }}>{error}</Alert>}
 
       <Box component="form" onSubmit={handleSubmit}>
-        <Box sx={{ display: 'flex', gap: 2 }}>
+        <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', sm: '1fr 1fr' }, gap: 2 }}>
+          <Box>
+            <Typography component="label" htmlFor="register-first-name" sx={fieldLabelSx}>
+              First Name
+            </Typography>
             <TextField
+                id="register-first-name"
                 fullWidth
-                margin="normal"
-                label="First Name"
                 name="firstName"
+                placeholder="First name"
                 value={formData.firstName}
                 onChange={handleChange}
                 error={Boolean(touched.firstName && fieldErrors.firstName)}
                 helperText={touched.firstName && fieldErrors.firstName}
                 onBlur={handleBlur}
                 required
+                sx={inputSx}
+                InputProps={{
+                  startAdornment: (
+                    <InputAdornment position="start">
+                      <PersonOutline fontSize="small" />
+                    </InputAdornment>
+                  )
+                }}
             />
+          </Box>
+          <Box>
+            <Typography component="label" htmlFor="register-last-name" sx={fieldLabelSx}>
+              Last Name
+            </Typography>
             <TextField
+                id="register-last-name"
                 fullWidth
-                margin="normal"
-                label="Last Name"
                 name="lastName"
+                placeholder="Last name"
                 value={formData.lastName}
                 onChange={handleChange}
                 error={Boolean(touched.lastName && fieldErrors.lastName)}
                 helperText={touched.lastName && fieldErrors.lastName}
                 onBlur={handleBlur}
                 required
+                sx={inputSx}
+                InputProps={{
+                  startAdornment: (
+                    <InputAdornment position="start">
+                      <PersonOutline fontSize="small" />
+                    </InputAdornment>
+                  )
+                }}
             />
+          </Box>
         </Box>
+        <Typography component="label" htmlFor="register-email" sx={fieldLabelSx}>
+          Email Address
+        </Typography>
         <TextField
+          id="register-email"
           fullWidth
-          margin="normal"
-          label="Email Address"
           name="email"
           type="email"
+          placeholder="Enter your email"
           value={formData.email}
           onChange={handleChange}
           error={Boolean(touched.email && fieldErrors.email)}
           helperText={touched.email && fieldErrors.email}
           onBlur={handleBlur}
           required
+          sx={inputSx}
+          InputProps={{
+            startAdornment: (
+              <InputAdornment position="start">
+                <EmailOutlined fontSize="small" />
+              </InputAdornment>
+            )
+          }}
         />
+        <Typography component="label" htmlFor="register-password" sx={fieldLabelSx}>
+          Password
+        </Typography>
         <TextField
+          id="register-password"
           fullWidth
-          margin="normal"
-          label="Password"
           name="password"
           type="password"
+          placeholder="Enter your password"
           value={formData.password}
           onChange={handleChange}
           error={Boolean(touched.password && fieldErrors.password)}
@@ -176,19 +235,38 @@ const RegisterPage = () => {
           }
           onBlur={handleBlur}
           required
+          sx={inputSx}
+          InputProps={{
+            startAdornment: (
+              <InputAdornment position="start">
+                <LockOutlined fontSize="small" />
+              </InputAdornment>
+            )
+          }}
         />
+        <Typography component="label" htmlFor="register-confirm-password" sx={fieldLabelSx}>
+          Confirm Password
+        </Typography>
         <TextField
+          id="register-confirm-password"
           fullWidth
-          margin="normal"
-          label="Confirm Password"
           name="confirmPassword"
           type="password"
+          placeholder="Confirm your password"
           value={formData.confirmPassword}
           onChange={handleChange}
           error={Boolean(touched.confirmPassword && fieldErrors.confirmPassword)}
           helperText={touched.confirmPassword && fieldErrors.confirmPassword}
           onBlur={handleBlur}
           required
+          sx={{ ...inputSx, mb: 1 }}
+          InputProps={{
+            startAdornment: (
+              <InputAdornment position="start">
+                <LockOutlined fontSize="small" />
+              </InputAdornment>
+            )
+          }}
         />
 
         <Button
@@ -196,11 +274,15 @@ const RegisterPage = () => {
           type="submit"
           variant="contained"
           size="large"
-          sx={{ mt: 3, mb: 2 }}
+          sx={{ mt: 2, mb: 2, height: 52, borderRadius: '8px' }}
           disabled={loading}
         >
           {loading ? 'Creating account...' : 'Sign Up'}
         </Button>
+
+        <Divider sx={{ my: 2.5 }}>
+          <Typography variant="caption" color="text.secondary">or</Typography>
+        </Divider>
         
         <Typography textAlign="center" variant="body2">
           Already have an account?{' '}
@@ -209,7 +291,7 @@ const RegisterPage = () => {
           </Box>
         </Typography>
       </Box>
-    </Box>
+    </AuthPageShell>
   );
 };
 
