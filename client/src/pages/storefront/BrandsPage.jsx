@@ -92,13 +92,13 @@ const BrandsPage = () => {
   }, [brands]);
 
   const featuredBrands = useMemo(() => {
-    return brands.filter((b) => b.isFeatured).slice(0, featuredCount);
+    return brands.filter((b) => b.isPromoted).slice(0, featuredCount);
   }, [brands, featuredCount]);
 
   const nonFeaturedBrands = useMemo(() => {
-    if (activeLetter === 'All') return brands.filter((b) => !b.isFeatured);
-    if (activeLetter === '#') return brands.filter((b) => !b.isFeatured && !/^[A-Z]/i.test(b.name?.[0] || ''));
-    return brands.filter((b) => !b.isFeatured && b.name?.[0]?.toUpperCase() === activeLetter);
+    if (activeLetter === 'All') return brands.filter((b) => !b.isPromoted);
+    if (activeLetter === '#') return brands.filter((b) => !b.isPromoted && !/^[A-Z]/i.test(b.name?.[0] || ''));
+    return brands.filter((b) => !b.isPromoted && b.name?.[0]?.toUpperCase() === activeLetter);
   }, [brands, activeLetter]);
 
   const displayBrands = showFeaturedSection ? nonFeaturedBrands : filteredBrands;
