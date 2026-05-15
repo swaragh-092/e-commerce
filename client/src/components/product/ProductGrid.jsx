@@ -1,5 +1,6 @@
 import React from 'react';
-import { Grid, Skeleton, Typography, Box } from '@mui/material';
+import { Button, Grid, Skeleton, Typography, Box } from '@mui/material';
+import SearchOffOutlinedIcon from '@mui/icons-material/SearchOffOutlined';
 import ProductCard from './ProductCard';
 
 // Maps the setting value (number of desktop columns) → MUI Grid breakpoints
@@ -10,7 +11,7 @@ const COLS_MAP = {
     5: { xs: 6, sm: 4,  md: 3,  lg: 2.4 },
 };
 
-const ProductGrid = ({ products, loading, gridCols = 4, fromCategory }) => {
+const ProductGrid = ({ products, loading, gridCols = 4, fromCategory, hasActiveFilters = false, onClearFilters }) => {
     const cols = COLS_MAP[parseInt(gridCols)] || COLS_MAP[4];
 
     if (loading) {
@@ -31,8 +32,21 @@ const ProductGrid = ({ products, loading, gridCols = 4, fromCategory }) => {
 
     if (!products || products.length === 0) {
         return (
-            <Box sx={{ py: 8, textAlign: 'center' }}>
-                <Typography variant="h6" color="text.secondary">No products found matching your criteria.</Typography>
+            <Box sx={{ py: { xs: 7, md: 9 }, px: 2, textAlign: 'center', display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
+                <Box sx={{ width: 72, height: 72, borderRadius: '50%', border: '1.5px solid', borderColor: 'divider', display: 'flex', alignItems: 'center', justifyContent: 'center', mb: 2.5 }}>
+                    <SearchOffOutlinedIcon sx={{ fontSize: 30, color: 'text.disabled' }} />
+                </Box>
+                <Typography variant="h6" fontWeight={700} gutterBottom>No products found</Typography>
+                <Typography color="text.secondary" sx={{ mb: hasActiveFilters ? 3 : 0, maxWidth: 360, lineHeight: 1.6 }}>
+                    {hasActiveFilters
+                        ? 'Try broadening your search or clearing some filters to see more products.'
+                        : 'There are no products available right now. Please check back soon.'}
+                </Typography>
+                {hasActiveFilters && onClearFilters && (
+                    <Button variant="contained" onClick={onClearFilters}>
+                        Clear Filters
+                    </Button>
+                )}
             </Box>
         );
     }

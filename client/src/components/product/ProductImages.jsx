@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { Box, CardMedia, Grid, Typography } from '@mui/material';
 import { getMediaUrl } from '../../utils/media';
 
-const ProductImages = ({ images, variantImages = [], selectedVariantId, thumbnailAlignment = 'horizontal' }) => {
+const ProductImages = ({ images, variantImages = [], selectedVariantId, thumbnailAlignment = 'horizontal', productName }) => {
   const clamp = (value) => Math.min(100, Math.max(0, value));
   const imageKey = (img) => img.id || img.mediaId || img.media?.id || img.url;
   const isVertical = thumbnailAlignment === 'vertical';
@@ -90,6 +90,7 @@ const ProductImages = ({ images, variantImages = [], selectedVariantId, thumbnai
               <CardMedia
                 component="img"
                 image={img.url}
+                alt={`${productName || 'Product'} thumbnail${img.scope === 'variant' ? ' (variant)' : ''}`}
                 sx={{
                   width: '100%',
                   height: '100%',
@@ -123,6 +124,7 @@ const ProductImages = ({ images, variantImages = [], selectedVariantId, thumbnai
         <CardMedia
           component="img"
           image={selectedImage}
+          alt={productName || 'Product image'}
           sx={{
             position: 'absolute',
             top: 0,
@@ -211,6 +213,7 @@ const ProductImages = ({ images, variantImages = [], selectedVariantId, thumbnai
                 <CardMedia
                   component="img"
                   image={img.url}
+                  alt={`${productName || 'Product'} thumbnail${img.scope === 'variant' ? ' (variant)' : ''}`}
                   sx={{
                     width: '100%',
                     height: '100%',

@@ -48,7 +48,9 @@
     "SYSTEM_ROLES_MANAGE": "system_roles.manage",
     "USERS_ASSIGN_ROLES": "users.assign_roles",
     "ENQUIRIES_READ": "enquiries.read",
-    "ENQUIRIES_MANAGE": "enquiries.manage"
+    "ENQUIRIES_MANAGE": "enquiries.manage",
+    "BRANDS_READ": "brands.read",
+    "BRANDS_MANAGE": "brands.manage"
   },
   "systemRoleDefinitions": {
     "customer": {
@@ -101,7 +103,9 @@
     "menus.read",
     "menus.manage",
     "enquiries.read",
-    "enquiries.manage"
+    "enquiries.manage",
+    "brands.read",
+    "brands.manage"
   ],
   "customerPermissionKeys": [
     "account.self",
@@ -155,6 +159,8 @@
     "users.assign_roles": "Assign roles to users (super admin only)",
     "enquiries.read": "View customer enquiries",
     "enquiries.manage": "Reply to and manage enquiries",
+    "brands.read": "View brands",
+    "brands.manage": "Create, edit, and delete brands",
     "account.self": "Manage own account profile",
     "cart.self": "Manage own shopping cart",
     "wishlist.self": "Manage own wishlist",
@@ -168,6 +174,7 @@
     "pages.manage": ["pages.read"],
     "menus.manage": ["menus.read"],
     "enquiries.manage": ["enquiries.read"],
+    "brands.manage": ["brands.read"],
     "roles.manage": ["roles.read"],
     "settings.manage": ["settings.read"],
     "settings.advanced": ["settings.read", "settings.manage"],

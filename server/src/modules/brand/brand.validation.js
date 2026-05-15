@@ -6,7 +6,7 @@ const createBrandSchema = Joi.object({
     name: Joi.string().max(255).required(),
     slug: Joi.string().max(255).lowercase().allow('').optional(),
     description: Joi.string().max(2000).allow('', null).optional(),
-    image: Joi.string().max(500).allow('', null).optional(),
+    image: Joi.string().uri({ allowRelative: true }).max(500).allow('', null).optional(),
     isActive: Joi.boolean().optional(),
     isPromoted: Joi.boolean().optional(),
     isFeatured: Joi.boolean().optional(),
@@ -16,7 +16,7 @@ const updateBrandSchema = Joi.object({
     name: Joi.string().max(255).optional(),
     slug: Joi.string().max(255).lowercase().allow('').optional(),
     description: Joi.string().max(2000).allow('', null).optional(),
-    image: Joi.string().max(500).allow('', null).optional(),
+    image: Joi.string().uri({ allowRelative: true }).max(500).allow('', null).optional(),
     isActive: Joi.boolean().optional(),
     isPromoted: Joi.boolean().optional(),
     isFeatured: Joi.boolean().optional(),
@@ -38,9 +38,14 @@ const getBrandBySlugSchema = Joi.object({
     productLimit: Joi.number().integer().min(1).max(100).optional(),
 });
 
+const slugParamSchema = Joi.object({
+    slug: Joi.string().max(255).pattern(/^[a-z0-9]+(?:-[a-z0-9]+)*$/).required(),
+});
+
 module.exports = {
     createBrandSchema,
     updateBrandSchema,
     queryBrandSchema,
     getBrandBySlugSchema,
+    slugParamSchema,
 };

@@ -1,7 +1,7 @@
 import { useState, useEffect, useMemo } from 'react';
-import { useParams, useLocation, useNavigate } from 'react-router-dom';
+import { useParams, useLocation, useNavigate, Link as RouterLink } from 'react-router-dom';
 import {
-    Box, Button, Chip, CircularProgress, Container, Divider, Grid, IconButton, Typography,
+    Alert, Box, Button, Chip, Container, Divider, Grid, IconButton, Skeleton, Typography,
 } from '@mui/material';
 import AddIcon from '@mui/icons-material/Add';
 import RemoveIcon from '@mui/icons-material/Remove';
@@ -31,6 +31,7 @@ import { formatAttributeValue } from '../../utils/attributePresentation';
 import EnquiryModal from '../../components/storefront/EnquiryModal';
 import RelatedProducts from '../../components/product/RelatedProducts';
 import ProductTabsAccordion from '../../components/storefront/ProductTabsAccordion';
+import { getApiErrorMessage } from '../../utils/apiErrors';
 
 const ProductDetailPage = () => {
     const { slug } = useParams();
@@ -70,30 +71,39 @@ const ProductDetailPage = () => {
         return () => window.clearInterval(timer);
     }, [sales.showCountdown]);
 
-    useEffect(() => {
-        const fetchProduct = async () => {
-            try {
-                const res = await getProduct(slug);
-                const nextProduct = res?.data?.product || res?.data || null;
-                if (!nextProduct) {
-                    setError('Product not found');
-                }
-                setProduct(nextProduct);
-                if (nextProduct?.variants?.length > 0) {
-                    const initialVariant = nextProduct.variants.find((variant) => variant?.isActive !== false && Number(variant?.stockQty || 0) > 0)
-                        || nextProduct.variants.find((variant) => variant?.isActive !== false)
-                        || nextProduct.variants[0];
-                    setSelectedVariant(initialVariant || null);
-                } else {
-                    setSelectedVariant(null);
-                }
-            } catch (err) {
-                setError('Product not found');
-            } finally {
-                setLoading(false);
+    const fetchProduct = async () => {
+        setLoading(true);
+        setError(null);
+        try {
+            const res = await getProduct(slug);
+            const nextProduct = res?.data?.product || res?.data || null;
+            if (!nextProduct) {
+                setProduct(null);
+                setSelectedVariant(null);
+                setError('Product not found.');
+                return;
             }
-        };
+            setProduct(nextProduct);
+            if (nextProduct?.variants?.length > 0) {
+                const initialVariant = nextProduct.variants.find((variant) => variant?.isActive !== false && Number(variant?.stockQty || 0) > 0)
+                    || nextProduct.variants.find((variant) => variant?.isActive !== false)
+                    || nextProduct.variants[0];
+                setSelectedVariant(initialVariant || null);
+            } else {
+                setSelectedVariant(null);
+            }
+        } catch (err) {
+            setProduct(null);
+            setSelectedVariant(null);
+            setError(getApiErrorMessage(err, 'Unable to load this product.'));
+        } finally {
+            setLoading(false);
+        }
+    };
+
+    useEffect(() => {
         fetchProduct();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [slug]);
 
     const activeVariants = useMemo(
@@ -149,8 +159,51 @@ const ProductDetailPage = () => {
         });
     }, [product, selectedVariant]);
 
-    if (loading) return <Box sx={{ display: 'flex', justifyContent: 'center', py: 10 }}><CircularProgress /></Box>;
-    if (error || !product) return <Typography variant="h5" color="error" textAlign="center" sx={{ mt: 10 }}>{error}</Typography>;
+    if (loading) return (
+        <Container maxWidth={false} sx={{ maxWidth: { xs: '100%', lg: 1520 }, mx: 'auto', px: { xs: 2, sm: 3, lg: 5 }, py: { xs: 3, md: 5 } }}>
+            <Grid container spacing={{ xs: 3, md: 4, lg: 5 }} alignItems="flex-start">
+                <Grid item xs={12} md={5}>
+                    <Skeleton variant="rounded" sx={{ width: '100%', aspectRatio: '1', borderRadius: 2 }} />
+                    <Box sx={{ display: 'flex', gap: 1, mt: 1.5 }}>
+                        {[...Array(4)].map((_, i) => <Skeleton key={i} variant="rounded" width={64} height={64} />)}
+                    </Box>
+                </Grid>
+                <Grid item xs={12} md={4}>
+                    <Skeleton width="40%" height={20} sx={{ mb: 1.5 }} />
+                    <Skeleton width="85%" height={40} sx={{ mb: 1 }} />
+                    <Skeleton width="60%" height={40} sx={{ mb: 2.5 }} />
+                    <Box sx={{ display: 'flex', gap: 1, mb: 2.5 }}>
+                        <Skeleton variant="rounded" width={80} height={28} />
+                        <Skeleton variant="rounded" width={100} height={28} />
+                    </Box>
+                    <Skeleton width="50%" height={48} sx={{ mb: 3 }} />
+                    <Skeleton width="100%" height={20} sx={{ mb: 1 }} />
+                    <Skeleton width="90%" height={20} sx={{ mb: 1 }} />
+                    <Skeleton width="70%" height={20} />
+                </Grid>
+                <Grid item xs={12} md={3} sx={{ display: { xs: 'none', md: 'block' } }}>
+                    <Skeleton variant="rounded" sx={{ width: '100%', height: 320, borderRadius: 2 }} />
+                </Grid>
+            </Grid>
+        </Container>
+    );
+    if (error || !product) {
+        return (
+            <Container maxWidth="sm" sx={{ py: { xs: 6, md: 10 } }}>
+                <Alert severity="error" sx={{ mb: 3 }}>
+                    {error || 'Product not found.'}
+                </Alert>
+                <Box sx={{ display: 'flex', gap: 1.5, flexWrap: 'wrap' }}>
+                    <Button variant="contained" onClick={fetchProduct}>
+                        Try Again
+                    </Button>
+                    <Button component={RouterLink} to="/products" variant="outlined">
+                        Back to Products
+                    </Button>
+                </Box>
+            </Container>
+        );
+    }
 
     const currentPrice = getVariantUnitPrice(product, selectedVariant);
     const regularPrice = getVariantRegularPrice(product, selectedVariant);
@@ -278,6 +331,7 @@ const ProductDetailPage = () => {
                             variantImages={selectedVariant?.images || []}
                             selectedVariantId={selectedVariant?.id}
                             thumbnailAlignment={imageAlignment}
+                            productName={product.name}
                         />
                     </Box>
                 </Grid>
@@ -291,28 +345,63 @@ const ProductDetailPage = () => {
                     <Typography
                         variant="caption"
                         color="text.secondary"
-                        sx={{ display: 'block', mb: 1, fontWeight: 700, textTransform: 'uppercase', letterSpacing: 0 }}
+                        sx={{ 
+                            display: 'flex', 
+                            alignItems: 'center', 
+                            flexWrap: 'wrap',
+                            gap: 0.8,
+                            mb: 1.2, 
+                            fontWeight: 700, 
+                            textTransform: 'uppercase', 
+                            letterSpacing: 0.5 
+                        }}
                     >
+                        <Box 
+                            component={RouterLink} 
+                            to="/" 
+                            sx={{ color: 'inherit', textDecoration: 'none', '&:hover': { color: 'primary.main' } }}
+                        >
+                            Home
+                        </Box>
+                        
                         {(() => {
-                            if (location.state?.fromCategory) return location.state.fromCategory;
-
                             const cats = product.categories;
                             if (!cats?.length) return null;
+                            
                             const catMap = Object.fromEntries(cats.map(c => [c.id, c]));
                             const parentIds = new Set(cats.map(c => c.parentId).filter(Boolean));
                             const leaf = cats.find(c => !parentIds.has(c.id)) || cats[0];
                             const path = [];
                             let cur = leaf;
                             while (cur) {
-                                path.unshift(cur.name);
+                                path.unshift({ name: cur.name, slug: cur.slug });
                                 cur = cur.parentId ? catMap[cur.parentId] : null;
                             }
-                            return path.join(' > ');
+
+                            return path.map((cat, index) => (
+                                <Box key={cat.slug} sx={{ display: 'flex', alignItems: 'center', gap: 0.8 }}>
+                                    <Box component="span" sx={{ opacity: 0.4, fontWeight: 400 }}>/</Box>
+                                    <Box
+                                        component={RouterLink}
+                                        to={`/products?category=${cat.slug}`}
+                                        sx={{ 
+                                            color: 'inherit', 
+                                            textDecoration: 'none', 
+                                            '&:hover': { color: 'primary.main' },
+                                            // The last one is the current leaf category, maybe make it slightly bolder or different?
+                                            // But for breadcrumbs, usually the current page is not a link.
+                                            // However, here they are all categories.
+                                        }}
+                                    >
+                                        {cat.name}
+                                    </Box>
+                                </Box>
+                            ));
                         })()}
                     </Typography>
 
                     <Box sx={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 2, mb: 1.5 }}>
-                        <Typography variant="h2" fontWeight={900} sx={{ fontSize: { xs: '2.1rem', md: '2.6rem', lg: '3rem' }, lineHeight: 1.04 }}>
+                        <Typography variant="h2" component="h1" fontWeight={900} sx={{ fontSize: { xs: '2.1rem', md: '2.6rem', lg: '3rem' }, lineHeight: 1.1 }}>
                             {product.name}
                         </Typography>
                         <Box sx={{ display: 'flex', gap: 1 }}>
@@ -443,9 +532,9 @@ const ProductDetailPage = () => {
 
                     <Box sx={{ display: { xs: 'block', md: 'none' }, mb: 4, mt: 3 }}>
                         {cartMsg && (
-                            <Typography color={cartMsg.type === 'error' ? 'error' : 'success.main'} variant="body2" sx={{ mb: 1 }}>
+                            <Alert severity={cartMsg.type} sx={{ mb: 1 }}>
                                 {cartMsg.text}
-                            </Typography>
+                            </Alert>
                         )}
                         {cartEnabled && (
                             <Box
@@ -650,9 +739,9 @@ const ProductDetailPage = () => {
                         </Typography>
 
                         {cartMsg && (
-                            <Typography color={cartMsg.type === 'error' ? 'error' : 'success.main'} variant="body2" sx={{ mb: 1.5 }}>
+                            <Alert severity={cartMsg.type} sx={{ mb: 1.5 }}>
                                 {cartMsg.text}
-                            </Typography>
+                            </Alert>
                         )}
 
                         {cartEnabled && stockAvailable && (

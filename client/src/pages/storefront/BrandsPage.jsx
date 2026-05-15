@@ -24,7 +24,7 @@ const COLS_MAP = {
   5: { xs: 12, sm: 6, md: 4, lg: 2.4 },
 };
 
-const ALPHABET = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ'.split('');
+const ALPHABET = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ#'.split('');
 
 const BrandsPage = () => {
   const [brands, setBrands] = useState([]);
@@ -60,7 +60,8 @@ const BrandsPage = () => {
     const fetchBrands = async () => {
       try {
         const response = await brandService.getBrands({
-          isActive: 'true',
+          isActive: true,
+          withPublishedProducts: true,
           limit: 100,
           sortBy: 'name',
           sortOrder: 'ASC',
@@ -78,11 +79,15 @@ const BrandsPage = () => {
 
   const filteredBrands = useMemo(() => {
     if (activeLetter === 'All') return brands;
+    if (activeLetter === '#') return brands.filter((b) => !/^[A-Z]/i.test(b.name?.[0] || ''));
     return brands.filter((b) => b.name?.[0]?.toUpperCase() === activeLetter);
   }, [brands, activeLetter]);
 
   const availableLetters = useMemo(() => {
-    const letters = new Set(brands.map((b) => b.name?.[0]?.toUpperCase()).filter(Boolean));
+    const letters = new Set(brands.map((b) => {
+      const first = b.name?.[0]?.toUpperCase();
+      return first && /^[A-Z]$/.test(first) ? first : '#';
+    }).filter(Boolean));
     return letters;
   }, [brands]);
 
@@ -92,6 +97,7 @@ const BrandsPage = () => {
 
   const nonFeaturedBrands = useMemo(() => {
     if (activeLetter === 'All') return brands.filter((b) => !b.isFeatured);
+    if (activeLetter === '#') return brands.filter((b) => !b.isFeatured && !/^[A-Z]/i.test(b.name?.[0] || ''));
     return brands.filter((b) => !b.isFeatured && b.name?.[0]?.toUpperCase() === activeLetter);
   }, [brands, activeLetter]);
 
@@ -610,30 +616,35 @@ const BrandsPage = () => {
         </Typography>
       )}
 
-      {/* All Brands heading */}
-      {showFeaturedSection && !loading && featuredBrands.length > 0 && displayBrands.length > 0 && (
-        <Box sx={{ mb: 3, display: 'flex', alignItems: 'center', gap: 2 }}>
-          <Typography variant="h5" fontWeight={700}>
-            All Brands
-          </Typography>
-          <Box sx={{ flexGrow: 1, height: 1, bgcolor: 'divider' }} />
-        </Box>
-      )}
+      {/* Results grid or skeleton loading */}
+      {(!loading && displayBrands.length > 0) || loading ? (
+        <>
+          {/* All Brands heading - only shown if we have featured brands and are also showing non-featured ones */}
+          {showFeaturedSection && !loading && featuredBrands.length > 0 && displayBrands.length > 0 && (
+            <Box sx={{ mb: 3, display: 'flex', alignItems: 'center', gap: 2 }}>
+              <Typography variant="h5" fontWeight={700}>
+                All Brands
+              </Typography>
+              <Box sx={{ flexGrow: 1, height: 1, bgcolor: 'divider' }} />
+            </Box>
+          )}
 
-      {/* Grid */}
-      <Grid container spacing={3}>
-        {loading
-          ? Array.from({ length: 8 }).map((_, index) => (
-              <Grid item {...cols} key={index}>
-                <Skeleton variant="rounded" height={aspectHeight + 120} sx={{ borderRadius: `${cardBorderRadius}px` }} />
-              </Grid>
-            ))
-          : displayBrands.map((brand) => (
-              <Grid item {...cols} key={brand.id}>
-                {renderBrandCard(brand)}
-              </Grid>
-            ))}
-      </Grid>
+          {/* Grid */}
+          <Grid container spacing={3}>
+            {loading
+              ? Array.from({ length: 8 }).map((_, index) => (
+                  <Grid item {...cols} key={index}>
+                    <Skeleton variant="rounded" height={aspectHeight + 120} sx={{ borderRadius: `${cardBorderRadius}px` }} />
+                  </Grid>
+                ))
+              : displayBrands.map((brand) => (
+                  <Grid item {...cols} key={brand.id}>
+                    {renderBrandCard(brand)}
+                  </Grid>
+                ))}
+          </Grid>
+        </>
+      ) : null}
 
       {/* Empty states */}
       {!loading && brands.length === 0 && (

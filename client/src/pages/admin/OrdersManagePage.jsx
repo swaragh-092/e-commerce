@@ -18,6 +18,7 @@ import {
 } from '@mui/material';
 import { DataGrid } from '@mui/x-data-grid';
 import VisibilityIcon from '@mui/icons-material/Visibility';
+import ReceiptLongOutlinedIcon from '@mui/icons-material/ReceiptLongOutlined';
 
 import PaymentsOutlinedIcon from '@mui/icons-material/PaymentsOutlined';
 import UndoOutlinedIcon from '@mui/icons-material/UndoOutlined';
@@ -121,6 +122,7 @@ const OrdersManagePage = () => {
   const [search, setSearch] = useState('');
   const [counts, setCounts] = useState({});
   const [pageRevenue, setPageRevenue] = useState(0);
+  const hasActiveFilters = Boolean(search || status);
 
   useEffect(() => {
     const timer = window.setTimeout(() => setSearch(searchInput.trim()), 350);
@@ -391,6 +393,41 @@ const OrdersManagePage = () => {
     [actionLoadingId, canRefundOrders, canUpdateStatus, formatPrice, navigate]
   );
 
+  const EmptyOrdersOverlay = () => (
+    <Stack alignItems="center" justifyContent="center" spacing={1.5} sx={{ height: '100%', minHeight: 240, px: 3, textAlign: 'center' }}>
+      <Box sx={{ width: 64, height: 64, borderRadius: '50%', bgcolor: 'action.hover', color: 'text.disabled', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+        <ReceiptLongOutlinedIcon />
+      </Box>
+      <Box>
+        <Typography variant="h6" fontWeight={700}>
+          {hasActiveFilters ? 'No orders match these filters' : 'No orders yet'}
+        </Typography>
+        <Typography color="text.secondary" sx={{ mt: 0.5, maxWidth: 360 }}>
+          {hasActiveFilters
+            ? 'Try clearing filters or changing your search to find more orders.'
+            : 'Orders will appear here after customers complete checkout.'}
+        </Typography>
+      </Box>
+      {hasActiveFilters ? (
+        <Button
+          variant="outlined"
+          onClick={() => {
+            setSearchInput('');
+            setSearch('');
+            setStatus('');
+            setPaginationModel((current) => ({ ...current, page: 0 }));
+          }}
+        >
+          Clear filters
+        </Button>
+      ) : (
+        <Button variant="outlined" onClick={() => navigate('/products')}>
+          View storefront
+        </Button>
+      )}
+    </Stack>
+  );
+
   return (
     <Box>
       <Typography variant="h5" fontWeight={700} mb={3}>
@@ -492,6 +529,7 @@ const OrdersManagePage = () => {
           pageSizeOptions={[10, 20, 50]}
           disableRowSelectionOnClick
           autoHeight
+          slots={{ noRowsOverlay: EmptyOrdersOverlay }}
           onRowClick={(params) => navigate(`/admin/orders/${params.id}`)}
           sx={{
             border: 0,
@@ -514,6 +552,9 @@ const OrdersManagePage = () => {
             },
             '& .MuiDataGrid-row:hover': {
               bgcolor: 'action.hover',
+            },
+            '& .MuiDataGrid-overlayWrapper': {
+              minHeight: 260,
             },
           }}
         />

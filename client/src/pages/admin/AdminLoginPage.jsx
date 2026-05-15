@@ -1,5 +1,7 @@
 import React, { useState } from 'react';
-import { Box, Typography, TextField, Button, Alert, useTheme, Paper } from '@mui/material';
+import { Box, Typography, TextField, Button, Alert, useTheme, Paper, IconButton, InputAdornment } from '@mui/material';
+import Visibility from '@mui/icons-material/Visibility';
+import VisibilityOff from '@mui/icons-material/VisibilityOff';
 import { useNavigate, useLocation, Navigate, Link as RouterLink } from 'react-router-dom';
 import { useAuth } from '../../hooks/useAuth';
 import { getFirstAccessibleAdminPath } from '../../utils/permissions';
@@ -18,6 +20,7 @@ const AdminLoginPage = () => {
   const [fieldErrors, setFieldErrors] = useState({});
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
+  const [showPassword, setShowPassword] = useState(false);
 
   // If already logged in and an admin, redirect them directly to the admin area
   if (isAuthenticated) {
@@ -123,13 +126,27 @@ const AdminLoginPage = () => {
             margin="normal"
             label="Password"
             name="password"
-            type="password"
+            type={showPassword ? 'text' : 'password'}
             value={formData.password}
             onChange={handleChange}
             error={Boolean(fieldErrors.password)}
             helperText={fieldErrors.password}
             required
             autoComplete="current-password"
+            InputProps={{
+              endAdornment: (
+                <InputAdornment position="end">
+                  <IconButton
+                    aria-label="toggle password visibility"
+                    onClick={() => setShowPassword((prev) => !prev)}
+                    onMouseDown={(e) => e.preventDefault()}
+                    edge="end"
+                  >
+                    {showPassword ? <VisibilityOff /> : <Visibility />}
+                  </IconButton>
+                </InputAdornment>
+              ),
+            }}
           />
 
           <Box sx={{ display: 'flex', justifyContent: 'flex-end', mt: 1 }}>

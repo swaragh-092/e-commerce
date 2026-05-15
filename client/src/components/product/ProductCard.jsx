@@ -124,13 +124,11 @@ const ProductCard = ({ product, fromCategory }) => {
         />
       </Box>
       <CardContent sx={{ flexGrow: 1, p: { xs: 1.5, sm: 1.75 }, display: 'flex', flexDirection: 'column' }}>
-        <Box sx={{ minHeight: 34, mb: 0.75 }}>
-          {product.brand?.name ? (
-            <Typography variant="caption" color="primary" sx={{ display: 'block', fontWeight: 700, mb: 0.25, textTransform: 'uppercase', letterSpacing: 0.4 }}>
+        <Box sx={{ minHeight: 40, mb: 0.75 }}>
+          {product.brand?.name && (
+            <Typography variant="caption" color="primary" sx={{ display: 'block', fontWeight: 700, mb: 0.25, letterSpacing: 0.4 }}>
               {product.brand.name}
             </Typography>
-          ) : (
-            <Box sx={{ height: 18 }} />
           )}
           <Typography variant="caption" color="text.secondary" noWrap sx={{ display: 'block' }}>
             {product.categories?.[0]?.name || 'Uncategorized'}

@@ -43,6 +43,8 @@ const generateSlug = (text) => {
   if (!text) return '';
   return text
     .toString()
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
     .toLowerCase()
     .trim()
     .replace(/\s+/g, '-')
@@ -454,7 +456,7 @@ const BrandsPage = () => {
               value={formData.description}
               onChange={(e) => setFormData({ ...formData, description: e.target.value })}
               inputProps={{ maxLength: 2000 }}
-              helperText={`${formData.description?.length || 0}/2000 characters`}
+              helperText={errors.description || `${formData.description?.length || 0}/2000 characters`}
               error={!!errors.description}
             />
             

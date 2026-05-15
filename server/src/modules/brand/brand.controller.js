@@ -2,6 +2,9 @@
 
 const brandService = require('./brand.service');
 const { success, paginated } = require('../../utils/response');
+const { serializeProductPricing } = require('../product/product.pricing');
+const { getSaleLabels } = require('../settings/saleLabel.service');
+const SettingsService = require('../settings/settings.service');
 
 const { PERMISSIONS, getPermissionsForUser } = require('../../config/permissions');
 
@@ -30,6 +33,19 @@ const getBrandBySlug = async (req, res, next) => {
     try {
         const isAdmin = hasBrandAdminView(req.user);
         const brand = await brandService.getBrandBySlug(req.params.slug, isAdmin, req.query);
+        
+        // If storefront view and brand has products, serialize them
+        if (!isAdmin && brand.products) {
+            const [labelPresets, { features }] = await Promise.all([
+                getSaleLabels().catch(() => []),
+                SettingsService.getFeatures(),
+            ]);
+            
+            brand.products = brand.products.map(product => 
+                serializeProductPricing(product, { adminView: false, features }, labelPresets)
+            );
+        }
+        
         return success(res, { brand }, 'Brand retrieved successfully');
     } catch (err) {
         next(err);

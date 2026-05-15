@@ -74,6 +74,7 @@ const TIER2_DEFAULTS = {
     enquiry:                  false,  // Tier 2: defaults to false in ecommerce but admin can enable
     showPrice:                true,   // Tier 2: visibility of price on product cards/pages
     apiBuilder:               true,
+    brands:                   true,
   },
   catalog: {
     wishlist:                 true,   // defaults to true so catalog users can save favorites
@@ -89,6 +90,7 @@ const TIER2_DEFAULTS = {
     enquiry:                  true,   // Tier 2: defaults to true in catalog mode
     showPrice:                false,  // Tier 2: visibility of price (defaults to off in catalog)
     apiBuilder:               true,
+    brands:                   true,
   },
 };
 

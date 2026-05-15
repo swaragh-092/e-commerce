@@ -426,7 +426,7 @@ const CartPage = () => {
                     <Typography sx={{ fontSize: '0.63rem', fontWeight: 800, letterSpacing: 2.5, textTransform: 'uppercase', color: 'text.disabled', mb: 0.25, display: 'block' }}>
                         Review your order
                     </Typography>
-                    <Typography variant="h4" fontWeight={800} letterSpacing={-0.8} lineHeight={1.1}>
+                    <Typography variant="h4" component="h1" fontWeight={800} letterSpacing={-0.8} lineHeight={1.1}>
                         Shopping Cart{' '}
                         <Box component="span" sx={{ fontSize: '0.95rem', fontWeight: 400, color: 'text.disabled', letterSpacing: 0 }}>
                             ({visibleCount})
@@ -434,7 +434,7 @@ const CartPage = () => {
                     </Typography>
                 </Box>
                 <Button component={Link} to="/products" size="small"
-                    sx={{ color: 'text.secondary', fontSize: '0.78rem', fontWeight: 500, display: { xs: 'none', sm: 'flex' } }}>
+                    sx={{ color: 'text.secondary', fontSize: '0.78rem', fontWeight: 500 }}>
                     ← Continue shopping
                 </Button>
             </Box>
