@@ -97,7 +97,7 @@ const getBrands = async (query = {}, isAdmin = false) => {
         where,
         attributes: {
             include: [
-                [literal('(SELECT COUNT(*) FROM "Products" WHERE "Products"."brandId" = "Brand"."id" AND "Products"."status" = \'published\' AND "Products"."isEnabled" = true)'), 'productCount'],
+                [literal('(SELECT COUNT(*) FROM "products" WHERE "products"."brand_id" = "Brand"."id" AND "products"."status" = \'published\' AND "products"."is_enabled" = true AND "products"."deleted_at" IS NULL)'), 'productCount'],
             ],
         },
         limit: parseInt(limit),
@@ -171,7 +171,7 @@ const getBrandBySlug = async (slug, isAdmin = false, query = {}) => {
         where,
         attributes: {
             include: [
-                [literal('(SELECT COUNT(*) FROM "Products" WHERE "Products"."brandId" = "Brand"."id" AND "Products"."status" = \'published\' AND "Products"."isEnabled" = true)'), 'productCount'],
+                [literal('(SELECT COUNT(*) FROM "products" WHERE "products"."brand_id" = "Brand"."id" AND "products"."status" = \'published\' AND "products"."is_enabled" = true AND "products"."deleted_at" IS NULL)'), 'productCount'],
             ],
         },
         include: [productInclude]
