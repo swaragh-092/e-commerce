@@ -363,8 +363,8 @@ const ProductFilters = ({ filters, onFilterChange, priceRange: externalPriceRang
                                         '& .MuiSlider-thumb': {
                                             backgroundColor: '#fff',
                                             border: '2px solid currentColor',
-                                            width: 16,
-                                            height: 16,
+                                            width: { xs: 44, md: 16 },
+                                            height: { xs: 44, md: 16 },
                                             '&:hover': { boxShadow: '0 0 0 6px rgba(25, 118, 210, 0.12)' },
                                         },
                                         '& .MuiSlider-rail': { opacity: 0.3, bgcolor: 'grey.300' },

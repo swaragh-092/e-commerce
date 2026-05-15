@@ -54,7 +54,7 @@ const ComboItemRow = ({ item, index, total, onChange, onRemove, onMoveUp, onMove
     const { symbol } = useCurrency();
 
     return (
-        <Paper variant="outlined" sx={{ p: 2, mb: 1.5, display: 'flex', gap: 2, alignItems: 'flex-start' }}>
+        <Paper variant="outlined" sx={{ p: 2, mb: 1.5, display: 'flex', gap: 2, alignItems: 'flex-start', flexWrap: 'wrap' }}>
             {/* Thumbnail */}
             <Avatar
                 src={getMediaUrl(item.images?.[0]?.url || item.snapshotImage)}

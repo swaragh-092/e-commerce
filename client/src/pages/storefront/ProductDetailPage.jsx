@@ -258,7 +258,7 @@ const ProductDetailPage = () => {
         <Container
             maxWidth={false}
             sx={{
-                maxWidth: 1520,
+                maxWidth: { xs: '100%', lg: 1520 },
                 mx: 'auto',
                 px: { xs: 2, sm: 3, lg: 5 },
                 py: { xs: 3, md: 5 },

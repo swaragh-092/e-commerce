@@ -185,7 +185,7 @@ const HeroCarousel = ({ section, slides }) => {
       sx={{
         position: 'relative',
         overflow: 'hidden',
-        minHeight: { xs: 480, md: 560 },
+        minHeight: { xs: 380, sm: 480, md: 560 },
         display: 'flex',
         alignItems: 'center',
         color: slide.color || '#ffffff',

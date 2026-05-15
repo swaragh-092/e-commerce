@@ -73,6 +73,18 @@ const SearchWidget = ({
   const inputRef = useRef(null);
   const debouncedQuery = useDebounce(query, DEBOUNCE_MS);
 
+  // Reactive Popper width
+  const [popperWidth, setPopperWidth] = useState(280);
+  useEffect(() => {
+    const updateWidth = () => {
+      const inputW = inputRef.current?.offsetWidth || 0;
+      setPopperWidth(Math.min(window.innerWidth - 32, Math.max(inputW, 280)));
+    };
+    updateWidth();
+    window.addEventListener('resize', updateWidth);
+    return () => window.removeEventListener('resize', updateWidth);
+  }, []);
+
   // Load recent searches from localStorage
   useEffect(() => {
     const saved = localStorage.getItem(RECENT_SEARCHES_KEY);
@@ -337,9 +349,7 @@ const SearchWidget = ({
             placement="bottom-start"
             style={{
               zIndex: 1400,
-              width: variant === 'header'
-                ? Math.max(inputRef.current?.offsetWidth || 0, 420)
-                : inputRef.current?.offsetWidth,
+              width: popperWidth,
             }}
             modifiers={[{ name: 'offset', options: { offset: [0, 8] } }]}
           >
@@ -380,9 +390,7 @@ const SearchWidget = ({
            placement="bottom-start"
            style={{
              zIndex: 1400,
-             width: variant === 'header'
-               ? Math.max(inputRef.current?.offsetWidth || 0, 420)
-               : inputRef.current?.offsetWidth,
+             width: popperWidth,
            }}
            modifiers={[{ name: 'offset', options: { offset: [0, 8] } }]}
          >

@@ -68,7 +68,7 @@ const CategoryGrid = ({ title, categories = [], loading = false }) => {
                                 }}
                             >
                                 {cat.image ? (
-                                    <Box sx={{ overflow: 'hidden', height: 150 }}>
+                                    <Box sx={{ overflow: 'hidden', height: { xs: 130, md: 150 } }}>
                                         <CardMedia
                                             component="img"
                                             image={getMediaUrl(cat.image)}

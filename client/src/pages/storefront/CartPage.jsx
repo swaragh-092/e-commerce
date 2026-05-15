@@ -72,7 +72,7 @@ const sortCartItems = (items = []) => [...items].sort((a, b) => {
 const CartSkeleton = () => (
     <Container maxWidth="lg" sx={{ py: 5 }}>
         <Skeleton width={120} height={13} sx={{ mb: 0.5 }} /><Skeleton width={240} height={40} sx={{ mb: 4 }} />
-        <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', md: '1fr 400px' }, gap: 3 }}>
+        <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', md: 'minmax(0, 1fr) 400px' }, gap: 3 }}>
             <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1.5 }}>
                 {[1, 2].map(i => (
                     <Paper key={i} elevation={0} sx={{ border: '1px solid', borderColor: 'divider', borderRadius: 2, overflow: 'hidden', display: 'flex' }}>
@@ -322,7 +322,7 @@ const OrderSummary = ({ visibleCount, subtotal, shippingCost, shippingMethod, fr
             </Paper>
 
             {/* Trust badges 2×2 */}
-            <Box sx={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 1 }}>
+            <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', sm: '1fr 1fr' }, gap: 1 }}>
                 <TrustBadge icon={<CachedIcon />} title="Easy Returns" sub="30-day hassle-free" />
                 <TrustBadge icon={<VerifiedIcon />} title="100% Authentic" sub="Guaranteed genuine" />
                 <TrustBadge icon={<LocalShippingOutlinedIcon />} title="Fast Delivery" sub="Tracked & insured" />
@@ -439,7 +439,7 @@ const CartPage = () => {
                 </Button>
             </Box>
 
-            <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', md: '1fr 400px' }, gap: { xs: 3, md: 3.5 }, alignItems: 'start' }}>
+            <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', md: 'minmax(0, 1fr) 400px' }, gap: { xs: 3, md: 3.5 }, alignItems: 'start' }}>
 
                 {/* Items */}
                 <Box>

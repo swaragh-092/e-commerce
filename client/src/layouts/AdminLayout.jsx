@@ -438,28 +438,39 @@ const AdminLayout = () => {
 
   const drawerContent = (
     <Box sx={{ height: '100%', display: 'flex', flexDirection: 'column' }}>
-      <Box sx={{ p: 2, pb: 1, display: isCollapsed ? 'none' : 'block' }}>
-        <TextField
-          fullWidth
-          size="small"
-          placeholder="Quick find... (Ctrl+/)"
-          value={searchQuery}
-          onChange={(e) => setSearchQuery(e.target.value)}
-          inputRef={searchInputRef}
-          InputProps={{
-            startAdornment: (
-              <InputAdornment position="start">
-                <SearchIcon fontSize="small" sx={{ color: 'text.secondary' }} />
-              </InputAdornment>
-            ),
-            sx: { 
-              borderRadius: 2, 
-              bgcolor: 'action.hover',
-              '& fieldset': { border: 'none' },
-              '& input': { fontSize: 13 },
-            }
-          }}
-        />
+      <Box sx={{ p: 2, pb: 1 }}>
+        {/* Collapsed: compact search icon button */}
+        <Box sx={{ display: isCollapsed ? 'flex' : 'none', justifyContent: 'center' }}>
+          <Tooltip title="Quick find... (Ctrl+/)" placement="right">
+            <IconButton onClick={() => { setIsCollapsed(false); setTimeout(() => searchInputRef.current?.focus(), 300); }} size="small">
+              <SearchIcon fontSize="small" />
+            </IconButton>
+          </Tooltip>
+        </Box>
+        {/* Expanded: full search field */}
+        <Box sx={{ display: isCollapsed ? 'none' : 'block' }}>
+          <TextField
+            fullWidth
+            size="small"
+            placeholder="Quick find... (Ctrl+/)"
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            inputRef={searchInputRef}
+            InputProps={{
+              startAdornment: (
+                <InputAdornment position="start">
+                  <SearchIcon fontSize="small" sx={{ color: 'text.secondary' }} />
+                </InputAdornment>
+              ),
+              sx: { 
+                borderRadius: 2, 
+                bgcolor: 'action.hover',
+                '& fieldset': { border: 'none' },
+                '& input': { fontSize: 13 },
+              }
+            }}
+          />
+        </Box>
       </Box>
 
       <Box sx={{ flexGrow: 1, overflowY: 'auto', overflowX: 'hidden', py: 1 }}>
@@ -668,7 +679,8 @@ const AdminLayout = () => {
           p: { xs: 2, sm: 3 },
           bgcolor: 'background.default',
           minHeight: '100vh',
-          width: { md: `calc(100% - ${isCollapsed ? slimDrawerWidth : drawerWidth}px)` },
+          width: { xs: '100%', md: `calc(100% - ${isCollapsed ? slimDrawerWidth : drawerWidth}px)` },
+          maxWidth: { xs: '100%', md: 'none' },
           transition: theme.transitions.create(['width', 'margin'], {
             easing: theme.transitions.easing.sharp,
             duration: theme.transitions.duration.enteringScreen,

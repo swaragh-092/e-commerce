@@ -473,11 +473,12 @@ const OrdersManagePage = () => {
 
       <Box
         sx={{
-          height: 580,
           bgcolor: 'background.paper',
           borderRadius: 2,
           border: '1px solid',
           borderColor: 'divider',
+          overflowX: 'auto',
+          '& .MuiDataGrid-root': { minWidth: 700 },
         }}
       >
         <DataGrid
@@ -485,14 +486,12 @@ const OrdersManagePage = () => {
           columns={columns}
           rowCount={total}
           loading={loading}
-          rowHeight={72}
-          columnHeaderHeight={48}
           paginationMode="server"
           paginationModel={paginationModel}
           onPaginationModelChange={setPaginationModel}
           pageSizeOptions={[10, 20, 50]}
           disableRowSelectionOnClick
-          // getRowHeight={() => 'auto'}
+          autoHeight
           onRowClick={(params) => navigate(`/admin/orders/${params.id}`)}
           sx={{
             border: 0,

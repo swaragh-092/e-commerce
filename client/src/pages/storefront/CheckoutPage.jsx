@@ -140,7 +140,7 @@ const Section = ({ step, activeSection, completedSections, title, icon, summary,
             {/* Header */}
             <Box sx={{
                 display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-                px: 3, py: 2,
+                px: { xs: 2, md: 3 }, py: 2,
                 bgcolor: 'background.paper',
             }}>
                 <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5 }}>

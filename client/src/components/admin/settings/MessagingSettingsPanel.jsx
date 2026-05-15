@@ -72,7 +72,7 @@ const MessagingSettingsPanel = ({ form, set }) => {
           <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
             Configure your SMTP server details below. Save the settings before sending a test with newly changed credentials.
           </Typography>
-          <Box sx={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 2, mb: 2 }}>
+          <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', sm: '1fr 1fr' }, gap: 2, mb: 2 }}>
             <TextField
               fullWidth
               size="small"
@@ -90,7 +90,7 @@ const MessagingSettingsPanel = ({ form, set }) => {
               onChange={(e) => set('messaging_credentials.smtp_port', e.target.value)}
             />
           </Box>
-          <Box sx={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 2, mb: 2 }}>
+          <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', sm: '1fr 1fr' }, gap: 2, mb: 2 }}>
             <TextField
               fullWidth
               size="small"
@@ -107,7 +107,7 @@ const MessagingSettingsPanel = ({ form, set }) => {
               onChange={(e) => set('messaging_credentials.smtp_pass', e.target.value)}
             />
           </Box>
-          <Box sx={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 2, mb: 2 }}>
+          <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', sm: '1fr 1fr' }, gap: 2, mb: 2 }}>
             <TextField
               fullWidth
               size="small"

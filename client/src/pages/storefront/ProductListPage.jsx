@@ -154,7 +154,7 @@ const ProductListPage = () => {
             </Grid>
 
             <Drawer anchor="left" open={mobileFilterOpen} onClose={() => setMobileFilterOpen(false)}>
-                <Box sx={{ width: 280, p: 3 }}>
+                <Box sx={{ width: { xs: '85vw', sm: 320 }, maxWidth: 380, p: 3 }}>
                     <StorefrontSidebarMenu onNavigate={() => setMobileFilterOpen(false)} />
                     <ProductFilters filters={filters} onFilterChange={(f) => { handleFilterChange(f); setMobileFilterOpen(false); }} priceRange={priceRange} />
                 </Box>

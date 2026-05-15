@@ -191,7 +191,7 @@ const CategoryAttributesDialog = ({ open, onClose, categoryId, categoryName }) =
           </Box>
 
           {/* Right Side: Link New Attribute */}
-          <Box sx={{ width: { md: '300px' }, p: 2, bgcolor: 'background.default' }}>
+          <Box sx={{ width: { xs: '100%', md: 'clamp(240px, 30vw, 300px)' }, p: 2, bgcolor: 'background.default' }}>
             <Typography variant="subtitle2" fontWeight={600} gutterBottom sx={{ mb: 2, display: 'flex', alignItems: 'center', gap: 1 }}>
               <AddIcon fontSize="small" color="success" /> Link New Attribute
             </Typography>

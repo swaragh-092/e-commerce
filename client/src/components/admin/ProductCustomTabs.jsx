@@ -327,6 +327,7 @@ const TabCard = ({
                     gap: 1,
                     px: 2,
                     py: 1.25,
+                    flexWrap: 'wrap',
                     bgcolor: tab.isActive ? 'grey.50' : 'error.50',
                     borderBottom: expanded ? '1px solid' : 'none',
                     borderColor: 'divider',

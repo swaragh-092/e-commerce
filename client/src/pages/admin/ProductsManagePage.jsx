@@ -912,7 +912,14 @@ const ProductsManagePage = () => {
       )}
 
       {/* ── Data Grid ── */}
-      <Box sx={{ bgcolor: 'background.paper', borderRadius: 2, border: '1px solid', borderColor: 'divider' }}>
+      <Box sx={{ 
+        bgcolor: 'background.paper', 
+        borderRadius: 2, 
+        border: '1px solid', 
+        borderColor: 'divider',
+        overflowX: 'auto',
+        '& .MuiDataGrid-root': { minWidth: 700 },
+      }}>
         <DataGrid
           rows={rows}
           columns={columns}
@@ -935,6 +942,7 @@ const ProductsManagePage = () => {
           getRowHeight={() => 'auto'}
           getEstimatedRowHeight={() => 80}
           pagination
+          autoHeight
           sx={{
             border: 0,
             '& .MuiDataGrid-cell': {

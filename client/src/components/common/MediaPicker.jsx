@@ -218,7 +218,8 @@ const MediaPicker = ({ open, onClose, onSelect, multiple = false, title = 'Selec
       PaperProps={{
         sx: {
           borderRadius: 3,
-          height: '80vh',
+          height: { xs: '90vh', sm: '80vh' },
+          maxHeight: '90vh',
           display: 'flex',
           flexDirection: 'column',
         },
