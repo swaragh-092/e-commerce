@@ -40,7 +40,7 @@ import PageSEO from '../../../components/common/PageSEO';
 
 import { userService } from '../../../services/userService';
 import { useCurrency, useFeature } from '../../../hooks/useSettings';
-import { getOrderStatusColor, getOrderStatusLabel } from '../../../utils/orderWorkflow';
+import { getCustomerOrderDisplayStatus, getCustomerOrderStatusLabel } from '../../../utils/orderHelpers';
 import { getApiErrorMessage } from '../../../utils/apiErrors';
 import { useNotification } from '../../../context/NotificationContext';
 
@@ -77,7 +77,9 @@ const STATUS_CONFIG = {
     processing: { icon: ProcessingIcon, bg: '#EFF6FF', color: '#1D4ED8', border: '#BFDBFE' },
     ready_for_shipment: { icon: ShippingIcon, bg: '#F5F3FF', color: '#6D28D9', border: '#DDD6FE' },
     shipped:    { icon: ShippingIcon,   bg: '#F5F3FF', color: '#6D28D9', border: '#DDD6FE' },
+    partially_delivered: { icon: ShippingIcon, bg: '#FFFBEB', color: '#B45309', border: '#FDE68A' },
     delivered:  { icon: CheckCircleIcon,bg: '#F0FDF4', color: '#15803D', border: '#BBF7D0' },
+    refunded:   { icon: UndoOutlinedIcon,bg: '#F8FAFC', color: '#475569', border: '#CBD5E1' },
     closed:     { icon: CheckCircleIcon,bg: '#ECFDF5', color: '#065F46', border: '#A7F3D0' },
     cancelled:  { icon: CancelIcon,     bg: '#FFF1F2', color: '#BE123C', border: '#FECDD3' },
     rto:        { icon: UndoOutlinedIcon,bg: '#F8FAFC', color: '#475569', border: '#CBD5E1' },
@@ -126,10 +128,11 @@ const formatOrderDate = (dateStr) =>
 
 // ─── Status Badge ─────────────────────────────────────────────────────────────
 
-const StatusBadge = ({ status }) => {
-    const cfg = STATUS_CONFIG[status] || STATUS_CONFIG.placed;
+const StatusBadge = ({ order, status }) => {
+    const displayStatus = order ? getCustomerOrderDisplayStatus(order) : status;
+    const cfg = STATUS_CONFIG[displayStatus] || STATUS_CONFIG.placed;
     const Icon = cfg.icon;
-    const label = getOrderStatusLabel(status);
+    const label = getCustomerOrderStatusLabel(displayStatus);
 
     return (
         <Box
@@ -246,7 +249,7 @@ const OrderRow = ({ order, onView, formatPrice }) => {
                         {paymentLabel}
                     </Typography>
                 </Box>
-                <StatusBadge status={order.status} />
+                <StatusBadge order={order} />
             </Box>
 
             {/* Row 2 — products */}

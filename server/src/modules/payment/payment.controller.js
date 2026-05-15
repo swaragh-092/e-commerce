@@ -58,7 +58,7 @@ const handlePayUReturn = async (req, res, next) => {
 
 const confirmCodPayment = async (req, res, next) => {
     try {
-        const result = await PaymentService.confirmCodPayment(req.user.id, req.params.orderId);
+        const result = await PaymentService.confirmCodPayment(req.user.id, req.params.orderId, req.body || {});
         return success(res, result, 'COD payment confirmed');
     } catch (err) { next(err); }
 };

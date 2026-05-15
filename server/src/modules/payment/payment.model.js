@@ -42,6 +42,7 @@ module.exports = (sequelize, DataTypes) => {
                     'payment_expired',
                     'paid_cod',
                     'paid_online',
+                    'partially_refunded',
                 ]],
             },
         },

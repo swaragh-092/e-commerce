@@ -42,6 +42,8 @@ const PRODUCT_STATUS_META = {
   out_for_delivery: { label: 'Out for delivery', color: 'warning', step: 'out_for_delivery' },
   partially_delivered: { label: 'Partially delivered', color: 'warning', step: 'delivered' },
   delivered: { label: 'Delivered', color: 'success', step: 'delivered' },
+  partially_refunded: { label: 'Partially refunded', color: 'info', step: 'delivered' },
+  refunded: { label: 'Refunded', color: 'success', step: 'delivered' },
   delivery_failed: { label: 'Delivery issue', color: 'error', step: 'out_for_delivery' },
   rto_initiated: { label: 'Returning', color: 'error', step: 'out_for_delivery' },
   rto: { label: 'Returned', color: 'error', step: 'delivered' },
@@ -159,6 +161,8 @@ const getLatestHistoryTime = (history = []) => {
 };
 
 export const buildProductTrackingItems = ({ orderItems, fulfillments, order, payment }) => {
+  const paymentMethod = order?.paymentMethod || payment?.provider;
+  const isCod = paymentMethod === 'cod';
   const paymentSettled = PAYMENT_SETTLED_STATUSES.includes(payment?.status);
   const paymentStepTime = paymentSettled ? payment?.updatedAt || payment?.createdAt : '';
   const orderPlacedTime = order?.createdAt;
@@ -168,6 +172,55 @@ export const buildProductTrackingItems = ({ orderItems, fulfillments, order, pay
       .find((event) => event.statusGroup === 'order' && ['processing', 'ready_for_shipment', 'closed'].includes(event.toStatus))
       ?.createdAt
     : '';
+  const refundsByReturnId = new Set(
+    (order?.refunds || order?.Refunds || [])
+      .filter((refund) => ['refunded', 'partially_refunded'].includes(refund.status))
+      .map((refund) => refund.returnId)
+      .filter(Boolean)
+  );
+  const refundAmountByReturnId = (order?.refunds || order?.Refunds || [])
+    .filter((refund) => ['refunded', 'partially_refunded'].includes(refund.status) && refund.returnId)
+    .reduce((map, refund) => {
+      map[refund.returnId] = (map[refund.returnId] || 0) + Number(refund.amount || 0);
+      return map;
+    }, {});
+  const refundedQuantityByItem = (order?.returns || order?.Returns || [])
+    .filter((request) => request.type === 'return' && refundsByReturnId.has(request.id))
+    .flatMap((request) => request.items || [])
+    .reduce((map, returnItem) => {
+      const orderItemId = returnItem.orderItemId || returnItem.orderItem?.id;
+      if (!orderItemId) return map;
+      map[orderItemId] = (map[orderItemId] || 0) + Number(returnItem.quantity || 0);
+      return map;
+    }, {});
+  const orderItemAmountById = orderItems.reduce((map, item) => {
+    map[item.id] = Number(item.total || 0);
+    return map;
+  }, {});
+  const orderItemQuantityById = orderItems.reduce((map, item) => {
+    map[item.id] = Number(item.quantity || 0);
+    return map;
+  }, {});
+  const refundedAmountByItem = (order?.returns || order?.Returns || [])
+    .filter((request) => request.type === 'return' && refundsByReturnId.has(request.id))
+    .reduce((map, request) => {
+      const requestItems = request.items || [];
+      const requestItemAmounts = requestItems.map((returnItem) => {
+        const orderItemId = returnItem.orderItemId || returnItem.orderItem?.id;
+        const orderedQty = Number(orderItemQuantityById[orderItemId] || 0);
+        const returnedQty = Number(returnItem.quantity || 0);
+        const itemTotal = Number(orderItemAmountById[orderItemId] || 0);
+        const amount = orderedQty > 0 ? itemTotal * (returnedQty / orderedQty) : 0;
+        return { orderItemId, amount };
+      });
+      const requestAmount = requestItemAmounts.reduce((sum, item) => sum + item.amount, 0);
+      const refundedAmount = Number(refundAmountByReturnId[request.id] || 0);
+      requestItemAmounts.forEach((returnItem) => {
+        if (!returnItem.orderItemId || requestAmount <= 0) return;
+        map[returnItem.orderItemId] = (map[returnItem.orderItemId] || 0) + (refundedAmount * (returnItem.amount / requestAmount));
+      });
+      return map;
+    }, {});
 
   return orderItems.map((item) => {
     const relatedFulfillments = fulfillments
@@ -227,8 +280,15 @@ export const buildProductTrackingItems = ({ orderItems, fulfillments, order, pay
       productStatus = 'partially_delivered';
     } else if (deliveredQuantity >= totalQuantity && totalQuantity > 0) {
       productStatus = 'delivered';
-    } else if (!paymentSettled && order?.paymentMethod !== 'cod') {
+    } else if (!paymentSettled && !isCod) {
       productStatus = 'pending';
+    }
+    const refundedQuantity = Math.min(Number(refundedQuantityByItem[item.id] || 0), totalQuantity);
+    const refundedAmount = Number(refundedAmountByItem[item.id] || 0);
+    if (refundedQuantity > 0 && refundedQuantity < totalQuantity) {
+      productStatus = 'partially_refunded';
+    } else if (refundedQuantity >= totalQuantity && totalQuantity > 0) {
+      productStatus = 'refunded';
     }
 
     const meta = PRODUCT_STATUS_META[productStatus] || {
@@ -252,7 +312,10 @@ export const buildProductTrackingItems = ({ orderItems, fulfillments, order, pay
       totalQuantity,
       fulfilledQuantity,
       deliveredQuantity,
+      refundedQuantity,
+      refundedAmount,
       paymentSettled,
+      isCod,
       orderPlacedTime,
       paymentStepTime,
       processingTime,

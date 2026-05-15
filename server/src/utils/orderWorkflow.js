@@ -12,7 +12,7 @@ const ORDER_STATUS_VALUES = statusGroup('order');
 const SHIPMENT_STATUS_VALUES = statusGroup('shipment');
 const ORDER_SHIPPING_STATUS_VALUES = statusGroup('order_shipping');
 const RETURN_LIFECYCLE_STATUS_VALUES = Object.freeze(
-    (orderWorkflow.statuses?.return || []).filter((status) => status.startsWith('return_'))
+    (orderWorkflow.statuses?.return || []).filter((status) => !status.startsWith('replacement_'))
 );
 const REPLACEMENT_STATUS_VALUES = Object.freeze(
     (orderWorkflow.statuses?.return || []).filter((status) => status.startsWith('replacement_'))
@@ -50,14 +50,43 @@ const legacyPaymentStatusMap = Object.freeze({
     completed: 'paid_online',
     cod_collected: 'paid_cod',
     failed: 'payment_failed',
-    refunded: 'paid_online',
 });
+
+const LEGACY_PUT_BACK_STATUS_VALUES = Object.freeze([
+    'requested',
+    'approved',
+    'rejected',
+    'scheduled',
+    'picked_up',
+    'returned',
+    'processing',
+    'shipped',
+    'delivered',
+    'completed',
+]);
 
 const normalizeOrderStatus = (status) => legacyOrderStatusMap[status] || status || ORDER_DEFAULT_STATUS;
 const normalizePaymentStatus = (status, provider) => {
     if (PAYMENT_STATUS_VALUES.includes(status)) return status;
     if (provider === 'cod' && status === 'pending') return 'pending_cod';
     return legacyPaymentStatusMap[status] || status || PAYMENT_DEFAULT_STATUS;
+};
+const normalizePutBackRecordStatus = (status, type = 'return') => {
+    if (PUT_BACK_RECORD_STATUS_VALUES.includes(status)) return status;
+    const prefix = type === 'replacement' ? 'replacement' : 'return';
+    const legacyMap = {
+        requested: `${prefix}_requested`,
+        approved: `${prefix}_approved`,
+        rejected: `${prefix}_rejected`,
+        scheduled: 'pickup_scheduled',
+        picked_up: 'pickup_completed',
+        returned: 'return_completed',
+        processing: 'replacement_processing',
+        shipped: 'replacement_shipped',
+        delivered: 'replacement_delivered',
+        completed: type === 'replacement' ? 'replacement_completed' : 'return_completed',
+    };
+    return legacyMap[status] || status || (type === 'replacement' ? REPLACEMENT_DEFAULT_STATUS : RETURN_DEFAULT_STATUS);
 };
 
 const getAllowedNextStatuses = (group, currentStatus) => {
@@ -130,8 +159,8 @@ const buildQuantityMap = (rows = [], key = 'orderItemId') => rows.reduce((map, r
 
 const derivePutBackCache = ({ orderItems = [], putBacks = [] }) => {
     const totalQuantity = orderItems.reduce((sum, item) => sum + Number(item.quantity || 0), 0);
-    const activeRecords = putBacks.filter((record) => ACTIVE_PUT_BACK_STATUSES.includes(record.status));
-    const completedRecords = putBacks.filter((record) => COMPLETED_PUT_BACK_STATUSES.includes(record.status));
+    const activeRecords = putBacks.filter((record) => ACTIVE_PUT_BACK_STATUSES.includes(normalizePutBackRecordStatus(record.status, record.type)));
+    const completedRecords = putBacks.filter((record) => COMPLETED_PUT_BACK_STATUSES.includes(normalizePutBackRecordStatus(record.status, record.type)));
     const completedReturnItems = completedRecords
         .filter((record) => record.type === 'return')
         .flatMap((record) => record.items || []);
@@ -164,7 +193,17 @@ const isShippingTerminal = (status) => ['delivered', 'rto'].includes(status);
 const canCloseOrder = ({ order, payment, orderShippingStatus }) => {
     const paymentStatus = payment?.status || order?.paymentStatus;
     const paymentProvider = payment?.provider || order?.paymentMethod;
-    return isPaymentSettled(paymentStatus, paymentProvider) && isShippingTerminal(orderShippingStatus || order?.orderShippingStatus);
+    const normalizedPaymentStatus = normalizePaymentStatus(paymentStatus, paymentProvider);
+    const paymentResolved = isPaymentSettled(paymentStatus, paymentProvider) || normalizedPaymentStatus === 'refunded';
+    if (!paymentResolved || !isShippingTerminal(orderShippingStatus || order?.orderShippingStatus)) {
+        return false;
+    }
+    if (paymentProvider === 'cod' && normalizedPaymentStatus !== 'refunded') {
+        const collectedAmount = Number(payment?.metadata?.codCollectedAmount ?? payment?.amount ?? 0);
+        const orderTotal = Number(order?.total ?? 0);
+        return orderTotal > 0 && collectedAmount >= orderTotal;
+    }
+    return true;
 };
 
 module.exports = {
@@ -176,6 +215,7 @@ module.exports = {
     RETURN_LIFECYCLE_STATUS_VALUES,
     REPLACEMENT_STATUS_VALUES,
     PUT_BACK_RECORD_STATUS_VALUES,
+    LEGACY_PUT_BACK_STATUS_VALUES,
     REFUND_STATUS_VALUES,
     PUT_BACK_STATUS_VALUES,
     ORDER_DEFAULT_STATUS,
@@ -187,6 +227,7 @@ module.exports = {
     ORDER_DEFAULT_SHIPPING_STATUS,
     normalizeOrderStatus,
     normalizePaymentStatus,
+    normalizePutBackRecordStatus,
     getAllowedNextStatuses,
     getAllowedOrderStatuses,
     ensureStatusValue,

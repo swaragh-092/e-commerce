@@ -39,6 +39,18 @@ export const orderService = {
     return response.data;
   },
 
+  createReturnRequest: async (id, data) => {
+    if (!id) throw new TypeError('orderService.createReturnRequest: Invalid id');
+    const response = await api.post(`/orders/${id}/returns`, data);
+    return response.data.data;
+  },
+
+  createReplacementRequest: async (id, data) => {
+    if (!id) throw new TypeError('orderService.createReplacementRequest: Invalid id');
+    const response = await api.post(`/orders/${id}/replacements`, data);
+    return response.data.data;
+  },
+
   /**
    * Create a new order (Checkout).
    */

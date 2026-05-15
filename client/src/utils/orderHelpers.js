@@ -33,11 +33,16 @@ export const getCustomerOrderDisplayStatus = (order = {}) => {
     // Legacy fallback: older orders may only have shipmentStatus. Remove once migration is confirmed.
     const shippingStatus = order.orderShippingStatus || order.shipmentStatus || 'not_shipped';
     const paymentStatus = order.Payment?.status || order.paymentStatus;
+    const refundedAmount = Number(order.Payment?.metadata?.refundedAmount || 0);
+    const effectiveRefundedAmount = refundedAmount || (paymentStatus === 'refunded' ? Number(order.Payment?.amount || 0) : 0);
+    const orderTotal = Number(order.total || order.Payment?.amount || 0);
     const paymentSettled = PAYMENT_SETTLED_STATUSES.includes(paymentStatus);
 
     if (orderStatus === 'cancelled') return 'cancelled';
+    if (paymentStatus === 'refunded' && orderTotal > 0 && effectiveRefundedAmount >= orderTotal) return 'refunded';
     if (orderStatus === 'pending_payment') return 'pending_payment';
-    if (['delivered', 'partially_delivered'].includes(shippingStatus)) return 'delivered';
+    if (shippingStatus === 'partially_delivered') return 'partially_delivered';
+    if (shippingStatus === 'delivered') return 'delivered';
     if (['rto', 'partially_rto', 'rto_initiated'].includes(shippingStatus)) return 'rto';
     if (orderStatus === 'closed') return 'delivered';
     if (['out_for_delivery', 'partially_out_for_delivery'].includes(shippingStatus)) return 'out_for_delivery';
@@ -54,7 +59,9 @@ export const getCustomerOrderStatusLabel = (status) => ({
     packed: 'Packed',
     shipped: 'Shipped',
     out_for_delivery: 'Out For Delivery',
+    partially_delivered: 'Partially Delivered',
     delivered: 'Delivered',
+    refunded: 'Refunded',
     rto: 'Returned to Origin',
     cancelled: 'Cancelled',
 }[status] || 'Placed');

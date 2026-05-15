@@ -1,7 +1,7 @@
 'use strict';
 const crypto = require('crypto');
 const { Op } = require('sequelize');
-const { sequelize, Payment, Order, WebhookEvent, Setting, User, UserProfile, Cart, Coupon, CouponUsage, OrderHistory, OrderStatusHistory, Shipment } = require('../index');
+const { sequelize, Payment, Order, OrderItem, WebhookEvent, Setting, User, UserProfile, Cart, Coupon, CouponUsage, OrderHistory, OrderStatusHistory, Shipment, ShipmentItem } = require('../index');
 const { encrypt, decrypt } = require('../../utils/crypto');
 const AppError = require('../../utils/AppError');
 const AuditService = require('../audit/audit.service');
@@ -776,11 +776,64 @@ const handleWebhook = async (payload, signature) => {
     return { received: true };
 };
 
+const money = (value) => Number(Number(value || 0).toFixed(2));
+
+const isCodPaymentCollectable = (payment, order) => {
+    if (['pending_cod', 'pending'].includes(payment.status)) return true;
+    if (['refunded', 'partially_refunded'].includes(payment.status)) {
+        const refundedAmount = money(payment.metadata?.refundedAmount);
+        const orderTotal = money(order.total);
+        return orderTotal > 0 && refundedAmount < orderTotal;
+    }
+    return false;
+};
+
+const getCodCollectionState = async (orderId, transaction) => {
+    const [orderItems, shipments] = await Promise.all([
+        OrderItem.findAll({
+            where: { orderId },
+            attributes: ['id', 'quantity', 'total'],
+            transaction,
+        }),
+        Shipment.findAll({
+            where: { orderId },
+            attributes: ['id', 'status'],
+            include: [{ model: ShipmentItem, as: 'items' }],
+            transaction,
+        }),
+    ]);
+
+    const totalQuantity = orderItems.reduce((sum, item) => sum + Number(item.quantity || 0), 0);
+    const deliveredByItem = shipments
+        .filter((shipment) => shipment.status === 'delivered')
+        .flatMap((shipment) => shipment.items || [])
+        .reduce((map, item) => {
+            map[item.orderItemId] = (map[item.orderItemId] || 0) + Number(item.quantity || 0);
+            return map;
+        }, {});
+    const deliveredQuantity = Object.values(deliveredByItem).reduce((sum, qty) => sum + qty, 0);
+
+    const deliveredItemsAmount = orderItems.reduce((sum, item) => {
+        const orderedQty = Number(item.quantity || 0);
+        if (orderedQty <= 0) return sum;
+        const deliveredQty = Math.min(Number(deliveredByItem[item.id] || 0), orderedQty);
+        return sum + (Number(item.total || 0) * (deliveredQty / orderedQty));
+    }, 0);
+    const allDelivered = totalQuantity > 0 && deliveredQuantity >= totalQuantity;
+
+    return {
+        allDelivered,
+        deliveredQuantity,
+        totalQuantity,
+        deliveredItemsAmount: money(deliveredItemsAmount),
+    };
+};
+
 /**
- * Confirms that cash was collected for a COD order (admin action).
- * Transitions payment: pending_cod → paid_cod only after delivery.
+ * Records cash collected for a COD order (admin action).
+ * Partial deliveries keep payment pending_cod; final full collection marks paid_cod.
  */
-const confirmCodPayment = async (actingUserId, orderId) => {
+const confirmCodPayment = async (actingUserId, orderId, payload = {}) => {
     return sequelize.transaction(async (t) => {
         const order = await Order.findByPk(orderId, {
             transaction: t,
@@ -798,14 +851,6 @@ const confirmCodPayment = async (actingUserId, orderId) => {
                 `Cannot confirm COD collection for a ${order.status} order`
             );
         }
-        const shipments = await Shipment.findAll({
-            where: { orderId },
-            attributes: ['status'],
-            transaction: t,
-        });
-        if (shipments.length === 0 || !shipments.every((shipment) => shipment.status === 'delivered')) {
-            throw new AppError('VALIDATION_ERROR', 400, 'COD can be collected only after all shipments are delivered');
-        }
 
         const previousStatus = order.status;
 
@@ -820,16 +865,57 @@ const confirmCodPayment = async (actingUserId, orderId) => {
         }
 
         const previousPaymentStatus = payment.status;
+        if (!isCodPaymentCollectable(payment, order)) {
+            throw new AppError('VALIDATION_ERROR', 400, `Cannot confirm COD from ${payment.status} payment state`);
+        }
+
+        const collectionState = await getCodCollectionState(orderId, t);
+        if (collectionState.deliveredQuantity <= 0) {
+            throw new AppError('VALIDATION_ERROR', 400, 'COD can be collected only after at least one shipment is delivered');
+        }
+
+        const metadata = payment.metadata || {};
+        const previouslyCollected = money(metadata.codCollectedAmount || 0);
+        const orderTotal = money(order.total);
+        const remainingTotal = money(orderTotal - previouslyCollected);
+        const maxCollectableNow = remainingTotal;
+
+        if (maxCollectableNow <= 0) {
+            throw new AppError('VALIDATION_ERROR', 400, 'This COD order has no remaining amount to collect');
+        }
+
+        const requestedAmount = payload.amount === undefined || payload.amount === null || payload.amount === ''
+            ? maxCollectableNow
+            : money(payload.amount);
+        if (requestedAmount <= 0) {
+            throw new AppError('VALIDATION_ERROR', 400, 'COD collection amount must be greater than zero');
+        }
+        if (requestedAmount > maxCollectableNow) {
+            throw new AppError(
+                'VALIDATION_ERROR',
+                400,
+                `COD collection cannot exceed the remaining balance of ${maxCollectableNow.toFixed(2)}`
+            );
+        }
+
+        const nextCollectedAmount = money(previouslyCollected + requestedAmount);
+        const fullyCollected = nextCollectedAmount >= orderTotal;
+        const nextPaymentStatus = fullyCollected ? 'paid_cod' : 'pending_cod';
+
         if (payment) {
-            if (!['pending_cod', 'pending'].includes(payment.status)) {
-                throw new AppError('VALIDATION_ERROR', 400, `Cannot confirm COD from ${payment.status} payment state`);
-            }
             await payment.update({
-                status: 'paid_cod',
+                status: nextPaymentStatus,
+                amount: orderTotal,
                 metadata: {
-                    ...(payment.metadata || {}),
-                    confirmedBy: actingUserId,
-                    confirmedAt: new Date().toISOString(),
+                    ...metadata,
+                    codCollectedAmount: nextCollectedAmount,
+                    codDueAmount: money(orderTotal - nextCollectedAmount),
+                    codDeliveredItemsAmount: collectionState.deliveredItemsAmount,
+                    lastCollectedAmount: requestedAmount,
+                    lastCollectedBy: actingUserId,
+                    lastCollectedAt: new Date().toISOString(),
+                    confirmedBy: fullyCollected ? actingUserId : metadata.confirmedBy,
+                    confirmedAt: fullyCollected ? new Date().toISOString() : metadata.confirmedAt,
                 },
             }, { transaction: t });
         }
@@ -840,21 +926,32 @@ const confirmCodPayment = async (actingUserId, orderId) => {
             entityId: payment.id,
             statusGroup: 'payment',
             fromStatus: previousPaymentStatus,
-            toStatus: 'paid_cod',
+            toStatus: nextPaymentStatus,
             changedBy: actingUserId,
-            metadata: { adminAction: 'confirm_cod_payment' },
+            metadata: {
+                adminAction: 'confirm_cod_payment',
+                collectedAmount: requestedAmount,
+                totalCollectedAmount: nextCollectedAmount,
+                partial: !fullyCollected,
+            },
         }, { transaction: t });
 
         await OrderHistory.create({
             orderId: order.id,
             eventType: 'payment',
-            description: 'COD payment was marked as collected.',
+            description: fullyCollected
+                ? 'COD payment was fully collected.'
+                : `Partial COD payment of ${requestedAmount.toFixed(2)} was collected.`,
             actorId: actingUserId,
             actorType: 'admin',
-            metadata: { paymentStatus: 'paid_cod' },
+            metadata: {
+                paymentStatus: nextPaymentStatus,
+                collectedAmount: requestedAmount,
+                totalCollectedAmount: nextCollectedAmount,
+            },
         }, { transaction: t });
 
-        if (order.status === 'ready_for_shipment') {
+        if (fullyCollected && collectionState.allDelivered && order.status === 'ready_for_shipment') {
             await order.update({ status: 'closed' }, { transaction: t });
             await OrderStatusHistory.create({
                 orderId: order.id,
@@ -880,20 +977,28 @@ const confirmCodPayment = async (actingUserId, orderId) => {
             if (AuditService && AuditService.log) {
                 await AuditService.log({
                     userId: actingUserId,
-                    action: ACTIONS.STATUS_CHANGE,
-                    entity: ENTITIES.PAYMENT,
-                    entityId: payment?.id || orderId,
-                    changes: {
-                        orderStatus: { before: previousStatus, after: order.status },
-                        paymentStatus: { before: previousPaymentStatus, after: 'paid_cod' },
-                    },
-                }, t);
+                action: ACTIONS.STATUS_CHANGE,
+                entity: ENTITIES.PAYMENT,
+                entityId: payment?.id || orderId,
+                changes: {
+                    orderStatus: { before: previousStatus, after: order.status },
+                    paymentStatus: { before: previousPaymentStatus, after: nextPaymentStatus },
+                    collectedAmount: { before: previouslyCollected, after: nextCollectedAmount },
+                },
+            }, t);
             }
         } catch (err) {
             logger.error('COD confirmation audit log failed', { actingUserId, orderId, errorMessage: err.message });
         }
 
-        return { success: true, orderId, status: order.status };
+        return {
+            success: true,
+            orderId,
+            status: order.status,
+            paymentStatus: nextPaymentStatus,
+            collectedAmount: nextCollectedAmount,
+            dueAmount: money(orderTotal - nextCollectedAmount),
+        };
     });
 };
 

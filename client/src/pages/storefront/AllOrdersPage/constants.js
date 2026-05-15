@@ -15,6 +15,7 @@ export const ORDER_STATUSES = [
     { value: 'confirmed',  label: 'Confirmed' },
     { value: 'processing', label: 'Processing' },
     { value: 'shipped',    label: 'On the way' },
+    { value: 'partially_delivered', label: 'Partially delivered' },
     { value: 'delivered',  label: 'Delivered' },
     { value: 'cancelled',  label: 'Cancelled' },
 ];
@@ -38,7 +39,9 @@ export const STATUS_CONFIG = {
     packed:     { icon: PlacedIcon,      bg: '#F5F3FF', color: '#6D28D9', border: '#DDD6FE' },
     shipped:    { icon: ShippingIcon,    bg: '#F5F3FF', color: '#6D28D9', border: '#DDD6FE' },
     out_for_delivery: { icon: ShippingIcon, bg: '#FFFBEB', color: '#B45309', border: '#FDE68A' },
+    partially_delivered: { icon: ShippingIcon, bg: '#FFFBEB', color: '#B45309', border: '#FDE68A' },
     delivered:  { icon: CheckCircleIcon, bg: '#F0FDF4', color: '#15803D', border: '#BBF7D0' },
+    refunded:   { icon: ShippingIcon, bg: '#F8FAFC', color: '#475569', border: '#CBD5E1' },
     closed:     { icon: CheckCircleIcon, bg: '#052E16', color: '#BBF7D0', border: '#166534' },
     cancelled:  { icon: CancelIcon,      bg: '#FFF1F2', color: '#BE123C', border: '#FECDD3' },
 };

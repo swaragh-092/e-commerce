@@ -21,13 +21,11 @@ import VisibilityIcon from '@mui/icons-material/Visibility';
 import ReceiptLongOutlinedIcon from '@mui/icons-material/ReceiptLongOutlined';
 
 import PaymentsOutlinedIcon from '@mui/icons-material/PaymentsOutlined';
-import UndoOutlinedIcon from '@mui/icons-material/UndoOutlined';
 
 import { useNavigate, useSearchParams } from 'react-router-dom';
 
 import { useCurrency } from '../../hooks/useSettings';
-import { PAYMENT_SETTLED_STATUSES } from '../../utils/constants';
-import { confirmCodPayment, getAllOrders, refundOrder, updateOrderStatus } from '../../services/adminService';
+import { confirmCodPayment, getAllOrders, updateOrderStatus } from '../../services/adminService';
 import { useNotification } from '../../context/NotificationContext';
 import { useAuth } from '../../hooks/useAuth';
 import { PERMISSIONS } from '../../utils/permissions';
@@ -39,7 +37,6 @@ import {
   getAllowedOrderStatuses,
   getOrderStatusColor,
   getOrderStatusLabel,
-  isOrderRefundableStatus,
 } from '../../utils/orderWorkflow';
 
 const SummaryCard = ({ label, value, tone = 'default' }) => (
@@ -109,7 +106,6 @@ const OrdersManagePage = () => {
   const { notify, confirm } = useNotification();
   const { hasPermission } = useAuth();
   const canUpdateStatus = hasPermission(PERMISSIONS.ORDERS_UPDATE_STATUS);
-  const canRefundOrders = hasPermission(PERMISSIONS.ORDERS_REFUND);
   const [orders, setOrders] = useState([]);
   const [loading, setLoading] = useState(true);
   const [actionLoadingId, setActionLoadingId] = useState(null);
@@ -195,40 +191,33 @@ const OrdersManagePage = () => {
   };
 
   const handleConfirmCodPayment = async (order) => {
+    const collectedAmount = Number(order.Payment?.metadata?.codCollectedAmount || 0);
+    const pendingAmount = Math.max(Number(order.total || 0) - collectedAmount, 0);
+    const enteredAmount = window.prompt(
+      `Enter COD amount collected for ${order.orderNumber}. Pending balance: ${formatPrice(pendingAmount)}`,
+      pendingAmount > 0 ? pendingAmount.toFixed(2) : ''
+    );
+    if (enteredAmount === null) return;
+    const amount = Number(enteredAmount);
+    if (!Number.isFinite(amount) || amount <= 0 || amount > pendingAmount) {
+      notify(`Enter an amount between 0 and ${formatPrice(pendingAmount)}.`, 'error');
+      return;
+    }
+
     const confirmed = await confirm(
       'Mark COD Collected',
-      `Confirm cash collection for ${order.orderNumber}?`,
+      `Confirm COD collection of ${formatPrice(amount)} for ${order.orderNumber}?`,
       'primary'
     );
     if (!confirmed) return;
 
     setActionLoadingId(`${order.id}:cod`);
     try {
-      await confirmCodPayment(order.id);
-      notify('COD payment marked as collected.', 'success');
+      await confirmCodPayment(order.id, { amount });
+      notify('COD payment collection recorded.', 'success');
       fetchOrders();
     } catch (codError) {
       notify(getApiErrorMessage(codError, 'Failed to confirm COD payment.'), 'error');
-    } finally {
-      setActionLoadingId(null);
-    }
-  };
-
-  const handleRefund = async (order) => {
-    const confirmed = await confirm(
-      'Issue Refund',
-      `Issue a full refund for ${order.orderNumber}? This will mark the order and payment as refunded.`,
-      'danger'
-    );
-    if (!confirmed) return;
-
-    setActionLoadingId(`${order.id}:refund`);
-    try {
-      await refundOrder(order.id);
-      notify('Refund recorded successfully.', 'success');
-      fetchOrders();
-    } catch (refundError) {
-      notify(getApiErrorMessage(refundError, 'Failed to refund order.'), 'error');
     } finally {
       setActionLoadingId(null);
     }
@@ -340,12 +329,18 @@ const OrdersManagePage = () => {
         renderCell: ({ row }) => {
           const paymentStatus = row.Payment?.status;
           const shippingStatus = row.orderShippingStatus || row.shipmentStatus || 'not_shipped';
-          const hasSettledPayment = PAYMENT_SETTLED_STATUSES.includes(paymentStatus);
+          const codCollectedAmount = Number(
+            row.Payment?.metadata?.codCollectedAmount
+            || (row.paymentMethod === 'cod' && paymentStatus !== 'paid_cod' && Number(row.Payment?.amount || 0) < Number(row.total || 0)
+              ? row.Payment?.amount
+              : 0)
+          );
+          const codDueAmount = Math.max(Number(row.total || 0) - codCollectedAmount, 0);
           const canCollectCod = canUpdateStatus
             && row.paymentMethod === 'cod'
-            && shippingStatus === 'delivered'
-            && ['pending_cod', 'pending'].includes(paymentStatus || 'pending_cod');
-          const canRefund = canRefundOrders && isOrderRefundableStatus(row.status) && hasSettledPayment;
+            && ['partially_delivered', 'delivered'].includes(shippingStatus)
+            && ['pending_cod', 'pending', 'partially_refunded', 'refunded'].includes(paymentStatus || 'pending_cod')
+            && codDueAmount > 0;
 
           return (
             <Stack
@@ -372,25 +367,12 @@ const OrdersManagePage = () => {
                   Collect COD
                 </Button>
               )}
-              {canRefund && (
-                <Button
-                  size="small"
-                  color="error"
-                  variant="outlined"
-                  startIcon={<UndoOutlinedIcon />}
-                  disabled={actionLoadingId === `${row.id}:refund`}
-                  onClick={() => handleRefund(row)}
-                  sx={{ minWidth: 88, whiteSpace: 'nowrap' }}
-                >
-                  Refund
-                </Button>
-              )}
             </Stack>
           );
         },
       },
     ],
-    [actionLoadingId, canRefundOrders, canUpdateStatus, formatPrice, navigate]
+    [actionLoadingId, canUpdateStatus, navigate]
   );
 
   const EmptyOrdersOverlay = () => (

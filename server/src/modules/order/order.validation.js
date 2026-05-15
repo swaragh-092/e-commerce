@@ -5,6 +5,7 @@ const {
     SHIPMENT_STATUS_VALUES,
     ORDER_SHIPPING_STATUS_VALUES,
     PUT_BACK_RECORD_STATUS_VALUES,
+    LEGACY_PUT_BACK_STATUS_VALUES,
     REFUND_STATUS_VALUES,
 } = require('../../utils/orderWorkflow');
 
@@ -69,7 +70,7 @@ const createPutBackSchema = Joi.object({
 });
 
 const updatePutBackStatusSchema = Joi.object({
-    status: Joi.string().valid(...PUT_BACK_RECORD_STATUS_VALUES).required(),
+    status: Joi.string().valid(...PUT_BACK_RECORD_STATUS_VALUES, ...LEGACY_PUT_BACK_STATUS_VALUES).required(),
 });
 
 const processRefundSchema = Joi.object({
