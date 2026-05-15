@@ -191,16 +191,26 @@ const AdminLayout = () => {
     path === '/admin' ? location.pathname === '/admin' : location.pathname.startsWith(path);
 
   // Keyboard shortcut for search (Ctrl + /)
+  const [searchFocusTrigger, setSearchFocusTrigger] = React.useState(0);
+
   React.useEffect(() => {
     const handleKeyDown = (e) => {
       if ((e.ctrlKey || e.metaKey) && e.key === '/') {
         e.preventDefault();
-        searchInputRef.current?.focus();
+        e.stopPropagation();
+        setIsCollapsed(false);
+        setSearchFocusTrigger((t) => t + 1);
       }
     };
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, []);
+
+  React.useEffect(() => {
+    if (searchFocusTrigger > 0) {
+      searchInputRef.current?.focus();
+    }
+  }, [searchFocusTrigger]);
 
   // Filter and check if group should be visible
   const isItemVisible = (item) => {
