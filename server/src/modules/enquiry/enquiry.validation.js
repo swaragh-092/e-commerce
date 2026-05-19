@@ -2,20 +2,48 @@
 
 const Joi = require('joi');
 
+const uuidSchema = Joi.string().guid({ version: ['uuidv4', 'uuidv5'] });
+
 const createEnquirySchema = Joi.object({
-  name: Joi.string().max(255).required(),
-  email: Joi.string().email().required().lowercase(),
+  name: Joi.string().trim().min(2).max(255).required(),
+  email: Joi.string().trim().email().required().lowercase(),
   phone: Joi.string()
+    .trim()
     .pattern(/^\d{10,12}$/)
     .allow(null, '')
     .messages({
       'string.pattern.base': 'Phone number must be between 10 and 12 digits and contain only numbers'
     }),
-  message: Joi.string().max(2000).required(),
-  productId: Joi.string().uuid().optional().allow(null),
-  variantId: Joi.string().uuid().optional().allow(null),
+  message: Joi.string().trim().min(5).max(2000).required(),
+  productId: uuidSchema.optional().allow(null),
+  variantId: uuidSchema.optional().allow(null),
   quantity: Joi.number().integer().min(1).optional().default(1),
-  cartItems: Joi.array().items(Joi.object()).optional().allow(null)
+  cartItems: Joi.array()
+    .items(
+      Joi.object({
+        product: Joi.object({
+          id: uuidSchema.required()
+        }).required(),
+        variant: Joi.object({
+          id: uuidSchema.optional().allow(null),
+          sku: Joi.string().trim().max(100).optional().allow(null, '')
+        }).optional().allow(null),
+        quantity: Joi.number().integer().min(1).required()
+      }).unknown(true)
+    )
+    .max(100)
+    .optional()
+    .allow(null)
+}).custom((value, helpers) => {
+  if (!value.productId && !value.cartItems) {
+    return helpers.error('any.custom', { message: 'Either productId or cartItems is required' });
+  }
+  if (value.productId && value.cartItems) {
+    return helpers.error('any.custom', { message: 'Provide either productId or cartItems, not both' });
+  }
+  return value;
+}, 'enquiry payload rules').messages({
+  'any.custom': '{{#message}}'
 });
 
 const updateEnquiryStatusSchema = Joi.object({

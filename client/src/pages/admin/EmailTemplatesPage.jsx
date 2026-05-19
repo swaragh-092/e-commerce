@@ -400,12 +400,14 @@ const EmailTemplatesPage = () => {
                             {dirty && <Box sx={{ width: 7, height: 7, borderRadius: '50%', bgcolor: 'warning.main', flexShrink: 0 }} />}
                           </Box>
                         }
+                        primaryTypographyProps={{ component: 'div' }}
                         secondary={
                           <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
                             <FiberManualRecordIcon sx={{ fontSize: 8, color: active ? 'success.main' : 'text.disabled' }} />
                             <Typography variant="caption" sx={{ color: 'inherit', opacity: 0.7 }} noWrap>{active ? 'Active' : 'Inactive'}</Typography>
                           </Box>
                         }
+                        secondaryTypographyProps={{ component: 'div' }}
                       />
                     </ListItemButton>
                   </ListItem>

@@ -4,10 +4,33 @@ const nodemailer = require('nodemailer');
 const logger = require('../../../utils/logger');
 const SettingsService = require('../../settings/settings.service');
 
+const MASKED_VALUE = '********';
+
 const toBoolean = (value, fallback = false) => {
     if (value === undefined || value === null || value === '') return fallback;
     if (typeof value === 'boolean') return value;
     return ['1', 'true', 'yes', 'on'].includes(String(value).toLowerCase());
+};
+
+const settingOrEnv = (settings, key, envKey) => {
+    const value = settings?.[key];
+    if (value !== undefined && value !== null && String(value).trim() !== '' && String(value).trim() !== MASKED_VALUE) {
+        return value;
+    }
+    return process.env[envKey];
+};
+
+const getSmtpConfig = async () => {
+    const creds = await SettingsService.getByGroup('messaging_credentials', { maskSensitive: false });
+    const messaging = await SettingsService.getByGroup('messaging');
+    const host = settingOrEnv(creds, 'smtp_host', 'SMTP_HOST');
+    const port = settingOrEnv(creds, 'smtp_port', 'SMTP_PORT');
+    const user = settingOrEnv(creds, 'smtp_user', 'SMTP_USER');
+    const pass = settingOrEnv(creds, 'smtp_pass', 'SMTP_PASS');
+    const secure = settingOrEnv(creds, 'smtp_secure', 'SMTP_SECURE');
+    const from = settingOrEnv(messaging, 'emailFrom', 'EMAIL_FROM');
+
+    return { host, port, user, pass, secure, from };
 };
 
 const requireSetting = (value, label) => {
@@ -18,16 +41,16 @@ const requireSetting = (value, label) => {
 };
 
 const createTransporter = async () => {
-    const creds = await SettingsService.getByGroup('messaging_credentials', { maskSensitive: false });
-    const host = requireSetting(creds.smtp_host, 'SMTP Host');
-    const port = Number.parseInt(creds.smtp_port, 10) || 587;
-    const user = requireSetting(creds.smtp_user, 'SMTP User');
-    const pass = requireSetting(creds.smtp_pass, 'SMTP Password');
+    const smtp = await getSmtpConfig();
+    const host = requireSetting(smtp.host, 'SMTP Host');
+    const port = Number.parseInt(smtp.port, 10) || 587;
+    const user = requireSetting(smtp.user, 'SMTP User');
+    const pass = requireSetting(smtp.pass, 'SMTP Password');
 
     return nodemailer.createTransport({
         host,
         port,
-        secure: toBoolean(creds.smtp_secure, port === 465),
+        secure: toBoolean(smtp.secure, port === 465),
         auth: {
             user,
             pass,
@@ -53,15 +76,14 @@ const send = async ({ to, subject, html, text }) => {
     }
 
     const transporter = await createTransporter();
-    const config = await SettingsService.getByGroup('messaging');
-    const creds = await SettingsService.getByGroup('messaging_credentials', { maskSensitive: false });
+    const smtp = await getSmtpConfig();
     const general = await SettingsService.getByGroup('general');
 
     const storeName = general.storeName || 'E-Commerce Store';
-    const defaultFrom = creds.smtp_user ? `"${storeName}" <${creds.smtp_user}>` : null;
+    const defaultFrom = smtp.user ? `"${storeName}" <${smtp.user}>` : null;
 
     await transporter.sendMail({
-        from: config.emailFrom || defaultFrom || requireSetting(creds.smtp_user, 'Sender Email'),
+        from: smtp.from || defaultFrom || requireSetting(smtp.user, 'Sender Email'),
         to,
         subject,
         text,

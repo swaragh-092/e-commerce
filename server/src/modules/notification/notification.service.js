@@ -157,6 +157,54 @@ const send = async (
     }
 };
 
+const sendImmediate = async (
+    templateName,
+    recipient,
+    variables = {},
+    userId = null,
+    orderId = null,
+    channel = 'email'
+) => {
+    const template = await NotificationTemplate.findOne({
+        where: { name: templateName, channel },
+    });
+
+    if (!template) {
+        logger.warn(`Notification template '${templateName}' not found for channel '${channel}'. Send skipped.`);
+        return false;
+    }
+
+    if (!template.isActive) {
+        logger.debug(`Template '${templateName}' (${channel}) is inactive. Send skipped.`);
+        return false;
+    }
+
+    const compiled = await compileTemplate(template, normalizeVariables(variables));
+    const payload = buildPayload(channel, recipient, compiled.subject, compiled.html, compiled.text);
+    const job = {
+        templateName,
+        userId,
+        orderId,
+        channel,
+        recipientEmail: channel === 'email' ? recipient : null,
+        recipientPhone: channel === 'email' ? null : recipient,
+    };
+
+    try {
+        const dispatched = await dispatch(channel, payload);
+        await createLog({
+            job,
+            subject: compiled.subject,
+            status: dispatched ? 'sent' : 'skipped',
+            error: dispatched ? null : 'Channel disabled',
+        });
+        return dispatched;
+    } catch (err) {
+        await createLog({ job, subject: compiled.subject, status: 'failed', error: err.message });
+        throw err;
+    }
+};
+
 const processQueued = async ({ limit = 25 } = {}) => {
     const jobs = await NotificationQueue.findAll({
         where: {
@@ -303,4 +351,4 @@ const sendDeliveryUpdate = async (userId, orderId, status) => {
     }
 };
 
-module.exports = { send, sendToUser, sendToAdmins, sendDeliveryUpdate, processQueued };
+module.exports = { send, sendImmediate, sendToUser, sendToAdmins, sendDeliveryUpdate, processQueued };

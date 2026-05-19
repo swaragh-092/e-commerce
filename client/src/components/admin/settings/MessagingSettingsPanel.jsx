@@ -95,6 +95,8 @@ const MessagingSettingsPanel = ({ form, set }) => {
               fullWidth
               size="small"
               label="SMTP User"
+              autoComplete="off"
+              name="smtp-user-setting"
               value={form['messaging_credentials.smtp_user'] || ''}
               onChange={(e) => set('messaging_credentials.smtp_user', e.target.value)}
             />
@@ -103,6 +105,8 @@ const MessagingSettingsPanel = ({ form, set }) => {
               size="small"
               label="SMTP Password"
               type="password"
+              autoComplete="new-password"
+              name="smtp-password-setting"
               value={form['messaging_credentials.smtp_pass'] || ''}
               onChange={(e) => set('messaging_credentials.smtp_pass', e.target.value)}
             />
@@ -172,6 +176,8 @@ const MessagingSettingsPanel = ({ form, set }) => {
             size="small"
             label="Twilio Account SID"
             type="password"
+            autoComplete="off"
+            name="twilio-sid-setting"
             value={form['messaging_credentials.twilio_sid'] || ''}
             onChange={(e) => set('messaging_credentials.twilio_sid', e.target.value)}
             sx={{ mb: 2 }}
@@ -181,6 +187,8 @@ const MessagingSettingsPanel = ({ form, set }) => {
             size="small"
             label="Twilio Auth Token"
             type="password"
+            autoComplete="new-password"
+            name="twilio-token-setting"
             value={form['messaging_credentials.twilio_token'] || ''}
             onChange={(e) => set('messaging_credentials.twilio_token', e.target.value)}
             sx={{ mb: 2 }}

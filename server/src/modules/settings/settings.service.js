@@ -12,6 +12,9 @@ const path = require('path');
 const logger = require('../../utils/logger');
 const { encrypt, decrypt } = require('../../utils/crypto');
 
+const isMaskedSecretPlaceholder = (value) =>
+  typeof value === 'string' && value.trim() === '********';
+
 // Read local config/default.json for fallback defaults
 // Path: server/src/modules/settings/ → ../../../config/default.json = server/config/default.json
 let defaultSettings = {};
@@ -142,10 +145,11 @@ const updateKey = async (key, value, group, actingUserId) => {
   // Capture the transaction result so we can invalidate the feature cache
   // AFTER it commits — ensuring we never bust the cache on a rollback.
   const result = await sequelize.transaction(async (t) => {
-    let setting = await Setting.findOne({ where: { key }, transaction: t });
+    // Look up by (key, group) to avoid cross-group collisions for shared key names.
+    let setting = await Setting.findOne({ where: { key, group }, transaction: t });
     let before = setting ? setting.toJSON() : null;
 
-    if (value !== null && value !== undefined && String(value).trim() === '********') return null;
+    if (isMaskedSecretPlaceholder(value)) return null;
 
     // Auto-encrypt if it's a credential group and value is not empty
     let finalValue = value;
@@ -234,14 +238,14 @@ const bulkUpdate = async (settingsInput, actingUserId, actingUser = null) => {
                 }
             }
 
+            // Skip updating if the value is the sensitive placeholder (means it wasn't changed)
+            if (isMaskedSecretPlaceholder(value)) continue;
+
             // Auto-encrypt if it's a credential group and value is not empty
             let finalValue = value;
             if (credentialGroups.includes(resolvedGroup) && value !== null && value !== undefined && String(value).trim() !== '') {
                 finalValue = encrypt(String(value).trim());
             }
-
-            // Skip updating if the value is the sensitive placeholder (means it wasn't changed)
-            if (value === '********') continue;
 
             // Look up by (key, group) — not key alone — to avoid cross-group collisions
             let setting = await Setting.findOne({ where: { key, group: resolvedGroup }, transaction: t });

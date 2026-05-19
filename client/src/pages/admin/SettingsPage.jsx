@@ -69,6 +69,11 @@ const getCurrencySymbol = (code) =>
 const bool = (val, fallback = true) =>
   val === undefined || val === null ? fallback : val !== false && val !== 'false' && val !== '0';
 
+const MASKED_SECRET = '********';
+
+const isMaskedSecret = (value) =>
+  typeof value === 'string' && value.trim() === MASKED_SECRET;
+
 const FONTS = [
   'Roboto',
   'Inter',
@@ -301,7 +306,7 @@ const SettingsPage = () => {
       const payload = Object.entries(form).map(([flatKey, value]) => {
         const [group, ...keyParts] = flatKey.split('.');
         return { group, key: keyParts.join('.'), value };
-      });
+      }).filter(({ value }) => !isMaskedSecret(value));
       await updateSettings(payload);
       notify('Settings saved successfully.', 'success');
       // Refresh theme settings in real-time

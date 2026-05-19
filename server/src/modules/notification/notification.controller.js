@@ -216,12 +216,12 @@ const sendTestNotification = async (req, res, next) => {
       throw new AppError('NOT_FOUND', 404, `Template '${templateName}' for channel '${channel}' not found`);
     }
 
-    const sent = await NotificationService.send(templateName, finalRecipient, SAMPLE_VARIABLES, null, null, channel);
+    const sent = await NotificationService.sendImmediate(templateName, finalRecipient, SAMPLE_VARIABLES, null, null, channel);
     if (!sent) {
-      return error(res, `Test ${channel} could not be queued. Check the template and recipient.`, 500, 'QUEUE_FAILED');
+      return error(res, `Test ${channel} could not be sent. Check the template, recipient, and channel settings.`, 500, 'SEND_FAILED');
     }
 
-    return success(res, null, `Test ${channel} queued for ${finalRecipient}`);
+    return success(res, null, `Test ${channel} sent to ${finalRecipient}`);
   } catch (err) {
     next(err);
   }
