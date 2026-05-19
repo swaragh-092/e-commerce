@@ -33,6 +33,46 @@ const uniqueEmails = (values) => {
 };
 
 class EnquiryService {
+  async normalizeCartItems(cartItems = []) {
+    if (!Array.isArray(cartItems) || cartItems.length === 0) return null;
+
+    const normalized = [];
+    for (const item of cartItems) {
+      const quantity = Number(item?.quantity) > 0 ? Number(item.quantity) : 1;
+      const productId = item?.product?.id || item?.productId || (typeof item?.product === 'string' ? item.product : null) || null;
+      const variantId = item?.variant?.id || item?.variantId || null;
+
+      let product = null;
+      if (productId) {
+        product = await Product.findByPk(productId, {
+          attributes: ['id', 'name', 'sku'],
+        });
+      }
+
+      let variant = null;
+      if (variantId) {
+        variant = await ProductVariant.findByPk(variantId, {
+          attributes: ['id', 'sku'],
+        });
+      }
+
+      normalized.push({
+        product: {
+          id: productId,
+          name: item?.product?.name || item?.name || product?.name || 'Unknown Product',
+          sku: item?.product?.sku || item?.sku || product?.sku || null,
+        },
+        variant: variantId ? {
+          id: variantId,
+          sku: item?.variant?.sku || variant?.sku || null,
+        } : null,
+        quantity,
+      });
+    }
+
+    return normalized;
+  }
+
   async getAdminNotificationEmails(settings) {
     const adminUsers = await User.findAll({
       where: {
@@ -75,6 +115,8 @@ class EnquiryService {
       parsedQuantity = 1;
     }
 
+    const normalizedCartItems = await this.normalizeCartItems(data.cartItems);
+
     const payload = {
       name,
       email,
@@ -83,7 +125,7 @@ class EnquiryService {
       quantity: parsedQuantity,
       productId: data.productId || null,
       variantId: data.variantId || null,
-      cartItems: data.cartItems || null,
+      cartItems: normalizedCartItems,
       status: 'pending',
     };
 

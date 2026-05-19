@@ -3,6 +3,14 @@
 const Joi = require('joi');
 
 const uuidSchema = Joi.string().guid({ version: ['uuidv4', 'uuidv5'] });
+const cartProductSchema = Joi.alternatives().try(
+  Joi.object({
+    id: uuidSchema.required(),
+    name: Joi.string().trim().max(255).optional().allow(null, ''),
+    sku: Joi.string().trim().max(100).optional().allow(null, ''),
+  }).unknown(true),
+  uuidSchema
+);
 
 const createEnquirySchema = Joi.object({
   name: Joi.string().trim().min(2).max(255).required(),
@@ -21,13 +29,13 @@ const createEnquirySchema = Joi.object({
   cartItems: Joi.array()
     .items(
       Joi.object({
-        product: Joi.object({
-          id: uuidSchema.required()
-        }).required(),
+        product: cartProductSchema.optional(),
+        productId: uuidSchema.optional(),
         variant: Joi.object({
           id: uuidSchema.optional().allow(null),
           sku: Joi.string().trim().max(100).optional().allow(null, '')
         }).optional().allow(null),
+        variantId: uuidSchema.optional().allow(null),
         quantity: Joi.number().integer().min(1).required()
       }).unknown(true)
     )
