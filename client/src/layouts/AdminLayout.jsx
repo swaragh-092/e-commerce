@@ -616,7 +616,7 @@ const AdminLayout = () => {
                 onError={(e) => { e.target.style.display = 'none'; }}
               />
             ) : null}
-            <Typography variant="h6" noWrap sx={{ fontWeight: 700 }}>
+            <Typography variant="h6" noWrap sx={{ fontWeight: 700, display: { xs: 'none', md: 'block' } }}>
               Admin Dashboard
             </Typography>
           </Box>

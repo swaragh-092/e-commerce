@@ -777,12 +777,30 @@ const ProductsManagePage = () => {
           }}
         />
       </Stack>
-      <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 3 }}>
+      <Box
+        sx={{
+          display: 'flex',
+          flexDirection: { xs: 'column', sm: 'row' },
+          justifyContent: 'space-between',
+          alignItems: { xs: 'flex-start', sm: 'center' },
+          gap: { xs: 1.5, sm: 2 },
+          mb: 3,
+        }}
+      >
         <Box>
           <Typography variant="h5" fontWeight={700}>Manage Products</Typography>
           <Typography variant="body2" color="text.secondary">{total} products total</Typography>
         </Box>
-        <Stack direction="row" spacing={1.5}>
+        <Stack
+          direction="row"
+          spacing={1.5}
+          sx={{
+            width: { xs: '100%', sm: 'auto' },
+            justifyContent: { xs: 'flex-start', sm: 'flex-end' },
+            flexWrap: 'wrap',
+            rowGap: 1,
+          }}
+        >
           <Button variant="outlined" startIcon={<DownloadIcon />} onClick={handleExportCSV} disabled={rows.length === 0}>
             Export CSV
           </Button>
@@ -821,7 +839,7 @@ const ProductsManagePage = () => {
       )}
 
       {/* ── Filters ── */}
-      <Stack direction="row" spacing={2} mb={2} flexWrap="wrap" alignItems="center">
+      <Stack direction="row" spacing={2} mb={2} flexWrap="wrap" alignItems="center" useFlexGap sx={{ rowGap: 1.5 }}>
         <TextField
           size="small"
           label="Search name / description"

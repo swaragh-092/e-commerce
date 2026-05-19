@@ -29,6 +29,8 @@ import api from '../../services/api';
 import PageSEO from '../../components/common/PageSEO';
 import { useNotification } from '../../context/NotificationContext';
 
+const ADMIN_PREFIX = import.meta.env.VITE_ADMIN_ROUTE_PREFIX || 'admin';
+
 const EnquiriesPage = () => {
   const { notify } = useNotification();
   const [enquiries, setEnquiries] = useState([]);
@@ -42,7 +44,7 @@ const EnquiriesPage = () => {
   const fetchEnquiries = useCallback(async () => {
     setLoading(true);
     try {
-      const { data } = await api.get('/enquiries/admin', {
+      const { data } = await api.get(`/${ADMIN_PREFIX}/enquiries`, {
         params: { status: statusFilter || undefined },
       });
       setEnquiries(data.data || []);
@@ -60,7 +62,7 @@ const EnquiriesPage = () => {
 
   const handleStatusChange = async (id, newStatus) => {
     try {
-      await api.patch(`/enquiries/admin/${id}/status`, { status: newStatus });
+      await api.patch(`/${ADMIN_PREFIX}/enquiries/${id}/status`, { status: newStatus });
       setEnquiries((prev) =>
         prev.map((eq) => (eq.id === id ? { ...eq, status: newStatus } : eq))
       );
@@ -77,7 +79,7 @@ const EnquiriesPage = () => {
     if (!replyMessage.trim() || !selectedEnquiry) return;
     setReplyLoading(true);
     try {
-      const { data } = await api.post(`/enquiries/admin/${selectedEnquiry.id}/reply`, {
+      const { data } = await api.post(`/${ADMIN_PREFIX}/enquiries/${selectedEnquiry.id}/reply`, {
         replyMessage: replyMessage.trim()
       });
       if (data && data.data && data.data.enquiry) {
