@@ -39,8 +39,8 @@ class EnquiryService {
     const normalized = [];
     for (const item of cartItems) {
       const quantity = Number(item?.quantity) > 0 ? Number(item.quantity) : 1;
-      const productId = item?.product?.id || item?.productId || (typeof item?.product === 'string' ? item.product : null) || null;
-      const variantId = item?.variant?.id || item?.variantId || null;
+      const productId = item?.product?.id || null;
+      const variantId = item?.variant?.id || null;
 
       let product = null;
       if (productId) {
@@ -59,8 +59,8 @@ class EnquiryService {
       normalized.push({
         product: {
           id: productId,
-          name: item?.product?.name || item?.name || product?.name || 'Unknown Product',
-          sku: item?.product?.sku || item?.sku || product?.sku || null,
+          name: item?.product?.name || product?.name || 'Unknown Product',
+          sku: item?.product?.sku || product?.sku || null,
         },
         variant: variantId ? {
           id: variantId,

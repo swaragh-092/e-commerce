@@ -22,7 +22,7 @@ const createEnquirySchema = Joi.object({
     .messages({
       'string.pattern.base': 'Phone number must be between 10 and 12 digits and contain only numbers'
     }),
-  message: Joi.string().trim().min(5).max(2000).required(),
+  message: Joi.string().trim().max(2000).required(),
   productId: uuidSchema.optional().allow(null),
   variantId: uuidSchema.optional().allow(null),
   quantity: Joi.number().integer().min(1).optional().default(1),
