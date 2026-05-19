@@ -1,12 +1,57 @@
 'use strict';
 
-const { Enquiry, Product, ProductVariant, sequelize } = require('../index');
+const { Op } = require('sequelize');
+const { Enquiry, Product, ProductVariant, User, sequelize } = require('../index');
 const notificationService = require('../notification/notification.service');
 const settingsService = require('../settings/settings.service');
 const AppError = require('../../utils/AppError');
 const logger = require('../../utils/logger');
 
+const parseRecipientList = (value) => String(value || '')
+  .split(',')
+  .map((item) => item.trim())
+  .filter(Boolean);
+
+const extractEmailAddress = (value) => {
+  const input = String(value || '').trim();
+  if (!input) return null;
+  const match = input.match(/<([^>]+)>/);
+  return (match ? match[1] : input).trim();
+};
+
+const uniqueEmails = (values) => {
+  const seen = new Set();
+  return values
+    .map(extractEmailAddress)
+    .filter((email) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email || ''))
+    .filter((email) => {
+      const key = email.toLowerCase();
+      if (seen.has(key)) return false;
+      seen.add(key);
+      return true;
+    });
+};
+
 class EnquiryService {
+  async getAdminNotificationEmails(settings) {
+    const adminUsers = await User.findAll({
+      where: {
+        role: { [Op.in]: ['admin', 'super_admin'] },
+        status: 'active',
+      },
+      attributes: ['email'],
+    });
+
+    return uniqueEmails([
+      ...parseRecipientList(process.env.ADMIN_NOTIFICATION_EMAIL),
+      settings?.general?.storeEmail,
+      settings?.footer?.email,
+      settings?.messaging?.emailFrom,
+      process.env.SMTP_USER,
+      ...adminUsers.map((user) => user.email),
+    ]);
+  }
+
   /**
    * Create a new enquiry
    */
@@ -46,7 +91,7 @@ class EnquiryService {
 
     // Fetch store settings for admin email
     const settings = await settingsService.getAll();
-    const adminEmail = settings?.general?.storeEmail || 'admin@store.com';
+    const adminEmails = await this.getAdminNotificationEmails(settings);
     const storeName = settings?.general?.storeName || 'Our Store';
 
     // Fetch product details for email context if it's a product enquiry
@@ -80,24 +125,34 @@ class EnquiryService {
     // Dispatch async notifications
     try {
       // 1. Alert Admin
-      await notificationService.send(
-        'new_enquiry_admin',
-        adminEmail,
-        templateVars,
-        userId,
-        enquiry.id,
-        'email'
-      );
+      const adminResults = [];
+      for (const adminEmail of adminEmails) {
+        adminResults.push(await notificationService.send(
+          'new_enquiry_admin',
+          adminEmail,
+          templateVars,
+          userId,
+          null,
+          'email'
+        ));
+      }
 
       // 2. Auto-reply Customer
-      await notificationService.send(
+      const customerQueued = await notificationService.send(
         'new_enquiry_customer',
         enquiry.email,
         templateVars,
         userId,
-        enquiry.id,
+        null,
         'email'
       );
+
+      if (!adminResults.some(Boolean) && !customerQueued) {
+        logger.warn('[EnquiryService] Enquiry saved but no email notifications were queued', {
+          enquiryId: enquiry.id,
+          adminRecipientCount: adminEmails.length,
+        });
+      }
     } catch (err) {
       logger.error('[EnquiryService] Failed to send email notifications:', { 
         error: err.message, 
@@ -198,14 +253,19 @@ class EnquiryService {
         await enquiry.save({ transaction });
       }
 
-      await notificationService.send(
+      const queued = await notificationService.send(
         'enquiry_reply_customer',
         enquiry.email,
         templateVars,
         adminUserId,
-        enquiry.id,
-        'email'
+        null,
+        'email',
+        transaction
       );
+
+      if (!queued) {
+        throw new Error('Reply email could not be queued');
+      }
 
       await transaction.commit();
     } catch (err) {
