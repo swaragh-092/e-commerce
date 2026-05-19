@@ -4,6 +4,11 @@ import {
   getShipmentStatusLabel,
 } from '../../../utils/orderWorkflow';
 import { PAYMENT_SETTLED_STATUSES } from '../../../utils/constants';
+export {
+  formatCompactDateTime,
+  formatDateOnly,
+  formatDateTime,
+} from '../../../utils/dates';
 
 export const PRODUCT_TRACKING_STEPS = [
   { key: 'placed', label: 'Placed' },
@@ -62,20 +67,6 @@ export const getTaxRows = (order = {}) => {
 
   if (rows.length > 0) return rows;
   return Number(order.tax || 0) > 0 ? [{ label: 'Tax', value: order.tax }] : [];
-};
-
-export const formatDateTime = (value) => {
-  if (!value) return '';
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) return '';
-  return date.toLocaleString('en-US', { dateStyle: 'medium', timeStyle: 'short' });
-};
-
-export const formatCompactDateTime = (value) => {
-  if (!value) return '';
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) return '';
-  return date.toLocaleString('en-US', { dateStyle: 'short', timeStyle: 'short' });
 };
 
 const normalizeShipmentStatus = (status) => {

@@ -3,7 +3,7 @@ import { Box, Typography } from '@mui/material';
 import { STATUS_CONFIG } from '../../pages/storefront/AllOrdersPage/constants';
 import { getCustomerOrderDisplayStatus, getCustomerOrderStatusLabel } from '../../utils/orderHelpers';
 
-const StatusBadge = ({ status, order }) => {
+const StatusBadge = React.memo(({ status, order }) => {
     const displayStatus = order ? getCustomerOrderDisplayStatus(order) : status;
     const cfg = STATUS_CONFIG[displayStatus] || STATUS_CONFIG.placed;
     const Icon = cfg.icon;
@@ -37,6 +37,6 @@ const StatusBadge = ({ status, order }) => {
             </Typography>
         </Box>
     );
-};
+});
 
 export default StatusBadge;

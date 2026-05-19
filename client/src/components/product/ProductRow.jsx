@@ -1,4 +1,4 @@
-import React, { useRef, useState, useEffect } from 'react';
+import React, { useRef } from 'react';
 import {
   Box, Typography, Button, Grid, Skeleton, IconButton, alpha,
 } from '@mui/material';
@@ -7,6 +7,7 @@ import ProductCard from './ProductCard';
 import ArrowForwardIcon from '@mui/icons-material/ArrowForward';
 import ChevronLeftIcon from '@mui/icons-material/ChevronLeft';
 import ChevronRightIcon from '@mui/icons-material/ChevronRight';
+import { useScrollState } from '../../hooks/useScrollState';
 
 /**
  * ProductRow — reusable section component used on the homepage.
@@ -21,35 +22,7 @@ const ProductRow = ({
   layout = 'grid',
 }) => {
   const scrollRef = useRef(null);
-  const [canScrollLeft, setCanScrollLeft] = useState(false);
-  const [canScrollRight, setCanScrollRight] = useState(false);
-
-  // Track scroll to show/hide navigation
-  const checkScroll = () => {
-    if (scrollRef.current) {
-      const { scrollLeft, scrollWidth, clientWidth } = scrollRef.current;
-      // Use a smaller threshold for better accuracy
-      setCanScrollLeft(scrollLeft > 5);
-      setCanScrollRight(scrollLeft + clientWidth < scrollWidth - 5);
-    }
-  };
-
-  useEffect(() => {
-    const el = scrollRef.current;
-    if (el) {
-      el.addEventListener('scroll', checkScroll);
-      window.addEventListener('resize', checkScroll);
-      
-      // Check after a short delay to ensure layout is complete
-      const timer = setTimeout(checkScroll, 100);
-      
-      return () => {
-        el.removeEventListener('scroll', checkScroll);
-        window.removeEventListener('resize', checkScroll);
-        clearTimeout(timer);
-      };
-    }
-  }, [products, loading, layout]);
+  const { canScrollLeft, canScrollRight } = useScrollState(scrollRef, [products, loading, layout], { delay: 100 });
 
   const scroll = (direction) => {
     if (scrollRef.current) {

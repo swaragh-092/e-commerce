@@ -134,6 +134,10 @@ const ProductImages = ({ images, variantImages = [], selectedVariantId, thumbnai
             p: { xs: 1, md: 2 },
             transition: 'transform 180ms ease',
             transform: { xs: 'none', md: zoom.active ? 'scale(1.035)' : 'scale(1)' },
+            '@media (prefers-reduced-motion: reduce)': {
+              transition: 'none',
+              transform: 'none',
+            },
           }}
         />
         <Box
@@ -162,7 +166,7 @@ const ProductImages = ({ images, variantImages = [], selectedVariantId, thumbnai
             px: 1.25,
             py: 0.5,
             borderRadius: 99,
-            bgcolor: 'rgba(0,0,0,0.58)',
+            bgcolor: 'rgba(0,0,0,0.72)',
             color: '#fff',
             pointerEvents: 'none',
           }}

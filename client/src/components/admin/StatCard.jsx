@@ -1,3 +1,4 @@
+import { memo } from 'react';
 import { Paper, Box, Typography, Chip, Skeleton } from '@mui/material';
 import TrendingUpIcon from '@mui/icons-material/TrendingUp';
 import TrendingDownIcon from '@mui/icons-material/TrendingDown';
@@ -6,7 +7,7 @@ import TrendingDownIcon from '@mui/icons-material/TrendingDown';
  * Metric card for the admin dashboard.
  * @param {{ title, value, icon, loading, trend, color, onClick }} props
  */
-const StatCard = ({ title, value, icon, loading = false, trend, color = 'primary.main', onClick }) => (
+const StatCard = memo(({ title, value, icon, loading = false, trend, color = 'primary.main', onClick }) => (
   <Paper
     elevation={0}
     onClick={onClick}
@@ -62,6 +63,6 @@ const StatCard = ({ title, value, icon, loading = false, trend, color = 'primary
       )}
     </Box>
   </Paper>
-);
+));
 
 export default StatCard;

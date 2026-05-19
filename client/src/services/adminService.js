@@ -1,4 +1,5 @@
 import api from './api';
+import { buildQueryString, withQueryString } from '../utils/query';
 
 // Admin route prefix — driven by VITE_ADMIN_ROUTE_PREFIX in .env.
 // Must match the ADMIN_ROUTE_PREFIX set on the server (without the leading /api/).
@@ -8,65 +9,43 @@ const A = import.meta.env.VITE_ADMIN_ROUTE_PREFIX || 'admin';
 // Dashboard
 const getStats = () => api.get(`/${A}/dashboard/stats`);
 const getSalesChart = ({ period = 'monthly', startDate, endDate } = {}) => {
-  const params = new URLSearchParams({ period });
-  if (startDate) params.set('startDate', startDate);
-  if (endDate) params.set('endDate', endDate);
-  return api.get(`/${A}/dashboard/sales-chart?${params.toString()}`);
+  const query = buildQueryString({ period, startDate, endDate }, { omitEmpty: true });
+  return api.get(`/${A}/dashboard/sales-chart?${query}`);
 };
 const getLowStock = (threshold = 10) => api.get(`/${A}/dashboard/low-stock?threshold=${threshold}`);
 const getRecentOrders = () => api.get(`/${A}/dashboard/recent-orders`);
 const getAccessRoles = () => api.get(`/${A}/access-control/roles`);
 const getAccessPermissions = () => api.get(`/${A}/access-control/permissions`);
-const getAccessUsers = (params = {}) => {
-  const query = new URLSearchParams(
-    Object.fromEntries(Object.entries(params).filter(([, value]) => value != null && value !== ''))
-  ).toString();
-  return api.get(`/${A}/access-control/users${query ? `?${query}` : ''}`);
-};
+const getAccessUsers = (params = {}) =>
+  api.get(withQueryString(`/${A}/access-control/users`, params, { omitEmpty: true }));
 const createAccessRole = (data) => api.post(`/${A}/access-control/roles`, data);
 const updateAccessRole = (id, data) => api.put(`/${A}/access-control/roles/${id}`, data);
 const updateAccessUserRole = (id, roleId) => api.put(`/${A}/access-control/users/${id}/role`, { roleId });
 const createAccessUser = (data) => api.post(`/${A}/access-control/users`, data);
 
 // Audit Logs
-const getAuditLogs = (params = {}) => {
-  const query = new URLSearchParams(
-    Object.fromEntries(Object.entries(params).filter(([, v]) => v != null && v !== ''))
-  ).toString();
-  return api.get(`/audit-logs${query ? `?${query}` : ''}`);
-};
+const getAuditLogs = (params = {}) =>
+  api.get(withQueryString('/audit-logs', params, { omitEmpty: true }));
 
 // Users (admin view)
-const getUsers = (params = {}) => {
-  const query = new URLSearchParams(params).toString();
-  return api.get(`/users${query ? `?${query}` : ''}`);
-};
+const getUsers = (params = {}) => api.get(withQueryString('/users', params));
 const getUserById = (id) => api.get(`/users/${id}`);
 const updateUserStatus = (id, status) => api.put(`/users/${id}/status`, { status });
 
 // Reviews (admin moderation)
-const getAdminReviews = (params = {}) => {
-  const query = new URLSearchParams(params).toString();
-  return api.get(`/${A}/reviews${query ? `?${query}` : ''}`);
-};
+const getAdminReviews = (params = {}) => api.get(withQueryString(`/${A}/reviews`, params));
 // Route: PUT /{adminPrefix}/reviews/:id/moderate
 const updateReviewStatus = (id, status) => api.put(`/${A}/reviews/${id}/moderate`, { status });
 const deleteReview = (id) => api.delete(`/${A}/reviews/${id}`);
 
 // Coupons
-const getCoupons = (params = {}) => {
-  const query = new URLSearchParams(params).toString();
-  return api.get(`/coupons${query ? `?${query}` : ''}`);
-};
+const getCoupons = (params = {}) => api.get(withQueryString('/coupons', params));
 const createCoupon = (data) => api.post('/coupons', data);
 const updateCoupon = (id, data) => api.put(`/coupons/${id}`, data);
 const deleteCoupon = (id) => api.delete(`/coupons/${id}`);
 
 // Orders (admin)
-const getAllOrders = (params = {}) => {
-  const query = new URLSearchParams(params).toString();
-  return api.get(`/orders${query ? `?${query}` : ''}`);
-};
+const getAllOrders = (params = {}) => api.get(withQueryString('/orders', params));
 const getOrderById = (id) => api.get(`/orders/${id}`);
 const getOrderTracking = (id) => api.get(`/orders/${id}/tracking`);
 const updateOrderStatus = (id, status) => api.put(`/orders/${id}/status`, { status });

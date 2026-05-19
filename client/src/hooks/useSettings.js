@@ -1,4 +1,4 @@
-import { useContext } from 'react';
+import { useContext, useMemo } from 'react';
 import { SettingsContext } from '../context/ThemeContext';
 
 export const useSettings = () => {
@@ -70,14 +70,21 @@ export const useCurrency = () => {
   const { settings } = useSettings();
   const currency = settings?.general?.currency || 'USD';
 
-  const formatter = new Intl.NumberFormat(undefined, {
-    style: 'currency',
-    currency,
-    minimumFractionDigits: 2,
-    maximumFractionDigits: 2,
-  });
+  const formatter = useMemo(
+    () =>
+      new Intl.NumberFormat(undefined, {
+        style: 'currency',
+        currency,
+        minimumFractionDigits: 2,
+        maximumFractionDigits: 2,
+      }),
+    [currency]
+  );
 
-  const formatPrice = (amount) => formatter.format(Number(amount) || 0);
+  const formatPrice = useMemo(
+    () => (amount) => formatter.format(Number(amount) || 0),
+    [formatter]
+  );
 
   const symbol = formatter.formatToParts(0).find(part => part.type === 'currency')?.value || currency;
 

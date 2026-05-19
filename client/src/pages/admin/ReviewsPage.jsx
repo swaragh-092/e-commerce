@@ -30,6 +30,7 @@ import { getAdminReviews, updateReviewStatus, deleteReview } from '../../service
 import { useNotification } from '../../context/NotificationContext';
 import { useAuth } from '../../hooks/useAuth';
 import { PERMISSIONS } from '../../utils/permissions';
+import { formatDateTime } from '../../utils/dates';
 
 const SummaryCard = ({ label, value, tone = 'default', onClick, active }) => (
   <Paper
@@ -190,7 +191,7 @@ const ReviewsPage = () => {
       field: 'createdAt',
       headerName: 'Date',
       width: 170,
-      renderCell: ({ value }) => new Date(value).toLocaleString(),
+      renderCell: ({ value }) => formatDateTime(value),
     },
     {
       field: 'actions',

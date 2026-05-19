@@ -28,6 +28,8 @@ import ReplyIcon from '@mui/icons-material/Reply';
 import api from '../../services/api';
 import PageSEO from '../../components/common/PageSEO';
 import { useNotification } from '../../context/NotificationContext';
+import { getApiErrorMessage } from '../../utils/apiErrors';
+import { formatDateOnly } from '../../utils/dates';
 
 const ADMIN_PREFIX = import.meta.env.VITE_ADMIN_ROUTE_PREFIX || 'admin';
 
@@ -49,8 +51,7 @@ const EnquiriesPage = () => {
       });
       setEnquiries(data.data || []);
     } catch (err) {
-      console.error('Failed to load enquiries', err);
-      notify('Failed to load enquiries', 'error');
+      notify(getApiErrorMessage(err, 'Failed to load enquiries'), 'error');
     } finally {
       setLoading(false);
     }
@@ -70,8 +71,7 @@ const EnquiriesPage = () => {
         setSelectedEnquiry((prev) => ({ ...prev, status: newStatus }));
       }
     } catch (err) {
-      console.error('Failed to update status', err);
-      notify('Failed to update status', 'error');
+      notify(getApiErrorMessage(err, 'Failed to update status'), 'error');
     }
   };
 
@@ -94,8 +94,7 @@ const EnquiriesPage = () => {
       setReplyMode(false);
       setReplyMessage('');
     } catch (err) {
-      console.error('Failed to send reply', err);
-      notify('Failed to send reply', 'error');
+      notify(getApiErrorMessage(err, 'Failed to send reply'), 'error');
     } finally {
       setReplyLoading(false);
     }
@@ -171,12 +170,7 @@ const EnquiriesPage = () => {
               enquiries.map((enquiry) => (
                 <TableRow key={enquiry.id} hover>
                   <TableCell>
-                    {(() => {
-                      const raw = enquiry.created_at || enquiry.createdAt;
-                      if (!raw) return '-';
-                      const date = new Date(raw);
-                      return isNaN(date.getTime()) ? '-' : date.toLocaleDateString(undefined, { month: 'short', day: '2-digit', year: 'numeric' });
-                    })()}
+                    {formatDateOnly(enquiry.created_at || enquiry.createdAt) || '-'}
                   </TableCell>
                   <TableCell>
                     <Typography variant="body2" fontWeight={500}>{enquiry.name}</Typography>

@@ -26,11 +26,11 @@ import DeleteOutlineIcon from '@mui/icons-material/DeleteOutline';
 import PlayArrowIcon from '@mui/icons-material/PlayArrow';
 import SaveIcon from '@mui/icons-material/Save';
 import CodeIcon from '@mui/icons-material/Code';
-import api from '../../services/api';
 import {
   buildPublicApiUrl,
   createApiDefinition,
   deleteApiDefinition,
+  getApiBuilderReferenceData,
   getApiDefinitions,
   previewApiDefinition,
   updateApiDefinition,
@@ -39,6 +39,7 @@ import { useNotification } from '../../context/NotificationContext';
 import { useAuth } from '../../hooks/useAuth';
 import { PERMISSIONS } from '../../utils/permissions';
 import { getApiErrorMessage } from '../../utils/apiErrors';
+import { walkCategoryTree } from '../../utils/categories';
 
 const RESOURCE_FIELDS = {
   categories: ['id', 'name', 'slug', 'description', 'parentId', 'image', 'icon', 'sortOrder', 'metaTitle', 'metaDescription', 'createdAt', 'updatedAt'],
@@ -166,10 +167,8 @@ const emptyForm = {
   },
 };
 
-const flattenCategories = (nodes = [], depth = 0) => nodes.flatMap((node) => [
-  { ...node, label: `${'— '.repeat(depth)}${node.name}` },
-  ...flattenCategories(node.children || [], depth + 1),
-]);
+const flattenCategories = (nodes = []) =>
+  walkCategoryTree(nodes, (node, { depth }) => ({ ...node, label: `${'— '.repeat(depth)}${node.name}` }));
 
 const extractArray = (response) => {
   const data = response?.data?.data ?? response?.data ?? response;
@@ -273,14 +272,7 @@ const ApiBuilderPage = () => {
 
   useEffect(() => {
     loadDefinitions().catch((error) => notify(getApiErrorMessage(error, 'Failed to load API definitions.'), 'error'));
-    Promise.allSettled([
-      api.get('/categories'),
-      api.get('/products', { params: { limit: 100 } }),
-      api.get('/brands', { params: { limit: 100 } }),
-      api.get('/pages'),
-      api.get('/menus', { params: { includeInactive: true } }),
-      api.get('/media', { params: { limit: 100 } }),
-    ]).then(([categories, products, brands, pages, menus, media]) => {
+    getApiBuilderReferenceData().then(([categories, products, brands, pages, menus, media]) => {
       setOptions({
         categories: categories.status === 'fulfilled' ? flattenCategories(extractArray(categories.value)) : [],
         products: products.status === 'fulfilled' ? extractArray(products.value) : [],

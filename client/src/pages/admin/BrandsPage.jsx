@@ -38,21 +38,7 @@ import { useAuth } from '../../hooks/useAuth';
 import { useBrands } from '../../context/BrandContext';
 import { PERMISSIONS } from '../../utils/permissions';
 import { getApiErrorMessage } from '../../utils/apiErrors';
-
-const generateSlug = (text) => {
-  if (!text) return '';
-  return text
-    .toString()
-    .normalize('NFD')
-    .replace(/[\u0300-\u036f]/g, '')
-    .toLowerCase()
-    .trim()
-    .replace(/\s+/g, '-')
-    .replace(/[^\w-]+/g, '')
-    .replace(/--+/g, '-')
-    .replace(/^-+/, '')
-    .replace(/-+$/, '');
-};
+import { generateSlug } from '../../utils/strings';
 
 const BrandsPage = () => {
   const { notify } = useNotification();

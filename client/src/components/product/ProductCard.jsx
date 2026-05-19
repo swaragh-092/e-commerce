@@ -53,6 +53,15 @@ const ProductCard = ({ product, fromCategory }) => {
         overflow: 'hidden',
         boxShadow: 'rgba(15, 23, 42, 0.08) 0px 4px 14px',
         transition: 'transform 0.22s ease, box-shadow 0.22s ease, border-color 0.22s ease',
+        '@media (prefers-reduced-motion: reduce)': {
+          transition: 'none',
+          '&:hover': {
+            transform: 'none',
+          },
+          '&:hover img': {
+            transform: 'none',
+          },
+        },
         '&:hover': {
           transform: 'translateY(-4px)',
           boxShadow: 'rgba(15, 23, 42, 0.13) 0px 12px 28px',
@@ -120,6 +129,9 @@ const ProductCard = ({ product, fromCategory }) => {
             height: '100%',
             objectFit: 'cover',
             transition: 'transform 0.45s ease',
+            '@media (prefers-reduced-motion: reduce)': {
+              transition: 'none',
+            },
           }}
         />
       </Box>
@@ -207,7 +219,7 @@ const ProductCard = ({ product, fromCategory }) => {
       </CardContent>
       </Box>
       <CardActions sx={{ px: { xs: 1.25, sm: 1.5 }, pb: 1.25, pt: 0, gap: 0.75 }}>
-        <Box sx={{ '& .MuiIconButton-root': { width: 34, height: 34, bgcolor: 'action.hover' } }}>
+        <Box sx={{ '& .MuiIconButton-root': { width: 44, height: 44, bgcolor: 'action.hover' } }}>
           <WishlistButton productId={product.id} />
         </Box>
       </CardActions>

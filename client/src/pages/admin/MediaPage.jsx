@@ -167,6 +167,7 @@ const MediaPage = () => {
   const [editingFile, setEditingFile] = useState(null);
   const [editFormData, setEditFormData] = useState({ alt: '', description: '', caption: '', originalName: '' });
   const [savingEdit, setSavingEdit] = useState(false);
+  const [manualCopyUrl, setManualCopyUrl] = useState('');
   const observerRef = useRef(null);
 
   const fetchMedia = async (pageNum = 1, isLoadMore = false) => {
@@ -281,24 +282,15 @@ const MediaPage = () => {
     try {
       if (navigator.clipboard?.writeText && window.isSecureContext) {
         await navigator.clipboard.writeText(url);
-      } else {
-        const textarea = document.createElement('textarea');
-        textarea.value = url;
-        textarea.setAttribute('readonly', '');
-        textarea.style.position = 'fixed';
-        textarea.style.top = '-9999px';
-        textarea.style.left = '-9999px';
-        document.body.appendChild(textarea);
-        textarea.select();
-        const copied = document.execCommand('copy');
-        document.body.removeChild(textarea);
-        if (!copied) throw new Error('Copy command was not available.');
+        notify('Media URL copied to clipboard successfully.', 'success');
+        return;
       }
-      notify('Media URL copied to clipboard successfully.', 'success');
     } catch (err) {
       console.error('Copy failed', err);
-      notify('Unable to copy automatically. Please copy the URL manually.', 'warning');
     }
+
+    setManualCopyUrl(url);
+    notify('Automatic copy is unavailable here. Copy the URL manually from the dialog.', 'warning');
   };
 
   const toggleSortDir = () => setSortDir((d) => (d === 'asc' ? 'desc' : 'asc'));
@@ -595,6 +587,30 @@ const MediaPage = () => {
           >
             {savingEdit ? 'Saving...' : 'Save Changes'}
           </Button>
+        </DialogActions>
+      </Dialog>
+
+      <Dialog
+        open={Boolean(manualCopyUrl)}
+        onClose={() => setManualCopyUrl('')}
+        maxWidth="sm"
+        fullWidth
+      >
+        <DialogTitle>Copy Media URL</DialogTitle>
+        <DialogContent>
+          <TextField
+            autoFocus
+            fullWidth
+            margin="dense"
+            label="Media URL"
+            value={manualCopyUrl}
+            InputProps={{ readOnly: true }}
+            onFocus={(event) => event.target.select()}
+            helperText="Automatic clipboard access is unavailable in this browser context. Copy the URL manually."
+          />
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setManualCopyUrl('')}>Close</Button>
         </DialogActions>
       </Dialog>
     </Box>

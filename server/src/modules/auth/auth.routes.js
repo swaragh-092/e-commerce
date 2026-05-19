@@ -15,7 +15,8 @@ const {
   logoutSchema,
   forgotPasswordSchema, 
   resetPasswordSchema,
-  resendVerificationSchema
+  resendVerificationSchema,
+  verifyEmailSchema
 } = require('./auth.validation');
 
 const { authenticate } = require('../../middleware/auth.middleware');
@@ -31,7 +32,6 @@ router.post('/reset-password', validate(resetPasswordSchema), authController.res
 
 router.post('/resend-verification', forgotPasswordLimiter, validate(resendVerificationSchema), authController.resendVerification);
 
-// Uses query parameter instead of body: /verify-email?token=xxx
-router.get('/verify-email', authController.verifyEmail);
+router.post('/verify-email', validate(verifyEmailSchema), authController.verifyEmail);
 
 module.exports = router;

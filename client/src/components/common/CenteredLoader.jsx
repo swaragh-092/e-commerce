@@ -1,6 +1,7 @@
+import { memo } from 'react';
 import { Box, CircularProgress, Typography } from '@mui/material';
 
-const CenteredLoader = ({ message = 'Loading...', minHeight = '40vh' }) => (
+const CenteredLoader = memo(({ message = 'Loading...', minHeight = '40vh' }) => (
   <Box
     sx={{
       display: 'flex',
@@ -15,6 +16,6 @@ const CenteredLoader = ({ message = 'Loading...', minHeight = '40vh' }) => (
     <CircularProgress />
     <Typography color="text.secondary">{message}</Typography>
   </Box>
-);
+));
 
 export default CenteredLoader;

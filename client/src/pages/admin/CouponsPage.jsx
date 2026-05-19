@@ -36,6 +36,7 @@ import { getCategoryTree } from '../../services/categoryService';
 import brandService from '../../services/brandService';
 import { useAuth } from '../../hooks/useAuth';
 import { PERMISSIONS } from '../../utils/permissions';
+import { walkCategoryTree } from '../../utils/categories';
 
 const empty = {
   name: '',
@@ -69,14 +70,8 @@ const empty = {
   priority: 0,
 };
 
-const flattenCategoryTree = (nodes = [], prefix = '') =>
-  nodes.flatMap((node) => {
-    const label = prefix ? `${prefix} › ${node.name}` : node.name;
-    return [
-      { id: node.id, name: label },
-      ...flattenCategoryTree(node.children || [], label),
-    ];
-  });
+const flattenCategoryTree = (nodes = []) =>
+  walkCategoryTree(nodes, (node, { path }) => ({ id: node.id, name: path }));
 
 const formatLocalDateTime = (value) => (value ? new Date(value).toISOString().slice(0, 16) : '');
 

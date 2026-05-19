@@ -1,8 +1,9 @@
-import React, { useState, useRef, useEffect } from 'react';
+import React, { useState, useRef } from 'react';
 import { Box, Button, Menu, MenuItem, Typography, CircularProgress, Divider } from '@mui/material';
 import { useNavigate } from 'react-router-dom';
 import { useCategories } from '../../context/CategoryContext';
 import { useSettings } from '../../hooks/useSettings';
+import { useScrollState } from '../../hooks/useScrollState';
 
 /**
  * Recursively flattens category children into MenuItem rows with visual indentation.
@@ -34,21 +35,7 @@ const CategoryNav = () => {
     const [anchorEls, setAnchorEls] = useState({});
     const navigate = useNavigate();
     const scrollRef = useRef(null);
-    const [canScrollLeft, setCanScrollLeft] = useState(false);
-    const [canScrollRight, setCanScrollRight] = useState(false);
-
-    useEffect(() => {
-        const el = scrollRef.current;
-        if (!el) return;
-        const check = () => {
-            setCanScrollLeft(el.scrollLeft > 5);
-            setCanScrollRight(el.scrollLeft + el.clientWidth < el.scrollWidth - 5);
-        };
-        check();
-        el.addEventListener('scroll', check);
-        window.addEventListener('resize', check);
-        return () => { el.removeEventListener('scroll', check); window.removeEventListener('resize', check); };
-    }, [categories.length]);
+    const { canScrollLeft, canScrollRight } = useScrollState(scrollRef, [categories.length]);
 
     const handleOpen = (event, id) => setAnchorEls(prev => ({ ...prev, [id]: event.currentTarget }));
     const handleClose = (id) => setAnchorEls(prev => ({ ...prev, [id]: null }));

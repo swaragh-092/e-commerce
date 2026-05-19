@@ -8,6 +8,8 @@ import CenteredLoader from '../../components/common/CenteredLoader';
 import { getApiErrorMessage } from '../../utils/apiErrors';
 import { useCart } from '../../hooks/useCart';
 import { PAYMENT_SETTLED_STATUSES } from '../../utils/constants';
+import { useSettings } from '../../hooks/useSettings';
+import { getStoreName } from '../../utils/store';
 
 const loadScript = (src, globalName) => new Promise((resolve, reject) => {
     if (globalName && window[globalName]) {
@@ -52,6 +54,8 @@ const PaymentPage = () => {
     const [processing, setProcessing] = useState(false);
     const paymentStartedRef = useRef(false);
     const { fetchCart } = useCart();
+    const { settings } = useSettings();
+    const storeName = getStoreName(settings);
 
     useEffect(() => {
         if (!orderId) { navigate('/cart'); return; }
@@ -134,7 +138,7 @@ const PaymentPage = () => {
                 key: import.meta.env.VITE_RAZORPAY_KEY_ID,
                 amount: orderData.amount,
                 currency: orderData.currency,
-                name: "My Store",
+                name: storeName,
                 description: `Order #${orderId}`,
                 order_id: orderData.id,
                 handler: async (response) => {

@@ -37,6 +37,11 @@ module.exports = (sequelize, DataTypes) => {
                 isIn: [ORDER_SHIPPING_STATUS_VALUES],
             },
         },
+        shipmentStatus: {
+            type: DataTypes.STRING(50),
+            defaultValue: 'pending',
+            field: 'shipment_status',
+        },
         putBackStatus: {
             type: DataTypes.STRING(50),
             allowNull: true,

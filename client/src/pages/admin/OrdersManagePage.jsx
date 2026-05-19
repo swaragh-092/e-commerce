@@ -4,6 +4,10 @@ import {
   Box,
   Button,
   Chip,
+  Dialog,
+  DialogActions,
+  DialogContent,
+  DialogTitle,
   Divider,
   IconButton,
   FormControl,
@@ -30,6 +34,7 @@ import { useNotification } from '../../context/NotificationContext';
 import { useAuth } from '../../hooks/useAuth';
 import { PERMISSIONS } from '../../utils/permissions';
 import { getApiErrorMessage } from '../../utils/apiErrors';
+import { formatDateTime } from '../../utils/dates';
 import {
   ORDER_STATUS_OPTIONS,
   ORDER_STATUS_SUMMARY_GROUPS,
@@ -118,6 +123,8 @@ const OrdersManagePage = () => {
   const [search, setSearch] = useState('');
   const [counts, setCounts] = useState({});
   const [pageRevenue, setPageRevenue] = useState(0);
+  const [codCollectionOrder, setCodCollectionOrder] = useState(null);
+  const [codCollectionAmount, setCodCollectionAmount] = useState('');
   const hasActiveFilters = Boolean(search || status);
 
   useEffect(() => {
@@ -190,15 +197,24 @@ const OrdersManagePage = () => {
     }
   };
 
-  const handleConfirmCodPayment = async (order) => {
+  const openCodCollectionDialog = (order) => {
     const collectedAmount = Number(order.Payment?.metadata?.codCollectedAmount || 0);
     const pendingAmount = Math.max(Number(order.total || 0) - collectedAmount, 0);
-    const enteredAmount = window.prompt(
-      `Enter COD amount collected for ${order.orderNumber}. Pending balance: ${formatPrice(pendingAmount)}`,
-      pendingAmount > 0 ? pendingAmount.toFixed(2) : ''
-    );
-    if (enteredAmount === null) return;
-    const amount = Number(enteredAmount);
+    setCodCollectionOrder(order);
+    setCodCollectionAmount(pendingAmount > 0 ? pendingAmount.toFixed(2) : '');
+  };
+
+  const closeCodCollectionDialog = () => {
+    setCodCollectionOrder(null);
+    setCodCollectionAmount('');
+  };
+
+  const handleConfirmCodPayment = async () => {
+    if (!codCollectionOrder) return;
+
+    const collectedAmount = Number(codCollectionOrder.Payment?.metadata?.codCollectedAmount || 0);
+    const pendingAmount = Math.max(Number(codCollectionOrder.total || 0) - collectedAmount, 0);
+    const amount = Number(codCollectionAmount);
     if (!Number.isFinite(amount) || amount <= 0 || amount > pendingAmount) {
       notify(`Enter an amount between 0 and ${formatPrice(pendingAmount)}.`, 'error');
       return;
@@ -206,14 +222,15 @@ const OrdersManagePage = () => {
 
     const confirmed = await confirm(
       'Mark COD Collected',
-      `Confirm COD collection of ${formatPrice(amount)} for ${order.orderNumber}?`,
+      `Confirm COD collection of ${formatPrice(amount)} for ${codCollectionOrder.orderNumber}?`,
       'primary'
     );
     if (!confirmed) return;
 
-    setActionLoadingId(`${order.id}:cod`);
+    setActionLoadingId(`${codCollectionOrder.id}:cod`);
     try {
-      await confirmCodPayment(order.id, { amount });
+      await confirmCodPayment(codCollectionOrder.id, { amount });
+      closeCodCollectionDialog();
       notify('COD payment collection recorded.', 'success');
       fetchOrders();
     } catch (codError) {
@@ -319,7 +336,7 @@ const OrdersManagePage = () => {
         field: 'createdAt',
         headerName: 'Placed',
         width: 180,
-        renderCell: ({ value }) => new Date(value).toLocaleString(),
+        renderCell: ({ value }) => formatDateTime(value),
       },
       {
         field: 'actions',
@@ -361,7 +378,7 @@ const OrdersManagePage = () => {
                   variant="outlined"
                   startIcon={<PaymentsOutlinedIcon />}
                   disabled={actionLoadingId === `${row.id}:cod`}
-                  onClick={() => handleConfirmCodPayment(row)}
+                  onClick={() => openCodCollectionDialog(row)}
                   sx={{ minWidth: 112, whiteSpace: 'nowrap' }}
                 >
                   Collect COD
@@ -541,6 +558,60 @@ const OrdersManagePage = () => {
           }}
         />
       </Box>
+
+      <Dialog
+        open={Boolean(codCollectionOrder)}
+        onClose={() => !actionLoadingId && closeCodCollectionDialog()}
+        maxWidth="xs"
+        fullWidth
+      >
+        <DialogTitle>Collect COD Payment</DialogTitle>
+        <DialogContent>
+          <Stack spacing={2} sx={{ pt: 1 }}>
+            <Box>
+              <Typography variant="caption" color="text.secondary">
+                {codCollectionOrder?.orderNumber || 'Order'}
+              </Typography>
+              <Typography variant="subtitle1" fontWeight={800}>
+                Pending balance:{' '}
+                {formatPrice(
+                  Math.max(
+                    Number(codCollectionOrder?.total || 0)
+                      - Number(codCollectionOrder?.Payment?.metadata?.codCollectedAmount || 0),
+                    0
+                  )
+                )}
+              </Typography>
+            </Box>
+            <TextField
+              autoFocus
+              label="Amount collected"
+              type="number"
+              value={codCollectionAmount}
+              onChange={(event) => setCodCollectionAmount(event.target.value)}
+              inputProps={{
+                min: 0,
+                max: Math.max(
+                  Number(codCollectionOrder?.total || 0)
+                    - Number(codCollectionOrder?.Payment?.metadata?.codCollectedAmount || 0),
+                  0
+                ),
+                step: '0.01',
+              }}
+              helperText="Enter the amount received from the customer."
+              fullWidth
+            />
+          </Stack>
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={closeCodCollectionDialog} disabled={Boolean(actionLoadingId)}>
+            Cancel
+          </Button>
+          <Button variant="contained" onClick={handleConfirmCodPayment} disabled={Boolean(actionLoadingId)}>
+            {actionLoadingId ? 'Saving…' : 'Record Payment'}
+          </Button>
+        </DialogActions>
+      </Dialog>
     </Box>
   );
 };

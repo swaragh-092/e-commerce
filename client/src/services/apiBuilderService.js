@@ -34,3 +34,13 @@ export const buildPublicApiUrl = (slug) => {
   const base = api.defaults.baseURL || '';
   return `${base.replace(/\/$/, '')}/api-builder/public/${slug}`;
 };
+
+export const getApiBuilderReferenceData = () =>
+  Promise.allSettled([
+    api.get('/categories'),
+    api.get('/products', { params: { limit: 100 } }),
+    api.get('/brands', { params: { limit: 100 } }),
+    api.get('/pages'),
+    api.get('/menus', { params: { includeInactive: true } }),
+    api.get('/media', { params: { limit: 100 } }),
+  ]);

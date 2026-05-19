@@ -4,13 +4,13 @@
  * Admin UI component for managing Product Custom Tabs.
  * Features:
  *   - Add / remove tabs dynamically
- *   - Quill-style rich-text editor per tab (via contentEditable + execCommand polyfill)
+ *   - Rich-text editor per tab
  *   - Move tabs up/down (drag-and-drop-style ordering with arrow buttons)
  *   - Toggle active/inactive per tab
  *   - Preview / Code toggle
  *   - Saves all tabs atomically via PUT /products/:id/tabs (full sync)
  */
-import React, { useState, useEffect, useCallback, useRef } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import {
     Box,
     Paper,
@@ -21,7 +21,6 @@ import {
     Switch,
     FormControlLabel,
     Tooltip,
-    Divider,
     Alert,
     CircularProgress,
     Chip,
@@ -37,6 +36,7 @@ import {
     Avatar,
     InputAdornment,
     Autocomplete,
+    Divider,
 } from '@mui/material';
 import {
     Add as AddIcon,
@@ -56,22 +56,9 @@ import DOMPurify from 'dompurify';
 import productTabService from '../../services/productTabService';
 import { getProducts } from '../../services/productService';
 import { useNotification } from '../../context/NotificationContext';
-
-// ─── Constants ──────────────────────────────────────────────────────────────
-const SAFE_PROTOCOLS = ['http:', 'https:', 'mailto:', 'tel:'];
+import RichTextEditor from '../editor/RichTextEditor';
 
 // ─── Helpers ────────────────────────────────────────────────────────────────
-const isValidUrl = (url) => {
-    if (!url) return false;
-    try {
-        const parsed = new URL(url);
-        return SAFE_PROTOCOLS.includes(parsed.protocol);
-    } catch {
-        // Fallback for relative paths if needed, but here we require absolute for safety
-        return false;
-    }
-};
-
 const normalizeHtml = (html) => {
     if (!html) return '';
     const doc = new DOMParser().parseFromString(html, 'text/html');
@@ -86,128 +73,29 @@ const generateUniqueId = () => {
     return `new-${Date.now()}-${nextNewTabId++}`;
 };
 
-// ─── Rich Text Toolbar ──────────────────────────────────────────────────────
-const TOOLBAR_ACTIONS = [
-    { label: 'B',    cmd: 'bold',          title: 'Bold' },
-    { label: 'I',    cmd: 'italic',        title: 'Italic' },
-    { label: 'U',    cmd: 'underline',     title: 'Underline' },
-    { label: 'S',    cmd: 'strikeThrough', title: 'Strikethrough' },
-    null, // separator
-    { label: 'H2',   cmd: 'formatBlock',   value: 'H2', title: 'Heading 2' },
-    { label: 'H3',   cmd: 'formatBlock',   value: 'H3', title: 'Heading 3' },
-    null,
-    { label: 'UL',   cmd: 'insertUnorderedList', title: 'Bullet list' },
-    { label: 'OL',   cmd: 'insertOrderedList',   title: 'Numbered list' },
-    null,
-    { label: 'Link', cmd: 'createLink',    title: 'Insert Link' },
-];
-
-const RichToolbar = ({ editorRef }) => {
-    const exec = (cmd, value) => {
-        if (cmd === 'createLink') {
-            const url = window.prompt('Enter URL:', 'https://');
-            if (!url) return;
-            if (!isValidUrl(url)) {
-                alert('Invalid URL. Please use http, https, mailto, or tel.');
-                return;
-            }
-            
-            // Selection-based link insertion (replacement for execCommand)
-            const selection = window.getSelection();
-            if (selection.rangeCount > 0) {
-                const range = selection.getRangeAt(0);
-                const anchor = document.createElement('a');
-                anchor.href = url;
-                anchor.rel = 'noopener noreferrer';
-                anchor.target = '_blank';
-                
-                if (range.collapsed) {
-                    anchor.textContent = url;
-                    range.insertNode(anchor);
-                } else {
-                    anchor.appendChild(range.extractContents());
-                    range.insertNode(anchor);
-                }
-            }
-        } else {
-            document.execCommand(cmd, false, value || null);
-        }
-        editorRef.current?.focus();
-    };
-
-    return (
-        <Box
-            sx={{
-                display: 'flex',
-                flexWrap: 'wrap',
-                alignItems: 'center',
-                gap: 0.5,
-                px: 1,
-                py: 0.5,
-                borderBottom: '1px solid',
-                borderColor: 'divider',
-                bgcolor: 'grey.50',
-            }}
-        >
-            {TOOLBAR_ACTIONS.map((action, i) =>
-                action === null ? (
-                    <Divider key={`sep-${i}`} orientation="vertical" flexItem sx={{ mx: 0.5 }} />
-                ) : (
-                    <Tooltip key={action.cmd + action.label} title={action.title}>
-                        <Button
-                            size="small"
-                            variant="text"
-                            sx={{
-                                minWidth: 32,
-                                px: 0.5,
-                                py: 0.25,
-                                fontWeight: 700,
-                                fontSize: '0.75rem',
-                                color: 'text.secondary',
-                                '&:hover': { bgcolor: 'primary.50', color: 'primary.main' },
-                            }}
-                            onMouseDown={(e) => {
-                                e.preventDefault(); // prevent blur on editor
-                                exec(action.cmd, action.value);
-                            }}
-                        >
-                            {action.label}
-                        </Button>
-                    </Tooltip>
-                )
-            )}
-        </Box>
-    );
+const RICH_EDITOR_MODULES = {
+    toolbar: [
+        ['bold', 'italic', 'underline', 'strike'],
+        [{ header: 2 }, { header: 3 }],
+        [{ list: 'ordered' }, { list: 'bullet' }],
+        ['link'],
+    ],
 };
+
+const RICH_EDITOR_FORMATS = [
+    'bold',
+    'italic',
+    'underline',
+    'strike',
+    'header',
+    'list',
+    'link',
+];
 
 // ─── Rich Text Editor ───────────────────────────────────────────────────────
 const RichEditor = ({ value, onChange, placeholder = 'Enter tab content…' }) => {
-    const editorRef = useRef(null);
-    const lastHtml = useRef(value || '');
     const [codeMode, setCodeMode] = useState(false);
-
-    // Sync incoming value changes (e.g., on tab load)
-    useEffect(() => {
-        if (editorRef.current && !codeMode) {
-            const current = normalizeHtml(editorRef.current.innerHTML);
-            const normalizedValue = normalizeHtml(value);
-            if (normalizedValue !== current) {
-                editorRef.current.innerHTML = normalizedValue;
-                lastHtml.current = normalizedValue;
-            }
-        }
-    }, [value, codeMode]);
-
-    const handleInput = () => {
-        if (!editorRef.current) return;
-        // Sanitize on input for defense-in-depth
-        const rawHtml = editorRef.current.innerHTML;
-        const sanitized = DOMPurify.sanitize(rawHtml);
-        if (sanitized !== lastHtml.current) {
-            lastHtml.current = sanitized;
-            onChange(sanitized);
-        }
-    };
+    const handleVisualChange = (html) => onChange(DOMPurify.sanitize(html));
 
     return (
         <Box
@@ -221,7 +109,11 @@ const RichEditor = ({ value, onChange, placeholder = 'Enter tab content…' }) =
             {/* Toolbar header row */}
             <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
                 {!codeMode ? (
-                    <RichToolbar editorRef={editorRef} />
+                    <Box sx={{ px: 1, py: 0.5, bgcolor: 'grey.50', flex: 1 }}>
+                        <Typography variant="caption" color="text.secondary">
+                            Visual Editor
+                        </Typography>
+                    </Box>
                 ) : (
                     <Box sx={{ px: 1, py: 0.5, bgcolor: 'grey.50', flex: 1 }}>
                         <Typography variant="caption" color="text.secondary" fontFamily="monospace">
@@ -243,41 +135,16 @@ const RichEditor = ({ value, onChange, placeholder = 'Enter tab content…' }) =
 
             {/* Visual editor */}
             {!codeMode && (
-                <Box
-                    ref={editorRef}
-                    contentEditable
-                    role="textbox"
-                    aria-multiline="true"
-                    aria-label={placeholder}
-                    tabIndex={0}
-                    suppressContentEditableWarning
-                    onInput={handleInput}
-                    data-placeholder={placeholder}
-                    sx={{
-                        minHeight: 140,
-                        px: 2,
-                        py: 1.5,
-                        outline: 'none',
-                        fontSize: '0.875rem',
-                        lineHeight: 1.7,
-                        color: 'text.primary',
-                        '&:focus': {
-                            boxShadow: 'inset 0 0 0 2px rgba(25, 118, 210, 0.15)',
-                        },
-                        '&:empty:before': {
-                            content: 'attr(data-placeholder)',
-                            color: 'text.disabled',
-                            pointerEvents: 'none',
-                        },
-                        // Render typical richtext styles inside the editor
-                        '& h2': { fontSize: '1.25rem', fontWeight: 700, my: 1 },
-                        '& h3': { fontSize: '1.1rem', fontWeight: 600, my: 0.75 },
-                        '& ul, & ol': { pl: 3, my: 0.5 },
-                        '& a': { color: 'primary.main' },
-                        '& table': { borderCollapse: 'collapse', width: '100%' },
-                        '& th, & td': { border: '1px solid', borderColor: 'divider', p: 0.75 },
-                    }}
-                />
+                <Box sx={{ px: 1.5, pt: 1.5 }}>
+                    <RichTextEditor
+                        value={normalizeHtml(value)}
+                        onChange={handleVisualChange}
+                        modules={RICH_EDITOR_MODULES}
+                        formats={RICH_EDITOR_FORMATS}
+                        placeholder={placeholder}
+                        minHeight={140}
+                    />
+                </Box>
             )}
 
             {/* Raw HTML textarea */}
@@ -287,7 +154,7 @@ const RichEditor = ({ value, onChange, placeholder = 'Enter tab content…' }) =
                     fullWidth
                     minRows={5}
                     value={value || ''}
-                    onChange={(e) => onChange(e.target.value)}
+                    onChange={(e) => onChange(DOMPurify.sanitize(e.target.value))}
                     inputProps={{ style: { fontFamily: 'monospace', fontSize: 13 } }}
                     sx={{ '& fieldset': { border: 'none' } }}
                 />
@@ -687,7 +554,7 @@ const ProductCustomTabs = ({ productId, canEdit = true }) => {
             const payload = tabs.map((t, i) => ({
                 ...(t.id ? { id: t.id } : {}),
                 title: t.title.trim(),
-                content: t.content || '',
+                content: DOMPurify.sanitize(t.content || ''),
                 type: t.type || 'html',
                 sortOrder: i,
                 isActive: t.isActive ?? true,

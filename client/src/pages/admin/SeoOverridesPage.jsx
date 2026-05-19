@@ -22,7 +22,8 @@ import {
   Tooltip,
   Divider,
   Stack,
-  Chip
+  Chip,
+  CircularProgress,
 } from '@mui/material';
 import {
   Add as AddIcon,
@@ -36,7 +37,14 @@ import {
 import { useNotification } from '../../context/NotificationContext';
 import { useAuth } from '../../hooks/useAuth';
 import { PERMISSIONS } from '../../utils/permissions';
-import api from '../../services/api';
+import {
+  createSeoOverride,
+  deleteSeoOverride,
+  getSeoOverrides,
+  updateSeoOverride,
+} from '../../services/seoService';
+import { getApiErrorMessage } from '../../utils/apiErrors';
+import { formatDateOnly } from '../../utils/dates';
 
 const SeoOverridesPage = () => {
   const { notify, confirm } = useNotification();
@@ -61,11 +69,10 @@ const SeoOverridesPage = () => {
   const fetchOverrides = async () => {
     try {
       setLoading(true);
-      const response = await api.get('/seo/overrides');
+      const response = await getSeoOverrides();
       setOverrides(response.data.data || []);
     } catch (err) {
-      console.error('Failed to fetch SEO overrides:', err);
-      notify('Failed to load SEO overrides', 'error');
+      notify(getApiErrorMessage(err, 'Failed to load SEO overrides'), 'error');
     } finally {
       setLoading(false);
     }
@@ -112,16 +119,16 @@ const SeoOverridesPage = () => {
     try {
       setSubmitting(true);
       if (editingId) {
-        await api.put(`/seo/overrides/${editingId}`, formData);
+        await updateSeoOverride(editingId, formData);
         notify('SEO override updated successfully', 'success');
       } else {
-        await api.post('/seo/overrides', formData);
+        await createSeoOverride(formData);
         notify('SEO override created successfully', 'success');
       }
       handleCloseDialog();
       fetchOverrides();
     } catch (err) {
-      notify(err.response?.data?.message || 'Operation failed', 'error');
+      notify(getApiErrorMessage(err, 'Operation failed'), 'error');
     } finally {
       setSubmitting(false);
     }
@@ -130,11 +137,11 @@ const SeoOverridesPage = () => {
   const handleDelete = async (id) => {
     if (await confirm('Are you sure you want to delete this SEO override?')) {
       try {
-        await api.delete(`/seo/overrides/${id}`);
+        await deleteSeoOverride(id);
         notify('SEO override deleted successfully', 'success');
         fetchOverrides();
       } catch (err) {
-        notify('Failed to delete SEO override', 'error');
+        notify(getApiErrorMessage(err, 'Failed to delete SEO override'), 'error');
       }
     }
   };
@@ -174,7 +181,9 @@ const SeoOverridesPage = () => {
           <TableBody>
             {loading ? (
               <TableRow>
-                <TableCell colSpan={5} align="center" sx={{ py: 3 }}>Loading...</TableCell>
+                <TableCell colSpan={5} align="center" sx={{ py: 3 }}>
+                  <CircularProgress size={24} aria-label="Loading SEO overrides" />
+                </TableCell>
               </TableRow>
             ) : overrides.length === 0 ? (
               <TableRow>
@@ -202,7 +211,7 @@ const SeoOverridesPage = () => {
                   </TableCell>
                   <TableCell>
                     <Typography variant="caption">
-                      {new Date(override.updatedAt).toLocaleDateString()}
+                      {formatDateOnly(override.updatedAt)}
                     </Typography>
                   </TableCell>
                   <TableCell align="right">

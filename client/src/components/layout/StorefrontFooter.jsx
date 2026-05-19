@@ -16,6 +16,7 @@ import { useSettings } from '../../hooks/useSettings';
 import { useTheme } from '@mui/material/styles';
 import PageService from '../../services/pageService';
 import MenuService from '../../services/menuService';
+import { isExternalUrl } from '../../utils/urls';
 
 const SOCIAL = [
   { key: 'facebook',  Icon: FacebookIcon,  label: 'Facebook'  },
@@ -74,7 +75,6 @@ const StorefrontFooter = () => {
     });
     return acc;
   };
-  const isExternalUrl = (url = '') => /^https?:\/\//i.test(url) || url.startsWith('mailto:') || url.startsWith('tel:');
   const toFooterLink = (link) => {
     const label = link?.label || link?.title || link?.name || '';
     const url = link?.url || (link?.slug ? `/p/${link.slug}` : '');

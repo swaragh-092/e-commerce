@@ -18,7 +18,7 @@ import {
   DialogActions,
 } from '@mui/material';
 import { updateSettings } from '../../services/adminService';
-import api from '../../services/api';
+import { getAllSettings } from '../../services/settingsService';
 import { useNotification } from '../../context/NotificationContext';
 import { SettingsContext } from '../../context/ThemeContext';
 import { useAuth, useIsSuperAdmin } from '../../hooks/useAuth';
@@ -38,8 +38,7 @@ const FeaturesPage = () => {
   const [featureConfirmOpen, setFeatureConfirmOpen] = useState(false);
 
   useEffect(() => {
-    api.get('/settings').then((res) => {
-      const raw = res.data.data || {};
+    getAllSettings().then((raw = {}) => {
       const flat = {};
       Object.entries(raw).forEach(([group, keys]) => {
         if (typeof keys === 'object') {

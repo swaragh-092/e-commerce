@@ -18,6 +18,7 @@ import { getUserById } from '../../services/adminService';
 import { useCurrency } from '../../hooks/useSettings';
 import { getApiErrorMessage } from '../../utils/apiErrors';
 import { getOrderStatusColor, getOrderStatusLabel } from '../../utils/orderWorkflow';
+import { formatDateTime } from '../../utils/dates';
 
 const DetailCard = ({ title, children }) => (
   <Paper elevation={0} sx={{ p: 3, border: '1px solid', borderColor: 'divider', borderRadius: 2 }}>
@@ -39,11 +40,7 @@ const Field = ({ label, value }) => (
   </Box>
 );
 
-const formatDateTime = (value) => {
-  if (!value) return '-';
-  const date = new Date(value);
-  return Number.isNaN(date.getTime()) ? '-' : date.toLocaleString();
-};
+const formatCustomerDateTime = (value) => formatDateTime(value) || '-';
 
 const CustomerDetailPage = () => {
   const { id } = useParams();
@@ -136,8 +133,8 @@ const CustomerDetailPage = () => {
                 <Field label="First name" value={customer.firstName} />
                 <Field label="Last name" value={customer.lastName} />
                 <Field label="Role" value={customer.role} />
-                <Field label="Joined" value={formatDateTime(customer.createdAt)} />
-                <Field label="Last login" value={formatDateTime(customer.lastLoginAt)} />
+                <Field label="Joined" value={formatCustomerDateTime(customer.createdAt)} />
+                <Field label="Last login" value={formatCustomerDateTime(customer.lastLoginAt)} />
               </Stack>
             </DetailCard>
 
@@ -184,7 +181,7 @@ const CustomerDetailPage = () => {
                     <Box key={order.id} sx={{ py: 1.5, display: 'flex', justifyContent: 'space-between', gap: 2, alignItems: 'center' }}>
                       <Box sx={{ minWidth: 0 }}>
                         <Typography variant="body2" fontWeight={700}>{order.orderNumber}</Typography>
-                        <Typography variant="caption" color="text.secondary">{formatDateTime(order.createdAt)}</Typography>
+                        <Typography variant="caption" color="text.secondary">{formatCustomerDateTime(order.createdAt)}</Typography>
                       </Box>
                       <Stack direction="row" spacing={1} alignItems="center">
                         <Chip size="small" label={getOrderStatusLabel(order.status)} color={getOrderStatusColor(order.status)} />

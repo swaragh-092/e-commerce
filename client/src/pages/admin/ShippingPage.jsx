@@ -31,7 +31,6 @@ import EditIcon from '@mui/icons-material/Edit';
 import DeleteIcon from '@mui/icons-material/Delete';
 import AddIcon from '@mui/icons-material/Add';
 import { useNotification } from '../../context/NotificationContext';
-import api from '../../services/api';
 import {
   getShippingProviders,
   updateShippingProvider,
@@ -45,20 +44,8 @@ import {
   deleteShippingRule
 } from '../../services/adminService';
 import { useCurrency } from '../../hooks/useSettings';
-
-function TabPanel(props) {
-  const { children, value, index, ...other } = props;
-  return (
-    <div
-      role="tabpanel"
-      hidden={value !== index}
-      id={`shipping-tabpanel-${index}`}
-      {...other}
-    >
-      {value === index && <Box sx={{ pt: 3 }}>{children}</Box>}
-    </div>
-  );
-}
+import TabPanel from '../../components/common/TabPanel';
+import { calculateShipping } from '../../services/shippingService';
 
 const ShippingPage = () => {
   const { notify } = useNotification();
@@ -390,7 +377,7 @@ const ShippingPage = () => {
         ],
         paymentMethod: testParams.paymentMethod
       };
-      const res = await api.post('/shipping/calculate', payload);
+      const res = await calculateShipping(payload);
       setTestResult(res.data.data);
       notify('Test completed successfully', 'success');
     } catch (err) {
@@ -423,7 +410,7 @@ const ShippingPage = () => {
 
         <Box sx={{ p: 3 }}>
           {/* PROVIDERS TAB */}
-          <TabPanel value={tabIndex} index={0}>
+            <TabPanel value={tabIndex} index={0} idPrefix="shipping" sx={{ pt: 3 }}>
             <Alert severity="info" sx={{ mb: 3 }}>
               Providers handle the actual delivery. Enable/disable providers and set default capabilities here.
             </Alert>
@@ -463,7 +450,7 @@ const ShippingPage = () => {
           </TabPanel>
 
           {/* ZONES TAB */}
-          <TabPanel value={tabIndex} index={1}>
+            <TabPanel value={tabIndex} index={1} idPrefix="shipping" sx={{ pt: 3 }}>
             <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 2 }}>
               <Typography variant="subtitle1" fontWeight={600}>Delivery Zones</Typography>
               <Button variant="contained" size="small" startIcon={<AddIcon />} onClick={() => handleOpenZoneDialog()}>
@@ -504,7 +491,7 @@ const ShippingPage = () => {
           </TabPanel>
 
           {/* RULES TAB */}
-          <TabPanel value={tabIndex} index={2}>
+            <TabPanel value={tabIndex} index={2} idPrefix="shipping" sx={{ pt: 3 }}>
             <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 2 }}>
               <Typography variant="subtitle1" fontWeight={600}>Shipping Rules</Typography>
               <Button variant="contained" size="small" startIcon={<AddIcon />} onClick={() => handleOpenRuleDialog()}>

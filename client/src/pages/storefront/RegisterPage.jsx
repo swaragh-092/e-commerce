@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Box, Typography, TextField, Button, Alert, useTheme, InputAdornment, Divider } from '@mui/material';
+import { Box, Typography, TextField, Button, Alert, useTheme, InputAdornment, Divider, CircularProgress } from '@mui/material';
 import { useNavigate, Link as RouterLink } from 'react-router-dom';
 import { useAuth } from '../../hooks/useAuth';
 import { validateEmail, validatePassword, validateRequired, getPasswordChecks } from '../../utils/authValidation';
@@ -277,7 +277,7 @@ const RegisterPage = () => {
           sx={{ mt: 2, mb: 2, height: 52, borderRadius: '8px' }}
           disabled={loading}
         >
-          {loading ? 'Creating account...' : 'Sign Up'}
+          {loading ? <><CircularProgress size={18} color="inherit" sx={{ mr: 1 }} /> Creating account…</> : 'Sign Up'}
         </Button>
 
         <Divider sx={{ my: 2.5 }}>

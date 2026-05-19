@@ -1,11 +1,8 @@
 import api from './api';
+import { withQueryString } from '../utils/query';
 
-const getAttributes = (params = {}) => {
-  const query = new URLSearchParams(
-    Object.fromEntries(Object.entries(params).filter(([, v]) => v != null && v !== ''))
-  ).toString();
-  return api.get(`/attributes${query ? `?${query}` : ''}`);
-};
+const getAttributes = (params = {}) =>
+  api.get(withQueryString('/attributes', params, { omitEmpty: true }));
 
 const getAttributeById = (id) => api.get(`/attributes/${id}`);
 const createAttribute = (data) => api.post('/attributes', data);

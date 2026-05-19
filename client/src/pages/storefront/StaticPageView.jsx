@@ -12,6 +12,7 @@ import {
 import PageService from '../../services/pageService';
 import { getMediaUrl } from '../../utils/media';
 import { Helmet } from 'react-helmet-async';
+import DOMPurify from 'dompurify';
 
 const StaticPageView = () => {
   const { slug } = useParams();
@@ -122,7 +123,7 @@ const StaticPageView = () => {
               '& li': { mb: 1 },
               '& img': { maxWidth: '100%', height: 'auto', borderRadius: 2 },
             }}
-            dangerouslySetInnerHTML={{ __html: page.content }}
+            dangerouslySetInnerHTML={{ __html: DOMPurify.sanitize(page.content || '') }}
           />
         </Paper>
       </Container>

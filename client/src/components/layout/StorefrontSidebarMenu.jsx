@@ -2,8 +2,8 @@ import React from 'react';
 import { Box, Divider, Link as MuiLink, List, ListItemButton, ListItemText, Paper, Typography } from '@mui/material';
 import { Link as RouterLink } from 'react-router-dom';
 import MenuService from '../../services/menuService';
+import { isExternalUrl } from '../../utils/urls';
 
-const isExternalUrl = (url = '') => /^https?:\/\//i.test(url) || url.startsWith('mailto:') || url.startsWith('tel:');
 const isNavigableItem = (item) => item?.targetType !== 'none' && item?.url && item.url !== '#';
 
 const flattenVisibleItems = (items = [], depth = 0, rows = []) => {

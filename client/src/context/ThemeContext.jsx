@@ -1,6 +1,7 @@
 import React, { createContext, useState, useEffect } from 'react';
 import { ThemeProvider, createTheme, CssBaseline, Box, CircularProgress } from '@mui/material';
 import settingsService from '../services/settingsService';
+import { DEFAULT_STORE_NAME } from '../utils/store';
 
 export const SettingsContext = createContext(null);
 
@@ -30,7 +31,7 @@ export const SettingsProvider = ({ children }) => {
       // Fallback defaults — safe for both modes
       setSettings({
         theme: { primaryColor: '#1976d2', mode: 'light', fontFamily: 'Roboto' },
-        general: { storeName: 'E-Commerce Store' },
+        general: { storeName: DEFAULT_STORE_NAME },
         features: { wishlist: true, reviews: true, coupons: true, guestCheckout: true, seo: true },
         payments: {
           razorpayEnabled: true,

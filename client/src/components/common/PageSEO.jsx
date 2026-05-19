@@ -1,8 +1,11 @@
 import React from 'react';
 import { Helmet } from 'react-helmet-async';
+import { useSettings } from '../../hooks/useSettings';
+import { getStoreName } from '../../utils/store';
 
 const PageSEO = ({ title, description, image, url, type = 'website' }) => {
-  const siteName = 'E-Commerce Store';
+  const { settings } = useSettings();
+  const siteName = getStoreName(settings);
   const fullTitle = title ? `${title} | ${siteName}` : siteName;
 
   return (

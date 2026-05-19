@@ -21,15 +21,7 @@ import { getApiErrorMessage } from '../../utils/apiErrors';
 import { useNotification } from '../../context/NotificationContext';
 import { Visibility, VisibilityOff } from '@mui/icons-material';
 import { getPasswordChecks } from '../../utils/authValidation';
-
-function TabPanel(props) {
-    const { children, value, index, ...other } = props;
-    return (
-        <div role="tabpanel" hidden={value !== index} {...other}>
-            {value === index && <Box sx={{ p: 3 }}>{children}</Box>}
-        </div>
-    );
-}
+import TabPanel from '../../components/common/TabPanel';
 
 const AccountPage = () => {
     const { user, updateProfile } = useContext(AuthContext);
@@ -50,13 +42,13 @@ const AccountPage = () => {
                         <Tab label="Password" />
                     </Tabs>
                 </Box>
-                <TabPanel value={tab} index={0}>
+                <TabPanel value={tab} index={0} sx={{ p: 3 }}>
                     <ProfileTab user={user} updateProfile={updateProfile} />
                 </TabPanel>
-                <TabPanel value={tab} index={1}>
+                <TabPanel value={tab} index={1} sx={{ p: 3 }}>
                     <AddressesTab />
                 </TabPanel>
-                <TabPanel value={tab} index={2}>
+                <TabPanel value={tab} index={2} sx={{ p: 3 }}>
                     <PasswordTab />
                 </TabPanel>
             </Paper>

@@ -15,31 +15,34 @@ export const getSessionId = () => {
 
 export const clearSessionId = () => localStorage.removeItem(SESSION_KEY);
 
+const withSessionHeader = (config = {}) => ({
+  ...config,
+  headers: {
+    ...config.headers,
+    'X-Session-Id': getSessionId(),
+  },
+});
+
 const cartService = {
-  getCart: () =>
-    api.get('/cart', { headers: { 'X-Session-Id': getSessionId() } }),
+  getCart: () => api.get('/cart', withSessionHeader()),
 
   addItem: (productId, quantity = 1, variantId = null) =>
     api.post(
       '/cart/items',
       { productId, quantity, ...(variantId && { variantId }) },
-      { headers: { 'X-Session-Id': getSessionId() } }
+      withSessionHeader()
     ),
 
   updateItem: (cartItemId, quantity) =>
     api.put(
       `/cart/items/${cartItemId}`,
       { quantity },
-      { headers: { 'X-Session-Id': getSessionId() } }
+      withSessionHeader()
     ),
 
-  removeItem: (cartItemId) =>
-    api.delete(`/cart/items/${cartItemId}`, {
-      headers: { 'X-Session-Id': getSessionId() },
-    }),
+  removeItem: (cartItemId) => api.delete(`/cart/items/${cartItemId}`, withSessionHeader()),
 
-  clearCart: () =>
-    api.delete('/cart', { headers: { 'X-Session-Id': getSessionId() } }),
+  clearCart: () => api.delete('/cart', withSessionHeader()),
 
   mergeGuestCart: () =>
     api.post('/cart/merge', { sessionId: getSessionId() }),

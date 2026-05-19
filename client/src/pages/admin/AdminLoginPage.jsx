@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 
-import { Box, Typography, TextField, Button, Alert, useTheme, Paper, IconButton, InputAdornment } from '@mui/material';
+import { Box, Typography, TextField, Button, Alert, useTheme, Paper, IconButton, InputAdornment, CircularProgress } from '@mui/material';
 import Visibility from '@mui/icons-material/Visibility';
 import VisibilityOff from '@mui/icons-material/VisibilityOff';
 import { useNavigate, useLocation, Navigate, Link as RouterLink } from 'react-router-dom';
@@ -92,7 +92,8 @@ const AdminLoginPage = () => {
         return;
       }
 
-      const adminEntryPath = getFirstAccessibleAdminPath(loggedUser);
+      const fromPath = location.state?.from?.pathname;
+      const adminEntryPath = (fromPath && fromPath.startsWith('/admin')) ? fromPath : getFirstAccessibleAdminPath(loggedUser);
       navigate(adminEntryPath || '/admin', { replace: true });
 
     } catch (err) {
@@ -188,7 +189,7 @@ const AdminLoginPage = () => {
             sx={{ mt: 2.5, mb: 2, py: 1.45, borderRadius: '8px', fontWeight: 800 }}
             disabled={loading}
           >
-            {loading ? 'Authenticating...' : 'Sign In'}
+            {loading ? <><CircularProgress size={18} color="inherit" sx={{ mr: 1 }} /> Authenticating…</> : 'Sign In'}
           </Button>
           
           <Box sx={{ display: 'flex', justifyContent: 'center', mt: 2 }}>

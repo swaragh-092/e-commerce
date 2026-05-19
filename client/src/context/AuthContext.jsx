@@ -65,27 +65,26 @@ export const AuthProvider = ({ children }) => {
 
   const login = async (email, password) => {
     const data = await authService.login(email, password);
-    // Fetch full user data including profile (login response doesn't include profile)
-    const fullUser = await userService.getMe();
-    setUser(fullUser);
-    setIsAuthenticated(true);
-    localStorage.setItem('userProfile', JSON.stringify(fullUser));
-    // Merge guest cart into authenticated cart
-    try { await cartService.mergeGuestCart(); } catch (_) {}
-    clearSessionId();
+    const fullUser = await finalizeAuthenticatedSession();
     return { ...data, user: fullUser };
   };
 
   const register = async (userData) => {
     // Option B: log in immediately after register and redirect to home
     const data = await authService.register(userData);
+    const fullUser = await finalizeAuthenticatedSession();
+    return { ...data, user: fullUser };
+  };
+
+  const finalizeAuthenticatedSession = async () => {
+    // Fetch full user data including profile (auth responses do not include the full profile shape).
     const fullUser = await userService.getMe();
     setUser(fullUser);
     setIsAuthenticated(true);
     localStorage.setItem('userProfile', JSON.stringify(fullUser));
     try { await cartService.mergeGuestCart(); } catch (_) {}
     clearSessionId();
-    return { ...data, user: fullUser };
+    return fullUser;
   };
 
   const logout = async () => {

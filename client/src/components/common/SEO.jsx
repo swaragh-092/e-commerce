@@ -4,6 +4,7 @@ import { useLocation } from 'react-router-dom';
 import { seoService } from '../../services/seoService';
 import { SettingsContext } from '../../context/ThemeContext';
 import { useContext } from 'react';
+import { getStoreName } from '../../utils/store';
 
 const SEO = () => {
     const { settings } = useContext(SettingsContext);
@@ -31,7 +32,7 @@ const SEO = () => {
 
     if (!metadata) return null;
 
-    const title = metadata.title || 'E-Commerce Store';
+    const title = metadata.title || getStoreName(settings);
 
     return (
         <Helmet>

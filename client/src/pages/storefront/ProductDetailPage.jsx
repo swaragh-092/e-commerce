@@ -32,6 +32,7 @@ import EnquiryModal from '../../components/storefront/EnquiryModal';
 import RelatedProducts from '../../components/product/RelatedProducts';
 import ProductTabsAccordion from '../../components/storefront/ProductTabsAccordion';
 import { getApiErrorMessage } from '../../utils/apiErrors';
+import { getStoreName } from '../../utils/store';
 
 const getAvailableStock = (entity, stockKey) => {
     const total = Number(entity?.[stockKey] || 0);
@@ -54,6 +55,7 @@ const ProductDetailPage = () => {
     const { addItem } = useCart();
     const { formatPrice } = useCurrency();
     const { settings } = useSettings();
+    const storeName = getStoreName(settings);
     const cartEnabled    = useFeature('cart');
     const pricingEnabled = useFeature('pricing');
     const showPrice = useFeature('showPrice');
@@ -740,10 +742,10 @@ const ProductDetailPage = () => {
                             {stockAvailable ? 'In stock' : 'Currently unavailable'}
                         </Typography>
                         <Typography variant="body2" color="text.secondary" sx={{ mb: 1.5 }}>
-                            Ships from <strong>My Store</strong>
+                            Ships from <strong>{storeName}</strong>
                         </Typography>
                         <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
-                            Sold by <strong>My Store</strong>
+                            Sold by <strong>{storeName}</strong>
                         </Typography>
 
                         {cartMsg && (

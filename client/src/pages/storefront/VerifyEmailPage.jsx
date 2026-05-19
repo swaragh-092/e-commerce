@@ -1,12 +1,17 @@
-import { useEffect, useState, useRef } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Box, Typography, Button, Alert, CircularProgress } from '@mui/material';
-import { useSearchParams, Link as RouterLink } from 'react-router-dom';
+import { Link as RouterLink, useLocation, useNavigate, useSearchParams } from 'react-router-dom';
 import authService from '../../services/authService';
 import { getApiErrorMessage } from '../../utils/apiErrors';
 
 const VerifyEmailPage = () => {
   const [searchParams] = useSearchParams();
-  const token = searchParams.get('token');
+  const location = useLocation();
+  const navigate = useNavigate();
+  const [token] = useState(() => {
+    const hashParams = new URLSearchParams(location.hash.replace(/^#/, ''));
+    return hashParams.get('token') || searchParams.get('token');
+  });
   
   const [status, setStatus] = useState({ loading: true, type: '', message: '' });
   const hasVerified = useRef(false); // strict mode double-fire prevention
@@ -15,6 +20,10 @@ const VerifyEmailPage = () => {
     if (!token) {
         setStatus({ loading: false, type: 'error', message: 'Invalid or missing verification token.' });
         return;
+    }
+
+    if (location.hash || searchParams.has('token')) {
+      navigate(location.pathname, { replace: true });
     }
 
     if (hasVerified.current) return;
@@ -30,7 +39,7 @@ const VerifyEmailPage = () => {
     };
 
     verify();
-  }, [token]);
+  }, [location.hash, location.pathname, navigate, searchParams, token]);
 
   return (
     <Box sx={{ maxWidth: 400, mx: 'auto', mt: 10, textAlign: 'center' }}>

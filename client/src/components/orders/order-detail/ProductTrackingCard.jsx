@@ -11,16 +11,10 @@ import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
 import ReceiptLongIcon from '@mui/icons-material/ReceiptLong';
 import {
   formatCompactDateTime,
+  formatDateOnly,
   formatDateTime,
   PRODUCT_TRACKING_STEPS,
 } from './orderDetailUtils';
-
-const formatDateOnly = (value) => {
-  if (!value) return '';
-  const date = new Date(`${value}T00:00:00`);
-  if (Number.isNaN(date.getTime())) return value;
-  return date.toLocaleDateString('en-US', { dateStyle: 'medium' });
-};
 
 const ProductTrackingStepper = ({ product }) => {
   const trackingSteps = product.isCod

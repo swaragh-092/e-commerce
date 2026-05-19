@@ -8,19 +8,8 @@ import { useCurrency } from '../../hooks/useSettings';
 import { SettingsContext } from '../../context/ThemeContext';
 import { getApiErrorMessage } from '../../utils/apiErrors';
 import { getMediaUrl } from '../../utils/media';
-
-const getTaxRows = (order = {}) => {
-  const breakdown = order.taxBreakdown || {};
-  const rows = [
-    { label: 'CGST', value: breakdown.cgst },
-    { label: 'SGST', value: breakdown.sgst },
-    { label: 'IGST', value: breakdown.igst },
-    { label: 'Tax', value: breakdown.flatTax },
-  ].filter((row) => Number(row.value || 0) > 0);
-
-  if (rows.length > 0) return rows;
-  return Number(order.tax || 0) > 0 ? [{ label: 'Tax', value: order.tax }] : [];
-};
+import { getTaxRows } from '../../components/orders/order-detail/orderDetailUtils';
+import { formatDateOnly } from '../../utils/dates';
 
 const OrderInvoicePage = () => {
   const { id } = useParams();
@@ -136,7 +125,7 @@ const OrderInvoicePage = () => {
               <Typography variant="body2">{invoicePrefix}{order.id}</Typography>
               
               <Typography variant="body2" fontWeight={600}>Date:</Typography>
-              <Typography variant="body2">{new Date(order.createdAt).toLocaleDateString()}</Typography>
+              <Typography variant="body2">{formatDateOnly(order.createdAt)}</Typography>
 
               <Typography variant="body2" fontWeight={600}>Status:</Typography>
               <Typography variant="body2" sx={{ textTransform: 'uppercase' }}>{order.status}</Typography>

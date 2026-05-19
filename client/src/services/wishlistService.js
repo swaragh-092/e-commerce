@@ -1,11 +1,11 @@
 import api from './api';
+import { withQueryString } from '../utils/query';
 
 const buildVariantParams = (variantId) => (variantId ? { params: { variantId } } : undefined);
 
 export const wishlistService = {
   getWishlist: async (params = {}) => {
-    const query = new URLSearchParams(params).toString();
-    const response = await api.get(`/wishlist${query ? `?${query}` : ''}`);
+    const response = await api.get(withQueryString('/wishlist', params));
     return { data: response.data?.data || [], meta: response.data?.meta || {} };
   },
 

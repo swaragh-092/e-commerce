@@ -33,6 +33,8 @@ import HistoryIcon from '@mui/icons-material/History';
 import CloseIcon from '@mui/icons-material/Close';
 import { useCurrency } from '../../hooks/useSettings';
 import { PAYMENT_SETTLED_STATUSES } from '../../utils/constants';
+import { getTaxRows } from '../../components/orders/order-detail/orderDetailUtils';
+import { formatDateOnly, formatDateTime } from '../../utils/dates';
 import { getOrderById, updateOrderStatus, createFulfillment, updateFulfillmentStatus, updateShipment, confirmCodPayment, getShippingProviders, addOrderNote, updateReturnStatus, processRefund } from '../../services/adminService';
 import { useNotification } from '../../context/NotificationContext';
 import {
@@ -145,7 +147,7 @@ const HistoryEventRow = ({ event, isLast }) => {
             </Box>
           </Tooltip>
           <Typography variant="caption" color="text.disabled" sx={{ ml: 'auto', whiteSpace: 'nowrap' }}>
-            {new Date(event.createdAt).toLocaleString()}
+            {formatDateTime(event.createdAt)}
           </Typography>
         </Box>
         <Typography
@@ -327,7 +329,7 @@ const ProgressEntry = ({ label, status, occurredAt, last }) => {
         </Typography>
         {occurredAt && (
           <Typography variant="caption" color="text.secondary">
-            {new Date(occurredAt).toLocaleString()}
+            {formatDateTime(occurredAt)}
           </Typography>
         )}
       </Box>
@@ -335,18 +337,6 @@ const ProgressEntry = ({ label, status, occurredAt, last }) => {
   );
 };
 
-const getTaxRows = (order = {}) => {
-  const breakdown = order.taxBreakdown || {};
-  const rows = [
-    { label: 'CGST', value: breakdown.cgst },
-    { label: 'SGST', value: breakdown.sgst },
-    { label: 'IGST', value: breakdown.igst },
-    { label: 'Tax', value: breakdown.flatTax },
-  ].filter((row) => Number(row.value || 0) > 0);
-
-  if (rows.length > 0) return rows;
-  return Number(order.tax || 0) > 0 ? [{ label: 'Tax', value: order.tax }] : [];
-};
 
 const getFulfillmentProgress = (items = [], fulfillments = []) => {
   const total = items.reduce((sum, item) => sum + Number(item.quantity || 0), 0);
@@ -691,12 +681,7 @@ const FulfillmentDialog = ({ open, onClose, orderItems, onSave, loading }) => {
   );
 };
 
-const formatDeliveryDate = (value) => {
-  if (!value) return 'Not set';
-  const date = new Date(`${value}T00:00:00`);
-  if (Number.isNaN(date.getTime())) return value;
-  return date.toLocaleDateString('en-US', { dateStyle: 'medium' });
-};
+const formatDeliveryDate = (value) => formatDateOnly(value) || 'Not set';
 
 const ShipmentExpectedDeliveryControl = ({ orderId, shipment, canUpdate, onSaved, notify }) => {
   const [date, setDate] = useState('');
@@ -751,7 +736,7 @@ const ShipmentExpectedDeliveryControl = ({ orderId, shipment, canUpdate, onSaved
           {[...history].reverse().map((entry, idx) => (
             <Box key={`${entry.date}-${entry.at}-${idx}`} sx={{ display: 'flex', justifyContent: 'space-between', gap: 1 }}>
               <Typography variant="caption" color="text.secondary">
-                {entry.at ? new Date(entry.at).toLocaleString() : 'Time pending'}
+                {formatDateTime(entry.at) || 'Time pending'}
               </Typography>
               <Typography variant="caption" fontWeight={700}>
                 {formatDeliveryDate(entry.date)}
@@ -782,6 +767,8 @@ const OrderDetailPage = () => {
   const [historyDialogOpen, setHistoryDialogOpen] = useState(false);
   const [codCollectionDialogOpen, setCodCollectionDialogOpen] = useState(false);
   const [codCollectionAmount, setCodCollectionAmount] = useState('');
+  const [refundDialogRequest, setRefundDialogRequest] = useState(null);
+  const [refundAmount, setRefundAmount] = useState('');
   const [fulfillmentLoading, setFulfillmentLoading] = useState(false);
   const [addingNote, setAddingNote] = useState(false);
 
@@ -957,7 +944,7 @@ const OrderDetailPage = () => {
     }
   };
 
-  const handleReturnRefund = async (returnRequest) => {
+  const openReturnRefundDialog = (returnRequest) => {
     const returnRequestAmount = getReturnRequestAmount(returnRequest);
     const refundedForReturn = getRefundedAmountForReturnRequest(order, returnRequest.id);
     const remainingReturnAmount = Math.max(returnRequestAmount - refundedForReturn, 0);
@@ -967,12 +954,24 @@ const OrderDetailPage = () => {
       notify('No captured payment is available to refund for this return.', 'error');
       return;
     }
-    const enteredAmount = window.prompt(
-      `Enter refund amount. Returned product limit: ${formatPrice(suggestedAmount)}. Captured payment available: ${formatPrice(refundableAmount)}.`,
-      maxAmount > 0 ? maxAmount.toFixed(2) : ''
-    );
-    if (enteredAmount === null) return;
-    const amount = Number(enteredAmount);
+    setRefundDialogRequest(returnRequest);
+    setRefundAmount(maxAmount > 0 ? maxAmount.toFixed(2) : '');
+  };
+
+  const closeReturnRefundDialog = () => {
+    setRefundDialogRequest(null);
+    setRefundAmount('');
+  };
+
+  const handleReturnRefund = async () => {
+    if (!refundDialogRequest) return;
+
+    const returnRequestAmount = getReturnRequestAmount(refundDialogRequest);
+    const refundedForReturn = getRefundedAmountForReturnRequest(order, refundDialogRequest.id);
+    const remainingReturnAmount = Math.max(returnRequestAmount - refundedForReturn, 0);
+    const suggestedAmount = remainingReturnAmount || refundableAmount;
+    const maxAmount = Math.min(refundableAmount, suggestedAmount);
+    const amount = Number(refundAmount);
     if (!Number.isFinite(amount) || amount <= 0 || amount > maxAmount) {
       notify(`Enter an amount between 0 and ${formatPrice(maxAmount)}.`, 'error');
       return;
@@ -980,7 +979,8 @@ const OrderDetailPage = () => {
 
     setUpdating(true);
     try {
-      await processRefund(id, { returnId: returnRequest.id, amount, reason: returnRequest.reason || 'Return refund' });
+      await processRefund(id, { returnId: refundDialogRequest.id, amount, reason: refundDialogRequest.reason || 'Return refund' });
+      closeReturnRefundDialog();
       await fetchOrder();
       notify('Return refund recorded.', 'success');
     } catch (err) {
@@ -1064,7 +1064,7 @@ const OrderDetailPage = () => {
             />
           </Stack>
           <Typography variant="body2" color="text.secondary" sx={{ mt: 1 }}>
-            Placed on {new Date(order.createdAt).toLocaleString()} • Last updated {new Date(order.updatedAt).toLocaleString()}
+            Placed on {formatDateTime(order.createdAt)} • Last updated {formatDateTime(order.updatedAt)}
           </Typography>
         </Box>
 
@@ -1435,7 +1435,7 @@ const OrderDetailPage = () => {
                               <Box key={idx} sx={{ display: 'flex', gap: 2 }}>
                                 <Box sx={{ minWidth: 120 }}>
                                   <Typography variant="caption" color="text.secondary" sx={{ display: 'block' }}>
-                                    {new Date(event.timestamp || event.at || event.createdAt).toLocaleString()}
+                                    {formatDateTime(event.timestamp || event.at || event.createdAt)}
                                   </Typography>
                                 </Box>
                                 <Box>
@@ -1520,7 +1520,7 @@ const OrderDetailPage = () => {
                               </Select>
                             </FormControl>
                             {canRefundReturn && (
-                              <Button size="small" variant="outlined" color="error" onClick={() => handleReturnRefund(request)} disabled={updating}>
+                              <Button size="small" variant="outlined" color="error" onClick={() => openReturnRefundDialog(request)} disabled={updating}>
                                 Refund
                               </Button>
                             )}
@@ -1687,6 +1687,74 @@ const OrderDetailPage = () => {
           </Button>
           <Button variant="contained" onClick={handleConfirmCodPayment} disabled={updating}>
             {updating ? 'Saving…' : 'Record Payment'}
+          </Button>
+        </DialogActions>
+      </Dialog>
+
+      <Dialog
+        open={Boolean(refundDialogRequest)}
+        onClose={() => !updating && closeReturnRefundDialog()}
+        maxWidth="xs"
+        fullWidth
+      >
+        <DialogTitle>Record Return Refund</DialogTitle>
+        <DialogContent>
+          <Stack spacing={2} sx={{ pt: 1 }}>
+            <Box>
+              <Typography variant="caption" color="text.secondary">
+                Returned product limit
+              </Typography>
+              <Typography variant="subtitle1" fontWeight={800}>
+                {formatPrice(
+                  refundDialogRequest
+                    ? Math.max(
+                        getReturnRequestAmount(refundDialogRequest)
+                          - getRefundedAmountForReturnRequest(order, refundDialogRequest.id),
+                        0
+                      )
+                    : 0
+                )}
+              </Typography>
+            </Box>
+            <Box>
+              <Typography variant="caption" color="text.secondary">
+                Captured payment available
+              </Typography>
+              <Typography variant="body2" fontWeight={700}>
+                {formatPrice(refundableAmount)}
+              </Typography>
+            </Box>
+            <TextField
+              autoFocus
+              label="Refund amount"
+              type="number"
+              value={refundAmount}
+              onChange={(event) => setRefundAmount(event.target.value)}
+              inputProps={{
+                min: 0,
+                max: refundDialogRequest
+                  ? Math.min(
+                      refundableAmount,
+                      Math.max(
+                        getReturnRequestAmount(refundDialogRequest)
+                          - getRefundedAmountForReturnRequest(order, refundDialogRequest.id),
+                        0
+                      ) || refundableAmount
+                    )
+                  : 0,
+                step: '0.01',
+              }}
+              helperText="Refunds cannot exceed the returned item amount or the captured payment available."
+              fullWidth
+            />
+          </Stack>
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={closeReturnRefundDialog} disabled={updating}>
+            Cancel
+          </Button>
+          <Button variant="contained" color="error" onClick={handleReturnRefund} disabled={updating}>
+            {updating ? 'Saving…' : 'Record Refund'}
           </Button>
         </DialogActions>
       </Dialog>

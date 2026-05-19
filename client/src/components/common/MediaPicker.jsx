@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo, useRef } from 'react';
+import React, { useState, useEffect, useMemo, useRef, useCallback } from 'react';
 import {
   Dialog,
   DialogTitle,
@@ -26,6 +26,7 @@ import {
   ToggleButtonGroup,
   ToggleButton,
   Tooltip,
+  Alert,
 } from '@mui/material';
 import {
   Search as SearchIcon,
@@ -43,9 +44,6 @@ import { mediaService } from '../../services/mediaService';
 import MediaUploader from './MediaUploader';
 import { getMediaUrl } from '../../utils/media';
 
-// Global cache for media library to avoid redundant initial fetches across multiple picker instances
-let mediaCache = null;
-let mediaCacheTimestamp = 0;
 const CACHE_TTL = 30000; // 30 seconds
 
 /**
@@ -69,32 +67,99 @@ const MediaPicker = ({ open, onClose, onSelect, multiple = false, title = 'Selec
   const [loadingMore, setLoadingMore] = useState(false);
   const [sortBy, setSortBy] = useState('date');
   const [sortDir, setSortDir] = useState('desc');
-  const initialFetchRef = useRef(false);
   const observerRef = useRef(null);
+  const cacheRef = useRef(new Map());
+  const requestIdRef = useRef(0);
+  const abortControllerRef = useRef(null);
+  const [loadError, setLoadError] = useState('');
+
+  const cacheKey = `${sortBy}:${sortDir}`;
+  const previousSortKeyRef = useRef(cacheKey);
+
+  const fetchMedia = useCallback(async (pageNum = 1, isLoadMore = false, isBackground = false) => {
+    const requestId = ++requestIdRef.current;
+
+    if (!isLoadMore) {
+      abortControllerRef.current?.abort();
+      abortControllerRef.current = new AbortController();
+    }
+
+    if (isLoadMore) setLoadingMore(true);
+    else if (!isBackground) setLoading(true);
+
+    try {
+      const res = await mediaService.list(
+        {
+          page: pageNum,
+          limit: 30,
+          sortBy,
+          sortDir,
+        },
+        abortControllerRef.current?.signal
+      );
+
+      if (requestId !== requestIdRef.current) return [];
+
+      const newMedia = res.data || [];
+      const meta = res.meta || {};
+
+      if (pageNum === 1) {
+        setMedia(newMedia);
+        cacheRef.current.set(cacheKey, {
+          items: newMedia,
+          timestamp: Date.now(),
+        });
+        if (newMedia.length > 0) setTab((currentTab) => (currentTab === 0 ? 1 : currentTab));
+      } else {
+        setMedia((prev) => [...prev, ...newMedia]);
+      }
+
+      setLoadError('');
+      setHasMore(newMedia.length > 0 && meta.page < meta.totalPages);
+      setPage(pageNum);
+      return newMedia;
+    } catch (err) {
+      if (err?.name !== 'CanceledError' && err?.code !== 'ERR_CANCELED') {
+        if (requestId === requestIdRef.current) {
+          setLoadError('Failed to load media. Please try again.');
+        }
+      }
+      return [];
+    } finally {
+      if (requestId === requestIdRef.current) {
+        setLoading(false);
+        setLoadingMore(false);
+      }
+    }
+  }, [cacheKey, sortBy, sortDir]);
 
   // Reset state when opening
   useEffect(() => {
     if (open) {
       setSelected([]);
-      
-      // Load from cache if fresh
-      if (mediaCache && (Date.now() - mediaCacheTimestamp < CACHE_TTL)) {
-        setMedia(mediaCache);
-        setTab(mediaCache.length > 0 ? 1 : 0);
+      setLoadError('');
+
+      const cached = cacheRef.current.get(cacheKey);
+      if (cached && Date.now() - cached.timestamp < CACHE_TTL) {
+        setMedia(cached.items);
+        setTab(cached.items.length > 0 ? 1 : 0);
         // Refresh in background silently
         fetchMedia(1, false, true);
       } else {
         fetchMedia(1);
       }
     }
-  }, [open]);
+  }, [cacheKey, fetchMedia, open]);
 
   // Refresh when sort changes
   useEffect(() => {
-    if (open) {
+    if (open && previousSortKeyRef.current !== cacheKey) {
+      previousSortKeyRef.current = cacheKey;
       fetchMedia(1);
     }
-  }, [sortBy, sortDir]);
+  }, [cacheKey, fetchMedia, open]);
+
+  useEffect(() => () => abortControllerRef.current?.abort(), []);
 
   // Infinite scroll observer
   useEffect(() => {
@@ -121,43 +186,6 @@ const MediaPicker = ({ open, onClose, onSelect, multiple = false, title = 'Selec
       observer.disconnect();
     };
   }, [hasMore, loading, loadingMore]);
-
-  const fetchMedia = async (pageNum = 1, isLoadMore = false, isBackground = false) => {
-    if (isLoadMore) setLoadingMore(true);
-    else if (!isBackground) setLoading(true);
-
-    try {
-      const res = await mediaService.list({ 
-        page: pageNum, 
-        limit: 30,
-        sortBy,
-        sortDir
-      });
-      const newMedia = res.data || [];
-      const meta = res.meta || {};
-      
-      if (pageNum === 1) {
-        setMedia(newMedia);
-        // Update global cache
-        mediaCache = newMedia;
-        mediaCacheTimestamp = Date.now();
-        // Automatically switch to library tab if there's media
-        if (newMedia.length > 0 && tab === 0) setTab(1);
-      } else {
-        setMedia((prev) => [...prev, ...newMedia]);
-      }
-
-      setHasMore(newMedia.length > 0 && (meta.page < meta.totalPages));
-      setPage(pageNum);
-      return newMedia;
-    } catch (err) {
-      console.error('Failed to fetch media', err);
-      return [];
-    } finally {
-      setLoading(false);
-      setLoadingMore(false);
-    }
-  };
 
   const handleLoadMore = () => {
     if (!loading && !loadingMore && hasMore) {
@@ -267,6 +295,11 @@ const MediaPicker = ({ open, onClose, onSelect, multiple = false, title = 'Selec
 
         {tab === 1 && (
           <Box sx={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
+            {loadError && (
+              <Alert severity="error" sx={{ m: 2, mb: 0 }}>
+                {loadError}
+              </Alert>
+            )}
             {/* Toolbar */}
             <Box sx={{ p: 2, bgcolor: 'background.paper', borderBottom: 1, borderColor: 'divider', display: 'flex', gap: 2, flexWrap: 'wrap', alignItems: 'center' }}>
               <TextField

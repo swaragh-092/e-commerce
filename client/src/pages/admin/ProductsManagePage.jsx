@@ -25,15 +25,9 @@ import { formatSaleDateTime, isEndingSoon } from '../../utils/pricing';
 import { useAuth } from '../../hooks/useAuth';
 import { PERMISSIONS } from '../../utils/permissions';
 import { getApiErrorMessage } from '../../utils/apiErrors';
+import { formatOpenEndedDateRange, toDateTimeLocal } from '../../utils/dates';
 
 const STOREFRONT_BASE = (import.meta.env.VITE_APP_URL || 'http://localhost:3000');
-const toDateTimeLocal = (value) => {
-  if (!value) return '';
-  const date = new Date(value);
-  const offset = date.getTimezoneOffset();
-  const localDate = new Date(date.getTime() - (offset * 60 * 1000));
-  return localDate.toISOString().slice(0, 16);
-};
 const toIsoOrNull = (value) => (value ? new Date(value).toISOString() : null);
 
 const SummaryCard = ({ label, value, tone = 'default' }) => (
@@ -1259,10 +1253,13 @@ const ProductsManagePage = () => {
                   </Select>
                   {(() => {
                     const selected = saleLabels.find(l => l.id === editDialog.saleLabel);
-                    if (selected && (selected.startDate || selected.endDate)) {
+                    const scheduleLabel = selected
+                      ? formatOpenEndedDateRange(selected.startDate, selected.endDate)
+                      : '';
+                    if (scheduleLabel) {
                       return (
                         <FormHelperText sx={{ color: 'primary.main', fontWeight: 600 }}>
-                          Global schedule: {selected.startDate ? new Date(selected.startDate).toLocaleDateString() : 'Now'} - {selected.endDate ? new Date(selected.endDate).toLocaleDateString() : 'Indefinite'}
+                          Global schedule: {scheduleLabel}
                         </FormHelperText>
                       );
                     }
@@ -1401,10 +1398,13 @@ const ProductsManagePage = () => {
                 </Select>
                 {(() => {
                   const selected = saleLabels.find(l => l.id === bulkSaleDialog.saleLabel);
-                  if (selected && (selected.startDate || selected.endDate)) {
+                  const scheduleLabel = selected
+                    ? formatOpenEndedDateRange(selected.startDate, selected.endDate)
+                    : '';
+                  if (scheduleLabel) {
                     return (
                       <FormHelperText sx={{ color: 'primary.main', fontWeight: 600 }}>
-                        Global schedule: {selected.startDate ? new Date(selected.startDate).toLocaleDateString() : 'Now'} - {selected.endDate ? new Date(selected.endDate).toLocaleDateString() : 'Indefinite'}
+                        Global schedule: {scheduleLabel}
                       </FormHelperText>
                     );
                   }

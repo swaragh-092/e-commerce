@@ -9,6 +9,7 @@ import { BrandProvider } from './context/BrandContext';
 import { NotificationProvider } from './context/NotificationContext';
 import AppErrorBoundary from './components/common/AppErrorBoundary';
 import AppRoutes from './routes/AppRoutes';
+import AuthRedirectListener from './components/common/AuthRedirectListener';
 
 function App() {
   return (
@@ -21,6 +22,7 @@ function App() {
                 <CategoryProvider>
                   <BrandProvider>
                     <WishlistProvider>
+                      <AuthRedirectListener />
                       <AppRoutes />
                     </WishlistProvider>
                   </BrandProvider>
@@ -35,6 +37,3 @@ function App() {
 }
 
 export default App;
-
-
-// here i am working

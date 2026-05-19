@@ -44,7 +44,7 @@ const authService = {
   },
 
   verifyEmail: async (token) => {
-    const response = await api.get(`/auth/verify-email?token=${token}`);
+    const response = await api.post('/auth/verify-email', { token });
     return response.data;
   },
 
@@ -60,4 +60,3 @@ const authService = {
 };
 
 export default authService;
-

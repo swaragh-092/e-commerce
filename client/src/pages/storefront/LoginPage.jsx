@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Box, Typography, TextField, Button, Alert, useTheme, IconButton, InputAdornment, Divider, Checkbox } from '@mui/material';
+import { Box, Typography, TextField, Button, Alert, useTheme, IconButton, InputAdornment, CircularProgress, Divider, Checkbox } from '@mui/material';
 import { useNavigate, Link as RouterLink, useLocation } from 'react-router-dom';
 import { useAuth } from '../../hooks/useAuth';
 import { validateEmail, validateRequired } from '../../utils/authValidation';
@@ -93,8 +93,9 @@ const LoginPage = () => {
 
     try {
       await login(formData.email, formData.password);
-      // For storefront login, always treat user as a customer and send to home/account
-      navigate('/');
+      // Redirect to the page the user was trying to access, or home
+      const redirectTo = location.state?.from?.pathname || '/';
+      navigate(redirectTo, { replace: true });
     } catch (err) {
       const msg = getApiErrorMessage(err, 'Login failed. Please verify credentials.');
       setError(msg);
@@ -148,7 +149,7 @@ const LoginPage = () => {
           )}
         </Box>
       )}
-      {successMsg && <Alert severity="success" sx={{ mb: 2 }}>{successMsg}</Alert>}
+      {successMsg && <Alert severity={location.state?.sessionExpired ? 'info' : 'success'} sx={{ mb: 2 }}>{successMsg}</Alert>}
 
       <Box component="form" onSubmit={handleSubmit}>
         <Typography component="label" htmlFor="login-email" sx={fieldLabelSx}>
@@ -200,6 +201,7 @@ const LoginPage = () => {
               endAdornment: (
                 <InputAdornment position="end">
                   <IconButton
+                    aria-label={showPassword ? 'Hide password' : 'Show password'}
                     onClick={() => setShowPassword(prev => !prev)}
                     onMouseDown={(e) => e.preventDefault()}
                     edge="end"
@@ -237,7 +239,7 @@ const LoginPage = () => {
           sx={{ mt: 0, mb: 2, height: 52, borderRadius: '8px' }}
           disabled={loading}
         >
-          {loading ? 'Logging in...' : 'Log In'}
+          {loading ? <><CircularProgress size={18} color="inherit" sx={{ mr: 1 }} /> Logging in…</> : 'Log In'}
         </Button>
 
         <Divider sx={{ my: 2.5 }}>

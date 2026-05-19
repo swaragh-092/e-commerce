@@ -11,7 +11,12 @@ import WarningAmberIcon from '@mui/icons-material/WarningAmber';
 import VisibilityIcon from '@mui/icons-material/Visibility';
 import VisibilityOffIcon from '@mui/icons-material/VisibilityOff';
 import OpenInNewIcon from '@mui/icons-material/OpenInNew';
-import api from '../../services/api';
+import {
+  configurePaymentGateway,
+  getPaymentGateways,
+} from '../../services/paymentService';
+import { getAllSettings } from '../../services/settingsService';
+import { updateSettings } from '../../services/adminService';
 import { useNotification } from '../../context/NotificationContext';
 import { useAuth } from '../../hooks/useAuth';
 import { PERMISSIONS } from '../../utils/permissions';
@@ -103,7 +108,7 @@ const SetupModal = ({ gateway, open, onClose, onSaved }) => {
       const payload = Object.fromEntries(
         Object.entries(values).filter(([, v]) => v.trim() !== '')
       );
-      await api.post(`/payments/gateways/${gateway.id}/configure`, payload);
+      await configurePaymentGateway(gateway.id, payload);
       notify(`${gateway.name} credentials saved.`, 'success');
       onSaved();
       onClose();
@@ -347,12 +352,11 @@ const PaymentGatewaysPage = () => {
   const load = useCallback(async () => {
     setLoading(true);
     try {
-      const [gwRes, settingsRes] = await Promise.all([
-        api.get('/payments/gateways'),
-        api.get('/settings'),
+      const [gwRes, allSettings] = await Promise.all([
+        getPaymentGateways(),
+        getAllSettings(),
       ]);
       setGateways(gwRes.data?.data || []);
-      const allSettings = settingsRes.data?.data || {};
       setPaymentSettings(allSettings.payments || {});
     } catch {
       notify('Failed to load gateway data.', 'error');
@@ -366,7 +370,7 @@ const PaymentGatewaysPage = () => {
   const handleToggle = async (gatewayId, enabled) => {
     setTogglingId(gatewayId);
     try {
-      await api.put('/settings/bulk', [
+      await updateSettings([
         { group: 'payments', key: `${gatewayId}Enabled`, value: enabled },
       ]);
       setPaymentSettings((prev) => ({ ...prev, [`${gatewayId}Enabled`]: enabled }));
@@ -380,7 +384,7 @@ const PaymentGatewaysPage = () => {
 
   const handleDefaultChange = async (e) => {
     try {
-      await api.put('/settings/bulk', [
+      await updateSettings([
         { group: 'payments', key: 'defaultMethod', value: e.target.value },
       ]);
       setPaymentSettings((prev) => ({ ...prev, defaultMethod: e.target.value }));

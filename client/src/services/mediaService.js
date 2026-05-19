@@ -1,4 +1,5 @@
 import api from './api';
+import { withQueryString } from '../utils/query';
 
 export const mediaService = {
   uploadMedia: async (file, signal) => {
@@ -13,9 +14,8 @@ export const mediaService = {
     return response.data;
   },
 
-  list: async (params = {}) => {
-    const query = new URLSearchParams(params).toString();
-    const response = await api.get(`/media${query ? `?${query}` : ''}`);
+  list: async (params = {}, signal) => {
+    const response = await api.get(withQueryString('/media', params), { signal });
     return response.data;
   },
 

@@ -1,6 +1,7 @@
+import { memo } from 'react';
 import { Box, Typography } from '@mui/material';
 
-const SectionLabel = ({ icon: Icon, children }) => (
+const SectionLabel = memo(({ icon: Icon, children }) => (
   <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 2 }}>
     {Icon && <Icon sx={{ fontSize: 15, color: 'text.disabled' }} />}
     <Typography
@@ -15,6 +16,6 @@ const SectionLabel = ({ icon: Icon, children }) => (
       {children}
     </Typography>
   </Box>
-);
+));
 
 export default SectionLabel;

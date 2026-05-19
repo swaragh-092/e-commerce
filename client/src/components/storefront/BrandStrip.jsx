@@ -1,10 +1,11 @@
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useRef } from 'react';
 import { Avatar, Box, ButtonBase, IconButton, Skeleton, Stack, Typography, alpha } from '@mui/material';
 import { Link } from 'react-router-dom';
 import ArrowForwardIcon from '@mui/icons-material/ArrowForward';
 import ChevronLeftIcon from '@mui/icons-material/ChevronLeft';
 import ChevronRightIcon from '@mui/icons-material/ChevronRight';
 import { getMediaUrl } from '../../utils/media';
+import { useScrollState } from '../../hooks/useScrollState';
 
 /**
  * BrandStrip — horizontal brand chip strip for the homepage.
@@ -12,20 +13,8 @@ import { getMediaUrl } from '../../utils/media';
  */
 const BrandStrip = ({ title, brands = [], loading = false }) => {
     const scrollerRef = useRef(null);
-    const [canScroll, setCanScroll] = useState(false);
-
-    useEffect(() => {
-        const node = scrollerRef.current;
-        if (!node) return undefined;
-
-        const updateCanScroll = () => {
-            setCanScroll(node.scrollWidth > node.clientWidth + 4);
-        };
-
-        updateCanScroll();
-        window.addEventListener('resize', updateCanScroll);
-        return () => window.removeEventListener('resize', updateCanScroll);
-    }, [brands.length, loading]);
+    const { canScrollLeft, canScrollRight } = useScrollState(scrollerRef, [brands.length, loading], { threshold: 4 });
+    const canScroll = canScrollLeft || canScrollRight;
 
     if (!loading && brands.length === 0) return null;
 
@@ -51,7 +40,7 @@ const BrandStrip = ({ title, brands = [], loading = false }) => {
                     gridTemplateColumns: { xs: '1fr', md: 'minmax(200px, 260px) minmax(0, 1fr)' },
                     gap: { xs: 2, md: 2.5 },
                     alignItems: 'center',
-                    bgcolor: 'rgba(255, 252, 246, 0.92)',
+                    bgcolor: (theme) => alpha(theme.palette.background.paper, theme.palette.mode === 'dark' ? 0.92 : 0.96),
                     borderRadius: 3,
                     px: { xs: 2, md: 3 },
                     py: { xs: 2.25, md: 3 },
@@ -134,8 +123,8 @@ const BrandStrip = ({ title, brands = [], loading = false }) => {
                             top: '50%',
                             transform: 'translateY(-50%)',
                             zIndex: 2,
-                            width: 34,
-                            height: 34,
+                            width: 44,
+                            height: 44,
                             borderRadius: '50%',
                             bgcolor: 'background.paper',
                             boxShadow: '0 8px 20px rgba(15, 23, 42, 0.10)',
@@ -181,7 +170,7 @@ const BrandStrip = ({ title, brands = [], loading = false }) => {
                                 borderRadius: 2,
                                 p: 1.4,
                                 minHeight: 126,
-                                bgcolor: '#fff',
+                                bgcolor: 'background.paper',
                                 boxShadow: '0 12px 28px rgba(31, 26, 18, 0.07)',
                                 position: 'relative',
                                 overflow: 'hidden',
@@ -249,8 +238,8 @@ const BrandStrip = ({ title, brands = [], loading = false }) => {
                             top: '50%',
                             transform: 'translateY(-50%)',
                             zIndex: 2,
-                            width: 34,
-                            height: 34,
+                            width: 44,
+                            height: 44,
                             borderRadius: '50%',
                             bgcolor: 'background.paper',
                             boxShadow: '0 8px 20px rgba(15, 23, 42, 0.10)',

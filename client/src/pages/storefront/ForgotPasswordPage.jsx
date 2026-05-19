@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Box, Typography, TextField, Button, Alert } from '@mui/material';
+import { Box, Typography, TextField, Button, Alert, CircularProgress } from '@mui/material';
 import { Link as RouterLink } from 'react-router-dom';
 import authService from '../../services/authService';
 import { validateEmail } from '../../utils/authValidation';
@@ -72,7 +72,7 @@ const ForgotPasswordPage = () => {
           sx={{ mt: 3, mb: 2 }}
           disabled={loading}
         >
-          {loading ? 'Sending...' : 'Send Reset Link'}
+          {loading ? <><CircularProgress size={18} color="inherit" sx={{ mr: 1 }} /> Sending…</> : 'Send Reset Link'}
         </Button>
         
         <Box textAlign="center" mt={2}>

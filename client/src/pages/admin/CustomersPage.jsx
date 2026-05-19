@@ -17,11 +17,11 @@ import VisibilityIcon from '@mui/icons-material/Visibility';
 import BlockIcon from '@mui/icons-material/Block';
 import CheckCircleIcon from '@mui/icons-material/CheckCircle';
 import { useNavigate } from 'react-router-dom';
-import { getUsers } from '../../services/adminService';
-import api from '../../services/api';
+import { getUsers, updateUserStatus } from '../../services/adminService';
 import { useNotification } from '../../context/NotificationContext';
 import { useAuth } from '../../hooks/useAuth';
 import { PERMISSIONS } from '../../utils/permissions';
+import { formatDateOnly } from '../../utils/dates';
 
 const CustomersPage = () => {
   const [rows, setRows] = useState([]);
@@ -62,7 +62,7 @@ const CustomersPage = () => {
 
     const newStatus = currentStatus === 'banned' ? 'active' : 'banned';
     try {
-      await api.put(`/users/${id}/status`, { status: newStatus });
+      await updateUserStatus(id, newStatus);
       notify(`User status updated to ${newStatus} successfully.`, 'success');
       fetchUsers();
     } catch {
@@ -101,7 +101,7 @@ const CustomersPage = () => {
       field: 'createdAt',
       headerName: 'Joined',
       width: 120,
-      renderCell: ({ value }) => new Date(value).toLocaleDateString(),
+      renderCell: ({ value }) => formatDateOnly(value),
     },
     {
       field: 'actions',

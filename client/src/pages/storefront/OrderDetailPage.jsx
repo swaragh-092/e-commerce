@@ -30,6 +30,7 @@ import TotalsNotesCard from '../../components/orders/order-detail/TotalsNotesCar
 import { buildProductTrackingItems } from '../../components/orders/order-detail/orderDetailUtils';
 import { useNotification } from '../../context/NotificationContext';
 import { useCurrency, useFeature } from '../../hooks/useSettings';
+import { formatDateTime } from '../../utils/dates';
 
 import { useOrderStatusTransitions } from '../../hooks/useOrderStatusTransitions';
 import { userService } from '../../services/userService';
@@ -327,7 +328,7 @@ const OrderDetailPage = () => {
               {order.orderNumber}
             </Typography>
             <Typography variant="body2" color="text.secondary">
-              {isPendingOnlinePayment ? 'Payment started' : 'Placed'} on {new Date(order.createdAt).toLocaleString('en-US', { dateStyle: 'medium', timeStyle: 'short' })} UTC
+              {isPendingOnlinePayment ? 'Payment started' : 'Placed'} on {formatDateTime(order.createdAt)}
             </Typography>
           </Box>
           <Chip

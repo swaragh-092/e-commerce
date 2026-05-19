@@ -32,6 +32,7 @@ import CenteredLoader from '../../components/common/CenteredLoader';
 import { getApiErrorMessage } from '../../utils/apiErrors';
 import { getVariantOptionLabel } from '../../utils/variantOptions';
 import {calculateTax} from '../../../../shared/calculations.js';
+import { getStoreName } from '../../utils/store';
 
 const EMPTY_ADDR = {
     label: '', fullName: '', phone: '',
@@ -192,6 +193,7 @@ const CheckoutPage = () => {
     const location = useLocation();
     const { user } = useContext(AuthContext);
     const { settings } = useSettings();
+    const storeName = getStoreName(settings);
     const { formatPrice } = useCurrency();
     const { cart, clearCart } = useCart();
 
@@ -468,7 +470,7 @@ const CheckoutPage = () => {
             key: import.meta.env.VITE_RAZORPAY_KEY_ID,
             amount: paymentOrder.amount,
             currency: paymentOrder.currency,
-            name: 'My Store',
+            name: storeName,
             description: `Order #${orderId}`,
             order_id: paymentOrder.id,
             handler: async (response) => {

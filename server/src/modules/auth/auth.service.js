@@ -120,7 +120,7 @@ const register = async (payload) => {
     if (NotificationService && NotificationService.send) {
       await NotificationService.send('email_verification', registrationResult.verificationEmail.email, {
         name: registrationResult.verificationEmail.firstName,
-        verify_url: `${process.env.CLIENT_URL || 'http://localhost:5173'}/verify-email?token=${registrationResult.verificationEmail.verifyToken}`
+        verify_url: `${process.env.CLIENT_URL || 'http://localhost:5173'}/verify-email#token=${registrationResult.verificationEmail.verifyToken}`
       }, registrationResult.verificationEmail.userId);
     }
   } catch (e) {
@@ -200,8 +200,27 @@ const refresh = async (refreshTokenStr, ipAddress) => {
           lock: t.LOCK.UPDATE,
         });
 
-        if (!tokenRecord || tokenRecord.revokedAt || tokenRecord.expiresAt < new Date()) {
-          throw new AppError('UNAUTHORIZED', 401, 'Token revoked');
+        if (!tokenRecord) {
+          throw new AppError('UNAUTHORIZED', 401, 'Token not found');
+        }
+        if (tokenRecord.expiresAt < new Date()) {
+          throw new AppError('UNAUTHORIZED', 401, 'Token expired');
+        }
+
+        // Reuse detection — a revoked token being replayed signals theft.
+        // Invalidate ALL tokens for this user so the attacker (and the
+        // legitimate user) must re-authenticate.
+        if (tokenRecord.revokedAt) {
+          await RefreshToken.update(
+            { revokedAt: new Date() },
+            { where: { userId: tokenRecord.userId, revokedAt: null }, transaction: t }
+          );
+          logger.warn('Refresh token reuse detected — all sessions revoked', {
+            userId: tokenRecord.userId,
+            replayedTokenId: tokenRecord.id,
+            ipAddress,
+          });
+          throw new AppError('UNAUTHORIZED', 401, 'Token reuse detected. All sessions revoked.');
         }
 
         const user = await User.findByPk(decoded.id, {
@@ -356,7 +375,7 @@ const resendVerification = async (email) => {
         if (NotificationService && NotificationService.send) {
             await NotificationService.send('email_verification', user.email, {
                 name: user.firstName,
-                verify_url: `${process.env.CLIENT_URL || 'http://localhost:5173'}/verify-email?token=${verifyToken}`
+                verify_url: `${process.env.CLIENT_URL || 'http://localhost:5173'}/verify-email#token=${verifyToken}`
             }, user.id, null, t);
         }
     } catch (e) {}

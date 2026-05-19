@@ -31,15 +31,7 @@ import {
 import { useNotification } from '../../context/NotificationContext';
 import { useAuth } from '../../hooks/useAuth';
 import { PERMISSIONS } from '../../utils/permissions';
-
-const toDateTimeLocal = (value) => {
-  if (!value) return '';
-  const date = new Date(value);
-  if (isNaN(date.getTime())) return '';
-  const offset = date.getTimezoneOffset();
-  const localDate = new Date(date.getTime() - (offset * 60 * 1000));
-  return localDate.toISOString().slice(0, 16);
-};
+import { formatOpenEndedDateRange, toDateTimeLocal } from '../../utils/dates';
 
 const SaleLabelsPage = () => {
   const [labels, setLabels] = useState([]);
@@ -277,9 +269,9 @@ const SaleLabelsPage = () => {
                           <Typography variant="caption" color="text.secondary" sx={{ display: 'block' }}>
                             ID: {label.id}
                           </Typography>
-                          {(label.startDate || label.endDate) && (
+                          {formatOpenEndedDateRange(label.startDate, label.endDate) && (
                             <Typography variant="caption" color="primary.main" sx={{ display: 'block', fontWeight: 600 }}>
-                              Schedule: {label.startDate ? new Date(label.startDate).toLocaleDateString() : 'Now'} - {label.endDate ? new Date(label.endDate).toLocaleDateString() : 'Indefinite'}
+                              Schedule: {formatOpenEndedDateRange(label.startDate, label.endDate)}
                             </Typography>
                           )}
                         </Box>

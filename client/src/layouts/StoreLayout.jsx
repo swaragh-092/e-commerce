@@ -22,11 +22,14 @@ import PageService from '../services/pageService';
 import MenuService from '../services/menuService';
 import { ADMIN_ACCESS_PERMISSIONS, getFirstAccessibleAdminPath } from '../utils/permissions';
 import SEO from '../components/common/SEO';
+import { isExternalUrl } from '../utils/urls';
+import { getStoreName } from '../utils/store';
 
 const StoreLayout = () => {
   const { isAuthenticated, logout, hasAnyPermission, user } = useAuth();
   const { settings } = useSettings();
   const location = useLocation();
+  const storeName = getStoreName(settings);
   const { cartCount } = useCart();
   const { wishlistCount } = useWishlist();
   const { error: categoryError } = useCategories();
@@ -122,7 +125,6 @@ const StoreLayout = () => {
   const hasDedicatedMobileItems = Array.isArray(mobileMenu?.items) && mobileMenu.items.length > 0;
   const mobileHeaderItems = hasDedicatedMobileItems ? mobileMenu.items : desktopHeaderItems;
 
-  const isExternalUrl = (url = '') => /^https?:\/\//i.test(url) || url.startsWith('mailto:') || url.startsWith('tel:');
   const getLinkProps = (item) => {
     const url = item.url || '/';
     if (item.targetType === 'none' || url === '#') {
@@ -315,13 +317,13 @@ const StoreLayout = () => {
             {settings?.logo?.main && !logoLoadFailed ? (
               <img
                 src={settings.logo.main}
-                alt={settings?.general?.storeName || 'Store'}
+                alt={storeName}
                 style={{ maxHeight: 36, maxWidth: 140, objectFit: 'contain' }}
                 onError={() => setLogoLoadFailed(true)}
               />
             ) : (
               <Typography variant="h6" noWrap sx={{ fontWeight: 700, maxWidth: 180 }}>
-                {settings?.general?.storeName || 'E-Commerce Store'}
+                {storeName}
               </Typography>
             )}
           </Box>
