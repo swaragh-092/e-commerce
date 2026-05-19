@@ -84,6 +84,7 @@ const ApiBuilderPage = lazy(() => import('../pages/admin/ApiBuilderPage'));
 const SeoOverridesPage = lazy(() => import('../pages/admin/SeoOverridesPage'));
 const EmailTemplatesPage = lazy(() => import('../pages/admin/EmailTemplatesPage'));
 const StaticPageView = lazy(() => import('../pages/storefront/StaticPageView'));
+const GalleriesPage = lazy(() => import('../pages/admin/GalleriesPage'));
 
 const LoadingFallback = () => (
   <Box sx={{ display: 'flex', justifyContent: 'center', alignItems: 'center', minHeight: '50vh' }}>
@@ -214,6 +215,7 @@ const AppRoutes = () => (
           </Route>
           <Route element={<ProtectedRoute permission={PERMISSIONS.MEDIA_READ} />}>
             <Route path="media" element={<MediaPage />} />
+            <Route path="galleries" element={<GalleriesPage />} />
           </Route>
           <Route element={<ProtectedRoute permission={PERMISSIONS.SETTINGS_READ} />}>
             <Route path="settings" element={<SettingsPage />} />
