@@ -9,7 +9,7 @@ import { useAuth } from '../../hooks/useAuth';
 import { getFirstAccessibleAdminPath } from '../../utils/permissions';
 import { validateEmail, validateRequired } from '../../utils/authValidation';
 import { getApiErrorMessage } from '../../utils/apiErrors';
-import { EmailOutlined, LockOutlined, Visibility, VisibilityOff } from '@mui/icons-material';
+import { EmailOutlined, LockOutlined } from '@mui/icons-material';
 import AuthPageShell from '../../components/storefront/AuthPageShell';
 
 const AdminLoginPage = () => {
@@ -161,18 +161,12 @@ const AdminLoginPage = () => {
               ),
               endAdornment: (
                 <InputAdornment position="end">
-                  <IconButton edge="end" onClick={() => setShowPassword((value) => !value)} aria-label={showPassword ? 'Hide password' : 'Show password'}>
-
-            InputProps={{
-              endAdornment: (
-                <InputAdornment position="end">
                   <IconButton
-                    aria-label="toggle password visibility"
+                    edge="end"
+                    aria-label={showPassword ? 'Hide password' : 'Show password'}
                     onClick={() => setShowPassword((prev) => !prev)}
                     onMouseDown={(e) => e.preventDefault()}
-                    edge="end"
                   >
-
                     {showPassword ? <VisibilityOff /> : <Visibility />}
                   </IconButton>
                 </InputAdornment>
