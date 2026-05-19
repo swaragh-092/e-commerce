@@ -85,9 +85,6 @@ class EnquiryService {
     return uniqueEmails([
       ...parseRecipientList(process.env.ADMIN_NOTIFICATION_EMAIL),
       settings?.general?.storeEmail,
-      settings?.footer?.email,
-      settings?.messaging?.emailFrom,
-      process.env.SMTP_USER,
       ...adminUsers.map((user) => user.email),
     ]);
   }
