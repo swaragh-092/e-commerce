@@ -125,6 +125,11 @@ module.exports = (sequelize, DataTypes) => {
             },
             field: 'payment_method',
         },
+        inventoryReleasedAt: {
+            type: DataTypes.DATE,
+            allowNull: true,
+            field: 'inventory_released_at',
+        },
     }, {
         tableName: 'orders',
         timestamps: true,
@@ -143,6 +148,7 @@ module.exports = (sequelize, DataTypes) => {
         Order.hasMany(models.OrderRefund, { foreignKey: 'orderId', as: 'refunds', onDelete: 'CASCADE' });
         Order.hasMany(models.OrderStatusHistory, { foreignKey: 'orderId', as: 'statusHistory', onDelete: 'CASCADE' });
         Order.hasMany(models.OrderHistory, { foreignKey: 'orderId', as: 'history', onDelete: 'CASCADE' });
+        Order.hasMany(models.InventoryTransaction, { foreignKey: 'orderId', as: 'inventoryTransactions' });
     };
 
     return Order;

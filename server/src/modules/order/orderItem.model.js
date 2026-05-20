@@ -93,6 +93,7 @@ module.exports = (sequelize, DataTypes) => {
         OrderItem.hasMany(models.FulfillmentItem, { foreignKey: 'orderItemId', as: 'fulfillmentItems' });
         OrderItem.hasMany(models.ShipmentItem, { foreignKey: 'orderItemId', as: 'shipmentItems' });
         OrderItem.hasMany(models.OrderReturnItem, { foreignKey: 'orderItemId', as: 'returnItems' });
+        OrderItem.hasMany(models.InventoryTransaction, { foreignKey: 'orderItemId', as: 'inventoryTransactions' });
     };
 
     return OrderItem;

@@ -2,8 +2,9 @@
 
 const cron = require('node-cron');
 const { Op, Transaction } = require('sequelize');
-const { Order, OrderItem, Product, ProductVariant, Coupon, CouponUsage, sequelize } = require('../modules');
+const { Order, OrderItem, Coupon, CouponUsage, sequelize } = require('../modules');
 const AuditService = require('../modules/audit/audit.service');
+const InventoryService = require('../modules/inventory/inventory.service');
 const logger = require('../utils/logger');
 
 const run = () => {
@@ -45,67 +46,31 @@ const run = () => {
       }, {});
 
       for (const order of expiredOrders) {
+        if (order.inventoryReleasedAt) {
+          continue;
+        }
         const orderItemsForOrder = itemsByOrderId[order.id] || [];
         const variantProductIdsToSync = new Set();
-        // Release product-level reserved inventory.
-        // GREATEST(..., 0) ensures we never go below zero even if there's
-        // a data inconsistency (e.g. a prior partial decrement).
         for (const item of orderItemsForOrder) {
           if (item.productId && item.quantity > 0) {
-            if (item.variantId) {
-              await ProductVariant.update(
-                {
-                  reservedQty: sequelize.literal(
-                    `GREATEST(reserved_qty - ${item.quantity}, 0)`
-                  ),
-                },
-                {
-                  where: {
-                    id: item.variantId,
-                    reservedQty: { [Op.gt]: 0 },
-                  },
-                  transaction,
-                }
-              );
-              variantProductIdsToSync.add(String(item.productId));
-            } else {
-              await Product.update(
-                {
-                  reservedQty: sequelize.literal(
-                    `GREATEST(reserved_qty - ${item.quantity}, 0)`
-                  ),
-                },
-                {
-                  where: {
-                    id: item.productId,
-                    // Only decrement if there is actually something reserved —
-                    // guards against double-firing on already-released inventory.
-                    reservedQty: { [Op.gt]: 0 },
-                  },
-                  transaction,
-                }
-              );
-            }
+            await InventoryService.release({
+              productId: item.productId,
+              variantId: item.variantId || null,
+              qty: Number(item.quantity),
+              orderId: order.id,
+              orderItemId: item.id,
+              metadata: {
+                reason: 'pending_payment_timeout',
+              },
+              transaction,
+              syncParent: false,
+            });
+            if (item.variantId) variantProductIdsToSync.add(String(item.productId));
           }
         }
 
         for (const productId of variantProductIdsToSync) {
-          const [stockSum, reservedSum] = await Promise.all([
-            ProductVariant.sum('stockQty', {
-              where: { productId, isActive: true },
-              transaction,
-            }),
-            ProductVariant.sum('reservedQty', {
-              where: { productId, isActive: true },
-              transaction,
-            }),
-          ]);
-          const nextReserved = Number(reservedSum || 0);
-          const nextQuantity = Math.max(Number(stockSum || 0), nextReserved);
-          await Product.update(
-            { quantity: nextQuantity, reservedQty: nextReserved },
-            { where: { id: productId }, transaction }
-          );
+          await InventoryService.syncParentProductFromVariants(productId, transaction);
         }
 
         // Release coupons if any
@@ -132,7 +97,7 @@ const run = () => {
           }
         }
 
-        await order.update({ status: 'cancelled' }, { transaction });
+        await order.update({ status: 'cancelled', inventoryReleasedAt: new Date() }, { transaction });
 
         try {
           await AuditService.log({

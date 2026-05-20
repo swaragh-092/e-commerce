@@ -43,6 +43,7 @@ const { events, PRODUCT_EVENTS, ORDER_EVENTS } = require('../../utils/events');
 const defaultSettings = require('../../../../config/default.json');
 
 const NotificationService = require('../notification/notification.service');
+const InventoryService = require('../inventory/inventory.service');
 
 const { getPagination } = require('../../utils/pagination');
 const { ACTIONS, ENTITIES } = require('../../config/constants');
@@ -436,27 +437,6 @@ const getPrimaryProductImageUrl = (product = {}) => {
     return image?.url || null;
 };
 
-const syncParentProductFromVariants = async (productId, transaction) => {
-    if (!productId) return;
-    const [stockSum, reservedSum] = await Promise.all([
-        ProductVariant.sum('stockQty', {
-            where: { productId, isActive: true },
-            transaction,
-        }),
-        ProductVariant.sum('reservedQty', {
-            where: { productId, isActive: true },
-            transaction,
-        }),
-    ]);
-    const nextReserved = Number(reservedSum || 0);
-    const nextQuantity = Math.max(Number(stockSum || 0), nextReserved);
-    await Product.update(
-        { quantity: nextQuantity, reservedQty: nextReserved },
-        { where: { id: productId }, transaction }
-    );
-};
-
-
 const HEAVY_ORDER_INCLUDE = [
     {
         model: OrderItem,
@@ -709,6 +689,10 @@ const buildOrderTimeline = (order, progress) => {
 };
 
 const releaseOrderReservationsAndCoupons = async (order, transaction) => {
+    if (order.inventoryReleasedAt) {
+        return [];
+    }
+
     const orderItems = order.items || await OrderItem.findAll({
         where: { orderId: order.id },
         transaction,
@@ -717,30 +701,20 @@ const releaseOrderReservationsAndCoupons = async (order, transaction) => {
     const eventBuffer = [];
     const variantProductIdsToSync = new Set();
     for (const item of orderItems) {
-        if (item.variantId) {
-            await ProductVariant.update(
-                { reservedQty: sequelize.literal(`GREATEST(reserved_qty - ${item.quantity}, 0)`) },
-                {
-                    where: {
-                        id: item.variantId,
-                        reservedQty: { [Op.gt]: 0 },
-                    },
-                    transaction,
-                }
-            );
-            if (item.productId) variantProductIdsToSync.add(String(item.productId));
-        } else if (item.productId) {
-            await Product.update(
-                { reservedQty: sequelize.literal(`GREATEST(reserved_qty - ${item.quantity}, 0)`) },
-                {
-                    where: {
-                        id: item.productId,
-                        reservedQty: { [Op.gt]: 0 },
-                    },
-                    transaction,
-                }
-            );
-        }
+        if (!item.productId || Number(item.quantity) <= 0) continue;
+        await InventoryService.release({
+            productId: item.productId,
+            variantId: item.variantId || null,
+            qty: Number(item.quantity),
+            orderId: order.id,
+            orderItemId: item.id,
+            metadata: {
+                reason: 'order_cancel_or_release',
+            },
+            transaction,
+            syncParent: false,
+        });
+        if (item.variantId) variantProductIdsToSync.add(String(item.productId));
         
         eventBuffer.push({
             name: PRODUCT_EVENTS.STOCK_CHANGED,
@@ -754,8 +728,10 @@ const releaseOrderReservationsAndCoupons = async (order, transaction) => {
     }
 
     for (const productId of variantProductIdsToSync) {
-        await syncParentProductFromVariants(productId, transaction);
+        await InventoryService.syncParentProductFromVariants(productId, transaction);
     }
+
+    await order.update({ inventoryReleasedAt: new Date() }, { transaction });
 
     const appliedCouponIds = Array.from(new Set([
         ...(Array.isArray(order.appliedDiscounts) ? order.appliedDiscounts.map((item) => item.couponId).filter(Boolean) : []),
@@ -1236,43 +1212,33 @@ const placeOrder = async (userId, payload) => {
 
         const eventBuffer = [];
 
-        const variantProductIdsToSync = new Set();
         for (const item of checkoutItems) {
             const product = item.currentProduct;
-            let updatedRows;
             
             if (item.variantId) {
-                updatedRows = await ProductVariant.update(
-                    { reservedQty: sequelize.literal(`reserved_qty + ${item.quantity}`) },
-                    {
-                        where: {
-                            id: item.variantId,
-                            [Op.and]: sequelize.literal(`(stock_qty - reserved_qty) >= ${item.quantity}`)
-                        },
-                        transaction: t
-                    }
-                );
-                if (item.productId) variantProductIdsToSync.add(String(item.productId));
+                await InventoryService.reserve({
+                    productId: item.productId,
+                    variantId: item.variantId,
+                    qty: Number(item.quantity),
+                    metadata: {
+                        reason: 'order_placement_reserve',
+                    },
+                    transaction: t,
+                });
             } else if (product.type === 'combo') {
                 // Combo products: validate virtual stock against all constituents.
                 // Stock deduction happens per-constituent after OrderItem creation.
                 await productComboService.validateComboStock(product.id, item.quantity, t);
-                updatedRows = [1]; // sentinel — validation passed, skip standard reservation
             } else {
-                updatedRows = await Product.update(
-                    { reservedQty: sequelize.literal(`reserved_qty + ${item.quantity}`) },
-                    { 
-                        where: { 
-                            id: product.id, 
-                            [Op.and]: sequelize.literal(`(quantity - reserved_qty) >= ${item.quantity}`)
-                        }, 
-                        transaction: t 
-                    }
-                );
-            }
-
-            if (updatedRows[0] === 0) {
-                 throw new AppError('CONFLICT', 409, `Insufficient stock for product ${product.name}`);
+                await InventoryService.reserve({
+                    productId: product.id,
+                    variantId: null,
+                    qty: Number(item.quantity),
+                    metadata: {
+                        reason: 'order_placement_reserve',
+                    },
+                    transaction: t,
+                });
             }
             
             eventBuffer.push({
@@ -1284,10 +1250,6 @@ const placeOrder = async (userId, payload) => {
                     type: 'reservation'
                 }
             });
-        }
-
-        for (const productId of variantProductIdsToSync) {
-            await syncParentProductFromVariants(productId, t);
         }
 
         const crypto = require('crypto');
@@ -1862,6 +1824,7 @@ const createFulfillment = async (orderId, payload, actingUserId, auditContext = 
                 remaining:     oi.quantity - alreadyShipped,
                 productId:     oi.productId,
                 variantId:     oi.variantId,
+                isCombo:       Boolean(oi.isCombo),
                 snapshotName:  oi.snapshotName,
                 snapshotSku:   oi.snapshotSku,
                 snapshotPrice: oi.snapshotPrice,
@@ -1904,6 +1867,7 @@ const createFulfillment = async (orderId, payload, actingUserId, auditContext = 
             const qty  = Number(item.quantity);
             const info = orderItemMap[item.orderItemId];
             if (!info?.productId) continue; 
+            if (info.isCombo) continue;
             
             const key = `${info.productId}:${info.variantId || ''}`;
             stockDeductions.set(
@@ -1913,73 +1877,20 @@ const createFulfillment = async (orderId, payload, actingUserId, auditContext = 
         }
 
         // Row-lock each product/variant then perform strict atomic stock deduction
-        const variantProductIdsToSync = new Set();
         for (const [key, qty] of stockDeductions) {
             const [productId, variantIdStr] = key.split(':');
             const variantId = variantIdStr || null;
 
-            if (variantId) {
-                const variant = await ProductVariant.findByPk(variantId, {
-                    transaction: t,
-                    lock: Transaction.LOCK.UPDATE,
-                });
-
-                if (!variant) {
-                    throw new AppError('NOT_FOUND', 404, `Variant ${variantId} not found during stock deduction`);
-                }
-
-                const [affectedRows] = await ProductVariant.update(
-                    {
-                        stockQty: sequelize.literal(`stock_qty - ${qty}`),
-                        reservedQty: sequelize.literal(`reserved_qty - ${qty}`),
-                    },
-                    {
-                        where: {
-                            id: variantId,
-                            stockQty: { [Op.gte]: qty },
-                            reservedQty: { [Op.gte]: qty },
-                        },
-                        transaction: t,
-                    }
-                );
-
-                if (affectedRows === 0) {
-                    throw new AppError('CONFLICT', 409, `Stock deduction failed for variant ${variant.sku}: insufficient quantity or reserved stock.`);
-                }
-                variantProductIdsToSync.add(String(productId));
-            } else {
-                const product = await Product.findByPk(productId, {
-                    transaction: t,
-                    lock: Transaction.LOCK.UPDATE,
-                });
-
-                if (!product) {
-                    throw new AppError('NOT_FOUND', 404, `Product ${productId} not found during stock deduction`);
-                }
-
-                const [affectedRows] = await Product.update(
-                    {
-                        quantity: sequelize.literal(`quantity - ${qty}`),
-                        reservedQty: sequelize.literal(`reserved_qty - ${qty}`),
-                    },
-                    {
-                        where: {
-                            id: productId,
-                            quantity: { [Op.gte]: qty },
-                            reservedQty: { [Op.gte]: qty },
-                        },
-                        transaction: t,
-                    }
-                );
-
-                if (affectedRows === 0) {
-                    throw new AppError('CONFLICT', 409, `Stock deduction failed for "${product.name}": insufficient quantity or reserved stock.`);
-                }
-            }
-        }
-
-        for (const productId of variantProductIdsToSync) {
-            await syncParentProductFromVariants(productId, t);
+            await InventoryService.shipDeduct({
+                productId,
+                variantId,
+                qty,
+                orderId,
+                metadata: {
+                    reason: 'shipment_created',
+                },
+                transaction: t,
+            });
         }
 
         // Determine Provider
@@ -2491,7 +2402,12 @@ const cancelOrder = async (id, userId) => {
     let orderRecord, prevStatus, eventsToEmit;
 
     await sequelize.transaction(async (t) => {
-        const order = await Order.findOne({ where: { id, userId }, include: [{ model: OrderItem, as: 'items' }], transaction: t });
+        const order = await Order.findOne({
+            where: { id, userId },
+            include: [{ model: OrderItem, as: 'items' }],
+            transaction: t,
+            lock: Transaction.LOCK.UPDATE,
+        });
         if (!order) throw new AppError('NOT_FOUND', 404, 'Order not found');
 
         prevStatus = order.status;

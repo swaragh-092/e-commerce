@@ -134,7 +134,10 @@ const getWishlist = async (userId) => {
           ? serializeVariantPricing(serializedProduct, plainItem.variant)
           : null;
         const availableStock = serializedVariant
-          ? Number(serializedVariant.stockQty || 0)
+          ? Math.max(
+            0,
+            Number(serializedVariant.stockQty || 0) - Number(serializedVariant.reservedQty || 0)
+          )
           : Math.max(0, Number(serializedProduct.quantity || 0) - Number(serializedProduct.reservedQty || 0));
 
         return {

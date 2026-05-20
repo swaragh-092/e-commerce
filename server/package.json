@@ -9,6 +9,7 @@
         "test": "vitest",
         "migrate": "npx sequelize-cli db:migrate",
         "migrate:undo": "npx sequelize-cli db:migrate:undo",
+        "inventory:reconcile": "node src/scripts/reconcileInventory.js",
         "seed": "npx sequelize-cli db:seed:all",
         "seed:undo": "npx sequelize-cli db:seed:undo:all",
         "db:reset": "npx sequelize-cli db:drop && npx sequelize-cli db:create && npm run migrate && npm run seed"

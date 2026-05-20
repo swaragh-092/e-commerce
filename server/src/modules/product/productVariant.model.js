@@ -73,6 +73,10 @@ module.exports = (sequelize, DataTypes) => {
             as: 'images',
             onDelete: 'CASCADE',
         });
+        ProductVariant.hasMany(models.InventoryTransaction, {
+            foreignKey: 'variantId',
+            as: 'inventoryTransactions',
+        });
     };
 
     return ProductVariant;

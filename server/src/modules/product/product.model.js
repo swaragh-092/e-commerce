@@ -162,6 +162,7 @@ module.exports = (sequelize, DataTypes) => {
         Product.hasMany(models.CartItem, { foreignKey: 'productId' });
         Product.hasMany(models.WishlistItem, { foreignKey: 'productId', onDelete: 'CASCADE' });
         Product.hasMany(models.ProductTab, { foreignKey: 'productId', as: 'tabs', onDelete: 'CASCADE' });
+        Product.hasMany(models.InventoryTransaction, { foreignKey: 'productId', as: 'inventoryTransactions' });
         // Combo: items this product bundles (only populated when type === 'combo')
         Product.hasMany(models.ProductComboItem, { foreignKey: 'comboProductId', as: 'comboItems', onDelete: 'CASCADE' });
         // Reverse: which combos include this product as a constituent?
