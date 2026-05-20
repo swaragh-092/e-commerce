@@ -16,13 +16,19 @@ const syncProductVariantStock = async (productId, transaction = null) => {
         where: { productId, isActive: true },
         transaction,
     });
+    const product = await Product.findByPk(productId, {
+        attributes: ['id', 'reservedQty'],
+        transaction,
+    });
+    const reservedQty = Number(product?.reservedQty || 0);
+    const nextQuantity = Math.max(Number(total || 0), reservedQty);
 
     await Product.update(
-        { quantity: Number(total || 0) },
+        { quantity: nextQuantity },
         { where: { id: productId }, transaction }
     );
 
-    return Number(total || 0);
+    return nextQuantity;
 };
 
 // ── Reusable include for variant detail ──────────────────────────────────────

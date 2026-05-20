@@ -25,7 +25,11 @@ import {
     resolveAttributePresentation,
 } from '../../utils/attributePresentation';
 
-const isVariantAvailable = (variant) => variant?.isActive !== false && Number(variant?.stockQty || 0) > 0;
+const isVariantAvailable = (variant) => {
+    const stock = Number(variant?.stockQty || 0);
+    const reserved = Number(variant?.reservedQty || 0);
+    return variant?.isActive !== false && (stock - reserved) > 0;
+};
 
 const VariantSelector = ({ variants, selectedVariantId, onSelect }) => {
     const activeVariants = useMemo(

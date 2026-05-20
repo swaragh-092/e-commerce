@@ -46,28 +46,66 @@ const run = () => {
 
       for (const order of expiredOrders) {
         const orderItemsForOrder = itemsByOrderId[order.id] || [];
+        const variantProductIdsToSync = new Set();
         // Release product-level reserved inventory.
         // GREATEST(..., 0) ensures we never go below zero even if there's
         // a data inconsistency (e.g. a prior partial decrement).
         for (const item of orderItemsForOrder) {
           if (item.productId && item.quantity > 0) {
-            await Product.update(
-              {
-                reservedQty: sequelize.literal(
-                  `GREATEST(reserved_qty - ${item.quantity}, 0)`
-                ),
-              },
-              {
-                where: {
-                  id: item.productId,
-                  // Only decrement if there is actually something reserved —
-                  // guards against double-firing on already-released inventory.
-                  reservedQty: { [Op.gt]: 0 },
+            if (item.variantId) {
+              await ProductVariant.update(
+                {
+                  reservedQty: sequelize.literal(
+                    `GREATEST(reserved_qty - ${item.quantity}, 0)`
+                  ),
                 },
-                transaction,
-              }
-            );
+                {
+                  where: {
+                    id: item.variantId,
+                    reservedQty: { [Op.gt]: 0 },
+                  },
+                  transaction,
+                }
+              );
+              variantProductIdsToSync.add(String(item.productId));
+            } else {
+              await Product.update(
+                {
+                  reservedQty: sequelize.literal(
+                    `GREATEST(reserved_qty - ${item.quantity}, 0)`
+                  ),
+                },
+                {
+                  where: {
+                    id: item.productId,
+                    // Only decrement if there is actually something reserved —
+                    // guards against double-firing on already-released inventory.
+                    reservedQty: { [Op.gt]: 0 },
+                  },
+                  transaction,
+                }
+              );
+            }
           }
+        }
+
+        for (const productId of variantProductIdsToSync) {
+          const [stockSum, reservedSum] = await Promise.all([
+            ProductVariant.sum('stockQty', {
+              where: { productId, isActive: true },
+              transaction,
+            }),
+            ProductVariant.sum('reservedQty', {
+              where: { productId, isActive: true },
+              transaction,
+            }),
+          ]);
+          const nextReserved = Number(reservedSum || 0);
+          const nextQuantity = Math.max(Number(stockSum || 0), nextReserved);
+          await Product.update(
+            { quantity: nextQuantity, reservedQty: nextReserved },
+            { where: { id: productId }, transaction }
+          );
         }
 
         // Release coupons if any

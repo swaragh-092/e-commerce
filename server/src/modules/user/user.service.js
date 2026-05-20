@@ -1,6 +1,7 @@
 'use strict';
 
 const { sequelize, User, UserProfile, Order, Address, Media, Role, Permission } = require('../index');
+const { Op } = require('sequelize');
 const AppError = require('../../utils/AppError');
 const AuditService = require('../audit/audit.service');
 const { getPagination } = require('../../utils/pagination');
@@ -157,11 +158,19 @@ const updateAvatar = async (userId, mediaId) => {
   });
 };
 
-const listAll = async ({ page, limit, status, role }) => {
+const listAll = async ({ page, limit, status, role, search }) => {
   const { limit: lmt, offset } = getPagination(page, limit);
   const where = {};
   if (status) where.status = status;
   if (role) where.role = role;
+  if (search && search.trim()) {
+    const pattern = `%${search.trim()}%`;
+    where[Op.or] = [
+      { firstName: { [Op.iLike]: pattern } },
+      { lastName: { [Op.iLike]: pattern } },
+      { email: { [Op.iLike]: pattern } },
+    ];
+  }
 
   return User.findAndCountAll({
     where,
@@ -184,7 +193,7 @@ const getById = async (id) => {
         separate: true,
         limit: 10,
         order: [['createdAt', 'DESC']],
-        attributes: ['id', 'orderNumber', 'status', 'orderShippingStatus', 'shipmentStatus', 'total', 'paymentMethod', 'createdAt', 'updatedAt'],
+        attributes: ['id', 'orderNumber', 'status', 'orderShippingStatus', 'total', 'paymentMethod', 'createdAt', 'updatedAt'],
       },
     ],
     attributes: { exclude: ['password'] }

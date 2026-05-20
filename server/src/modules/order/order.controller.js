@@ -3,6 +3,7 @@ const OrderService = require('./order.service');
 const { success, paginated } = require('../../utils/response');
 const { PERMISSIONS, getPermissionsForUser } = require('../../config/permissions');
 const AppError = require('../../utils/AppError');
+const logger = require('../../utils/logger');
 
 const hasOrderAdminAccess = (user) => getPermissionsForUser(user).includes(PERMISSIONS.ORDERS_READ);
 
@@ -19,9 +20,28 @@ const getOrders = async (req, res, next) => {
   try {
     const { page, limit, status, orderShippingStatus, search, productId } = req.query;
     const isAdminSession = hasOrderAdminAccess(req.user);
+    logger.debug('OrderController.getOrders: request', {
+      requestId: req.id,
+      userId: req.user?.id,
+      isAdminSession,
+      page,
+      limit,
+      hasSearch: Boolean(search && String(search).trim()),
+      status: status || null,
+      orderShippingStatus: orderShippingStatus || null,
+      hasProductId: Boolean(productId),
+    });
     const result = await OrderService.getOrders(req.user.id, isAdminSession, page, limit, { status, orderShippingStatus, search, productId });
     return paginated(res, result.rows, result.count, page, limit, 'Success', { counts: result.counts || {} });
   } catch (err) {
+    logger.error('OrderController.getOrders: failed', {
+      requestId: req.id,
+      userId: req.user?.id,
+      message: err.message,
+      name: err.name,
+      code: err.code,
+      statusCode: err.statusCode,
+    });
     next(err);
   }
 };

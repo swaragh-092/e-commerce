@@ -230,8 +230,14 @@ const productHasVariants = async (productId, transaction = null) => {
 
 const syncProductVariantStock = async (productId, transaction = null) => {
   const quantity = await getVariantStockTotal(productId, transaction);
-  await Product.update({ quantity }, { where: { id: productId }, transaction });
-  return quantity;
+  const product = await Product.findByPk(productId, {
+    attributes: ['id', 'reservedQty'],
+    transaction,
+  });
+  const reservedQty = Number(product?.reservedQty || 0);
+  const nextQuantity = Math.max(Number(quantity || 0), reservedQty);
+  await Product.update({ quantity: nextQuantity }, { where: { id: productId }, transaction });
+  return nextQuantity;
 };
 
 const createVariantsWithOptions = async (productId, variants, transaction) => {
@@ -330,7 +336,11 @@ exports.getProducts = async (filters, page, limit, isAdmin = false) => {
     if (filters.maxPrice) where.price[Op.lte] = filters.maxPrice;
   }
   if (filters.maxQty !== undefined && filters.maxQty !== null) {
-    where.quantity = { [Op.lte]: parseInt(filters.maxQty) };
+    const maxQty = parseInt(filters.maxQty, 10);
+    where[Op.and] = [
+      ...(where[Op.and] || []),
+      Sequelize.literal(`("Product"."quantity" - "Product"."reserved_qty") <= ${maxQty}`),
+    ];
   }
   if (filters.brand) {
     const isUUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(filters.brand);

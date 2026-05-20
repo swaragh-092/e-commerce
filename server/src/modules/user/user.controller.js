@@ -45,8 +45,8 @@ const changePassword = async (req, res, next) => {
 // Admin Endpoints
 const list = async (req, res, next) => {
   try {
-    const { page, limit, status, role } = req.query;
-    const result = await UserService.listAll({ page, limit, status, role });
+    const { page, limit, status, role, search } = req.query;
+    const result = await UserService.listAll({ page, limit, status, role, search });
     return paginated(res, result.rows.map((user) => enrichUserAuthorization(user)), result.count, page, limit);
   } catch (err) {
     next(err);

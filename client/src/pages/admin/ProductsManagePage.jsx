@@ -237,12 +237,15 @@ const ProductsManagePage = () => {
     const headers = ['Name', 'SKU', 'Price', 'Sale Price', 'Stock', 'Status'];
     const csvRows = [headers.join(',')];
     rows.forEach((r) => {
+      const total = Number(r?.quantity || 0);
+      const reserved = Number(r?.reservedQty || 0);
+      const available = Math.max(0, total - reserved);
       csvRows.push([
         `"${(r.name || '').replace(/"/g, '""')}"`,
         `"${r.sku || ''}"`,
         r.price,
         r.salePrice ?? '',
-        r.quantity,
+        available,
         r.status,
       ].join(','));
     });
@@ -596,19 +599,23 @@ const ProductsManagePage = () => {
     {
       field: 'quantity',
       headerName: 'Stock',
-      width: 90,
+      width: 120,
       sortable: true,
-      renderCell: ({ value }) => {
-        const v = Number(value);
-        const color = v === 0 ? 'error' : v <= LOW_STOCK_THRESHOLD ? 'warning' : 'success';
+      renderCell: ({ row }) => {
+        const total = Number(row?.quantity || 0);
+        const reserved = Number(row?.reservedQty || 0);
+        const available = Math.max(0, total - reserved);
+        const color = available === 0 ? 'error' : available <= LOW_STOCK_THRESHOLD ? 'warning' : 'success';
         return (
-          <Chip
-            label={v}
-            size="small"
-            color={color}
-            variant={v === 0 ? 'filled' : 'outlined'}
-            sx={{ fontWeight: 700, minWidth: 48 }}
-          />
+          <Tooltip title={`Available ${available} (Total ${total}, Reserved ${reserved})`}>
+            <Chip
+              label={available}
+              size="small"
+              color={color}
+              variant={available === 0 ? 'filled' : 'outlined'}
+              sx={{ fontWeight: 700, minWidth: 54 }}
+            />
+          </Tooltip>
         );
       },
     },

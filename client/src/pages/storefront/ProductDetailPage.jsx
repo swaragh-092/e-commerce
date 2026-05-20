@@ -33,6 +33,12 @@ import RelatedProducts from '../../components/product/RelatedProducts';
 import ProductTabsAccordion from '../../components/storefront/ProductTabsAccordion';
 import { getApiErrorMessage } from '../../utils/apiErrors';
 
+const getAvailableStock = (entity, stockKey) => {
+    const total = Number(entity?.[stockKey] || 0);
+    const reserved = Number(entity?.reservedQty || 0);
+    return Math.max(0, total - reserved);
+};
+
 const ProductDetailPage = () => {
     const { slug } = useParams();
     const location = useLocation();
@@ -85,7 +91,7 @@ const ProductDetailPage = () => {
             }
             setProduct(nextProduct);
             if (nextProduct?.variants?.length > 0) {
-                const initialVariant = nextProduct.variants.find((variant) => variant?.isActive !== false && Number(variant?.stockQty || 0) > 0)
+                const initialVariant = nextProduct.variants.find((variant) => variant?.isActive !== false && getAvailableStock(variant, 'stockQty') > 0)
                     || nextProduct.variants.find((variant) => variant?.isActive !== false)
                     || nextProduct.variants[0];
                 setSelectedVariant(initialVariant || null);
@@ -245,7 +251,9 @@ const ProductDetailPage = () => {
     const showDiscountPercent = sales.showDiscountPercent !== false;
     const showSavingsAmount = sales.showSavingsAmount !== false;
     const endingSoon = hasSale && sales.showCountdown !== false && isEndingSoon(product.saleEndAt, sales.endingSoonHours);
-    const maxStock = selectedVariant ? Number(selectedVariant.stockQty || 0) : Number(product.quantity || 0);
+    const maxStock = selectedVariant
+        ? getAvailableStock(selectedVariant, 'stockQty')
+        : getAvailableStock(product, 'quantity');
     const stockAvailable = maxStock > 0;
     const selectedVariantLabel = selectedVariant ? getVariantOptionLabel(selectedVariant) : '';
     const displaySku = selectedVariant?.sku || product.sku;

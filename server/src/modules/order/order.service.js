@@ -30,6 +30,7 @@ const {
     UserProfile,
 } = require('../index');
 const AppError = require('../../utils/AppError');
+const logger = require('../../utils/logger');
 const AuditService = require('../audit/audit.service');
 const CouponService = require('../coupon/coupon.service');
 const PaymentService = require('../payment/payment.service');
@@ -435,6 +436,26 @@ const getPrimaryProductImageUrl = (product = {}) => {
     return image?.url || null;
 };
 
+const syncParentProductFromVariants = async (productId, transaction) => {
+    if (!productId) return;
+    const [stockSum, reservedSum] = await Promise.all([
+        ProductVariant.sum('stockQty', {
+            where: { productId, isActive: true },
+            transaction,
+        }),
+        ProductVariant.sum('reservedQty', {
+            where: { productId, isActive: true },
+            transaction,
+        }),
+    ]);
+    const nextReserved = Number(reservedSum || 0);
+    const nextQuantity = Math.max(Number(stockSum || 0), nextReserved);
+    await Product.update(
+        { quantity: nextQuantity, reservedQty: nextReserved },
+        { where: { id: productId }, transaction }
+    );
+};
+
 
 const HEAVY_ORDER_INCLUDE = [
     {
@@ -694,6 +715,7 @@ const releaseOrderReservationsAndCoupons = async (order, transaction) => {
     });
 
     const eventBuffer = [];
+    const variantProductIdsToSync = new Set();
     for (const item of orderItems) {
         if (item.variantId) {
             await ProductVariant.update(
@@ -706,6 +728,7 @@ const releaseOrderReservationsAndCoupons = async (order, transaction) => {
                     transaction,
                 }
             );
+            if (item.productId) variantProductIdsToSync.add(String(item.productId));
         } else if (item.productId) {
             await Product.update(
                 { reservedQty: sequelize.literal(`GREATEST(reserved_qty - ${item.quantity}, 0)`) },
@@ -728,6 +751,10 @@ const releaseOrderReservationsAndCoupons = async (order, transaction) => {
                 type: 'release'
             }
         });
+    }
+
+    for (const productId of variantProductIdsToSync) {
+        await syncParentProductFromVariants(productId, transaction);
     }
 
     const appliedCouponIds = Array.from(new Set([
@@ -1209,6 +1236,7 @@ const placeOrder = async (userId, payload) => {
 
         const eventBuffer = [];
 
+        const variantProductIdsToSync = new Set();
         for (const item of checkoutItems) {
             const product = item.currentProduct;
             let updatedRows;
@@ -1224,6 +1252,7 @@ const placeOrder = async (userId, payload) => {
                         transaction: t
                     }
                 );
+                if (item.productId) variantProductIdsToSync.add(String(item.productId));
             } else if (product.type === 'combo') {
                 // Combo products: validate virtual stock against all constituents.
                 // Stock deduction happens per-constituent after OrderItem creation.
@@ -1255,6 +1284,10 @@ const placeOrder = async (userId, payload) => {
                     type: 'reservation'
                 }
             });
+        }
+
+        for (const productId of variantProductIdsToSync) {
+            await syncParentProductFromVariants(productId, t);
         }
 
         const crypto = require('crypto');
@@ -1521,12 +1554,27 @@ const placeOrder = async (userId, payload) => {
 const getOrders = async (userId, isAdmin, page = 1, limit = 20, filters = {}) => {
     const { limit: lmt, offset } = getPagination(page, limit);
     const where = isAdmin ? {} : { userId };
+    const andClauses = [];
 
     const normalizedStatus = typeof filters.status === 'string' ? filters.status.trim() : '';
     const normalizedShippingStatus = typeof filters.orderShippingStatus === 'string' ? filters.orderShippingStatus.trim() : '';
     const normalizedSearch = typeof filters.search === 'string' ? filters.search.trim() : '';
     const productId = filters.productId;
-    // We'll apply productId filter inside the include to stay subQuery-safe
+    // Apply product filter with EXISTS so list query and grouped count query
+    // can share identical predicates without fragile include/group behavior.
+    if (productId) {
+        andClauses.push(
+            sequelize.where(
+                sequelize.literal(`EXISTS (
+                    SELECT 1
+                    FROM order_items AS oi
+                    WHERE oi.order_id = "Order"."id"
+                      AND oi.product_id = ${sequelize.escape(productId)}
+                )`),
+                true
+            )
+        );
+    }
 
 
     // if (normalizedStatus) {
@@ -1563,8 +1611,7 @@ const getOrders = async (userId, isAdmin, page = 1, limit = 20, filters = {}) =>
     include.push({
         model: OrderItem,
         as: 'items',
-        required: !!productId,
-        where: productId ? { productId } : undefined,
+        required: false,
         include: [
             {
                 model: Product,
@@ -1580,68 +1627,132 @@ const getOrders = async (userId, isAdmin, page = 1, limit = 20, filters = {}) =>
         const searchClauses = [
             { orderNumber: { [Op.iLike]: searchPattern } },
             { status: { [Op.iLike]: searchPattern } },
-            { '$items.product.name$': { [Op.iLike]: searchPattern } },
+            // Avoid fragile nested-include alias references in paginated/count queries.
+            // Use EXISTS against order_items/products so Postgres always has a valid FROM path.
+            sequelize.where(
+                sequelize.literal(`EXISTS (
+                    SELECT 1
+                    FROM order_items AS oi
+                    INNER JOIN products AS p ON p.id = oi.product_id
+                    WHERE oi.order_id = "Order"."id"
+                      AND p.name ILIKE ${sequelize.escape(searchPattern)}
+                )`),
+                true
+            ),
         ];
         if (isAdmin) {
             searchClauses.push(
-                { '$User.first_name$': { [Op.iLike]: searchPattern } },
-                { '$User.last_name$': { [Op.iLike]: searchPattern } },
-                { '$User.email$': { [Op.iLike]: searchPattern } }
+                sequelize.where(
+                    sequelize.literal(`EXISTS (
+                        SELECT 1
+                        FROM users AS u
+                        WHERE u.id = "Order"."user_id"
+                          AND (
+                            u.first_name ILIKE ${sequelize.escape(searchPattern)}
+                            OR u.last_name ILIKE ${sequelize.escape(searchPattern)}
+                            OR u.email ILIKE ${sequelize.escape(searchPattern)}
+                          )
+                    )`),
+                    true
+                )
             );
         }
         where[Op.or] = searchClauses;
     }
-    
 
-    const result = await Order.findAndCountAll({
-        where,
-        include,
-        limit: lmt,
-        offset,
-        order: [['createdAt', 'DESC']],
-        distinct: true,
-        // Only use subQuery: false if we have a search that joins User or items, 
-        // as Sequelize root 'where' with '$' syntax requires it.
-        subQuery: !!normalizedSearch,
+    if (andClauses.length) {
+        where[Op.and] = andClauses;
+    }
+
+    logger.debug('OrderService.getOrders: start', {
+        userId,
+        isAdmin,
+        page,
+        limit,
+        hasSearch: Boolean(normalizedSearch),
+        hasStatus: Boolean(normalizedStatus),
+        hasShippingStatus: Boolean(normalizedShippingStatus),
+        hasProductId: Boolean(productId),
     });
+
+    let pagedIds = [];
+    let totalCount = 0;
+    try {
+        [pagedIds, totalCount] = await Promise.all([
+            Order.findAll({
+                where,
+                attributes: ['id'],
+                limit: lmt,
+                offset,
+                order: [['createdAt', 'DESC']],
+                raw: true,
+            }),
+            Order.count({
+                where,
+                distinct: true,
+                col: 'id',
+            }),
+        ]);
+    } catch (err) {
+        logger.error('OrderService.getOrders: id/count query failed', {
+            error: err.message,
+            name: err.name,
+            sql: err.sql,
+            original: err.original?.message,
+        });
+        throw err;
+    }
+
+    const orderIds = pagedIds.map((row) => row.id);
+    let rows = [];
+    if (orderIds.length > 0) {
+        try {
+            rows = await Order.findAll({
+                where: { id: { [Op.in]: orderIds } },
+                include,
+                order: [['createdAt', 'DESC']],
+            });
+        } catch (err) {
+            logger.error('OrderService.getOrders: rows query failed', {
+                error: err.message,
+                name: err.name,
+                sql: err.sql,
+                original: err.original?.message,
+            });
+            throw err;
+        }
+    }
 
     let counts = {};
     if (isAdmin) {
-        const countWhere = { ...where };
-        delete countWhere.status;
+        try {
+            const countWhere = { ...where };
+            delete countWhere.status;
 
-        // Ensure we include items if productId filter is active or search is active
-        const countInclude = (normalizedSearch ? include : [])
-            .map(inc => ({ ...inc, attributes: [] }));
-        if (productId && !countInclude.some(inc => inc.as === 'items')) {
-            countInclude.push({
-                model: OrderItem,
-                as: 'items',
-                attributes: [],
-                required: true,
-                include: [{ model: Product, as: 'product', attributes: [] }]
+            const statusCounts = await Order.findAll({
+                where: countWhere,
+                attributes: [
+                    [sequelize.col('Order.status'), 'status'],
+                    [sequelize.fn('COUNT', sequelize.fn('DISTINCT', sequelize.col('Order.id'))), 'count']
+                ],
+                group: [sequelize.col('Order.status')],
+                raw: true
             });
+            counts = statusCounts.reduce((acc, curr) => {
+                acc[curr.status] = parseInt(curr.count, 10);
+                return acc;
+            }, {});
+        } catch (err) {
+            logger.error('Order status counts query failed; continuing without counts', {
+                error: err.message,
+            });
+            counts = {};
         }
-
-        const statusCounts = await Order.findAll({
-            where: countWhere,
-            include: countInclude,
-            attributes: [
-                [sequelize.col('Order.status'), 'status'],
-                [sequelize.fn('COUNT', sequelize.fn('DISTINCT', sequelize.col('Order.id'))), 'count']
-            ],
-            group: [sequelize.col('Order.status')],
-            raw: true
-        });
-        counts = statusCounts.reduce((acc, curr) => {
-            acc[curr.status] = parseInt(curr.count, 10);
-            return acc;
-        }, {});
     }
 
     return {
-        rows: result.rows,
-        count: result.count,
+        rows,
+        count: totalCount,
         counts
     };
 };
@@ -1802,6 +1913,7 @@ const createFulfillment = async (orderId, payload, actingUserId, auditContext = 
         }
 
         // Row-lock each product/variant then perform strict atomic stock deduction
+        const variantProductIdsToSync = new Set();
         for (const [key, qty] of stockDeductions) {
             const [productId, variantIdStr] = key.split(':');
             const variantId = variantIdStr || null;
@@ -1834,6 +1946,7 @@ const createFulfillment = async (orderId, payload, actingUserId, auditContext = 
                 if (affectedRows === 0) {
                     throw new AppError('CONFLICT', 409, `Stock deduction failed for variant ${variant.sku}: insufficient quantity or reserved stock.`);
                 }
+                variantProductIdsToSync.add(String(productId));
             } else {
                 const product = await Product.findByPk(productId, {
                     transaction: t,
@@ -1863,6 +1976,10 @@ const createFulfillment = async (orderId, payload, actingUserId, auditContext = 
                     throw new AppError('CONFLICT', 409, `Stock deduction failed for "${product.name}": insufficient quantity or reserved stock.`);
                 }
             }
+        }
+
+        for (const productId of variantProductIdsToSync) {
+            await syncParentProductFromVariants(productId, t);
         }
 
         // Determine Provider

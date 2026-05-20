@@ -65,7 +65,7 @@ const addWishlistItemToCart = async (userId, item, transaction) => {
     if (!variant) {
       throw new AppError('NOT_FOUND', 404, 'Selected variant not found');
     }
-    availableStock = Number(variant.stockQty || 0);
+    availableStock = Math.max(0, Number(variant.stockQty || 0) - Number(variant.reservedQty || 0));
   }
 
   if (availableStock <= 0) {
