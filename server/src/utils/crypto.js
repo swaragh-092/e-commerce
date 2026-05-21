@@ -11,9 +11,9 @@ const TAG_LENGTH = 16;
  * Returns an object with the ciphertext and metadata.
  */
 const encrypt = (text) => {
-    const keyStr = process.env.CREDENTIAL_ENCRYPTION_KEY || process.env.JWT_ACCESS_SECRET;
+    const keyStr = process.env.CREDENTIAL_ENCRYPTION_KEY;
     if (!keyStr) {
-        throw new Error('Encryption key not found in environment');
+        throw new Error('CREDENTIAL_ENCRYPTION_KEY is required but not set in environment');
     }
 
     // Ensure key is 32 bytes
@@ -44,9 +44,9 @@ const decrypt = (encryptedObj) => {
         throw new Error(`Unsupported encryption version: ${version}`);
     }
 
-    const keyStr = process.env.CREDENTIAL_ENCRYPTION_KEY || process.env.JWT_ACCESS_SECRET;
+    const keyStr = process.env.CREDENTIAL_ENCRYPTION_KEY;
     if (!keyStr) {
-        throw new Error('Encryption key not found in environment');
+        throw new Error('CREDENTIAL_ENCRYPTION_KEY is required but not set in environment');
     }
 
     const key = crypto.createHash('sha256').update(keyStr).digest();

@@ -60,7 +60,11 @@ const getResolvedFeature = async (featureKey) => {
   // Cache miss or expired — reload everything from DB
   const resolved = await loadAndCacheAllFeatures();
 
-  // If the key is not in DB or mode config, default to false (deny unknown features)
+  // If the key is not in DB or mode config, cache it as false (negative cache)
+  if (!(featureKey in resolved)) {
+    featureCache.set(featureKey, { value: false, expiresAt: Date.now() + CACHE_TTL_MS });
+  }
+
   return resolved[featureKey] ?? false;
 };
 
@@ -123,4 +127,4 @@ const invalidateFeature = (featureKey) => {
  */
 const clearFeatureCache = () => featureCache.clear();
 
-module.exports = { featureGate, invalidateFeature, clearFeatureCache };
+module.exports = { featureGate, getResolvedFeature, invalidateFeature, clearFeatureCache };

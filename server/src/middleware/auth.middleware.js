@@ -4,6 +4,10 @@ const jwt = require('jsonwebtoken');
 const AppError = require('../utils/AppError');
 const { User, Role, Permission } = require('../modules');
 const { enrichUserAuthorization } = require('../config/permissions');
+const logger = require('../utils/logger');
+const tokenBlocklist = require('../utils/tokenBlocklist');
+
+const JWT_VERIFY_OPTS = { algorithms: ['HS256'], issuer: process.env.JWT_ISSUER || 'ecommerce-pro', audience: process.env.JWT_AUDIENCE || 'ecommerce-pro-client' };
 
 const authUserInclude = [
   {
@@ -29,9 +33,14 @@ const authenticate = async (req, res, next) => {
     // Verify token
     let decoded;
     try {
-      decoded = jwt.verify(token, process.env.JWT_ACCESS_SECRET);
+      decoded = jwt.verify(token, process.env.JWT_ACCESS_SECRET, JWT_VERIFY_OPTS);
     } catch (err) {
       throw new AppError('UNAUTHORIZED', 401, 'Invalid or expired token');
+    }
+
+    // Check blocklist (tokens invalidated on logout)
+    if (tokenBlocklist.isBlocked(token)) {
+      throw new AppError('UNAUTHORIZED', 401, 'Token has been revoked');
     }
 
     // Check if user still exists (could be deleted)
@@ -66,7 +75,7 @@ const optionalAuth = async (req, res, next) => {
     
     let decoded;
     try {
-      decoded = jwt.verify(token, process.env.JWT_ACCESS_SECRET);
+      decoded = jwt.verify(token, process.env.JWT_ACCESS_SECRET, JWT_VERIFY_OPTS);
     } catch (err) {
       return next();
     }
@@ -81,6 +90,7 @@ const optionalAuth = async (req, res, next) => {
     }
     next();
   } catch (error) {
+    logger.error('optionalAuth failed — proceeding as unauthenticated', { error: error.message, stack: error.stack });
     next();
   }
 };

@@ -5,14 +5,14 @@ import { useAuth } from '../../hooks/useAuth';
 import { validateEmail, validateRequired } from '../../utils/authValidation';
 import { getApiErrorMessage } from '../../utils/apiErrors';
 import authService from '../../services/authService';
-import { EmailOutlined, LockOutlined, Visibility, VisibilityOff } from '@mui/icons-material';
+import { EmailOutlined, LockOutlined, Visibility, VisibilityOff, PhoneOutlined } from '@mui/icons-material';
 import AuthPageShell from '../../components/storefront/AuthPageShell';
 
 const LoginPage = () => {
   const theme = useTheme();
   const navigate = useNavigate();
   const location = useLocation();
-  const { login } = useAuth();
+  const { login, verifyTwoFactor, finalizeAuthenticatedSession } = useAuth();
   
   const [formData, setFormData] = useState({ email: '', password: '' });
   const [fieldErrors, setFieldErrors] = useState({});
@@ -24,6 +24,17 @@ const LoginPage = () => {
   const [showPassword, setShowPassword] = useState(false);
   const [touched, setTouched] = useState({});
   const [rememberMe, setRememberMe] = useState(false);
+
+  // 2FA state
+  const [twoFactorStep, setTwoFactorStep] = useState(false);
+  const [tempToken, setTempToken] = useState('');
+  const [totpCode, setTotpCode] = useState('');
+
+  // Phone login state
+  const [loginMode, setLoginMode] = useState('email'); // 'email' | 'phone'
+  const [phone, setPhone] = useState('');
+  const [otpSent, setOtpSent] = useState(false);
+  const [otpCode, setOtpCode] = useState('');
 
   const validateForm = (values) => ({
     email: validateEmail(values.email),
@@ -92,8 +103,13 @@ const LoginPage = () => {
     setLoading(true);
 
     try {
-      await login(formData.email, formData.password);
-      // Redirect to the page the user was trying to access, or home
+      const result = await login(formData.email, formData.password);
+      if (result.requiresTwoFactor) {
+        setTwoFactorStep(true);
+        setTempToken(result.tempToken);
+        setError('');
+        return;
+      }
       const redirectTo = location.state?.from?.pathname || '/';
       navigate(redirectTo, { replace: true });
     } catch (err) {
@@ -128,6 +144,59 @@ const LoginPage = () => {
     }
   };
 
+  const handleTwoFactorSubmit = async (e) => {
+    e.preventDefault();
+    setError('');
+    setLoading(true);
+    try {
+      await verifyTwoFactor(tempToken, totpCode);
+      const redirectTo = location.state?.from?.pathname || '/';
+      navigate(redirectTo, { replace: true });
+    } catch (err) {
+      setError(getApiErrorMessage(err, 'Invalid 2FA code. Please try again.'));
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleGoogleLogin = () => {
+    window.location.href = authService.getGoogleOAuthUrl();
+  };
+
+  const handleSendOtp = async () => {
+    if (!phone || phone.length < 10) {
+      setError('Please enter a valid phone number');
+      return;
+    }
+    setLoading(true);
+    setError('');
+    try {
+      await authService.sendOtp(phone);
+      setOtpSent(true);
+      setSuccessMsg('OTP sent to your phone');
+    } catch (err) {
+      setError(getApiErrorMessage(err, 'Failed to send OTP'));
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleVerifyOtp = async (e) => {
+    e.preventDefault();
+    setLoading(true);
+    setError('');
+    try {
+      await authService.verifyOtp(phone, otpCode);
+      await finalizeAuthenticatedSession();
+      const redirectTo = location.state?.from?.pathname || '/';
+      navigate(redirectTo, { replace: true });
+    } catch (err) {
+      setError(getApiErrorMessage(err, 'Invalid OTP'));
+    } finally {
+      setLoading(false);
+    }
+  };
+
 
   return (
     <AuthPageShell type="login">
@@ -151,6 +220,80 @@ const LoginPage = () => {
       )}
       {successMsg && <Alert severity={location.state?.sessionExpired ? 'info' : 'success'} sx={{ mb: 2 }}>{successMsg}</Alert>}
 
+      {twoFactorStep ? (
+        <Box component="form" onSubmit={handleTwoFactorSubmit}>
+          <Typography sx={{ mb: 2, fontSize: 14, color: '#475569' }}>
+            Enter the 6-digit code from your authenticator app.
+          </Typography>
+          <TextField
+            fullWidth
+            autoFocus
+            name="totpCode"
+            placeholder="000000"
+            value={totpCode}
+            onChange={(e) => setTotpCode(e.target.value.replace(/\D/g, '').slice(0, 6))}
+            inputProps={{ maxLength: 6, inputMode: 'numeric', autoComplete: 'one-time-code' }}
+            sx={inputSx}
+          />
+          <Button
+            fullWidth
+            type="submit"
+            variant="contained"
+            size="large"
+            sx={{ mt: 1, mb: 2, height: 52, borderRadius: '8px' }}
+            disabled={loading || totpCode.length !== 6}
+          >
+            {loading ? <CircularProgress size={18} color="inherit" /> : 'Verify'}
+          </Button>
+        </Box>
+      ) : loginMode === 'phone' ? (
+        <Box component="form" onSubmit={handleVerifyOtp}>
+          <Typography component="label" htmlFor="login-phone" sx={fieldLabelSx}>
+            Phone Number
+          </Typography>
+          <TextField
+            id="login-phone"
+            fullWidth
+            placeholder="Enter your phone number"
+            value={phone}
+            onChange={(e) => setPhone(e.target.value.replace(/\D/g, '').slice(0, 15))}
+            disabled={otpSent}
+            sx={inputSx}
+            InputProps={{
+              startAdornment: <InputAdornment position="start"><PhoneOutlined fontSize="small" /></InputAdornment>
+            }}
+          />
+          {otpSent && (
+            <>
+              <Typography component="label" htmlFor="login-otp" sx={fieldLabelSx}>
+                OTP Code
+              </Typography>
+              <TextField
+                id="login-otp"
+                fullWidth
+                autoFocus
+                placeholder="Enter 6-digit OTP"
+                value={otpCode}
+                onChange={(e) => setOtpCode(e.target.value.replace(/\D/g, '').slice(0, 6))}
+                inputProps={{ maxLength: 6, inputMode: 'numeric', autoComplete: 'one-time-code' }}
+                sx={inputSx}
+              />
+            </>
+          )}
+          {!otpSent ? (
+            <Button fullWidth variant="contained" size="large" sx={{ height: 52, borderRadius: '8px', mb: 2 }} onClick={handleSendOtp} disabled={loading || phone.length < 10}>
+              {loading ? <CircularProgress size={18} color="inherit" /> : 'Send OTP'}
+            </Button>
+          ) : (
+            <Button fullWidth type="submit" variant="contained" size="large" sx={{ height: 52, borderRadius: '8px', mb: 2 }} disabled={loading || otpCode.length !== 6}>
+              {loading ? <CircularProgress size={18} color="inherit" /> : 'Verify & Login'}
+            </Button>
+          )}
+          <Button fullWidth variant="text" size="small" onClick={() => { setLoginMode('email'); setOtpSent(false); setOtpCode(''); setError(''); }}>
+            Use email instead
+          </Button>
+        </Box>
+      ) : (
       <Box component="form" onSubmit={handleSubmit}>
         <Typography component="label" htmlFor="login-email" sx={fieldLabelSx}>
           Email Address
@@ -245,6 +388,26 @@ const LoginPage = () => {
         <Divider sx={{ my: 2.5 }}>
           <Typography variant="caption" color="text.secondary">or</Typography>
         </Divider>
+
+        <Button
+          fullWidth
+          variant="outlined"
+          size="large"
+          onClick={handleGoogleLogin}
+          sx={{ mb: 2, height: 48, borderRadius: '8px', textTransform: 'none', fontWeight: 600 }}
+        >
+          Continue with Google
+        </Button>
+
+        <Button
+          fullWidth
+          variant="text"
+          size="small"
+          onClick={() => { setLoginMode('phone'); setError(''); }}
+          sx={{ mb: 2, textTransform: 'none' }}
+        >
+          Login with phone number
+        </Button>
         
         <Typography textAlign="center" variant="body2">
           Don't have an account?{' '}
@@ -253,6 +416,7 @@ const LoginPage = () => {
           </Box>
         </Typography>
       </Box>
+      )}
     </AuthPageShell>
   );
 };

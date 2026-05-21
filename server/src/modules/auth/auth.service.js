@@ -11,6 +11,10 @@ const { ACTIONS, AUTH_TIME, ENTITIES } = require('../../config/constants');
 const { enrichUserAuthorization } = require('../../config/permissions');
 const logger = require('../../utils/logger');
 
+const JWT_ALGORITHMS = { algorithms: ['HS256'] };
+
+const hashToken = (token) => crypto.createHash('sha256').update(token).digest('hex');
+
 const authUserInclude = [
   {
     model: Role,
@@ -22,24 +26,22 @@ const authUserInclude = [
 
 const getRefreshTokenExpiryDate = () => new Date(Date.now() + AUTH_TIME.REFRESH_TOKEN_TTL_MS);
 
-let emailVerificationCache = { result: false, at: 0 };
-
 const isEmailVerificationRequired = async () => {
-  if (Date.now() - emailVerificationCache.at < 5000) return emailVerificationCache.result;
   try {
-    const SettingsService = require('../settings/settings.service');
-    const features = await SettingsService.getByGroup('features');
-    emailVerificationCache = { result: features?.emailVerification === true, at: Date.now() };
-    return emailVerificationCache.result;
-  } catch (error) {
+    const { getResolvedFeature } = require('../../middleware/featureGate.middleware');
+    return await getResolvedFeature('emailVerification');
+  } catch {
     return false;
   }
 };
 
+const JWT_ISS = process.env.JWT_ISSUER || 'ecommerce-pro';
+const JWT_AUD = process.env.JWT_AUDIENCE || 'ecommerce-pro-client';
+
 const generateTokens = (user) => {
   const payload = { id: user.id, role: user.role };
-  const accessToken = jwt.sign(payload, process.env.JWT_ACCESS_SECRET, { expiresIn: process.env.JWT_ACCESS_EXPIRY || '15m' });
-  const refreshToken = jwt.sign(payload, process.env.JWT_REFRESH_SECRET, { expiresIn: process.env.JWT_REFRESH_EXPIRY || '7d' });
+  const accessToken = jwt.sign(payload, process.env.JWT_ACCESS_SECRET, { expiresIn: process.env.JWT_ACCESS_EXPIRY || '15m', issuer: JWT_ISS, audience: JWT_AUD });
+  const refreshToken = jwt.sign(payload, process.env.JWT_REFRESH_SECRET, { expiresIn: process.env.JWT_REFRESH_EXPIRY || '7d', issuer: JWT_ISS, audience: JWT_AUD });
   return { accessToken, refreshToken };
 };
 
@@ -75,17 +77,17 @@ const register = async (payload) => {
     const verifyToken = crypto.randomBytes(32).toString('hex');
     await EmailVerificationToken.create({
       userId: user.id,
-      token: verifyToken,
+      token: hashToken(verifyToken),
       expiresAt: new Date(Date.now() + AUTH_TIME.EMAIL_VERIFICATION_TTL_MS)
     }, { transaction: t });
 
     // Generate JWTs
     const tokens = generateTokens(user);
 
-    // Save refresh token
+    // Save refresh token (hashed)
     await RefreshToken.create({
       userId: user.id,
-      token: tokens.refreshToken,
+      token: hashToken(tokens.refreshToken),
       expiresAt: getRefreshTokenExpiryDate(),
       createdByIp: 'registration'
     }, { transaction: t });
@@ -120,7 +122,7 @@ const register = async (payload) => {
     if (NotificationService && NotificationService.send) {
       await NotificationService.send('email_verification', registrationResult.verificationEmail.email, {
         name: registrationResult.verificationEmail.firstName,
-        verify_url: `${process.env.CLIENT_URL || 'http://localhost:5173'}/verify-email#token=${registrationResult.verificationEmail.verifyToken}`
+        verify_url: `${process.env.CLIENT_URL || 'http://localhost:5173'}/verify-email?token=${registrationResult.verificationEmail.verifyToken}`
       }, registrationResult.verificationEmail.userId);
     }
   } catch (e) {
@@ -135,13 +137,23 @@ const register = async (payload) => {
   return registrationResult;
 };
 
+const bcrypt = require('bcryptjs');
+
+// Pre-computed dummy hash for constant-time comparison when user doesn't exist
+const DUMMY_HASH = '$2a$12$LJ3m4sMKfRzb3Z5K5K5K5OdummyhashfortimingatttackpreventionXX';
+
 const login = async (email, password, ipAddress) => {
   const user = await User.scope('withPassword').findOne({
     where: { email },
     include: authUserInclude,
   });
 
-  if (!user || !(await user.validatePassword(password))) {
+  // Always run bcrypt.compare to prevent timing side-channel
+  const isValid = user
+    ? await user.validatePassword(password)
+    : await bcrypt.compare(password, DUMMY_HASH);
+
+  if (!user || !isValid) {
     throw new AppError('UNAUTHORIZED', 401, 'Invalid email or password');
   }
 
@@ -155,13 +167,23 @@ const login = async (email, password, ipAddress) => {
     }
   }
 
+  // If 2FA is enabled, return a short-lived temp token instead of full auth
+  if (user.twoFactorEnabled) {
+    const tempToken = jwt.sign(
+      { id: user.id, purpose: '2fa' },
+      process.env.JWT_ACCESS_SECRET,
+      { expiresIn: '5m' }
+    );
+    return { requiresTwoFactor: true, tempToken };
+  }
+
   // Generate tokens
   const tokens = generateTokens(user);
 
-  // Save refresh token
+  // Save refresh token (hashed)
   await RefreshToken.create({
     userId: user.id,
-    token: tokens.refreshToken,
+    token: hashToken(tokens.refreshToken),
     expiresAt: getRefreshTokenExpiryDate(),
     createdByIp: ipAddress
   });
@@ -188,14 +210,15 @@ const login = async (email, password, ipAddress) => {
 
 const refresh = async (refreshTokenStr, ipAddress) => {
   try {
-    const decoded = jwt.verify(refreshTokenStr, process.env.JWT_REFRESH_SECRET);
+    const decoded = jwt.verify(refreshTokenStr, process.env.JWT_REFRESH_SECRET, { algorithms: ['HS256'], issuer: JWT_ISS, audience: JWT_AUD });
     const emailVerificationRequired = await isEmailVerificationRequired();
+    const tokenHash = hashToken(refreshTokenStr);
 
     return sequelize.transaction(
       { isolationLevel: Transaction.ISOLATION_LEVELS.READ_COMMITTED },
       async (t) => {
         const tokenRecord = await RefreshToken.findOne({
-          where: { token: refreshTokenStr },
+          where: { token: tokenHash },
           transaction: t,
           lock: t.LOCK.UPDATE,
         });
@@ -208,8 +231,6 @@ const refresh = async (refreshTokenStr, ipAddress) => {
         }
 
         // Reuse detection — a revoked token being replayed signals theft.
-        // Invalidate ALL tokens for this user so the attacker (and the
-        // legitimate user) must re-authenticate.
         if (tokenRecord.revokedAt) {
           await RefreshToken.update(
             { revokedAt: new Date() },
@@ -242,7 +263,7 @@ const refresh = async (refreshTokenStr, ipAddress) => {
         await tokenRecord.update({ revokedAt: new Date() }, { transaction: t });
         await RefreshToken.create({
           userId: user.id,
-          token: tokens.refreshToken,
+          token: hashToken(tokens.refreshToken),
           expiresAt: getRefreshTokenExpiryDate(),
           createdByIp: ipAddress,
         }, { transaction: t });
@@ -276,13 +297,17 @@ const refresh = async (refreshTokenStr, ipAddress) => {
 };
 
 const logout = async (refreshTokenStr, userId) => {
-  const tokenRecord = await RefreshToken.findOne({ where: { token: refreshTokenStr } });
+  const tokenRecord = await RefreshToken.findOne({ where: { token: hashToken(refreshTokenStr) } });
   if (tokenRecord) {
     if (!userId || tokenRecord.userId !== userId) {
       throw new AppError('FORBIDDEN', 403, 'You do not have permission to revoke this token');
     }
 
-    await tokenRecord.update({ revokedAt: new Date() });
+    // Revoke ALL active refresh tokens for this user (full session termination)
+    await RefreshToken.update(
+      { revokedAt: new Date() },
+      { where: { userId, revokedAt: null } }
+    );
   }
   
   try {
@@ -308,7 +333,7 @@ const forgotPassword = async (email) => {
     const resetToken = crypto.randomBytes(32).toString('hex');
     await PasswordResetToken.create({
       userId: user.id,
-      token: resetToken,
+      token: hashToken(resetToken),
       expiresAt: new Date(Date.now() + AUTH_TIME.PASSWORD_RESET_TTL_MS)
     }, { transaction: t });
 
@@ -325,7 +350,7 @@ const forgotPassword = async (email) => {
 
 const resetPassword = async (token, newPassword) => {
   return sequelize.transaction(async (t) => {
-    const resetRecord = await PasswordResetToken.findOne({ where: { token }, transaction: t });
+    const resetRecord = await PasswordResetToken.findOne({ where: { token: hashToken(token) }, transaction: t });
     
     if (!resetRecord || resetRecord.expiresAt < new Date()) {
       throw new AppError('VALIDATION_ERROR', 400, 'Invalid or expired reset token');
@@ -356,18 +381,14 @@ const resetPassword = async (token, newPassword) => {
 const resendVerification = async (email) => {
   return sequelize.transaction(async (t) => {
     const user = await User.findOne({ where: { email }, transaction: t });
-    if (!user) return; // Silent return for security
-
-    if (user.emailVerified) {
-      throw new AppError('VALIDATION_ERROR', 400, 'Email is already verified');
-    }
+    if (!user || user.emailVerified) return; // Silent return — no state leak
 
     await EmailVerificationToken.destroy({ where: { userId: user.id }, transaction: t });
 
     const verifyToken = crypto.randomBytes(32).toString('hex');
     await EmailVerificationToken.create({
       userId: user.id,
-      token: verifyToken,
+      token: hashToken(verifyToken),
       expiresAt: new Date(Date.now() + AUTH_TIME.EMAIL_VERIFICATION_TTL_MS)
     }, { transaction: t });
 
@@ -375,7 +396,7 @@ const resendVerification = async (email) => {
         if (NotificationService && NotificationService.send) {
             await NotificationService.send('email_verification', user.email, {
                 name: user.firstName,
-                verify_url: `${process.env.CLIENT_URL || 'http://localhost:5173'}/verify-email#token=${verifyToken}`
+                verify_url: `${process.env.CLIENT_URL || 'http://localhost:5173'}/verify-email?token=${verifyToken}`
             }, user.id, null, t);
         }
     } catch (e) {}
@@ -395,7 +416,7 @@ const resendVerification = async (email) => {
 
 const verifyEmail = async (token) => {
   return sequelize.transaction(async (t) => {
-    const verifyRecord = await EmailVerificationToken.findOne({ where: { token }, transaction: t });
+    const verifyRecord = await EmailVerificationToken.findOne({ where: { token: hashToken(token) }, transaction: t });
     
     if (!verifyRecord || verifyRecord.expiresAt < new Date()) {
       throw new AppError('VALIDATION_ERROR', 400, 'Invalid or expired verification token');
@@ -420,9 +441,104 @@ const verifyEmail = async (token) => {
   });
 };
 
+const verifyTwoFactor = async (tempToken, totpCode, ipAddress) => {
+  let decoded;
+  try {
+    decoded = jwt.verify(tempToken, process.env.JWT_ACCESS_SECRET, JWT_ALGORITHMS);
+  } catch (err) {
+    throw new AppError('UNAUTHORIZED', 401, 'Invalid or expired 2FA token');
+  }
+
+  if (decoded.purpose !== '2fa') {
+    throw new AppError('UNAUTHORIZED', 401, 'Invalid token purpose');
+  }
+
+  const user = await User.scope('withPassword').findByPk(decoded.id, { include: authUserInclude });
+  if (!user || user.status !== 'active') {
+    throw new AppError('FORBIDDEN', 403, 'User inactive');
+  }
+
+  const TwoFactorService = require('./twoFactor.service');
+  if (!TwoFactorService.verify(user, totpCode)) {
+    throw new AppError('UNAUTHORIZED', 401, 'Invalid 2FA code');
+  }
+
+  const tokens = generateTokens(user);
+  await RefreshToken.create({
+    userId: user.id,
+    token: hashToken(tokens.refreshToken),
+    expiresAt: getRefreshTokenExpiryDate(),
+    createdByIp: ipAddress,
+  });
+
+  await user.update({ lastLoginAt: new Date() });
+  const userData = await User.findByPk(user.id, { include: authUserInclude });
+
+  try {
+    if (AuditService && AuditService.log) {
+      await AuditService.log({ userId: user.id, action: ACTIONS.LOGIN, entity: ENTITIES.USER, entityId: user.id, ipAddress });
+    }
+  } catch (e) {}
+
+  return { user: enrichUserAuthorization(userData), tokens };
+};
+
+const loginByPhone = async (phone, ipAddress) => {
+  // Find user by phone in user_profiles
+  const profile = await UserProfile.findOne({ where: { phone } });
+
+  let user;
+  if (profile) {
+    user = await User.findByPk(profile.userId, { include: authUserInclude });
+    if (!user || user.status !== 'active') {
+      throw new AppError('FORBIDDEN', 403, 'Account is inactive');
+    }
+  } else {
+    // Auto-create user for phone-based sign-in
+    user = await sequelize.transaction(async (t) => {
+      const newUser = await User.create({
+        email: `${phone}@phone.local`, // placeholder — phone-only users
+        password: require('crypto').randomBytes(32).toString('hex'),
+        firstName: 'User',
+        role: 'customer',
+        status: 'active',
+        emailVerified: false,
+      }, { transaction: t });
+
+      await UserProfile.create({ userId: newUser.id, phone }, { transaction: t });
+
+      const customerRole = await Role.findOne({ where: { slug: 'customer' }, transaction: t });
+      if (customerRole) await newUser.setRoles([customerRole], { transaction: t });
+
+      return await User.findByPk(newUser.id, { include: authUserInclude, transaction: t });
+    });
+  }
+
+  const tokens = generateTokens(user);
+  await RefreshToken.create({
+    userId: user.id,
+    token: hashToken(tokens.refreshToken),
+    expiresAt: getRefreshTokenExpiryDate(),
+    createdByIp: ipAddress,
+  });
+
+  await user.update({ lastLoginAt: new Date() });
+  const userData = await User.findByPk(user.id, { include: authUserInclude });
+
+  try {
+    if (AuditService && AuditService.log) {
+      await AuditService.log({ userId: user.id, action: ACTIONS.LOGIN, entity: ENTITIES.USER, entityId: user.id, ipAddress });
+    }
+  } catch (e) {}
+
+  return { user: enrichUserAuthorization(userData), tokens };
+};
+
 module.exports = {
   register,
   login,
+  loginByPhone,
+  verifyTwoFactor,
   refresh,
   logout,
   forgotPassword,

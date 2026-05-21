@@ -45,13 +45,21 @@ module.exports = (sequelize, DataTypes) => {
         lastLoginAt: {
             type: DataTypes.DATE,
         },
+        twoFactorEnabled: {
+            type: DataTypes.BOOLEAN,
+            defaultValue: false,
+        },
+        twoFactorSecret: {
+            type: DataTypes.JSONB,
+            allowNull: true,
+        },
     }, {
         tableName: 'users',
         timestamps: true,
         underscored: true,
         paranoid: true, // soft delete
         defaultScope: {
-            attributes: { exclude: ['password'] },
+            attributes: { exclude: ['password', 'twoFactorSecret'] },
         },
         scopes: {
             withPassword: {

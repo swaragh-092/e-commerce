@@ -65,6 +65,16 @@ export const AuthProvider = ({ children }) => {
 
   const login = async (email, password) => {
     const data = await authService.login(email, password);
+    // If 2FA is required, return early — caller handles the 2FA step
+    if (data.requiresTwoFactor) {
+      return data;
+    }
+    const fullUser = await finalizeAuthenticatedSession();
+    return { ...data, user: fullUser };
+  };
+
+  const verifyTwoFactor = async (tempToken, code) => {
+    const data = await authService.verifyTwoFactor(tempToken, code);
     const fullUser = await finalizeAuthenticatedSession();
     return { ...data, user: fullUser };
   };
@@ -120,6 +130,8 @@ export const AuthProvider = ({ children }) => {
     hasAnyPermission: (permissions = []) => permissions.some((permission) => getPermissionsForUser(user).includes(permission)),
     hasAllPermissions: (permissions = []) => permissions.every((permission) => getPermissionsForUser(user).includes(permission)),
     login,
+    verifyTwoFactor,
+    finalizeAuthenticatedSession,
     register,
     logout,
     updateProfile,

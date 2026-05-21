@@ -1,5 +1,5 @@
 const emailPattern = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-const strongPasswordPattern = /^(?=.*[A-Z])(?=.*\d).{8,}$/;
+const strongPasswordPattern = /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[!@#$%^&*]).{8,}$/;
 
 export const validateEmail = (email) => {
   const value = String(email || '').trim();

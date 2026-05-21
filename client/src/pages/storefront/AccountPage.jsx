@@ -22,9 +22,10 @@ import { useNotification } from '../../context/NotificationContext';
 import { Visibility, VisibilityOff } from '@mui/icons-material';
 import { getPasswordChecks } from '../../utils/authValidation';
 import TabPanel from '../../components/common/TabPanel';
+import TwoFactorSetup from '../../components/storefront/TwoFactorSetup';
 
 const AccountPage = () => {
-    const { user, updateProfile } = useContext(AuthContext);
+    const { user, updateProfile, refreshUser } = useContext(AuthContext);
     const { confirm } = useNotification();
     const [tab, setTab] = useState(0);
 
@@ -40,6 +41,7 @@ const AccountPage = () => {
                         <Tab label="Profile" />
                         <Tab label="Addresses" />
                         <Tab label="Password" />
+                        <Tab label="Security" />
                     </Tabs>
                 </Box>
                 <TabPanel value={tab} index={0} sx={{ p: 3 }}>
@@ -50,6 +52,9 @@ const AccountPage = () => {
                 </TabPanel>
                 <TabPanel value={tab} index={2} sx={{ p: 3 }}>
                     <PasswordTab />
+                </TabPanel>
+                <TabPanel value={tab} index={3} sx={{ p: 3 }}>
+                    <TwoFactorSetup user={user} onUpdate={refreshUser} />
                 </TabPanel>
             </Paper>
         </Container>

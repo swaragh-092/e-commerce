@@ -2,6 +2,7 @@
 
 const AuthService = require('./auth.service');
 const { success } = require('../../utils/response');
+const tokenBlocklist = require('../../utils/tokenBlocklist');
 
 const register = async (req, res, next) => {
   try {
@@ -37,6 +38,9 @@ const refresh = async (req, res, next) => {
 const logout = async (req, res, next) => {
   try {
     await AuthService.logout(req.validated.refreshToken, req.user?.id);
+    // Blocklist the current access token for its remaining lifetime
+    const accessToken = req.headers.authorization?.split(' ')[1];
+    if (accessToken) tokenBlocklist.add(accessToken);
     return success(res, null, 'Logged out successfully');
   } catch (err) {
     next(err);
@@ -82,6 +86,17 @@ const verifyEmail = async (req, res, next) => {
   }
 };
 
+const verifyTwoFactor = async (req, res, next) => {
+  try {
+    const { tempToken, code } = req.validated;
+    const ipAddress = req.ip;
+    const result = await AuthService.verifyTwoFactor(tempToken, code, ipAddress);
+    return success(res, result, 'Login successful');
+  } catch (err) {
+    next(err);
+  }
+};
+
 module.exports = {
   register,
   resendVerification,
@@ -90,5 +105,6 @@ module.exports = {
   logout,
   forgotPassword,
   resetPassword,
-  verifyEmail
+  verifyEmail,
+  verifyTwoFactor
 };

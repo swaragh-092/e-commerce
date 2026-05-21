@@ -1,13 +1,62 @@
 import api from './api';
 
+const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:5000/api';
+
 const authService = {
   login: async (email, password) => {
     const response = await api.post('/auth/login', { email, password });
-    if (response.data.data.tokens) {
-      localStorage.setItem('accessToken', response.data.data.tokens.accessToken);
-      localStorage.setItem('refreshToken', response.data.data.tokens.refreshToken);
+    const data = response.data.data;
+    // If 2FA is required, don't store tokens yet
+    if (data.requiresTwoFactor) {
+      return data;
     }
+    if (data.tokens) {
+      localStorage.setItem('accessToken', data.tokens.accessToken);
+      localStorage.setItem('refreshToken', data.tokens.refreshToken);
+    }
+    return data;
+  },
+
+  verifyTwoFactor: async (tempToken, code) => {
+    const response = await api.post('/auth/2fa/verify', { tempToken, code });
+    const data = response.data.data;
+    if (data.tokens) {
+      localStorage.setItem('accessToken', data.tokens.accessToken);
+      localStorage.setItem('refreshToken', data.tokens.refreshToken);
+    }
+    return data;
+  },
+
+  setup2FA: async () => {
+    const response = await api.post('/auth/2fa/setup');
     return response.data.data;
+  },
+
+  enable2FA: async (code) => {
+    const response = await api.post('/auth/2fa/enable', { code });
+    return response.data.data;
+  },
+
+  disable2FA: async (code) => {
+    const response = await api.post('/auth/2fa/disable', { code });
+    return response.data.data;
+  },
+
+  getGoogleOAuthUrl: () => `${API_URL}/auth/google`,
+
+  sendOtp: async (phone) => {
+    const response = await api.post('/auth/otp/send', { phone });
+    return response.data.data;
+  },
+
+  verifyOtp: async (phone, code) => {
+    const response = await api.post('/auth/otp/verify', { phone, code });
+    const data = response.data.data;
+    if (data.tokens) {
+      localStorage.setItem('accessToken', data.tokens.accessToken);
+      localStorage.setItem('refreshToken', data.tokens.refreshToken);
+    }
+    return data;
   },
 
   register: async (userData) => {
