@@ -42,6 +42,7 @@ const disable = async (userId, totpCode) => {
   const user = await User.scope('withPassword').findByPk(userId);
   if (!user) throw new AppError('NOT_FOUND', 404, 'User not found');
   if (!user.twoFactorEnabled) throw new AppError('VALIDATION_ERROR', 400, '2FA is not enabled');
+  if (!user.twoFactorSecret) throw new AppError('VALIDATION_ERROR', 400, '2FA secret missing');
 
   const secret = decrypt(user.twoFactorSecret);
   if (!authenticator.verify({ token: totpCode, secret })) {

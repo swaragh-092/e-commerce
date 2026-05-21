@@ -35,6 +35,8 @@ const refreshLimiter = createLimiter(15, 30, 'Too many refresh requests, please 
 
 const bulkOperationLimiter = createLimiter(1, 5, 'Too many bulk operations, please try again in a minute');
 const otpSendLimiter = createLimiter(1, 1, 'Please wait 60 seconds before requesting a new OTP');
+const otpVerifyLimiter = createLimiter(15, 5, 'Too many OTP verification attempts, please try again after 15 minutes');
+const twoFactorLimiter = createLimiter(15, 5, 'Too many 2FA attempts, please try again after 15 minutes');
 const mediaUploadLimiter = createLimiter(15, 50, 'Too many uploads, please try again after 15 minutes');
 const searchLimiter = createLimiter(1, 30, 'Too many search requests, please slow down');
 
@@ -46,6 +48,8 @@ module.exports = {
   resetPasswordLimiter,
   refreshLimiter,
   otpSendLimiter,
+  otpVerifyLimiter,
+  twoFactorLimiter,
   reviewLimiter,
   couponLimiter,
   globalLimiter,

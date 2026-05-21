@@ -15,6 +15,7 @@ import AuthPageShell from '../../components/storefront/AuthPageShell';
 const AdminLoginPage = () => {
   const theme = useTheme();
   const navigate = useNavigate();
+  const location = useLocation();
   const { login, verifyTwoFactor, isAuthenticated, user, hasRole } = useAuth();
   
   const [formData, setFormData] = useState({ email: '', password: '' });
@@ -130,7 +131,9 @@ const AdminLoginPage = () => {
         return;
       }
       const adminEntryPath = getFirstAccessibleAdminPath(loggedUser);
-      navigate(adminEntryPath || '/admin', { replace: true });
+      const fromPath = location.state?.from?.pathname;
+      const target = (fromPath && fromPath.startsWith('/admin')) ? fromPath : (adminEntryPath || '/admin');
+      navigate(target, { replace: true });
     } catch (err) {
       setError(getApiErrorMessage(err, 'Invalid 2FA code.'));
     } finally {

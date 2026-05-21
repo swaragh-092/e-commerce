@@ -10,6 +10,8 @@ const {
   resetPasswordLimiter,
   refreshLimiter,
   otpSendLimiter,
+  otpVerifyLimiter,
+  twoFactorLimiter,
 } = require('../../middleware/rateLimiter.middleware');
 
 const { 
@@ -57,14 +59,14 @@ router.post('/resend-verification', forgotPasswordLimiter, validate(resendVerifi
 router.post('/verify-email', verifyEmailLimiter, validate(verifyEmailSchema), authController.verifyEmail);
 
 // 2FA routes
-router.post('/2fa/verify', loginLimiter, validate(twoFactorVerifySchema), authController.verifyTwoFactor);
+router.post('/2fa/verify', twoFactorLimiter, validate(twoFactorVerifySchema), authController.verifyTwoFactor);
 router.post('/2fa/setup', authenticate, twoFactorController.setup);
-router.post('/2fa/enable', authenticate, validate(totpCodeSchema), twoFactorController.enable);
-router.post('/2fa/disable', authenticate, validate(totpCodeSchema), twoFactorController.disable);
+router.post('/2fa/enable', authenticate, twoFactorLimiter, validate(totpCodeSchema), twoFactorController.enable);
+router.post('/2fa/disable', authenticate, twoFactorLimiter, validate(totpCodeSchema), twoFactorController.disable);
 
 // Phone OTP routes
 router.post('/otp/send', otpSendLimiter, validate(otpSendSchema), otpController.sendOtp);
-router.post('/otp/verify', loginLimiter, validate(otpVerifySchema), otpController.verifyOtp);
+router.post('/otp/verify', otpVerifyLimiter, validate(otpVerifySchema), otpController.verifyOtp);
 
 // Google OAuth routes
 if (process.env.GOOGLE_CLIENT_ID) {
@@ -72,7 +74,7 @@ if (process.env.GOOGLE_CLIENT_ID) {
   router.get('/google/callback', passport.authenticate('google', { session: false, failureRedirect: `${process.env.CLIENT_URL || 'http://localhost:5173'}/login?error=oauth_failed` }), (req, res) => {
     const { tokens } = req.user;
     const clientUrl = process.env.CLIENT_URL || 'http://localhost:5173';
-    res.redirect(`${clientUrl}/oauth/callback?accessToken=${tokens.accessToken}&refreshToken=${tokens.refreshToken}`);
+    res.redirect(`${clientUrl}/oauth/callback#accessToken=${encodeURIComponent(tokens.accessToken)}&refreshToken=${encodeURIComponent(tokens.refreshToken)}`);
   });
 }
 

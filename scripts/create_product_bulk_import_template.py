@@ -205,16 +205,22 @@ def style_sheet(ws):
 
 def add_validations(ws):
     if ws.title == "Products":
-        type_col = ws["E"]
-        status_col = ws["F"]
-        bool_cols = ["G", "H"]
+        headers = [cell.value for cell in ws[1]]
+        type_idx = headers.index("type") + 1
+        status_idx = headers.index("status") + 1
+        type_col = get_column_letter(type_idx)
+        status_col = get_column_letter(status_idx)
+
         type_dv = DataValidation(type="list", formula1='"simple,variable,combo"', allow_blank=False)
         status_dv = DataValidation(type="list", formula1='"draft,published"', allow_blank=False)
         ws.add_data_validation(type_dv)
         ws.add_data_validation(status_dv)
-        type_dv.add(f"{type_col[1].coordinate}:E1000")
-        status_dv.add(f"{status_col[1].coordinate}:F1000")
-        for col in bool_cols:
+        type_dv.add(f"{type_col}2:{type_col}1000")
+        status_dv.add(f"{status_col}2:{status_col}1000")
+
+        for name in ("is_enabled", "is_featured"):
+            idx = headers.index(name) + 1
+            col = get_column_letter(idx)
             dv = DataValidation(type="list", formula1='"true,false"', allow_blank=True)
             ws.add_data_validation(dv)
             dv.add(f"{col}2:{col}1000")

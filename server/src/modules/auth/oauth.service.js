@@ -12,9 +12,11 @@ const hashToken = (token) => crypto.createHash('sha256').update(token).digest('h
 
 const generateTokens = (user) => {
   const payload = { id: user.id, role: user.role };
+  const iss = process.env.JWT_ISSUER || 'ecommerce-pro';
+  const aud = process.env.JWT_AUDIENCE || 'ecommerce-pro-client';
   return {
-    accessToken: jwt.sign(payload, process.env.JWT_ACCESS_SECRET, { expiresIn: process.env.JWT_ACCESS_EXPIRY || '15m' }),
-    refreshToken: jwt.sign(payload, process.env.JWT_REFRESH_SECRET, { expiresIn: process.env.JWT_REFRESH_EXPIRY || '7d' }),
+    accessToken: jwt.sign(payload, process.env.JWT_ACCESS_SECRET, { expiresIn: process.env.JWT_ACCESS_EXPIRY || '15m', issuer: iss, audience: aud }),
+    refreshToken: jwt.sign(payload, process.env.JWT_REFRESH_SECRET, { expiresIn: process.env.JWT_REFRESH_EXPIRY || '7d', issuer: iss, audience: aud }),
   };
 };
 
@@ -29,9 +31,10 @@ const initializeGoogleStrategy = () => {
     clientID: process.env.GOOGLE_CLIENT_ID,
     clientSecret: process.env.GOOGLE_CLIENT_SECRET,
     callbackURL: `${process.env.SERVER_URL || 'http://localhost:5000'}/api/auth/google/callback`,
-  }, async (_accessToken, _refreshToken, profile, done) => {
+    passReqToCallback: true,
+  }, async (req, _accessToken, _refreshToken, profile, done) => {
     try {
-      const result = await findOrCreateOAuthUser(profile);
+      const result = await findOrCreateOAuthUser(profile, req.ip);
       done(null, result);
     } catch (err) {
       done(err);
@@ -42,7 +45,7 @@ const initializeGoogleStrategy = () => {
   passport.deserializeUser((data, done) => done(null, data));
 };
 
-const findOrCreateOAuthUser = async (profile) => {
+const findOrCreateOAuthUser = async (profile, clientIp) => {
   const email = profile.emails?.[0]?.value;
   if (!email) throw new Error('No email returned from Google');
 
@@ -61,7 +64,8 @@ const findOrCreateOAuthUser = async (profile) => {
       }, { transaction: t });
 
       const customerRole = await Role.findOne({ where: { slug: 'customer' }, transaction: t });
-      if (customerRole) await user.setRoles([customerRole], { transaction: t });
+      if (!customerRole) throw new Error('System error: customer role not found');
+      await user.setRoles([customerRole], { transaction: t });
     } else if (user.status !== 'active') {
       throw new Error('Account is inactive');
     }
@@ -71,7 +75,7 @@ const findOrCreateOAuthUser = async (profile) => {
       userId: user.id,
       token: hashToken(tokens.refreshToken),
       expiresAt: new Date(Date.now() + AUTH_TIME.REFRESH_TOKEN_TTL_MS),
-      createdByIp: 'oauth-google',
+      createdByIp: clientIp || 'oauth-google',
     }, { transaction: t });
 
     await user.update({ lastLoginAt: new Date(), emailVerified: true }, { transaction: t });

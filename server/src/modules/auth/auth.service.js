@@ -140,7 +140,8 @@ const register = async (payload) => {
 const bcrypt = require('bcryptjs');
 
 // Pre-computed dummy hash for constant-time comparison when user doesn't exist
-const DUMMY_HASH = '$2a$12$LJ3m4sMKfRzb3Z5K5K5K5OdummyhashfortimingatttackpreventionXX';
+// Generated via: bcrypt.hashSync('dummy-password-never-matches', 12)
+const DUMMY_HASH = '$2a$12$dpabKKLz0iNKPD1LEZL0oOGI86Zcks4c1j0jbtA3f1FwXE55zzNXa';
 
 const login = async (email, password, ipAddress, rememberMe = false) => {
   const user = await User.scope('withPassword').findOne({
@@ -498,7 +499,7 @@ const loginByPhone = async (phone, ipAddress) => {
     // Auto-create user for phone-based sign-in
     user = await sequelize.transaction(async (t) => {
       const newUser = await User.create({
-        email: `${phone}@phone.local`, // placeholder — phone-only users
+        email: `${phone}@phone.local`,
         password: require('crypto').randomBytes(32).toString('hex'),
         firstName: 'User',
         role: 'customer',
@@ -515,24 +516,36 @@ const loginByPhone = async (phone, ipAddress) => {
     });
   }
 
-  const tokens = generateTokens(user);
-  await RefreshToken.create({
-    userId: user.id,
-    token: hashToken(tokens.refreshToken),
-    expiresAt: getRefreshTokenExpiryDate(),
-    createdByIp: ipAddress,
+  // If 2FA is enabled, return temp token instead of full auth
+  if (user.twoFactorEnabled) {
+    const tempToken = jwt.sign(
+      { id: user.id, purpose: '2fa' },
+      process.env.JWT_ACCESS_SECRET,
+      { expiresIn: '5m' }
+    );
+    return { requiresTwoFactor: true, tempToken };
+  }
+
+  return await sequelize.transaction(async (t) => {
+    const tokens = generateTokens(user);
+    await RefreshToken.create({
+      userId: user.id,
+      token: hashToken(tokens.refreshToken),
+      expiresAt: getRefreshTokenExpiryDate(),
+      createdByIp: ipAddress,
+    }, { transaction: t });
+
+    await user.update({ lastLoginAt: new Date() }, { transaction: t });
+    const userData = await User.findByPk(user.id, { include: authUserInclude, transaction: t });
+
+    try {
+      if (AuditService && AuditService.log) {
+        await AuditService.log({ userId: user.id, action: ACTIONS.LOGIN, entity: ENTITIES.USER, entityId: user.id, ipAddress }, t);
+      }
+    } catch (e) {}
+
+    return { user: enrichUserAuthorization(userData), tokens };
   });
-
-  await user.update({ lastLoginAt: new Date() });
-  const userData = await User.findByPk(user.id, { include: authUserInclude });
-
-  try {
-    if (AuditService && AuditService.log) {
-      await AuditService.log({ userId: user.id, action: ACTIONS.LOGIN, entity: ENTITIES.USER, entityId: user.id, ipAddress });
-    }
-  } catch (e) {}
-
-  return { user: enrichUserAuthorization(userData), tokens };
 };
 
 module.exports = {
@@ -545,5 +558,6 @@ module.exports = {
   forgotPassword,
   resetPassword,
   verifyEmail,
-  resendVerification
+  resendVerification,
+  hashToken,
 };

@@ -31,7 +31,7 @@ const generate = async (identifier, purpose = 'login', ip) => {
   await OtpToken.destroy({ where: { identifier, purpose } });
 
   // Generate 6-digit OTP
-  const otp = String(crypto.randomInt(100000, 999999));
+  const otp = String(crypto.randomInt(100000, 1000000));
 
   await OtpToken.create({
     identifier,
@@ -77,4 +77,4 @@ const verify = async (identifier, otp, purpose = 'login') => {
   return true;
 };
 
-module.exports = { generate, verify };
+module.exports = { generate, verify, hashOtp };
