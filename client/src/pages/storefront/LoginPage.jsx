@@ -14,7 +14,7 @@ const LoginPage = () => {
   const location = useLocation();
   const { login, verifyTwoFactor, finalizeAuthenticatedSession } = useAuth();
   
-  const [formData, setFormData] = useState({ email: '', password: '' });
+  const [formData, setFormData] = useState({ email: localStorage.getItem('rememberedEmail') || '', password: '' });
   const [fieldErrors, setFieldErrors] = useState({});
   const [error, setError] = useState('');
   const [successMsg, setSuccessMsg] = useState(location.state?.message || '');
@@ -103,7 +103,7 @@ const LoginPage = () => {
     setLoading(true);
 
     try {
-      const result = await login(formData.email, formData.password);
+      const result = await login(formData.email, formData.password, rememberMe);
       if (result.requiresTwoFactor) {
         setTwoFactorStep(true);
         setTempToken(result.tempToken);

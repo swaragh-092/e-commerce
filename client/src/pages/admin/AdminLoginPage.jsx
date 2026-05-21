@@ -15,13 +15,18 @@ import AuthPageShell from '../../components/storefront/AuthPageShell';
 const AdminLoginPage = () => {
   const theme = useTheme();
   const navigate = useNavigate();
-  const { login, isAuthenticated, user, hasRole } = useAuth();
+  const { login, verifyTwoFactor, isAuthenticated, user, hasRole } = useAuth();
   
   const [formData, setFormData] = useState({ email: '', password: '' });
   const [fieldErrors, setFieldErrors] = useState({});
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
+
+  // 2FA state
+  const [twoFactorStep, setTwoFactorStep] = useState(false);
+  const [tempToken, setTempToken] = useState('');
+  const [totpCode, setTotpCode] = useState('');
 
   // If already logged in and an admin, redirect them directly to the admin area
   if (isAuthenticated) {
@@ -77,6 +82,14 @@ const AdminLoginPage = () => {
 
     try {
       const data = await login(formData.email, formData.password);
+
+      // Handle 2FA requirement
+      if (data.requiresTwoFactor) {
+        setTwoFactorStep(true);
+        setTempToken(data.tempToken);
+        setLoading(false);
+        return;
+      }
       
       // Enforce strict admin bounds
       const loggedUser = data.user;
@@ -103,12 +116,57 @@ const AdminLoginPage = () => {
     }
   };
 
+  const handleTwoFactorSubmit = async (e) => {
+    e.preventDefault();
+    setError('');
+    setLoading(true);
+    try {
+      const data = await verifyTwoFactor(tempToken, totpCode);
+      const loggedUser = data.user;
+      const isAdmin = loggedUser.roles && loggedUser.roles.some(r => r.name === 'admin' || r.name === 'super_admin' || r.permissions?.length > 0);
+      if (!isAdmin) {
+        setError('Unauthorized: You do not have staff permissions.');
+        setLoading(false);
+        return;
+      }
+      const adminEntryPath = getFirstAccessibleAdminPath(loggedUser);
+      navigate(adminEntryPath || '/admin', { replace: true });
+    } catch (err) {
+      setError(getApiErrorMessage(err, 'Invalid 2FA code.'));
+    } finally {
+      setLoading(false);
+    }
+  };
+
   return (
     <AuthPageShell type="admin" fullHeight>
         {error && (
           <Alert severity="error" sx={{ mb: 3 }}>{error}</Alert>
         )}
 
+        {twoFactorStep ? (
+          <Box component="form" onSubmit={handleTwoFactorSubmit}>
+            <Typography sx={{ mb: 2, fontSize: 14, color: '#475569' }}>
+              Enter the 6-digit code from your authenticator app.
+            </Typography>
+            <TextField
+              fullWidth
+              autoFocus
+              placeholder="000000"
+              value={totpCode}
+              onChange={(e) => setTotpCode(e.target.value.replace(/\D/g, '').slice(0, 6))}
+              inputProps={{ maxLength: 6, inputMode: 'numeric', autoComplete: 'one-time-code' }}
+              sx={inputSx}
+            />
+            <Button
+              fullWidth type="submit" variant="contained" size="large"
+              sx={{ mt: 1, mb: 2, py: 1.45, borderRadius: '8px', fontWeight: 800 }}
+              disabled={loading || totpCode.length !== 6}
+            >
+              {loading ? <CircularProgress size={18} color="inherit" /> : 'Verify'}
+            </Button>
+          </Box>
+        ) : (
         <Box component="form" onSubmit={handleSubmit}>
           <Typography component="label" htmlFor="admin-login-email" sx={fieldLabelSx}>
             Email Address
@@ -198,6 +256,7 @@ const AdminLoginPage = () => {
             </Typography>
           </Box>
         </Box>
+        )}
     </AuthPageShell>
   );
 };

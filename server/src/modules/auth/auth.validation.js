@@ -23,7 +23,8 @@ const registerSchema = Joi.object({
 
 const loginSchema = Joi.object({
   email: Joi.string().email().required().lowercase(),
-  password: Joi.string().required(), // No policy check on login, just need it to exist
+  password: Joi.string().required(),
+  rememberMe: Joi.boolean().default(false),
 });
 
 const refreshSchema = Joi.object({

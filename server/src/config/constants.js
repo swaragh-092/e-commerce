@@ -58,6 +58,7 @@ module.exports = {
 
   AUTH_TIME: Object.freeze({
     REFRESH_TOKEN_TTL_MS: 7 * 24 * 60 * 60 * 1000,
+    REMEMBER_ME_TTL_MS: 30 * 24 * 60 * 60 * 1000,
     EMAIL_VERIFICATION_TTL_MS: 24 * 60 * 60 * 1000,
     PASSWORD_RESET_TTL_MS: 15 * 60 * 1000,
   }),

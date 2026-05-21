@@ -63,8 +63,8 @@ export const AuthProvider = ({ children }) => {
     return () => window.removeEventListener('auth:unauthorized', handleUnauthorized);
   }, []);
 
-  const login = async (email, password) => {
-    const data = await authService.login(email, password);
+  const login = async (email, password, rememberMe = false) => {
+    const data = await authService.login(email, password, rememberMe);
     // If 2FA is required, return early — caller handles the 2FA step
     if (data.requiresTwoFactor) {
       return data;

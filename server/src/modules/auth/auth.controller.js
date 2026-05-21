@@ -15,9 +15,9 @@ const register = async (req, res, next) => {
 
 const login = async (req, res, next) => {
   try {
-    const { email, password } = req.validated;
+    const { email, password, rememberMe } = req.validated;
     const ipAddress = req.ip;
-    const result = await AuthService.login(email, password, ipAddress);
+    const result = await AuthService.login(email, password, ipAddress, rememberMe);
     return success(res, result, 'Login successful');
   } catch (err) {
     next(err);

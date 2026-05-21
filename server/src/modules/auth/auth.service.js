@@ -142,7 +142,7 @@ const bcrypt = require('bcryptjs');
 // Pre-computed dummy hash for constant-time comparison when user doesn't exist
 const DUMMY_HASH = '$2a$12$LJ3m4sMKfRzb3Z5K5K5K5OdummyhashfortimingatttackpreventionXX';
 
-const login = async (email, password, ipAddress) => {
+const login = async (email, password, ipAddress, rememberMe = false) => {
   const user = await User.scope('withPassword').findOne({
     where: { email },
     include: authUserInclude,
@@ -179,12 +179,13 @@ const login = async (email, password, ipAddress) => {
 
   // Generate tokens
   const tokens = generateTokens(user);
+  const ttl = rememberMe ? AUTH_TIME.REMEMBER_ME_TTL_MS : AUTH_TIME.REFRESH_TOKEN_TTL_MS;
 
   // Save refresh token (hashed)
   await RefreshToken.create({
     userId: user.id,
     token: hashToken(tokens.refreshToken),
-    expiresAt: getRefreshTokenExpiryDate(),
+    expiresAt: new Date(Date.now() + ttl),
     createdByIp: ipAddress
   });
 

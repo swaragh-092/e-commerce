@@ -3,8 +3,8 @@ import api from './api';
 const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:5000/api';
 
 const authService = {
-  login: async (email, password) => {
-    const response = await api.post('/auth/login', { email, password });
+  login: async (email, password, rememberMe = false) => {
+    const response = await api.post('/auth/login', { email, password, rememberMe });
     const data = response.data.data;
     // If 2FA is required, don't store tokens yet
     if (data.requiresTwoFactor) {
@@ -13,6 +13,12 @@ const authService = {
     if (data.tokens) {
       localStorage.setItem('accessToken', data.tokens.accessToken);
       localStorage.setItem('refreshToken', data.tokens.refreshToken);
+    }
+    // Persist email for "remember me"
+    if (rememberMe) {
+      localStorage.setItem('rememberedEmail', email);
+    } else {
+      localStorage.removeItem('rememberedEmail');
     }
     return data;
   },
