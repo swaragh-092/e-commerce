@@ -62,8 +62,18 @@ const replyEnquirySchema = Joi.object({
   replyMessage: Joi.string().max(5000).required()
 });
 
+const queryEnquiriesSchema = Joi.object({
+  status: Joi.string().valid('pending', 'responded', 'closed').allow(''),
+  search: Joi.string().trim().allow(''),
+  sortBy: Joi.string().valid('createdAt', 'name', 'email', 'status', 'subject').default('createdAt'),
+  sortDir: Joi.string().valid('asc', 'desc', 'ASC', 'DESC').default('desc'),
+  page: Joi.number().integer().min(1).default(1),
+  limit: Joi.number().integer().min(1).max(100).default(20),
+});
+
 module.exports = {
   createEnquirySchema,
   updateEnquiryStatusSchema,
-  replyEnquirySchema
+  replyEnquirySchema,
+  queryEnquiriesSchema,
 };

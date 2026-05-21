@@ -212,16 +212,47 @@ class EnquiryService {
 
     const limit = parseInt(pagination.limit) || 20;
     const offset = (parseInt(pagination.page || 1) - 1) * limit;
+    const sortMap = {
+      createdAt: ['created_at', filters.sortDir?.toUpperCase() === 'ASC' ? 'ASC' : 'DESC'],
+      name: ['name', filters.sortDir?.toUpperCase() === 'ASC' ? 'ASC' : 'DESC'],
+      email: ['email', filters.sortDir?.toUpperCase() === 'ASC' ? 'ASC' : 'DESC'],
+      status: ['status', filters.sortDir?.toUpperCase() === 'ASC' ? 'ASC' : 'DESC'],
+    };
+
+    if (filters.search) {
+      where[Op.or] = [
+        { name: { [Op.iLike]: `%${filters.search}%` } },
+        { email: { [Op.iLike]: `%${filters.search}%` } },
+        { phone: { [Op.iLike]: `%${filters.search}%` } },
+        { message: { [Op.iLike]: `%${filters.search}%` } },
+      ];
+    }
+
+    const include = [
+      { model: Product, as: 'product', attributes: ['id', 'name', 'slug'], required: false },
+      { model: ProductVariant, as: 'variant', attributes: ['id', 'sku'], required: false },
+    ];
+
+    if (filters.search) {
+      include[0].where = {
+        [Op.or]: [
+          { name: { [Op.iLike]: `%${filters.search}%` } },
+        ],
+      };
+      include[0].required = false;
+      where[Op.or].push({ '$product.name$': { [Op.iLike]: `%${filters.search}%` } });
+    }
+
+    const normalizedSortBy = filters.sortBy === 'subject' ? 'createdAt' : (filters.sortBy || 'createdAt');
+    const order = [sortMap[normalizedSortBy] || sortMap.createdAt];
 
     const { count, rows } = await Enquiry.findAndCountAll({
       where,
       limit,
       offset,
-      order: [['created_at', 'DESC']],
-      include: [
-        { model: Product, as: 'product', attributes: ['id', 'name', 'slug'] },
-        { model: ProductVariant, as: 'variant', attributes: ['id', 'sku'] },
-      ],
+      order,
+      include,
+      distinct: true,
     });
 
     return {

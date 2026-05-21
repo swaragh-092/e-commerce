@@ -3,6 +3,7 @@ import { Box, CircularProgress } from '@mui/material';
 import authService from '../services/authService';
 import { userService } from '../services/userService';
 import cartService, { clearSessionId } from '../services/cartService';
+import { wishlistService } from '../services/wishlistService';
 import { getPermissionsForUser, getRolesForUser } from '../utils/permissions';
 
 export const AuthContext = createContext(null);
@@ -93,6 +94,7 @@ export const AuthProvider = ({ children }) => {
     setIsAuthenticated(true);
     localStorage.setItem('userProfile', JSON.stringify(fullUser));
     try { await cartService.mergeGuestCart(); } catch (_) {}
+    try { await wishlistService.mergeGuestWishlist(); } catch (_) {}
     clearSessionId();
     return fullUser;
   };

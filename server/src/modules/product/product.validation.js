@@ -8,6 +8,7 @@ const createProductSchema = Joi.object({
   description: Joi.string().allow('', null),
   shortDescription: Joi.string().max(500).allow('', null),
   sku: Joi.string().max(100).allow('', null),
+  unit: Joi.string().max(50).allow('', null),
   price: Joi.number().precision(2).positive().when('type', {
     is: 'variable',
     then: Joi.forbidden(),

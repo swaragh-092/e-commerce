@@ -52,6 +52,8 @@ const HomePage = lazy(() => import('../pages/storefront/HomePage'));
 const SearchResultsPage = lazy(() => import('../pages/storefront/SearchResultsPage'));
 const StoreBrandsPage = lazy(() => import('../pages/storefront/BrandsPage'));
 const BrandDetailPage = lazy(() => import('../pages/storefront/BrandDetailPage'));
+const BlogsPage = lazy(() => import('../pages/storefront/BlogsPage'));
+const BlogDetailPage = lazy(() => import('../pages/storefront/BlogDetailPage'));
 const NotFoundPage = lazy(() => import('../pages/storefront/NotFoundPage'));
 
 // Admin pages
@@ -85,7 +87,9 @@ const ApiBuilderPage = lazy(() => import('../pages/admin/ApiBuilderPage'));
 const SeoOverridesPage = lazy(() => import('../pages/admin/SeoOverridesPage'));
 const EmailTemplatesPage = lazy(() => import('../pages/admin/EmailTemplatesPage'));
 const StaticPageView = lazy(() => import('../pages/storefront/StaticPageView'));
-const GalleriesPage = lazy(() => import('../pages/admin/GalleriesPage'));
+const BlogsManagePage = lazy(() => import('../pages/admin/BlogsManagePage'));
+const BlogEditPage = lazy(() => import('../pages/admin/BlogEditPage'));
+const BlogCategoriesPage = lazy(() => import('../pages/admin/BlogCategoriesPage'));
 
 const LoadingFallback = () => (
   <Box sx={{ display: 'flex', justifyContent: 'center', alignItems: 'center', minHeight: '50vh' }}>
@@ -125,7 +129,12 @@ const AppRoutes = () => (
         <Route path="search" element={<SearchResultsPage />} />
         <Route path="brands" element={<StoreBrandsPage />} />
         <Route path="brands/:slug" element={<BrandDetailPage />} />
+        <Route path="blogs" element={<BlogsPage />} />
+        <Route path="blogs/:slug" element={<BlogDetailPage />} />
         <Route path="cart" element={<CartPage />} />
+        <Route element={<FeatureRoute feature="wishlist" />}>
+          <Route path="wishlist" element={<WishlistPage />} />
+        </Route>
 
         {/* Auth */}
         <Route path="login" element={<LoginPage />} />
@@ -154,10 +163,6 @@ const AppRoutes = () => (
           <Route path="orders" element={<AllOrdersPage />} />
           <Route path="profile" element={<AccountPage />} />
 
-          {/* Wishlist — feature gated */}
-          <Route element={<FeatureRoute feature="wishlist" />}>
-            <Route path="wishlist" element={<WishlistPage />} />
-          </Route>
         </Route>
 
         {/* 404 catch-all */}
@@ -217,7 +222,6 @@ const AppRoutes = () => (
           </Route>
           <Route element={<ProtectedRoute permission={PERMISSIONS.MEDIA_READ} />}>
             <Route path="media" element={<MediaPage />} />
-            <Route path="galleries" element={<GalleriesPage />} />
           </Route>
           <Route element={<ProtectedRoute permission={PERMISSIONS.SETTINGS_READ} />}>
             <Route path="settings" element={<SettingsPage />} />
@@ -239,6 +243,10 @@ const AppRoutes = () => (
           <Route element={<ProtectedRoute permission={PERMISSIONS.PAGES_READ} />}>
             <Route path="pages" element={<PagesManagePage />} />
           </Route>
+          <Route element={<ProtectedRoute permission={PERMISSIONS.BLOGS_READ} />}>
+            <Route path="blogs" element={<BlogsManagePage />} />
+            <Route path="blogs/categories" element={<BlogCategoriesPage />} />
+          </Route>
           <Route element={<ProtectedRoute permission={PERMISSIONS.MENUS_READ} />}>
             <Route path="menus" element={<MenuBuilderPage />} />
           </Route>
@@ -248,6 +256,10 @@ const AppRoutes = () => (
           <Route element={<ProtectedRoute permission={PERMISSIONS.PAGES_MANAGE} />}>
             <Route path="pages/new" element={<PageEditPage />} />
             <Route path="pages/:id/edit" element={<PageEditPage />} />
+          </Route>
+          <Route element={<ProtectedRoute permission={PERMISSIONS.BLOGS_MANAGE} />}>
+            <Route path="blogs/new" element={<BlogEditPage />} />
+            <Route path="blogs/:id/edit" element={<BlogEditPage />} />
           </Route>
           <Route
             path="access-control"

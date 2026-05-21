@@ -2,13 +2,6 @@ import React, { useState, useEffect, useCallback } from 'react';
 import {
   Box,
   Typography,
-  Paper,
-  Table,
-  TableBody,
-  TableCell,
-  TableContainer,
-  TableHead,
-  TableRow,
   Chip,
   IconButton,
   Button,
@@ -16,60 +9,95 @@ import {
   DialogTitle,
   DialogContent,
   DialogActions,
+  CircularProgress,
+  TextField,
   FormControl,
   InputLabel,
   Select,
   MenuItem,
-  CircularProgress,
-  TextField,
+  Paper,
+  Stack,
+  InputAdornment,
 } from '@mui/material';
+import { DataGrid } from '@mui/x-data-grid';
 import VisibilityIcon from '@mui/icons-material/Visibility';
 import ReplyIcon from '@mui/icons-material/Reply';
+import SearchIcon from '@mui/icons-material/Search';
 import api from '../../services/api';
 import PageSEO from '../../components/common/PageSEO';
 import { useNotification } from '../../context/NotificationContext';
 import { getApiErrorMessage } from '../../utils/apiErrors';
-import { formatDateOnly } from '../../utils/dates';
 
 const ADMIN_PREFIX = import.meta.env.VITE_ADMIN_ROUTE_PREFIX || 'admin';
 
+const useDebounceValue = (value, delay) => {
+  const [debouncedValue, setDebouncedValue] = useState(value);
+
+  useEffect(() => {
+    const timer = setTimeout(() => setDebouncedValue(value), delay);
+    return () => clearTimeout(timer);
+  }, [value, delay]);
+
+  return debouncedValue;
+};
+
 const EnquiriesPage = () => {
   const { notify } = useNotification();
-  const [enquiries, setEnquiries] = useState([]);
+  const [rows, setRows] = useState([]);
+  const [rowCount, setRowCount] = useState(0);
   const [loading, setLoading] = useState(true);
   const [selectedEnquiry, setSelectedEnquiry] = useState(null);
   const [statusFilter, setStatusFilter] = useState('');
+  const [searchQuery, setSearchQuery] = useState('');
   const [replyMode, setReplyMode] = useState(false);
   const [replyMessage, setReplyMessage] = useState('');
   const [replyLoading, setReplyLoading] = useState(false);
+  const [paginationModel, setPaginationModel] = useState({ page: 0, pageSize: 20 });
+  const [sortModel, setSortModel] = useState([{ field: 'createdAt', sort: 'desc' }]);
+
+  const debouncedSearchQuery = useDebounceValue(searchQuery, 300);
 
   const fetchEnquiries = useCallback(async () => {
     setLoading(true);
     try {
+      const activeSort = sortModel[0] || {};
       const { data } = await api.get(`/${ADMIN_PREFIX}/enquiries`, {
-        params: { status: statusFilter || undefined },
+        params: {
+          page: paginationModel.page + 1,
+          limit: paginationModel.pageSize,
+          status: statusFilter || undefined,
+          search: debouncedSearchQuery || undefined,
+          sortBy: activeSort.field || 'createdAt',
+          sortDir: activeSort.sort || 'desc',
+        },
       });
-      setEnquiries(data.data || []);
+      setRows(data.data || []);
+      setRowCount(data.meta?.total || 0);
     } catch (err) {
       notify(getApiErrorMessage(err, 'Failed to load enquiries'), 'error');
     } finally {
       setLoading(false);
     }
-  }, [statusFilter, notify]);
+  }, [statusFilter, debouncedSearchQuery, paginationModel, sortModel, notify]);
 
   useEffect(() => {
     fetchEnquiries();
   }, [fetchEnquiries]);
 
+  useEffect(() => {
+    setPaginationModel((prev) => ({ ...prev, page: 0 }));
+  }, [statusFilter, debouncedSearchQuery]);
+
   const handleStatusChange = async (id, newStatus) => {
     try {
       await api.patch(`/${ADMIN_PREFIX}/enquiries/${id}/status`, { status: newStatus });
-      setEnquiries((prev) =>
+      setRows((prev) =>
         prev.map((eq) => (eq.id === id ? { ...eq, status: newStatus } : eq))
       );
       if (selectedEnquiry && selectedEnquiry.id === id) {
         setSelectedEnquiry((prev) => ({ ...prev, status: newStatus }));
       }
+      notify('Enquiry status updated successfully', 'success');
     } catch (err) {
       notify(getApiErrorMessage(err, 'Failed to update status'), 'error');
     }
@@ -80,10 +108,10 @@ const EnquiriesPage = () => {
     setReplyLoading(true);
     try {
       const { data } = await api.post(`/${ADMIN_PREFIX}/enquiries/${selectedEnquiry.id}/reply`, {
-        replyMessage: replyMessage.trim()
+        replyMessage: replyMessage.trim(),
       });
-      if (data && data.data && data.data.enquiry) {
-        setEnquiries((prev) =>
+      if (data?.data?.enquiry) {
+        setRows((prev) =>
           prev.map((eq) => (eq.id === selectedEnquiry.id ? data.data.enquiry : eq))
         );
         notify('Reply sent successfully', 'success');
@@ -122,98 +150,154 @@ const EnquiriesPage = () => {
     }
   };
 
+  const columns = [
+    {
+      field: 'createdAt',
+      headerName: 'Date',
+      minWidth: 140,
+      flex: 0.8,
+      renderCell: ({ row }) => {
+        const raw = row.created_at || row.createdAt;
+        if (!raw) return '-';
+        const date = new Date(raw);
+        return Number.isNaN(date.getTime())
+          ? '-'
+          : date.toLocaleDateString(undefined, { month: 'short', day: '2-digit', year: 'numeric' });
+      },
+    },
+    {
+      field: 'name',
+      headerName: 'Customer',
+      minWidth: 220,
+      flex: 1.2,
+      renderCell: ({ row }) => (
+        <Box py={0.5}>
+          <Typography variant="body2" fontWeight={500}>{row.name}</Typography>
+          <Typography variant="caption" color="text.secondary" display="block">{row.email}</Typography>
+          {row.phone ? <Typography variant="caption" color="text.secondary" display="block">{row.phone}</Typography> : null}
+        </Box>
+      ),
+    },
+    {
+      field: 'subject',
+      headerName: 'Subject',
+      minWidth: 220,
+      flex: 1,
+      sortable: false,
+      renderCell: ({ row }) => (
+        row.product ? `Product: ${row.product.name}` : (row.cartItems ? 'Cart Items' : 'General')
+      ),
+    },
+    {
+      field: 'status',
+      headerName: 'Status',
+      width: 130,
+      renderCell: ({ value }) => <Chip label={value} size="small" color={getStatusColor(value)} />,
+    },
+    {
+      field: 'actions',
+      headerName: 'Actions',
+      width: 120,
+      sortable: false,
+      filterable: false,
+      renderCell: ({ row }) => (
+        <IconButton
+          size="small"
+          color="primary"
+          onClick={() => setSelectedEnquiry(row)}
+          aria-label={`View enquiry from ${row.email}`}
+        >
+          <VisibilityIcon fontSize="small" />
+        </IconButton>
+      ),
+    },
+  ];
+
   return (
     <Box sx={{ p: 3 }}>
       <PageSEO title="Enquiries | Admin" type="noindex" />
-      <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 3 }}>
-        <Typography variant="h5" fontWeight="bold">Enquiries</Typography>
-        <FormControl size="small" sx={{ minWidth: 150 }}>
-          <InputLabel>Status</InputLabel>
-          <Select
-            value={statusFilter}
-            label="Status"
-            onChange={(e) => setStatusFilter(e.target.value)}
+
+      <Typography variant="h5" fontWeight={700} mb={3}>
+        Enquiries
+      </Typography>
+
+      <Paper elevation={0} sx={{ p: 2, mb: 2, borderRadius: 3, border: '1px solid', borderColor: 'divider' }}>
+        <Stack direction="row" spacing={2} alignItems="center" justifyContent="space-between" flexWrap="wrap" useFlexGap>
+          <Box display="flex" gap={2} alignItems="center" flexWrap="wrap">
+            <TextField
+              size="small"
+              placeholder="Search"
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              sx={{ minWidth: 280 }}
+              InputProps={{
+                startAdornment: (
+                  <InputAdornment position="start">
+                    <SearchIcon fontSize="small" />
+                  </InputAdornment>
+                ),
+              }}
+            />
+            <FormControl size="small" sx={{ minWidth: 160 }}>
+              <InputLabel>Status</InputLabel>
+              <Select
+                value={statusFilter}
+                label="Status"
+                onChange={(e) => setStatusFilter(e.target.value)}
+              >
+                <MenuItem value="">All</MenuItem>
+                <MenuItem value="pending">Pending</MenuItem>
+                <MenuItem value="responded">Responded</MenuItem>
+                <MenuItem value="closed">Closed</MenuItem>
+              </Select>
+            </FormControl>
+          </Box>
+          <Button
+            variant="text"
+            size="small"
+            onClick={() => {
+              setSearchQuery('');
+              setStatusFilter('');
+              setSortModel([{ field: 'createdAt', sort: 'desc' }]);
+            }}
+            sx={{ display: (searchQuery || statusFilter || sortModel[0]?.field !== 'createdAt' || sortModel[0]?.sort !== 'desc') ? 'inline-flex' : 'none' }}
           >
-            <MenuItem value="">All</MenuItem>
-            <MenuItem value="pending">Pending</MenuItem>
-            <MenuItem value="responded">Responded</MenuItem>
-            <MenuItem value="closed">Closed</MenuItem>
-          </Select>
-        </FormControl>
+            Clear Filter
+          </Button>
+        </Stack>
+      </Paper>
+
+      <Box
+        sx={{
+          minHeight: 620,
+          height: { xs: 620, md: 'calc(100vh - 280px)' },
+          bgcolor: 'background.paper',
+          borderRadius: 2,
+          border: '1px solid',
+          borderColor: 'divider',
+        }}
+      >
+        <DataGrid
+          rows={rows}
+          columns={columns}
+          rowCount={rowCount}
+          loading={loading}
+          paginationMode="server"
+          sortingMode="server"
+          paginationModel={paginationModel}
+          onPaginationModelChange={setPaginationModel}
+          sortModel={sortModel}
+          onSortModelChange={setSortModel}
+          pageSizeOptions={[10, 20, 50]}
+          disableRowSelectionOnClick
+        />
       </Box>
 
-      <TableContainer component={Paper} elevation={0} sx={{ border: '1px solid', borderColor: 'divider' }}>
-        <Table>
-          <TableHead sx={{ bgcolor: 'action.hover' }}>
-            <TableRow>
-              <TableCell>Date</TableCell>
-              <TableCell>Customer</TableCell>
-              <TableCell>Subject</TableCell>
-              <TableCell>Status</TableCell>
-              <TableCell align="right">Actions</TableCell>
-            </TableRow>
-          </TableHead>
-          <TableBody>
-            {loading ? (
-              <TableRow>
-                <TableCell colSpan={5} align="center" sx={{ py: 5 }}>
-                  <CircularProgress />
-                </TableCell>
-              </TableRow>
-            ) : enquiries.length === 0 ? (
-              <TableRow>
-                <TableCell colSpan={5} align="center" sx={{ py: 5 }}>
-                  <Typography color="text.secondary">No enquiries found.</Typography>
-                </TableCell>
-              </TableRow>
-            ) : (
-              enquiries.map((enquiry) => (
-                <TableRow key={enquiry.id} hover>
-                  <TableCell>
-                    {formatDateOnly(enquiry.created_at || enquiry.createdAt) || '-'}
-                  </TableCell>
-                  <TableCell>
-                    <Typography variant="body2" fontWeight={500}>{enquiry.name}</Typography>
-                    <Typography variant="caption" color="text.secondary" display="block">{enquiry.email}</Typography>
-                    {enquiry.phone && <Typography variant="caption" color="text.secondary" display="block">{enquiry.phone}</Typography>}
-                  </TableCell>
-                  <TableCell>
-                    {enquiry.product ? `Product: ${enquiry.product.name}` : (enquiry.cartItems ? 'Cart Items' : 'General')}
-                  </TableCell>
-                  <TableCell>
-                    <Chip label={enquiry.status} size="small" color={getStatusColor(enquiry.status)} />
-                  </TableCell>
-                  <TableCell align="right">
-                    <IconButton 
-                      size="small" 
-                      color="primary" 
-                      onClick={() => setSelectedEnquiry(enquiry)}
-                      aria-label={`View enquiry from ${enquiry.email}`}
-                    >
-                      <VisibilityIcon fontSize="small" />
-                    </IconButton>
-                    {/* <IconButton 
-                      size="small" 
-                      component="a" 
-                      href={`mailto:${enquiry.email}?subject=Re: Your Enquiry`} 
-                      color="secondary"
-                      aria-label={`Reply to enquiry from ${enquiry.email}`}
-                    >
-                      <ReplyIcon fontSize="small" />
-                    </IconButton> */}
-                  </TableCell>
-                </TableRow>
-              ))
-            )}
-          </TableBody>
-        </Table>
-      </TableContainer>
-
       {selectedEnquiry && (
-        <Dialog 
-          open={Boolean(selectedEnquiry)} 
-          onClose={handleDialogClose} 
-          maxWidth="sm" 
+        <Dialog
+          open={Boolean(selectedEnquiry)}
+          onClose={handleDialogClose}
+          maxWidth="sm"
           fullWidth
           disableEscapeKeyDown={replyLoading}
         >
@@ -225,7 +309,7 @@ const EnquiriesPage = () => {
               <Typography variant="body2"><strong>Email:</strong> {selectedEnquiry.email}</Typography>
               <Typography variant="body2"><strong>Phone:</strong> {selectedEnquiry.phone || 'N/A'}</Typography>
             </Box>
-            
+
             <Box sx={{ mb: 2 }}>
               <Typography variant="subtitle2" color="text.secondary">Subject</Typography>
               {selectedEnquiry.product ? (
@@ -237,7 +321,7 @@ const EnquiriesPage = () => {
                     {selectedEnquiry.cartItems.map((item, index) => (
                       <Typography component="li" key={item.id || index} variant="body2" sx={{ py: 0.5 }}>
                         <strong>{item.product?.name || 'Unknown Product'}</strong>
-                        {item.variant ? ` (${item.variant.sku || 'Variant'})` : ''} 
+                        {item.variant ? ` (${item.variant.sku || 'Variant'})` : ''}
                         {' - '}Qty: {item.quantity}
                       </Typography>
                     ))}
@@ -271,7 +355,7 @@ const EnquiriesPage = () => {
                 ))}
               </Box>
             </Box>
-            
+
             {replyMode && (
               <Box sx={{ mt: 3, pt: 2, borderTop: '1px solid', borderColor: 'divider' }}>
                 <Typography variant="subtitle2" color="primary" gutterBottom>Draft Reply</Typography>
@@ -294,9 +378,9 @@ const EnquiriesPage = () => {
                 Reply via Email
               </Button>
             ) : (
-              <Button 
-                onClick={handleReply} 
-                variant="contained" 
+              <Button
+                onClick={handleReply}
+                variant="contained"
                 disabled={replyLoading || !replyMessage.trim()}
               >
                 {replyLoading ? <CircularProgress size={24} color="inherit" /> : 'Send Reply'}

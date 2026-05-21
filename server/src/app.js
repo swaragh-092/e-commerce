@@ -10,6 +10,7 @@ const { v4: uuidv4 } = require('uuid');
 const { errorHandler } = require('./middleware/errorHandler.middleware');
 const { globalLimiter } = require('./middleware/rateLimiter.middleware');
 const { success, error } = require('./utils/response');
+const logger = require('./utils/logger');
 
 const app = express();
 
@@ -60,7 +61,13 @@ if (process.env.NODE_ENV !== 'test') {
 
 // Use the same resolution strategy as media.service.js so both always point
 // to the same directory regardless of the working directory at startup.
-const UPLOADS_SERVE_DIR = path.resolve(process.env.UPLOAD_DIR || 'uploads');
+const SERVER_ROOT = path.resolve(__dirname, '..');
+const UPLOADS_SERVE_DIR = !process.env.UPLOAD_DIR
+  ? path.resolve(SERVER_ROOT, 'uploads')
+  : path.isAbsolute(process.env.UPLOAD_DIR)
+    ? process.env.UPLOAD_DIR
+    : path.resolve(SERVER_ROOT, process.env.UPLOAD_DIR);
+logger.info(`Serving uploads from: ${UPLOADS_SERVE_DIR}`);
 app.use('/uploads', express.static(UPLOADS_SERVE_DIR, {
   maxAge: '1y',
   immutable: true,
@@ -70,10 +77,11 @@ app.use('/uploads', express.static(UPLOADS_SERVE_DIR, {
 }));
 
 // Fallback: serve placeholder for any missing upload file
-// We return a 404 status code so that broken links are visible in dev tools/logs, 
+// We return a 404 status code so that broken links are visible in dev tools/logs,
 // while still providing a graceful image for the UI.
 app.use('/uploads', (req, res) => {
   res.setHeader('Cross-Origin-Resource-Policy', 'cross-origin');
+  logger.warn(`Upload file not found for request: ${req.path.replace(/^[\/\\]+/, '')}`);
   res.status(404).sendFile(path.join(__dirname, '../public/no-image.png'));
 });
 
@@ -118,7 +126,7 @@ const enquiryAdminRoutes = require('./modules/enquiry/enquiry.admin.routes');
 const searchRoutes = require('./modules/search/search.routes');
 const reviewAdminRoutes = require('./modules/review/review.admin.routes');
 const apiBuilderRoutes = require('./modules/apiBuilder/apiBuilder.routes');
-const galleryRoutes = require('./modules/gallery/gallery.routes');
+const blogRoutes = require('./modules/blog/blog.routes');
 
 app.use('/api/seo', seoRoutes);
 app.use('/api/settings', settingsRoutes);
@@ -157,7 +165,7 @@ app.use('/api/notifications', notificationRoutes);
 app.use('/api/enquiries', enquiryRoutes);
 app.use('/api/search', searchRoutes);
 app.use('/api/api-builder', apiBuilderRoutes);
-app.use('/api/galleries', galleryRoutes);
+app.use('/api/blogs', blogRoutes);
 
 // Health check endpoint
 app.get('/health', async (req, res) => {

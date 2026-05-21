@@ -52,7 +52,7 @@ const QUILL_MODULES = {
 
 const QUILL_FORMATS = [
   'header', 'bold', 'italic', 'underline', 'strike', 'blockquote',
-  'list', 'bullet', 'indent', 'align', 'link', 'image', 'color', 'background',
+  'list', 'indent', 'align', 'link', 'image', 'color', 'background',
 ];
 
 // Inline Preview: renders the current HTML content in a sandboxed iframe with styles

@@ -15,6 +15,7 @@ module.exports = (sequelize, DataTypes) => {
 
   Gallery.associate = (models) => {
     Gallery.hasMany(models.GalleryItem, { foreignKey: 'galleryId', as: 'items' });
+    Gallery.hasMany(models.BlogPost, { foreignKey: 'galleryId', as: 'blogPosts' });
   };
 
   return Gallery;

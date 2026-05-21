@@ -51,7 +51,29 @@ const getWishlistItemWhere = (wishlistId, productId, variantId = null) => ({
   variantId: variantId || null,
 });
 
-const addWishlistItemToCart = async (userId, item, transaction) => {
+const getOwnerWhere = (userId, sessionId) => {
+  if (userId) {
+    return { userId };
+  }
+  if (sessionId) {
+    return { sessionId };
+  }
+  throw new AppError('VALIDATION_ERROR', 400, 'Must provide userId or sessionId');
+};
+
+const getWishlistByOwner = async (userId, sessionId, transaction) => {
+  const whereClause = getOwnerWhere(userId, sessionId);
+  let wishlist = await Wishlist.findOne({ where: whereClause, transaction });
+  if (!wishlist) {
+    wishlist = await Wishlist.create({
+      userId: userId || null,
+      sessionId: userId ? null : sessionId,
+    }, { transaction });
+  }
+  return wishlist;
+};
+
+const addWishlistItemToCart = async (userId, sessionId, item, transaction) => {
   const product = await Product.findByPk(item.productId, { transaction });
   if (!product || product.status !== 'published' || !product.isEnabled) {
     throw new AppError('NOT_FOUND', 404, 'Product not found or unavailable');
@@ -72,9 +94,22 @@ const addWishlistItemToCart = async (userId, item, transaction) => {
     throw new AppError('INSUFFICIENT_STOCK', 409, 'Product is out of stock');
   }
 
-  let cart = await Cart.findOne({ where: { userId, status: 'active' }, transaction });
+  let cartWhere = {};
+  if (userId) {
+    cartWhere = { userId, status: 'active' };
+  } else if (sessionId) {
+    cartWhere = { sessionId, status: 'active' };
+  } else {
+    throw new AppError('VALIDATION_ERROR', 400, 'Must provide userId or sessionId');
+  }
+
+  let cart = await Cart.findOne({ where: cartWhere, transaction });
   if (!cart) {
-    cart = await Cart.create({ userId, status: 'active' }, { transaction });
+    cart = await Cart.create({
+      userId: userId || null,
+      sessionId: userId ? null : sessionId,
+      status: 'active',
+    }, { transaction });
   }
 
   const [cartItem, created] = await CartItem.findOrCreate({
@@ -94,15 +129,12 @@ const addWishlistItemToCart = async (userId, item, transaction) => {
   return cartItem;
 };
 
-const getWishlist = async (userId) => {
+const getWishlist = async (userId, sessionId) => {
   if (!(await isWishlistEnabled())) {
     throw new AppError('FORBIDDEN', 403, 'Wishlist feature is currently disabled');
   }
   return sequelize.transaction(async (t) => {
-    let wishlist = await Wishlist.findOne({ where: { userId }, transaction: t });
-    if (!wishlist) {
-      wishlist = await Wishlist.create({ userId }, { transaction: t });
-    }
+    const wishlist = await getWishlistByOwner(userId, sessionId, t);
 
     const items = await WishlistItem.findAll({
       where: { wishlistId: wishlist.id },
@@ -158,15 +190,12 @@ const getWishlist = async (userId) => {
   });
 };
 
-const addItem = async (userId, productId, variantId = null) => {
+const addItem = async (userId, sessionId, productId, variantId = null) => {
   if (!(await isWishlistEnabled())) {
     throw new AppError('FORBIDDEN', 403, 'Wishlist feature is currently disabled');
   }
   return sequelize.transaction(async (t) => {
-    let wishlist = await Wishlist.findOne({ where: { userId }, transaction: t });
-    if (!wishlist) {
-      wishlist = await Wishlist.create({ userId }, { transaction: t });
-    }
+    const wishlist = await getWishlistByOwner(userId, sessionId, t);
 
     const product = await Product.findByPk(productId, { transaction: t });
     if (!product || product.status !== 'published' || !product.isEnabled) throw new AppError('NOT_FOUND', 404, 'Product not found');
@@ -186,9 +215,9 @@ const addItem = async (userId, productId, variantId = null) => {
   });
 };
 
-const removeItem = async (userId, productId, variantId = null) => {
+const removeItem = async (userId, sessionId, productId, variantId = null) => {
   return sequelize.transaction(async (t) => {
-    const wishlist = await Wishlist.findOne({ where: { userId }, transaction: t });
+    const wishlist = await Wishlist.findOne({ where: getOwnerWhere(userId, sessionId), transaction: t });
     if (!wishlist) throw new AppError('NOT_FOUND', 404, 'Wishlist not found');
 
     const item = await WishlistItem.findOne({ where: getWishlistItemWhere(wishlist.id, productId, variantId), transaction: t });
@@ -198,7 +227,7 @@ const removeItem = async (userId, productId, variantId = null) => {
   });
 };
 
-const moveToCart = async (userId, productId, variantId = null) => {
+const moveToCart = async (userId, sessionId, productId, variantId = null) => {
   if (!(await isWishlistEnabled())) {
     throw new AppError('FORBIDDEN', 403, 'Wishlist feature is currently disabled');
   }
@@ -206,13 +235,13 @@ const moveToCart = async (userId, productId, variantId = null) => {
     throw new AppError('FORBIDDEN', 403, 'Cart feature is currently disabled');
   }
   return sequelize.transaction(async (t) => {
-    const wishlist = await Wishlist.findOne({ where: { userId }, transaction: t });
+    const wishlist = await Wishlist.findOne({ where: getOwnerWhere(userId, sessionId), transaction: t });
     if (!wishlist) throw new AppError('NOT_FOUND', 404, 'Wishlist not found');
 
     const item = await WishlistItem.findOne({ where: getWishlistItemWhere(wishlist.id, productId, variantId), transaction: t });
     if (!item) throw new AppError('NOT_FOUND', 404, 'Item not found in wishlist');
 
-    const cartItem = await addWishlistItemToCart(userId, item, t);
+    const cartItem = await addWishlistItemToCart(userId, sessionId, item, t);
 
     await item.destroy({ transaction: t });
 
@@ -220,7 +249,7 @@ const moveToCart = async (userId, productId, variantId = null) => {
   });
 };
 
-const moveAllToCart = async (userId) => {
+const moveAllToCart = async (userId, sessionId) => {
   if (!(await isWishlistEnabled())) {
     throw new AppError('FORBIDDEN', 403, 'Wishlist feature is currently disabled');
   }
@@ -228,7 +257,7 @@ const moveAllToCart = async (userId) => {
     throw new AppError('FORBIDDEN', 403, 'Cart feature is currently disabled');
   }
   return sequelize.transaction(async (t) => {
-    const wishlist = await Wishlist.findOne({ where: { userId }, transaction: t });
+    const wishlist = await Wishlist.findOne({ where: getOwnerWhere(userId, sessionId), transaction: t });
     if (!wishlist) throw new AppError('NOT_FOUND', 404, 'Wishlist not found');
 
     const items = await WishlistItem.findAll({ where: { wishlistId: wishlist.id }, transaction: t, order: [['createdAt', 'ASC']] });
@@ -241,7 +270,7 @@ const moveAllToCart = async (userId) => {
 
     for (const item of items) {
       try {
-        await addWishlistItemToCart(userId, item, t);
+        await addWishlistItemToCart(userId, sessionId, item, t);
         movedIds.push(item.id);
       } catch (error) {
         failedItems.push({
@@ -261,15 +290,46 @@ const moveAllToCart = async (userId) => {
   });
 };
 
-const clearWishlist = async (userId) => {
+const clearWishlist = async (userId, sessionId) => {
   return sequelize.transaction(async (t) => {
-    const wishlist = await Wishlist.findOne({ where: { userId }, transaction: t });
+    const wishlist = await Wishlist.findOne({ where: getOwnerWhere(userId, sessionId), transaction: t });
     if (!wishlist) {
       return { removedCount: 0 };
     }
 
     const removedCount = await WishlistItem.destroy({ where: { wishlistId: wishlist.id }, transaction: t });
     return { removedCount };
+  });
+};
+
+const mergeGuestWishlist = async (guestSessionId, userId) => {
+  if (!guestSessionId || !userId) return { mergedCount: 0 };
+
+  return sequelize.transaction(async (t) => {
+    const guestWishlist = await Wishlist.findOne({
+      where: { sessionId: guestSessionId },
+      include: [{ model: WishlistItem }],
+      transaction: t,
+    });
+
+    const userWishlist = await getWishlistByOwner(userId, null, t);
+
+    if (!guestWishlist || !guestWishlist.WishlistItems || guestWishlist.WishlistItems.length === 0) {
+      return { mergedCount: 0, wishlistId: userWishlist.id };
+    }
+
+    for (const guestItem of guestWishlist.WishlistItems) {
+      await WishlistItem.findOrCreate({
+        where: getWishlistItemWhere(userWishlist.id, guestItem.productId, guestItem.variantId),
+        defaults: getWishlistItemWhere(userWishlist.id, guestItem.productId, guestItem.variantId),
+        transaction: t,
+      });
+    }
+
+    const mergedCount = guestWishlist.WishlistItems.length;
+    await guestWishlist.destroy({ transaction: t });
+
+    return { mergedCount, wishlistId: userWishlist.id };
   });
 };
 
@@ -280,4 +340,5 @@ module.exports = {
   moveToCart,
   moveAllToCart,
   clearWishlist,
+  mergeGuestWishlist,
 };

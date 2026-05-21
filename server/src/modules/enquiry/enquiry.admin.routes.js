@@ -7,7 +7,7 @@ const { authorizePermissions } = require('../../middleware/role.middleware');
 const { PERMISSIONS } = require('../../config/permissions');
 const { featureGate } = require('../../middleware/featureGate.middleware');
 const { validate } = require('../../middleware/validate.middleware');
-const { updateEnquiryStatusSchema, replyEnquirySchema } = require('./enquiry.validation');
+const { updateEnquiryStatusSchema, replyEnquirySchema, queryEnquiriesSchema } = require('./enquiry.validation');
 const { idParamSchema } = require('../../utils/common.validation');
 
 // Apply enquiry feature gate to all routes in this module
@@ -18,6 +18,7 @@ router.get(
   '/',
   authenticate,
   authorizePermissions(PERMISSIONS.ENQUIRIES_READ),
+  validate(queryEnquiriesSchema, 'query'),
   enquiryController.getEnquiries
 );
 

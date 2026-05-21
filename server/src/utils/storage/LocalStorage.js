@@ -3,9 +3,18 @@ const path = require('path');
 const fs = require('fs').promises;
 const logger = require('../logger');
 
+const SERVER_ROOT = path.resolve(__dirname, '../../..');
+const DEFAULT_UPLOADS_DIR = path.resolve(SERVER_ROOT, 'uploads');
+
 class LocalStorage {
     getUploadsDir() {
-        return path.resolve(process.env.UPLOAD_DIR || 'uploads');
+        if (!process.env.UPLOAD_DIR) {
+            return DEFAULT_UPLOADS_DIR;
+        }
+
+        return path.isAbsolute(process.env.UPLOAD_DIR)
+            ? process.env.UPLOAD_DIR
+            : path.resolve(SERVER_ROOT, process.env.UPLOAD_DIR);
     }
 
     async ensureDirs() {

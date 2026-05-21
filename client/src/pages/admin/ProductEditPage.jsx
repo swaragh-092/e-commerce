@@ -125,6 +125,10 @@ const validate = (formData) => {
     errs.sku = 'SKU must be 100 characters or less.';
   }
 
+  if (formData.unit && formData.unit.length > 50) {
+    errs.unit = 'Unit must be 50 characters or less.';
+  }
+
   if (formData.slug && !/^[a-z0-9-]+$/.test(formData.slug)) {
     errs.slug = 'Slug can only contain lowercase letters, numbers, and hyphens.';
   } else if (formData.slug && formData.slug.length > 255) {
@@ -182,6 +186,7 @@ const ProductEditPage = () => {
     description: '',
     shortDescription: '',
     sku: '',
+    unit: '',
     price: '',
     salePrice: '',
     saleStartAt: '',
@@ -261,6 +266,7 @@ const ProductEditPage = () => {
               description: p.description || '',
               shortDescription: p.shortDescription || '',
               sku: p.sku || '',
+              unit: p.unit || '',
               price: p.price || '',
               salePrice: p.salePrice || '',
               saleStartAt: toDateTimeLocal(p.saleStartAt),
@@ -358,6 +364,8 @@ const ProductEditPage = () => {
         saleEndAt: (formData.salePrice !== '' && formData.salePrice !== null) ? toIsoOrNull(formData.saleEndAt) : null,
         saleLabel: (formData.salePrice !== '' && formData.salePrice !== null) ? (formData.saleLabel || null) : null,
         brandId: formData.brandId || null,
+        unit: formData.unit?.trim() || null,
+        quantity: formData.type === 'combo' ? 0 : (parseInt(formData.quantity) || 0),
         type: formData.type || 'simple',
         // Shipping dimensions — null when blank so DB stores NULL cleanly
         requiresShipping: formData.requiresShipping,
@@ -1088,6 +1096,16 @@ const ProductEditPage = () => {
                       </InputAdornment>
                     ),
                   }}
+                />
+                <TextField
+                  fullWidth
+                  label="Unit"
+                  margin="normal"
+                  placeholder="e.g. kg, litre, piece, pack"
+                  value={formData.unit}
+                  onChange={(e) => setField('unit', e.target.value)}
+                  error={Boolean(errors.unit)}
+                  helperText={errors.unit || 'Used in storefront pricing display'}
                 />
                 <TextField
                   fullWidth

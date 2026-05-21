@@ -19,11 +19,13 @@ exports.getEnquiries = async (req, res, next) => {
   try {
     const filters = {
       status: req.query.status,
+      search: req.query.search,
+      sortBy: req.query.sortBy,
+      sortDir: req.query.sortDir,
     };
-    const MAX_LIMIT = 100;
     const pagination = {
-      page: Math.max(1, parseInt(req.query.page, 10) || 1),
-      limit: Math.min(MAX_LIMIT, Math.max(1, parseInt(req.query.limit, 10) || 20)),
+      page: req.query.page,
+      limit: req.query.limit,
     };
 
     const result = await enquiryService.getEnquiries(filters, pagination);

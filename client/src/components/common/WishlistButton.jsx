@@ -2,9 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { IconButton, Tooltip, Snackbar, Alert } from '@mui/material';
 import FavoriteIcon from '@mui/icons-material/Favorite';
 import FavoriteBorderIcon from '@mui/icons-material/FavoriteBorder';
-import { useNavigate, useLocation } from 'react-router-dom';
 import { wishlistService } from '../../services/wishlistService';
-import { useAuth } from '../../hooks/useAuth';
 import { useWishlist } from '../../context/WishlistContext';
 import { useFeature } from '../../hooks/useSettings';
 
@@ -14,9 +12,6 @@ const WishlistButton = ({ productId, variantId = null }) => {
   const [inWishlist, setInWishlist] = useState(false);
   const [loading, setLoading] = useState(false);
   const [snackbar, setSnackbar] = useState(null);
-  const { isAuthenticated } = useAuth();
-  const navigate = useNavigate();
-  const location = useLocation();
 
   // Sync with global wishlist context whenever the set changes
   useEffect(() => {
@@ -26,11 +21,6 @@ const WishlistButton = ({ productId, variantId = null }) => {
   if (!wishlistEnabled) return null;
 
   const toggleWishlist = async () => {
-    if (!isAuthenticated) {
-      navigate('/login', { state: { from: location.pathname } });
-      return;
-    }
-
     const nextInWishlist = !inWishlist;
     setLoading(true);
     setInWishlist(nextInWishlist);

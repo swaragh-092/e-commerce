@@ -16,7 +16,12 @@ const moveToCartSchema = Joi.object({
   }).unknown(true),
 });
 
+const mergeWishlistSchema = Joi.object({
+  sessionId: Joi.string().uuid().required(),
+});
+
 module.exports = {
   addItemSchema,
   moveToCartSchema,
+  mergeWishlistSchema,
 };

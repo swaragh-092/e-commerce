@@ -1,4 +1,5 @@
 'use strict';
+const { Op } = require('sequelize');
 
 module.exports = (sequelize, DataTypes) => {
     const Wishlist = sequelize.define('Wishlist', {
@@ -9,14 +10,31 @@ module.exports = (sequelize, DataTypes) => {
         },
         userId: {
             type: DataTypes.UUID,
-            unique: true,
-            allowNull: false,
+            allowNull: true,
+        },
+        sessionId: {
+            type: DataTypes.UUID,
+            allowNull: true,
         },
     }, {
         tableName: 'wishlists',
         timestamps: true,
         updatedAt: false,
         underscored: true,
+        indexes: [
+            {
+                unique: true,
+                fields: ['userId'],
+                where: { userId: { [Op.ne]: null } },
+                name: 'uniq_wishlists_user_id_not_null',
+            },
+            {
+                unique: true,
+                fields: ['sessionId'],
+                where: { sessionId: { [Op.ne]: null } },
+                name: 'uniq_wishlists_session_id_not_null',
+            },
+        ],
     });
 
     Wishlist.associate = (models) => {

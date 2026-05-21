@@ -50,7 +50,9 @@
     "ENQUIRIES_READ": "enquiries.read",
     "ENQUIRIES_MANAGE": "enquiries.manage",
     "BRANDS_READ": "brands.read",
-    "BRANDS_MANAGE": "brands.manage"
+    "BRANDS_MANAGE": "brands.manage",
+    "BLOGS_READ": "blogs.read",
+    "BLOGS_MANAGE": "blogs.manage"
   },
   "systemRoleDefinitions": {
     "customer": {
@@ -105,7 +107,9 @@
     "enquiries.read",
     "enquiries.manage",
     "brands.read",
-    "brands.manage"
+    "brands.manage",
+    "blogs.read",
+    "blogs.manage"
   ],
   "customerPermissionKeys": [
     "account.self",
@@ -161,6 +165,8 @@
     "enquiries.manage": "Reply to and manage enquiries",
     "brands.read": "View brands",
     "brands.manage": "Create, edit, and delete brands",
+    "blogs.read": "View blog posts and categories",
+    "blogs.manage": "Create, edit, and delete blog posts and categories",
     "account.self": "Manage own account profile",
     "cart.self": "Manage own shopping cart",
     "wishlist.self": "Manage own wishlist",
@@ -187,6 +193,7 @@
     "products.delete": ["products.read"],
     "media.upload": ["media.read"],
     "media.update": ["media.read"],
-    "media.delete": ["media.read"]
+    "media.delete": ["media.read"],
+    "blogs.manage": ["blogs.read"]
   }
 }

@@ -1,6 +1,5 @@
 import React, { createContext, useState, useEffect, useCallback, useContext } from 'react';
 import { wishlistService } from '../services/wishlistService';
-import { useAuth } from '../hooks/useAuth';
 import { useSettings } from '../hooks/useSettings';
 import { useNotification } from './NotificationContext';
 
@@ -16,13 +15,12 @@ const WishlistContext = createContext({
 
 export const WishlistProvider = ({ children }) => {
   const [wishlistKeys, setWishlistKeys] = useState(new Set());
-  const { isAuthenticated } = useAuth();
   const { settings } = useSettings();
   const { notify } = useNotification();
   const wishlistEnabled = settings?.features?.wishlist !== false;
 
   const refreshWishlist = useCallback(async () => {
-    if (!isAuthenticated || !wishlistEnabled) {
+    if (!wishlistEnabled) {
       setWishlistKeys(new Set());
       return { items: [], meta: {} };
     }
@@ -50,7 +48,7 @@ export const WishlistProvider = ({ children }) => {
       setWishlistKeys(new Set());
       return { items: [], meta: {} };
     }
-  }, [isAuthenticated, wishlistEnabled, notify]);
+  }, [wishlistEnabled, notify]);
 
   useEffect(() => {
     refreshWishlist();

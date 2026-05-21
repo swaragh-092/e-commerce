@@ -259,6 +259,7 @@ const ProductDetailPage = () => {
     const stockAvailable = maxStock > 0;
     const selectedVariantLabel = selectedVariant ? getVariantOptionLabel(selectedVariant) : '';
     const displaySku = selectedVariant?.sku || product.sku;
+    const displayUnit = product.unit ? String(product.unit).trim() : '';
 
     const addSelectedItemToCart = async (action) => {
         setPendingAction(action);
@@ -355,29 +356,29 @@ const ProductDetailPage = () => {
                     <Typography
                         variant="caption"
                         color="text.secondary"
-                        sx={{ 
-                            display: 'flex', 
-                            alignItems: 'center', 
+                        sx={{
+                            display: 'flex',
+                            alignItems: 'center',
                             flexWrap: 'wrap',
                             gap: 0.8,
-                            mb: 1.2, 
-                            fontWeight: 700, 
-                            textTransform: 'uppercase', 
-                            letterSpacing: 0.5 
+                            mb: 1.2,
+                            fontWeight: 700,
+                            textTransform: 'uppercase',
+                            letterSpacing: 0.5
                         }}
                     >
-                        <Box 
-                            component={RouterLink} 
-                            to="/" 
+                        <Box
+                            component={RouterLink}
+                            to="/"
                             sx={{ color: 'inherit', textDecoration: 'none', '&:hover': { color: 'primary.main' } }}
                         >
                             Home
                         </Box>
-                        
+
                         {(() => {
                             const cats = product.categories;
                             if (!cats?.length) return null;
-                            
+
                             const catMap = Object.fromEntries(cats.map(c => [c.id, c]));
                             const parentIds = new Set(cats.map(c => c.parentId).filter(Boolean));
                             const leaf = cats.find(c => !parentIds.has(c.id)) || cats[0];
@@ -394,9 +395,9 @@ const ProductDetailPage = () => {
                                     <Box
                                         component={RouterLink}
                                         to={`/products?category=${cat.slug}`}
-                                        sx={{ 
-                                            color: 'inherit', 
-                                            textDecoration: 'none', 
+                                        sx={{
+                                            color: 'inherit',
+                                            textDecoration: 'none',
                                             '&:hover': { color: 'primary.main' },
                                             // The last one is the current leaf category, maybe make it slightly bolder or different?
                                             // But for breadcrumbs, usually the current page is not a link.
@@ -418,7 +419,7 @@ const ProductDetailPage = () => {
                             {wishlistEnabled && (
                                 <WishlistButton productId={product.id} variantId={selectedVariant?.id || null} />
                             )}
-                            <ShareButton 
+                            <ShareButton
                                 title={product.name}
                                 text={product.shortDescription}
                                 url={window.location.href}
@@ -438,6 +439,9 @@ const ProductDetailPage = () => {
                         )}
                         {pp.showSKU !== false && displaySku && (
                             <Chip label={`SKU: ${displaySku}`} size="small" variant="outlined" />
+                        )}
+                        {displayUnit && (
+                            <Chip label={`Unit: ${displayUnit}`} size="small" variant="outlined" />
                         )}
                         {selectedVariantLabel && (
                             <Chip label={`Selected: ${selectedVariantLabel}`} size="small" variant="outlined" />
@@ -461,6 +465,11 @@ const ProductDetailPage = () => {
                             {pricingEnabled && endingSoon && <Chip label="Ending Soon" color="warning" variant="outlined" />}
                         </Box>
                     )}
+                    {showPrice && displayUnit && (
+                        <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
+                            Price per {displayUnit}
+                        </Typography>
+                    )}
 
                     {pricingEnabled && (hasSale || isScheduledSale) && (
                         <Box
@@ -476,15 +485,15 @@ const ProductDetailPage = () => {
                         >
                             <Box sx={{ display: 'flex', gap: 1, flexWrap: 'wrap', alignItems: 'center', mb: 1 }}>
                                 {saleLabelText && (
-                                    <Chip 
-                                        label={saleLabelText} 
-                                        sx={{ 
+                                    <Chip
+                                        label={saleLabelText}
+                                        sx={{
                                             bgcolor: saleLabelColor.startsWith('#') ? saleLabelColor : undefined,
                                             color: saleLabelColor.startsWith('#') ? '#fff' : undefined,
                                             fontWeight: 700
                                         }}
                                         color={!saleLabelColor.startsWith('#') ? saleLabelColor : undefined}
-                                        size="small" 
+                                        size="small"
                                     />
                                 )}
                                 {showDiscountPercent && discountPercent > 0 && <Chip label={`${discountPercent}% OFF`} color={hasSale ? 'error' : 'warning'} variant="outlined" size="small" />}
@@ -732,6 +741,11 @@ const ProductDetailPage = () => {
                                     </>
                                 ) : (
                                     <Typography variant="h4" fontWeight={900}>{formatPrice(currentPrice)}</Typography>
+                                )}
+                                {displayUnit && (
+                                    <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mt: 0.25 }}>
+                                        per {displayUnit}
+                                    </Typography>
                                 )}
                             </Box>
                         )}
