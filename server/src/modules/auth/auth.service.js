@@ -146,7 +146,7 @@ const DUMMY_HASH = '$2a$12$dpabKKLz0iNKPD1LEZL0oOGI86Zcks4c1j0jbtA3f1FwXE55zzNXa
 const { parseDeviceName } = require('../../utils/deviceParser');
 const AccountEvents = require('./accountEvents');
 
-const login = async (email, password, ipAddress, rememberMe = false, userAgent) => {
+const login = async (email, password, ipAddress, rememberMe = false, userAgent, trustedDevice) => {
   const user = await User.scope('withPassword').findOne({
     where: { email },
     include: authUserInclude,
@@ -171,14 +171,19 @@ const login = async (email, password, ipAddress, rememberMe = false, userAgent) 
     }
   }
 
-  // If 2FA is enabled, return a short-lived temp token instead of full auth
+  // If 2FA is enabled, check trusted device cookie before requiring TOTP
   if (user.twoFactorEnabled) {
-    const tempToken = jwt.sign(
-      { id: user.id, purpose: '2fa' },
-      process.env.JWT_ACCESS_SECRET,
-      { expiresIn: '5m' }
-    );
-    return { requiresTwoFactor: true, tempToken };
+    const expectedDeviceId = crypto.createHash('sha256').update(`${user.id}:${userAgent}:${ipAddress}`).digest('hex').slice(0, 32);
+    if (trustedDevice && trustedDevice === expectedDeviceId) {
+      // Trusted device — skip 2FA
+    } else {
+      const tempToken = jwt.sign(
+        { id: user.id, purpose: '2fa' },
+        process.env.JWT_ACCESS_SECRET,
+        { expiresIn: '5m' }
+      );
+      return { requiresTwoFactor: true, tempToken };
+    }
   }
 
   // Generate tokens

@@ -70,6 +70,16 @@ const findOrCreateOAuthUser = async (profile, clientIp) => {
       throw new Error('Account is inactive');
     }
 
+    // Check if 2FA is enabled — return temp token instead of full auth
+    if (user.twoFactorEnabled) {
+      const tempToken = jwt.sign(
+        { id: user.id, purpose: '2fa' },
+        process.env.JWT_ACCESS_SECRET,
+        { expiresIn: '5m' }
+      );
+      return { requiresTwoFactor: true, tempToken };
+    }
+
     const tokens = generateTokens(user);
     await RefreshToken.create({
       userId: user.id,

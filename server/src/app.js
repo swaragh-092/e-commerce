@@ -6,6 +6,7 @@ const helmet = require('helmet');
 const morgan = require('morgan');
 const path = require('path');
 const compression = require('compression');
+const cookieParser = require('cookie-parser');
 const { v4: uuidv4 } = require('uuid');
 const { errorHandler } = require('./middleware/errorHandler.middleware');
 const { globalLimiter } = require('./middleware/rateLimiter.middleware');
@@ -14,9 +15,13 @@ const logger = require('./utils/logger');
 
 const app = express();
 
+// Trust proxy (nginx/ALB) — required for correct req.ip and rate limiting
+app.set('trust proxy', 1);
+
 // Security Middleware
 app.use(helmet());
 app.use(compression());
+app.use(cookieParser());
 app.use((req, res, next) => {
   req.id = uuidv4();
   res.setHeader('X-Request-Id', req.id);

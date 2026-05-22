@@ -16,7 +16,8 @@ const register = async (req, res, next) => {
 const login = async (req, res, next) => {
   try {
     const { email, password, rememberMe } = req.validated;
-    const result = await AuthService.login(email, password, req.ip, rememberMe, req.headers['user-agent']);
+    const trustedDevice = req.cookies?.trusted_device;
+    const result = await AuthService.login(email, password, req.ip, rememberMe, req.headers['user-agent'], trustedDevice);
     return success(res, result, 'Login successful');
   } catch (err) {
     next(err);
@@ -86,9 +87,22 @@ const verifyEmail = async (req, res, next) => {
 
 const verifyTwoFactor = async (req, res, next) => {
   try {
-    const { tempToken, code } = req.validated;
+    const { tempToken, code, trustDevice } = req.validated;
     const ipAddress = req.ip;
     const result = await AuthService.verifyTwoFactor(tempToken, code, ipAddress);
+
+    // Set trusted device cookie if requested (30 days)
+    if (trustDevice) {
+      const crypto = require('crypto');
+      const deviceId = crypto.createHash('sha256').update(`${result.user.id}:${req.headers['user-agent']}:${ipAddress}`).digest('hex').slice(0, 32);
+      res.cookie('trusted_device', deviceId, {
+        httpOnly: true,
+        secure: process.env.NODE_ENV === 'production',
+        sameSite: 'lax',
+        maxAge: 30 * 24 * 60 * 60 * 1000, // 30 days
+      });
+    }
+
     return success(res, result, 'Login successful');
   } catch (err) {
     next(err);

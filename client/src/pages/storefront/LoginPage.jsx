@@ -1,6 +1,6 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { Box, Typography, TextField, Button, Alert, useTheme, IconButton, InputAdornment, CircularProgress, Divider, Checkbox } from '@mui/material';
-import { useNavigate, Link as RouterLink, useLocation } from 'react-router-dom';
+import { useNavigate, Link as RouterLink, useLocation, useSearchParams } from 'react-router-dom';
 import { useAuth } from '../../hooks/useAuth';
 import { validateEmail, validateRequired } from '../../utils/authValidation';
 import { getApiErrorMessage } from '../../utils/apiErrors';
@@ -13,6 +13,7 @@ const LoginPage = () => {
   const navigate = useNavigate();
   const location = useLocation();
   const { login, verifyTwoFactor, finalizeAuthenticatedSession } = useAuth();
+  const [searchParams] = useSearchParams();
   
   const [formData, setFormData] = useState({ email: localStorage.getItem('rememberedEmail') || '', password: '' });
   const [fieldErrors, setFieldErrors] = useState({});
@@ -30,6 +31,15 @@ const LoginPage = () => {
   const [tempToken, setTempToken] = useState('');
   const [totpCode, setTotpCode] = useState('');
   const [useBackupCode, setUseBackupCode] = useState(false);
+  const [trustDevice, setTrustDevice] = useState(false);
+
+  // Handle OAuth 2FA redirect
+  useEffect(() => {
+    if (searchParams.get('requiresTwoFactor') === 'true' && searchParams.get('tempToken')) {
+      setTwoFactorStep(true);
+      setTempToken(searchParams.get('tempToken'));
+    }
+  }, []);
 
   // Phone login state
   const [loginMode, setLoginMode] = useState('email'); // 'email' | 'phone'
@@ -150,7 +160,7 @@ const LoginPage = () => {
     setError('');
     setLoading(true);
     try {
-      await verifyTwoFactor(tempToken, totpCode);
+      await verifyTwoFactor(tempToken, totpCode, trustDevice);
       const redirectTo = location.state?.from?.pathname || '/';
       navigate(redirectTo, { replace: true });
     } catch (err) {
@@ -187,7 +197,13 @@ const LoginPage = () => {
     setLoading(true);
     setError('');
     try {
-      await authService.verifyOtp(phone, otpCode);
+      const result = await authService.verifyOtp(phone, otpCode);
+      if (result.requiresTwoFactor) {
+        setTwoFactorStep(true);
+        setTempToken(result.tempToken);
+        setLoginMode('email'); // switch to show 2FA input
+        return;
+      }
       await finalizeAuthenticatedSession();
       const redirectTo = location.state?.from?.pathname || '/';
       navigate(redirectTo, { replace: true });
@@ -244,6 +260,10 @@ const LoginPage = () => {
             inputProps={{ maxLength: useBackupCode ? 8 : 6, autoComplete: 'one-time-code' }}
             sx={inputSx}
           />
+          <Box component="label" sx={{ display: 'flex', alignItems: 'center', gap: 0.75, mb: 1, cursor: 'pointer', fontSize: 13, color: '#475569' }}>
+            <Checkbox size="small" checked={trustDevice} onChange={(e) => setTrustDevice(e.target.checked)} sx={{ p: 0 }} />
+            Trust this device for 30 days
+          </Box>
           <Button
             fullWidth
             type="submit"

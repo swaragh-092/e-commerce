@@ -74,8 +74,8 @@ export const AuthProvider = ({ children }) => {
     return { ...data, user: fullUser };
   };
 
-  const verifyTwoFactor = async (tempToken, code) => {
-    const data = await authService.verifyTwoFactor(tempToken, code);
+  const verifyTwoFactor = async (tempToken, code, trustDevice = false) => {
+    const data = await authService.verifyTwoFactor(tempToken, code, trustDevice);
     const fullUser = await finalizeAuthenticatedSession();
     return { ...data, user: fullUser };
   };

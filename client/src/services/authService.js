@@ -23,8 +23,8 @@ const authService = {
     return data;
   },
 
-  verifyTwoFactor: async (tempToken, code) => {
-    const response = await api.post('/auth/2fa/verify', { tempToken, code });
+  verifyTwoFactor: async (tempToken, code, trustDevice = false) => {
+    const response = await api.post('/auth/2fa/verify', { tempToken, code, trustDevice });
     const data = response.data.data;
     if (data.tokens) {
       localStorage.setItem('accessToken', data.tokens.accessToken);

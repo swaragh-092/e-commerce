@@ -41,6 +41,7 @@ const twoFactorVerifySchema = Joi.object({
   code: Joi.string().required().pattern(/^(\d{6}|[a-f0-9]{8})$/).messages({
     'string.pattern.base': 'Code must be a 6-digit TOTP or 8-character backup code',
   }),
+  trustDevice: Joi.boolean().default(false),
 });
 const otpSendSchema = Joi.object({ phone: Joi.string().pattern(/^\d{10,15}$/).required() });
 const otpVerifySchema = Joi.object({
@@ -75,9 +76,13 @@ router.post('/otp/verify', otpVerifyLimiter, validate(otpVerifySchema), otpContr
 if (process.env.GOOGLE_CLIENT_ID) {
   router.get('/google', passport.authenticate('google', { scope: ['profile', 'email'], session: false }));
   router.get('/google/callback', passport.authenticate('google', { session: false, failureRedirect: `${process.env.CLIENT_URL || 'http://localhost:5173'}/login?error=oauth_failed` }), (req, res) => {
-    const { tokens } = req.user;
     const clientUrl = process.env.CLIENT_URL || 'http://localhost:5173';
-    res.redirect(`${clientUrl}/oauth/callback#accessToken=${encodeURIComponent(tokens.accessToken)}&refreshToken=${encodeURIComponent(tokens.refreshToken)}`);
+    if (req.user.requiresTwoFactor) {
+      res.redirect(`${clientUrl}/login?requiresTwoFactor=true&tempToken=${encodeURIComponent(req.user.tempToken)}`);
+    } else {
+      const { tokens } = req.user;
+      res.redirect(`${clientUrl}/oauth/callback#accessToken=${encodeURIComponent(tokens.accessToken)}&refreshToken=${encodeURIComponent(tokens.refreshToken)}`);
+    }
   });
 }
 
