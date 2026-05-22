@@ -20,6 +20,8 @@ import {
   TextField,
   InputAdornment,
   Badge,
+  Menu,
+  MenuItem,
 } from '@mui/material';
 import { alpha } from '@mui/material/styles';
 import SearchIcon from '@mui/icons-material/Search';
@@ -27,7 +29,7 @@ import PushPinIcon from '@mui/icons-material/PushPin';
 import PushPinOutlinedIcon from '@mui/icons-material/PushPinOutlined';
 import DragIndicatorIcon from '@mui/icons-material/DragIndicator';
 import { DragDropContext, Droppable, Draggable } from '@hello-pangea/dnd';
-import { Outlet, Link as RouterLink, useLocation } from 'react-router-dom';
+import { Outlet, Link as RouterLink, useLocation, useNavigate } from 'react-router-dom';
 import DashboardIcon from '@mui/icons-material/Dashboard';
 import InventoryIcon from '@mui/icons-material/Inventory';
 import CategoryIcon from '@mui/icons-material/Category';
@@ -44,6 +46,7 @@ import StoreIcon from '@mui/icons-material/Storefront';
 import ExitIcon from '@mui/icons-material/ExitToApp';
 import DescriptionIcon from '@mui/icons-material/Description';
 import AccountTreeIcon from '@mui/icons-material/AccountTree';
+import PersonIcon from '@mui/icons-material/Person';
 import PaymentIcon from '@mui/icons-material/Payment';
 import LocalShippingIcon from '@mui/icons-material/LocalShipping';
 import PublicIcon from '@mui/icons-material/Public';
@@ -143,6 +146,7 @@ const AdminLayout = () => {
   const isMobile = useMediaQuery(theme.breakpoints.down('md'));
   const [mobileOpen, setMobileOpen] = useState(false);
   const [isCollapsed, setIsCollapsed] = useState(false);
+  const [anchorEl, setAnchorEl] = useState(null);
   const [openGroups, setOpenGroups] = useState({});
   const [searchQuery, setSearchQuery] = useState('');
   const [favorites, setFavorites] = useState(() => {
@@ -158,6 +162,7 @@ const AdminLayout = () => {
 
   const { logout, user, hasAnyPermission, hasPermission } = useAuth();
   const location = useLocation();
+  const navigate = useNavigate();
   const { settings, features } = useSettings();
   const appMode = useMode(); // 'ecommerce' | 'catalog'
 
@@ -540,53 +545,10 @@ const AdminLayout = () => {
           </Droppable>
         </DragDropContext>
 
-        <Divider sx={{ my: 1, opacity: 0.6 }} />
-        <List dense>
-          <ListItem disablePadding>
-            <ListItemButton 
-              onClick={() => {
-                logout();
-                isMobile && setMobileOpen(false);
-              }} 
-              sx={{ 
-                mx: 1, 
-                borderRadius: 2,
-                justifyContent: isCollapsed ? 'center' : 'initial',
-                color: 'error.main',
-                '&:hover': {
-                  bgcolor: 'error.lighter',
-                }
-              }}
-            >
-              <ListItemIcon sx={{ 
-                minWidth: isCollapsed ? 0 : 36, 
-                mr: isCollapsed ? 0 : 0,
-                color: 'inherit'
-              }}>
-                <ExitIcon />
-              </ListItemIcon>
-              {!isCollapsed && <ListItemText primary="Logout" primaryTypographyProps={{ fontSize: 14, fontWeight: 500 }} />}
-            </ListItemButton>
-          </ListItem>
-        </List>
+
       </Box>
 
       <Box sx={{ mt: 'auto', borderTop: '1px solid', borderColor: 'divider', p: 1, bgcolor: 'background.paper' }}>
-        {!isCollapsed && (
-          <Box sx={{ px: 2, py: 1, mb: 1, display: 'flex', alignItems: 'center', gap: 1.5, bgcolor: 'action.hover', borderRadius: 2 }}>
-            <Avatar sx={{ width: 32, height: 32, bgcolor: 'secondary.main', fontSize: 13 }}>
-              {user?.firstName?.[0]?.toUpperCase() || 'A'}
-            </Avatar>
-            <Box sx={{ overflow: 'hidden' }}>
-              <Typography variant="caption" sx={{ fontWeight: 700, display: 'block', noWrap: true }}>
-                {user?.firstName} {user?.lastName}
-              </Typography>
-              <Typography variant="caption" sx={{ color: 'text.secondary', display: 'block', noWrap: true, fontSize: 10 }}>
-                {user?.email}
-              </Typography>
-            </Box>
-          </Box>
-        )}
         <IconButton 
           onClick={handleToggleCollapse} 
           sx={{ 
@@ -633,9 +595,36 @@ const AdminLayout = () => {
               <StoreIcon />
             </IconButton>
           </Tooltip>
-          <Avatar sx={{ width: 34, height: 34, bgcolor: 'secondary.main', fontSize: 14 }}>
-            {user?.firstName?.[0]?.toUpperCase() || 'A'}
-          </Avatar>
+          <IconButton onClick={(e) => setAnchorEl(e.currentTarget)} sx={{ p: 0 }}>
+            <Avatar sx={{ width: 34, height: 34, bgcolor: 'secondary.main', fontSize: 14 }}>
+              {user?.firstName?.[0]?.toUpperCase() || 'A'}
+            </Avatar>
+          </IconButton>
+          <Menu
+            anchorEl={anchorEl}
+            open={Boolean(anchorEl)}
+            onClose={() => setAnchorEl(null)}
+            anchorOrigin={{ vertical: 'bottom', horizontal: 'right' }}
+            transformOrigin={{ vertical: 'top', horizontal: 'right' }}
+          >
+            <Box sx={{ px: 2, py: 1 }}>
+              <Typography variant="body2" sx={{ fontWeight: 600 }}>
+                {user?.firstName} {user?.lastName}
+              </Typography>
+              <Typography variant="caption" sx={{ color: 'text.secondary' }}>
+                {user?.email}
+              </Typography>
+            </Box>
+            <Divider />
+            <MenuItem onClick={() => { setAnchorEl(null); navigate('/admin/profile'); }}>
+              <ListItemIcon><PersonIcon fontSize="small" /></ListItemIcon>
+              My Profile
+            </MenuItem>
+            <MenuItem onClick={() => { setAnchorEl(null); logout(); }}>
+              <ListItemIcon><ExitIcon fontSize="small" /></ListItemIcon>
+              Logout
+            </MenuItem>
+          </Menu>
         </Toolbar>
       </AppBar>
 

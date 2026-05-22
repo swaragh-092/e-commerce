@@ -90,6 +90,7 @@ const StaticPageView = lazy(() => import('../pages/storefront/StaticPageView'));
 const BlogsManagePage = lazy(() => import('../pages/admin/BlogsManagePage'));
 const BlogEditPage = lazy(() => import('../pages/admin/BlogEditPage'));
 const BlogCategoriesPage = lazy(() => import('../pages/admin/BlogCategoriesPage'));
+const AdminProfilePage = lazy(() => import('../pages/admin/AdminProfilePage'));
 
 const LoadingFallback = () => (
   <Box sx={{ display: 'flex', justifyContent: 'center', alignItems: 'center', minHeight: '50vh' }}>
@@ -181,6 +182,7 @@ const AppRoutes = () => (
 
         <Route element={<AdminLayout />}>
           <Route index element={<AdminIndex />} />
+          <Route path="profile" element={<AdminProfilePage />} />
           <Route element={<ProtectedRoute permission={PERMISSIONS.PRODUCTS_READ} />}>
             <Route path="products" element={<ProductsManagePage />} />
             <Route path="brands" element={<BrandsPage />} />
