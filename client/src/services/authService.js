@@ -48,6 +48,11 @@ const authService = {
     return response.data.data;
   },
 
+  regenerateBackupCodes: async (code) => {
+    const response = await api.post('/auth/2fa/backup-codes', { code });
+    return response.data.data;
+  },
+
   getGoogleOAuthUrl: () => `${API_URL}/auth/google`,
 
   sendOtp: async (phone) => {

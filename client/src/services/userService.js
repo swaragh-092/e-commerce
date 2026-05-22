@@ -46,4 +46,29 @@ export const userService = {
     return response.data.data;
   },
 
+  deleteAccount: async (payload) => {
+    const response = await api.delete('/users/me', { data: payload });
+    return response.data;
+  },
+
+  cancelAccountDeletion: async () => {
+    const response = await api.post('/users/me/cancel-deletion');
+    return response.data;
+  },
+
+  getSessions: async () => {
+    const response = await api.get('/users/me/sessions');
+    return response.data.data;
+  },
+
+  revokeSession: async (id) => {
+    const response = await api.delete(`/users/me/sessions/${id}`);
+    return response.data;
+  },
+
+  revokeAllOtherSessions: async () => {
+    const response = await api.delete('/users/me/sessions');
+    return response.data;
+  },
+
 };

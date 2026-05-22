@@ -10,10 +10,10 @@ const updateProfileSchema = Joi.object({
   firstName: Joi.string().max(50),
   lastName: Joi.string().max(50),
   phone: Joi.string()
-    .regex(/^\d{10,12}$/)
+    .regex(/^\d{10,15}$/)
     .allow(null, '')
     .messages({
-      'string.pattern.base': 'Phone number must be between 10 and 12 digits and contain only numbers'
+      'string.pattern.base': 'Phone number must be between 10 and 15 digits and contain only numbers'
     }),
   gender: Joi.string().valid('male', 'female', 'other', 'prefer_not_to_say').allow(null),
   dateOfBirth: Joi.date().iso().allow(null)
@@ -90,11 +90,39 @@ const updateAddressSchema = Joi.object({
   isDefault: Joi.boolean().optional()
 });
 
+const deleteAccountSchema = Joi.object({
+  password: Joi.string().optional(),
+  oauthProvider: Joi.string().valid('google').optional(),
+}).or('password', 'oauthProvider');
+
+const phoneChangeRequestSchema = Joi.object({
+  phone: Joi.string().pattern(/^\d{10,15}$/).required(),
+});
+
+const phoneChangeConfirmSchema = Joi.object({
+  phone: Joi.string().pattern(/^\d{10,15}$/).required(),
+  code: Joi.string().length(6).pattern(/^\d+$/).required(),
+});
+
+const emailChangeRequestSchema = Joi.object({
+  newEmail: Joi.string().email().required().lowercase(),
+  password: Joi.string().required(),
+});
+
+const emailChangeConfirmSchema = Joi.object({
+  token: Joi.string().required(),
+});
+
 module.exports = {
   updateProfileSchema,
   changePasswordSchema,
   updateAvatarSchema,
   updateStatusSchema,
   createAddressSchema,
-  updateAddressSchema
+  updateAddressSchema,
+  deleteAccountSchema,
+  phoneChangeRequestSchema,
+  phoneChangeConfirmSchema,
+  emailChangeRequestSchema,
+  emailChangeConfirmSchema,
 };

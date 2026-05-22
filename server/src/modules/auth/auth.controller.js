@@ -16,8 +16,7 @@ const register = async (req, res, next) => {
 const login = async (req, res, next) => {
   try {
     const { email, password, rememberMe } = req.validated;
-    const ipAddress = req.ip;
-    const result = await AuthService.login(email, password, ipAddress, rememberMe);
+    const result = await AuthService.login(email, password, req.ip, rememberMe, req.headers['user-agent']);
     return success(res, result, 'Login successful');
   } catch (err) {
     next(err);
@@ -27,8 +26,7 @@ const login = async (req, res, next) => {
 const refresh = async (req, res, next) => {
   try {
     const { refreshToken } = req.validated;
-    const ipAddress = req.ip;
-    const result = await AuthService.refresh(refreshToken, ipAddress);
+    const result = await AuthService.refresh(refreshToken, req.ip, req.headers['user-agent']);
     return success(res, result, 'Token refreshed');
   } catch (err) {
     next(err);

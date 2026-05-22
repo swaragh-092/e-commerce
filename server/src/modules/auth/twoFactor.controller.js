@@ -24,4 +24,11 @@ const disable = async (req, res, next) => {
   } catch (err) { next(err); }
 };
 
-module.exports = { setup, enable, disable };
+const regenerateBackupCodes = async (req, res, next) => {
+  try {
+    const result = await TwoFactorService.regenerateBackupCodes(req.user.id, req.validated.code);
+    return success(res, result, 'New backup codes generated. Save them securely.');
+  } catch (err) { next(err); }
+};
+
+module.exports = { setup, enable, disable, regenerateBackupCodes };

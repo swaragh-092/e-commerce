@@ -236,10 +236,17 @@ const SetupModal = ({ gateway, open, onClose, onSaved }) => {
 };
 
 // ─── Gateway Card ─────────────────────────────────────────────────────────────
-const GatewayCard = ({ gateway, paymentSettings, onToggle, onConfigure, togglingId }) => {
+const GatewayCard = ({ gateway, paymentSettings, onToggle, onConfigure, togglingId, canManage }) => {
   const enabledKey = `${gateway.id}Enabled`;
   const isEnabled = Boolean(paymentSettings[enabledKey]);
   const isToggling = togglingId === gateway.id;
+  const requiresSetup = gateway.id !== 'cod' && !gateway.connected;
+  const switchDisabled = !canManage || isToggling || (requiresSetup && !isEnabled);
+  const toggleTooltip = !canManage
+    ? 'No permission'
+    : requiresSetup && !isEnabled
+      ? 'Configure API credentials before enabling'
+      : isEnabled ? 'Disable at checkout' : 'Enable at checkout';
 
   return (
     <Paper
@@ -319,7 +326,7 @@ const GatewayCard = ({ gateway, paymentSettings, onToggle, onConfigure, toggling
         )}
 
         {/* Enable toggle */}
-        <Tooltip title={isEnabled ? 'Disable at checkout' : 'Enable at checkout'}>
+        <Tooltip title={toggleTooltip}>
           <Box sx={{ display: 'flex', alignItems: 'center' }}>
             {isToggling ? (
               <CircularProgress size={24} />
@@ -328,6 +335,7 @@ const GatewayCard = ({ gateway, paymentSettings, onToggle, onConfigure, toggling
                 checked={isEnabled}
                 onChange={() => onToggle(gateway.id, !isEnabled)}
                 color="primary"
+                disabled={switchDisabled}
               />
             )}
           </Box>
@@ -368,6 +376,13 @@ const PaymentGatewaysPage = () => {
   useEffect(() => { load(); }, [load]);
 
   const handleToggle = async (gatewayId, enabled) => {
+    const gateway = gateways.find((gw) => gw.id === gatewayId);
+    if (enabled && gateway?.id !== 'cod' && !gateway?.connected) {
+      notify(`${gateway?.name || gatewayId} must be configured before it can be enabled.`, 'error');
+      setConfiguring(gateway || null);
+      return;
+    }
+
     setTogglingId(gatewayId);
     try {
       await updateSettings([
@@ -375,8 +390,8 @@ const PaymentGatewaysPage = () => {
       ]);
       setPaymentSettings((prev) => ({ ...prev, [`${gatewayId}Enabled`]: enabled }));
       notify(`${gatewayId.charAt(0).toUpperCase() + gatewayId.slice(1)} ${enabled ? 'enabled' : 'disabled'}.`, 'success');
-    } catch {
-      notify('Failed to update gateway status.', 'error');
+    } catch (err) {
+      notify(err?.response?.data?.error?.message || 'Failed to update gateway status.', 'error');
     } finally {
       setTogglingId(null);
     }
@@ -389,12 +404,12 @@ const PaymentGatewaysPage = () => {
       ]);
       setPaymentSettings((prev) => ({ ...prev, defaultMethod: e.target.value }));
       notify('Default payment method updated.', 'success');
-    } catch {
-      notify('Failed to update default method.', 'error');
+    } catch (err) {
+      notify(err?.response?.data?.error?.message || 'Failed to update default method.', 'error');
     }
   };
 
-  const enabledGateways = gateways.filter((g) => paymentSettings[`${g.id}Enabled`]);
+  const enabledGateways = gateways.filter((g) => paymentSettings[`${g.id}Enabled`] && g.connected);
   const selectedDefaultId = enabledGateways.find(g => g.id === paymentSettings.defaultMethod)
     ? paymentSettings.defaultMethod
     : (enabledGateways[0]?.id || '');
@@ -405,8 +420,8 @@ const PaymentGatewaysPage = () => {
       <Box sx={{ mb: 3 }}>
         <Typography variant="h5" fontWeight={800} gutterBottom>Payment Gateways</Typography>
         <Typography variant="body2" color="text.secondary">
-          Choose which payment methods are available at checkout. Enable a gateway, then click
-          the ⚙ icon to enter your API keys — no server restart needed.
+          Choose which payment methods are available at checkout. Configure a gateway first,
+          then enable it for customers — no server restart needed.
         </Typography>
       </Box>
 
@@ -432,6 +447,7 @@ const PaymentGatewaysPage = () => {
                 onToggle={canManage ? handleToggle : () => notify('No permission.', 'error')}
                 onConfigure={canManage ? setConfiguring : () => notify('No permission.', 'error')}
                 togglingId={togglingId}
+                canManage={canManage}
               />
             ))}
           </Stack>

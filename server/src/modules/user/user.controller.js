@@ -116,11 +116,91 @@ const setDefaultAddress = async (req, res, next) => {
   }
 };
 
+const deleteAccount = async (req, res, next) => {
+  try {
+    const result = await UserService.deleteAccount(req.user.id, req.validated);
+    return success(res, result, `Account scheduled for deletion on ${result.scheduledDeletionAt.toLocaleDateString()}`);
+  } catch (err) { next(err); }
+};
+
+const cancelAccountDeletion = async (req, res, next) => {
+  try {
+    const result = await UserService.cancelAccountDeletion(req.user.id);
+    return success(res, result, 'Account deletion cancelled');
+  } catch (err) { next(err); }
+};
+
+const getSessions = async (req, res, next) => {
+  try {
+    const result = await UserService.getSessions(req.user.id, req.headers.authorization?.split(' ')[1]);
+    return success(res, result);
+  } catch (err) { next(err); }
+};
+
+const revokeSession = async (req, res, next) => {
+  try {
+    await UserService.revokeSession(req.user.id, req.params.id);
+    return success(res, null, 'Session revoked');
+  } catch (err) { next(err); }
+};
+
+const revokeAllOtherSessions = async (req, res, next) => {
+  try {
+    const result = await UserService.revokeAllOtherSessions(req.user.id, req.headers.authorization?.split(' ')[1]);
+    return success(res, result, 'All other sessions revoked');
+  } catch (err) { next(err); }
+};
+
+const forceLogout = async (req, res, next) => {
+  try {
+    const result = await UserService.forceLogoutUser(req.params.id);
+    return success(res, result, 'User sessions revoked');
+  } catch (err) { next(err); }
+};
+
+const requestPhoneChange = async (req, res, next) => {
+  try {
+    const result = await UserService.requestPhoneChange(req.user.id, req.validated.phone);
+    return success(res, result, 'OTP sent to new phone number');
+  } catch (err) { next(err); }
+};
+
+const confirmPhoneChange = async (req, res, next) => {
+  try {
+    const result = await UserService.confirmPhoneChange(req.user.id, req.validated.phone, req.validated.code);
+    return success(res, result, 'Phone number updated');
+  } catch (err) { next(err); }
+};
+
+const requestEmailChange = async (req, res, next) => {
+  try {
+    const result = await UserService.requestEmailChange(req.user.id, req.validated.newEmail, req.validated.password);
+    return success(res, result, 'Verification email sent to new address');
+  } catch (err) { next(err); }
+};
+
+const confirmEmailChange = async (req, res, next) => {
+  try {
+    const result = await UserService.confirmEmailChange(req.validated.token);
+    return success(res, result, 'Email updated successfully');
+  } catch (err) { next(err); }
+};
+
 module.exports = {
   getMe,
   updateMe,
   updateAvatar,
   changePassword,
+  deleteAccount,
+  cancelAccountDeletion,
+  getSessions,
+  revokeSession,
+  revokeAllOtherSessions,
+  forceLogout,
+  requestPhoneChange,
+  confirmPhoneChange,
+  requestEmailChange,
+  confirmEmailChange,
   list,
   getOne,
   updateStatus,

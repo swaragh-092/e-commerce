@@ -53,13 +53,25 @@ module.exports = (sequelize, DataTypes) => {
             type: DataTypes.JSONB,
             allowNull: true,
         },
+        twoFactorBackupCodes: {
+            type: DataTypes.JSONB,
+            allowNull: true,
+        },
+        scheduledDeletionAt: {
+            type: DataTypes.DATE,
+            allowNull: true,
+        },
+        pendingEmail: {
+            type: DataTypes.STRING(255),
+            allowNull: true,
+        },
     }, {
         tableName: 'users',
         timestamps: true,
         underscored: true,
         paranoid: true, // soft delete
         defaultScope: {
-            attributes: { exclude: ['password', 'twoFactorSecret'] },
+            attributes: { exclude: ['password', 'twoFactorSecret', 'twoFactorBackupCodes'] },
         },
         scopes: {
             withPassword: {

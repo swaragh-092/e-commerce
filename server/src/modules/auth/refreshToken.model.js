@@ -30,6 +30,21 @@ module.exports = (sequelize, DataTypes) => {
                 allowNull: true,
                 field: 'revoked_at',
             },
+            userAgent: {
+                type: DataTypes.TEXT,
+                allowNull: true,
+                field: 'user_agent',
+            },
+            deviceName: {
+                type: DataTypes.STRING(200),
+                allowNull: true,
+                field: 'device_name',
+            },
+            lastActiveAt: {
+                type: DataTypes.DATE,
+                allowNull: true,
+                field: 'last_active_at',
+            },
     }, {
         tableName: 'refresh_tokens',
         timestamps: true,

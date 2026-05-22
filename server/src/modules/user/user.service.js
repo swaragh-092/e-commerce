@@ -403,11 +403,230 @@ const setDefaultAddress = async (userId, addressId) => {
   });
 };
 
+const ACTIVE_ORDER_STATUSES = ['pending_payment', 'confirmed', 'on_hold', 'processing', 'ready_for_shipment'];
+const DELETION_GRACE_DAYS = 30;
+
+const deleteAccount = async (userId, { password, oauthProvider } = {}) => {
+  const { RefreshToken } = require('../index');
+  const NotificationService = require('../notification/notification.service');
+
+  return sequelize.transaction(async (t) => {
+    const user = await User.scope('withPassword').findByPk(userId, { transaction: t });
+    if (!user) throw new AppError('NOT_FOUND', 404, 'User not found');
+
+    // Verify identity: password for email users, oauthProvider flag for OAuth users
+    if (oauthProvider) {
+      if (!['google'].includes(oauthProvider)) {
+        throw new AppError('VALIDATION_ERROR', 400, 'Unsupported OAuth provider');
+      }
+    } else {
+      if (!password) throw new AppError('VALIDATION_ERROR', 400, 'Password is required');
+      if (!(await user.validatePassword(password))) {
+        throw new AppError('VALIDATION_ERROR', 400, 'Incorrect password');
+      }
+    }
+
+    // Block if active orders exist
+    const activeOrders = await Order.count({
+      where: { userId, status: { [Op.in]: ACTIVE_ORDER_STATUSES } },
+      transaction: t,
+    });
+    if (activeOrders > 0) {
+      throw new AppError('VALIDATION_ERROR', 400, `Cannot delete account with ${activeOrders} active order(s). Please complete or cancel them first.`);
+    }
+
+    // Schedule deletion (30-day grace period)
+    const scheduledDeletionAt = new Date(Date.now() + DELETION_GRACE_DAYS * 24 * 60 * 60 * 1000);
+    await user.update({ scheduledDeletionAt }, { transaction: t });
+
+    try {
+      if (AuditService && AuditService.log) {
+        await AuditService.log({ userId, action: ACTIONS.DELETE, entity: ENTITIES.USER, entityId: userId }, t);
+      }
+    } catch (e) {}
+
+    // Send confirmation email
+    try {
+      if (NotificationService && NotificationService.send) {
+        await NotificationService.send('account_deletion_scheduled', user.email, {
+          name: user.firstName,
+          deletion_date: scheduledDeletionAt.toLocaleDateString(),
+          cancel_url: `${process.env.CLIENT_URL || 'http://localhost:5173'}/account?cancelDeletion=true`,
+        }, userId, null, t);
+      }
+    } catch (e) {}
+
+    return { scheduledDeletionAt };
+  });
+};
+
+const cancelAccountDeletion = async (userId) => {
+  const user = await User.findByPk(userId);
+  if (!user) throw new AppError('NOT_FOUND', 404, 'User not found');
+  if (!user.scheduledDeletionAt) throw new AppError('VALIDATION_ERROR', 400, 'No pending deletion to cancel');
+
+  await user.update({ scheduledDeletionAt: null });
+  return { cancelled: true };
+};
+
+const getSessions = async (userId, currentAccessToken) => {
+  const { RefreshToken } = require('../index');
+  const crypto = require('crypto');
+  const jwt = require('jsonwebtoken');
+
+  const sessions = await RefreshToken.findAll({
+    where: { userId, revokedAt: null },
+    attributes: ['id', 'createdByIp', 'deviceName', 'lastActiveAt', 'createdAt', 'token'],
+    order: [['lastActiveAt', 'DESC']],
+  });
+
+  // Determine current session by matching the access token's user to the most recent refresh
+  let currentTokenUserId;
+  try {
+    const decoded = jwt.verify(currentAccessToken, process.env.JWT_ACCESS_SECRET, { algorithms: ['HS256'] });
+    currentTokenUserId = decoded.id;
+  } catch (e) {}
+
+  // The most recently active session for this user is the current one
+  return sessions.map((s, idx) => ({
+    id: s.id,
+    deviceName: s.deviceName || 'Unknown device',
+    ipAddress: s.createdByIp,
+    lastActiveAt: s.lastActiveAt || s.createdAt,
+    createdAt: s.createdAt,
+    isCurrent: currentTokenUserId ? idx === 0 : false,
+  }));
+};
+
+const revokeSession = async (userId, sessionId) => {
+  const { RefreshToken } = require('../index');
+  const session = await RefreshToken.findOne({ where: { id: sessionId, userId, revokedAt: null } });
+  if (!session) throw new AppError('NOT_FOUND', 404, 'Session not found');
+  await session.update({ revokedAt: new Date() });
+};
+
+const revokeAllOtherSessions = async (userId, currentAccessToken) => {
+  const { RefreshToken } = require('../index');
+
+  // Get all active sessions, revoke all except the most recently active one
+  const sessions = await RefreshToken.findAll({
+    where: { userId, revokedAt: null },
+    order: [['lastActiveAt', 'DESC']],
+  });
+
+  if (sessions.length <= 1) return { revoked: 0 };
+
+  const currentSessionId = sessions[0].id;
+  const toRevoke = sessions.slice(1).map(s => s.id);
+
+  await RefreshToken.update(
+    { revokedAt: new Date() },
+    { where: { id: toRevoke } }
+  );
+
+  return { revoked: toRevoke.length };
+};
+
+const requestPhoneChange = async (userId, newPhone) => {
+  const OtpService = require('../auth/otp.service');
+  const existing = await UserProfile.findOne({ where: { phone: newPhone } });
+  if (existing && existing.userId !== userId) {
+    throw new AppError('VALIDATION_ERROR', 400, 'This phone number is already in use');
+  }
+  const otp = await OtpService.generate(newPhone, 'phone_change', null);
+  try {
+    const NotificationService = require('../notification/notification.service');
+    if (NotificationService && NotificationService.send) {
+      await NotificationService.send('otp_login', newPhone, { otp, expires_in: '5 minutes' });
+    }
+  } catch (e) {}
+  return { sent: true };
+};
+
+const confirmPhoneChange = async (userId, newPhone, code) => {
+  const OtpService = require('../auth/otp.service');
+  await OtpService.verify(newPhone, code, 'phone_change');
+  let profile = await UserProfile.findOne({ where: { userId } });
+  if (!profile) profile = await UserProfile.create({ userId, phone: newPhone });
+  else await profile.update({ phone: newPhone });
+  return { phone: newPhone };
+};
+
+const requestEmailChange = async (userId, newEmail, password) => {
+  const crypto = require('crypto');
+  const { EmailVerificationToken } = require('../index');
+  const NotificationService = require('../notification/notification.service');
+
+  const user = await User.scope('withPassword').findByPk(userId);
+  if (!user) throw new AppError('NOT_FOUND', 404, 'User not found');
+  if (!(await user.validatePassword(password))) throw new AppError('VALIDATION_ERROR', 400, 'Incorrect password');
+
+  const existing = await User.findOne({ where: { email: newEmail } });
+  if (existing) throw new AppError('VALIDATION_ERROR', 400, 'This email is already in use');
+
+  const token = crypto.randomBytes(32).toString('hex');
+  const hashed = crypto.createHash('sha256').update(token).digest('hex');
+  await EmailVerificationToken.destroy({ where: { userId } });
+  await EmailVerificationToken.create({ userId, token: hashed, expiresAt: new Date(Date.now() + 24 * 60 * 60 * 1000) });
+
+  // Store pending new email on user record
+  await user.update({ pendingEmail: newEmail });
+
+  try {
+    if (NotificationService && NotificationService.send) {
+      await NotificationService.send('email_change_verification', newEmail, {
+        name: user.firstName,
+        verify_url: `${process.env.CLIENT_URL || 'http://localhost:5173'}/verify-email-change?token=${token}`,
+      }, userId);
+    }
+  } catch (e) {}
+  return { sent: true };
+};
+
+const confirmEmailChange = async (token) => {
+  const crypto = require('crypto');
+  const { EmailVerificationToken } = require('../index');
+  const hashed = crypto.createHash('sha256').update(token).digest('hex');
+  const record = await EmailVerificationToken.findOne({ where: { token: hashed } });
+  if (!record || record.expiresAt < new Date()) throw new AppError('VALIDATION_ERROR', 400, 'Invalid or expired token');
+
+  const user = await User.findByPk(record.userId);
+  if (!user || !user.pendingEmail) throw new AppError('VALIDATION_ERROR', 400, 'No pending email change');
+
+  const newEmail = user.pendingEmail;
+  await user.update({ email: newEmail, pendingEmail: null });
+  await record.destroy();
+  return { email: newEmail };
+};
+
+const forceLogoutUser = async (userId) => {
+  const { RefreshToken } = require('../index');
+  const user = await User.findByPk(userId);
+  if (!user) throw new AppError('NOT_FOUND', 404, 'User not found');
+
+  const [revoked] = await RefreshToken.update(
+    { revokedAt: new Date() },
+    { where: { userId, revokedAt: null } }
+  );
+
+  return { revoked };
+};
+
 module.exports = {
   getMe,
   updateMe,
   updateAvatar,
   changePassword,
+  deleteAccount,
+  cancelAccountDeletion,
+  getSessions,
+  revokeSession,
+  revokeAllOtherSessions,
+  forceLogoutUser,
+  requestPhoneChange,
+  confirmPhoneChange,
+  requestEmailChange,
+  confirmEmailChange,
   listAll,
   getById,
   updateStatus,

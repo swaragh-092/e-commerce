@@ -23,6 +23,8 @@ import { Visibility, VisibilityOff } from '@mui/icons-material';
 import { getPasswordChecks } from '../../utils/authValidation';
 import TabPanel from '../../components/common/TabPanel';
 import TwoFactorSetup from '../../components/storefront/TwoFactorSetup';
+import DeleteAccount from '../../components/storefront/DeleteAccount';
+import ActiveSessions from '../../components/storefront/ActiveSessions';
 
 const AccountPage = () => {
     const { user, updateProfile, refreshUser } = useContext(AuthContext);
@@ -55,6 +57,8 @@ const AccountPage = () => {
                 </TabPanel>
                 <TabPanel value={tab} index={3} sx={{ p: 3 }}>
                     <TwoFactorSetup user={user} onUpdate={refreshUser} />
+                    <ActiveSessions />
+                    <DeleteAccount user={user} onUpdate={refreshUser} />
                 </TabPanel>
             </Paper>
         </Container>

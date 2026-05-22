@@ -38,7 +38,9 @@ const Joi = require('joi');
 const totpCodeSchema = Joi.object({ code: Joi.string().length(6).pattern(/^\d+$/).required() });
 const twoFactorVerifySchema = Joi.object({
   tempToken: Joi.string().required(),
-  code: Joi.string().length(6).pattern(/^\d+$/).required(),
+  code: Joi.string().required().pattern(/^(\d{6}|[a-f0-9]{8})$/).messages({
+    'string.pattern.base': 'Code must be a 6-digit TOTP or 8-character backup code',
+  }),
 });
 const otpSendSchema = Joi.object({ phone: Joi.string().pattern(/^\d{10,15}$/).required() });
 const otpVerifySchema = Joi.object({
@@ -63,6 +65,7 @@ router.post('/2fa/verify', twoFactorLimiter, validate(twoFactorVerifySchema), au
 router.post('/2fa/setup', authenticate, twoFactorController.setup);
 router.post('/2fa/enable', authenticate, twoFactorLimiter, validate(totpCodeSchema), twoFactorController.enable);
 router.post('/2fa/disable', authenticate, twoFactorLimiter, validate(totpCodeSchema), twoFactorController.disable);
+router.post('/2fa/backup-codes', authenticate, twoFactorLimiter, validate(totpCodeSchema), twoFactorController.regenerateBackupCodes);
 
 // Phone OTP routes
 router.post('/otp/send', otpSendLimiter, validate(otpSendSchema), otpController.sendOtp);

@@ -143,7 +143,10 @@ const bcrypt = require('bcryptjs');
 // Generated via: bcrypt.hashSync('dummy-password-never-matches', 12)
 const DUMMY_HASH = '$2a$12$dpabKKLz0iNKPD1LEZL0oOGI86Zcks4c1j0jbtA3f1FwXE55zzNXa';
 
-const login = async (email, password, ipAddress, rememberMe = false) => {
+const { parseDeviceName } = require('../../utils/deviceParser');
+const AccountEvents = require('./accountEvents');
+
+const login = async (email, password, ipAddress, rememberMe = false, userAgent) => {
   const user = await User.scope('withPassword').findOne({
     where: { email },
     include: authUserInclude,
@@ -182,12 +185,26 @@ const login = async (email, password, ipAddress, rememberMe = false) => {
   const tokens = generateTokens(user);
   const ttl = rememberMe ? AUTH_TIME.REMEMBER_ME_TTL_MS : AUTH_TIME.REFRESH_TOKEN_TTL_MS;
 
+  // New device/IP detection (before creating new token)
+  let isNewDevice = false;
+  try {
+    const deviceName = parseDeviceName(userAgent);
+    const knownSession = await RefreshToken.findOne({
+      where: { userId: user.id, deviceName, createdByIp: ipAddress, revokedAt: null },
+      attributes: ['id'],
+    });
+    isNewDevice = !knownSession;
+  } catch (e) {}
+
   // Save refresh token (hashed)
   await RefreshToken.create({
     userId: user.id,
     token: hashToken(tokens.refreshToken),
     expiresAt: new Date(Date.now() + ttl),
-    createdByIp: ipAddress
+    createdByIp: ipAddress,
+    userAgent: userAgent || null,
+    deviceName: parseDeviceName(userAgent),
+    lastActiveAt: new Date(),
   });
 
   // Update lastLoginAt and load user data without password for response
@@ -207,10 +224,27 @@ const login = async (email, password, ipAddress, rememberMe = false) => {
       }
   } catch(e) {}
 
+  // New device/IP notification
+  if (isNewDevice) {
+    try {
+      if (NotificationService && NotificationService.send) {
+        await NotificationService.send('new_login_alert', user.email, {
+          name: user.firstName,
+          device: parseDeviceName(userAgent),
+          ip: ipAddress,
+          time: new Date().toLocaleString(),
+        }, user.id);
+      }
+    } catch (e) {}
+  }
+
+  // Emit account event
+  AccountEvents.emit('login', { userId: user.id, ipAddress, device: parseDeviceName(userAgent) });
+
   return { user: enrichUserAuthorization(userData), tokens };
 };
 
-const refresh = async (refreshTokenStr, ipAddress) => {
+const refresh = async (refreshTokenStr, ipAddress, userAgent) => {
   try {
     const decoded = jwt.verify(refreshTokenStr, process.env.JWT_REFRESH_SECRET, { algorithms: ['HS256'], issuer: JWT_ISS, audience: JWT_AUD });
     const emailVerificationRequired = await isEmailVerificationRequired();
@@ -268,6 +302,9 @@ const refresh = async (refreshTokenStr, ipAddress) => {
           token: hashToken(tokens.refreshToken),
           expiresAt: getRefreshTokenExpiryDate(),
           createdByIp: ipAddress,
+          userAgent: userAgent || tokenRecord.userAgent,
+          deviceName: userAgent ? parseDeviceName(userAgent) : tokenRecord.deviceName,
+          lastActiveAt: new Date(),
         }, { transaction: t });
 
         try {
@@ -322,6 +359,8 @@ const logout = async (refreshTokenStr, userId) => {
           });
       }
   } catch(e) {}
+
+  AccountEvents.emit('logout', { userId: userId || tokenRecord?.userId });
 };
 
 const forgotPassword = async (email) => {
@@ -461,7 +500,14 @@ const verifyTwoFactor = async (tempToken, totpCode, ipAddress) => {
   }
 
   const TwoFactorService = require('./twoFactor.service');
-  if (!TwoFactorService.verify(user, totpCode)) {
+  let isValid = false;
+  try {
+    isValid = TwoFactorService.verify(user, totpCode);
+  } catch (e) {}
+  if (!isValid) {
+    isValid = await TwoFactorService.verifyBackupCode(user, totpCode);
+  }
+  if (!isValid) {
     throw new AppError('UNAUTHORIZED', 401, 'Invalid 2FA code');
   }
 

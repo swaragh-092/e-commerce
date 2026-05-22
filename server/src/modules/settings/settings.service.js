@@ -15,6 +15,93 @@ const { encrypt, decrypt } = require('../../utils/crypto');
 const isMaskedSecretPlaceholder = (value) =>
   typeof value === 'string' && value.trim() === '********';
 
+const PAYMENT_GATEWAY_ENABLED_KEYS = {
+  razorpayEnabled: 'razorpay',
+  cashfreeEnabled: 'cashfree',
+  stripeEnabled: 'stripe',
+  payuEnabled: 'payu',
+  codEnabled: 'cod',
+};
+
+const isTruthySetting = (value) => value === true || value === 'true';
+
+const resolveSettingGroup = (key, group) => {
+  if (group) return group;
+  for (const candidateGroup of Object.keys(defaultSettings || {})) {
+    if (defaultSettings[candidateGroup]?.[key] !== undefined) return candidateGroup;
+  }
+  return 'general';
+};
+
+const ensurePaymentGatewaySettingsAreValid = async (settingsArray) => {
+  const touchesPayments = settingsArray.some(({ key, group }) => {
+    const resolvedGroup = resolveSettingGroup(key, group);
+    return resolvedGroup === 'payments' && (
+      PAYMENT_GATEWAY_ENABLED_KEYS[key] || key === 'defaultMethod'
+    );
+  });
+
+  if (!touchesPayments) return;
+
+  const currentPayments = await getByGroup('payments', { maskSensitive: false });
+  const nextPayments = { ...currentPayments };
+
+  for (const { key, value, group } of settingsArray) {
+    const resolvedGroup = resolveSettingGroup(key, group);
+    if (resolvedGroup === 'payments' && value !== null && value !== undefined) {
+      nextPayments[key] = value;
+    }
+  }
+
+  const PaymentService = require('../payment/payment.service');
+  const statuses = await PaymentService.getGatewayStatuses();
+  const statusById = new Map(statuses.map((gateway) => [gateway.id, gateway]));
+
+  for (const { key, value, group } of settingsArray) {
+    const resolvedGroup = resolveSettingGroup(key, group);
+    const gatewayId = PAYMENT_GATEWAY_ENABLED_KEYS[key];
+    if (resolvedGroup !== 'payments' || !gatewayId || !isTruthySetting(value)) continue;
+
+    const gateway = statusById.get(gatewayId);
+    if (!gateway?.connected) {
+      throw new AppError(
+        'PAYMENT_GATEWAY_SETUP_REQUIRED',
+        400,
+        `${gateway?.name || gatewayId} must be configured before it can be enabled.`
+      );
+    }
+  }
+
+  const touchesDefaultMethod = settingsArray.some(({ key, group }) =>
+    resolveSettingGroup(key, group) === 'payments' && key === 'defaultMethod'
+  );
+  const defaultMethod = nextPayments.defaultMethod;
+  if (touchesDefaultMethod && defaultMethod) {
+    const defaultEnabledKey = `${defaultMethod}Enabled`;
+    const defaultGateway = statusById.get(defaultMethod);
+
+    if (!PAYMENT_GATEWAY_ENABLED_KEYS[defaultEnabledKey] || !defaultGateway) {
+      throw new AppError('VALIDATION_ERROR', 400, 'Invalid default payment method.');
+    }
+
+    if (!isTruthySetting(nextPayments[defaultEnabledKey])) {
+      throw new AppError(
+        'VALIDATION_ERROR',
+        400,
+        'Default payment method must be enabled first.'
+      );
+    }
+
+    if (!defaultGateway.connected) {
+      throw new AppError(
+        'PAYMENT_GATEWAY_SETUP_REQUIRED',
+        400,
+        `${defaultGateway.name} must be configured before it can be the default payment method.`
+      );
+    }
+  }
+};
+
 // Read local config/default.json for fallback defaults
 // Path: server/src/modules/settings/ → ../../../config/default.json = server/config/default.json
 let defaultSettings = {};
@@ -142,6 +229,8 @@ const updateKey = async (key, value, group, actingUserId) => {
     );
   }
 
+  await ensurePaymentGatewaySettingsAreValid([{ key, value, group }]);
+
   // Capture the transaction result so we can invalidate the feature cache
   // AFTER it commits — ensuring we never bust the cache on a rollback.
   const result = await sequelize.transaction(async (t) => {
@@ -199,6 +288,8 @@ const bulkUpdate = async (settingsInput, actingUserId, actingUser = null) => {
         ? settingsInput 
         : Object.entries(settingsInput).map(([key, value]) => ({ key, value }));
 
+    await ensurePaymentGatewaySettingsAreValid(settingsArray);
+
     // ── Superadmin guard ─────────────────────────────────────────────────────
     // Tier 2 feature toggles (group === 'features', non-Tier-1 keys) may only
     // be written by a super_admin. Regular admins can save everything else.
@@ -237,6 +328,9 @@ const bulkUpdate = async (settingsInput, actingUserId, actingUser = null) => {
                     }
                 }
             }
+
+            // Skip entries with null/undefined values — DB column is NOT NULL
+            if (value === null || value === undefined) continue;
 
             // Skip updating if the value is the sensitive placeholder (means it wasn't changed)
             if (isMaskedSecretPlaceholder(value)) continue;

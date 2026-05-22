@@ -28,6 +28,7 @@ const AdminLoginPage = () => {
   const [twoFactorStep, setTwoFactorStep] = useState(false);
   const [tempToken, setTempToken] = useState('');
   const [totpCode, setTotpCode] = useState('');
+  const [useBackupCode, setUseBackupCode] = useState(false);
 
   // If already logged in and an admin, redirect them directly to the admin area
   if (isAuthenticated) {
@@ -150,23 +151,33 @@ const AdminLoginPage = () => {
         {twoFactorStep ? (
           <Box component="form" onSubmit={handleTwoFactorSubmit}>
             <Typography sx={{ mb: 2, fontSize: 14, color: '#475569' }}>
-              Enter the 6-digit code from your authenticator app.
+              {useBackupCode ? 'Enter one of your 8-character backup codes.' : 'Enter the 6-digit code from your authenticator app.'}
             </Typography>
             <TextField
               fullWidth
               autoFocus
-              placeholder="000000"
+              placeholder={useBackupCode ? 'e.g. b2ef58fb' : '000000'}
               value={totpCode}
-              onChange={(e) => setTotpCode(e.target.value.replace(/\D/g, '').slice(0, 6))}
-              inputProps={{ maxLength: 6, inputMode: 'numeric', autoComplete: 'one-time-code' }}
+              onChange={(e) => {
+                if (useBackupCode) setTotpCode(e.target.value.replace(/[^a-f0-9]/gi, '').toLowerCase().slice(0, 8));
+                else setTotpCode(e.target.value.replace(/\D/g, '').slice(0, 6));
+              }}
+              inputProps={{ maxLength: useBackupCode ? 8 : 6, autoComplete: 'one-time-code' }}
               sx={inputSx}
             />
             <Button
               fullWidth type="submit" variant="contained" size="large"
-              sx={{ mt: 1, mb: 2, py: 1.45, borderRadius: '8px', fontWeight: 800 }}
-              disabled={loading || totpCode.length !== 6}
+              sx={{ mt: 1, mb: 1, py: 1.45, borderRadius: '8px', fontWeight: 800 }}
+              disabled={loading || totpCode.length !== (useBackupCode ? 8 : 6)}
             >
               {loading ? <CircularProgress size={18} color="inherit" /> : 'Verify'}
+            </Button>
+            <Button
+              fullWidth variant="text" size="small"
+              onClick={() => { setUseBackupCode(!useBackupCode); setTotpCode(''); }}
+              sx={{ mb: 2, textTransform: 'none' }}
+            >
+              {useBackupCode ? 'Use authenticator code instead' : 'Lost your device? Use a backup code'}
             </Button>
           </Box>
         ) : (
