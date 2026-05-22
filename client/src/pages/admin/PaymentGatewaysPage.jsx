@@ -20,6 +20,7 @@ import { updateSettings } from '../../services/adminService';
 import { useNotification } from '../../context/NotificationContext';
 import { useAuth } from '../../hooks/useAuth';
 import { PERMISSIONS } from '../../utils/permissions';
+import { getApiErrorMessage } from '../../utils/apiErrors';
 
 // ─── Gateway logos (inline SVG / emoji fallbacks) ───────────────────────────
 const GATEWAY_LOGOS = {
@@ -113,7 +114,7 @@ const SetupModal = ({ gateway, open, onClose, onSaved }) => {
       onSaved();
       onClose();
     } catch (err) {
-      notify(err?.response?.data?.error?.message || 'Failed to save credentials.', 'error');
+      notify(getApiErrorMessage(err, 'Failed to save credentials.'), 'error');
     } finally {
       setSaving(false);
     }
@@ -241,11 +242,11 @@ const GatewayCard = ({ gateway, paymentSettings, onToggle, onConfigure, toggling
   const isEnabled = Boolean(paymentSettings[enabledKey]);
   const isToggling = togglingId === gateway.id;
   const requiresSetup = gateway.id !== 'cod' && !gateway.connected;
-  const switchDisabled = !canManage || isToggling || (requiresSetup && !isEnabled);
+  const switchDisabled = !canManage || isToggling;
   const toggleTooltip = !canManage
     ? 'No permission'
     : requiresSetup && !isEnabled
-      ? 'Configure API credentials before enabling'
+      ? `Set up ${gateway.name} before enabling`
       : isEnabled ? 'Disable at checkout' : 'Enable at checkout';
 
   return (
@@ -314,15 +315,28 @@ const GatewayCard = ({ gateway, paymentSettings, onToggle, onConfigure, toggling
       <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, flexShrink: 0 }}>
         {/* Configure button — not needed for COD */}
         {gateway.id !== 'cod' && (
-          <Tooltip title="Configure API credentials">
-            <IconButton
+          requiresSetup ? (
+            <Button
               size="small"
+              variant="outlined"
+              color="warning"
+              startIcon={<SettingsIcon fontSize="small" />}
               onClick={() => onConfigure(gateway)}
-              sx={{ border: '1px solid', borderColor: 'divider', borderRadius: 2 }}
+              sx={{ flexShrink: 0 }}
             >
-              <SettingsIcon fontSize="small" />
-            </IconButton>
-          </Tooltip>
+              Set up
+            </Button>
+          ) : (
+            <Tooltip title="Configure API credentials">
+              <IconButton
+                size="small"
+                onClick={() => onConfigure(gateway)}
+                sx={{ border: '1px solid', borderColor: 'divider', borderRadius: 2 }}
+              >
+                <SettingsIcon fontSize="small" />
+              </IconButton>
+            </Tooltip>
+          )
         )}
 
         {/* Enable toggle */}
@@ -378,7 +392,7 @@ const PaymentGatewaysPage = () => {
   const handleToggle = async (gatewayId, enabled) => {
     const gateway = gateways.find((gw) => gw.id === gatewayId);
     if (enabled && gateway?.id !== 'cod' && !gateway?.connected) {
-      notify(`${gateway?.name || gatewayId} must be configured before it can be enabled.`, 'error');
+      notify(`Add ${gateway?.name || gatewayId} credentials before enabling checkout.`, 'warning');
       setConfiguring(gateway || null);
       return;
     }
@@ -391,7 +405,12 @@ const PaymentGatewaysPage = () => {
       setPaymentSettings((prev) => ({ ...prev, [`${gatewayId}Enabled`]: enabled }));
       notify(`${gatewayId.charAt(0).toUpperCase() + gatewayId.slice(1)} ${enabled ? 'enabled' : 'disabled'}.`, 'success');
     } catch (err) {
-      notify(err?.response?.data?.error?.message || 'Failed to update gateway status.', 'error');
+      const code = err?.response?.data?.error?.code;
+      if (code === 'PAYMENT_GATEWAY_SETUP_REQUIRED') {
+        const gateway = gateways.find((gw) => gw.id === gatewayId);
+        if (gateway) setConfiguring(gateway);
+      }
+      notify(getApiErrorMessage(err, 'Failed to update gateway status.'), 'error');
     } finally {
       setTogglingId(null);
     }
@@ -405,7 +424,7 @@ const PaymentGatewaysPage = () => {
       setPaymentSettings((prev) => ({ ...prev, defaultMethod: e.target.value }));
       notify('Default payment method updated.', 'success');
     } catch (err) {
-      notify(err?.response?.data?.error?.message || 'Failed to update default method.', 'error');
+      notify(getApiErrorMessage(err, 'Failed to update default method.'), 'error');
     }
   };
 

@@ -60,7 +60,9 @@ const ensurePaymentGatewaySettingsAreValid = async (settingsArray) => {
   for (const { key, value, group } of settingsArray) {
     const resolvedGroup = resolveSettingGroup(key, group);
     const gatewayId = PAYMENT_GATEWAY_ENABLED_KEYS[key];
-    if (resolvedGroup !== 'payments' || !gatewayId || !isTruthySetting(value)) continue;
+    const wasEnabled = isTruthySetting(currentPayments[key]);
+    const willBeEnabled = isTruthySetting(value);
+    if (resolvedGroup !== 'payments' || !gatewayId || !willBeEnabled || wasEnabled) continue;
 
     const gateway = statusById.get(gatewayId);
     if (!gateway?.connected) {
@@ -72,11 +74,12 @@ const ensurePaymentGatewaySettingsAreValid = async (settingsArray) => {
     }
   }
 
-  const touchesDefaultMethod = settingsArray.some(({ key, group }) =>
+  const defaultMethodUpdate = settingsArray.find(({ key, group }) =>
     resolveSettingGroup(key, group) === 'payments' && key === 'defaultMethod'
   );
   const defaultMethod = nextPayments.defaultMethod;
-  if (touchesDefaultMethod && defaultMethod) {
+  const defaultMethodChanged = defaultMethodUpdate && defaultMethod !== currentPayments.defaultMethod;
+  if (defaultMethodChanged && defaultMethod) {
     const defaultEnabledKey = `${defaultMethod}Enabled`;
     const defaultGateway = statusById.get(defaultMethod);
 
