@@ -50,22 +50,21 @@ const SummaryCard = ({ label, value, tone = 'default', onClick, active }) => (
       minWidth: 150,
       flex: '1 1 0',
       borderRadius: 3,
-      border: active ? '2px solid' : '1px solid',
+      border: '1px solid',
       borderColor: active ? 'primary.main' : 'divider',
-      bgcolor: active ? 'primary.light' : 'background.paper',
-      color: active ? 'primary.contrastText' : 'inherit',
+      bgcolor: active ? 'action.hover' : 'background.paper',
       cursor: onClick ? 'pointer' : 'default',
       transition: 'all 0.2s',
       '&:hover': onClick ? {
         borderColor: 'primary.main',
-        bgcolor: active ? 'primary.light' : 'action.hover',
+        bgcolor: 'action.hover',
       } : {},
     }}
   >
-    <Typography variant="body2" color={active ? 'inherit' : 'text.secondary'} sx={{ mb: 0.5, opacity: active ? 0.9 : 1 }}>
+    <Typography variant="body2" color="text.secondary" sx={{ mb: 0.5 }}>
       {label}
     </Typography>
-    <Typography variant="h6" fontWeight={700} color={active ? 'inherit' : tone === 'error' ? 'error.main' : tone === 'success' ? 'success.main' : tone === 'warning' ? 'warning.main' : 'text.primary'}>
+    <Typography variant="h6" fontWeight={700} color={tone === 'error' ? 'error.main' : tone === 'success' ? 'success.main' : tone === 'warning' ? 'warning.main' : 'text.primary'}>
       {value}
     </Typography>
   </Paper>

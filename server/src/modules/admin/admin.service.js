@@ -81,10 +81,10 @@ const getStats = async () => {
     pendingReviewsCount,
     totalReviewsCount,
   ] = await Promise.all([
-    // Total revenue from paid/processing/shipped/delivered orders
+    // Total revenue from confirmed/processing/ready/closed orders (excludes pending_payment & cancelled)
     Order.findOne({
       attributes: [[fn('COALESCE', fn('SUM', col('"Order".total')), 0), 'totalRevenue']],
-      where: { status: { [Op.in]: ['paid', 'processing', 'shipped', 'delivered'] } },
+      where: { status: { [Op.in]: ['confirmed', 'processing', 'ready_for_shipment', 'closed'] } },
       raw: true,
     }),
     Order.count(),
@@ -198,7 +198,7 @@ const getSalesChart = async ({ period = 'monthly', startDate, endDate }) => {
       [fn('COUNT', col('"Order".id')), 'orderCount'],
     ],
     where: {
-      status: { [Op.in]: ['paid', 'processing', 'shipped', 'delivered'] },
+      status: { [Op.in]: ['confirmed', 'processing', 'ready_for_shipment', 'closed'] },
       createdAt: dateFilter,
     },
     group: [fn('DATE_TRUNC', trunc, col('"Order".created_at'))],

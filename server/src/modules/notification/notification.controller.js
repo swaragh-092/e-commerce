@@ -195,14 +195,16 @@ const getDefaultTemplate = async (req, res, next) => {
 /**
  * POST /notifications/test
  * Send a test message on any channel to verify configuration.
+ * If the requested template doesn't exist (e.g. 'test_notification'), sends a
+ * simple inline test message to verify channel connectivity.
  */
 const sendTestNotification = async (req, res, next) => {
   try {
     const { templateName, recipient, recipientEmail, channel = 'email' } = req.body;
     const finalRecipient = recipient || recipientEmail;
 
-    if (!templateName || !finalRecipient) {
-      return error(res, 'templateName and recipient are required', 400, 'VALIDATION_ERROR');
+    if (!finalRecipient) {
+      return error(res, 'recipient is required', 400, 'VALIDATION_ERROR');
     }
 
     const validChannels = ['email', 'sms', 'whatsapp'];
@@ -210,15 +212,36 @@ const sendTestNotification = async (req, res, next) => {
       return error(res, `channel must be one of: ${validChannels.join(', ')}`, 400, 'VALIDATION_ERROR');
     }
 
-    const NotificationService = require('./notification.service');
-    const template = await NotificationTemplate.findOne({ where: { name: templateName, channel } });
-    if (!template) {
-      throw new AppError('NOT_FOUND', 404, `Template '${templateName}' for channel '${channel}' not found`);
-    }
+    const template = templateName
+      ? await NotificationTemplate.findOne({ where: { name: templateName, channel } })
+      : null;
 
-    const sent = await NotificationService.sendImmediate(templateName, finalRecipient, SAMPLE_VARIABLES, null, null, channel);
-    if (!sent) {
-      return error(res, `Test ${channel} could not be sent. Check the template, recipient, and channel settings.`, 500, 'SEND_FAILED');
+    if (template) {
+      const NotificationService = require('./notification.service');
+      const sent = await NotificationService.sendImmediate(templateName, finalRecipient, SAMPLE_VARIABLES, null, null, channel);
+      if (!sent) {
+        return error(res, `Test ${channel} could not be sent. Check the template, recipient, and channel settings.`, 500, 'SEND_FAILED');
+      }
+    } else {
+      // No template found — send a simple inline test message to verify connectivity
+      const { dispatch } = require('./notification.dispatcher');
+      let storeName = 'E-Commerce Store';
+      try {
+        const SettingsService = require('../settings/settings.service');
+        const general = await SettingsService.getByGroup('general');
+        storeName = general.storeName || storeName;
+      } catch (_) {}
+
+      const subject = `Test ${channel} from ${storeName}`;
+      const body = `This is a test ${channel} message from ${storeName}. If you received this, your ${channel} configuration is working correctly.`;
+      const payload = channel === 'email'
+        ? { to: finalRecipient, subject, html: `<p>${body}</p>`, text: body }
+        : { to: finalRecipient, body };
+
+      const sent = await dispatch(channel, payload);
+      if (!sent) {
+        return error(res, `Test ${channel} could not be sent. Check your ${channel} channel settings.`, 500, 'SEND_FAILED');
+      }
     }
 
     return success(res, null, `Test ${channel} sent to ${finalRecipient}`);

@@ -6,6 +6,11 @@ export const reviewService = {
     return response.data;
   },
 
+  getMyReview: async (slug) => {
+    const response = await api.get(`/products/${slug}/reviews/mine`);
+    return response.data.data;
+  },
+
   create: async (slug, reviewData) => {
     const response = await api.post(`/products/${slug}/reviews`, reviewData);
     return response.data.data;

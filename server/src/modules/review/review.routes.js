@@ -15,6 +15,9 @@ const { paginationQuerySchema, slugParamSchema } = require('../../utils/common.v
 // Apply reviews feature gate to all routes in this module
 router.use(featureGate('reviews'));
 
+// Get current user's review for a product (must be before /:slug/reviews to avoid param conflict)
+router.get('/products/:slug/reviews/mine', authenticate, reviewController.getMyReview);
+
 // Public read access for approved reviews
 router.get('/products/:slug/reviews', validate(paginationQuerySchema, 'query'), validate(slugParamSchema, 'params'), reviewController.list);
 

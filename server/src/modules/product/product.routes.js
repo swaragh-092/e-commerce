@@ -20,6 +20,7 @@ router.post('/bulk-sale', authenticate, authorizePermissions(PERMISSIONS.PRODUCT
 router.delete('/bulk', authenticate, authorizePermissions(PERMISSIONS.PRODUCTS_DELETE), validate(bulkDeleteSchema), auditLog('Product'), productController.bulkDelete);
 router.patch('/bulk', authenticate, authorizePermissions(PERMISSIONS.PRODUCTS_UPDATE), validate(bulkUpdateSchema), auditLog('Product'), productController.bulkUpdate);
 router.get('/id/:id/related', optionalAuth, productController.getRelated);
+router.get('/id/:id/stock-history', authenticate, authorizePermissions(PERMISSIONS.PRODUCTS_READ), validate(idParamSchema, 'params'), productController.getStockHistory);
 
 router.get('/:slug', optionalAuth, productController.getBySlug);
 

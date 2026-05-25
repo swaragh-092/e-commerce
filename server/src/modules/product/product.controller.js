@@ -130,3 +130,37 @@ exports.getRelated = async (req, res, next) => {
     next(err);
   }
 };
+
+exports.getStockHistory = async (req, res, next) => {
+  try {
+    const { InventoryTransaction, User, Order, ProductVariant } = require('../index');
+    const { Op } = require('sequelize');
+    const page = parseInt(req.query.page) || 1;
+    const limit = Math.min(parseInt(req.query.limit) || 20, 100);
+    const offset = (page - 1) * limit;
+    const where = { productId: req.params.id };
+
+    if (req.query.type) where.type = req.query.type;
+
+    const { count, rows } = await InventoryTransaction.findAndCountAll({
+      where,
+      include: [
+        { model: User, as: 'actor', attributes: ['id', 'firstName', 'lastName', 'email'], required: false },
+        { model: Order, as: 'order', attributes: ['id', 'orderNumber'], required: false },
+        { model: ProductVariant, as: 'variant', attributes: ['id', 'sku'], required: false },
+      ],
+      order: [['createdAt', 'DESC']],
+      limit,
+      offset,
+    });
+
+    return success(res, rows, 'Stock history fetched', 200, {
+      total: count,
+      page,
+      totalPages: Math.ceil(count / limit),
+      limit,
+    });
+  } catch (err) {
+    next(err);
+  }
+};

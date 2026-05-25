@@ -34,6 +34,7 @@ const { normalizeSalePayload, serializeProductPricing } = require('./product.pri
 const { events, PRODUCT_EVENTS } = require('../../utils/events');
 const { getSaleLabels } = require('../settings/saleLabel.service');
 const SettingsService = require('../settings/settings.service');
+const inventoryService = require('../inventory/inventory.service');
 
 
 // Fetch the active label catalog once per request (the service caches for 60 s)
@@ -726,11 +727,30 @@ exports.updateProduct = async (id, data, auditContext = null) => {
 
     const variantsExist = await productHasVariants(id, transaction);
     if ((variantsExist || (Array.isArray(data.variants) && data.variants.length > 0)) && data.quantity !== undefined) {
+      logger.warn(`Attempted to set quantity directly on variant product ${id}. Ignoring — stock is managed by variants.`);
       delete data.quantity;
     }
 
     validateProductStock(data, product);
     if (data.images) await validateProductImages(data.images);
+
+    // Log inventory ADJUSTMENT if quantity is being manually changed
+    const stockChanged = data.quantity !== undefined && Number(data.quantity) !== Number(product.quantity || 0);
+    const adjustmentReason = data.stockAdjustmentReason;
+    delete data.stockAdjustmentReason;
+
+    if (stockChanged && !variantsExist) {
+      await inventoryService.adjust({
+        productId: id,
+        newQuantity: Number(data.quantity),
+        reason: adjustmentReason || 'Admin manual adjustment',
+        createdBy: auditContext?.userId || null,
+        metadata: { source: 'product_update' },
+        transaction,
+      });
+      // Remove quantity from data since adjust() already updated it
+      delete data.quantity;
+    }
 
     await product.update(data, { transaction });
 

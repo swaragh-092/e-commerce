@@ -23,7 +23,20 @@ const createLimiter = (windowMinutes, maxRequests, message) => {
 const loginLimiter = createLimiter(15, 20, 'Too many login attempts, please try again after 15 minutes');
 const registerLimiter = createLimiter(60, 20, 'Too many accounts created from this IP, please try again after an hour');
 const forgotPasswordLimiter = createLimiter(60, 3, 'Too many password reset requests, please try again after an hour');
-const reviewLimiter = createLimiter(24 * 60, 5, 'You have reached the daily limit for reviews');
+const reviewLimiter = rateLimit({
+  windowMs: 24 * 60 * 60 * 1000,
+  max: 20,
+  keyGenerator: (req) => req.user?.id || req.ip,
+  message: {
+    success: false,
+    error: {
+      code: 'TOO_MANY_REQUESTS',
+      message: 'You have reached the daily limit for reviews. Please try again tomorrow.'
+    }
+  },
+  standardHeaders: true,
+  legacyHeaders: false,
+});
 const couponLimiter = createLimiter(1, 10, 'Too many coupon validation requests');
 const globalLimiter = createLimiter(15, 2000, 'Too many requests to this API, please try again later');
 const publicApiLimiter = createLimiter(15, 500, 'Too many requests to public endpoints, please try again later');

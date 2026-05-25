@@ -57,7 +57,13 @@ const create = async (userId, slug, payload) => {
     const productId = product.id;
 
     const existing = await Review.findOne({ where: { userId, productId }, transaction: t });
-    if (existing) throw new AppError('DUPLICATE_ENTRY', 409, 'You have already reviewed this product');
+    if (existing) {
+      if (existing.status === 'rejected') {
+        await existing.destroy({ transaction: t });
+      } else {
+        throw new AppError('DUPLICATE_ENTRY', 409, 'You have already reviewed this product');
+      }
+    }
 
     // Check if verified purchase
     let isVerifiedPurchase = false;

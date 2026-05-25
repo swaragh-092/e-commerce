@@ -27,8 +27,8 @@ const list = async (req, res, next) => {
     const slug = req.params.slug;
 
     // If slug exists, it's a public product view (only show approved)
-    // If no slug, it's an admin view (use status from query)
-    const effectiveStatus = slug ? 'approved' : status || 'approved';
+    // If no slug, it's an admin view (show all, or filter by status if provided)
+    const effectiveStatus = slug ? 'approved' : (status || '');
 
     const result = await ReviewService.list(slug, { page, limit, status: effectiveStatus, search });
     
@@ -69,9 +69,19 @@ const remove = async (req, res, next) => {
   }
 };
 
+const getMyReview = async (req, res, next) => {
+  try {
+    const review = await ReviewService.getUserReviewForProduct(req.user.id, req.params.slug);
+    return success(res, review);
+  } catch (err) {
+    next(err);
+  }
+};
+
 module.exports = {
   create,
   list,
   moderate,
   remove,
+  getMyReview,
 };

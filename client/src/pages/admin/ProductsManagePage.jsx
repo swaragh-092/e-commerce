@@ -11,10 +11,10 @@ import {
   OpenInNew as OpenInNewIcon, Clear as ClearIcon,
   CheckCircle as CheckCircleIcon, RemoveCircle as RemoveCircleIcon,
   DeleteSweep as DeleteSweepIcon, Download as DownloadIcon, EditNote as EditNoteIcon,
-  Inventory as InventoryIcon,
+  Inventory as InventoryIcon, History as HistoryIcon,
 } from '@mui/icons-material';
 import { Link, useNavigate, useSearchParams } from 'react-router-dom';
-import { getProducts, deleteProduct, updateProduct, bulkUpdateSale, bulkDeleteProducts, bulkUpdateProducts } from '../../services/productService';
+import { getProducts, deleteProduct, updateProduct, bulkUpdateSale, bulkDeleteProducts, bulkUpdateProducts, getStockHistory } from '../../services/productService';
 import { getCategoryTree } from '../../services/categoryService';
 import { getSaleLabels } from '../../services/adminService';
 import { getMediaUrl } from '../../utils/media';
@@ -164,6 +164,24 @@ const ProductsManagePage = () => {
 
   // Step amount for the stock stepper — persists between quick-edit opens
   const [editStepAmount, setEditStepAmount] = useState(1);
+  // Stock history dialog
+  const [stockHistoryDialog, setStockHistoryDialog] = useState({ open: false, productId: null, productName: '', rows: [], loading: false, page: 1, total: 0, typeFilter: '' });
+  const openStockHistory = async (productId, productName) => {
+    setStockHistoryDialog({ open: true, productId, productName, rows: [], loading: true, page: 1, total: 0, typeFilter: '' });
+    try {
+      const res = await getStockHistory(productId, { page: 1, limit: 20 });
+      setStockHistoryDialog((s) => ({ ...s, rows: res?.data || [], total: res?.meta?.total || 0, loading: false }));
+    } catch { setStockHistoryDialog((s) => ({ ...s, loading: false })); }
+  };
+  const fetchStockHistoryPage = async (page, typeFilter) => {
+    setStockHistoryDialog((s) => ({ ...s, loading: true, page }));
+    try {
+      const params = { page, limit: 20 };
+      if (typeFilter) params.type = typeFilter;
+      const res = await getStockHistory(stockHistoryDialog.productId, params);
+      setStockHistoryDialog((s) => ({ ...s, rows: res?.data || [], total: res?.meta?.total || 0, loading: false }));
+    } catch { setStockHistoryDialog((s) => ({ ...s, loading: false })); }
+  };
   const openEditDialog = (row) => {
     if (!canUpdateProducts) {
       notify('You do not have permission to update products.', 'error');
@@ -198,7 +216,7 @@ const ProductsManagePage = () => {
       const payload = {
         name: editDialog.name.trim(),
         slug: editDialog.slug.trim(),
-        ...(cartEnabled && { quantity: parseInt(editDialog.quantity, 10) || 0 }),
+        ...(cartEnabled && !(editDialog.row?.variants?.length > 0) && { quantity: parseInt(editDialog.quantity, 10) || 0 }),
         price: parseFloat(editDialog.price),
         status: editDialog.status,
         isEnabled: editDialog.isEnabled,
@@ -462,7 +480,7 @@ const ProductsManagePage = () => {
     editSalePriceValue < 0 ||
     editSalePriceValue >= editPriceValue
   );
-  const hasInvalidQuantity = cartEnabled && editDialog.open && (Number.isNaN(Number(editDialog.quantity)) || Number(editDialog.quantity) < 0);
+  const hasInvalidQuantity = cartEnabled && editDialog.open && !(editDialog.row?.variants?.length > 0) && (Number.isNaN(Number(editDialog.quantity)) || Number(editDialog.quantity) < 0);
   const hasInvalidSaleDates = Boolean(editDialog.open && editDialog.saleEnabled && editDialog.saleStartAt && editDialog.saleEndAt && new Date(editDialog.saleEndAt) <= new Date(editDialog.saleStartAt));
   const bulkSaleValue = Number(bulkSaleDialog.value);
   const hasInvalidBulkSale = bulkSaleDialog.mode === 'apply' && (
@@ -601,7 +619,7 @@ const ProductsManagePage = () => {
         const available = Math.max(0, total - reserved);
         const color = available === 0 ? 'error' : available <= LOW_STOCK_THRESHOLD ? 'warning' : 'success';
         return (
-          <Tooltip title={`Available ${available} (Total ${total}, Reserved ${reserved})`}>
+          <Tooltip title={`Available: ${available} | Total: ${total} | Reserved: ${reserved}`}>
             <Chip
               label={available}
               size="small"
@@ -1064,6 +1082,39 @@ const ProductsManagePage = () => {
             {/* ── Stock Stepper — only in ecommerce mode (cart Tier-1 feature) ── */}
             {cartEnabled && (
             <Box>
+              {(editDialog.row?.variants?.length > 0) ? (
+                /* ── Variant-managed stock: read-only breakdown ── */
+                <>
+                  <Typography variant="caption" color="text.secondary" fontWeight={600} sx={{ mb: 0.5, display: 'block' }}>
+                    Stock (managed by variants)
+                  </Typography>
+                  <Paper variant="outlined" sx={{ p: 1.5, borderRadius: 2, bgcolor: 'action.hover' }}>
+                    <Stack direction="row" justifyContent="space-between" sx={{ mb: 1 }}>
+                      <Typography variant="body2" fontWeight={700}>
+                        Total: {editDialog.row?.quantity ?? 0}
+                      </Typography>
+                      <Typography variant="body2" color="success.main" fontWeight={600}>
+                        Available: {Math.max(0, (editDialog.row?.quantity ?? 0) - (editDialog.row?.reservedQty ?? 0))}
+                      </Typography>
+                    </Stack>
+                    <Stack spacing={0.5} sx={{ maxHeight: 140, overflowY: 'auto' }}>
+                      {editDialog.row.variants.filter(v => v.isActive !== false).map((v) => (
+                        <Stack key={v.id} direction="row" justifyContent="space-between" alignItems="center">
+                          <Typography variant="caption" color="text.secondary" noWrap sx={{ maxWidth: 160 }}>
+                            {v.sku || v.options?.map(o => o.value?.value || o.value?.displayLabel).join(' / ') || 'Variant'}
+                          </Typography>
+                          <Chip label={v.stockQty ?? 0} size="small" variant="outlined" sx={{ fontWeight: 700, minWidth: 40 }} />
+                        </Stack>
+                      ))}
+                    </Stack>
+                  </Paper>
+                  <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mt: 0.5 }}>
+                    Edit individual variant stock from the product edit page.
+                  </Typography>
+                </>
+              ) : (
+                /* ── Simple product: editable stock stepper ── */
+                <>
               <Stack direction="row" alignItems="center" spacing={0.5} sx={{ mb: 0.75 }}>
                 <Typography variant="caption" color="text.secondary" fontWeight={600}>
                   Stock Quantity
@@ -1074,6 +1125,19 @@ const ProductsManagePage = () => {
                   <Box component="span" fontWeight={700} color="text.primary">
                     {editDialog.row?.quantity ?? 0}
                   </Box>
+                  {Number(editDialog.row?.reservedQty || 0) > 0 && (
+                    <>
+                      &nbsp;(Available:&nbsp;
+                      <Box component="span" fontWeight={700} color="success.main">
+                        {Math.max(0, (editDialog.row?.quantity ?? 0) - (editDialog.row?.reservedQty ?? 0))}
+                      </Box>
+                      , Reserved:&nbsp;
+                      <Box component="span" fontWeight={700} color="warning.main">
+                        {editDialog.row?.reservedQty ?? 0}
+                      </Box>
+                      )
+                    </>
+                  )}
                 </Typography>
               </Stack>
 
@@ -1170,6 +1234,17 @@ const ProductsManagePage = () => {
                   Stock cannot be negative.
                 </Typography>
               )}
+                </>
+              )}
+              <Button
+                size="small"
+                variant="text"
+                startIcon={<HistoryIcon />}
+                onClick={() => openStockHistory(editDialog.row.id, editDialog.row.name)}
+                sx={{ mt: 1, alignSelf: 'flex-start' }}
+              >
+                View Stock History
+              </Button>
             </Box>
             )}
             <TextField
@@ -1470,6 +1545,86 @@ const ProductsManagePage = () => {
           <Button variant="contained" color="error" onClick={handleDelete}>
             Delete
           </Button>
+        </DialogActions>
+      </Dialog>
+
+      {/* ── Stock History Dialog ── */}
+      <Dialog
+        open={stockHistoryDialog.open}
+        onClose={() => setStockHistoryDialog((s) => ({ ...s, open: false }))}
+        maxWidth="sm"
+        fullWidth
+      >
+        <DialogTitle component="div">
+          <Typography variant="h6" fontWeight={700}>Stock History</Typography>
+          <Typography variant="body2" color="text.secondary">{stockHistoryDialog.productName}</Typography>
+        </DialogTitle>
+        <DialogContent>
+          <Stack direction="row" spacing={1} sx={{ mb: 2 }}>
+            {['', 'ADJUSTMENT', 'RESERVE', 'RELEASE', 'SHIP', 'RETURN'].map((t) => (
+              <Chip
+                key={t || 'all'}
+                label={t || 'All'}
+                size="small"
+                variant={stockHistoryDialog.typeFilter === t ? 'filled' : 'outlined'}
+                color={stockHistoryDialog.typeFilter === t ? 'primary' : 'default'}
+                onClick={() => {
+                  setStockHistoryDialog((s) => ({ ...s, typeFilter: t, page: 1 }));
+                  fetchStockHistoryPage(1, t);
+                }}
+                sx={{ cursor: 'pointer', textTransform: 'capitalize' }}
+              />
+            ))}
+          </Stack>
+          {stockHistoryDialog.loading ? (
+            <Typography color="text.secondary" sx={{ py: 4, textAlign: 'center' }}>Loading...</Typography>
+          ) : stockHistoryDialog.rows.length === 0 ? (
+            <Typography color="text.secondary" sx={{ py: 4, textAlign: 'center' }}>No stock transactions found.</Typography>
+          ) : (
+            <Stack spacing={1.5}>
+              {stockHistoryDialog.rows.map((tx) => {
+                const typeColors = { ADJUSTMENT: 'info', RESERVE: 'warning', RELEASE: 'secondary', SHIP: 'error', RETURN: 'success' };
+                const direction = tx.metadata?.direction;
+                return (
+                  <Paper key={tx.id} variant="outlined" sx={{ p: 1.5, borderRadius: 2 }}>
+                    <Stack direction="row" justifyContent="space-between" alignItems="flex-start">
+                      <Box>
+                        <Stack direction="row" spacing={1} alignItems="center">
+                          <Chip label={tx.type} size="small" color={typeColors[tx.type] || 'default'} sx={{ fontWeight: 700, fontSize: '0.7rem' }} />
+                          {tx.variant?.sku && <Typography variant="caption" color="text.secondary">Variant: {tx.variant.sku}</Typography>}
+                        </Stack>
+                        <Typography variant="body2" sx={{ mt: 0.5 }}>
+                          {tx.beforeStock ?? '?'} → <Box component="span" fontWeight={700} color={direction === 'increase' || tx.type === 'RETURN' ? 'success.main' : tx.type === 'SHIP' ? 'error.main' : 'text.primary'}>{tx.afterStock ?? '?'}</Box>
+                          <Box component="span" color="text.secondary"> ({direction === 'increase' || tx.type === 'RETURN' ? '+' : '-'}{tx.qty})</Box>
+                        </Typography>
+                        {tx.metadata?.reason && <Typography variant="caption" color="text.secondary" sx={{ display: 'block' }}>Reason: {tx.metadata.reason}</Typography>}
+                        {tx.order && <Typography variant="caption" color="text.secondary" sx={{ display: 'block' }}>Order: #{tx.order.orderNumber}</Typography>}
+                      </Box>
+                      <Box sx={{ textAlign: 'right', minWidth: 100 }}>
+                        <Typography variant="caption" color="text.secondary" sx={{ display: 'block' }}>
+                          {new Date(tx.createdAt).toLocaleDateString(undefined, { day: 'numeric', month: 'short', year: 'numeric' })}
+                        </Typography>
+                        <Typography variant="caption" color="text.secondary" sx={{ display: 'block' }}>
+                          {new Date(tx.createdAt).toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' })}
+                        </Typography>
+                        {tx.actor && <Typography variant="caption" color="text.secondary" sx={{ display: 'block' }}>{tx.actor.firstName} {tx.actor.lastName}</Typography>}
+                      </Box>
+                    </Stack>
+                  </Paper>
+                );
+              })}
+            </Stack>
+          )}
+          {stockHistoryDialog.total > 20 && (
+            <Stack direction="row" justifyContent="center" spacing={1} sx={{ mt: 2 }}>
+              <Button size="small" disabled={stockHistoryDialog.page <= 1} onClick={() => fetchStockHistoryPage(stockHistoryDialog.page - 1, stockHistoryDialog.typeFilter)}>Prev</Button>
+              <Typography variant="body2" sx={{ lineHeight: '32px' }}>Page {stockHistoryDialog.page} of {Math.ceil(stockHistoryDialog.total / 20)}</Typography>
+              <Button size="small" disabled={stockHistoryDialog.page >= Math.ceil(stockHistoryDialog.total / 20)} onClick={() => fetchStockHistoryPage(stockHistoryDialog.page + 1, stockHistoryDialog.typeFilter)}>Next</Button>
+            </Stack>
+          )}
+        </DialogContent>
+        <DialogActions sx={{ px: 3, pb: 2 }}>
+          <Button onClick={() => setStockHistoryDialog((s) => ({ ...s, open: false }))}>Close</Button>
         </DialogActions>
       </Dialog>
     </Box>

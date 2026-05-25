@@ -561,11 +561,89 @@ const restockReturn = async ({
   };
 };
 
+const adjust = async ({
+  productId,
+  variantId = null,
+  newQuantity,
+  reason = 'Manual adjustment',
+  createdBy = null,
+  metadata = {},
+  transaction,
+  syncParent = true,
+}) => {
+  assertTransaction(transaction);
+  const newQty = Number(newQuantity);
+  if (!Number.isInteger(newQty) || newQty < 0) {
+    throw new AppError('VALIDATION_ERROR', 400, 'Quantity must be a non-negative integer');
+  }
+
+  if (variantId) {
+    const variant = await ProductVariant.findOne({
+      where: { id: variantId, productId },
+      transaction,
+      lock: Transaction.LOCK.UPDATE,
+    });
+    if (!variant) throw new AppError('NOT_FOUND', 404, 'Variant not found');
+
+    const beforeStock = Number(variant.stockQty || 0);
+    if (beforeStock === newQty) return { productId, variantId, changed: false };
+
+    const beforeReserved = Number(variant.reservedQty || 0);
+    await variant.update({ stockQty: newQty }, { transaction });
+
+    await createLedgerEntry({
+      type: 'ADJUSTMENT',
+      qty: Math.abs(newQty - beforeStock),
+      productId,
+      variantId,
+      beforeStock,
+      afterStock: newQty,
+      beforeReserved,
+      afterReserved: beforeReserved,
+      createdBy,
+      metadata: { ...metadata, reason, direction: newQty > beforeStock ? 'increase' : 'decrease' },
+      transaction,
+    });
+
+    if (syncParent) await syncParentProductFromVariants(productId, transaction);
+    return { productId, variantId, changed: true, beforeStock, afterStock: newQty };
+  }
+
+  const product = await Product.findByPk(productId, {
+    transaction,
+    lock: Transaction.LOCK.UPDATE,
+  });
+  if (!product) throw new AppError('NOT_FOUND', 404, 'Product not found');
+
+  const beforeStock = Number(product.quantity || 0);
+  if (beforeStock === newQty) return { productId, variantId: null, changed: false };
+
+  const beforeReserved = Number(product.reservedQty || 0);
+  await product.update({ quantity: newQty }, { transaction });
+
+  await createLedgerEntry({
+    type: 'ADJUSTMENT',
+    qty: Math.abs(newQty - beforeStock),
+    productId,
+    variantId: null,
+    beforeStock,
+    afterStock: newQty,
+    beforeReserved,
+    afterReserved: beforeReserved,
+    createdBy,
+    metadata: { ...metadata, reason, direction: newQty > beforeStock ? 'increase' : 'decrease' },
+    transaction,
+  });
+
+  return { productId, variantId: null, changed: true, beforeStock, afterStock: newQty };
+};
+
 module.exports = {
   reserve,
   release,
   shipDeduct,
   restockReturn,
+  adjust,
   syncParentProductFromVariants,
 };
 

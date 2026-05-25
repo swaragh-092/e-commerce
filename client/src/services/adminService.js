@@ -25,7 +25,7 @@ const createAccessUser = (data) => api.post(`/${A}/access-control/users`, data);
 
 // Audit Logs
 const getAuditLogs = (params = {}) =>
-  api.get(withQueryString('/audit-logs', params, { omitEmpty: true }));
+  api.get(withQueryString(`/${A}/audit-logs`, params, { omitEmpty: true }));
 
 // Users (admin view)
 const getUsers = (params = {}) => api.get(withQueryString('/users', params));

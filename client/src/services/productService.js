@@ -49,3 +49,8 @@ export const getRelatedProducts = async (id, limit = 6) => {
   const response = await api.get(`/products/id/${id}/related`, { params: { limit } });
   return response.data;
 };
+
+export const getStockHistory = async (id, params = {}) => {
+  const response = await api.get(`/products/id/${id}/stock-history`, { params });
+  return response.data;
+};

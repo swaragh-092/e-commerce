@@ -1,5 +1,4 @@
-import { Grid } from '@mui/material';
-import AttachMoneyIcon from '@mui/icons-material/AttachMoney';
+import { Grid, Typography } from '@mui/material';
 import ShoppingCartIcon from '@mui/icons-material/ShoppingCart';
 import PeopleIcon from '@mui/icons-material/People';
 import InventoryIcon from '@mui/icons-material/Inventory';
@@ -8,6 +7,12 @@ import { useNavigate } from 'react-router-dom';
 import StatCard from '../StatCard';
 import { checkBool } from './dashboardUtils';
 import { PERMISSIONS } from '../../../utils/permissions';
+import { useCurrency } from '../../../hooks/useSettings';
+
+const CurrencyIcon = () => {
+  const { symbol } = useCurrency();
+  return <Typography fontSize="inherit" fontWeight={700} component="span">{symbol}</Typography>;
+};
 
 const KpiCardsWidget = ({ stats, loading, settings, formatPrice, spacing, hasAnyPermission }) => {
   const navigate = useNavigate();
@@ -21,7 +26,7 @@ const KpiCardsWidget = ({ stats, loading, settings, formatPrice, spacing, hasAny
     showStatCards && canViewOrders && checkBool(settings['dashboard.showRevenueCard']) && {
       title: 'Total Revenue',
       value: formatPrice(stats?.totalRevenue),
-      icon: <AttachMoneyIcon fontSize="inherit" />,
+      icon: <CurrencyIcon />,
       color: 'success.main',
       // Revenue is an aggregate; go to all orders
       onClick: () => navigate('/admin/orders'),

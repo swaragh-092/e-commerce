@@ -649,8 +649,10 @@ const updateProductVariant = async (productId, variantId, data) => {
 const deleteProductVariant = async (productId, variantId) => {
     const variant = await ProductVariant.findOne({ where: { id: variantId, productId } });
     if (!variant) throw new AppError('NOT_FOUND', 404, 'Variant not found');
-    await variant.destroy(); // paranoid soft-delete
-    await syncProductVariantStock(productId);
+    await sequelize.transaction(async (t) => {
+        await variant.destroy({ transaction: t });
+        await syncProductVariantStock(productId, t);
+    });
 };
 
 const reorderValues = async (attributeId, valueIds) => {
