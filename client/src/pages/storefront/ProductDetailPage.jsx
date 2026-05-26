@@ -33,6 +33,7 @@ import RelatedProducts from '../../components/product/RelatedProducts';
 import ProductTabsAccordion from '../../components/storefront/ProductTabsAccordion';
 import { getApiErrorMessage } from '../../utils/apiErrors';
 import { getStoreName } from '../../utils/store';
+import { buildProductJsonLd } from '../../utils/seo/buildProductJsonLd';
 
 const getAvailableStock = (entity, stockKey) => {
     const total = Number(entity?.[stockKey] || 0);
@@ -52,8 +53,9 @@ const ProductDetailPage = () => {
     const [cartMsg, setCartMsg] = useState(null);
     const [qty, setQty] = useState(1);
     const [enquiryOpen, setEnquiryOpen] = useState(false);
+    const [visibleReviews, setVisibleReviews] = useState([]);
     const { addItem } = useCart();
-    const { formatPrice } = useCurrency();
+    const { formatPrice, currency } = useCurrency();
     const { settings } = useSettings();
     const storeName = getStoreName(settings);
     const cartEnabled    = useFeature('cart');
@@ -260,6 +262,29 @@ const ProductDetailPage = () => {
     const selectedVariantLabel = selectedVariant ? getVariantOptionLabel(selectedVariant) : '';
     const displaySku = selectedVariant?.sku || product.sku;
     const displayUnit = product.unit ? String(product.unit).trim() : '';
+    const canonicalBaseUrl = settings?.seo?.canonicalBaseUrl;
+    const base = String(canonicalBaseUrl || '').trim();
+    let resolvedPageUrl = window.location.href;
+    if (base) {
+        try {
+            resolvedPageUrl = new URL(location.pathname, base).toString();
+        } catch (_) {
+            resolvedPageUrl = window.location.href;
+        }
+    }
+
+    const productJsonLd = buildProductJsonLd({
+        product,
+        selectedVariant,
+        currentPrice,
+        currency,
+        stockAvailable,
+        displaySku,
+        storeName,
+        pageUrl: resolvedPageUrl,
+        canonicalBaseUrl,
+        visibleReviews,
+    });
 
     const addSelectedItemToCart = async (action) => {
         setPendingAction(action);
@@ -333,6 +358,8 @@ const ProductDetailPage = () => {
                 description={product.shortDescription}
                 image={product.ogImage || product.images?.[0]?.url}
                 type="product"
+                url={resolvedPageUrl}
+                structuredData={productJsonLd}
             />
             <Grid container spacing={{ xs: 3, md: 4, lg: 5 }} alignItems="flex-start">
                 <Grid item xs={12} md={5}>
@@ -708,7 +735,11 @@ const ProductDetailPage = () => {
                         </Box>
                     )}
 
-                    <ReviewSection slug={product.slug} productId={product.id} />
+                    <ReviewSection
+                        slug={product.slug}
+                        productId={product.id}
+                        onVisibleReviewsChange={setVisibleReviews}
+                    />
                     </Box>
                 </Grid>
 

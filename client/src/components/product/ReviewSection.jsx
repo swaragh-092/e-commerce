@@ -7,7 +7,7 @@ import { useAuth } from '../../hooks/useAuth';
 import { orderService } from '../../services/orderService';
 import { useFeature } from '../../hooks/useSettings';
 
-const ReviewSection = ({ slug, productId }) => {
+const ReviewSection = ({ slug, productId, onVisibleReviewsChange }) => {
     const reviewsEnabled = useFeature('reviews');
     const requirePurchase = useFeature('requirePurchaseForReview');
 
@@ -162,6 +162,16 @@ const ReviewSection = ({ slug, productId }) => {
             </Paper>
         );
     };
+
+    useEffect(() => {
+        if (typeof onVisibleReviewsChange !== 'function') return;
+        const visibleApprovedReviews = reviews.filter((row) => {
+            if (!row || row.status !== 'approved') return false;
+            if (myReview && row.id === myReview.id) return false;
+            return true;
+        });
+        onVisibleReviewsChange(visibleApprovedReviews);
+    }, [reviews, myReview, onVisibleReviewsChange]);
 
     return (
         <Box sx={{ mt: 4 }}>

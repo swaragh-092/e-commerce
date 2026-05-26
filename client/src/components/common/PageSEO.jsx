@@ -3,7 +3,7 @@ import { Helmet } from 'react-helmet-async';
 import { useSettings } from '../../hooks/useSettings';
 import { getStoreName } from '../../utils/store';
 
-const PageSEO = ({ title, description, image, url, type = 'website' }) => {
+const PageSEO = ({ title, description, image, url, type = 'website', structuredData }) => {
   const { settings } = useSettings();
   const siteName = getStoreName(settings);
   const fullTitle = title ? `${title} | ${siteName}` : siteName;
@@ -29,6 +29,12 @@ const PageSEO = ({ title, description, image, url, type = 'website' }) => {
       
       {/* Canonical URL */}
       {url ? <link rel="canonical" href={url} /> : null}
+
+      {structuredData ? (
+        <script type="application/ld+json">
+          {JSON.stringify(structuredData)}
+        </script>
+      ) : null}
       
       {type === 'noindex' && <meta name="robots" content="noindex,nofollow" />}
     </Helmet>
