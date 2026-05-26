@@ -120,6 +120,10 @@ const getRevenueByPaymentMethod = (params = {}) => api.get(withQueryString(`/${A
 const getCustomerLifetimeValue = (params = {}) => api.get(withQueryString(`/${A}/analytics/customer-lifetime-value`, params, { omitEmpty: true }));
 const getConversionRate = (params = {}) => api.get(withQueryString(`/${A}/analytics/conversion-rate`, params, { omitEmpty: true }));
 const getTrafficSources = (params = {}) => api.get(withQueryString(`/${A}/analytics/traffic-sources`, params, { omitEmpty: true }));
+const getProductFunnel = (params = {}) => api.get(withQueryString(`/${A}/analytics/product-funnel`, params, { omitEmpty: true }));
+const getUtmAttribution = (params = {}) => api.get(withQueryString(`/${A}/analytics/utm-attribution`, params, { omitEmpty: true }));
+const getCouponPerformance = (params = {}) => api.get(withQueryString(`/${A}/analytics/coupon-performance`, params, { omitEmpty: true }));
+const exportAnalyticsCsv = (metric, params = {}) => `${api.defaults.baseURL}/${A}/analytics/export/${metric}?${buildQueryString(params, { omitEmpty: true })}`;
 
 export {
   getStats, getSalesChart, getLowStock, getRecentOrders,
@@ -139,4 +143,5 @@ export {
   getSaleLabels, createSaleLabel, updateSaleLabel, deleteSaleLabel, reorderSaleLabels,
   getTopProducts, getAovTrend, getAbandonedCarts, getRevenueByCategory, getRepeatCustomers, getRefundRate,
   getGeographicSales, getRevenueByPaymentMethod, getCustomerLifetimeValue, getConversionRate, getTrafficSources,
+  getProductFunnel, getUtmAttribution, getCouponPerformance, exportAnalyticsCsv,
 };

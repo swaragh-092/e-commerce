@@ -56,6 +56,10 @@ router.get('/analytics/revenue-by-payment', ...adminOnly, validate(analyticsQuer
 router.get('/analytics/customer-lifetime-value', ...adminOnly, validate(analyticsQuerySchema, 'query'), adminController.getCustomerLifetimeValue);
 router.get('/analytics/conversion-rate', ...adminOnly, validate(analyticsQuerySchema, 'query'), adminController.getConversionRate);
 router.get('/analytics/traffic-sources', ...adminOnly, validate(analyticsQuerySchema, 'query'), adminController.getTrafficSources);
+router.get('/analytics/product-funnel', ...adminOnly, validate(analyticsQuerySchema, 'query'), adminController.getProductFunnel);
+router.get('/analytics/utm-attribution', ...adminOnly, validate(analyticsQuerySchema, 'query'), adminController.getUtmAttribution);
+router.get('/analytics/coupon-performance', ...adminOnly, validate(analyticsQuerySchema, 'query'), adminController.getCouponPerformance);
+router.get('/analytics/export/:metric', ...adminOnly, adminController.exportAnalyticsCsv);
 
 
 module.exports = router;

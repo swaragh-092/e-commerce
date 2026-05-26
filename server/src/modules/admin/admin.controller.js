@@ -190,6 +190,65 @@ const getTrafficSources = async (req, res, next) => {
   } catch (err) { next(err); }
 };
 
+const getProductFunnel = async (req, res, next) => {
+  try {
+    const data = await AnalyticsService.getProductFunnel(req.query);
+    return success(res, data);
+  } catch (err) { next(err); }
+};
+
+const getUtmAttribution = async (req, res, next) => {
+  try {
+    const data = await AnalyticsService.getUtmAttribution(req.query);
+    return success(res, data);
+  } catch (err) { next(err); }
+};
+
+const getCouponPerformance = async (req, res, next) => {
+  try {
+    const data = await AnalyticsService.getCouponPerformance(req.query);
+    return success(res, data);
+  } catch (err) { next(err); }
+};
+
+const exportAnalyticsCsv = async (req, res, next) => {
+  try {
+    const { metric } = req.params;
+    const methodMap = {
+      'top-products': 'getTopProducts',
+      'aov-trend': 'getAovTrend',
+      'abandoned-carts': 'getAbandonedCarts',
+      'revenue-by-category': 'getRevenueByCategory',
+      'repeat-customers': 'getRepeatCustomers',
+      'refund-rate': 'getRefundRate',
+      'geographic-sales': 'getGeographicSales',
+      'revenue-by-payment': 'getRevenueByPaymentMethod',
+      'customer-lifetime-value': 'getCustomerLifetimeValue',
+      'conversion-rate': 'getConversionRate',
+      'traffic-sources': 'getTrafficSources',
+      'product-funnel': 'getProductFunnel',
+      'utm-attribution': 'getUtmAttribution',
+      'coupon-performance': 'getCouponPerformance',
+    };
+    const method = methodMap[metric];
+    if (!method) return res.status(400).json({ success: false, error: { message: 'Invalid metric' } });
+
+    const data = await AnalyticsService[method](req.query);
+    const rows = Array.isArray(data) ? data : [data];
+    if (rows.length === 0) return res.status(200).send('');
+
+    const headers = Object.keys(rows[0]);
+    const csv = [
+      headers.join(','),
+      ...rows.map(r => headers.map(h => JSON.stringify(r[h] ?? '')).join(','))
+    ].join('\n');
+
+    res.setHeader('Content-Type', 'text/csv');
+    res.setHeader('Content-Disposition', `attachment; filename="${metric}-${new Date().toISOString().slice(0, 10)}.csv"`);
+    return res.send(csv);
+  } catch (err) { next(err); }
+};
+
 module.exports = {
   getStats,
   getSalesChart,
@@ -213,4 +272,8 @@ module.exports = {
   getCustomerLifetimeValue,
   getConversionRate,
   getTrafficSources,
+  getProductFunnel,
+  getUtmAttribution,
+  getCouponPerformance,
+  exportAnalyticsCsv,
 };

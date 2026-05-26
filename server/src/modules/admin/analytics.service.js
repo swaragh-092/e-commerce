@@ -371,6 +371,153 @@ const getTrafficSources = async ({ period = '30d', limit = 10 } = {}) => {
   return rows.map((r) => ({ source: r.source, visits: r.visits }));
 };
 
+/**
+ * Product funnel: views → add to cart → purchase for top products.
+ */
+const getProductFunnel = async ({ period = '30d', limit = 10 } = {}) => {
+  const { start, end } = resolveDateRange(period);
+
+  const tableExists = await db.sequelize.query(
+    `SELECT to_regclass('public.page_visits') AS t`,
+    { type: db.sequelize.QueryTypes.SELECT }
+  );
+  if (!tableExists[0]?.t) return [];
+
+  const rows = await db.sequelize.query(`
+    WITH product_views AS (
+      SELECT product_id, COUNT(*)::int AS views
+      FROM page_visits
+      WHERE product_id IS NOT NULL AND created_at BETWEEN :start AND :end
+      GROUP BY product_id
+    ),
+    product_carts AS (
+      SELECT ci.product_id, COUNT(DISTINCT c.id)::int AS add_to_cart
+      FROM cart_items ci
+      JOIN carts c ON c.id = ci.cart_id
+      WHERE c.created_at BETWEEN :start AND :end
+      GROUP BY ci.product_id
+    ),
+    product_purchases AS (
+      SELECT oi.product_id, SUM(oi.quantity)::int AS purchased
+      FROM order_items oi
+      JOIN orders o ON o.id = oi.order_id
+      WHERE o.status IN ('confirmed','processing','ready_for_shipment','closed')
+        AND o.created_at BETWEEN :start AND :end
+        AND oi.product_id IS NOT NULL
+      GROUP BY oi.product_id
+    )
+    SELECT
+      p.id AS product_id,
+      p.name,
+      COALESCE(pv.views, 0) AS views,
+      COALESCE(pc.add_to_cart, 0) AS add_to_cart,
+      COALESCE(pp.purchased, 0) AS purchased
+    FROM products p
+    LEFT JOIN product_views pv ON pv.product_id = p.id
+    LEFT JOIN product_carts pc ON pc.product_id = p.id
+    LEFT JOIN product_purchases pp ON pp.product_id = p.id
+    WHERE COALESCE(pv.views, 0) + COALESCE(pc.add_to_cart, 0) + COALESCE(pp.purchased, 0) > 0
+    ORDER BY views DESC
+    LIMIT :limit
+  `, {
+    replacements: { start, end, limit: parseInt(limit, 10) },
+    type: db.sequelize.QueryTypes.SELECT,
+  });
+
+  return rows.map((r) => ({
+    productId: r.product_id,
+    name: r.name,
+    views: r.views,
+    addToCart: r.add_to_cart,
+    purchased: r.purchased,
+    viewToCartRate: r.views > 0 ? parseFloat(((r.add_to_cart / r.views) * 100).toFixed(1)) : 0,
+    cartToBuyRate: r.add_to_cart > 0 ? parseFloat(((r.purchased / r.add_to_cart) * 100).toFixed(1)) : 0,
+  }));
+};
+
+/**
+ * UTM Marketing Attribution — revenue and orders attributed to UTM campaigns.
+ */
+const getUtmAttribution = async ({ period = '30d', limit = 20 } = {}) => {
+  const { start, end } = resolveDateRange(period);
+
+  const tableExists = await db.sequelize.query(
+    `SELECT to_regclass('public.page_visits') AS t`,
+    { type: db.sequelize.QueryTypes.SELECT }
+  );
+  if (!tableExists[0]?.t) return [];
+
+  // Attribute orders to UTM by matching user_id or session_id from visits to orders
+  const rows = await db.sequelize.query(`
+    SELECT
+      pv.utm_source AS source,
+      pv.utm_medium AS medium,
+      pv.utm_campaign AS campaign,
+      COUNT(DISTINCT o.id)::int AS orders,
+      COALESCE(SUM(o.total), 0) AS revenue
+    FROM page_visits pv
+    JOIN orders o ON (o.user_id = pv.user_id OR o.checkout_session_id::text = pv.session_id)
+    WHERE pv.utm_source IS NOT NULL
+      AND pv.created_at BETWEEN :start AND :end
+      AND o.status IN ('confirmed','processing','ready_for_shipment','closed')
+      AND o.created_at BETWEEN :start AND :end
+    GROUP BY pv.utm_source, pv.utm_medium, pv.utm_campaign
+    ORDER BY revenue DESC
+    LIMIT :limit
+  `, {
+    replacements: { start, end, limit: parseInt(limit, 10) },
+    type: db.sequelize.QueryTypes.SELECT,
+  });
+
+  return rows.map((r) => ({
+    source: r.source,
+    medium: r.medium,
+    campaign: r.campaign,
+    orders: r.orders,
+    revenue: parseFloat(r.revenue),
+  }));
+};
+
+/**
+ * Coupon performance — usage, revenue, and avg discount per coupon.
+ */
+const getCouponPerformance = async ({ period = '30d', limit = 10 } = {}) => {
+  const { start, end } = resolveDateRange(period);
+
+  const rows = await db.sequelize.query(`
+    SELECT
+      c.id AS coupon_id,
+      c.code,
+      c.discount_type,
+      c.discount_value,
+      COUNT(o.id)::int AS times_used,
+      COALESCE(SUM(o.total), 0) AS revenue_generated,
+      COALESCE(SUM(o.discount_amount), 0) AS total_discount_given,
+      COALESCE(AVG(o.discount_amount), 0) AS avg_discount
+    FROM coupons c
+    JOIN orders o ON o.coupon_id = c.id
+    WHERE o.status IN ('confirmed','processing','ready_for_shipment','closed')
+      AND o.created_at BETWEEN :start AND :end
+    GROUP BY c.id, c.code, c.discount_type, c.discount_value
+    ORDER BY revenue_generated DESC
+    LIMIT :limit
+  `, {
+    replacements: { start, end, limit: parseInt(limit, 10) },
+    type: db.sequelize.QueryTypes.SELECT,
+  });
+
+  return rows.map((r) => ({
+    couponId: r.coupon_id,
+    code: r.code,
+    discountType: r.discount_type,
+    discountValue: parseFloat(r.discount_value),
+    timesUsed: r.times_used,
+    revenueGenerated: parseFloat(r.revenue_generated),
+    totalDiscountGiven: parseFloat(r.total_discount_given),
+    avgDiscount: parseFloat(parseFloat(r.avg_discount).toFixed(2)),
+  }));
+};
+
 module.exports = {
   getTopProducts,
   getAovTrend,
@@ -383,4 +530,7 @@ module.exports = {
   getCustomerLifetimeValue,
   getConversionRate,
   getTrafficSources,
+  getProductFunnel,
+  getUtmAttribution,
+  getCouponPerformance,
 };
