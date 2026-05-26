@@ -57,6 +57,7 @@
         "freeThreshold": 50.00
     },
     "tax": {
+        "originState": "",
         "rate": 0.00,
         "inclusive": false,
         "enableCGST": false,
@@ -153,6 +154,7 @@
         "showCategoryBar": true
     },
     "catalog": {
+        "lowStockThreshold": 10,
         "showCategoryIcon": false,
         "defaultSort": "newest",
         "defaultPageSize": 20,

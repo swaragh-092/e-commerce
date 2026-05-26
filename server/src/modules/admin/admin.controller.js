@@ -24,7 +24,7 @@ const getSalesChart = async (req, res, next) => {
 
 const getLowStock = async (req, res, next) => {
   try {
-    const threshold = parseInt(req.query.threshold, 10) || 10;
+    const threshold = req.query.threshold ? parseInt(req.query.threshold, 10) : undefined;
     const data = await AdminService.getLowStock(threshold);
     return success(res, data);
   } catch (err) {

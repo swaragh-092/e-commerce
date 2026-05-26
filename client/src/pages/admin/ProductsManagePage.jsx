@@ -18,7 +18,6 @@ import { getProducts, deleteProduct, updateProduct, bulkUpdateSale, bulkDeletePr
 import { getCategoryTree } from '../../services/categoryService';
 import { getSaleLabels } from '../../services/adminService';
 import { getMediaUrl } from '../../utils/media';
-import { LOW_STOCK_THRESHOLD } from '../../utils/constants';
 import { useCurrency, useSettings, useFeature } from '../../hooks/useSettings';
 import { useNotification } from '../../context/NotificationContext';
 import { formatSaleDateTime, isEndingSoon } from '../../utils/pricing';
@@ -27,7 +26,7 @@ import { PERMISSIONS } from '../../utils/permissions';
 import { getApiErrorMessage } from '../../utils/apiErrors';
 import { formatOpenEndedDateRange, toDateTimeLocal } from '../../utils/dates';
 
-const STOREFRONT_BASE = (import.meta.env.VITE_APP_URL || 'http://localhost:3000');
+const STOREFRONT_BASE = (import.meta.env.VITE_APP_URL || window.location.origin);
 const toIsoOrNull = (value) => (value ? new Date(value).toISOString() : null);
 
 const SummaryCard = ({ label, value, tone = 'default' }) => (
@@ -102,6 +101,7 @@ const ProductsManagePage = () => {
   // In catalog mode cart=false, so we hide stock column + stepper entirely.
   const cartEnabled = useFeature('cart');
   const sales = settings?.sales || {};
+  const lowStockThreshold = Number(settings?.catalog?.lowStockThreshold) || 10;
   const canCreateProducts = hasPermission(PERMISSIONS.PRODUCTS_CREATE);
   const canUpdateProducts = hasPermission(PERMISSIONS.PRODUCTS_UPDATE);
   const canDeleteProducts = hasPermission(PERMISSIONS.PRODUCTS_DELETE);
@@ -121,7 +121,7 @@ const ProductsManagePage = () => {
   const [categoryFilter, setCategoryFilter] = useState('');
   const [flatCategories, setFlatCategories] = useState([]);
   const [saleLabels, setSaleLabels] = useState([]);
-  // ?stock=low from dashboard → show only items with qty ≤ LOW_STOCK_THRESHOLD
+  // ?stock=low from dashboard → show only items with qty ≤ lowStockThreshold
   const [lowStockOnly, setLowStockOnly] = useState(() => searchParams.get('stock') === 'low');
 
   // Bulk selection
@@ -306,8 +306,8 @@ const ProductsManagePage = () => {
       ...(saleFilter && { saleStatus: saleFilter }),
       ...(categoryFilter && { categoryId: categoryFilter }),
       ...(sortModel[0] && { sortBy: sortModel[0].field, sortOrder: sortModel[0].sort }),
-      // Low-stock filter: pass maxQty=LOW_STOCK_THRESHOLD so the server returns only low-stock items
-      ...(lowStockOnly && { maxQty: LOW_STOCK_THRESHOLD }),
+      // Low-stock filter: pass maxQty=lowStockThreshold so the server returns only low-stock items
+      ...(lowStockOnly && { maxQty: lowStockThreshold }),
     };
     getProducts(params)
       .then((res) => {
@@ -617,7 +617,7 @@ const ProductsManagePage = () => {
         const total = Number(row?.quantity || 0);
         const reserved = Number(row?.reservedQty || 0);
         const available = Math.max(0, total - reserved);
-        const color = available === 0 ? 'error' : available <= LOW_STOCK_THRESHOLD ? 'warning' : 'success';
+        const color = available === 0 ? 'error' : available <= lowStockThreshold ? 'warning' : 'success';
         return (
           <Tooltip title={`Available: ${available} | Total: ${total} | Reserved: ${reserved}`}>
             <Chip
@@ -787,7 +787,7 @@ const ProductsManagePage = () => {
         />
         <ClickableSummaryCard 
           label="Low Stock" 
-          value="≤ 10" 
+          value={counts.lowStock ?? `≤ ${lowStockThreshold}`} 
           tone="warning"
           active={lowStockOnly}
           onClick={() => {
@@ -844,7 +844,7 @@ const ProductsManagePage = () => {
         >
           <InventoryIcon color="warning" fontSize="small" />
           <Typography variant="body2" fontWeight={600} color="warning.dark" sx={{ flexGrow: 1 }}>
-            Showing low-stock products (qty ≤ {LOW_STOCK_THRESHOLD})
+            Showing low-stock products (qty ≤ {lowStockThreshold})
           </Typography>
           <Button
             size="small"
@@ -973,7 +973,7 @@ const ProductsManagePage = () => {
           )}
           {pricingEnabled && sales.allowBulkSales !== false && canBulkSaleProducts && (
             <>
-              <Button size="small" variant="outlined" onClick={() => setBulkSaleDialog({ open: true, mode: 'apply', saleType: 'percentage', value: '', saleLabel: '', saleStartAt: '', saleEndAt: '', saving: false })}>
+              <Button size="small" variant="outlined" onClick={() => { getSaleLabels().then((res) => setSaleLabels((res.data?.data || []).filter((l) => l.isActive !== false))).catch(() => {}); setBulkSaleDialog({ open: true, mode: 'apply', saleType: 'percentage', value: '', saleLabel: '', saleStartAt: '', saleEndAt: '', saving: false }); }}>
                 Apply Sale
               </Button>
               <Button size="small" variant="outlined" color="warning" onClick={() => setBulkSaleDialog({ open: true, mode: 'clear', saleType: 'percentage', value: '', saleLabel: '', saleStartAt: '', saleEndAt: '', saving: false })}>

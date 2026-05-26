@@ -1612,6 +1612,7 @@ const getOrders = async (userId, isAdmin, page = 1, limit = 20, filters = {}) =>
                           AND (
                             u.first_name ILIKE ${sequelize.escape(searchPattern)}
                             OR u.last_name ILIKE ${sequelize.escape(searchPattern)}
+                            OR (u.first_name || ' ' || u.last_name) ILIKE ${sequelize.escape(searchPattern)}
                             OR u.email ILIKE ${sequelize.escape(searchPattern)}
                           )
                     )`),

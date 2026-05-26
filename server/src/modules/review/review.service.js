@@ -23,7 +23,9 @@ const refreshProductRatingCache = async (productId) => {
 
     const promise = new Promise((resolve) => {
         setTimeout(async () => {
-            activeRefreshes.delete(productId);
+            // Do NOT delete the Map entry here — it must remain for the full duration
+            // of the async work so that concurrent callers within the 500ms window
+            // correctly receive this same promise instead of spawning a duplicate query.
             try {
                 const result = await Review.findOne({
                     where: { productId, status: 'approved' },
@@ -39,6 +41,8 @@ const refreshProductRatingCache = async (productId) => {
             } catch (err) {
                 logger.error('Error refreshing product rating cache', { productId, error: err.message });
             } finally {
+                // Remove only after the work is done so no duplicate runs are spawned
+                activeRefreshes.delete(productId);
                 resolve();
             }
         }, 500); // 500ms batching window
@@ -189,13 +193,31 @@ const list = async (slug, { page, limit, status, search }) => {
 
   if (search && !slug) {
     const searchEscaped = search.replace(/[%_]/g, '\\$&');
+    const searchPattern = `%${searchEscaped}%`;
     where = {
       ...where,
       [Op.or]: [
-        { '$User.firstName$': { [Op.iLike]: `%${searchEscaped}%` } },
-        { '$User.lastName$': { [Op.iLike]: `%${searchEscaped}%` } },
-        { '$Product.name$': { [Op.iLike]: `%${searchEscaped}%` } },
-        { title: { [Op.iLike]: `%${searchEscaped}%` } },
+        { title: { [Op.iLike]: searchPattern } },
+        sequelize.where(
+          sequelize.literal(`EXISTS (
+            SELECT 1 FROM users AS u
+            WHERE u.id = "Review"."user_id"
+              AND (
+                u.first_name ILIKE ${sequelize.escape(searchPattern)}
+                OR u.last_name ILIKE ${sequelize.escape(searchPattern)}
+                OR (u.first_name || ' ' || u.last_name) ILIKE ${sequelize.escape(searchPattern)}
+              )
+          )`),
+          true
+        ),
+        sequelize.where(
+          sequelize.literal(`EXISTS (
+            SELECT 1 FROM products AS p
+            WHERE p.id = "Review"."product_id"
+              AND p.name ILIKE ${sequelize.escape(searchPattern)}
+          )`),
+          true
+        ),
       ]
     };
   }
@@ -217,7 +239,6 @@ const list = async (slug, { page, limit, status, search }) => {
 
     const statusCounts = await Review.findAll({
       where: countWhere,
-      include: (search && !slug) ? include.map(inc => ({ ...inc, attributes: [] })) : [],
       attributes: [
         [sequelize.col('Review.status'), 'status'],
         [sequelize.fn('COUNT', sequelize.fn('DISTINCT', sequelize.col('Review.id'))), 'count']

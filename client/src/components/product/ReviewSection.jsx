@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { Box, Typography, Button, Rating, TextField, Divider, Avatar, List, ListItem, ListItemAvatar, ListItemText, Alert, CircularProgress, Tooltip, Chip, Paper, Stack } from '@mui/material';
 import RateReviewIcon from '@mui/icons-material/RateReview';
 import { Link as RouterLink } from 'react-router-dom';
@@ -30,12 +30,19 @@ const ReviewSection = ({ slug, productId, onVisibleReviewsChange }) => {
     const [error, setError] = useState(null);
     const [purchaseCheckError, setPurchaseCheckError] = useState(false);
     const dismissTimer = useRef(null);
+    // Used to detect stale responses when slug changes rapidly
+    const fetchSlugRef = useRef(null);
+    const myReviewSlugRef = useRef(null);
 
     // User can write if: authenticated, no existing review (or rejected), and purchase requirement met
     const hasReviewed = myReview && myReview.status !== 'rejected';
     const canWriteReview = isAuthenticated && !hasReviewed && !purchaseLoading && (!requirePurchase || hasPurchased);
 
-    const fetchReviews = async (pageNum = 1) => {
+    const fetchReviews = useCallback(async (pageNum = 1) => {
+        // Capture the slug at call-time; ignore response if slug has since changed
+        const calledForSlug = slug;
+        fetchSlugRef.current = calledForSlug;
+
         if (pageNum === 1) {
             setLoading(true);
             setError(null);
@@ -43,7 +50,10 @@ const ReviewSection = ({ slug, productId, onVisibleReviewsChange }) => {
             setLoadingMore(true);
         }
         try {
-            const res = await reviewService.list(slug, { page: pageNum, limit: 10 });
+            const res = await reviewService.list(calledForSlug, { page: pageNum, limit: 10 });
+            // Discard stale response if slug changed while awaiting
+            if (fetchSlugRef.current !== calledForSlug) return;
+
             const rawData = res.data || [];
             const newReviews = Array.isArray(rawData) ? rawData : (rawData.rows || []);
 
@@ -56,38 +66,59 @@ const ReviewSection = ({ slug, productId, onVisibleReviewsChange }) => {
             setHasMore(pageNum < totalPages);
             setPage(pageNum);
         } catch (e) {
+            if (fetchSlugRef.current !== calledForSlug) return;
             console.error('Failed to load reviews', e);
             if (pageNum === 1) setError('Failed to load reviews. Please try again later.');
         } finally {
+            if (fetchSlugRef.current !== calledForSlug) return;
             if (pageNum === 1) setLoading(false);
             else setLoadingMore(false);
         }
-    };
+    }, [slug]);
 
     // Fetch user's own review via dedicated endpoint (reliable even if not on page 1)
     useEffect(() => {
         if (!isAuthenticated || !slug) return;
+        const calledForSlug = slug;
+        myReviewSlugRef.current = calledForSlug;
         setMyReviewLoading(true);
-        reviewService.getMyReview(slug)
-            .then((review) => setMyReview(review || null))
-            .catch(() => setMyReview(null))
-            .finally(() => setMyReviewLoading(false));
+        reviewService.getMyReview(calledForSlug)
+            .then((review) => {
+                // Discard stale response if slug changed while awaiting
+                if (myReviewSlugRef.current !== calledForSlug) return;
+                setMyReview(review || null);
+            })
+            .catch(() => {
+                if (myReviewSlugRef.current !== calledForSlug) return;
+                setMyReview(null);
+            })
+            .finally(() => {
+                if (myReviewSlugRef.current !== calledForSlug) return;
+                setMyReviewLoading(false);
+            });
     }, [isAuthenticated, slug]);
 
     useEffect(() => {
         fetchReviews(1);
     }, [slug]);
 
-    // Check purchase history for verified badge
+    // Check purchase history for verified badge.
+    // AbortController prevents a stale response from a previous productId overwriting
+    // state after productId has changed (e.g. navigating between products quickly).
     useEffect(() => {
         if (!isAuthenticated || !productId) return;
+        const controller = new AbortController();
         setPurchaseCheckError(false);
         setPurchaseLoading(true);
+        // Reset purchase state so prior product's orderId doesn't bleed through
+        setHasPurchased(false);
+        setFormData(prev => ({ ...prev, orderId: null }));
+
         orderService.getMyOrders({
             productId,
             orderShippingStatus: 'delivered,partially_delivered',
-            limit: 1
-        })
+            limit: 1,
+        }, { signal: controller.signal })
             .then((res) => {
                 const responseData = res.data || {};
                 const orders = Array.isArray(responseData) ? responseData : (responseData.rows || []);
@@ -96,11 +127,17 @@ const ReviewSection = ({ slug, productId, onVisibleReviewsChange }) => {
                     setHasPurchased(true);
                 }
             })
-            .catch(() => {
+            .catch((err) => {
+                // Ignore errors caused by our own abort on productId change
+                if (err?.name === 'AbortError' || err?.name === 'CanceledError') return;
                 setPurchaseCheckError(true);
                 setHasPurchased(true); // allow review on error, just won't be verified
             })
-            .finally(() => setPurchaseLoading(false));
+            .finally(() => {
+                if (!controller.signal.aborted) setPurchaseLoading(false);
+            });
+
+        return () => controller.abort();
     }, [isAuthenticated, productId]);
 
     // Auto-dismiss success message

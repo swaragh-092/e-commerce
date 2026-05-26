@@ -12,7 +12,7 @@ const getSalesChart = ({ period = 'monthly', startDate, endDate } = {}) => {
   const query = buildQueryString({ period, startDate, endDate }, { omitEmpty: true });
   return api.get(`/${A}/dashboard/sales-chart?${query}`);
 };
-const getLowStock = (threshold = 10) => api.get(`/${A}/dashboard/low-stock?threshold=${threshold}`);
+const getLowStock = (threshold) => api.get(`/${A}/dashboard/low-stock${threshold != null ? `?threshold=${threshold}` : ''}`);
 const getRecentOrders = () => api.get(`/${A}/dashboard/recent-orders`);
 const getAccessRoles = () => api.get(`/${A}/access-control/roles`);
 const getAccessPermissions = () => api.get(`/${A}/access-control/permissions`);

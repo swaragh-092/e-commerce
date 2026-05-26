@@ -34,6 +34,7 @@ import AddIcon from '@mui/icons-material/Add';
 import DragIndicatorIcon from '@mui/icons-material/DragIndicator';
 import PublicIcon from '@mui/icons-material/Public';
 import HomepageSettingsEditor from './HomepageSettingsEditor';
+import { INDIAN_STATES } from '../../../utils/indianStates';
 
 export default function buildSettingsPanels(ctx) {
   const {
@@ -432,8 +433,9 @@ function buildCatalogPanel({ form, set, section, field, toggle, imageField }) {
           </Select>
         </FormControl>
         {toggle('catalog.showCategoryIcon', 'Show category icons in storefront (if uploaded)')}
+        {field('catalog.lowStockThreshold', 'Low stock warning threshold (products with qty ≤ this are flagged)', 'number')}
       </>,
-      ['catalog', 'sort', 'filters', 'grid', 'category depth', 'icon']
+      ['catalog', 'sort', 'filters', 'grid', 'category depth', 'icon', 'low stock', 'threshold']
     ),
     section(
       'Product Page Experience',
@@ -631,8 +633,17 @@ function buildCheckoutPanel({ form, set, section, field, toggle, currSymbol, ena
         <Divider sx={{ my: 2 }} />
         <Typography variant="subtitle2" fontWeight={600} color="text.secondary" mb={0.5}>GST Breakdown (India)</Typography>
         <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mb: 2 }}>
-          When any GST component is enabled it overrides the global rate and shows a line-by-line breakdown.
+          When any GST component is enabled it overrides the global rate. CGST+SGST applies for intra-state orders; IGST applies for inter-state orders (based on shipping address vs. store origin state).
         </Typography>
+        <Autocomplete
+          options={INDIAN_STATES}
+          value={form['tax.originState'] || null}
+          onChange={(_, v) => set('tax.originState', v || '')}
+          freeSolo
+          size="small"
+          sx={{ mb: 2 }}
+          renderInput={(params) => <TextField {...params} label="Store Origin State" helperText="Select your business registered state for GST calculation" />}
+        />
         {toggle('tax.enableCGST', 'Enable CGST (Central Goods & Services Tax)')}
         {enableCGST && field('tax.cgstRate', 'CGST Rate (e.g. 0.09 for 9%)', 'number')}
         {toggle('tax.enableSGST', 'Enable SGST (State Goods & Services Tax)')}

@@ -562,6 +562,13 @@ exports.getProducts = async (filters, page, limit, isAdmin = false) => {
       acc[curr.status] = parseInt(curr.count || 0, 10);
       return acc;
     }, {});
+
+    // Low stock count
+    const catalogSettings = await SettingsService.getByGroup('catalog', { maskSensitive: false });
+    const lowStockThreshold = parseInt(catalogSettings.lowStockThreshold, 10) || 10;
+    counts.lowStock = await Product.count({
+      where: Sequelize.literal(`"Product"."quantity" - "Product"."reserved_qty" <= ${lowStockThreshold}`),
+    });
   }
 
   const labelPresets = await getLabelPresets();

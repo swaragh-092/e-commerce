@@ -57,7 +57,11 @@ const updateCouponSchema = Joi.object({
     usageLimit: Joi.number().integer().min(1).allow(null).optional(),
     perUserLimit: Joi.number().integer().min(1).optional(),
     startDate: Joi.date().iso().optional(),
-    endDate: Joi.date().iso().greater(Joi.ref('startDate')).optional(),
+    endDate: Joi.date().iso().when('startDate', {
+        is: Joi.exist(),
+        then: Joi.date().iso().greater(Joi.ref('startDate')),
+        otherwise: Joi.date().iso(),
+    }).optional(),
     isActive: Joi.boolean().optional(),
     campaignStatus: campaignStatus.optional(),
     applicationMode: applicationMode.optional(),

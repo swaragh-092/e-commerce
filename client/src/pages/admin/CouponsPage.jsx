@@ -73,7 +73,20 @@ const empty = {
 const flattenCategoryTree = (nodes = []) =>
   walkCategoryTree(nodes, (node, { path }) => ({ id: node.id, name: path }));
 
-const formatLocalDateTime = (value) => (value ? new Date(value).toISOString().slice(0, 16) : '');
+const formatLocalDateTime = (value) => {
+  if (!value) return '';
+  const d = new Date(value);
+  if (isNaN(d)) return '';
+  const pad = (n) => String(n).padStart(2, '0');
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
+};
+
+const localToISO = (value) => {
+  if (!value) return null;
+  const d = new Date(value);
+  if (isNaN(d)) return value;
+  return d.toISOString();
+};
 
 const CouponsPage = () => {
   const [rows, setRows] = useState([]);
@@ -310,8 +323,8 @@ const CouponsPage = () => {
     maxDiscount: nextForm.type === 'percentage' && nextForm.maxDiscount !== '' ? Number(nextForm.maxDiscount) : null,
     usageLimit: nextForm.usageLimit === '' ? null : Number(nextForm.usageLimit),
     perUserLimit: Number(nextForm.perUserLimit || 1),
-    startDate: nextForm.startDate,
-    endDate: nextForm.endDate,
+    startDate: localToISO(nextForm.startDate),
+    endDate: localToISO(nextForm.endDate),
     isActive: Boolean(nextForm.isActive) && nextForm.campaignStatus === 'active',
     campaignStatus: nextForm.campaignStatus,
     applicationMode: nextForm.applicationMode,

@@ -81,9 +81,73 @@ const createProductSchema = Joi.object({
   ),
 });
 
-const updateProductSchema = createProductSchema
-  .fork(['name', 'price', 'type'], (schema) => schema.optional())
-  .min(1);
+const updateProductSchema = Joi.object({
+  name: Joi.string().max(255),
+  slug: Joi.string().max(255).allow('', null),
+  isEnabled: Joi.boolean(),
+  description: Joi.string().allow('', null),
+  shortDescription: Joi.string().max(500).allow('', null),
+  sku: Joi.string().max(100).allow('', null),
+  unit: Joi.string().max(50).allow('', null),
+  price: Joi.number().precision(2).positive(),
+  salePrice: Joi.number().precision(2).positive().allow(null),
+  saleStartAt: Joi.date().iso().allow(null),
+  saleEndAt: Joi.date().iso().allow(null),
+  saleLabel: Joi.string().max(100).allow('', null),
+  quantity: Joi.number().integer().min(0),
+  weight: Joi.number().precision(2).min(0).allow(null),
+  requiresShipping: Joi.boolean(),
+  weightGrams: Joi.number().integer().min(0).allow(null),
+  lengthCm: Joi.number().min(0).allow(null),
+  breadthCm: Joi.number().min(0).allow(null),
+  heightCm: Joi.number().min(0).allow(null),
+  taxConfig: Joi.object({
+    isCustom: Joi.boolean().required(),
+    inclusive: Joi.boolean(),
+    sgst: Joi.number().min(0).max(1),
+    cgst: Joi.number().min(0).max(1),
+    igst: Joi.number().min(0).max(1),
+  }).allow(null),
+  type: Joi.string().valid('simple', 'variable', 'combo'),
+  status: Joi.string().valid('draft', 'published'),
+  isFeatured: Joi.boolean(),
+  categoryIds: Joi.array().items(Joi.string().uuid()),
+  brandId: Joi.string().uuid().allow(null),
+  tags: Joi.array().items(Joi.string()),
+  variants: Joi.array().items(
+    Joi.object({
+      sku: Joi.string().max(100).allow('', null),
+      price: Joi.number().precision(2).min(0).required(),
+      stockQty: Joi.number().integer().min(0).default(0),
+      isActive: Joi.boolean().default(true),
+      sortOrder: Joi.number().integer().min(0).default(0),
+      images: Joi.array().items(
+        Joi.object({
+          url: Joi.string().allow('', null),
+          alt: Joi.string().max(255).allow('', null),
+          mediaId: Joi.string().uuid().allow(null),
+          sortOrder: Joi.number().integer().default(0),
+          isPrimary: Joi.boolean().default(false),
+        })
+      ),
+      options: Joi.array().items(
+        Joi.object({
+          attributeId: Joi.string().uuid().required(),
+          valueId: Joi.string().uuid().required(),
+        })
+      ).min(1).required(),
+    })
+  ),
+  images: Joi.array().items(
+    Joi.object({
+      url: Joi.string().allow('', null),
+      alt: Joi.string().max(255).allow('', null),
+      mediaId: Joi.string().uuid().allow(null),
+      sortOrder: Joi.number().integer().default(0),
+      isPrimary: Joi.boolean().default(false),
+    })
+  ),
+}).min(1);
 
 const bulkSaleSchema = Joi.object({
   action: Joi.string().valid('apply', 'clear').required(),
@@ -124,6 +188,7 @@ const bulkUpdateSchema = Joi.object({
   data: Joi.object({
     status: Joi.string().valid('draft', 'published'),
     isEnabled: Joi.boolean(),
+    saleLabel: Joi.string().max(100).allow('', null),
   }).min(1).required(),
 });
 

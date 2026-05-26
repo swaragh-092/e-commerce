@@ -169,6 +169,10 @@ const listAll = async ({ page, limit, status, role, search }) => {
       { firstName: { [Op.iLike]: pattern } },
       { lastName: { [Op.iLike]: pattern } },
       { email: { [Op.iLike]: pattern } },
+      sequelize.where(
+        sequelize.fn('concat', sequelize.col('first_name'), ' ', sequelize.col('last_name')),
+        { [Op.iLike]: pattern }
+      ),
     ];
   }
 

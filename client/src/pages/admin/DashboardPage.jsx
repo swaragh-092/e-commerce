@@ -19,7 +19,7 @@ const DashboardPage = () => {
     setLoading(true);
     setError('');
     setSectionErrors({});
-    Promise.allSettled([getStats(), getLowStock(10), getRecentOrders()])
+    Promise.allSettled([getStats(), getLowStock(), getRecentOrders()])
       .then(([s, ls, ro]) => {
         const errors = {};
         if (s.status === 'fulfilled') setStats(s.value.data.data);

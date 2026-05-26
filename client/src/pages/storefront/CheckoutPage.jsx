@@ -4,7 +4,7 @@ import {
     Box, Container, Typography, Button, Divider, Paper, TextField,
     CircularProgress, Alert, Radio, RadioGroup,
     FormControlLabel, Chip, Dialog, DialogTitle, DialogContent, DialogActions,
-    Grid, IconButton, Checkbox, Collapse,
+    Grid, IconButton, Checkbox, Collapse, Autocomplete,
 } from '@mui/material';
 import LocalShippingIcon from '@mui/icons-material/LocalShipping';
 import LocalOfferIcon from '@mui/icons-material/LocalOffer';
@@ -33,6 +33,7 @@ import { getApiErrorMessage } from '../../utils/apiErrors';
 import { getVariantOptionLabel } from '../../utils/variantOptions';
 import {calculateTax} from '../../../../shared/calculations.js';
 import { getStoreName } from '../../utils/store';
+import { INDIAN_STATES } from '../../utils/indianStates';
 
 const EMPTY_ADDR = {
     label: '', fullName: '', phone: '',
@@ -1208,9 +1209,17 @@ const CheckoutPage = () => {
                                 error={!!addrDialog.errors?.city} helperText={addrDialog.errors?.city} />
                         </Grid>
                         <Grid item xs={12} sm={6}>
-                            <TextField label="State / Province" size="small" fullWidth autoComplete="address-level1"
-                                value={addrDialog.form.state} onChange={(e) => setAddrField('state', e.target.value)}
-                                error={!!addrDialog.errors?.state} helperText={addrDialog.errors?.state} />
+                            <Autocomplete
+                                options={INDIAN_STATES}
+                                value={addrDialog.form.state || null}
+                                onChange={(_, v) => setAddrField('state', v || '')}
+                                freeSolo
+                                size="small"
+                                renderInput={(params) => (
+                                    <TextField {...params} label="State / Province" fullWidth autoComplete="address-level1"
+                                        error={!!addrDialog.errors?.state} helperText={addrDialog.errors?.state} />
+                                )}
+                            />
                         </Grid>
                         <Grid item xs={12} sm={6}>
                             <TextField label="Postal Code *" size="small" fullWidth required autoComplete="postal-code"

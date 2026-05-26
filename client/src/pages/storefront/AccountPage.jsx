@@ -3,7 +3,7 @@ import {
     Box, Typography, Tabs, Tab, Paper, Container, TextField, Button, Alert,
     List, ListItem, ListItemText, ListItemSecondaryAction, IconButton, Chip,
     Dialog, DialogTitle, DialogContent, DialogActions, Divider, CircularProgress,
-    Table, TableBody, TableCell, TableContainer, TableHead, TableRow, Tooltip, InputAdornment
+    Table, TableBody, TableCell, TableContainer, TableHead, TableRow, Tooltip, InputAdornment, Autocomplete
 } from '@mui/material';
 import DeleteIcon from '@mui/icons-material/Delete';
 import EditIcon from '@mui/icons-material/Edit';
@@ -25,6 +25,7 @@ import TabPanel from '../../components/common/TabPanel';
 import TwoFactorSetup from '../../components/storefront/TwoFactorSetup';
 import DeleteAccount from '../../components/storefront/DeleteAccount';
 import ActiveSessions from '../../components/storefront/ActiveSessions';
+import { INDIAN_STATES } from '../../utils/indianStates';
 
 const AccountPage = () => {
     const { user, updateProfile, refreshUser } = useContext(AuthContext);
@@ -267,7 +268,7 @@ const AddressesTab = () => {
                     <TextField size="small" label="Address Line 2 (optional)" value={form.addressLine2} onChange={(e) => set('addressLine2', e.target.value)} error={!!validationErrors.addressLine2} helperText={validationErrors.addressLine2} />
                     <Box sx={{ display: 'flex', gap: 2 }}>
                         <TextField size="small" label="City" value={form.city} onChange={(e) => set('city', e.target.value)} required fullWidth error={!!validationErrors.city} helperText={validationErrors.city} />
-                        <TextField size="small" label="State/Province" value={form.state} onChange={(e) => set('state', e.target.value)} fullWidth error={!!validationErrors.state} helperText={validationErrors.state} />
+                        <Autocomplete options={INDIAN_STATES} value={form.state || null} onChange={(_, v) => set('state', v || '')} freeSolo size="small" renderInput={(params) => <TextField {...params} label="State/Province" fullWidth error={!!validationErrors.state} helperText={validationErrors.state} />} />
                     </Box>
                     <Box sx={{ display: 'flex', gap: 2 }}>
                         <TextField size="small" label="Postal Code" value={form.postalCode} onChange={(e) => set('postalCode', e.target.value)} required fullWidth error={!!validationErrors.postalCode} helperText={validationErrors.postalCode} />

@@ -845,7 +845,9 @@ const OrderDetailPage = () => {
       : 0)
   );
   const codDueAmount = Math.max(Number(order?.total || 0) - codCollectedAmount, 0);
-  const defaultCodCollectionAmount = Math.min(deliveredItemsAmount, codDueAmount);
+  const defaultCodCollectionAmount = deliveredItemsAmount >= Number(order?.subtotal || 0)
+    ? codDueAmount
+    : Math.min(deliveredItemsAmount, codDueAmount);
   const canConfirmCod = canUpdateOrderStatus
     && order?.paymentMethod === 'cod'
     && ['pending_cod', 'pending', 'partially_refunded', 'refunded'].includes(payment?.status || 'pending_cod')

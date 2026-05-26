@@ -14,10 +14,14 @@ import {
   IconButton,
   Grid,
   CircularProgress,
+  Autocomplete,
+  Chip,
+  Tooltip,
 } from '@mui/material';
 import EditIcon from '@mui/icons-material/Edit';
 import DeleteIcon from '@mui/icons-material/Delete';
 import AddIcon from '@mui/icons-material/Add';
+import LabelIcon from '@mui/icons-material/Label';
 import DragIndicatorIcon from '@mui/icons-material/DragIndicator';
 import { DragDropContext, Droppable, Draggable } from '@hello-pangea/dnd';
 
@@ -28,6 +32,7 @@ import {
   deleteSaleLabel,
   reorderSaleLabels,
 } from '../../services/adminService';
+import { getProducts, bulkUpdateProducts } from '../../services/productService';
 import { useNotification } from '../../context/NotificationContext';
 import { useAuth } from '../../hooks/useAuth';
 import { PERMISSIONS } from '../../utils/permissions';
@@ -52,6 +57,43 @@ const SaleLabelsPage = () => {
   const { notify } = useNotification();
   const { hasPermission } = useAuth();
   const canManage = hasPermission(PERMISSIONS.SETTINGS_MANAGE);
+  const canBulkSale = hasPermission(PERMISSIONS.PRODUCTS_BULK_SALE);
+
+  // Bulk assign state
+  const [assignDialog, setAssignDialog] = useState({ open: false, labelId: '', labelName: '' });
+  const [productOptions, setProductOptions] = useState([]);
+  const [selectedProducts, setSelectedProducts] = useState([]);
+  const [assignSaving, setAssignSaving] = useState(false);
+  const [productsLoading, setProductsLoading] = useState(false);
+
+  const openAssignDialog = (label) => {
+    setAssignDialog({ open: true, labelId: label.id, labelName: label.name });
+    setSelectedProducts([]);
+    if (productOptions.length === 0) {
+      setProductsLoading(true);
+      getProducts({ page: 1, limit: 200 })
+        .then((res) => setProductOptions((res?.data || []).map((p) => ({ id: p.id, name: p.name, sku: p.sku }))))
+        .catch(() => {})
+        .finally(() => setProductsLoading(false));
+    }
+  };
+
+  const handleBulkAssign = async () => {
+    if (selectedProducts.length === 0) { notify('Select at least one product.', 'warning'); return; }
+    setAssignSaving(true);
+    try {
+      await bulkUpdateProducts(
+        selectedProducts.map((p) => p.id),
+        { saleLabel: assignDialog.labelId }
+      );
+      notify(`Label "${assignDialog.labelName}" assigned to ${selectedProducts.length} products.`, 'success');
+      setAssignDialog({ open: false, labelId: '', labelName: '' });
+    } catch (err) {
+      notify(err?.response?.data?.message || 'Failed to assign label.', 'error');
+    } finally {
+      setAssignSaving(false);
+    }
+  };
 
   useEffect(() => {
     fetchLabels();
@@ -299,7 +341,14 @@ const SaleLabelsPage = () => {
                           </Typography>
                         </Box>
 
-                        <Box sx={{ display: 'flex', gap: 1, width: 80, justifyContent: 'flex-end' }}>
+                        <Box sx={{ display: 'flex', gap: 1, width: 120, justifyContent: 'flex-end' }}>
+                          {canBulkSale && (
+                            <Tooltip title="Assign to products">
+                              <IconButton size="small" color="primary" onClick={() => openAssignDialog(label)}>
+                                <LabelIcon fontSize="small" />
+                              </IconButton>
+                            </Tooltip>
+                          )}
                           {canManage && (
                             <>
                               <IconButton size="small" onClick={() => handleOpen(label)}>
@@ -428,6 +477,30 @@ const SaleLabelsPage = () => {
           <Button onClick={handleClose}>Cancel</Button>
           <Button onClick={handleSave} variant="contained" disabled={saving}>
             {saving ? 'Saving...' : 'Save Label'}
+          </Button>
+        </DialogActions>
+      </Dialog>
+
+      {/* Bulk Assign Dialog */}
+      <Dialog open={assignDialog.open} onClose={() => !assignSaving && setAssignDialog({ open: false, labelId: '', labelName: '' })} maxWidth="sm" fullWidth>
+        <DialogTitle>Assign "{assignDialog.labelName}" to Products</DialogTitle>
+        <DialogContent>
+          <Autocomplete
+            multiple
+            options={productOptions}
+            loading={productsLoading}
+            getOptionLabel={(o) => `${o.name}${o.sku ? ` (${o.sku})` : ''}`}
+            value={selectedProducts}
+            onChange={(_, v) => setSelectedProducts(v)}
+            isOptionEqualToValue={(o, v) => o.id === v.id}
+            renderTags={(value, getTagProps) => value.map((o, i) => <Chip {...getTagProps({ i })} key={o.id} label={o.name} size="small" />)}
+            renderInput={(params) => <TextField {...params} label="Select products" size="small" sx={{ mt: 1 }} />}
+          />
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setAssignDialog({ open: false, labelId: '', labelName: '' })}>Cancel</Button>
+          <Button variant="contained" onClick={handleBulkAssign} disabled={assignSaving || selectedProducts.length === 0}>
+            {assignSaving ? 'Assigning...' : `Assign to ${selectedProducts.length} products`}
           </Button>
         </DialogActions>
       </Dialog>

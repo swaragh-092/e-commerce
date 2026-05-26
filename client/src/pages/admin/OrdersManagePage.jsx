@@ -23,6 +23,7 @@ import {
 import { DataGrid } from '@mui/x-data-grid';
 import VisibilityIcon from '@mui/icons-material/Visibility';
 import ReceiptLongOutlinedIcon from '@mui/icons-material/ReceiptLongOutlined';
+import DownloadIcon from '@mui/icons-material/Download';
 
 import PaymentsOutlinedIcon from '@mui/icons-material/PaymentsOutlined';
 
@@ -238,6 +239,30 @@ const OrdersManagePage = () => {
     } finally {
       setActionLoadingId(null);
     }
+  };
+
+  const handleExportCSV = () => {
+    const headers = ['Order #', 'Customer', 'Email', 'Total', 'Payment', 'Status', 'Date'];
+    const csvRows = [headers.join(',')];
+    orders.forEach((o) => {
+      const name = o.User ? `${o.User.firstName || ''} ${o.User.lastName || ''}`.trim() : (o.customer_name || '');
+      csvRows.push([
+        `"${o.orderNumber || ''}"`,
+        `"${name.replace(/"/g, '""')}"`,
+        `"${o.User?.email || ''}"`,
+        o.total || 0,
+        `"${o.Payment?.status || o.paymentMethod || ''}"`,
+        `"${o.status || ''}"`,
+        `"${o.createdAt ? new Date(o.createdAt).toLocaleDateString() : ''}"`,
+      ].join(','));
+    });
+    const blob = new Blob([csvRows.join('\n')], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `orders-${new Date().toISOString().slice(0, 10)}.csv`;
+    a.click();
+    URL.revokeObjectURL(url);
   };
 
   const columns = useMemo(
@@ -483,17 +508,22 @@ const OrdersManagePage = () => {
               </Select>
             </FormControl>
           </Stack>
-          <Button
-            variant="text"
-            onClick={() => {
-              setSearchInput('');
-              setStatus('');
-              setPaginationModel((current) => ({ ...current, page: 0 }));
-            }}
-            disabled={!searchInput && !status}
-          >
-            Clear filters
-          </Button>
+          <Stack direction="row" spacing={1}>
+            <Button
+              variant="text"
+              onClick={() => {
+                setSearchInput('');
+                setStatus('');
+                setPaginationModel((current) => ({ ...current, page: 0 }));
+              }}
+              disabled={!searchInput && !status}
+            >
+              Clear filters
+            </Button>
+            <Button variant="outlined" startIcon={<DownloadIcon />} onClick={handleExportCSV} disabled={orders.length === 0}>
+              Export CSV
+            </Button>
+          </Stack>
         </Stack>
         <Divider sx={{ my: 2 }} />
         <Typography variant="body2" color="text.secondary">

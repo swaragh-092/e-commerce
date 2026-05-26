@@ -1,6 +1,6 @@
 'use strict';
 
-const { Op, fn, col, literal } = require('sequelize');
+const { Op, fn, col, literal, UniqueConstraintError } = require('sequelize');
 const slugify = require('slugify');
 const db = require('../index');
 const { Order, User, Product, Role, Permission, Review } = db;
@@ -71,6 +71,10 @@ const canManageSystemRoles = (user) => getPermissionsForUser(user).includes(PERM
  *  pendingOrders, lowStockCount
  */
 const getStats = async () => {
+  const SettingsService = require('../settings/settings.service');
+  const catalog = await SettingsService.getByGroup('catalog', { maskSensitive: false });
+  const threshold = parseInt(catalog.lowStockThreshold, 10) || 10;
+
   const [
     revenueResult,
     orderCount,
@@ -92,7 +96,7 @@ const getStats = async () => {
     Product.count({ where: { status: 'published' } }),
     Order.count({ where: { status: 'pending_payment' } }),
     Product.count({
-      where: literal('"Product".quantity - "Product".reserved_qty < 10'),
+      where: literal(`"Product".quantity - "Product".reserved_qty < ${parseInt(threshold, 10)}`),
     }),
     Review.count({ where: { status: 'pending' } }),
     Review.count(),
@@ -215,9 +219,14 @@ const getSalesChart = async ({ period = 'monthly', startDate, endDate }) => {
 
 /**
  * Low-stock products where available qty < threshold.
- * @param {number} threshold - default 10
+ * @param {number} threshold - overrides the configured setting
  */
-const getLowStock = async (threshold = 10) => {
+const getLowStock = async (threshold) => {
+  if (threshold === undefined || threshold === null) {
+    const SettingsService = require('../settings/settings.service');
+    const catalog = await SettingsService.getByGroup('catalog', { maskSensitive: false });
+    threshold = parseInt(catalog.lowStockThreshold, 10) || 10;
+  }
   const rows = await Product.findAll({
     attributes: ['id', 'name', 'quantity', 'reservedQty'],
     where: {
@@ -289,13 +298,26 @@ const getAccessPermissions = async () => {
   }));
 };
 
-const buildRoleSlug = async (name, roleId = null) => {
+/**
+ * Build a unique slug for a role name, scoped to the provided transaction
+ * to eliminate the TOCTOU race between the uniqueness SELECT and the INSERT.
+ * @param {string} name
+ * @param {string|null} roleId - current role id when updating (exclude from dupe check)
+ * @param {import('sequelize').Transaction} transaction
+ */
+const buildRoleSlug = async (name, roleId = null, transaction = null) => {
   const baseSlug = slugify(name, { lower: true, strict: true, trim: true }) || 'custom-role';
   let slug = baseSlug;
   let suffix = 1;
 
   while (true) {
-    const existingRole = await Role.findOne({ where: { slug } });
+    // Lock the candidate row during the check so concurrent transactions
+    // cannot pass the same uniqueness gate simultaneously.
+    const existingRole = await Role.findOne({
+      where: { slug },
+      lock: transaction ? transaction.LOCK.UPDATE : undefined,
+      transaction,
+    });
     if (!existingRole || existingRole.id === roleId) {
       return slug;
     }
@@ -315,14 +337,27 @@ const createAccessRole = async ({ name, description, baseRole, permissionIds }, 
       throw new AppError('FORBIDDEN', 403, 'Reserved super admin permissions cannot be assigned to custom roles');
     }
 
-    const role = await Role.create({
-      name: name.trim(),
-      slug: await buildRoleSlug(name),
-      description: description || null,
-      baseRole,
-      isSystem: false,
-      isActive: true,
-    }, { transaction });
+    // Slug generation inside the transaction so the SELECT + INSERT are serialised
+    const slug = await buildRoleSlug(name, null, transaction);
+
+    let role;
+    try {
+      role = await Role.create({
+        name: name.trim(),
+        slug,
+        description: description || null,
+        baseRole,
+        isSystem: false,
+        isActive: true,
+      }, { transaction });
+    } catch (err) {
+      // Last-resort guard: if a concurrent transaction sneaked the same slug past us,
+      // surface a clear conflict error instead of a raw DB exception.
+      if (err instanceof UniqueConstraintError && err.fields?.slug) {
+        throw new AppError('CONFLICT', 409, 'A role with this name already exists. Please choose a different name.');
+      }
+      throw err;
+    }
 
     await role.setPermissions(permissionIds, { transaction });
     const createdRole = await Role.findByPk(role.id, { include: roleInclude, transaction });
@@ -374,7 +409,8 @@ const updateAccessRole = async (roleId, payload, actingUser) => {
     const updates = {};
     if (!role.isSystem && payload.name && payload.name.trim() !== role.name) {
       updates.name = payload.name.trim();
-      updates.slug = await buildRoleSlug(payload.name, role.id);
+      // Pass transaction so the uniqueness check is inside the same lock scope
+      updates.slug = await buildRoleSlug(payload.name, role.id, transaction);
     } else if (role.isSystem && payload.name && payload.name.trim() !== role.name) {
       throw new AppError('VALIDATION_ERROR', 400, 'System role names cannot be changed');
     }
