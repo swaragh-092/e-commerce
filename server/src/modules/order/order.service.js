@@ -1619,6 +1619,13 @@ const getOrders = async (userId, isAdmin, page = 1, limit = 20, filters = {}) =>
                     true
                 )
             );
+            // Search by phone in shipping address snapshot
+            searchClauses.push(
+                sequelize.where(
+                    sequelize.literal(`"Order"."shipping_address_snapshot"->>'phone' ILIKE ${sequelize.escape(searchPattern)}`),
+                    true
+                )
+            );
         }
         where[Op.or] = searchClauses;
     }

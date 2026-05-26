@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Box, Container, Grid, Typography, Pagination, useTheme, useMediaQuery } from '@mui/material';
+import { Box, Container, Typography, Pagination, FormControl, Select, MenuItem } from '@mui/material';
 import ProductGrid from '../../components/product/ProductGrid';
 import { getProducts } from '../../services/productService';
 import PageSEO from '../../components/common/PageSEO';
@@ -11,10 +11,10 @@ const SalePage = () => {
     const [loading, setLoading] = useState(true);
     const [meta, setMeta] = useState({ page: 1, totalPages: 1 });
     const [page, setPage] = useState(1);
+    const [sort, setSort] = useState('discount_desc');
 
     const pricingEnabled = useFeature('pricing');
 
-    const theme = useTheme();
     const { settings } = useSettings();
     const catalog = settings?.catalog || {};
     const defaultLimit = parseInt(catalog.defaultPageSize) || 20;
@@ -28,7 +28,8 @@ const SalePage = () => {
                     onSale: true, 
                     status: 'published', 
                     page, 
-                    limit: defaultLimit 
+                    limit: defaultLimit,
+                    sort,
                 });
                 setProducts(res.data || []);
                 if (res.meta) setMeta(res.meta);
@@ -39,7 +40,7 @@ const SalePage = () => {
             }
         };
         fetchProducts();
-    }, [page, defaultLimit]);
+    }, [page, defaultLimit, sort]);
 
     if (!pricingEnabled) {
         return <Navigate to="/404" replace />;
@@ -52,13 +53,24 @@ const SalePage = () => {
                 description="Check out our latest deals and discounted products. Limited time offers!" 
             />
             
-            <Box sx={{ mb: 6, textAlign: 'center' }}>
-                <Typography variant="h3" fontWeight={800} color="error.main" gutterBottom>
-                    Special Offers & Sales
-                </Typography>
-                <Typography variant="h6" color="text.secondary">
-                    Don't miss out on these exclusive discounts.
-                </Typography>
+            <Box sx={{ mb: 4, display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 2 }}>
+                <Box>
+                    <Typography variant="h4" fontWeight={800} color="error.main">
+                        Special Offers & Sales
+                    </Typography>
+                    <Typography variant="body1" color="text.secondary">
+                        Don't miss out on these exclusive discounts.
+                    </Typography>
+                </Box>
+                <FormControl size="small" sx={{ minWidth: 180 }}>
+                    <Select value={sort} onChange={(e) => { setSort(e.target.value); setPage(1); }}>
+                        <MenuItem value="discount_desc">Biggest Discount</MenuItem>
+                        <MenuItem value="ending_soon">Ending Soonest</MenuItem>
+                        <MenuItem value="price_asc">Price: Low to High</MenuItem>
+                        <MenuItem value="price_desc">Price: High to Low</MenuItem>
+                        <MenuItem value="newest">Newest First</MenuItem>
+                    </Select>
+                </FormControl>
             </Box>
 
             {products.length === 0 && !loading ? (

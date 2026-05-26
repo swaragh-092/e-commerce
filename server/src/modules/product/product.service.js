@@ -432,6 +432,8 @@ exports.getProducts = async (filters, page, limit, isAdmin = false) => {
   else if (filters.sort === 'price_desc') order.push(['price', 'DESC']);
   else if (filters.sort === 'newest') order.push(['createdAt', 'DESC']);
   else if (filters.sort === 'name_asc') order.push(['name', 'ASC']);
+  else if (filters.sort === 'discount_desc') order.push([Sequelize.literal('CASE WHEN sale_price IS NOT NULL AND sale_price < price THEN (price - sale_price) * 100.0 / price ELSE 0 END'), 'DESC']);
+  else if (filters.sort === 'ending_soon') order.push([Sequelize.literal('CASE WHEN sale_end_at IS NOT NULL THEN sale_end_at ELSE \'2099-12-31\'::timestamp END'), 'ASC']);
   else order.push(['createdAt', 'DESC']);
 
 
@@ -939,6 +941,7 @@ exports.bulkUpdateSale = async (payload, actingUserId = null, auditContext = nul
     const products = await Product.findAll({
       where: { id: productIds },
       transaction,
+      lock: transaction.LOCK.UPDATE,
     });
 
     if (products.length !== productIds.length) {

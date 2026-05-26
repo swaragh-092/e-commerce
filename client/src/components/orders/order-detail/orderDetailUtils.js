@@ -58,10 +58,11 @@ const PRODUCT_STATUS_META = {
 
 export const getTaxRows = (order = {}) => {
   const breakdown = order.taxBreakdown || {};
+  const rates = breakdown.components?.[0]?.rates || {};
   const rows = [
-    { label: 'CGST', value: breakdown.cgst },
-    { label: 'SGST', value: breakdown.sgst },
-    { label: 'IGST', value: breakdown.igst },
+    { label: rates.cgst ? `CGST @ ${rates.cgst}%` : 'CGST', value: breakdown.cgst },
+    { label: rates.sgst ? `SGST @ ${rates.sgst}%` : 'SGST', value: breakdown.sgst },
+    { label: rates.igst ? `IGST @ ${rates.igst}%` : 'IGST', value: breakdown.igst },
     { label: 'Tax', value: breakdown.flatTax },
   ].filter((row) => Number(row.value || 0) > 0);
 

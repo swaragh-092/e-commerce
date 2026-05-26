@@ -25,7 +25,7 @@ import { getMediaUrl } from '../../utils/media';
 import PageSEO from '../../components/common/PageSEO';
 import { AuthContext } from '../../context/AuthContext';
 import { getEligibleCoupons } from '../../services/adminService';
-import { getCartItemUnitPrice } from '../../utils/variantPricing';
+import { getCartItemUnitPrice, getVariantRegularPrice, getVariantDiscountPercent } from '../../utils/variantPricing';
 import { getVariantOptionLabel } from '../../utils/variantOptions';
 import {calculateTax} from '../../../../shared/calculations.js';
 import EnquiryModal from '../../components/storefront/EnquiryModal';
@@ -130,6 +130,9 @@ const CartItem = React.memo(({ item, getQty, handleUpdate, handleRemove, removin
     const product = item.product;
     const variant = item.variant;
     const itemPrice = getCartItemUnitPrice(item);
+    const regularPrice = getVariantRegularPrice(product, variant);
+    const discountPct = getVariantDiscountPercent(product, variant);
+    const isOnSale = discountPct > 0;
     const imageUrl = getMediaUrl(product?.images?.[0]?.url || '') || '/placeholder.png';
     const qty = getQty(item);
     const isRemoving = removingIds.has(item.id);
@@ -172,7 +175,8 @@ const CartItem = React.memo(({ item, getQty, handleUpdate, handleRemove, removin
                     {/* Bottom controls */}
                     <Box sx={{ ...row('center', 'space-between') }}>
                         <Typography sx={{ fontSize: '0.75rem', color: 'text.disabled', fontWeight: 500 }}>
-                            {formatPrice(itemPrice)} / unit
+                            {isOnSale && <><Typography component="span" sx={{ textDecoration: 'line-through', fontSize: '0.75rem', color: 'text.disabled', mr: 0.5 }}>{formatPrice(regularPrice)}</Typography><Typography component="span" sx={{ fontSize: '0.75rem', color: 'success.main', fontWeight: 700, mr: 0.5 }}>{formatPrice(itemPrice)}</Typography><Typography component="span" sx={{ fontSize: '0.68rem', color: 'success.main', fontWeight: 700 }}>({discountPct}% off)</Typography></>}
+                            {!isOnSale && <>{formatPrice(itemPrice)} / unit</>}
                         </Typography>
                         <Box sx={{ ...row('center'), gap: 0.75 }}>
                             <QttyStepper qty={qty} isUpdating={isUpdating}

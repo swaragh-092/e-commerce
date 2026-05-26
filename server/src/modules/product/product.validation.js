@@ -92,7 +92,11 @@ const updateProductSchema = Joi.object({
   price: Joi.number().precision(2).positive(),
   salePrice: Joi.number().precision(2).positive().allow(null),
   saleStartAt: Joi.date().iso().allow(null),
-  saleEndAt: Joi.date().iso().allow(null),
+  saleEndAt: Joi.date().iso().allow(null).when('saleStartAt', {
+    is: Joi.date().required(),
+    then: Joi.date().iso().allow(null).greater(Joi.ref('saleStartAt')),
+    otherwise: Joi.date().iso().allow(null),
+  }),
   saleLabel: Joi.string().max(100).allow('', null),
   quantity: Joi.number().integer().min(0),
   weight: Joi.number().precision(2).min(0).allow(null),

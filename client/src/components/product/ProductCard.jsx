@@ -202,18 +202,11 @@ const ProductCard = ({ product, fromCategory }) => {
             )}
           </Box>
         )}
-        {(saleTiming || endingSoon) && (
+        {saleTiming && (
           <Box sx={{ mt: 1 }}>
-            {saleTiming && (
-              <Typography variant="caption" color="text.secondary" sx={{ display: 'block' }}>
-                {saleTiming}
-              </Typography>
-            )}
-            {endingSoon && (
-              <Typography variant="caption" color="warning.main" sx={{ display: 'block', fontWeight: 700 }}>
-                Ends soon
-              </Typography>
-            )}
+            <Typography variant="caption" color="text.secondary" sx={{ display: 'block' }}>
+              {saleTiming}
+            </Typography>
           </Box>
         )}
       </CardContent>

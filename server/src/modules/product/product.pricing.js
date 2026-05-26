@@ -17,7 +17,15 @@ const resolveSaleLabel = (labelId, presets = []) => {
   if (!labelId) return null;
 
   const found = presets.find((p) => p.id === labelId);
-  if (found) return found;
+  if (found) {
+    // Skip inactive labels
+    if (found.isActive === false) return null;
+    // Skip labels outside their own schedule
+    const now = new Date();
+    if (found.startDate && new Date(found.startDate) > now) return null;
+    if (found.endDate && new Date(found.endDate) < now) return null;
+    return found;
+  }
 
   // Graceful fallback: raw legacy string — surface it without crashing
   return { id: null, name: labelId, color: null };

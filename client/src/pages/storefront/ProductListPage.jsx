@@ -39,6 +39,7 @@ const ProductListPage = () => {
         sort: searchParams.get('sort') || defaultSort,
         minPrice: searchParams.get('minPrice') || '',
         maxPrice: searchParams.get('maxPrice') || '',
+        ...(searchParams.get('onSale') === 'true' && { saleStatus: 'active' }),
         status: 'published',
         limit: defaultLimit,
     };

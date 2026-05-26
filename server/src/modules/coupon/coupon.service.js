@@ -140,13 +140,14 @@ const getCouponStatus = (coupon, referenceDate = new Date()) => {
     if (coupon.campaignStatus === 'paused') return 'paused';
     if (coupon.campaignStatus === 'archived') return 'archived';
     if (!coupon.isActive) return 'paused';
+
+    const now = referenceDate instanceof Date ? referenceDate : new Date(referenceDate);
+    if (coupon.endDate && now > new Date(coupon.endDate)) return 'expired';
+    if (coupon.startDate && now < new Date(coupon.startDate)) return 'scheduled';
+
     if (coupon.usageLimit !== null && coupon.usageLimit !== undefined && coupon.usedCount >= coupon.usageLimit) {
         return 'usage_limit_reached';
     }
-
-    const now = referenceDate instanceof Date ? referenceDate : new Date(referenceDate);
-    if (coupon.startDate && now < new Date(coupon.startDate)) return 'scheduled';
-    if (coupon.endDate && now > new Date(coupon.endDate)) return 'expired';
     return 'active';
 };
 
@@ -643,6 +644,12 @@ const validateCoupon = async (code, userId, rawContext = {}) => {
     if (!couponRecord) throw new AppError('NOT_FOUND', 404, 'Coupon not found');
 
     const coupon = serializeCoupon(couponRecord);
+
+    // Private coupons with auto-apply mode cannot be manually entered by customers
+    if (coupon.visibility === 'private' && coupon.applicationMode === 'auto') {
+        throw new AppError('NOT_FOUND', 404, 'Coupon not found');
+    }
+
     const context = await buildValidationContext(userId, rawContext);
     const primaryEvaluation = await evaluateCouponAgainstContext(coupon, userId, context);
 
