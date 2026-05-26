@@ -12,6 +12,8 @@ import { useCurrency } from '../../hooks/useSettings';
 import {
   getTopProducts, getAovTrend, getAbandonedCarts,
   getRevenueByCategory, getRepeatCustomers, getRefundRate,
+  getGeographicSales, getRevenueByPaymentMethod, getCustomerLifetimeValue,
+  getConversionRate, getTrafficSources,
 } from '../../services/adminService';
 
 const PERIODS = [
@@ -52,7 +54,12 @@ const AnalyticsPage = () => {
       getRevenueByCategory({ period, limit: 10 }),
       getRepeatCustomers({ period }),
       getRefundRate({ period: trendPeriod }),
-    ]).then(([tp, aov, ac, rc, rep, ref]) => {
+      getGeographicSales({ period, limit: 20 }),
+      getRevenueByPaymentMethod({ period }),
+      getCustomerLifetimeValue({ period, limit: 10 }),
+      getConversionRate({ period }),
+      getTrafficSources({ period, limit: 10 }),
+    ]).then(([tp, aov, ac, rc, rep, ref, geo, pay, clv, conv, traffic]) => {
       setData({
         topProducts: tp.status === 'fulfilled' ? tp.value.data.data : [],
         aovTrend: aov.status === 'fulfilled' ? aov.value.data.data : [],
@@ -60,8 +67,13 @@ const AnalyticsPage = () => {
         revenueByCategory: rc.status === 'fulfilled' ? rc.value.data.data : [],
         repeatCustomers: rep.status === 'fulfilled' ? rep.value.data.data : null,
         refundRate: ref.status === 'fulfilled' ? ref.value.data.data : [],
+        geographicSales: geo.status === 'fulfilled' ? geo.value.data.data : [],
+        paymentMethods: pay.status === 'fulfilled' ? pay.value.data.data : [],
+        clv: clv.status === 'fulfilled' ? clv.value.data.data : [],
+        conversionRate: conv.status === 'fulfilled' ? conv.value.data.data : null,
+        trafficSources: traffic.status === 'fulfilled' ? traffic.value.data.data : [],
       });
-      const allFailed = [tp, aov, ac, rc, rep, ref].every(r => r.status === 'rejected');
+      const allFailed = [tp, aov, ac, rc, rep, ref, geo, pay, clv, conv, traffic].every(r => r.status === 'rejected');
       if (allFailed) setError('Failed to load analytics data.');
     }).finally(() => setLoading(false));
   };
@@ -86,6 +98,27 @@ const AnalyticsPage = () => {
         <Alert severity="error" sx={{ mb: 2 }} action={<Button color="inherit" size="small" onClick={fetchAll}>Retry</Button>}>
           {error}
         </Alert>
+      )}
+
+      {/* Conversion Rate Banner */}
+      {!loading && data.conversionRate && (
+        <Paper sx={{ p: 2, mb: 3, display: 'flex', alignItems: 'center', gap: 3, flexWrap: 'wrap' }} elevation={0}>
+          <Box>
+            <Typography variant="body2" color="text.secondary">Page Visits</Typography>
+            <Typography variant="h5" fontWeight={700}>{data.conversionRate.visits?.toLocaleString() || 0}</Typography>
+          </Box>
+          <Box>
+            <Typography variant="body2" color="text.secondary">Orders</Typography>
+            <Typography variant="h5" fontWeight={700}>{data.conversionRate.orders?.toLocaleString() || 0}</Typography>
+          </Box>
+          <Box>
+            <Typography variant="body2" color="text.secondary">Conversion Rate</Typography>
+            <Typography variant="h5" fontWeight={700} color="primary.main">{data.conversionRate.rate}%</Typography>
+          </Box>
+          {data.conversionRate.message && (
+            <Typography variant="caption" color="text.secondary">{data.conversionRate.message}</Typography>
+          )}
+        </Paper>
       )}
 
       <Grid container spacing={3}>
@@ -140,13 +173,32 @@ const AnalyticsPage = () => {
                     <CartesianGrid strokeDasharray="3 3" stroke={theme.palette.divider} />
                     <XAxis dataKey="date" tick={{ fontSize: 11 }} />
                     <YAxis tick={{ fontSize: 11 }} />
-                    <Tooltip formatter={(v, name) => name === 'aov' ? [formatPrice(v), 'AOV'] : [v, 'Orders']} />
+                    <Tooltip formatter={(v, name) => name === 'AOV' ? [formatPrice(v), 'AOV'] : [v, 'Orders']} />
                     <Legend />
                     <Line type="monotone" dataKey="aov" stroke={theme.palette.primary.main} strokeWidth={2} name="AOV" dot={false} />
                     <Line type="monotone" dataKey="orderCount" stroke={theme.palette.success.main} strokeWidth={1} name="Orders" dot={false} />
                   </LineChart>
                 </ResponsiveContainer>
               ) : <Typography color="text.secondary">No order data for this period.</Typography>
+            )}
+          </Paper>
+        </Grid>
+
+        {/* Revenue by Payment Method */}
+        <Grid item xs={12} md={6} lg={4}>
+          <Paper sx={{ p: 3 }} elevation={0}>
+            <Typography variant="h6" fontWeight={600} mb={2}>Revenue by Payment</Typography>
+            {loading ? <CardSkeleton /> : (
+              data.paymentMethods?.length > 0 ? (
+                <ResponsiveContainer width="100%" height={250}>
+                  <PieChart>
+                    <Pie data={data.paymentMethods} cx="50%" cy="50%" outerRadius={80} dataKey="revenue" nameKey="method" label={({ method }) => method}>
+                      {data.paymentMethods.map((_, i) => <Cell key={i} fill={PIE_COLORS[i % PIE_COLORS.length]} />)}
+                    </Pie>
+                    <Tooltip formatter={(v) => formatPrice(v)} />
+                  </PieChart>
+                </ResponsiveContainer>
+              ) : <Typography color="text.secondary">No payment data.</Typography>
             )}
           </Paper>
         </Grid>
@@ -188,30 +240,6 @@ const AnalyticsPage = () => {
           </Paper>
         </Grid>
 
-        {/* Revenue by Category */}
-        <Grid item xs={12} md={6} lg={4}>
-          <Paper sx={{ p: 3 }} elevation={0}>
-            <Typography variant="h6" fontWeight={600} mb={2}>Revenue by Category</Typography>
-            {loading ? <CardSkeleton /> : (
-              data.revenueByCategory?.length > 0 ? (
-                <ResponsiveContainer width="100%" height={280}>
-                  <PieChart>
-                    <Pie
-                      data={data.revenueByCategory}
-                      cx="50%" cy="50%" outerRadius={90} dataKey="revenue" nameKey="category" label={({ category }) => category}
-                    >
-                      {data.revenueByCategory.map((_, i) => (
-                        <Cell key={i} fill={PIE_COLORS[i % PIE_COLORS.length]} />
-                      ))}
-                    </Pie>
-                    <Tooltip formatter={(v) => formatPrice(v)} />
-                  </PieChart>
-                </ResponsiveContainer>
-              ) : <Typography color="text.secondary">No category revenue data.</Typography>
-            )}
-          </Paper>
-        </Grid>
-
         {/* Repeat Customers */}
         <Grid item xs={12} md={6} lg={4}>
           <Paper sx={{ p: 3 }} elevation={0}>
@@ -244,6 +272,111 @@ const AnalyticsPage = () => {
                     {data.repeatCustomers.total} unique customers
                   </Typography>
                 </Box>
+              ) : <Typography color="text.secondary">No customer data for this period.</Typography>
+            )}
+          </Paper>
+        </Grid>
+
+        {/* Revenue by Category */}
+        <Grid item xs={12} md={6}>
+          <Paper sx={{ p: 3 }} elevation={0}>
+            <Typography variant="h6" fontWeight={600} mb={2}>Revenue by Category</Typography>
+            {loading ? <CardSkeleton /> : (
+              data.revenueByCategory?.length > 0 ? (
+                <ResponsiveContainer width="100%" height={280}>
+                  <PieChart>
+                    <Pie
+                      data={data.revenueByCategory}
+                      cx="50%" cy="50%" outerRadius={90} dataKey="revenue" nameKey="category" label={({ category }) => category}
+                    >
+                      {data.revenueByCategory.map((_, i) => <Cell key={i} fill={PIE_COLORS[i % PIE_COLORS.length]} />)}
+                    </Pie>
+                    <Tooltip formatter={(v) => formatPrice(v)} />
+                  </PieChart>
+                </ResponsiveContainer>
+              ) : <Typography color="text.secondary">No category revenue data.</Typography>
+            )}
+          </Paper>
+        </Grid>
+
+        {/* Traffic Sources */}
+        <Grid item xs={12} md={6}>
+          <Paper sx={{ p: 3 }} elevation={0}>
+            <Typography variant="h6" fontWeight={600} mb={2}>Traffic Sources</Typography>
+            {loading ? <CardSkeleton /> : (
+              data.trafficSources?.length > 0 ? (
+                <ResponsiveContainer width="100%" height={280}>
+                  <BarChart data={data.trafficSources}>
+                    <CartesianGrid strokeDasharray="3 3" stroke={theme.palette.divider} />
+                    <XAxis dataKey="source" tick={{ fontSize: 11 }} />
+                    <YAxis tick={{ fontSize: 11 }} />
+                    <Tooltip />
+                    <Bar dataKey="visits" fill={theme.palette.info.main} radius={[4, 4, 0, 0]} />
+                  </BarChart>
+                </ResponsiveContainer>
+              ) : <Typography color="text.secondary">No traffic data yet. Data appears after the page_visits migration runs.</Typography>
+            )}
+          </Paper>
+        </Grid>
+
+        {/* Geographic Sales */}
+        <Grid item xs={12} lg={6}>
+          <Paper sx={{ p: 3 }} elevation={0}>
+            <Typography variant="h6" fontWeight={600} mb={2}>Geographic Sales</Typography>
+            {loading ? <CardSkeleton /> : (
+              data.geographicSales?.length > 0 ? (
+                <Table size="small">
+                  <TableHead>
+                    <TableRow>
+                      <TableCell>State</TableCell>
+                      <TableCell>City</TableCell>
+                      <TableCell align="right">Orders</TableCell>
+                      <TableCell align="right">Revenue</TableCell>
+                    </TableRow>
+                  </TableHead>
+                  <TableBody>
+                    {data.geographicSales.map((r, i) => (
+                      <TableRow key={i}>
+                        <TableCell>{r.state}</TableCell>
+                        <TableCell>{r.city}</TableCell>
+                        <TableCell align="right">{r.orders}</TableCell>
+                        <TableCell align="right">{formatPrice(r.revenue)}</TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              ) : <Typography color="text.secondary">No geographic data for this period.</Typography>
+            )}
+          </Paper>
+        </Grid>
+
+        {/* Customer Lifetime Value */}
+        <Grid item xs={12} lg={6}>
+          <Paper sx={{ p: 3 }} elevation={0}>
+            <Typography variant="h6" fontWeight={600} mb={2}>Customer Lifetime Value (Top 10)</Typography>
+            {loading ? <CardSkeleton /> : (
+              data.clv?.length > 0 ? (
+                <Table size="small">
+                  <TableHead>
+                    <TableRow>
+                      <TableCell>Customer</TableCell>
+                      <TableCell align="right">Orders</TableCell>
+                      <TableCell align="right">Lifetime Value</TableCell>
+                    </TableRow>
+                  </TableHead>
+                  <TableBody>
+                    {data.clv.map((c) => (
+                      <TableRow key={c.id}>
+                        <TableCell>
+                          <Typography variant="body2" fontWeight={500}>{c.name}</Typography>
+                          <Typography variant="caption" color="text.secondary">{c.email}</Typography>
+                        </TableCell>
+                        <TableCell align="right">{c.orders}</TableCell>
+                        <TableCell align="right">{formatPrice(c.lifetimeValue)}</TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
               ) : <Typography color="text.secondary">No customer data for this period.</Typography>
             )}
           </Paper>

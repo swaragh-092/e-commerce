@@ -115,6 +115,11 @@ const getAbandonedCarts = (params = {}) => api.get(withQueryString(`/${A}/analyt
 const getRevenueByCategory = (params = {}) => api.get(withQueryString(`/${A}/analytics/revenue-by-category`, params, { omitEmpty: true }));
 const getRepeatCustomers = (params = {}) => api.get(withQueryString(`/${A}/analytics/repeat-customers`, params, { omitEmpty: true }));
 const getRefundRate = (params = {}) => api.get(withQueryString(`/${A}/analytics/refund-rate`, params, { omitEmpty: true }));
+const getGeographicSales = (params = {}) => api.get(withQueryString(`/${A}/analytics/geographic-sales`, params, { omitEmpty: true }));
+const getRevenueByPaymentMethod = (params = {}) => api.get(withQueryString(`/${A}/analytics/revenue-by-payment`, params, { omitEmpty: true }));
+const getCustomerLifetimeValue = (params = {}) => api.get(withQueryString(`/${A}/analytics/customer-lifetime-value`, params, { omitEmpty: true }));
+const getConversionRate = (params = {}) => api.get(withQueryString(`/${A}/analytics/conversion-rate`, params, { omitEmpty: true }));
+const getTrafficSources = (params = {}) => api.get(withQueryString(`/${A}/analytics/traffic-sources`, params, { omitEmpty: true }));
 
 export {
   getStats, getSalesChart, getLowStock, getRecentOrders,
@@ -133,4 +138,5 @@ export {
   getAddresses, createAddress, updateAddress, deleteAddress, setDefaultAddress,
   getSaleLabels, createSaleLabel, updateSaleLabel, deleteSaleLabel, reorderSaleLabels,
   getTopProducts, getAovTrend, getAbandonedCarts, getRevenueByCategory, getRepeatCustomers, getRefundRate,
+  getGeographicSales, getRevenueByPaymentMethod, getCustomerLifetimeValue, getConversionRate, getTrafficSources,
 };

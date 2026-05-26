@@ -155,6 +155,41 @@ const getRefundRate = async (req, res, next) => {
   } catch (err) { next(err); }
 };
 
+const getGeographicSales = async (req, res, next) => {
+  try {
+    const data = await AnalyticsService.getGeographicSales(req.query);
+    return success(res, data);
+  } catch (err) { next(err); }
+};
+
+const getRevenueByPaymentMethod = async (req, res, next) => {
+  try {
+    const data = await AnalyticsService.getRevenueByPaymentMethod(req.query);
+    return success(res, data);
+  } catch (err) { next(err); }
+};
+
+const getCustomerLifetimeValue = async (req, res, next) => {
+  try {
+    const data = await AnalyticsService.getCustomerLifetimeValue(req.query);
+    return success(res, data);
+  } catch (err) { next(err); }
+};
+
+const getConversionRate = async (req, res, next) => {
+  try {
+    const data = await AnalyticsService.getConversionRate(req.query);
+    return success(res, data);
+  } catch (err) { next(err); }
+};
+
+const getTrafficSources = async (req, res, next) => {
+  try {
+    const data = await AnalyticsService.getTrafficSources(req.query);
+    return success(res, data);
+  } catch (err) { next(err); }
+};
+
 module.exports = {
   getStats,
   getSalesChart,
@@ -173,4 +208,9 @@ module.exports = {
   getRevenueByCategory,
   getRepeatCustomers,
   getRefundRate,
+  getGeographicSales,
+  getRevenueByPaymentMethod,
+  getCustomerLifetimeValue,
+  getConversionRate,
+  getTrafficSources,
 };

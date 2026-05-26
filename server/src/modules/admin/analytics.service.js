@@ -221,6 +221,156 @@ const getRefundRate = async ({ period = 'monthly' } = {}) => {
   });
 };
 
+/**
+ * Geographic sales — revenue by state/city from shipping address snapshot.
+ */
+const getGeographicSales = async ({ period = '30d', limit = 20 } = {}) => {
+  const { start, end } = resolveDateRange(period);
+
+  const rows = await db.sequelize.query(`
+    SELECT
+      COALESCE(shipping_address_snapshot->>'state', 'Unknown') AS state,
+      COALESCE(shipping_address_snapshot->>'city', 'Unknown') AS city,
+      COUNT(*)::int AS orders,
+      COALESCE(SUM(total), 0) AS revenue
+    FROM orders
+    WHERE status IN ('confirmed','processing','ready_for_shipment','closed')
+      AND created_at BETWEEN :start AND :end
+      AND shipping_address_snapshot IS NOT NULL
+    GROUP BY state, city
+    ORDER BY revenue DESC
+    LIMIT :limit
+  `, {
+    replacements: { start, end, limit: parseInt(limit, 10) },
+    type: db.sequelize.QueryTypes.SELECT,
+  });
+
+  return rows.map((r) => ({ state: r.state, city: r.city, orders: r.orders, revenue: parseFloat(r.revenue) }));
+};
+
+/**
+ * Revenue by payment method.
+ */
+const getRevenueByPaymentMethod = async ({ period = '30d' } = {}) => {
+  const { start, end } = resolveDateRange(period);
+
+  const rows = await Order.findAll({
+    attributes: [
+      'paymentMethod',
+      [fn('COUNT', col('"Order".id')), 'orders'],
+      [fn('COALESCE', fn('SUM', col('"Order".total')), 0), 'revenue'],
+    ],
+    where: {
+      status: { [Op.in]: VALID_STATUSES },
+      createdAt: { [Op.between]: [start, end] },
+    },
+    group: ['paymentMethod'],
+    order: [[literal('"revenue"'), 'DESC']],
+    raw: true,
+  });
+
+  return rows.map((r) => ({
+    method: r.paymentMethod,
+    orders: parseInt(r.orders, 10),
+    revenue: parseFloat(r.revenue),
+  }));
+};
+
+/**
+ * Customer Lifetime Value — top customers by total spend (all time or period).
+ */
+const getCustomerLifetimeValue = async ({ period = '12m', limit = 10 } = {}) => {
+  const { start, end } = resolveDateRange(period);
+
+  const rows = await db.sequelize.query(`
+    SELECT
+      u.id,
+      u.first_name || ' ' || u.last_name AS name,
+      u.email,
+      COUNT(o.id)::int AS orders,
+      COALESCE(SUM(o.total), 0) AS lifetime_value,
+      MIN(o.created_at) AS first_order,
+      MAX(o.created_at) AS last_order
+    FROM users u
+    JOIN orders o ON o.user_id = u.id
+    WHERE o.status IN ('confirmed','processing','ready_for_shipment','closed')
+      AND o.created_at BETWEEN :start AND :end
+    GROUP BY u.id, u.first_name, u.last_name, u.email
+    ORDER BY lifetime_value DESC
+    LIMIT :limit
+  `, {
+    replacements: { start, end, limit: parseInt(limit, 10) },
+    type: db.sequelize.QueryTypes.SELECT,
+  });
+
+  return rows.map((r) => ({
+    id: r.id,
+    name: r.name,
+    email: r.email,
+    orders: r.orders,
+    lifetimeValue: parseFloat(r.lifetime_value),
+    firstOrder: r.first_order,
+    lastOrder: r.last_order,
+  }));
+};
+
+/**
+ * Conversion rate — page visits vs orders placed.
+ * Reads from page_visits table (created by tracking middleware).
+ */
+const getConversionRate = async ({ period = '30d' } = {}) => {
+  const { start, end } = resolveDateRange(period);
+
+  // Check if page_visits table exists
+  const tableExists = await db.sequelize.query(
+    `SELECT to_regclass('public.page_visits') AS t`,
+    { type: db.sequelize.QueryTypes.SELECT }
+  );
+  if (!tableExists[0]?.t) {
+    return { visits: 0, orders: 0, rate: 0, message: 'Visit tracking not yet active. Data will appear after the migration runs.' };
+  }
+
+  const [[{ visits }], orders] = await Promise.all([
+    db.sequelize.query(
+      `SELECT COUNT(*)::int AS visits FROM page_visits WHERE created_at BETWEEN :start AND :end`,
+      { replacements: { start, end }, type: db.sequelize.QueryTypes.SELECT }
+    ),
+    Order.count({ where: { status: { [Op.in]: VALID_STATUSES }, createdAt: { [Op.between]: [start, end] } } }),
+  ]);
+
+  const rate = visits > 0 ? parseFloat(((orders / visits) * 100).toFixed(2)) : 0;
+  return { visits, orders, rate };
+};
+
+/**
+ * Traffic sources — referrer breakdown from page_visits.
+ */
+const getTrafficSources = async ({ period = '30d', limit = 10 } = {}) => {
+  const { start, end } = resolveDateRange(period);
+
+  const tableExists = await db.sequelize.query(
+    `SELECT to_regclass('public.page_visits') AS t`,
+    { type: db.sequelize.QueryTypes.SELECT }
+  );
+  if (!tableExists[0]?.t) return [];
+
+  const rows = await db.sequelize.query(`
+    SELECT
+      COALESCE(NULLIF(referrer_source, ''), 'Direct') AS source,
+      COUNT(*)::int AS visits
+    FROM page_visits
+    WHERE created_at BETWEEN :start AND :end
+    GROUP BY source
+    ORDER BY visits DESC
+    LIMIT :limit
+  `, {
+    replacements: { start, end, limit: parseInt(limit, 10) },
+    type: db.sequelize.QueryTypes.SELECT,
+  });
+
+  return rows.map((r) => ({ source: r.source, visits: r.visits }));
+};
+
 module.exports = {
   getTopProducts,
   getAovTrend,
@@ -228,4 +378,9 @@ module.exports = {
   getRevenueByCategory,
   getRepeatCustomers,
   getRefundRate,
+  getGeographicSales,
+  getRevenueByPaymentMethod,
+  getCustomerLifetimeValue,
+  getConversionRate,
+  getTrafficSources,
 };
