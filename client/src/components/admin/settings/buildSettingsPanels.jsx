@@ -639,7 +639,6 @@ function buildCheckoutPanel({ form, set, section, field, toggle, currSymbol, ena
           options={INDIAN_STATES}
           value={form['tax.originState'] || null}
           onChange={(_, v) => set('tax.originState', v || '')}
-          freeSolo
           size="small"
           sx={{ mb: 2 }}
           renderInput={(params) => <TextField {...params} label="Store Origin State" helperText="Select your business registered state for GST calculation" />}

@@ -35,6 +35,7 @@ import MediaPicker from '../../components/common/MediaPicker';
 import buildSettingsPanels from '../../components/admin/settings/buildSettingsPanels';
 import { getMediaUrl } from '../../utils/media';
 import { DEFAULT_STORE_NAME } from '../../utils/store';
+import { INDIAN_STATES } from '../../utils/indianStates';
 
 const CURRENCIES = [
   { code: 'USD', symbol: '$',  name: 'US Dollar' },
@@ -211,6 +212,15 @@ const SettingsPage = () => {
           });
         }
       });
+      // Normalise tax.originState: clamp any legacy free-text or case variant to the
+      // canonical entry in INDIAN_STATES. Unrecognised values are cleared so the
+      // strict (non-freeSolo) Autocomplete doesn't silently show an invalid value.
+      if (flat['tax.originState']) {
+        const raw = String(flat['tax.originState']).trim().toLowerCase();
+        const match = INDIAN_STATES.find((s) => s.toLowerCase() === raw);
+        flat['tax.originState'] = match || '';
+      }
+
       setForm((f) => ({
         ...flat,
         // Patch features.* with the mode-resolved map from ThemeContext.
