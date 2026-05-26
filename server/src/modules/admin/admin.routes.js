@@ -6,7 +6,7 @@ const { authorizeAnyPermission, authorizePermissions } = require('../../middlewa
 const adminController = require('./admin.controller');
 const { PERMISSIONS } = require('../../config/permissions');
 const { validate } = require('../../middleware/validate.middleware');
-const { updateUserRoleSchema, createRoleSchema, updateRoleSchema, salesChartQuerySchema, lowStockQuerySchema, createStaffUserSchema } = require('./admin.validation');
+const { updateUserRoleSchema, createRoleSchema, updateRoleSchema, salesChartQuerySchema, lowStockQuerySchema, createStaffUserSchema, analyticsQuerySchema, analyticsTrendSchema } = require('./admin.validation');
 const { idParamSchema, paginationQuerySchema } = require('../../utils/common.validation');
 
 
@@ -43,6 +43,14 @@ router.get('/access-control/users', ...accessManageOnly, validate(paginationQuer
 
 router.post('/access-control/users', ...accessManageOnly, validate(createStaffUserSchema), adminController.createStaffUser);
 router.put('/access-control/users/:id/role', ...accessManageOnly, validate(idParamSchema, 'params'), validate(updateUserRoleSchema), adminController.updateUserRole);
+
+// Analytics
+router.get('/analytics/top-products', ...adminOnly, validate(analyticsQuerySchema, 'query'), adminController.getTopProducts);
+router.get('/analytics/aov-trend', ...adminOnly, validate(analyticsTrendSchema, 'query'), adminController.getAovTrend);
+router.get('/analytics/abandoned-carts', ...adminOnly, validate(analyticsQuerySchema, 'query'), adminController.getAbandonedCarts);
+router.get('/analytics/revenue-by-category', ...adminOnly, validate(analyticsQuerySchema, 'query'), adminController.getRevenueByCategory);
+router.get('/analytics/repeat-customers', ...adminOnly, validate(analyticsQuerySchema, 'query'), adminController.getRepeatCustomers);
+router.get('/analytics/refund-rate', ...adminOnly, validate(analyticsTrendSchema, 'query'), adminController.getRefundRate);
 
 
 module.exports = router;

@@ -58,6 +58,7 @@ import ExpandLess from '@mui/icons-material/ExpandLess';
 import ExpandMore from '@mui/icons-material/ExpandMore';
 import ChevronLeftIcon from '@mui/icons-material/ChevronLeft';
 import ChevronRightIcon from '@mui/icons-material/ChevronRight';
+import AnalyticsIcon from '@mui/icons-material/Analytics';
 import { useAuth } from '../hooks/useAuth';
 import { useSettings, useMode } from '../hooks/useSettings';
 import { PERMISSIONS } from '../utils/permissions';
@@ -69,6 +70,7 @@ const slimDrawerWidth = 72;
 // Items with a `mode: 'ecommerce'` key are hidden entirely in catalog mode.
 const MENU_STRUCTURE = [
   { text: 'Dashboard', path: '/admin', icon: <DashboardIcon />, permission: PERMISSIONS.DASHBOARD_VIEW },
+  { text: 'Analytics', path: '/admin/analytics', icon: <AnalyticsIcon />, permission: PERMISSIONS.DASHBOARD_VIEW, mode: 'ecommerce' },
   {
     title: 'Catalog',
     icon: <InventoryIcon />,

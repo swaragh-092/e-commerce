@@ -1,6 +1,7 @@
 'use strict';
 
 const AdminService = require('./admin.service');
+const AnalyticsService = require('./analytics.service');
 const { success, paginated } = require('../../utils/response');
 
 const getStats = async (req, res, next) => {
@@ -111,6 +112,49 @@ const createStaffUser = async (req, res, next) => {
   }
 };
 
+// Analytics
+const getTopProducts = async (req, res, next) => {
+  try {
+    const data = await AnalyticsService.getTopProducts(req.query);
+    return success(res, data);
+  } catch (err) { next(err); }
+};
+
+const getAovTrend = async (req, res, next) => {
+  try {
+    const data = await AnalyticsService.getAovTrend(req.query);
+    return success(res, data);
+  } catch (err) { next(err); }
+};
+
+const getAbandonedCarts = async (req, res, next) => {
+  try {
+    const data = await AnalyticsService.getAbandonedCarts(req.query);
+    return success(res, data);
+  } catch (err) { next(err); }
+};
+
+const getRevenueByCategory = async (req, res, next) => {
+  try {
+    const data = await AnalyticsService.getRevenueByCategory(req.query);
+    return success(res, data);
+  } catch (err) { next(err); }
+};
+
+const getRepeatCustomers = async (req, res, next) => {
+  try {
+    const data = await AnalyticsService.getRepeatCustomers(req.query);
+    return success(res, data);
+  } catch (err) { next(err); }
+};
+
+const getRefundRate = async (req, res, next) => {
+  try {
+    const data = await AnalyticsService.getRefundRate(req.query);
+    return success(res, data);
+  } catch (err) { next(err); }
+};
+
 module.exports = {
   getStats,
   getSalesChart,
@@ -123,4 +167,10 @@ module.exports = {
   getAccessUsers,
   updateUserRole,
   createStaffUser,
+  getTopProducts,
+  getAovTrend,
+  getAbandonedCarts,
+  getRevenueByCategory,
+  getRepeatCustomers,
+  getRefundRate,
 };

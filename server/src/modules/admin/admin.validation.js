@@ -55,6 +55,16 @@ const createStaffUserSchema = Joi.object({
   roleId: Joi.string().uuid().required(),
 });
 
+const analyticsQuerySchema = Joi.object({
+  period: Joi.string().pattern(/^\d+(d|m)$/).default('30d'),
+  limit: Joi.number().integer().min(1).max(50).default(10),
+  sortBy: Joi.string().valid('quantity', 'revenue').default('quantity'),
+});
+
+const analyticsTrendSchema = Joi.object({
+  period: Joi.string().valid('daily', 'weekly', 'monthly').default('monthly'),
+});
+
 module.exports = {
   updateUserRoleSchema,
   createRoleSchema,
@@ -62,4 +72,6 @@ module.exports = {
   salesChartQuerySchema,
   lowStockQuerySchema,
   createStaffUserSchema,
+  analyticsQuerySchema,
+  analyticsTrendSchema,
 };

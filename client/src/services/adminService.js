@@ -108,6 +108,14 @@ const updateSaleLabel = (id, data) => api.patch(`/settings/sale-labels/${id}`, d
 const deleteSaleLabel = (id) => api.delete(`/settings/sale-labels/${id}`);
 const reorderSaleLabels = (labels) => api.put('/settings/sale-labels', { labels });
 
+// Analytics
+const getTopProducts = (params = {}) => api.get(withQueryString(`/${A}/analytics/top-products`, params, { omitEmpty: true }));
+const getAovTrend = (params = {}) => api.get(withQueryString(`/${A}/analytics/aov-trend`, params, { omitEmpty: true }));
+const getAbandonedCarts = (params = {}) => api.get(withQueryString(`/${A}/analytics/abandoned-carts`, params, { omitEmpty: true }));
+const getRevenueByCategory = (params = {}) => api.get(withQueryString(`/${A}/analytics/revenue-by-category`, params, { omitEmpty: true }));
+const getRepeatCustomers = (params = {}) => api.get(withQueryString(`/${A}/analytics/repeat-customers`, params, { omitEmpty: true }));
+const getRefundRate = (params = {}) => api.get(withQueryString(`/${A}/analytics/refund-rate`, params, { omitEmpty: true }));
+
 export {
   getStats, getSalesChart, getLowStock, getRecentOrders,
   getAccessRoles, getAccessPermissions, getAccessUsers, createAccessRole, updateAccessRole, updateAccessUserRole, createAccessUser,
@@ -124,4 +132,5 @@ export {
   validateCoupon, getPublicCoupons, getEligibleCoupons,
   getAddresses, createAddress, updateAddress, deleteAddress, setDefaultAddress,
   getSaleLabels, createSaleLabel, updateSaleLabel, deleteSaleLabel, reorderSaleLabels,
+  getTopProducts, getAovTrend, getAbandonedCarts, getRevenueByCategory, getRepeatCustomers, getRefundRate,
 };

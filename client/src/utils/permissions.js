@@ -20,6 +20,7 @@ export const ROLE_PERMISSIONS = Object.freeze({
 
 export const ADMIN_ROUTE_PERMISSION_MAP = Object.freeze([
   { path: '/admin', permissions: [PERMISSIONS.DASHBOARD_VIEW] },
+  { path: '/admin/analytics', permissions: [PERMISSIONS.DASHBOARD_VIEW] },
   { path: '/admin/products', permissions: [PERMISSIONS.PRODUCTS_READ, PERMISSIONS.PRODUCTS_CREATE, PERMISSIONS.PRODUCTS_UPDATE, PERMISSIONS.PRODUCTS_DELETE] },
   { path: '/admin/categories', permissions: [PERMISSIONS.CATEGORIES_READ, PERMISSIONS.CATEGORIES_MANAGE] },
   { path: '/admin/brands', permissions: [PERMISSIONS.PRODUCTS_READ, PERMISSIONS.PRODUCTS_CREATE, PERMISSIONS.PRODUCTS_UPDATE, PERMISSIONS.PRODUCTS_DELETE] },
