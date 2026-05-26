@@ -523,7 +523,7 @@ const ProductDetailPage = () => {
                                         size="small"
                                     />
                                 )}
-                                {showDiscountPercent && discountPercent > 0 && !endingSoon && <Chip label={`${discountPercent}% OFF`} color={hasSale ? 'error' : 'warning'} variant="outlined" size="small" />}
+                                {showDiscountPercent && discountPercent > 0 && <Chip label={`${discountPercent}% OFF`} color={hasSale ? 'error' : 'warning'} variant="outlined" size="small" />}
                                 {saleTiming && <Chip label={saleTiming} variant="outlined" size="small" />}
                                 {countdownText && <Chip key={countdownNow} label={countdownText} color={hasSale ? 'error' : 'warning'} variant="filled" size="small" />}
                             </Box>
@@ -540,7 +540,7 @@ const ProductDetailPage = () => {
                                 </Typography>
                             )}
 
-                            {countdownText && !endingSoon && (
+                            {countdownText && (
                                 <Typography variant="body2" color={hasSale ? 'error.main' : 'warning.dark'} sx={{ mb: 0.5, fontWeight: 700 }}>
                                     {countdownText}
                                 </Typography>

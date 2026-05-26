@@ -16,7 +16,11 @@ const createProductSchema = Joi.object({
   }),
   salePrice: Joi.number().precision(2).positive().allow(null).less(Joi.ref('price')),
   saleStartAt: Joi.date().iso().allow(null),
-  saleEndAt: Joi.date().iso().allow(null).greater(Joi.ref('saleStartAt')),
+  saleEndAt: Joi.date().iso().allow(null).when('saleStartAt', {
+    is: Joi.date().required(),
+    then: Joi.date().iso().allow(null).greater(Joi.ref('saleStartAt')),
+    otherwise: Joi.date().iso().allow(null),
+  }),
   saleLabel: Joi.string().max(100).allow('', null),
   quantity: Joi.number().integer().min(0).when('type', {
     is: 'simple',
@@ -173,7 +177,11 @@ const bulkSaleSchema = Joi.object({
   }),
   saleEndAt: Joi.when('action', {
     is: 'apply',
-    then: Joi.date().iso().allow(null).greater(Joi.ref('saleStartAt')),
+    then: Joi.date().iso().allow(null).when('saleStartAt', {
+      is: Joi.date().required(),
+      then: Joi.date().iso().allow(null).greater(Joi.ref('saleStartAt')),
+      otherwise: Joi.date().iso().allow(null),
+    }),
     otherwise: Joi.forbidden(),
   }),
   saleLabel: Joi.when('action', {
