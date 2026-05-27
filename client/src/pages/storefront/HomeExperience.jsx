@@ -470,15 +470,29 @@ const HomeExperience = () => {
       {visibleSections.map((section, index) => {
         const rendered = renderSection(section);
         if (!rendered) return null;
-        if (section.type === 'hero-carousel') return rendered;
+
+        const display = {
+          xs: section.hideOnMobile ? 'none' : 'block',
+          md: section.hideOnDesktop ? 'none' : 'block',
+        };
+
+        if (section.type === 'hero-carousel') {
+          return (
+            <Box key={section.id || index} sx={{ display }}>
+              {rendered}
+            </Box>
+          );
+        }
 
         const isFirstNonHero = index === (visibleSections[0]?.type === 'hero-carousel' ? 1 : 0);
         const sectionPadding = isFirstNonHero ? { pt: { xs: 5, md: 7 }, pb: { xs: 2, md: 3 } } : { py: { xs: 2, md: 3 } };
 
         return (
-          <Container key={section.id || index} maxWidth="xl" sx={sectionPadding}>
-            {rendered}
-          </Container>
+          <Box key={section.id || index} sx={{ display }}>
+            <Container maxWidth="xl" sx={sectionPadding}>
+              {rendered}
+            </Container>
+          </Box>
         );
       })}
     </Box>

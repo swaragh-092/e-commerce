@@ -149,6 +149,7 @@ const getAll = async () => {
     messaging: { ...defaultSettings.messaging },
     gateway_credentials: { ...defaultSettings.gateway_credentials },
     messaging_credentials: { ...defaultSettings.messaging_credentials },
+    advanced: { ...defaultSettings.advanced },
   };
 
   settings.forEach(s => {
@@ -182,7 +183,7 @@ const getAll = async () => {
 
 const getByGroup = async (groupName, options = {}) => {
   const { maskSensitive = true } = options;
-  const validGroups = ['theme', 'features', 'payments', 'sales', 'seo', 'general', 'shipping', 'tax', 'sku', 'logo', 'hero', 'auth', 'footer', 'announcement', 'nav', 'catalog', 'homepage', 'productPage', 'brandsPage', 'admin', 'invoice', 'gateway_credentials', 'messaging_credentials', 'messaging'];
+  const validGroups = ['theme', 'features', 'payments', 'sales', 'seo', 'general', 'shipping', 'tax', 'sku', 'logo', 'hero', 'auth', 'footer', 'announcement', 'nav', 'catalog', 'homepage', 'productPage', 'brandsPage', 'admin', 'invoice', 'gateway_credentials', 'messaging_credentials', 'messaging', 'advanced'];
   if (!validGroups.includes(groupName)) {
     throw new AppError('VALIDATION_ERROR', 400, 'Invalid setting group');
   }
@@ -283,7 +284,7 @@ const updateKey = async (key, value, group, actingUserId) => {
 };
 
 const bulkUpdate = async (settingsInput, actingUserId, actingUser = null) => {
-  const validGroups = ['theme', 'features', 'payments', 'sales', 'seo', 'general', 'shipping', 'tax', 'sku', 'logo', 'hero', 'auth', 'footer', 'announcement', 'nav', 'catalog', 'homepage', 'productPage', 'brandsPage', 'admin', 'invoice', 'gateway_credentials', 'messaging_credentials', 'messaging'];
+  const validGroups = ['theme', 'features', 'payments', 'sales', 'seo', 'general', 'shipping', 'tax', 'sku', 'logo', 'hero', 'auth', 'footer', 'announcement', 'nav', 'catalog', 'homepage', 'productPage', 'brandsPage', 'admin', 'invoice', 'gateway_credentials', 'messaging_credentials', 'messaging', 'advanced'];
   const credentialGroups = ['gateway_credentials', 'messaging_credentials'];
 
     // Normalize input to an array of { key, value, group }

@@ -13,6 +13,12 @@
         "surfaceColor": "#FFFFFF",
         "textColor": "#1F2933",
         "fontFamily": "Inter",
+        "headingFont": "Inter",
+        "headingWeight": "700",
+        "bodyWeight": "400",
+        "lineHeight": "1.5",
+        "letterSpacing": "0px",
+        "headingLetterSpacing": "0px",
         "borderRadius": "8px",
         "mode": "light",
         "headerStyle": "glass",
@@ -371,5 +377,10 @@
         "dashboard.storeHealthSize": "medium",
         "dashboard.lowStockSize": "full",
         "dashboard.widgetOrder": "salesChart,recentOrders,operationsSummary,storeHealth,inventoryWarnings,lowStock"
+    },
+    "advanced": {
+        "customCSS": "",
+        "headScripts": "",
+        "bodyScripts": ""
     }
 }

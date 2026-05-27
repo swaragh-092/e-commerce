@@ -237,6 +237,28 @@ const SettingsPage = () => {
       .catch(() => {});
   }, []);
 
+  useEffect(() => {
+    const bodyFont = form['theme.fontFamily'];
+    const headFont = form['theme.headingFont'];
+    if (bodyFont || headFont) {
+      const fonts = new Set();
+      if (bodyFont) fonts.add(bodyFont);
+      if (headFont) fonts.add(headFont);
+      const families = [...fonts]
+        .map((f) => `family=${f.replace(/\s+/g, '+')}:wght@300;400;500;600;700;800;900`)
+        .join('&');
+      const linkId = 'google-font-preview-link';
+      let link = document.getElementById(linkId);
+      if (!link) {
+        link = document.createElement('link');
+        link.id = linkId;
+        link.rel = 'stylesheet';
+        document.head.appendChild(link);
+      }
+      link.href = `https://fonts.googleapis.com/css2?${families}&display=swap`;
+    }
+  }, [form['theme.fontFamily'], form['theme.headingFont']]);
+
   const set = (key, value) => setForm((f) => ({ ...f, [key]: value }));
   const applyThemePreset = (preset) => setForm((f) => ({ ...f, ...preset.values }));
   const dashboardOrder = parseDashboardOrder(form['admin.dashboard.widgetOrder']);
@@ -458,6 +480,9 @@ const SettingsPage = () => {
   const enableIGST = Boolean(form['tax.enableIGST']);
   const previewStyles = {
     fontFamily: `"${fontFamily}", "Roboto", "Helvetica", "Arial", sans-serif`,
+    fontWeight: form['theme.bodyWeight'] ? parseInt(form['theme.bodyWeight']) : 400,
+    lineHeight: form['theme.lineHeight'] || 1.5,
+    letterSpacing: form['theme.letterSpacing'] || '0px',
     background: backgroundStyle === 'softGradient'
       ? `linear-gradient(180deg, ${pageBackground} 0%, ${surfaceColor} 100%)`
       : pageBackground,

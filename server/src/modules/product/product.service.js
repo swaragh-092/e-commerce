@@ -18,7 +18,7 @@ const {
   sequelize,
 } = require('../index');
 const { Op } = Sequelize;
-const salePriceIsDiscounted = Sequelize.where(Sequelize.col('sale_price'), Op.lt, Sequelize.col('price'));
+const salePriceIsDiscounted = Sequelize.where(Sequelize.col('Product.sale_price'), Op.lt, Sequelize.col('Product.price'));
 const { generateSlug } = require('../../utils/slugify');
 // Note: Although the ARCHITECTURE/STANDARDS refer to generateUniqueSlug(),
 // the slugify.js utility internally implements the collision-safe loop
@@ -365,7 +365,7 @@ exports.getProducts = async (filters, page, limit, isAdmin = false) => {
       active: {
         [Op.and]: [
           { salePrice: { [Op.ne]: null } },
-          Sequelize.where(Sequelize.col('sale_price'), Op.lt, Sequelize.col('price')),
+          Sequelize.where(Sequelize.col('Product.sale_price'), Op.lt, Sequelize.col('Product.price')),
           { [Op.or]: [{ saleStartAt: null }, { saleStartAt: { [Op.lte]: now } }] },
           { [Op.or]: [{ saleEndAt: null }, { saleEndAt: { [Op.gte]: now } }] },
         ],
@@ -432,8 +432,8 @@ exports.getProducts = async (filters, page, limit, isAdmin = false) => {
   else if (filters.sort === 'price_desc') order.push(['price', 'DESC']);
   else if (filters.sort === 'newest') order.push(['createdAt', 'DESC']);
   else if (filters.sort === 'name_asc') order.push(['name', 'ASC']);
-  else if (filters.sort === 'discount_desc') order.push([Sequelize.literal('CASE WHEN sale_price IS NOT NULL AND sale_price < price THEN (price - sale_price) * 100.0 / price ELSE 0 END'), 'DESC']);
-  else if (filters.sort === 'ending_soon') order.push([Sequelize.literal('CASE WHEN sale_end_at IS NOT NULL THEN sale_end_at ELSE \'2099-12-31\'::timestamp END'), 'ASC']);
+  else if (filters.sort === 'discount_desc') order.push([Sequelize.literal('CASE WHEN "Product"."sale_price" IS NOT NULL AND "Product"."sale_price" < "Product"."price" THEN ("Product"."price" - "Product"."sale_price") * 100.0 / "Product"."price" ELSE 0 END'), 'DESC']);
+  else if (filters.sort === 'ending_soon') order.push([Sequelize.literal('CASE WHEN "Product"."sale_end_at" IS NOT NULL THEN "Product"."sale_end_at" ELSE \'2099-12-31\'::timestamp END'), 'ASC']);
   else order.push(['createdAt', 'DESC']);
 
 
@@ -515,8 +515,8 @@ exports.getProducts = async (filters, page, limit, isAdmin = false) => {
   const priceRangeResult = await Product.findOne({
     where: priceRangeWhere,
     attributes: [
-      [Sequelize.fn('MIN', Sequelize.col('price')), 'min'],
-      [Sequelize.fn('MAX', Sequelize.col('price')), 'max'],
+      [Sequelize.fn('MIN', Sequelize.col('Product.price')), 'min'],
+      [Sequelize.fn('MAX', Sequelize.col('Product.price')), 'max'],
     ],
     raw: true,
   });

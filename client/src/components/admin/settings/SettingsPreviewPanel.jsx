@@ -48,22 +48,27 @@ const SettingsPreviewPanel = ({
   showSaleTiming,
   showCountdown,
 }) => {
-    const previewContainerSx = {
-      ...previewStyles,
-      p: 2,
-      border: '1px solid',
-      borderColor: themeMode === 'dark' ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.08)',
-      overflow: 'hidden',
-      boxShadow: '0 12px 30px rgba(0,0,0,0.08)',
-    };
+  const previewContainerSx = {
+    ...previewStyles,
+    p: 2,
+    border: '1px solid',
+    borderColor: themeMode === 'dark' ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.08)',
+    overflow: 'hidden',
+    boxShadow: '0 12px 30px rgba(0,0,0,0.08)',
+  };
 
+  const headingFont = form['theme.headingFont'] || form['theme.fontFamily'] || 'Inter';
+  const headingWeight = form['theme.headingWeight'] || '700';
+  const headingLetterSpacing = form['theme.headingLetterSpacing'] || '0px';
+
+  const renderContent = () => {
     if (currentTab === 'Store' || currentTab === 'Branding') {
       return (
-        <Box sx={previewContainerSx}>
+        <>
           <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 2 }}>
             <Box>
               <Typography variant="subtitle2" sx={{ color: 'text.secondary' }}>Storefront Header</Typography>
-              <Typography variant="h6" fontWeight={700} sx={{ color: textColor }}>{storeName}</Typography>
+              <Typography variant="h6" className="preview-heading-text" sx={{ color: textColor }}>{storeName}</Typography>
             </Box>
             {form['logo.main'] ? (
               <Box component="img" src={form['logo.main']} alt="Logo" sx={{ maxWidth: 72, maxHeight: 36, objectFit: 'contain' }} />
@@ -81,27 +86,27 @@ const SettingsPreviewPanel = ({
             <Box sx={{ flex: 1, p: 1.5, ...previewButtonSx, textAlign: 'center', fontWeight: 700 }}>Primary</Box>
             <Box sx={{ flex: 1, p: 1.5, bgcolor: brandSecondary, color: '#fff', borderRadius: 2, textAlign: 'center', fontWeight: 700 }}>Accent</Box>
           </Box>
-        </Box>
+        </>
       );
     }
 
     if (currentTab === 'Layout') {
       return (
-        <Box sx={previewContainerSx}>
+        <>
           {announcementEnabled && (
             <Box sx={{ mb: 1.5, px: 1.5, py: 1, bgcolor: form['announcement.bgColor'] || brandPrimary, color: form['announcement.fgColor'] || '#fff', borderRadius: 2, fontSize: 12, textAlign: 'center' }}>
               {form['announcement.text'] || 'Free shipping on orders over $50!'}
             </Box>
           )}
           <Box sx={{ ...previewCardSx, p: 1.5, mb: 1.5 }}>
-            <Typography variant="subtitle2" fontWeight={700}>{storeName}</Typography>
+            <Typography variant="subtitle2" className="preview-heading-text">{storeName}</Typography>
             <Typography variant="caption" color="text.secondary">
               {stickyHeader ? 'Sticky header enabled' : 'Standard header'} • {showCategoryBar ? 'Category bar visible' : 'Category bar hidden'}
             </Typography>
           </Box>
           {footerEnabled && (
             <Box sx={{ mt: 2, p: 2, bgcolor: form['footer.bgColor'] || surfaceColor, color: form['footer.fgColor'] || textColor, borderRadius: `${borderRadius}px`, border: '1px solid', borderColor: 'divider' }}>
-              <Typography variant="subtitle2" fontWeight={700}>{storeName}</Typography>
+              <Typography variant="subtitle2" className="preview-heading-text">{storeName}</Typography>
               <Typography variant="body2" sx={{ mt: 0.5 }}>{footerTagline}</Typography>
               {footerShowLinks && (
                 <Typography variant="caption" sx={{ display: 'block', mt: 1.5 }}>
@@ -110,13 +115,13 @@ const SettingsPreviewPanel = ({
               )}
             </Box>
           )}
-        </Box>
+        </>
       );
     }
 
     if (currentTab === 'Homepage') {
       return (
-        <Box sx={previewContainerSx}>
+        <>
           <Box
             sx={{
               p: 2.5,
@@ -132,38 +137,60 @@ const SettingsPreviewPanel = ({
                 {primaryHeroSlide.eyebrow}
               </Typography>
             )}
-            <Typography variant="h6" fontWeight={800} sx={{ color: 'inherit' }}>{primaryHeroSlide.title || heroTitle}</Typography>
+            <Typography variant="h6" className="preview-heading-text" sx={{ color: 'inherit' }}>{primaryHeroSlide.title || heroTitle}</Typography>
             <Typography variant="body2" sx={{ color: 'inherit', opacity: 0.9, mt: 0.75, mb: 2 }}>{primaryHeroSlide.subtitle || heroSubtitle}</Typography>
             <Box sx={{ display: 'inline-block', px: 1.5, py: 0.9, ...previewButtonSx, fontWeight: 700, fontSize: 13 }}>
               {primaryHeroSlide.buttonText || heroButtonText}
             </Box>
           </Box>
           <Box sx={{ mt: 2, display: 'flex', flexDirection: 'column', gap: 1.5 }}>
-            {homepageSections.filter((item) => item.type !== 'hero-carousel' && bool(item.enabled)).slice(0, 7).map((item) => (
-              <Box key={item.id}>
-                <Typography variant="caption" fontWeight={700} sx={{ display: 'block', mb: 0.5 }}>
-                  {item.title || homepageSectionTypes.find((type) => type.value === item.type)?.label || item.type}
-                </Typography>
-                <Box sx={{
-                  display: item.type === 'value-props' || item.type === 'brand-showcase' ? 'flex' : 'grid',
-                  gridTemplateColumns: item.type === 'category-shortcuts' ? 'repeat(3, 1fr)' : 'repeat(2, 1fr)',
-                  gap: 1,
-                }}>
-                  {Array.from({ length: item.type === 'value-props' || item.type === 'brand-showcase' ? 4 : item.type === 'category-shortcuts' ? 3 : 2 }).map((_, i) => (
-                    <Box key={i} sx={{ height: item.type === 'brand-showcase' ? 22 : item.type === 'category-shortcuts' ? 40 : 58, flex: 1, bgcolor: surfaceColor, borderRadius: 1.5, border: '1px solid', borderColor: 'divider' }} />
-                  ))}
+            {homepageSections.filter((item) => item.type !== 'hero-carousel' && bool(item.enabled)).slice(0, 7).map((item) => {
+              const showOnMobile = !item.hideOnMobile;
+              const showOnDesktop = !item.hideOnDesktop;
+              let badgeText = '';
+              if (!showOnMobile && !showOnDesktop) {
+                badgeText = ' (Hidden)';
+              } else if (!showOnMobile) {
+                badgeText = ' (Desktop Only)';
+              } else if (!showOnDesktop) {
+                badgeText = ' (Mobile Only)';
+              }
+
+              return (
+                <Box
+                  key={item.id}
+                  sx={{
+                    display: {
+                      xs: !showOnMobile ? 'none' : 'block',
+                      md: !showOnDesktop ? 'none' : 'block',
+                    }
+                  }}
+                >
+                  <Typography variant="caption" className="preview-heading-text" sx={{ display: 'block', mb: 0.5 }}>
+                    {item.title || homepageSectionTypes.find((type) => type.value === item.type)?.label || item.type}
+                    {badgeText && <span style={{ opacity: 0.7, fontStyle: 'italic', fontWeight: 500 }}>{badgeText}</span>}
+                  </Typography>
+                  <Box sx={{
+                    display: item.type === 'value-props' || item.type === 'brand-showcase' ? 'flex' : 'grid',
+                    gridTemplateColumns: item.type === 'category-shortcuts' ? 'repeat(3, 1fr)' : 'repeat(2, 1fr)',
+                    gap: 1,
+                  }}>
+                    {Array.from({ length: item.type === 'value-props' || item.type === 'brand-showcase' ? 4 : item.type === 'category-shortcuts' ? 3 : 2 }).map((_, i) => (
+                      <Box key={i} sx={{ height: item.type === 'brand-showcase' ? 22 : item.type === 'category-shortcuts' ? 40 : 58, flex: 1, bgcolor: surfaceColor, borderRadius: 1.5, border: '1px solid', borderColor: 'divider' }} />
+                    ))}
+                  </Box>
                 </Box>
-              </Box>
-            ))}
+              );
+            })}
           </Box>
-        </Box>
+        </>
       );
     }
 
     if (currentTab === 'Catalog') {
       return (
-        <Box sx={previewContainerSx}>
-          <Typography variant="subtitle2" sx={{ color: 'text.secondary', mb: 1.5 }}>Catalog Card Preview</Typography>
+        <>
+          <Typography variant="subtitle2" className="preview-heading-text" sx={{ color: 'text.secondary', mb: 1.5 }}>Catalog Card Preview</Typography>
           <Box sx={{ p: 1.5, bgcolor: surfaceColor, borderRadius: `${borderRadius}px`, border: '1px solid', borderColor: 'divider' }}>
             <Box sx={{ height: 120, borderRadius: 2, background: `linear-gradient(135deg, ${brandPrimary}22, ${brandSecondary}33)`, mb: 1.5 }} />
             <Typography variant="body2" fontWeight={700}>Everyday Essential Tee</Typography>
@@ -187,7 +214,7 @@ const SettingsPreviewPanel = ({
               )}
             </Box>
           </Box>
-        </Box>
+        </>
       );
     }
 
@@ -201,26 +228,26 @@ const SettingsPreviewPanel = ({
       const total = subtotal + shippingValue + taxAmount;
 
       return (
-        <Box sx={previewContainerSx}>
-          <Typography variant="subtitle2" sx={{ color: 'text.secondary', mb: 1.5 }}>Checkout Summary</Typography>
+        <>
+          <Typography variant="subtitle2" className="preview-heading-text" sx={{ color: 'text.secondary', mb: 1.5 }}>Checkout Summary</Typography>
           <Box sx={{ p: 2, bgcolor: surfaceColor, borderRadius: `${borderRadius}px`, border: '1px solid', borderColor: 'divider' }}>
-            <Typography variant="body2" fontWeight={700} sx={{ mb: 1.5 }}>Order #Preview</Typography>
+            <Typography variant="body2" className="preview-heading-text" sx={{ mb: 1.5 }}>Order #Preview</Typography>
             <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 0.75 }}><Typography variant="body2">Subtotal</Typography><Typography variant="body2">{formatMoney(subtotal)}</Typography></Box>
             <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 0.75 }}><Typography variant="body2">Shipping</Typography><Typography variant="body2">{shippingValue === 0 ? 'Free' : formatMoney(shippingValue)}</Typography></Box>
             <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 0.75 }}><Typography variant="body2">Tax</Typography><Typography variant="body2">{taxInclusive ? 'Included' : formatMoney(taxAmount)}</Typography></Box>
             <Divider sx={{ my: 1.25 }} />
-            <Box sx={{ display: 'flex', justifyContent: 'space-between' }}><Typography variant="subtitle2" fontWeight={800}>Total</Typography><Typography variant="subtitle2" fontWeight={800}>{formatMoney(total)}</Typography></Box>
+            <Box sx={{ display: 'flex', justifyContent: 'space-between' }}><Typography variant="subtitle2" className="preview-heading-text">Total</Typography><Typography variant="subtitle2" className="preview-heading-text">{formatMoney(total)}</Typography></Box>
           </Box>
           <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mt: 1.5 }}>
             {guestCheckoutEnabled ? 'Guest checkout enabled' : 'Account required'} • {couponsEnabled ? 'Coupons available' : 'Coupons hidden'}
           </Typography>
-        </Box>
+        </>
       );
     }
 
     if (currentTab === 'Promotions') {
       return (
-        <Box sx={previewContainerSx}>
+        <>
           <Box sx={{ p: 2, bgcolor: surfaceColor, borderRadius: `${borderRadius}px`, border: '1px solid', borderColor: 'divider' }}>
             <Box sx={{ display: 'flex', gap: 1, alignItems: 'center', mb: 1.25 }}>
               {showSaleLabelBadge && (
@@ -234,15 +261,14 @@ const SettingsPreviewPanel = ({
                 </Box>
               )}
             </Box>
-            <Typography variant="body2" fontWeight={700}>Wireless Headphones</Typography>
+            <Typography variant="body2" className="preview-heading-text">Wireless Headphones</Typography>
             <Box sx={{ display: 'flex', alignItems: 'baseline', gap: 1, mt: 1 }}>
-              <Typography variant="h6" fontWeight={800}>{formatMoney(149.99)}</Typography>
+              <Typography variant="h6" className="preview-heading-text">{formatMoney(149.99)}</Typography>
               <Typography variant="body2" sx={{ textDecoration: 'line-through', color: 'text.secondary' }}>{formatMoney(199.99)}</Typography>
             </Box>
             {showSavingsAmount && (
               <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mt: 1 }}>You save {formatMoney(50)}</Typography>
             )}
-            {Boolean(form['sales.showTiming']) || Boolean(form['sales.showSaleTiming']) ? null : null}
             {showSaleTiming && (
               <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mt: 0.5 }}>Ends tomorrow at 11:59 PM</Typography>
             )}
@@ -250,23 +276,39 @@ const SettingsPreviewPanel = ({
               <Typography variant="caption" sx={{ display: 'block', mt: 0.5, color: brandSecondary, fontWeight: 700 }}>Ending soon • 08h 24m left</Typography>
             )}
           </Box>
-        </Box>
+        </>
       );
     }
 
     return (
-      <Box sx={previewContainerSx}>
-        <Typography variant="subtitle2" sx={{ color: 'text.secondary', mb: 1.5 }}>Search & Discovery Preview</Typography>
+      <>
+        <Typography variant="subtitle2" className="preview-heading-text" sx={{ color: 'text.secondary', mb: 1.5 }}>Search & Discovery Preview</Typography>
         <Box sx={{ p: 2, bgcolor: surfaceColor, borderRadius: `${borderRadius}px`, border: '1px solid', borderColor: 'divider' }}>
           <Typography variant="caption" color="text.secondary">Search result</Typography>
-          <Typography variant="h6" fontWeight={700} sx={{ mt: 0.5 }}>{storeName} | Premium online shopping experience</Typography>
+          <Typography variant="h6" className="preview-heading-text" sx={{ mt: 0.5 }}>{storeName} | Premium online shopping experience</Typography>
           <Typography variant="body2" color="text.secondary" sx={{ mt: 1 }}>{form['seo.defaultDescription'] || 'Shop the best products online at unbeatable prices.'}</Typography>
           <Typography variant="caption" sx={{ display: 'block', mt: 1.5, color: brandPrimary }}>
             {form['seo.googleAnalyticsId'] || 'Analytics not connected yet'}
           </Typography>
         </Box>
-      </Box>
+      </>
     );
   };
+
+  return (
+    <Box sx={previewContainerSx}>
+      <style>
+        {`
+          .preview-heading-text {
+            font-family: "${headingFont}", sans-serif !important;
+            font-weight: ${headingWeight} !important;
+            letter-spacing: ${headingLetterSpacing} !important;
+          }
+        `}
+      </style>
+      {renderContent()}
+    </Box>
+  );
+};
 
 export default SettingsPreviewPanel;

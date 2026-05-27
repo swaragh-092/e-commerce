@@ -14,19 +14,24 @@ export const SettingsProvider = ({ children }) => {
   const [lockedKeys, setLockedKeys] = useState([]);       // Tier 1 keys — greyed-out in Settings UI
   const [loading, setLoading] = useState(true);
 
+  const t = settings?.theme || {};
+
   // Customer dark mode: localStorage override with prefers-color-scheme fallback
   const [customerDarkMode, setCustomerDarkMode] = useState(() => {
     const stored = localStorage.getItem('customerDarkMode');
-    if (stored !== null) return stored === 'true';
-    return window.matchMedia?.('(prefers-color-scheme: dark)').matches || false;
+    if (stored === 'true') return 'dark';
+    if (stored === 'false') return 'light';
+    return stored; // 'light', 'dark', or null
   });
 
   const toggleDarkMode = useCallback(() => {
     setCustomerDarkMode((prev) => {
-      localStorage.setItem('customerDarkMode', String(!prev));
-      return !prev;
+      const currentResolved = prev || (t.mode || (window.matchMedia?.('(prefers-color-scheme: dark)').matches ? 'dark' : 'light'));
+      const next = currentResolved === 'dark' ? 'light' : 'dark';
+      localStorage.setItem('customerDarkMode', next);
+      return next;
     });
-  }, []);
+  }, [t.mode]);
 
   const fetchSettings = async () => {
     try {
@@ -115,7 +120,9 @@ export const SettingsProvider = ({ children }) => {
       const fonts = new Set();
       if (data.theme.fontFamily) fonts.add(data.theme.fontFamily);
       if (data.theme.headingFont) fonts.add(data.theme.headingFont);
-      const families = [...fonts].map((f) => f.replace(/\s+/g, '+')).join('&family=');
+      const families = [...fonts]
+        .map((f) => `family=${f.replace(/\s+/g, '+')}:wght@300;400;500;600;700;800;900`)
+        .join('&');
       const linkId = 'google-font-link';
       let link = document.getElementById(linkId);
       if (!link) {
@@ -124,7 +131,7 @@ export const SettingsProvider = ({ children }) => {
         link.rel = 'stylesheet';
         document.head.appendChild(link);
       }
-      link.href = `https://fonts.googleapis.com/css2?family=${families}:wght@300;400;500;600;700;800&display=swap`;
+      link.href = `https://fonts.googleapis.com/css2?${families}&display=swap`;
     }
   };
 
@@ -132,9 +139,10 @@ export const SettingsProvider = ({ children }) => {
     fetchSettings();
   }, []);
 
-  const t = settings?.theme || {};
   const radius = parseInt(t.borderRadius) || 8;
-  const themeMode = customerDarkMode ? 'dark' : (t.mode || 'light');
+  const themeMode = customerDarkMode 
+    ? customerDarkMode 
+    : (t.mode || (window.matchMedia?.('(prefers-color-scheme: dark)').matches ? 'dark' : 'light'));
   const isDark = themeMode === 'dark';
   const fallbackPrimary = isDark ? '#4fd1a5' : '#0f766e';
   const fallbackSecondary = isDark ? '#ffb86b' : '#f97316';
@@ -144,10 +152,16 @@ export const SettingsProvider = ({ children }) => {
   const backgroundStyle = t.backgroundStyle || 'softGradient';
   const buttonStyle = t.buttonStyle || 'solid';
   const cardStyle = t.cardStyle || 'elevated';
-  const primaryMain = t.primaryColor || fallbackPrimary;
-  const secondaryMain = t.secondaryColor || fallbackSecondary;
-  const backgroundDefault = t.backgroundColor || fallbackBackground;
-  const surfaceColor = t.surfaceColor || fallbackSurface;
+
+  // If resolved mode matches the settings mode, use the admin settings colors.
+  // Otherwise, use theme-appropriate fallbacks.
+  const useAdminColors = t.mode === themeMode;
+
+  const primaryMain = useAdminColors ? (t.primaryColor || fallbackPrimary) : fallbackPrimary;
+  const secondaryMain = useAdminColors ? (t.secondaryColor || fallbackSecondary) : fallbackSecondary;
+  const backgroundDefault = useAdminColors ? (t.backgroundColor || fallbackBackground) : fallbackBackground;
+  const surfaceColor = useAdminColors ? (t.surfaceColor || fallbackSurface) : fallbackSurface;
+  const textColor = useAdminColors ? (t.textColor || fallbackText) : fallbackText;
 
   const themeConfig = createTheme({
     palette: {
@@ -175,7 +189,7 @@ export const SettingsProvider = ({ children }) => {
         paper: surfaceColor,
       },
       text: {
-        primary: t.textColor || fallbackText,
+        primary: textColor,
         secondary: isDark ? '#cbd5e1' : '#64748b',
       },
       divider: isDark ? 'rgba(148, 163, 184, 0.18)' : 'rgba(15, 118, 110, 0.14)',
@@ -184,12 +198,22 @@ export const SettingsProvider = ({ children }) => {
       fontFamily: t.fontFamily
         ? `"${t.fontFamily}", "Roboto", "Helvetica", "Arial", sans-serif`
         : '"Roboto", "Helvetica", "Arial", sans-serif',
-      h1: { fontSize: '2.5rem', fontWeight: 800, letterSpacing: 0, ...(t.headingFont && { fontFamily: `"${t.headingFont}", "Roboto", sans-serif` }) },
-      h2: { fontSize: '2rem', fontWeight: 800, letterSpacing: 0, ...(t.headingFont && { fontFamily: `"${t.headingFont}", "Roboto", sans-serif` }) },
-      h3: { fontWeight: 700, ...(t.headingFont && { fontFamily: `"${t.headingFont}", "Roboto", sans-serif` }) },
-      h4: { fontWeight: 700, ...(t.headingFont && { fontFamily: `"${t.headingFont}", "Roboto", sans-serif` }) },
-      h5: { fontWeight: 800, letterSpacing: 0, ...(t.headingFont && { fontFamily: `"${t.headingFont}", "Roboto", sans-serif` }) },
-      h6: { fontWeight: 700, ...(t.headingFont && { fontFamily: `"${t.headingFont}", "Roboto", sans-serif` }) },
+      h1: { fontSize: '2.5rem', fontWeight: t.headingWeight ? parseInt(t.headingWeight) : 800, letterSpacing: t.headingLetterSpacing || '0px', ...(t.headingFont && { fontFamily: `"${t.headingFont}", "Roboto", sans-serif` }) },
+      h2: { fontSize: '2rem', fontWeight: t.headingWeight ? parseInt(t.headingWeight) : 800, letterSpacing: t.headingLetterSpacing || '0px', ...(t.headingFont && { fontFamily: `"${t.headingFont}", "Roboto", sans-serif` }) },
+      h3: { fontSize: '1.75rem', fontWeight: t.headingWeight ? parseInt(t.headingWeight) : 700, letterSpacing: t.headingLetterSpacing || '0px', ...(t.headingFont && { fontFamily: `"${t.headingFont}", "Roboto", sans-serif` }) },
+      h4: { fontSize: '1.5rem', fontWeight: t.headingWeight ? parseInt(t.headingWeight) : 700, letterSpacing: t.headingLetterSpacing || '0px', ...(t.headingFont && { fontFamily: `"${t.headingFont}", "Roboto", sans-serif` }) },
+      h5: { fontSize: '1.25rem', fontWeight: t.headingWeight ? parseInt(t.headingWeight) : 800, letterSpacing: t.headingLetterSpacing || '0px', ...(t.headingFont && { fontFamily: `"${t.headingFont}", "Roboto", sans-serif` }) },
+      h6: { fontSize: '1rem', fontWeight: t.headingWeight ? parseInt(t.headingWeight) : 700, letterSpacing: t.headingLetterSpacing || '0px', ...(t.headingFont && { fontFamily: `"${t.headingFont}", "Roboto", sans-serif` }) },
+      body1: {
+        fontWeight: t.bodyWeight ? parseInt(t.bodyWeight) : 400,
+        lineHeight: t.lineHeight || 1.5,
+        letterSpacing: t.letterSpacing || '0px',
+      },
+      body2: {
+        fontWeight: t.bodyWeight ? parseInt(t.bodyWeight) : 400,
+        lineHeight: t.lineHeight || 1.5,
+        letterSpacing: t.letterSpacing || '0px',
+      },
       button: { textTransform: 'none', fontWeight: 700 },
     },
     shape: {
@@ -262,6 +286,16 @@ export const SettingsProvider = ({ children }) => {
               backgroundStyle === 'softGradient'
                 ? `linear-gradient(180deg, ${backgroundDefault} 0%, ${surfaceColor} 48%, ${backgroundDefault} 100%)`
                 : backgroundDefault,
+            fontWeight: t.bodyWeight ? parseInt(t.bodyWeight) : 400,
+            lineHeight: t.lineHeight || 1.5,
+            letterSpacing: t.letterSpacing || '0px',
+          },
+          'h1, h2, h3, h4, h5, h6': {
+            fontFamily: t.headingFont
+              ? `"${t.headingFont}", "Roboto", sans-serif`
+              : (t.fontFamily ? `"${t.fontFamily}", "Roboto", sans-serif` : 'inherit'),
+            fontWeight: t.headingWeight ? parseInt(t.headingWeight) : 700,
+            letterSpacing: t.headingLetterSpacing || '0px',
           },
         },
       },
@@ -293,6 +327,60 @@ export const SettingsProvider = ({ children }) => {
       style.remove();
     }
   }, [settings?.advanced?.customCSS]);
+
+  // Inject custom Head & Body scripts from admin settings
+  useEffect(() => {
+    const headScripts = settings?.advanced?.headScripts;
+    const bodyScripts = settings?.advanced?.bodyScripts;
+
+    const injectHtmlSnippet = (htmlString, targetContainer, scriptClass) => {
+      const existing = targetContainer.querySelectorAll(`.${scriptClass}`);
+      existing.forEach(el => el.remove());
+
+      if (!htmlString || !htmlString.trim()) {
+        return;
+      }
+
+      try {
+        const parser = new DOMParser();
+        const doc = parser.parseFromString(`<div>${htmlString}</div>`, 'text/html');
+        const parsedContainer = doc.querySelector('div');
+
+        if (!parsedContainer) return;
+
+        const nodes = Array.from(parsedContainer.childNodes);
+        for (const node of nodes) {
+          if (node.nodeType === Node.ELEMENT_NODE) {
+            let newEl;
+            if (node.nodeName.toLowerCase() === 'script') {
+              newEl = document.createElement('script');
+              for (const attr of Array.from(node.attributes)) {
+                newEl.setAttribute(attr.name, attr.value);
+              }
+              newEl.textContent = node.textContent;
+            } else {
+              newEl = node.cloneNode(true);
+            }
+
+            if (newEl && newEl.nodeType === Node.ELEMENT_NODE) {
+              newEl.classList.add(scriptClass);
+              targetContainer.appendChild(newEl);
+            }
+          }
+        }
+      } catch (err) {
+        console.error(`Error injecting script for ${scriptClass}:`, err);
+      }
+    };
+
+    injectHtmlSnippet(headScripts, document.head, 'admin-head-script');
+    injectHtmlSnippet(bodyScripts, document.body, 'admin-body-script');
+
+    return () => {
+      document.head.querySelectorAll('.admin-head-script').forEach(el => el.remove());
+      document.body.querySelectorAll('.admin-body-script').forEach(el => el.remove());
+    };
+  }, [settings?.advanced?.headScripts, settings?.advanced?.bodyScripts]);
 
   return (
     <SettingsContext.Provider value={value}>

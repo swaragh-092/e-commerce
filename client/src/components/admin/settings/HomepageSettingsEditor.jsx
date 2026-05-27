@@ -131,6 +131,18 @@ const HomepageSettingsEditor = ({
                 </IconButton>
               </Box>
             </Grid>
+            <Grid item xs={12}>
+              <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 3, mt: 0.5 }}>
+                <FormControlLabel
+                  control={<Switch size="small" checked={!bool(item.hideOnMobile, false)} onChange={(e) => updateHomepageSection(index, { hideOnMobile: !e.target.checked })} />}
+                  label="Show on Mobile"
+                />
+                <FormControlLabel
+                  control={<Switch size="small" checked={!bool(item.hideOnDesktop, false)} onChange={(e) => updateHomepageSection(index, { hideOnDesktop: !e.target.checked })} />}
+                  label="Show on Desktop"
+                />
+              </Box>
+            </Grid>
           </Grid>
 
           {item.type !== 'hero-carousel' && item.type !== 'value-props' && (

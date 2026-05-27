@@ -248,6 +248,51 @@ export default function buildSettingsPanels(ctx) {
                 renderInput={(params) => <TextField {...params} label="Body Font" size="small" sx={{ mb: 2 }} />}
               />
             </Grid>
+            <Grid item xs={12} sm={6}>
+              <FormControl fullWidth size="small" sx={{ mb: 2 }}>
+                <InputLabel>Heading Weight</InputLabel>
+                <Select
+                  label="Heading Weight"
+                  value={form['theme.headingWeight'] || '700'}
+                  onChange={(e) => set('theme.headingWeight', e.target.value)}
+                >
+                  <MenuItem value="300">Light (300)</MenuItem>
+                  <MenuItem value="400">Regular (400)</MenuItem>
+                  <MenuItem value="500">Medium (500)</MenuItem>
+                  <MenuItem value="600">Semi-Bold (600)</MenuItem>
+                  <MenuItem value="700">Bold (700)</MenuItem>
+                  <MenuItem value="800">Extra-Bold (800)</MenuItem>
+                  <MenuItem value="900">Black (900)</MenuItem>
+                </Select>
+              </FormControl>
+            </Grid>
+            <Grid item xs={12} sm={6}>
+              <FormControl fullWidth size="small" sx={{ mb: 2 }}>
+                <InputLabel>Body Weight</InputLabel>
+                <Select
+                  label="Body Weight"
+                  value={form['theme.bodyWeight'] || '400'}
+                  onChange={(e) => set('theme.bodyWeight', e.target.value)}
+                >
+                  <MenuItem value="300">Light (300)</MenuItem>
+                  <MenuItem value="400">Regular (400)</MenuItem>
+                  <MenuItem value="500">Medium (500)</MenuItem>
+                  <MenuItem value="600">Semi-Bold (600)</MenuItem>
+                  <MenuItem value="700">Bold (700)</MenuItem>
+                  <MenuItem value="800">Extra-Bold (800)</MenuItem>
+                  <MenuItem value="900">Black (900)</MenuItem>
+                </Select>
+              </FormControl>
+            </Grid>
+            <Grid item xs={12} sm={4}>
+              {field('theme.lineHeight', 'Body Line Height (e.g. 1.5)')}
+            </Grid>
+            <Grid item xs={12} sm={4}>
+              {field('theme.headingLetterSpacing', 'Heading Letter Spacing (e.g. 0px)')}
+            </Grid>
+            <Grid item xs={12} sm={4}>
+              {field('theme.letterSpacing', 'Body Letter Spacing (e.g. 0px)')}
+            </Grid>
             <Grid item xs={12} sm={6}>{field('theme.borderRadius', 'Border Radius (e.g. 12px)')}</Grid>
             <Grid item xs={12} sm={6}>
               <FormControl fullWidth size="small" sx={{ mb: 2 }}>
@@ -803,13 +848,39 @@ function buildAdvancedPanel({ form, set, section, field, toggle, imageField, boo
       ['api builder', 'custom api', 'dynamic api', 'public api']
     ),
     section(
-      'Custom CSS',
-      'Inject custom CSS into the storefront. Styles are applied globally after the theme.',
+      'Custom Code / Code Injection',
+      'Inject custom styles or scripts (e.g. Google Tag Manager, custom trackers, integrations) into the storefront.',
       <>
         <TextField
           fullWidth
           multiline
-          rows={8}
+          rows={6}
+          size="small"
+          label="Header Scripts"
+          placeholder="<!-- Scripts injected in the <head> tag -->&#10;<script>&#10;  console.log('head script');&#10;</script>"
+          value={form['advanced.headScripts'] ?? ''}
+          onChange={(e) => set('advanced.headScripts', e.target.value)}
+          sx={{ mb: 3, fontFamily: 'monospace' }}
+          InputProps={{ sx: { fontFamily: 'monospace', fontSize: '0.85rem' } }}
+          helperText="HTML scripts, meta tags, or link tags injected inside <head>."
+        />
+        <TextField
+          fullWidth
+          multiline
+          rows={6}
+          size="small"
+          label="Body Scripts"
+          placeholder="<!-- Scripts injected in the <body> tag -->&#10;<script>&#10;  console.log('body script');&#10;</script>"
+          value={form['advanced.bodyScripts'] ?? ''}
+          onChange={(e) => set('advanced.bodyScripts', e.target.value)}
+          sx={{ mb: 3, fontFamily: 'monospace' }}
+          InputProps={{ sx: { fontFamily: 'monospace', fontSize: '0.85rem' } }}
+          helperText="HTML or JS snippets injected right before the closing </body> tag."
+        />
+        <TextField
+          fullWidth
+          multiline
+          rows={6}
           size="small"
           label="Custom CSS"
           placeholder={`.my-class {\n  color: red;\n}`}
@@ -817,12 +888,10 @@ function buildAdvancedPanel({ form, set, section, field, toggle, imageField, boo
           onChange={(e) => set('advanced.customCSS', e.target.value)}
           sx={{ mb: 1, fontFamily: 'monospace' }}
           InputProps={{ sx: { fontFamily: 'monospace', fontSize: '0.85rem' } }}
+          helperText="Global CSS rules applied after theme styles."
         />
-        <Typography variant="caption" color="text.secondary">
-          Use standard CSS selectors. Changes apply immediately after saving.
-        </Typography>
       </>,
-      ['custom css', 'css injection', 'styles', 'code']
+      ['custom css', 'css injection', 'scripts', 'code injection', 'head scripts', 'body scripts']
     ),
     section(
       'SEO & Discovery',
