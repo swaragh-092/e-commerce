@@ -142,6 +142,52 @@ export default function buildSettingsPanels(ctx) {
         'Theme & Colors',
         'Start with a suggested theme, then fine-tune every color and token.',
         <>
+          <Box sx={{ display: 'flex', gap: 1, mb: 2 }}>
+            <Button
+              size="small"
+              variant="outlined"
+              onClick={() => {
+                const themeKeys = Object.entries(form).filter(([k]) => k.startsWith('theme.'));
+                const themeData = Object.fromEntries(themeKeys);
+                const blob = new Blob([JSON.stringify(themeData, null, 2)], { type: 'application/json' });
+                const url = URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.href = url;
+                a.download = 'theme-export.json';
+                a.click();
+                URL.revokeObjectURL(url);
+              }}
+            >
+              Export Theme
+            </Button>
+            <Button
+              size="small"
+              variant="outlined"
+              component="label"
+            >
+              Import Theme
+              <input
+                type="file"
+                accept=".json"
+                hidden
+                onChange={(e) => {
+                  const file = e.target.files?.[0];
+                  if (!file) return;
+                  const reader = new FileReader();
+                  reader.onload = (ev) => {
+                    try {
+                      const data = JSON.parse(ev.target.result);
+                      const themeEntries = Object.entries(data).filter(([k]) => k.startsWith('theme.'));
+                      if (themeEntries.length === 0) return;
+                      themeEntries.forEach(([k, v]) => set(k, v));
+                    } catch { /* ignore invalid JSON */ }
+                  };
+                  reader.readAsText(file);
+                  e.target.value = '';
+                }}
+              />
+            </Button>
+          </Box>
           <Typography variant="subtitle2" sx={{ mb: 1 }}>Suggested Custom Themes</Typography>
           <Grid container spacing={1.5} sx={{ mb: 2 }}>
             {THEME_PRESETS.map((preset) => (
@@ -187,10 +233,19 @@ export default function buildSettingsPanels(ctx) {
             <Grid item xs={12} sm={6}>
               <Autocomplete
                 options={FONTS}
+                value={form['theme.headingFont'] || form['theme.fontFamily'] || ''}
+                onChange={(e, value) => set('theme.headingFont', value || '')}
+                freeSolo
+                renderInput={(params) => <TextField {...params} label="Heading Font" size="small" sx={{ mb: 2 }} />}
+              />
+            </Grid>
+            <Grid item xs={12} sm={6}>
+              <Autocomplete
+                options={FONTS}
                 value={form['theme.fontFamily'] || ''}
                 onChange={(e, value) => set('theme.fontFamily', value || '')}
                 freeSolo
-                renderInput={(params) => <TextField {...params} label="Font Family" size="small" sx={{ mb: 2 }} />}
+                renderInput={(params) => <TextField {...params} label="Body Font" size="small" sx={{ mb: 2 }} />}
               />
             </Grid>
             <Grid item xs={12} sm={6}>{field('theme.borderRadius', 'Border Radius (e.g. 12px)')}</Grid>
@@ -746,6 +801,28 @@ function buildAdvancedPanel({ form, set, section, field, toggle, imageField, boo
         </Typography>
       </>,
       ['api builder', 'custom api', 'dynamic api', 'public api']
+    ),
+    section(
+      'Custom CSS',
+      'Inject custom CSS into the storefront. Styles are applied globally after the theme.',
+      <>
+        <TextField
+          fullWidth
+          multiline
+          rows={8}
+          size="small"
+          label="Custom CSS"
+          placeholder={`.my-class {\n  color: red;\n}`}
+          value={form['advanced.customCSS'] ?? ''}
+          onChange={(e) => set('advanced.customCSS', e.target.value)}
+          sx={{ mb: 1, fontFamily: 'monospace' }}
+          InputProps={{ sx: { fontFamily: 'monospace', fontSize: '0.85rem' } }}
+        />
+        <Typography variant="caption" color="text.secondary">
+          Use standard CSS selectors. Changes apply immediately after saving.
+        </Typography>
+      </>,
+      ['custom css', 'css injection', 'styles', 'code']
     ),
     section(
       'SEO & Discovery',

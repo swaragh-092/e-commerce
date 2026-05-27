@@ -18,6 +18,7 @@ import StorefrontFooter from '../components/layout/StorefrontFooter';
 import { useWishlist } from '../context/WishlistContext';
 import { useCategories } from '../context/CategoryContext';
 import SearchWidget from '../components/search/SearchWidget';
+import DarkModeToggle from '../components/layout/DarkModeToggle';
 import PageService from '../services/pageService';
 import MenuService from '../services/menuService';
 import { ADMIN_ACCESS_PERMISSIONS, getFirstAccessibleAdminPath } from '../utils/permissions';
@@ -396,6 +397,7 @@ const StoreLayout = () => {
             <Box sx={{ display: { xs: 'flex', md: 'none' }, alignItems: 'center' }}>
               <SearchWidget variant="header" placeholder="Search..." sx={{ width: 160 }} />
             </Box>
+            <DarkModeToggle />
             {cartEnabled && (
               <IconButton color="inherit" component={RouterLink} to="/cart" sx={{ '&:hover': { bgcolor: 'rgba(255,255,255,0.12)' } }}>
                 <Badge badgeContent={cartCount || 0} color="error">

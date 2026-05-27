@@ -1,9 +1,11 @@
-import React, { createContext, useState, useEffect } from 'react';
+import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
 import { ThemeProvider, createTheme, CssBaseline, Box, CircularProgress } from '@mui/material';
 import settingsService from '../services/settingsService';
 import { DEFAULT_STORE_NAME } from '../utils/store';
 
 export const SettingsContext = createContext(null);
+const CustomerThemeContext = createContext({ isDark: false, toggleDarkMode: () => {} });
+export const useCustomerTheme = () => useContext(CustomerThemeContext);
 
 export const SettingsProvider = ({ children }) => {
   const [settings, setSettings] = useState(null);
@@ -11,6 +13,20 @@ export const SettingsProvider = ({ children }) => {
   const [features, setFeatures] = useState(null);         // fully resolved feature map
   const [lockedKeys, setLockedKeys] = useState([]);       // Tier 1 keys — greyed-out in Settings UI
   const [loading, setLoading] = useState(true);
+
+  // Customer dark mode: localStorage override with prefers-color-scheme fallback
+  const [customerDarkMode, setCustomerDarkMode] = useState(() => {
+    const stored = localStorage.getItem('customerDarkMode');
+    if (stored !== null) return stored === 'true';
+    return window.matchMedia?.('(prefers-color-scheme: dark)').matches || false;
+  });
+
+  const toggleDarkMode = useCallback(() => {
+    setCustomerDarkMode((prev) => {
+      localStorage.setItem('customerDarkMode', String(!prev));
+      return !prev;
+    });
+  }, []);
 
   const fetchSettings = async () => {
     try {
@@ -94,9 +110,12 @@ export const SettingsProvider = ({ children }) => {
       link.href = data.logo.favicon;
     }
 
-    // Google Font
-    if (data?.theme?.fontFamily) {
-      const fontName = data.theme.fontFamily.replace(/\s+/g, '+');
+    // Google Fonts — load both heading and body fonts
+    if (data?.theme?.fontFamily || data?.theme?.headingFont) {
+      const fonts = new Set();
+      if (data.theme.fontFamily) fonts.add(data.theme.fontFamily);
+      if (data.theme.headingFont) fonts.add(data.theme.headingFont);
+      const families = [...fonts].map((f) => f.replace(/\s+/g, '+')).join('&family=');
       const linkId = 'google-font-link';
       let link = document.getElementById(linkId);
       if (!link) {
@@ -105,7 +124,7 @@ export const SettingsProvider = ({ children }) => {
         link.rel = 'stylesheet';
         document.head.appendChild(link);
       }
-      link.href = `https://fonts.googleapis.com/css2?family=${fontName}:wght@300;400;500;600;700&display=swap`;
+      link.href = `https://fonts.googleapis.com/css2?family=${families}:wght@300;400;500;600;700;800&display=swap`;
     }
   };
 
@@ -115,7 +134,7 @@ export const SettingsProvider = ({ children }) => {
 
   const t = settings?.theme || {};
   const radius = parseInt(t.borderRadius) || 8;
-  const themeMode = t.mode || 'light';
+  const themeMode = customerDarkMode ? 'dark' : (t.mode || 'light');
   const isDark = themeMode === 'dark';
   const fallbackPrimary = isDark ? '#4fd1a5' : '#0f766e';
   const fallbackSecondary = isDark ? '#ffb86b' : '#f97316';
@@ -165,9 +184,12 @@ export const SettingsProvider = ({ children }) => {
       fontFamily: t.fontFamily
         ? `"${t.fontFamily}", "Roboto", "Helvetica", "Arial", sans-serif`
         : '"Roboto", "Helvetica", "Arial", sans-serif',
-      h1: { fontSize: '2.5rem', fontWeight: 800, letterSpacing: 0 },
-      h2: { fontSize: '2rem', fontWeight: 800, letterSpacing: 0 },
-      h5: { fontWeight: 800, letterSpacing: 0 },
+      h1: { fontSize: '2.5rem', fontWeight: 800, letterSpacing: 0, ...(t.headingFont && { fontFamily: `"${t.headingFont}", "Roboto", sans-serif` }) },
+      h2: { fontSize: '2rem', fontWeight: 800, letterSpacing: 0, ...(t.headingFont && { fontFamily: `"${t.headingFont}", "Roboto", sans-serif` }) },
+      h3: { fontWeight: 700, ...(t.headingFont && { fontFamily: `"${t.headingFont}", "Roboto", sans-serif` }) },
+      h4: { fontWeight: 700, ...(t.headingFont && { fontFamily: `"${t.headingFont}", "Roboto", sans-serif` }) },
+      h5: { fontWeight: 800, letterSpacing: 0, ...(t.headingFont && { fontFamily: `"${t.headingFont}", "Roboto", sans-serif` }) },
+      h6: { fontWeight: 700, ...(t.headingFont && { fontFamily: `"${t.headingFont}", "Roboto", sans-serif` }) },
       button: { textTransform: 'none', fontWeight: 700 },
     },
     shape: {
@@ -255,16 +277,35 @@ export const SettingsProvider = ({ children }) => {
     refreshSettings: fetchSettings,
   };
 
+  // Inject custom CSS from admin settings
+  useEffect(() => {
+    const customCss = settings?.advanced?.customCSS;
+    const styleId = 'admin-custom-css';
+    let style = document.getElementById(styleId);
+    if (customCss) {
+      if (!style) {
+        style = document.createElement('style');
+        style.id = styleId;
+        document.head.appendChild(style);
+      }
+      style.textContent = customCss;
+    } else if (style) {
+      style.remove();
+    }
+  }, [settings?.advanced?.customCSS]);
+
   return (
     <SettingsContext.Provider value={value}>
-      <ThemeProvider theme={themeConfig}>
-        <CssBaseline />
-        {loading ? (
-          <Box sx={{ display: 'flex', justifyContent: 'center', alignItems: 'center', minHeight: '100vh' }}>
-            <CircularProgress />
-          </Box>
-        ) : children}
-      </ThemeProvider>
+      <CustomerThemeContext.Provider value={{ isDark, toggleDarkMode }}>
+        <ThemeProvider theme={themeConfig}>
+          <CssBaseline />
+          {loading ? (
+            <Box sx={{ display: 'flex', justifyContent: 'center', alignItems: 'center', minHeight: '100vh' }}>
+              <CircularProgress />
+            </Box>
+          ) : children}
+        </ThemeProvider>
+      </CustomerThemeContext.Provider>
     </SettingsContext.Provider>
   );
 };
