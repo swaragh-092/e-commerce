@@ -35,7 +35,7 @@ const CardSkeleton = () => <Skeleton variant="rectangular" height={280} sx={{ bo
 
 const ExportBtn = ({ metric, params }) => (
   <Tooltip title="Export CSV">
-    <IconButton size="small" component="a" href={exportAnalyticsCsv(metric, params)} target="_blank">
+    <IconButton size="small" onClick={() => exportAnalyticsCsv(metric, params)}>
       <DownloadIcon fontSize="small" />
     </IconButton>
   </Tooltip>

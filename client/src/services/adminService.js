@@ -123,7 +123,17 @@ const getTrafficSources = (params = {}) => api.get(withQueryString(`/${A}/analyt
 const getProductFunnel = (params = {}) => api.get(withQueryString(`/${A}/analytics/product-funnel`, params, { omitEmpty: true }));
 const getUtmAttribution = (params = {}) => api.get(withQueryString(`/${A}/analytics/utm-attribution`, params, { omitEmpty: true }));
 const getCouponPerformance = (params = {}) => api.get(withQueryString(`/${A}/analytics/coupon-performance`, params, { omitEmpty: true }));
-const exportAnalyticsCsv = (metric, params = {}) => `${api.defaults.baseURL}/${A}/analytics/export/${metric}?${buildQueryString(params, { omitEmpty: true })}`;
+const exportAnalyticsCsv = (metric, params = {}) => {
+  const query = buildQueryString(params, { omitEmpty: true });
+  return api.get(`/${A}/analytics/export/${metric}?${query}`, { responseType: 'blob' }).then((res) => {
+    const url = window.URL.createObjectURL(new Blob([res.data], { type: 'text/csv' }));
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `${metric}-${new Date().toISOString().slice(0, 10)}.csv`;
+    a.click();
+    window.URL.revokeObjectURL(url);
+  });
+};
 
 export {
   getStats, getSalesChart, getLowStock, getRecentOrders,
