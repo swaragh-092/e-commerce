@@ -63,4 +63,57 @@ describe('GST utilities', () => {
     expect(summary.sgst).toBe(11.25);
     expect(summary.igst).toBe(0);
   });
+
+  it('throws when priceResolver is missing', () => {
+    expect(() => calculateTaxSummary({ items, settings })).toThrow(TypeError);
+  });
+
+  it('allows zero-priced items and returns zero tax for them', () => {
+    const summary = calculateTaxSummary({
+      items,
+      settings,
+      priceResolver: () => 0,
+    });
+
+    expect(summary.totalTax).toBe(0);
+    expect(summary.taxRows).toEqual([]);
+  });
+
+  it('throws when priceResolver returns a negative unit price', () => {
+    expect(() => calculateTaxSummary({
+      items,
+      settings,
+      priceResolver: () => -1,
+    })).toThrow(Error);
+  });
+
+  it('marks mixed inclusive when item breakdowns disagree', () => {
+    const mixedItems = [
+      {
+        quantity: 1,
+        product: {
+          id: 'product-1',
+          taxConfig: { isCustom: true, flatRate: 0.1, inclusive: true },
+        },
+      },
+      {
+        quantity: 1,
+        product: {
+          id: 'product-2',
+          taxConfig: { isCustom: true, flatRate: 0.1, inclusive: false },
+        },
+      },
+    ];
+
+    const summary = calculateTaxSummary({
+      items: mixedItems,
+      settings,
+      priceResolver: () => 100,
+    });
+
+    expect(summary.isInclusive).toBeNull();
+    expect(summary.hasMixedInclusive).toBe(true);
+    expect(summary.inclusiveCount).toBe(1);
+    expect(summary.totalCount).toBe(2);
+  });
 });

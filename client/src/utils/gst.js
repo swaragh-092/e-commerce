@@ -115,8 +115,12 @@ export const calculateTaxSummary = ({
   settings = {},
   destinationState = '',
   quantityResolver = (item) => Math.max(1, Math.floor(toNumber(item?.quantity, 1))),
-  priceResolver = () => 0,
+  priceResolver,
 } = {}) => {
+  if (typeof priceResolver !== 'function') {
+    throw new TypeError('calculateTaxSummary requires a valid priceResolver function');
+  }
+
   const taxSettings = settings?.tax || {};
   const originState = String(taxSettings.originState || '');
   const totals = {
@@ -126,6 +130,9 @@ export const calculateTaxSummary = ({
     flatTax: 0,
     totalTax: 0,
     isInclusive: false,
+    hasMixedInclusive: false,
+    inclusiveCount: 0,
+    totalCount: 0,
   };
   const componentRates = {
     cgst: [],
@@ -137,7 +144,11 @@ export const calculateTaxSummary = ({
   items.forEach((item) => {
     if (!item?.product) return;
     const quantity = Math.max(1, Math.floor(toNumber(quantityResolver(item), 1)));
-    const unitPrice = toNumber(priceResolver(item), 0);
+    const unitPrice = toNumber(priceResolver(item));
+    if (unitPrice < 0) {
+      throw new Error(`priceResolver must return a non-negative unit price; got ${unitPrice}`);
+    }
+
     const itemSubtotal = unitPrice * quantity;
     const effectiveTax = getEffectiveTax(item.product, taxSettings);
     const breakdown = computeItemTax(effectiveTax, itemSubtotal, destinationState, originState);
@@ -147,13 +158,25 @@ export const calculateTaxSummary = ({
     totals.igst += breakdown.igst;
     totals.flatTax += breakdown.flatTax;
     totals.totalTax += breakdown.totalTax;
-    totals.isInclusive = totals.isInclusive || breakdown.isInclusive;
+    totals.totalCount += 1;
+    if (breakdown.isInclusive) totals.inclusiveCount += 1;
 
     if (breakdown.cgst > 0) componentRates.cgst.push(breakdown.rates.cgst);
     if (breakdown.sgst > 0) componentRates.sgst.push(breakdown.rates.sgst);
     if (breakdown.igst > 0) componentRates.igst.push(breakdown.rates.igst);
     if (breakdown.flatTax > 0) componentRates.flatTax.push(breakdown.rates.flatTax);
   });
+
+  if (totals.totalCount === 0) {
+    totals.isInclusive = false;
+  } else if (totals.inclusiveCount === 0) {
+    totals.isInclusive = false;
+  } else if (totals.inclusiveCount === totals.totalCount) {
+    totals.isInclusive = true;
+  } else {
+    totals.isInclusive = null;
+    totals.hasMixedInclusive = true;
+  }
 
   const summary = {
     cgst: roundMoney(totals.cgst),
@@ -162,6 +185,9 @@ export const calculateTaxSummary = ({
     flatTax: roundMoney(totals.flatTax),
     totalTax: roundMoney(totals.totalTax),
     isInclusive: totals.isInclusive,
+    hasMixedInclusive: totals.hasMixedInclusive,
+    inclusiveCount: totals.inclusiveCount,
+    totalCount: totals.totalCount,
     useGST: roundMoney(totals.cgst + totals.sgst + totals.igst) > 0,
     originState,
     destinationState: String(destinationState || ''),

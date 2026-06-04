@@ -201,6 +201,7 @@ const CheckoutPage = () => {
     const buyNowItem = useMemo(() => {
         return location.state?.fromBuyNow ? normalizeBuyNowItem(location.state?.buyNowItem) : null;
     }, [location.state?.fromBuyNow, location.state?.buyNowItem]);
+    const hasInvalidBuyNowState = Boolean(location.state?.fromBuyNow) && !buyNowItem;
 
     const checkoutEnabled = useFeature('checkout');
     const cartEnabled = useFeature('cart');
@@ -467,8 +468,13 @@ const CheckoutPage = () => {
             throw new Error('Razorpay checkout is not available. Please try again.');
         }
 
+        const razorpayKey = paymentOrder?.keyId || import.meta.env.VITE_RAZORPAY_KEY_ID;
+        if (!razorpayKey) {
+            throw new Error('Razorpay public key is missing. Please contact support.');
+        }
+
         const options = {
-            key: import.meta.env.VITE_RAZORPAY_KEY_ID,
+            key: razorpayKey,
             amount: paymentOrder.amount,
             currency: paymentOrder.currency,
             name: storeName,
@@ -481,6 +487,7 @@ const CheckoutPage = () => {
                         razorpay_payment_id: response.razorpay_payment_id,
                         razorpay_signature: response.razorpay_signature,
                     });
+                    if (!isBuyNowFlow) await clearCart();
                     navigate('/payment/success', { state: { orderId, orderNumber } });
                 } catch (err) {
                     setError(getApiErrorMessage(err, 'Payment verification failed.'));
@@ -532,6 +539,7 @@ const CheckoutPage = () => {
             const verificationResponse = await paymentService.verifyPayment(orderId, { provider: 'cashfree' });
             const result = verificationResponse.data?.data || verificationResponse.data;
             if (result?.success) {
+                if (!isBuyNowFlow) await clearCart();
                 navigate('/payment/success', { state: { orderId, orderNumber } });
             } else {
                 navigate('/payment/failure', { state: { orderId, orderNumber, status: result?.status } });
@@ -596,9 +604,15 @@ const CheckoutPage = () => {
             const orderId = res?.order?.id;
             const orderNumber = res?.order?.orderNumber;
             orderPlaced = true;
-            if (!isBuyNowFlow) await clearCart();
-            if (paymentMethod === 'cod') navigate('/payment/success', { state: { orderId, orderNumber, isCod: true } });
-            else await startOnlinePayment(orderId, orderNumber);
+            if (!orderId) {
+                throw new Error('Order was created, but the order id is missing. Please check your orders and retry payment.');
+            }
+            if (paymentMethod === 'cod') {
+                if (!isBuyNowFlow) await clearCart();
+                navigate('/payment/success', { state: { orderId, orderNumber, isCod: true } });
+            } else {
+                await startOnlinePayment(orderId, orderNumber);
+            }
 
         } catch (err) {
             setError(getApiErrorMessage(
@@ -614,8 +628,21 @@ const CheckoutPage = () => {
     if (items.length === 0) {
         return (
             <Container maxWidth="sm" sx={{ py: 8, textAlign: 'center' }}>
-                <Typography variant="h5">Your cart is empty</Typography>
-                <Button variant="contained" href="/products" sx={{ mt: 2 }}>Browse Products</Button>
+                <Typography variant="h5">
+                    {hasInvalidBuyNowState ? 'Unable to start Buy Now checkout' : 'Your cart is empty'}
+                </Typography>
+                <Typography variant="body2" color="text.secondary" sx={{ mt: 1.5 }}>
+                    {hasInvalidBuyNowState
+                        ? 'This product session is missing or expired. Please return to the product page and try Buy Now again.'
+                        : 'Add items to your cart to continue to checkout.'}
+                </Typography>
+                <Button
+                    variant="contained"
+                    href={hasInvalidBuyNowState ? '/products' : '/products'}
+                    sx={{ mt: 2 }}
+                >
+                    {hasInvalidBuyNowState ? 'Back to Products' : 'Browse Products'}
+                </Button>
             </Container>
         );
     }
