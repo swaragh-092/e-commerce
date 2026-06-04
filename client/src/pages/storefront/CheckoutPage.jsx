@@ -31,9 +31,9 @@ import { getCartItemUnitPrice } from '../../utils/variantPricing';
 import CenteredLoader from '../../components/common/CenteredLoader';
 import { getApiErrorMessage } from '../../utils/apiErrors';
 import { getVariantOptionLabel } from '../../utils/variantOptions';
-import {calculateTax} from '../../../../shared/calculations.js';
 import { getStoreName } from '../../utils/store';
 import { INDIAN_STATES } from '../../utils/indianStates';
+import { calculateTaxSummary } from '../../utils/gst';
 
 const EMPTY_ADDR = {
     label: '', fullName: '', phone: '',
@@ -325,6 +325,10 @@ const CheckoutPage = () => {
         return sum + itemPrice * quantity;
     }, 0);
 
+    const selectedAddress = useMemo(
+        () => addresses.find((address) => address.id === selectedAddressId),
+        [addresses, selectedAddressId]
+    );
     const orderDiscount = couponResult?.orderDiscount || 0;
     const appliedCoupons = couponResult?.appliedCoupons || [];
 
@@ -334,18 +338,14 @@ const CheckoutPage = () => {
 
     const shippingDiscount = couponResult?.shippingDiscount || (couponResult?.freeShipping ? shippingCost : 0);
     const effectiveShippingCost = Math.max(0, shippingCost - shippingDiscount);
-
-    const enableCGST = settings?.tax?.enableCGST === true;
-    const enableSGST = settings?.tax?.enableSGST === true;
-    const enableIGST = settings?.tax?.enableIGST === true;
-    const useGST = enableCGST || enableSGST || enableIGST;
-    const taxInclusive = !useGST && settings?.tax?.inclusive === true;
-    const cgstAmount = enableCGST ? subtotal * parseFloat(settings?.tax?.cgstRate ?? 0) : 0;
-    const sgstAmount = enableSGST ? subtotal * parseFloat(settings?.tax?.sgstRate ?? 0) : 0;
-    const igstAmount = enableIGST ? subtotal * parseFloat(settings?.tax?.igstRate ?? 0) : 0;
-    const taxRate = parseFloat(settings?.tax?.rate ?? 0);
-    const flatTaxAmount = (!taxInclusive && !useGST && taxRate > 0) ? calculateTax( subtotal, taxRate ) : 0;
-    const taxAmount = useGST ? cgstAmount + sgstAmount + igstAmount : flatTaxAmount;
+    const taxSummary = useMemo(() => calculateTaxSummary({
+        items,
+        settings,
+        destinationState: selectedAddress?.state || '',
+        quantityResolver: (item) => normalizeBuyNowQuantity(item?.quantity),
+        priceResolver: (item) => (item?.product ? getCartItemUnitPrice(item) : 0),
+    }), [items, settings, selectedAddress?.state]);
+    const taxAmount = taxSummary.totalTax;
     const total = Math.max(0, subtotal + effectiveShippingCost + taxAmount - orderDiscount);
     const itemSignature = useMemo(() => (
         items.map((item) => `${item?.productId || item?.product?.id}:${item?.variantId || item?.variant?.id || 'base'}:${normalizeBuyNowQuantity(item?.quantity)}`).join('|')
@@ -610,8 +610,6 @@ const CheckoutPage = () => {
             setPlacing(false);
         }
     };
-
-    const selectedAddress = addresses.find((a) => a.id === selectedAddressId);
 
     if (items.length === 0) {
         return (
@@ -1064,31 +1062,13 @@ const CheckoutPage = () => {
                             )}
 
                             {/* GST breakdown */}
-                            {enableCGST && cgstAmount > 0 && (
-                                <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 0.5 }}>
-                                    <Typography variant="body2" color="text.secondary">CGST ({(parseFloat(settings?.tax?.cgstRate ?? 0) * 100).toFixed(1)}%)</Typography>
-                                    <Typography variant="body2">{formatPrice(cgstAmount)}</Typography>
+                            {taxSummary.taxRows.map((row) => (
+                                <Box key={row.key} sx={{ display: 'flex', justifyContent: 'space-between', mb: 0.5 }}>
+                                    <Typography variant="body2" color="text.secondary">{row.label}</Typography>
+                                    <Typography variant="body2">{formatPrice(row.amount)}</Typography>
                                 </Box>
-                            )}
-                            {enableSGST && sgstAmount > 0 && (
-                                <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 0.5 }}>
-                                    <Typography variant="body2" color="text.secondary">SGST ({(parseFloat(settings?.tax?.sgstRate ?? 0) * 100).toFixed(1)}%)</Typography>
-                                    <Typography variant="body2">{formatPrice(sgstAmount)}</Typography>
-                                </Box>
-                            )}
-                            {enableIGST && igstAmount > 0 && (
-                                <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 0.5 }}>
-                                    <Typography variant="body2" color="text.secondary">IGST ({(parseFloat(settings?.tax?.igstRate ?? 0) * 100).toFixed(1)}%)</Typography>
-                                    <Typography variant="body2">{formatPrice(igstAmount)}</Typography>
-                                </Box>
-                            )}
-                            {!useGST && flatTaxAmount > 0 && (
-                                <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 0.5 }}>
-                                    <Typography variant="body2" color="text.secondary">Tax ({(taxRate).toFixed(0)}%)</Typography>
-                                    <Typography variant="body2">{formatPrice(flatTaxAmount)}</Typography>
-                                </Box>
-                            )}
-                            {taxInclusive && (
+                            ))}
+                            {taxSummary.isInclusive && (
                                 <Typography variant="caption" color="text.secondary" display="block" mb={1} textAlign="right">
                                     Inclusive of all taxes
                                 </Typography>

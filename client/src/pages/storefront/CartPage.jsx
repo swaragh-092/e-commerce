@@ -27,9 +27,9 @@ import { AuthContext } from '../../context/AuthContext';
 import { getEligibleCoupons } from '../../services/adminService';
 import { getCartItemUnitPrice, getVariantRegularPrice, getVariantDiscountPercent } from '../../utils/variantPricing';
 import { getVariantOptionLabel } from '../../utils/variantOptions';
-import {calculateTax} from '../../../../shared/calculations.js';
 import EnquiryModal from '../../components/storefront/EnquiryModal';
 import HelpOutlineIcon from '@mui/icons-material/HelpOutline';
+import { calculateTaxSummary } from '../../utils/gst';
 
 const row = (align = 'center', justify = 'flex-start') => ({
     display: 'flex', alignItems: align, justifyContent: justify,
@@ -379,28 +379,16 @@ const CartPage = () => {
     if (shippingMethod === 'flat_rate') shippingCost = flatRate;
     else if (shippingMethod === 'free_above_threshold') shippingCost = subtotal >= freeThreshold ? 0 : flatRate;
 
-    const enableCGST = settings?.tax?.enableCGST === true;
-    const enableSGST = settings?.tax?.enableSGST === true;
-    const enableIGST = settings?.tax?.enableIGST === true;
-    const useGST = enableCGST || enableSGST || enableIGST;
-    const taxInclusive = !useGST && settings?.tax?.inclusive === true;
-    const cgst = enableCGST ? subtotal * parseFloat(settings?.tax?.cgstRate ?? 0) : 0;
-    const sgst = enableSGST ? subtotal * parseFloat(settings?.tax?.sgstRate ?? 0) : 0;
-    const igst = enableIGST ? subtotal * parseFloat(settings?.tax?.igstRate ?? 0) : 0;
-    const taxRate = parseInt(settings?.tax?.rate ?? 0);
-
-  
-    const flatTax = (!taxInclusive && !useGST && taxRate > 0) ? calculateTax(subtotal, taxRate) : 0;
-
-    const taxAmount = useGST ? cgst + sgst + igst : flatTax;
+    const taxSummary = useMemo(() => calculateTaxSummary({
+        items,
+        settings,
+        quantityResolver: (item) => getQty(item),
+        priceResolver: (item) => getCartItemUnitPrice(item),
+    }), [items, settings, getQty]);
+    const taxAmount = taxSummary.totalTax;
     const estimatedTotal = subtotal + shippingCost + taxAmount;
-
-    const taxRows = [
-        ...(enableCGST && cgst > 0 ? [{ label: `CGST (${(parseFloat(settings?.tax?.cgstRate ?? 0) * 100).toFixed(1)}%)`, value: formatPrice(cgst) }] : []),
-        ...(enableSGST && sgst > 0 ? [{ label: `SGST (${(parseFloat(settings?.tax?.sgstRate ?? 0) * 100).toFixed(1)}%)`, value: formatPrice(sgst) }] : []),
-        ...(enableIGST && igst > 0 ? [{ label: `IGST (${(parseFloat(settings?.tax?.igstRate ?? 0) * 100).toFixed(1)}%)`, value: formatPrice(igst) }] : []),
-        ...(!useGST && flatTax > 0 ? [{ label: `Tax (${(taxRate).toFixed(0)}%)`, value: formatPrice(flatTax) }] : []),
-    ];
+    const taxRows = taxSummary.taxRows.map((row) => ({ label: row.label, value: formatPrice(row.amount) }));
+    const taxInclusive = taxSummary.isInclusive;
 
     const couponsEnabled = useFeatureFlag('coupons');
     const showAvailableCoupons = useFeatureFlag('showAvailableCoupons');
