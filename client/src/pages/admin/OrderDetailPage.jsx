@@ -502,7 +502,7 @@ const hasFullRefundForReturnRequest = (order = {}, request = {}) => {
   return refundedAmount >= requestAmount;
 };
 
-const FulfillmentDialog = ({ open, onClose, orderItems, onSave, loading }) => {
+const FulfillmentDialog = ({ open, onClose, orderItems, orderDate, onSave, loading, notify }) => {
   const [trackingNumber, setTrackingNumber] = useState('');
   const [courier, setCourier] = useState('');
   const [expectedDeliveryDate, setExpectedDeliveryDate] = useState('');
@@ -511,6 +511,7 @@ const FulfillmentDialog = ({ open, onClose, orderItems, onSave, loading }) => {
   const [items, setItems] = useState({});
   const [providers, setProviders] = useState([]);
   const [providerId, setProviderId] = useState('manual');
+  const minExpectedDate = normalizeDateInputValue(orderDate);
 
   useEffect(() => {
     if (open) {
@@ -545,6 +546,10 @@ const FulfillmentDialog = ({ open, onClose, orderItems, onSave, loading }) => {
   };
 
   const handleSubmit = () => {
+    if (expectedDeliveryDate && minExpectedDate && expectedDeliveryDate < minExpectedDate) {
+      notify(`Expected delivery date cannot be before ${formatDateOnly(minExpectedDate)}.`, 'error');
+      return;
+    }
     const shipmentItems = Object.entries(items)
       .filter(([, qty]) => qty > 0)
       .map(([orderItemId, quantity]) => ({ orderItemId, quantity }));
@@ -604,6 +609,7 @@ const FulfillmentDialog = ({ open, onClose, orderItems, onSave, loading }) => {
             size="small"
             value={expectedDeliveryDate}
             onChange={(e) => setExpectedDeliveryDate(e.target.value)}
+            inputProps={minExpectedDate ? { min: minExpectedDate } : undefined}
             InputLabelProps={{ shrink: true }}
           />
           <TextField
@@ -683,13 +689,25 @@ const FulfillmentDialog = ({ open, onClose, orderItems, onSave, loading }) => {
 
 const formatDeliveryDate = (value) => formatDateOnly(value) || 'Not set';
 
-const ShipmentExpectedDeliveryControl = ({ orderId, shipment, canUpdate, onSaved, notify }) => {
+const normalizeDateInputValue = (value) => {
+  if (!value) return '';
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return '';
+  return date.toISOString().slice(0, 10);
+};
+
+const ShipmentExpectedDeliveryControl = ({ orderId, shipment, orderDate, canUpdate, onSaved, notify }) => {
   const [date, setDate] = useState('');
   const [saving, setSaving] = useState(false);
   const history = Array.isArray(shipment?.expectedDeliveryHistory) ? shipment.expectedDeliveryHistory : [];
+  const minDate = normalizeDateInputValue(orderDate);
 
   const handleSave = async () => {
     if (!date || !shipment?.id) return;
+    if (minDate && date < minDate) {
+      notify(`Expected delivery date cannot be before ${formatDateOnly(minDate)}.`, 'error');
+      return;
+    }
     setSaving(true);
     try {
       const response = await updateShipment(orderId, shipment.id, { expectedDeliveryDate: date });
@@ -722,6 +740,7 @@ const ShipmentExpectedDeliveryControl = ({ orderId, shipment, canUpdate, onSaved
               size="small"
               value={date}
               onChange={(e) => setDate(e.target.value)}
+              inputProps={minDate ? { min: minDate } : undefined}
               InputLabelProps={{ shrink: true }}
               sx={{ width: 190 }}
             />
@@ -1413,6 +1432,7 @@ const OrderDetailPage = () => {
                         <ShipmentExpectedDeliveryControl
                           orderId={id}
                           shipment={shipment}
+                          orderDate={order?.createdAt}
                           canUpdate={canUpdateOrderStatus}
                           onSaved={setOrder}
                           notify={notify}
@@ -1801,8 +1821,10 @@ const OrderDetailPage = () => {
         open={fulfillmentDialogOpen}
         onClose={() => setFulfillmentDialogOpen(false)}
         orderItems={orderItems}
+        orderDate={order?.createdAt}
         onSave={handleCreateFulfillment}
         loading={fulfillmentLoading}
+        notify={notify}
       />
     </Box>
   );

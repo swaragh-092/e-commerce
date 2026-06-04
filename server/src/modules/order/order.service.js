@@ -44,6 +44,7 @@ const defaultSettings = require('../../../../config/default.json');
 
 const NotificationService = require('../notification/notification.service');
 const InventoryService = require('../inventory/inventory.service');
+const { normalizeDateOnly, isDateOnOrAfter } = require('./orderDate.utils');
 
 const { getPagination } = require('../../utils/pagination');
 const { ACTIONS, ENTITIES } = require('../../config/constants');
@@ -168,17 +169,6 @@ const appendStatusHistoryEvent = (history = [], status, source = 'admin') => {
     ];
 };
 
-const normalizeDateOnly = (value) => {
-    if (!value) return null;
-    if (value instanceof Date) {
-        if (Number.isNaN(value.getTime())) return null;
-        return value.toISOString().slice(0, 10);
-    }
-    const date = new Date(value);
-    if (Number.isNaN(date.getTime())) return null;
-    return date.toISOString().slice(0, 10);
-};
-
 const appendExpectedDeliveryHistory = (history = [], nextDate, actingUserId = null, source = 'admin') => {
     const date = normalizeDateOnly(nextDate);
     if (!date) return Array.isArray(history) ? history : [];
@@ -194,6 +184,13 @@ const appendExpectedDeliveryHistory = (history = [], nextDate, actingUserId = nu
             changedBy: actingUserId,
         },
     ];
+};
+
+const assertExpectedDeliveryDateNotBeforeOrderDate = (expectedDeliveryDate, orderDate) => {
+    if (!expectedDeliveryDate) return;
+    if (!isDateOnOrAfter(expectedDeliveryDate, orderDate)) {
+        throw new AppError('VALIDATION_ERROR', 400, 'Expected delivery date cannot be before the order date');
+    }
 };
 
 const syncOrderShippingStatus = async (order, transaction, actingUserId = null) => {
@@ -1786,6 +1783,7 @@ const createFulfillment = async (orderId, payload, actingUserId, auditContext = 
         });
 
         if (!order) throw new AppError('NOT_FOUND', 404, 'Order not found');
+        assertExpectedDeliveryDateNotBeforeOrderDate(normalizedExpectedDeliveryDate, order.createdAt);
 
         // Fetch items associated with the locked order
         const orderItems = await OrderItem.findAll({
@@ -2666,6 +2664,7 @@ const updateShipmentStatus = async (orderId, shipmentId, payload, actingUserId, 
             if (!normalizedExpectedDeliveryDate) {
                 throw new AppError('VALIDATION_ERROR', 400, 'Expected delivery date must be a valid date');
             }
+            assertExpectedDeliveryDateNotBeforeOrderDate(normalizedExpectedDeliveryDate, order.createdAt);
             updates.expectedDeliveryDate = normalizedExpectedDeliveryDate;
             updates.expectedDeliveryHistory = appendExpectedDeliveryHistory(
                 shipment.expectedDeliveryHistory,
