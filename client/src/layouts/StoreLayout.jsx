@@ -43,6 +43,7 @@ const StoreLayout = () => {
   const [mobileMenu, setMobileMenu] = useState(null);
   const [menuAnchors, setMenuAnchors] = useState({});
   const [mobileMenuAnchor, setMobileMenuAnchor] = useState(null);
+  const [isMobileSearchExpanded, setIsMobileSearchExpanded] = useState(false);
   const [logoLoadFailed, setLogoLoadFailed] = useState(false);
   const [accountMenuAnchor, setAccountMenuAnchor] = useState(null);
   const adminEntryPath = getFirstAccessibleAdminPath(user);
@@ -301,7 +302,14 @@ const StoreLayout = () => {
           boxShadow: headerStyle === 'glass' ? '0 12px 28px rgba(15, 23, 42, 0.08)' : '0 14px 32px rgba(15, 23, 42, 0.18)',
         }}
       >
-        <Toolbar sx={{ minHeight: { xs: 64, md: 72 }, gap: 2, position: 'relative' }}>
+        <Toolbar
+          sx={{
+            minHeight: { xs: 64, md: 72 },
+            gap: { xs: 0.5, sm: 1, md: 2 },
+            px: { xs: 1, sm: 2 },
+            position: 'relative',
+          }}
+        >
           <Box
             component={RouterLink}
             to="/"
@@ -319,11 +327,11 @@ const StoreLayout = () => {
               <img
                 src={settings.logo.main}
                 alt={storeName}
-                style={{ maxHeight: 36, maxWidth: 140, objectFit: 'contain' }}
+                style={{ maxHeight: 36, maxWidth: 112, objectFit: 'contain' }}
                 onError={() => setLogoLoadFailed(true)}
               />
             ) : (
-              <Typography variant="h6" noWrap sx={{ fontWeight: 700, maxWidth: 180 }}>
+              <Typography variant="h6" noWrap sx={{ fontWeight: 700, maxWidth: { xs: 110, sm: 180 } }}>
                 {storeName}
               </Typography>
             )}
@@ -374,7 +382,11 @@ const StoreLayout = () => {
               <IconButton
                 color="inherit"
                 onClick={openMobileMenu}
-                sx={{ display: { xs: 'inline-flex', md: 'none' }, '&:hover': { bgcolor: 'rgba(255,255,255,0.12)' } }}
+                sx={{
+                  display: { xs: 'inline-flex', md: 'none' },
+                  p: { xs: 0.75, sm: 1 },
+                  '&:hover': { bgcolor: 'rgba(255,255,255,0.12)' },
+                }}
                 aria-label="Open navigation menu"
               >
                 <MenuIcon />
@@ -392,14 +404,28 @@ const StoreLayout = () => {
             </>
           )}
 
-          <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
+          <Box sx={{ display: 'flex', alignItems: 'center', gap: { xs: 0.125, sm: 0.5 }, flexShrink: 0 }}>
             {/* Mobile inline search — expandable SearchWidget */}
             <Box sx={{ display: { xs: 'flex', md: 'none' }, alignItems: 'center' }}>
-              <SearchWidget variant="header" placeholder="Search..." sx={{ width: 160 }} />
+              <SearchWidget
+                variant="header"
+                placeholder="Search..."
+                collapseToIcon
+                fullWidth={false}
+                onExpandedChange={setIsMobileSearchExpanded}
+                sx={{ width: { xs: 'min(168px, calc(100vw - 172px))', sm: 180 } }}
+              />
             </Box>
-            <DarkModeToggle />
-            {cartEnabled && (
-              <IconButton color="inherit" component={RouterLink} to="/cart" sx={{ '&:hover': { bgcolor: 'rgba(255,255,255,0.12)' } }}>
+            <Box sx={{ display: { xs: 'none', md: 'flex' } }}>
+              <DarkModeToggle />
+            </Box>
+            {cartEnabled && !isMobileSearchExpanded && (
+              <IconButton
+                color="inherit"
+                component={RouterLink}
+                to="/cart"
+                sx={{ p: { xs: 0.75, sm: 1 }, '&:hover': { bgcolor: 'rgba(255,255,255,0.12)' } }}
+              >
                 <Badge badgeContent={cartCount || 0} color="error">
                   <ShoppingCartIcon />
                 </Badge>
@@ -407,8 +433,13 @@ const StoreLayout = () => {
             )}
             {isAuthenticated ? (
               <>
-                {wishlistEnabled && (
-                  <IconButton color="inherit" component={RouterLink} to="/wishlist" sx={{ '&:hover': { bgcolor: 'rgba(255,255,255,0.12)' } }}>
+                {wishlistEnabled && !isMobileSearchExpanded && (
+                  <IconButton
+                    color="inherit"
+                    component={RouterLink}
+                    to="/wishlist"
+                    sx={{ p: { xs: 0.75, sm: 1 }, '&:hover': { bgcolor: 'rgba(255,255,255,0.12)' } }}
+                  >
                     <Badge badgeContent={wishlistCount || 0} color="error">
                       <FavoriteBorderIcon />
                     </Badge>
@@ -416,9 +447,11 @@ const StoreLayout = () => {
                 )}
 
                 
-                <IconButton color="inherit" onClick={handleAccountMenuOpen}>
-                  <AccountCircleIcon />
-                </IconButton>
+                {!isMobileSearchExpanded && (
+                  <IconButton color="inherit" onClick={handleAccountMenuOpen} sx={{ p: { xs: 0.75, sm: 1 } }}>
+                    <AccountCircleIcon />
+                  </IconButton>
+                )}
                 <Menu
                   anchorEl={accountMenuAnchor}
                   open={Boolean(accountMenuAnchor)}
