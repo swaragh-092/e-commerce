@@ -163,7 +163,6 @@ const ProductsManagePage = () => {
   const hasActiveFilters = Boolean(search || status || saleFilter || categoryFilter || lowStockOnly);
 
   // Step amount for the stock stepper — persists between quick-edit opens
-  const [editStepAmount, setEditStepAmount] = useState(1);
   // Stock history dialog
   const [stockHistoryDialog, setStockHistoryDialog] = useState({ open: false, productId: null, productName: '', rows: [], loading: false, page: 1, total: 0, typeFilter: '' });
   const openStockHistory = async (productId, productName) => {
@@ -1143,7 +1142,7 @@ const ProductsManagePage = () => {
 
               {/* Decrement | Input | Increment row */}
               <Stack direction="row" alignItems="center" spacing={1}>
-                <Tooltip title={`− ${editStepAmount}`}>
+                <Tooltip title="Increase stock">
                   <span>
                     <IconButton
                       size="small"
@@ -1151,7 +1150,7 @@ const ProductsManagePage = () => {
                       onClick={() =>
                         setEditDialog((s) => ({
                           ...s,
-                          quantity: Math.max(0, (Number(s.quantity) || 0) - editStepAmount),
+                          quantity: Math.max(0, (Number(s.quantity) || 0) - 1),
                         }))
                       }
                       disabled={Number(editDialog.quantity) <= 0}
@@ -1177,14 +1176,14 @@ const ProductsManagePage = () => {
                   sx={{ width: 96 }}
                 />
 
-                <Tooltip title={`+ ${editStepAmount}`}>
+                <Tooltip title="Decrease stock">
                   <IconButton
                     size="small"
                     color="success"
                     onClick={() =>
                       setEditDialog((s) => ({
                         ...s,
-                        quantity: (Number(s.quantity) || 0) + editStepAmount,
+                        quantity: (Number(s.quantity) || 0) + 1,
                       }))
                     }
                     sx={{
@@ -1197,36 +1196,6 @@ const ProductsManagePage = () => {
                     <AddIcon fontSize="small" />
                   </IconButton>
                 </Tooltip>
-              </Stack>
-
-              {/* Step presets row */}
-              <Stack direction="row" spacing={0.5} alignItems="center" sx={{ mt: 1, flexWrap: 'wrap', gap: 0.5 }}>
-                <Typography variant="caption" color="text.secondary" sx={{ mr: 0.25, fontWeight: 600 }}>
-                  Step:
-                </Typography>
-                {[1, 5, 10, 50, 100].map((preset) => (
-                  <Chip
-                    key={preset}
-                    label={preset}
-                    size="small"
-                    variant={editStepAmount === preset ? 'filled' : 'outlined'}
-                    color={editStepAmount === preset ? 'primary' : 'default'}
-                    onClick={() => setEditStepAmount(preset)}
-                    sx={{ cursor: 'pointer', fontWeight: 600, fontSize: '0.7rem' }}
-                  />
-                ))}
-                <TextField
-                  type="number"
-                  size="small"
-                  value={editStepAmount}
-                  onChange={(e) => {
-                    const v = parseInt(e.target.value, 10);
-                    if (!Number.isNaN(v) && v > 0) setEditStepAmount(v);
-                  }}
-                  inputProps={{ min: 1, style: { textAlign: 'center', padding: '2px 6px', fontWeight: 700 } }}
-                  sx={{ width: 62 }}
-                  placeholder="custom"
-                />
               </Stack>
 
               {hasInvalidQuantity && (
@@ -1632,3 +1601,4 @@ const ProductsManagePage = () => {
 };
 
 export default ProductsManagePage;
+

@@ -1,4 +1,4 @@
-'use strict';
+  'use strict';
 const OrderService = require('./order.service');
 const { success, paginated } = require('../../utils/response');
 const { PERMISSIONS, getPermissionsForUser } = require('../../config/permissions');
