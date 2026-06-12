@@ -67,6 +67,7 @@ const {
     deriveOrderShippingStatus,
     derivePutBackCache,
     isPaymentSettled,
+    isShippingTerminal,
     canCloseOrder,
 } = require('../../utils/orderWorkflow');
 
@@ -2648,7 +2649,10 @@ const updateShipmentStatus = async (orderId, shipmentId, payload, actingUserId, 
         });
         if (!shipment) throw new AppError('NOT_FOUND', 404, 'Shipment not found');
 
-        const before = shipment.status;
+        const latestShipmentStatus = Array.isArray(shipment.statusHistory) && shipment.statusHistory.length > 0
+            ? shipment.statusHistory[shipment.statusHistory.length - 1]?.status
+            : null;
+        const before = latestShipmentStatus || shipment.status;
         if (status) ensureValidShipmentTransition(before, status);
         const history = Array.isArray(shipment.statusHistory) ? shipment.statusHistory : [];
         const expectedDeliveryChanged = expectedDeliveryDate !== undefined;
@@ -2661,6 +2665,13 @@ const updateShipmentStatus = async (orderId, shipmentId, payload, actingUserId, 
             ...(courierName !== undefined ? { courierName } : {}),
         };
         if (expectedDeliveryChanged) {
+            if (isShippingTerminal(before)) {
+                throw new AppError(
+                    'VALIDATION_ERROR',
+                    400,
+                    'Expected delivery date cannot be changed after the shipment is delivered or returned'
+                );
+            }
             if (!normalizedExpectedDeliveryDate) {
                 throw new AppError('VALIDATION_ERROR', 400, 'Expected delivery date must be a valid date');
             }

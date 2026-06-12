@@ -696,30 +696,8 @@ const normalizeDateInputValue = (value) => {
   return date.toISOString().slice(0, 10);
 };
 
-const ShipmentExpectedDeliveryControl = ({ orderId, shipment, orderDate, canUpdate, onSaved, notify }) => {
-  const [date, setDate] = useState('');
-  const [saving, setSaving] = useState(false);
+const ShipmentExpectedDeliveryControl = ({ shipment }) => {
   const history = Array.isArray(shipment?.expectedDeliveryHistory) ? shipment.expectedDeliveryHistory : [];
-  const minDate = normalizeDateInputValue(orderDate);
-
-  const handleSave = async () => {
-    if (!date || !shipment?.id) return;
-    if (minDate && date < minDate) {
-      notify(`Expected delivery date cannot be before ${formatDateOnly(minDate)}.`, 'error');
-      return;
-    }
-    setSaving(true);
-    try {
-      const response = await updateShipment(orderId, shipment.id, { expectedDeliveryDate: date });
-      onSaved(response.data.data);
-      setDate('');
-      notify('Expected delivery date added.', 'success');
-    } catch (err) {
-      notify(getApiErrorMessage(err, 'Failed to update expected delivery date.'), 'error');
-    } finally {
-      setSaving(false);
-    }
-  };
 
   return (
     <Box sx={{ mt: 2, p: 2, bgcolor: 'action.hover', borderRadius: 1.5, border: '1px solid', borderColor: 'divider' }}>
@@ -732,23 +710,6 @@ const ShipmentExpectedDeliveryControl = ({ orderId, shipment, orderDate, canUpda
             {formatDeliveryDate(shipment?.expectedDeliveryDate)}
           </Typography>
         </Box>
-        {canUpdate && (
-          <>
-            <TextField
-              label="Add new expected date"
-              type="date"
-              size="small"
-              value={date}
-              onChange={(e) => setDate(e.target.value)}
-              inputProps={minDate ? { min: minDate } : undefined}
-              InputLabelProps={{ shrink: true }}
-              sx={{ width: 190 }}
-            />
-            <Button size="small" variant="outlined" onClick={handleSave} disabled={saving || !date}>
-              {saving ? 'Saving...' : 'Add Date'}
-            </Button>
-          </>
-        )}
       </Box>
       {history.length > 0 && (
         <Stack spacing={0.75} sx={{ mt: 1.5 }}>
@@ -1430,12 +1391,7 @@ const OrderDetailPage = () => {
 
                       {shipment && (
                         <ShipmentExpectedDeliveryControl
-                          orderId={id}
                           shipment={shipment}
-                          orderDate={order?.createdAt}
-                          canUpdate={canUpdateOrderStatus}
-                          onSaved={setOrder}
-                          notify={notify}
                         />
                       )}
 
