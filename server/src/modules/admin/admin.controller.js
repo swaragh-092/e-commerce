@@ -2,6 +2,7 @@
 
 const AdminService = require('./admin.service');
 const AnalyticsService = require('./analytics.service');
+const AnalyticsReportService = require('./analyticsReport.service');
 const { success, paginated } = require('../../utils/response');
 
 const getStats = async (req, res, next) => {
@@ -112,101 +113,108 @@ const createStaffUser = async (req, res, next) => {
   }
 };
 
-// Analytics
+// Analytics — helper to support comparison mode
+const analyticsWithCompare = async (methodName, query) => {
+  if (query.compare) {
+    return AnalyticsService.withComparison(AnalyticsService[methodName], query);
+  }
+  return AnalyticsService[methodName](query);
+};
+
 const getTopProducts = async (req, res, next) => {
   try {
-    const data = await AnalyticsService.getTopProducts(req.query);
+    const data = await analyticsWithCompare('getTopProducts', req.query);
     return success(res, data);
   } catch (err) { next(err); }
 };
 
 const getAovTrend = async (req, res, next) => {
   try {
-    const data = await AnalyticsService.getAovTrend(req.query);
+    const data = await analyticsWithCompare('getAovTrend', req.query);
     return success(res, data);
   } catch (err) { next(err); }
 };
 
 const getAbandonedCarts = async (req, res, next) => {
   try {
-    const data = await AnalyticsService.getAbandonedCarts(req.query);
+    const data = await analyticsWithCompare('getAbandonedCarts', req.query);
     return success(res, data);
   } catch (err) { next(err); }
 };
 
 const getRevenueByCategory = async (req, res, next) => {
   try {
-    const data = await AnalyticsService.getRevenueByCategory(req.query);
+    const data = await analyticsWithCompare('getRevenueByCategory', req.query);
     return success(res, data);
   } catch (err) { next(err); }
 };
 
 const getRepeatCustomers = async (req, res, next) => {
   try {
-    const data = await AnalyticsService.getRepeatCustomers(req.query);
+    const data = await analyticsWithCompare('getRepeatCustomers', req.query);
     return success(res, data);
   } catch (err) { next(err); }
 };
 
 const getRefundRate = async (req, res, next) => {
   try {
-    const data = await AnalyticsService.getRefundRate(req.query);
+    const data = await analyticsWithCompare('getRefundRate', req.query);
     return success(res, data);
   } catch (err) { next(err); }
 };
 
 const getGeographicSales = async (req, res, next) => {
   try {
-    const data = await AnalyticsService.getGeographicSales(req.query);
+    const data = await analyticsWithCompare('getGeographicSales', req.query);
     return success(res, data);
   } catch (err) { next(err); }
 };
 
 const getRevenueByPaymentMethod = async (req, res, next) => {
   try {
-    const data = await AnalyticsService.getRevenueByPaymentMethod(req.query);
+    const data = await analyticsWithCompare('getRevenueByPaymentMethod', req.query);
     return success(res, data);
   } catch (err) { next(err); }
 };
 
 const getCustomerLifetimeValue = async (req, res, next) => {
   try {
-    const data = await AnalyticsService.getCustomerLifetimeValue(req.query);
+    const data = await analyticsWithCompare('getCustomerLifetimeValue', req.query);
     return success(res, data);
   } catch (err) { next(err); }
 };
 
 const getConversionRate = async (req, res, next) => {
   try {
-    const data = await AnalyticsService.getConversionRate(req.query);
+    const data = await analyticsWithCompare('getConversionRate', req.query);
     return success(res, data);
   } catch (err) { next(err); }
 };
 
 const getTrafficSources = async (req, res, next) => {
   try {
-    const data = await AnalyticsService.getTrafficSources(req.query);
+    const data = await analyticsWithCompare('getTrafficSources', req.query);
     return success(res, data);
   } catch (err) { next(err); }
 };
 
 const getProductFunnel = async (req, res, next) => {
   try {
-    const data = await AnalyticsService.getProductFunnel(req.query);
+    const data = await analyticsWithCompare('getProductFunnel', req.query);
     return success(res, data);
   } catch (err) { next(err); }
 };
 
 const getUtmAttribution = async (req, res, next) => {
   try {
-    const data = await AnalyticsService.getUtmAttribution(req.query);
+    const data = await analyticsWithCompare('getUtmAttribution', req.query);
     return success(res, data);
   } catch (err) { next(err); }
 };
 
 const getCouponPerformance = async (req, res, next) => {
   try {
-    const data = await AnalyticsService.getCouponPerformance(req.query);
+    const data = await analyticsWithCompare('getCouponPerformance', req.query);
     return success(res, data);
   } catch (err) { next(err); }
 };
@@ -229,12 +237,16 @@ const exportAnalyticsCsv = async (req, res, next) => {
       'product-funnel': 'getProductFunnel',
       'utm-attribution': 'getUtmAttribution',
       'coupon-performance': 'getCouponPerformance',
+      'cohort-retention': 'getCohortRetention',
+      'rfm-segmentation': 'getRfmSegmentation',
+      'order-heatmap': 'getOrderHeatmap',
+      'revenue-forecast': 'getRevenueForecast',
     };
     const method = methodMap[metric];
     if (!method) return res.status(400).json({ success: false, error: { message: 'Invalid metric' } });
 
     const data = await AnalyticsService[method](req.query);
-    const rows = Array.isArray(data) ? data : [data];
+    const rows = Array.isArray(data) ? data : (data.actual || [data]);
     if (rows.length === 0) return res.status(200).send('');
 
     const headers = Object.keys(rows[0]);
@@ -246,6 +258,49 @@ const exportAnalyticsCsv = async (req, res, next) => {
     res.setHeader('Content-Type', 'text/csv');
     res.setHeader('Content-Disposition', `attachment; filename="${metric}-${new Date().toISOString().slice(0, 10)}.csv"`);
     return res.send(csv);
+  } catch (err) { next(err); }
+};
+
+const getCohortRetention = async (req, res, next) => {
+  try {
+    const data = await AnalyticsService.getCohortRetention(req.query);
+    return success(res, data);
+  } catch (err) { next(err); }
+};
+
+const getRfmSegmentation = async (req, res, next) => {
+  try {
+    const data = await AnalyticsService.getRfmSegmentation(req.query);
+    return success(res, data);
+  } catch (err) { next(err); }
+};
+
+const getOrderHeatmap = async (req, res, next) => {
+  try {
+    const data = await analyticsWithCompare('getOrderHeatmap', req.query);
+    return success(res, data);
+  } catch (err) { next(err); }
+};
+
+const getRevenueForecast = async (req, res, next) => {
+  try {
+    const data = await AnalyticsService.getRevenueForecast(req.query);
+    return success(res, data);
+  } catch (err) { next(err); }
+};
+
+const getDrillDown = async (req, res, next) => {
+  try {
+    const { metric, filterKey, filterValue, period, page, limit } = req.query;
+    const data = await AnalyticsService.getDrillDown({ metric, filterKey, filterValue, period, page, limit });
+    return success(res, data);
+  } catch (err) { next(err); }
+};
+
+const sendTestReport = async (req, res, next) => {
+  try {
+    await AnalyticsReportService.sendReport();
+    return success(res, null, 'Test report sent successfully');
   } catch (err) { next(err); }
 };
 
@@ -276,4 +331,10 @@ module.exports = {
   getUtmAttribution,
   getCouponPerformance,
   exportAnalyticsCsv,
+  getCohortRetention,
+  getRfmSegmentation,
+  getOrderHeatmap,
+  getRevenueForecast,
+  getDrillDown,
+  sendTestReport,
 };

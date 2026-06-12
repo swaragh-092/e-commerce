@@ -136,6 +136,7 @@ const searchRoutes = require('./modules/search/search.routes');
 const reviewAdminRoutes = require('./modules/review/review.admin.routes');
 const apiBuilderRoutes = require('./modules/apiBuilder/apiBuilder.routes');
 const blogRoutes = require('./modules/blog/blog.routes');
+const productAssistantRoutes = require('./modules/productAssistant/productAssistant.routes');
 
 app.use('/api/seo', seoRoutes);
 app.use('/api/settings', settingsRoutes);
@@ -159,6 +160,7 @@ app.use('/api', reviewRoutes);
 const adminPrefix = process.env.ADMIN_ROUTE_PREFIX || '/api/admin';
 app.use(adminPrefix, adminRoutes);
 app.use(adminPrefix, shippingAdminRoutes);
+app.use(adminPrefix, productAssistantRoutes);
 app.use(`${adminPrefix}/reviews`, reviewAdminRoutes);
 app.use(`${adminPrefix}/enquiries`, enquiryAdminRoutes);
 app.use(`${adminPrefix}/audit-logs`, auditRoutes);

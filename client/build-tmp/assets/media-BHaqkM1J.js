@@ -1,0 +1,1 @@
+const i=t=>t?t.startsWith("http://")||t.startsWith("https://")||t.startsWith("data:")||t.startsWith("blob:")?t:t.startsWith("uploads/")?`/${t}`:t.startsWith("/")?t:!t.includes("/")||/^(thumbnails|medium|large)\//.test(t)?`/uploads/${t}`:`/${t}`:"";export{i as g};

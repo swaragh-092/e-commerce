@@ -1,0 +1,1 @@
+import{k as n,l as o,m as i,n as d}from"./index-BjzcwbkG.js";var e={},r;function s(){if(r)return e;r=1;var t=n();Object.defineProperty(e,"__esModule",{value:!0}),e.default=void 0;var a=t(o()),u=i();return e.default=(0,a.default)((0,u.jsx)("path",{d:"M2.01 21 23 12 2.01 3 2 10l15 2-15 2z"}),"Send"),e}var f=s();const v=d(f);export{v as S};

@@ -4,24 +4,32 @@ const multer = require('multer');
 const AppError = require('../utils/AppError');
 
 
-const fileFilter = (req, file, cb) => {
-  // Check basic extension mapping first, but we'll use file-type inside the media service for true validation
-  const allowedMimeTypes = ['image/jpeg', 'image/png', 'image/webp', 'image/gif'];
-  
-  if (allowedMimeTypes.includes(file.mimetype)) {
-    cb(null, true);
-  } else {
-    cb(new AppError('INVALID_FILE_TYPE', 400, 'Only JPEG, PNG, WebP, and GIF images are allowed. SVGs are rejected.'), false);
-  }
-};
-
-const memoryUpload = multer({
+const createMemoryUpload = ({ allowedMimeTypes, maxFileSizeMb, errorMessage }) => multer({
   storage: multer.memoryStorage(),
   limits: {
-    fileSize: (parseInt(process.env.MAX_FILE_SIZE_MB) || 5) * 1024 * 1024 // default 5MB
+    fileSize: maxFileSizeMb * 1024 * 1024,
   },
-  fileFilter: fileFilter
+  fileFilter: (req, file, cb) => {
+    if (allowedMimeTypes.includes(file.mimetype)) {
+      cb(null, true);
+      return;
+    }
+
+    cb(new AppError('INVALID_FILE_TYPE', 400, errorMessage), false);
+  },
 });
 
-module.exports = { memoryUpload };
+const memoryUpload = createMemoryUpload({
+  allowedMimeTypes: ['image/jpeg', 'image/png', 'image/webp', 'image/gif'],
+  maxFileSizeMb: parseInt(process.env.MAX_FILE_SIZE_MB, 10) || 5,
+  errorMessage: 'Only JPEG, PNG, WebP, and GIF images are allowed. SVGs are rejected.',
+});
+
+const documentMemoryUpload = createMemoryUpload({
+  allowedMimeTypes: ['application/pdf'],
+  maxFileSizeMb: parseInt(process.env.MAX_DOCUMENT_FILE_SIZE_MB, 10) || 10,
+  errorMessage: 'Only PDF documents are allowed.',
+});
+
+module.exports = { memoryUpload, documentMemoryUpload };
 

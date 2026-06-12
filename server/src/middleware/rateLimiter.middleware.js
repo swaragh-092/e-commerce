@@ -52,6 +52,8 @@ const otpVerifyLimiter = createLimiter(15, 5, 'Too many OTP verification attempt
 const twoFactorLimiter = createLimiter(15, 5, 'Too many 2FA attempts, please try again after 15 minutes');
 const mediaUploadLimiter = createLimiter(15, 50, 'Too many uploads, please try again after 15 minutes');
 const searchLimiter = createLimiter(1, 30, 'Too many search requests, please slow down');
+// AI assistant calls are expensive — limit tightly per-user to prevent abuse.
+const aiAssistantLimiter = createLimiter(15, 10, 'Too many AI assistant requests. Please wait before trying again.');
 
 module.exports = {
   loginLimiter,
@@ -70,6 +72,7 @@ module.exports = {
   bulkOperationLimiter,
   mediaUploadLimiter,
   searchLimiter,
+  aiAssistantLimiter,
 };
 
 

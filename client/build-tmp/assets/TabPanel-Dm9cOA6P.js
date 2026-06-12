@@ -1,0 +1,1 @@
+import{j as l,B as r}from"./index-BjzcwbkG.js";const j=({children:o,value:t,index:a,idPrefix:s,sx:b={},...p})=>l.jsx("div",{role:"tabpanel",hidden:t!==a,...s?{id:`${s}-tabpanel-${a}`,"aria-labelledby":`${s}-tab-${a}`}:{},...p,children:t===a&&l.jsx(r,{sx:b,children:o})});export{j as T};

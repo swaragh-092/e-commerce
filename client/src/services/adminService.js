@@ -123,6 +123,12 @@ const getTrafficSources = (params = {}) => api.get(withQueryString(`/${A}/analyt
 const getProductFunnel = (params = {}) => api.get(withQueryString(`/${A}/analytics/product-funnel`, params, { omitEmpty: true }));
 const getUtmAttribution = (params = {}) => api.get(withQueryString(`/${A}/analytics/utm-attribution`, params, { omitEmpty: true }));
 const getCouponPerformance = (params = {}) => api.get(withQueryString(`/${A}/analytics/coupon-performance`, params, { omitEmpty: true }));
+const getCohortRetention = (params = {}) => api.get(withQueryString(`/${A}/analytics/cohort-retention`, params, { omitEmpty: true }));
+const getRfmSegmentation = (params = {}) => api.get(withQueryString(`/${A}/analytics/rfm-segmentation`, params, { omitEmpty: true }));
+const getOrderHeatmap = (params = {}) => api.get(withQueryString(`/${A}/analytics/order-heatmap`, params, { omitEmpty: true }));
+const getRevenueForecast = (params = {}) => api.get(withQueryString(`/${A}/analytics/revenue-forecast`, params, { omitEmpty: true }));
+const getDrillDown = (params = {}) => api.get(withQueryString(`/${A}/analytics/drill-down`, params, { omitEmpty: true }));
+const sendTestReport = () => api.post(`/${A}/analytics/send-test-report`);
 const exportAnalyticsCsv = (metric, params = {}) => {
   const query = buildQueryString(params, { omitEmpty: true });
   return api.get(`/${A}/analytics/export/${metric}?${query}`, { responseType: 'blob' }).then((res) => {
@@ -154,4 +160,5 @@ export {
   getTopProducts, getAovTrend, getAbandonedCarts, getRevenueByCategory, getRepeatCustomers, getRefundRate,
   getGeographicSales, getRevenueByPaymentMethod, getCustomerLifetimeValue, getConversionRate, getTrafficSources,
   getProductFunnel, getUtmAttribution, getCouponPerformance, exportAnalyticsCsv,
+  getCohortRetention, getRfmSegmentation, getOrderHeatmap, getRevenueForecast, getDrillDown, sendTestReport,
 };
