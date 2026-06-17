@@ -14,8 +14,8 @@ exports.getTree = async (req, res, next) => {
 
 exports.getBySlug = async (req, res, next) => {
     try {
-        const { page = 1, limit = 20 } = req.query;
-        const result = await categoryService.getCategoryWithProducts(req.params.slug, page, limit);
+        const { page = 1, limit = 20, sort = 'newest' } = req.query;
+        const result = await categoryService.getCategoryWithProducts(req.params.slug, page, limit, sort);
         return success(res, result);
     } catch (err) {
         if (err.statusCode === 404) return error(res, err.message, 404, 'NOT_FOUND');

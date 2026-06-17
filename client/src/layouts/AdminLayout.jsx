@@ -118,6 +118,9 @@ const MENU_STRUCTURE = [
     items: [
       { text: 'Platform Features', path: '/admin/features', icon: <AdminPanelSettingsIcon />, permission: PERMISSIONS.SETTINGS_READ },
       { text: 'General', path: '/admin/settings', icon: <SettingsIcon />, permission: PERMISSIONS.SETTINGS_READ },
+      { text: 'Store Templates', path: '/admin/themes', icon: <PhotoLibraryIcon />, permission: PERMISSIONS.SETTINGS_READ },
+      { text: 'Store Designer', path: '/admin/store-designer', icon: <PhotoLibraryIcon />, permission: PERMISSIONS.SETTINGS_MANAGE },
+      { text: 'Newsletter', path: '/admin/newsletter', icon: <MailOutlineIcon />, permission: PERMISSIONS.SETTINGS_READ },
       { text: 'Templates', path: '/admin/email-templates', icon: <MailOutlineIcon />, permission: PERMISSIONS.SETTINGS_READ },
       { text: 'Payment Gateways', path: '/admin/payment-gateways', icon: <PaymentIcon />, permission: PERMISSIONS.SETTINGS_READ, mode: 'ecommerce' },
       { text: 'Shipping', path: '/admin/shipping', icon: <LocalShippingIcon />, permission: PERMISSIONS.SETTINGS_READ, mode: 'ecommerce' },
@@ -147,7 +150,7 @@ const AdminLayout = () => {
   const theme = useTheme();
   const isMobile = useMediaQuery(theme.breakpoints.down('md'));
   const [mobileOpen, setMobileOpen] = useState(false);
-  const [isCollapsed, setIsCollapsed] = useState(false);
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [anchorEl, setAnchorEl] = useState(null);
   const [openGroups, setOpenGroups] = useState({});
   const [searchQuery, setSearchQuery] = useState('');
@@ -167,13 +170,16 @@ const AdminLayout = () => {
   const navigate = useNavigate();
   const { settings, features } = useSettings();
   const appMode = useMode(); // 'ecommerce' | 'catalog'
+  const isDesignerCanvasRoute = location.pathname.startsWith('/admin/store-designer');
+  const navCollapsed = sidebarCollapsed;
+  const desktopDrawerWidth = isDesignerCanvasRoute ? 0 : (navCollapsed ? slimDrawerWidth : drawerWidth);
 
   const handleDrawerToggle = () => {
     setMobileOpen(!mobileOpen);
   };
 
   const handleToggleCollapse = () => {
-    setIsCollapsed(!isCollapsed);
+    setSidebarCollapsed(!sidebarCollapsed);
   };
 
   const handleGroupToggle = (title) => {
@@ -213,7 +219,7 @@ const AdminLayout = () => {
       if ((e.ctrlKey || e.metaKey) && e.key === '/') {
         e.preventDefault();
         e.stopPropagation();
-        setIsCollapsed(false);
+        setSidebarCollapsed(false);
         setSearchFocusTrigger((t) => t + 1);
       }
     };
@@ -293,7 +299,7 @@ const AdminLayout = () => {
         }}
       >
         {/* Professional Active Indicator Bar */}
-        {active && !isCollapsed && (
+        {active && !navCollapsed && (
           <Box
             sx={{
               position: 'absolute',
@@ -308,7 +314,7 @@ const AdminLayout = () => {
             }}
           />
         )}
-        <Tooltip title={isCollapsed ? item.text : ""} placement="right">
+        <Tooltip title={navCollapsed ? item.text : ""} placement="right">
           <ListItemButton
             component={RouterLink}
             to={item.path}
@@ -318,9 +324,9 @@ const AdminLayout = () => {
               borderRadius: '12px',
               mb: 0.5,
               py: 1,
-              pl: isNested ? (isCollapsed ? 1.5 : 4.5) : 2.5,
-              pr: isCollapsed ? 0 : 4,
-              justifyContent: isCollapsed ? 'center' : 'initial',
+              pl: isNested ? (navCollapsed ? 1.5 : 4.5) : 2.5,
+              pr: navCollapsed ? 0 : 4,
+              justifyContent: navCollapsed ? 'center' : 'initial',
               transition: 'all 0.25s cubic-bezier(0.4, 0, 0.2, 1)',
               '&:hover': {
                 bgcolor: (theme) => alpha(theme.palette.primary.main, 0.04),
@@ -338,7 +344,7 @@ const AdminLayout = () => {
             }}
           >
             <ListItemIcon sx={{ 
-              minWidth: isCollapsed ? 0 : 38, 
+              minWidth: navCollapsed ? 0 : 38, 
               transition: 'all 0.25s cubic-bezier(0.4, 0, 0.2, 1)',
               color: active ? 'primary.main' : 'text.secondary',
               display: 'flex',
@@ -346,7 +352,7 @@ const AdminLayout = () => {
             }}>
               {item.icon}
             </ListItemIcon>
-            {!isCollapsed && (
+            {!navCollapsed && (
               <ListItemText 
                 primary={item.text} 
                 primaryTypographyProps={{ 
@@ -357,7 +363,7 @@ const AdminLayout = () => {
             )}
             
             {/* Pin Toggle */}
-            {!isCollapsed && (
+            {!navCollapsed && (
               <IconButton
                 className="pin-action"
                 size="small"
@@ -390,17 +396,17 @@ const AdminLayout = () => {
       return (
         <React.Fragment key={section.title}>
           <ListItem disablePadding {...draggableProps} sx={{ mb: 0.5 }}>
-            <Tooltip title={isCollapsed ? section.title : ""} placement="right">
+            <Tooltip title={navCollapsed ? section.title : ""} placement="right">
               <ListItemButton
                 onClick={() => handleGroupToggle(section.title)}
                 sx={{
                   mx: 1,
                   borderRadius: 2,
-                  justifyContent: isCollapsed ? 'center' : 'initial',
+                  justifyContent: navCollapsed ? 'center' : 'initial',
                   '&:hover .drag-handle': { opacity: 0.5 }
                 }}
               >
-                {!isCollapsed && (
+                {!navCollapsed && (
                   <Box 
                     className="drag-handle" 
                     {...dragHandleProps} 
@@ -417,14 +423,14 @@ const AdminLayout = () => {
                   </Box>
                 )}
                 <ListItemIcon sx={{ 
-                  minWidth: isCollapsed ? 0 : 30, 
+                  minWidth: navCollapsed ? 0 : 30, 
                   transition: 'all 0.3s ease',
                   transform: isOpen ? 'scale(1.1)' : 'none',
                   color: isOpen ? 'primary.main' : 'inherit',
                 }}>
                   {section.icon}
                 </ListItemIcon>
-                {!isCollapsed && (
+                {!navCollapsed && (
                   <>
                     <ListItemText 
                       primary={section.title} 
@@ -450,7 +456,7 @@ const AdminLayout = () => {
               </ListItemButton>
             </Tooltip>
           </ListItem>
-          <Collapse in={(isOpen || !!searchQuery) && !isCollapsed} timeout="auto" unmountOnExit>
+          <Collapse in={(isOpen || !!searchQuery) && !navCollapsed} timeout="auto" unmountOnExit>
             <List component="div" disablePadding>
               {section.items.map(item => renderMenuItem(item, true))}
             </List>
@@ -465,15 +471,15 @@ const AdminLayout = () => {
     <Box sx={{ height: '100%', display: 'flex', flexDirection: 'column' }}>
       <Box sx={{ p: 2, pb: 1 }}>
         {/* Collapsed: compact search icon button */}
-        <Box sx={{ display: isCollapsed ? 'flex' : 'none', justifyContent: 'center' }}>
+        <Box sx={{ display: navCollapsed ? 'flex' : 'none', justifyContent: 'center' }}>
           <Tooltip title="Quick find... (Ctrl+/)" placement="right">
-            <IconButton onClick={() => { setIsCollapsed(false); setTimeout(() => searchInputRef.current?.focus(), 300); }} size="small">
+            <IconButton onClick={() => { setSidebarCollapsed(false); setTimeout(() => searchInputRef.current?.focus(), 300); }} size="small">
               <SearchIcon fontSize="small" />
             </IconButton>
           </Tooltip>
         </Box>
         {/* Expanded: full search field */}
-        <Box sx={{ display: isCollapsed ? 'none' : 'block' }}>
+        <Box sx={{ display: navCollapsed ? 'none' : 'block' }}>
           <TextField
             fullWidth
             size="small"
@@ -502,7 +508,7 @@ const AdminLayout = () => {
         {/* Favorites Section */}
         {favorites.length > 0 && (
           <>
-            <Box sx={{ px: 2, py: 1, display: isCollapsed ? 'none' : 'block' }}>
+            <Box sx={{ px: 2, py: 1, display: navCollapsed ? 'none' : 'block' }}>
               <Typography variant="caption" sx={{ fontWeight: 800, color: 'primary.main', letterSpacing: 1.5, textTransform: 'uppercase', fontSize: 10 }}>
                 Favorites
               </Typography>
@@ -560,7 +566,7 @@ const AdminLayout = () => {
             '&:hover': { bgcolor: 'primary.lighter', color: 'primary.main' }
           }}
         >
-          {isCollapsed ? <ChevronRightIcon /> : <ChevronLeftIcon />}
+          {navCollapsed ? <ChevronRightIcon /> : <ChevronLeftIcon />}
         </IconButton>
       </Box>
     </Box>
@@ -655,15 +661,15 @@ const AdminLayout = () => {
       <Drawer
         variant="permanent"
         sx={{
-          display: { xs: 'none', md: 'block' },
-          width: isCollapsed ? slimDrawerWidth : drawerWidth,
+          display: { xs: 'none', md: isDesignerCanvasRoute ? 'none' : 'block' },
+          width: desktopDrawerWidth,
           transition: theme.transitions.create('width', {
             easing: theme.transitions.easing.sharp,
             duration: theme.transitions.duration.enteringScreen,
           }),
           flexShrink: 0,
           [`& .MuiDrawer-paper`]: {
-            width: isCollapsed ? slimDrawerWidth : drawerWidth,
+            width: desktopDrawerWidth,
             transition: theme.transitions.create('width', {
               easing: theme.transitions.easing.sharp,
               duration: theme.transitions.duration.enteringScreen,
@@ -685,10 +691,10 @@ const AdminLayout = () => {
         component="main"
         sx={{
           flexGrow: 1,
-          p: { xs: 2, sm: 3 },
+          p: isDesignerCanvasRoute ? { xs: 1, sm: 1.5 } : { xs: 2, sm: 3 },
           bgcolor: 'background.default',
           minHeight: '100vh',
-          width: { xs: '100%', md: `calc(100% - ${isCollapsed ? slimDrawerWidth : drawerWidth}px)` },
+          width: { xs: '100%', md: `calc(100% - ${desktopDrawerWidth}px)` },
           maxWidth: { xs: '100%', md: 'none' },
           transition: theme.transitions.create(['width', 'margin'], {
             easing: theme.transitions.easing.sharp,

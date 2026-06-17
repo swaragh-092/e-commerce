@@ -43,6 +43,7 @@ const StorefrontOrderInvoicePage = lazy(() => import('../pages/storefront/OrderI
 const WishlistPage = lazy(() => import('../pages/storefront/WishlistPage'));
 const ProductDetailPage = lazy(() => import('../pages/storefront/ProductDetailPage'));
 const ProductListPage = lazy(() => import('../pages/storefront/ProductListPage'));
+const CategoryPage = lazy(() => import('../pages/storefront/CategoryPage'));
 const CartPage = lazy(() => import('../pages/storefront/CartPage'));
 const CheckoutPage = lazy(() => import('../pages/storefront/CheckoutPage'));
 const PaymentPage = lazy(() => import('../pages/storefront/PaymentPage'));
@@ -86,6 +87,9 @@ const MenuBuilderPage = lazy(() => import('../pages/admin/MenuBuilderPage'));
 const ApiBuilderPage = lazy(() => import('../pages/admin/ApiBuilderPage'));
 const SeoOverridesPage = lazy(() => import('../pages/admin/SeoOverridesPage'));
 const EmailTemplatesPage = lazy(() => import('../pages/admin/EmailTemplatesPage'));
+const ThemeGalleryPage = lazy(() => import('../pages/admin/ThemeGalleryPage'));
+const SectionComposerPage = lazy(() => import('../pages/admin/SectionComposerPage'));
+const NewsletterSubscribersPage = lazy(() => import('../pages/admin/NewsletterSubscribersPage'));
 const StaticPageView = lazy(() => import('../pages/storefront/StaticPageView'));
 const BlogsManagePage = lazy(() => import('../pages/admin/BlogsManagePage'));
 const BlogEditPage = lazy(() => import('../pages/admin/BlogEditPage'));
@@ -126,14 +130,13 @@ const AppRoutes = () => (
         <Route path="products" element={<ProductListPage />} />
         <Route path="products/:slug" element={<ProductDetailPage />} />
         <Route path="product/:slug" element={<ProductDetailPage />} />
-        <Route path="category/:categorySlug" element={<ProductListPage />} />
+        <Route path="category/:categorySlug" element={<CategoryPage />} />
         <Route path="p/:slug" element={<StaticPageView />} />
         <Route path="search" element={<SearchResultsPage />} />
         <Route path="brands" element={<StoreBrandsPage />} />
         <Route path="brands/:slug" element={<BrandDetailPage />} />
         <Route path="blogs" element={<BlogsPage />} />
         <Route path="blogs/:slug" element={<BlogDetailPage />} />
-        <Route path="cart" element={<CartPage />} />
         <Route element={<FeatureRoute feature="wishlist" />}>
           <Route path="wishlist" element={<WishlistPage />} />
         </Route>
@@ -234,6 +237,10 @@ const AppRoutes = () => (
             <Route path="features" element={<FeaturesPage />} />
             <Route path="seo-overrides" element={<SeoOverridesPage />} />
             <Route path="email-templates" element={<EmailTemplatesPage />} />
+            <Route path="themes" element={<ThemeGalleryPage />} />
+            <Route path="store-designer" element={<SectionComposerPage />} />
+            <Route path="sections" element={<SectionComposerPage />} />
+            <Route path="newsletter" element={<NewsletterSubscribersPage />} />
           </Route>
           {/* Payment Gateways, Shipping, Sale Labels — ecommerce only */}
           <Route element={<ModeRoute requiredMode="ecommerce" />}>

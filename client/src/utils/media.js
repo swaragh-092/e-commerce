@@ -38,3 +38,37 @@ export const getMediaUrl = (path) => {
   // relative paths are best.
   return normalizedPath;
 };
+
+
+const canUseQueryOptimization = (url) => (
+  url &&
+  !url.startsWith('data:') &&
+  !url.startsWith('blob:') &&
+  !url.includes('/svg') &&
+  !url.toLowerCase().endsWith('.svg')
+);
+
+/**
+ * Returns an image URL with lightweight transformation hints.
+ * CDNs may honor width/quality/format params; local upload handlers can ignore them safely.
+ */
+export const getOptimizedMediaUrl = (path, options = {}) => {
+  const resolved = getMediaUrl(path);
+  if (!canUseQueryOptimization(resolved)) return resolved;
+
+  const { width, quality = 82, format = 'auto' } = options;
+  const separator = resolved.includes('?') ? '&' : '?';
+  const params = [];
+
+  if (width) params.push('w=' + encodeURIComponent(width));
+  if (quality) params.push('q=' + encodeURIComponent(quality));
+  if (format) params.push('fm=' + encodeURIComponent(format));
+
+  return params.length ? resolved + separator + params.join('&') : resolved;
+};
+
+export const imageLoadingProps = ({ priority = false } = {}) => ({
+  loading: priority ? 'eager' : 'lazy',
+  decoding: priority ? 'sync' : 'async',
+  fetchPriority: priority ? 'high' : 'auto',
+});

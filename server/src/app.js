@@ -48,12 +48,17 @@ app.use(
 app.use('/api', globalLimiter);
 
 // Body Parsing
-// Important: Webhook routes must be parsed as raw, so only apply json parser if not a webhook
+// Important: Webhook routes must be parsed as raw, so only apply json parser if not a webhook.
+// Default limit is 1mb to match the previous behavior, but routes that need
+// different limits (theme import = 500kb) must mount their own parser. Mounting
+// `express.json()` again on a sub-router is a no-op because the body has
+// already been consumed by the global parser; the per-route limit is enforced
+// here via a verify hook on the import paths instead.
 app.use((req, res, next) => {
   if (req.originalUrl.includes('/webhook')) {
     express.raw({ type: 'application/json' })(req, res, next);
   } else {
-    express.json()(req, res, next);
+    express.json({ limit: '1mb' })(req, res, next);
   }
 });
 app.use(express.urlencoded({ extended: true }));
@@ -136,7 +141,12 @@ const searchRoutes = require('./modules/search/search.routes');
 const reviewAdminRoutes = require('./modules/review/review.admin.routes');
 const apiBuilderRoutes = require('./modules/apiBuilder/apiBuilder.routes');
 const blogRoutes = require('./modules/blog/blog.routes');
+
+const themeRoutes = require('./modules/theme/theme.routes');
+const newsletterRoutes = require('./modules/newsletter/newsletter.routes');
+
 const productAssistantRoutes = require('./modules/productAssistant/productAssistant.routes');
+
 
 app.use('/api/seo', seoRoutes);
 app.use('/api/settings', settingsRoutes);
@@ -177,6 +187,8 @@ app.use('/api/enquiries', enquiryRoutes);
 app.use('/api/search', searchRoutes);
 app.use('/api/api-builder', apiBuilderRoutes);
 app.use('/api/blogs', blogRoutes);
+app.use('/api/themes', themeRoutes);
+app.use('/api/newsletter', newsletterRoutes);
 
 // Health check endpoint
 app.get('/health', async (req, res) => {

@@ -59,11 +59,28 @@ exports.getCategoryTree = async () => {
     return buildTree(categories);
 };
 
-exports.getCategoryWithProducts = async (slug, page = 1, limit = 20) => {
+exports.getCategoryWithProducts = async (slug, page = 1, limit = 20, sort = 'newest') => {
     const category = await Category.findOne({
-        where: { slug }
+        where: { slug },
+        include: [{ model: Category, as: 'parent', attributes: ['id', 'name', 'slug'] }]
     });
     if (!category) throw new AppError('NOT_FOUND', 404, 'Category not found');
+
+    // Direct subcategories for the subcategory rail on the category page
+    const subcategories = await Category.findAll({
+        where: { parentId: category.id },
+        order: [['sortOrder', 'ASC'], ['name', 'ASC']],
+        attributes: ['id', 'name', 'slug', 'image', 'sortOrder'],
+    });
+
+    // Map sort param to Sequelize order
+    const sortMap = {
+        newest:     [['createdAt', 'DESC']],
+        price_asc:  [['price', 'ASC']],
+        price_desc: [['price', 'DESC']],
+        name_asc:   [['name', 'ASC']],
+    };
+    const productOrder = sortMap[sort] || sortMap.newest;
 
     const offset = (page - 1) * limit;
 
@@ -83,14 +100,12 @@ exports.getCategoryWithProducts = async (slug, page = 1, limit = 20) => {
         limit: parseInt(limit),
         offset: parseInt(offset),
         distinct: true,
-        order: [
-            [ { model: Category, as: 'categories' }, 'ProductCategory', 'sortOrder', 'ASC' ],
-            ['createdAt', 'DESC']
-        ]
+        order: [...productOrder, ['id', 'ASC']],
     });
 
     return {
         category,
+        subcategories,
         products,
         pagination: {
             totalItems: count,

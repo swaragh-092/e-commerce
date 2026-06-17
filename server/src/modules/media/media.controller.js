@@ -11,6 +11,15 @@ exports.upload = async (req, res, next) => {
     }
 };
 
+exports.uploadFont = async (req, res, next) => {
+    try {
+        const media = await mediaService.uploadFont(req.file);
+        return success(res, { media }, 'Font uploaded successfully', 201);
+    } catch (err) {
+        next(err);
+    }
+};
+
 exports.list = async (req, res, next) => {
     try {
         const { page, limit, sortBy, sortDir } = req.query;

@@ -15,7 +15,7 @@ import { userService } from '../../services/userService';
 import AvatarUploader from '../../components/common/AvatarUploader';
 import PageSEO from '../../components/common/PageSEO';
 import { Link } from 'react-router-dom';
-import { useCurrency } from '../../hooks/useSettings';
+import { useSettings } from '../../hooks/useSettings';
 import CenteredLoader from '../../components/common/CenteredLoader';
 import { getApiErrorMessage } from '../../utils/apiErrors';
 import { useNotification } from '../../context/NotificationContext';
@@ -30,7 +30,12 @@ import { INDIAN_STATES } from '../../utils/indianStates';
 const AccountPage = () => {
     const { user, updateProfile, refreshUser } = useContext(AuthContext);
     const { confirm } = useNotification();
+    const { settings } = useSettings();
     const [tab, setTab] = useState(0);
+    const accountPage = settings?.accountPage || {};
+    const layout = accountPage.layout || 'tabs';
+    const useSidebarLayout = layout === 'sidebar';
+    const showSupportInfo = accountPage.showSupportInfo === true;
 
     if (!user) return null;
 
@@ -38,30 +43,47 @@ const AccountPage = () => {
         <Container maxWidth="md" sx={{ py: 4 }}>
             <PageSEO title="My Account" type="noindex" />
             <Typography variant="h4" gutterBottom>My Account</Typography>
-            <Paper sx={{ width: '100%' }}>
-                <Box sx={{ borderBottom: 1, borderColor: 'divider' }}>
-                    <Tabs value={tab} onChange={(_, v) => setTab(v)} variant="scrollable" scrollButtons="auto">
+            <Paper sx={{ width: '100%', display: useSidebarLayout ? { xs: 'block', md: 'grid' } : 'block', gridTemplateColumns: useSidebarLayout ? '220px minmax(0, 1fr)' : undefined }}>
+                <Box sx={{ borderBottom: useSidebarLayout ? { xs: 1, md: 0 } : 1, borderRight: useSidebarLayout ? { md: 1 } : 0, borderColor: 'divider' }}>
+                    <Tabs
+                        value={tab}
+                        onChange={(_, v) => setTab(v)}
+                        variant="scrollable"
+                        scrollButtons="auto"
+                        orientation={useSidebarLayout ? 'vertical' : 'horizontal'}
+                        sx={{ minHeight: useSidebarLayout ? { md: 360 } : undefined }}
+                    >
                         <Tab label="Profile" />
                         <Tab label="Addresses" />
                         <Tab label="Password" />
                         <Tab label="Security" />
                     </Tabs>
                 </Box>
-                <TabPanel value={tab} index={0} sx={{ p: 3 }}>
-                    <ProfileTab user={user} updateProfile={updateProfile} />
-                </TabPanel>
-                <TabPanel value={tab} index={1} sx={{ p: 3 }}>
-                    <AddressesTab />
-                </TabPanel>
-                <TabPanel value={tab} index={2} sx={{ p: 3 }}>
-                    <PasswordTab />
-                </TabPanel>
-                <TabPanel value={tab} index={3} sx={{ p: 3 }}>
-                    <TwoFactorSetup user={user} onUpdate={refreshUser} />
-                    <ActiveSessions />
-                    <DeleteAccount user={user} onUpdate={refreshUser} />
-                </TabPanel>
+                <Box sx={{ minWidth: 0 }}>
+                    <TabPanel value={tab} index={0} sx={{ p: 3 }}>
+                        <ProfileTab user={user} updateProfile={updateProfile} />
+                    </TabPanel>
+                    <TabPanel value={tab} index={1} sx={{ p: 3 }}>
+                        <AddressesTab />
+                    </TabPanel>
+                    <TabPanel value={tab} index={2} sx={{ p: 3 }}>
+                        <PasswordTab />
+                    </TabPanel>
+                    <TabPanel value={tab} index={3} sx={{ p: 3 }}>
+                        <TwoFactorSetup user={user} onUpdate={refreshUser} />
+                        <ActiveSessions />
+                        <DeleteAccount user={user} onUpdate={refreshUser} />
+                    </TabPanel>
+                </Box>
             </Paper>
+            {showSupportInfo && (
+                <Paper sx={{ mt: 3, p: 3, border: '1px solid', borderColor: 'divider' }} elevation={0}>
+                    <Typography variant="subtitle1" fontWeight={700} gutterBottom>Need help?</Typography>
+                    <Typography variant="body2" color="text.secondary">
+                        Contact support from your order details page or reach out with your registered email for faster help.
+                    </Typography>
+                </Paper>
+            )}
         </Container>
     );
 };

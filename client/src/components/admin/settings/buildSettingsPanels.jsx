@@ -34,6 +34,9 @@ import AddIcon from '@mui/icons-material/Add';
 import DragIndicatorIcon from '@mui/icons-material/DragIndicator';
 import PublicIcon from '@mui/icons-material/Public';
 import HomepageSettingsEditor from './HomepageSettingsEditor';
+import { ProductCardStyleEditor, CategoryCardStyleEditor, PromoCardStyleEditor, BrandCardStyleEditor, TrustCardStyleEditor } from './CardStyleEditors';
+import { ThemeContrastPanel } from './ContrastBadge';
+import CssVarsPanel from './CssVarsPanel';
 import { INDIAN_STATES } from '../../../utils/indianStates';
 
 export default function buildSettingsPanels(ctx) {
@@ -139,56 +142,31 @@ export default function buildSettingsPanels(ctx) {
     // ─── 2: Branding ────────────────────────────────────────────────────
     [
       section(
-        'Theme & Colors',
-        'Start with a suggested theme, then fine-tune every color and token.',
+        'Branding & Quick Presets',
+        'Use quick presets for colors and typography. For full homepage layouts, sections, and demo content, browse Store Templates.',
         <>
+          <Alert
+            severity="info"
+            sx={{ mb: 2.5 }}
+            action={(
+              <Button component={Link} to="/admin/store-designer" size="small" color="inherit">
+                Open Designer
+              </Button>
+            )}
+          >
+            Store Designer is the source of truth for visual editing. Use these presets only as quick global defaults.
+          </Alert>
           <Box sx={{ display: 'flex', gap: 1, mb: 2 }}>
             <Button
               size="small"
               variant="outlined"
-              onClick={() => {
-                const themeKeys = Object.entries(form).filter(([k]) => k.startsWith('theme.'));
-                const themeData = Object.fromEntries(themeKeys);
-                const blob = new Blob([JSON.stringify(themeData, null, 2)], { type: 'application/json' });
-                const url = URL.createObjectURL(blob);
-                const a = document.createElement('a');
-                a.href = url;
-                a.download = 'theme-export.json';
-                a.click();
-                URL.revokeObjectURL(url);
-              }}
+              component={Link}
+              to="/admin/themes"
             >
-              Export Theme
-            </Button>
-            <Button
-              size="small"
-              variant="outlined"
-              component="label"
-            >
-              Import Theme
-              <input
-                type="file"
-                accept=".json"
-                hidden
-                onChange={(e) => {
-                  const file = e.target.files?.[0];
-                  if (!file) return;
-                  const reader = new FileReader();
-                  reader.onload = (ev) => {
-                    try {
-                      const data = JSON.parse(ev.target.result);
-                      const themeEntries = Object.entries(data).filter(([k]) => k.startsWith('theme.'));
-                      if (themeEntries.length === 0) return;
-                      themeEntries.forEach(([k, v]) => set(k, v));
-                    } catch { /* ignore invalid JSON */ }
-                  };
-                  reader.readAsText(file);
-                  e.target.value = '';
-                }}
-              />
+              Browse Store Templates
             </Button>
           </Box>
-          <Typography variant="subtitle2" sx={{ mb: 1 }}>Suggested Custom Themes</Typography>
+          <Typography variant="subtitle2" sx={{ mb: 1 }}>Quick Brand Presets</Typography>
           <Grid container spacing={1.5} sx={{ mb: 2 }}>
             {THEME_PRESETS.map((preset) => (
               <Grid item xs={12} md={4} key={preset.name}>
@@ -222,6 +200,21 @@ export default function buildSettingsPanels(ctx) {
             <Grid item xs={12} sm={6}>{field('theme.surfaceColor', 'Surface / Card Color', 'color')}</Grid>
             <Grid item xs={12} sm={6}>{field('theme.textColor', 'Text Color', 'color')}</Grid>
           </Grid>
+          <Divider sx={{ my: 2 }} />
+          <Typography variant="subtitle2" sx={{ mb: 1 }}>State Colors</Typography>
+          <Grid container spacing={2}>
+            <Grid item xs={12} sm={6}>{field('theme.errorColor', 'Error Color', 'color')}</Grid>
+            <Grid item xs={12} sm={6}>{field('theme.warningColor', 'Warning Color', 'color')}</Grid>
+            <Grid item xs={12} sm={6}>{field('theme.successColor', 'Success Color', 'color')}</Grid>
+            <Grid item xs={12} sm={6}>{field('theme.infoColor', 'Info Color', 'color')}</Grid>
+          </Grid>
+          {/* WCAG 2.1 contrast audit — updates live as admin changes colours */}
+          <ThemeContrastPanel
+            primaryColor={form['theme.primaryColor'] || '#0f766e'}
+            secondaryColor={form['theme.secondaryColor'] || '#f97316'}
+            backgroundColor={form['theme.backgroundColor'] || '#f7f3ec'}
+            textColor={form['theme.textColor'] || '#1f2933'}
+          />
         </>,
         ['theme', 'colors', 'dark mode', 'primary', 'secondary', 'preset']
       ),
@@ -229,6 +222,17 @@ export default function buildSettingsPanels(ctx) {
         'Typography, Shape & Components',
         'Control fonts, corner radius, header treatment, buttons, cards, and page background style.',
         <>
+          <Alert
+            severity="info"
+            sx={{ mb: 2.5 }}
+            action={(
+              <Button component={Link} to="/admin/store-designer" size="small" color="inherit">
+                Edit Tokens
+              </Button>
+            )}
+          >
+            Typography, mobile overrides, header treatment, buttons, and component tokens are easier to tune with the live canvas beside them.
+          </Alert>
           <Grid container spacing={2}>
             <Grid item xs={12} sm={6}>
               <Autocomplete
@@ -338,9 +342,51 @@ export default function buildSettingsPanels(ctx) {
         ['font', 'radius', 'typography', 'shape', 'header', 'button', 'card']
       ),
       section(
+        'Storefront Card Styles',
+        'Make templates feel genuinely different by changing product and category card structure, spacing, badges, shadows, and image ratios.',
+        <>
+          <Alert severity="info" sx={{ mb: 2.5 }} action={<Button component={Link} to="/admin/store-designer" size="small" color="inherit">Open Designer</Button>}>
+            Component card styles are now block-aware in Store Designer. This panel remains for detailed fallback tuning.
+          </Alert>
+          <Typography variant="subtitle2" sx={{ mb: 1 }}>Product Cards</Typography>
+          <ProductCardStyleEditor
+            value={form['componentStyles.productCard']}
+            onChange={(nextValue) => set('componentStyles.productCard', nextValue)}
+          />
+          <Divider sx={{ my: 3 }} />
+          <Typography variant="subtitle2" sx={{ mb: 1 }}>Category Cards</Typography>
+          <CategoryCardStyleEditor
+            value={form['componentStyles.categoryCard']}
+            onChange={(nextValue) => set('componentStyles.categoryCard', nextValue)}
+          />
+          <Divider sx={{ my: 3 }} />
+          <Typography variant="subtitle2" sx={{ mb: 1 }}>Promo Cards</Typography>
+          <PromoCardStyleEditor
+            value={form['componentStyles.promoCard']}
+            onChange={(nextValue) => set('componentStyles.promoCard', nextValue)}
+          />
+          <Divider sx={{ my: 3 }} />
+          <Typography variant="subtitle2" sx={{ mb: 1 }}>Brand Cards</Typography>
+          <BrandCardStyleEditor
+            value={form['componentStyles.brandCard']}
+            onChange={(nextValue) => set('componentStyles.brandCard', nextValue)}
+          />
+          <Divider sx={{ my: 3 }} />
+          <Typography variant="subtitle2" sx={{ mb: 1 }}>Trust Cards</Typography>
+          <TrustCardStyleEditor
+            value={form['componentStyles.trustCard']}
+            onChange={(nextValue) => set('componentStyles.trustCard', nextValue)}
+          />
+        </>,
+        ['product card', 'category card', 'promo card', 'brand card', 'trust card', 'component styles', 'template card', 'card editor', 'layout']
+      ),
+      section(
         'Announcement Bar',
         'Control the slim message strip shown at the top of every storefront page.',
         <>
+          <Alert severity="info" sx={{ mb: 2.5 }} action={<Button component={Link} to="/admin/store-designer" size="small" color="inherit">Edit Bar</Button>}>
+            Announcement bar content and styling can be edited from the canvas header controls.
+          </Alert>
           {toggle('announcement.enabled', 'Show announcement bar')}
           {Boolean(form['announcement.enabled']) && (
             <>
@@ -370,6 +416,18 @@ export default function buildSettingsPanels(ctx) {
         'Header & Navigation',
         'Choose how the top navigation behaves and whether category navigation is promoted.',
         <>
+          <Alert
+            severity="info"
+            sx={{ mb: 2.5 }}
+            action={(
+              <Box sx={{ display: 'flex', gap: 1 }}>
+                <Button component={Link} to="/admin/store-designer" size="small" color="inherit">Designer</Button>
+                <Button component={Link} to="/admin/menus" size="small" color="inherit">Menus</Button>
+              </Box>
+            )}
+          >
+            Header layout is edited in Store Designer. Published menu items come from Menu Builder, matching the live storefront.
+          </Alert>
           {toggle('nav.sticky', 'Sticky navbar — stays visible while scrolling')}
           {toggle('nav.showCategoryBar', 'Show category bar below the navbar')}
         </>,
@@ -379,6 +437,9 @@ export default function buildSettingsPanels(ctx) {
         'Footer',
         'Customize footer layout, links, social icons, and contact information in one place.',
         <>
+          <Alert severity="info" sx={{ mb: 2.5 }} action={<Button component={Link} to="/admin/store-designer" size="small" color="inherit">Edit Footer</Button>}>
+            Footer layout and nested link blocks can be edited in Store Designer; these fields remain as fallback settings.
+          </Alert>
           {toggle('footer.enabled', 'Show footer')}
           <Typography variant="subtitle2" sx={{ mb: 1, mt: 2 }}>Appearance</Typography>
           <Grid container spacing={2}>
@@ -452,30 +513,43 @@ export default function buildSettingsPanels(ctx) {
       section(
         'Homepage Builder',
         'Control the redesigned homepage: hero slides, section order, product rows, value props, and promo banners.',
-        <HomepageSettingsEditor
-          heroSlides={heroSlides}
-          removeHeroSlide={removeHeroSlide}
-          updateHeroSlide={updateHeroSlide}
-          addHeroSlide={addHeroSlide}
-          homepageSections={homepageSections}
-          updateHomepageSection={updateHomepageSection}
-          sectionTypes={HOMEPAGE_SECTION_TYPES}
-          moveHomepageSection={moveHomepageSection}
-          removeHomepageSection={removeHomepageSection}
-          productSources={HOMEPAGE_PRODUCT_SOURCES}
-          addHomepageSection={addHomepageSection}
-          homepageValueProps={homepageValueProps}
-          valueIcons={HOMEPAGE_VALUE_ICONS}
-          updateValueProp={updateValueProp}
-          removeValueProp={removeValueProp}
-          addValueProp={addValueProp}
-          homepagePromos={homepagePromos}
-          removeHomepagePromo={removeHomepagePromo}
-          updateHomepagePromo={updateHomepagePromo}
-          addHomepagePromo={addHomepagePromo}
-          brandPrimary={brandPrimary}
-        />,
-        ['hero', 'homepage banner', 'headline', 'sections', 'promo', 'value props']
+        <>
+          <Alert
+            severity="info"
+            sx={{ mb: 2.5 }}
+            action={(
+              <Button component={Link} to="/admin/store-designer" size="small" color="inherit">
+                Open Store Designer
+              </Button>
+            )}
+          >
+            Recommended: use Store Designer for visual homepage editing. This legacy panel remains for detailed fallback settings.
+          </Alert>
+          <HomepageSettingsEditor
+            heroSlides={heroSlides}
+            removeHeroSlide={removeHeroSlide}
+            updateHeroSlide={updateHeroSlide}
+            addHeroSlide={addHeroSlide}
+            homepageSections={homepageSections}
+            updateHomepageSection={updateHomepageSection}
+            sectionTypes={HOMEPAGE_SECTION_TYPES}
+            moveHomepageSection={moveHomepageSection}
+            removeHomepageSection={removeHomepageSection}
+            productSources={HOMEPAGE_PRODUCT_SOURCES}
+            addHomepageSection={addHomepageSection}
+            homepageValueProps={homepageValueProps}
+            valueIcons={HOMEPAGE_VALUE_ICONS}
+            updateValueProp={updateValueProp}
+            removeValueProp={removeValueProp}
+            addValueProp={addValueProp}
+            homepagePromos={homepagePromos}
+            removeHomepagePromo={removeHomepagePromo}
+            updateHomepagePromo={updateHomepagePromo}
+            addHomepagePromo={addHomepagePromo}
+            brandPrimary={brandPrimary}
+          />
+        </>,
+        ['hero', 'homepage banner', 'headline', 'sections', 'promo', 'value props', 'store designer']
       ),
     ],
     // ─── 5: Catalog ─────────────────────────────────────────────────────
@@ -497,6 +571,34 @@ function buildCatalogPanel({ form, set, section, field, toggle, imageField }) {
       'Catalog Listing',
       'Control sorting, filters, grid density, and category depth in product listing pages.',
       <>
+        <Typography variant="subtitle2" fontWeight={800} sx={{ mb: 1 }}>Collection Page Template</Typography>
+        <Grid container spacing={2}>
+          <Grid item xs={12} sm={6}>
+            <FormControl fullWidth size="small" sx={{ mb: 2 }}>
+              <InputLabel>Collection Layout</InputLabel>
+              <Select label="Collection Layout" value={form['catalog.templateLayout'] || 'sidebar-filters-grid'} onChange={(e) => set('catalog.templateLayout', e.target.value)}>
+                <MenuItem value="sidebar-filters-grid">Sidebar filters + grid</MenuItem>
+                <MenuItem value="topbar-filters-grid">Top filter bar + grid</MenuItem>
+                <MenuItem value="compact-b2b-list">Compact B2B list</MenuItem>
+                <MenuItem value="editorial-collection-grid">Editorial collection grid</MenuItem>
+                <MenuItem value="image-led-grid">Image-led grid</MenuItem>
+              </Select>
+            </FormControl>
+          </Grid>
+          <Grid item xs={12} sm={6}>
+            <FormControl fullWidth size="small" sx={{ mb: 2 }}>
+              <InputLabel>Filter Layout</InputLabel>
+              <Select label="Filter Layout" value={form['catalog.filterLayout'] || 'sidebar'} onChange={(e) => set('catalog.filterLayout', e.target.value)}>
+                <MenuItem value="sidebar">Sidebar filters</MenuItem>
+                <MenuItem value="topbar">Top bar filters</MenuItem>
+                <MenuItem value="drawer">Drawer/mobile-first filters</MenuItem>
+              </Select>
+            </FormControl>
+          </Grid>
+        </Grid>
+        {toggle('catalog.showBreadcrumbs', 'Show breadcrumbs on product listing and category pages')}
+        <Divider sx={{ my: 2 }} />
+        <Typography variant="subtitle2" fontWeight={800} sx={{ mb: 1 }}>Catalog Defaults</Typography>
         <FormControl fullWidth size="small" sx={{ mb: 2 }}>
           <InputLabel>Default Sort Order</InputLabel>
           <Select label="Default Sort Order" value={form['catalog.defaultSort'] || 'newest'} onChange={(e) => set('catalog.defaultSort', e.target.value)}>
@@ -541,6 +643,26 @@ function buildCatalogPanel({ form, set, section, field, toggle, imageField }) {
       'Product Page Experience',
       'Choose what customers see on individual product pages and whether engagement features are enabled.',
       <>
+        <Typography variant="subtitle2" fontWeight={800} sx={{ mb: 1 }}>Product Page Template</Typography>
+        <FormControl fullWidth size="small" sx={{ mb: 2 }}>
+          <InputLabel>Product Layout</InputLabel>
+          <Select label="Product Layout" value={form['productPage.templateLayout'] || 'media-left-details-right'} onChange={(e) => set('productPage.templateLayout', e.target.value)}>
+            <MenuItem value="media-left-details-right">Media left, details right</MenuItem>
+            <MenuItem value="gallery-top-details-below">Gallery top, details below</MenuItem>
+            <MenuItem value="sticky-purchase-panel">Sticky purchase panel</MenuItem>
+            <MenuItem value="luxury-editorial">Luxury editorial</MenuItem>
+            <MenuItem value="editorial">Editorial</MenuItem>
+          </Select>
+        </FormControl>
+        <Grid container spacing={1} sx={{ mb: 1 }}>
+          <Grid item xs={12} sm={6}>{toggle('productPage.showBreadcrumbs', 'Show breadcrumbs')}</Grid>
+          <Grid item xs={12} sm={6}>{toggle('productPage.showStickyAddToCart', 'Show sticky add-to-cart')}</Grid>
+          <Grid item xs={12} sm={6}>{toggle('productPage.showTrustBadges', 'Show trust badges')}</Grid>
+          <Grid item xs={12} sm={6}>{toggle('productPage.showRelatedProducts', 'Show related products')}</Grid>
+          <Grid item xs={12} sm={6}>{toggle('productPage.showRecentlyViewed', 'Show recently viewed')}</Grid>
+        </Grid>
+        <Divider sx={{ my: 2 }} />
+        <Typography variant="subtitle2" fontWeight={800} sx={{ mb: 1 }}>Product Details</Typography>
         {toggle('productPage.showSKU', 'Show SKU code under product name')}
         {toggle('productPage.showStockBadge', 'Show In Stock / Out of Stock badge')}
         <Divider sx={{ my: 2 }} />
@@ -637,6 +759,47 @@ function buildCatalogPanel({ form, set, section, field, toggle, imageField }) {
         {field('brandsPage.featuredCount', 'Max featured brands to show', 'number')}
       </>,
       ['brands', 'brands page', 'brand grid', 'card layout', 'hero', 'featured']
+    ),
+    section(
+      'Category Pages',
+      'Customize how the /category/:slug storefront pages look and behave.',
+      <>
+        {field('categoryPage.heroTitle', 'Default Hero Title (fallback if category lacks name)', 'text')}
+        <FormControl fullWidth size="small" sx={{ mb: 2, mt: 1 }}>
+          <InputLabel>Header Layout</InputLabel>
+          <Select label="Header Layout" value={form['categoryPage.headerLayout'] || 'standard'} onChange={(e) => set('categoryPage.headerLayout', e.target.value)}>
+            <MenuItem value="standard">Standard - title and description inline</MenuItem>
+            <MenuItem value="cover">Cover - full-width background banner</MenuItem>
+            <MenuItem value="split">Split - text left, image right</MenuItem>
+          </Select>
+        </FormControl>
+        {toggle('categoryPage.showSubcategories', 'Show subcategory navigation chips')}
+      </>,
+      ['category page', 'categories', 'layout']
+    ),
+    section(
+      'Blog & Content Pages',
+      'Customize the layout of articles and content pages.',
+      <>
+        <FormControl fullWidth size="small" sx={{ mb: 2, mt: 1 }}>
+          <InputLabel>Blog List Layout</InputLabel>
+          <Select label="Blog List Layout" value={form['blogPage.listLayout'] || 'grid'} onChange={(e) => set('blogPage.listLayout', e.target.value)}>
+            <MenuItem value="grid">Grid Layout</MenuItem>
+            <MenuItem value="list">List Layout</MenuItem>
+            <MenuItem value="masonry">Masonry</MenuItem>
+          </Select>
+        </FormControl>
+        {toggle('blogPage.showAuthor', 'Show author names on articles')}
+        {toggle('blogPage.showDate', 'Show publication dates')}
+        <FormControl fullWidth size="small" sx={{ mb: 2, mt: 2 }}>
+          <InputLabel>Article Layout</InputLabel>
+          <Select label="Article Layout" value={form['blogPage.articleLayout'] || 'standard'} onChange={(e) => set('blogPage.articleLayout', e.target.value)}>
+            <MenuItem value="standard">Standard</MenuItem>
+            <MenuItem value="cover">Cover Image Header</MenuItem>
+          </Select>
+        </FormControl>
+      </>,
+      ['blog', 'content', 'article', 'layout']
     ),
     section(
       'SKU Automation',
@@ -757,6 +920,45 @@ function buildCheckoutPanel({ form, set, section, field, toggle, currSymbol, ena
       'Decide how easy checkout is and which customer conveniences are available.',
       <></>,
       ['checkout', 'guest checkout', 'coupons']
+    ),
+    section(
+      'Cart Page Experience',
+      'Customize the cart page and drawer behavior.',
+      <>
+        <FormControl fullWidth size="small" sx={{ mb: 2, mt: 1 }}>
+          <InputLabel>Cart Layout</InputLabel>
+          <Select label="Cart Layout" value={form['cartPage.layout'] || 'standard'} onChange={(e) => set('cartPage.layout', e.target.value)}>
+            <MenuItem value="standard">Standard - two column</MenuItem>
+            <MenuItem value="compact">Compact - centered single column</MenuItem>
+          </Select>
+        </FormControl>
+        {toggle('cartPage.showCrossSells', 'Show "You May Also Like" cross-sells')}
+        {toggle('cartPage.showTrustBadges', 'Show trust badges and secure checkout messaging')}
+        {field('cartPage.emptyStateText', 'Custom Empty Cart Message', 'text')}
+      </>,
+      ['cart', 'layout', 'cross sells', 'empty state']
+    ),
+    section(
+      'Customer Account Experience',
+      'Customize the layout of the customer account portal.',
+      <>
+        <FormControl fullWidth size="small" sx={{ mb: 2, mt: 1 }}>
+          <InputLabel>Account Dashboard Layout</InputLabel>
+          <Select label="Account Dashboard Layout" value={form['accountPage.layout'] || 'sidebar'} onChange={(e) => set('accountPage.layout', e.target.value)}>
+            <MenuItem value="sidebar">Sidebar Navigation</MenuItem>
+            <MenuItem value="tabs">Horizontal Tabs</MenuItem>
+          </Select>
+        </FormControl>
+        <FormControl fullWidth size="small" sx={{ mb: 2 }}>
+          <InputLabel>Order Card Style</InputLabel>
+          <Select label="Order Card Style" value={form['accountPage.orderCardStyle'] || 'detailed'} onChange={(e) => set('accountPage.orderCardStyle', e.target.value)}>
+            <MenuItem value="detailed">Detailed (shows thumbnails)</MenuItem>
+            <MenuItem value="compact">Compact (list view)</MenuItem>
+          </Select>
+        </FormControl>
+        {toggle('accountPage.showSupportInfo', 'Show customer support contact info in account')}
+      </>,
+      ['account', 'customer', 'dashboard', 'orders']
     ),
     section(
       'Payment Gateways',
@@ -888,8 +1090,10 @@ function buildAdvancedPanel({ form, set, section, field, toggle, imageField, boo
           onChange={(e) => set('advanced.customCSS', e.target.value)}
           sx={{ mb: 1, fontFamily: 'monospace' }}
           InputProps={{ sx: { fontFamily: 'monospace', fontSize: '0.85rem' } }}
-          helperText="Global CSS rules applied after theme styles."
+          helperText="Global CSS rules applied after theme styles. Use --store-* variables below for theme-aware values."
         />
+        {/* Live reference of all --store-* CSS custom properties */}
+        <CssVarsPanel />
       </>,
       ['custom css', 'css injection', 'scripts', 'code injection', 'head scripts', 'body scripts']
     ),

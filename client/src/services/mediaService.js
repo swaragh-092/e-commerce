@@ -14,6 +14,18 @@ export const mediaService = {
     return response.data;
   },
 
+  uploadFont: async (file, signal) => {
+    const formData = new FormData();
+    formData.append('file', file);
+    const response = await api.post('/media/upload-font', formData, {
+      headers: {
+        'Content-Type': 'multipart/form-data',
+      },
+      signal,
+    });
+    return response.data;
+  },
+
   list: async (params = {}, signal) => {
     const response = await api.get(withQueryString('/media', params), { signal });
     return response.data;

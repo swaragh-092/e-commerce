@@ -16,6 +16,7 @@ import { Link as RouterLink, useParams } from 'react-router-dom';
 import PageSEO from '../../components/common/PageSEO';
 import BlogService from '../../services/blogService';
 import { getMediaUrl } from '../../utils/media';
+import { useSettings } from '../../hooks/useSettings';
 
 const formatDate = (value) => {
   if (!value) return '';
@@ -24,6 +25,12 @@ const formatDate = (value) => {
 
 const BlogDetailPage = () => {
   const { slug } = useParams();
+  const { settings } = useSettings();
+  const blogPage = settings?.blogPage || {};
+  const articleLayout = blogPage.articleLayout || 'standard';
+  const showAuthor = blogPage.showAuthor !== false;
+  const showDate = blogPage.showDate !== false;
+  const useCoverLayout = articleLayout === 'cover';
   const [post, setPost] = useState(null);
   const [loading, setLoading] = useState(true);
 
@@ -63,7 +70,7 @@ const BlogDetailPage = () => {
   const authorName = [post?.author?.firstName, post?.author?.lastName].filter(Boolean).join(' ');
 
   return (
-    <Container maxWidth="lg" sx={{ py: { xs: 4, md: 6 } }}>
+    <Container maxWidth={useCoverLayout ? 'xl' : 'lg'} sx={{ py: { xs: 4, md: 6 } }}>
       <PageSEO
         title={post?.metaTitle || post?.title || 'Blog'}
         description={post?.metaDescription || post?.summary || 'Read this blog post.'}
@@ -106,37 +113,69 @@ const BlogDetailPage = () => {
             ))}
           </Stack>
 
-          <Typography variant="h3" fontWeight={800} sx={{ mb: 2 }}>
-            {post.title}
-          </Typography>
-
-          <Stack direction={{ xs: 'column', sm: 'row' }} spacing={2} sx={{ mb: 3, color: 'text.secondary' }}>
-            <Typography variant="body2">{formatDate(post.displayDate || post.publishedAt)}</Typography>
-            {authorName ? <Typography variant="body2">By {authorName}</Typography> : null}
-          </Stack>
-
-          {post.summary ? (
-            <Typography
-              variant="body1"
-              color="text.secondary"
-              sx={{ mb: 4, maxWidth: 880, lineHeight: 1.8 }}
-            >
-              {post.summary}
-            </Typography>
-          ) : null}
-
-          {heroImage ? (
+          {useCoverLayout && heroImage ? (
             <Box
               sx={{
-                height: { xs: 260, md: 480 },
+                minHeight: { xs: 340, md: 560 },
                 borderRadius: 4,
                 mb: 5,
-                background: `url(${heroImage}) center/cover no-repeat`,
-                border: '1px solid',
-                borderColor: 'divider',
+                p: { xs: 3, md: 6 },
+                display: 'flex',
+                alignItems: 'flex-end',
+                background: `linear-gradient(to top, rgba(0,0,0,0.72), rgba(0,0,0,0.16)), url(${heroImage}) center/cover no-repeat`,
+                color: '#fff',
               }}
-            />
-          ) : null}
+            >
+              <Box sx={{ maxWidth: 880 }}>
+                <Typography variant="h2" fontWeight={900} sx={{ mb: 2, lineHeight: 1.05 }}>
+                  {post.title}
+                </Typography>
+                {(showDate || (showAuthor && authorName)) && (
+                  <Stack direction={{ xs: 'column', sm: 'row' }} spacing={2} sx={{ mb: post.summary ? 2 : 0, color: 'rgba(255,255,255,0.82)' }}>
+                    {showDate && <Typography variant="body2">{formatDate(post.displayDate || post.publishedAt)}</Typography>}
+                    {showAuthor && authorName ? <Typography variant="body2">By {authorName}</Typography> : null}
+                  </Stack>
+                )}
+                {post.summary ? <Typography variant="body1" sx={{ maxWidth: 760, lineHeight: 1.8, color: 'rgba(255,255,255,0.86)' }}>{post.summary}</Typography> : null}
+              </Box>
+            </Box>
+          ) : (
+            <>
+              <Typography variant="h3" fontWeight={800} sx={{ mb: 2 }}>
+                {post.title}
+              </Typography>
+
+              {(showDate || (showAuthor && authorName)) && (
+                <Stack direction={{ xs: 'column', sm: 'row' }} spacing={2} sx={{ mb: 3, color: 'text.secondary' }}>
+                  {showDate && <Typography variant="body2">{formatDate(post.displayDate || post.publishedAt)}</Typography>}
+                  {showAuthor && authorName ? <Typography variant="body2">By {authorName}</Typography> : null}
+                </Stack>
+              )}
+
+              {post.summary ? (
+                <Typography
+                  variant="body1"
+                  color="text.secondary"
+                  sx={{ mb: 4, maxWidth: 880, lineHeight: 1.8 }}
+                >
+                  {post.summary}
+                </Typography>
+              ) : null}
+
+              {heroImage ? (
+                <Box
+                  sx={{
+                    height: { xs: 260, md: 480 },
+                    borderRadius: 4,
+                    mb: 5,
+                    background: `url(${heroImage}) center/cover no-repeat`,
+                    border: '1px solid',
+                    borderColor: 'divider',
+                  }}
+                />
+              ) : null}
+            </>
+          )}
 
           <Divider sx={{ mb: 4 }} />
 

@@ -19,7 +19,7 @@ import PaymentsIcon from '@mui/icons-material/Payments';
 import CreditCardIcon from '@mui/icons-material/CreditCard';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { AuthContext } from '../../context/AuthContext';
-import { useSettings, useCurrency, useFeature } from '../../hooks/useSettings';
+import { useSettings, useCurrency, useFeature, useComponentStyles } from '../../hooks/useSettings';
 import { useCart } from '../../hooks/useCart';
 import { userService } from '../../services/userService';
 import { orderService } from '../../services/orderService';
@@ -33,7 +33,11 @@ import { getApiErrorMessage } from '../../utils/apiErrors';
 import { getVariantOptionLabel } from '../../utils/variantOptions';
 import { getStoreName } from '../../utils/store';
 import { INDIAN_STATES } from '../../utils/indianStates';
+
+import { getBadgeChipProps, getFormControlSize, getFormControlSx } from '../../utils/componentStyles';
+
 import { calculateTaxSummary } from '../../utils/gst';
+
 
 const EMPTY_ADDR = {
     label: '', fullName: '', phone: '',
@@ -135,7 +139,7 @@ const Section = ({ step, activeSection, completedSections, title, icon, summary,
             sx={{
                 border: '1px solid',
                 borderColor: isActive ? 'primary.main' : 'divider',
-                borderRadius: 2,
+                borderRadius: blockRadius,
                 overflow: 'hidden',
                 transition: 'border-color 0.2s',
                 mb: 1.5,
@@ -196,6 +200,20 @@ const CheckoutPage = () => {
     const { settings } = useSettings();
     const storeName = getStoreName(settings);
     const { formatPrice } = useCurrency();
+    const checkoutBlockStyle = useComponentStyles('checkoutBlock');
+    const formControlStyle = useComponentStyles('formControl');
+    const badgeChipStyle = useComponentStyles('badgeChip');
+    const formFieldProps = useMemo(() => ({
+        size: getFormControlSize(formControlStyle),
+        variant: formControlStyle.variant === 'filled' ? 'filled' : 'outlined',
+        sx: getFormControlSx(formControlStyle),
+    }), [formControlStyle]);
+    const badgeChipProps = useMemo(() => getBadgeChipProps(badgeChipStyle), [badgeChipStyle]);
+    const themedChipProps = (overrides = {}) => ({
+        ...badgeChipProps,
+        ...overrides,
+        sx: { ...badgeChipProps.sx, ...(overrides.sx || {}) },
+    });
     const { cart, clearCart } = useCart();
 
     const buyNowItem = useMemo(() => {
@@ -262,6 +280,9 @@ const CheckoutPage = () => {
     const [shippingError, setShippingError] = useState('');
 
     // Address dialog
+    const blockRadius = checkoutBlockStyle.radius === 'none' ? 0 : checkoutBlockStyle.radius === 'small' ? 1 : checkoutBlockStyle.radius === 'large' ? 3 : 2;
+    const blockShadow = checkoutBlockStyle.shadow === 'soft' ? '0 4px 20px rgba(0,0,0,0.08)' : checkoutBlockStyle.shadow === 'medium' ? '0 10px 28px rgba(0,0,0,0.10)' : checkoutBlockStyle.shadow === 'strong' ? '0 18px 44px rgba(0,0,0,0.14)' : 'none';
+    const blockPadding = checkoutBlockStyle.density === 'compact' ? 2 : checkoutBlockStyle.density === 'spacious' ? 3 : 2.5;
     const [addrDialog, setAddrDialog] = useState({ open: false, mode: 'add', addrId: null, form: EMPTY_ADDR, saving: false, errors: {} });
     const openAddAddrDialog = () =>
         setAddrDialog({ open: true, mode: 'add', addrId: null, form: { ...EMPTY_ADDR }, saving: false, errors: {} });
@@ -731,10 +752,10 @@ const CheckoutPage = () => {
                                                         <Box sx={{ display: 'flex', gap: 1, alignItems: 'center', mb: 0.5 }}>
                                                             <Typography variant="body2" fontWeight={700}>{addr.fullName}</Typography>
                                                             {addr.label && (
-                                                                <Chip label={addr.label} size="small" sx={{ height: 20, fontSize: 11 }} />
+                                                                <Chip {...themedChipProps({ label: addr.label, sx: { height: 20, fontSize: 11 } })} />
                                                             )}
                                                             {addr.isDefault && (
-                                                                <Chip label="Default" size="small" color="primary" sx={{ height: 20, fontSize: 11 }} />
+                                                                <Chip {...themedChipProps({ label: "Default", color: "primary", sx: { height: 20, fontSize: 11 } })} />
                                                             )}
                                                         </Box>
                                                         <Typography variant="body2" color="text.secondary">
@@ -843,13 +864,15 @@ const CheckoutPage = () => {
                                                 return (
                                                     <Chip
                                                         key={c.code}
-                                                        icon={<LocalOfferIcon />}
-                                                        label={`${c.code} — ${c.name || label}`}
-                                                        onClick={() => handleApplyCoupon(c.code)}
-                                                        color={applied ? 'success' : 'default'}
-                                                        variant={applied ? 'filled' : 'outlined'}
-                                                        clickable
-                                                        disabled={couponLoading}
+                                                        {...themedChipProps({
+                                                            icon: <LocalOfferIcon />,
+                                                            label: `${c.code} — ${c.name || label}`,
+                                                            onClick: () => handleApplyCoupon(c.code),
+                                                            color: applied ? 'success' : 'default',
+                                                            variant: applied ? 'filled' : badgeChipProps.variant,
+                                                            clickable: true,
+                                                            disabled: couponLoading,
+                                                        })}
                                                     />
                                                 );
                                             })}
@@ -868,11 +891,11 @@ const CheckoutPage = () => {
                             {/* Manual entry */}
                             <Box sx={{ display: 'flex', gap: 1, mb: 1 }}>
                                 <TextField
-                                    size="small"
+                                    {...formFieldProps}
                                     placeholder="Enter coupon code"
                                     value={couponCode}
                                     onChange={(e) => { setCouponCode(e.target.value.toUpperCase()); setCouponResult(null); }}
-                                    sx={{ flexGrow: 1 }}
+                                    sx={{ ...formFieldProps.sx, flexGrow: 1 }}
                                     InputProps={{ sx: { fontFamily: 'monospace', fontWeight: 600, letterSpacing: 1 } }}
                                 />
                                 <Button
@@ -901,10 +924,11 @@ const CheckoutPage = () => {
                                     {appliedCoupons.map((coupon) => (
                                         <Chip
                                             key={coupon.code}
-                                            size="small"
-                                            color={coupon.applicationMode === 'auto' ? 'info' : 'success'}
-                                            variant="outlined"
-                                            label={`${coupon.code} · ${formatPrice(coupon.totalDiscount || 0)}`}
+                                            {...themedChipProps({
+                                                color: coupon.applicationMode === 'auto' ? 'info' : 'success',
+                                                variant: 'outlined',
+                                                label: `${coupon.code} · ${formatPrice(coupon.totalDiscount || 0)}`,
+                                            })}
                                         />
                                     ))}
                                 </Box>
@@ -989,7 +1013,7 @@ const CheckoutPage = () => {
                                         {method.id !== 'cod' && (
                                             <Box sx={{ display: 'flex', gap: 0.5, alignItems: 'center' }}>
                                                 {['VISA', 'UPI', 'MC'].map((brand) => (
-                                                    <Chip key={brand} label={brand} size="small" sx={{ fontSize: 10, height: 20 }} variant="outlined" />
+                                                    <Chip key={brand} {...themedChipProps({ label: brand, variant: "outlined", sx: { fontSize: 10, height: 20 } })} />
                                                 ))}
                                             </Box>
                                         )}
@@ -1001,7 +1025,7 @@ const CheckoutPage = () => {
                         {/* Order notes */}
                         <TextField
                             fullWidth
-                            size="small"
+                            {...formFieldProps}
                             label="Order notes (optional)"
                             placeholder="Special instructions for delivery..."
                             multiline
@@ -1013,7 +1037,7 @@ const CheckoutPage = () => {
                     </Section>
 
                     {/* ── Items summary (always visible at bottom of left col) ── */}
-                    <Paper elevation={0} sx={{ border: '1px solid', borderColor: 'divider', borderRadius: 2, p: 2.5, mt: 1.5 }}>
+                    <Paper elevation={0} sx={{ border: '1px solid', borderColor: 'divider', borderRadius: blockRadius, boxShadow: blockShadow, p: blockPadding, mt: 1.5 }}>
                         <Typography variant="subtitle2" fontWeight={600} mb={1.5} color="text.secondary">
                             ORDER ITEMS ({items.length})
                         </Typography>
@@ -1048,7 +1072,7 @@ const CheckoutPage = () => {
 
                 {/* ── Right: Price breakdown + CTA ── */}
                 <Box sx={{ position: 'sticky', top: 80 }}>
-                    <Paper elevation={0} sx={{ border: '1px solid', borderColor: 'divider', borderRadius: 2, overflow: 'hidden' }}>
+                    <Paper elevation={0} sx={{ border: '1px solid', borderColor: 'divider', borderRadius: blockRadius, boxShadow: blockShadow, overflow: 'hidden' }}>
                         <Box sx={{ px: 2.5, py: 2, borderBottom: '1px solid', borderColor: 'divider' }}>
                             <Typography variant="subtitle2" fontWeight={700} color="text.secondary" letterSpacing={0.5}>
                                 PRICE DETAILS
@@ -1138,7 +1162,8 @@ const CheckoutPage = () => {
                             {/* CTA */}
                             <Button
                                 fullWidth
-                                variant="contained"
+                                variant={checkoutBlockStyle.ctaStyle === 'outline' ? 'outlined' : 'contained'}
+                                color={checkoutBlockStyle.ctaStyle === 'soft' ? 'secondary' : 'primary'}
                                 size="large"
                                 onClick={handlePlaceOrder}
                                 disabled={placing || shippingLoading || !shippingQuote?.quoteId || shippingQuote?.serviceable === false || activeSection !== 3 || !selectedAddressId}
@@ -1146,7 +1171,7 @@ const CheckoutPage = () => {
                                     py: 1.5,
                                     fontSize: 16,
                                     fontWeight: 700,
-                                    borderRadius: 2,
+                                    borderRadius: blockRadius,
                                 }}
                             >
                                 {placing ? (
@@ -1186,32 +1211,32 @@ const CheckoutPage = () => {
                 <DialogContent>
                     <Grid container spacing={2} sx={{ mt: 0.5 }}>
                         <Grid item xs={12} sm={6}>
-                            <TextField label="Label (e.g. Home, Work)" size="small" fullWidth
+                            <TextField label="Label (e.g. Home, Work)" {...formFieldProps} fullWidth
                                 value={addrDialog.form.label} onChange={(e) => setAddrField('label', e.target.value)}
                                 error={!!addrDialog.errors?.label} helperText={addrDialog.errors?.label} />
                         </Grid>
                         <Grid item xs={12} sm={6}>
-                            <TextField label="Full Name *" size="small" fullWidth required autoComplete="name"
+                            <TextField label="Full Name *" {...formFieldProps} fullWidth required autoComplete="name"
                                 value={addrDialog.form.fullName} onChange={(e) => setAddrField('fullName', e.target.value)}
                                 error={!!addrDialog.errors?.fullName} helperText={addrDialog.errors?.fullName} />
                         </Grid>
                         <Grid item xs={12} sm={6}>
-                            <TextField label="Phone" size="small" fullWidth autoComplete="tel"
+                            <TextField label="Phone" {...formFieldProps} fullWidth autoComplete="tel"
                                 value={addrDialog.form.phone} onChange={(e) => setAddrField('phone', e.target.value)}
                                 error={!!addrDialog.errors?.phone} helperText={addrDialog.errors?.phone} />
                         </Grid>
                         <Grid item xs={12}>
-                            <TextField label="Address Line 1 *" size="small" fullWidth required autoComplete="address-line1"
+                            <TextField label="Address Line 1 *" {...formFieldProps} fullWidth required autoComplete="address-line1"
                                 value={addrDialog.form.addressLine1} onChange={(e) => setAddrField('addressLine1', e.target.value)}
                                 error={!!addrDialog.errors?.addressLine1} helperText={addrDialog.errors?.addressLine1} />
                         </Grid>
                         <Grid item xs={12}>
-                            <TextField label="Address Line 2" size="small" fullWidth autoComplete="address-line2"
+                            <TextField label="Address Line 2" {...formFieldProps} fullWidth autoComplete="address-line2"
                                 value={addrDialog.form.addressLine2} onChange={(e) => setAddrField('addressLine2', e.target.value)}
                                 error={!!addrDialog.errors?.addressLine2} helperText={addrDialog.errors?.addressLine2} />
                         </Grid>
                         <Grid item xs={12} sm={6}>
-                            <TextField label="City *" size="small" fullWidth required autoComplete="address-level2"
+                            <TextField label="City *" {...formFieldProps} fullWidth required autoComplete="address-level2"
                                 value={addrDialog.form.city} onChange={(e) => setAddrField('city', e.target.value)}
                                 error={!!addrDialog.errors?.city} helperText={addrDialog.errors?.city} />
                         </Grid>
@@ -1223,26 +1248,27 @@ const CheckoutPage = () => {
                                 freeSolo
                                 size="small"
                                 renderInput={(params) => (
-                                    <TextField {...params} label="State / Province" fullWidth autoComplete="address-level1"
+                                    <TextField {...params} {...formFieldProps} label="State / Province" fullWidth autoComplete="address-level1"
                                         error={!!addrDialog.errors?.state} helperText={addrDialog.errors?.state} />
                                 )}
                             />
                         </Grid>
                         <Grid item xs={12} sm={6}>
-                            <TextField label="Postal Code *" size="small" fullWidth required autoComplete="postal-code"
+                            <TextField label="Postal Code *" {...formFieldProps} fullWidth required autoComplete="postal-code"
                                 value={addrDialog.form.postalCode} onChange={(e) => setAddrField('postalCode', e.target.value)}
                                 error={!!addrDialog.errors?.postalCode} helperText={addrDialog.errors?.postalCode} />
                         </Grid>
                         <Grid item xs={12} sm={6}>
-                            <TextField label="Country *" size="small" fullWidth required autoComplete="country-name"
+                            <TextField label="Country *" {...formFieldProps} fullWidth required autoComplete="country-name"
                                 value={addrDialog.form.country} onChange={(e) => setAddrField('country', e.target.value)}
                                 error={!!addrDialog.errors?.country} helperText={addrDialog.errors?.country} />
                         </Grid>
                         <Grid item xs={12} sm={6}>
-                            <TextField label="GSTIN (for B2B)" size="small" fullWidth
+                            <TextField label="GSTIN (for B2B)" {...formFieldProps} fullWidth
                                 placeholder="e.g. 22AAAAA0000A1Z5"
                                 value={addrDialog.form.gstin} onChange={(e) => setAddrField('gstin', e.target.value.toUpperCase())}
                                 error={!!addrDialog.errors?.gstin} helperText={addrDialog.errors?.gstin}
+                                sx={formFieldProps.sx}
                                 InputProps={{ sx: { fontFamily: 'monospace', letterSpacing: 1 } }} />
                         </Grid>
                         <Grid item xs={12}>

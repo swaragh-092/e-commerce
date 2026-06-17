@@ -31,6 +31,7 @@ import { PERMISSIONS } from '../../utils/permissions';
 import { DASHBOARD_PROFILES } from '../../components/admin/dashboard/dashboardWidgets';
 import MessagingSettingsPanel from '../../components/admin/settings/MessagingSettingsPanel';
 import SettingsPreviewPanel from '../../components/admin/settings/SettingsPreviewPanel';
+import LiveStorefrontPreview from '../../components/admin/settings/LiveStorefrontPreview';
 import MediaPicker from '../../components/common/MediaPicker';
 import buildSettingsPanels from '../../components/admin/settings/buildSettingsPanels';
 import { getMediaUrl } from '../../utils/media';
@@ -189,6 +190,7 @@ const SettingsPage = () => {
   const [form, setForm] = useState({});
   const [saving, setSaving] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
+  const [previewMode, setPreviewMode] = useState('live'); // 'live' | 'mock'
   const [emailTemplates, setEmailTemplates] = useState([]);
   const [templateSaving, setTemplateSaving] = useState({});
   const [templateTestEmail, setTemplateTestEmail] = useState('');
@@ -201,6 +203,7 @@ const SettingsPage = () => {
   const appMode = useMode();
   const isSuperAdmin = useIsSuperAdmin();
   const canManageSettings = hasPermission(PERMISSIONS.SETTINGS_MANAGE);
+  const canManageAdvancedSettings = hasPermission(PERMISSIONS.SETTINGS_ADVANCED);
 
   useEffect(() => {
     getAllSettings().then((raw = {}) => {
@@ -302,7 +305,7 @@ const SettingsPage = () => {
       const payload = Object.entries(form).map(([flatKey, value]) => {
         const [group, ...keyParts] = flatKey.split('.');
         return { group, key: keyParts.join('.'), value };
-      }).filter(({ value }) => !isMaskedSecret(value));
+      }).filter(({ group, value }) => !isMaskedSecret(value) && (canManageAdvancedSettings || group !== 'advanced'));
       await updateSettings(payload);
       notify('Settings saved successfully.', 'success');
       // Refresh theme settings in real-time
@@ -320,7 +323,11 @@ const SettingsPage = () => {
 
   const allTabs = ['Store', 'SEO', 'Branding', 'Layout', 'Homepage', 'Catalog', 'Checkout', 'Promotions', 'Invoice', 'Advanced', 'Notifications'];
   const visibleTabs = [
-    ...allTabs.filter(t => appMode === 'ecommerce' || !['Checkout', 'Promotions', 'Invoice'].includes(t))
+    ...allTabs.filter((t) => {
+      if (appMode !== 'ecommerce' && ['Checkout', 'Promotions', 'Invoice'].includes(t)) return false;
+      if (t === 'Advanced' && !canManageAdvancedSettings) return false;
+      return true;
+    })
   ];
   const safeTabIndex = tab < visibleTabs.length ? tab : 0;
   const currentTab = visibleTabs[safeTabIndex];
@@ -720,58 +727,86 @@ const SettingsPage = () => {
         <Grid item xs={12} xl={4}>
           <Box sx={{ position: { xl: 'sticky' }, top: { xl: 24 } }}>
             <Paper variant="outlined" sx={{ p: 2.5, borderRadius: 3, boxShadow: 'none' }}>
-              <Typography variant="subtitle1" fontWeight={700} gutterBottom>
-                Live Preview
-              </Typography>
-              <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
-                This mock storefront updates instantly as you edit {currentTab.toLowerCase()} settings.
-              </Typography>
-              <SettingsPreviewPanel
-                currentTab={currentTab}
-                form={form}
-                previewStyles={previewStyles}
-                themeMode={themeMode}
-                textColor={textColor}
-                storeName={storeName}
-                previewHeaderBackground={previewHeaderBackground}
-                headerStyle={headerStyle}
-                previewCardSx={previewCardSx}
-                storeDescription={storeDescription}
-                previewButtonSx={previewButtonSx}
-                brandSecondary={brandSecondary}
-                announcementEnabled={announcementEnabled}
-                brandPrimary={brandPrimary}
-                stickyHeader={stickyHeader}
-                showCategoryBar={showCategoryBar}
-                footerEnabled={footerEnabled}
-                surfaceColor={surfaceColor}
-                borderRadius={borderRadius}
-                footerTagline={footerTagline}
-                footerShowLinks={footerShowLinks}
-                links={links}
-                primaryHeroSlide={primaryHeroSlide}
-                heroTextColor={heroTextColor}
-                heroTitle={heroTitle}
-                heroSubtitle={heroSubtitle}
-                heroButtonText={heroButtonText}
-                homepageSections={homepageSections}
-                homepageSectionTypes={HOMEPAGE_SECTION_TYPES}
-                showProductSku={showProductSku}
-                showStockBadge={showStockBadge}
-                showBuyNowButton={showBuyNowButton}
-                addToCartLabel={addToCartLabel}
-                buyNowLabel={buyNowLabel}
-                formatMoney={formatMoney}
-                taxInclusive={taxInclusive}
-                guestCheckoutEnabled={guestCheckoutEnabled}
-                couponsEnabled={couponsEnabled}
-                showSaleLabelBadge={showSaleLabelBadge}
-                saleLabel={saleLabel}
-                showDiscountPercentBadge={showDiscountPercentBadge}
-                showSavingsAmount={showSavingsAmount}
-                showSaleTiming={showSaleTiming}
-                showCountdown={showCountdown}
-              />
+              {/* Preview mode toggle */}
+              <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 1.5 }}>
+                <Typography variant="subtitle1" fontWeight={700}>
+                  {previewMode === 'live' ? 'Live Storefront Preview' : 'Mock Storefront Preview'}
+                </Typography>
+                <Box sx={{ display: 'flex', gap: 0.5 }}>
+                  <Button
+                    size="small"
+                    variant={previewMode === 'live' ? 'contained' : 'outlined'}
+                    onClick={() => setPreviewMode('live')}
+                    sx={{ minWidth: 0, px: 1.5, fontSize: '0.72rem', height: 28 }}
+                  >
+                    Live
+                  </Button>
+                  <Button
+                    size="small"
+                    variant={previewMode === 'mock' ? 'contained' : 'outlined'}
+                    onClick={() => setPreviewMode('mock')}
+                    sx={{ minWidth: 0, px: 1.5, fontSize: '0.72rem', height: 28 }}
+                  >
+                    Mock
+                  </Button>
+                </Box>
+              </Box>
+
+              {previewMode === 'live' ? (
+                <LiveStorefrontPreview form={form} />
+              ) : (
+                <>
+                  <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
+                    This mock storefront updates instantly as you edit {currentTab.toLowerCase()} settings.
+                  </Typography>
+                  <SettingsPreviewPanel
+                    currentTab={currentTab}
+                    form={form}
+                    previewStyles={previewStyles}
+                    themeMode={themeMode}
+                    textColor={textColor}
+                    storeName={storeName}
+                    previewHeaderBackground={previewHeaderBackground}
+                    headerStyle={headerStyle}
+                    previewCardSx={previewCardSx}
+                    storeDescription={storeDescription}
+                    previewButtonSx={previewButtonSx}
+                    brandSecondary={brandSecondary}
+                    announcementEnabled={announcementEnabled}
+                    brandPrimary={brandPrimary}
+                    stickyHeader={stickyHeader}
+                    showCategoryBar={showCategoryBar}
+                    footerEnabled={footerEnabled}
+                    surfaceColor={surfaceColor}
+                    borderRadius={borderRadius}
+                    footerTagline={footerTagline}
+                    footerShowLinks={footerShowLinks}
+                    links={links}
+                    primaryHeroSlide={primaryHeroSlide}
+                    heroTextColor={heroTextColor}
+                    heroTitle={heroTitle}
+                    heroSubtitle={heroSubtitle}
+                    heroButtonText={heroButtonText}
+                    homepageSections={homepageSections}
+                    homepageSectionTypes={HOMEPAGE_SECTION_TYPES}
+                    showProductSku={showProductSku}
+                    showStockBadge={showStockBadge}
+                    showBuyNowButton={showBuyNowButton}
+                    addToCartLabel={addToCartLabel}
+                    buyNowLabel={buyNowLabel}
+                    formatMoney={formatMoney}
+                    taxInclusive={taxInclusive}
+                    guestCheckoutEnabled={guestCheckoutEnabled}
+                    couponsEnabled={couponsEnabled}
+                    showSaleLabelBadge={showSaleLabelBadge}
+                    saleLabel={saleLabel}
+                    showDiscountPercentBadge={showDiscountPercentBadge}
+                    showSavingsAmount={showSavingsAmount}
+                    showSaleTiming={showSaleTiming}
+                    showCountdown={showCountdown}
+                  />
+                </>
+              )}
             </Paper>
           </Box>
         </Grid>

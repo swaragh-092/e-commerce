@@ -1,11 +1,33 @@
-import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
+import React, { createContext, useContext, useState, useEffect, useCallback, useMemo } from 'react';
 import { ThemeProvider, createTheme, CssBaseline, Box, CircularProgress } from '@mui/material';
 import settingsService from '../services/settingsService';
 import { DEFAULT_STORE_NAME } from '../utils/store';
+import { buildCriticalThemeCss, buildStorefrontCssVariables, buildStorefrontTheme, resolveStorefrontThemeState } from '../utils/theme';
 
 export const SettingsContext = createContext(null);
+// Separate context for components that ONLY need the resolved design tokens
+// (CSS-variable output). Subscribers do not re-render when unrelated
+// settings (payments, shipping, product page) change — only when the
+// theme tokens themselves change. See HomeExperience, HeroSection, etc.
+export const DesignTokensContext = createContext(null);
 const CustomerThemeContext = createContext({ isDark: false, toggleDarkMode: () => {} });
 export const useCustomerTheme = () => useContext(CustomerThemeContext);
+
+/**
+ * Slice hook — returns only the resolved design tokens object.
+ * Re-renders only when the tokens change, not on every settings write.
+ *
+ * Usage: const { cssVariables, themeObj } = useDesignTokens();
+ */
+export const useDesignTokens = () => useContext(DesignTokensContext);
+
+// Detect preview mode — storefront iframe loaded by the admin settings panel.
+// When true, settings come from localStorage instead of the API so the admin
+// can preview unsaved changes without touching production data.
+const PREVIEW_KEY = 'storePreviewTheme';
+const isPreviewMode = () =>
+  typeof window !== 'undefined' &&
+  new URLSearchParams(window.location.search).get('previewMode') === '1';
 
 export const SettingsProvider = ({ children }) => {
   const [settings, setSettings] = useState(null);
@@ -33,20 +55,32 @@ export const SettingsProvider = ({ children }) => {
     });
   }, [t.mode]);
 
-  const fetchSettings = async () => {
+  // Memoize fetchSettings so any consumer that depends on `refreshSettings`
+  // in a useEffect dep array does not infinite-loop. The previous version
+  // returned a fresh closure on every render, which made ThemeGalleryPage's
+  // 5 dependent effects re-fire on every render.
+  const fetchSettings = useCallback(async () => {
     try {
-      // Fetch settings and features in parallel — one round-trip each
-      const [data, featureData] = await Promise.all([
-        settingsService.getAllSettings(),
+      let data;
+      // In preview mode read from localStorage — avoids API call and keeps
+      // production data untouched while the admin previews unsaved changes.
+      if (isPreviewMode()) {
+        const raw = localStorage.getItem(PREVIEW_KEY);
+        data = raw ? JSON.parse(raw) : {};
+      } else {
+        [data] = await Promise.all([settingsService.getAllSettings()]);
+      }
+
+      const [, featureData] = await Promise.all([
+        Promise.resolve(data),
         settingsService.getFeatures(),
       ]);
 
       setSettings(data);
       setMode(featureData?.mode || 'ecommerce');
-      // Merge: mode-resolved features override anything in settings.features
       setFeatures({ ...data?.features, ...featureData?.features });
       setLockedKeys(featureData?.lockedKeys || []);
-      applyDocumentSettings(data);
+      if (!isPreviewMode()) applyDocumentSettings(data);
     } catch (error) {
       console.error("Failed to load settings", error);
       // Fallback defaults — safe for both modes
@@ -90,7 +124,8 @@ export const SettingsProvider = ({ children }) => {
     } finally {
       setLoading(false);
     }
-  };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const applyDocumentSettings = (data) => {
     // Page title
@@ -115,13 +150,20 @@ export const SettingsProvider = ({ children }) => {
       link.href = data.logo.favicon;
     }
 
-    // Google Fonts — load both heading and body fonts
+    // Google Fonts — load only the weights actually used by the theme so we
+    // don't request 7 weight files per family. See issue M4.
     if (data?.theme?.fontFamily || data?.theme?.headingFont) {
       const fonts = new Set();
       if (data.theme.fontFamily) fonts.add(data.theme.fontFamily);
-      if (data.theme.headingFont) fonts.add(data.theme.headingFont);
+      if (data.theme.headingFont && data.theme.headingFont !== data.theme.fontFamily) {
+        fonts.add(data.theme.headingFont);
+      }
+      const bodyWeight = parseInt(data.theme.bodyWeight, 10) || 400;
+      const headingWeight = parseInt(data.theme.headingWeight, 10) || 700;
+      const weightSet = new Set([bodyWeight, headingWeight, 400, 700]);
+      const weightStr = [...weightSet].sort((a, b) => a - b).join(';');
       const families = [...fonts]
-        .map((f) => `family=${f.replace(/\s+/g, '+')}:wght@300;400;500;600;700;800;900`)
+        .map((f) => `family=${f.replace(/\s+/g, '+')}:wght@${weightStr}`)
         .join('&');
       const linkId = 'google-font-link';
       let link = document.getElementById(linkId);
@@ -139,177 +181,110 @@ export const SettingsProvider = ({ children }) => {
     fetchSettings();
   }, []);
 
-  const radius = parseInt(t.borderRadius) || 8;
-  const themeMode = customerDarkMode 
-    ? customerDarkMode 
-    : (t.mode || (window.matchMedia?.('(prefers-color-scheme: dark)').matches ? 'dark' : 'light'));
-  const isDark = themeMode === 'dark';
-  const fallbackPrimary = isDark ? '#4fd1a5' : '#0f766e';
-  const fallbackSecondary = isDark ? '#ffb86b' : '#f97316';
-  const fallbackBackground = isDark ? '#101514' : '#f7f3ec';
-  const fallbackSurface = isDark ? '#17211f' : '#fffaf2';
-  const fallbackText = isDark ? '#f8fafc' : '#1f2933';
-  const backgroundStyle = t.backgroundStyle || 'softGradient';
-  const buttonStyle = t.buttonStyle || 'solid';
-  const cardStyle = t.cardStyle || 'elevated';
+  const { isDark } = resolveStorefrontThemeState(t, customerDarkMode);
+  const themeConfig = useMemo(
+    () => createTheme(buildStorefrontTheme(t, customerDarkMode)),
+    [t, customerDarkMode]
+  );
+  // Resolved design tokens — used by the new DesignTokensContext.
+  // Recomputed only when the theme object or dark-mode toggles.
+  const designTokens = useMemo(
+    () => ({ cssVariables: buildStorefrontCssVariables(t, customerDarkMode), themeObj: t }),
+    [t, customerDarkMode]
+  );
 
-  // If resolved mode matches the settings mode, use the admin settings colors.
-  // Otherwise, use theme-appropriate fallbacks.
-  const useAdminColors = t.mode === themeMode;
+  // Memoize the SettingsContext value object — without this, every
+  // consumer of useSettings() re-renders on ANY change to any of the
+  // 6 fields below. Combined with the new DesignTokensContext, components
+  // that only need theme tokens can subscribe to that instead and stay
+  // untouched by payments/shipping/etc. writes.
+  const value = useMemo(
+    () => ({
+      settings,
+      mode,        // 'ecommerce' | 'catalog'
+      features,    // fully resolved feature map — use useFeature() to read individual flags
+      lockedKeys,  // Tier 1 keys — use useIsFeatureLocked() to read
+      loading,
+      refreshSettings: fetchSettings,
+    }),
+    [settings, mode, features, lockedKeys, loading, fetchSettings]
+  );
 
-  const primaryMain = useAdminColors ? (t.primaryColor || fallbackPrimary) : fallbackPrimary;
-  const secondaryMain = useAdminColors ? (t.secondaryColor || fallbackSecondary) : fallbackSecondary;
-  const backgroundDefault = useAdminColors ? (t.backgroundColor || fallbackBackground) : fallbackBackground;
-  const surfaceColor = useAdminColors ? (t.surfaceColor || fallbackSurface) : fallbackSurface;
-  const textColor = useAdminColors ? (t.textColor || fallbackText) : fallbackText;
+  // Expose resolved storefront design tokens as CSS custom properties for custom CSS and widgets.
+  useEffect(() => {
+    const vars = buildStorefrontCssVariables(t, customerDarkMode);
+    const root = document.documentElement;
+    Object.entries(vars).forEach(([key, value]) => root.style.setProperty(key, value));
 
-  const themeConfig = createTheme({
-    palette: {
-      mode: themeMode,
-      primary: {
-        main: primaryMain,
-        dark: isDark ? '#31a884' : '#0b4f49',
-        light: isDark ? '#7ee5c4' : '#ccfbf1',
-        contrastText: '#ffffff',
-      },
-      secondary: {
-        main: secondaryMain,
-        dark: isDark ? '#f59e0b' : '#c2410c',
-        light: isDark ? '#ffd39a' : '#fed7aa',
-        contrastText: isDark ? '#1f2933' : '#ffffff',
-      },
-      error: {
-        main: '#e11d48',
-      },
-      warning: {
-        main: '#d97706',
-      },
-      background: {
-        default: backgroundDefault,
-        paper: surfaceColor,
-      },
-      text: {
-        primary: textColor,
-        secondary: isDark ? '#cbd5e1' : '#64748b',
-      },
-      divider: isDark ? 'rgba(148, 163, 184, 0.18)' : 'rgba(15, 118, 110, 0.14)',
-    },
-    typography: {
-      fontFamily: t.fontFamily
-        ? `"${t.fontFamily}", "Roboto", "Helvetica", "Arial", sans-serif`
-        : '"Roboto", "Helvetica", "Arial", sans-serif',
-      h1: { fontSize: '2.5rem', fontWeight: t.headingWeight ? parseInt(t.headingWeight) : 800, letterSpacing: t.headingLetterSpacing || '0px', ...(t.headingFont && { fontFamily: `"${t.headingFont}", "Roboto", sans-serif` }) },
-      h2: { fontSize: '2rem', fontWeight: t.headingWeight ? parseInt(t.headingWeight) : 800, letterSpacing: t.headingLetterSpacing || '0px', ...(t.headingFont && { fontFamily: `"${t.headingFont}", "Roboto", sans-serif` }) },
-      h3: { fontSize: '1.75rem', fontWeight: t.headingWeight ? parseInt(t.headingWeight) : 700, letterSpacing: t.headingLetterSpacing || '0px', ...(t.headingFont && { fontFamily: `"${t.headingFont}", "Roboto", sans-serif` }) },
-      h4: { fontSize: '1.5rem', fontWeight: t.headingWeight ? parseInt(t.headingWeight) : 700, letterSpacing: t.headingLetterSpacing || '0px', ...(t.headingFont && { fontFamily: `"${t.headingFont}", "Roboto", sans-serif` }) },
-      h5: { fontSize: '1.25rem', fontWeight: t.headingWeight ? parseInt(t.headingWeight) : 800, letterSpacing: t.headingLetterSpacing || '0px', ...(t.headingFont && { fontFamily: `"${t.headingFont}", "Roboto", sans-serif` }) },
-      h6: { fontSize: '1rem', fontWeight: t.headingWeight ? parseInt(t.headingWeight) : 700, letterSpacing: t.headingLetterSpacing || '0px', ...(t.headingFont && { fontFamily: `"${t.headingFont}", "Roboto", sans-serif` }) },
-      body1: {
-        fontWeight: t.bodyWeight ? parseInt(t.bodyWeight) : 400,
-        lineHeight: t.lineHeight || 1.5,
-        letterSpacing: t.letterSpacing || '0px',
-      },
-      body2: {
-        fontWeight: t.bodyWeight ? parseInt(t.bodyWeight) : 400,
-        lineHeight: t.lineHeight || 1.5,
-        letterSpacing: t.letterSpacing || '0px',
-      },
-      button: { textTransform: 'none', fontWeight: 700 },
-    },
-    shape: {
-      borderRadius: radius,
-    },
-    breakpoints: {
-      values: {
-        xs: 0,
-        sm: 600,
-        md: 960,
-        lg: 1280,
-        xl: 1920,
-      },
-    },
-    components: {
-      MuiButton: {
-        styleOverrides: {
-          root: {
-            borderRadius: radius,
-            boxShadow: 'none',
-            '&:hover': { boxShadow: 'none' },
-          },
-          containedPrimary: {
-            background: buttonStyle === 'soft' || buttonStyle === 'outline'
-              ? 'transparent'
-              : `linear-gradient(135deg, ${primaryMain} 0%, ${isDark ? secondaryMain : '#134e4a'} 100%)`,
-            color: buttonStyle === 'soft' || buttonStyle === 'outline' ? primaryMain : '#ffffff',
-            border: buttonStyle === 'outline' ? `1px solid ${primaryMain}` : '1px solid transparent',
-            ...(buttonStyle === 'soft' && { backgroundColor: `${primaryMain}22` }),
-          },
-        },
-      },
-      MuiCard: {
-        styleOverrides: {
-          root: {
-            borderRadius: radius + 4,
-            border: cardStyle === 'flat'
-              ? '1px solid transparent'
-              : `1px solid ${isDark ? 'rgba(148, 163, 184, 0.16)' : 'rgba(15, 118, 110, 0.12)'}`,
-            boxShadow: cardStyle === 'elevated'
-              ? (isDark ? '0 18px 45px rgba(0, 0, 0, 0.22)' : '0 18px 45px rgba(31, 41, 51, 0.08)')
-              : 'none',
-          },
-        },
-      },
-      MuiPaper: {
-        styleOverrides: {
-          root: {
-            borderRadius: radius,
-            backgroundImage: 'none',
-          },
-        },
-      },
-      MuiChip: {
-        styleOverrides: {
-          root: { borderRadius: radius, fontWeight: 700 },
-        },
-      },
-      MuiTextField: {
-        styleOverrides: {
-          root: {
-            '& .MuiOutlinedInput-root': { borderRadius: radius },
-          },
-        },
-      },
-      MuiCssBaseline: {
-        styleOverrides: {
-          body: {
-            background:
-              backgroundStyle === 'softGradient'
-                ? `linear-gradient(180deg, ${backgroundDefault} 0%, ${surfaceColor} 48%, ${backgroundDefault} 100%)`
-                : backgroundDefault,
-            fontWeight: t.bodyWeight ? parseInt(t.bodyWeight) : 400,
-            lineHeight: t.lineHeight || 1.5,
-            letterSpacing: t.letterSpacing || '0px',
-          },
-          'h1, h2, h3, h4, h5, h6': {
-            fontFamily: t.headingFont
-              ? `"${t.headingFont}", "Roboto", sans-serif`
-              : (t.fontFamily ? `"${t.fontFamily}", "Roboto", sans-serif` : 'inherit'),
-            fontWeight: t.headingWeight ? parseInt(t.headingWeight) : 700,
-            letterSpacing: t.headingLetterSpacing || '0px',
-          },
-        },
-      },
-    },
-  });
+    return () => {
+      Object.keys(vars).forEach((key) => root.style.removeProperty(key));
+    };
+  }, [t, customerDarkMode]);
 
-  const value = {
-    settings,
-    mode,        // 'ecommerce' | 'catalog'
-    features,    // fully resolved feature map — use useFeature() to read individual flags
-    lockedKeys,  // Tier 1 keys — use useIsFeatureLocked() to read
-    loading,
-    refreshSettings: fetchSettings,
-  };
+  // In preview mode: listen for postMessage from the admin panel to apply
+  // updated CSS vars instantly (colour/font changes without iframe reload).
+  useEffect(() => {
+    if (!isPreviewMode()) return;
+    const handler = (event) => {
+      if (
+        event.origin !== window.location.origin ||
+        event.data?.type !== 'PREVIEW_THEME_UPDATE'
+      ) return;
+      const root = document.documentElement;
+      Object.entries(event.data.vars || {}).forEach(([key, value]) =>
+        root.style.setProperty(key, value)
+      );
+    };
+    window.addEventListener('message', handler);
+    return () => window.removeEventListener('message', handler);
+  }, []);
+
+  // Inject critical CSS and package-level asset hints from theme settings.
+  useEffect(() => {
+    const criticalCss = settings?.theme?.criticalCSS || settings?.theme?.performance?.criticalCSS || buildCriticalThemeCss(t, customerDarkMode);
+    const styleId = 'theme-critical-css';
+    let style = document.getElementById(styleId);
+
+    if (criticalCss) {
+      if (!style) {
+        style = document.createElement('style');
+        style.id = styleId;
+        style.setAttribute('data-storefront-performance', 'critical-css');
+        document.head.prepend(style);
+      }
+      style.textContent = criticalCss;
+    } else if (style) {
+      style.remove();
+    }
+  }, [settings?.theme?.criticalCSS, settings?.theme?.performance?.criticalCSS, t, customerDarkMode]);
+
+  useEffect(() => {
+    const perf = settings?.theme?.performance || {};
+    const assets = [
+      ...(Array.isArray(perf.preloadAssets) ? perf.preloadAssets.map((asset) => ({ ...asset, rel: 'preload' })) : []),
+      ...(Array.isArray(perf.prefetchAssets) ? perf.prefetchAssets.map((asset) => ({ ...asset, rel: 'prefetch' })) : []),
+      ...(Array.isArray(perf.assetHints) ? perf.assetHints : []),
+    ].filter((asset) => asset?.href);
+
+    document.querySelectorAll('link[data-theme-asset-hint="true"]').forEach((node) => node.remove());
+
+    assets.forEach((asset) => {
+      const link = document.createElement('link');
+      link.setAttribute('data-theme-asset-hint', 'true');
+      link.rel = asset.rel || 'preload';
+      link.href = asset.href;
+      if (asset.as) link.as = asset.as;
+      if (asset.type) link.type = asset.type;
+      if (asset.crossOrigin) link.crossOrigin = asset.crossOrigin;
+      if (asset.media) link.media = asset.media;
+      if (asset.fetchPriority) link.fetchPriority = asset.fetchPriority;
+      document.head.appendChild(link);
+    });
+
+    return () => {
+      document.querySelectorAll('link[data-theme-asset-hint="true"]').forEach((node) => node.remove());
+    };
+  }, [settings?.theme?.performance]);
 
   // Inject custom CSS from admin settings
   useEffect(() => {
@@ -384,16 +359,18 @@ export const SettingsProvider = ({ children }) => {
 
   return (
     <SettingsContext.Provider value={value}>
-      <CustomerThemeContext.Provider value={{ isDark, toggleDarkMode }}>
-        <ThemeProvider theme={themeConfig}>
-          <CssBaseline />
-          {loading ? (
-            <Box sx={{ display: 'flex', justifyContent: 'center', alignItems: 'center', minHeight: '100vh' }}>
-              <CircularProgress />
-            </Box>
-          ) : children}
-        </ThemeProvider>
-      </CustomerThemeContext.Provider>
+      <DesignTokensContext.Provider value={designTokens}>
+        <CustomerThemeContext.Provider value={{ isDark, toggleDarkMode }}>
+          <ThemeProvider theme={themeConfig}>
+            <CssBaseline />
+            {loading ? (
+              <Box sx={{ display: 'flex', justifyContent: 'center', alignItems: 'center', minHeight: '100vh' }}>
+                <CircularProgress />
+              </Box>
+            ) : children}
+          </ThemeProvider>
+        </CustomerThemeContext.Provider>
+      </DesignTokensContext.Provider>
     </SettingsContext.Provider>
   );
 };

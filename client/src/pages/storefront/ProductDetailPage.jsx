@@ -17,7 +17,7 @@ import ShareButton from '../../components/common/ShareButton';
 import ReviewSection from '../../components/product/ReviewSection';
 import DOMPurify from 'dompurify';
 import { useCart } from '../../hooks/useCart';
-import { useCurrency, useSettings, useFeature } from '../../hooks/useSettings';
+import { useCurrency, useSettings, useFeature, useComponentStyles } from '../../hooks/useSettings';
 import { formatSaleDateTime, getCountdownText, getDiscountPercent, getSaleTimingMessage, getSavingsAmount, isEndingSoon } from '../../utils/pricing';
 import {
     getVariantDiscountPercent,
@@ -33,7 +33,9 @@ import RelatedProducts from '../../components/product/RelatedProducts';
 import ProductTabsAccordion from '../../components/storefront/ProductTabsAccordion';
 import { getApiErrorMessage } from '../../utils/apiErrors';
 import { getStoreName } from '../../utils/store';
+import { trackRecentlyViewed } from '../../components/storefront/sections/RecentlyViewedSection';
 import { buildProductJsonLd } from '../../utils/seo/buildProductJsonLd';
+import { getBadgeChipProps } from '../../utils/componentStyles';
 
 const getAvailableStock = (entity, stockKey) => {
     const total = Number(entity?.[stockKey] || 0);
@@ -64,11 +66,32 @@ const ProductDetailPage = () => {
     const wishlistEnabled = useFeature('wishlist');
     const enquiryEnabled = useFeature('enquiry');
     const pp = settings?.productPage || {};
+    const badgeChipStyle = useComponentStyles('badgeChip');
+    const badgeChipProps = useMemo(() => getBadgeChipProps(badgeChipStyle), [badgeChipStyle]);
+    const themedChipProps = (overrides = {}) => ({
+        ...badgeChipProps,
+        ...overrides,
+        sx: { ...badgeChipProps.sx, ...(overrides.sx || {}) },
+    });
     const sales = settings?.sales || {};
     const addToCartLabel = pp.addToCartLabel || 'Add to Cart';
     const buyNowLabel = pp.buyNowLabel || 'Buy Now';
     const showBuyNowButton = pp.showBuyNowButton !== false;
     const imageAlignment = pp.imageAlignment === 'vertical' ? 'vertical' : 'horizontal';
+    const productTemplateLayout = pp.templateLayout || 'media-left-details-right';
+    const isGalleryTopLayout = productTemplateLayout === 'gallery-top-details-below';
+    const isStickyPanelLayout = productTemplateLayout === 'sticky-purchase-panel';
+    const isEditorialProductLayout = ['gallery-top-details-below', 'luxury-editorial', 'editorial'].includes(productTemplateLayout);
+    const showStickyPurchasePanel = pp.showStickyAddToCart !== false && !isGalleryTopLayout;
+
+    // Grid column config per layout variant
+    const layoutGrid = isGalleryTopLayout
+      ? { media: 12, details: 12, panel: 0, spacing: 4 }
+      : isStickyPanelLayout
+        ? { media: 5, details: 3, panel: 4, spacing: 4 }
+        : { media: isEditorialProductLayout ? 7 : 5, details: isEditorialProductLayout ? 5 : 4, panel: 3, spacing: isEditorialProductLayout ? 6 : 4 };
+    const showProductTrustBadges = pp.showTrustBadges !== false;
+    const showProductRelated = pp.showRelatedProducts !== false;
     const [countdownNow, setCountdownNow] = useState(Date.now());
 
     useEffect(() => {
@@ -94,6 +117,7 @@ const ProductDetailPage = () => {
                 return;
             }
             setProduct(nextProduct);
+            trackRecentlyViewed(nextProduct);
             if (nextProduct?.variants?.length > 0) {
                 const initialVariant = nextProduct.variants.find((variant) => variant?.isActive !== false && getAvailableStock(variant, 'stockQty') > 0)
                     || nextProduct.variants.find((variant) => variant?.isActive !== false)
@@ -171,14 +195,27 @@ const ProductDetailPage = () => {
 
     if (loading) return (
         <Container maxWidth={false} sx={{ maxWidth: { xs: '100%', lg: 1520 }, mx: 'auto', px: { xs: 2, sm: 3, lg: 5 }, py: { xs: 3, md: 5 } }}>
-            <Grid container spacing={{ xs: 3, md: 4, lg: 5 }} alignItems="flex-start">
-                <Grid item xs={12} md={5}>
-                    <Skeleton variant="rounded" sx={{ width: '100%', aspectRatio: '1', borderRadius: 2 }} />
+            <Grid
+                container
+                spacing={{ xs: 3, md: layoutGrid.spacing, lg: layoutGrid.spacing + 1 }}
+                alignItems="flex-start"
+                direction={isGalleryTopLayout ? 'column' : 'row'}
+                sx={isEditorialProductLayout ? {
+                    p: { xs: 0, md: 3 },
+                    borderRadius: 4,
+                    border: '1px solid',
+                    borderColor: 'divider',
+                    bgcolor: 'background.paper',
+                    boxShadow: '0 24px 70px rgba(15, 23, 42, 0.08)',
+                } : undefined}
+            >
+                <Grid item xs={12} md={layoutGrid.media}>
+                    <Skeleton variant="rounded" sx={{ width: '100%', aspectRatio: isGalleryTopLayout ? '16/7' : '1', borderRadius: 2 }} />
                     <Box sx={{ display: 'flex', gap: 1, mt: 1.5 }}>
                         {[...Array(4)].map((_, i) => <Skeleton key={i} variant="rounded" width={64} height={64} />)}
                     </Box>
                 </Grid>
-                <Grid item xs={12} md={4}>
+                <Grid item xs={12} md={layoutGrid.details || 12} sx={isGalleryTopLayout ? { maxWidth: 720, mx: 'auto' } : undefined}>
                     <Skeleton width="40%" height={20} sx={{ mb: 1.5 }} />
                     <Skeleton width="85%" height={40} sx={{ mb: 1 }} />
                     <Skeleton width="60%" height={40} sx={{ mb: 2.5 }} />
@@ -191,7 +228,7 @@ const ProductDetailPage = () => {
                     <Skeleton width="90%" height={20} sx={{ mb: 1 }} />
                     <Skeleton width="70%" height={20} />
                 </Grid>
-                <Grid item xs={12} md={3} sx={{ display: { xs: 'none', md: 'block' } }}>
+                <Grid item xs={12} md={layoutGrid.panel || 3} sx={{ display: showStickyPurchasePanel && layoutGrid.panel ? { xs: 'none', md: 'block' } : 'none' }}>
                     <Skeleton variant="rounded" sx={{ width: '100%', height: 320, borderRadius: 2 }} />
                 </Grid>
             </Grid>
@@ -361,20 +398,33 @@ const ProductDetailPage = () => {
                 url={resolvedPageUrl}
                 structuredData={productJsonLd}
             />
-            <Grid container spacing={{ xs: 3, md: 4, lg: 5 }} alignItems="flex-start">
-                <Grid item xs={12} md={5}>
-                    <Box sx={{ position: { md: 'sticky' }, top: { md: 96 } }}>
+            <Grid
+                container
+                spacing={{ xs: 3, md: layoutGrid.spacing, lg: layoutGrid.spacing + 1 }}
+                alignItems="flex-start"
+                direction={isGalleryTopLayout ? 'column' : 'row'}
+                sx={isEditorialProductLayout ? {
+                    p: { xs: 0, md: 3 },
+                    borderRadius: 4,
+                    border: '1px solid',
+                    borderColor: 'divider',
+                    bgcolor: 'background.paper',
+                    boxShadow: '0 24px 70px rgba(15, 23, 42, 0.08)',
+                } : undefined}
+            >
+                <Grid item xs={12} md={layoutGrid.media}>
+                    <Box sx={{ position: isGalleryTopLayout ? 'static' : { md: 'sticky' }, top: { md: 96 } }}>
                         <ProductImages
                             images={product.images}
                             variantImages={selectedVariant?.images || []}
                             selectedVariantId={selectedVariant?.id}
-                            thumbnailAlignment={imageAlignment}
+                            thumbnailAlignment={isGalleryTopLayout ? 'horizontal' : imageAlignment}
                             productName={product.name}
                         />
                     </Box>
                 </Grid>
 
-                <Grid item xs={12} md={4}>
+                <Grid item xs={12} md={layoutGrid.details || 12} sx={isGalleryTopLayout ? { maxWidth: 780, mx: 'auto', width: '100%' } : undefined}>
                     <Box
                         sx={{
                             p: { xs: 2, sm: 0 },
@@ -421,7 +471,7 @@ const ProductDetailPage = () => {
                                     <Box component="span" sx={{ opacity: 0.4, fontWeight: 400 }}>/</Box>
                                     <Box
                                         component={RouterLink}
-                                        to={`/products?category=${cat.slug}`}
+                                        to={`/category/${cat.slug}`}
                                         sx={{
                                             color: 'inherit',
                                             textDecoration: 'none',
@@ -458,20 +508,21 @@ const ProductDetailPage = () => {
                     <Box sx={{ display: 'flex', gap: 1, flexWrap: 'wrap', alignItems: 'center', mb: 2.5 }}>
                         {pp.showStockBadge !== false && (
                             <Chip
-                                label={stockAvailable ? 'In Stock' : 'Out of Stock'}
-                                color={stockAvailable ? 'success' : 'default'}
-                                size="small"
-                                sx={{ fontWeight: 800 }}
+                                {...themedChipProps({
+                                    label: stockAvailable ? 'In Stock' : 'Out of Stock',
+                                    color: stockAvailable ? 'success' : 'default',
+                                    sx: { fontWeight: 800 },
+                                })}
                             />
                         )}
                         {pp.showSKU !== false && displaySku && (
-                            <Chip label={`SKU: ${displaySku}`} size="small" variant="outlined" />
+                            <Chip {...themedChipProps({ label: `SKU: ${displaySku}`, variant: "outlined" })} />
                         )}
                         {displayUnit && (
-                            <Chip label={`Unit: ${displayUnit}`} size="small" variant="outlined" />
+                            <Chip {...themedChipProps({ label: `Unit: ${displayUnit}`, variant: "outlined" })} />
                         )}
                         {selectedVariantLabel && (
-                            <Chip label={`Selected: ${selectedVariantLabel}`} size="small" variant="outlined" />
+                            <Chip {...themedChipProps({ label: `Selected: ${selectedVariantLabel}`, variant: "outlined" })} />
                         )}
                     </Box>
 
@@ -487,9 +538,9 @@ const ProductDetailPage = () => {
                             ) : (
                                 <Typography variant="h3" fontWeight={900} sx={{ fontSize: { xs: '2rem', lg: '2.4rem' } }}>{formatPrice(currentPrice)}</Typography>
                             )}
-                            {pricingEnabled && hasSale && showDiscountPercent && discountPercent > 0 && <Chip label={`${discountPercent}% OFF`} color="error" />}
-                            {pricingEnabled && isScheduledSale && <Chip label="Sale Starts Soon" color="warning" />}
-                            {pricingEnabled && endingSoon && <Chip label="Ending Soon" color="warning" variant="outlined" />}
+                            {pricingEnabled && hasSale && showDiscountPercent && discountPercent > 0 && <Chip {...themedChipProps({ label: `${discountPercent}% OFF`, color: "error" })} />}
+                            {pricingEnabled && isScheduledSale && <Chip {...themedChipProps({ label: "Sale Starts Soon", color: "warning" })} />}
+                            {pricingEnabled && endingSoon && <Chip {...themedChipProps({ label: "Ending Soon", color: "warning", variant: "outlined" })} />}
                         </Box>
                     )}
                     {showPrice && displayUnit && (
@@ -513,19 +564,20 @@ const ProductDetailPage = () => {
                             <Box sx={{ display: 'flex', gap: 1, flexWrap: 'wrap', alignItems: 'center', mb: 1 }}>
                                 {saleLabelText && (
                                     <Chip
-                                        label={saleLabelText}
-                                        sx={{
-                                            bgcolor: saleLabelColor.startsWith('#') ? saleLabelColor : undefined,
-                                            color: saleLabelColor.startsWith('#') ? '#fff' : undefined,
-                                            fontWeight: 700
-                                        }}
-                                        color={!saleLabelColor.startsWith('#') ? saleLabelColor : undefined}
-                                        size="small"
+                                        {...themedChipProps({
+                                            label: saleLabelText,
+                                            sx: {
+                                                bgcolor: saleLabelColor.startsWith('#') ? saleLabelColor : undefined,
+                                                color: saleLabelColor.startsWith('#') ? '#fff' : undefined,
+                                                fontWeight: 700,
+                                            },
+                                            color: !saleLabelColor.startsWith('#') ? saleLabelColor : undefined,
+                                        })}
                                     />
                                 )}
-                                {showDiscountPercent && discountPercent > 0 && <Chip label={`${discountPercent}% OFF`} color={hasSale ? 'error' : 'warning'} variant="outlined" size="small" />}
-                                {saleTiming && <Chip label={saleTiming} variant="outlined" size="small" />}
-                                {countdownText && <Chip key={countdownNow} label={countdownText} color={hasSale ? 'error' : 'warning'} variant="filled" size="small" />}
+                                {showDiscountPercent && discountPercent > 0 && <Chip {...themedChipProps({ label: `${discountPercent}% OFF`, color: hasSale ? 'error' : 'warning', variant: "outlined" })} />}
+                                {saleTiming && <Chip {...themedChipProps({ label: saleTiming, variant: "outlined" })} />}
+                                {countdownText && <Chip key={countdownNow} {...themedChipProps({ label: countdownText, color: hasSale ? 'error' : 'warning', variant: "filled" })} />}
                             </Box>
 
                             {hasSale && showSavingsAmount && (
@@ -738,7 +790,7 @@ const ProductDetailPage = () => {
                     </Box>
                 </Grid>
 
-                <Grid item xs={12} md={3} sx={{ display: { xs: 'none', md: 'block' } }}>
+                <Grid item xs={12} md={layoutGrid.panel || 3} sx={{ display: showStickyPurchasePanel && layoutGrid.panel ? { xs: 'none', md: 'block' } : 'none' }}>
                     <Box
                         sx={{
                             position: 'sticky',
@@ -874,24 +926,28 @@ const ProductDetailPage = () => {
                             </Button>
                         )}
 
-                        <Divider sx={{ my: 2 }} />
-                        <Box sx={{ display: 'grid', gap: 1 }}>
-                            {[
-                                ['Delivery', 'Fast dispatch after confirmation'],
-                                ['Payment', 'Secure transaction'],
-                                ['Support', 'Order updates available'],
-                            ].map(([label, value]) => (
-                                <Box key={label} sx={{ display: 'grid', gridTemplateColumns: '82px 1fr', gap: 1 }}>
-                                    <Typography variant="caption" color="text.secondary">{label}</Typography>
-                                    <Typography variant="caption" fontWeight={700}>{value}</Typography>
+                        {showProductTrustBadges && (
+                            <>
+                                <Divider sx={{ my: 2 }} />
+                                <Box sx={{ display: 'grid', gap: 1 }}>
+                                    {[
+                                        ['Delivery', 'Fast dispatch after confirmation'],
+                                        ['Payment', 'Secure transaction'],
+                                        ['Support', 'Order updates available'],
+                                    ].map(([label, value]) => (
+                                        <Box key={label} sx={{ display: 'grid', gridTemplateColumns: '82px 1fr', gap: 1 }}>
+                                            <Typography variant="caption" color="text.secondary">{label}</Typography>
+                                            <Typography variant="caption" fontWeight={700}>{value}</Typography>
+                                        </Box>
+                                    ))}
                                 </Box>
-                            ))}
-                        </Box>
+                            </>
+                        )}
                     </Box>
                 </Grid>
             </Grid>
 
-            <RelatedProducts productId={product.id} />
+            {showProductRelated && <RelatedProducts productId={product.id} />}
 
             <EnquiryModal
                 open={enquiryOpen}

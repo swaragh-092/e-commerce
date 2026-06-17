@@ -10,6 +10,7 @@ import { NotificationProvider } from './context/NotificationContext';
 import AppErrorBoundary from './components/common/AppErrorBoundary';
 import AppRoutes from './routes/AppRoutes';
 import AuthRedirectListener from './components/common/AuthRedirectListener';
+import { Agentation } from 'agentation';
 
 function App() {
   return (
@@ -24,6 +25,7 @@ function App() {
                     <WishlistProvider>
                       <AuthRedirectListener />
                       <AppRoutes />
+                      {import.meta.env.DEV && <Agentation />}
                     </WishlistProvider>
                   </BrandProvider>
                 </CategoryProvider>

@@ -461,8 +461,8 @@ const StoreLayout = () => {
                   PaperProps={{
                     sx: {
                       mt: 1.5,
-                      boxShadow: '0 8px 24px rgba(0,0,0,0.15)',
-                      borderRadius: '8px',
+                      boxShadow: 'var(--store-shadow-dropdown)',
+                      borderRadius: 'var(--store-radius)',
                       minWidth: '220px',
                       overflow: 'hidden',
                     },

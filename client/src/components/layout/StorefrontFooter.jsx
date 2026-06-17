@@ -61,8 +61,11 @@ const StorefrontFooter = () => {
   // Respect the enabled toggle (default: show)
   if (f.enabled === false) return null;
 
-  const bgColor = f.bgColor || theme.palette.background.paper;
-  const fgColor = f.fgColor || theme.palette.text.secondary;
+  // Fall back to CSS custom properties first so that admins who customise
+  // the theme via CSS variables (not the MUI theme palette) are honoured.
+  // See issue L5 in docs/DESIGN-SYSTEM-ISSUES.md.
+  const bgColor = f.bgColor || 'var(--store-color-surface, ' + theme.palette.background.paper + ')';
+  const fgColor = f.fgColor || 'var(--store-color-text-muted, ' + theme.palette.text.secondary + ')';
 
   const copyright = (f.copyright || '© {year} {storeName}. All rights reserved.')
     .replace('{year}',      new Date().getFullYear())

@@ -31,7 +31,7 @@ const updateSingle = async (req, res, next) => {
     
     // In actual implementation req.body is validated by validation.js which only ensures 'value' is present
     const resolvedGroup = req.query.group || group || 'general';
-    const result = await SettingsService.updateKey(key, value, resolvedGroup, req.user.id);
+    const result = await SettingsService.updateKey(key, value, resolvedGroup, req.user.id, req.user);
     return success(res, result, 'Setting updated successfully');
   } catch (err) {
     next(err);

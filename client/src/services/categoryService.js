@@ -5,8 +5,8 @@ export const getCategoryTree = async () => {
     return response.data;
 };
 
-export const getCategoryWithProducts = async (slug, page = 1, limit = 20) => {
-    const response = await api.get(`/categories/${slug}`, { params: { page, limit } });
+export const getCategoryWithProducts = async (slug, page = 1, limit = 20, sort = 'newest') => {
+    const response = await api.get(`/categories/${slug}`, { params: { page, limit, sort } });
     return response.data;
 };
 

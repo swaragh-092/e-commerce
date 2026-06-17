@@ -1,0 +1,458 @@
+{
+  "schemaVersion": 3,
+  "meta": {
+    "slug": "b2b-catalog",
+    "name": "B2B Catalog",
+    "version": "1.0.0",
+    "author": "Platform Templates",
+    "description": "Clean catalog-first template for wholesale, industrial supplies, procurement, and enquiry-led stores.",
+    "category": "b2b",
+    "tags": [
+      "b2b",
+      "catalog",
+      "wholesale",
+      "industrial",
+      "enquiry"
+    ],
+    "previewImage": "data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSI0MDAiIGhlaWdodD0iMjYwIiB2aWV3Qm94PSIwIDAgNDAwIDI2MCI+CiAgPHJlY3Qgd2lkdGg9IjQwMCIgaGVpZ2h0PSIyNjAiIGZpbGw9IiNmOGZhZmMiLz4KICA8cmVjdCB3aWR0aD0iNDAwIiBoZWlnaHQ9IjMyIiBmaWxsPSIjMWUzYThhIi8+CiAgPHJlY3QgeD0iMTIiIHk9IjgiIHdpZHRoPSI2MCIgaGVpZ2h0PSIxNiIgcng9IjMiIGZpbGw9IiNmZmZmZmYiIG9wYWNpdHk9IjAuMyIvPgogIDxyZWN0IHg9IjMwMCIgeT0iMTAiIHdpZHRoPSI0MCIgaGVpZ2h0PSIxMiIgcng9IjIiIGZpbGw9IiNmZmZmZmYiIG9wYWNpdHk9IjAuMyIvPgogIDxyZWN0IHg9IjM1MCIgeT0iMTAiIHdpZHRoPSI0MCIgaGVpZ2h0PSIxMiIgcng9IjIiIGZpbGw9IiNmZmZmZmYiIG9wYWNpdHk9IjAuMyIvPgogIDxyZWN0IHg9IjAiIHk9IjM2IiB3aWR0aD0iNDAwIiBoZWlnaHQ9IjEwMCIgZmlsbD0iIzFlM2E4YSIgb3BhY2l0eT0iMC4xMiIvPgogIDxyZWN0IHg9IjI0IiB5PSI1NiIgd2lkdGg9IjE4MCIgaGVpZ2h0PSIxNCIgcng9IjMiIGZpbGw9IiMwZjE3MmEiIG9wYWNpdHk9IjAuOCIvPgogIDxyZWN0IHg9IjI0IiB5PSI3OCIgd2lkdGg9IjI0MCIgaGVpZ2h0PSI4IiByeD0iMiIgZmlsbD0iIzBmMTcyYSIgb3BhY2l0eT0iMC40Ii8+CiAgPHJlY3QgeD0iMjQiIHk9Ijk0IiB3aWR0aD0iMjAwIiBoZWlnaHQ9IjgiIHJ4PSIyIiBmaWxsPSIjMGYxNzJhIiBvcGFjaXR5PSIwLjMiLz4KICA8cmVjdCB4PSIyNCIgeT0iMTEyIiB3aWR0aD0iODAiIGhlaWdodD0iMjQiIHJ4PSI0IiBmaWxsPSIjMWUzYThhIi8+CiAgPHJlY3QgeD0iMTEyIiB5PSIxMTIiIHdpZHRoPSI4MCIgaGVpZ2h0PSIyNCIgcng9IjQiIGZpbGw9IiM2NDc0OGIiIG9wYWNpdHk9IjAuOCIvPgogIDxyZWN0IHg9IjI0IiB5PSIxNTAiIHdpZHRoPSIxMTAiIGhlaWdodD0iODAiIHJ4PSI2IiBmaWxsPSIjZmZmZmZmIi8+CiAgPHJlY3QgeD0iMTQ0IiB5PSIxNTAiIHdpZHRoPSIxMTAiIGhlaWdodD0iODAiIHJ4PSI2IiBmaWxsPSIjZmZmZmZmIi8+CiAgPHJlY3QgeD0iMjY0IiB5PSIxNTAiIHdpZHRoPSIxMTAiIGhlaWdodD0iODAiIHJ4PSI2IiBmaWxsPSIjZmZmZmZmIi8+CiAgPHJlY3QgeD0iMzIiIHk9IjE1OCIgd2lkdGg9Ijk0IiBoZWlnaHQ9IjQ0IiByeD0iNCIgZmlsbD0iIzFlM2E4YSIgb3BhY2l0eT0iMC4xIi8+CiAgPHJlY3QgeD0iMTUyIiB5PSIxNTgiIHdpZHRoPSI5NCIgaGVpZ2h0PSI0NCIgcng9IjQiIGZpbGw9IiMxZTNhOGEiIG9wYWNpdHk9IjAuMSIvPgogIDxyZWN0IHg9IjI3MiIgeT0iMTU4IiB3aWR0aD0iOTQiIGhlaWdodD0iNDQiIHJ4PSI0IiBmaWxsPSIjMWUzYThhIiBvcGFjaXR5PSIwLjEiLz4KICA8cmVjdCB4PSIzMiIgeT0iMjEwIiB3aWR0aD0iNjAiIGhlaWdodD0iNiIgcng9IjIiIGZpbGw9IiMwZjE3MmEiIG9wYWNpdHk9IjAuNiIvPgogIDxyZWN0IHg9IjE1MiIgeT0iMjEwIiB3aWR0aD0iNjAiIGhlaWdodD0iNiIgcng9IjIiIGZpbGw9IiMwZjE3MmEiIG9wYWNpdHk9IjAuNiIvPgogIDxyZWN0IHg9IjI3MiIgeT0iMjEwIiB3aWR0aD0iNjAiIGhlaWdodD0iNiIgcng9IjIiIGZpbGw9IiMwZjE3MmEiIG9wYWNpdHk9IjAuNiIvPgogIDxyZWN0IHg9IjMyIiB5PSIyMjAiIHdpZHRoPSI0MCIgaGVpZ2h0PSI2IiByeD0iMiIgZmlsbD0iIzY0NzQ4YiIgb3BhY2l0eT0iMC43Ii8+CiAgPHJlY3QgeD0iMTUyIiB5PSIyMjAiIHdpZHRoPSI0MCIgaGVpZ2h0PSI2IiByeD0iMiIgZmlsbD0iIzY0NzQ4YiIgb3BhY2l0eT0iMC43Ii8+CiAgPHJlY3QgeD0iMjcyIiB5PSIyMjAiIHdpZHRoPSI0MCIgaGVpZ2h0PSI2IiByeD0iMiIgZmlsbD0iIzY0NzQ4YiIgb3BhY2l0eT0iMC43Ii8+CiAgPHJlY3QgeD0iMCIgeT0iMjQ0IiB3aWR0aD0iNDAwIiBoZWlnaHQ9IjE2IiBmaWxsPSIjMWYyOTMzIi8+Cjwvc3ZnPg==",
+    "bestFor": "B2B catalogs, wholesale stores, industrial supply, bulk ordering, and quote-led commerce."
+  },
+  "design": {
+    "theme": {
+      "mode": "light",
+      "primaryColor": "#1e3a8a",
+      "secondaryColor": "#64748b",
+      "backgroundColor": "#f8fafc",
+      "surfaceColor": "#ffffff",
+      "textColor": "#0f172a",
+      "fontFamily": "Inter",
+      "headingFont": "Inter",
+      "headingWeight": "800",
+      "bodyWeight": "400",
+      "lineHeight": "1.5",
+      "letterSpacing": "0px",
+      "headingLetterSpacing": "-0.01em",
+      "borderRadius": "6px",
+      "headerStyle": "solid",
+      "buttonStyle": "solid",
+      "cardStyle": "outlined",
+      "backgroundStyle": "solid"
+    }
+  },
+  "layout": {
+    "nav": {
+      "sticky": true,
+      "showCategoryBar": true
+    },
+    "footerStyle": {
+      "bgColor": "#0f172a",
+      "fgColor": "#f8fafc"
+    },
+    "announcementStyle": {
+      "bgColor": "#1e3a8a",
+      "fgColor": "#ffffff",
+      "dismissible": true
+    },
+    "homepageSections": [
+      {
+        "id": "hero",
+        "type": "hero-carousel",
+        "enabled": true,
+        "autoPlay": true,
+        "interval": 6500,
+        "variant": "split"
+      },
+      {
+        "id": "trust-badges",
+        "type": "trust-badges",
+        "enabled": true,
+        "items": [
+          {
+            "title": "Bulk Ready",
+            "text": "Built for larger carts"
+          },
+          {
+            "title": "Fast Quotes",
+            "text": "Support sales workflows"
+          },
+          {
+            "title": "Verified Supply",
+            "text": "Build procurement trust"
+          },
+          {
+            "title": "Account Friendly",
+            "text": "Guide repeat buyers"
+          }
+        ],
+        "variant": "card-grid"
+      },
+      {
+        "id": "categories",
+        "type": "featured-collection-grid",
+        "enabled": true,
+        "title": "Browse Catalog Departments",
+        "count": 8,
+        "dynamic": true,
+        "variant": "compact-chips"
+      },
+      {
+        "id": "featured",
+        "type": "product-row",
+        "enabled": true,
+        "title": "Popular Catalog Items",
+        "source": "featured",
+        "dataSourceKey": "featured-products",
+        "count": 8,
+        "layout": "grid",
+        "viewAllLink": "/products?featured=true",
+        "variant": "grid-compact"
+      },
+      {
+        "id": "procurement-story",
+        "type": "editorial-image-text",
+        "enabled": true,
+        "title": "Procurement Without Friction",
+        "subtitle": "Explain service levels, supply confidence, account workflows, and quote support.",
+        "image": "https://images.unsplash.com/photo-1581091226825-a6a2a5aee158?auto=format&fit=crop&w=1200&q=80",
+        "imagePosition": "left",
+        "ctaText": "Browse Catalog",
+        "ctaLink": "/products"
+      },
+      {
+        "id": "logo-cloud",
+        "type": "logo-cloud",
+        "enabled": true,
+        "title": "Trusted Supplier Network",
+        "items": [
+          {
+            "title": "SupplyCo"
+          },
+          {
+            "title": "Industrial+"
+          },
+          {
+            "title": "BulkPro"
+          },
+          {
+            "title": "TradeLine"
+          }
+        ]
+      },
+      {
+        "id": "faq",
+        "type": "faq",
+        "enabled": true,
+        "title": "Buyer Questions",
+        "items": [
+          {
+            "title": "Can buyers request quotes?",
+            "text": "Pair this template with enquiry and bulk-order workflows."
+          },
+          {
+            "title": "Can catalog rows be dynamic?",
+            "text": "Yes. Template data sources can power product rows."
+          }
+        ]
+      }
+    ]
+  },
+  "demoContent": {
+    "announcementText": "Bulk ordering and enquiry-friendly catalog experience.",
+    "heroSlides": [
+      {
+        "eyebrow": "Wholesale Ready",
+        "title": "A Serious Catalog For Serious Buyers",
+        "subtitle": "Organize product discovery for procurement, B2B, and industrial buying.",
+        "buttonText": "Browse Catalog",
+        "buttonLink": "/products",
+        "secondaryButtonText": "Request Quote",
+        "secondaryButtonLink": "/contact",
+        "image": "https://images.unsplash.com/photo-1581091226825-a6a2a5aee158?auto=format&fit=crop&w=1800&q=80",
+        "position": "center",
+        "color": "#ffffff"
+      },
+      {
+        "eyebrow": "Procurement",
+        "title": "Make Repeat Buying Easier",
+        "subtitle": "Clean sections, fast discovery, and practical product rows.",
+        "buttonText": "View Products",
+        "buttonLink": "/products?featured=true",
+        "image": "https://images.unsplash.com/photo-1504917595217-d4dc5ebe6122?auto=format&fit=crop&w=1800&q=80",
+        "position": "center",
+        "color": "#ffffff"
+      }
+    ],
+    "valueProps": [
+      {
+        "icon": "verified",
+        "title": "Reliable Catalog",
+        "text": "Structured buying flow"
+      },
+      {
+        "icon": "support",
+        "title": "Quote Support",
+        "text": "Help for bulk buyers"
+      },
+      {
+        "icon": "shipping",
+        "title": "Fulfillment Ready",
+        "text": "Clear delivery process"
+      },
+      {
+        "icon": "secure",
+        "title": "Secure Accounts",
+        "text": "Professional checkout"
+      }
+    ],
+    "promoBanners": [
+      {
+        "kicker": "Bulk Ready",
+        "title": "Frequently Ordered Items",
+        "subtitle": "Surface repeat-purchase essentials for business buyers.",
+        "ctaText": "Shop Catalog",
+        "link": "/products?featured=true",
+        "color": "#eff6ff",
+        "accentColor": "#1e3a8a"
+      },
+      {
+        "kicker": "Procurement",
+        "title": "New Supplier Highlights",
+        "subtitle": "Showcase approved products and trusted brands.",
+        "ctaText": "View New",
+        "link": "/products?sort=newest",
+        "color": "#f1f5f9",
+        "accentColor": "#64748b"
+      }
+    ]
+  },
+  "capabilities": {
+    "design": true,
+    "layoutStyle": true,
+    "homepageSections": true,
+    "demoContent": true,
+    "pageTemplates": true,
+    "dataSources": true,
+    "customCode": false,
+    "componentStyles": true,
+    "sectionPresets": true
+  },
+  "dataSources": [
+    {
+      "key": "featured-products",
+      "type": "apiBuilder",
+      "definition": {
+        "name": "B2B Catalog Featured Products",
+        "description": "Template-owned storefront endpoint for B2B Catalog product rows.",
+        "isActive": true,
+        "config": {
+          "responseMode": "object",
+          "includeMeta": true,
+          "blocks": [
+            {
+              "key": "products",
+              "resource": "products",
+              "enabled": true,
+              "mode": "filtered",
+              "limit": 8,
+              "fields": [
+                "id",
+                "name",
+                "slug",
+                "shortDescription",
+                "price",
+                "salePrice",
+                "saleLabel",
+                "avgRating",
+                "reviewCount",
+                "brandId",
+                "createdAt"
+              ],
+              "filters": [
+                {
+                  "field": "isFeatured",
+                  "operator": "equals",
+                  "source": "static",
+                  "value": true
+                }
+              ],
+              "relations": [
+                {
+                  "key": "images",
+                  "relation": "images",
+                  "resource": "productImages",
+                  "enabled": true,
+                  "mode": "all",
+                  "limit": 1,
+                  "fields": [
+                    "url",
+                    "alt",
+                    "isPrimary",
+                    "sortOrder"
+                  ],
+                  "sortBy": "sortOrder",
+                  "sortOrder": "ASC"
+                }
+              ],
+              "sortBy": "createdAt",
+              "sortOrder": "DESC"
+            }
+          ]
+        }
+      }
+    }
+  ],
+  "pageTemplates": {
+    "product": {
+      "layout": "specs-first",
+      "showTrustBadges": true,
+      "showRelatedProducts": true,
+      "showRecentlyViewed": true,
+      "showStickyAddToCart": true,
+      "showBreadcrumbs": true
+    },
+    "collection": {
+      "layout": "compact-b2b-list",
+      "productsPerRow": 2,
+      "filterLayout": "topbar",
+      "showBreadcrumbs": true
+    }
+  },
+  "componentStyles": {
+    "productCard": {
+      "variant": "compact",
+      "imageRatio": "1/1",
+      "imageFit": "contain",
+      "showBrand": true,
+      "showCategory": true,
+      "showRating": false,
+      "showWishlist": false,
+      "showSaleCountdown": false,
+      "priceStyle": "regular",
+      "badgeStyle": "minimal",
+      "badgePosition": "top-right",
+      "hoverEffect": "none",
+      "radius": "small",
+      "shadow": "none",
+      "density": "compact"
+    },
+    "categoryCard": {
+      "variant": "compact-chips",
+      "imageRatio": "1/1",
+      "imageFit": "contain",
+      "titlePlacement": "below",
+      "showSubtitle": false,
+      "showProductCount": true,
+      "hoverEffect": "none",
+      "radius": "small",
+      "shadow": "none",
+      "density": "compact"
+    },
+    "promoCard": {
+      "variant": "banner-stack",
+      "imagePlacement": "right",
+      "titleSize": "small",
+      "ctaStyle": "text-link",
+      "radius": "small",
+      "shadow": "none"
+    },
+    "brandCard": {
+      "variant": "logo-only",
+      "hoverEffect": "none",
+      "radius": "small",
+      "shadow": "none"
+    },
+    "trustCard": {
+      "variant": "icon-row",
+      "titleSize": "small",
+      "radius": "small",
+      "shadow": "none"
+    }
+  },
+  "sectionPresets": {
+    "hero": {
+      "type": "hero-carousel",
+      "autoPlay": true,
+      "interval": 6500,
+      "variant": "split"
+    },
+    "trust": {
+      "type": "trust-badges",
+      "items": [
+        {
+          "title": "Bulk Ready",
+          "text": "Built for larger carts"
+        },
+        {
+          "title": "Fast Quotes",
+          "text": "Support sales workflows"
+        },
+        {
+          "title": "Verified Supply",
+          "text": "Build procurement trust"
+        },
+        {
+          "title": "Account Friendly",
+          "text": "Guide repeat buyers"
+        }
+      ],
+      "variant": "card-grid"
+    },
+    "categoryGrid": {
+      "type": "featured-collection-grid",
+      "title": "Browse Catalog Departments",
+      "count": 8,
+      "dynamic": true,
+      "variant": "compact-chips"
+    },
+    "productRow": {
+      "type": "product-row",
+      "title": "Popular Catalog Items",
+      "source": "featured",
+      "count": 8,
+      "layout": "grid",
+      "viewAllLink": "/products?featured=true",
+      "variant": "grid-compact"
+    },
+    "editorial": {
+      "type": "editorial-image-text",
+      "title": "Procurement Without Friction",
+      "subtitle": "Explain service levels, supply confidence, account workflows, and quote support.",
+      "image": "https://images.unsplash.com/photo-1581091226825-a6a2a5aee158?auto=format&fit=crop&w=1200&q=80",
+      "imagePosition": "left",
+      "ctaText": "Browse Catalog",
+      "ctaLink": "/products"
+    },
+    "logoCloud": {
+      "type": "logo-cloud",
+      "title": "Trusted Supplier Network",
+      "items": [
+        {
+          "title": "SupplyCo"
+        },
+        {
+          "title": "Industrial+"
+        },
+        {
+          "title": "BulkPro"
+        },
+        {
+          "title": "TradeLine"
+        }
+      ]
+    },
+    "faq": {
+      "type": "faq",
+      "title": "Buyer Questions",
+      "items": [
+        {
+          "title": "Can buyers request quotes?",
+          "text": "Pair this template with enquiry and bulk-order workflows."
+        },
+        {
+          "title": "Can catalog rows be dynamic?",
+          "text": "Yes. Template data sources can power product rows."
+        }
+      ]
+    }
+  }
+}

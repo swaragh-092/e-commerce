@@ -36,6 +36,11 @@ module.exports = (sequelize, DataTypes) => {
       allowNull: true,
       field: 'created_by',
     },
+    createdByTemplateId: {
+      type: DataTypes.STRING(255),
+      allowNull: true,
+      field: 'created_by_template_id',
+    },
     updatedBy: {
       type: DataTypes.UUID,
       allowNull: true,

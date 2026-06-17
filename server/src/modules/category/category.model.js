@@ -48,6 +48,16 @@ module.exports = (sequelize, DataTypes) => {
             type: DataTypes.STRING(500),
             field: 'og_image'
         },
+        bannerImage: {
+            type: DataTypes.TEXT,
+            allowNull: true,
+            field: 'banner_image'
+        },
+        customHeading: {
+            type: DataTypes.STRING(255),
+            allowNull: true,
+            field: 'custom_heading'
+        },
     }, {
         tableName: 'categories',
         timestamps: true,
