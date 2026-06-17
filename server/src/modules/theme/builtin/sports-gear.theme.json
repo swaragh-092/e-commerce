@@ -1,0 +1,400 @@
+{
+  "schemaVersion": 3,
+  "meta": {
+    "slug": "sports-gear",
+    "name": "Sports Gear",
+    "version": "1.0.0",
+    "author": "Platform Templates",
+    "description": "Bold performance template for sports equipment, apparel, fitness gear, and active lifestyle stores.",
+    "category": "sports",
+    "tags": [
+      "sports",
+      "fitness",
+      "performance",
+      "dark",
+      "red"
+    ],
+    "previewImage": "data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSI0MDAiIGhlaWdodD0iMjYwIiB2aWV3Qm94PSIwIDAgNDAwIDI2MCI+CiAgPHJlY3Qgd2lkdGg9IjQwMCIgaGVpZ2h0PSIyNjAiIGZpbGw9IiMxMTE4MjciLz4KICA8cmVjdCB3aWR0aD0iNDAwIiBoZWlnaHQ9IjMyIiBmaWxsPSIjZGMyNjI2Ii8+CiAgPHJlY3QgeD0iMTIiIHk9IjgiIHdpZHRoPSI2MCIgaGVpZ2h0PSIxNiIgcng9IjMiIGZpbGw9IiMxZjI5MzciIG9wYWNpdHk9IjAuMyIvPgogIDxyZWN0IHg9IjMwMCIgeT0iMTAiIHdpZHRoPSI0MCIgaGVpZ2h0PSIxMiIgcng9IjIiIGZpbGw9IiMxZjI5MzciIG9wYWNpdHk9IjAuMyIvPgogIDxyZWN0IHg9IjM1MCIgeT0iMTAiIHdpZHRoPSI0MCIgaGVpZ2h0PSIxMiIgcng9IjIiIGZpbGw9IiMxZjI5MzciIG9wYWNpdHk9IjAuMyIvPgogIDxyZWN0IHg9IjAiIHk9IjM2IiB3aWR0aD0iNDAwIiBoZWlnaHQ9IjEwMCIgZmlsbD0iI2RjMjYyNiIgb3BhY2l0eT0iMC4xMiIvPgogIDxyZWN0IHg9IjI0IiB5PSI1NiIgd2lkdGg9IjE4MCIgaGVpZ2h0PSIxNCIgcng9IjMiIGZpbGw9IiNmOWZhZmIiIG9wYWNpdHk9IjAuOCIvPgogIDxyZWN0IHg9IjI0IiB5PSI3OCIgd2lkdGg9IjI0MCIgaGVpZ2h0PSI4IiByeD0iMiIgZmlsbD0iI2Y5ZmFmYiIgb3BhY2l0eT0iMC40Ii8+CiAgPHJlY3QgeD0iMjQiIHk9Ijk0IiB3aWR0aD0iMjAwIiBoZWlnaHQ9IjgiIHJ4PSIyIiBmaWxsPSIjZjlmYWZiIiBvcGFjaXR5PSIwLjMiLz4KICA8cmVjdCB4PSIyNCIgeT0iMTEyIiB3aWR0aD0iODAiIGhlaWdodD0iMjQiIHJ4PSI0IiBmaWxsPSIjZGMyNjI2Ii8+CiAgPHJlY3QgeD0iMTEyIiB5PSIxMTIiIHdpZHRoPSI4MCIgaGVpZ2h0PSIyNCIgcng9IjQiIGZpbGw9IiNmZmZmZmYiIG9wYWNpdHk9IjAuOCIvPgogIDxyZWN0IHg9IjI0IiB5PSIxNTAiIHdpZHRoPSIxMTAiIGhlaWdodD0iODAiIHJ4PSI2IiBmaWxsPSIjMWYyOTM3Ii8+CiAgPHJlY3QgeD0iMTQ0IiB5PSIxNTAiIHdpZHRoPSIxMTAiIGhlaWdodD0iODAiIHJ4PSI2IiBmaWxsPSIjMWYyOTM3Ii8+CiAgPHJlY3QgeD0iMjY0IiB5PSIxNTAiIHdpZHRoPSIxMTAiIGhlaWdodD0iODAiIHJ4PSI2IiBmaWxsPSIjMWYyOTM3Ii8+CiAgPHJlY3QgeD0iMzIiIHk9IjE1OCIgd2lkdGg9Ijk0IiBoZWlnaHQ9IjQ0IiByeD0iNCIgZmlsbD0iI2RjMjYyNiIgb3BhY2l0eT0iMC4xIi8+CiAgPHJlY3QgeD0iMTUyIiB5PSIxNTgiIHdpZHRoPSI5NCIgaGVpZ2h0PSI0NCIgcng9IjQiIGZpbGw9IiNkYzI2MjYiIG9wYWNpdHk9IjAuMSIvPgogIDxyZWN0IHg9IjI3MiIgeT0iMTU4IiB3aWR0aD0iOTQiIGhlaWdodD0iNDQiIHJ4PSI0IiBmaWxsPSIjZGMyNjI2IiBvcGFjaXR5PSIwLjEiLz4KICA8cmVjdCB4PSIzMiIgeT0iMjEwIiB3aWR0aD0iNjAiIGhlaWdodD0iNiIgcng9IjIiIGZpbGw9IiNmOWZhZmIiIG9wYWNpdHk9IjAuNiIvPgogIDxyZWN0IHg9IjE1MiIgeT0iMjEwIiB3aWR0aD0iNjAiIGhlaWdodD0iNiIgcng9IjIiIGZpbGw9IiNmOWZhZmIiIG9wYWNpdHk9IjAuNiIvPgogIDxyZWN0IHg9IjI3MiIgeT0iMjEwIiB3aWR0aD0iNjAiIGhlaWdodD0iNiIgcng9IjIiIGZpbGw9IiNmOWZhZmIiIG9wYWNpdHk9IjAuNiIvPgogIDxyZWN0IHg9IjMyIiB5PSIyMjAiIHdpZHRoPSI0MCIgaGVpZ2h0PSI2IiByeD0iMiIgZmlsbD0iI2ZmZmZmZiIgb3BhY2l0eT0iMC43Ii8+CiAgPHJlY3QgeD0iMTUyIiB5PSIyMjAiIHdpZHRoPSI0MCIgaGVpZ2h0PSI2IiByeD0iMiIgZmlsbD0iI2ZmZmZmZiIgb3BhY2l0eT0iMC43Ii8+CiAgPHJlY3QgeD0iMjcyIiB5PSIyMjAiIHdpZHRoPSI0MCIgaGVpZ2h0PSI2IiByeD0iMiIgZmlsbD0iI2ZmZmZmZiIgb3BhY2l0eT0iMC43Ii8+CiAgPHJlY3QgeD0iMCIgeT0iMjQ0IiB3aWR0aD0iNDAwIiBoZWlnaHQ9IjE2IiBmaWxsPSIjMWExYTJlIi8+Cjwvc3ZnPg==",
+    "bestFor": "Sports gear, fitness equipment, activewear, outdoor shops, and team stores."
+  },
+  "design": {
+    "theme": {
+      "mode": "dark",
+      "primaryColor": "#dc2626",
+      "secondaryColor": "#ffffff",
+      "backgroundColor": "#111827",
+      "surfaceColor": "#1f2937",
+      "textColor": "#f9fafb",
+      "fontFamily": "Inter",
+      "headingFont": "Inter",
+      "headingWeight": "900",
+      "bodyWeight": "400",
+      "lineHeight": "1.45",
+      "letterSpacing": "0px",
+      "headingLetterSpacing": "-0.03em",
+      "borderRadius": "6px",
+      "headerStyle": "solid",
+      "buttonStyle": "solid",
+      "cardStyle": "elevated",
+      "backgroundStyle": "solid"
+    }
+  },
+  "layout": {
+    "nav": {
+      "sticky": true,
+      "showCategoryBar": true
+    },
+    "footerStyle": {
+      "bgColor": "#030712",
+      "fgColor": "#f9fafb"
+    },
+    "announcementStyle": {
+      "bgColor": "#dc2626",
+      "fgColor": "#ffffff",
+      "dismissible": true
+    },
+    "homepageSections": [
+      {
+        "id": "hero",
+        "type": "hero-carousel",
+        "enabled": true,
+        "autoPlay": true,
+        "interval": 6000,
+        "variant": "overlay"
+      },
+      {
+        "id": "countdown",
+        "type": "countdown-sale",
+        "enabled": true,
+        "title": "Game Day Deals",
+        "subtitle": "Push urgent offers and seasonal campaigns.",
+        "ctaText": "Shop Sale",
+        "ctaLink": "/products?onSale=true"
+      },
+      {
+        "id": "categories",
+        "type": "featured-collection-grid",
+        "enabled": true,
+        "title": "Shop By Sport",
+        "count": 8,
+        "dynamic": true
+      },
+      {
+        "id": "featured",
+        "type": "product-row",
+        "enabled": true,
+        "title": "Performance Picks",
+        "source": "featured",
+        "dataSourceKey": "featured-products",
+        "count": 8,
+        "layout": "carousel",
+        "viewAllLink": "/products?featured=true"
+      },
+      {
+        "id": "training-story",
+        "type": "editorial-image-text",
+        "enabled": true,
+        "title": "Built For Training Days",
+        "subtitle": "Use section storytelling for benefits, durability, and use cases.",
+        "image": "https://images.unsplash.com/photo-1517836357463-d25dfeac3438?auto=format&fit=crop&w=1200&q=80",
+        "imagePosition": "right",
+        "ctaText": "Shop Gear",
+        "ctaLink": "/products"
+      },
+      {
+        "id": "trust-badges",
+        "type": "trust-badges",
+        "enabled": true,
+        "items": [
+          {
+            "title": "Performance Tested",
+            "text": "Built for movement"
+          },
+          {
+            "title": "Easy Returns",
+            "text": "Reduce buying anxiety"
+          },
+          {
+            "title": "Fast Shipping",
+            "text": "Gear up quickly"
+          },
+          {
+            "title": "Secure Checkout",
+            "text": "Protected payments"
+          }
+        ]
+      }
+    ]
+  },
+  "demoContent": {
+    "announcementText": "Game day offers are live. Gear up before the next session.",
+    "heroSlides": [
+      {
+        "eyebrow": "Performance",
+        "title": "Gear Built For The Next Level",
+        "subtitle": "Equipment, apparel, and essentials for training and competition.",
+        "buttonText": "Shop Gear",
+        "buttonLink": "/products",
+        "secondaryButtonText": "Deals",
+        "secondaryButtonLink": "/products?onSale=true",
+        "image": "https://images.unsplash.com/photo-1517649763962-0c623066013b?auto=format&fit=crop&w=1800&q=80",
+        "position": "center",
+        "color": "#ffffff"
+      },
+      {
+        "eyebrow": "Train Hard",
+        "title": "Performance Starts With The Right Kit",
+        "subtitle": "A bold storefront for sports, fitness, and active lifestyle catalogs.",
+        "buttonText": "Shop Performance",
+        "buttonLink": "/products?featured=true",
+        "image": "https://images.unsplash.com/photo-1517836357463-d25dfeac3438?auto=format&fit=crop&w=1800&q=80",
+        "position": "center",
+        "color": "#ffffff"
+      }
+    ],
+    "valueProps": [
+      {
+        "icon": "verified",
+        "title": "Performance Tested",
+        "text": "Built for movement"
+      },
+      {
+        "icon": "shipping",
+        "title": "Fast Gear Delivery",
+        "text": "Ready for training"
+      },
+      {
+        "icon": "offers",
+        "title": "Game Day Deals",
+        "text": "Offers that move fast"
+      },
+      {
+        "icon": "support",
+        "title": "Fit Support",
+        "text": "Help choosing gear"
+      }
+    ],
+    "promoBanners": [
+      {
+        "kicker": "Game Day",
+        "title": "Performance Gear Sale",
+        "subtitle": "Save on equipment and training essentials.",
+        "ctaText": "Shop Sale",
+        "link": "/products?onSale=true",
+        "color": "#1f2937",
+        "accentColor": "#dc2626"
+      },
+      {
+        "kicker": "New",
+        "title": "Fresh Training Drops",
+        "subtitle": "Latest gear for gym, field, and road.",
+        "ctaText": "See New",
+        "link": "/products?sort=newest",
+        "color": "#111827",
+        "accentColor": "#ffffff"
+      }
+    ]
+  },
+  "capabilities": {
+    "design": true,
+    "layoutStyle": true,
+    "homepageSections": true,
+    "demoContent": true,
+    "pageTemplates": true,
+    "dataSources": true,
+    "customCode": false,
+    "componentStyles": true,
+    "sectionPresets": true
+  },
+  "dataSources": [
+    {
+      "key": "featured-products",
+      "type": "apiBuilder",
+      "definition": {
+        "name": "Sports Gear Featured Products",
+        "description": "Template-owned storefront endpoint for Sports Gear product rows.",
+        "isActive": true,
+        "config": {
+          "responseMode": "object",
+          "includeMeta": true,
+          "blocks": [
+            {
+              "key": "products",
+              "resource": "products",
+              "enabled": true,
+              "mode": "filtered",
+              "limit": 8,
+              "fields": [
+                "id",
+                "name",
+                "slug",
+                "shortDescription",
+                "price",
+                "salePrice",
+                "saleLabel",
+                "avgRating",
+                "reviewCount",
+                "brandId",
+                "createdAt"
+              ],
+              "filters": [
+                {
+                  "field": "isFeatured",
+                  "operator": "equals",
+                  "source": "static",
+                  "value": true
+                }
+              ],
+              "relations": [
+                {
+                  "key": "images",
+                  "relation": "images",
+                  "resource": "productImages",
+                  "enabled": true,
+                  "mode": "all",
+                  "limit": 1,
+                  "fields": [
+                    "url",
+                    "alt",
+                    "isPrimary",
+                    "sortOrder"
+                  ],
+                  "sortBy": "sortOrder",
+                  "sortOrder": "ASC"
+                }
+              ],
+              "sortBy": "createdAt",
+              "sortOrder": "DESC"
+            }
+          ]
+        }
+      }
+    }
+  ],
+  "pageTemplates": {
+    "product": {
+      "layout": "sticky-purchase-panel",
+      "showTrustBadges": true,
+      "showRelatedProducts": true,
+      "showRecentlyViewed": true,
+      "showStickyAddToCart": true,
+      "showBreadcrumbs": true
+    },
+    "collection": {
+      "layout": "compact-performance-grid",
+      "productsPerRow": 4,
+      "filterLayout": "topbar",
+      "showBreadcrumbs": true
+    }
+  },
+  "componentStyles": {
+    "productCard": {
+      "variant": "deal",
+      "imageRatio": "4/3",
+      "imageFit": "cover",
+      "showBrand": true,
+      "showCategory": true,
+      "showRating": true,
+      "showWishlist": true,
+      "showSaleCountdown": true,
+      "priceStyle": "bold",
+      "badgeStyle": "ribbon",
+      "badgePosition": "top-left",
+      "hoverEffect": "lift",
+      "radius": "small",
+      "shadow": "strong",
+      "density": "compact"
+    },
+    "categoryCard": {
+      "variant": "image-tile",
+      "imageRatio": "16/9",
+      "imageFit": "cover",
+      "titlePlacement": "overlay",
+      "showSubtitle": false,
+      "showProductCount": true,
+      "hoverEffect": "zoom",
+      "radius": "small",
+      "shadow": "medium",
+      "density": "compact"
+    },
+    "promoCard": {
+      "variant": "asymmetric",
+      "imagePlacement": "right",
+      "titleSize": "large",
+      "ctaStyle": "button",
+      "radius": "small",
+      "shadow": "strong"
+    },
+    "brandCard": {
+      "variant": "logo-card",
+      "hoverEffect": "lift",
+      "radius": "small",
+      "shadow": "medium"
+    },
+    "trustCard": {
+      "variant": "icon-row",
+      "titleSize": "medium",
+      "radius": "small",
+      "shadow": "none"
+    }
+  },
+  "sectionPresets": {
+    "hero": {
+      "type": "hero-carousel",
+      "autoPlay": true,
+      "interval": 6000,
+      "variant": "overlay"
+    },
+    "campaign": {
+      "type": "countdown-sale",
+      "title": "Game Day Deals",
+      "subtitle": "Push urgent offers and seasonal campaigns.",
+      "ctaText": "Shop Sale",
+      "ctaLink": "/products?onSale=true"
+    },
+    "categoryGrid": {
+      "type": "featured-collection-grid",
+      "title": "Shop By Sport",
+      "count": 8,
+      "dynamic": true
+    },
+    "productRow": {
+      "type": "product-row",
+      "title": "Performance Picks",
+      "source": "featured",
+      "count": 8,
+      "layout": "carousel",
+      "viewAllLink": "/products?featured=true"
+    },
+    "editorial": {
+      "type": "editorial-image-text",
+      "title": "Built For Training Days",
+      "subtitle": "Use section storytelling for benefits, durability, and use cases.",
+      "image": "https://images.unsplash.com/photo-1517836357463-d25dfeac3438?auto=format&fit=crop&w=1200&q=80",
+      "imagePosition": "right",
+      "ctaText": "Shop Gear",
+      "ctaLink": "/products"
+    },
+    "trust": {
+      "type": "trust-badges",
+      "items": [
+        {
+          "title": "Performance Tested",
+          "text": "Built for movement"
+        },
+        {
+          "title": "Easy Returns",
+          "text": "Reduce buying anxiety"
+        },
+        {
+          "title": "Fast Shipping",
+          "text": "Gear up quickly"
+        },
+        {
+          "title": "Secure Checkout",
+          "text": "Protected payments"
+        }
+      ]
+    }
+  }
+}

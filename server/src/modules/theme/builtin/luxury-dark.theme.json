@@ -1,0 +1,426 @@
+{
+  "schemaVersion": 3,
+  "meta": {
+    "slug": "luxury-dark",
+    "name": "Luxury Dark",
+    "version": "1.0.0",
+    "author": "Platform Templates",
+    "description": "Dark premium template with gold accents and serif headings for luxury fashion, jewelry, and high-end retail.",
+    "category": "luxury",
+    "tags": [
+      "dark",
+      "premium",
+      "gold",
+      "serif",
+      "luxury"
+    ],
+    "previewImage": "data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSI0MDAiIGhlaWdodD0iMjYwIiB2aWV3Qm94PSIwIDAgNDAwIDI2MCI+CiAgPHJlY3Qgd2lkdGg9IjQwMCIgaGVpZ2h0PSIyNjAiIGZpbGw9IiMwZjExMTUiLz4KICA8cmVjdCB3aWR0aD0iNDAwIiBoZWlnaHQ9IjMyIiBmaWxsPSIjZDRhZjM3Ii8+CiAgPHJlY3QgeD0iMTIiIHk9IjgiIHdpZHRoPSI2MCIgaGVpZ2h0PSIxNiIgcng9IjMiIGZpbGw9IiMxODFiMjIiIG9wYWNpdHk9IjAuMyIvPgogIDxyZWN0IHg9IjMwMCIgeT0iMTAiIHdpZHRoPSI0MCIgaGVpZ2h0PSIxMiIgcng9IjIiIGZpbGw9IiMxODFiMjIiIG9wYWNpdHk9IjAuMyIvPgogIDxyZWN0IHg9IjM1MCIgeT0iMTAiIHdpZHRoPSI0MCIgaGVpZ2h0PSIxMiIgcng9IjIiIGZpbGw9IiMxODFiMjIiIG9wYWNpdHk9IjAuMyIvPgogIDxyZWN0IHg9IjAiIHk9IjM2IiB3aWR0aD0iNDAwIiBoZWlnaHQ9IjEwMCIgZmlsbD0iI2Q0YWYzNyIgb3BhY2l0eT0iMC4xMiIvPgogIDxyZWN0IHg9IjI0IiB5PSI1NiIgd2lkdGg9IjE4MCIgaGVpZ2h0PSIxNCIgcng9IjMiIGZpbGw9IiNmOGZhZmMiIG9wYWNpdHk9IjAuOCIvPgogIDxyZWN0IHg9IjI0IiB5PSI3OCIgd2lkdGg9IjI0MCIgaGVpZ2h0PSI4IiByeD0iMiIgZmlsbD0iI2Y4ZmFmYyIgb3BhY2l0eT0iMC40Ii8+CiAgPHJlY3QgeD0iMjQiIHk9Ijk0IiB3aWR0aD0iMjAwIiBoZWlnaHQ9IjgiIHJ4PSIyIiBmaWxsPSIjZjhmYWZjIiBvcGFjaXR5PSIwLjMiLz4KICA8cmVjdCB4PSIyNCIgeT0iMTEyIiB3aWR0aD0iODAiIGhlaWdodD0iMjQiIHJ4PSI0IiBmaWxsPSIjZDRhZjM3Ii8+CiAgPHJlY3QgeD0iMTEyIiB5PSIxMTIiIHdpZHRoPSI4MCIgaGVpZ2h0PSIyNCIgcng9IjQiIGZpbGw9IiM4YjVjZjYiIG9wYWNpdHk9IjAuOCIvPgogIDxyZWN0IHg9IjI0IiB5PSIxNTAiIHdpZHRoPSIxMTAiIGhlaWdodD0iODAiIHJ4PSI2IiBmaWxsPSIjMTgxYjIyIi8+CiAgPHJlY3QgeD0iMTQ0IiB5PSIxNTAiIHdpZHRoPSIxMTAiIGhlaWdodD0iODAiIHJ4PSI2IiBmaWxsPSIjMTgxYjIyIi8+CiAgPHJlY3QgeD0iMjY0IiB5PSIxNTAiIHdpZHRoPSIxMTAiIGhlaWdodD0iODAiIHJ4PSI2IiBmaWxsPSIjMTgxYjIyIi8+CiAgPHJlY3QgeD0iMzIiIHk9IjE1OCIgd2lkdGg9Ijk0IiBoZWlnaHQ9IjQ0IiByeD0iNCIgZmlsbD0iI2Q0YWYzNyIgb3BhY2l0eT0iMC4xIi8+CiAgPHJlY3QgeD0iMTUyIiB5PSIxNTgiIHdpZHRoPSI5NCIgaGVpZ2h0PSI0NCIgcng9IjQiIGZpbGw9IiNkNGFmMzciIG9wYWNpdHk9IjAuMSIvPgogIDxyZWN0IHg9IjI3MiIgeT0iMTU4IiB3aWR0aD0iOTQiIGhlaWdodD0iNDQiIHJ4PSI0IiBmaWxsPSIjZDRhZjM3IiBvcGFjaXR5PSIwLjEiLz4KICA8cmVjdCB4PSIzMiIgeT0iMjEwIiB3aWR0aD0iNjAiIGhlaWdodD0iNiIgcng9IjIiIGZpbGw9IiNmOGZhZmMiIG9wYWNpdHk9IjAuNiIvPgogIDxyZWN0IHg9IjE1MiIgeT0iMjEwIiB3aWR0aD0iNjAiIGhlaWdodD0iNiIgcng9IjIiIGZpbGw9IiNmOGZhZmMiIG9wYWNpdHk9IjAuNiIvPgogIDxyZWN0IHg9IjI3MiIgeT0iMjEwIiB3aWR0aD0iNjAiIGhlaWdodD0iNiIgcng9IjIiIGZpbGw9IiNmOGZhZmMiIG9wYWNpdHk9IjAuNiIvPgogIDxyZWN0IHg9IjMyIiB5PSIyMjAiIHdpZHRoPSI0MCIgaGVpZ2h0PSI2IiByeD0iMiIgZmlsbD0iIzhiNWNmNiIgb3BhY2l0eT0iMC43Ii8+CiAgPHJlY3QgeD0iMTUyIiB5PSIyMjAiIHdpZHRoPSI0MCIgaGVpZ2h0PSI2IiByeD0iMiIgZmlsbD0iIzhiNWNmNiIgb3BhY2l0eT0iMC43Ii8+CiAgPHJlY3QgeD0iMjcyIiB5PSIyMjAiIHdpZHRoPSI0MCIgaGVpZ2h0PSI2IiByeD0iMiIgZmlsbD0iIzhiNWNmNiIgb3BhY2l0eT0iMC43Ii8+CiAgPHJlY3QgeD0iMCIgeT0iMjQ0IiB3aWR0aD0iNDAwIiBoZWlnaHQ9IjE2IiBmaWxsPSIjMWExYTJlIi8+Cjwvc3ZnPg==",
+    "bestFor": "Luxury fashion, premium accessories, jewelry, watches, and high-margin catalogs."
+  },
+  "design": {
+    "theme": {
+      "mode": "dark",
+      "primaryColor": "#d4af37",
+      "secondaryColor": "#8b5cf6",
+      "backgroundColor": "#0f1115",
+      "surfaceColor": "#181b22",
+      "textColor": "#f8fafc",
+      "fontFamily": "Lato",
+      "headingFont": "Playfair Display",
+      "headingWeight": "700",
+      "bodyWeight": "400",
+      "lineHeight": "1.5",
+      "letterSpacing": "0px",
+      "headingLetterSpacing": "0px",
+      "borderRadius": "4px",
+      "headerStyle": "glass",
+      "buttonStyle": "outline",
+      "cardStyle": "elevated",
+      "backgroundStyle": "solid"
+    }
+  },
+  "layout": {
+    "nav": {
+      "sticky": true,
+      "showCategoryBar": true
+    },
+    "footerStyle": {
+      "bgColor": "#0a0a0a",
+      "fgColor": "#e2e8f0"
+    },
+    "announcementStyle": {
+      "bgColor": "#d4af37",
+      "fgColor": "#0f1115",
+      "dismissible": true
+    },
+    "homepageSections": [
+      {
+        "id": "hero",
+        "type": "hero-carousel",
+        "enabled": true,
+        "autoPlay": true,
+        "interval": 7000,
+        "variant": "overlay"
+      },
+      {
+        "id": "signature-story",
+        "type": "editorial-image-text",
+        "enabled": true,
+        "title": "A More Considered Purchase",
+        "subtitle": "Create premium pacing with story, spacing, and fewer stronger merchandising moments.",
+        "image": "https://images.unsplash.com/photo-1515562141207-7a88fb7ce338?auto=format&fit=crop&w=1200&q=80",
+        "imagePosition": "right",
+        "ctaText": "View Collection",
+        "ctaLink": "/products?featured=true",
+        "variant": "overlap-card"
+      },
+      {
+        "id": "featured",
+        "type": "product-row",
+        "enabled": true,
+        "title": "Signature Pieces",
+        "source": "featured",
+        "dataSourceKey": "featured-products",
+        "count": 6,
+        "layout": "carousel",
+        "viewAllLink": "/products?featured=true",
+        "variant": "carousel"
+      },
+      {
+        "id": "logo-cloud",
+        "type": "logo-cloud",
+        "enabled": true,
+        "title": "As Seen In",
+        "items": [
+          {
+            "title": "VOGUE"
+          },
+          {
+            "title": "ELLE"
+          },
+          {
+            "title": "GQ"
+          },
+          {
+            "title": "BAZAAR"
+          }
+        ]
+      },
+      {
+        "id": "promo",
+        "type": "promo-banners",
+        "enabled": true,
+        "title": "Private Client Services",
+        "variant": "cards"
+      },
+      {
+        "id": "trust-badges",
+        "type": "trust-badges",
+        "enabled": true,
+        "items": [
+          {
+            "title": "Authenticity",
+            "text": "Verified product story"
+          },
+          {
+            "title": "Premium Support",
+            "text": "High-touch assistance"
+          },
+          {
+            "title": "Secure Payment",
+            "text": "Protected checkout"
+          },
+          {
+            "title": "Gift Ready",
+            "text": "Premium packaging"
+          }
+        ],
+        "variant": "card-grid"
+      }
+    ]
+  },
+  "demoContent": {
+    "announcementText": "Complimentary shipping on all orders. Luxury delivered to your door.",
+    "heroSlides": [
+      {
+        "eyebrow": "Exclusive",
+        "title": "Timeless Elegance, Redefined",
+        "subtitle": "Discover premium pieces crafted for distinction.",
+        "buttonText": "Explore Collection",
+        "buttonLink": "/products",
+        "secondaryButtonText": "New In",
+        "secondaryButtonLink": "/products?sort=newest",
+        "image": "https://images.unsplash.com/photo-1441984904996-e0b6ba687e04?auto=format&fit=crop&w=1800&q=80",
+        "position": "center",
+        "color": "#ffffff"
+      },
+      {
+        "eyebrow": "Limited Edit",
+        "title": "The Premium Collection",
+        "subtitle": "Deep tones, refined typography, and elevated merchandising.",
+        "buttonText": "Shop The Edit",
+        "buttonLink": "/products?featured=true",
+        "image": "https://images.unsplash.com/photo-1515886657613-9f3515b0c78f?auto=format&fit=crop&w=1800&q=80",
+        "position": "center",
+        "color": "#ffffff"
+      }
+    ],
+    "valueProps": [
+      {
+        "icon": "verified",
+        "title": "Authenticated",
+        "text": "Every piece verified genuine"
+      },
+      {
+        "icon": "shipping",
+        "title": "White Glove Delivery",
+        "text": "Complimentary on all orders"
+      },
+      {
+        "icon": "secure",
+        "title": "Secure & Private",
+        "text": "Discreet checkout"
+      },
+      {
+        "icon": "support",
+        "title": "Concierge Support",
+        "text": "Premium assistance"
+      }
+    ],
+    "promoBanners": [
+      {
+        "kicker": "New Season",
+        "title": "Autumn Collection",
+        "subtitle": "Rich textures and warm tones for the discerning eye.",
+        "ctaText": "View Collection",
+        "link": "/products?sort=newest",
+        "color": "#1a1a2e",
+        "accentColor": "#d4af37"
+      },
+      {
+        "kicker": "Private Edit",
+        "title": "Signature Pieces",
+        "subtitle": "Curated products designed to anchor a premium catalog.",
+        "ctaText": "Discover",
+        "link": "/products?featured=true",
+        "color": "#111111",
+        "accentColor": "#8b5cf6"
+      }
+    ]
+  },
+  "capabilities": {
+    "design": true,
+    "layoutStyle": true,
+    "homepageSections": true,
+    "demoContent": true,
+    "pageTemplates": true,
+    "dataSources": true,
+    "customCode": false,
+    "componentStyles": true,
+    "sectionPresets": true
+  },
+  "dataSources": [
+    {
+      "key": "featured-products",
+      "type": "apiBuilder",
+      "definition": {
+        "name": "Luxury Dark Featured Products",
+        "description": "Template-owned storefront endpoint for Luxury Dark product rows.",
+        "isActive": true,
+        "config": {
+          "responseMode": "object",
+          "includeMeta": true,
+          "blocks": [
+            {
+              "key": "products",
+              "resource": "products",
+              "enabled": true,
+              "mode": "filtered",
+              "limit": 8,
+              "fields": [
+                "id",
+                "name",
+                "slug",
+                "shortDescription",
+                "price",
+                "salePrice",
+                "saleLabel",
+                "avgRating",
+                "reviewCount",
+                "brandId",
+                "createdAt"
+              ],
+              "filters": [
+                {
+                  "field": "isFeatured",
+                  "operator": "equals",
+                  "source": "static",
+                  "value": true
+                }
+              ],
+              "relations": [
+                {
+                  "key": "images",
+                  "relation": "images",
+                  "resource": "productImages",
+                  "enabled": true,
+                  "mode": "all",
+                  "limit": 1,
+                  "fields": [
+                    "url",
+                    "alt",
+                    "isPrimary",
+                    "sortOrder"
+                  ],
+                  "sortBy": "sortOrder",
+                  "sortOrder": "ASC"
+                }
+              ],
+              "sortBy": "createdAt",
+              "sortOrder": "DESC"
+            }
+          ]
+        }
+      }
+    }
+  ],
+  "pageTemplates": {
+    "product": {
+      "layout": "luxury-editorial",
+      "showTrustBadges": true,
+      "showRelatedProducts": true,
+      "showRecentlyViewed": true,
+      "showStickyAddToCart": false,
+      "showBreadcrumbs": true
+    },
+    "collection": {
+      "layout": "editorial-collection-grid",
+      "productsPerRow": 3,
+      "filterLayout": "sidebar",
+      "showBreadcrumbs": true
+    }
+  },
+  "componentStyles": {
+    "productCard": {
+      "variant": "editorial",
+      "imageRatio": "4/5",
+      "imageFit": "cover",
+      "showBrand": true,
+      "showCategory": false,
+      "showRating": true,
+      "showWishlist": true,
+      "showSaleCountdown": false,
+      "priceStyle": "bold",
+      "badgeStyle": "corner",
+      "badgePosition": "top-left",
+      "hoverEffect": "fade",
+      "radius": "small",
+      "shadow": "strong",
+      "density": "spacious"
+    },
+    "categoryCard": {
+      "variant": "image-tile",
+      "imageRatio": "4/5",
+      "imageFit": "cover",
+      "titlePlacement": "overlay",
+      "showSubtitle": false,
+      "showProductCount": false,
+      "hoverEffect": "fade",
+      "radius": "small",
+      "shadow": "strong",
+      "density": "spacious"
+    },
+    "promoCard": {
+      "variant": "asymmetric",
+      "imagePlacement": "right",
+      "titleSize": "large",
+      "ctaStyle": "text-link",
+      "radius": "small",
+      "shadow": "strong"
+    },
+    "brandCard": {
+      "variant": "logo-card",
+      "hoverEffect": "fade",
+      "radius": "small",
+      "shadow": "medium"
+    },
+    "trustCard": {
+      "variant": "card-grid",
+      "titleSize": "medium",
+      "radius": "small",
+      "shadow": "medium"
+    }
+  },
+  "sectionPresets": {
+    "hero": {
+      "type": "hero-carousel",
+      "autoPlay": true,
+      "interval": 7000,
+      "variant": "overlay"
+    },
+    "editorial": {
+      "type": "editorial-image-text",
+      "title": "A More Considered Purchase",
+      "subtitle": "Create premium pacing with story, spacing, and fewer stronger merchandising moments.",
+      "image": "https://images.unsplash.com/photo-1515562141207-7a88fb7ce338?auto=format&fit=crop&w=1200&q=80",
+      "imagePosition": "right",
+      "ctaText": "View Collection",
+      "ctaLink": "/products?featured=true",
+      "variant": "overlap-card"
+    },
+    "productRow": {
+      "type": "product-row",
+      "title": "Signature Pieces",
+      "source": "featured",
+      "count": 6,
+      "layout": "carousel",
+      "viewAllLink": "/products?featured=true",
+      "variant": "carousel"
+    },
+    "logoCloud": {
+      "type": "logo-cloud",
+      "title": "As Seen In",
+      "items": [
+        {
+          "title": "VOGUE"
+        },
+        {
+          "title": "ELLE"
+        },
+        {
+          "title": "GQ"
+        },
+        {
+          "title": "BAZAAR"
+        }
+      ]
+    },
+    "promoBanner": {
+      "type": "promo-banners",
+      "title": "Private Client Services",
+      "variant": "cards"
+    },
+    "trust": {
+      "type": "trust-badges",
+      "items": [
+        {
+          "title": "Authenticity",
+          "text": "Verified product story"
+        },
+        {
+          "title": "Premium Support",
+          "text": "High-touch assistance"
+        },
+        {
+          "title": "Secure Payment",
+          "text": "Protected checkout"
+        },
+        {
+          "title": "Gift Ready",
+          "text": "Premium packaging"
+        }
+      ],
+      "variant": "card-grid"
+    }
+  }
+}

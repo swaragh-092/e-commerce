@@ -1,0 +1,402 @@
+{
+  "schemaVersion": 3,
+  "meta": {
+    "slug": "artisan-craft",
+    "name": "Artisan Craft",
+    "version": "1.0.0",
+    "author": "Platform Templates",
+    "description": "Warm story-led template for handmade goods, craft stores, ceramics, decor, and maker-led brands.",
+    "category": "handmade",
+    "tags": [
+      "handmade",
+      "artisan",
+      "craft",
+      "warm",
+      "serif"
+    ],
+    "previewImage": "data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSI0MDAiIGhlaWdodD0iMjYwIiB2aWV3Qm94PSIwIDAgNDAwIDI2MCI+CiAgPHJlY3Qgd2lkdGg9IjQwMCIgaGVpZ2h0PSIyNjAiIGZpbGw9IiNmZGY2ZTciLz4KICA8cmVjdCB3aWR0aD0iNDAwIiBoZWlnaHQ9IjMyIiBmaWxsPSIjOTI0MDBlIi8+CiAgPHJlY3QgeD0iMTIiIHk9IjgiIHdpZHRoPSI2MCIgaGVpZ2h0PSIxNiIgcng9IjMiIGZpbGw9IiNmZmZhZjAiIG9wYWNpdHk9IjAuMyIvPgogIDxyZWN0IHg9IjMwMCIgeT0iMTAiIHdpZHRoPSI0MCIgaGVpZ2h0PSIxMiIgcng9IjIiIGZpbGw9IiNmZmZhZjAiIG9wYWNpdHk9IjAuMyIvPgogIDxyZWN0IHg9IjM1MCIgeT0iMTAiIHdpZHRoPSI0MCIgaGVpZ2h0PSIxMiIgcng9IjIiIGZpbGw9IiNmZmZhZjAiIG9wYWNpdHk9IjAuMyIvPgogIDxyZWN0IHg9IjAiIHk9IjM2IiB3aWR0aD0iNDAwIiBoZWlnaHQ9IjEwMCIgZmlsbD0iIzkyNDAwZSIgb3BhY2l0eT0iMC4xMiIvPgogIDxyZWN0IHg9IjI0IiB5PSI1NiIgd2lkdGg9IjE4MCIgaGVpZ2h0PSIxNCIgcng9IjMiIGZpbGw9IiMzZjJmMWYiIG9wYWNpdHk9IjAuOCIvPgogIDxyZWN0IHg9IjI0IiB5PSI3OCIgd2lkdGg9IjI0MCIgaGVpZ2h0PSI4IiByeD0iMiIgZmlsbD0iIzNmMmYxZiIgb3BhY2l0eT0iMC40Ii8+CiAgPHJlY3QgeD0iMjQiIHk9Ijk0IiB3aWR0aD0iMjAwIiBoZWlnaHQ9IjgiIHJ4PSIyIiBmaWxsPSIjM2YyZjFmIiBvcGFjaXR5PSIwLjMiLz4KICA8cmVjdCB4PSIyNCIgeT0iMTEyIiB3aWR0aD0iODAiIGhlaWdodD0iMjQiIHJ4PSI0IiBmaWxsPSIjOTI0MDBlIi8+CiAgPHJlY3QgeD0iMTEyIiB5PSIxMTIiIHdpZHRoPSI4MCIgaGVpZ2h0PSIyNCIgcng9IjQiIGZpbGw9IiMwZjc2NmUiIG9wYWNpdHk9IjAuOCIvPgogIDxyZWN0IHg9IjI0IiB5PSIxNTAiIHdpZHRoPSIxMTAiIGhlaWdodD0iODAiIHJ4PSI2IiBmaWxsPSIjZmZmYWYwIi8+CiAgPHJlY3QgeD0iMTQ0IiB5PSIxNTAiIHdpZHRoPSIxMTAiIGhlaWdodD0iODAiIHJ4PSI2IiBmaWxsPSIjZmZmYWYwIi8+CiAgPHJlY3QgeD0iMjY0IiB5PSIxNTAiIHdpZHRoPSIxMTAiIGhlaWdodD0iODAiIHJ4PSI2IiBmaWxsPSIjZmZmYWYwIi8+CiAgPHJlY3QgeD0iMzIiIHk9IjE1OCIgd2lkdGg9Ijk0IiBoZWlnaHQ9IjQ0IiByeD0iNCIgZmlsbD0iIzkyNDAwZSIgb3BhY2l0eT0iMC4xIi8+CiAgPHJlY3QgeD0iMTUyIiB5PSIxNTgiIHdpZHRoPSI5NCIgaGVpZ2h0PSI0NCIgcng9IjQiIGZpbGw9IiM5MjQwMGUiIG9wYWNpdHk9IjAuMSIvPgogIDxyZWN0IHg9IjI3MiIgeT0iMTU4IiB3aWR0aD0iOTQiIGhlaWdodD0iNDQiIHJ4PSI0IiBmaWxsPSIjOTI0MDBlIiBvcGFjaXR5PSIwLjEiLz4KICA8cmVjdCB4PSIzMiIgeT0iMjEwIiB3aWR0aD0iNjAiIGhlaWdodD0iNiIgcng9IjIiIGZpbGw9IiMzZjJmMWYiIG9wYWNpdHk9IjAuNiIvPgogIDxyZWN0IHg9IjE1MiIgeT0iMjEwIiB3aWR0aD0iNjAiIGhlaWdodD0iNiIgcng9IjIiIGZpbGw9IiMzZjJmMWYiIG9wYWNpdHk9IjAuNiIvPgogIDxyZWN0IHg9IjI3MiIgeT0iMjEwIiB3aWR0aD0iNjAiIGhlaWdodD0iNiIgcng9IjIiIGZpbGw9IiMzZjJmMWYiIG9wYWNpdHk9IjAuNiIvPgogIDxyZWN0IHg9IjMyIiB5PSIyMjAiIHdpZHRoPSI0MCIgaGVpZ2h0PSI2IiByeD0iMiIgZmlsbD0iIzBmNzY2ZSIgb3BhY2l0eT0iMC43Ii8+CiAgPHJlY3QgeD0iMTUyIiB5PSIyMjAiIHdpZHRoPSI0MCIgaGVpZ2h0PSI2IiByeD0iMiIgZmlsbD0iIzBmNzY2ZSIgb3BhY2l0eT0iMC43Ii8+CiAgPHJlY3QgeD0iMjcyIiB5PSIyMjAiIHdpZHRoPSI0MCIgaGVpZ2h0PSI2IiByeD0iMiIgZmlsbD0iIzBmNzY2ZSIgb3BhY2l0eT0iMC43Ii8+CiAgPHJlY3QgeD0iMCIgeT0iMjQ0IiB3aWR0aD0iNDAwIiBoZWlnaHQ9IjE2IiBmaWxsPSIjMWYyOTMzIi8+Cjwvc3ZnPg==",
+    "bestFor": "Handmade goods, craft sellers, home decor, ceramics, and maker-led stores."
+  },
+  "design": {
+    "theme": {
+      "mode": "light",
+      "primaryColor": "#92400e",
+      "secondaryColor": "#0f766e",
+      "backgroundColor": "#fdf6e7",
+      "surfaceColor": "#fffaf0",
+      "textColor": "#3f2f1f",
+      "fontFamily": "Lora",
+      "headingFont": "Lora",
+      "headingWeight": "700",
+      "bodyWeight": "400",
+      "lineHeight": "1.65",
+      "letterSpacing": "0px",
+      "headingLetterSpacing": "0px",
+      "borderRadius": "12px",
+      "headerStyle": "solid",
+      "buttonStyle": "outline",
+      "cardStyle": "elevated",
+      "backgroundStyle": "softGradient"
+    }
+  },
+  "layout": {
+    "nav": {
+      "sticky": true,
+      "showCategoryBar": true
+    },
+    "footerStyle": {
+      "bgColor": "#3f2f1f",
+      "fgColor": "#fdf6e7"
+    },
+    "announcementStyle": {
+      "bgColor": "#92400e",
+      "fgColor": "#ffffff",
+      "dismissible": true
+    },
+    "homepageSections": [
+      {
+        "id": "hero",
+        "type": "hero-carousel",
+        "enabled": true,
+        "autoPlay": true,
+        "interval": 6500,
+        "variant": "overlay"
+      },
+      {
+        "id": "maker-story",
+        "type": "editorial-image-text",
+        "enabled": true,
+        "title": "Made With A Human Hand",
+        "subtitle": "Maker-led stores should show process, texture, and story before the product row.",
+        "image": "https://images.unsplash.com/photo-1452860606245-08befc0ff44b?auto=format&fit=crop&w=1200&q=80",
+        "imagePosition": "left",
+        "ctaText": "Meet The Collection",
+        "ctaLink": "/products?featured=true",
+        "variant": "image-left"
+      },
+      {
+        "id": "categories",
+        "type": "featured-collection-grid",
+        "enabled": true,
+        "title": "Shop The Studio",
+        "count": 6,
+        "dynamic": true
+      },
+      {
+        "id": "featured",
+        "type": "product-row",
+        "enabled": true,
+        "title": "Handmade Favorites",
+        "source": "featured",
+        "dataSourceKey": "featured-products",
+        "count": 8,
+        "layout": "grid",
+        "viewAllLink": "/products?featured=true"
+      },
+      {
+        "id": "trust-badges",
+        "type": "trust-badges",
+        "enabled": true,
+        "items": [
+          {
+            "title": "Small Batch",
+            "text": "Limited handmade runs"
+          },
+          {
+            "title": "Giftable",
+            "text": "Great for thoughtful gifting"
+          },
+          {
+            "title": "Craft Story",
+            "text": "Bring process into commerce"
+          },
+          {
+            "title": "Secure Checkout",
+            "text": "Simple buying flow"
+          }
+        ],
+        "variant": "card-grid"
+      },
+      {
+        "id": "newsletter",
+        "type": "newsletter-signup",
+        "enabled": true,
+        "title": "Studio Notes",
+        "subtitle": "Share drops, maker stories, and new handmade pieces.",
+        "ctaText": "Follow Along"
+      }
+    ]
+  },
+  "demoContent": {
+    "announcementText": "Handmade pieces, small-batch drops, and studio favorites.",
+    "heroSlides": [
+      {
+        "eyebrow": "Small Batch",
+        "title": "Handmade Pieces With A Story",
+        "subtitle": "A warm storefront built for craft, ceramics, decor, and maker-led brands.",
+        "buttonText": "Shop Handmade",
+        "buttonLink": "/products",
+        "secondaryButtonText": "New Work",
+        "secondaryButtonLink": "/products?sort=newest",
+        "image": "https://images.unsplash.com/photo-1452860606245-08befc0ff44b?auto=format&fit=crop&w=1800&q=80",
+        "position": "center",
+        "color": "#ffffff"
+      },
+      {
+        "eyebrow": "Studio Drop",
+        "title": "Crafted Slowly. Chosen Thoughtfully.",
+        "subtitle": "Use story-led sections to make products feel personal and premium.",
+        "buttonText": "Explore Studio",
+        "buttonLink": "/products?featured=true",
+        "image": "https://images.unsplash.com/photo-1513519245088-0e12902e5a38?auto=format&fit=crop&w=1800&q=80",
+        "position": "center",
+        "color": "#ffffff"
+      }
+    ],
+    "valueProps": [
+      {
+        "icon": "verified",
+        "title": "Small Batch",
+        "text": "Thoughtful production"
+      },
+      {
+        "icon": "shipping",
+        "title": "Packed With Care",
+        "text": "Protective packaging"
+      },
+      {
+        "icon": "support",
+        "title": "Maker Support",
+        "text": "Real help from the studio"
+      },
+      {
+        "icon": "offers",
+        "title": "Studio Specials",
+        "text": "Seasonal craft offers"
+      }
+    ],
+    "promoBanners": [
+      {
+        "kicker": "Studio Drop",
+        "title": "New Handmade Arrivals",
+        "subtitle": "Fresh pieces from the workshop, ready to ship.",
+        "ctaText": "Shop New",
+        "link": "/products?sort=newest",
+        "color": "#fffbeb",
+        "accentColor": "#92400e"
+      },
+      {
+        "kicker": "Giftable",
+        "title": "Meaningful Finds",
+        "subtitle": "Warm products for home, gifts, and everyday rituals.",
+        "ctaText": "Browse Gifts",
+        "link": "/products?featured=true",
+        "color": "#ecfdf5",
+        "accentColor": "#0f766e"
+      }
+    ]
+  },
+  "capabilities": {
+    "design": true,
+    "layoutStyle": true,
+    "homepageSections": true,
+    "demoContent": true,
+    "pageTemplates": true,
+    "dataSources": true,
+    "customCode": false,
+    "componentStyles": true,
+    "sectionPresets": true
+  },
+  "dataSources": [
+    {
+      "key": "featured-products",
+      "type": "apiBuilder",
+      "definition": {
+        "name": "Artisan Craft Featured Products",
+        "description": "Template-owned storefront endpoint for Artisan Craft product rows.",
+        "isActive": true,
+        "config": {
+          "responseMode": "object",
+          "includeMeta": true,
+          "blocks": [
+            {
+              "key": "products",
+              "resource": "products",
+              "enabled": true,
+              "mode": "filtered",
+              "limit": 8,
+              "fields": [
+                "id",
+                "name",
+                "slug",
+                "shortDescription",
+                "price",
+                "salePrice",
+                "saleLabel",
+                "avgRating",
+                "reviewCount",
+                "brandId",
+                "createdAt"
+              ],
+              "filters": [
+                {
+                  "field": "isFeatured",
+                  "operator": "equals",
+                  "source": "static",
+                  "value": true
+                }
+              ],
+              "relations": [
+                {
+                  "key": "images",
+                  "relation": "images",
+                  "resource": "productImages",
+                  "enabled": true,
+                  "mode": "all",
+                  "limit": 1,
+                  "fields": [
+                    "url",
+                    "alt",
+                    "isPrimary",
+                    "sortOrder"
+                  ],
+                  "sortBy": "sortOrder",
+                  "sortOrder": "ASC"
+                }
+              ],
+              "sortBy": "createdAt",
+              "sortOrder": "DESC"
+            }
+          ]
+        }
+      }
+    }
+  ],
+  "pageTemplates": {
+    "product": {
+      "layout": "luxury-editorial",
+      "showTrustBadges": true,
+      "showRelatedProducts": true,
+      "showRecentlyViewed": true,
+      "showStickyAddToCart": false,
+      "showBreadcrumbs": true
+    },
+    "collection": {
+      "layout": "editorial-collection-grid",
+      "productsPerRow": 3,
+      "filterLayout": "sidebar",
+      "showBreadcrumbs": true
+    }
+  },
+  "componentStyles": {
+    "productCard": {
+      "variant": "editorial",
+      "imageRatio": "4/5",
+      "imageFit": "cover",
+      "showBrand": true,
+      "showCategory": true,
+      "showRating": true,
+      "showWishlist": true,
+      "showSaleCountdown": false,
+      "priceStyle": "regular",
+      "badgeStyle": "minimal",
+      "badgePosition": "top-right",
+      "hoverEffect": "lift",
+      "radius": "medium",
+      "shadow": "soft",
+      "density": "spacious"
+    },
+    "categoryCard": {
+      "variant": "image-tile",
+      "imageRatio": "4/3",
+      "imageFit": "cover",
+      "titlePlacement": "below",
+      "showSubtitle": true,
+      "showProductCount": false,
+      "hoverEffect": "lift",
+      "radius": "medium",
+      "shadow": "soft",
+      "density": "comfortable"
+    },
+    "promoCard": {
+      "variant": "split-image",
+      "imagePlacement": "left",
+      "titleSize": "medium",
+      "ctaStyle": "text-link",
+      "radius": "medium",
+      "shadow": "soft"
+    },
+    "brandCard": {
+      "variant": "logo-card",
+      "hoverEffect": "lift",
+      "radius": "medium",
+      "shadow": "none"
+    },
+    "trustCard": {
+      "variant": "card-grid",
+      "titleSize": "medium",
+      "radius": "medium",
+      "shadow": "soft"
+    }
+  },
+  "sectionPresets": {
+    "hero": {
+      "type": "hero-carousel",
+      "autoPlay": true,
+      "interval": 6500,
+      "variant": "overlay"
+    },
+    "editorial": {
+      "type": "editorial-image-text",
+      "title": "Made With A Human Hand",
+      "subtitle": "Maker-led stores should show process, texture, and story before the product row.",
+      "image": "https://images.unsplash.com/photo-1452860606245-08befc0ff44b?auto=format&fit=crop&w=1200&q=80",
+      "imagePosition": "left",
+      "ctaText": "Meet The Collection",
+      "ctaLink": "/products?featured=true",
+      "variant": "image-left"
+    },
+    "categoryGrid": {
+      "type": "featured-collection-grid",
+      "title": "Shop The Studio",
+      "count": 6,
+      "dynamic": true
+    },
+    "productRow": {
+      "type": "product-row",
+      "title": "Handmade Favorites",
+      "source": "featured",
+      "count": 8,
+      "layout": "grid",
+      "viewAllLink": "/products?featured=true"
+    },
+    "trust": {
+      "type": "trust-badges",
+      "items": [
+        {
+          "title": "Small Batch",
+          "text": "Limited handmade runs"
+        },
+        {
+          "title": "Giftable",
+          "text": "Great for thoughtful gifting"
+        },
+        {
+          "title": "Craft Story",
+          "text": "Bring process into commerce"
+        },
+        {
+          "title": "Secure Checkout",
+          "text": "Simple buying flow"
+        }
+      ],
+      "variant": "card-grid"
+    },
+    "newsletter": {
+      "type": "newsletter-signup",
+      "title": "Studio Notes",
+      "subtitle": "Share drops, maker stories, and new handmade pieces.",
+      "ctaText": "Follow Along"
+    }
+  }
+}

@@ -443,7 +443,9 @@ const CategoriesPage = () => {
         metaTitle: '',
         metaDescription: '',
         metaKeywords: '',
-        ogImage: ''
+        ogImage: '',
+        bannerImage: '',
+        customHeading: '',
     });
     const [attrDialogOpen, setAttrDialogOpen] = useState(false);
     const [attrCategory, setAttrCategory] = useState(null);
@@ -451,6 +453,7 @@ const CategoriesPage = () => {
     const [mediaPickerOpen, setMediaPickerOpen] = useState(false);
     const [iconPickerOpen, setIconPickerOpen] = useState(false);
     const [ogPickerOpen, setOgPickerOpen] = useState(false);
+    const [bannerPickerOpen, setBannerPickerOpen] = useState(false);
 
     const { notify, confirm } = useNotification();
     const { hasPermission } = useAuth();
@@ -546,7 +549,9 @@ const CategoriesPage = () => {
             metaTitle: '',
             metaDescription: '',
             metaKeywords: '',
-            ogImage: ''
+            ogImage: '',
+            bannerImage: '',
+            customHeading: '',
         });
         setFormErrors({});
         setOpenDialog(true);
@@ -568,6 +573,8 @@ const CategoriesPage = () => {
             metaDescription: cat.metaDescription || '',
             metaKeywords: cat.metaKeywords || '',
             ogImage: cat.ogImage || '',
+            bannerImage: cat.bannerImage || '',
+            customHeading: cat.customHeading || '',
         });
         setFormErrors({});
         setOpenDialog(true);
@@ -600,6 +607,8 @@ const CategoriesPage = () => {
             if (!data.metaTitle) data.metaTitle = null;
             if (!data.metaDescription) data.metaDescription = null;
             if (!data.metaKeywords) data.metaKeywords = null;
+            if (!data.bannerImage) data.bannerImage = null;
+            if (!data.customHeading) data.customHeading = null;
 
             if (editingCat) {
                 await updateCategory(editingCat.id, data);
@@ -952,6 +961,73 @@ const CategoriesPage = () => {
                                 </MenuItem>
                             ))}
                     </TextField>
+
+                    {/* ── Page Customization ─────────────────────────── */}
+                    <Divider sx={{ my: 1 }} />
+                    <Box>
+                        <Box sx={{ display: 'flex', alignItems: 'center', mb: 2 }}>
+                            <Typography variant="subtitle2" sx={{ fontWeight: 600 }}>Category Page</Typography>
+                            <Chip label="Storefront" size="small" variant="outlined" color="primary" sx={{ ml: 1, height: 20, fontSize: '0.65rem' }} />
+                        </Box>
+                        <Stack spacing={2}>
+                            <TextField
+                                label="Custom Heading"
+                                fullWidth
+                                size="small"
+                                value={formData.customHeading}
+                                onChange={(e) => setFormData(f => ({ ...f, customHeading: e.target.value }))}
+                                placeholder={formData.name}
+                                helperText="Override the page h1 heading shown on the storefront category page"
+                                inputProps={{ maxLength: 255 }}
+                            />
+                            <Box>
+                                <Typography variant="caption" color="text.secondary" sx={{ fontWeight: 600, display: 'block', mb: 1 }}>
+                                    Category Page Banner
+                                </Typography>
+                                {formData.bannerImage ? (
+                                    <Box sx={{ position: 'relative', width: '100%', height: 140, borderRadius: 1.5, overflow: 'hidden', border: '1px solid', borderColor: 'divider' }}>
+                                        <CardMedia
+                                            component="img"
+                                            image={getMediaUrl(formData.bannerImage)}
+                                            sx={{ width: '100%', height: '100%', objectFit: 'cover' }}
+                                        />
+                                        <IconButton
+                                            size="small"
+                                            onClick={() => setFormData(f => ({ ...f, bannerImage: '' }))}
+                                            sx={{ position: 'absolute', top: 4, right: 4, bgcolor: 'background.paper', p: 0.5 }}
+                                        >
+                                            <CloseIcon fontSize="inherit" />
+                                        </IconButton>
+                                    </Box>
+                                ) : (
+                                    <>
+                                        <Button
+                                            variant="outlined"
+                                            size="small"
+                                            onClick={() => setBannerPickerOpen(true)}
+                                            sx={{ borderStyle: 'dashed' }}
+                                        >
+                                            Select Banner Image
+                                        </Button>
+                                        <MediaPicker
+                                            open={bannerPickerOpen}
+                                            onClose={() => setBannerPickerOpen(false)}
+                                            onSelect={(selected) => {
+                                                const media = Array.isArray(selected) ? selected[0] : selected;
+                                                if (media?.url) setFormData(f => ({ ...f, bannerImage: media.url }));
+                                                setBannerPickerOpen(false);
+                                            }}
+                                            multiple={false}
+                                            title="Select Category Banner"
+                                        />
+                                    </>
+                                )}
+                                <Typography variant="caption" color="text.secondary" sx={{ mt: 0.5, display: 'block' }}>
+                                    Full-width hero banner displayed at the top of the category page
+                                </Typography>
+                            </Box>
+                        </Stack>
+                    </Box>
 
                     {settings?.features?.seo !== false && (
                         <>

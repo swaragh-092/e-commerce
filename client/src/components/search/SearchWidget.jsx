@@ -589,7 +589,7 @@ const ResultsList = ({
                 <ListItemButton
                   key={cat.id}
                   selected={selectedIndex === currentIdx}
-                  onClick={() => handleItemClick({ type: 'category', to: `/products?category=${cat.slug}`, label: cat.name })}
+                  onClick={() => handleItemClick({ type: 'category', to: `/category/${cat.slug}`, label: cat.name })}
                   onMouseEnter={() => setSelectedIndex(currentIdx)}
                 sx={{
                   mx: 0.75,
@@ -673,7 +673,7 @@ const buildItemList = (results, recentSearches = []) => {
   if (!results) return [];
   (results.products?.data || []).forEach((p) => items.push({ to: `/products/${p.slug}`, type: 'product', label: p.name }));
   (results.brands || []).forEach((b) => items.push({ to: `/products?brand=${b.slug}`, type: 'brand', label: b.name }));
-  (results.categories || []).forEach((c) => items.push({ to: `/products?category=${c.slug}`, type: 'category', label: c.name }));
+  (results.categories || []).forEach((c) => items.push({ to: `/category/${c.slug}`, type: 'category', label: c.name }));
   return items;
 };
 

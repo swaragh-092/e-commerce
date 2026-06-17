@@ -37,17 +37,30 @@ desktop.ini
 .vscode/
 .idea/
 # ── Agent & AI Tooling ──
+# Singular/plural agent config dirs
 .agent/
+.agents/
+
+# AI assistant & IDE agent directories
+.claude/
+.anthropic/
+.gemini/
 .commandcode/
 .cline/
 .clinerules
 .codex/
+.codex
 .opencode/
-.anthropic/
-.claude/
 .cursor/
 .windsurf/
+.copilot/
+.continue/
 .aider*
+.tabby/
+
+# Misc AI/agent hidden files
+.pi
+.ai-agents/
 *.swp
 *.swo
 *~

@@ -26,6 +26,81 @@
         "cardStyle": "elevated",
         "backgroundStyle": "softGradient"
     },
+    "sectionPresets": {
+        "hero": {},
+        "productRow": {},
+        "categoryGrid": {},
+        "promoBanner": {},
+        "editorial": {},
+        "trust": {},
+        "newsletter": {}
+    },
+    "componentStyles": {
+        "productCard": {
+            "variant": "classic",
+            "imageRatio": "4/3",
+            "imageFit": "cover",
+            "showBrand": true,
+            "showCategory": true,
+            "showRating": true,
+            "showWishlist": true,
+            "showSaleCountdown": true,
+            "priceStyle": "bold",
+            "badgeStyle": "pill",
+            "badgePosition": "top-right",
+            "hoverEffect": "lift",
+            "radius": "medium",
+            "shadow": "soft",
+            "density": "comfortable"
+        },
+        "categoryCard": {
+            "variant": "image-tile",
+            "imageRatio": "1/1",
+            "imageFit": "cover",
+            "titlePlacement": "below",
+            "showSubtitle": false,
+            "showProductCount": false,
+            "hoverEffect": "zoom",
+            "radius": "medium",
+            "shadow": "none",
+            "density": "comfortable"
+        },
+        "promoCard": {
+            "variant": "split-image",
+            "imagePlacement": "right",
+            "titleSize": "large",
+            "ctaStyle": "button",
+            "radius": "large",
+            "shadow": "soft"
+        },
+        "brandCard": {
+            "variant": "logo-card",
+            "imageRatio": "1/1",
+            "hoverEffect": "lift",
+            "radius": "medium",
+            "shadow": "none"
+        },
+        "trustCard": {
+            "variant": "icon-row",
+            "titleSize": "medium",
+            "radius": "medium",
+            "shadow": "none"
+        },
+        "reviewCard": {
+            "variant": "quote-card",
+            "showRating": true,
+            "radius": "large",
+            "shadow": "soft"
+        },
+        "contentCard": {
+            "variant": "editorial",
+            "imageRatio": "16/9",
+            "titleSize": "medium",
+            "hoverEffect": "lift",
+            "radius": "medium",
+            "shadow": "soft"
+        }
+    },
     "features": {
         "wishlist": true,
         "reviews": true,
@@ -167,7 +242,11 @@
         "priceRangeMax": 2000,
         "showFilters": true,
         "gridColumns": 4,
-        "categoryDepth": 3
+        "categoryDepth": 3,
+        "templateLayout": "sidebar-filters-grid",
+        "filterLayout": "sidebar",
+        "showBreadcrumbs": true,
+        "subcategoryVariant": "compact-chips"
     },
     "brandsPage": {
         "gridColumns": 4,
@@ -347,12 +426,40 @@
         ]
     },
     "productPage": {
+        "templateLayout": "media-left-details-right",
         "showSKU": true,
         "showStockBadge": true,
         "imageAlignment": "vertical",
         "addToCartLabel": "Add to Cart",
         "showBuyNowButton": true,
-        "buyNowLabel": "Buy Now"
+        "buyNowLabel": "Buy Now",
+        "showTrustBadges": true,
+        "showRelatedProducts": true,
+        "showRecentlyViewed": true,
+        "showStickyAddToCart": true,
+        "showBreadcrumbs": true
+    },
+    "categoryPage": {
+        "heroTitle": "Shop Category",
+        "headerLayout": "standard",
+        "showSubcategories": true
+    },
+    "blogPage": {
+        "listLayout": "grid",
+        "showAuthor": true,
+        "showDate": true,
+        "articleLayout": "standard"
+    },
+    "cartPage": {
+        "layout": "standard",
+        "showCrossSells": false,
+        "showTrustBadges": true,
+        "emptyStateText": "Haven't added anything yet. Let's fix that."
+    },
+    "accountPage": {
+        "layout": "tabs",
+        "orderCardStyle": "detailed",
+        "showSupportInfo": false
     },
     "admin": {
         "dashboard.showStatCards": true,

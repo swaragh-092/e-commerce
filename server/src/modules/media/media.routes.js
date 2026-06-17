@@ -5,7 +5,7 @@ const mediaController = require('./media.controller');
 const { authenticate } = require('../../middleware/auth.middleware');
 const { authorizePermissions } = require('../../middleware/role.middleware');
 const { auditLog } = require('../audit/audit.middleware');
-const { memoryUpload } = require('../../middleware/upload.middleware');
+const { memoryUpload, fontUpload } = require('../../middleware/upload.middleware');
 const { mediaUploadLimiter } = require('../../middleware/rateLimiter.middleware');
 const { PERMISSIONS } = require('../../config/permissions');
 const { validate } = require('../../middleware/validate.middleware');
@@ -19,6 +19,15 @@ router.post('/upload',
     memoryUpload.single('file'),
     auditLog('Media'),
     mediaController.upload
+);
+
+router.post('/upload-font',
+    authenticate,
+    authorizePermissions(PERMISSIONS.MEDIA_UPLOAD),
+    mediaUploadLimiter,
+    fontUpload.single('file'),
+    auditLog('Media'),
+    mediaController.uploadFont
 );
 
 router.get('/',

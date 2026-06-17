@@ -393,9 +393,9 @@ const StoreLayout = () => {
           )}
 
           <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
-            {/* Mobile inline search — expandable SearchWidget */}
+            {/* Mobile inline search — responsive width for small phones and tablets */}
             <Box sx={{ display: { xs: 'flex', md: 'none' }, alignItems: 'center' }}>
-              <SearchWidget variant="header" placeholder="Search..." sx={{ width: 160 }} />
+              <SearchWidget variant="header" placeholder="Search..." sx={{ width: { xs: 120, sm: 160 } }} />
             </Box>
             <DarkModeToggle />
             {cartEnabled && (
@@ -428,8 +428,8 @@ const StoreLayout = () => {
                   PaperProps={{
                     sx: {
                       mt: 1.5,
-                      boxShadow: '0 8px 24px rgba(0,0,0,0.15)',
-                      borderRadius: '8px',
+                      boxShadow: 'var(--store-shadow-dropdown)',
+                      borderRadius: 'var(--store-radius)',
                       minWidth: '220px',
                       overflow: 'hidden',
                     },

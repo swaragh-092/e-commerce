@@ -66,6 +66,32 @@ exports.uploadMedia = async (file) => {
   return media;
 };
 
+exports.uploadFont = async (file) => {
+  if (!file) throw new AppError('VALIDATION_ERROR', 400, 'No file provided');
+
+  const allowedExtensions = ['.woff2', '.woff', '.ttf', '.otf'];
+  const ext = (file.originalname || '').slice((file.originalname || '').lastIndexOf('.')).toLowerCase();
+
+  if (!allowedExtensions.includes(ext)) {
+    throw new AppError('VALIDATION_ERROR', 400, 'Invalid font file type. Only WOFF2, WOFF, TTF, and OTF are allowed.');
+  }
+
+  const uniqueId = uuidv4();
+  const filename = `${uniqueId}${ext}`;
+  const fontUrl = await storage.save(file.buffer, filename, 'fonts');
+
+  const media = await Media.create({
+    url: fontUrl,
+    filename: filename,
+    originalName: file.originalname,
+    mimeType: file.mimetype || 'font/woff2',
+    size: file.size,
+    provider: process.env.STORAGE_PROVIDER || 'local',
+  });
+
+  return media;
+};
+
 exports.listMedia = async (page, limit, sortBy = 'createdAt', sortDir = 'DESC') => {
   const { limit: queryLimit, offset } = getPagination(page, limit);
   

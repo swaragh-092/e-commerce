@@ -1,0 +1,402 @@
+{
+  "schemaVersion": 3,
+  "meta": {
+    "slug": "premium-retail",
+    "name": "Premium Retail",
+    "version": "1.0.0",
+    "author": "Platform Templates",
+    "description": "Warm storefront with emerald actions and coral accents. Built for fashion, lifestyle, and general retail launches.",
+    "category": "general",
+    "tags": [
+      "light",
+      "warm",
+      "retail",
+      "emerald",
+      "coral"
+    ],
+    "previewImage": "data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSI0MDAiIGhlaWdodD0iMjYwIiB2aWV3Qm94PSIwIDAgNDAwIDI2MCI+CiAgPHJlY3Qgd2lkdGg9IjQwMCIgaGVpZ2h0PSIyNjAiIGZpbGw9IiNmN2YzZWMiLz4KICA8cmVjdCB3aWR0aD0iNDAwIiBoZWlnaHQ9IjMyIiBmaWxsPSIjMGY3NjZlIi8+CiAgPHJlY3QgeD0iMTIiIHk9IjgiIHdpZHRoPSI2MCIgaGVpZ2h0PSIxNiIgcng9IjMiIGZpbGw9IiNmZmZhZjIiIG9wYWNpdHk9IjAuMyIvPgogIDxyZWN0IHg9IjMwMCIgeT0iMTAiIHdpZHRoPSI0MCIgaGVpZ2h0PSIxMiIgcng9IjIiIGZpbGw9IiNmZmZhZjIiIG9wYWNpdHk9IjAuMyIvPgogIDxyZWN0IHg9IjM1MCIgeT0iMTAiIHdpZHRoPSI0MCIgaGVpZ2h0PSIxMiIgcng9IjIiIGZpbGw9IiNmZmZhZjIiIG9wYWNpdHk9IjAuMyIvPgogIDxyZWN0IHg9IjAiIHk9IjM2IiB3aWR0aD0iNDAwIiBoZWlnaHQ9IjEwMCIgZmlsbD0iIzBmNzY2ZSIgb3BhY2l0eT0iMC4xMiIvPgogIDxyZWN0IHg9IjI0IiB5PSI1NiIgd2lkdGg9IjE4MCIgaGVpZ2h0PSIxNCIgcng9IjMiIGZpbGw9IiMxZjI5MzMiIG9wYWNpdHk9IjAuOCIvPgogIDxyZWN0IHg9IjI0IiB5PSI3OCIgd2lkdGg9IjI0MCIgaGVpZ2h0PSI4IiByeD0iMiIgZmlsbD0iIzFmMjkzMyIgb3BhY2l0eT0iMC40Ii8+CiAgPHJlY3QgeD0iMjQiIHk9Ijk0IiB3aWR0aD0iMjAwIiBoZWlnaHQ9IjgiIHJ4PSIyIiBmaWxsPSIjMWYyOTMzIiBvcGFjaXR5PSIwLjMiLz4KICA8cmVjdCB4PSIyNCIgeT0iMTEyIiB3aWR0aD0iODAiIGhlaWdodD0iMjQiIHJ4PSI0IiBmaWxsPSIjMGY3NjZlIi8+CiAgPHJlY3QgeD0iMTEyIiB5PSIxMTIiIHdpZHRoPSI4MCIgaGVpZ2h0PSIyNCIgcng9IjQiIGZpbGw9IiNmOTczMTYiIG9wYWNpdHk9IjAuOCIvPgogIDxyZWN0IHg9IjI0IiB5PSIxNTAiIHdpZHRoPSIxMTAiIGhlaWdodD0iODAiIHJ4PSI2IiBmaWxsPSIjZmZmYWYyIi8+CiAgPHJlY3QgeD0iMTQ0IiB5PSIxNTAiIHdpZHRoPSIxMTAiIGhlaWdodD0iODAiIHJ4PSI2IiBmaWxsPSIjZmZmYWYyIi8+CiAgPHJlY3QgeD0iMjY0IiB5PSIxNTAiIHdpZHRoPSIxMTAiIGhlaWdodD0iODAiIHJ4PSI2IiBmaWxsPSIjZmZmYWYyIi8+CiAgPHJlY3QgeD0iMzIiIHk9IjE1OCIgd2lkdGg9Ijk0IiBoZWlnaHQ9IjQ0IiByeD0iNCIgZmlsbD0iIzBmNzY2ZSIgb3BhY2l0eT0iMC4xIi8+CiAgPHJlY3QgeD0iMTUyIiB5PSIxNTgiIHdpZHRoPSI5NCIgaGVpZ2h0PSI0NCIgcng9IjQiIGZpbGw9IiMwZjc2NmUiIG9wYWNpdHk9IjAuMSIvPgogIDxyZWN0IHg9IjI3MiIgeT0iMTU4IiB3aWR0aD0iOTQiIGhlaWdodD0iNDQiIHJ4PSI0IiBmaWxsPSIjMGY3NjZlIiBvcGFjaXR5PSIwLjEiLz4KICA8cmVjdCB4PSIzMiIgeT0iMjEwIiB3aWR0aD0iNjAiIGhlaWdodD0iNiIgcng9IjIiIGZpbGw9IiMxZjI5MzMiIG9wYWNpdHk9IjAuNiIvPgogIDxyZWN0IHg9IjE1MiIgeT0iMjEwIiB3aWR0aD0iNjAiIGhlaWdodD0iNiIgcng9IjIiIGZpbGw9IiMxZjI5MzMiIG9wYWNpdHk9IjAuNiIvPgogIDxyZWN0IHg9IjI3MiIgeT0iMjEwIiB3aWR0aD0iNjAiIGhlaWdodD0iNiIgcng9IjIiIGZpbGw9IiMxZjI5MzMiIG9wYWNpdHk9IjAuNiIvPgogIDxyZWN0IHg9IjMyIiB5PSIyMjAiIHdpZHRoPSI0MCIgaGVpZ2h0PSI2IiByeD0iMiIgZmlsbD0iI2Y5NzMxNiIgb3BhY2l0eT0iMC43Ii8+CiAgPHJlY3QgeD0iMTUyIiB5PSIyMjAiIHdpZHRoPSI0MCIgaGVpZ2h0PSI2IiByeD0iMiIgZmlsbD0iI2Y5NzMxNiIgb3BhY2l0eT0iMC43Ii8+CiAgPHJlY3QgeD0iMjcyIiB5PSIyMjAiIHdpZHRoPSI0MCIgaGVpZ2h0PSI2IiByeD0iMiIgZmlsbD0iI2Y5NzMxNiIgb3BhY2l0eT0iMC43Ii8+CiAgPHJlY3QgeD0iMCIgeT0iMjQ0IiB3aWR0aD0iNDAwIiBoZWlnaHQ9IjE2IiBmaWxsPSIjMWYyOTMzIi8+Cjwvc3ZnPg==",
+    "bestFor": "General retail stores that need a polished launch-ready homepage with offers and discovery."
+  },
+  "design": {
+    "theme": {
+      "mode": "light",
+      "primaryColor": "#0f766e",
+      "secondaryColor": "#f97316",
+      "backgroundColor": "#f7f3ec",
+      "surfaceColor": "#fffaf2",
+      "textColor": "#1f2933",
+      "fontFamily": "Inter",
+      "headingFont": "Inter",
+      "headingWeight": "800",
+      "bodyWeight": "400",
+      "lineHeight": "1.5",
+      "letterSpacing": "0px",
+      "headingLetterSpacing": "0px",
+      "borderRadius": "12px",
+      "headerStyle": "gradient",
+      "buttonStyle": "solid",
+      "cardStyle": "elevated",
+      "backgroundStyle": "softGradient"
+    }
+  },
+  "layout": {
+    "nav": {
+      "sticky": true,
+      "showCategoryBar": true
+    },
+    "footerStyle": {
+      "bgColor": "#1f2933",
+      "fgColor": "#f7f3ec"
+    },
+    "announcementStyle": {
+      "bgColor": "#0f766e",
+      "fgColor": "#ffffff",
+      "dismissible": true
+    },
+    "homepageSections": [
+      {
+        "id": "hero",
+        "type": "hero-carousel",
+        "enabled": true,
+        "autoPlay": true,
+        "interval": 6500,
+        "variant": "product-spotlight"
+      },
+      {
+        "id": "value-props",
+        "type": "trust-badges",
+        "enabled": true,
+        "items": [
+          {
+            "title": "Fast Delivery",
+            "text": "Reliable shipping"
+          },
+          {
+            "title": "Daily Offers",
+            "text": "Fresh promotions"
+          },
+          {
+            "title": "Secure Checkout",
+            "text": "Protected payment flow"
+          },
+          {
+            "title": "Easy Support",
+            "text": "Help when needed"
+          }
+        ],
+        "variant": "card-grid"
+      },
+      {
+        "id": "categories",
+        "type": "featured-collection-grid",
+        "enabled": true,
+        "title": "Shop Popular Categories",
+        "count": 8,
+        "dynamic": true
+      },
+      {
+        "id": "featured",
+        "type": "product-row",
+        "enabled": true,
+        "title": "Featured Products",
+        "source": "featured",
+        "dataSourceKey": "featured-products",
+        "count": 8,
+        "layout": "carousel",
+        "viewAllLink": "/products?featured=true"
+      },
+      {
+        "id": "promo",
+        "type": "promo-banners",
+        "enabled": true,
+        "title": "Today In Store"
+      },
+      {
+        "id": "new-arrivals",
+        "type": "product-row",
+        "enabled": true,
+        "title": "New Arrivals",
+        "source": "newest",
+        "count": 8,
+        "layout": "grid",
+        "viewAllLink": "/products?sort=newest"
+      },
+      {
+        "id": "newsletter",
+        "type": "newsletter-signup",
+        "enabled": true,
+        "title": "Never Miss A Deal",
+        "subtitle": "Launch offers, new arrivals, and retail updates.",
+        "ctaText": "Get Updates",
+        "variant": "banner"
+      }
+    ]
+  },
+  "demoContent": {
+    "announcementText": "Free shipping on orders over $50. Fresh arrivals are live.",
+    "heroSlides": [
+      {
+        "eyebrow": "New Season",
+        "title": "Fresh Arrivals for Every Style",
+        "subtitle": "Discover curated collections for fashion, home, and lifestyle.",
+        "buttonText": "Shop Now",
+        "buttonLink": "/products",
+        "secondaryButtonText": "View Deals",
+        "secondaryButtonLink": "/products?onSale=true",
+        "image": "https://images.unsplash.com/photo-1441986300917-64674bd600d8?auto=format&fit=crop&w=1800&q=80",
+        "position": "center",
+        "color": "#ffffff"
+      },
+      {
+        "eyebrow": "Weekend Picks",
+        "title": "Essentials That Sell Fast",
+        "subtitle": "A balanced storefront for everyday retail and seasonal campaigns.",
+        "buttonText": "Explore Picks",
+        "buttonLink": "/products?featured=true",
+        "image": "https://images.unsplash.com/photo-1483985988355-763728e1935b?auto=format&fit=crop&w=1800&q=80",
+        "position": "center",
+        "color": "#ffffff"
+      }
+    ],
+    "valueProps": [
+      {
+        "icon": "shipping",
+        "title": "Fast Delivery",
+        "text": "Reliable shipping on every order"
+      },
+      {
+        "icon": "offers",
+        "title": "Daily Offers",
+        "text": "Fresh deals across top categories"
+      },
+      {
+        "icon": "secure",
+        "title": "Secure Payments",
+        "text": "Protected checkout experience"
+      },
+      {
+        "icon": "support",
+        "title": "Easy Support",
+        "text": "Help when you need it"
+      }
+    ],
+    "promoBanners": [
+      {
+        "kicker": "Limited Time",
+        "title": "Flat 40% Off",
+        "subtitle": "Season-ready looks and daily essentials.",
+        "ctaText": "Grab Offers",
+        "link": "/products?onSale=true",
+        "color": "#fff7ed",
+        "accentColor": "#f97316"
+      },
+      {
+        "kicker": "Just In",
+        "title": "New Everyday Favorites",
+        "subtitle": "Fresh products selected for repeat shoppers.",
+        "ctaText": "See New",
+        "link": "/products?sort=newest",
+        "color": "#ecfdf5",
+        "accentColor": "#0f766e"
+      }
+    ]
+  },
+  "capabilities": {
+    "design": true,
+    "layoutStyle": true,
+    "homepageSections": true,
+    "demoContent": true,
+    "pageTemplates": true,
+    "dataSources": true,
+    "customCode": false,
+    "componentStyles": true,
+    "sectionPresets": true
+  },
+  "dataSources": [
+    {
+      "key": "featured-products",
+      "type": "apiBuilder",
+      "definition": {
+        "name": "Premium Retail Featured Products",
+        "description": "Template-owned storefront endpoint for Premium Retail product rows.",
+        "isActive": true,
+        "config": {
+          "responseMode": "object",
+          "includeMeta": true,
+          "blocks": [
+            {
+              "key": "products",
+              "resource": "products",
+              "enabled": true,
+              "mode": "filtered",
+              "limit": 8,
+              "fields": [
+                "id",
+                "name",
+                "slug",
+                "shortDescription",
+                "price",
+                "salePrice",
+                "saleLabel",
+                "avgRating",
+                "reviewCount",
+                "brandId",
+                "createdAt"
+              ],
+              "filters": [
+                {
+                  "field": "isFeatured",
+                  "operator": "equals",
+                  "source": "static",
+                  "value": true
+                }
+              ],
+              "relations": [
+                {
+                  "key": "images",
+                  "relation": "images",
+                  "resource": "productImages",
+                  "enabled": true,
+                  "mode": "all",
+                  "limit": 1,
+                  "fields": [
+                    "url",
+                    "alt",
+                    "isPrimary",
+                    "sortOrder"
+                  ],
+                  "sortBy": "sortOrder",
+                  "sortOrder": "ASC"
+                }
+              ],
+              "sortBy": "createdAt",
+              "sortOrder": "DESC"
+            }
+          ]
+        }
+      }
+    }
+  ],
+  "pageTemplates": {
+    "product": {
+      "layout": "sticky-purchase-panel",
+      "showTrustBadges": true,
+      "showRelatedProducts": true,
+      "showRecentlyViewed": true,
+      "showStickyAddToCart": true,
+      "showBreadcrumbs": true
+    },
+    "collection": {
+      "layout": "sidebar-filters-grid",
+      "productsPerRow": 4,
+      "filterLayout": "sidebar",
+      "showBreadcrumbs": true
+    }
+  },
+  "componentStyles": {
+    "productCard": {
+      "variant": "classic",
+      "imageRatio": "4/3",
+      "imageFit": "cover",
+      "showBrand": true,
+      "showCategory": true,
+      "showRating": true,
+      "showWishlist": true,
+      "showSaleCountdown": true,
+      "priceStyle": "bold",
+      "badgeStyle": "pill",
+      "badgePosition": "top-right",
+      "hoverEffect": "lift",
+      "radius": "medium",
+      "shadow": "soft",
+      "density": "comfortable"
+    },
+    "categoryCard": {
+      "variant": "image-tile",
+      "imageRatio": "1/1",
+      "imageFit": "cover",
+      "titlePlacement": "below",
+      "showSubtitle": false,
+      "showProductCount": false,
+      "hoverEffect": "zoom",
+      "radius": "medium",
+      "shadow": "soft",
+      "density": "comfortable"
+    },
+    "promoCard": {
+      "variant": "split-image",
+      "imagePlacement": "right",
+      "titleSize": "large",
+      "ctaStyle": "button",
+      "radius": "large",
+      "shadow": "soft"
+    },
+    "brandCard": {
+      "variant": "logo-card",
+      "hoverEffect": "lift",
+      "radius": "medium",
+      "shadow": "none"
+    },
+    "trustCard": {
+      "variant": "icon-row",
+      "titleSize": "medium",
+      "radius": "medium",
+      "shadow": "none"
+    }
+  },
+  "sectionPresets": {
+    "hero": {
+      "type": "hero-carousel",
+      "autoPlay": true,
+      "interval": 6500,
+      "variant": "product-spotlight"
+    },
+    "trust": {
+      "type": "trust-badges",
+      "items": [
+        {
+          "title": "Fast Delivery",
+          "text": "Reliable shipping"
+        },
+        {
+          "title": "Daily Offers",
+          "text": "Fresh promotions"
+        },
+        {
+          "title": "Secure Checkout",
+          "text": "Protected payment flow"
+        },
+        {
+          "title": "Easy Support",
+          "text": "Help when needed"
+        }
+      ],
+      "variant": "card-grid"
+    },
+    "categoryGrid": {
+      "type": "featured-collection-grid",
+      "title": "Shop Popular Categories",
+      "count": 8,
+      "dynamic": true
+    },
+    "productRow": {
+      "type": "product-row",
+      "title": "Featured Products",
+      "source": "featured",
+      "count": 8,
+      "layout": "carousel",
+      "viewAllLink": "/products?featured=true"
+    },
+    "promoBanner": {
+      "type": "promo-banners",
+      "title": "Today In Store"
+    },
+    "newsletter": {
+      "type": "newsletter-signup",
+      "title": "Never Miss A Deal",
+      "subtitle": "Launch offers, new arrivals, and retail updates.",
+      "ctaText": "Get Updates",
+      "variant": "banner"
+    }
+  }
+}

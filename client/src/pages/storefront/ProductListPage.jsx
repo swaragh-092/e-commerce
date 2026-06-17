@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Box, Breadcrumbs, Container, Grid, Link as MuiLink, Typography, Pagination, Drawer, IconButton, useTheme, useMediaQuery, FormControl, Select, MenuItem } from '@mui/material';
+import { Box, Breadcrumbs, Container, Grid, Link as MuiLink, Typography, Pagination, Drawer, IconButton, useTheme, useMediaQuery, FormControl, Select, MenuItem, alpha } from '@mui/material';
 import { FilterList as FilterIcon, Sort as SortIcon } from '@mui/icons-material';
 import { Link as RouterLink, useSearchParams } from 'react-router-dom';
 import ProductGrid from '../../components/product/ProductGrid';
@@ -27,6 +27,13 @@ const ProductListPage = () => {
     const defaultLimit = parseInt(catalog.defaultPageSize) || 20;
     const gridCols     = parseInt(catalog.gridColumns) || 4;
     const showFilters  = catalog.showFilters !== false;
+    const collectionLayout = catalog.templateLayout || 'sidebar-filters-grid';
+    const filterLayout = catalog.filterLayout || (collectionLayout.includes('top') ? 'topbar' : 'sidebar');
+    const isCompactCatalog = collectionLayout.includes('compact') || collectionLayout.includes('table') || collectionLayout.includes('b2b');
+    const isEditorialCatalog = collectionLayout.includes('editorial') || collectionLayout.includes('image-led');
+    const showSidebarFilters = showFilters && !isMobile && filterLayout !== 'topbar';
+    const showTopbarFilters = showFilters && !isMobile && filterLayout === 'topbar';
+    const showCatalogBreadcrumbs = catalog.showBreadcrumbs !== false;
     const pricingEnabled = useFeature('pricing');
 
 
@@ -110,8 +117,9 @@ const ProductListPage = () => {
     );
 
     return (
-        <Container maxWidth="xl" sx={{ py: 4 }}>
+        <Container maxWidth={isCompactCatalog ? 'lg' : 'xl'} sx={{ py: isEditorialCatalog ? { xs: 3, md: 5 } : 4 }}>
             <PageSEO title="Products" description="Browse our products" />
+            {showCatalogBreadcrumbs && (
             <Breadcrumbs aria-label="breadcrumb" sx={{ mb: 2 }}>
                 <MuiLink component={RouterLink} underline="hover" color="inherit" to="/">
                     Home
@@ -129,7 +137,18 @@ const ProductListPage = () => {
                     </Typography>
                 ))}
             </Breadcrumbs>
-            <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 3 }}>
+            )}
+            <Box sx={{
+                display: 'flex',
+                justifyContent: 'space-between',
+                alignItems: 'center',
+                mb: 3,
+                p: isEditorialCatalog ? { xs: 2.5, md: 4 } : 0,
+                borderRadius: isEditorialCatalog ? 4 : 0,
+                border: isEditorialCatalog ? '1px solid' : 'none',
+                borderColor: 'divider',
+                background: isEditorialCatalog ? (theme) => `linear-gradient(135deg, ${alpha(theme.palette.primary.main, 0.10)}, ${alpha(theme.palette.secondary.main, 0.06)})` : 'transparent',
+            }}>
                 <Typography variant="h4" fontWeight="bold">Our Products</Typography>
 
                 <Box sx={{ display: 'flex', gap: 2, alignItems: 'center' }}>
@@ -160,15 +179,21 @@ const ProductListPage = () => {
                 </Box>
             </Box>
 
-            <Grid container spacing={4}>
-                {showFilters && !isMobile && (
+            {showTopbarFilters && (
+                <Box sx={{ mb: 3, p: 2, border: '1px solid', borderColor: 'divider', borderRadius: 3, bgcolor: 'background.paper' }}>
+                    <ProductFilters filters={filters} onFilterChange={handleFilterChange} priceRange={priceRange} />
+                </Box>
+            )}
+
+            <Grid container spacing={isCompactCatalog ? 2.5 : 4}>
+                {showSidebarFilters && (
                     <Grid item md={3} lg={2.5} sx={{ position: 'sticky', top: 24, alignSelf: 'flex-start', height: 'fit-content' }}>
                         <StorefrontSidebarMenu />
                         <ProductFilters filters={filters} onFilterChange={handleFilterChange} priceRange={priceRange} />
                     </Grid>
                 )}
 
-                <Grid item xs={12} md={showFilters ? 9 : 12} lg={showFilters ? 9.5 : 12}>
+                <Grid item xs={12} md={showSidebarFilters ? 9 : 12} lg={showSidebarFilters ? 9.5 : 12}>
                     <ProductGrid
                         products={products}
                         loading={loading}
@@ -176,6 +201,7 @@ const ProductListPage = () => {
                         fromCategory={categoryName}
                         hasActiveFilters={hasActiveFilters}
                         onClearFilters={() => setSearchParams(new URLSearchParams())}
+                        variant={isCompactCatalog ? 'compact-list' : 'grid'}
                     />
 
                     {meta.totalPages > 1 && (

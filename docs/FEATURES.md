@@ -476,6 +476,199 @@ pending_payment → confirmed → processing → shipped → delivered
 - Price updates when variant changes
 - Variant-specific images
 ---
+### 2.23 Store Templates & Theme Gallery
+
+**What It Does:** Install and manage complete storefront blueprints that change design, layout, sections, demo content, page templates, and data sources.
+
+**Features Available to Admin:**
+
+| Feature | Description |
+
+|---------|-------------|
+
+| **Built-in Templates** | 12 industry-specific templates (Fashion, Tech, Grocery, Beauty, etc.) |
+
+| **Scoped Install** | Choose what to apply: design, layout styling, homepage sections, demo content, page templates, data sources |
+
+| **Preview** | Desktop/tablet/mobile preview with current-vs-template comparison |
+
+| **Import/Export** | Import `.theme.json` files, export current store config as reusable template |
+
+| **Template Library** | Save templates to personal library for reuse |
+
+| **Install History** | Full activation history with one-click rollback |
+
+| **Category Filtering** | Search templates by industry/category |
+
+| **Detail Modal** | Full template detail with color palette, typography, sections, data sources |
+
+| **Empty Store Detection** | Recommends full install for empty/new stores |
+
+**Customer-Facing Impact:**
+
+- Completely transformed storefront appearance per template
+
+- Different hero variants (overlay, split, product-spotlight) per template
+
+- Full homepage structure changes on template install
+
+---
+
+### 2.24 Section Composer
+
+**What It Does:** Visual drag-and-drop homepage section manager for composing custom storefront layouts.
+
+**Features Available to Admin:**
+
+| Feature | Description |
+
+|---------|-------------|
+
+| **Section Reorder** | Drag handles + up/down arrows to reorder homepage sections |
+
+| **Add Section** | Add new sections from all 14 section types with variant selection |
+
+| **Edit Section** | Edit section properties: title, variant, product source, count, layout, auto-play |
+
+| **Enable/Disable** | Toggle section visibility without deleting |
+
+| **Save as Template** | Save current configuration as reusable library template |
+
+| **Settings Integration** | HomepageSettingsEditor in Settings → Homepage tab for full hero/value props/promo editing |
+
+**Customer-Facing Impact:**
+
+- Custom homepage layouts without coding
+
+- Mix-and-match sections from different templates
+
+---
+
+### 2.25 Menu Builder
+
+**What It Does:** Visual menu management for header, footer, and sidebar navigation.
+
+**Features Available to Admin:**
+
+| Feature | Description |
+
+|---------|-------------|
+
+| **Menu CRUD** | Create/edit/delete menus with name, slug, location (header/footer/sidebar) |
+
+| **Menu Items** | Add/reorder/edit/delete items with parent-child hierarchy |
+
+| **Link Types** | Link to pages, categories, products, or custom URLs |
+
+| **Bulk Actions** | Bulk move items between menus, bulk delete |
+
+| **Activation** | Set which menu is active per location |
+
+**Customer-Facing Impact:**
+
+- Dynamic navigation links in header, footer, and sidebar
+
+- Configurable menu structure without code changes
+
+---
+
+### 2.26 API Builder
+
+**What It Does:** Create custom public API endpoints from catalog, content, and settings data — no code required.
+
+**Features Available to Admin:**
+
+| Feature | Description |
+
+|---------|-------------|
+
+| **Endpoint Builder** | Create public data endpoints with response mode (object/array) |
+
+| **Block Config** | Configure data blocks with resource selection (products, categories, brands, media, pages) |
+
+| **Filtering** | Add static or query-param filters per block |
+
+| **Relations** | Include related data (e.g., product images with products) |
+
+| **Field Selection** | Choose which fields to expose per resource |
+
+| **Sorting & Pagination** | Configure sort order, page size, pagination mode |
+
+| **Template Integration** | Templates auto-create API endpoints for dynamic sections |
+
+| **Circuit Breaker** | Automatic 30s backoff when endpoint fails (prevents cascading failures) |
+
+**Customer-Facing Impact:**
+
+- Dynamic data drives product rows, category grids, and brand showcases
+
+- Real-time product and category data from API Builder endpoints
+
+---
+
+### 2.27 Blogs
+
+**What It Does:** Full blog system with posts, categories, rich text editing, and SEO.
+
+**Features Available to Admin:**
+
+| Feature | Description |
+
+|---------|-------------|
+
+| **Post CRUD** | Create/edit/delete blog posts with rich text editor |
+
+| **Categories** | Blog-specific category management |
+
+| **Rich Text** | WYSIWYG editor with formatting, images, links |
+
+| **SEO Fields** | Per-post meta title, description, canonical URL |
+
+| **Publish/Draft** | Toggle post visibility |
+
+| **Media** | Featured image and inline images from media library |
+
+| **Tags** | Flexible tagging for blog posts |
+
+**Customer-Facing Impact:**
+
+- Blog listing page with category filtering
+
+- Blog detail pages with rich content
+
+- SEO-optimized blog posts
+
+---
+
+### 2.28 Analytics
+
+**What It Does:** Real-time store metrics dashboard with configurable widgets.
+
+**Features Available to Admin:**
+
+| Feature | Description |
+
+|---------|-------------|
+
+| **KPI Cards** | Revenue, orders, customers, products at a glance |
+
+| **Sales Chart** | Visual trends by day, week, month, year, or custom range |
+
+| **Recent Orders** | Latest orders with status badges and quick actions |
+
+| **Low Stock Alerts** | Products running low on inventory |
+
+| **Widget Registry** | Enable/disable individual dashboard widgets |
+
+| **Layout Density** | Choose Balanced, Analytics-focused, or Compact views |
+
+| **Drag-and-Drop** | Reorder dashboard widgets |
+
+| **Permission-Aware** | Widgets auto-hide based on admin permissions |
+
+| **Store Health** | Real-time checklist for system issues |
+
+
 ## 3. Customer-Facing Features
 ### 3.1 Storefront Browsing
 | Feature | Description |

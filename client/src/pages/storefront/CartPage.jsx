@@ -18,7 +18,7 @@ import CachedIcon from '@mui/icons-material/Cached';
 import { Link, useNavigate } from 'react-router-dom';
 
 import { useCart } from '../../hooks/useCart';
-import { useSettings, useCurrency, useFeature, useFeatureFlag } from '../../hooks/useSettings';
+import { useSettings, useCurrency, useFeature, useComponentStyles } from '../../hooks/useSettings';
 import { getMediaUrl } from '../../utils/media';
 
 
@@ -90,7 +90,7 @@ const CartSkeleton = () => (
 );
 
 // ── Empty Cart ─────────────────────────────────────────────────────────────────
-const EmptyCart = () => (
+const EmptyCart = ({ message }) => (
     <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'center', py: 14, px: 2 }}>
         <PageSEO title="Cart" type="noindex" />
         <Box sx={{ width: 72, height: 72, borderRadius: '50%', border: '1.5px solid', borderColor: 'divider', display: 'flex', alignItems: 'center', justifyContent: 'center', mb: 2.5 }}>
@@ -98,7 +98,7 @@ const EmptyCart = () => (
         </Box>
         <Typography variant="h6" fontWeight={700} letterSpacing={-0.4} gutterBottom>Your cart is empty</Typography>
         <Typography color="text.secondary" sx={{ fontSize: '0.85rem', mb: 4, textAlign: 'center', maxWidth: 260, lineHeight: 1.6 }}>
-            Haven't added anything yet. Let's fix that.
+            {message || "Haven't added anything yet. Let's fix that."}
         </Typography>
         <Button variant="contained" component={Link} to="/products" size="large"
             endIcon={<ArrowForwardIcon sx={{ fontSize: 16 }} />}
@@ -126,7 +126,7 @@ const QttyStepper = ({ qty, isUpdating, onDecrement, onIncrement }) => (
 );
 
 // ── Cart Item Card ────────────────────────────────────────────────────────────
-const CartItem = React.memo(({ item, getQty, handleUpdate, handleRemove, removingIds, updatingIds, formatPrice }) => {
+const CartItem = React.memo(({ item, getQty, handleUpdate, handleRemove, removingIds, updatingIds, formatPrice, cartItemStyle = {} }) => {
     const product = item.product;
     const variant = item.variant;
     const itemPrice = getCartItemUnitPrice(item);
@@ -137,13 +137,17 @@ const CartItem = React.memo(({ item, getQty, handleUpdate, handleRemove, removin
     const qty = getQty(item);
     const isRemoving = removingIds.has(item.id);
     const isUpdating = updatingIds.has(item.id);
+    const densityPadding = cartItemStyle.density === 'compact' ? { xs: 1.25, sm: 1.5 } : cartItemStyle.density === 'spacious' ? { xs: 2.25, sm: 3 } : { xs: 1.75, sm: 2.25 };
+    const cardRadius = cartItemStyle.radius === 'none' ? 0 : cartItemStyle.radius === 'small' ? 1 : cartItemStyle.radius === 'large' ? 3 : 2;
+    const cardShadow = cartItemStyle.shadow === 'soft' ? '0 4px 20px rgba(0,0,0,0.08)' : cartItemStyle.shadow === 'medium' ? '0 10px 28px rgba(0,0,0,0.10)' : cartItemStyle.shadow === 'strong' ? '0 18px 44px rgba(0,0,0,0.14)' : 'none';
+    const hoverSx = cartItemStyle.hoverEffect === 'lift' ? { transform: 'translateY(-2px)', borderColor: 'text.secondary', boxShadow: cardShadow === 'none' ? '0 4px 20px rgba(0,0,0,0.08)' : cardShadow } : cartItemStyle.hoverEffect === 'fade' ? { opacity: 0.92 } : { borderColor: 'text.secondary' };
     return (
         <Collapse in={!isRemoving} timeout={280} unmountOnExit>
             <Paper elevation={0} sx={{
                 display: 'flex', overflow: 'hidden',
-                border: '1px solid', borderColor: 'divider', borderRadius: 2,
-                transition: 'border-color 0.18s, box-shadow 0.18s',
-                '&:hover': { borderColor: 'text.secondary', boxShadow: '0 4px 20px rgba(0,0,0,0.08)' },
+                border: '1px solid', borderColor: 'divider', borderRadius: cardRadius, boxShadow: cardShadow,
+                transition: 'border-color 0.18s, box-shadow 0.18s, transform 0.18s, opacity 0.18s',
+                '&:hover': hoverSx,
                 opacity: isRemoving ? 0.4 : 1,
             }}>
                 {/* Image */}
@@ -153,7 +157,7 @@ const CartItem = React.memo(({ item, getQty, handleUpdate, handleRemove, removin
                         sx={{ width: '100%', height: '100%', minHeight: 120, objectFit: 'cover', display: 'block', transition: 'transform 0.4s ease', '&:hover': { transform: 'scale(1.06)' } }} />
                 </Box>
                 {/* Body */}
-                <Box sx={{ flexGrow: 1, display: 'flex', flexDirection: 'column', justifyContent: 'space-between', p: { xs: 1.75, sm: 2.25 } }}>
+                <Box sx={{ flexGrow: 1, display: 'flex', flexDirection: 'column', justifyContent: 'space-between', p: densityPadding }}>
                     {/* Top */}
                     <Box sx={{ ...row('flex-start', 'space-between'), gap: 1, mb: 1.5 }}>
                         <Box sx={{ minWidth: 0, flexGrow: 1 }}>
@@ -161,7 +165,7 @@ const CartItem = React.memo(({ item, getQty, handleUpdate, handleRemove, removin
                                 sx={{ display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden', textDecoration: 'none', fontSize: '0.9rem', fontWeight: 700, letterSpacing: -0.2, lineHeight: 1.4, color: 'text.primary', '&:hover': { color: 'primary.main' }, transition: 'color 0.15s' }}>
                                 {product?.name}
                             </Typography>
-                            {variant && (
+                            {variant && cartItemStyle.showVariantPill !== false && (
                                 <Box sx={{ display: 'inline-block', mt: 0.6, px: 1, py: 0.2, border: '1px solid', borderColor: 'divider', borderRadius: 0.75, fontSize: '0.68rem', fontWeight: 600, color: 'text.secondary' }}>
                                     {getVariantOptionLabel(variant)}
                                 </Box>
@@ -225,17 +229,22 @@ const TrustBadge = ({ icon, title, sub }) => (
 );
 
 // ── Order Summary ─────────────────────────────────────────────────────────────
-const OrderSummary = ({ visibleCount, subtotal, shippingCost, shippingMethod, freeThreshold, taxRows, taxInclusive, estimatedTotal, offerSummary, formatPrice, onCheckout, setEnquiryOpen, checkoutEnabled, enquiryEnabled }) => {
+const OrderSummary = ({ visibleCount, subtotal, shippingCost, shippingMethod, freeThreshold, taxRows, taxInclusive, estimatedTotal, offerSummary, formatPrice, onCheckout, setEnquiryOpen, checkoutEnabled, enquiryEnabled, showTrustBadges = true, checkoutBlockStyle = {} }) => {
     const shippingFree = shippingMethod === 'free' || shippingCost === 0;
     const progressPct = freeThreshold > 0 ? Math.min((subtotal / freeThreshold) * 100, 100) : 0;
+    const blockRadius = checkoutBlockStyle.radius === 'none' ? 0 : checkoutBlockStyle.radius === 'small' ? 1 : checkoutBlockStyle.radius === 'large' ? 3 : 2;
+    const blockShadow = checkoutBlockStyle.shadow === 'soft' ? '0 4px 20px rgba(0,0,0,0.08)' : checkoutBlockStyle.shadow === 'medium' ? '0 10px 28px rgba(0,0,0,0.10)' : checkoutBlockStyle.shadow === 'strong' ? '0 18px 44px rgba(0,0,0,0.14)' : 'none';
+    const blockPadding = checkoutBlockStyle.density === 'compact' ? { px: 2, py: 1.5 } : checkoutBlockStyle.density === 'spacious' ? { px: 3, py: 2.5 } : { px: 2.5, py: 2 };
+    const headerBg = checkoutBlockStyle.headerStyle === 'accent' ? 'primary.main' : checkoutBlockStyle.headerStyle === 'plain' ? 'background.paper' : 'action.selected';
+    const headerColor = checkoutBlockStyle.headerStyle === 'accent' ? 'primary.contrastText' : 'text.secondary';
     return (
         <Box sx={{ position: { md: 'sticky' }, top: { md: 80 }, display: 'flex', flexDirection: 'column', gap: 1.5 }}>
 
             {/* Main card */}
-            <Paper elevation={0} sx={{ border: '1px solid', borderColor: 'divider', borderRadius: 2, overflow: 'hidden' }}>
+            <Paper elevation={0} sx={{ border: '1px solid', borderColor: 'divider', borderRadius: blockRadius, boxShadow: blockShadow, overflow: 'hidden' }}>
 
                 {/* Header stripe */}
-                <Box sx={{ px: 2.5, py: 1.4, bgcolor: 'action.selected', borderBottom: '1px solid', borderColor: 'divider', ...row('center', 'space-between') }}>
+                <Box sx={{ px: 2.5, py: 1.4, bgcolor: headerBg, borderBottom: '1px solid', borderColor: 'divider', color: headerColor, ...row('center', 'space-between') }}>
                     <Typography sx={{ fontSize: '0.63rem', fontWeight: 800, letterSpacing: 2.5, textTransform: 'uppercase', color: 'text.secondary' }}>
                         Order Summary
                     </Typography>
@@ -244,7 +253,7 @@ const OrderSummary = ({ visibleCount, subtotal, shippingCost, shippingMethod, fr
                     </Typography>
                 </Box>
 
-                <Box sx={{ px: 2.5, py: 2 }}>
+                <Box sx={blockPadding}>
                     <PriceRow label="Subtotal" value={formatPrice(subtotal)} />
                     <PriceRow label="Shipping" icon={<LocalShippingOutlinedIcon />}
                         value={shippingFree ? 'Free' : formatPrice(shippingCost)} green={shippingFree} />
@@ -326,12 +335,14 @@ const OrderSummary = ({ visibleCount, subtotal, shippingCost, shippingMethod, fr
             </Paper>
 
             {/* Trust badges 2×2 */}
-            <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', sm: '1fr 1fr' }, gap: 1 }}>
-                <TrustBadge icon={<CachedIcon />} title="Easy Returns" sub="30-day hassle-free" />
-                <TrustBadge icon={<VerifiedIcon />} title="100% Authentic" sub="Guaranteed genuine" />
-                <TrustBadge icon={<LocalShippingOutlinedIcon />} title="Fast Delivery" sub="Tracked & insured" />
-                <TrustBadge icon={<HeadsetMicIcon />} title="24/7 Support" sub="Always here for you" />
-            </Box>
+            {showTrustBadges && (
+                <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', sm: '1fr 1fr' }, gap: 1 }}>
+                    <TrustBadge icon={<CachedIcon />} title="Easy Returns" sub="30-day hassle-free" />
+                    <TrustBadge icon={<VerifiedIcon />} title="100% Authentic" sub="Guaranteed genuine" />
+                    <TrustBadge icon={<LocalShippingOutlinedIcon />} title="Fast Delivery" sub="Tracked & insured" />
+                    <TrustBadge icon={<HeadsetMicIcon />} title="24/7 Support" sub="Always here for you" />
+                </Box>
+            )}
 
             {/* Payment methods */}
             <Paper elevation={0} sx={{ border: '1px solid', borderColor: 'divider', borderRadius: 1.75, px: 2, py: 1.25, ...row('center', 'space-between') }}>
@@ -361,6 +372,13 @@ const CartPage = () => {
     const cartEnabled = useFeature('cart');
     const checkoutEnabled = useFeature('checkout');
     const enquiryEnabled = useFeature('enquiry');
+    const cartPage = settings?.cartPage || {};
+    const cartItemStyle = useComponentStyles('cartItem');
+    const checkoutBlockStyle = useComponentStyles('checkoutBlock');
+    const cartLayout = cartPage.layout || 'standard';
+    const isCompactCart = cartLayout === 'compact';
+    const showCartTrustBadges = cartPage.showTrustBadges !== false;
+    const emptyStateText = cartPage.emptyStateText || "Haven't added anything yet. Let's fix that.";
 
     useEffect(() => {
         if (!cartEnabled) {
@@ -402,8 +420,8 @@ const CartPage = () => {
         ...(!useGST && flatTax > 0 ? [{ label: `Tax (${(taxRate).toFixed(0)}%)`, value: formatPrice(flatTax) }] : []),
     ];
 
-    const couponsEnabled = useFeatureFlag('coupons');
-    const showAvailableCoupons = useFeatureFlag('showAvailableCoupons');
+    const couponsEnabled = useFeature('coupons');
+    const showAvailableCoupons = useFeature('showAvailableCoupons');
 
     useEffect(() => {
         if (!user || items.length === 0 || !couponsEnabled || !showAvailableCoupons) { setOfferSummary(null); return; }
@@ -415,13 +433,13 @@ const CartPage = () => {
     const handleClearCart = async () => { setClearing(true); await clearCart(); setClearing(false); };
 
     if (loading) return <CartSkeleton />;
-    if (items.length === 0) return <EmptyCart />;
+    if (items.length === 0) return <EmptyCart message={emptyStateText} />;
 
     const visibleItems = items.filter(i => !removingIds.has(i.id));
     const visibleCount = visibleItems.reduce((s, i) => s + getQty(i), 0);
 
     return (
-        <Container maxWidth="lg" sx={{ py: { xs: 3, md: 5 } }}>
+        <Container maxWidth={isCompactCart ? 'md' : 'lg'} sx={{ py: { xs: 3, md: 5 } }}>
             <PageSEO title="Cart" type="noindex" />
 
             {/* Header */}
@@ -443,7 +461,7 @@ const CartPage = () => {
                 </Button>
             </Box>
 
-            <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', md: 'minmax(0, 1fr) 400px' }, gap: { xs: 3, md: 3.5 }, alignItems: 'start' }}>
+            <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', md: isCompactCart ? '1fr' : 'minmax(0, 1fr) 400px' }, gap: { xs: 3, md: 3.5 }, alignItems: 'start' }}>
 
                 {/* Items */}
                 <Box>
@@ -451,7 +469,7 @@ const CartPage = () => {
                         {items.map(item => (
                             <CartItem key={item.id} item={item} getQty={getQty}
                                 handleUpdate={handleUpdate} handleRemove={handleRemove}
-                                removingIds={removingIds} updatingIds={updatingIds} formatPrice={formatPrice} />
+                                removingIds={removingIds} updatingIds={updatingIds} formatPrice={formatPrice} cartItemStyle={cartItemStyle} />
                         ))}
                     </Box>
 
@@ -500,6 +518,8 @@ const CartPage = () => {
                     setEnquiryOpen={setEnquiryOpen}
                     checkoutEnabled={checkoutEnabled}
                     enquiryEnabled={enquiryEnabled}
+                    showTrustBadges={showCartTrustBadges}
+                    checkoutBlockStyle={checkoutBlockStyle}
                 />
             </Box>
 

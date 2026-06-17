@@ -141,14 +141,33 @@ This script installs Docker, generates secure secrets, builds containers, and in
 
 For deep dives into specific subsystems, refer to the `docs/` directory:
 
-- [Architecture Overview](docs/ARCHITECTURE.md)
-- [Database Schema & Constraints](docs/DATABASE.md)
-- [API Contract Reference](docs/API.md)
-- [SEO Implementation Guide](docs/SEO_IMPLEMENTATION.md)
-- [Shipping Engine & Volumetric Logic](docs/SHIPPING-SYSTEM-GUIDE.md)
-- [Audit & Compliance Report](docs/AUDIT-REPORT.md)
 
----
+
+- [Documentation Index](docs/INDEX.md) — Full documentation map and reading order
+
+- [Features Catalogue](docs/FEATURES.md) — Complete admin + customer-facing features
+
+- [Architecture Overview](docs/ARCHITECTURE.md)
+
+- [Store Templates & Theme System](docs/STORE-TEMPLATES.md)
+
+- [Database Schema & Constraints](docs/DATABASE.md)
+
+- [API Contract Reference](docs/API.md)
+
+- [Auth & Access Control](docs/AUTH-GUIDE.md)
+
+- [SEO Implementation Guide](docs/SEO.md)
+
+- [Shipping Engine](docs/SHIPPING-SYSTEM.md)
+
+- [Coupon & Discount Engine](docs/COUPONS.md)
+
+- [Media Module](docs/MEDIA.md)
+
+- [Deployment Guide](docs/DEPLOYMENT.md)
+
+- [Testing Guide](docs/TESTING_GUIDE.md)
 
 ## 🛡️ Default Access (Post-Seed)
 

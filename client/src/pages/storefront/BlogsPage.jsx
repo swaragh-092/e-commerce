@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import {
   Box,
   Breadcrumbs,
@@ -18,11 +18,14 @@ import { Link as RouterLink, useSearchParams } from 'react-router-dom';
 import PageSEO from '../../components/common/PageSEO';
 import BlogService from '../../services/blogService';
 import { getMediaUrl } from '../../utils/media';
+import { useSettings } from '../../hooks/useSettings';
 
 const formatDate = (value) => {
   if (!value) return '';
   return new Date(value).toLocaleDateString();
 };
+
+const formatAuthorName = (author) => [author?.firstName, author?.lastName].filter(Boolean).join(' ');
 
 const BlogCardSkeleton = () => (
   <Card sx={{ height: '100%', borderRadius: 4 }}>
@@ -43,6 +46,13 @@ const BlogsPage = () => {
   const [categories, setCategories] = useState([]);
   const [meta, setMeta] = useState({ page: 1, totalPages: 1, total: 0 });
   const [loading, setLoading] = useState(true);
+  const { settings } = useSettings();
+  const blogPage = settings?.blogPage || {};
+  const listLayout = blogPage.listLayout || 'grid';
+  const showAuthor = blogPage.showAuthor !== false;
+  const showDate = blogPage.showDate !== false;
+  const isListLayout = listLayout === 'list';
+  const isMasonryLayout = listLayout === 'masonry';
 
   const page = parseInt(searchParams.get('page') || '1', 10);
   const categorySlug = searchParams.get('category') || '';
@@ -76,6 +86,12 @@ const BlogsPage = () => {
     if (nextCategory) params.set('category', nextCategory);
     setSearchParams(params);
   };
+
+  const gridSize = useMemo(() => {
+    if (isListLayout) return { xs: 12 };
+    if (isMasonryLayout) return { xs: 12, md: 6 };
+    return { xs: 12, md: 6, lg: 4 };
+  }, [isListLayout, isMasonryLayout]);
 
   return (
     <Container maxWidth="xl" sx={{ py: { xs: 4, md: 6 } }}>
@@ -122,12 +138,12 @@ const BlogsPage = () => {
       <Grid container spacing={3}>
         {loading
           ? Array.from({ length: 6 }).map((_, index) => (
-              <Grid item xs={12} md={6} lg={4} key={index}>
+              <Grid item {...gridSize} key={index}>
                 <BlogCardSkeleton />
               </Grid>
             ))
           : posts.map((post) => (
-              <Grid item xs={12} md={6} lg={4} key={post.id}>
+              <Grid item {...gridSize} key={post.id}>
                 <Card
                   sx={{
                     height: '100%',
@@ -135,6 +151,8 @@ const BlogsPage = () => {
                     overflow: 'hidden',
                     border: '1px solid',
                     borderColor: 'divider',
+                    display: isListLayout ? { xs: 'block', md: 'grid' } : 'block',
+                    gridTemplateColumns: isListLayout ? '320px minmax(0, 1fr)' : undefined,
                     transition: 'transform 0.25s ease, box-shadow 0.25s ease',
                     '&:hover': {
                       transform: 'translateY(-4px)',
@@ -144,13 +162,14 @@ const BlogsPage = () => {
                 >
                   <Box
                     sx={{
-                      height: 220,
+                      height: isListLayout ? { xs: 220, md: '100%' } : isMasonryLayout ? 280 : 220,
+                      minHeight: isListLayout ? { md: 260 } : undefined,
                       background: post.featuredImage?.url
                         ? `url(${getMediaUrl(post.featuredImage.url)}) center/cover no-repeat`
                         : 'linear-gradient(135deg, #d8ecef 0%, #f1dfc3 100%)',
                     }}
                   />
-                  <CardContent sx={{ p: 3, display: 'flex', flexDirection: 'column', height: 'calc(100% - 220px)' }}>
+                  <CardContent sx={{ p: 3, display: 'flex', flexDirection: 'column', height: isListLayout ? '100%' : isMasonryLayout ? 'auto' : 'calc(100% - 220px)' }}>
                     <Stack direction="row" spacing={1} sx={{ mb: 1.5, flexWrap: 'wrap', gap: 1 }}>
                       {(post.categories || []).slice(0, 2).map((category) => (
                         <Chip key={category.id} label={category.name} size="small" variant="outlined" />
@@ -159,9 +178,20 @@ const BlogsPage = () => {
                     <Typography variant="h5" fontWeight={800} sx={{ mb: 1.2, lineHeight: 1.25 }}>
                       {post.title}
                     </Typography>
-                    <Typography variant="caption" color="text.secondary" sx={{ mb: 1.5, letterSpacing: '0.04em' }}>
-                      {formatDate(post.displayDate || post.publishedAt)}
-                    </Typography>
+                    {(showDate || (showAuthor && formatAuthorName(post.author))) && (
+                      <Stack direction="row" spacing={1.5} sx={{ mb: 1.5, color: 'text.secondary', flexWrap: 'wrap' }}>
+                        {showDate && (
+                          <Typography variant="caption" sx={{ letterSpacing: '0.04em' }}>
+                            {formatDate(post.displayDate || post.publishedAt)}
+                          </Typography>
+                        )}
+                        {showAuthor && formatAuthorName(post.author) ? (
+                          <Typography variant="caption" sx={{ letterSpacing: '0.04em' }}>
+                            By {formatAuthorName(post.author)}
+                          </Typography>
+                        ) : null}
+                      </Stack>
+                    )}
                     <Typography variant="body2" color="text.secondary" sx={{ lineHeight: 1.75, flexGrow: 1 }}>
                       {post.summary || 'Read the full article for more details.'}
                     </Typography>

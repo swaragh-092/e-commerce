@@ -1,5 +1,6 @@
 import { useContext, useMemo } from 'react';
 import { SettingsContext } from '../context/ThemeContext';
+import { getComponentStyle } from '../utils/componentStyles';
 
 export const useSettings = () => {
   const context = useContext(SettingsContext);
@@ -22,9 +23,6 @@ export const useFeature = (featureName) => {
   if (features === null) return true;
   return features[featureName] !== false;
 };
-
-/** Alias kept for backward compatibility */
-export const useFeatureFlag = useFeature;
 
 /**
  * Returns true if the feature is Tier 1 (mode-locked).
@@ -89,4 +87,17 @@ export const useCurrency = () => {
   const symbol = formatter.formatToParts(0).find(part => part.type === 'currency')?.value || currency;
 
   return { currency, symbol, formatPrice };
+};
+
+
+/**
+ * Returns merged component style settings for storefront building blocks.
+ * Example: const productCardStyle = useComponentStyles('productCard');
+ */
+export const useComponentStyles = (componentName) => {
+  const { settings } = useSettings();
+  return useMemo(
+    () => getComponentStyle(settings, componentName),
+    [settings, componentName]
+  );
 };

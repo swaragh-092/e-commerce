@@ -14,7 +14,7 @@ const renderMenuItems = (children, depth, maxDepth, navigate, closeMenu) => {
     return children.map(child => (
         <React.Fragment key={child.id}>
             <MenuItem
-                onClick={() => { closeMenu(); navigate(`/products?category=${child.slug}`); }}
+                onClick={() => { closeMenu(); navigate(`/category/${child.slug}`); }}
                 sx={{ pl: 2 + (depth - 1) * 2 }}
             >
                 <Typography variant="body2" fontWeight={depth === 1 ? 600 : 400}>
@@ -61,7 +61,7 @@ const CategoryNav = () => {
                             <Button
                                 color="inherit"
                                 size="small"
-                                onClick={(e) => hasChildren ? handleOpen(e, cat.id) : navigate(`/products?category=${cat.slug}`)}
+                                onClick={(e) => hasChildren ? handleOpen(e, cat.id) : navigate(`/category/${cat.slug}`)}
                                 sx={{ fontSize: { xs: '0.8rem', md: '0.875rem' }, px: { xs: 1.5, md: 1.5 }, minHeight: 44, minWidth: 44, whiteSpace: 'nowrap' }}
                             >
                                 {cat.name}
@@ -73,7 +73,7 @@ const CategoryNav = () => {
                                     onClose={() => handleClose(cat.id)}
                                     MenuListProps={{ onMouseLeave: () => handleClose(cat.id) }}
                                 >
-                                    <MenuItem onClick={() => { handleClose(cat.id); navigate(`/products?category=${cat.slug}`); }}>
+                                    <MenuItem onClick={() => { handleClose(cat.id); navigate(`/category/${cat.slug}`); }}>
                                         <Typography variant="body2" fontWeight="bold">All {cat.name}</Typography>
                                     </MenuItem>
                                     <Divider />

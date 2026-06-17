@@ -19,6 +19,8 @@ const SalePage = () => {
     const catalog = settings?.catalog || {};
     const defaultLimit = parseInt(catalog.defaultPageSize) || 20;
     const gridCols = parseInt(catalog.gridColumns) || 4;
+    const collectionLayout = catalog.templateLayout || 'sidebar-filters-grid';
+    const isCompactCatalog = collectionLayout.includes('compact') || collectionLayout.includes('table') || collectionLayout.includes('b2b');
 
     useEffect(() => {
         const fetchProducts = async () => {
@@ -81,7 +83,7 @@ const SalePage = () => {
                 </Box>
             ) : (
                 <>
-                    <ProductGrid products={products} loading={loading} gridCols={gridCols} />
+                    <ProductGrid products={products} loading={loading} gridCols={gridCols} variant={isCompactCatalog ? 'compact-list' : 'grid'} />
 
                     {meta.totalPages > 1 && (
                         <Box sx={{ display: 'flex', justifyContent: 'center', mt: 6 }}>

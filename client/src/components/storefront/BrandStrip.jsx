@@ -6,15 +6,25 @@ import ChevronLeftIcon from '@mui/icons-material/ChevronLeft';
 import ChevronRightIcon from '@mui/icons-material/ChevronRight';
 import { getMediaUrl } from '../../utils/media';
 import { useScrollState } from '../../hooks/useScrollState';
+import { useComponentStyles } from '../../hooks/useSettings';
+import { resolveRadius, resolveShadow } from '../../utils/styleMaps';
+import { CanvasEditableText } from './sections/SectionFallback';
+
 
 /**
  * BrandStrip — horizontal brand chip strip for the homepage.
  * Links each brand to the filtered product list page.
  */
-const BrandStrip = ({ title, brands = [], loading = false }) => {
+const BrandStrip = ({ title, section = {}, brands = [], loading = false, align = 'left', mode = 'live', onInlineFieldChange, onInlineFieldCommit, onInlineBlockFocus }) => {
     const scrollerRef = useRef(null);
+    const brandCardStyle = useComponentStyles('brandCard');
     const { canScrollLeft, canScrollRight } = useScrollState(scrollerRef, [brands.length, loading], { threshold: 4 });
     const canScroll = canScrollLeft || canScrollRight;
+    const preview = mode === 'preview';
+    const cardRadius = resolveRadius(brandCardStyle.radius);
+    const cardShadow = resolveShadow(brandCardStyle.shadow);
+    const isLogoOnly = brandCardStyle.variant === 'logo-only';
+    const hoverEffect = brandCardStyle.hoverEffect || 'lift';
 
     if (!loading && brands.length === 0) return null;
 
@@ -49,7 +59,14 @@ const BrandStrip = ({ title, brands = [], loading = false }) => {
                     border: '1px solid rgba(29, 92, 72, 0.08)',
                 }}
             >
-                <Box sx={{ pr: { md: 1 } }}>
+                <Box sx={{ 
+                    pr: { md: 1 }, 
+                    textAlign: align,
+                    display: 'flex',
+                    flexDirection: 'column',
+                    alignItems: align === 'center' ? 'center' : align === 'right' ? 'flex-end' : 'flex-start',
+                    width: '100%'
+                }}>
                     <Typography
                         variant="overline"
                         sx={{
@@ -61,16 +78,29 @@ const BrandStrip = ({ title, brands = [], loading = false }) => {
                     >
                         Trusted & loved
                     </Typography>
-                    <Typography variant="h5" fontWeight={900} sx={{ mt: 0.6, lineHeight: 1.12 }}>
+                    <CanvasEditableText
+                        section={section}
+                        field="title"
+                        preview={preview}
+                        onInlineFieldChange={onInlineFieldChange}
+                        onInlineFieldCommit={onInlineFieldCommit} onInlineBlockFocus={onInlineBlockFocus}
+                        variant="h5"
+                        sx={{ mt: 0.6, lineHeight: 1.12, width: '100%', fontWeight: 900 }}
+                    >
                         {title}
-                    </Typography>
-                    <Typography
+                    </CanvasEditableText>
+                    <CanvasEditableText
+                        section={section}
+                        field="subtitle"
+                        preview={preview}
+                        onInlineFieldChange={onInlineFieldChange}
+                        onInlineFieldCommit={onInlineFieldCommit} onInlineBlockFocus={onInlineBlockFocus}
                         variant="body2"
                         color="text.secondary"
-                        sx={{ mt: 1.4, maxWidth: 210, lineHeight: 1.65 }}
+                        sx={{ mt: 1.4, maxWidth: 210, lineHeight: 1.65, width: '100%' }}
                     >
-                        Shop from our handpicked brands you can trust.
-                    </Typography>
+                        {section.subtitle || 'Shop from our handpicked brands you can trust.'}
+                    </CanvasEditableText>
                     <Stack
                         component={Link}
                         to="/brands"
@@ -150,40 +180,50 @@ const BrandStrip = ({ title, brands = [], loading = false }) => {
                 >
                 {loading
                     ? Array.from({ length: 8 }).map((_, i) => (
-                        <Box key={i} sx={{ width: 150, flex: '0 0 auto' }}>
+                        <Box key={i} sx={{ width: isLogoOnly ? 118 : 150, flex: '0 0 auto' }}>
                             <Skeleton variant="rounded" width="100%" height={126} sx={{ borderRadius: 2 }} />
                         </Box>
                     ))
-                    : brands.map((brand) => (
+                    : brands.map((brand) => {
+                        const actionProps = preview
+                            ? { component: 'div' }
+                            : { component: Link, to: `/products?brand=${brand.slug}` };
+                        return (
                         <ButtonBase
                             key={brand.id}
-                            component={Link}
-                            to={`/products?brand=${brand.slug}`}
+                            {...actionProps}
+                            data-component="brand-card"
+                            data-variant={isLogoOnly ? 'logo-only' : 'standard'}
                             sx={{
-                                width: { xs: 142, sm: 150, md: 154 },
+                                width: isLogoOnly ? { xs: 116, sm: 124, md: 132 } : { xs: 142, sm: 150, md: 154 },
                                 flex: '0 0 auto',
                                 scrollSnapAlign: 'start',
                                 display: 'block',
                                 textAlign: 'center',
                                 color: 'text.primary',
                                 textDecoration: 'none',
-                                borderRadius: 2,
-                                p: 1.4,
-                                minHeight: 126,
+                                borderRadius: cardRadius,
+                                p: isLogoOnly ? 1 : 1.4,
+                                minHeight: isLogoOnly ? 96 : 126,
                                 bgcolor: 'background.paper',
-                                boxShadow: '0 12px 28px rgba(31, 26, 18, 0.07)',
+                                boxShadow: cardShadow,
                                 position: 'relative',
                                 overflow: 'hidden',
                                 border: '1px solid rgba(29, 92, 72, 0.06)',
-                                '&:hover': { borderColor: 'rgba(29, 92, 72, 0.16)' },
+                                transition: 'transform 0.22s ease, box-shadow 0.22s ease, border-color 0.22s ease, opacity 0.22s ease',
+                                '&:hover': {
+                                    borderColor: 'rgba(29, 92, 72, 0.16)',
+                                    transform: hoverEffect === 'lift' ? 'translateY(-4px)' : 'none',
+                                    opacity: hoverEffect === 'fade' ? 0.9 : 1,
+                                },
                             }}
                         >
                             <Box
                                 className="brand-stage"
                                 sx={{
                                     width: '100%',
-                                    height: 70,
-                                    borderRadius: 1.5,
+                                    height: isLogoOnly ? 54 : 70,
+                                    borderRadius: Math.max(1, cardRadius - 0.5),
                                     bgcolor: 'transparent',
                                     position: 'relative',
                                     overflow: 'hidden',
@@ -213,17 +253,20 @@ const BrandStrip = ({ title, brands = [], loading = false }) => {
                                     {brand.name?.[0]?.toUpperCase()}
                                 </Avatar>
                             </Box>
-                            <Box sx={{ minWidth: 0, px: 0.25, pt: 1.15 }}>
-                                <Typography
-                                    fontWeight={800}
-                                    noWrap
-                                    sx={{ fontSize: '0.82rem', lineHeight: 1.2 }}
-                                >
-                                    {brand.name}
-                                </Typography>
-                            </Box>
+                            {!isLogoOnly && (
+                                <Box sx={{ minWidth: 0, px: 0.25, pt: 1.15 }}>
+                                    <Typography
+                                        fontWeight={800}
+                                        noWrap
+                                        sx={{ fontSize: '0.82rem', lineHeight: 1.2 }}
+                                    >
+                                        {brand.name}
+                                    </Typography>
+                                </Box>
+                            )}
                         </ButtonBase>
-                    ))
+                        );
+                    })
                 }
                 </Box>
                 {canScroll && (

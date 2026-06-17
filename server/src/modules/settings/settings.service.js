@@ -5,6 +5,7 @@ const AuditService = require('../audit/audit.service');
 const AppError = require('../../utils/AppError');
 const { ACTIONS, ENTITIES } = require('../../config/constants');
 const { buildFeatures, isTier1Feature, TIER1_KEYS } = require('../../config/modes');
+const { getPermissionsForUser, PERMISSIONS } = require('../../config/permissions');
 const { invalidateFeature } = require('../../middleware/featureGate.middleware');
 
 const fs = require('fs');
@@ -24,6 +25,20 @@ const PAYMENT_GATEWAY_ENABLED_KEYS = {
 };
 
 const isTruthySetting = (value) => value === true || value === 'true';
+
+const hasAdvancedSettingsPermission = (user) =>
+  getPermissionsForUser(user || {}).includes(PERMISSIONS.SETTINGS_ADVANCED);
+
+const ensureAdvancedSettingsAllowed = (settingsArray, actingUser) => {
+  const touchesAdvanced = settingsArray.some(({ key, group }) => resolveSettingGroup(key, group) === 'advanced');
+  if (touchesAdvanced && !hasAdvancedSettingsPermission(actingUser)) {
+    throw new AppError(
+      'SETTINGS_ADVANCED_REQUIRED',
+      403,
+      'Advanced settings require the settings.advanced permission.'
+    );
+  }
+};
 
 const resolveSettingGroup = (key, group) => {
   if (group) return group;
@@ -126,6 +141,8 @@ const getAll = async () => {
   // Group settings by group type
   const grouped = {
     theme: { ...defaultSettings.theme },
+    componentStyles: { ...defaultSettings.componentStyles },
+    sectionPresets: { ...defaultSettings.sectionPresets },
     features: { ...defaultSettings.features },
     payments: { ...defaultSettings.payments },
     sales: { ...defaultSettings.sales },
@@ -143,7 +160,11 @@ const getAll = async () => {
     catalog: { ...defaultSettings.catalog },
     homepage: { ...defaultSettings.homepage },
     productPage: { ...defaultSettings.productPage },
+    categoryPage: { ...defaultSettings.categoryPage },
+    blogPage: { ...defaultSettings.blogPage },
     brandsPage: { ...defaultSettings.brandsPage },
+    cartPage: { ...defaultSettings.cartPage },
+    accountPage: { ...defaultSettings.accountPage },
     admin: { ...defaultSettings.admin },
     invoice: { ...defaultSettings.invoice },
     messaging: { ...defaultSettings.messaging },
@@ -183,7 +204,7 @@ const getAll = async () => {
 
 const getByGroup = async (groupName, options = {}) => {
   const { maskSensitive = true } = options;
-  const validGroups = ['theme', 'features', 'payments', 'sales', 'seo', 'general', 'shipping', 'tax', 'sku', 'logo', 'hero', 'auth', 'footer', 'announcement', 'nav', 'catalog', 'homepage', 'productPage', 'brandsPage', 'admin', 'invoice', 'gateway_credentials', 'messaging_credentials', 'messaging', 'advanced'];
+  const validGroups = ['theme', 'componentStyles', 'sectionPresets', 'features', 'payments', 'sales', 'seo', 'general', 'shipping', 'tax', 'sku', 'logo', 'hero', 'auth', 'footer', 'announcement', 'nav', 'catalog', 'homepage', 'productPage', 'categoryPage', 'blogPage', 'brandsPage', 'cartPage', 'accountPage', 'admin', 'invoice', 'gateway_credentials', 'messaging_credentials', 'messaging', 'advanced'];
   if (!validGroups.includes(groupName)) {
     throw new AppError('VALIDATION_ERROR', 400, 'Invalid setting group');
   }
@@ -220,7 +241,7 @@ const getByGroup = async (groupName, options = {}) => {
   return result;
 };
 
-const updateKey = async (key, value, group, actingUserId) => {
+const updateKey = async (key, value, group, actingUserId, actingUser = null) => {
   const credentialGroups = ['gateway_credentials', 'messaging_credentials'];
 
   // Tier 1 feature keys are mode-locked — reject any attempt to modify them via settings.
@@ -233,6 +254,7 @@ const updateKey = async (key, value, group, actingUserId) => {
     );
   }
 
+  ensureAdvancedSettingsAllowed([{ key, value, group }], actingUser);
   await ensurePaymentGatewaySettingsAreValid([{ key, value, group }]);
 
   // Capture the transaction result so we can invalidate the feature cache
@@ -283,8 +305,9 @@ const updateKey = async (key, value, group, actingUserId) => {
   return result;
 };
 
-const bulkUpdate = async (settingsInput, actingUserId, actingUser = null) => {
-  const validGroups = ['theme', 'features', 'payments', 'sales', 'seo', 'general', 'shipping', 'tax', 'sku', 'logo', 'hero', 'auth', 'footer', 'announcement', 'nav', 'catalog', 'homepage', 'productPage', 'brandsPage', 'admin', 'invoice', 'gateway_credentials', 'messaging_credentials', 'messaging', 'advanced'];
+const bulkUpdate = async (settingsInput, actingUserId, actingUser = null, options = {}) => {
+  const { transaction: outerTransaction = null } = options;
+  const validGroups = ['theme', 'componentStyles', 'sectionPresets', 'features', 'payments', 'sales', 'seo', 'general', 'shipping', 'tax', 'sku', 'logo', 'hero', 'auth', 'footer', 'announcement', 'nav', 'catalog', 'homepage', 'productPage', 'categoryPage', 'blogPage', 'brandsPage', 'cartPage', 'accountPage', 'admin', 'invoice', 'gateway_credentials', 'messaging_credentials', 'messaging', 'advanced'];
   const credentialGroups = ['gateway_credentials', 'messaging_credentials'];
 
     // Normalize input to an array of { key, value, group }
@@ -292,6 +315,7 @@ const bulkUpdate = async (settingsInput, actingUserId, actingUser = null) => {
         ? settingsInput 
         : Object.entries(settingsInput).map(([key, value]) => ({ key, value }));
 
+    ensureAdvancedSettingsAllowed(settingsArray, actingUser);
     await ensurePaymentGatewaySettingsAreValid(settingsArray);
 
     // ── Superadmin guard ─────────────────────────────────────────────────────
@@ -312,7 +336,7 @@ const bulkUpdate = async (settingsInput, actingUserId, actingUser = null) => {
       }
     }
 
-    await sequelize.transaction(async (t) => {
+    const writeSettings = async (t) => {
         let updatedCount = 0;
         for (let { key, value, group } of settingsArray) {
             // Resolve the group for this key upfront so lookups are always scoped
@@ -368,7 +392,13 @@ const bulkUpdate = async (settingsInput, actingUserId, actingUser = null) => {
                 }, t);
             }
         } catch(err) {}
-    });
+    };
+
+    if (outerTransaction) {
+      await writeSettings(outerTransaction);
+    } else {
+      await sequelize.transaction(writeSettings);
+    }
 
     // Bust feature cache for any feature-group key that was updated
     for (const { key, group } of settingsArray) {

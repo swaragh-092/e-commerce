@@ -20,6 +20,8 @@ const ProductRow = ({
   loading = false,
   count = 4,
   layout = 'grid',
+  compact = false,
+  align = 'left',
 }) => {
   const scrollRef = useRef(null);
   const { canScrollLeft, canScrollRight } = useScrollState(scrollRef, [products, loading, layout], { delay: 100 });
@@ -34,11 +36,13 @@ const ProductRow = ({
 
   if (!loading && products.length === 0) return null;
 
-  const carouselCardWidth = { xs: '210px', sm: '230px', md: '248px', lg: '260px' };
+  const carouselCardWidth = compact
+    ? { xs: '170px', sm: '190px', md: '210px', lg: '220px' }
+    : { xs: '210px', sm: '230px', md: '248px', lg: '260px' };
 
   const carouselStyles = {
     display: 'flex',
-    gap: { xs: 1.5, md: 2 },
+    gap: compact ? { xs: 1, md: 1.25 } : { xs: 1.5, md: 2 },
     overflowX: 'auto',
     pb: 2,
     alignItems: 'stretch',
@@ -76,10 +80,19 @@ const ProductRow = ({
   });
 
   return (
-    <Box sx={{ mb: { xs: 4, md: 5 } }}>
+    <Box sx={{ mb: compact ? { xs: 3, md: 4 } : { xs: 4, md: 5 } }}>
       {/* Section header */}
-      <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 2, mb: 2.25 }}>
-        <Typography variant="h5" fontWeight={800}>
+      <Box sx={{
+        display: 'flex',
+        flexDirection: align === 'left' ? { xs: 'column', sm: 'row' } : 'column',
+        justifyContent: 'space-between',
+        alignItems: align === 'center' ? 'center' : align === 'right' ? 'flex-end' : { xs: 'flex-start', sm: 'center' },
+        gap: 2,
+        mb: compact ? 1.5 : 2.25,
+        textAlign: align,
+        width: '100%',
+      }}>
+        <Typography variant={compact ? 'h6' : 'h5'} fontWeight={800} sx={{ width: align === 'left' ? 'auto' : '100%' }}>
           {title}
         </Typography>
         {viewAllLink && (
@@ -136,7 +149,7 @@ const ProductRow = ({
               ? Array.from({ length: count }).map((_, i) => (
                 <Box key={i} sx={{ width: carouselCardWidth, flexShrink: 0, display: 'flex' }}>
                   <Box sx={{ width: '100%', display: 'flex', flexDirection: 'column' }}>
-                    <Box sx={{ position: 'relative', aspectRatio: '4 / 3.2', mb: 1, bgcolor: 'action.hover', borderRadius: 2 }}>
+                    <Box sx={{ position: 'relative', aspectRatio: compact ? '1 / 1' : '4 / 3.2', mb: 1, bgcolor: 'action.hover', borderRadius: 2 }}>
                       <Skeleton variant="rectangular" sx={{ position: 'absolute', top: 0, left: 0, width: '100%', height: '100%', borderRadius: 2 }} />
                     </Box>
                     <Skeleton width="80%" />
@@ -146,18 +159,18 @@ const ProductRow = ({
               ))
               : products.map((product) => (
                 <Box key={product.id} sx={{ width: carouselCardWidth, flexShrink: 0, display: 'flex' }}>
-                  <ProductCard product={product} />
+                  <ProductCard product={product} compact={compact} />
                 </Box>
               ))
             }
           </Box>
         </Box>
       ) : (
-        <Grid container spacing={{ xs: 1.5, md: 2 }}>
+        <Grid container spacing={compact ? { xs: 1, md: 1.25 } : { xs: 1.5, md: 2 }}>
           {loading
             ? Array.from({ length: count }).map((_, i) => (
-              <Grid item xs={6} sm={4} md={3} lg={2.4} key={i}>
-                <Box sx={{ aspectRatio: '4 / 3.2', mb: 1.5, bgcolor: 'action.hover', borderRadius: 2 }}>
+              <Grid item xs={6} sm={compact ? 3 : 4} md={compact ? 2 : 3} lg={compact ? 2 : 2.4} key={i}>
+                <Box sx={{ aspectRatio: compact ? '1 / 1' : '4 / 3.2', mb: compact ? 1 : 1.5, bgcolor: 'action.hover', borderRadius: 2 }}>
                   <Skeleton variant="rectangular" sx={{ width: '100%', height: '100%', borderRadius: 2 }} />
                 </Box>
                 <Skeleton width="80%" />
@@ -165,8 +178,8 @@ const ProductRow = ({
               </Grid>
             ))
             : products.map((product) => (
-              <Grid item xs={6} sm={4} md={3} lg={2.4} key={product.id} sx={{ display: 'flex' }}>
-                <ProductCard product={product} />
+              <Grid item xs={6} sm={compact ? 3 : 4} md={compact ? 2 : 3} lg={compact ? 2 : 2.4} key={product.id} sx={{ display: 'flex' }}>
+                <ProductCard product={product} compact={compact} />
               </Grid>
             ))
           }

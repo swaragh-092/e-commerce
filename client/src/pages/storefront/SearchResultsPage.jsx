@@ -31,6 +31,8 @@ const SearchResultsPage = () => {
   const { settings } = useSettings();
   const catalog = settings?.catalog || {};
   const gridCols = parseInt(catalog.gridColumns) || 4;
+  const collectionLayout = catalog.templateLayout || 'sidebar-filters-grid';
+  const isCompactCatalog = collectionLayout.includes('compact') || collectionLayout.includes('table') || collectionLayout.includes('b2b');
 
   // URL state
   const urlQuery = searchParams.get('q') || '';
@@ -142,13 +144,13 @@ const SearchResultsPage = () => {
 
       {/* Loading State */}
       {loading && (
-        <ProductGrid products={[]} loading={true} gridCols={gridCols} />
+        <ProductGrid products={[]} loading={true} gridCols={gridCols} variant={isCompactCatalog ? 'compact-list' : 'grid'} />
       )}
 
       {/* Results */}
       {!loading && hasSearched && products.length > 0 && (
         <>
-          <ProductGrid products={products} loading={false} gridCols={gridCols} />
+          <ProductGrid products={products} loading={false} gridCols={gridCols} variant={isCompactCatalog ? 'compact-list' : 'grid'} />
 
           {meta.totalPages > 1 && (
             <Box sx={{ display: 'flex', justifyContent: 'center', mt: 6, mb: 2 }}>
