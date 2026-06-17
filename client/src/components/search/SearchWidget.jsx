@@ -55,6 +55,8 @@ const SearchWidget = ({
   initialValue = '',
   sx = {},
   fullWidth = true,
+  collapseToIcon = false,
+  onExpandedChange,
 }) => {
   const navigate = useNavigate();
   const location = useLocation();
@@ -84,6 +86,20 @@ const SearchWidget = ({
     window.addEventListener('resize', updateWidth);
     return () => window.removeEventListener('resize', updateWidth);
   }, []);
+
+  useEffect(() => {
+    if (collapseToIcon && isExpanded) {
+      const timer = window.setTimeout(() => inputRef.current?.focus(), 0);
+      return () => window.clearTimeout(timer);
+    }
+    return undefined;
+  }, [collapseToIcon, isExpanded]);
+
+  useEffect(() => {
+    if (typeof onExpandedChange === 'function') {
+      onExpandedChange(isExpanded);
+    }
+  }, [isExpanded, onExpandedChange]);
 
   // Load recent searches from localStorage
   useEffect(() => {
@@ -272,75 +288,109 @@ const SearchWidget = ({
     (results?.products?.data?.length || 0) > 0 ||
     (results?.brands?.length || 0) > 0 ||
     (results?.categories?.length || 0) > 0;
+  const showCollapsedIcon = variant === 'header' && collapseToIcon && !isExpanded && !query;
+  const showFloatingMobileSearch = variant === 'header' && collapseToIcon && isExpanded;
+  const mergedContainerSx = {
+    position: 'relative',
+    transition: 'max-width 0.3s ease',
+    ...sx,
+    width: showCollapsedIcon
+      ? 'auto'
+      : (sx?.width ?? (fullWidth ? '100%' : 'auto')),
+    maxWidth: showCollapsedIcon
+      ? 'none'
+      : (sx?.maxWidth ?? (variant === 'header' ? (isExpanded ? 500 : 200) : 'none')),
+    ...(showFloatingMobileSearch
+      ? {
+          position: 'absolute',
+          right: 0,
+          top: '50%',
+          transform: 'translateY(-50%)',
+          zIndex: 10,
+          width: sx?.width ?? { xs: 'min(200px, calc(100vw - 120px))', sm: 180 },
+          maxWidth: 'calc(100vw - 120px)',
+        }
+      : {}),
+  };
 
   return (
     <ClickAwayListener onClickAway={() => {
       closeDropdown();
       if (variant === 'header' && !query) setIsExpanded(false);
     }}>
-      <Box sx={{ 
-        position: 'relative', 
-        width: fullWidth ? '100%' : 'auto',
-        maxWidth: variant === 'header' ? (isExpanded ? 500 : 200) : 'none',
-        transition: 'max-width 0.3s ease',
-        ...sx 
-      }}>
-        <TextField
-          inputRef={inputRef}
-          size="small"
-          fullWidth
-          placeholder={placeholder}
-          value={query || ''}
-          onChange={(e) => setQuery(e.target.value)}
-          onKeyDown={handleKeyDown}
-          onFocus={() => {
-            setIsExpanded(true);
-            if (query.length < MIN_QUERY_LENGTH && recentSearches.length > 0) {
-              setOpen(true);
-            } else if (results && debouncedQuery.length >= MIN_QUERY_LENGTH) {
-              setOpen(true);
-            }
-          }}
-          InputProps={{
-            startAdornment: (
-              <InputAdornment position="start">
-                {loading ? (
-                  <CircularProgress size={18} color="inherit" />
-                ) : (
-                  <SearchIcon 
-                    color={variant === 'header' ? 'inherit' : 'action'} 
-                    fontSize="small" 
-                    sx={{ opacity: variant === 'header' ? 0.8 : 1 }}
-                  />
-                )}
-              </InputAdornment>
-            ),
-            endAdornment: (
-              <InputAdornment position="end">
-                {query && (
-                  <IconButton size="small" onClick={handleClear} sx={{ color: 'inherit', p: 0.5, mr: 0.5 }}>
-                    <CloseIcon sx={{ fontSize: 16, opacity: 0.7 }} />
-                  </IconButton>
-                )}
-                {query && variant !== 'header' && results?.products?.totalItems !== undefined && (
-                  <Chip
-                    label={results.products.totalItems}
-                    size="small"
-                    color="primary"
-                    sx={{ height: 20, fontSize: '0.65rem', fontWeight: 700 }}
-                  />
-                )}
-              </InputAdornment>
-            ),
-          }}
-          sx={{
-            '& .MuiOutlinedInput-root': getStyles(),
-            '& .MuiInputBase-input': {
-              py: variant === 'header' ? 1 : 1.2,
-              fontSize: '0.9rem',
-            }
-          }}
-        />
+      <Box sx={mergedContainerSx}>
+        {showCollapsedIcon ? (
+          <IconButton
+            color="inherit"
+            aria-label="Open search"
+            onClick={() => setIsExpanded(true)}
+            sx={{
+              color: 'inherit',
+              bgcolor: alpha(theme.palette.common.white, 0.15),
+              borderRadius: 2,
+              '&:hover': { bgcolor: alpha(theme.palette.common.white, 0.22) },
+            }}
+          >
+            <SearchIcon fontSize="small" />
+          </IconButton>
+        ) : (
+          <TextField
+            inputRef={inputRef}
+            size="small"
+            fullWidth
+            placeholder={placeholder}
+            value={query || ''}
+            onChange={(e) => setQuery(e.target.value)}
+            onKeyDown={handleKeyDown}
+            onFocus={() => {
+              setIsExpanded(true);
+              if (query.length < MIN_QUERY_LENGTH && recentSearches.length > 0) {
+                setOpen(true);
+              } else if (results && debouncedQuery.length >= MIN_QUERY_LENGTH) {
+                setOpen(true);
+              }
+            }}
+            InputProps={{
+              startAdornment: (
+                <InputAdornment position="start">
+                  {loading ? (
+                    <CircularProgress size={18} color="inherit" />
+                  ) : (
+                    <SearchIcon 
+                      color={variant === 'header' ? 'inherit' : 'action'} 
+                      fontSize="small" 
+                      sx={{ opacity: variant === 'header' ? 0.8 : 1 }}
+                    />
+                  )}
+                </InputAdornment>
+              ),
+              endAdornment: (
+                <InputAdornment position="end">
+                  {query && (
+                    <IconButton size="small" onClick={handleClear} sx={{ color: 'inherit', p: 0.5, mr: 0.5 }}>
+                      <CloseIcon sx={{ fontSize: 16, opacity: 0.7 }} />
+                    </IconButton>
+                  )}
+                  {query && variant !== 'header' && results?.products?.totalItems !== undefined && (
+                    <Chip
+                      label={results.products.totalItems}
+                      size="small"
+                      color="primary"
+                      sx={{ height: 20, fontSize: '0.65rem', fontWeight: 700 }}
+                    />
+                  )}
+                </InputAdornment>
+              ),
+            }}
+            sx={{
+              '& .MuiOutlinedInput-root': getStyles(),
+              '& .MuiInputBase-input': {
+                py: variant === 'header' ? 1 : 1.2,
+                fontSize: '0.9rem',
+              }
+            }}
+          />
+        )}
 
         {showSuggestions && (
           <Popper

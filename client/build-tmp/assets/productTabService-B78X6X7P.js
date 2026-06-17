@@ -1,0 +1,1 @@
+import{q as a}from"./index-BjzcwbkG.js";const r=e=>`/products/${e}/tabs`,o={getTabs:e=>a.get(r(e)),createTab:(e,t)=>a.post(r(e),t),updateTab:(e,t,p)=>a.put(`${r(e)}/${t}`,p),deleteTab:(e,t)=>a.delete(`${r(e)}/${t}`),reorderTabs:(e,t)=>a.put(`${r(e)}/reorder`,{order:t}),syncTabs:(e,t)=>a.put(r(e),{tabs:t})};export{o as p};

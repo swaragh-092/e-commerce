@@ -1,0 +1,1 @@
+const p=(s,m="Something went wrong.")=>{var a,g,t,n,e;return((t=(g=(a=s==null?void 0:s.response)==null?void 0:a.data)==null?void 0:g.error)==null?void 0:t.message)||((e=(n=s==null?void 0:s.response)==null?void 0:n.data)==null?void 0:e.message)||(s==null?void 0:s.message)||m};export{p as g};

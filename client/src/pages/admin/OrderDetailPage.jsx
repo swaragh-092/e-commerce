@@ -502,7 +502,7 @@ const hasFullRefundForReturnRequest = (order = {}, request = {}) => {
   return refundedAmount >= requestAmount;
 };
 
-const FulfillmentDialog = ({ open, onClose, orderItems, onSave, loading }) => {
+const FulfillmentDialog = ({ open, onClose, orderItems, orderDate, onSave, loading, notify }) => {
   const [trackingNumber, setTrackingNumber] = useState('');
   const [courier, setCourier] = useState('');
   const [expectedDeliveryDate, setExpectedDeliveryDate] = useState('');
@@ -511,6 +511,7 @@ const FulfillmentDialog = ({ open, onClose, orderItems, onSave, loading }) => {
   const [items, setItems] = useState({});
   const [providers, setProviders] = useState([]);
   const [providerId, setProviderId] = useState('manual');
+  const minExpectedDate = normalizeDateInputValue(orderDate);
 
   useEffect(() => {
     if (open) {
@@ -545,6 +546,10 @@ const FulfillmentDialog = ({ open, onClose, orderItems, onSave, loading }) => {
   };
 
   const handleSubmit = () => {
+    if (expectedDeliveryDate && minExpectedDate && expectedDeliveryDate < minExpectedDate) {
+      notify(`Expected delivery date cannot be before ${formatDateOnly(minExpectedDate)}.`, 'error');
+      return;
+    }
     const shipmentItems = Object.entries(items)
       .filter(([, qty]) => qty > 0)
       .map(([orderItemId, quantity]) => ({ orderItemId, quantity }));
@@ -604,6 +609,7 @@ const FulfillmentDialog = ({ open, onClose, orderItems, onSave, loading }) => {
             size="small"
             value={expectedDeliveryDate}
             onChange={(e) => setExpectedDeliveryDate(e.target.value)}
+            inputProps={minExpectedDate ? { min: minExpectedDate } : undefined}
             InputLabelProps={{ shrink: true }}
           />
           <TextField
@@ -683,25 +689,15 @@ const FulfillmentDialog = ({ open, onClose, orderItems, onSave, loading }) => {
 
 const formatDeliveryDate = (value) => formatDateOnly(value) || 'Not set';
 
-const ShipmentExpectedDeliveryControl = ({ orderId, shipment, canUpdate, onSaved, notify }) => {
-  const [date, setDate] = useState('');
-  const [saving, setSaving] = useState(false);
-  const history = Array.isArray(shipment?.expectedDeliveryHistory) ? shipment.expectedDeliveryHistory : [];
+const normalizeDateInputValue = (value) => {
+  if (!value) return '';
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return '';
+  return date.toISOString().slice(0, 10);
+};
 
-  const handleSave = async () => {
-    if (!date || !shipment?.id) return;
-    setSaving(true);
-    try {
-      const response = await updateShipment(orderId, shipment.id, { expectedDeliveryDate: date });
-      onSaved(response.data.data);
-      setDate('');
-      notify('Expected delivery date added.', 'success');
-    } catch (err) {
-      notify(getApiErrorMessage(err, 'Failed to update expected delivery date.'), 'error');
-    } finally {
-      setSaving(false);
-    }
-  };
+const ShipmentExpectedDeliveryControl = ({ shipment }) => {
+  const history = Array.isArray(shipment?.expectedDeliveryHistory) ? shipment.expectedDeliveryHistory : [];
 
   return (
     <Box sx={{ mt: 2, p: 2, bgcolor: 'action.hover', borderRadius: 1.5, border: '1px solid', borderColor: 'divider' }}>
@@ -714,22 +710,6 @@ const ShipmentExpectedDeliveryControl = ({ orderId, shipment, canUpdate, onSaved
             {formatDeliveryDate(shipment?.expectedDeliveryDate)}
           </Typography>
         </Box>
-        {canUpdate && (
-          <>
-            <TextField
-              label="Add new expected date"
-              type="date"
-              size="small"
-              value={date}
-              onChange={(e) => setDate(e.target.value)}
-              InputLabelProps={{ shrink: true }}
-              sx={{ width: 190 }}
-            />
-            <Button size="small" variant="outlined" onClick={handleSave} disabled={saving || !date}>
-              {saving ? 'Saving...' : 'Add Date'}
-            </Button>
-          </>
-        )}
       </Box>
       {history.length > 0 && (
         <Stack spacing={0.75} sx={{ mt: 1.5 }}>
@@ -1411,11 +1391,7 @@ const OrderDetailPage = () => {
 
                       {shipment && (
                         <ShipmentExpectedDeliveryControl
-                          orderId={id}
                           shipment={shipment}
-                          canUpdate={canUpdateOrderStatus}
-                          onSaved={setOrder}
-                          notify={notify}
                         />
                       )}
 
@@ -1801,8 +1777,10 @@ const OrderDetailPage = () => {
         open={fulfillmentDialogOpen}
         onClose={() => setFulfillmentDialogOpen(false)}
         orderItems={orderItems}
+        orderDate={order?.createdAt}
         onSave={handleCreateFulfillment}
         loading={fulfillmentLoading}
+        notify={notify}
       />
     </Box>
   );

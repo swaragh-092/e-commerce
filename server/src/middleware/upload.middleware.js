@@ -3,18 +3,6 @@
 const multer = require('multer');
 const AppError = require('../utils/AppError');
 
-
-const fileFilter = (req, file, cb) => {
-  // Check basic extension mapping first, but we'll use file-type inside the media service for true validation
-  const allowedMimeTypes = ['image/jpeg', 'image/png', 'image/webp', 'image/gif'];
-  
-  if (allowedMimeTypes.includes(file.mimetype)) {
-    cb(null, true);
-  } else {
-    cb(new AppError('INVALID_FILE_TYPE', 400, 'Only JPEG, PNG, WebP, and GIF images are allowed. SVGs are rejected.'), false);
-  }
-};
-
 const fontFileFilter = (req, file, cb) => {
   const allowedMimeTypes = [
     'font/woff2',
@@ -27,31 +15,89 @@ const fontFileFilter = (req, file, cb) => {
     'application/x-font-opentype',
     'application/vnd.ms-fontobject',
   ];
-  const allowedExtensions = ['.woff2', '.woff', '.ttf', '.otf'];
-  const ext = (file.originalname || '').slice((file.originalname || '').lastIndexOf('.')).toLowerCase();
 
-  if (allowedMimeTypes.includes(file.mimetype) || allowedExtensions.includes(ext)) {
+  const allowedExtensions = ['.woff2', '.woff', '.ttf', '.otf'];
+
+  const ext = (file.originalname || '')
+    .slice((file.originalname || '').lastIndexOf('.'))
+    .toLowerCase();
+
+  if (
+    allowedMimeTypes.includes(file.mimetype) ||
+    allowedExtensions.includes(ext)
+  ) {
     cb(null, true);
   } else {
-    cb(new AppError('INVALID_FILE_TYPE', 400, 'Only WOFF2, WOFF, TTF, and OTF font files are allowed.'), false);
+    cb(
+      new AppError(
+        'INVALID_FILE_TYPE',
+        400,
+        'Only WOFF2, WOFF, TTF, and OTF font files are allowed.'
+      ),
+      false
+    );
   }
 };
 
-const memoryUpload = multer({
-  storage: multer.memoryStorage(),
-  limits: {
-    fileSize: (parseInt(process.env.MAX_FILE_SIZE_MB) || 5) * 1024 * 1024 // default 5MB
-  },
-  fileFilter: fileFilter
+const createMemoryUpload = ({
+  allowedMimeTypes,
+  maxFileSizeMb,
+  errorMessage,
+}) =>
+  multer({
+    storage: multer.memoryStorage(),
+    limits: {
+      fileSize: maxFileSizeMb * 1024 * 1024,
+    },
+    fileFilter: (req, file, cb) => {
+      if (allowedMimeTypes.includes(file.mimetype)) {
+        cb(null, true);
+        return;
+      }
+
+      cb(
+        new AppError(
+          'INVALID_FILE_TYPE',
+          400,
+          errorMessage
+        ),
+        false
+      );
+    },
+  });
+
+const memoryUpload = createMemoryUpload({
+  allowedMimeTypes: [
+    'image/jpeg',
+    'image/png',
+    'image/webp',
+    'image/gif',
+  ],
+  maxFileSizeMb: parseInt(process.env.MAX_FILE_SIZE_MB, 10) || 5,
+  errorMessage:
+    'Only JPEG, PNG, WebP, and GIF images are allowed. SVGs are rejected.',
+});
+
+const documentMemoryUpload = createMemoryUpload({
+  allowedMimeTypes: ['application/pdf'],
+  maxFileSizeMb:
+    parseInt(process.env.MAX_DOCUMENT_FILE_SIZE_MB, 10) || 10,
+  errorMessage: 'Only PDF documents are allowed.',
 });
 
 const fontUpload = multer({
   storage: multer.memoryStorage(),
   limits: {
-    fileSize: (parseInt(process.env.MAX_FONT_SIZE_MB) || 10) * 1024 * 1024 // default 10MB for fonts
+    fileSize:
+      (parseInt(process.env.MAX_FONT_SIZE_MB, 10) || 10) *
+      1024 *
+      1024,
   },
-  fileFilter: fontFileFilter
+  fileFilter: fontFileFilter,
 });
 
-module.exports = { memoryUpload, fontUpload };
-
+module.exports = {
+  memoryUpload,
+  documentMemoryUpload,
+  fontUpload,
+};

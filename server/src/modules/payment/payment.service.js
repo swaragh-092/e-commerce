@@ -77,6 +77,20 @@ const cashfreeRequest = async (path, { method = 'GET', body } = {}) => {
     return data;
 };
 
+const getErrorMessage = (error, fallback = 'Unexpected payment provider error') => {
+    if (!error) return fallback;
+    if (typeof error === 'string') return error;
+    return (
+        error.message ||
+        error.description ||
+        error.error?.description ||
+        error.error?.message ||
+        error.response?.data?.message ||
+        error.response?.data?.error_description ||
+        fallback
+    );
+};
+
 const getRazorpayClient = async () => {
     const keyId     = await getCredential('razorpay.keyId', 'RAZORPAY_KEY_ID');
     const keySecret = await getCredential('razorpay.keySecret', 'RAZORPAY_KEY_SECRET');
@@ -133,9 +147,10 @@ const createRazorpayOrder = async (userId, order) => {
             id: razorpayOrder.id,
             amount: razorpayOrder.amount,
             currency: razorpayOrder.currency,
+            keyId: await getCredential('razorpay.keyId', 'RAZORPAY_KEY_ID'),
         };
     } catch (err) {
-        throw new AppError('PAYMENT_ERROR', 400, `Razorpay Order Creation Failed: ${err.message}`);
+        throw new AppError('PAYMENT_ERROR', 400, `Razorpay Order Creation Failed: ${getErrorMessage(err)}`);
     }
 };
 

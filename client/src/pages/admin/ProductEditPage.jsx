@@ -71,9 +71,36 @@ import ProductCustomTabs from '../../components/admin/ProductCustomTabs';
 import ProductComboBuilder from '../../components/admin/ProductComboBuilder';
 import TaxConfigSection from '../../components/admin/ProductTaxConfig';
 import VariantsPanel from '../../components/admin/ProductVariantsPanel';
+import ProductAssistantPanel from '../../components/admin/ProductAssistantPanel';
 import { toDateTimeLocal } from '../../utils/dates';
 import { generateSlug } from '../../utils/strings';
 import { walkCategoryTree } from '../../utils/categories';
+
+const escapeHtml = (value = '') => String(value)
+  .replaceAll('&', '&amp;')
+  .replaceAll('<', '&lt;')
+  .replaceAll('>', '&gt;')
+  .replaceAll('"', '&quot;')
+  .replaceAll("'", '&#39;');
+
+const buildAssistantDescription = (draft = {}) => {
+  const longDescription = draft.longDescription?.trim() || '';
+  const featureBullets = Array.isArray(draft.featureBullets) ? draft.featureBullets.filter(Boolean) : [];
+
+  if (featureBullets.length === 0) {
+    return longDescription;
+  }
+
+  const bulletList = `<ul>${featureBullets.map((item) => `<li>${escapeHtml(item)}</li>`).join('')}</ul>`;
+  return longDescription ? `${longDescription}\n${bulletList}` : bulletList;
+};
+
+const shouldAutoRefreshSlug = (currentSlug, previousName, nextName) => {
+  if (!nextName?.trim()) return false;
+  if (!currentSlug?.trim()) return true;
+  return currentSlug === generateSlug(previousName || '');
+};
+
 const validate = (formData) => {
   const errs = {};
   if (!formData.name?.trim()) errs.name = 'Product name is required.';
@@ -323,6 +350,50 @@ const ProductEditPage = () => {
     }
   }, []);
 
+  const applyAssistantResult = useCallback((result) => {
+    const draft = result?.draft || {};
+    const attributes = result?.attributes || {};
+    const matchedBrand = attributes.brand
+      ? brands.find((brand) => brand.name?.trim().toLowerCase() === attributes.brand.trim().toLowerCase())
+      : null;
+
+    setFormData((prev) => {
+      const nextTitle = draft.title || prev.name;
+      const nextSlug = shouldAutoRefreshSlug(prev.slug, prev.name, nextTitle)
+        ? generateSlug(nextTitle)
+        : prev.slug;
+
+      return {
+        ...prev,
+        name: nextTitle,
+        slug: nextSlug,
+        shortDescription: draft.shortDescription || prev.shortDescription,
+        description: buildAssistantDescription(draft) || prev.description,
+        metaTitle: draft.metaTitle || prev.metaTitle,
+        metaDescription: draft.metaDescription || prev.metaDescription,
+        metaKeywords: draft.seoKeywords?.length ? draft.seoKeywords.join(', ') : prev.metaKeywords,
+        sku: attributes.sku || prev.sku,
+        unit: attributes.unit || prev.unit,
+        brandId: matchedBrand?.id || prev.brandId,
+      };
+    });
+
+    setErrors((prev) => ({
+      ...prev,
+      name: undefined,
+      slug: undefined,
+      shortDescription: undefined,
+      sku: undefined,
+      unit: undefined,
+    }));
+
+    if (attributes.brand && !matchedBrand) {
+      notify(`AI detected brand "${attributes.brand}", but it does not match an existing brand record.`, 'warning');
+    } else {
+      notify('AI content applied to the product form.', 'success');
+    }
+  }, [brands, notify]);
+
   const handleSave = async (e) => {
     e.preventDefault();
     if (!canSaveProduct) {
@@ -475,6 +546,12 @@ const ProductEditPage = () => {
       <form onSubmit={handleSave} noValidate>
         <Grid container spacing={4}>
           <Grid item xs={12} md={8}>
+            <ProductAssistantPanel
+              initialInput={formData.name}
+              canUseAssistant={canSaveProduct}
+              onApplyResult={applyAssistantResult}
+            />
+
             <Paper sx={{ p: 3, mb: 3 }}>
               <Typography variant="h6" gutterBottom>
                 Basic Info

@@ -59,6 +59,12 @@ router.get('/analytics/traffic-sources', ...adminOnly, validate(analyticsQuerySc
 router.get('/analytics/product-funnel', ...adminOnly, validate(analyticsQuerySchema, 'query'), adminController.getProductFunnel);
 router.get('/analytics/utm-attribution', ...adminOnly, validate(analyticsQuerySchema, 'query'), adminController.getUtmAttribution);
 router.get('/analytics/coupon-performance', ...adminOnly, validate(analyticsQuerySchema, 'query'), adminController.getCouponPerformance);
+router.get('/analytics/cohort-retention', ...adminOnly, validate(analyticsQuerySchema, 'query'), adminController.getCohortRetention);
+router.get('/analytics/rfm-segmentation', ...adminOnly, validate(analyticsQuerySchema, 'query'), adminController.getRfmSegmentation);
+router.get('/analytics/order-heatmap', ...adminOnly, validate(analyticsQuerySchema, 'query'), adminController.getOrderHeatmap);
+router.get('/analytics/revenue-forecast', ...adminOnly, validate(analyticsQuerySchema, 'query'), adminController.getRevenueForecast);
+router.get('/analytics/drill-down', ...adminOnly, adminController.getDrillDown);
+router.post('/analytics/send-test-report', ...adminOnly, adminController.sendTestReport);
 router.get('/analytics/export/:metric', ...adminOnly, adminController.exportAnalyticsCsv);
 
 

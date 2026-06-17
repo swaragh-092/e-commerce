@@ -1,0 +1,1 @@
+import{q as t}from"./index-BjzcwbkG.js";const s=e=>t.post("/payments/create-order",{orderId:e}),r=(e,a)=>t.post(`/payments/verify/${e}`,a),n=()=>t.get("/payments/gateways"),y=(e,a)=>t.post(`/payments/gateways/${e}/configure`,a),c={createOrder:s,verifyPayment:r,getGateways:n,configureGateway:y};export{y as c,n as g,c as p};

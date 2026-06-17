@@ -95,11 +95,19 @@ const BrandsPage = () => {
     return brands.filter((b) => b.isPromoted).slice(0, featuredCount);
   }, [brands, featuredCount]);
 
+  const featuredBrandIds = useMemo(() => {
+    return new Set(featuredBrands.map((brand) => brand.id));
+  }, [featuredBrands]);
+
   const nonFeaturedBrands = useMemo(() => {
-    if (activeLetter === 'All') return brands.filter((b) => !b.isPromoted);
-    if (activeLetter === '#') return brands.filter((b) => !b.isPromoted && !/^[A-Z]/i.test(b.name?.[0] || ''));
-    return brands.filter((b) => !b.isPromoted && b.name?.[0]?.toUpperCase() === activeLetter);
-  }, [brands, activeLetter]);
+    const baseBrands = showFeaturedSection
+      ? brands.filter((brand) => !featuredBrandIds.has(brand.id))
+      : brands;
+
+    if (activeLetter === 'All') return baseBrands;
+    if (activeLetter === '#') return baseBrands.filter((b) => !/^[A-Z]/i.test(b.name?.[0] || ''));
+    return baseBrands.filter((b) => b.name?.[0]?.toUpperCase() === activeLetter);
+  }, [brands, activeLetter, featuredBrandIds, showFeaturedSection]);
 
   const displayBrands = showFeaturedSection ? nonFeaturedBrands : filteredBrands;
 

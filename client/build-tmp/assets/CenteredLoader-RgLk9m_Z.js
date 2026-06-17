@@ -1,0 +1,1 @@
+import{r as o,j as e,B as t,C as a,T as n}from"./index-BjzcwbkG.js";const c=o.memo(({message:r="Loading...",minHeight:s="40vh"})=>e.jsxs(t,{sx:{display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",minHeight:s,gap:2,py:4},children:[e.jsx(a,{}),e.jsx(n,{color:"text.secondary",children:r})]}));export{c as C};

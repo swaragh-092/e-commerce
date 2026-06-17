@@ -4,9 +4,9 @@ const paymentController = require('./payment.controller');
 const { authenticate } = require('../../middleware/auth.middleware');
 const { authorizePermissions } = require('../../middleware/role.middleware');
 const { validate } = require('../../middleware/validate.middleware');
-const { createOrderSchema } = require('./payment.validation');
+const { createOrderSchema, gatewayIdParamSchema } = require('./payment.validation');
 const { PERMISSIONS } = require('../../config/permissions');
-const { idParamSchema, orderIdParamSchema } = require('../../utils/common.validation');
+const { orderIdParamSchema } = require('../../utils/common.validation');
 
 
 const { featureGate } = require('../../middleware/featureGate.middleware');
@@ -35,7 +35,7 @@ router.post('/cod/confirm/:orderId', authenticate, authorizePermissions(PERMISSI
 
 // Admin: gateway manager — list statuses + save credentials
 router.get('/gateways', authenticate, authorizePermissions(PERMISSIONS.SETTINGS_READ), paymentController.getGatewayStatuses);
-router.post('/gateways/:id/configure', authenticate, authorizePermissions(PERMISSIONS.SETTINGS_MANAGE), validate(idParamSchema, 'params'), paymentController.saveGatewayCredentials);
+router.post('/gateways/:id/configure', authenticate, authorizePermissions(PERMISSIONS.SETTINGS_MANAGE), validate(gatewayIdParamSchema, 'params'), paymentController.saveGatewayCredentials);
 
 
 module.exports = router;

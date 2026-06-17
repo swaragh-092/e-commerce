@@ -1,0 +1,1 @@
+const f=(a=[],n,c=0,e="")=>{if(typeof n!="function")throw new TypeError("visitor must be a function");const t=[];return a.forEach(r=>{var s;const o=e?`${e} › ${r.name}`:r.name;t.push(n(r,{depth:c,path:o})),(s=r.children)!=null&&s.length&&t.push(...f(r.children,n,c+1,o))}),t};export{f as w};

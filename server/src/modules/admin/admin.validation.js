@@ -59,6 +59,7 @@ const analyticsQuerySchema = Joi.object({
   period: Joi.string().pattern(/^\d+(d|m)$/).default('30d'),
   limit: Joi.number().integer().min(1).max(50).default(10),
   sortBy: Joi.string().valid('quantity', 'revenue').default('quantity'),
+  compare: Joi.boolean().default(false),
 });
 
 const analyticsTrendSchema = Joi.object({
