@@ -75,6 +75,7 @@ const TIER2_DEFAULTS = {
     showPrice:                true,   // Tier 2: visibility of price on product cards/pages
     apiBuilder:               true,
     brands:                   true,
+    themes:                   true,
   },
   catalog: {
     wishlist:                 true,   // defaults to true so catalog users can save favorites
@@ -91,6 +92,7 @@ const TIER2_DEFAULTS = {
     showPrice:                false,  // Tier 2: visibility of price (defaults to off in catalog)
     apiBuilder:               true,
     brands:                   true,
+    themes:                   true,
   },
 };
 

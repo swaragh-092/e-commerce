@@ -2,26 +2,25 @@
 
 module.exports = {
   async up(queryInterface) {
-    // 1. Add the column WITHOUT a unique constraint — we will backfill first,
-    //    then create the unique index. With the unique index in place, rows
-    //    with NULL tokens would still be allowed (NULLs are not equal in PG),
-    //    but creating the index before backfill is fragile and order-sensitive.
-    await queryInterface.addColumn('newsletter_subscribers', 'unsubscribe_token', {
-      type: 'VARCHAR(64)',
-      allowNull: true,
-    });
+    await queryInterface.sequelize.query('CREATE EXTENSION IF NOT EXISTS pgcrypto');
 
-    // 2. Backfill in a single server-side statement. gen_random_bytes is
-    //    Postgres-side — no per-row JS round-trip, no transaction window,
-    //    and atomic across the whole table.
+    const [cols] = await queryInterface.sequelize.query(
+      "SELECT column_name FROM information_schema.columns WHERE table_name = 'newsletter_subscribers' AND column_name = 'unsubscribe_token'"
+    );
+
+    if (cols.length === 0) {
+      await queryInterface.addColumn('newsletter_subscribers', 'unsubscribe_token', {
+        type: 'VARCHAR(64)',
+        allowNull: true,
+      });
+    }
+
     await queryInterface.sequelize.query(
       "UPDATE newsletter_subscribers SET unsubscribe_token = encode(gen_random_bytes(24), 'hex') WHERE unsubscribe_token IS NULL"
     );
 
-    // 3. Now that every row has a non-null value, create the unique index.
-    //    Skip existing duplicates defensively — should never fire post-backfill.
     await queryInterface.sequelize.query(
-      'CREATE UNIQUE INDEX newsletter_subscribers_token_uniq ON newsletter_subscribers (unsubscribe_token)'
+      'CREATE UNIQUE INDEX IF NOT EXISTS newsletter_subscribers_token_uniq ON newsletter_subscribers (unsubscribe_token)'
     );
   },
 
