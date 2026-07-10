@@ -23,6 +23,8 @@ import PageService from '../../../services/pageService';
 import { useBrands } from '../../../context/BrandContext';
 import { needsCategoryData, needsProductData } from '../../storefront/sections/sectionRegistry';
 import { buildSectionRendererData } from '../../storefront/sections/sectionData';
+
+const DEFAULT_ACTIONS_ORDER = ['search', 'cart', 'wishlist', 'account'];
 // Code-split the dev mock renderers — they only matter inside the admin
 // designer/preview, not in the customer-facing chunk. Importing eagerly
 // added ~67 KB of dev mock data to the production bundle.
@@ -454,6 +456,9 @@ const StorefrontTemplatePreview = ({ packageData, mode = "desktop", currentSetti
     const logoUrl = navSettings.logoUrl || scopedSettings.logo?.main || '';
     const headerStyle = scopedSettings.theme?.headerStyle || 'gradient';
     const headerItems = resolvePreviewHeaderItems(navSettings, navigationData);
+    const actionsOrder = Array.isArray(navSettings.actionsOrder) && navSettings.actionsOrder.length
+      ? [...new Set([...navSettings.actionsOrder, ...DEFAULT_ACTIONS_ORDER])].filter((key) => DEFAULT_ACTIONS_ORDER.includes(key))
+      : DEFAULT_ACTIONS_ORDER;
     const categoryLabels = resolvePreviewCategoryLabels(navigationData, scopedSettings, demoData);
     const announcementText = announcementSettings.text || demoData.announcementText;
     const showAnnouncement = announcementText && announcementSettings.enabled !== false && announcementSettings.enabled !== 'false';
@@ -588,9 +593,18 @@ const StorefrontTemplatePreview = ({ packageData, mode = "desktop", currentSetti
               sx={{ alignItems: 'center', cursor: onSelectComponent ? 'pointer' : 'default', borderRadius: 1, '&:hover': onSelectComponent ? { outline: '2px dashed #ffffff' } : undefined }}
             >
               <IconButton color="inherit" size="small"><WbSunnyIcon /></IconButton>
-              {navSettings.showCart !== false && <IconButton color="inherit" size="small"><Badge badgeContent={0} color="error"><ShoppingCartIcon /></Badge></IconButton>}
-              {navSettings.showWishlist === true && <IconButton color="inherit" size="small"><Badge badgeContent={0} color="error"><FavoriteBorderIcon /></Badge></IconButton>}
-              {navSettings.showAccount !== false && <IconButton color="inherit" size="small"><AccountCircleIcon /></IconButton>}
+              {actionsOrder.map((actionKey) => {
+                if (actionKey === 'cart' && navSettings.showCart !== false) {
+                  return <IconButton key="cart" color="inherit" size="small"><Badge badgeContent={0} color="error"><ShoppingCartIcon /></Badge></IconButton>;
+                }
+                if (actionKey === 'wishlist' && navSettings.showWishlist === true) {
+                  return <IconButton key="wishlist" color="inherit" size="small"><Badge badgeContent={0} color="error"><FavoriteBorderIcon /></Badge></IconButton>;
+                }
+                if (actionKey === 'account' && navSettings.showAccount !== false) {
+                  return <IconButton key="account" color="inherit" size="small"><AccountCircleIcon /></IconButton>;
+                }
+                return null;
+              })}
             </Stack>
           </Toolbar>
           {navSettings.showCategoryBar === true && categoryLabels.length > 0 && (

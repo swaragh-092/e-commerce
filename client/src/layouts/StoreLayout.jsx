@@ -26,6 +26,8 @@ import SEO from '../components/common/SEO';
 import { isExternalUrl } from '../utils/urls';
 import { getStoreName } from '../utils/store';
 
+const DEFAULT_ACTIONS_ORDER = ['search', 'cart', 'wishlist', 'account'];
+
 const StoreLayout = () => {
   const { isAuthenticated, logout, hasAnyPermission, user } = useAuth();
   const { settings } = useSettings();
@@ -97,7 +99,10 @@ const StoreLayout = () => {
   const showAccount  = nav.showAccount !== false;
   const showCart     = nav.showCart !== false && cartEnabled;
   const showWishlist = nav.showWishlist === true && wishlistEnabled;
-  
+  const actionsOrder = Array.isArray(nav.actionsOrder) && nav.actionsOrder.length
+    ? [...new Set([...nav.actionsOrder, ...DEFAULT_ACTIONS_ORDER])].filter((key) => DEFAULT_ACTIONS_ORDER.includes(key))
+    : DEFAULT_ACTIONS_ORDER;
+
   const themeSettings = settings?.theme || {};
   const announcement = settings?.announcement || {};
   const showAnnouncement = announcement.enabled && !announcementDismissed;
@@ -412,38 +417,43 @@ const StoreLayout = () => {
           )}
 
           <Box sx={{ display: 'flex', alignItems: 'center', gap: { xs: 0.125, sm: 0.5 }, flexShrink: 0 }}>
-            {/* Mobile inline search — expandable SearchWidget */}
-            {showSearch && (
-              <Box sx={{ display: { xs: 'flex', md: 'none' }, alignItems: 'center' }}>
-                <SearchWidget
-                  variant="header"
-                  placeholder="Search..."
-                  collapseToIcon
-                  fullWidth={false}
-                  onExpandedChange={setIsMobileSearchExpanded}
-                  sx={{ width: { xs: 'min(168px, calc(100vw - 172px))', sm: 180 } }}
-                />
-              </Box>
-            )}
             <Box sx={{ display: { xs: 'none', md: 'flex' } }}>
               <DarkModeToggle />
             </Box>
-            {showCart && !isMobileSearchExpanded && (
-              <IconButton
-                color="inherit"
-                component={RouterLink}
-                to="/cart"
-                sx={{ p: { xs: 0.75, sm: 1 }, '&:hover': { bgcolor: 'rgba(255,255,255,0.12)' } }}
-              >
-                <Badge badgeContent={cartCount || 0} color="error">
-                  <ShoppingCartIcon />
-                </Badge>
-              </IconButton>
-            )}
-            {isAuthenticated ? (
-              <>
-                {showWishlist && !isMobileSearchExpanded && (
+            {actionsOrder.map((actionKey) => {
+              if (actionKey === 'search') {
+                return showSearch ? (
+                  <Box key="search" sx={{ display: { xs: 'flex', md: 'none' }, alignItems: 'center' }}>
+                    <SearchWidget
+                      variant="header"
+                      placeholder="Search..."
+                      collapseToIcon
+                      fullWidth={false}
+                      onExpandedChange={setIsMobileSearchExpanded}
+                      sx={{ width: { xs: 'min(168px, calc(100vw - 172px))', sm: 180 } }}
+                    />
+                  </Box>
+                ) : null;
+              }
+              if (actionKey === 'cart') {
+                return showCart && !isMobileSearchExpanded ? (
                   <IconButton
+                    key="cart"
+                    color="inherit"
+                    component={RouterLink}
+                    to="/cart"
+                    sx={{ p: { xs: 0.75, sm: 1 }, '&:hover': { bgcolor: 'rgba(255,255,255,0.12)' } }}
+                  >
+                    <Badge badgeContent={cartCount || 0} color="error">
+                      <ShoppingCartIcon />
+                    </Badge>
+                  </IconButton>
+                ) : null;
+              }
+              if (actionKey === 'wishlist') {
+                return isAuthenticated && showWishlist && !isMobileSearchExpanded ? (
+                  <IconButton
+                    key="wishlist"
                     color="inherit"
                     component={RouterLink}
                     to="/wishlist"
@@ -453,100 +463,103 @@ const StoreLayout = () => {
                       <FavoriteBorderIcon />
                     </Badge>
                   </IconButton>
-                )}
-
-                
-                {showAccount && !isMobileSearchExpanded && (
-                  <IconButton color="inherit" onClick={handleAccountMenuOpen} sx={{ p: { xs: 0.75, sm: 1 } }}>
-                    <AccountCircleIcon />
-                  </IconButton>
-                )}
-                <Menu
-                  anchorEl={accountMenuAnchor}
-                  open={Boolean(accountMenuAnchor)}
-                  onClose={handleAccountMenuClose}
-                  anchorOrigin={{ vertical: 'bottom', horizontal: 'right' }}
-                  transformOrigin={{ vertical: 'top', horizontal: 'right' }}
-                  PaperProps={{
-                    sx: {
-                      mt: 1.5,
-                      boxShadow: 'var(--store-shadow-dropdown)',
-                      borderRadius: 'var(--store-radius)',
-                      minWidth: '220px',
-                      overflow: 'hidden',
-                    },
-                  }}
-                >
-                  <Box sx={{ px: 2, py: 1.5, bgcolor: 'background.paper' }}>
-                    <Typography variant="subtitle1" sx={{ fontWeight: 600, fontSize: '0.95rem' }}>
-                      {user?.firstName || 'My Account'}
-                    </Typography>
-                    <Typography variant="caption" color="text.secondary">
-                      {user?.email || ''}
-                    </Typography>
-                  </Box>
-                  <Divider />
-                  <MenuItem
-                    component={RouterLink}
-                    to="/profile"
-                    onClick={handleAccountMenuClose}
-                    sx={{
-                      py: 1.2,
-                      px: 2,
-                      '&:hover': { bgcolor: 'action.hover' },
-                    }}
-                  >
-                    <PersonIcon sx={{ mr: 1.5, fontSize: '1.2rem', color: 'primary.main' }} />
-                    <Typography sx={{ fontSize: '0.95rem' }}>Profile</Typography>
-                  </MenuItem>
-                  {ordersEnabled && (
-                    <MenuItem
+                ) : null;
+              }
+              if (actionKey === 'account') {
+                if (isAuthenticated) {
+                  return showAccount && !isMobileSearchExpanded ? (
+                    <IconButton key="account" color="inherit" onClick={handleAccountMenuOpen} sx={{ p: { xs: 0.75, sm: 1 } }}>
+                      <AccountCircleIcon />
+                    </IconButton>
+                  ) : null;
+                }
+                return showAccount ? (
+                  <Box key="account" sx={{ display: 'flex', alignItems: 'center' }}>
+                    <Button color="inherit" component={RouterLink} to="/login" sx={{ fontWeight: 700 }}>Login</Button>
+                    <Button
+                      color="inherit"
                       component={RouterLink}
-                      to="/orders"
-                      onClick={handleAccountMenuClose}
+                      to="/register"
+                      variant="outlined"
                       sx={{
-                        py: 1.2,
-                        px: 2,
-                        '&:hover': { bgcolor: 'action.hover' },
+                        fontWeight: 700,
+                        borderColor: 'rgba(255,255,255,0.55)',
+                        '&:hover': { borderColor: '#fff', bgcolor: 'rgba(255,255,255,0.12)' },
                       }}
                     >
-                      <ShoppingBagIcon sx={{ mr: 1.5, fontSize: '1.2rem', color: 'primary.main' }} />
-                      <Typography sx={{ fontSize: '0.95rem' }}>Orders</Typography>
-                    </MenuItem>
-                  )}
-                  <Divider sx={{ my: 0.5 }} />
-                  <MenuItem
-                    onClick={handleLogout}
-                    sx={{
-                      py: 1.2,
-                      px: 2,
-                      '&:hover': { bgcolor: 'error.light', color: 'white', opacity: 0.8 },
-                    }}
-                  >
-                    <LogoutIcon sx={{ mr: 1.5, fontSize: '1.2rem' }} />
-                    <Typography sx={{ fontSize: '0.95rem', }}>Logout</Typography>
-                  </MenuItem>
-                </Menu>
-
-              </>
-            ) : showAccount ? (
-              <>
-                <Button color="inherit" component={RouterLink} to="/login" sx={{ fontWeight: 700 }}>Login</Button>
-                <Button
-                  color="inherit"
+                      Register
+                    </Button>
+                  </Box>
+                ) : null;
+              }
+              return null;
+            })}
+            <Menu
+              anchorEl={accountMenuAnchor}
+              open={Boolean(accountMenuAnchor)}
+              onClose={handleAccountMenuClose}
+              anchorOrigin={{ vertical: 'bottom', horizontal: 'right' }}
+              transformOrigin={{ vertical: 'top', horizontal: 'right' }}
+              PaperProps={{
+                sx: {
+                  mt: 1.5,
+                  boxShadow: 'var(--store-shadow-dropdown)',
+                  borderRadius: 'var(--store-radius)',
+                  minWidth: '220px',
+                  overflow: 'hidden',
+                },
+              }}
+            >
+              <Box sx={{ px: 2, py: 1.5, bgcolor: 'background.paper' }}>
+                <Typography variant="subtitle1" sx={{ fontWeight: 600, fontSize: '0.95rem' }}>
+                  {user?.firstName || 'My Account'}
+                </Typography>
+                <Typography variant="caption" color="text.secondary">
+                  {user?.email || ''}
+                </Typography>
+              </Box>
+              <Divider />
+              <MenuItem
+                component={RouterLink}
+                to="/profile"
+                onClick={handleAccountMenuClose}
+                sx={{
+                  py: 1.2,
+                  px: 2,
+                  '&:hover': { bgcolor: 'action.hover' },
+                }}
+              >
+                <PersonIcon sx={{ mr: 1.5, fontSize: '1.2rem', color: 'primary.main' }} />
+                <Typography sx={{ fontSize: '0.95rem' }}>Profile</Typography>
+              </MenuItem>
+              {ordersEnabled && (
+                <MenuItem
                   component={RouterLink}
-                  to="/register"
-                  variant="outlined"
+                  to="/orders"
+                  onClick={handleAccountMenuClose}
                   sx={{
-                    fontWeight: 700,
-                    borderColor: 'rgba(255,255,255,0.55)',
-                    '&:hover': { borderColor: '#fff', bgcolor: 'rgba(255,255,255,0.12)' },
+                    py: 1.2,
+                    px: 2,
+                    '&:hover': { bgcolor: 'action.hover' },
                   }}
                 >
-                  Register
-                </Button>
-              </>
-            ) : null}
+                  <ShoppingBagIcon sx={{ mr: 1.5, fontSize: '1.2rem', color: 'primary.main' }} />
+                  <Typography sx={{ fontSize: '0.95rem' }}>Orders</Typography>
+                </MenuItem>
+              )}
+              <Divider sx={{ my: 0.5 }} />
+              <MenuItem
+                onClick={handleLogout}
+                sx={{
+                  py: 1.2,
+                  px: 2,
+                  '&:hover': { bgcolor: 'error.light', color: 'white', opacity: 0.8 },
+                }}
+              >
+                <LogoutIcon sx={{ mr: 1.5, fontSize: '1.2rem' }} />
+                <Typography sx={{ fontSize: '0.95rem', }}>Logout</Typography>
+              </MenuItem>
+            </Menu>
           </Box>
         </Toolbar>
       </AppBar>

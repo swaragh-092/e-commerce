@@ -14,6 +14,8 @@ import PaymentIcon from '@mui/icons-material/Payment';
 import BadgeIcon from '@mui/icons-material/Badge';
 import InputIcon from '@mui/icons-material/Input';
 import LoyaltyIcon from '@mui/icons-material/Loyalty';
+import DragIndicatorIcon from '@mui/icons-material/DragIndicator';
+import { DragDropContext, Droppable, Draggable } from '@hello-pangea/dnd';
 import {
   ProductCardStyleEditor,
   CategoryCardStyleEditor,
@@ -92,15 +94,75 @@ const HeaderMenuEditor = ({ value = {}, onChange }) => {
   );
 };
 
+const DEFAULT_ACTIONS_ORDER = ['search', 'cart', 'wishlist', 'account'];
+
+const ACTION_META = {
+  search:   { field: 'showSearch',   label: 'Show search',   isChecked: (v) => v.showSearch !== false },
+  cart:     { field: 'showCart',     label: 'Show cart',     isChecked: (v) => v.showCart !== false },
+  wishlist: { field: 'showWishlist', label: 'Show wishlist', isChecked: (v) => v.showWishlist === true },
+  account:  { field: 'showAccount',  label: 'Show account',  isChecked: (v) => v.showAccount !== false },
+};
+
 const HeaderActionsEditor = ({ value = {}, onChange }) => {
   const patch = (key, next) => onChange({ ...(value || {}), [key]: next });
+
+  const order = Array.isArray(value.actionsOrder) && value.actionsOrder.length
+    ? [...new Set([...value.actionsOrder, ...DEFAULT_ACTIONS_ORDER])].filter((key) => ACTION_META[key])
+    : DEFAULT_ACTIONS_ORDER;
+
+  const handleDragEnd = (result) => {
+    if (!result.destination) return;
+    const next = Array.from(order);
+    const [moved] = next.splice(result.source.index, 1);
+    next.splice(result.destination.index, 0, moved);
+    patch('actionsOrder', next);
+  };
+
   return (
     <Stack spacing={1.5}>
       <Typography variant="subtitle2" fontWeight={900}>Right Actions</Typography>
-      <FormControlLabel control={<Switch size="small" checked={value.showSearch !== false} onChange={(e) => patch('showSearch', e.target.checked)} />} label="Show search" />
-      <FormControlLabel control={<Switch size="small" checked={value.showAccount !== false} onChange={(e) => patch('showAccount', e.target.checked)} />} label="Show account" />
-      <FormControlLabel control={<Switch size="small" checked={value.showCart !== false} onChange={(e) => patch('showCart', e.target.checked)} />} label="Show cart" />
-      <FormControlLabel control={<Switch size="small" checked={value.showWishlist === true} onChange={(e) => patch('showWishlist', e.target.checked)} />} label="Show wishlist" />
+      <Typography variant="caption" color="text.secondary">Drag to reorder how these appear in the header.</Typography>
+      <DragDropContext onDragEnd={handleDragEnd}>
+        <Droppable droppableId="header-actions-order">
+          {(droppableProvided) => (
+            <Stack spacing={0.75} ref={droppableProvided.innerRef} {...droppableProvided.droppableProps}>
+              {order.map((actionKey, index) => {
+                const meta = ACTION_META[actionKey];
+                return (
+                  <Draggable key={actionKey} draggableId={actionKey} index={index}>
+                    {(dragProvided, dragSnapshot) => (
+                      <Box
+                        ref={dragProvided.innerRef}
+                        {...dragProvided.draggableProps}
+                        sx={{
+                          display: 'flex',
+                          alignItems: 'center',
+                          gap: 0.5,
+                          pr: 1,
+                          border: '1px solid',
+                          borderColor: 'divider',
+                          borderRadius: 1,
+                          bgcolor: dragSnapshot.isDragging ? 'action.hover' : 'transparent',
+                        }}
+                      >
+                        <Box {...dragProvided.dragHandleProps} sx={{ display: 'flex', alignItems: 'center', color: 'text.disabled', cursor: 'grab', px: 0.75 }}>
+                          <DragIndicatorIcon fontSize="small" />
+                        </Box>
+                        <FormControlLabel
+                          sx={{ flex: 1, m: 0, py: 0.5 }}
+                          control={<Switch size="small" checked={meta.isChecked(value)} onChange={(e) => patch(meta.field, e.target.checked)} />}
+                          label={meta.label}
+                        />
+                      </Box>
+                    )}
+                  </Draggable>
+                );
+              })}
+              {droppableProvided.placeholder}
+            </Stack>
+          )}
+        </Droppable>
+      </DragDropContext>
     </Stack>
   );
 };
