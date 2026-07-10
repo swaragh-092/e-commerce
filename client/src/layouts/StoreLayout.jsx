@@ -93,6 +93,11 @@ const StoreLayout = () => {
   }, []);
 
   const nav          = settings?.nav          || {};
+  const showSearch   = nav.showSearch !== false;
+  const showAccount  = nav.showAccount !== false;
+  const showCart     = nav.showCart !== false && cartEnabled;
+  const showWishlist = nav.showWishlist === true && wishlistEnabled;
+  
   const themeSettings = settings?.theme || {};
   const announcement = settings?.announcement || {};
   const showAnnouncement = announcement.enabled && !announcementDismissed;
@@ -373,9 +378,11 @@ const StoreLayout = () => {
           {(headerAlignment === 'left' || headerAlignment === 'center') && <Box sx={{ flexGrow: 1, minWidth: 8 }} />}
 
           {/* Global Search Bar */}
-          <Box sx={{ display: { xs: 'none', md: 'flex' }, width: { md: 200, lg: 320 }, flexShrink: 0, mx: 1 }}>
-            <SearchWidget variant="header" />
-          </Box>
+          {showSearch && (
+            <Box sx={{ display: { xs: 'none', md: 'flex' }, width: { md: 200, lg: 320 }, flexShrink: 0, mx: 1 }}>
+              <SearchWidget variant="header" />
+            </Box>
+          )}
 
           {mobileHeaderItems.length > 0 && (
             <>
@@ -406,20 +413,22 @@ const StoreLayout = () => {
 
           <Box sx={{ display: 'flex', alignItems: 'center', gap: { xs: 0.125, sm: 0.5 }, flexShrink: 0 }}>
             {/* Mobile inline search — expandable SearchWidget */}
-            <Box sx={{ display: { xs: 'flex', md: 'none' }, alignItems: 'center' }}>
-              <SearchWidget
-                variant="header"
-                placeholder="Search..."
-                collapseToIcon
-                fullWidth={false}
-                onExpandedChange={setIsMobileSearchExpanded}
-                sx={{ width: { xs: 'min(168px, calc(100vw - 172px))', sm: 180 } }}
-              />
-            </Box>
+            {showSearch && (
+              <Box sx={{ display: { xs: 'flex', md: 'none' }, alignItems: 'center' }}>
+                <SearchWidget
+                  variant="header"
+                  placeholder="Search..."
+                  collapseToIcon
+                  fullWidth={false}
+                  onExpandedChange={setIsMobileSearchExpanded}
+                  sx={{ width: { xs: 'min(168px, calc(100vw - 172px))', sm: 180 } }}
+                />
+              </Box>
+            )}
             <Box sx={{ display: { xs: 'none', md: 'flex' } }}>
               <DarkModeToggle />
             </Box>
-            {cartEnabled && !isMobileSearchExpanded && (
+            {showCart && !isMobileSearchExpanded && (
               <IconButton
                 color="inherit"
                 component={RouterLink}
@@ -433,7 +442,7 @@ const StoreLayout = () => {
             )}
             {isAuthenticated ? (
               <>
-                {wishlistEnabled && !isMobileSearchExpanded && (
+                {showWishlist && !isMobileSearchExpanded && (
                   <IconButton
                     color="inherit"
                     component={RouterLink}
@@ -447,7 +456,7 @@ const StoreLayout = () => {
                 )}
 
                 
-                {!isMobileSearchExpanded && (
+                {showAccount && !isMobileSearchExpanded && (
                   <IconButton color="inherit" onClick={handleAccountMenuOpen} sx={{ p: { xs: 0.75, sm: 1 } }}>
                     <AccountCircleIcon />
                   </IconButton>
@@ -520,7 +529,7 @@ const StoreLayout = () => {
                 </Menu>
 
               </>
-            ) : (
+            ) : showAccount ? (
               <>
                 <Button color="inherit" component={RouterLink} to="/login" sx={{ fontWeight: 700 }}>Login</Button>
                 <Button
@@ -537,7 +546,7 @@ const StoreLayout = () => {
                   Register
                 </Button>
               </>
-            )}
+            ) : null}
           </Box>
         </Toolbar>
       </AppBar>

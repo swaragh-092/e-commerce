@@ -289,6 +289,7 @@ const DesignerThemePanel = ({
                 value={activeValue}
                 onChange={handleValueChange}
                 disabled={activeItem.requiresAdvanced && !canManageAdvancedSettings}
+                isSidebar={true}
               />
             )}
           </Box>

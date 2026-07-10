@@ -17,7 +17,7 @@ const usePreviewData = () => {
     getProducts({ limit: 1 }).then(res => {
       if (res.data?.data?.[0]) setProduct(res.data.data[0]);
     }).catch(() => {});
-    
+
     getCategories().then(res => {
       if (res?.[0]) setCategory(res[0]);
     }).catch(() => {});
@@ -199,7 +199,7 @@ const ProductCardPreview = ({ style, product }) => {
         </Box>
         <Typography fontWeight={900} sx={{ mt: 0.5, display: '-webkit-box', WebkitLineClamp: titleLines, WebkitBoxOrient: 'vertical', overflow: 'hidden', lineHeight: 1.2 }}>{name}</Typography>
         {style.showRating !== false && !isCompact && <Typography variant="caption" color="warning.main" sx={{ mt: 0.5, display: 'block' }}>★★★★★</Typography>}
-        
+
         {style.variant === 'deal' && (
           <Box sx={{ mt: 1, mb: 1 }}>
             <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 0.5 }}>
@@ -215,7 +215,7 @@ const ProductCardPreview = ({ style, product }) => {
             </Box>
           </Box>
         )}
-        
+
         <Box sx={{ flexGrow: 1 }} />
         <Typography color="primary" fontWeight={style.priceStyle === 'regular' ? 700 : 950} sx={{ mt: 1 }}>{price}</Typography>
       </Box>
@@ -330,13 +330,13 @@ const TrustCardPreview = ({ style }) => (
   </Paper>
 );
 
-export const ProductCardStyleEditor = ({ value, onChange }) => {
+export const ProductCardStyleEditor = ({ value, onChange, isSidebar }) => {
   const style = mergeStyle('productCard', value);
   const patch = (key, nextValue) => onChange({ ...style, [key]: nextValue });
   const { product } = usePreviewData();
 
   return (
-    <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', xl: 'minmax(0, 1fr) minmax(240px, 320px)' }, gap: 2, alignItems: 'start', minWidth: 0 }}>
+    <Box sx={{ display: 'grid', gridTemplateColumns: isSidebar ? '1fr' : { xs: '1fr', xl: 'minmax(0, 1fr) minmax(240px, 320px)' }, gap: 2, alignItems: 'start', minWidth: 0 }}>
       <Box sx={{ minWidth: 0 }}>
         <PresetPicker
           title="Product card presets"
@@ -464,21 +464,23 @@ export const ProductCardStyleEditor = ({ value, onChange }) => {
           </Grid>
         </Grid>
       </Box>
-      <Box sx={{ minWidth: 0, position: { xl: 'sticky' }, top: { xl: 12 } }}>
-        <ProductCardPreview style={style} product={product} />
-      </Box>
+      {!isSidebar && (
+        <Box sx={{ minWidth: 0, position: { xl: 'sticky' }, top: { xl: 12 } }}>
+          <ProductCardPreview style={style} product={product} />
+        </Box>
+      )}
     </Box>
   );
 };
 
-export const CategoryCardStyleEditor = ({ value, onChange }) => {
+export const CategoryCardStyleEditor = ({ value, onChange, isSidebar }) => {
   const style = mergeStyle('categoryCard', value);
   const patch = (key, nextValue) => onChange({ ...style, [key]: nextValue });
   const { category } = usePreviewData();
 
   return (
     <Grid container spacing={2}>
-      <Grid item xs={12} md={8}>
+      <Grid item xs={12} md={isSidebar ? 12 : 8}>
         <PresetPicker
           title="Category card presets"
           presets={CATEGORY_CARD_PRESETS}
@@ -539,21 +541,23 @@ export const CategoryCardStyleEditor = ({ value, onChange }) => {
           </Grid>
         </Grid>
       </Grid>
-      <Grid item xs={12} md={4}>
-        <CategoryCardPreview style={style} category={category} />
-      </Grid>
+      {!isSidebar && (
+        <Grid item xs={12} md={4}>
+          <CategoryCardPreview style={style} category={category} />
+        </Grid>
+      )}
     </Grid>
   );
 };
 
 
-export const PromoCardStyleEditor = ({ value, onChange }) => {
+export const PromoCardStyleEditor = ({ value, onChange, isSidebar }) => {
   const style = mergeStyle('promoCard', value);
   const patch = (key, nextValue) => onChange({ ...style, [key]: nextValue });
 
   return (
     <Grid container spacing={2}>
-      <Grid item xs={12} md={8}>
+      <Grid item xs={12} md={isSidebar ? 12 : 8}>
         <Grid container spacing={2}>
           <Grid item xs={12} sm={6}>
             <SelectField label="Promo Variant" value={style.variant} onChange={(v) => patch('variant', v)}>
@@ -604,18 +608,18 @@ export const PromoCardStyleEditor = ({ value, onChange }) => {
           </Grid>
         </Grid>
       </Grid>
-      <Grid item xs={12} md={4}><PromoCardPreview style={style} /></Grid>
+      {!isSidebar && <Grid item xs={12} md={4}><PromoCardPreview style={style} /></Grid>}
     </Grid>
   );
 };
 
-export const BrandCardStyleEditor = ({ value, onChange }) => {
+export const BrandCardStyleEditor = ({ value, onChange, isSidebar }) => {
   const style = mergeStyle('brandCard', value);
   const patch = (key, nextValue) => onChange({ ...style, [key]: nextValue });
 
   return (
     <Grid container spacing={2}>
-      <Grid item xs={12} md={8}>
+      <Grid item xs={12} md={isSidebar ? 12 : 8}>
         <Grid container spacing={2}>
           <Grid item xs={12} sm={6}>
             <SelectField label="Brand Variant" value={style.variant} onChange={(v) => patch('variant', v)}>
@@ -649,18 +653,18 @@ export const BrandCardStyleEditor = ({ value, onChange }) => {
           </Grid>
         </Grid>
       </Grid>
-      <Grid item xs={12} md={4}><BrandCardPreview style={style} /></Grid>
+      {!isSidebar && <Grid item xs={12} md={4}><BrandCardPreview style={style} /></Grid>}
     </Grid>
   );
 };
 
-export const TrustCardStyleEditor = ({ value, onChange }) => {
+export const TrustCardStyleEditor = ({ value, onChange, isSidebar }) => {
   const style = mergeStyle('trustCard', value);
   const patch = (key, nextValue) => onChange({ ...style, [key]: nextValue });
 
   return (
     <Grid container spacing={2}>
-      <Grid item xs={12} md={8}>
+      <Grid item xs={12} md={isSidebar ? 12 : 8}>
         <Grid container spacing={2}>
           <Grid item xs={12} sm={6}>
             <SelectField label="Trust Variant" value={style.variant} onChange={(v) => patch('variant', v)}>
@@ -694,7 +698,7 @@ export const TrustCardStyleEditor = ({ value, onChange }) => {
           </Grid>
         </Grid>
       </Grid>
-      <Grid item xs={12} md={4}><TrustCardPreview style={style} /></Grid>
+      {!isSidebar && <Grid item xs={12} md={4}><TrustCardPreview style={style} /></Grid>}
     </Grid>
   );
 };
@@ -805,13 +809,13 @@ export const CheckoutBlockStyleEditor = ({ value, onChange }) => {
 };
 
 
-export const FormControlStyleEditor = ({ value, onChange }) => {
+export const FormControlStyleEditor = ({ value, onChange, isSidebar }) => {
   const style = mergeStyle('formControl', value);
   const patch = (key, nextValue) => onChange({ ...style, [key]: nextValue });
 
   return (
     <Grid container spacing={2} alignItems="stretch">
-      <Grid item xs={12} md={8}>
+      <Grid item xs={12} md={isSidebar ? 12 : 8}>
         <Grid container spacing={2}>
           <Grid item xs={12} sm={6}>
             <SelectField label="Input Variant" value={style.variant} onChange={(v) => patch('variant', v)}>
@@ -857,15 +861,17 @@ export const FormControlStyleEditor = ({ value, onChange }) => {
           </Grid>
         </Grid>
       </Grid>
-      <Grid item xs={12} md={4}>
-        <Paper variant="outlined" sx={{ p: 2, borderRadius: style.radius === 'pill' ? 6 : style.radius === 'large' ? 4 : style.radius === 'small' ? 1.5 : 2.5 }}>
-          <Typography variant="caption" color="text.secondary" fontWeight={800}>Preview</Typography>
-          <Stack spacing={1.25} sx={{ mt: 1 }}>
-            <TextField size={style.density === 'spacious' ? 'medium' : 'small'} variant={style.variant === 'filled' ? 'filled' : 'outlined'} label={style.labelStyle === 'placeholder' ? undefined : 'Email'} placeholder="Email address" fullWidth />
-            <TextField size={style.density === 'spacious' ? 'medium' : 'small'} variant={style.variant === 'filled' ? 'filled' : 'outlined'} label={style.labelStyle === 'placeholder' ? undefined : 'Coupon'} placeholder="WELCOME10" fullWidth />
-          </Stack>
-        </Paper>
-      </Grid>
+      {!isSidebar && (
+        <Grid item xs={12} md={4}>
+          <Paper variant="outlined" sx={{ p: 2, borderRadius: style.radius === 'pill' ? 6 : style.radius === 'large' ? 4 : style.radius === 'small' ? 1.5 : 2.5 }}>
+            <Typography variant="caption" color="text.secondary" fontWeight={800}>Preview</Typography>
+            <Stack spacing={1.25} sx={{ mt: 1 }}>
+              <TextField size={style.density === 'spacious' ? 'medium' : 'small'} variant={style.variant === 'filled' ? 'filled' : 'outlined'} label={style.labelStyle === 'placeholder' ? undefined : 'Email'} placeholder="Email address" fullWidth />
+              <TextField size={style.density === 'spacious' ? 'medium' : 'small'} variant={style.variant === 'filled' ? 'filled' : 'outlined'} label={style.labelStyle === 'placeholder' ? undefined : 'Coupon'} placeholder="WELCOME10" fullWidth />
+            </Stack>
+          </Paper>
+        </Grid>
+      )}
     </Grid>
   );
 };
@@ -1063,7 +1069,7 @@ const FooterBlock = ({ title, children, defaultExpanded = false }) => (
 );
 
 export const FooterStyleEditor = ({ value, onChange }) => {
-  const footer = value || {};
+   const footer = value || {};
   const [links, setLinks] = useState(footer.links || []);
 
   useEffect(() => {

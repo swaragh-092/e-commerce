@@ -504,7 +504,7 @@ const AdminLayout = () => {
         </Box>
       </Box>
 
-      <Box sx={{ flexGrow: 1, overflowY: 'auto', overflowX: 'hidden', py: 1 }}>
+      <Box sx={{ flexGrow: 1, overflowY: 'auto', overflowX: 'hidden', py: 1, '&::-webkit-scrollbar': { display: 'none' }, msOverflowStyle: 'none', scrollbarWidth: 'none' }}>
         {/* Favorites Section */}
         {favorites.length > 0 && (
           <>
@@ -650,6 +650,10 @@ const AdminLayout = () => {
             boxSizing: 'border-box',
             width: drawerWidth,
             borderRight: 'none',
+            overflowY: 'auto',
+            '&::-webkit-scrollbar': { display: 'none' },
+            msOverflowStyle: 'none',
+            scrollbarWidth: 'none',
           },
         }}
       >
@@ -678,6 +682,10 @@ const AdminLayout = () => {
             borderRight: '1px solid',
             borderColor: 'divider',
             overflowX: 'hidden',
+            overflowY: 'auto',
+            '&::-webkit-scrollbar': { display: 'none' },
+            msOverflowStyle: 'none',
+            scrollbarWidth: 'none',
             bgcolor: (theme) => theme.palette.mode === 'light' ? 'rgba(255, 255, 255, 0.8)' : 'rgba(20, 20, 20, 0.8)',
             backdropFilter: 'blur(10px)',
           },
