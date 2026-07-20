@@ -13,6 +13,13 @@ import { useNotification } from '../../context/NotificationContext';
 
 const ratioToCss = (ratio, fallback) => String(ratio || fallback).replace('/', ' / ');
 
+// Mirrors ProductDetailPage's stock resolution for the no-variant quick-add path.
+const getAvailableStock = (entity, stockKey) => {
+  const total = Number(entity?.[stockKey] || 0);
+  const reserved = Number(entity?.reservedQty || 0);
+  return Math.max(0, total - reserved);
+};
+
 const hoverSx = (effect, shadow) => {
   if (effect === 'none') return {};
   if (effect === 'fade') return { opacity: 0.92, boxShadow: resolveShadow(shadow, resolveShadow('soft')) };
@@ -56,6 +63,9 @@ const ProductCard = ({ product, fromCategory, compact = false }) => {
   const primaryImage =
     getMediaUrl(product.images?.find((i) => i.isPrimary)?.url || product.images?.[0]?.url || '') || '/placeholder.png';
   const displayPrice = product.effectivePrice ?? product.salePrice ?? product.price;
+  // Quick-add always adds the base product with no variant, so gate it on the
+  // product-level stock the same way ProductDetailPage gates its no-variant path.
+  const quickAddStockAvailable = getAvailableStock(product, 'quantity') > 0;
   const hasSale = product.isSaleActive ?? (product.salePrice && parseFloat(product.salePrice) < parseFloat(product.price));
   const isScheduledSale = product.saleStatus === 'scheduled';
   const discountPercent = product.discountPercent || getDiscountPercent(product);
@@ -86,6 +96,10 @@ const ProductCard = ({ product, fromCategory, compact = false }) => {
   const handleAddToCart = async (e) => {
     e.preventDefault();
     e.stopPropagation();
+    if (!quickAddStockAvailable) {
+      notify('This product is out of stock.', 'error');
+      return;
+    }
     try {
       await addItem(product.id, 1);
       notify('Product added to cart successfully!', 'success');
@@ -375,10 +389,11 @@ const ProductCard = ({ product, fromCategory, compact = false }) => {
           <Button
             variant="contained"
             size="small"
+            disabled={!quickAddStockAvailable}
             onClick={handleAddToCart}
             sx={{ flexGrow: 1, height: 44, borderRadius: 'var(--store-radius-button, 8px)', fontWeight: 700 }}
           >
-            Add to Cart
+            {quickAddStockAvailable ? 'Add to Cart' : 'Out of Stock'}
           </Button>
         )}
       </CardActions>

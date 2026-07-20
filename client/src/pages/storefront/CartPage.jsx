@@ -35,6 +35,14 @@ const row = (align = 'center', justify = 'flex-start') => ({
     display: 'flex', alignItems: align, justifyContent: justify,
 });
 
+// Mirrors ProductDetailPage's stock resolution so the cart stepper can't
+// exceed what's actually purchasable.
+const getAvailableStock = (entity, stockKey) => {
+    const total = Number(entity?.[stockKey] || 0);
+    const reserved = Number(entity?.reservedQty || 0);
+    return Math.max(0, total - reserved);
+};
+
 // ── Optimistic state ──────────────────────────────────────────────────────────
 const useOptimisticCart = (items, updateItem, removeItem) => {
     const [optimisticQtys, setOptimisticQtys] = useState({});
@@ -49,8 +57,11 @@ const useOptimisticCart = (items, updateItem, removeItem) => {
         clearTimeout(pendingRef.current[itemId]);
         pendingRef.current[itemId] = setTimeout(async () => {
             try { await updateItem(itemId, newQty); }
-            catch { setOptimisticQtys(p => { const n = { ...p }; delete n[itemId]; return n; }); }
-            finally { setUpdatingIds(p => { const n = new Set(p); n.delete(itemId); return n; }); }
+            catch { /* ignore, cleared below regardless of outcome */ }
+            finally {
+                setOptimisticQtys(p => { const n = { ...p }; delete n[itemId]; return n; });
+                setUpdatingIds(p => { const n = new Set(p); n.delete(itemId); return n; });
+            }
         }, 400);
     }, [updateItem]);
     const handleRemove = useCallback(async (itemId) => {
@@ -109,7 +120,7 @@ const EmptyCart = ({ message }) => (
 );
 
 // ── Qty Stepper ───────────────────────────────────────────────────────────────
-const QttyStepper = ({ qty, isUpdating, onDecrement, onIncrement }) => (
+const QttyStepper = ({ qty, isUpdating, onDecrement, onIncrement, atMax }) => (
     <Box sx={{ display: 'inline-flex', alignItems: 'center', height: 30, border: '1px solid', borderColor: 'divider', borderRadius: 1, overflow: 'hidden' }}>
         <IconButton size="small" disableRipple disabled={qty <= 1 || isUpdating} onClick={onDecrement}
             sx={{ width: 28, height: 30, borderRadius: 0, color: 'text.secondary', '&:not(.Mui-disabled):hover': { bgcolor: 'action.selected' }, '&.Mui-disabled': { opacity: 0.3 } }}>
@@ -118,8 +129,8 @@ const QttyStepper = ({ qty, isUpdating, onDecrement, onIncrement }) => (
         <Box sx={{ minWidth: 30, height: 30, borderLeft: '1px solid', borderRight: '1px solid', borderColor: 'divider', display: 'flex', alignItems: 'center', justifyContent: 'center', bgcolor: 'background.paper' }}>
             {isUpdating ? <CircularProgress size={10} /> : <Typography sx={{ fontSize: '0.78rem', fontWeight: 700 }}>{qty}</Typography>}
         </Box>
-        <IconButton size="small" disableRipple disabled={isUpdating} onClick={onIncrement}
-            sx={{ width: 28, height: 30, borderRadius: 0, color: 'text.secondary', '&:not(.Mui-disabled):hover': { bgcolor: 'action.selected' } }}>
+        <IconButton size="small" disableRipple disabled={isUpdating || atMax} onClick={onIncrement}
+            sx={{ width: 28, height: 30, borderRadius: 0, color: 'text.secondary', '&:not(.Mui-disabled):hover': { bgcolor: 'action.selected' }, '&.Mui-disabled': { opacity: 0.3 } }}>
             <AddIcon sx={{ fontSize: 12 }} />
         </IconButton>
     </Box>
@@ -135,6 +146,7 @@ const CartItem = React.memo(({ item, getQty, handleUpdate, handleRemove, removin
     const isOnSale = discountPct > 0;
     const imageUrl = getMediaUrl(product?.images?.[0]?.url || '') || '/placeholder.png';
     const qty = getQty(item);
+    const maxQty = variant ? getAvailableStock(variant, 'stockQty') : getAvailableStock(product, 'quantity');
     const isRemoving = removingIds.has(item.id);
     const isUpdating = updatingIds.has(item.id);
     const densityPadding = cartItemStyle.density === 'compact' ? { xs: 1.25, sm: 1.5 } : cartItemStyle.density === 'spacious' ? { xs: 2.25, sm: 3 } : { xs: 1.75, sm: 2.25 };
@@ -178,12 +190,19 @@ const CartItem = React.memo(({ item, getQty, handleUpdate, handleRemove, removin
                     </Box>
                     {/* Bottom controls */}
                     <Box sx={{ ...row('center', 'space-between') }}>
-                        <Typography sx={{ fontSize: '0.75rem', color: 'text.disabled', fontWeight: 500 }}>
-                            {isOnSale && <><Typography component="span" sx={{ textDecoration: 'line-through', fontSize: '0.75rem', color: 'text.disabled', mr: 0.5 }}>{formatPrice(regularPrice)}</Typography><Typography component="span" sx={{ fontSize: '0.75rem', color: 'success.main', fontWeight: 700, mr: 0.5 }}>{formatPrice(itemPrice)}</Typography><Typography component="span" sx={{ fontSize: '0.68rem', color: 'success.main', fontWeight: 700 }}>({discountPct}% off)</Typography></>}
-                            {!isOnSale && <>{formatPrice(itemPrice)} / unit</>}
-                        </Typography>
+                        <Box>
+                            <Typography sx={{ fontSize: '0.75rem', color: 'text.disabled', fontWeight: 500 }}>
+                                {isOnSale && <><Typography component="span" sx={{ textDecoration: 'line-through', fontSize: '0.75rem', color: 'text.disabled', mr: 0.5 }}>{formatPrice(regularPrice)}</Typography><Typography component="span" sx={{ fontSize: '0.75rem', color: 'success.main', fontWeight: 700, mr: 0.5 }}>{formatPrice(itemPrice)}</Typography><Typography component="span" sx={{ fontSize: '0.68rem', color: 'success.main', fontWeight: 700 }}>({discountPct}% off)</Typography></>}
+                                {!isOnSale && <>{formatPrice(itemPrice)} / unit</>}
+                            </Typography>
+                            {maxQty > 0 && maxQty <= qty && (
+                                <Typography sx={{ fontSize: '0.68rem', color: 'warning.main', fontWeight: 600, mt: 0.25 }}>
+                                    Only {maxQty} left in stock
+                                </Typography>
+                            )}
+                        </Box>
                         <Box sx={{ ...row('center'), gap: 0.75 }}>
-                            <QttyStepper qty={qty} isUpdating={isUpdating}
+                            <QttyStepper qty={qty} isUpdating={isUpdating} atMax={qty >= maxQty}
                                 onDecrement={() => handleUpdate(item.id, qty - 1)}
                                 onIncrement={() => handleUpdate(item.id, qty + 1)} />
                             <Tooltip title="Remove" placement="top" arrow>

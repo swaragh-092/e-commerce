@@ -177,22 +177,27 @@ const CategoryPage = () => {
 
     // ── Data fetching ─────────────────────────────────────────────────────────
     useEffect(() => {
-        if (!categorySlug) return;
+        if (!categorySlug) return undefined;
+        let cancelled = false;
         setLoading(true);
         setNotFound(false);
 
         getCategoryWithProducts(categorySlug, filters.page, filters.limit, filters.sort)
             .then((res) => {
+                if (cancelled) return;
                 const data = res?.data;
                 if (!data?.category) { setNotFound(true); return; }
                 setPageData(data);
                 setPriceRange(data.priceRange || null);
             })
             .catch((err) => {
+                if (cancelled) return;
                 if (err?.response?.status === 404) { setNotFound(true); }
                 else { setPageData(null); }
             })
-            .finally(() => setLoading(false));
+            .finally(() => { if (!cancelled) setLoading(false); });
+
+        return () => { cancelled = true; };
     // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [categorySlug, searchParams.toString()]);
 

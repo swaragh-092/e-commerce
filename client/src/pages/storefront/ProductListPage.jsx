@@ -52,10 +52,12 @@ const ProductListPage = () => {
     };
 
     useEffect(() => {
+        let cancelled = false;
         const fetchProducts = async () => {
             setLoading(true);
             try {
                 const res = await getProducts(filters);
+                if (cancelled) return;
                 setProducts(res.data || []);
                 if (res.meta) {
                     setMeta(res.meta);
@@ -64,12 +66,13 @@ const ProductListPage = () => {
                     setPriceRange(null);
                 }
             } catch (err) {
-                console.error(err);
+                if (!cancelled) console.error(err);
             } finally {
-                setLoading(false);
+                if (!cancelled) setLoading(false);
             }
         };
         fetchProducts();
+        return () => { cancelled = true; };
     // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [searchParams.toString()]);
 

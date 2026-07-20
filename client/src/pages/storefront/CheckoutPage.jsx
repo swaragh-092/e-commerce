@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useContext, useMemo } from 'react';
+import React, { useState, useEffect, useContext, useMemo, useRef } from 'react';
 import { v4 as uuidv4 } from 'uuid';
 import {
     Box, Container, Typography, Button, Divider, Paper, TextField,
@@ -128,7 +128,7 @@ const loadScript = (src, globalName) => new Promise((resolve, reject) => {
 });
 
 // Section wrapper — shows locked/completed state when not active
-const Section = ({ step, activeSection, completedSections, title, icon, summary, onEdit, children }) => {
+const Section = ({ step, activeSection, completedSections, title, icon, summary, onEdit, children, radius }) => {
     const isActive = activeSection === step;
     const isCompleted = completedSections.includes(step);
     const isLocked = !isActive && !isCompleted;
@@ -139,7 +139,7 @@ const Section = ({ step, activeSection, completedSections, title, icon, summary,
             sx={{
                 border: '1px solid',
                 borderColor: isActive ? 'primary.main' : 'divider',
-                borderRadius: blockRadius,
+                borderRadius: radius,
                 overflow: 'hidden',
                 transition: 'border-color 0.2s',
                 mb: 1.5,
@@ -272,6 +272,10 @@ const CheckoutPage = () => {
     const [publicCoupons, setPublicCoupons] = useState([]);
     const [publicCouponsLoading, setPublicCouponsLoading] = useState(false);
     const [eligibleCouponSummary, setEligibleCouponSummary] = useState(null);
+    // Once the shopper explicitly removes a coupon, never auto-reapply one —
+    // otherwise a shipping-cost recalc triggered by the removal itself can
+    // feed back into the auto-apply effect and silently reinstate it.
+    const userRemovedCouponRef = useRef(false);
 
     // Notes & Payment
     const [notes, setNotes] = useState('');
@@ -455,7 +459,7 @@ const CheckoutPage = () => {
                     const data = res.data?.data || {};
                     setPublicCoupons(data.eligibleCoupons || []);
                     setEligibleCouponSummary(data);
-                    if (!couponResult && !couponCode && data.bestCombination?.appliedCoupons?.length) {
+                    if (!couponResult && !couponCode && !userRemovedCouponRef.current && data.bestCombination?.appliedCoupons?.length) {
                         const manualCoupon = data.bestCombination.appliedCoupons.find((c) => c.applicationMode !== 'auto');
                         setCouponCode(manualCoupon?.code || data.bestCombination.appliedCoupons[0]?.code || '');
                         setCouponResult(data.bestCombination);
@@ -685,6 +689,7 @@ const CheckoutPage = () => {
                     {/* ── Section 1: Delivery Address ── */}
                     <Section
                         step={1}
+                        radius={blockRadius}
                         activeSection={activeSection}
                         completedSections={completedSections}
                         title="Delivery Address"
@@ -827,6 +832,7 @@ const CheckoutPage = () => {
                     {couponsEnabled && (
                         <Section
                             step={2}
+                            radius={blockRadius}
                             activeSection={activeSection}
                             completedSections={completedSections}
                             title="Coupons & Offers"
@@ -942,7 +948,7 @@ const CheckoutPage = () => {
                                     <Button
                                         variant="text"
                                         color="error"
-                                        onClick={() => { setCouponCode(''); setCouponResult(null); }}
+                                        onClick={() => { userRemovedCouponRef.current = true; setCouponCode(''); setCouponResult(null); }}
                                     >
                                         Remove coupon
                                     </Button>
@@ -954,6 +960,7 @@ const CheckoutPage = () => {
                     {/* ── Section 3: Payment ── */}
                     <Section
                         step={3}
+                        radius={blockRadius}
                         activeSection={activeSection}
                         completedSections={completedSections}
                         title="Payment Method"

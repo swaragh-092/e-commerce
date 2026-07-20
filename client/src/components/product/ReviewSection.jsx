@@ -11,8 +11,6 @@ const ReviewSection = ({ slug, productId, onVisibleReviewsChange }) => {
     const reviewsEnabled = useFeature('reviews');
     const requirePurchase = useFeature('requirePurchaseForReview');
 
-    if (!reviewsEnabled) return null;
-
     const [reviews, setReviews] = useState([]);
     const [showForm, setShowForm] = useState(false);
     const [formData, setFormData] = useState({ rating: 0, title: '', body: '', orderId: null });
@@ -78,7 +76,7 @@ const ReviewSection = ({ slug, productId, onVisibleReviewsChange }) => {
 
     // Fetch user's own review via dedicated endpoint (reliable even if not on page 1)
     useEffect(() => {
-        if (!isAuthenticated || !slug) return;
+        if (!reviewsEnabled || !isAuthenticated || !slug) return;
         const calledForSlug = slug;
         myReviewSlugRef.current = calledForSlug;
         setMyReviewLoading(true);
@@ -96,17 +94,18 @@ const ReviewSection = ({ slug, productId, onVisibleReviewsChange }) => {
                 if (myReviewSlugRef.current !== calledForSlug) return;
                 setMyReviewLoading(false);
             });
-    }, [isAuthenticated, slug]);
+    }, [reviewsEnabled, isAuthenticated, slug]);
 
     useEffect(() => {
+        if (!reviewsEnabled) return;
         fetchReviews(1);
-    }, [slug]);
+    }, [reviewsEnabled, slug]);
 
     // Check purchase history for verified badge.
     // AbortController prevents a stale response from a previous productId overwriting
     // state after productId has changed (e.g. navigating between products quickly).
     useEffect(() => {
-        if (!isAuthenticated || !productId) return;
+        if (!reviewsEnabled || !isAuthenticated || !productId) return;
         const controller = new AbortController();
         setPurchaseCheckError(false);
         setPurchaseLoading(true);
@@ -209,6 +208,11 @@ const ReviewSection = ({ slug, productId, onVisibleReviewsChange }) => {
         });
         onVisibleReviewsChange(visibleApprovedReviews);
     }, [reviews, myReview, onVisibleReviewsChange]);
+
+    // All hooks above must run on every render regardless of this flag —
+    // bailing out earlier breaks the Rules of Hooks since `reviewsEnabled`
+    // starts optimistically `true` while settings load, then can flip to `false`.
+    if (!reviewsEnabled) return null;
 
     return (
         <Box sx={{ mt: 4 }}>
