@@ -160,6 +160,15 @@ else
     sudo systemctl enable --now postgresql
     sudo systemctl enable --now nginx
 
+    # Fix PostgreSQL Ident Authentication issue on Amazon Linux / RedHat / Ubuntu
+    PG_HBA=$(sudo find /etc /var/lib/pgsql -name "pg_hba.conf" 2>/dev/null | head -n 1)
+    if [ -n "$PG_HBA" ]; then
+        echo -e "${BLUE}🔧 Configuring PostgreSQL authentication in ${PG_HBA}...${NC}"
+        sudo sed -i 's/\bident\b/trust/g' "$PG_HBA"
+        sudo sed -i 's/\bpeer\b/trust/g' "$PG_HBA"
+        sudo systemctl restart postgresql
+    fi
+
     # Install PM2 globally
     if ! command -v pm2 &>/dev/null; then
         echo -e "${BLUE}📦 Installing PM2 process manager...${NC}"
