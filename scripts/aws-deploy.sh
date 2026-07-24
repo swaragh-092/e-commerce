@@ -167,9 +167,9 @@ else
     fi
 
     # Configure PostgreSQL Database
-    DB_NAME=$(grep -E "^DB_NAME=" .env | cut -d '=' -f2 | tr -d '"\'' ' ' || echo "ecommerce")
-    DB_USER=$(grep -E "^DB_USER=" .env | cut -d '=' -f2 | tr -d '"\'' ' ' || echo "postgres")
-    DB_PASS=$(grep -E "^DB_PASSWORD=" .env | cut -d '=' -f2 | tr -d '"\'' ' ' || echo "postgres")
+    DB_NAME=$(grep -E "^DB_NAME=" .env | cut -d '=' -f2 | tr -d '"' | tr -d "'" | tr -d ' ' || echo "ecommerce")
+    DB_USER=$(grep -E "^DB_USER=" .env | cut -d '=' -f2 | tr -d '"' | tr -d "'" | tr -d ' ' || echo "postgres")
+    DB_PASS=$(grep -E "^DB_PASSWORD=" .env | cut -d '=' -f2 | tr -d '"' | tr -d "'" | tr -d ' ' || echo "postgres")
 
     echo -e "${BLUE}🗄️ Setting up PostgreSQL database '${DB_NAME}'...${NC}"
     sudo -u postgres psql -c "CREATE DATABASE ${DB_NAME};" 2>/dev/null || true
@@ -211,7 +211,7 @@ else
         sudo mkdir -p /etc/nginx/sites-available /etc/nginx/sites-enabled
     fi
 
-    sudo bash -c "cat << 'EOF' > ${NGINX_CONF}
+    cat << EOF | sudo tee "${NGINX_CONF}" > /dev/null
 server {
     listen 80;
     server_name _;
@@ -234,7 +234,7 @@ server {
         proxy_pass http://localhost:5000/uploads/;
     }
 }
-EOF"
+EOF
 
     if [ -d /etc/nginx/sites-enabled ]; then
         sudo ln -sf /etc/nginx/sites-available/ecommerce /etc/nginx/sites-enabled/default
