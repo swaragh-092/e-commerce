@@ -196,7 +196,7 @@ else
     cd server
     npm install
     npx sequelize-cli db:migrate
-    npm run seed
+    npm run seed || true
     
     # Start API with PM2
     echo -e "${BLUE}🚀 Starting Backend Server with PM2...${NC}"
