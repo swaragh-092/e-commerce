@@ -1,10 +1,16 @@
-require('dotenv').config({ path: require('path').resolve(__dirname, '../../../.env') });
+const path = require('path');
+const dotenv = require('dotenv');
+
+// Load environment variables from process cwd, server/.env, and root .env
+dotenv.config();
+dotenv.config({ path: path.resolve(__dirname, '../../.env') });
+dotenv.config({ path: path.resolve(__dirname, '../../../.env') });
 
 module.exports = {
     development: {
         username: process.env.DB_USER || 'postgres',
         password: process.env.DB_PASSWORD || 'postgres',
-        database: process.env.DB_NAME || 'ecommerce_dev',
+        database: process.env.DB_NAME || 'ecommerce',
         host: process.env.DB_HOST || 'localhost',
         port: parseInt(process.env.DB_PORT, 10) || 5432,
         dialect: 'postgres',
