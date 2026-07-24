@@ -143,12 +143,13 @@ else
     if [[ "$OS_ID" == "amzn" ]]; then
         if command -v dnf &>/dev/null; then
             sudo dnf update -y
-            sudo dnf install -y nodejs20 postgresql15 postgresql15-server nginx git
+            sudo dnf install -y nodejs20 postgresql15 postgresql15-server postgresql15-contrib nginx git 2>/dev/null || sudo dnf install -y nodejs20 postgresql postgresql-server postgresql-contrib nginx git
             sudo postgresql-setup --initdb 2>/dev/null || true
         else
             curl -fsSL https://rpm.nodesource.com/setup_20.x | sudo bash -
             sudo yum install -y nodejs git
-            sudo amazon-linux-extras install -y nginx1 postgresql14 2>/dev/null || sudo yum install -y nginx postgresql-server
+            sudo amazon-linux-extras install -y nginx1 postgresql14 2>/dev/null || sudo yum install -y nginx postgresql-server postgresql-contrib
+            sudo yum install -y postgresql-contrib postgresql14-contrib 2>/dev/null || true
             sudo postgresql-setup initdb 2>/dev/null || true
         fi
     else
