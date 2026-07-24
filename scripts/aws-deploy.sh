@@ -143,7 +143,7 @@ else
     if [[ "$OS_ID" == "amzn" ]]; then
         if command -v dnf &>/dev/null; then
             sudo dnf update -y
-            sudo dnf install -y nodejs20 postgresql15 postgresql15-server postgresql15-contrib nginx git 2>/dev/null || sudo dnf install -y nodejs20 postgresql postgresql-server postgresql-contrib nginx git
+            sudo dnf install -y nodejs20 postgresql15 postgresql15-server postgresql15-contrib nginx git 2>/dev/null || sudo dnf install -y nodejs20 postgresql postgresql-server postgresql15-contrib nginx git
             sudo postgresql-setup --initdb 2>/dev/null || true
         else
             curl -fsSL https://rpm.nodesource.com/setup_20.x | sudo bash -
@@ -209,7 +209,7 @@ else
     echo -e "${BLUE}🎨 Installing Frontend Dependencies & Building UI...${NC}"
     cd client
     npm install
-    npm run build
+    NODE_OPTIONS="--max-old-space-size=2048" npm run build
     CLIENT_BUILD_DIR=$(pwd)/dist
     cd ..
 
