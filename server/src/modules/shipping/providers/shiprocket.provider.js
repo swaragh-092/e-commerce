@@ -407,13 +407,38 @@ class ShiprocketProvider extends BaseShippingProvider {
     }
 
     async handleWebhook(payload) {
-        // Shiprocket sends multipart/form-data or JSON depending on config
-        const awbCode = payload.awb || payload.AWB || '';
-        const status = payload['current-status'] || payload.status || 'unknown';
-        const location = payload['current-city'] || payload.location || '';
-        const providerEventId = payload.scan_id || payload.id || null;
+        // Shiprocket sends JSON with diverse naming conventions across courier partners
+        const awbCode = String(
+            payload.awb ||
+            payload.awb_code ||
+            payload.awbCode ||
+            payload.AWB ||
+            ''
+        ).trim();
 
-        const timestamp = payload.scan_date_time || payload.timestamp || payload.date || new Date();
+        const status = payload.current_status ||
+            payload['current-status'] ||
+            payload.shipment_status ||
+            payload.status ||
+            'unknown';
+
+        const location = payload.current_timestamp_location ||
+            payload.current_city ||
+            payload['current-city'] ||
+            payload.location ||
+            '';
+
+        const providerEventId = payload.scan_id ||
+            payload.sr_status_id ||
+            payload.event_id ||
+            payload.id ||
+            null;
+
+        const timestamp = payload.current_timestamp ||
+            payload.scan_date_time ||
+            payload.timestamp ||
+            payload.date ||
+            new Date();
 
         return {
             providerEventId: providerEventId ? String(providerEventId) : null,
@@ -426,13 +451,14 @@ class ShiprocketProvider extends BaseShippingProvider {
     }
 
     _normalizeStatus(srStatus) {
-        const s = String(srStatus).toLowerCase();
+        const s = String(srStatus || '').toLowerCase().replace(/[-_]/g, ' ').trim();
         if (s.includes('delivered')) return 'delivered';
         if (s.includes('out for delivery')) return 'out_for_delivery';
-        if (s.includes('pickup')) return 'picked_up';
-        if (s.includes('in transit') || s.includes('transit')) return 'in_transit';
-        if (s.includes('returned')) return 'returned';
+        if (s.includes('pickup') || s.includes('picked up')) return 'in_transit';
+        if (s.includes('in transit') || s.includes('transit') || s.includes('shipped') || s.includes('reached')) return 'in_transit';
+        if (s.includes('rto') || s.includes('return')) return 'rto';
         if (s.includes('cancel')) return 'cancelled';
+        if (s.includes('failed') || s.includes('undelivered')) return 'delivery_failed';
         return 'in_transit';
     }
 }

@@ -139,13 +139,20 @@ exports.processWebhook = async (providerCode, payload, headers) => {
             throw err;
         }
 
+        // Guard: Prevent regression from terminal shipment statuses
+        const terminalStatuses = ['delivered', 'cancelled', 'returned', 'rto'];
+        if (terminalStatuses.includes(shipment.status) && !terminalStatuses.includes(normalizedEvent.status)) {
+            console.log(`[Webhook: ${providerCode}] Ignoring regression from terminal shipment status "${shipment.status}" to "${normalizedEvent.status}"`);
+            return;
+        }
+
         // Update shipment status if it has changed
         if (shipment.status !== normalizedEvent.status) {
             const newHistory = [...(shipment.statusHistory || []), {
                 status: normalizedEvent.status,
                 at: normalizedEvent.timestamp ? new Date(normalizedEvent.timestamp).toISOString() : new Date().toISOString(),
                 source: 'webhook',
-                location: normalizedEvent.location
+                location: normalizedEvent.location,
             }];
             
             await shipment.update({
@@ -156,9 +163,9 @@ exports.processWebhook = async (providerCode, payload, headers) => {
             // Propagate status back to Fulfillment
             if (shipment.fulfillment) {
                 let fulfillmentStatus = shipment.fulfillment.status;
-                if (['delivered', 'returned'].includes(normalizedEvent.status)) {
-                    fulfillmentStatus = normalizedEvent.status;
-                } else if (normalizedEvent.status === 'shipped' || normalizedEvent.status === 'out_for_delivery') {
+                if (['delivered', 'returned', 'rto'].includes(normalizedEvent.status)) {
+                    fulfillmentStatus = normalizedEvent.status === 'rto' ? 'returned' : normalizedEvent.status;
+                } else if (['shipped', 'in_transit', 'out_for_delivery'].includes(normalizedEvent.status)) {
                     fulfillmentStatus = 'shipped';
                 }
                 
@@ -170,32 +177,52 @@ exports.processWebhook = async (providerCode, payload, headers) => {
             // Notify customer if it's out for delivery or delivered
             if (['out_for_delivery', 'delivered'].includes(normalizedEvent.status) && shipment.orderId) {
                 try {
-                    await NotificationService.sendDeliveryUpdate(shipment.order.userId, shipment.orderId, normalizedEvent.status);
+                    const recipientUserId = shipment.order?.userId || (await Order.findByPk(shipment.orderId, { transaction: t }))?.userId;
+                    if (recipientUserId) {
+                        await NotificationService.sendDeliveryUpdate(recipientUserId, shipment.orderId, normalizedEvent.status);
+                    }
                 } catch (err) {
                     console.error('Failed to send delivery update notification', err);
                 }
             }
 
-            // Propagate terminal status to Order if all fulfillments are terminal
-            if (['delivered', 'returned'].includes(normalizedEvent.status) && shipment.orderId) {
+            // Propagate terminal or progressive status to Order
+            if (shipment.orderId) {
                 const order = await Order.findByPk(shipment.orderId, {
                     include: [{ model: Fulfillment, as: 'fulfillments' }],
-                    transaction: t
+                    transaction: t,
                 });
 
-                if (order && !['delivered', 'cancelled', 'refunded', 'returned'].includes(order.status)) {
-                    const allTerminal = order.fulfillments.every(f => 
-                        ['delivered', 'returned', 'rto'].includes(f.status)
-                    );
+                if (order && !['cancelled', 'closed'].includes(order.status)) {
+                    if (['delivered', 'returned', 'rto'].includes(normalizedEvent.status)) {
+                        const allTerminal = (order.fulfillments || []).length > 0 && (order.fulfillments || []).every(f => 
+                            ['delivered', 'returned', 'rto'].includes(f.status)
+                        );
 
-                    if (allTerminal) {
-                        const finalStatus = order.fulfillments.every(f => f.status === 'delivered') ? 'delivered' : 'returned';
-                        await order.update({ 
-                            status: finalStatus, 
-                            shipmentStatus: finalStatus 
+                        if (allTerminal) {
+                            const finalShippingStatus = (order.fulfillments || []).every(f => f.status === 'delivered') ? 'delivered' : 'rto';
+                            await order.update({ 
+                                orderShippingStatus: finalShippingStatus, 
+                                shipmentStatus: finalShippingStatus,
+                            }, { transaction: t });
+                        } else {
+                            await order.update({ 
+                                orderShippingStatus: 'partially_delivered',
+                                shipmentStatus: 'partially_delivered',
+                            }, { transaction: t });
+                        }
+                    } else if (['shipped', 'in_transit'].includes(normalizedEvent.status)) {
+                        if (order.orderShippingStatus === 'not_shipped' || !order.orderShippingStatus) {
+                            await order.update({
+                                orderShippingStatus: 'shipped',
+                                shipmentStatus: 'shipped',
+                            }, { transaction: t });
+                        }
+                    } else if (normalizedEvent.status === 'out_for_delivery') {
+                        await order.update({
+                            orderShippingStatus: 'out_for_delivery',
+                            shipmentStatus: 'out_for_delivery',
                         }, { transaction: t });
-                    } else {
-                        await order.update({ shipmentStatus: 'partially_delivered' }, { transaction: t });
                     }
                 }
             }

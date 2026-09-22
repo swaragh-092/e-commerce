@@ -198,6 +198,7 @@ app.use('/api/orders', orderRoutes);
 app.use('/api/payments', paymentRoutes);
 app.use('/api/shipping', shippingRoutes);
 app.use('/api/webhook/shipping', shippingWebhookRoutes);
+app.use('/api/v1/shipping/webhooks', shippingWebhookRoutes);
 app.use('/api/wishlist', wishlistRoutes);
 app.use('/api', reviewRoutes);
 // Admin route is mounted at a configurable secret path to prevent enumeration.
