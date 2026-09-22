@@ -144,6 +144,7 @@ const CartItem = React.memo(({ item, getQty, handleUpdate, handleRemove, removin
     const regularPrice = getVariantRegularPrice(product, variant);
     const discountPct = getVariantDiscountPercent(product, variant);
     const isOnSale = discountPct > 0;
+    const displayUnit = product?.unit ? String(product.unit).trim() : '';
     const imageUrl = getMediaUrl(product?.images?.[0]?.url || '') || '/placeholder.png';
     const qty = getQty(item);
     const maxQty = variant ? getAvailableStock(variant, 'stockQty') : getAvailableStock(product, 'quantity');
@@ -192,9 +193,18 @@ const CartItem = React.memo(({ item, getQty, handleUpdate, handleRemove, removin
                     <Box sx={{ ...row('center', 'space-between') }}>
                         <Box>
                             <Typography sx={{ fontSize: '0.75rem', color: 'text.disabled', fontWeight: 500 }}>
-                                {isOnSale && <><Typography component="span" sx={{ textDecoration: 'line-through', fontSize: '0.75rem', color: 'text.disabled', mr: 0.5 }}>{formatPrice(regularPrice)}</Typography><Typography component="span" sx={{ fontSize: '0.75rem', color: 'success.main', fontWeight: 700, mr: 0.5 }}>{formatPrice(itemPrice)}</Typography><Typography component="span" sx={{ fontSize: '0.68rem', color: 'success.main', fontWeight: 700 }}>({discountPct}% off)</Typography></>}
-                                {!isOnSale && <>{formatPrice(itemPrice)} / unit</>}
+                                {isOnSale ? (
+                                    <>
+                                        <Typography component="span" sx={{ textDecoration: 'line-through', fontSize: '0.75rem', color: 'text.disabled', mr: 0.5 }}>{formatPrice(regularPrice)}</Typography>
+                                        <Typography component="span" sx={{ fontSize: '0.75rem', color: 'success.main', fontWeight: 700, mr: 0.5 }}>{formatPrice(itemPrice)}</Typography>
+                                        {displayUnit && <Typography component="span" sx={{ fontSize: '0.75rem', color: 'text.secondary', mr: 0.5 }}>/ {displayUnit}</Typography>}
+                                        <Typography component="span" sx={{ fontSize: '0.68rem', color: 'success.main', fontWeight: 700 }}>({discountPct}% off)</Typography>
+                                    </>
+                                ) : (
+                                    <>{formatPrice(itemPrice)}{displayUnit ? ` / ${displayUnit}` : ''}</>
+                                )}
                             </Typography>
+
                             {maxQty > 0 && maxQty <= qty && (
                                 <Typography sx={{ fontSize: '0.68rem', color: 'warning.main', fontWeight: 600, mt: 0.25 }}>
                                     Only {maxQty} left in stock

@@ -8,6 +8,7 @@ const { authorizeAnyPermission } = require('../../middleware/role.middleware');
 const { validate } = require('../../middleware/validate.middleware');
 const { documentMemoryUpload } = require('../../middleware/upload.middleware');
 const { aiAssistantLimiter } = require('../../middleware/rateLimiter.middleware');
+const { featureGate } = require('../../middleware/featureGate.middleware');
 const { PERMISSIONS } = require('../../config/permissions');
 const { generateDraftSchema } = require('./productAssistant.validation');
 
@@ -17,6 +18,7 @@ router.post(
   '/product-assistant/generate',
   authenticate,
   authorizeAnyPermission(PERMISSIONS.PRODUCTS_CREATE, PERMISSIONS.PRODUCTS_UPDATE),
+  featureGate('productAssistant'),
   aiAssistantLimiter,
   validate(generateDraftSchema),
   controller.generate
@@ -28,6 +30,7 @@ router.post(
   '/product-assistant/extract-specs',
   authenticate,
   authorizeAnyPermission(PERMISSIONS.PRODUCTS_CREATE, PERMISSIONS.PRODUCTS_UPDATE),
+  featureGate('productAssistant'),
   aiAssistantLimiter,
   documentMemoryUpload.single('file'),
   controller.extractSpecs

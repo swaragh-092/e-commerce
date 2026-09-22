@@ -1039,6 +1039,50 @@ function buildInvoicePanel({ form, set, section, field, toggle, imageField }) {
 function buildAdvancedPanel({ form, set, section, field, toggle, imageField, bool, dashboardOrder, handleDashboardOrderDragEnd, applyDashboardProfile, DASHBOARD_ORDER_WIDGETS, DASHBOARD_PROFILES }) {
   return [
     section(
+      'AI Product Assistant',
+      'Configure the OpenAI-compatible provider used by the product creation assistant. API keys are encrypted before they are stored and are never sent back in plain text.',
+      <>
+        <Alert severity="info" sx={{ mb: 2 }}>
+          Use Platform Features to show or hide the assistant on product forms. Values saved here override the matching server environment values; blank fields keep the environment fallback.
+        </Alert>
+        <TextField
+          fullWidth
+          size="small"
+          label="API Key"
+          type="password"
+          value={form['ai_credentials.apiKey'] ?? ''}
+          onChange={(e) => set('ai_credentials.apiKey', e.target.value)}
+          onFocus={(e) => e.target.select()}
+          autoComplete="new-password"
+          sx={{ mb: 2 }}
+          helperText={form['ai_credentials.apiKey'] === '********'
+            ? 'A key is already stored. Leave this masked value unchanged to keep it, or replace it with a new key.'
+            : 'Stored encrypted on the server. Leave blank to use the server environment fallback.'}
+        />
+        <Grid container spacing={2}>
+          <Grid item xs={12} sm={6}>
+            {field('ai.baseUrl', 'Provider Base URL (e.g. https://openrouter.ai/api/v1)', 'text')}
+          </Grid>
+          <Grid item xs={12} sm={6}>
+            {field('ai.model', 'Model (e.g. mistralai/mistral-7b-instruct:free)', 'text')}
+          </Grid>
+          <Grid item xs={12} sm={6}>
+            {field('ai.chatCompletionsPath', 'Chat Completions Path', 'text')}
+          </Grid>
+          <Grid item xs={12} sm={6}>
+            {field('ai.timeoutMs', 'Request Timeout (ms)', 'number', { inputProps: { min: 1000, max: 120000 } })}
+          </Grid>
+          <Grid item xs={12} sm={6}>
+            {field('ai.siteUrl', 'Provider Site URL', 'url')}
+          </Grid>
+          <Grid item xs={12} sm={6}>
+            {field('ai.siteTitle', 'Provider Site Title', 'text')}
+          </Grid>
+        </Grid>
+      </>,
+      ['ai', 'assistant', 'openai', 'openrouter', 'api key', 'provider', 'model']
+    ),
+    section(
       'API Builder',
       'Control whether admins can create public custom APIs from catalog, content, menu, and setting data.',
       <>

@@ -305,7 +305,10 @@ const SettingsPage = () => {
       const payload = Object.entries(form).map(([flatKey, value]) => {
         const [group, ...keyParts] = flatKey.split('.');
         return { group, key: keyParts.join('.'), value };
-      }).filter(({ group, value }) => !isMaskedSecret(value) && (canManageAdvancedSettings || group !== 'advanced'));
+      }).filter(({ group, value }) => (
+        !isMaskedSecret(value)
+        && (canManageAdvancedSettings || !['advanced', 'ai', 'ai_credentials'].includes(group))
+      ));
       await updateSettings(payload);
       notify('Settings saved successfully.', 'success');
       // Refresh theme settings in real-time

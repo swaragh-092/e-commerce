@@ -161,7 +161,7 @@ const ProductTrackingCard = ({ product, formatPrice }) => {
             />
           </Box>
           <Typography variant="caption" color="text.secondary" display="block">
-            SKU: {item.snapshotSku || '—'} · Qty {item.quantity}
+            SKU: {item.snapshotSku || '—'} · Qty {item.quantity}{item.variantInfo?.unit || item.product?.unit ? ` ${item.variantInfo?.unit || item.product?.unit}` : ''}
           </Typography>
           {item.variantInfo && (
             <Typography variant="caption" color="text.secondary" display="block">
@@ -169,11 +169,12 @@ const ProductTrackingCard = ({ product, formatPrice }) => {
                 .filter(([key]) => ![
                   'id', 'productId', 'variantId', 'orderId', 'sku', 'price',
                   'isActive', 'stockQty', 'createdAt', 'updatedAt', 'deletedAt',
-                  'sortOrder', 'version', 'isDefault',
+                  'sortOrder', 'version', 'isDefault', 'unit',
                 ].includes(key))
                 .map(([k, v]) => `${k}: ${v}`).join(' · ')}
             </Typography>
           )}
+
         </Box>
 
         <Box sx={{ textAlign: { xs: 'left', sm: 'right' } }}>

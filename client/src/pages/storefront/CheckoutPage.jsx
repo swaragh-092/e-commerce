@@ -1064,8 +1064,9 @@ const CheckoutPage = () => {
                                             </Typography>
                                         )}
                                         <Typography variant="caption" color="text.secondary" display="block">
-                                            Qty: {quantity}
+                                            Qty: {quantity}{item?.product?.unit ? ` ${String(item.product.unit).trim()}` : ''}
                                         </Typography>
+
                                     </Box>
                                     <Typography variant="body2" fontWeight={600}>{formatPrice(itemPrice * quantity)}</Typography>
                                 </Box>

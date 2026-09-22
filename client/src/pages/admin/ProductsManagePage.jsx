@@ -133,7 +133,7 @@ const ProductsManagePage = () => {
   // Server-side sorting
   const [sortModel, setSortModel] = useState([]);
 
-  // Quick-edit dialog (stock + price + sale + status)
+  // Quick-edit dialog (stock + MRP + sale + status)
   const [editDialog, setEditDialog] = useState({
     open: false,
     row: null,
@@ -245,7 +245,7 @@ const ProductsManagePage = () => {
 
   // CSV export — exports the current page's visible rows
   const handleExportCSV = () => {
-    const headers = ['Name', 'SKU', 'Price', 'Sale Price', 'Stock', 'Status'];
+    const headers = ['Name', 'SKU', 'MRP', 'Sale Price', 'Stock', 'Status'];
     const csvRows = [headers.join(',')];
     rows.forEach((r) => {
       const total = Number(r?.quantity || 0);
@@ -534,7 +534,7 @@ const ProductsManagePage = () => {
     // 3. Merged price: sale price prominent + original struck-through
     {
       field: 'price',
-      headerName: 'Price',
+      headerName: 'MRP',
       width: 160,
       sortable: true,
       renderCell: ({ row }) => (
@@ -545,7 +545,9 @@ const ProductsManagePage = () => {
             color={pricingEnabled && row.isSaleActive ? 'error.main' : 'text.primary'}
           >
             {formatPrice(pricingEnabled && (row.effectivePrice ?? row.salePrice) ? (row.effectivePrice ?? row.salePrice) : row.price)}
+            {row.unit ? ` / ${row.unit}` : ''}
           </Typography>
+
           {pricingEnabled && row.salePrice && (
             <Typography variant="caption" color="text.secondary" sx={{ textDecoration: 'line-through', display: 'block' }}>
               {formatPrice(row.price)}
@@ -620,9 +622,10 @@ const ProductsManagePage = () => {
         return (
           <Tooltip title={`Available: ${available} | Total: ${total} | Reserved: ${reserved}`}>
             <Chip
-              label={available}
+              label={row.unit ? `${available} ${row.unit}` : available}
               size="small"
               color={color}
+
               variant={available === 0 ? 'filled' : 'outlined'}
               sx={{ fontWeight: 700, minWidth: 54 }}
             />
@@ -1217,12 +1220,12 @@ const ProductsManagePage = () => {
             </Box>
             )}
             <TextField
-              label="Price"
+              label="MRP"
               type="number"
               size="small"
               fullWidth
               error={hasInvalidPrice}
-              helperText={hasInvalidPrice ? 'Enter a valid price.' : `Current price: ${formatPrice(editDialog.row?.price || 0)}`}
+              helperText={hasInvalidPrice ? 'Enter a valid MRP.' : `Current MRP: ${formatPrice(editDialog.row?.price || 0)}`}
               InputProps={{
                 startAdornment: <InputAdornment position="start">{formatPrice(0).replace(/0.00|0/g, '').trim() || '$'}</InputAdornment>,
               }}
@@ -1263,7 +1266,7 @@ const ProductsManagePage = () => {
                     !editDialog.saleEnabled
                       ? 'Sale price is currently removed.'
                       : hasInvalidSalePrice
-                        ? 'Sale price must be lower than the regular price.'
+                        ? 'Sale price must be lower than the MRP.'
                         : `Current sale price: ${editDialog.row?.salePrice ? formatPrice(editDialog.row.salePrice) : 'None'}`
                   }
                   InputProps={{
@@ -1396,7 +1399,7 @@ const ProductsManagePage = () => {
         <DialogContent>
           {bulkSaleDialog.mode === 'clear' ? (
             <DialogContentText>
-              This removes the sale price, schedule, and label from all selected products while keeping their base price unchanged.
+              This removes the sale price, schedule, and label from all selected products while keeping their base MRP unchanged.
             </DialogContentText>
           ) : (
             <Stack spacing={2} sx={{ mt: 1 }}>
@@ -1601,4 +1604,3 @@ const ProductsManagePage = () => {
 };
 
 export default ProductsManagePage;
-

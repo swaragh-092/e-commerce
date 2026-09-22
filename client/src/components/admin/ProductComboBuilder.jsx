@@ -319,17 +319,17 @@ const ProductComboBuilder = ({ productId, onSuggestedPrice, canEdit = true }) =>
         }
     };
 
-    // ── Sync suggested price ──────────────────────────────────────────────
+    // ── Sync suggested MRP ─────────────────────────────────────────────────
     const handleSyncPrice = async () => {
         try {
             const res = await productComboService.getSuggestedPrice(productId);
             const price = res?.data?.data?.suggestedPrice ?? res?.data?.suggestedPrice;
             if (price !== undefined && onSuggestedPrice) {
                 onSuggestedPrice(price);
-                notify(`Suggested price synced: ${symbol}${Number(price).toFixed(2)}`, 'success');
+                notify(`Suggested MRP synced: ${symbol}${Number(price).toFixed(2)}`, 'success');
             }
         } catch {
-            notify('Failed to calculate suggested price.', 'error');
+            notify('Failed to calculate suggested MRP.', 'error');
         }
     };
 
@@ -360,7 +360,7 @@ const ProductComboBuilder = ({ productId, onSuggestedPrice, canEdit = true }) =>
                                     onClick={handleSyncPrice}
                                     disabled={saving}
                                 >
-                                    Sync Price
+                                    Sync MRP
                                 </Button>
                             </Tooltip>
                         )}

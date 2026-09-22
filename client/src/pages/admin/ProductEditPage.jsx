@@ -72,7 +72,9 @@ import ProductComboBuilder from '../../components/admin/ProductComboBuilder';
 import TaxConfigSection from '../../components/admin/ProductTaxConfig';
 import VariantsPanel from '../../components/admin/ProductVariantsPanel';
 import ProductAssistantPanel from '../../components/admin/ProductAssistantPanel';
+import UnitSelector from '../../components/admin/UnitSelector';
 import { toDateTimeLocal } from '../../utils/dates';
+
 import { generateSlug } from '../../utils/strings';
 import { walkCategoryTree } from '../../utils/categories';
 
@@ -114,9 +116,9 @@ const validate = (formData) => {
   if (pricingEnabled || showPrice) {
     const rPrice = Number(formData.price);
     if (formData.price === '' || formData.price === null || formData.price === undefined) {
-      errs.price = 'Price is required.';
+      errs.price = 'MRP is required.';
     } else if (isNaN(rPrice) || rPrice <= 0) {
-      errs.price = 'Price must be a positive number.';
+      errs.price = 'MRP must be a positive number.';
     }
 
     if (formData.salePrice !== '' && formData.salePrice !== null) {
@@ -124,7 +126,7 @@ const validate = (formData) => {
       if (isNaN(sPrice) || sPrice <= 0) {
         errs.salePrice = 'Sale price must be a positive number.';
       } else if (!isNaN(rPrice) && rPrice > 0 && sPrice >= rPrice) {
-        errs.salePrice = 'Sale price must be less than the regular price.';
+        errs.salePrice = 'Sale price must be less than the MRP.';
       }
     }
 
@@ -205,6 +207,7 @@ const ProductEditPage = () => {
   const canUploadMedia = hasPermission(PERMISSIONS.MEDIA_UPLOAD);
   const pricingEnabled = useFeature('pricing');
   const showPrice = useFeature('showPrice');
+  const productAssistantEnabled = useFeature('productAssistant');
   const canSaveProduct = isNew ? canCreateProducts : canUpdateProducts;
 
   const [formData, setFormData] = useState({
@@ -546,11 +549,13 @@ const ProductEditPage = () => {
       <form onSubmit={handleSave} noValidate>
         <Grid container spacing={4}>
           <Grid item xs={12} md={8}>
-            <ProductAssistantPanel
-              initialInput={formData.name}
-              canUseAssistant={canSaveProduct}
-              onApplyResult={applyAssistantResult}
-            />
+            {productAssistantEnabled && (
+              <ProductAssistantPanel
+                initialInput={formData.name}
+                canUseAssistant={canSaveProduct}
+                onApplyResult={applyAssistantResult}
+              />
+            )}
 
             <Paper sx={{ p: 3, mb: 3 }}>
               <Typography variant="h6" gutterBottom>
@@ -633,7 +638,7 @@ const ProductEditPage = () => {
                   <Grid item xs={6}>
                     <TextField
                       fullWidth
-                      label="Price *"
+                      label="MRP *"
                       type="number"
                       InputProps={{ startAdornment: <InputAdornment position="start">{symbol}</InputAdornment> }}
                       inputProps={{ step: '0.01', min: 0 }}
@@ -653,7 +658,7 @@ const ProductEditPage = () => {
                       value={formData.salePrice}
                       onChange={(e) => setField('salePrice', e.target.value)}
                       error={Boolean(errors.salePrice)}
-                      helperText={errors.salePrice || 'Must be less than regular price'}
+                      helperText={errors.salePrice || 'Must be less than MRP'}
                     />
                   </Grid>
                   <Grid item xs={12}>
@@ -1174,16 +1179,13 @@ const ProductEditPage = () => {
                     ),
                   }}
                 />
-                <TextField
-                  fullWidth
-                  label="Unit"
-                  margin="normal"
-                  placeholder="e.g. kg, litre, piece, pack"
+                <UnitSelector
                   value={formData.unit}
-                  onChange={(e) => setField('unit', e.target.value)}
+                  onChange={(val) => setField('unit', val)}
                   error={Boolean(errors.unit)}
-                  helperText={errors.unit || 'Used in storefront pricing display'}
+                  helperText={errors.unit || 'Used in storefront pricing and quantity display'}
                 />
+
                 <TextField
                   fullWidth
                   label="Stock Quantity *"

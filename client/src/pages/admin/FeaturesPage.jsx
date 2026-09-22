@@ -244,6 +244,7 @@ const FeaturesPage = () => {
               { key: 'features.showAvailableCoupons', label: 'Show Available Coupons', desc: 'Display applicable coupon codes on the cart page.', defaultE: true, defaultC: false },
               { key: 'features.multiCurrency', label: 'Multi-Currency', desc: 'Support multiple display currencies (experimental).', defaultE: false, defaultC: false },
               { key: 'features.showPrice', label: 'Show Product Prices', desc: 'Control whether prices are displayed on the storefront.', defaultE: true, defaultC: false },
+              { key: 'features.productAssistant', label: 'AI Product Assistant', desc: 'Show the AI product creation assistant on product forms.', defaultE: true, defaultC: true },
             ].filter(item => {
               if (item.key === 'features.requirePurchaseForReview' && appMode === 'catalog') return false;
               return true;

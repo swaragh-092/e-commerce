@@ -836,7 +836,7 @@ const VariantsPanel = ({
             </Box>
 
             <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
-              Mark attributes like Color or Size as variant-forming, then generate one SKU row per combination. Price and stock are stored on the SKU row itself.
+              Mark attributes like Color or Size as variant-forming, then generate one SKU row per combination. MRP and stock are stored on the SKU row itself.
             </Typography>
 
             <Box sx={{ display: 'flex', gap: 0.75, flexWrap: 'wrap', mb: 2 }}>
@@ -990,7 +990,7 @@ const VariantsPanel = ({
                           <TextField
                             fullWidth
                             size="small"
-                            label="Price"
+                            label="MRP"
                             type="number"
                             value={variant.price}
                             onChange={(e) => handleVariantChange(index, 'price', e.target.value)}

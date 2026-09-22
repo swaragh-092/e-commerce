@@ -16,6 +16,13 @@ const { encrypt, decrypt } = require('../../utils/crypto');
 const isMaskedSecretPlaceholder = (value) =>
   typeof value === 'string' && value.trim() === '********';
 
+const isSensitiveSettingKey = (key) => {
+  const normalizedKey = String(key || '').toLowerCase();
+  const isSecret = /pass|token|secret|api[_-]?key|privatekey/i.test(normalizedKey);
+  const isPublicIdentifier = /id|public|publishable/i.test(normalizedKey);
+  return isSecret && !isPublicIdentifier;
+};
+
 const PAYMENT_GATEWAY_ENABLED_KEYS = {
   razorpayEnabled: 'razorpay',
   cashfreeEnabled: 'cashfree',
@@ -29,8 +36,13 @@ const isTruthySetting = (value) => value === true || value === 'true';
 const hasAdvancedSettingsPermission = (user) =>
   getPermissionsForUser(user || {}).includes(PERMISSIONS.SETTINGS_ADVANCED);
 
+const isAdvancedSettingsGroup = (group) =>
+  ['advanced', 'ai', 'ai_credentials'].includes(group);
+
 const ensureAdvancedSettingsAllowed = (settingsArray, actingUser) => {
-  const touchesAdvanced = settingsArray.some(({ key, group }) => resolveSettingGroup(key, group) === 'advanced');
+  const touchesAdvanced = settingsArray.some(({ key, group }) =>
+    isAdvancedSettingsGroup(resolveSettingGroup(key, group))
+  );
   if (touchesAdvanced && !hasAdvancedSettingsPermission(actingUser)) {
     throw new AppError(
       'SETTINGS_ADVANCED_REQUIRED',
@@ -170,6 +182,8 @@ const getAll = async () => {
     messaging: { ...defaultSettings.messaging },
     gateway_credentials: { ...defaultSettings.gateway_credentials },
     messaging_credentials: { ...defaultSettings.messaging_credentials },
+    ai: { ...defaultSettings.ai },
+    ai_credentials: { ...defaultSettings.ai_credentials },
     advanced: { ...defaultSettings.advanced },
   };
 
@@ -188,8 +202,7 @@ const getAll = async () => {
       }
 
       // Mask sensitive values before sending to client
-      const isSensitive = /pass|token|secret|key_secret|private/i.test(s.key) && !/id|public|publishable/i.test(s.key);
-      if (isSensitive && parsedValue) {
+      if (isSensitiveSettingKey(s.key) && parsedValue) {
         parsedValue = '********';
       }
 
@@ -204,7 +217,7 @@ const getAll = async () => {
 
 const getByGroup = async (groupName, options = {}) => {
   const { maskSensitive = true } = options;
-  const validGroups = ['theme', 'componentStyles', 'sectionPresets', 'features', 'payments', 'sales', 'seo', 'general', 'shipping', 'tax', 'sku', 'logo', 'hero', 'auth', 'footer', 'announcement', 'nav', 'catalog', 'homepage', 'productPage', 'categoryPage', 'blogPage', 'brandsPage', 'cartPage', 'accountPage', 'admin', 'invoice', 'gateway_credentials', 'messaging_credentials', 'messaging', 'advanced'];
+  const validGroups = ['theme', 'componentStyles', 'sectionPresets', 'features', 'payments', 'sales', 'seo', 'general', 'shipping', 'tax', 'sku', 'logo', 'hero', 'auth', 'footer', 'announcement', 'nav', 'catalog', 'homepage', 'productPage', 'categoryPage', 'blogPage', 'brandsPage', 'cartPage', 'accountPage', 'admin', 'invoice', 'gateway_credentials', 'messaging_credentials', 'messaging', 'ai', 'ai_credentials', 'advanced'];
   if (!validGroups.includes(groupName)) {
     throw new AppError('VALIDATION_ERROR', 400, 'Invalid setting group');
   }
@@ -230,9 +243,8 @@ const getByGroup = async (groupName, options = {}) => {
     
     // Mask sensitive values for client-facing reads. Internal services can opt
     // out so encrypted credentials remain usable by SMTP/Twilio senders.
-    const isSensitive = /pass|token|secret|key_secret|private/i.test(s.key) && !/id|public|publishable/i.test(s.key);
-    if (maskSensitive && isSensitive && parsedValue) {
-        parsedValue = '********';
+    if (maskSensitive && isSensitiveSettingKey(s.key) && parsedValue) {
+      parsedValue = '********';
     }
 
     result[s.key] = parsedValue;
@@ -242,7 +254,7 @@ const getByGroup = async (groupName, options = {}) => {
 };
 
 const updateKey = async (key, value, group, actingUserId, actingUser = null) => {
-  const credentialGroups = ['gateway_credentials', 'messaging_credentials'];
+  const credentialGroups = ['gateway_credentials', 'messaging_credentials', 'ai_credentials'];
 
   // Tier 1 feature keys are mode-locked — reject any attempt to modify them via settings.
   // This is the server-side enforcement regardless of who calls the API.
@@ -307,8 +319,8 @@ const updateKey = async (key, value, group, actingUserId, actingUser = null) => 
 
 const bulkUpdate = async (settingsInput, actingUserId, actingUser = null, options = {}) => {
   const { transaction: outerTransaction = null } = options;
-  const validGroups = ['theme', 'componentStyles', 'sectionPresets', 'features', 'payments', 'sales', 'seo', 'general', 'shipping', 'tax', 'sku', 'logo', 'hero', 'auth', 'footer', 'announcement', 'nav', 'catalog', 'homepage', 'productPage', 'categoryPage', 'blogPage', 'brandsPage', 'cartPage', 'accountPage', 'admin', 'invoice', 'gateway_credentials', 'messaging_credentials', 'messaging', 'advanced'];
-  const credentialGroups = ['gateway_credentials', 'messaging_credentials'];
+  const validGroups = ['theme', 'componentStyles', 'sectionPresets', 'features', 'payments', 'sales', 'seo', 'general', 'shipping', 'tax', 'sku', 'logo', 'hero', 'auth', 'footer', 'announcement', 'nav', 'catalog', 'homepage', 'productPage', 'categoryPage', 'blogPage', 'brandsPage', 'cartPage', 'accountPage', 'admin', 'invoice', 'gateway_credentials', 'messaging_credentials', 'messaging', 'ai', 'ai_credentials', 'advanced'];
+  const credentialGroups = ['gateway_credentials', 'messaging_credentials', 'ai_credentials'];
 
     // Normalize input to an array of { key, value, group }
     const settingsArray = Array.isArray(settingsInput) 

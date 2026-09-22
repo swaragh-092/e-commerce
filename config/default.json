@@ -111,7 +111,8 @@
         "emailVerification": false,
         "requirePurchaseForReview": false,
         "showAvailableCoupons": true,
-        "apiBuilder": true
+        "apiBuilder": true,
+        "productAssistant": true
     },
     "payments": {
         "razorpayEnabled": true,
@@ -484,6 +485,17 @@
         "dashboard.storeHealthSize": "medium",
         "dashboard.lowStockSize": "full",
         "dashboard.widgetOrder": "salesChart,recentOrders,operationsSummary,storeHealth,inventoryWarnings,lowStock"
+    },
+    "ai": {
+        "baseUrl": "",
+        "model": "",
+        "chatCompletionsPath": "",
+        "timeoutMs": "",
+        "siteUrl": "",
+        "siteTitle": ""
+    },
+    "ai_credentials": {
+        "apiKey": ""
     },
     "advanced": {
         "customCSS": "",

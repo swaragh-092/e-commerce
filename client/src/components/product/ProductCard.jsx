@@ -365,8 +365,14 @@ const ProductCard = ({ product, fromCategory, compact = false }) => {
             ) : (
               <Typography variant={effectiveCompact ? 'body2' : 'subtitle1'} sx={{ fontWeight: productCardStyle.priceStyle === 'regular' ? 700 : 900, lineHeight: 1.2 }}>{formatPrice(displayPrice)}</Typography>
             )}
+            {product?.unit && (
+              <Typography variant="caption" color="text.secondary" sx={{ fontWeight: 500, lineHeight: 1 }}>
+                / {String(product.unit).trim()}
+              </Typography>
+            )}
           </Box>
         )}
+
         {!effectiveCompact && showSaleCountdown && saleTiming && (
           <Box sx={{ mt: 1 }}>
             <Typography variant="caption" color="text.secondary" sx={{ display: 'block' }}>

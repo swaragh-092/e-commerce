@@ -84,3 +84,10 @@ export const isEndingSoon = (value, thresholdHours = 24) => {
 
   return diffMs <= Number(thresholdHours || 24) * 60 * 60 * 1000;
 };
+
+export const formatPriceWithUnit = (formattedPrice, unit) => {
+  if (!formattedPrice) return '';
+  const cleanUnit = unit ? String(unit).trim() : '';
+  return cleanUnit ? `${formattedPrice} / ${cleanUnit}` : formattedPrice;
+};
+

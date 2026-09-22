@@ -181,31 +181,39 @@ const StorefrontOrderInvoicePage = () => {
           </Box>
           
           {/* Table Rows */}
-          {orderItems.map((item) => (
-            <Box key={item.id} sx={{ display: 'flex', p: 1.5, borderBottom: '1px solid #eee' }}>
-              <Box sx={{ flex: 3, pr: 2 }}>
-                <Typography variant="body2" fontWeight={600}>{item.snapshotName}</Typography>
-                {(item.snapshotSku || item.variant?.sku) && (
-                  <Typography variant="caption" sx={{ color: '#666', display: 'block' }}>SKU: {item.snapshotSku || item.variant?.sku}</Typography>
-                )}
-                {item.variantInfo && (
-                  <Typography variant="caption" sx={{ color: '#666' }}>
-                    {Object.entries(item.variantInfo)
-                      .filter(([key]) => ![
-                        'id', 'productId', 'variantId', 'orderId', 'sku', 'price', 
-                        'isActive', 'stockQty', 'createdAt', 'updatedAt', 'deletedAt', 
-                        'sortOrder', 'version', 'isDefault'
-                      ].includes(key))
-                      .map(([key, value]) => `${key}: ${value}`)
-                      .join(', ')}
-                  </Typography>
-                )}
+          {orderItems.map((item) => {
+            const itemUnit = item.variantInfo?.unit || item.product?.unit || '';
+            return (
+              <Box key={item.id} sx={{ display: 'flex', p: 1.5, borderBottom: '1px solid #eee' }}>
+                <Box sx={{ flex: 3, pr: 2 }}>
+                  <Typography variant="body2" fontWeight={600}>{item.snapshotName}</Typography>
+                  {(item.snapshotSku || item.variant?.sku) && (
+                    <Typography variant="caption" sx={{ color: '#666', display: 'block' }}>SKU: {item.snapshotSku || item.variant?.sku}</Typography>
+                  )}
+                  {item.variantInfo && (
+                    <Typography variant="caption" sx={{ color: '#666' }}>
+                      {Object.entries(item.variantInfo)
+                        .filter(([key]) => ![
+                          'id', 'productId', 'variantId', 'orderId', 'sku', 'price', 
+                          'isActive', 'stockQty', 'createdAt', 'updatedAt', 'deletedAt', 
+                          'sortOrder', 'version', 'isDefault', 'unit'
+                        ].includes(key))
+                        .map(([key, value]) => `${key}: ${value}`)
+                        .join(', ')}
+                    </Typography>
+                  )}
+                </Box>
+                <Typography variant="body2" sx={{ flex: 1, textAlign: 'center' }}>
+                  {item.quantity}{itemUnit ? ` ${itemUnit}` : ''}
+                </Typography>
+                <Typography variant="body2" sx={{ flex: 1, textAlign: 'right' }}>
+                  {formatPrice(item.snapshotPrice || 0)}{itemUnit ? ` / ${itemUnit}` : ''}
+                </Typography>
+                <Typography variant="body2" sx={{ flex: 1, textAlign: 'right' }} fontWeight={600}>{formatPrice(item.total || 0)}</Typography>
               </Box>
-              <Typography variant="body2" sx={{ flex: 1, textAlign: 'center' }}>{item.quantity}</Typography>
-              <Typography variant="body2" sx={{ flex: 1, textAlign: 'right' }}>{formatPrice(item.snapshotPrice || 0)}</Typography>
-              <Typography variant="body2" sx={{ flex: 1, textAlign: 'right' }} fontWeight={600}>{formatPrice(item.total || 0)}</Typography>
-            </Box>
-          ))}
+            );
+          })}
+
           {orderItems.length === 0 && (
              <Box sx={{ p: 2, textAlign: 'center' }}>
                <Typography variant="body2" color="text.secondary">No items found</Typography>

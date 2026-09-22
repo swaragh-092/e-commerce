@@ -3,18 +3,49 @@
 const AppError = require('../../utils/AppError');
 const logger = require('../../utils/logger');
 
-const getAiConfig = () => {
-  const enabled = `${process.env.AI_ENABLED || 'false'}`.toLowerCase() === 'true';
-  const baseUrl = (process.env.AI_BASE_URL || '').trim().replace(/\/$/, '');
-  const apiKey = (process.env.AI_API_KEY || '').trim();
-  const model = (process.env.AI_MODEL || '').trim();
-  const path = (process.env.AI_CHAT_COMPLETIONS_PATH || '/chat/completions').trim();
-  const timeoutMs = Number(process.env.AI_TIMEOUT_MS || 30000);
+const toBoolean = (value) => value === true || `${value}`.toLowerCase() === 'true';
+
+const buildAiConfig = ({ settings = {}, credentials = {}, env = process.env } = {}) => {
+  const databaseApiKey = String(credentials.apiKey || '').trim();
+  const databaseBaseUrl = String(settings.baseUrl || '').trim();
+  const databaseModel = String(settings.model || '').trim();
+  const hasDatabaseProviderConfig = Boolean(databaseApiKey || databaseBaseUrl || databaseModel);
+  const enabled = settings.enabled !== undefined && settings.enabled !== null && settings.enabled !== ''
+    ? toBoolean(settings.enabled)
+    : toBoolean(env.AI_ENABLED) || hasDatabaseProviderConfig;
+  const baseUrl = (databaseBaseUrl || env.AI_BASE_URL || '').trim().replace(/\/$/, '');
+  const apiKey = (databaseApiKey || env.AI_API_KEY || '').trim();
+  const model = (databaseModel || env.AI_MODEL || '').trim();
+  const path = (settings.chatCompletionsPath || env.AI_CHAT_COMPLETIONS_PATH || '/chat/completions').trim();
+  const timeoutMs = Number(settings.timeoutMs || env.AI_TIMEOUT_MS || 30000);
   // Some providers (e.g. OpenRouter free tier) require site metadata headers.
-  const siteUrl = (process.env.AI_SITE_URL || process.env.CLIENT_URL || 'http://localhost:3000').trim();
-  const siteTitle = (process.env.AI_SITE_TITLE || 'E-Commerce Admin').trim();
+  const siteUrl = (settings.siteUrl || env.AI_SITE_URL || env.CLIENT_URL || 'http://localhost:3000').trim();
+  const siteTitle = (settings.siteTitle || env.AI_SITE_TITLE || 'E-Commerce Admin').trim();
 
   return { enabled, baseUrl, apiKey, model, path, timeoutMs, siteUrl, siteTitle };
+};
+
+const getAiConfig = async () => {
+  let settings = {};
+  let credentials = {};
+
+  try {
+    // Keep the API key server-side. The internal read disables masking so the
+    // provider can use the decrypted value, but it is never returned to a client.
+    const SettingsService = require('../settings/settings.service');
+    [settings, credentials] = await Promise.all([
+      SettingsService.getByGroup('ai'),
+      SettingsService.getByGroup('ai_credentials', { maskSensitive: false }),
+    ]);
+  } catch (err) {
+    // Environment configuration remains a safe fallback if settings storage is
+    // unavailable during startup or a migration is still in progress.
+    logger.warn('Failed to load AI settings; falling back to environment configuration', {
+      errorMessage: err.message,
+    });
+  }
+
+  return buildAiConfig({ settings, credentials });
 };
 
 const getMessageContent = (content) => {
@@ -56,7 +87,7 @@ const parseJsonResponse = (content) => {
 };
 
 const completeJson = async ({ system, user, temperature = 0.3 }) => {
-  const config = getAiConfig();
+  const config = await getAiConfig();
 
   if (!config.enabled) {
     throw new AppError('AI_DISABLED', 503, 'AI assistant is disabled. Set AI_ENABLED=true to use this feature.');
@@ -157,4 +188,5 @@ const completeJson = async ({ system, user, temperature = 0.3 }) => {
 module.exports = {
   completeJson,
   getAiConfig,
+  buildAiConfig,
 };

@@ -87,7 +87,7 @@ export const SettingsProvider = ({ children }) => {
       setSettings({
         theme: { primaryColor: '#1976d2', mode: 'light', fontFamily: 'Roboto' },
         general: { storeName: DEFAULT_STORE_NAME },
-        features: { wishlist: true, reviews: true, coupons: true, guestCheckout: true, seo: true },
+        features: { wishlist: true, reviews: true, coupons: true, guestCheckout: true, seo: true, productAssistant: true },
         payments: {
           razorpayEnabled: true,
           stripeEnabled: false,
@@ -118,7 +118,7 @@ export const SettingsProvider = ({ children }) => {
       });
       // On error, keep mode as ecommerce so the app doesn't silently hide features
       setMode('ecommerce');
-      setFeatures({ wishlist: true, reviews: true, pricing: true, cart: true, checkout: true });
+      setFeatures({ wishlist: true, reviews: true, pricing: true, cart: true, checkout: true, productAssistant: true });
       // Fallback: treat all known Tier 1 keys as locked so UI remains correct offline
       setLockedKeys(['pricing','cart','checkout','orders','payments','shipping','enquiry']);
     } finally {

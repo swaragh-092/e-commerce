@@ -27,22 +27,58 @@ app.use((req, res, next) => {
   res.setHeader('X-Request-Id', req.id);
   next();
 });
-app.use(
-  cors({
-    origin: (origin, callback) => {
-      const allowedOrigins = (
-        process.env.CORS_URL ||
-        'http://localhost:5173,http://localhost:3000,http://localhost:3001,http://localhost,https://d5ozzq0sqe1pj.cloudfront.net'
-      ).split(',');
-      if (!origin || allowedOrigins.includes(origin)) {
-        callback(null, true);
-      } else {
-        callback(new Error('Not allowed by CORS'));
+const corsOptionsDelegate = (req, callback) => {
+  const origin = req.headers.origin;
+  const host = req.headers['x-forwarded-host'] || req.headers.host;
+
+  const rawOrigins = [
+    ...(process.env.CORS_URL ? process.env.CORS_URL.split(',') : []),
+    process.env.CLIENT_URL,
+    process.env.SERVER_URL,
+    'http://localhost:5173',
+    'http://localhost:3000',
+    'http://localhost:3001',
+    'http://localhost',
+    'https://d5ozzq0sqe1pj.cloudfront.net',
+  ];
+
+  const configuredOrigins = rawOrigins
+    .filter(Boolean)
+    .map((url) => url.trim().replace(/\/+$/, ''));
+
+  let isAllowed = false;
+
+  if (!origin) {
+    // Non-browser or same-origin requests without Origin header
+    isAllowed = true;
+  } else {
+    const cleanOrigin = origin.trim().replace(/\/+$/, '');
+
+    if (configuredOrigins.includes('*') || configuredOrigins.includes(cleanOrigin)) {
+      isAllowed = true;
+    } else if (host) {
+      // Allow if origin hostname matches the request host (e.g. https://soft.swaragh.net)
+      const cleanHost = host.split(':')[0].toLowerCase();
+      try {
+        const originUrl = new URL(cleanOrigin);
+        if (originUrl.hostname.toLowerCase() === cleanHost) {
+          isAllowed = true;
+        }
+      } catch (e) {
+        // Invalid origin format
       }
-    },
-    credentials: true,
-  })
-);
+    }
+  }
+
+  if (isAllowed) {
+    callback(null, { origin: true, credentials: true });
+  } else {
+    logger.warn(`CORS rejected origin: ${origin}`);
+    callback(null, { origin: false });
+  }
+};
+
+app.use(cors(corsOptionsDelegate));
 
 // Global rate limiting
 app.use('/api', globalLimiter);

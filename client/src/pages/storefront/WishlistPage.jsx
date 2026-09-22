@@ -177,6 +177,11 @@ const WishlistPage = () => {
                                         {pricingEnabled && (
                                             <Typography color="text.secondary">
                                                 {formatPrice(itemPrice)}
+                                                {product?.unit && (
+                                                    <Box component="span" sx={{ fontSize: '0.8rem', color: 'text.secondary', ml: 0.5 }}>
+                                                        / {String(product.unit).trim()}
+                                                    </Box>
+                                                )}
                                                 {product?.isSaleActive && regularPrice > 0 && itemPrice < regularPrice && (
                                                     <Box component="span" sx={{ ml: 1, textDecoration: 'line-through', color: 'text.disabled' }}>
                                                         {formatPrice(regularPrice)}
@@ -184,6 +189,7 @@ const WishlistPage = () => {
                                                 )}
                                             </Typography>
                                         )}
+
                                     </CardContent>
                                     <CardActions sx={{ justifyContent: 'space-between' }}>
                                         {cartEnabled && (

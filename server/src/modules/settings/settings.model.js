@@ -19,7 +19,7 @@ module.exports = (sequelize, DataTypes) => {
             type: DataTypes.STRING(50),
             allowNull: false,
             validate: {
-                isIn: [['theme', 'componentStyles', 'sectionPresets', 'features', 'payments', 'sales', 'seo', 'general', 'shipping', 'tax', 'sku', 'logo', 'hero', 'auth', 'footer', 'announcement', 'nav', 'catalog', 'homepage', 'productPage', 'categoryPage', 'brandsPage', 'cartPage', 'accountPage', 'blogPage', 'admin', 'invoice', 'gateway_credentials', 'messaging', 'messaging_credentials', 'advanced']],
+                isIn: [['theme', 'componentStyles', 'sectionPresets', 'features', 'payments', 'sales', 'seo', 'general', 'shipping', 'tax', 'sku', 'logo', 'hero', 'auth', 'footer', 'announcement', 'nav', 'catalog', 'homepage', 'productPage', 'categoryPage', 'brandsPage', 'cartPage', 'accountPage', 'blogPage', 'admin', 'invoice', 'gateway_credentials', 'messaging', 'messaging_credentials', 'ai', 'ai_credentials', 'advanced']],
             },
         },
         updatedBy: {

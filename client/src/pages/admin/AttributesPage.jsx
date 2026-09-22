@@ -20,6 +20,8 @@ import { PERMISSIONS } from '../../utils/permissions';
 import { getApiErrorMessage } from '../../utils/apiErrors';
 import { useNotification } from '../../context/NotificationContext';
 import AppErrorBoundary from '../../components/common/AppErrorBoundary';
+import UnitSelector from '../../components/admin/UnitSelector';
+
 
 const DISPLAY_TYPE_OPTIONS = [
   { value: 'auto', label: 'Auto detect' },
@@ -243,13 +245,17 @@ const ValuesPanel = ({ attribute, onRefresh, canManage }) => {
           onChange={(event) => setNewMeta((current) => ({ ...current, swatchColor: event.target.value }))}
           sx={{ width: 130 }}
         />
-        <TextField
-          size="small"
-          placeholder="Unit"
-          value={newMeta.unitLabel}
-          onChange={(event) => setNewMeta((current) => ({ ...current, unitLabel: event.target.value }))}
-          sx={{ width: 90 }}
-        />
+        <Box sx={{ width: 140 }}>
+          <UnitSelector
+            size="small"
+            margin="none"
+            placeholder="Unit"
+            label=""
+            value={newMeta.unitLabel}
+            onChange={(val) => setNewMeta((current) => ({ ...current, unitLabel: val }))}
+            helperText=""
+          />
+        </Box>
         <Button variant="outlined" size="small" onClick={handleAdd} disabled={!canManage || saving || !newValue.trim()}>
           Add
         </Button>
@@ -286,14 +292,17 @@ const ValuesPanel = ({ attribute, onRefresh, canManage }) => {
               />
             </Grid>
             <Grid item xs={12} sm={6}>
-              <TextField
+              <UnitSelector
                 label="Unit override"
-                placeholder="kg, GB, ml"
-                fullWidth
+                placeholder="Select or type unit"
+                size="medium"
+                margin="none"
                 value={editingValue?.unitLabel || ''}
-                onChange={(event) => setEditingValue((current) => ({ ...current, unitLabel: event.target.value }))}
+                onChange={(val) => setEditingValue((current) => ({ ...current, unitLabel: val }))}
+                helperText="Optional. Override default unit for this specific value."
               />
             </Grid>
+
             <Grid item xs={12}>
               <TextField
                 label="Image swatch URL"
@@ -575,15 +584,16 @@ const AttributesPage = () => {
               </FormControl>
             </Grid>
             <Grid item xs={12}>
-              <TextField
+              <UnitSelector
                 label="Default unit"
-                placeholder="kg, cm, GB, ml"
-                fullWidth
+                placeholder="Select or type unit (e.g. kg, cm, ml)"
                 size="small"
+                margin="none"
                 value={formData.unit}
-                onChange={(event) => setFormData((current) => ({ ...current, unit: event.target.value }))}
-                helperText="Optional. Used to format values like 500g, 1kg, 128GB, or 1L."
+                onChange={(val) => setFormData((current) => ({ ...current, unit: val }))}
+                helperText="Optional. Used to format values like 500g, 1kg, or 1L."
               />
+
             </Grid>
           </Grid>
         </DialogContent>
