@@ -48,4 +48,51 @@ describe('Shipping service helpers', () => {
 
         findOneSpy.mockRestore();
     });
+
+    it('inherits default provider when shipping rule has no provider explicitly assigned', async () => {
+        const mockDefaultProvider = {
+            id: 'mock-provider-id',
+            code: 'shiprocket',
+            name: 'Shiprocket',
+            enabled: true,
+            isDefault: true,
+            supportsCod: true,
+        };
+
+        const mockRule = {
+            id: 'mock-rule-id',
+            name: 'Standard Flat Rate',
+            rateType: 'flat',
+            rateConfig: { flatRate: 50 },
+            conditions: {},
+            codAllowed: true,
+            provider: null,
+            zone: null,
+        };
+
+        const { ShippingRule, Setting } = require('../../src/modules');
+
+        const providerSpy = vi.spyOn(ShippingProvider, 'findOne').mockResolvedValue(mockDefaultProvider);
+        const ruleSpy = vi.spyOn(ShippingRule, 'findAll').mockResolvedValue([mockRule]);
+        const settingSpy = vi.spyOn(Setting, 'findAll').mockResolvedValue([
+            { group: 'shipping', key: 'warehousePincode', value: '560001' },
+            { group: 'general', key: 'currency', value: 'INR' },
+        ]);
+
+        const result = await ShippingService.testCalculation({
+            pincode: '560002',
+            subtotal: 500,
+            weightGrams: 500,
+            paymentMethod: 'prepaid',
+        });
+
+        expect(result.decision.serviceable).toBe(true);
+        expect(result.decision.providerId).toBe('mock-provider-id');
+        expect(result.decision.providerCode).toBe('shiprocket');
+        expect(result.decision.ruleId).toBe('mock-rule-id');
+
+        providerSpy.mockRestore();
+        ruleSpy.mockRestore();
+        settingSpy.mockRestore();
+    });
 });

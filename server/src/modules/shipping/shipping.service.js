@@ -499,24 +499,24 @@ const calculateRuleDecision = async ({ subtotal, chargeableWeightGrams = 0, pack
         ],
     });
 
-    const matchedRule = rules.find((rule) => (
-        (!rule.zone || zoneMatches(rule.zone, addressSnapshot)) &&
-        conditionsMatch(rule.conditions || {}, { subtotal, chargeableWeightGrams, addressSnapshot, paymentMethod }) &&
-        providerSupportsDecision(rule.provider, { paymentMethod })
-    ));
+    const defaultProvider = await getDefaultProvider();
+
+    const matchedRule = rules.find((rule) => {
+        const effectiveProvider = rule.provider || defaultProvider;
+        if (effectiveProvider && effectiveProvider.maxWeightKg) {
+            const maxWeightGrams = Number(effectiveProvider.maxWeightKg) * 1000;
+            if (chargeableWeightGrams > maxWeightGrams * packageCount) {
+                return false;
+            }
+        }
+        return (!rule.zone || zoneMatches(rule.zone, addressSnapshot)) &&
+            conditionsMatch(rule.conditions || {}, { subtotal, chargeableWeightGrams, addressSnapshot, paymentMethod }) &&
+            providerSupportsDecision(effectiveProvider, { paymentMethod });
+    });
 
     if (!matchedRule) return null;
 
-    const defaultProvider = await getDefaultProvider();
     const provider = matchedRule.provider || defaultProvider;
-
-    // FIX 8: Reject if total weight exceeds provider's max
-    if (provider.maxWeightKg) {
-        const maxWeightGrams = Number(provider.maxWeightKg) * 1000;
-        if (chargeableWeightGrams > maxWeightGrams * packageCount) {
-            return null; // provider cannot handle this weight — fall through to next rule/manual
-        }
-    }
 
     const rateBreakdown = calculateRuleRate(matchedRule, {
         subtotal,
