@@ -70,6 +70,7 @@ const getShippingRules = () => api.get(`/${A}/shipping/rules`);
 const createShippingRule = (data) => api.post(`/${A}/shipping/rules`, data);
 const updateShippingRule = (id, data) => api.patch(`/${A}/shipping/rules/${id}`, data);
 const deleteShippingRule = (id) => api.delete(`/${A}/shipping/rules/${id}`);
+const testShippingCalculation = (data) => api.post(`/${A}/shipping/test`, data);
 
 // Settings bulk update
 const updateSettings = (settings) => api.put('/settings/bulk', settings);
@@ -151,7 +152,7 @@ export {
   getAllOrders, getOrderById, getOrderTracking, updateOrderStatus, createFulfillment, updateFulfillmentStatus,
   updateShipment, createReturnRequest, createReplacementRequest, updateReturnStatus, processRefund, confirmCodPayment, addOrderNote,
   getShippingProviders, updateShippingProvider, getShippingZones, createShippingZone, updateShippingZone, deleteShippingZone,
-  getShippingRules, createShippingRule, updateShippingRule, deleteShippingRule,
+  getShippingRules, createShippingRule, updateShippingRule, deleteShippingRule, testShippingCalculation,
   updateSettings,
   getEmailTemplates, getEmailTemplate, updateEmailTemplate, previewEmailTemplate, resetEmailTemplate, getEmailTemplateDefault, sendTestEmail, sendTestNotification,
   validateCoupon, getPublicCoupons, getEligibleCoupons,

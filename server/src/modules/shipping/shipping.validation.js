@@ -115,6 +115,14 @@ const ruleUpdateSchema = Joi.object({
     return value;
 });
 
+const shippingTestSchema = Joi.object({
+    pincode: Joi.string().required(),
+    subtotal: Joi.number().min(0).default(0),
+    paymentMethod: Joi.string().valid('razorpay', 'stripe', 'payu', 'cashfree', 'cod', 'prepaid', 'PREPAID', 'COD').default('razorpay'),
+    weightGrams: Joi.number().min(0).optional().default(500),
+    country: Joi.string().optional().default('India'),
+});
+
 module.exports = {
     calculateShippingSchema,
     providerUpdateSchema,
@@ -122,4 +130,5 @@ module.exports = {
     zoneUpdateSchema,
     ruleSchema,
     ruleUpdateSchema,
+    shippingTestSchema,
 };

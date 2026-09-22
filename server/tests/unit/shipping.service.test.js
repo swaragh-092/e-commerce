@@ -1,7 +1,8 @@
 import { createRequire } from 'node:module';
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 
 const require = createRequire(import.meta.url);
+const { ShippingProvider } = require('../../src/modules');
 const ShippingService = require('../../src/modules/shipping/shipping.service');
 
 describe('Shipping service helpers', () => {
@@ -22,5 +23,29 @@ describe('Shipping service helpers', () => {
             totalWeightGrams: 500,
             volumeCm3: 1000,
         });
+    });
+
+    it('exports provider resolution and testing helpers', () => {
+        expect(typeof ShippingService.getDefaultProvider).toBe('function');
+        expect(typeof ShippingService.getManualProvider).toBe('function');
+        expect(typeof ShippingService.testCalculation).toBe('function');
+    });
+
+    it('resolves active default provider from ShippingProvider model', async () => {
+        const mockProvider = {
+            id: 'mock-provider-id',
+            code: 'shiprocket',
+            name: 'Shiprocket',
+            enabled: true,
+            isDefault: true,
+        };
+
+        const findOneSpy = vi.spyOn(ShippingProvider, 'findOne').mockResolvedValue(mockProvider);
+
+        const provider = await ShippingService.getDefaultProvider();
+        expect(provider).toEqual(mockProvider);
+        expect(findOneSpy).toHaveBeenCalled();
+
+        findOneSpy.mockRestore();
     });
 });

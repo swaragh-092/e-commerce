@@ -30,6 +30,7 @@ import {
 import EditIcon from '@mui/icons-material/Edit';
 import DeleteIcon from '@mui/icons-material/Delete';
 import AddIcon from '@mui/icons-material/Add';
+import StarIcon from '@mui/icons-material/Star';
 import { useNotification } from '../../context/NotificationContext';
 import {
   getShippingProviders,
@@ -41,11 +42,11 @@ import {
   getShippingRules,
   createShippingRule,
   updateShippingRule,
-  deleteShippingRule
+  deleteShippingRule,
+  testShippingCalculation,
 } from '../../services/adminService';
 import { useCurrency } from '../../hooks/useSettings';
 import TabPanel from '../../components/common/TabPanel';
-import { calculateShipping } from '../../services/shippingService';
 
 const ShippingPage = () => {
   const { notify } = useNotification();
@@ -59,7 +60,7 @@ const ShippingPage = () => {
   const [loading, setLoading] = useState(true);
   
   // Test Panel State
-  const [testParams, setTestParams] = useState({ pincode: '', subtotal: 0, paymentMethod: 'PREPAID' });
+  const [testParams, setTestParams] = useState({ pincode: '', subtotal: 0, paymentMethod: 'prepaid' });
   const [testResult, setTestResult] = useState(null);
   const [testingEngine, setTestingEngine] = useState(false);
 
@@ -132,13 +133,27 @@ const ShippingPage = () => {
   };
 
   // --- Providers ---
-  const handleToggleProvider = async (id, currentEnabled) => {
+  const handleToggleProvider = async (provider) => {
+    if (provider.isDefault && provider.enabled) {
+      notify('Cannot disable the default shipping provider. Please set another provider as default first.', 'warning');
+      return;
+    }
     try {
-      await updateShippingProvider(id, { enabled: !currentEnabled });
+      await updateShippingProvider(provider.id, { enabled: !provider.enabled });
       notify('Provider status updated', 'success');
       fetchData();
     } catch (err) {
-      notify('Failed to update provider', 'error');
+      notify(err.response?.data?.message || 'Failed to update provider', 'error');
+    }
+  };
+
+  const handleSetDefaultProvider = async (provider) => {
+    try {
+      await updateShippingProvider(provider.id, { isDefault: true, enabled: true });
+      notify(`"${provider.name}" is now the default shipping provider`, 'success');
+      fetchData();
+    } catch (err) {
+      notify(err.response?.data?.message || 'Failed to set default provider', 'error');
     }
   };
 
@@ -167,7 +182,7 @@ const ShippingPage = () => {
       setProviderDialogOpen(false);
       fetchData();
     } catch (err) {
-      notify('Failed to update provider', 'error');
+      notify(err.response?.data?.message || 'Failed to update provider', 'error');
     }
   };
 
@@ -360,29 +375,24 @@ const ShippingPage = () => {
   };
 
   const handleRunTest = async () => {
+    if (!testParams.pincode) {
+      notify('Please enter a delivery pincode to test', 'warning');
+      return;
+    }
     setTestingEngine(true);
     setTestResult(null);
     try {
       const payload = {
-        deliveryAddress: {
-          pincode: testParams.pincode,
-          country: 'India'
-        },
-        items: [
-          {
-            price: Number(testParams.subtotal),
-            quantity: 1,
-            requiresShipping: true
-          }
-        ],
-        paymentMethod: testParams.paymentMethod
+        pincode: testParams.pincode,
+        subtotal: Number(testParams.subtotal) || 0,
+        paymentMethod: testParams.paymentMethod || 'prepaid'
       };
-      const res = await calculateShipping(payload);
+      const res = await testShippingCalculation(payload);
       setTestResult(res.data.data);
       notify('Test completed successfully', 'success');
     } catch (err) {
       setTestResult({ error: err.response?.data?.message || err.message });
-      notify('Failed to run test', 'error');
+      notify(err.response?.data?.message || 'Failed to run test', 'error');
     } finally {
       setTestingEngine(false);
     }
@@ -431,12 +441,32 @@ const ShippingPage = () => {
                     <TableRow key={p.id}>
                       <TableCell><Chip size="small" label={p.code} /></TableCell>
                       <TableCell sx={{ fontWeight: 600 }}>{p.name}</TableCell>
-                      <TableCell>{p.isDefault ? <Chip size="small" color="primary" label="Default" /> : ''}</TableCell>
+                      <TableCell>
+                        {p.isDefault ? (
+                          <Chip 
+                            size="small" 
+                            color="primary" 
+                            label="Default" 
+                            icon={<StarIcon sx={{ '&&': { fontSize: '1rem' } }} />} 
+                          />
+                        ) : (
+                          <Button 
+                            size="small" 
+                            variant="outlined" 
+                            disabled={!p.enabled}
+                            onClick={() => handleSetDefaultProvider(p)}
+                            sx={{ textTransform: 'none', py: 0.25, px: 1, fontSize: '0.75rem' }}
+                          >
+                            Set Default
+                          </Button>
+                        )}
+                      </TableCell>
                       <TableCell>{p.supportsCod ? 'Yes' : 'No'}</TableCell>
                       <TableCell>
                         <Switch 
                           checked={p.enabled} 
-                          onChange={() => handleToggleProvider(p.id, p.enabled)} 
+                          disabled={p.isDefault}
+                          onChange={() => handleToggleProvider(p)} 
                         />
                       </TableCell>
                       <TableCell align="right">
@@ -566,8 +596,8 @@ const ShippingPage = () => {
                     <TextField label="Pincode" size="small" fullWidth value={testParams.pincode} onChange={e => setTestParams({...testParams, pincode: e.target.value})} />
                     <TextField label="Cart Subtotal" type="number" size="small" fullWidth value={testParams.subtotal} onChange={e => setTestParams({...testParams, subtotal: e.target.value})} />
                     <TextField select label="Payment Method" size="small" fullWidth value={testParams.paymentMethod} onChange={e => setTestParams({...testParams, paymentMethod: e.target.value})}>
-                      <MenuItem value="PREPAID">Prepaid</MenuItem>
-                      <MenuItem value="COD">Cash on Delivery</MenuItem>
+                      <MenuItem value="prepaid">Prepaid (Online)</MenuItem>
+                      <MenuItem value="cod">Cash on Delivery (COD)</MenuItem>
                     </TextField>
                     <Button variant="contained" onClick={handleRunTest} disabled={testingEngine}>
                       {testingEngine ? 'Calculating...' : 'Run Test'}
@@ -606,8 +636,14 @@ const ShippingPage = () => {
               onChange={(e) => setEditingProvider({...editingProvider, name: e.target.value})} 
             />
             <FormControlLabel 
-              control={<Switch checked={editingProvider?.isDefault || false} onChange={(e) => setEditingProvider({...editingProvider, isDefault: e.target.checked})} />} 
-              label="Is Default Provider" 
+              control={
+                <Switch 
+                  checked={editingProvider?.isDefault || false} 
+                  disabled={editingProvider?.isDefault}
+                  onChange={(e) => setEditingProvider({...editingProvider, isDefault: e.target.checked})} 
+                />
+              } 
+              label={editingProvider?.isDefault ? "Default Provider (Active Default)" : "Set as Default Provider"} 
             />
             <FormControlLabel 
               control={<Switch checked={editingProvider?.supportsCod || false} onChange={(e) => setEditingProvider({...editingProvider, supportsCod: e.target.checked})} />} 

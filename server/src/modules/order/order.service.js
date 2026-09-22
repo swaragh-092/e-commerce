@@ -1908,6 +1908,23 @@ const createFulfillment = async (orderId, payload, actingUserId, auditContext = 
         if (providerId) {
             provider = await ShippingProvider.findByPk(providerId, { transaction: t });
         }
+        if (!provider && order?.shippingSnapshot?.provider) {
+            provider = await ShippingProvider.findOne({
+                where: {
+                    [Op.or]: [
+                        { id: order.shippingSnapshot.provider },
+                        { code: order.shippingSnapshot.provider },
+                    ],
+                },
+                transaction: t,
+            });
+        }
+        if (!provider) {
+            provider = await ShippingProvider.findOne({
+                where: { isDefault: true, enabled: true },
+                transaction: t,
+            });
+        }
         if (!provider) {
             provider = await ShippingProvider.findOne({ where: { code: 'manual' }, transaction: t });
         }
@@ -1956,11 +1973,12 @@ const createFulfillment = async (orderId, payload, actingUserId, auditContext = 
             order.user = user;
 
             const address = order.shippingAddressSnapshot || {};
+            const deliveryPincode = String(address.postalCode || address.pincode || '').trim();
             
             // 1. Mandatory Pre-Shipment Serviceability Revalidation
             if (typeof adapter.getServiceability === 'function') {
                 const serviceability = await adapter.getServiceability({
-                    pincode: address.pincode,
+                    pincode: deliveryPincode,
                     pickupPincode: provider.settings?.pickupPincode || null,
                     weightGrams: totalWeightGrams,
                     paymentMode: order.paymentMethod === 'cod' ? 'cod' : 'prepaid'
@@ -1991,7 +2009,14 @@ const createFulfillment = async (orderId, payload, actingUserId, auditContext = 
                         heightCm: dims.totalH,
                         volumetricWeightGrams: Math.ceil((dims.volumeCm3 / 5000) * 1000)
                     },
-                    address: order.shippingAddressSnapshot || {},
+                    address: {
+                        ...address,
+                        firstName: address.fullName?.split(' ')[0] || address.firstName || 'Customer',
+                        lastName: address.fullName?.split(' ').slice(1).join(' ') || address.lastName || '',
+                        line1: address.addressLine1 || address.line1 || '',
+                        line2: address.addressLine2 || address.line2 || '',
+                        postalCode: deliveryPincode,
+                    },
                     items: providerItems
                 });
 

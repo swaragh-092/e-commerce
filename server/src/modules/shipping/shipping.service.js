@@ -4,6 +4,7 @@ const crypto = require('crypto');
 const { v4: uuidv4 } = require('uuid');
 const { Op } = require('sequelize');
 const {
+    sequelize,
     Cart,
     CartItem,
     Product,
@@ -176,17 +177,36 @@ const getSettingMap = async (groups = ['shipping', 'general']) => {
     }, {});
 };
 
-const getManualProvider = async () => {
+const getManualProvider = async ({ transaction } = {}) => {
     const [provider] = await ShippingProvider.findOrCreate({
         where: { code: 'manual' },
         defaults: {
             name: 'Manual Shipping',
             type: 'manual',
             enabled: true,
-            isDefault: true,
+            isDefault: false,
             mode: 'manual',
         },
+        transaction,
     });
+    return provider;
+};
+
+const getDefaultProvider = async ({ transaction } = {}) => {
+    let provider = await ShippingProvider.findOne({
+        where: { isDefault: true, enabled: true },
+        transaction,
+    });
+    if (!provider) {
+        provider = await ShippingProvider.findOne({
+            where: { enabled: true },
+            order: [['isDefault', 'DESC'], ['createdAt', 'ASC']],
+            transaction,
+        });
+    }
+    if (!provider) {
+        provider = await getManualProvider({ transaction });
+    }
     return provider;
 };
 
@@ -328,6 +348,8 @@ const calculateManualDecision = async ({ subtotal, addressSnapshot, paymentMetho
             ? 'Delivery is not available for this pincode'
             : 'Delivery pincode is required';
 
+        const defaultProvider = await getDefaultProvider();
+
         return {
             serviceable,
             shippingCost: normalizeMoney(shippingCost),
@@ -335,14 +357,15 @@ const calculateManualDecision = async ({ subtotal, addressSnapshot, paymentMetho
             taxIncluded: false,
             taxAmount: 0,
             taxBreakdown: null,
-            codAvailable: serviceable,
+            codAvailable: serviceable && (defaultProvider.supportsCod !== false),
             estimatedMinDays: null,
             estimatedMaxDays: null,
             message: serviceable ? 'Delivery available' : unavailableMessage,
-        providerCode: 'manual',
-        providerName: 'Manual Shipping',
-        paymentMethod,
-    };
+            providerId: defaultProvider.id,
+            providerCode: defaultProvider.code,
+            providerName: defaultProvider.name,
+            paymentMethod,
+        };
 };
 
 const zoneMatches = (zone, addressSnapshot) => {
@@ -484,7 +507,8 @@ const calculateRuleDecision = async ({ subtotal, chargeableWeightGrams = 0, pack
 
     if (!matchedRule) return null;
 
-    const provider = matchedRule.provider || await getManualProvider();
+    const defaultProvider = await getDefaultProvider();
+    const provider = matchedRule.provider || defaultProvider;
 
     // FIX 8: Reject if total weight exceeds provider's max
     if (provider.maxWeightKg) {
@@ -592,7 +616,7 @@ const createQuote = async (userId, payload) => {
     });
     if (existing) return serializeQuote(existing);
 
-    const fallbackProvider = await getManualProvider();
+    const fallbackProvider = await getDefaultProvider();
     const decision = await calculateRuleDecision({
         subtotal:             context.subtotal,
         chargeableWeightGrams,            // FIX: volumetric-adjusted, slab-rounded
@@ -661,23 +685,86 @@ const listProviders = () => ShippingProvider.findAll({ order: [['isDefault', 'DE
 const cryptoUtils = require('../../utils/crypto');
 
 const updateProvider = async (id, payload) => {
-    const provider = await ShippingProvider.findByPk(id);
-    if (!provider) throw new AppError('NOT_FOUND', 404, 'Shipping provider not found');
-    
-    // Allowlist safe fields
-    const permitted = ['name', 'enabled', 'isDefault', 'supportsCod', 'settings', 'webhookSecret'];
-    const filtered = Object.keys(payload)
-        .filter(key => permitted.includes(key))
-        .reduce((obj, key) => {
-            obj[key] = payload[key];
-            return obj;
-        }, {});
+    return sequelize.transaction(async (t) => {
+        const provider = await ShippingProvider.findByPk(id, { transaction: t });
+        if (!provider) throw new AppError('NOT_FOUND', 404, 'Shipping provider not found');
+        
+        // Disallow un-defaulting directly without choosing another default
+        if (payload.isDefault === false && provider.isDefault) {
+            throw new AppError('BAD_REQUEST', 400, 'Cannot unset default status. Please set another provider as default instead.');
+        }
 
-    if (payload.credentials) {
-        filtered.credentialsEncrypted = JSON.stringify(cryptoUtils.encrypt(JSON.stringify(payload.credentials)));
-    }
+        // Disallow disabling the active default provider directly
+        if (payload.enabled === false && provider.isDefault && payload.isDefault !== true) {
+            throw new AppError('BAD_REQUEST', 400, 'Cannot disable the default shipping provider. Please set another provider as default first.');
+        }
 
-    return provider.update(filtered);
+        // Allowlist safe fields
+        const permitted = ['name', 'enabled', 'isDefault', 'supportsCod', 'settings', 'webhookSecret'];
+        const filtered = Object.keys(payload)
+            .filter(key => permitted.includes(key))
+            .reduce((obj, key) => {
+                obj[key] = payload[key];
+                return obj;
+            }, {});
+
+        if (payload.isDefault === true) {
+            filtered.enabled = true; // Default provider must always be enabled
+            await ShippingProvider.update(
+                { isDefault: false },
+                { where: { id: { [Op.ne]: id } }, transaction: t }
+            );
+        }
+
+        if (payload.credentials) {
+            filtered.credentialsEncrypted = JSON.stringify(cryptoUtils.encrypt(JSON.stringify(payload.credentials)));
+        }
+
+        return provider.update(filtered, { transaction: t });
+    });
+};
+
+const testCalculation = async ({ pincode, subtotal = 0, paymentMethod = 'razorpay', weightGrams = 500, country = 'India' }) => {
+    const addressSnapshot = {
+        postalCode: String(pincode || '').trim(),
+        country: country || 'India',
+    };
+    const rawMethod = String(paymentMethod || 'razorpay').toLowerCase();
+    const normalizedPaymentMethod = rawMethod === 'prepaid' ? 'razorpay' : rawMethod;
+    const settings = await getSettingMap(['shipping', 'general']);
+    const warehousePincode = String(settings['shipping.warehousePincode'] || '').trim();
+    const chargeableWeightGrams = Number(weightGrams || 500);
+    const zone = detectDeliveryZone(warehousePincode, addressSnapshot.postalCode);
+    const { packageCount } = splitIntoPackages(chargeableWeightGrams, 20000);
+
+    const defaultProvider = await getDefaultProvider();
+
+    const decision = await calculateRuleDecision({
+        subtotal: Number(subtotal || 0),
+        chargeableWeightGrams,
+        packageCount,
+        zone,
+        addressSnapshot,
+        paymentMethod: normalizedPaymentMethod,
+    }) || await calculateManualDecision({
+        subtotal: Number(subtotal || 0),
+        addressSnapshot,
+        paymentMethod: normalizedPaymentMethod,
+    });
+
+    return {
+        zone,
+        warehousePincode,
+        deliveryPincode: addressSnapshot.postalCode,
+        packageCount,
+        chargeableWeightGrams,
+        defaultProvider: {
+            id: defaultProvider.id,
+            code: defaultProvider.code,
+            name: defaultProvider.name,
+        },
+        decision,
+    };
 };
 
 const listZones = () => ShippingZone.findAll({ order: [['createdAt', 'DESC']] });
@@ -793,6 +880,9 @@ module.exports = {
     buildCheckoutContext,
     listProviders,
     updateProvider,
+    getDefaultProvider,
+    getManualProvider,
+    testCalculation,
     listZones,
     createZone,
     updateZone,

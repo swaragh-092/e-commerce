@@ -12,6 +12,7 @@ const {
     zoneUpdateSchema,
     ruleSchema,
     ruleUpdateSchema,
+    shippingTestSchema,
 } = require('./shipping.validation');
 const { idParamSchema } = require('../../utils/common.validation');
 
@@ -23,6 +24,7 @@ const manageShipping = [
 
 router.get('/shipping/providers', ...manageShipping, shippingController.listProviders);
 router.patch('/shipping/providers/:id', ...manageShipping, validate(idParamSchema, 'params'), validate(providerUpdateSchema), shippingController.updateProvider);
+router.post('/shipping/test', ...manageShipping, validate(shippingTestSchema), shippingController.testCalculation);
 
 
 router.get('/shipping/zones', ...manageShipping, shippingController.listZones);

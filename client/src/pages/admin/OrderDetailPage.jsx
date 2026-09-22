@@ -502,7 +502,7 @@ const hasFullRefundForReturnRequest = (order = {}, request = {}) => {
   return refundedAmount >= requestAmount;
 };
 
-const FulfillmentDialog = ({ open, onClose, orderItems, orderDate, onSave, loading, notify }) => {
+const FulfillmentDialog = ({ open, onClose, orderItems, orderDate, order, onSave, loading, notify }) => {
   const [trackingNumber, setTrackingNumber] = useState('');
   const [courier, setCourier] = useState('');
   const [expectedDeliveryDate, setExpectedDeliveryDate] = useState('');
@@ -510,7 +510,7 @@ const FulfillmentDialog = ({ open, onClose, orderItems, orderDate, onSave, loadi
   const [status, setStatus] = useState('pending');
   const [items, setItems] = useState({});
   const [providers, setProviders] = useState([]);
-  const [providerId, setProviderId] = useState('manual');
+  const [providerId, setProviderId] = useState('');
   const minExpectedDate = normalizeDateInputValue(orderDate);
 
   useEffect(() => {
@@ -529,16 +529,30 @@ const FulfillmentDialog = ({ open, onClose, orderItems, orderDate, onSave, loadi
       setExpectedDeliveryDate('');
       setNotes('');
       setStatus('created');
-      setProviderId('manual');
 
       getShippingProviders()
         .then(res => {
-            const active = res.data.data.filter(p => p.enabled);
+            const active = res.data?.data?.filter(p => p.enabled) || [];
             setProviders(active);
+            const quotedCode = order?.shippingSnapshot?.provider;
+            const matchedQuoted = active.find(p => p.code === quotedCode || p.id === quotedCode);
+            const defaultProv = active.find(p => p.isDefault);
+            if (matchedQuoted) {
+              setProviderId(matchedQuoted.id);
+            } else if (defaultProv) {
+              setProviderId(defaultProv.id);
+            } else if (active.length > 0) {
+              setProviderId(active[0].id);
+            } else {
+              setProviderId('manual');
+            }
         })
-        .catch(err => console.error(err));
+        .catch(err => {
+            console.error(err);
+            setProviderId('manual');
+        });
     }
-  }, [open, orderItems]);
+  }, [open, orderItems, order]);
 
   const handleQtyChange = (id, val, max) => {
     const qty = Math.min(max, Math.max(0, parseInt(val) || 0));
@@ -555,7 +569,8 @@ const FulfillmentDialog = ({ open, onClose, orderItems, orderDate, onSave, loadi
       .map(([orderItemId, quantity]) => ({ orderItemId, quantity }));
 
     if (shipmentItems.length === 0) return;
-    const finalProviderId = providerId === 'manual' ? null : providerId;
+    const selectedProvider = providers.find(p => p.id === providerId || p.code === providerId);
+    const finalProviderId = selectedProvider ? selectedProvider.id : (providerId === 'manual' ? null : providerId);
     onSave({
       trackingNumber,
       courier,
@@ -566,6 +581,8 @@ const FulfillmentDialog = ({ open, onClose, orderItems, orderDate, onSave, loadi
       items: shipmentItems,
     });
   };
+
+  const isManualProvider = providerId === 'manual' || providers.find(p => p.id === providerId)?.code === 'manual';
 
   return (
     <Dialog open={open} onClose={onClose} fullWidth maxWidth="sm">
@@ -580,12 +597,16 @@ const FulfillmentDialog = ({ open, onClose, orderItems, orderDate, onSave, loadi
             value={providerId}
             onChange={(e) => setProviderId(e.target.value)}
           >
-            <MenuItem value="manual">Manual / Own Delivery</MenuItem>
             {providers.map(p => (
-              <MenuItem key={p.id} value={p.id}>{p.name} ({p.code})</MenuItem>
+              <MenuItem key={p.id} value={p.id}>
+                {p.name} ({p.code}){p.isDefault ? ' — Default' : ''}
+              </MenuItem>
             ))}
+            {!providers.some(p => p.code === 'manual') && (
+              <MenuItem value="manual">Manual / Own Delivery</MenuItem>
+            )}
           </TextField>
-          {providerId === 'manual' && (
+          {isManualProvider && (
             <TextField
               label="Carrier / Courier"
               fullWidth
@@ -1778,6 +1799,7 @@ const OrderDetailPage = () => {
         onClose={() => setFulfillmentDialogOpen(false)}
         orderItems={orderItems}
         orderDate={order?.createdAt}
+        order={order}
         onSave={handleCreateFulfillment}
         loading={fulfillmentLoading}
         notify={notify}

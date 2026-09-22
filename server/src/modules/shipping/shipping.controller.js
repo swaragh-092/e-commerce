@@ -92,6 +92,15 @@ const deleteRule = async (req, res, next) => {
     }
 };
 
+const testCalculation = async (req, res, next) => {
+    try {
+        const result = await ShippingService.testCalculation(req.validated);
+        return success(res, result, 'Shipping calculation test completed');
+    } catch (err) {
+        next(err);
+    }
+};
+
 module.exports = {
     calculate,
     listProviders,
@@ -104,4 +113,5 @@ module.exports = {
     createRule,
     updateRule,
     deleteRule,
+    testCalculation,
 };

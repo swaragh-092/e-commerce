@@ -70,31 +70,52 @@ class ShiprocketProvider extends BaseShippingProvider {
     /* ------------------------------------------------------------------ */
 
     async getServiceability({ pincode, pickupPincode, weightGrams = 500, paymentMode = 'prepaid' }) {
-        const token = await this._getToken();
+        if (!this._credentials?.email || !this._credentials?.password) {
+            const isIndiaPincode = /^\d{6}$/.test(String(pincode || '').trim());
+            return {
+                serviceable: isIndiaPincode,
+                codAvailable: true,
+                reason: isIndiaPincode ? null : 'Invalid or unserviceable pincode',
+                rawResponse: { mock: true, pincode },
+            };
+        }
 
-        const codMode = paymentMode === 'cod' ? 1 : 0;
-        const weightKg = Math.max(0.1, weightGrams / 1000);
+        try {
+            const token = await this._getToken();
 
-        const { data } = await axios.get(`${SHIPROCKET_API_BASE}/courier/serviceability/`, {
-            headers: this._authHeader(token),
-            params: {
-                pickup_postcode: pickupPincode || this.settings.pickupPincode,
-                delivery_postcode: pincode,
-                weight: weightKg,
-                cod: codMode,
-            },
-        });
+            const codMode = paymentMode === 'cod' ? 1 : 0;
+            const weightKg = Math.max(0.1, weightGrams / 1000);
 
-        const available = data.data?.available_courier_companies || [];
-        const serviceable = available.length > 0;
-        const codAvailable = available.some(c => c.cod === 1);
+            const { data } = await axios.get(`${SHIPROCKET_API_BASE}/courier/serviceability/`, {
+                headers: this._authHeader(token),
+                params: {
+                    pickup_postcode: pickupPincode || this.settings.pickupPincode,
+                    delivery_postcode: pincode,
+                    weight: weightKg,
+                    cod: codMode,
+                },
+            });
 
-        return {
-            serviceable,
-            codAvailable,
-            reason: serviceable ? null : 'No courier available for this pincode',
-            rawResponse: data,
-        };
+            const available = data.data?.available_courier_companies || [];
+            const serviceable = available.length > 0;
+            const codAvailable = available.some(c => c.cod === 1);
+
+            return {
+                serviceable,
+                codAvailable,
+                reason: serviceable ? null : 'No courier available for this pincode',
+                rawResponse: data,
+            };
+        } catch (err) {
+            console.warn('[ShiprocketProvider] getServiceability API error, using local fallback:', err.message);
+            const isIndiaPincode = /^\d{6}$/.test(String(pincode || '').trim());
+            return {
+                serviceable: isIndiaPincode,
+                codAvailable: true,
+                reason: isIndiaPincode ? null : 'Invalid or unserviceable pincode',
+                rawResponse: { mock: true, pincode, error: err.message },
+            };
+        }
     }
 
     /* ------------------------------------------------------------------ */
@@ -224,26 +245,45 @@ class ShiprocketProvider extends BaseShippingProvider {
     /* Create Shipment                                                        */
     /* ------------------------------------------------------------------ */
 
-    async createShipment({ order, shipment, address, items }) {
+    async createShipment({ order, shipment, address = {}, items }) {
+        const fullName = address.fullName || `${address.firstName || ''} ${address.lastName || ''}`.trim() || 'Customer';
+        const nameParts = fullName.split(' ');
+        const firstName = address.firstName || nameParts[0] || 'Customer';
+        const lastName = address.lastName || nameParts.slice(1).join(' ') || '';
+        const line1 = address.addressLine1 || address.line1 || 'Address Line 1';
+        const line2 = address.addressLine2 || address.line2 || '';
+        const postalCode = String(address.postalCode || address.pincode || '').trim();
+
+        if (!this._credentials?.email || !this._credentials?.password) {
+            const ts = Date.now();
+            return {
+                awbCode: `SR${ts}`,
+                providerOrderId: `SR-ORD-${ts}`,
+                label: 'https://shiprocket.co/mock-label.pdf',
+                trackingUrl: `https://shiprocket.co/tracking/SR${ts}`,
+                rawResponse: { message: 'Mock Shiprocket shipment created (credentials not configured)', mock: true },
+            };
+        }
+
         const token = await this._getToken();
 
         const payload = {
             order_id: order.orderNumber,
             order_date: new Date(order.createdAt).toISOString().split('T')[0],
             pickup_location: this.settings.pickupLocationName || 'Primary',
-            billing_customer_name: address.firstName,
-            billing_last_name: address.lastName || '',
-            billing_address: address.line1,
-            billing_address_2: address.line2 || '',
-            billing_city: address.city,
-            billing_pincode: address.postalCode,
-            billing_state: address.state,
+            billing_customer_name: firstName,
+            billing_last_name: lastName,
+            billing_address: line1,
+            billing_address_2: line2,
+            billing_city: address.city || 'City',
+            billing_pincode: postalCode,
+            billing_state: address.state || 'State',
             billing_country: address.country || 'India',
             billing_email: order.user?.email || '',
-            billing_phone: address.phone,
+            billing_phone: address.phone || '9999999999',
             shipping_is_billing: 1,
             order_items: items.map(i => ({
-                name: i.snapshotName || i.name,
+                name: i.snapshotName || i.name || 'Product',
                 sku: i.snapshotSku || i.sku || 'SKU',
                 units: i.quantity,
                 selling_price: Number(i.unitPrice || 0),
