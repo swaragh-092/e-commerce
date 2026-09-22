@@ -12,6 +12,7 @@ import {
   CheckCircle as CheckCircleIcon, RemoveCircle as RemoveCircleIcon,
   DeleteSweep as DeleteSweepIcon, Download as DownloadIcon, EditNote as EditNoteIcon,
   Inventory as InventoryIcon, History as HistoryIcon,
+  LocalOffer as LocalOfferIcon,
 } from '@mui/icons-material';
 import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import { getProducts, deleteProduct, updateProduct, bulkUpdateSale, bulkDeleteProducts, bulkUpdateProducts, getStockHistory } from '../../services/productService';
@@ -479,6 +480,18 @@ const ProductsManagePage = () => {
     editSalePriceValue < 0 ||
     editSalePriceValue >= editPriceValue
   );
+  const hasValidEditDiscount = Boolean(
+    editDialog.open &&
+    editDialog.saleEnabled &&
+    Number.isFinite(editPriceValue) &&
+    editPriceValue > 0 &&
+    editSalePriceValue !== null &&
+    Number.isFinite(editSalePriceValue) &&
+    editSalePriceValue > 0 &&
+    editSalePriceValue < editPriceValue
+  );
+  const editDiscountAmount = hasValidEditDiscount ? editPriceValue - editSalePriceValue : 0;
+  const editDiscountPercent = hasValidEditDiscount ? Math.round(((editPriceValue - editSalePriceValue) / editPriceValue) * 100) : 0;
   const hasInvalidQuantity = cartEnabled && editDialog.open && !(editDialog.row?.variants?.length > 0) && (Number.isNaN(Number(editDialog.quantity)) || Number(editDialog.quantity) < 0);
   const hasInvalidSaleDates = Boolean(editDialog.open && editDialog.saleEnabled && editDialog.saleStartAt && editDialog.saleEndAt && new Date(editDialog.saleEndAt) <= new Date(editDialog.saleStartAt));
   const bulkSaleValue = Number(bulkSaleDialog.value);
@@ -1267,8 +1280,15 @@ const ProductsManagePage = () => {
                       ? 'Sale price is currently removed.'
                       : hasInvalidSalePrice
                         ? 'Sale price must be lower than the MRP.'
-                        : `Current sale price: ${editDialog.row?.salePrice ? formatPrice(editDialog.row.salePrice) : 'None'}`
+                        : hasValidEditDiscount
+                          ? `Discount: ${formatPrice(editDiscountAmount)} (${editDiscountPercent}% OFF)`
+                          : `Current sale price: ${editDialog.row?.salePrice ? formatPrice(editDialog.row.salePrice) : 'None'}`
                   }
+                  FormHelperTextProps={{
+                    sx: hasValidEditDiscount && !hasInvalidSalePrice && editDialog.saleEnabled
+                      ? { color: 'success.main', fontWeight: 600 }
+                      : {},
+                  }}
                   InputProps={{
                     startAdornment: <InputAdornment position="start">{formatPrice(0).replace(/0.00|0/g, '').trim() || '$'}</InputAdornment>,
                   }}
@@ -1276,6 +1296,34 @@ const ProductsManagePage = () => {
                   value={editDialog.salePrice}
                   onChange={(e) => setEditDialog((s) => ({ ...s, salePrice: e.target.value }))}
                 />
+                {hasValidEditDiscount && (
+                  <Box
+                    sx={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'space-between',
+                      px: 1.5,
+                      py: 1,
+                      borderRadius: 1.5,
+                      bgcolor: (theme) => theme.palette.mode === 'dark' ? 'rgba(46, 125, 50, 0.15)' : '#edf7ed',
+                      border: '1px solid',
+                      borderColor: (theme) => theme.palette.mode === 'dark' ? 'rgba(46, 125, 50, 0.35)' : '#b7dfb9',
+                    }}
+                  >
+                    <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.75 }}>
+                      <LocalOfferIcon sx={{ fontSize: 16, color: 'success.main' }} />
+                      <Typography variant="body2" sx={{ fontWeight: 600, color: 'success.dark', fontSize: '0.8125rem' }}>
+                        Discount: {formatPrice(editDiscountAmount)}
+                      </Typography>
+                    </Box>
+                    <Chip
+                      label={`${editDiscountPercent}% OFF`}
+                      size="small"
+                      color="success"
+                      sx={{ fontWeight: 700, height: 20, fontSize: '0.7rem' }}
+                    />
+                  </Box>
+                )}
                 <FormControl fullWidth size="small" disabled={!editDialog.saleEnabled}>
                   <InputLabel id="quick-edit-sale-label-select">Sale Label</InputLabel>
                   <Select

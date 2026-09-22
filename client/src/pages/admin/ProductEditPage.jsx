@@ -46,6 +46,7 @@ import {
   StarBorder as StarBorderIcon,
   ExpandMore as ExpandMoreIcon,
   Image as ImageIcon,
+  LocalOffer as LocalOfferIcon,
 } from '@mui/icons-material';
 import { getMediaUrl } from '../../utils/media';
 import useSKUGenerator from '../../hooks/useSKUGenerator';
@@ -342,6 +343,21 @@ const ProductEditPage = () => {
     if (errors[key]) setErrors((prev) => ({ ...prev, [key]: undefined }));
   };
 
+  const priceNum = Number(formData.price);
+  const salePriceNum = formData.salePrice !== '' && formData.salePrice !== null && formData.salePrice !== undefined
+    ? Number(formData.salePrice)
+    : null;
+  const hasValidDiscount =
+    Number.isFinite(priceNum) &&
+    priceNum > 0 &&
+    salePriceNum !== null &&
+    Number.isFinite(salePriceNum) &&
+    salePriceNum > 0 &&
+    salePriceNum < priceNum;
+
+  const discountAmount = hasValidDiscount ? priceNum - salePriceNum : 0;
+  const discountPercent = hasValidDiscount ? Math.round(((priceNum - salePriceNum) / priceNum) * 100) : 0;
+
   const handleVariantStockChange = useCallback((total, count, fallbackQuantity) => {
     setVariantStockTotal(total);
     setHasVariants(count > 0);
@@ -631,9 +647,21 @@ const ProductEditPage = () => {
 
             {(pricingEnabled || showPrice) && (
               <Paper sx={{ p: 3, mb: 3 }}>
-                <Typography variant="h6" gutterBottom>
-                  Pricing
-                </Typography>
+                <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 2 }}>
+                  <Typography variant="h6">
+                    Pricing
+                  </Typography>
+                  {hasValidDiscount && (
+                    <Chip
+                      icon={<LocalOfferIcon sx={{ fontSize: '15px !important' }} />}
+                      size="small"
+                      color="success"
+                      variant="outlined"
+                      label={`Discount: ${formatPrice(discountAmount)} (${discountPercent}% OFF)`}
+                      sx={{ fontWeight: 600 }}
+                    />
+                  )}
+                </Box>
                 <Grid container spacing={2}>
                   <Grid item xs={6}>
                     <TextField
@@ -658,9 +686,55 @@ const ProductEditPage = () => {
                       value={formData.salePrice}
                       onChange={(e) => setField('salePrice', e.target.value)}
                       error={Boolean(errors.salePrice)}
-                      helperText={errors.salePrice || 'Must be less than MRP'}
+                      helperText={
+                        errors.salePrice ||
+                        (hasValidDiscount
+                          ? `Discount: ${formatPrice(discountAmount)} (${discountPercent}% OFF)`
+                          : 'Must be less than MRP')
+                      }
+                      FormHelperTextProps={{
+                        sx: hasValidDiscount && !errors.salePrice
+                          ? { color: 'success.main', fontWeight: 600 }
+                          : {},
+                      }}
                     />
                   </Grid>
+
+                  {hasValidDiscount && (
+                    <Grid item xs={12}>
+                      <Box
+                        sx={{
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'space-between',
+                          flexWrap: 'wrap',
+                          gap: 1.5,
+                          p: 1.5,
+                          px: 2,
+                          borderRadius: 1.5,
+                          bgcolor: (theme) => theme.palette.mode === 'dark' ? 'rgba(46, 125, 50, 0.15)' : '#edf7ed',
+                          border: '1px solid',
+                          borderColor: (theme) => theme.palette.mode === 'dark' ? 'rgba(46, 125, 50, 0.35)' : '#b7dfb9',
+                        }}
+                      >
+                        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                          <LocalOfferIcon sx={{ fontSize: 18, color: 'success.main' }} />
+                          <Typography variant="body2" sx={{ fontWeight: 600, color: 'success.dark' }}>
+                            Discount Value: {formatPrice(discountAmount)}
+                          </Typography>
+                          <Chip
+                            label={`${discountPercent}% OFF`}
+                            size="small"
+                            color="success"
+                            sx={{ fontWeight: 700, height: 22, fontSize: '0.75rem' }}
+                          />
+                        </Box>
+                        <Typography variant="caption" sx={{ color: 'text.secondary', fontWeight: 500 }}>
+                          Customer saves {formatPrice(discountAmount)} ({discountPercent}% discount on MRP {formatPrice(priceNum)})
+                        </Typography>
+                      </Box>
+                    </Grid>
+                  )}
                   <Grid item xs={12}>
                     <FormControl fullWidth size="small" disabled={!formData.salePrice}>
                       <InputLabel id="sale-label-select">Sale Label</InputLabel>
