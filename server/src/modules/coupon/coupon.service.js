@@ -17,7 +17,8 @@ const AppError = require('../../utils/AppError');
 const AuditService = require('../audit/audit.service');
 const { getPagination } = require('../../utils/pagination');
 const { ACTIONS, ENTITIES } = require('../../config/constants');
-const { getEffectivePrice, getVariantUnitPrice, isSaleActive } = require('../product/product.pricing');
+const { getEffectivePrice, getVariantUnitPrice, isSaleActive, resolveSaleLabel } = require('../product/product.pricing');
+const { getSaleLabels } = require('../settings/saleLabel.service');
 
 const ensureArray = (value) => (Array.isArray(value) ? [...new Set(value.filter(Boolean))] : []);
 
@@ -423,28 +424,34 @@ const remove = async (id, actingUserId) => {
     });
 };
 
-const mapCartLine = (item) => {
+const mapCartLine = (item, labelPresets = []) => {
     const product = item.currentProduct || item.product;
     if (!product) return null;
 
-    const unitPrice = getVariantUnitPrice(product, item.variant);
+    const plainProduct = typeof product.toJSON === 'function' ? product.toJSON() : { ...product };
+    if (!plainProduct.saleLabelResolved && plainProduct.saleLabel) {
+        plainProduct.saleLabelResolved = resolveSaleLabel(plainProduct.saleLabel, labelPresets);
+    }
+
+    const unitPrice = getVariantUnitPrice(plainProduct, item.variant);
     const quantity = Number(item.quantity || 0);
 
     return {
-        productId: product.id,
-        productName: product.name,
-        brandId: product.brandId || product.brand?.id || null,
-        categoryIds: Array.isArray(product.categories) ? product.categories.map((category) => category.id) : [],
+        productId: plainProduct.id,
+        productName: plainProduct.name,
+        brandId: plainProduct.brandId || plainProduct.brand?.id || null,
+        categoryIds: Array.isArray(plainProduct.categories) ? plainProduct.categories.map((category) => category.id) : [],
         quantity,
         unitPrice,
         lineSubtotal: Number((unitPrice * quantity).toFixed(2)),
-        isSaleItem: product.isSaleActive !== undefined ? Boolean(product.isSaleActive) : isSaleActive(product),
+        isSaleItem: plainProduct.isSaleActive !== undefined ? Boolean(plainProduct.isSaleActive) : isSaleActive(plainProduct),
     };
 };
 
 const loadActiveCartLines = async (userId) => {
     if (!userId) return [];
 
+    const labelPresets = await getSaleLabels().catch(() => []);
     const cart = await Cart.findOne({
         where: { userId, status: 'active' },
         include: [{
@@ -465,13 +472,14 @@ const loadActiveCartLines = async (userId) => {
     });
 
     if (!cart?.items?.length) return [];
-    return cart.items.map(mapCartLine).filter(Boolean);
+    return cart.items.map((item) => mapCartLine(item, labelPresets)).filter(Boolean);
 };
 
 const buildValidationContext = async (userId, rawContext = {}) => {
     const legacyContext = typeof rawContext === 'number' ? { cartSubtotal: rawContext } : (rawContext || {});
+    const labelPresets = await getSaleLabels().catch(() => []);
     let cartItems = Array.isArray(legacyContext.cartItems)
-        ? legacyContext.cartItems.map(mapCartLine).filter(Boolean)
+        ? legacyContext.cartItems.map((item) => mapCartLine(item, labelPresets)).filter(Boolean)
         : [];
 
     if (!cartItems.length) {

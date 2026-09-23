@@ -8,6 +8,24 @@ const Joi = require('joi');
 
 const uuidSchema = Joi.string().uuid().required();
 
+const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+
+const uuidCsvSchema = Joi.string().custom((value, helpers) => {
+    if (!value || typeof value !== 'string') return helpers.error('any.invalid');
+    const parts = value.split(',').map(s => s.trim()).filter(Boolean);
+    if (parts.length === 0) return helpers.error('any.invalid');
+    for (const part of parts) {
+        if (!UUID_REGEX.test(part)) {
+            return helpers.error('string.guid', { value: part });
+        }
+    }
+    return value;
+}, 'UUID or CSV UUIDs').required();
+
+const uuidCsvParamSchema = Joi.object({
+    id: uuidCsvSchema,
+});
+
 const idParamSchema = Joi.object({
     id: uuidSchema,
 });
@@ -69,6 +87,8 @@ const slugParamSchema = Joi.object({
 
 module.exports = {
     uuidSchema,
+    uuidCsvSchema,
+    uuidCsvParamSchema,
     idParamSchema,
     stringIdParamSchema,
     attrIdParamSchema,

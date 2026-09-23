@@ -17,8 +17,9 @@ const generateSlug = async (text, Model = null, field = 'slug', options = {}) =>
         .replace(/[\u0300-\u036f]/g, '')
         .toLowerCase()
         .trim()
-        .replace(/\s+/g, '-')       // spaces → hyphens
+        .replace(/[_\s]+/g, '-')    // spaces and underscores → hyphens
         .replace(/[^\w-]+/g, '')    // remove non-word chars
+        .replace(/_/g, '-')         // ensure no underscores remain
         .replace(/--+/g, '-')       // collapse multiple hyphens
         .replace(/^-+/, '')         // trim leading hyphens
         .replace(/-+$/, '');        // trim trailing hyphens
@@ -29,7 +30,7 @@ const generateSlug = async (text, Model = null, field = 'slug', options = {}) =>
     let candidate = slug;
     let counter = 1;
     while (await Model.findOne({ 
-        where: { [field]: candidate }, 
+        where: { [field]: candidate, ...(options.where || {}) }, 
         transaction: options.transaction,
         paranoid: false // Check even deleted items to avoid collision if they are restored
     })) {

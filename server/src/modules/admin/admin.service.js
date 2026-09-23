@@ -85,10 +85,10 @@ const getStats = async () => {
     pendingReviewsCount,
     totalReviewsCount,
   ] = await Promise.all([
-    // Total revenue from confirmed/processing/ready/closed orders (excludes pending_payment & cancelled)
+    // Total revenue from confirmed/processing/ready/closed/on_hold orders (excludes pending_payment & cancelled)
     Order.findOne({
       attributes: [[fn('COALESCE', fn('SUM', col('"Order".total')), 0), 'totalRevenue']],
-      where: { status: { [Op.in]: ['confirmed', 'processing', 'ready_for_shipment', 'closed'] } },
+      where: { status: { [Op.in]: ['confirmed', 'processing', 'ready_for_shipment', 'closed', 'on_hold'] } },
       raw: true,
     }),
     Order.count(),
@@ -202,7 +202,7 @@ const getSalesChart = async ({ period = 'monthly', startDate, endDate }) => {
       [fn('COUNT', col('"Order".id')), 'orderCount'],
     ],
     where: {
-      status: { [Op.in]: ['confirmed', 'processing', 'ready_for_shipment', 'closed'] },
+      status: { [Op.in]: ['confirmed', 'processing', 'ready_for_shipment', 'closed', 'on_hold'] },
       createdAt: dateFilter,
     },
     group: [fn('DATE_TRUNC', trunc, col('"Order".created_at'))],
@@ -326,8 +326,11 @@ const buildRoleSlug = async (name, roleId = null, transaction = null) => {
   }
 };
 
-const createAccessRole = async ({ name, description, baseRole, permissionIds }, actingUserId) => {
+const createAccessRole = async ({ name, description, baseRole, permissionIds }, actingUser) => {
   return db.sequelize.transaction(async (transaction) => {
+    const actingUserId = typeof actingUser === 'object' && actingUser ? actingUser.id : actingUser;
+    const isSuperAdmin = actingUser?.role === ROLES.SUPER_ADMIN;
+
     const permissions = await Permission.findAll({ where: { id: permissionIds }, transaction });
     if (permissions.length !== permissionIds.length) {
       throw new AppError('VALIDATION_ERROR', 400, 'One or more permissions are invalid');
@@ -335,6 +338,17 @@ const createAccessRole = async ({ name, description, baseRole, permissionIds }, 
 
     if (permissions.some((permission) => RESERVED_SUPER_ADMIN_PERMISSIONS.includes(permission.key))) {
       throw new AppError('FORBIDDEN', 403, 'Reserved super admin permissions cannot be assigned to custom roles');
+    }
+
+    if (!isSuperAdmin && actingUser) {
+      if (baseRole === ROLES.SUPER_ADMIN) {
+        throw new AppError('FORBIDDEN', 403, 'Only super admins can create roles with super admin base role');
+      }
+      const userPerms = getPermissionsForUser(actingUser);
+      const unpossessed = permissions.filter((p) => !userPerms.includes(p.key));
+      if (unpossessed.length > 0) {
+        throw new AppError('FORBIDDEN', 403, 'You cannot grant permissions you do not possess');
+      }
     }
 
     // Slug generation inside the transaction so the SELECT + INSERT are serialised
@@ -382,6 +396,9 @@ const createAccessRole = async ({ name, description, baseRole, permissionIds }, 
 
 const updateAccessRole = async (roleId, payload, actingUser) => {
   return db.sequelize.transaction(async (transaction) => {
+    const actingUserId = typeof actingUser === 'object' && actingUser ? actingUser.id : actingUser;
+    const isSuperAdmin = actingUser?.role === ROLES.SUPER_ADMIN;
+
     const role = await Role.findByPk(roleId, { include: roleInclude, transaction });
     if (!role) {
       throw new AppError('NOT_FOUND', 404, 'Role not found');
@@ -395,14 +412,31 @@ const updateAccessRole = async (roleId, payload, actingUser) => {
       throw new AppError('FORBIDDEN', 403, 'You do not have permission to edit custom roles');
     }
 
+    let permissions = [];
     if (payload.permissionIds) {
-      const permissions = await Permission.findAll({ where: { id: payload.permissionIds }, transaction });
+      permissions = await Permission.findAll({ where: { id: payload.permissionIds }, transaction });
       if (permissions.length !== payload.permissionIds.length) {
         throw new AppError('VALIDATION_ERROR', 400, 'One or more permissions are invalid');
       }
       if (!role.isSystem && permissions.some((permission) => RESERVED_SUPER_ADMIN_PERMISSIONS.includes(permission.key))) {
         throw new AppError('FORBIDDEN', 403, 'Reserved super admin permissions cannot be assigned to custom roles');
       }
+    }
+
+    if (!isSuperAdmin && actingUser) {
+      if (payload.baseRole === ROLES.SUPER_ADMIN) {
+        throw new AppError('FORBIDDEN', 403, 'Only super admins can set super admin base role');
+      }
+      if (payload.permissionIds) {
+        const userPerms = getPermissionsForUser(actingUser);
+        const unpossessed = permissions.filter((p) => !userPerms.includes(p.key));
+        if (unpossessed.length > 0) {
+          throw new AppError('FORBIDDEN', 403, 'You cannot grant permissions you do not possess');
+        }
+      }
+    }
+
+    if (payload.permissionIds) {
       await role.setPermissions(payload.permissionIds, { transaction });
     }
 
@@ -431,7 +465,7 @@ const updateAccessRole = async (roleId, payload, actingUser) => {
 
     try {
       await AuditService.log({
-        userId: actingUser.id,
+        userId: actingUserId,
         action: ACTIONS.UPDATE,
         entity: 'Role',
         entityId: role.id,
@@ -446,6 +480,7 @@ const updateAccessRole = async (roleId, payload, actingUser) => {
 const listAccessUsers = async ({ page, limit, search, roleId, includeCustomers = false }) => {
   const { limit: pageSize, offset } = getPagination(page, limit);
   const where = {};
+  const andClauses = [];
   const include = [...userRoleInclude];
 
   if (roleId) {
@@ -456,15 +491,32 @@ const listAccessUsers = async ({ page, limit, search, roleId, includeCustomers =
   }
 
   if (search) {
-    where[Op.or] = [
-      { email: { [Op.iLike]: `%${search}%` } },
-      { firstName: { [Op.iLike]: `%${search}%` } },
-      { lastName: { [Op.iLike]: `%${search}%` } },
-    ];
+    andClauses.push({
+      [Op.or]: [
+        { email: { [Op.iLike]: `%${search}%` } },
+        { firstName: { [Op.iLike]: `%${search}%` } },
+        { lastName: { [Op.iLike]: `%${search}%` } },
+      ],
+    });
   }
 
   if (!includeCustomers) {
-    where.role = { [Op.ne]: ROLES.CUSTOMER };
+    andClauses.push({
+      [Op.or]: [
+        { role: { [Op.ne]: ROLES.CUSTOMER } },
+        literal(`EXISTS (
+          SELECT 1 FROM user_roles ur
+          JOIN roles r ON r.id = ur.role_id
+          WHERE ur.user_id = "User"."id"
+          AND r.slug != 'customer'
+          AND r.base_role != 'customer'
+        )`),
+      ],
+    });
+  }
+
+  if (andClauses.length > 0) {
+    where[Op.and] = andClauses;
   }
 
   const result = await User.findAndCountAll({
@@ -482,8 +534,11 @@ const listAccessUsers = async ({ page, limit, search, roleId, includeCustomers =
   };
 };
 
-const updateUserRole = async (userId, roleId, actingUserId) => {
+const updateUserRole = async (userId, roleId, actingUser) => {
   return db.sequelize.transaction(async (transaction) => {
+    const actingUserId = typeof actingUser === 'object' && actingUser ? actingUser.id : actingUser;
+    const isSuperAdmin = actingUser?.role === ROLES.SUPER_ADMIN;
+
     const user = await User.findByPk(userId, { include: userRoleInclude, transaction });
     if (!user) {
       throw new AppError('NOT_FOUND', 404, 'User not found');
@@ -496,6 +551,18 @@ const updateUserRole = async (userId, roleId, actingUserId) => {
     const role = await Role.findByPk(roleId, { include: roleInclude, transaction });
     if (!role || !role.isActive) {
       throw new AppError('NOT_FOUND', 404, 'Role not found');
+    }
+
+    if (!isSuperAdmin && actingUser) {
+      if (role.baseRole === ROLES.SUPER_ADMIN) {
+        throw new AppError('FORBIDDEN', 403, 'Only super admins can assign super admin roles');
+      }
+      const userPerms = getPermissionsForUser(actingUser);
+      const rolePermissions = Array.isArray(role.permissions) ? role.permissions : [];
+      const unpossessed = rolePermissions.filter((p) => !userPerms.includes(p.key));
+      if (unpossessed.length > 0) {
+        throw new AppError('FORBIDDEN', 403, 'You cannot assign a role with permissions you do not possess');
+      }
     }
 
     const previousRole = user.role;
@@ -563,7 +630,7 @@ const createStaffUser = async ({ firstName, lastName, email, password, roleId },
       password, // auto-hashed by User model's beforeSave hook
       role: role.baseRole,
       status: 'active',
-      isEmailVerified: true, // admin-created accounts are pre-verified
+      emailVerified: true, // admin-created accounts are pre-verified
     }, { transaction });
 
     await newUser.setRoles([role], { transaction });

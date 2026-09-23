@@ -28,7 +28,7 @@ const MAX_LIMIT = 200;
 
 const RESOURCE_FIELDS = {
   categories: ['id', 'name', 'slug', 'description', 'parentId', 'image', 'icon', 'sortOrder', 'metaTitle', 'metaDescription', 'createdAt', 'updatedAt'],
-  products: ['id', 'name', 'slug', 'description', 'shortDescription', 'sku', 'price', 'salePrice', 'saleStartAt', 'saleEndAt', 'saleLabel', 'quantity', 'weight', 'type', 'isFeatured', 'avgRating', 'reviewCount', 'brandId', 'metaTitle', 'metaDescription', 'createdAt', 'updatedAt'],
+  products: ['id', 'name', 'slug', 'description', 'shortDescription', 'sku', 'price', 'salePrice', 'saleStartAt', 'saleEndAt', 'saleLabel', 'quantity', 'weight', 'requiresShipping', 'type', 'isFeatured', 'avgRating', 'reviewCount', 'brandId', 'metaTitle', 'metaDescription', 'createdAt', 'updatedAt'],
   brands: ['id', 'name', 'slug', 'description', 'image', 'isActive', 'isPromoted', 'isFeatured', 'createdAt', 'updatedAt'],
   pages: ['id', 'title', 'slug', 'content', 'linkPosition', 'linkPlacement', 'metaTitle', 'metaDescription', 'bannerUrl', 'status', 'sortOrder', 'createdAt', 'updatedAt'],
   menus: ['id', 'name', 'slug', 'location', 'isActive', 'sortOrder', 'alignment', 'createdAt', 'updatedAt'],

@@ -63,7 +63,7 @@ const getAccessPermissions = async (req, res, next) => {
 
 const createAccessRole = async (req, res, next) => {
   try {
-    const role = await AdminService.createAccessRole(req.validated, req.user.id);
+    const role = await AdminService.createAccessRole(req.validated, req.user);
     return success(res, role, 'Role created successfully', 201);
   } catch (err) {
     next(err);
@@ -97,7 +97,7 @@ const getAccessUsers = async (req, res, next) => {
 
 const updateUserRole = async (req, res, next) => {
   try {
-    const user = await AdminService.updateUserRole(req.params.id, req.validated.roleId, req.user.id);
+    const user = await AdminService.updateUserRole(req.params.id, req.validated.roleId, req.user);
     return success(res, user, 'User role updated successfully');
   } catch (err) {
     next(err);

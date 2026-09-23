@@ -11,9 +11,10 @@ const {
     updateAttributeSchema,
     addValueSchema,
     updateValueSchema,
+    getAttributesQuerySchema,
 } = require('./attribute.validation');
 const { PERMISSIONS } = require('../../config/permissions');
-const { idParamSchema, attrIdValueIdParamSchema, paginationQuerySchema } = require('../../utils/common.validation');
+const { idParamSchema, attrIdValueIdParamSchema } = require('../../utils/common.validation');
 
 
 
@@ -21,7 +22,7 @@ const attributeRead = [authenticate, authorizePermissions(PERMISSIONS.ATTRIBUTES
 const attributeManage = [authenticate, authorizePermissions(PERMISSIONS.ATTRIBUTES_MANAGE)];
 
 // --- Attribute Template CRUD ---
-router.get('/', attributeRead, validate(paginationQuerySchema, 'query'), controller.getAllAttributes);
+router.get('/', attributeRead, validate(getAttributesQuerySchema, 'query'), controller.getAllAttributes);
 
 router.get('/:id', attributeRead, validate(idParamSchema, 'params'), controller.getAttributeById);
 

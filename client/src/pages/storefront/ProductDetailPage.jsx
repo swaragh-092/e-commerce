@@ -575,7 +575,15 @@ const ProductDetailPage = () => {
                                         })}
                                     />
                                 )}
-                                {showDiscountPercent && discountPercent > 0 && <Chip {...themedChipProps({ label: `${discountPercent}% OFF`, color: hasSale ? 'error' : 'warning', variant: "outlined" })} />}
+                                {showDiscountPercent && (hasSale ? discountPercent > 0 : isScheduledSale) && (
+                                    <Chip
+                                        {...themedChipProps({
+                                            label: hasSale ? `${discountPercent}% OFF` : 'Starts Soon',
+                                            color: hasSale ? 'error' : 'warning',
+                                            variant: "outlined",
+                                        })}
+                                    />
+                                )}
                                 {saleTiming && <Chip {...themedChipProps({ label: saleTiming, variant: "outlined" })} />}
                                 {countdownText && <Chip key={countdownNow} {...themedChipProps({ label: countdownText, color: hasSale ? 'error' : 'warning', variant: "filled" })} />}
                             </Box>

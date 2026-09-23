@@ -1,8 +1,14 @@
 'use strict';
 
-const { Category, Product, ProductCategory, sequelize } = require('../index');
+const { Category, Product, ProductCategory, ProductImage, ProductVariant, Media, Sequelize, sequelize } = require('../index');
+const { Op } = Sequelize;
 const { generateSlug } = require('../../utils/slugify');
 const AppError = require('../../utils/AppError');
+const SettingsService = require('../settings/settings.service');
+const { getSaleLabels } = require('../settings/saleLabel.service');
+const { serializeProductPricing } = require('../product/product.pricing');
+
+const getLabelPresets = () => getSaleLabels().catch(() => []);
 
 /**
  * Build a nested category tree from a flat list
@@ -52,6 +58,26 @@ exports.getCategoryAndDescendantIds = async (categoryId) => {
     return ids;
 };
 
+/**
+ * Trace the full ancestor chain from root to the specified category.
+ * Returns array of { id, name, slug } ordered from root to target category.
+ */
+exports.getCategoryAncestors = async (categoryId) => {
+    const all = await Category.findAll({ attributes: ['id', 'name', 'slug', 'parentId'] });
+    const catMap = new Map(all.map(c => [c.id, c]));
+    const chain = [];
+    let currentId = categoryId;
+    const visited = new Set();
+    while (currentId && catMap.has(currentId)) {
+        if (visited.has(currentId)) break;
+        visited.add(currentId);
+        const node = catMap.get(currentId);
+        chain.unshift({ id: node.id, name: node.name, slug: node.slug });
+        currentId = node.parentId;
+    }
+    return chain;
+};
+
 exports.getCategoryTree = async () => {
     const categories = await Category.findAll({
         order: [['sortOrder', 'ASC'], ['name', 'ASC']]
@@ -59,7 +85,42 @@ exports.getCategoryTree = async () => {
     return buildTree(categories);
 };
 
-exports.getCategoryWithProducts = async (slug, page = 1, limit = 20, sort = 'newest') => {
+exports.getCategoryWithProducts = async (slug, pageOrOptions = 1, limitArg = 20, sortArg = 'newest', minPriceArg, maxPriceArg) => {
+    let page = 1;
+    let limit = 20;
+    let sort = 'newest';
+    let minPrice;
+    let maxPrice;
+
+    let includeSubcategories = true;
+
+    if (typeof pageOrOptions === 'object' && pageOrOptions !== null) {
+        page = pageOrOptions.page ?? 1;
+        limit = pageOrOptions.limit ?? 20;
+        sort = pageOrOptions.sort ?? 'newest';
+        minPrice = pageOrOptions.minPrice;
+        maxPrice = pageOrOptions.maxPrice;
+        if (pageOrOptions.includeSubcategories !== undefined) {
+            const raw = pageOrOptions.includeSubcategories;
+            if (typeof raw === 'boolean') {
+                includeSubcategories = raw;
+            } else if (typeof raw === 'number') {
+                includeSubcategories = raw !== 0;
+            } else if (typeof raw === 'string') {
+                const s = raw.toLowerCase().trim();
+                includeSubcategories = !['false', '0', 'no'].includes(s);
+            } else {
+                includeSubcategories = Boolean(raw);
+            }
+        }
+    } else {
+        page = pageOrOptions ?? 1;
+        limit = limitArg ?? 20;
+        sort = sortArg ?? 'newest';
+        minPrice = minPriceArg;
+        maxPrice = maxPriceArg;
+    }
+
     const category = await Category.findOne({
         where: { slug },
         include: [{ model: Category, as: 'parent', attributes: ['id', 'name', 'slug'] }]
@@ -73,48 +134,126 @@ exports.getCategoryWithProducts = async (slug, page = 1, limit = 20, sort = 'new
         attributes: ['id', 'name', 'slug', 'image', 'sortOrder'],
     });
 
+    // Full ancestor chain for multi-level breadcrumbs
+    const breadcrumbs = await exports.getCategoryAncestors(category.id);
+
+    // Expand to category subtree (Anchor category standard) unless explicit includeSubcategories=false requested
+    const targetCategoryIds = includeSubcategories
+        ? await exports.getCategoryAndDescendantIds(category.id)
+        : [category.id];
+    const escapedCategoryIds = (targetCategoryIds.length > 0 ? targetCategoryIds : [category.id])
+        .map(id => sequelize.escape(id))
+        .join(',');
+    const descendantCondition = Sequelize.literal(
+        `"Product"."id" IN (SELECT "product_id" FROM "product_categories" WHERE "category_id" IN (${escapedCategoryIds}))`
+    );
+
+    const { getSqlEffectivePriceExpr } = require('../product/product.service');
+    const labelPresets = await getLabelPresets();
+    const { features } = await SettingsService.getFeatures();
+
+    const now = new Date();
+    const effectivePriceCol = getSqlEffectivePriceExpr(labelPresets, now, '"Product"');
+
     // Map sort param to Sequelize order
     const sortMap = {
         newest:     [['createdAt', 'DESC']],
-        price_asc:  [['price', 'ASC']],
-        price_desc: [['price', 'DESC']],
+        price_asc:  [[effectivePriceCol, 'ASC']],
+        price_desc: [[effectivePriceCol, 'DESC']],
         name_asc:   [['name', 'ASC']],
     };
     const productOrder = sortMap[sort] || sortMap.newest;
 
-    const offset = (page - 1) * limit;
+    const baseWhere = { status: 'published', isEnabled: true };
+
+    // Price range calculation for the category subtree
+    const priceRangeResult = await Product.findOne({
+        where: {
+            ...baseWhere,
+            [Op.and]: [descendantCondition],
+        },
+        attributes: [
+            [Sequelize.fn('MIN', effectivePriceCol), 'min'],
+            [Sequelize.fn('MAX', effectivePriceCol), 'max'],
+        ],
+        raw: true,
+    });
+
+    const priceRange = {
+        min: priceRangeResult?.min != null ? Number(priceRangeResult.min) : 0,
+        max: priceRangeResult?.max != null ? Number(priceRangeResult.max) : 0,
+    };
+
+    // Filter by effective price if minPrice or maxPrice provided
+    const productWhere = {
+        ...baseWhere,
+        [Op.and]: [descendantCondition],
+    };
+
+    const hasMin = minPrice !== undefined && minPrice !== null && minPrice !== '';
+    const hasMax = maxPrice !== undefined && maxPrice !== null && maxPrice !== '';
+
+    if (hasMin && hasMax) {
+        productWhere[Op.and].push(
+            Sequelize.where(effectivePriceCol, { [Op.between]: [Number(minPrice), Number(maxPrice)] })
+        );
+    } else if (hasMin) {
+        productWhere[Op.and].push(
+            Sequelize.where(effectivePriceCol, { [Op.gte]: Number(minPrice) })
+        );
+    } else if (hasMax) {
+        productWhere[Op.and].push(
+            Sequelize.where(effectivePriceCol, { [Op.lte]: Number(maxPrice) })
+        );
+    }
+
+    const offset = (parseInt(page, 10) - 1) * parseInt(limit, 10);
 
     const { count, rows: products } = await Product.findAndCountAll({
-        where: { status: 'published', isEnabled: true },
-        include: [{
-            model: Category,
-            as: 'categories',
-            where: { id: category.id },
-            through: { attributes: ['sortOrder'] }, 
-            required: true
-        }, {
-            model: require('../index').ProductImage,
-            as: 'images',
-            limit: 1 
-        }],
-        limit: parseInt(limit),
-        offset: parseInt(offset),
+        where: productWhere,
+        include: [
+            {
+                model: ProductImage,
+                as: 'images',
+                where: { variantId: null },
+                required: false,
+                include: [{ model: Media, as: 'media', required: false }],
+            },
+            {
+                model: ProductVariant,
+                as: 'variants',
+                required: false,
+                attributes: ['id', 'price', 'salePrice', 'stockQty', 'isActive'],
+            },
+        ],
+        limit: parseInt(limit, 10),
+        offset: parseInt(offset, 10),
         distinct: true,
         order: [...productOrder, ['id', 'ASC']],
     });
 
+    const serializedProducts = products.map((p) =>
+        serializeProductPricing(p, { adminView: false, features }, labelPresets)
+    );
+
+    const categoryData = category.toJSON ? category.toJSON() : { ...category };
+    categoryData.breadcrumbs = breadcrumbs;
+
     return {
-        category,
+        category: categoryData,
         subcategories,
-        products,
+        products: serializedProducts,
+        priceRange,
+        breadcrumbs,
         pagination: {
             totalItems: count,
-            totalPages: Math.ceil(count / limit),
-            currentPage: parseInt(page),
-            limit: parseInt(limit)
-        }
+            totalPages: Math.ceil(count / parseInt(limit, 10)),
+            currentPage: parseInt(page, 10),
+            limit: parseInt(limit, 10),
+        },
     };
 };
+
 
 /**
  * Check if a root category with the same name already exists.

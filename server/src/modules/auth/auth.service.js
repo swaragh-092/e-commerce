@@ -38,8 +38,8 @@ const isEmailVerificationRequired = async () => {
 const JWT_ISS = process.env.JWT_ISSUER || 'ecommerce-pro';
 const JWT_AUD = process.env.JWT_AUDIENCE || 'ecommerce-pro-client';
 
-const generateTokens = (user) => {
-  const payload = { id: user.id, role: user.role };
+const generateTokens = (user, sessionId = null) => {
+  const payload = { id: user.id, role: user.role, ...(sessionId ? { sid: sessionId } : {}) };
   const accessToken = jwt.sign(payload, process.env.JWT_ACCESS_SECRET, { expiresIn: process.env.JWT_ACCESS_EXPIRY || '15m', issuer: JWT_ISS, audience: JWT_AUD });
   const refreshToken = jwt.sign(payload, process.env.JWT_REFRESH_SECRET, { expiresIn: process.env.JWT_REFRESH_EXPIRY || '7d', issuer: JWT_ISS, audience: JWT_AUD });
   return { accessToken, refreshToken };
@@ -81,11 +81,13 @@ const register = async (payload) => {
       expiresAt: new Date(Date.now() + AUTH_TIME.EMAIL_VERIFICATION_TTL_MS)
     }, { transaction: t });
 
-    // Generate JWTs
-    const tokens = generateTokens(user);
+    // Generate JWTs with session ID
+    const sessionId = crypto.randomUUID();
+    const tokens = generateTokens(user, sessionId);
 
     // Save refresh token (hashed)
     await RefreshToken.create({
+      id: sessionId,
       userId: user.id,
       token: hashToken(tokens.refreshToken),
       expiresAt: getRefreshTokenExpiryDate(),
@@ -186,8 +188,9 @@ const login = async (email, password, ipAddress, rememberMe = false, userAgent, 
     }
   }
 
-  // Generate tokens
-  const tokens = generateTokens(user);
+  // Generate tokens with session ID
+  const sessionId = crypto.randomUUID();
+  const tokens = generateTokens(user, sessionId);
   const ttl = rememberMe ? AUTH_TIME.REMEMBER_ME_TTL_MS : AUTH_TIME.REFRESH_TOKEN_TTL_MS;
 
   // New device/IP detection (before creating new token)
@@ -203,6 +206,7 @@ const login = async (email, password, ipAddress, rememberMe = false, userAgent, 
 
   // Save refresh token (hashed)
   await RefreshToken.create({
+    id: sessionId,
     userId: user.id,
     token: hashToken(tokens.refreshToken),
     expiresAt: new Date(Date.now() + ttl),
@@ -299,10 +303,12 @@ const refresh = async (refreshTokenStr, ipAddress, userAgent) => {
           }
         }
 
-        const tokens = generateTokens(user);
+        const sessionId = crypto.randomUUID();
+        const tokens = generateTokens(user, sessionId);
 
         await tokenRecord.update({ revokedAt: new Date() }, { transaction: t });
         await RefreshToken.create({
+          id: sessionId,
           userId: user.id,
           token: hashToken(tokens.refreshToken),
           expiresAt: getRefreshTokenExpiryDate(),
@@ -516,8 +522,10 @@ const verifyTwoFactor = async (tempToken, totpCode, ipAddress) => {
     throw new AppError('UNAUTHORIZED', 401, 'Invalid 2FA code');
   }
 
-  const tokens = generateTokens(user);
+  const sessionId = crypto.randomUUID();
+  const tokens = generateTokens(user, sessionId);
   await RefreshToken.create({
+    id: sessionId,
     userId: user.id,
     token: hashToken(tokens.refreshToken),
     expiresAt: getRefreshTokenExpiryDate(),
@@ -578,8 +586,10 @@ const loginByPhone = async (phone, ipAddress) => {
   }
 
   return await sequelize.transaction(async (t) => {
-    const tokens = generateTokens(user);
+    const sessionId = crypto.randomUUID();
+    const tokens = generateTokens(user, sessionId);
     await RefreshToken.create({
+      id: sessionId,
       userId: user.id,
       token: hashToken(tokens.refreshToken),
       expiresAt: getRefreshTokenExpiryDate(),
@@ -611,4 +621,5 @@ module.exports = {
   verifyEmail,
   resendVerification,
   hashToken,
+  generateTokens,
 };

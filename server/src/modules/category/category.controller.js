@@ -14,8 +14,15 @@ exports.getTree = async (req, res, next) => {
 
 exports.getBySlug = async (req, res, next) => {
     try {
-        const { page = 1, limit = 20, sort = 'newest' } = req.query;
-        const result = await categoryService.getCategoryWithProducts(req.params.slug, page, limit, sort);
+        const { page = 1, limit = 20, sort = 'newest', minPrice, maxPrice, includeSubcategories } = req.query;
+        const result = await categoryService.getCategoryWithProducts(req.params.slug, {
+            page: parseInt(page, 10) || 1,
+            limit: parseInt(limit, 10) || 20,
+            sort,
+            minPrice,
+            maxPrice,
+            includeSubcategories,
+        });
         return success(res, result);
     } catch (err) {
         if (err.statusCode === 404) return error(res, err.message, 404, 'NOT_FOUND');

@@ -460,6 +460,7 @@ const CategoriesPage = () => {
     const { settings } = useSettings();
     const canManageCategories = hasPermission(PERMISSIONS.CATEGORIES_MANAGE);
     const canManageAttributes = hasPermission(PERMISSIONS.ATTRIBUTES_MANAGE);
+    const canManageCategoryAttributes = canManageCategories && canManageAttributes;
 
     const fetchCategories = async () => {
         try {
@@ -800,7 +801,7 @@ const CategoriesPage = () => {
                                 onNavigateNode={handleNavigateNode}
                                 onManageAttributes={handleOpenAttributes}
                                 canManageCategories={canManageCategories}
-                                canManageAttributes={canManageAttributes}
+                                canManageAttributes={canManageCategoryAttributes}
                             />
                         </Paper>
                         

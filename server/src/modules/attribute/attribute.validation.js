@@ -60,6 +60,18 @@ const cloneVariantsSchema = Joi.object({
         .messages({ 'any.required': 'Source product ID is required' }),
 });
 
+// --- Query schema ---
+const getAttributesQuerySchema = Joi.object({
+    page: Joi.number().integer().min(1).default(1),
+    limit: Joi.number().integer().min(1).max(1000).default(20),
+    search: Joi.string().max(100).allow('', null),
+    displayType: Joi.string().valid('all', ...displayTypes).allow('', null),
+    valueType: Joi.string().valid('all', ...valueTypes).allow('', null),
+    hasValues: Joi.string().valid('all', 'yes', 'no', 'true', 'false').allow('', null),
+    sortBy: Joi.string().valid('name', 'sortOrder', 'createdAt', 'slug').default('sortOrder'),
+    sortOrder: Joi.string().valid('ASC', 'DESC', 'asc', 'desc').default('ASC'),
+}).unknown(true);
+
 module.exports = {
     createAttributeSchema,
     updateAttributeSchema,
@@ -67,4 +79,6 @@ module.exports = {
     updateValueSchema,
     linkAttributeSchema,
     cloneVariantsSchema,
+    getAttributesQuerySchema,
 };
+

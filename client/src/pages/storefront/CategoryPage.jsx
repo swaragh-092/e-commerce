@@ -182,7 +182,13 @@ const CategoryPage = () => {
         setLoading(true);
         setNotFound(false);
 
-        getCategoryWithProducts(categorySlug, filters.page, filters.limit, filters.sort)
+        getCategoryWithProducts(categorySlug, {
+            page: filters.page,
+            limit: filters.limit,
+            sort: filters.sort,
+            minPrice: filters.minPrice,
+            maxPrice: filters.maxPrice,
+        })
             .then((res) => {
                 if (cancelled) return;
                 const data = res?.data;
@@ -224,10 +230,14 @@ const CategoryPage = () => {
     const { category, subcategories = [], products = [], pagination } = pageData || {};
     const pageTitle = category?.customHeading || category?.name || categoryFallbackTitle;
 
-    // Breadcrumb path: Home → (parent →) category
+    // Breadcrumb path: Home → (ancestors →) category
+    const ancestorCrumbs = Array.isArray(category?.breadcrumbs) && category.breadcrumbs.length > 0
+        ? category.breadcrumbs.slice(0, -1).map((b) => ({ label: b.name, to: `/category/${b.slug}` }))
+        : (category?.parent ? [{ label: category.parent.name, to: `/category/${category.parent.slug}` }] : []);
+
     const breadcrumbSegments = [
         { label: 'Home', to: '/' },
-        ...(category?.parent ? [{ label: category.parent.name, to: `/category/${category.parent.slug}` }] : []),
+        ...ancestorCrumbs,
         { label: category?.name || '…', to: null }, // current page
     ];
 

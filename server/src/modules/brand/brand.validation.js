@@ -20,6 +20,8 @@ const updateBrandSchema = Joi.object({
     isActive: Joi.boolean().optional(),
     isPromoted: Joi.boolean().optional(),
     isFeatured: Joi.boolean().optional(),
+}).min(1).messages({
+    'object.min': 'At least one field is required to update',
 });
 
 const queryBrandSchema = Joi.object({
@@ -36,10 +38,13 @@ const queryBrandSchema = Joi.object({
 
 const getBrandBySlugSchema = Joi.object({
     productLimit: Joi.number().integer().min(1).max(100).optional(),
+    productOffset: Joi.number().integer().min(0).optional(),
+    productSortBy: Joi.string().valid('name', 'price', 'createdAt', 'updatedAt').optional(),
+    productSortOrder: Joi.string().valid('ASC', 'DESC', 'asc', 'desc').optional(),
 });
 
 const slugParamSchema = Joi.object({
-    slug: Joi.string().max(255).pattern(/^[a-z0-9]+(?:-[a-z0-9]+)*$/).required(),
+    slug: Joi.string().max(255).pattern(/^[a-z0-9]+(?:[_-][a-z0-9]+)*$/).required(),
 });
 
 module.exports = {

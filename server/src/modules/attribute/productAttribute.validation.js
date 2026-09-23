@@ -35,7 +35,10 @@ const updateProductAttributeSchema = Joi.object({
     customValue: Joi.string().max(255),
     isVariantAttr: Joi.boolean(),
     sortOrder: Joi.number().integer().min(0),
-}).min(1).messages({ 'object.min': 'At least one field is required to update' });
+}).min(1).oxor('valueId', 'customValue').messages({
+    'object.min': 'At least one field is required to update',
+    'object.oxor': 'Cannot provide both valueId and customValue in the same update',
+});
 
 const generateVariantsSchema = Joi.object({
     defaultPrice: Joi.number().precision(2).min(0),

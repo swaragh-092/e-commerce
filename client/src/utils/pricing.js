@@ -17,7 +17,7 @@ export const getSavingsAmount = (product) => {
     return 0;
   }
 
-  return regularPrice - salePrice;
+  return Number((regularPrice - salePrice).toFixed(2));
 };
 
 export const formatSaleDateTime = (value) => {

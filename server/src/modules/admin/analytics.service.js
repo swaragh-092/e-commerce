@@ -4,7 +4,8 @@ const { Op, fn, col, literal } = require('sequelize');
 const db = require('../index');
 const { Order, OrderItem, Cart, CartItem, Product, Category, OrderRefund, User } = db;
 
-const VALID_STATUSES = ['confirmed', 'processing', 'ready_for_shipment', 'closed'];
+const VALID_STATUSES = ['confirmed', 'processing', 'ready_for_shipment', 'closed', 'on_hold'];
+const VALID_STATUSES_SQL = VALID_STATUSES.map((s) => `'${s}'`).join(',');
 
 /**
  * Get date range from params, supporting _dateRange override for comparison.
@@ -176,7 +177,7 @@ const getRevenueByCategory = async ({ period = '30d', limit = 10, _dateRange } =
     JOIN orders o ON o.id = oi.order_id
     LEFT JOIN product_categories pc ON pc.product_id = oi.product_id
     LEFT JOIN categories c ON c.id = pc.category_id
-    WHERE o.status IN ('confirmed','processing','ready_for_shipment','closed')
+    WHERE o.status IN (${VALID_STATUSES_SQL})
       AND o.created_at BETWEEN :start AND :end
       AND oi.product_id IS NOT NULL
     GROUP BY COALESCE(c.name, 'Uncategorized')
@@ -203,7 +204,7 @@ const getRepeatCustomers = async ({ period = '30d', _dateRange } = {}) => {
     FROM (
       SELECT user_id, COUNT(*) AS order_count
       FROM orders
-      WHERE status IN ('confirmed','processing','ready_for_shipment','closed')
+      WHERE status IN (${VALID_STATUSES_SQL})
         AND created_at BETWEEN :start AND :end
         AND user_id IS NOT NULL
       GROUP BY user_id
@@ -284,7 +285,7 @@ const getGeographicSales = async ({ period = '30d', limit = 20, _dateRange } = {
       COUNT(*)::int AS orders,
       COALESCE(SUM(total), 0) AS revenue
     FROM orders
-    WHERE status IN ('confirmed','processing','ready_for_shipment','closed')
+    WHERE status IN (${VALID_STATUSES_SQL})
       AND created_at BETWEEN :start AND :end
       AND shipping_address_snapshot IS NOT NULL
     GROUP BY state, city
@@ -343,7 +344,7 @@ const getCustomerLifetimeValue = async ({ period = '12m', limit = 10, _dateRange
       MAX(o.created_at) AS last_order
     FROM users u
     JOIN orders o ON o.user_id = u.id
-    WHERE o.status IN ('confirmed','processing','ready_for_shipment','closed')
+    WHERE o.status IN (${VALID_STATUSES_SQL})
       AND o.created_at BETWEEN :start AND :end
     GROUP BY u.id, u.first_name, u.last_name, u.email
     ORDER BY lifetime_value DESC
@@ -451,7 +452,7 @@ const getProductFunnel = async ({ period = '30d', limit = 10, _dateRange } = {})
       SELECT oi.product_id, SUM(oi.quantity)::int AS purchased
       FROM order_items oi
       JOIN orders o ON o.id = oi.order_id
-      WHERE o.status IN ('confirmed','processing','ready_for_shipment','closed')
+      WHERE o.status IN (${VALID_STATUSES_SQL})
         AND o.created_at BETWEEN :start AND :end
         AND oi.product_id IS NOT NULL
       GROUP BY oi.product_id
@@ -509,7 +510,7 @@ const getUtmAttribution = async ({ period = '30d', limit = 20, _dateRange } = {}
     JOIN orders o ON (o.user_id = pv.user_id OR o.checkout_session_id::text = pv.session_id)
     WHERE pv.utm_source IS NOT NULL
       AND pv.created_at BETWEEN :start AND :end
-      AND o.status IN ('confirmed','processing','ready_for_shipment','closed')
+      AND o.status IN (${VALID_STATUSES_SQL})
       AND o.created_at BETWEEN :start AND :end
     GROUP BY pv.utm_source, pv.utm_medium, pv.utm_campaign
     ORDER BY revenue DESC
@@ -538,17 +539,17 @@ const getCouponPerformance = async ({ period = '30d', limit = 10, _dateRange } =
     SELECT
       c.id AS coupon_id,
       c.code,
-      c.discount_type,
-      c.discount_value,
+      c.type AS discount_type,
+      c.value AS discount_value,
       COUNT(o.id)::int AS times_used,
       COALESCE(SUM(o.total), 0) AS revenue_generated,
       COALESCE(SUM(o.discount_amount), 0) AS total_discount_given,
       COALESCE(AVG(o.discount_amount), 0) AS avg_discount
     FROM coupons c
     JOIN orders o ON o.coupon_id = c.id
-    WHERE o.status IN ('confirmed','processing','ready_for_shipment','closed')
+    WHERE o.status IN (${VALID_STATUSES_SQL})
       AND o.created_at BETWEEN :start AND :end
-    GROUP BY c.id, c.code, c.discount_type, c.discount_value
+    GROUP BY c.id, c.code, c.type, c.value
     ORDER BY revenue_generated DESC
     LIMIT :limit
   `, {
@@ -591,7 +592,7 @@ const getCohortRetention = async ({ period = '12m' } = {}) => {
         DATE_TRUNC('month', o.created_at)::date AS order_month
       FROM cohorts c
       JOIN orders o ON o.user_id = c.user_id
-      WHERE o.status IN ('confirmed','processing','ready_for_shipment','closed')
+      WHERE o.status IN (${VALID_STATUSES_SQL})
     )
     SELECT
       cohort_month,
@@ -656,7 +657,7 @@ const getRfmSegmentation = async ({ period = '12m' } = {}) => {
         SUM(o.total)::numeric AS monetary,
         EXTRACT(EPOCH FROM (:end::timestamp - MAX(o.created_at))) / 86400 AS recency_days
       FROM orders o
-      WHERE o.status IN ('confirmed','processing','ready_for_shipment','closed')
+      WHERE o.status IN (${VALID_STATUSES_SQL})
         AND o.created_at BETWEEN :start AND :end
         AND o.user_id IS NOT NULL
       GROUP BY o.user_id
@@ -716,7 +717,7 @@ const getOrderHeatmap = async ({ period = '30d', _dateRange } = {}) => {
       EXTRACT(HOUR FROM created_at)::int AS hour,
       COUNT(*)::int AS orders
     FROM orders
-    WHERE status IN ('confirmed','processing','ready_for_shipment','closed')
+    WHERE status IN (${VALID_STATUSES_SQL})
       AND created_at BETWEEN :start AND :end
     GROUP BY day_of_week, hour
     ORDER BY day_of_week, hour
@@ -744,7 +745,7 @@ const getRevenueForecast = async ({ period = '90d' } = {}) => {
       created_at::date AS date,
       COALESCE(SUM(total), 0)::numeric AS revenue
     FROM orders
-    WHERE status IN ('confirmed','processing','ready_for_shipment','closed')
+    WHERE status IN (${VALID_STATUSES_SQL})
       AND created_at BETWEEN :start AND :end
     GROUP BY date
     ORDER BY date ASC
@@ -843,7 +844,7 @@ const getDrillDown = async ({ metric, filterKey, filterValue, period = '30d', pa
               ELSE 'Others'
             END AS seg
           FROM orders o2
-          WHERE o2.status IN ('confirmed','processing','ready_for_shipment','closed')
+          WHERE o2.status IN (${VALID_STATUSES_SQL})
             AND o2.created_at BETWEEN :start AND :end AND o2.user_id IS NOT NULL
           GROUP BY o2.user_id
         ) sub WHERE seg = :filterValue
@@ -858,7 +859,7 @@ const getDrillDown = async ({ metric, filterKey, filterValue, period = '30d', pa
     SELECT COUNT(DISTINCT o.id)::int AS count
     FROM orders o
     LEFT JOIN order_items oi ON oi.order_id = o.id
-    WHERE o.status IN ('confirmed','processing','ready_for_shipment','closed')
+    WHERE o.status IN (${VALID_STATUSES_SQL})
       AND o.created_at BETWEEN :start AND :end
       ${whereExtra}
   `, {
@@ -880,7 +881,7 @@ const getDrillDown = async ({ metric, filterKey, filterValue, period = '30d', pa
     FROM orders o
     LEFT JOIN users u ON u.id = o.user_id
     LEFT JOIN order_items oi ON oi.order_id = o.id
-    WHERE o.status IN ('confirmed','processing','ready_for_shipment','closed')
+    WHERE o.status IN (${VALID_STATUSES_SQL})
       AND o.created_at BETWEEN :start AND :end
       ${whereExtra}
     ORDER BY o.id, o.created_at DESC
@@ -928,4 +929,6 @@ module.exports = {
   getOrderHeatmap,
   getRevenueForecast,
   withComparison,
+  VALID_STATUSES,
+  VALID_STATUSES_SQL,
 };

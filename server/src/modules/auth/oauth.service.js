@@ -10,8 +10,9 @@ const { AUTH_TIME } = require('../../config/constants');
 
 const hashToken = (token) => crypto.createHash('sha256').update(token).digest('hex');
 
-const generateTokens = (user) => {
+const generateTokens = (user, sessionId = null) => {
   const payload = { id: user.id, role: user.role };
+  if (sessionId) payload.sid = sessionId;
   const iss = process.env.JWT_ISSUER || 'ecommerce-pro';
   const aud = process.env.JWT_AUDIENCE || 'ecommerce-pro-client';
   return {
@@ -80,8 +81,10 @@ const findOrCreateOAuthUser = async (profile, clientIp) => {
       return { requiresTwoFactor: true, tempToken };
     }
 
-    const tokens = generateTokens(user);
+    const sessionId = crypto.randomUUID();
+    const tokens = generateTokens(user, sessionId);
     await RefreshToken.create({
+      id: sessionId,
       userId: user.id,
       token: hashToken(tokens.refreshToken),
       expiresAt: new Date(Date.now() + AUTH_TIME.REFRESH_TOKEN_TTL_MS),

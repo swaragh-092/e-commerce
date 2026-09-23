@@ -178,9 +178,12 @@ const getSuggestedPrice = async (productId) => {
     });
 
     const total = items.reduce((sum, ci) => {
-        const unitPrice = ci.variantId
-            ? Number(ci.variant?.price ?? ci.item?.price ?? 0)
+        const itemPrice = ci.item?.salePrice && Number(ci.item.salePrice) < Number(ci.item.price)
+            ? Number(ci.item.salePrice)
             : Number(ci.item?.price ?? 0);
+        const unitPrice = ci.variantId
+            ? Number(ci.variant?.price ?? itemPrice)
+            : itemPrice;
         return sum + unitPrice * ci.quantity;
     }, 0);
 
