@@ -1,231 +1,192 @@
 'use strict';
 
+const crypto = require('crypto');
+const { Op } = require('sequelize');
 const { sequelize, Shipment, ShipmentEvent, ShippingProvider, Order, Fulfillment } = require('../index');
 const { resolveProvider } = require('./providers');
-const crypto = require('crypto');
+const { deriveOrderShippingStatus } = require('../../utils/orderWorkflow');
 const NotificationService = require('../notification/notification.service');
+const AppError = require('../../utils/AppError');
 
-exports.processWebhook = async (providerCode, payload, headers) => {
-    return sequelize.transaction(async (t) => {
+const STATUS_RANK = Object.freeze({
+    unknown: -1,
+    created: 0,
+    packed: 0,
+    shipped: 1,
+    in_transit: 1,
+    out_for_delivery: 2,
+    delivery_failed: 2,
+    delivered: 3,
+    rto_initiated: 3,
+    rto_in_transit: 4,
+    rto: 5,
+    cancelled: 5,
+});
+
+const TERMINAL_STATUSES = new Set(['delivered', 'rto', 'cancelled']);
+
+const asRawBuffer = (payload) => {
+    if (Buffer.isBuffer(payload)) return payload;
+    if (typeof payload === 'string') return Buffer.from(payload);
+    return Buffer.from(JSON.stringify(payload));
+};
+
+const parsePayload = (payload) => {
+    try {
+        const parsed = Buffer.isBuffer(payload) ? JSON.parse(payload.toString('utf8')) : payload;
+        if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) throw new Error('Payload must be a JSON object');
+        return parsed;
+    } catch (_) {
+        throw new AppError('VALIDATION_ERROR', 400, 'Invalid JSON payload in shipping webhook');
+    }
+};
+
+const isRegression = (current, incoming) => {
+    if (!incoming || incoming === 'unknown' || current === incoming) return false;
+    if (TERMINAL_STATUSES.has(current)) return true;
+    return STATUS_RANK[incoming] < STATUS_RANK[current];
+};
+
+const processWebhook = async (providerCode, payload, headers = {}) => {
+    const result = await sequelize.transaction(async (t) => {
         const provider = await ShippingProvider.findOne({ where: { code: providerCode }, transaction: t });
         if (!provider || !provider.enabled) {
-            console.warn(`Webhook received for disabled or missing provider: ${providerCode}`);
-            return;
+            throw new AppError('SHIPPING_PROVIDER_UNAVAILABLE', 503, `Shipping provider ${providerCode} is not enabled`);
         }
 
         const adapter = resolveProvider(provider);
-
-        // Validate payload type to prevent type confusion via parameter tampering.
-        // Accept only Buffer (raw body) or JSON object payloads; reject arrays/primitives.
-        if (!(Buffer.isBuffer(payload) || (payload !== null && typeof payload === 'object' && !Array.isArray(payload)))) {
-            console.warn(`Invalid webhook payload type for provider: ${providerCode}. Type: ${typeof payload}`);
-            throw new Error('Invalid webhook payload type');
+        if (typeof adapter.verifyWebhookSignature !== 'function') {
+            throw new AppError('WEBHOOK_AUTH_UNAVAILABLE', 503, `Webhook authentication is not configured for ${providerCode}`);
         }
-        
-        // Authenticate webhook payload
-        const signature = headers['x-provider-signature'] || headers['x-shiprocket-signature'] || headers['x-api-key'];
-        
-        if (provider.webhookSecret && typeof adapter.verifySignature !== 'function') {
-            console.error(`Security violation: Webhook secret configured but no verification implementation for provider: ${providerCode}`);
-            throw new Error(`Provider ${providerCode} requires signature verification but implementation is missing`);
+        if (!(await adapter.verifyWebhookSignature(payload, headers))) {
+            throw new AppError('FORBIDDEN', 403, 'Invalid shipping webhook authentication');
         }
 
-        if (typeof adapter.verifySignature === 'function') {
-            const isValid = await adapter.verifySignature(payload, signature, provider.webhookSecret);
-            if (!isValid) {
-                console.warn(`Invalid webhook signature for provider: ${providerCode}`);
-                return;
-            }
-        }
-        
-        // Parse webhook payload using the adapter
-        let parsedPayload;
-        try {
-            parsedPayload = Buffer.isBuffer(payload) ? JSON.parse(payload.toString('utf8')) : payload;
-            if (parsedPayload === null || typeof parsedPayload !== 'object' || Array.isArray(parsedPayload)) {
-                throw new Error('Parsed payload must be a JSON object');
-            }
-        } catch (err) {
-            console.error(`Malformed JSON payload received for provider: ${providerCode}. Length: ${payload?.length}, Type: ${typeof payload}`);
-            throw new Error('Invalid JSON payload in webhook');
-        }
+        const parsedPayload = parsePayload(payload);
         const normalizedEvent = await adapter.handleWebhook(parsedPayload);
-        
         if (!normalizedEvent.awbCode && !normalizedEvent.providerOrderId) {
-            console.warn(`Webhook received without AWB or provider order ID for provider: ${providerCode}`);
-            return;
+            return { accepted: true, ignored: true, reason: 'missing_shipment_identifier' };
         }
 
-        // Find the shipment
         const shipment = await Shipment.findOne({
-            where: normalizedEvent.awbCode ? { awb: normalizedEvent.awbCode } : { providerOrderId: normalizedEvent.providerOrderId },
+            where: {
+                providerId: provider.id,
+                [Op.or]: [
+                    normalizedEvent.awbCode ? { awb: normalizedEvent.awbCode } : null,
+                    normalizedEvent.providerOrderId ? { providerOrderId: normalizedEvent.providerOrderId } : null,
+                    normalizedEvent.providerOrderId ? { providerShipmentId: normalizedEvent.providerOrderId } : null,
+                    normalizedEvent.providerOrderId ? { providerRequestId: normalizedEvent.providerOrderId } : null,
+                ].filter(Boolean),
+            },
             include: [{ model: Fulfillment, as: 'fulfillment' }, { model: Order, as: 'order' }],
             transaction: t,
+            lock: t.LOCK?.UPDATE,
         });
 
-        if (!shipment) {
-            console.warn(`Shipment not found for searchKey=${normalizedEvent.awbCode ? 'awb' : 'providerOrderId'} value=${normalizedEvent.awbCode || normalizedEvent.providerOrderId} (awb: ${normalizedEvent.awbCode}, providerOrderId: ${normalizedEvent.providerOrderId})`);
-            return;
-        }
+        if (!shipment) return { accepted: true, ignored: true, reason: 'unknown_shipment' };
 
-        // Deduplicate events using a payload hash
-        let hashSource = payload;
-        if (Buffer.isBuffer(payload)) {
-            hashSource = payload;
-        } else if (typeof payload === 'string') {
-            hashSource = Buffer.from(payload);
-        } else {
-            hashSource = Buffer.from(JSON.stringify(payload));
-        }
-        const payloadHash = crypto.createHash('sha256').update(hashSource).digest('hex');
-        
-        let isDuplicate = false;
-        
-        // 1. Primary Dedupe Strategy
-        if (normalizedEvent.providerEventId) {
-            const existingPrimary = await ShipmentEvent.findOne({
-                where: {
-                    providerId: provider.id,
-                    providerEventId: normalizedEvent.providerEventId
-                },
-                transaction: t,
-            });
-            if (existingPrimary) isDuplicate = true;
-        }
-
-        // 2. Fallback Dedupe Strategy
-        if (!isDuplicate && !normalizedEvent.providerEventId) {
-            const fallbackWhere = {
+        const payloadHash = crypto.createHash('sha256').update(asRawBuffer(payload)).digest('hex');
+        const eventWhere = normalizedEvent.providerEventId
+            ? { providerId: provider.id, providerEventId: normalizedEvent.providerEventId }
+            : {
                 providerId: provider.id,
                 awb: normalizedEvent.awbCode || shipment.awb,
                 eventStatus: normalizedEvent.status,
+                eventTimestamp: normalizedEvent.timestamp,
                 payloadHash,
             };
-
-            // Only include timestamp in dedupe if it was provided in the webhook payload
-            if (normalizedEvent.timestamp) {
-                fallbackWhere.eventTimestamp = normalizedEvent.timestamp;
-            }
-
-            const existingFallback = await ShipmentEvent.findOne({
-                where: fallbackWhere,
-                transaction: t,
-            });
-            if (existingFallback) isDuplicate = true;
+        if (await ShipmentEvent.findOne({ where: eventWhere, transaction: t })) {
+            return { accepted: true, duplicate: true, shipmentId: shipment.id };
         }
 
-        if (isDuplicate) {
-            console.log('Duplicate webhook event skipped');
-            return;
-        }
-
-        // Create shipment event record
         try {
             await ShipmentEvent.create({
                 shipmentId: shipment.id,
                 providerId: provider.id,
                 providerEventId: normalizedEvent.providerEventId || null,
                 awb: normalizedEvent.awbCode || shipment.awb,
+                eventType: 'status_update',
                 eventStatus: normalizedEvent.status,
                 eventTimestamp: normalizedEvent.timestamp || new Date(),
                 payloadHash,
-                rawPayload: payload,
+                rawPayload: parsedPayload,
+                processedAt: new Date(),
             }, { transaction: t });
-        } catch (err) {
-            if (err.name === 'SequelizeUniqueConstraintError') {
-                console.log('Duplicate webhook event skipped (caught via unique constraint)');
-                return;
+        } catch (error) {
+            if (error.name === 'SequelizeUniqueConstraintError') {
+                return { accepted: true, duplicate: true, shipmentId: shipment.id };
             }
-            throw err;
+            throw error;
         }
 
-        // Guard: Prevent regression from terminal shipment statuses
-        const terminalStatuses = ['delivered', 'cancelled', 'returned', 'rto'];
-        if (terminalStatuses.includes(shipment.status) && !terminalStatuses.includes(normalizedEvent.status)) {
-            console.log(`[Webhook: ${providerCode}] Ignoring regression from terminal shipment status "${shipment.status}" to "${normalizedEvent.status}"`);
-            return;
+        if (isRegression(shipment.status || 'created', normalizedEvent.status)) {
+            return { accepted: true, ignored: true, reason: 'stale_status', shipmentId: shipment.id };
+        }
+        if (normalizedEvent.status === 'unknown') {
+            return { accepted: true, ignored: true, reason: 'unknown_status', shipmentId: shipment.id };
         }
 
-        // Update shipment status if it has changed
         if (shipment.status !== normalizedEvent.status) {
-            const newHistory = [...(shipment.statusHistory || []), {
-                status: normalizedEvent.status,
-                at: normalizedEvent.timestamp ? new Date(normalizedEvent.timestamp).toISOString() : new Date().toISOString(),
-                source: 'webhook',
-                location: normalizedEvent.location,
-            }];
-            
             await shipment.update({
                 status: normalizedEvent.status,
-                statusHistory: newHistory,
+                statusHistory: [
+                    ...(Array.isArray(shipment.statusHistory) ? shipment.statusHistory : []),
+                    {
+                        status: normalizedEvent.status,
+                        at: new Date(normalizedEvent.timestamp || Date.now()).toISOString(),
+                        source: 'webhook',
+                        location: normalizedEvent.location || null,
+                    },
+                ],
             }, { transaction: t });
+        }
 
-            // Propagate status back to Fulfillment
-            if (shipment.fulfillment) {
-                let fulfillmentStatus = shipment.fulfillment.status;
-                if (['delivered', 'returned', 'rto'].includes(normalizedEvent.status)) {
-                    fulfillmentStatus = normalizedEvent.status === 'rto' ? 'returned' : normalizedEvent.status;
-                } else if (['shipped', 'in_transit', 'out_for_delivery'].includes(normalizedEvent.status)) {
-                    fulfillmentStatus = 'shipped';
-                }
-                
-                if (fulfillmentStatus !== shipment.fulfillment.status) {
-                    await shipment.fulfillment.update({ status: fulfillmentStatus }, { transaction: t });
-                }
-            }
-
-            // Notify customer if it's out for delivery or delivered
-            if (['out_for_delivery', 'delivered'].includes(normalizedEvent.status) && shipment.orderId) {
-                try {
-                    const recipientUserId = shipment.order?.userId || (await Order.findByPk(shipment.orderId, { transaction: t }))?.userId;
-                    if (recipientUserId) {
-                        await NotificationService.sendDeliveryUpdate(recipientUserId, shipment.orderId, normalizedEvent.status);
-                    }
-                } catch (err) {
-                    console.error('Failed to send delivery update notification', err);
-                }
-            }
-
-            // Propagate terminal or progressive status to Order
-            if (shipment.orderId) {
-                const order = await Order.findByPk(shipment.orderId, {
-                    include: [{ model: Fulfillment, as: 'fulfillments' }],
-                    transaction: t,
-                });
-
-                if (order && !['cancelled', 'closed'].includes(order.status)) {
-                    if (['delivered', 'returned', 'rto'].includes(normalizedEvent.status)) {
-                        const allTerminal = (order.fulfillments || []).length > 0 && (order.fulfillments || []).every(f => 
-                            ['delivered', 'returned', 'rto'].includes(f.status)
-                        );
-
-                        if (allTerminal) {
-                            const finalShippingStatus = (order.fulfillments || []).every(f => f.status === 'delivered') ? 'delivered' : 'rto';
-                            await order.update({ 
-                                orderShippingStatus: finalShippingStatus, 
-                                shipmentStatus: finalShippingStatus,
-                            }, { transaction: t });
-                        } else {
-                            await order.update({ 
-                                orderShippingStatus: 'partially_delivered',
-                                shipmentStatus: 'partially_delivered',
-                            }, { transaction: t });
-                        }
-                    } else if (['shipped', 'in_transit'].includes(normalizedEvent.status)) {
-                        if (order.orderShippingStatus === 'not_shipped' || !order.orderShippingStatus) {
-                            await order.update({
-                                orderShippingStatus: 'shipped',
-                                shipmentStatus: 'shipped',
-                            }, { transaction: t });
-                        }
-                    } else if (normalizedEvent.status === 'out_for_delivery') {
-                        await order.update({
-                            orderShippingStatus: 'out_for_delivery',
-                            shipmentStatus: 'out_for_delivery',
-                        }, { transaction: t });
-                    }
-                }
+        if (shipment.fulfillment) {
+            const nextFulfillmentStatus = ['delivered', 'rto'].includes(normalizedEvent.status)
+                ? (normalizedEvent.status === 'rto' ? 'returned' : 'delivered')
+                : normalizedEvent.status === 'in_transit' || normalizedEvent.status === 'out_for_delivery'
+                    ? 'shipped'
+                    : ['packed', 'shipped', 'delivery_failed', 'rto_initiated', 'rto_in_transit'].includes(normalizedEvent.status)
+                        ? normalizedEvent.status
+                    : shipment.fulfillment.status;
+            if (nextFulfillmentStatus !== shipment.fulfillment.status) {
+                await shipment.fulfillment.update({ status: nextFulfillmentStatus }, { transaction: t });
             }
         }
+
+        let notification = null;
+        const order = shipment.order || await Order.findByPk(shipment.orderId, { transaction: t });
+        if (order) {
+            const orderShipments = await Shipment.findAll({ where: { orderId: order.id }, transaction: t });
+            const derivedShippingStatus = deriveOrderShippingStatus(orderShipments);
+            if (order.orderShippingStatus !== derivedShippingStatus || order.shipmentStatus !== derivedShippingStatus) {
+                await order.update({
+                    orderShippingStatus: derivedShippingStatus,
+                    shipmentStatus: derivedShippingStatus,
+                }, { transaction: t });
+            }
+            if (['out_for_delivery', 'delivered'].includes(normalizedEvent.status) && order.userId) {
+                notification = { userId: order.userId, orderId: order.id, status: normalizedEvent.status };
+            }
+        }
+
+        return { accepted: true, shipmentId: shipment.id, notification };
     });
+
+    // Notifications are external side effects. Send only after the transaction
+    // commits so a retry cannot notify for a rolled-back status update.
+    if (result.notification) {
+        try {
+            await NotificationService.sendDeliveryUpdate(
+                result.notification.userId,
+                result.notification.orderId,
+                result.notification.status,
+            );
+        } catch (error) {
+            console.error('[Webhook] Delivery notification failed:', error.message);
+        }
+    }
+    return result;
 };
+
+module.exports = { processWebhook };

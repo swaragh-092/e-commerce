@@ -6,6 +6,7 @@ const couponExpiryJob = require('./couponExpiry.job');
 const lowStockAlertJob = require('./lowStockAlert.job');
 const shippingQuoteCleanupJob = require('./shippingQuoteCleanup.job');
 const notificationQueueJob = require('./notificationQueue.job');
+const shippingOperationJob = require('./shippingOperation.job');
 const authCleanupJob = require('./authCleanup.job');
 const analyticsReportJob = require('./analyticsReport.job');
 const logger = require('../utils/logger');
@@ -18,6 +19,7 @@ const startJobs = () => {
   lowStockAlertJob.run();
   shippingQuoteCleanupJob.run();
   notificationQueueJob.run();
+  shippingOperationJob.run();
   authCleanupJob.run();
   analyticsReportJob.run();
 };

@@ -158,7 +158,13 @@ const ShippingPage = () => {
   };
 
   const handleEditProvider = (provider) => {
-    setEditingProvider(provider);
+    setEditingProvider({
+      ...provider,
+      pickupPincode: provider.settings?.pickupPincode || '',
+      pickupLocationName: provider.settings?.pickupLocationName || '',
+      webhookHeaderName: provider.settings?.webhookHeaderName || 'x-api-key',
+      webhookSecret: '',
+    });
     setProviderDialogOpen(true);
   };
 
@@ -167,7 +173,13 @@ const ShippingPage = () => {
       const payload = { 
         name: editingProvider.name,
         isDefault: editingProvider.isDefault,
-        supportsCod: editingProvider.supportsCod
+        supportsCod: editingProvider.supportsCod,
+        settings: {
+          ...(editingProvider.settings || {}),
+          pickupPincode: editingProvider.pickupPincode?.trim() || null,
+          pickupLocationName: editingProvider.pickupLocationName?.trim() || null,
+          webhookHeaderName: editingProvider.webhookHeaderName?.trim().toLowerCase() || 'x-api-key',
+        },
       };
 
       if (editingProvider.credEmail && editingProvider.credPassword) {
@@ -175,6 +187,10 @@ const ShippingPage = () => {
           email: editingProvider.credEmail,
           password: editingProvider.credPassword
         };
+      }
+
+      if (editingProvider.webhookSecret?.trim()) {
+        payload.webhookSecret = editingProvider.webhookSecret.trim();
       }
 
       await updateShippingProvider(editingProvider.id, payload);
@@ -672,6 +688,39 @@ const ShippingPage = () => {
                     size="small" 
                     value={editingProvider?.credPassword || ''} 
                     onChange={(e) => setEditingProvider({...editingProvider, credPassword: e.target.value})} 
+                  />
+                  <TextField
+                    label="Pickup Pincode"
+                    fullWidth
+                    size="small"
+                    value={editingProvider?.pickupPincode || ''}
+                    onChange={(e) => setEditingProvider({...editingProvider, pickupPincode: e.target.value})}
+                    helperText="Warehouse pincode registered in Shiprocket"
+                  />
+                  <TextField
+                    label="Shiprocket Pickup Location"
+                    fullWidth
+                    size="small"
+                    value={editingProvider?.pickupLocationName || ''}
+                    onChange={(e) => setEditingProvider({...editingProvider, pickupLocationName: e.target.value})}
+                    helperText="Must exactly match the Shiprocket pickup location name"
+                  />
+                  <TextField
+                    label="Webhook Header Key"
+                    fullWidth
+                    size="small"
+                    value={editingProvider?.webhookHeaderName || 'x-api-key'}
+                    onChange={(e) => setEditingProvider({...editingProvider, webhookHeaderName: e.target.value})}
+                    helperText="Use the Header Key configured in Shiprocket"
+                  />
+                  <TextField
+                    label="Webhook Header Value"
+                    type="password"
+                    fullWidth
+                    size="small"
+                    value={editingProvider?.webhookSecret || ''}
+                    onChange={(e) => setEditingProvider({...editingProvider, webhookSecret: e.target.value})}
+                    helperText={editingProvider?.webhookConfigured ? 'Leave blank to keep the existing value' : 'Required before enabling Shiprocket webhooks'}
                   />
                 </Stack>
               </Box>

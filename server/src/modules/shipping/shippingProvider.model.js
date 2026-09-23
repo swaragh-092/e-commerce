@@ -98,6 +98,7 @@ module.exports = (sequelize, DataTypes) => {
     ShippingProvider.associate = (models) => {
         ShippingProvider.hasMany(models.ShippingQuote, { foreignKey: 'providerId', as: 'quotes' });
         ShippingProvider.hasMany(models.Shipment, { foreignKey: 'providerId', as: 'shipments' });
+        ShippingProvider.hasMany(models.ShippingOperation, { foreignKey: 'providerId', as: 'shippingOperations' });
         ShippingProvider.hasMany(models.ShippingRule, { foreignKey: 'providerId', as: 'rules' });
     };
 

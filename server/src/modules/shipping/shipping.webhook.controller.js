@@ -6,13 +6,8 @@ const AppError = require('../../utils/AppError');
 
 exports.handleShiprocketWebhook = async (req, res, next) => {
     try {
-        // Ensure Shiprocket authentication if they send a specific header (e.g. x-api-key)
-        // Usually providers send a signature or token.
-        // We pass the raw body to the service so the adapter can verify the HMAC signature.
-        await ShippingWebhookService.processWebhook('shiprocket', req.body, req.headers);
-        
-        // Always return 200 OK to acknowledge receipt
-        res.status(200).send('OK');
+        const result = await ShippingWebhookService.processWebhook('shiprocket', req.body, req.headers);
+        return res.status(200).json({ success: true, ...result });
     } catch (err) {
         // Log the full error for debugging
         console.error('[Webhook: Shiprocket] Error processing webhook:', err);
@@ -26,7 +21,8 @@ exports.handleShiprocketWebhook = async (req, res, next) => {
             });
         }
 
-        // For non-operational (internal) errors, return 200 to acknowledge receipt and avoid retries
-        res.status(200).send('Acknowledged with internal errors');
+        // Internal failures must be retried by the provider. The event is only
+        // acknowledged after authentication and durable processing succeed.
+        return res.status(500).json({ success: false, code: 'WEBHOOK_PROCESSING_ERROR', message: 'Webhook processing failed' });
     }
 };

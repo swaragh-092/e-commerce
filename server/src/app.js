@@ -92,7 +92,7 @@ app.use('/api', globalLimiter);
 // here via a verify hook on the import paths instead.
 app.use((req, res, next) => {
   if (req.originalUrl.includes('/webhook')) {
-    express.raw({ type: 'application/json' })(req, res, next);
+    express.raw({ type: ['application/json', 'application/*+json'] })(req, res, next);
   } else {
     express.json({ limit: '1mb' })(req, res, next);
   }

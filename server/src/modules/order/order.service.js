@@ -27,6 +27,7 @@ const {
     Shipment,
     ShipmentItem,
     ShippingProvider,
+    ShippingOperation,
     UserProfile,
 } = require('../index');
 const AppError = require('../../utils/AppError');
@@ -38,6 +39,7 @@ const TaxService = require('../tax/tax.service');
 const ShippingService = require('../shipping/shipping.service');
 const SettingsService = require('../settings/settings.service');
 const { resolveProvider } = require('../shipping/providers');
+const ShippingOperationService = require('../shipping/shippingOperation.service');
 const { events, PRODUCT_EVENTS, ORDER_EVENTS } = require('../../utils/events');
 
 const defaultSettings = require('../../../../config/default.json');
@@ -1949,13 +1951,19 @@ const createFulfillment = async (orderId, payload, actingUserId, auditContext = 
         const dims = ShippingService.computePackageDimensions(fulfillmentItemsForDims);
         const totalWeightGrams = dims.totalWeightGrams;
 
+        let providerOrderId = null;
         let providerShipmentId = null;
+        let providerRequestId = null;
         let awbCode = trackingNumber || null;
         let trackingUrl = null;
         let labelUrl = null;
+        let manifestUrl = null;
+        let invoiceUrl = null;
         let finalStatus = status === 'pending' ? SHIPMENT_DEFAULT_STATUS : (status || SHIPMENT_DEFAULT_STATUS);
         let courierName = courier || (provider ? provider.name : 'Manual Shipping');
         let rawResponse = null;
+        let providerState = provider && provider.code !== 'manual' ? 'pending' : 'not_required';
+        let providerRequestPayload = null;
 
         // Create the fulfillment record
         ensureValidShipmentTransition(SHIPMENT_DEFAULT_STATUS, finalStatus);
@@ -1967,27 +1975,15 @@ const createFulfillment = async (orderId, payload, actingUserId, auditContext = 
             status:         finalStatus === SHIPMENT_DEFAULT_STATUS ? 'pending' : finalStatus,
         }, { transaction: t });
 
-        // Hit Provider API if not manual
+        // External provider calls are queued after this transaction commits.
+        // Local order/inventory state must never be held open while waiting on
+        // Shiprocket, and retries must operate on a durable shipment record.
         if (adapter && provider.code !== 'manual') {
             const user = await User.findByPk(order.userId, { transaction: t });
             order.user = user;
 
             const address = order.shippingAddressSnapshot || {};
             const deliveryPincode = String(address.postalCode || address.pincode || '').trim();
-            
-            // 1. Mandatory Pre-Shipment Serviceability Revalidation
-            if (typeof adapter.getServiceability === 'function') {
-                const serviceability = await adapter.getServiceability({
-                    pincode: deliveryPincode,
-                    pickupPincode: provider.settings?.pickupPincode || null,
-                    weightGrams: totalWeightGrams,
-                    paymentMode: order.paymentMethod === 'cod' ? 'cod' : 'prepaid'
-                });
-
-                if (!serviceability.serviceable || (order.paymentMethod === 'cod' && !serviceability.codAvailable)) {
-                    throw new AppError('SHIPPING_UNAVAILABLE', 400, `Shipping provider ${provider.name} cannot fulfill this order at this time. Reason: ${serviceability.reason || 'Unserviceable location'}`);
-                }
-            }
 
             const providerItems = items.map(reqItem => {
                 const info = orderItemMap[reqItem.orderItemId];
@@ -1998,47 +1994,47 @@ const createFulfillment = async (orderId, payload, actingUserId, auditContext = 
                     unitPrice: info.snapshotPrice || 0
                 };
             });
-
-            try {
-                const providerResult = await adapter.createShipment({
-                    order,
-                    shipment: { 
-                        actualWeightGrams: totalWeightGrams,
-                        lengthCm: dims.maxL,
-                        breadthCm: dims.maxB,
-                        heightCm: dims.totalH,
-                        volumetricWeightGrams: Math.ceil((dims.volumeCm3 / 5000) * 1000)
-                    },
-                    address: {
-                        ...address,
-                        firstName: address.fullName?.split(' ')[0] || address.firstName || 'Customer',
-                        lastName: address.fullName?.split(' ').slice(1).join(' ') || address.lastName || '',
-                        line1: address.addressLine1 || address.line1 || '',
-                        line2: address.addressLine2 || address.line2 || '',
-                        postalCode: deliveryPincode,
-                    },
-                    items: providerItems
-                });
-
-                awbCode = providerResult.awbCode || awbCode;
-                providerShipmentId = providerResult.providerOrderId || null;
-                trackingUrl = providerResult.trackingUrl || null;
-                labelUrl = providerResult.label || null;
-                rawResponse = providerResult.rawResponse || null;
-
-                await fulfillment.update({ trackingNumber: awbCode, courier: provider.name }, { transaction: t });
-                courierName = provider.name;
-            } catch (err) {
-                // If API fails, rollback by throwing
-                throw new AppError('SHIPPING_API_ERROR', 500, `Shipping provider error: ${err.message}`);
-            }
+            providerRequestId = `${order.orderNumber}-${fulfillment.id}`;
+            providerRequestPayload = {
+                order: {
+                    orderNumber: order.orderNumber,
+                    createdAt: order.createdAt,
+                    subtotal: Number(order.subtotal || 0),
+                    shippingCost: Number(order.shippingCost || 0),
+                    discountAmount: Number(order.discountAmount || 0),
+                    tax: Number(order.tax || 0),
+                    total: Number(order.total || 0),
+                    paymentMethod: order.paymentMethod,
+                    user: { email: user?.email || '' },
+                },
+                shipment: {
+                    providerRequestId,
+                    actualWeightGrams: totalWeightGrams,
+                    lengthCm: dims.maxL,
+                    breadthCm: dims.maxB,
+                    heightCm: dims.totalH,
+                    volumetricWeightGrams: Math.ceil((dims.volumeCm3 / 5000) * 1000),
+                },
+                address: {
+                    ...address,
+                    firstName: address.fullName?.split(' ')[0] || address.firstName || 'Customer',
+                    lastName: address.fullName?.split(' ').slice(1).join(' ') || address.lastName || '',
+                    line1: address.addressLine1 || address.line1 || '',
+                    line2: address.addressLine2 || address.line2 || '',
+                    postalCode: deliveryPincode,
+                },
+                items: providerItems,
+            };
         }
 
         const shipment = await Shipment.create({
             orderId,
             fulfillmentId: fulfillment.id,
             providerId: provider?.id || null,
-            providerOrderId: providerShipmentId,
+            providerOrderId,
+            providerShipmentId,
+            providerRequestId,
+            providerState,
             awb: awbCode,
             courierName: courierName,
             trackingNumber: awbCode,
@@ -2048,6 +2044,8 @@ const createFulfillment = async (orderId, payload, actingUserId, auditContext = 
                 ? appendExpectedDeliveryHistory([], normalizedExpectedDeliveryDate, actingUserId)
                 : [],
             labelUrl: labelUrl,
+            manifestUrl,
+            invoiceUrl,
             status: finalStatus,
             statusHistory: [{
                 status: finalStatus,
@@ -2075,6 +2073,15 @@ const createFulfillment = async (orderId, payload, actingUserId, auditContext = 
                 orderItemId: item.orderItemId,
                 quantity: qty,
             }, { transaction: t });
+        }
+
+        if (providerRequestPayload && provider) {
+            await ShippingOperationService.enqueueCreateOperation({
+                shipment,
+                provider,
+                requestPayload: providerRequestPayload,
+                transaction: t,
+            });
         }
 
         // Recalculate overall order fulfillment status
@@ -2135,12 +2142,37 @@ const createFulfillment = async (orderId, payload, actingUserId, auditContext = 
         } catch (err) {}
 
         fulfillment.setDataValue('shipments', [shipment]);
-        return fulfillment;
+        return {
+            fulfillment,
+            operationId: providerRequestPayload
+                ? (await ShippingOperation.findOne({
+                    where: { shipmentId: shipment.id, operationType: 'create' },
+                    transaction: t,
+                }))?.id
+                : null,
+        };
     });
 
-    const createdShipment = fulfillment.get('shipments')?.[0];
+    const createdFulfillment = fulfillment.fulfillment || fulfillment;
+    const createdShipment = createdFulfillment.get('shipments')?.[0];
+    if (fulfillment.operationId) {
+        const operationResult = await ShippingOperationService.processOperation(fulfillment.operationId);
+        if (operationResult.success && operationResult.result && createdShipment) {
+            Object.assign(createdShipment, {
+                providerOrderId: operationResult.result.providerOrderId || createdShipment.providerOrderId,
+                providerShipmentId: operationResult.result.providerShipmentId || createdShipment.providerShipmentId,
+                awb: operationResult.result.awbCode || createdShipment.awb,
+                trackingNumber: operationResult.result.awbCode || createdShipment.trackingNumber,
+                trackingUrl: operationResult.result.trackingUrl || createdShipment.trackingUrl,
+                labelUrl: operationResult.result.label || createdShipment.labelUrl,
+                manifestUrl: operationResult.result.manifest || createdShipment.manifestUrl,
+                invoiceUrl: operationResult.result.invoice || createdShipment.invoiceUrl,
+                providerState: 'completed',
+            });
+        }
+    }
     await queueShipmentNotification(orderId, createdShipment?.status, createdShipment);
-    return fulfillment;
+    return createdFulfillment;
 };
 
 

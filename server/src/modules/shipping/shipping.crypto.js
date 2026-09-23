@@ -32,6 +32,22 @@ const decryptCredentials = (encryptedRecord) => {
     }
 };
 
+const decryptSecret = (encryptedRecord) => {
+    if (!encryptedRecord) return '';
+    try {
+        const encryptedData = typeof encryptedRecord === 'string'
+            ? JSON.parse(encryptedRecord)
+            : encryptedRecord;
+        if (encryptedData && encryptedData.ciphertext && encryptedData.iv) {
+            return cryptoUtils.decrypt(encryptedData);
+        }
+    } catch (_) {
+        // Existing installations may contain a legacy plaintext value.
+    }
+    return String(encryptedRecord);
+};
+
 module.exports = {
-    decryptCredentials
+    decryptCredentials,
+    decryptSecret,
 };

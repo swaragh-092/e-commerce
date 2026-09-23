@@ -21,6 +21,7 @@ module.exports = (sequelize, DataTypes) => {
         },
         providerOrderId: DataTypes.STRING(255),
         providerShipmentId: DataTypes.STRING(255),
+        providerRequestId: DataTypes.STRING(255),
         awb: DataTypes.STRING(255),
         courierName: DataTypes.STRING(100),
         trackingNumber: DataTypes.STRING(255),
@@ -40,6 +41,11 @@ module.exports = (sequelize, DataTypes) => {
             type: DataTypes.STRING(50),
             defaultValue: 'created',
         },
+        providerState: {
+            type: DataTypes.STRING(50),
+            defaultValue: 'pending',
+        },
+        lastProviderError: DataTypes.TEXT,
         statusHistory: {
             type: DataTypes.JSONB,
             defaultValue: () => [],
@@ -66,6 +72,7 @@ module.exports = (sequelize, DataTypes) => {
         Shipment.belongsTo(models.ShippingProvider, { foreignKey: 'providerId', as: 'provider', onDelete: 'SET NULL' });
         Shipment.hasMany(models.ShipmentItem, { foreignKey: 'shipmentId', as: 'items', onDelete: 'CASCADE' });
         Shipment.hasMany(models.ShipmentEvent, { foreignKey: 'shipmentId', as: 'events', onDelete: 'CASCADE' });
+        Shipment.hasMany(models.ShippingOperation, { foreignKey: 'shipmentId', as: 'shippingOperations', onDelete: 'CASCADE' });
     };
 
     return Shipment;

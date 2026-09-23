@@ -21,6 +21,7 @@ const {
 } = require('../index');
 const AppError = require('../../utils/AppError');
 const { getVariantUnitPrice } = require('../product/product.pricing');
+const { resolveProvider } = require('./providers');
 
 const QUOTE_TTL_MINUTES = Number(process.env.SHIPPING_QUOTE_TTL_MINUTES || 10);
 const EMPTY_HASH = hashObject(null);
@@ -617,7 +618,7 @@ const createQuote = async (userId, payload) => {
     if (existing) return serializeQuote(existing);
 
     const fallbackProvider = await getDefaultProvider();
-    const decision = await calculateRuleDecision({
+    let decision = await calculateRuleDecision({
         subtotal:             context.subtotal,
         chargeableWeightGrams,            // FIX: volumetric-adjusted, slab-rounded
         packageCount,                     // FIX: multi-package split count
@@ -629,6 +630,39 @@ const createQuote = async (userId, payload) => {
         addressSnapshot: context.addressSnapshot,
         paymentMethod,
     });
+
+    // Shiprocket serviceability is checked at quote time as well as immediately
+    // before provider creation. Rules still own the customer-facing price, but
+    // checkout must not claim delivery when the carrier has no route/COD option.
+    const selectedProvider = decision.providerId === fallbackProvider.id
+        ? fallbackProvider
+        : await ShippingProvider.findByPk(decision.providerId || fallbackProvider.id);
+    let liveProviderResponse = null;
+    if (selectedProvider?.code === 'shiprocket' && selectedProvider.enabled) {
+        try {
+            const providerAdapter = resolveProvider(selectedProvider);
+            liveProviderResponse = await providerAdapter.getServiceability({
+                pincode: deliveryPincode,
+                pickupPincode: selectedProvider.settings?.pickupPincode || warehousePincode,
+                weightGrams: chargeableWeightGrams,
+                paymentMode: paymentMethod === 'cod' ? 'cod' : 'prepaid',
+            });
+            decision = {
+                ...decision,
+                serviceable: Boolean(decision.serviceable && liveProviderResponse.serviceable),
+                codAvailable: Boolean(decision.codAvailable && liveProviderResponse.codAvailable),
+                message: decision.serviceable && liveProviderResponse.serviceable
+                    ? decision.message
+                    : (liveProviderResponse.reason || 'Shiprocket cannot deliver to this address'),
+                liveServiceability: {
+                    serviceable: liveProviderResponse.serviceable,
+                    codAvailable: liveProviderResponse.codAvailable,
+                },
+            };
+        } catch (error) {
+            throw new AppError('SHIPPING_UNAVAILABLE', 503, `Shiprocket serviceability is unavailable: ${error.message}`);
+        }
+    }
 
     const expiresAt = new Date(Date.now() + QUOTE_TTL_MINUTES * 60 * 1000);
     
@@ -660,7 +694,7 @@ const createQuote = async (userId, payload) => {
                 couponCodes: context.couponCodes,
             },
             decisionSnapshot: decision,
-            rawResponse: null,
+            rawResponse: liveProviderResponse,
             expiresAt,
         });
 
@@ -680,7 +714,19 @@ const createQuote = async (userId, payload) => {
     }
 };
 
-const listProviders = () => ShippingProvider.findAll({ order: [['isDefault', 'DESC'], ['name', 'ASC']] });
+const listProviders = async () => {
+    const providers = await ShippingProvider.findAll({ order: [['isDefault', 'DESC'], ['name', 'ASC']] });
+    return providers.map((provider) => {
+        const data = typeof provider.toJSON === 'function' ? provider.toJSON() : { ...provider };
+        delete data.credentialsEncrypted;
+        delete data.webhookSecret;
+        if (data.settings) delete data.settings.webhookHeaderValue;
+        return {
+            ...data,
+            webhookConfigured: Boolean(provider.webhookSecret),
+        };
+    });
+};
 
 const cryptoUtils = require('../../utils/crypto');
 
@@ -718,6 +764,11 @@ const updateProvider = async (id, payload) => {
 
         if (payload.credentials) {
             filtered.credentialsEncrypted = JSON.stringify(cryptoUtils.encrypt(JSON.stringify(payload.credentials)));
+        }
+        if (Object.prototype.hasOwnProperty.call(payload, 'webhookSecret')) {
+            filtered.webhookSecret = payload.webhookSecret
+                ? JSON.stringify(cryptoUtils.encrypt(String(payload.webhookSecret)))
+                : null;
         }
 
         return provider.update(filtered, { transaction: t });

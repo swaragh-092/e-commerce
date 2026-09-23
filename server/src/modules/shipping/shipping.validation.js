@@ -34,6 +34,7 @@ const providerUpdateSchema = Joi.object({
     supportedRegions: Joi.array().items(Joi.string()).optional(),
     blockedRegions: Joi.array().items(Joi.string()).optional(),
     credentials: Joi.object().unknown(true).optional(),
+    webhookSecret: Joi.string().max(255).allow(null, '').optional(),
     settings: Joi.object().unknown(true).optional(),
 });
 

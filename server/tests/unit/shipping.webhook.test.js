@@ -67,7 +67,7 @@ describe('Shiprocket Provider Webhook Adapter', () => {
         };
 
         const event4 = await provider.handleWebhook(payload4);
-        expect(event4.status).toBe('rto');
+        expect(event4.status).toBe('rto_initiated');
     });
 
     it('verifies HMAC-SHA256 webhook signatures with timing safety', async () => {
@@ -83,9 +83,9 @@ describe('Shiprocket Provider Webhook Adapter', () => {
         const isInvalid = await provider.verifySignature(rawBody, invalidSignature, secret);
         expect(isInvalid).toBe(false);
 
-        // Bypasses when secret is null or empty
-        const allowsWithoutSecret = await provider.verifySignature(rawBody, null, null);
-        expect(allowsWithoutSecret).toBe(true);
+        // Missing webhook secrets fail closed.
+        const rejectsWithoutSecret = await provider.verifySignature(rawBody, null, null);
+        expect(rejectsWithoutSecret).toBe(false);
     });
 });
 
@@ -103,9 +103,9 @@ describe('ShippingWebhookService Lifecycle & Idempotency', () => {
             code: 'shiprocket',
             name: 'Shiprocket',
             enabled: true,
-            webhookSecret: null,
-            settings: {},
+            settings: { webhookHeaderName: 'x-api-key' },
             credentials: {},
+            webhookSecret: 'test-webhook-key',
         };
 
         mockFulfillmentRecord = {
@@ -147,6 +147,7 @@ describe('ShippingWebhookService Lifecycle & Idempotency', () => {
         vi.spyOn(sequelize, 'transaction').mockImplementation(async (cb) => cb({}));
         vi.spyOn(ShippingProvider, 'findOne').mockResolvedValue(mockProviderRecord);
         vi.spyOn(Shipment, 'findOne').mockResolvedValue(mockShipmentRecord);
+        vi.spyOn(Shipment, 'findAll').mockResolvedValue([mockShipmentRecord]);
         vi.spyOn(Order, 'findByPk').mockResolvedValue(mockOrderRecord);
         vi.spyOn(ShipmentEvent, 'create').mockResolvedValue({ id: 'event-1' });
         vi.spyOn(NotificationService, 'sendDeliveryUpdate').mockResolvedValue(true);
@@ -161,7 +162,7 @@ describe('ShippingWebhookService Lifecycle & Idempotency', () => {
             current_status: 'PICKED UP',
             scan_id: 'SCAN-101',
             location: 'Delhi Hub',
-        }, {});
+        }, { 'x-api-key': 'test-webhook-key' });
 
         expect(mockShipmentRecord.status).toBe('in_transit');
         expect(mockFulfillmentRecord.status).toBe('shipped');
@@ -175,7 +176,7 @@ describe('ShippingWebhookService Lifecycle & Idempotency', () => {
             current_status: 'OUT FOR DELIVERY',
             scan_id: 'SCAN-102',
             location: 'Noida Delivery Center',
-        }, {});
+        }, { 'x-api-key': 'test-webhook-key' });
 
         expect(mockShipmentRecord.status).toBe('out_for_delivery');
         expect(mockOrderRecord.orderShippingStatus).toBe('out_for_delivery');
@@ -187,7 +188,7 @@ describe('ShippingWebhookService Lifecycle & Idempotency', () => {
             current_status: 'DELIVERED',
             scan_id: 'SCAN-103',
             location: 'Delivered to recipient',
-        }, {});
+        }, { 'x-api-key': 'test-webhook-key' });
 
         expect(mockShipmentRecord.status).toBe('delivered');
         expect(mockFulfillmentRecord.status).toBe('delivered');
@@ -207,7 +208,7 @@ describe('ShippingWebhookService Lifecycle & Idempotency', () => {
             awb: 'SR123456789',
             current_status: 'IN TRANSIT',
             scan_id: 'SCAN-DUP-01',
-        }, {});
+        }, { 'x-api-key': 'test-webhook-key' });
 
         expect(mockShipmentRecord.update).not.toHaveBeenCalled();
         expect(mockShipmentRecord.status).toBe(initialStatus);
@@ -226,7 +227,7 @@ describe('ShippingWebhookService Lifecycle & Idempotency', () => {
             current_status: 'IN TRANSIT',
             scan_id: 'SCAN-DELAYED-01',
             location: 'Delayed transit update',
-        }, {});
+        }, { 'x-api-key': 'test-webhook-key' });
 
         expect(mockShipmentRecord.update).not.toHaveBeenCalled();
         expect(mockShipmentRecord.status).toBe('delivered');
