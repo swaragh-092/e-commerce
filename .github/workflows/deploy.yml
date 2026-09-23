@@ -84,23 +84,27 @@ jobs:
               || { echo "❌ npm ci failed — check package-lock.json is committed"; exit 1; }
             cd "$APP_DIR"
 
-            # ── [3/4] pm2 reload backend ───────────────────────────────
+            # ── [3/5] Database migrations ───────────────────────────────
             echo ""
-            echo "── [3/4] Reload backend via pm2"
+            echo "── [3/5] Database migrations"
+            cd "$APP_DIR/server"
+            if ! NODE_ENV=production npm run migrate; then
+              echo "❌ Database migrations failed — deployment stopped before backend reload"
+              exit 1
+            fi
+            echo "   ✅ Migrations applied"
+            cd "$APP_DIR"
+
+            # ── [4/5] pm2 reload backend ────────────────────────────────
+            echo ""
+            echo "── [4/5] Reload backend via pm2"
             pm2 reload ecommerce-api \
               || pm2 start "$APP_DIR/server/index.js" --name ecommerce-api \
               || { echo "❌ pm2 failed"; exit 1; }
 
-            # Run DB migrations
-            cd "$APP_DIR/server"
-            NODE_ENV=production npm run migrate \
-              && echo "   ✅ Migrations applied" \
-              || echo "   ℹ️  No new migrations to run"
-            cd "$APP_DIR"
-
-            # ── [4/4] Frontend: prepare directory for new dist ─────────
+            # ── [5/5] Frontend: prepare directory for new dist ──────────
             echo ""
-            echo "── [4/4] Deploy frontend dist to nginx"
+            echo "── [5/5] Deploy frontend dist to nginx"
             # Nginx owns dist/ — can't overwrite owned files. Use atomic swap.
             mv "$APP_DIR/client/dist" "$APP_DIR/client/dist_old" 2>/dev/null || true
             mkdir -p "$APP_DIR/client/dist"
