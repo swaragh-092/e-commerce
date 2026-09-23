@@ -11,7 +11,8 @@ const {
   updateAvatarSchema,
   updateStatusSchema,
   createAddressSchema,
-  updateAddressSchema
+  updateAddressSchema,
+  listUsersQuerySchema,
 } = require('./user.validation');
 const { PERMISSIONS } = require('../../config/permissions');
 const { idParamSchema } = require('../../utils/common.validation');
@@ -51,7 +52,7 @@ router.put('/me/addresses/:id/default', authenticate, authorizePermissions(PERMI
 
 
 // Admin Endpoints
-router.get('/', authenticate, authorizePermissions(PERMISSIONS.CUSTOMERS_READ), userController.list);
+router.get('/', authenticate, authorizePermissions(PERMISSIONS.CUSTOMERS_READ), validate(listUsersQuerySchema, 'query'), userController.list);
 router.get('/:id', authenticate, authorizePermissions(PERMISSIONS.CUSTOMERS_READ), validate(idParamSchema, 'params'), userController.getOne);
 router.put('/:id/status', authenticate, authorizePermissions(PERMISSIONS.CUSTOMERS_MANAGE), validate(idParamSchema, 'params'), validate(updateStatusSchema), userController.updateStatus);
 router.post('/:id/force-logout', authenticate, authorizePermissions(PERMISSIONS.CUSTOMERS_MANAGE), validate(idParamSchema, 'params'), userController.forceLogout);

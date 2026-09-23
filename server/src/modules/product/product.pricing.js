@@ -6,8 +6,8 @@ const AppError = require('../../utils/AppError');
 
 /**
  * Resolves a stored saleLabel id/string against the preset catalog.
- * Returns the full preset object ({ id, name, color, priority }) if found,
- * or a minimal fallback object if the id is a raw string not in the catalog,
+ * Returns the full preset object ({ id, name, color, priority, isActive, startDate, endDate })
+ * if found, or a minimal fallback object if the id is a raw string not in the catalog,
  * or null if there is no label at all.
  *
  * @param {string|null} labelId     - The value stored on products.sale_label
@@ -18,17 +18,11 @@ const resolveSaleLabel = (labelId, presets = []) => {
 
   const found = presets.find((p) => p.id === labelId);
   if (found) {
-    // Skip inactive labels
-    if (found.isActive === false) return null;
-    // Skip labels outside their own schedule
-    const now = new Date();
-    if (found.startDate && new Date(found.startDate) > now) return null;
-    if (found.endDate && new Date(found.endDate) < now) return null;
-    return found;
+    return { ...found };
   }
 
   // Graceful fallback: raw legacy string — surface it without crashing
-  return { id: null, name: labelId, color: null };
+  return { id: null, name: labelId, color: null, isActive: true };
 };
 
 const parseDateOrNull = (value) => {
@@ -87,13 +81,26 @@ const isSaleActive = (product, referenceDate = new Date()) => {
   }
 
   const now = referenceDate instanceof Date ? referenceDate : new Date(referenceDate);
-  const saleStartAt = product.saleStartAt ? new Date(product.saleStartAt) : (product.saleLabelResolved?.startDate ? new Date(product.saleLabelResolved.startDate) : null);
-  const saleEndAt = product.saleEndAt ? new Date(product.saleEndAt) : (product.saleLabelResolved?.endDate ? new Date(product.saleLabelResolved.endDate) : null);
+  if (Number.isNaN(now.getTime())) return false;
 
-  if (saleStartAt && saleStartAt > now) return false;
-  if (saleEndAt && saleEndAt < now) return false;
+  // If the product is linked to a resolved preset that has been explicitly deactivated
+  if (product.saleLabelResolved && product.saleLabelResolved.isActive === false) {
+    return false;
+  }
 
-  return Number(product.salePrice) < Number(product.price);
+  const saleStartAt = product.saleStartAt
+    ? new Date(product.saleStartAt)
+    : (product.saleLabelResolved?.startDate ? new Date(product.saleLabelResolved.startDate) : null);
+  const saleEndAt = product.saleEndAt
+    ? new Date(product.saleEndAt)
+    : (product.saleLabelResolved?.endDate ? new Date(product.saleLabelResolved.endDate) : null);
+
+  if (saleStartAt && !Number.isNaN(saleStartAt.getTime()) && saleStartAt > now) return false;
+  if (saleEndAt && !Number.isNaN(saleEndAt.getTime()) && saleEndAt < now) return false;
+
+  const salePrice = Number(product.salePrice);
+  const price = Number(product.price);
+  return Number.isFinite(salePrice) && Number.isFinite(price) && salePrice < price;
 };
 
 const getSaleStatus = (product, referenceDate = new Date()) => {
@@ -102,11 +109,21 @@ const getSaleStatus = (product, referenceDate = new Date()) => {
   }
 
   const now = referenceDate instanceof Date ? referenceDate : new Date(referenceDate);
-  const saleStartAt = product.saleStartAt ? new Date(product.saleStartAt) : (product.saleLabelResolved?.startDate ? new Date(product.saleLabelResolved.startDate) : null);
-  const saleEndAt = product.saleEndAt ? new Date(product.saleEndAt) : (product.saleLabelResolved?.endDate ? new Date(product.saleLabelResolved.endDate) : null);
+  if (Number.isNaN(now.getTime())) return 'none';
 
-  if (saleStartAt && saleStartAt > now) return 'scheduled';
-  if (saleEndAt && saleEndAt < now) return 'expired';
+  if (product.saleLabelResolved && product.saleLabelResolved.isActive === false) {
+    return 'inactive';
+  }
+
+  const saleStartAt = product.saleStartAt
+    ? new Date(product.saleStartAt)
+    : (product.saleLabelResolved?.startDate ? new Date(product.saleLabelResolved.startDate) : null);
+  const saleEndAt = product.saleEndAt
+    ? new Date(product.saleEndAt)
+    : (product.saleLabelResolved?.endDate ? new Date(product.saleLabelResolved.endDate) : null);
+
+  if (saleStartAt && !Number.isNaN(saleStartAt.getTime()) && saleStartAt > now) return 'scheduled';
+  if (saleEndAt && !Number.isNaN(saleEndAt.getTime()) && saleEndAt < now) return 'expired';
   return isSaleActive(product, now) ? 'active' : 'inactive';
 };
 
@@ -115,15 +132,34 @@ const getEffectivePrice = (product, referenceDate = new Date()) => {
 };
 
 const getVariantUnitPrice = (product, variant, referenceDate = new Date()) => {
-  const explicitUnitPrice = toFiniteNumber(
-    variant?.unitPrice ?? variant?.effectivePrice ?? variant?.price
-  );
-
-  if (explicitUnitPrice !== null) {
-    return Number(explicitUnitPrice.toFixed(2));
+  if (!variant) {
+    return Number(getEffectivePrice(product, referenceDate).toFixed(2));
   }
 
-  return Number(getEffectivePrice(product, referenceDate).toFixed(2));
+  // If the variant already has a pre-calculated unitPrice or effectivePrice, respect it
+  const precalculatedPrice = toFiniteNumber(variant.unitPrice ?? variant.effectivePrice);
+  if (precalculatedPrice !== null) {
+    return Number(precalculatedPrice.toFixed(2));
+  }
+
+  const rawVariantPrice = toFiniteNumber(variant.price);
+  if (rawVariantPrice === null) {
+    return Number(getEffectivePrice(product, referenceDate).toFixed(2));
+  }
+
+  // If a sale is active on the parent product, apply the discount to the variant
+  if (isSaleActive(product, referenceDate)) {
+    const productPrice = toFiniteNumber(product?.price);
+    const productSalePrice = toFiniteNumber(product?.salePrice);
+
+    if (productPrice !== null && productSalePrice !== null && productSalePrice < productPrice) {
+      const discountAmount = productPrice - productSalePrice;
+      const variantSalePrice = Math.max(0, rawVariantPrice - discountAmount);
+      return Number(variantSalePrice.toFixed(2));
+    }
+  }
+
+  return Number(rawVariantPrice.toFixed(2));
 };
 
 const getDiscountPercent = (product) => {
@@ -230,8 +266,8 @@ const serializeProductPricing = (product, { adminView = false, features = {} } =
     effectivePrice: getEffectivePrice(plain),
     isSaleActive: saleActive,
     saleStatus,
-    discountPercent: getDiscountPercent(plain),
-    savingsAmount: getSavingsAmount(plain),
+    discountPercent: saleActive ? getDiscountPercent(plain) : 0,
+    savingsAmount: saleActive ? getSavingsAmount(plain) : 0,
     saleLabelResolved: shouldExposeSaleMeta ? saleLabelResolved : null,
     ...(adminView
       ? {}
@@ -248,16 +284,23 @@ const serializeProductPricing = (product, { adminView = false, features = {} } =
  * Normalises and validates sale-related fields on a product payload.
  *
  * @param {object} payload
- * @param {number|null} [currentPrice]   - Existing product price for comparison.
+ * @param {object|number|null} [currentProductOrPrice] - Existing product or regular price.
  * @param {object} [options]
  * @param {Array}  [options.labelPresets] - If supplied, saleLabel must be one of the active preset ids.
  */
-const normalizeSalePayload = (payload, currentPrice = null, options = {}) => {
+const normalizeSalePayload = (payload, currentProductOrPrice = null, options = {}) => {
   const normalized = { ...payload };
+
+  const existingProduct = (currentProductOrPrice && typeof currentProductOrPrice === 'object')
+    ? (typeof currentProductOrPrice.toJSON === 'function' ? currentProductOrPrice.toJSON() : currentProductOrPrice)
+    : null;
+  const fallbackPrice = existingProduct ? existingProduct.price : currentProductOrPrice;
+  const fallbackSalePrice = existingProduct ? existingProduct.salePrice : null;
+
   const effectivePrice = normalized.price !== undefined && normalized.price !== null && normalized.price !== ''
     ? Number(normalized.price)
-    : currentPrice !== null && currentPrice !== undefined
-      ? Number(currentPrice)
+    : fallbackPrice !== null && fallbackPrice !== undefined
+      ? Number(fallbackPrice)
       : null;
 
   if ('salePrice' in normalized) {
@@ -272,6 +315,11 @@ const normalizeSalePayload = (payload, currentPrice = null, options = {}) => {
       if (effectivePrice !== null && normalized.salePrice >= effectivePrice) {
         throw new AppError('VALIDATION_ERROR', 400, 'Sale price must be less than the regular price');
       }
+    }
+  } else if (normalized.price !== undefined && normalized.price !== null && fallbackSalePrice !== null && fallbackSalePrice !== undefined) {
+    const existingSale = Number(fallbackSalePrice);
+    if (effectivePrice !== null && existingSale >= effectivePrice) {
+      throw new AppError('VALIDATION_ERROR', 400, 'Sale price must be less than the regular price');
     }
   }
 
@@ -300,6 +348,12 @@ const normalizeSalePayload = (payload, currentPrice = null, options = {}) => {
     normalized.saleEndAt = parseDateOrNull(normalized.saleEndAt);
   }
 
+  if ('salePrice' in normalized && normalized.salePrice === null) {
+    normalized.saleStartAt = null;
+    normalized.saleEndAt = null;
+    normalized.saleLabel = null;
+  }
+
   const start = normalized.saleStartAt;
   const end = normalized.saleEndAt;
 
@@ -307,10 +361,13 @@ const normalizeSalePayload = (payload, currentPrice = null, options = {}) => {
     throw new AppError('VALIDATION_ERROR', 400, 'Sale end date must be after the sale start date');
   }
 
-  if ('salePrice' in normalized && normalized.salePrice === null) {
-    normalized.saleStartAt = null;
-    normalized.saleEndAt = null;
-    normalized.saleLabel = null;
+  const resultingSalePrice = 'salePrice' in normalized ? normalized.salePrice : fallbackSalePrice;
+  if ((start || end) && (resultingSalePrice === null || resultingSalePrice === undefined)) {
+    throw new AppError('VALIDATION_ERROR', 400, 'Sale price is required when scheduling a sale window');
+  }
+
+  if (normalized.saleLabel && (resultingSalePrice === null || resultingSalePrice === undefined)) {
+    throw new AppError('VALIDATION_ERROR', 400, 'Sale price is required when setting a sale label');
   }
 
   return normalized;

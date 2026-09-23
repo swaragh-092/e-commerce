@@ -4,18 +4,21 @@ import {
   IconButton, Dialog, DialogTitle, DialogContent, DialogActions,
   TextField, Table, TableHead, TableRow, TableCell, TableBody,
   Chip, Collapse, Tooltip, Alert, Divider, TablePagination,
-  FormControl, InputLabel, Select, MenuItem, Grid
+  FormControl, InputLabel, Select, MenuItem, Grid, InputAdornment
 } from '@mui/material';
 
 import {
   Add as AddIcon, Edit as EditIcon, Delete as DeleteIcon,
   ExpandMore as ExpandMoreIcon, ExpandLess as ExpandLessIcon,
-  DragIndicator as DragIndicatorIcon
+  DragIndicator as DragIndicatorIcon,
+  Search as SearchIcon, Clear as ClearIcon,
+  RestartAlt as ResetIcon, FilterList as FilterListIcon
 } from '@mui/icons-material';
 import { DragDropContext, Droppable, Draggable } from '@hello-pangea/dnd';
 
 import attributeService from '../../services/attributeService';
 import { useAuth } from '../../hooks/useAuth';
+import { useDebounce } from '../../hooks/useDebounce';
 import { PERMISSIONS } from '../../utils/permissions';
 import { getApiErrorMessage } from '../../utils/apiErrors';
 import { useNotification } from '../../context/NotificationContext';
@@ -120,7 +123,11 @@ const ValuesPanel = ({ attribute, onRefresh, canManage }) => {
 
   const handleRemove = async (valueId) => {
     if (!canManage) return;
-    const confirmed = await confirm('Remove Value', 'Are you sure you want to remove this attribute value?', 'error');
+    const confirmed = await confirm(
+      'Remove Value',
+      'Are you sure you want to remove this attribute value? Values in use by products or variant options cannot be removed.',
+      'error'
+    );
     if (!confirmed) return;
     try {
       await attributeService.removeAttributeValue(attribute.id, valueId);
@@ -326,7 +333,7 @@ const ValuesPanel = ({ attribute, onRefresh, canManage }) => {
 
 const AttributesPage = () => {
   const { hasPermission } = useAuth();
-  const { notify } = useNotification();
+  const { notify, confirm } = useNotification();
   const [attributes, setAttributes] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
@@ -337,17 +344,39 @@ const AttributesPage = () => {
   const [page, setPage] = useState(0);
   const [rowsPerPage, setRowsPerPage] = useState(20);
   const [totalItems, setTotalItems] = useState(0);
+
+  // Search & Filter State
+  const [searchInput, setSearchInput] = useState('');
+  const debouncedSearch = useDebounce(searchInput, 300);
+  const [displayTypeFilter, setDisplayTypeFilter] = useState('all');
+  const [valueTypeFilter, setValueTypeFilter] = useState('all');
+  const [hasValuesFilter, setHasValuesFilter] = useState('all');
+  const [sortFilter, setSortFilter] = useState('sortOrder-ASC');
+
   const canManageAttributes = hasPermission(PERMISSIONS.ATTRIBUTES_MANAGE);
 
+  // Reset to first page when any search or filter changes
+  useEffect(() => {
+    setPage(0);
+  }, [debouncedSearch, displayTypeFilter, valueTypeFilter, hasValuesFilter, sortFilter]);
 
   const fetchAttributes = useCallback(async () => {
     try {
       setLoading(true);
       setError('');
-      const response = await attributeService.getAttributes({ 
-        page: page + 1, 
-        limit: rowsPerPage 
-      });
+      const [sortBy, sortOrder] = sortFilter.split('-');
+      const params = {
+        page: page + 1,
+        limit: rowsPerPage,
+        sortBy,
+        sortOrder,
+      };
+      if (debouncedSearch.trim()) params.search = debouncedSearch.trim();
+      if (displayTypeFilter !== 'all') params.displayType = displayTypeFilter;
+      if (valueTypeFilter !== 'all') params.valueType = valueTypeFilter;
+      if (hasValuesFilter !== 'all') params.hasValues = hasValuesFilter;
+
+      const response = await attributeService.getAttributes(params);
       const data = response?.data?.data || {};
       setAttributes(data.rows || []);
       setTotalItems(data.count || 0);
@@ -356,12 +385,28 @@ const AttributesPage = () => {
     } finally {
       setLoading(false);
     }
-  }, [page, rowsPerPage]);
-
+  }, [page, rowsPerPage, debouncedSearch, displayTypeFilter, valueTypeFilter, hasValuesFilter, sortFilter]);
 
   useEffect(() => {
     fetchAttributes();
   }, [fetchAttributes]);
+
+  const hasActiveFilters = Boolean(
+    debouncedSearch.trim() ||
+    displayTypeFilter !== 'all' ||
+    valueTypeFilter !== 'all' ||
+    hasValuesFilter !== 'all' ||
+    sortFilter !== 'sortOrder-ASC'
+  );
+
+  const handleClearFilters = () => {
+    setSearchInput('');
+    setDisplayTypeFilter('all');
+    setValueTypeFilter('all');
+    setHasValuesFilter('all');
+    setSortFilter('sortOrder-ASC');
+    setPage(0);
+  };
 
   const openCreate = () => {
     if (!canManageAttributes) return;
@@ -406,7 +451,7 @@ const AttributesPage = () => {
     if (!canManageAttributes) return;
     const confirmed = await confirm(
       'Delete Attribute Template',
-      'Are you sure you want to delete this attribute template? This will also remove all its values and category links.',
+      'Are you sure you want to delete this attribute template? This will remove all its values and category links. Templates in use by products or variant options cannot be deleted.',
       'error'
     );
     if (!confirmed) return;
@@ -417,7 +462,6 @@ const AttributesPage = () => {
       notify(getApiErrorMessage(err), 'error');
     }
   };
-
 
   const toggleExpanded = (id) => {
     setExpanded((prev) => ({ ...prev, [id]: !prev[id] }));
@@ -432,17 +476,195 @@ const AttributesPage = () => {
     setPage(0);
   };
 
-
   return (
     <Box sx={{ p: 3 }}>
-      <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 3 }}>
-        <Typography variant="h5" fontWeight="bold">Attribute Templates</Typography>
+      {/* Header */}
+      <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: { xs: 'flex-start', sm: 'center' }, flexDirection: { xs: 'column', sm: 'row' }, gap: 2, mb: 3 }}>
+        <Box>
+          <Typography variant="h5" fontWeight="bold">Attribute Templates</Typography>
+          <Typography variant="body2" color="text.secondary" sx={{ mt: 0.5 }}>
+            Manage product variation attributes, swatches, and specifications
+          </Typography>
+        </Box>
         {canManageAttributes && (
-          <Button variant="contained" startIcon={<AddIcon />} onClick={openCreate}>
+          <Button variant="contained" startIcon={<AddIcon />} onClick={openCreate} id="new-attribute-button">
             New Attribute
           </Button>
         )}
       </Box>
+
+      {/* Search and Filters Toolbar */}
+      <Paper variant="outlined" sx={{ p: 2, mb: 3, borderRadius: 2 }}>
+        <Grid container spacing={1.5} alignItems="center">
+          {/* Search Field */}
+          <Grid item xs={12} sm={6} md={3.5}>
+            <TextField
+              id="attributes-search-input"
+              size="small"
+              fullWidth
+              placeholder="Search by name, slug, or value..."
+              value={searchInput}
+              onChange={(e) => setSearchInput(e.target.value)}
+              InputProps={{
+                startAdornment: (
+                  <InputAdornment position="start">
+                    <SearchIcon fontSize="small" color="action" />
+                  </InputAdornment>
+                ),
+                endAdornment: searchInput ? (
+                  <InputAdornment position="end">
+                    <IconButton size="small" onClick={() => setSearchInput('')} aria-label="clear search">
+                      <ClearIcon fontSize="small" />
+                    </IconButton>
+                  </InputAdornment>
+                ) : null,
+              }}
+            />
+          </Grid>
+
+          {/* Display Style Filter */}
+          <Grid item xs={6} sm={3} md={2}>
+            <FormControl fullWidth size="small">
+              <InputLabel id="display-style-filter-label">Display Style</InputLabel>
+              <Select
+                labelId="display-style-filter-label"
+                id="display-style-filter"
+                value={displayTypeFilter}
+                label="Display Style"
+                onChange={(e) => setDisplayTypeFilter(e.target.value)}
+              >
+                <MenuItem value="all">All Styles</MenuItem>
+                {DISPLAY_TYPE_OPTIONS.map((opt) => (
+                  <MenuItem key={opt.value} value={opt.value}>
+                    {opt.label}
+                  </MenuItem>
+                ))}
+              </Select>
+            </FormControl>
+          </Grid>
+
+          {/* Value Type Filter */}
+          <Grid item xs={6} sm={3} md={2}>
+            <FormControl fullWidth size="small">
+              <InputLabel id="value-type-filter-label">Value Type</InputLabel>
+              <Select
+                labelId="value-type-filter-label"
+                id="value-type-filter"
+                value={valueTypeFilter}
+                label="Value Type"
+                onChange={(e) => setValueTypeFilter(e.target.value)}
+              >
+                <MenuItem value="all">All Value Types</MenuItem>
+                {VALUE_TYPE_OPTIONS.map((opt) => (
+                  <MenuItem key={opt.value} value={opt.value}>
+                    {opt.label}
+                  </MenuItem>
+                ))}
+              </Select>
+            </FormControl>
+          </Grid>
+
+          {/* Values Filter */}
+          <Grid item xs={6} sm={3} md={2}>
+            <FormControl fullWidth size="small">
+              <InputLabel id="has-values-filter-label">Values</InputLabel>
+              <Select
+                labelId="has-values-filter-label"
+                id="has-values-filter"
+                value={hasValuesFilter}
+                label="Values"
+                onChange={(e) => setHasValuesFilter(e.target.value)}
+              >
+                <MenuItem value="all">All Templates</MenuItem>
+                <MenuItem value="yes">With Values</MenuItem>
+                <MenuItem value="no">Empty / No Values</MenuItem>
+              </Select>
+            </FormControl>
+          </Grid>
+
+          {/* Sort By Filter */}
+          <Grid item xs={6} sm={3} md={2.5}>
+            <FormControl fullWidth size="small">
+              <InputLabel id="sort-filter-label">Sort By</InputLabel>
+              <Select
+                labelId="sort-filter-label"
+                id="sort-filter"
+                value={sortFilter}
+                label="Sort By"
+                onChange={(e) => setSortFilter(e.target.value)}
+              >
+                <MenuItem value="sortOrder-ASC">Default (Sort Order)</MenuItem>
+                <MenuItem value="name-ASC">Name (A → Z)</MenuItem>
+                <MenuItem value="name-DESC">Name (Z → A)</MenuItem>
+                <MenuItem value="createdAt-DESC">Newest Added</MenuItem>
+                <MenuItem value="createdAt-ASC">Oldest Added</MenuItem>
+              </Select>
+            </FormControl>
+          </Grid>
+        </Grid>
+
+        {/* Active Filter Chips Bar */}
+        {hasActiveFilters && (
+          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mt: 2, pt: 1.5, borderTop: 1, borderColor: 'divider', flexWrap: 'wrap' }}>
+            <Typography variant="caption" color="text.secondary" sx={{ fontWeight: 600, mr: 0.5 }}>
+              Active Filters:
+            </Typography>
+            {debouncedSearch.trim() && (
+              <Chip
+                size="small"
+                label={`Search: "${debouncedSearch}"`}
+                onDelete={() => setSearchInput('')}
+                color="primary"
+                variant="outlined"
+              />
+            )}
+            {displayTypeFilter !== 'all' && (
+              <Chip
+                size="small"
+                label={`Style: ${DISPLAY_TYPE_OPTIONS.find((o) => o.value === displayTypeFilter)?.label || displayTypeFilter}`}
+                onDelete={() => setDisplayTypeFilter('all')}
+                color="primary"
+                variant="outlined"
+              />
+            )}
+            {valueTypeFilter !== 'all' && (
+              <Chip
+                size="small"
+                label={`Type: ${VALUE_TYPE_OPTIONS.find((o) => o.value === valueTypeFilter)?.label || valueTypeFilter}`}
+                onDelete={() => setValueTypeFilter('all')}
+                color="primary"
+                variant="outlined"
+              />
+            )}
+            {hasValuesFilter !== 'all' && (
+              <Chip
+                size="small"
+                label={`Values: ${hasValuesFilter === 'yes' ? 'With Values' : 'Empty'}`}
+                onDelete={() => setHasValuesFilter('all')}
+                color="primary"
+                variant="outlined"
+              />
+            )}
+            {sortFilter !== 'sortOrder-ASC' && (
+              <Chip
+                size="small"
+                label={`Sort: ${sortFilter === 'name-ASC' ? 'Name (A-Z)' : sortFilter === 'name-DESC' ? 'Name (Z-A)' : sortFilter === 'createdAt-DESC' ? 'Newest' : sortFilter === 'createdAt-ASC' ? 'Oldest' : sortFilter}`}
+                onDelete={() => setSortFilter('sortOrder-ASC')}
+                variant="outlined"
+              />
+            )}
+            <Button
+              size="small"
+              color="inherit"
+              startIcon={<ResetIcon fontSize="small" />}
+              onClick={handleClearFilters}
+              sx={{ ml: 'auto', textTransform: 'none', fontSize: '0.8rem', py: 0.25 }}
+            >
+              Reset Filters
+            </Button>
+          </Box>
+        )}
+      </Paper>
 
       {error && <Alert severity="error" sx={{ mb: 2 }}>{error}</Alert>}
 
@@ -461,13 +683,33 @@ const AttributesPage = () => {
                 <TableCell sx={{ fontWeight: 'bold' }}>Values</TableCell>
                 <TableCell align="right" sx={{ fontWeight: 'bold' }}>Actions</TableCell>
               </TableRow>
-
             </TableHead>
             <TableBody>
               {attributes.length === 0 && (
                 <TableRow>
-                  <TableCell colSpan={5} align="center" sx={{ py: 4, color: 'text.secondary' }}>
-                    No attribute templates yet. Create one to get started.
+                  <TableCell colSpan={5} align="center" sx={{ py: 6, color: 'text.secondary' }}>
+                    {hasActiveFilters ? (
+                      <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 1 }}>
+                        <SearchIcon sx={{ fontSize: 40, color: 'action.disabled' }} />
+                        <Typography variant="body1" fontWeight={600} color="text.primary">
+                          No matching attribute templates
+                        </Typography>
+                        <Typography variant="body2" color="text.secondary">
+                          Try adjusting your search query or filters
+                        </Typography>
+                        <Button
+                          variant="outlined"
+                          size="small"
+                          startIcon={<ResetIcon />}
+                          onClick={handleClearFilters}
+                          sx={{ mt: 1 }}
+                        >
+                          Clear All Filters
+                        </Button>
+                      </Box>
+                    ) : (
+                      'No attribute templates yet. Create one to get started.'
+                    )}
                   </TableCell>
                 </TableRow>
               )}

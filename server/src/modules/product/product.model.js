@@ -81,6 +81,12 @@ module.exports = (sequelize, DataTypes) => {
             allowNull: true,
             defaultValue: 10,
         },
+        requiresShipping: {
+            type: DataTypes.BOOLEAN,
+            allowNull: false,
+            defaultValue: true,
+            field: 'requires_shipping',
+        },
         taxConfig: {
             type: DataTypes.JSONB,
             allowNull: true,

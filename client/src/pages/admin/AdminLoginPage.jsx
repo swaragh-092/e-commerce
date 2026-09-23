@@ -30,11 +30,11 @@ const AdminLoginPage = () => {
   const [totpCode, setTotpCode] = useState('');
   const [useBackupCode, setUseBackupCode] = useState(false);
 
-  // If already logged in and an admin, redirect them directly to the admin area
+  // If already logged in and has admin access, redirect them directly to the admin area
   if (isAuthenticated) {
-    if (hasRole('admin') || hasRole('super_admin') || (user?.roles && user.roles.length > 0)) {
-       const adminEntryPath = getFirstAccessibleAdminPath(user);
-       return <Navigate to={adminEntryPath || '/admin'} replace />;
+    const adminEntryPath = getFirstAccessibleAdminPath(user);
+    if (adminEntryPath) {
+      return <Navigate to={adminEntryPath} replace />;
     }
   }
 
@@ -95,21 +95,17 @@ const AdminLoginPage = () => {
       
       // Enforce strict admin bounds
       const loggedUser = data.user;
-      const isAdmin = loggedUser.roles && loggedUser.roles.some(r => r.name === 'admin' || r.name === 'super_admin' || r.permissions?.length > 0);
+      const adminEntryPath = getFirstAccessibleAdminPath(loggedUser);
       
-      if (!isAdmin) {
-        // Technically they got logged in via the global auth context, 
-        // but we treat this page as unauthorized. Let's show an error, 
-        // but their session cookie is actually set. They can go to / to shop.
-        // If we want true security, we'd log them out, but unified db means they are logged in.
+      if (!adminEntryPath) {
         setError('Unauthorized: You do not have staff permissions.');
         setLoading(false);
         return;
       }
 
       const fromPath = location.state?.from?.pathname;
-      const adminEntryPath = (fromPath && fromPath.startsWith('/admin')) ? fromPath : getFirstAccessibleAdminPath(loggedUser);
-      navigate(adminEntryPath || '/admin', { replace: true });
+      const target = (fromPath && fromPath.startsWith('/admin')) ? fromPath : adminEntryPath;
+      navigate(target, { replace: true });
 
     } catch (err) {
       setError(getApiErrorMessage(err, 'Login failed. Please verify credentials.'));
@@ -125,15 +121,14 @@ const AdminLoginPage = () => {
     try {
       const data = await verifyTwoFactor(tempToken, totpCode);
       const loggedUser = data.user;
-      const isAdmin = loggedUser.roles && loggedUser.roles.some(r => r.name === 'admin' || r.name === 'super_admin' || r.permissions?.length > 0);
-      if (!isAdmin) {
+      const adminEntryPath = getFirstAccessibleAdminPath(loggedUser);
+      if (!adminEntryPath) {
         setError('Unauthorized: You do not have staff permissions.');
         setLoading(false);
         return;
       }
-      const adminEntryPath = getFirstAccessibleAdminPath(loggedUser);
       const fromPath = location.state?.from?.pathname;
-      const target = (fromPath && fromPath.startsWith('/admin')) ? fromPath : (adminEntryPath || '/admin');
+      const target = (fromPath && fromPath.startsWith('/admin')) ? fromPath : adminEntryPath;
       navigate(target, { replace: true });
     } catch (err) {
       setError(getApiErrorMessage(err, 'Invalid 2FA code.'));

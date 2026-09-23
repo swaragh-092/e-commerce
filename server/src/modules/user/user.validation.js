@@ -113,6 +113,14 @@ const emailChangeConfirmSchema = Joi.object({
   token: Joi.string().required(),
 });
 
+const listUsersQuerySchema = Joi.object({
+  page: Joi.number().integer().min(1).default(1),
+  limit: Joi.number().integer().min(1).max(100).default(20),
+  status: Joi.string().valid('active', 'inactive', 'banned'),
+  role: Joi.string().max(50),
+  search: Joi.string().max(100).allow(''),
+});
+
 module.exports = {
   updateProfileSchema,
   changePasswordSchema,
@@ -125,4 +133,5 @@ module.exports = {
   phoneChangeConfirmSchema,
   emailChangeRequestSchema,
   emailChangeConfirmSchema,
+  listUsersQuerySchema,
 };

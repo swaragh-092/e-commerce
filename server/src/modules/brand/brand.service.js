@@ -137,6 +137,7 @@ const getBrandBySlug = async (slug, isAdmin = false, query = {}) => {
         model: Product,
         as: 'products',
         required: false,
+        separate: true,
     };
 
     // If not admin, only show active/published products
@@ -164,7 +165,7 @@ const getBrandBySlug = async (slug, isAdmin = false, query = {}) => {
 
     // Add sorting for products if provided
     if (query.productSortBy && query.productSortOrder) {
-        productInclude.order = [[query.productSortBy, query.productSortOrder]];
+        productInclude.order = [[query.productSortBy, query.productSortOrder.toUpperCase()]];
     }
 
     const brand = await Brand.findOne({
@@ -208,6 +209,9 @@ const updateBrand = async (id, data) => {
         if (slug && slug !== brand.slug) {
             // If brand explicitly provides a new slug, ensure it's unique
             finalSlug = await generateSlug(slug, Brand, 'slug', { transaction });
+        } else if (name && name !== brand.name && !slug) {
+            // If name changed and no explicit slug provided, auto-generate new slug
+            finalSlug = await generateSlug(name, Brand, 'slug', { transaction });
         }
 
         await brand.update({

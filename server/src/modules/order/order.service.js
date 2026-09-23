@@ -50,7 +50,8 @@ const { normalizeDateOnly, isDateOnOrAfter } = require('./orderDate.utils');
 
 const { getPagination } = require('../../utils/pagination');
 const { ACTIONS, ENTITIES } = require('../../config/constants');
-const { getVariantUnitPrice } = require('../product/product.pricing');
+const { getVariantUnitPrice, resolveSaleLabel } = require('../product/product.pricing');
+const { getSaleLabels } = require('../settings/saleLabel.service');
 const productComboService = require('../product/productCombo.service');
 const {
     ORDER_DEFAULT_STATUS,
@@ -1087,6 +1088,7 @@ const placeOrder = async (userId, payload) => {
     const settingsMap = await buildSettingsSnapshot(['tax', 'shipping']);
     const getLocalSetting = (key, defaultVal) => settingsMap[key] !== undefined ? settingsMap[key] : defaultVal;
 
+    const labelPresets = await getSaleLabels().catch(() => []);
     const { order, eventBuffer } = await sequelize.transaction(async (t) => {
         let subtotal = 0;
 
@@ -1107,8 +1109,13 @@ const placeOrder = async (userId, payload) => {
                     `"${product.name}" is no longer available. Please remove it from your cart before checkout.`
                 );
             }
+
+            const plainCurrentProduct = typeof currentProduct.toJSON === 'function' ? currentProduct.toJSON() : { ...currentProduct };
+            if (!plainCurrentProduct.saleLabelResolved && plainCurrentProduct.saleLabel) {
+                plainCurrentProduct.saleLabelResolved = resolveSaleLabel(plainCurrentProduct.saleLabel, labelPresets);
+            }
             
-            let currentPrice = getVariantUnitPrice(currentProduct, null);
+            let currentPrice = getVariantUnitPrice(plainCurrentProduct, null);
 
             if (item.variantId) {
                 const currentVariant = await ProductVariant.findByPk(item.variantId, { transaction: t });
@@ -1116,7 +1123,7 @@ const placeOrder = async (userId, payload) => {
                     throw new AppError('VALIDATION_ERROR', 400, `The selected variant for "${product.name}" is no longer available.`);
                 }
 
-                currentPrice = getVariantUnitPrice(currentProduct, currentVariant);
+                currentPrice = getVariantUnitPrice(plainCurrentProduct, currentVariant);
                 item.variant = currentVariant;
             }
 
@@ -1937,7 +1944,7 @@ const createFulfillment = async (orderId, payload, actingUserId, auditContext = 
         const productIds = items.map(reqItem => orderItemMap[reqItem.orderItemId]?.productId).filter(Boolean);
         const products = await Product.findAll({
             where: { id: productIds },
-            attributes: ['id', 'weightGrams', 'lengthCm', 'breadthCm', 'heightCm'],
+            attributes: ['id', 'weightGrams', 'lengthCm', 'breadthCm', 'heightCm', 'requiresShipping'],
             transaction: t
         });
         const productMap = products.reduce((map, p) => {

@@ -83,6 +83,14 @@ const updateProductAttribute = async (productId, attrId, data) => {
     const row = await ProductAttribute.findOne({ where: { id: attrId, productId } });
     if (!row) throw new AppError('NOT_FOUND', 404, 'Product attribute not found');
 
+    // Reject mode crossing: custom attributes cannot receive valueId, and template attributes cannot receive customValue
+    if (data.valueId && !row.attributeId) {
+        throw new AppError('VALIDATION_ERROR', 400, 'Cannot set valueId on a custom attribute');
+    }
+    if (data.customValue !== undefined && row.attributeId) {
+        throw new AppError('VALIDATION_ERROR', 400, 'Cannot set customValue on a global attribute template');
+    }
+
     // If swapping to a new global value, validate the new attributeValue belongs to the same template
     if (data.valueId && row.attributeId) {
         const attrValue = await AttributeValue.findOne({

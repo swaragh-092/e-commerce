@@ -29,6 +29,7 @@ import {
   Delete as DeleteIcon,
   ElectricBolt as ElectricBoltIcon,
   Campaign as CampaignIcon,
+  Star as StarIcon,
 } from '@mui/icons-material';
 import brandService from '../../services/brandService';
 import { getMediaUrl } from '../../utils/media';
@@ -45,9 +46,10 @@ const BrandsPage = () => {
   const { hasPermission } = useAuth();
   const { refreshBrands } = useBrands();
 
-  const canCreateBrand = hasPermission(PERMISSIONS.PRODUCTS_CREATE);
-  const canUpdateBrand = hasPermission(PERMISSIONS.PRODUCTS_UPDATE);
-  const canDeleteBrand = hasPermission(PERMISSIONS.PRODUCTS_DELETE);
+  const canManageBrands = hasPermission(PERMISSIONS.BRANDS_MANAGE);
+  const canCreateBrand = canManageBrands;
+  const canUpdateBrand = canManageBrands;
+  const canDeleteBrand = canManageBrands;
   const canUploadMedia = hasPermission(PERMISSIONS.MEDIA_UPLOAD);
 
   const [rows, setRows] = useState([]);
@@ -59,6 +61,7 @@ const BrandsPage = () => {
   const [search, setSearch] = useState('');
   const [searchInput, setSearchInput] = useState('');
   const [statusFilter, setStatusFilter] = useState('all'); // all, active, inactive
+  const [featuredFilter, setFeaturedFilter] = useState('all'); // all, featured, standard
 
   // Dialog state
   const [open, setOpen] = useState(false);
@@ -70,6 +73,7 @@ const BrandsPage = () => {
     image: '',
     isActive: true,
     isPromoted: false,
+    isFeatured: false,
   });
   const [errors, setErrors] = useState({});
   const [saving, setSaving] = useState(false);
@@ -86,6 +90,7 @@ const BrandsPage = () => {
         limit: paginationModel.pageSize,
         search: search || undefined,
         isActive: statusFilter === 'all' ? undefined : statusFilter === 'active',
+        isFeatured: featuredFilter === 'all' ? undefined : featuredFilter === 'featured',
       });
       setRows(res.data.data || []);
       setTotal(res.data.meta?.total || 0);
@@ -94,7 +99,7 @@ const BrandsPage = () => {
     } finally {
       setLoading(false);
     }
-  }, [paginationModel, search, statusFilter, notify]);
+  }, [paginationModel, search, statusFilter, featuredFilter, notify]);
 
   useEffect(() => {
     fetchBrands();
@@ -121,6 +126,7 @@ const BrandsPage = () => {
         image: brand.image || '',
         isActive: brand.isActive,
         isPromoted: Boolean(brand.isPromoted),
+        isFeatured: Boolean(brand.isFeatured),
       });
     } else {
       setEditingBrand(null);
@@ -131,6 +137,7 @@ const BrandsPage = () => {
         image: '',
         isActive: true,
         isPromoted: false,
+        isFeatured: false,
       });
     }
     setErrors({});
@@ -262,6 +269,20 @@ const BrandsPage = () => {
         />
       ),
     },
+    {
+      field: 'isFeatured',
+      headerName: 'Featured',
+      width: 140,
+      renderCell: (params) => (
+        <Chip
+          icon={params.value ? <StarIcon /> : undefined}
+          label={params.value ? 'Featured' : 'Standard'}
+          color={params.value ? 'warning' : 'default'}
+          variant={params.value ? 'filled' : 'outlined'}
+          size="small"
+        />
+      ),
+    },
   ];
 
   if (canUpdateBrand || canDeleteBrand) {
@@ -346,6 +367,21 @@ const BrandsPage = () => {
                 <MenuItem value="inactive">Inactive Only</MenuItem>
               </Select>
             </FormControl>
+            <FormControl size="small" sx={{ width: 150 }}>
+              <InputLabel>Featured</InputLabel>
+              <Select
+                value={featuredFilter}
+                label="Featured"
+                onChange={(e) => {
+                  setFeaturedFilter(e.target.value);
+                  setPaginationModel((prev) => ({ ...prev, page: 0 }));
+                }}
+              >
+                <MenuItem value="all">All Brands</MenuItem>
+                <MenuItem value="featured">Featured Only</MenuItem>
+                <MenuItem value="standard">Standard Only</MenuItem>
+              </Select>
+            </FormControl>
             <Button type="submit" variant="outlined">
               Search
             </Button>
@@ -355,6 +391,7 @@ const BrandsPage = () => {
                 setSearchInput('');
                 setSearch('');
                 setStatusFilter('all');
+                setFeaturedFilter('all');
                 setPaginationModel((prev) => ({ ...prev, page: 0 }));
               }}
             >
@@ -524,6 +561,18 @@ const BrandsPage = () => {
             />
             <Typography variant="caption" color="text.secondary" sx={{ mt: -2 }}>
               Promoted brands appear in Featured Brands only when they have at least one published product.
+            </Typography>
+            <FormControlLabel
+              control={
+                <Switch
+                  checked={formData.isFeatured}
+                  onChange={(e) => setFormData({ ...formData, isFeatured: e.target.checked })}
+                />
+              }
+              label="Featured brand"
+            />
+            <Typography variant="caption" color="text.secondary" sx={{ mt: -2 }}>
+              Featured brands are highlighted across storefront showcases and homepage brand sections.
             </Typography>
           </Stack>
         </DialogContent>

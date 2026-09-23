@@ -40,6 +40,145 @@ const inventoryService = require('../inventory/inventory.service');
 // Fetch the active label catalog once per request (the service caches for 60 s)
 const getLabelPresets = () => getSaleLabels().catch(() => []);
 
+/**
+ * Builds a SQL WHERE condition (string) that evaluates whether a product's sale is active,
+ * precisely matching the JS `isSaleActive` logic from product.pricing.js:
+ * 1. sale_price IS NOT NULL AND sale_price < price
+ * 2. sale_start_at IS NULL OR sale_start_at <= NOW()
+ * 3. sale_end_at IS NULL OR sale_end_at >= NOW()
+ * 4. Gated on label presets:
+ *    - Inactive presets are excluded
+ *    - Future preset start dates are excluded unless product has its own sale_start_at
+ *    - Expired preset end dates are excluded unless product has its own sale_end_at
+ */
+const buildSqlSaleCondition = (labelPresets = [], now = new Date(), tableAlias = '"Product"') => {
+  const inactiveIds = [];
+  const futureIds = [];
+  const expiredIds = [];
+
+  for (const preset of labelPresets) {
+    if (!preset || !preset.id) continue;
+    if (preset.isActive === false) {
+      inactiveIds.push(preset.id);
+      continue;
+    }
+    if (preset.startDate) {
+      const start = new Date(preset.startDate);
+      if (!Number.isNaN(start.getTime()) && start > now) {
+        futureIds.push(preset.id);
+        continue;
+      }
+    }
+    if (preset.endDate) {
+      const end = new Date(preset.endDate);
+      if (!Number.isNaN(end.getTime()) && end < now) {
+        expiredIds.push(preset.id);
+        continue;
+      }
+    }
+  }
+
+  const conditions = [
+    `${tableAlias}."sale_price" IS NOT NULL`,
+    `${tableAlias}."sale_price" < ${tableAlias}."price"`,
+    `(${tableAlias}."sale_start_at" IS NULL OR ${tableAlias}."sale_start_at" <= NOW())`,
+    `(${tableAlias}."sale_end_at" IS NULL OR ${tableAlias}."sale_end_at" >= NOW())`,
+  ];
+
+  if (inactiveIds.length > 0) {
+    const escaped = inactiveIds.map((id) => sequelize.escape(id)).join(',');
+    conditions.push(`(${tableAlias}."sale_label" IS NULL OR ${tableAlias}."sale_label" NOT IN (${escaped}))`);
+  }
+
+  if (futureIds.length > 0) {
+    const escaped = futureIds.map((id) => sequelize.escape(id)).join(',');
+    conditions.push(`(${tableAlias}."sale_label" IS NULL OR ${tableAlias}."sale_label" NOT IN (${escaped}) OR ${tableAlias}."sale_start_at" IS NOT NULL)`);
+  }
+
+  if (expiredIds.length > 0) {
+    const escaped = expiredIds.map((id) => sequelize.escape(id)).join(',');
+    conditions.push(`(${tableAlias}."sale_label" IS NULL OR ${tableAlias}."sale_label" NOT IN (${escaped}) OR ${tableAlias}."sale_end_at" IS NOT NULL)`);
+  }
+
+  return conditions.join(' AND ');
+};
+
+const getSqlEffectivePriceExpr = (labelPresets = [], now = new Date(), tableAlias = '"Product"') => {
+  const saleCond = buildSqlSaleCondition(labelPresets, now, tableAlias);
+  return Sequelize.literal(`COALESCE(CASE WHEN ${saleCond} THEN ${tableAlias}."sale_price" ELSE ${tableAlias}."price" END, ${tableAlias}."price")`);
+};
+
+const buildSqlSaleStatusCondition = (status, labelPresets = [], now = new Date(), tableAlias = '"Product"') => {
+  if (status === 'none') {
+    return `(${tableAlias}."sale_price" IS NULL OR ${tableAlias}."sale_price" >= ${tableAlias}."price")`;
+  }
+  if (status === 'active') {
+    return buildSqlSaleCondition(labelPresets, now, tableAlias);
+  }
+
+  const inactiveIds = [];
+  const futureIds = [];
+  const expiredIds = [];
+
+  for (const preset of labelPresets) {
+    if (!preset || !preset.id) continue;
+    if (preset.isActive === false) {
+      inactiveIds.push(preset.id);
+      continue;
+    }
+    if (preset.startDate) {
+      const start = new Date(preset.startDate);
+      if (!Number.isNaN(start.getTime()) && start > now) {
+        futureIds.push(preset.id);
+        continue;
+      }
+    }
+    if (preset.endDate) {
+      const end = new Date(preset.endDate);
+      if (!Number.isNaN(end.getTime()) && end < now) {
+        expiredIds.push(preset.id);
+        continue;
+      }
+    }
+  }
+
+  const notInactiveClause = inactiveIds.length > 0
+    ? `(${tableAlias}."sale_label" IS NULL OR ${tableAlias}."sale_label" NOT IN (${inactiveIds.map((id) => sequelize.escape(id)).join(',')}))`
+    : null;
+
+  if (status === 'scheduled') {
+    const scheduledParts = [`${tableAlias}."sale_start_at" > NOW()`];
+    if (futureIds.length > 0) {
+      const escaped = futureIds.map((id) => sequelize.escape(id)).join(',');
+      scheduledParts.push(`(${tableAlias}."sale_label" IN (${escaped}) AND ${tableAlias}."sale_start_at" IS NULL)`);
+    }
+    const conds = [
+      `${tableAlias}."sale_price" IS NOT NULL`,
+      `${tableAlias}."sale_price" < ${tableAlias}."price"`,
+      `(${scheduledParts.join(' OR ')})`,
+    ];
+    if (notInactiveClause) conds.push(notInactiveClause);
+    return conds.join(' AND ');
+  }
+
+  if (status === 'expired') {
+    const expiredParts = [`${tableAlias}."sale_end_at" < NOW()`];
+    if (expiredIds.length > 0) {
+      const escaped = expiredIds.map((id) => sequelize.escape(id)).join(',');
+      expiredParts.push(`(${tableAlias}."sale_label" IN (${escaped}) AND ${tableAlias}."sale_end_at" IS NULL)`);
+    }
+    const conds = [
+      `${tableAlias}."sale_price" IS NOT NULL`,
+      `${tableAlias}."sale_price" < ${tableAlias}."price"`,
+      `(${expiredParts.join(' OR ')})`,
+    ];
+    if (notInactiveClause) conds.push(notInactiveClause);
+    return conds.join(' AND ');
+  }
+
+  return null;
+};
+
 const sanitizeRichText = (html) => {
   if (!html) return html;
   return sanitizeHtml(html, {
@@ -310,6 +449,7 @@ exports.getProducts = async (filters, page, limit, isAdmin = false) => {
     { model: Brand, as: 'brand' },
   ];
   const now = new Date();
+  const labelPresets = await getLabelPresets();
 
   // Always restrict to published + enabled products for storefront; admins can filter by any status
   if (!isAdmin) {
@@ -326,15 +466,35 @@ exports.getProducts = async (filters, page, limit, isAdmin = false) => {
 
   // Filter Logic
   if (filters.search) {
-    where[Op.or] = [
-      { name: { [Op.iLike]: '%' + filters.search + '%' } },
-      { description: { [Op.iLike]: '%' + filters.search + '%' } },
-    ];
+    const trimmed = String(filters.search).trim();
+    if (trimmed) {
+      const searchPattern = `%${trimmed}%`;
+      const escapedQuery = sequelize.escape(trimmed);
+      where[Op.or] = [
+        { name: { [Op.iLike]: searchPattern } },
+        { description: { [Op.iLike]: searchPattern } },
+        { sku: { [Op.iLike]: searchPattern } },
+        Sequelize.literal(`"Product"."search_vector" @@ plainto_tsquery('simple', ${escapedQuery})`),
+      ];
+    }
   }
+  const priceFilterConditions = [];
   if (filters.minPrice || filters.maxPrice) {
-    where.price = {};
-    if (filters.minPrice) where.price[Op.gte] = filters.minPrice;
-    if (filters.maxPrice) where.price[Op.lte] = filters.maxPrice;
+    const effectivePriceExpr = getSqlEffectivePriceExpr(labelPresets, now, '"Product"');
+    if (filters.minPrice && filters.maxPrice) {
+      priceFilterConditions.push(
+        Sequelize.where(effectivePriceExpr, { [Op.between]: [Number(filters.minPrice), Number(filters.maxPrice)] })
+      );
+    } else if (filters.minPrice) {
+      priceFilterConditions.push(
+        Sequelize.where(effectivePriceExpr, { [Op.gte]: Number(filters.minPrice) })
+      );
+    } else if (filters.maxPrice) {
+      priceFilterConditions.push(
+        Sequelize.where(effectivePriceExpr, { [Op.lte]: Number(filters.maxPrice) })
+      );
+    }
+    where[Op.and] = [...(where[Op.and] || []), ...priceFilterConditions];
   }
   if (filters.maxQty !== undefined && filters.maxQty !== null) {
     const maxQty = parseInt(filters.maxQty, 10);
@@ -356,35 +516,12 @@ exports.getProducts = async (filters, page, limit, isAdmin = false) => {
     }
   }
   if (filters.saleStatus) {
-    const saleFilters = {
-      none: { salePrice: null },
-      scheduled: {
-        salePrice: { [Op.ne]: null },
-        saleStartAt: { [Op.gt]: now },
-      },
-      active: {
-        [Op.and]: [
-          { salePrice: { [Op.ne]: null } },
-          Sequelize.where(Sequelize.col('Product.sale_price'), Op.lt, Sequelize.col('Product.price')),
-          { [Op.or]: [{ saleStartAt: null }, { saleStartAt: { [Op.lte]: now } }] },
-          { [Op.or]: [{ saleEndAt: null }, { saleEndAt: { [Op.gte]: now } }] },
-        ],
-      },
-      expired: {
-        [Op.and]: [
-          { salePrice: { [Op.ne]: null } },
-          { saleEndAt: { [Op.lt]: now } },
-        ],
-      },
-    };
-
-    if (saleFilters[filters.saleStatus]) {
-      const filter = saleFilters[filters.saleStatus];
-      if (filter[Op.and]) {
-        where[Op.and] = [...(where[Op.and] || []), ...filter[Op.and]];
-      } else {
-        where[Op.and] = [...(where[Op.and] || []), filter];
-      }
+    const statusCond = buildSqlSaleStatusCondition(filters.saleStatus, labelPresets, now, '"Product"');
+    if (statusCond) {
+      where[Op.and] = [
+        ...(where[Op.and] || []),
+        Sequelize.literal(statusCond),
+      ];
     }
   }
 
@@ -407,10 +544,7 @@ exports.getProducts = async (filters, page, limit, isAdmin = false) => {
   if (filters.onSale === 'true' || filters.onSale === true || filters.sale === 'true' || filters.sale === true) {
     where[Op.and] = [
       ...(where[Op.and] || []),
-      { salePrice: { [Op.ne]: null } },
-      salePriceIsDiscounted,
-      { [Op.or]: [{ saleStartAt: null }, { saleStartAt: { [Op.lte]: now } }] },
-      { [Op.or]: [{ saleEndAt: null }, { saleEndAt: { [Op.gte]: now } }] },
+      Sequelize.literal(buildSqlSaleCondition(labelPresets, now, '"Product"')),
     ];
   }
 
@@ -432,7 +566,15 @@ exports.getProducts = async (filters, page, limit, isAdmin = false) => {
   else if (filters.sort === 'price_desc') order.push(['price', 'DESC']);
   else if (filters.sort === 'newest') order.push(['createdAt', 'DESC']);
   else if (filters.sort === 'name_asc') order.push(['name', 'ASC']);
-  else if (filters.sort === 'discount_desc') order.push([Sequelize.literal('CASE WHEN "Product"."sale_price" IS NOT NULL AND "Product"."sale_price" < "Product"."price" THEN ("Product"."price" - "Product"."sale_price") * 100.0 / "Product"."price" ELSE 0 END'), 'DESC']);
+  else if (filters.sort === 'discount_desc') {
+    const saleCond = buildSqlSaleCondition(labelPresets, now, '"Product"');
+    order.push([
+      Sequelize.literal(
+        `CASE WHEN ${saleCond} THEN ("Product"."price" - "Product"."sale_price") * 100.0 / "Product"."price" ELSE 0 END`
+      ),
+      'DESC',
+    ]);
+  }
   else if (filters.sort === 'ending_soon') order.push([Sequelize.literal('CASE WHEN "Product"."sale_end_at" IS NOT NULL THEN "Product"."sale_end_at" ELSE \'2099-12-31\'::timestamp END'), 'ASC']);
   else order.push(['createdAt', 'DESC']);
 
@@ -449,8 +591,22 @@ exports.getProducts = async (filters, page, limit, isAdmin = false) => {
     include.push(getAttributeInclude());
   }
 
+  const shouldIncludeSubcategories = (() => {
+    const raw = filters.includeSubcategories;
+    if (raw === undefined || raw === null || raw === '') return true;
+    if (typeof raw === 'boolean') return raw;
+    if (typeof raw === 'number') return raw !== 0;
+    if (typeof raw === 'string') {
+      const s = raw.toLowerCase().trim();
+      return !['false', '0', 'no'].includes(s);
+    }
+    return Boolean(raw);
+  })();
+
   if (filters.categoryId) {
-    const categoryIds = await getCategoryAndDescendantIds(filters.categoryId);
+    const categoryIds = shouldIncludeSubcategories
+      ? await getCategoryAndDescendantIds(filters.categoryId)
+      : [filters.categoryId];
     include.push({
       model: Category,
       as: 'categories',
@@ -464,7 +620,9 @@ exports.getProducts = async (filters, page, limit, isAdmin = false) => {
       attributes: ['id'],
     });
     if (rootCat) {
-      const categoryIds = await getCategoryAndDescendantIds(rootCat.id);
+      const categoryIds = shouldIncludeSubcategories
+        ? await getCategoryAndDescendantIds(rootCat.id)
+        : [rootCat.id];
       include.push({
         model: Category,
         as: 'categories',
@@ -492,6 +650,11 @@ exports.getProducts = async (filters, page, limit, isAdmin = false) => {
   // Compute actual price range for the current filter context (excluding minPrice/maxPrice)
   const priceRangeWhere = { ...where };
   delete priceRangeWhere.price;
+  if (priceFilterConditions.length > 0 && Array.isArray(priceRangeWhere[Op.and])) {
+    priceRangeWhere[Op.and] = priceRangeWhere[Op.and].filter(
+      (c) => !priceFilterConditions.includes(c)
+    );
+  }
 
   // Translate relationship includes into direct WHERE subqueries for the aggregation query
   if (filters._categoryIds?.length) {
@@ -512,11 +675,12 @@ exports.getProducts = async (filters, page, limit, isAdmin = false) => {
     }
   }
 
+  const effectivePriceCol = getSqlEffectivePriceExpr(labelPresets, now, '"Product"');
   const priceRangeResult = await Product.findOne({
     where: priceRangeWhere,
     attributes: [
-      [Sequelize.fn('MIN', Sequelize.col('Product.price')), 'min'],
-      [Sequelize.fn('MAX', Sequelize.col('Product.price')), 'max'],
+      [Sequelize.fn('MIN', effectivePriceCol), 'min'],
+      [Sequelize.fn('MAX', effectivePriceCol), 'max'],
     ],
     raw: true,
   });
@@ -573,7 +737,6 @@ exports.getProducts = async (filters, page, limit, isAdmin = false) => {
     });
   }
 
-  const labelPresets = await getLabelPresets();
   const { features } = await SettingsService.getFeatures();
   const serializedRows = rows.map((row) => serializeProductPricing(row, { adminView: isAdmin, features }, labelPresets));
   
@@ -717,7 +880,7 @@ exports.updateProduct = async (id, data, auditContext = null) => {
   const transaction = await Product.sequelize.transaction();
   const labelPresets = await getLabelPresets();
   try {
-    data = normalizeSalePayload(data, product.price, { labelPresets });
+    data = normalizeSalePayload(data, product, { labelPresets });
     
     if (data.slug && data.slug !== product.slug) {
       data.slug = await generateSlug(data.slug, Product, 'slug', { transaction });
@@ -884,6 +1047,10 @@ exports.bulkDeleteProducts = async (ids, actingUserId = null, auditContext = nul
 };
 
 exports.bulkUpdateProducts = async (ids, data, actingUserId = null, auditContext = null) => {
+  const labelPresets = await getLabelPresets();
+  const touchesPricingOrSale = ['price', 'salePrice', 'saleStartAt', 'saleEndAt', 'saleLabel'].some((k) => k in data);
+  let updatePayload = { ...data };
+
   return Product.sequelize.transaction(async (transaction) => {
     const products = await Product.findAll({
       where: { id: ids },
@@ -894,7 +1061,23 @@ exports.bulkUpdateProducts = async (ids, data, actingUserId = null, auditContext
       throw new AppError('NOT_FOUND', 404, 'No products found to update');
     }
 
-    await Product.update(data, {
+    if (touchesPricingOrSale) {
+      for (const product of products) {
+        const normalized = normalizeSalePayload(data, product, { labelPresets });
+        for (const key of ['saleLabel', 'salePrice', 'saleStartAt', 'saleEndAt', 'price']) {
+          if (key in data) {
+            updatePayload[key] = normalized[key];
+          }
+        }
+        if ('salePrice' in data && data.salePrice === null) {
+          updatePayload.saleStartAt = null;
+          updatePayload.saleEndAt = null;
+          updatePayload.saleLabel = null;
+        }
+      }
+    }
+
+    await Product.update(updatePayload, {
       where: { id: ids },
       transaction,
     });
@@ -907,7 +1090,7 @@ exports.bulkUpdateProducts = async (ids, data, actingUserId = null, auditContext
           action: ACTIONS.UPDATE,
           entity: ENTITIES.PRODUCT,
           entityId: product.id,
-          changes: data,
+          changes: updatePayload,
           ipAddress: auditContext?.ip,
           userAgent: auditContext?.userAgent,
         });
@@ -918,7 +1101,7 @@ exports.bulkUpdateProducts = async (ids, data, actingUserId = null, auditContext
     
     events.emit(PRODUCT_EVENTS.BULK_UPDATED, {
       productIds: ids,
-      changes: data,
+      changes: updatePayload,
       actingUserId
     });
 
@@ -1043,3 +1226,7 @@ exports.getRelatedProducts = async (productId, limit = 6) => {
   const { features } = await SettingsService.getFeatures();
   return rows.map((p) => serializeProductPricing(p, { adminView: false, features }, labelPresets));
 };
+
+exports.buildSqlSaleCondition = buildSqlSaleCondition;
+exports.getSqlEffectivePriceExpr = getSqlEffectivePriceExpr;
+exports.buildSqlSaleStatusCondition = buildSqlSaleStatusCondition;

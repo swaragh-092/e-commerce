@@ -45,12 +45,22 @@ const updateMe = async (userId, payload) => {
     }
 
     if (payload.phone || payload.gender || payload.dateOfBirth) {
+      if (payload.phone) {
+        const existingPhone = await UserProfile.findOne({
+          where: { phone: payload.phone },
+          transaction: t,
+        });
+        if (existingPhone && existingPhone.userId !== userId) {
+          throw new AppError('CONFLICT', 409, 'This phone number is already registered to another account');
+        }
+      }
+
       let profile = await UserProfile.findOne({ where: { userId }, transaction: t });
       if (!profile) {
         profile = await UserProfile.create({ userId }, { transaction: t });
       }
       await profile.update({
-        phone: payload.phone || profile.phone,
+        phone: payload.phone !== undefined ? payload.phone : profile.phone,
         gender: payload.gender || profile.gender,
         dateOfBirth: payload.dateOfBirth || profile.dateOfBirth
       }, { transaction: t });
@@ -161,23 +171,44 @@ const updateAvatar = async (userId, mediaId) => {
 const listAll = async ({ page, limit, status, role, search }) => {
   const { limit: lmt, offset } = getPagination(page, limit);
   const where = {};
-  if (status) where.status = status;
-  if (role) where.role = role;
+  const andClauses = [];
+
+  if (status) andClauses.push({ status });
+  if (role) {
+    andClauses.push({
+      [Op.or]: [
+        { role },
+        sequelize.literal(`EXISTS (
+          SELECT 1 FROM user_roles ur
+          JOIN roles r ON r.id = ur.role_id
+          WHERE ur.user_id = "User"."id"
+          AND (r.slug = ${sequelize.escape(role)} OR r.name ILIKE ${sequelize.escape(role)})
+        )`),
+      ],
+    });
+  }
   if (search && search.trim()) {
     const pattern = `%${search.trim()}%`;
-    where[Op.or] = [
-      { firstName: { [Op.iLike]: pattern } },
-      { lastName: { [Op.iLike]: pattern } },
-      { email: { [Op.iLike]: pattern } },
-      sequelize.where(
-        sequelize.fn('concat', sequelize.col('first_name'), ' ', sequelize.col('last_name')),
-        { [Op.iLike]: pattern }
-      ),
-    ];
+    andClauses.push({
+      [Op.or]: [
+        { firstName: { [Op.iLike]: pattern } },
+        { lastName: { [Op.iLike]: pattern } },
+        { email: { [Op.iLike]: pattern } },
+        sequelize.where(
+          sequelize.fn('concat', sequelize.col('first_name'), ' ', sequelize.col('last_name')),
+          { [Op.iLike]: pattern }
+        ),
+      ],
+    });
+  }
+
+  if (andClauses.length > 0) {
+    where[Op.and] = andClauses;
   }
 
   return User.findAndCountAll({
     where,
+    distinct: true,
     limit: lmt,
     offset,
     order: [['createdAt', 'DESC']],
@@ -208,6 +239,7 @@ const getById = async (id) => {
 };
 
 const updateStatus = async (id, status, actingUserId) => {
+  const { RefreshToken } = require('../index');
   return sequelize.transaction(async (t) => {
     const user = await User.findByPk(id, { transaction: t });
     if (!user) throw new AppError('NOT_FOUND', 404, 'User not found');
@@ -216,8 +248,26 @@ const updateStatus = async (id, status, actingUserId) => {
         throw new AppError('VALIDATION_ERROR', 400, 'You cannot change your own status');
     }
 
+    if (user.role === 'super_admin' && status !== 'active') {
+      const activeSuperAdminCount = await User.count({
+        where: { role: 'super_admin', status: 'active' },
+        transaction: t,
+      });
+      if (activeSuperAdminCount <= 1) {
+        throw new AppError('VALIDATION_ERROR', 400, 'Cannot deactivate or ban the last active super admin');
+      }
+    }
+
     const before = user.toJSON();
     await user.update({ status }, { transaction: t });
+
+    // Revoke refresh tokens on deactivation or ban so sessions cannot be resurrected
+    if (status !== 'active') {
+      await RefreshToken.update(
+        { revokedAt: new Date() },
+        { where: { userId: id, revokedAt: null }, transaction: t }
+      );
+    }
 
     try {
       if (AuditService && AuditService.log) {
@@ -475,7 +525,6 @@ const cancelAccountDeletion = async (userId) => {
 
 const getSessions = async (userId, currentAccessToken) => {
   const { RefreshToken } = require('../index');
-  const crypto = require('crypto');
   const jwt = require('jsonwebtoken');
 
   const sessions = await RefreshToken.findAll({
@@ -484,21 +533,21 @@ const getSessions = async (userId, currentAccessToken) => {
     order: [['lastActiveAt', 'DESC']],
   });
 
-  // Determine current session by matching the access token's user to the most recent refresh
-  let currentTokenUserId;
-  try {
-    const decoded = jwt.verify(currentAccessToken, process.env.JWT_ACCESS_SECRET, { algorithms: ['HS256'] });
-    currentTokenUserId = decoded.id;
-  } catch (e) {}
+  let currentSessionId = null;
+  if (currentAccessToken) {
+    try {
+      const decoded = jwt.verify(currentAccessToken, process.env.JWT_ACCESS_SECRET, { algorithms: ['HS256'] });
+      currentSessionId = decoded.sid || null;
+    } catch (e) {}
+  }
 
-  // The most recently active session for this user is the current one
   return sessions.map((s, idx) => ({
     id: s.id,
     deviceName: s.deviceName || 'Unknown device',
     ipAddress: s.createdByIp,
     lastActiveAt: s.lastActiveAt || s.createdAt,
     createdAt: s.createdAt,
-    isCurrent: currentTokenUserId ? idx === 0 : false,
+    isCurrent: currentSessionId ? s.id === currentSessionId : idx === 0,
   }));
 };
 
@@ -511,8 +560,17 @@ const revokeSession = async (userId, sessionId) => {
 
 const revokeAllOtherSessions = async (userId, currentAccessToken) => {
   const { RefreshToken } = require('../index');
+  const jwt = require('jsonwebtoken');
 
-  // Get all active sessions, revoke all except the most recently active one
+  let currentSessionId = null;
+  if (currentAccessToken) {
+    try {
+      const decoded = jwt.verify(currentAccessToken, process.env.JWT_ACCESS_SECRET, { algorithms: ['HS256'] });
+      currentSessionId = decoded.sid || null;
+    } catch (e) {}
+  }
+
+  // Get all active sessions
   const sessions = await RefreshToken.findAll({
     where: { userId, revokedAt: null },
     order: [['lastActiveAt', 'DESC']],
@@ -520,8 +578,12 @@ const revokeAllOtherSessions = async (userId, currentAccessToken) => {
 
   if (sessions.length <= 1) return { revoked: 0 };
 
-  const currentSessionId = sessions[0].id;
-  const toRevoke = sessions.slice(1).map(s => s.id);
+  const keepSessionId = currentSessionId && sessions.some(s => s.id === currentSessionId)
+    ? currentSessionId
+    : sessions[0].id;
+
+  const toRevoke = sessions.filter(s => s.id !== keepSessionId).map(s => s.id);
+  if (toRevoke.length === 0) return { revoked: 0 };
 
   await RefreshToken.update(
     { revokedAt: new Date() },
@@ -550,10 +612,17 @@ const requestPhoneChange = async (userId, newPhone) => {
 const confirmPhoneChange = async (userId, newPhone, code) => {
   const OtpService = require('../auth/otp.service');
   await OtpService.verify(newPhone, code, 'phone_change');
-  let profile = await UserProfile.findOne({ where: { userId } });
-  if (!profile) profile = await UserProfile.create({ userId, phone: newPhone });
-  else await profile.update({ phone: newPhone });
-  return { phone: newPhone };
+
+  return sequelize.transaction(async (t) => {
+    const existing = await UserProfile.findOne({ where: { phone: newPhone }, transaction: t });
+    if (existing && existing.userId !== userId) {
+      throw new AppError('CONFLICT', 409, 'This phone number is already registered to another account');
+    }
+    let profile = await UserProfile.findOne({ where: { userId }, transaction: t });
+    if (!profile) profile = await UserProfile.create({ userId, phone: newPhone }, { transaction: t });
+    else await profile.update({ phone: newPhone }, { transaction: t });
+    return { phone: newPhone };
+  });
 };
 
 const requestEmailChange = async (userId, newEmail, password) => {
@@ -570,7 +639,11 @@ const requestEmailChange = async (userId, newEmail, password) => {
 
   const token = crypto.randomBytes(32).toString('hex');
   const hashed = crypto.createHash('sha256').update(token).digest('hex');
-  await EmailVerificationToken.destroy({ where: { userId } });
+
+  // Only destroy previous tokens if the user is already email-verified, preserving registration verification token
+  if (user.emailVerified) {
+    await EmailVerificationToken.destroy({ where: { userId } });
+  }
   await EmailVerificationToken.create({ userId, token: hashed, expiresAt: new Date(Date.now() + 24 * 60 * 60 * 1000) });
 
   // Store pending new email on user record
@@ -591,16 +664,25 @@ const confirmEmailChange = async (token) => {
   const crypto = require('crypto');
   const { EmailVerificationToken } = require('../index');
   const hashed = crypto.createHash('sha256').update(token).digest('hex');
-  const record = await EmailVerificationToken.findOne({ where: { token: hashed } });
-  if (!record || record.expiresAt < new Date()) throw new AppError('VALIDATION_ERROR', 400, 'Invalid or expired token');
 
-  const user = await User.findByPk(record.userId);
-  if (!user || !user.pendingEmail) throw new AppError('VALIDATION_ERROR', 400, 'No pending email change');
+  return sequelize.transaction(async (t) => {
+    const record = await EmailVerificationToken.findOne({ where: { token: hashed }, transaction: t });
+    if (!record || record.expiresAt < new Date()) throw new AppError('VALIDATION_ERROR', 400, 'Invalid or expired token');
 
-  const newEmail = user.pendingEmail;
-  await user.update({ email: newEmail, pendingEmail: null });
-  await record.destroy();
-  return { email: newEmail };
+    const user = await User.findByPk(record.userId, { transaction: t });
+    if (!user || !user.pendingEmail) throw new AppError('VALIDATION_ERROR', 400, 'No pending email change');
+
+    const newEmail = user.pendingEmail;
+    // Re-verify uniqueness inside transaction to prevent TOCTOU race
+    const existing = await User.findOne({ where: { email: newEmail }, transaction: t });
+    if (existing && existing.id !== user.id) {
+      throw new AppError('CONFLICT', 409, 'This email address is already registered to another account');
+    }
+
+    await user.update({ email: newEmail, pendingEmail: null, emailVerified: true }, { transaction: t });
+    await record.destroy({ transaction: t });
+    return { email: newEmail };
+  });
 };
 
 const forceLogoutUser = async (userId) => {

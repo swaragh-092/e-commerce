@@ -3,18 +3,18 @@
 const express = require('express');
 const router = express.Router();
 const categoryController = require('./category.controller');
-const { createCategorySchema, updateCategorySchema } = require('./category.validation');
+const { createCategorySchema, updateCategorySchema, getCategoryProductsQuerySchema } = require('./category.validation');
 const { authenticate } = require('../../middleware/auth.middleware');
 const { authorizePermissions } = require('../../middleware/role.middleware');
 const { validate } = require('../../middleware/validate.middleware');
 const { auditLog } = require('../audit/audit.middleware');
 const { PERMISSIONS } = require('../../config/permissions');
-const { idParamSchema, paginationQuerySchema } = require('../../utils/common.validation');
+const { idParamSchema } = require('../../utils/common.validation');
 
 
 
 router.get('/', categoryController.getTree);
-router.get('/:slug', validate(paginationQuerySchema, 'query'), categoryController.getBySlug);
+router.get('/:slug', validate(getCategoryProductsQuerySchema, 'query'), categoryController.getBySlug);
 
 
 router.post('/',

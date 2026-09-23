@@ -5,8 +5,19 @@ export const getCategoryTree = async () => {
     return response.data;
 };
 
-export const getCategoryWithProducts = async (slug, page = 1, limit = 20, sort = 'newest') => {
-    const response = await api.get(`/categories/${slug}`, { params: { page, limit, sort } });
+export const getCategoryWithProducts = async (slug, pageOrOptions = 1, limit = 20, sort = 'newest', minPrice, maxPrice) => {
+    let params = { page: 1, limit: 20, sort: 'newest' };
+    if (typeof pageOrOptions === 'object' && pageOrOptions !== null) {
+        params = { ...pageOrOptions };
+    } else {
+        params = { page: pageOrOptions, limit, sort, minPrice, maxPrice };
+    }
+    Object.keys(params).forEach((key) => {
+        if (params[key] === undefined || params[key] === null || params[key] === '') {
+            delete params[key];
+        }
+    });
+    const response = await api.get(`/categories/${slug}`, { params });
     return response.data;
 };
 

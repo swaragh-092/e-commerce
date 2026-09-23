@@ -13,6 +13,7 @@ const {
 } = require('../index');
 const AppError = require('../../utils/AppError');
 const { serializeProductPricing, serializeVariantPricing } = require('../product/product.pricing');
+const { getSaleLabels } = require('../settings/saleLabel.service');
 
 const ATTRIBUTE_TEMPLATE_FIELDS = ['id', 'name', 'slug', 'sortOrder', 'displayType', 'valueType', 'unit'];
 const ATTRIBUTE_VALUE_FIELDS = ['id', 'value', 'slug', 'sortOrder', 'displayLabel', 'swatchColor', 'imageUrl', 'unitLabel', 'metadata'];
@@ -72,11 +73,12 @@ const fetchCartWithItems = async (cartId, transaction) => {
         transaction
     });
 
+    const labelPresets = await getSaleLabels().catch(() => []);
     const items = cartWithItems.items
         ? cartWithItems.items.filter(item => item.product !== null && item.product.isEnabled !== false)
             .map((item) => {
                 const plainItem = item.toJSON();
-                const serializedProduct = serializeProductPricing(item.product);
+                const serializedProduct = serializeProductPricing(item.product, {}, labelPresets);
 
                 return {
                     ...plainItem,

@@ -1,5 +1,6 @@
 'use strict';
 
+const { Op, Sequelize } = require('sequelize');
 const {
     AttributeTemplate, AttributeValue, CategoryAttribute, Category,
     Product, ProductImage, ProductAttribute, ProductVariant, VariantOption, Media, sequelize,
@@ -8,7 +9,7 @@ const { generateSlug } = require('../../utils/slugify');
 const AppError = require('../../utils/AppError');
 const logger = require('../../utils/logger');
 
-const ATTRIBUTE_TEMPLATE_FIELDS = ['id', 'name', 'slug', 'sortOrder', 'displayType', 'valueType', 'unit'];
+const ATTRIBUTE_TEMPLATE_FIELDS = ['id', 'name', 'slug', 'sortOrder', 'displayType', 'valueType', 'unit', 'createdAt'];
 const ATTRIBUTE_VALUE_FIELDS = ['id', 'value', 'slug', 'sortOrder', 'displayLabel', 'swatchColor', 'imageUrl', 'unitLabel', 'metadata'];
 
 const syncProductVariantStock = async (productId, transaction = null) => {
@@ -107,13 +108,99 @@ const createAttribute = async (data) => {
     return AttributeTemplate.create({ ...data, slug });
 };
 
-const getAllAttributes = async (page = 1, limit = 20) => {
-    const offset = (Math.max(1, parseInt(page, 10)) - 1) * Math.min(100, Math.max(1, parseInt(limit, 10)));
-    const safeLimit = Math.min(100, Math.max(1, parseInt(limit, 10)));
+const getAllAttributes = async (optionsOrPage = 1, limitArg = 20) => {
+    let page = 1;
+    let limit = 20;
+    let search = '';
+    let displayType = '';
+    let valueType = '';
+    let hasValues = '';
+    let sortBy = 'sortOrder';
+    let sortOrder = 'ASC';
+
+    if (typeof optionsOrPage === 'object' && optionsOrPage !== null) {
+        page = parseInt(optionsOrPage.page, 10) || 1;
+        limit = parseInt(optionsOrPage.limit, 10) || 20;
+        search = optionsOrPage.search ? String(optionsOrPage.search).trim() : '';
+        displayType = optionsOrPage.displayType ? String(optionsOrPage.displayType).trim() : '';
+        valueType = optionsOrPage.valueType ? String(optionsOrPage.valueType).trim() : '';
+        hasValues = optionsOrPage.hasValues ? String(optionsOrPage.hasValues).trim() : '';
+        sortBy = optionsOrPage.sortBy || 'sortOrder';
+        sortOrder = (optionsOrPage.sortOrder || 'ASC').toUpperCase();
+    } else {
+        page = parseInt(optionsOrPage, 10) || 1;
+        limit = parseInt(limitArg, 10) || 20;
+    }
+
+    const safeLimit = Math.min(100, Math.max(1, limit));
+    const offset = (Math.max(1, page) - 1) * safeLimit;
+
+    const where = {};
+    const andConditions = [];
+
+    if (search) {
+        const searchPattern = `%${search}%`;
+        andConditions.push({
+            [Op.or]: [
+                { name: { [Op.iLike]: searchPattern } },
+                { slug: { [Op.iLike]: searchPattern } },
+                Sequelize.literal(`EXISTS (
+                    SELECT 1 FROM "attribute_values" AS av 
+                    WHERE av."attribute_id" = "AttributeTemplate"."id" 
+                    AND (av."value" ILIKE ${sequelize.escape(searchPattern)} OR av."display_label" ILIKE ${sequelize.escape(searchPattern)})
+                )`),
+            ],
+        });
+    }
+
+    if (displayType && displayType !== 'all') {
+        where.displayType = displayType;
+    }
+
+    if (valueType && valueType !== 'all') {
+        where.valueType = valueType;
+    }
+
+    if (hasValues && hasValues !== 'all') {
+        const shouldHave = hasValues === 'yes' || hasValues === 'true';
+        if (shouldHave) {
+            andConditions.push(
+                Sequelize.literal(`EXISTS (
+                    SELECT 1 FROM "attribute_values" AS av 
+                    WHERE av."attribute_id" = "AttributeTemplate"."id"
+                )`)
+            );
+        } else {
+            andConditions.push(
+                Sequelize.literal(`NOT EXISTS (
+                    SELECT 1 FROM "attribute_values" AS av 
+                    WHERE av."attribute_id" = "AttributeTemplate"."id"
+                )`)
+            );
+        }
+    }
+
+    if (andConditions.length > 0) {
+        where[Op.and] = andConditions;
+    }
+
+    const validSortFields = ['sortOrder', 'name', 'slug', 'createdAt'];
+    const safeSortBy = validSortFields.includes(sortBy) ? sortBy : 'sortOrder';
+    const safeSortOrder = sortOrder === 'DESC' ? 'DESC' : 'ASC';
+
+    const order = [
+        [safeSortBy, safeSortOrder],
+        [{ model: AttributeValue, as: 'values' }, 'sortOrder', 'ASC'],
+    ];
+    if (safeSortBy !== 'id') {
+        order.push(['id', 'ASC']);
+    }
+
     return AttributeTemplate.findAndCountAll({
+        where,
         attributes: ATTRIBUTE_TEMPLATE_FIELDS,
         include: [{ model: AttributeValue, as: 'values', attributes: ATTRIBUTE_VALUE_FIELDS }],
-        order: [['sortOrder', 'ASC'], [{ model: AttributeValue, as: 'values' }, 'sortOrder', 'ASC']],
+        order,
         limit: safeLimit,
         offset,
         distinct: true,
@@ -140,6 +227,20 @@ const updateAttribute = async (id, data) => {
 
 const deleteAttribute = async (id) => {
     const attr = await getAttributeById(id);
+
+    const [productAttrCount, variantOptCount] = await Promise.all([
+        ProductAttribute.count({ where: { attributeId: id } }),
+        VariantOption.count({ where: { attributeId: id } }),
+    ]);
+
+    if (productAttrCount > 0 || variantOptCount > 0) {
+        throw new AppError(
+            'CONFLICT',
+            409,
+            `Cannot delete attribute template: in use by ${productAttrCount} product attribute(s) and ${variantOptCount} variant option(s)`
+        );
+    }
+
     await attr.destroy();
 };
 
@@ -148,7 +249,7 @@ const deleteAttribute = async (id) => {
  */
 const addValue = async (attributeId, data) => {
     await getAttributeById(attributeId);
-    const slug = await generateSlug(data.value, AttributeValue);
+    const slug = await generateSlug(data.value, AttributeValue, 'slug', { where: { attributeId } });
     return AttributeValue.create({ ...data, attributeId, slug });
 };
 
@@ -158,7 +259,7 @@ const updateValue = async (attributeId, valueId, data) => {
 
     const updates = { ...data };
     if (updates.value && updates.value !== val.value) {
-        updates.slug = await generateSlug(updates.value, AttributeValue);
+        updates.slug = await generateSlug(updates.value, AttributeValue, 'slug', { where: { attributeId } });
     }
 
     await val.update(updates);
@@ -168,6 +269,20 @@ const updateValue = async (attributeId, valueId, data) => {
 const removeValue = async (attributeId, valueId) => {
     const val = await AttributeValue.findOne({ where: { id: valueId, attributeId } });
     if (!val) throw new AppError('NOT_FOUND', 404, 'Attribute value not found');
+
+    const [productAttrCount, variantOptCount] = await Promise.all([
+        ProductAttribute.count({ where: { valueId } }),
+        VariantOption.count({ where: { valueId } }),
+    ]);
+
+    if (productAttrCount > 0 || variantOptCount > 0) {
+        throw new AppError(
+            'CONFLICT',
+            409,
+            `Cannot delete attribute value: in use by ${productAttrCount} product attribute(s) and ${variantOptCount} variant option(s)`
+        );
+    }
+
     await val.destroy();
 };
 
