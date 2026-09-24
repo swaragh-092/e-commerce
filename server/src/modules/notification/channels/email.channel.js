@@ -131,4 +131,4 @@ const send = async ({ to, subject, html, text }) => {
     }
 };
 
-module.exports = { send };
+module.exports = { send, getSmtpConfig, isPlaceholderCredential };

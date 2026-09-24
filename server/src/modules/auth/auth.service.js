@@ -380,8 +380,19 @@ const logout = async (refreshTokenStr, userId) => {
 };
 
 const forgotPassword = async (email) => {
-  const user = await User.findOne({ where: { email } });
-  if (!user) return; // Silent return for security (don't reveal if email exists)
+  const normalizedEmail = (email || '').trim().toLowerCase();
+  const user = await User.findOne({
+    where: sequelize.where(
+      sequelize.fn('LOWER', sequelize.col('email')),
+      normalizedEmail
+    )
+  });
+  if (!user) {
+    if (process.env.NODE_ENV === 'development') {
+      logger.warn(`[Auth] Forgot password requested for "${email}", but no user exists with this email in the database.`);
+    }
+    return; // Silent return for security (don't reveal if email exists)
+  }
 
   await sequelize.transaction(async (t) => {
     // Delete any existing unused tokens for this user
