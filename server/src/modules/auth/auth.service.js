@@ -38,6 +38,11 @@ const isEmailVerificationRequired = async () => {
 const JWT_ISS = process.env.JWT_ISSUER || 'ecommerce-pro';
 const JWT_AUD = process.env.JWT_AUDIENCE || 'ecommerce-pro-client';
 
+const getClientBaseUrl = () => {
+  const url = process.env.CLIENT_URL || 'http://localhost:5173';
+  return url.split(',')[0].trim().replace(/\/+$/, '');
+};
+
 const generateTokens = (user, sessionId = null) => {
   const payload = { id: user.id, role: user.role, ...(sessionId ? { sid: sessionId } : {}) };
   const accessToken = jwt.sign(payload, process.env.JWT_ACCESS_SECRET, { expiresIn: process.env.JWT_ACCESS_EXPIRY || '15m', issuer: JWT_ISS, audience: JWT_AUD });
@@ -124,7 +129,7 @@ const register = async (payload) => {
     if (NotificationService && NotificationService.send) {
       await NotificationService.send('email_verification', registrationResult.verificationEmail.email, {
         name: registrationResult.verificationEmail.firstName,
-        verify_url: `${process.env.CLIENT_URL || 'http://localhost:5173'}/verify-email?token=${registrationResult.verificationEmail.verifyToken}`
+        verify_url: `${getClientBaseUrl()}/verify-email?token=${registrationResult.verificationEmail.verifyToken}`
       }, registrationResult.verificationEmail.userId);
     }
   } catch (e) {
@@ -378,7 +383,7 @@ const forgotPassword = async (email) => {
   const user = await User.findOne({ where: { email } });
   if (!user) return; // Silent return for security (don't reveal if email exists)
 
-  return sequelize.transaction(async (t) => {
+  await sequelize.transaction(async (t) => {
     // Delete any existing unused tokens for this user
     await PasswordResetToken.destroy({ where: { userId: user.id }, transaction: t });
 
@@ -389,15 +394,35 @@ const forgotPassword = async (email) => {
       expiresAt: new Date(Date.now() + AUTH_TIME.PASSWORD_RESET_TTL_MS)
     }, { transaction: t });
 
+    const resetUrl = `${getClientBaseUrl()}/reset-password?token=${resetToken}`;
+    if (process.env.NODE_ENV === 'development') {
+      logger.info(`[Auth] Password reset link for ${user.email}: ${resetUrl}`);
+    }
+
     try {
         if (NotificationService && NotificationService.send) {
             await NotificationService.send('password_reset', user.email, {
                 name: user.firstName,
-                reset_url: `${process.env.CLIENT_URL || 'http://localhost:5173'}/reset-password?token=${resetToken}`
-            }, user.id, null, t);
+                reset_url: resetUrl
+            }, user.id, null, 'email', t);
         }
-    } catch (e) {}
+    } catch (e) {
+        logger.error('Password reset notification failed', {
+            userId: user.id,
+            error: e.message,
+            stack: e.stack
+        });
+    }
   });
+
+  // Promptly trigger queue processor so user does not have to wait for 1-minute cron
+  if (NotificationService && typeof NotificationService.processQueued === 'function') {
+    setImmediate(() => {
+      NotificationService.processQueued({ limit: 10 }).catch((err) => {
+        logger.error('[Auth] Failed to process notification queue immediately', err);
+      });
+    });
+  }
 };
 
 const resetPassword = async (token, newPassword) => {
@@ -431,7 +456,7 @@ const resetPassword = async (token, newPassword) => {
 };
 
 const resendVerification = async (email) => {
-  return sequelize.transaction(async (t) => {
+  await sequelize.transaction(async (t) => {
     const user = await User.findOne({ where: { email }, transaction: t });
     if (!user || user.emailVerified) return; // Silent return — no state leak
 
@@ -444,14 +469,25 @@ const resendVerification = async (email) => {
       expiresAt: new Date(Date.now() + AUTH_TIME.EMAIL_VERIFICATION_TTL_MS)
     }, { transaction: t });
 
+    const verifyUrl = `${getClientBaseUrl()}/verify-email?token=${verifyToken}`;
+    if (process.env.NODE_ENV === 'development') {
+      logger.info(`[Auth] Email verification link for ${user.email}: ${verifyUrl}`);
+    }
+
     try {
         if (NotificationService && NotificationService.send) {
             await NotificationService.send('email_verification', user.email, {
                 name: user.firstName,
-                verify_url: `${process.env.CLIENT_URL || 'http://localhost:5173'}/verify-email?token=${verifyToken}`
-            }, user.id, null, t);
+                verify_url: verifyUrl
+            }, user.id, null, 'email', t);
         }
-    } catch (e) {}
+    } catch (e) {
+        logger.error('Resend verification notification failed', {
+            userId: user.id,
+            error: e.message,
+            stack: e.stack
+        });
+    }
 
     try {
       if (AuditService && AuditService.log) {
@@ -464,6 +500,14 @@ const resendVerification = async (email) => {
       }
     } catch (e) {}
   });
+
+  if (NotificationService && typeof NotificationService.processQueued === 'function') {
+    setImmediate(() => {
+      NotificationService.processQueued({ limit: 10 }).catch((err) => {
+        logger.error('[Auth] Failed to process notification queue immediately', err);
+      });
+    });
+  }
 };
 
 const verifyEmail = async (token) => {

@@ -8,6 +8,11 @@ const { getPagination } = require('../../utils/pagination');
 const { ACTIONS, ENTITIES } = require('../../config/constants');
 const logger = require('../../utils/logger');
 
+const getClientBaseUrl = () => {
+  const url = process.env.CLIENT_URL || 'http://localhost:5173';
+  return url.split(',')[0].trim().replace(/\/+$/, '');
+};
+
 const authzInclude = [
   {
     model: Role,
@@ -505,8 +510,8 @@ const deleteAccount = async (userId, { password, oauthProvider } = {}) => {
         await NotificationService.send('account_deletion_scheduled', user.email, {
           name: user.firstName,
           deletion_date: scheduledDeletionAt.toLocaleDateString(),
-          cancel_url: `${process.env.CLIENT_URL || 'http://localhost:5173'}/account?cancelDeletion=true`,
-        }, userId, null, t);
+          cancel_url: `${getClientBaseUrl()}/account?cancelDeletion=true`,
+        }, userId, null, 'email', t);
       }
     } catch (e) {}
 
@@ -653,8 +658,8 @@ const requestEmailChange = async (userId, newEmail, password) => {
     if (NotificationService && NotificationService.send) {
       await NotificationService.send('email_change_verification', newEmail, {
         name: user.firstName,
-        verify_url: `${process.env.CLIENT_URL || 'http://localhost:5173'}/verify-email-change?token=${token}`,
-      }, userId);
+        verify_url: `${getClientBaseUrl()}/verify-email-change?token=${token}`,
+      }, userId, null, 'email');
     }
   } catch (e) {}
   return { sent: true };

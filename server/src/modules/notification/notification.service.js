@@ -50,7 +50,7 @@ const getGlobalVariables = async () => {
 
     return {
         store_name:    general.storeName || 'Our Store',
-        website_url:   process.env.CLIENT_URL || 'http://localhost:3000',
+        website_url:   (process.env.CLIENT_URL || 'http://localhost:3000').split(',')[0].trim().replace(/\/+$/, ''),
         support_email: footer.email || 'support@example.com',
         store_logo:    logo.main ? `${process.env.API_PUBLIC_URL || ''}${logo.main}` : null,
         copyright:     (footer.copyright || '© {{year}} {{store_name}}. All rights reserved.')
@@ -110,6 +110,17 @@ const send = async (
     channel = 'email',
     t = null
 ) => {
+    // Defensively handle positional argument variations (e.g. if a transaction is passed as channel or orderId)
+    if (orderId && typeof orderId === 'object' && !Array.isArray(orderId)) {
+        t = orderId;
+        orderId = null;
+        channel = 'email';
+    } else if (channel && typeof channel === 'object' && !Array.isArray(channel)) {
+        t = channel;
+        channel = 'email';
+    } else if (!channel || typeof channel !== 'string') {
+        channel = 'email';
+    }
     try {
         const normalizedVariables = normalizeVariables({
             ...(orderId && !variables.order_id && !variables.orderId ? { order_id: orderId } : {}),
