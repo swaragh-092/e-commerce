@@ -12,7 +12,7 @@ import {
   Divider,
 } from '@mui/material';
 import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
-import { sendTestNotification } from '../../../services/adminService';
+import { sendTestNotification, updateSettings } from '../../../services/adminService';
 import { useNotification } from '../../../context/NotificationContext';
 
 const MessagingSettingsPanel = ({ form, set }) => {
@@ -27,6 +27,30 @@ const MessagingSettingsPanel = ({ form, set }) => {
     sms: false,
     whatsapp: false,
   });
+  const [savingEmail, setSavingEmail] = useState(false);
+
+  const handleSaveEmailSettings = async () => {
+    setSavingEmail(true);
+    try {
+      const payload = [
+        { group: 'messaging_credentials', key: 'smtp_host', value: form['messaging_credentials.smtp_host'] || '' },
+        { group: 'messaging_credentials', key: 'smtp_port', value: form['messaging_credentials.smtp_port'] || '' },
+        { group: 'messaging_credentials', key: 'smtp_user', value: form['messaging_credentials.smtp_user'] || '' },
+        { group: 'messaging_credentials', key: 'smtp_pass', value: form['messaging_credentials.smtp_pass'] || '' },
+        { group: 'messaging_credentials', key: 'smtp_secure', value: Boolean(form['messaging_credentials.smtp_secure']) },
+        { group: 'messaging', key: 'emailFrom', value: form['messaging.emailFrom'] || '' },
+      ].filter((item) => item.value !== '********');
+
+      await updateSettings(payload);
+      notify('SMTP Email settings saved successfully!', 'success');
+      return true;
+    } catch (err) {
+      notify('Failed to save SMTP settings. Check server logs.', 'error');
+      return false;
+    } finally {
+      setSavingEmail(false);
+    }
+  };
 
   const handleTest = async (channel) => {
     const recipient = testRecipients[channel];
@@ -35,12 +59,18 @@ const MessagingSettingsPanel = ({ form, set }) => {
       return;
     }
 
+    if (channel === 'email') {
+      const saved = await handleSaveEmailSettings();
+      if (!saved) return;
+    }
+
     setTesting((p) => ({ ...p, [channel]: true }));
     try {
-      await sendTestNotification('test_notification', recipient, channel);
-      notify(`Test ${channel} sent to ${recipient}`, 'success');
+      const res = await sendTestNotification('test_notification', recipient, channel);
+      notify(res?.data?.message || `Test ${channel} sent to ${recipient}`, 'success');
     } catch (e) {
-      notify(`Failed to send test ${channel}. Check your configuration.`, 'error');
+      const msg = e.response?.data?.message || `Failed to send test ${channel}. Check your configuration.`;
+      notify(msg, 'error');
     } finally {
       setTesting((p) => ({ ...p, [channel]: false }));
     }
@@ -131,7 +161,23 @@ const MessagingSettingsPanel = ({ form, set }) => {
               label="Use SSL/TLS (Port 465)"
             />
           </Box>
+          <Box sx={{ display: 'flex', justifyContent: 'flex-start', mb: 2 }}>
+            <Button
+              variant="contained"
+              color="primary"
+              onClick={handleSaveEmailSettings}
+              disabled={savingEmail}
+            >
+              {savingEmail ? 'Saving...' : 'Save Email Settings'}
+            </Button>
+          </Box>
           <Divider sx={{ my: 2 }} />
+          <Typography variant="subtitle2" sx={{ mb: 1, fontWeight: 600 }}>
+            Send Test Email
+          </Typography>
+          <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mb: 1.5 }}>
+            Sending a test will automatically save your current SMTP credentials and test live delivery.
+          </Typography>
           <Box sx={{ display: 'flex', gap: 2, alignItems: 'center' }}>
             <TextField
               size="small"

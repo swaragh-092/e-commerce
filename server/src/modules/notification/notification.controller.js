@@ -244,7 +244,18 @@ const sendTestNotification = async (req, res, next) => {
       }
     }
 
-    return success(res, null, `Test ${channel} sent to ${finalRecipient}`);
+    let extraInfo = '';
+    if (channel === 'email' && process.env.NODE_ENV === 'development') {
+      try {
+        const emailChannel = require('./channels/email.channel');
+        const smtp = await emailChannel.getSmtpConfig();
+        if (emailChannel.isPlaceholderCredential(smtp.user) || emailChannel.isPlaceholderCredential(smtp.pass)) {
+          extraInfo = ' (Simulated in server console: SMTP credentials in Admin Settings > Notifications are placeholder or unconfigured)';
+        }
+      } catch (_) {}
+    }
+
+    return success(res, null, `Test ${channel} sent to ${finalRecipient}${extraInfo}`);
   } catch (err) {
     next(err);
   }
