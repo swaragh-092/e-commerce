@@ -20,13 +20,28 @@ const settingOrEnv = (settings, key, envKey) => {
     return process.env[envKey];
 };
 
+const isPlaceholderCredential = (val) => {
+    if (!val || typeof val !== 'string') return true;
+    const trimmed = val.trim().toLowerCase();
+    return (
+        trimmed === '' ||
+        trimmed === 'your_app_password_here' ||
+        trimmed === 'your_email@gmail.com' ||
+        trimmed.includes('example.com') ||
+        trimmed.includes('your_app_password')
+    );
+};
+
 const getSmtpConfig = async () => {
     const creds = await SettingsService.getByGroup('messaging_credentials', { maskSensitive: false });
     const messaging = await SettingsService.getByGroup('messaging');
     const host = settingOrEnv(creds, 'smtp_host', 'SMTP_HOST');
     const port = settingOrEnv(creds, 'smtp_port', 'SMTP_PORT');
     const user = settingOrEnv(creds, 'smtp_user', 'SMTP_USER');
-    const pass = settingOrEnv(creds, 'smtp_pass', 'SMTP_PASS');
+    let pass = settingOrEnv(creds, 'smtp_pass', 'SMTP_PASS');
+    if (typeof pass === 'string' && pass.includes(' ') && host && host.includes('gmail')) {
+        pass = pass.replace(/\s+/g, '');
+    }
     const secure = settingOrEnv(creds, 'smtp_secure', 'SMTP_SECURE');
     const from = settingOrEnv(messaging, 'emailFrom', 'EMAIL_FROM');
 
@@ -75,22 +90,45 @@ const send = async ({ to, subject, html, text }) => {
         return true;
     }
 
-    const transporter = await createTransporter();
     const smtp = await getSmtpConfig();
+
+    // In development mode, if SMTP credentials are placeholder or unconfigured, simulate email
+    if (process.env.NODE_ENV === 'development' && (isPlaceholderCredential(smtp.user) || isPlaceholderCredential(smtp.pass))) {
+        logger.warn(
+            `[email.channel] SMTP credentials are not configured or are placeholder (${smtp.user || 'none'}). Real email was not delivered over network. ` +
+            `To deliver real emails to inbox, configure valid SMTP credentials in .env or Admin Settings > Notifications.`
+        );
+        logger.info(
+            `\n================= DEV EMAIL NOTIFICATION =================\n` +
+            `To: ${to}\n` +
+            `Subject: ${subject}\n` +
+            `Body:\n${text || html}\n` +
+            `==========================================================\n`
+        );
+        return true;
+    }
+
+    const transporter = await createTransporter();
     const general = await SettingsService.getByGroup('general');
 
     const storeName = general.storeName || 'E-Commerce Store';
     const defaultFrom = smtp.user ? `"${storeName}" <${smtp.user}>` : null;
 
-    await transporter.sendMail({
-        from: smtp.from || defaultFrom || requireSetting(smtp.user, 'Sender Email'),
-        to,
-        subject,
-        text,
-        html,
-    });
-
-    return true;
+    try {
+        await transporter.sendMail({
+            from: smtp.from || defaultFrom || requireSetting(smtp.user, 'Sender Email'),
+            to,
+            subject,
+            text,
+            html,
+        });
+        return true;
+    } catch (err) {
+        if (process.env.NODE_ENV === 'development') {
+            logger.error(`[email.channel] SMTP delivery failed: ${err.message}. Email body for ${to}:\n${text || html}`);
+        }
+        throw err;
+    }
 };
 
 module.exports = { send };

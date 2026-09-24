@@ -59,6 +59,7 @@ import ExpandMore from '@mui/icons-material/ExpandMore';
 import ChevronLeftIcon from '@mui/icons-material/ChevronLeft';
 import ChevronRightIcon from '@mui/icons-material/ChevronRight';
 import AnalyticsIcon from '@mui/icons-material/Analytics';
+import OpenInNewIcon from '@mui/icons-material/OpenInNew';
 import { useAuth } from '../hooks/useAuth';
 import { useSettings, useMode } from '../hooks/useSettings';
 import { PERMISSIONS } from '../utils/permissions';
@@ -119,7 +120,7 @@ const MENU_STRUCTURE = [
       { text: 'Platform Features', path: '/admin/features', icon: <AdminPanelSettingsIcon />, permission: PERMISSIONS.SETTINGS_READ },
       { text: 'General', path: '/admin/settings', icon: <SettingsIcon />, permission: PERMISSIONS.SETTINGS_READ },
       { text: 'Store Templates', path: '/admin/themes', icon: <PhotoLibraryIcon />, permission: PERMISSIONS.SETTINGS_READ },
-      { text: 'Store Designer', path: '/admin/store-designer', icon: <PhotoLibraryIcon />, permission: PERMISSIONS.SETTINGS_MANAGE },
+      { text: 'Store Designer', path: '/admin/store-designer', icon: <PhotoLibraryIcon />, permission: PERMISSIONS.SETTINGS_MANAGE, newTab: true },
       { text: 'Newsletter', path: '/admin/newsletter', icon: <MailOutlineIcon />, permission: PERMISSIONS.SETTINGS_READ },
       { text: 'Templates', path: '/admin/email-templates', icon: <MailOutlineIcon />, permission: PERMISSIONS.SETTINGS_READ },
       { text: 'Payment Gateways', path: '/admin/payment-gateways', icon: <PaymentIcon />, permission: PERMISSIONS.SETTINGS_READ, mode: 'ecommerce' },
@@ -287,6 +288,7 @@ const AdminLayout = () => {
 
     const active = isActive(item.path);
     const isFavorited = favorites.includes(item.path);
+    const isNewTab = Boolean(item.newTab || item.path === '/admin/store-designer');
 
     return (
       <ListItem 
@@ -314,10 +316,12 @@ const AdminLayout = () => {
             }}
           />
         )}
-        <Tooltip title={navCollapsed ? item.text : ""} placement="right">
+        <Tooltip title={navCollapsed ? (isNewTab ? `${item.text} (opens in new tab)` : item.text) : ""} placement="right">
           <ListItemButton
             component={RouterLink}
             to={item.path}
+            target={isNewTab ? '_blank' : undefined}
+            rel={isNewTab ? 'noopener noreferrer' : undefined}
             selected={active}
             onClick={() => isMobile && setMobileOpen(false)}
             sx={{
@@ -353,13 +357,18 @@ const AdminLayout = () => {
               {item.icon}
             </ListItemIcon>
             {!navCollapsed && (
-              <ListItemText 
-                primary={item.text} 
-                primaryTypographyProps={{ 
-                  fontSize: 13, 
-                  fontWeight: active ? 700 : 500,
-                }} 
-              />
+              <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5, flex: 1, minWidth: 0 }}>
+                <ListItemText 
+                  primary={item.text} 
+                  primaryTypographyProps={{ 
+                    fontSize: 13, 
+                    fontWeight: active ? 700 : 500,
+                  }} 
+                />
+                {isNewTab && (
+                  <OpenInNewIcon sx={{ fontSize: 13, color: 'text.disabled', opacity: 0.7, flexShrink: 0 }} />
+                )}
+              </Box>
             )}
             
             {/* Pin Toggle */}
