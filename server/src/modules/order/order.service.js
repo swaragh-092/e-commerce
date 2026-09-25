@@ -1346,11 +1346,12 @@ const placeOrder = async (userId, payload) => {
                 snapshotName: item.currentProduct.name,
                 snapshotPrice: item.currentPrice,
                 snapshotImage: getPrimaryProductImageUrl(item.currentProduct),
+                snapshotSku: item.variant?.sku || item.currentProduct.sku || null,
                 variantInfo: {
                     ...(item.variant ? (typeof item.variant.toJSON === 'function' ? item.variant.toJSON() : item.variant) : {}),
                     ...(item.currentProduct?.unit ? { unit: item.currentProduct.unit } : {}),
                 },
-
+                quantity: item.quantity,
                 total: item.currentPrice * item.quantity,
                 taxBreakdown: item.taxBreakdown || null,
                 isCombo,
