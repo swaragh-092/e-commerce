@@ -60,6 +60,11 @@ const MessagingSettingsPanel = ({ form, set }) => {
     }
 
     if (channel === 'email') {
+      const user = String(form['messaging_credentials.smtp_user'] || '').trim();
+      if (user.includes('@gmial.') || user.includes('@gmai.') || user.includes('@gamil.')) {
+        notify('Typo detected in SMTP User email domain (e.g. gmial.com). Please fix it before testing.', 'error');
+        return;
+      }
       const saved = await handleSaveEmailSettings();
       if (!saved) return;
     }
@@ -69,7 +74,7 @@ const MessagingSettingsPanel = ({ form, set }) => {
       const res = await sendTestNotification('test_notification', recipient, channel);
       notify(res?.data?.message || `Test ${channel} sent to ${recipient}`, 'success');
     } catch (e) {
-      const msg = e.response?.data?.message || `Failed to send test ${channel}. Check your configuration.`;
+      const msg = e.response?.data?.error?.message || e.response?.data?.message || `Failed to send test ${channel}. Check your configuration.`;
       notify(msg, 'error');
     } finally {
       setTesting((p) => ({ ...p, [channel]: false }));

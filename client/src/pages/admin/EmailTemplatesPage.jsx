@@ -252,8 +252,9 @@ const EmailTemplatesPage = () => {
     try {
       await sendTestNotification(selected, testEmail, activeChannel);
       setSnack({ open: true, msg: `Test ${activeChannel} queued for ${testEmail}`, severity: 'success' });
-    } catch {
-      setSnack({ open: true, msg: `Failed to send test ${activeChannel}. Check your messaging config.`, severity: 'error' });
+    } catch (err) {
+      const msg = err.response?.data?.error?.message || err.response?.data?.message || `Failed to send test ${activeChannel}. Check your messaging config.`;
+      setSnack({ open: true, msg, severity: 'error' });
     } finally {
       setTestSending(false);
     }
