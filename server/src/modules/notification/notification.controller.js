@@ -216,32 +216,36 @@ const sendTestNotification = async (req, res, next) => {
       ? await NotificationTemplate.findOne({ where: { name: templateName, channel } })
       : null;
 
-    if (template) {
-      const NotificationService = require('./notification.service');
-      const sent = await NotificationService.sendImmediate(templateName, finalRecipient, SAMPLE_VARIABLES, null, null, channel);
-      if (!sent) {
-        return error(res, `Test ${channel} could not be sent. Check the template, recipient, and channel settings.`, 500, 'SEND_FAILED');
-      }
-    } else {
-      // No template found — send a simple inline test message to verify connectivity
-      const { dispatch } = require('./notification.dispatcher');
-      let storeName = 'E-Commerce Store';
-      try {
-        const SettingsService = require('../settings/settings.service');
-        const general = await SettingsService.getByGroup('general');
-        storeName = general.storeName || storeName;
-      } catch (_) {}
+    try {
+      if (template) {
+        const NotificationService = require('./notification.service');
+        const sent = await NotificationService.sendImmediate(templateName, finalRecipient, SAMPLE_VARIABLES, null, null, channel);
+        if (!sent) {
+          return error(res, `Test ${channel} could not be sent. Check the template, recipient, and channel settings.`, 400, 'SEND_FAILED');
+        }
+      } else {
+        // No template found — send a simple inline test message to verify connectivity
+        const { dispatch } = require('./notification.dispatcher');
+        let storeName = 'E-Commerce Store';
+        try {
+          const SettingsService = require('../settings/settings.service');
+          const general = await SettingsService.getByGroup('general');
+          storeName = general.storeName || storeName;
+        } catch (_) {}
 
-      const subject = `Test ${channel} from ${storeName}`;
-      const body = `This is a test ${channel} message from ${storeName}. If you received this, your ${channel} configuration is working correctly.`;
-      const payload = channel === 'email'
-        ? { to: finalRecipient, subject, html: `<p>${body}</p>`, text: body }
-        : { to: finalRecipient, body };
+        const subject = `Test ${channel} from ${storeName}`;
+        const body = `This is a test ${channel} message from ${storeName}. If you received this, your ${channel} configuration is working correctly.`;
+        const payload = channel === 'email'
+          ? { to: finalRecipient, subject, html: `<p>${body}</p>`, text: body }
+          : { to: finalRecipient, body };
 
-      const sent = await dispatch(channel, payload);
-      if (!sent) {
-        return error(res, `Test ${channel} could not be sent. Check your ${channel} channel settings.`, 500, 'SEND_FAILED');
+        const sent = await dispatch(channel, payload);
+        if (!sent) {
+          return error(res, `Test ${channel} could not be sent. Channel may be disabled or unconfigured.`, 400, 'SEND_FAILED');
+        }
       }
+    } catch (sendErr) {
+      return error(res, `Failed to send test ${channel}: ${sendErr.message}`, 400, 'SEND_FAILED');
     }
 
     let extraInfo = '';

@@ -35,12 +35,17 @@ const isPlaceholderCredential = (val) => {
 const getSmtpConfig = async () => {
     const creds = await SettingsService.getByGroup('messaging_credentials', { maskSensitive: false });
     const messaging = await SettingsService.getByGroup('messaging');
-    const host = settingOrEnv(creds, 'smtp_host', 'SMTP_HOST');
+    let host = settingOrEnv(creds, 'smtp_host', 'SMTP_HOST');
+    if (typeof host === 'string') host = host.trim();
     const port = settingOrEnv(creds, 'smtp_port', 'SMTP_PORT');
-    const user = settingOrEnv(creds, 'smtp_user', 'SMTP_USER');
+    let user = settingOrEnv(creds, 'smtp_user', 'SMTP_USER');
+    if (typeof user === 'string') user = user.trim();
     let pass = settingOrEnv(creds, 'smtp_pass', 'SMTP_PASS');
-    if (typeof pass === 'string' && pass.includes(' ') && host && host.includes('gmail')) {
-        pass = pass.replace(/\s+/g, '');
+    if (typeof pass === 'string') {
+        pass = pass.trim();
+        if (pass.includes(' ') && host && host.includes('gmail')) {
+            pass = pass.replace(/\s+/g, '');
+        }
     }
     const secure = settingOrEnv(creds, 'smtp_secure', 'SMTP_SECURE');
     const from = settingOrEnv(messaging, 'emailFrom', 'EMAIL_FROM');
@@ -70,6 +75,9 @@ const createTransporter = async () => {
             user,
             pass,
         },
+        connectionTimeout: 10000,
+        greetingTimeout: 10000,
+        socketTimeout: 15000,
     });
 };
 
