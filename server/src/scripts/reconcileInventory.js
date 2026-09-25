@@ -46,10 +46,9 @@ const run = async () => {
       FROM (
         SELECT
           product_id,
-          COALESCE(SUM(stock_qty), 0)::integer AS total_stock,
+          COALESCE(SUM(CASE WHEN is_active = true AND deleted_at IS NULL THEN stock_qty ELSE 0 END), 0)::integer AS total_stock,
           COALESCE(SUM(reserved_qty), 0)::integer AS total_reserved
         FROM product_variants
-        WHERE deleted_at IS NULL AND is_active = true
         GROUP BY product_id
       ) v
       WHERE

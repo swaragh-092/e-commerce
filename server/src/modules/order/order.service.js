@@ -1028,11 +1028,18 @@ const placeOrder = async (userId, payload) => {
         let variant = null;
         if (buyNowItem.variantId) {
             variant = await ProductVariant.findOne({
-                where: { id: buyNowItem.variantId, productId: buyNowItem.productId },
+                where: { id: buyNowItem.variantId, productId: buyNowItem.productId, isActive: true },
             });
 
             if (!variant) {
-                throw new AppError('NOT_FOUND', 404, 'Selected product variant not found');
+                throw new AppError('NOT_FOUND', 404, 'Selected product variant not found or is currently unavailable');
+            }
+        } else {
+            const activeVariantCount = await ProductVariant.count({
+                where: { productId: buyNowItem.productId, isActive: true },
+            });
+            if (activeVariantCount > 0) {
+                throw new AppError('VALIDATION_ERROR', 400, `Please select an option for "${product.name}" before checkout.`);
             }
         }
 

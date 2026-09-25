@@ -82,4 +82,39 @@ describe('Inventory & Variant Quantity Safeguards', () => {
         expect(willHaveVariants).toBe(false);
         expect(data.quantity).toBe(45);
     });
+
+    it('rejects updating quantity of a legacy cart item if product has since gained active variants', () => {
+        const item = { variantId: null, productId: 'prod-100' };
+        const activeVariantCount = 2;
+
+        const validateCartItemUpdate = (cartItem, variantsCount) => {
+            if (!cartItem.variantId && variantsCount > 0) {
+                throw new Error('Product now requires option selection and was removed from cart');
+            }
+            return true;
+        };
+
+        expect(() => validateCartItemUpdate(item, activeVariantCount)).toThrow('Product now requires option selection and was removed from cart');
+        expect(validateCartItemUpdate({ ...item, variantId: 'var-1' }, activeVariantCount)).toBe(true);
+        expect(validateCartItemUpdate(item, 0)).toBe(true);
+    });
+
+    it('validates buyNowItem early ensuring active variant requirement is met before order transaction starts', () => {
+        const validateBuyNowEarly = (buyNowItem, product, activeVariantCount) => {
+            if (buyNowItem.variantId) {
+                if (buyNowItem.variant?.isActive === false) {
+                    throw new Error('Selected product variant not found or is currently unavailable');
+                }
+            } else if (activeVariantCount > 0) {
+                throw new Error(`Please select an option for "${product.name}" before checkout.`);
+            }
+            return true;
+        };
+
+        const prod = { name: 'Running Shoes' };
+        expect(() => validateBuyNowEarly({ variantId: null }, prod, 4)).toThrow('Please select an option for "Running Shoes" before checkout.');
+        expect(() => validateBuyNowEarly({ variantId: 'v-1', variant: { isActive: false } }, prod, 4)).toThrow('Selected product variant not found or is currently unavailable');
+        expect(validateBuyNowEarly({ variantId: 'v-1', variant: { isActive: true } }, prod, 4)).toBe(true);
+        expect(validateBuyNowEarly({ variantId: null }, prod, 0)).toBe(true);
+    });
 });

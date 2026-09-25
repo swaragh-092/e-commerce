@@ -206,6 +206,17 @@ const updateItem = async (userId, sessionId, itemId, quantity) => {
             throw new AppError('NOT_FOUND', 404, 'Variant no longer available and removed from cart');
         }
 
+        if (!item.variantId) {
+            const activeVariantCount = await ProductVariant.count({
+                where: { productId: item.productId, isActive: true },
+                transaction: t,
+            });
+            if (activeVariantCount > 0) {
+                await item.destroy({ transaction: t });
+                throw new AppError('CONFLICT', 409, 'Product now requires option selection and was removed from cart');
+            }
+        }
+
         const availableStock = item.variantId
             ? Number(variant.stockQty || 0) - Number(variant.reservedQty || 0)
             : Number(product.quantity || 0) - Number(product.reservedQty || 0);
