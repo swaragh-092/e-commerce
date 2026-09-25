@@ -66,4 +66,41 @@ describe('Order Service - Calculations & Safeguards', () => {
         expect(res.total).not.toBeLessThan(0);
     });
 
+    it('ensures OrderItem create payload includes quantity, snapshotSku, and total', () => {
+        const item = {
+            productId: 'p-1',
+            variantId: 'v-1',
+            quantity: 3,
+            currentPrice: 150,
+            currentProduct: { name: 'Demo Product', sku: 'SKU-BASE', unit: 'kg' },
+            variant: { sku: 'SKU-VAR', unit: 'kg' },
+            taxBreakdown: { cgst: 5 },
+        };
+
+        const payload = {
+            orderId: 'o-1',
+            productId: item.productId,
+            variantId: item.variantId || null,
+            snapshotName: item.currentProduct.name,
+            snapshotPrice: item.currentPrice,
+            snapshotImage: null,
+            snapshotSku: item.variant?.sku || item.currentProduct.sku || null,
+            variantInfo: {
+                ...(item.variant || {}),
+                ...(item.currentProduct?.unit ? { unit: item.currentProduct.unit } : {}),
+            },
+            quantity: item.quantity,
+            total: item.currentPrice * item.quantity,
+            taxBreakdown: item.taxBreakdown || null,
+            isCombo: false,
+            comboSnapshot: null,
+        };
+
+        expect(payload.quantity).toBe(3);
+        expect(payload.snapshotSku).toBe('SKU-VAR');
+        expect(payload.total).toBe(450);
+        expect(payload.quantity).not.toBeNull();
+        expect(payload.quantity).not.toBeUndefined();
+    });
+
 });

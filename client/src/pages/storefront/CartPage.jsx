@@ -19,6 +19,7 @@ import { Link, useNavigate } from 'react-router-dom';
 
 import { useCart } from '../../hooks/useCart';
 import { useSettings, useCurrency, useFeature, useComponentStyles } from '../../hooks/useSettings';
+import { useNotification } from '../../context/NotificationContext';
 import { getMediaUrl } from '../../utils/media';
 
 
@@ -181,6 +182,11 @@ const CartItem = React.memo(({ item, getQty, handleUpdate, handleRemove, removin
                             {variant && cartItemStyle.showVariantPill !== false && (
                                 <Box sx={{ display: 'inline-block', mt: 0.6, px: 1, py: 0.2, border: '1px solid', borderColor: 'divider', borderRadius: 0.75, fontSize: '0.68rem', fontWeight: 600, color: 'text.secondary' }}>
                                     {getVariantOptionLabel(variant)}
+                                </Box>
+                            )}
+                            {!variant && (product?.hasVariants || (Array.isArray(product?.variants) && product.variants.length > 0)) && (
+                                <Box component={Link} to={`/products/${product?.slug}`} sx={{ display: 'inline-block', mt: 0.6, px: 1, py: 0.2, bgcolor: 'warning.light', color: 'warning.dark', borderRadius: 0.75, fontSize: '0.68rem', fontWeight: 700, textDecoration: 'none' }}>
+                                    Option selection required — click to choose
                                 </Box>
                             )}
                         </Box>
@@ -391,6 +397,7 @@ const OrderSummary = ({ visibleCount, subtotal, shippingCost, shippingMethod, fr
 // ── Page ──────────────────────────────────────────────────────────────────────
 const CartPage = () => {
     const { cart, loading, updateItem, removeItem, clearCart } = useCart();
+    const { notify } = useNotification();
     const { formatPrice } = useCurrency();
     const { settings } = useSettings();
     const { user } = useContext(AuthContext);
@@ -448,6 +455,17 @@ const CartPage = () => {
     }, [user, items.length, subtotal, shippingCost, couponsEnabled, showAvailableCoupons]);
 
     const handleClearCart = async () => { setClearing(true); await clearCart(); setClearing(false); };
+
+    const handleCheckout = () => {
+        const itemNeedingOption = items.find(
+            (item) => !item.variantId && (item.product?.hasVariants || (Array.isArray(item.product?.variants) && item.product.variants.length > 0))
+        );
+        if (itemNeedingOption) {
+            notify(`Please select options for "${itemNeedingOption.product?.name || 'an item'}" before proceeding to checkout.`, 'error');
+            return;
+        }
+        navigate('/checkout');
+    };
 
     if (loading) return <CartSkeleton />;
     if (items.length === 0) return <EmptyCart message={emptyStateText} />;
@@ -531,7 +549,7 @@ const CartPage = () => {
                     shippingCost={shippingCost} shippingMethod={shippingMethod} freeThreshold={freeThreshold}
                     taxRows={taxRows} taxInclusive={taxInclusive}
                     estimatedTotal={estimatedTotal} offerSummary={offerSummary}
-                    formatPrice={formatPrice} onCheckout={() => navigate('/checkout')}
+                    formatPrice={formatPrice} onCheckout={handleCheckout}
                     setEnquiryOpen={setEnquiryOpen}
                     checkoutEnabled={checkoutEnabled}
                     enquiryEnabled={enquiryEnabled}

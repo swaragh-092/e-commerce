@@ -69,7 +69,8 @@ const syncParentProductFromVariants = async (productId, transaction) => {
       transaction,
     }),
     ProductVariant.sum('reservedQty', {
-      where: { productId, isActive: true },
+      where: { productId },
+      paranoid: false,
       transaction,
     }),
   ]);

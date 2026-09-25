@@ -1028,11 +1028,18 @@ const placeOrder = async (userId, payload) => {
         let variant = null;
         if (buyNowItem.variantId) {
             variant = await ProductVariant.findOne({
-                where: { id: buyNowItem.variantId, productId: buyNowItem.productId },
+                where: { id: buyNowItem.variantId, productId: buyNowItem.productId, isActive: true },
             });
 
             if (!variant) {
-                throw new AppError('NOT_FOUND', 404, 'Selected product variant not found');
+                throw new AppError('NOT_FOUND', 404, 'Selected product variant not found or is currently unavailable');
+            }
+        } else {
+            const activeVariantCount = await ProductVariant.count({
+                where: { productId: buyNowItem.productId, isActive: true },
+            });
+            if (activeVariantCount > 0) {
+                throw new AppError('VALIDATION_ERROR', 400, `Please select an option for "${product.name}" before checkout.`);
             }
         }
 
@@ -1118,13 +1125,24 @@ const placeOrder = async (userId, payload) => {
             let currentPrice = getVariantUnitPrice(plainCurrentProduct, null);
 
             if (item.variantId) {
-                const currentVariant = await ProductVariant.findByPk(item.variantId, { transaction: t });
+                const currentVariant = await ProductVariant.findOne({
+                    where: { id: item.variantId, productId: product.id, isActive: true },
+                    transaction: t,
+                });
                 if (!currentVariant) {
-                    throw new AppError('VALIDATION_ERROR', 400, `The selected variant for "${product.name}" is no longer available.`);
+                    throw new AppError('VALIDATION_ERROR', 400, `The selected option for "${product.name}" is no longer available.`);
                 }
 
                 currentPrice = getVariantUnitPrice(plainCurrentProduct, currentVariant);
                 item.variant = currentVariant;
+            } else {
+                const activeVariantCount = await ProductVariant.count({
+                    where: { productId: product.id, isActive: true },
+                    transaction: t,
+                });
+                if (activeVariantCount > 0) {
+                    throw new AppError('VALIDATION_ERROR', 400, `Please select a product option for "${product.name}" before checkout.`);
+                }
             }
 
             subtotal += currentPrice * item.quantity;
@@ -1346,11 +1364,12 @@ const placeOrder = async (userId, payload) => {
                 snapshotName: item.currentProduct.name,
                 snapshotPrice: item.currentPrice,
                 snapshotImage: getPrimaryProductImageUrl(item.currentProduct),
+                snapshotSku: item.variant?.sku || item.currentProduct.sku || null,
                 variantInfo: {
                     ...(item.variant ? (typeof item.variant.toJSON === 'function' ? item.variant.toJSON() : item.variant) : {}),
                     ...(item.currentProduct?.unit ? { unit: item.currentProduct.unit } : {}),
                 },
-
+                quantity: item.quantity,
                 total: item.currentPrice * item.quantity,
                 taxBreakdown: item.taxBreakdown || null,
                 isCombo,
