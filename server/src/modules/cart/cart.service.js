@@ -121,15 +121,22 @@ const addItem = async (userId, sessionId, payload) => {
         let availableStock;
         if (variantId) {
             const variant = await ProductVariant.findOne({
-                where: { id: variantId, productId },
+                where: { id: variantId, productId, isActive: true },
                 transaction: t,
                 lock: Transaction.LOCK.UPDATE,
             });
             if (!variant) {
-                throw new AppError('NOT_FOUND', 404, 'Variant not found');
+                throw new AppError('NOT_FOUND', 404, 'Selected variant not found or is currently unavailable');
             }
             availableStock = Number(variant.stockQty || 0) - Number(variant.reservedQty || 0);
         } else {
+            const activeVariantCount = await ProductVariant.count({
+                where: { productId, isActive: true },
+                transaction: t,
+            });
+            if (activeVariantCount > 0) {
+                throw new AppError('VALIDATION_ERROR', 400, 'Please select a variant option before adding to cart');
+            }
             availableStock = Number(product.quantity || 0) - Number(product.reservedQty || 0);
         }
 

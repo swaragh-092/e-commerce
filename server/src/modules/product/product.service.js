@@ -369,14 +369,23 @@ const productHasVariants = async (productId, transaction = null) => {
 };
 
 const syncProductVariantStock = async (productId, transaction = null) => {
-  const quantity = await getVariantStockTotal(productId, transaction);
-  const product = await Product.findByPk(productId, {
-    attributes: ['id', 'reservedQty'],
-    transaction,
-  });
-  const reservedQty = Number(product?.reservedQty || 0);
-  const nextQuantity = Math.max(Number(quantity || 0), reservedQty);
-  await Product.update({ quantity: nextQuantity }, { where: { id: productId }, transaction });
+  const [stockSum, reservedSum] = await Promise.all([
+    ProductVariant.sum('stockQty', {
+      where: { productId, isActive: true },
+      transaction,
+    }),
+    ProductVariant.sum('reservedQty', {
+      where: { productId },
+      paranoid: false,
+      transaction,
+    }),
+  ]);
+  const nextReserved = Math.max(Number(reservedSum || 0), 0);
+  const nextQuantity = Math.max(Number(stockSum || 0), nextReserved);
+  await Product.update(
+    { quantity: nextQuantity, reservedQty: nextReserved },
+    { where: { id: productId }, transaction }
+  );
   return nextQuantity;
 };
 
@@ -898,7 +907,11 @@ exports.updateProduct = async (id, data, auditContext = null) => {
     }
 
     const variantsExist = await productHasVariants(id, transaction);
-    if ((variantsExist || (Array.isArray(data.variants) && data.variants.length > 0)) && data.quantity !== undefined) {
+    const willHaveVariants = Array.isArray(data.variants)
+      ? data.variants.length > 0
+      : variantsExist;
+
+    if (willHaveVariants && data.quantity !== undefined) {
       logger.warn(`Attempted to set quantity directly on variant product ${id}. Ignoring — stock is managed by variants.`);
       delete data.quantity;
     }

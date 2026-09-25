@@ -1118,13 +1118,24 @@ const placeOrder = async (userId, payload) => {
             let currentPrice = getVariantUnitPrice(plainCurrentProduct, null);
 
             if (item.variantId) {
-                const currentVariant = await ProductVariant.findByPk(item.variantId, { transaction: t });
+                const currentVariant = await ProductVariant.findOne({
+                    where: { id: item.variantId, productId: product.id, isActive: true },
+                    transaction: t,
+                });
                 if (!currentVariant) {
-                    throw new AppError('VALIDATION_ERROR', 400, `The selected variant for "${product.name}" is no longer available.`);
+                    throw new AppError('VALIDATION_ERROR', 400, `The selected option for "${product.name}" is no longer available.`);
                 }
 
                 currentPrice = getVariantUnitPrice(plainCurrentProduct, currentVariant);
                 item.variant = currentVariant;
+            } else {
+                const activeVariantCount = await ProductVariant.count({
+                    where: { productId: product.id, isActive: true },
+                    transaction: t,
+                });
+                if (activeVariantCount > 0) {
+                    throw new AppError('VALIDATION_ERROR', 400, `Please select a product option for "${product.name}" before checkout.`);
+                }
             }
 
             subtotal += currentPrice * item.quantity;

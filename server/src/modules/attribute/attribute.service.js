@@ -13,19 +13,22 @@ const ATTRIBUTE_TEMPLATE_FIELDS = ['id', 'name', 'slug', 'sortOrder', 'displayTy
 const ATTRIBUTE_VALUE_FIELDS = ['id', 'value', 'slug', 'sortOrder', 'displayLabel', 'swatchColor', 'imageUrl', 'unitLabel', 'metadata'];
 
 const syncProductVariantStock = async (productId, transaction = null) => {
-    const total = await ProductVariant.sum('stockQty', {
-        where: { productId, isActive: true },
-        transaction,
-    });
-    const product = await Product.findByPk(productId, {
-        attributes: ['id', 'reservedQty'],
-        transaction,
-    });
-    const reservedQty = Number(product?.reservedQty || 0);
-    const nextQuantity = Math.max(Number(total || 0), reservedQty);
+    const [stockSum, reservedSum] = await Promise.all([
+        ProductVariant.sum('stockQty', {
+            where: { productId, isActive: true },
+            transaction,
+        }),
+        ProductVariant.sum('reservedQty', {
+            where: { productId },
+            paranoid: false,
+            transaction,
+        }),
+    ]);
+    const nextReserved = Math.max(Number(reservedSum || 0), 0);
+    const nextQuantity = Math.max(Number(stockSum || 0), nextReserved);
 
     await Product.update(
-        { quantity: nextQuantity },
+        { quantity: nextQuantity, reservedQty: nextReserved },
         { where: { id: productId }, transaction }
     );
 

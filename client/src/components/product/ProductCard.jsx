@@ -1,6 +1,6 @@
 import React from 'react';
 import { Card, CardMedia, CardContent, Typography, Box, Rating, Chip, CardActions, Button } from '@mui/material';
-import { Link } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import { getMediaUrl } from '../../utils/media';
 import { useCurrency, useSettings, useFeature, useComponentStyles } from '../../hooks/useSettings';
 import { getDiscountPercent, getSaleTimingMessage, isEndingSoon } from '../../utils/pricing';
@@ -38,6 +38,7 @@ const badgePositionSx = (position = 'top-right', offset = 8) => {
 };
 
 const ProductCard = ({ product, fromCategory, compact = false }) => {
+  const navigate = useNavigate();
   const { formatPrice } = useCurrency();
   const { settings } = useSettings();
   const productCardStyle = useComponentStyles('productCard');
@@ -93,9 +94,15 @@ const ProductCard = ({ product, fromCategory, compact = false }) => {
   const { addItem } = useCart();
   const { notify } = useNotification();
 
+  const hasVariants = (Array.isArray(product.variants) && product.variants.some((v) => v?.isActive !== false)) || Boolean(product.hasVariants);
+
   const handleAddToCart = async (e) => {
     e.preventDefault();
     e.stopPropagation();
+    if (hasVariants) {
+      navigate(productPath);
+      return;
+    }
     if (!quickAddStockAvailable) {
       notify('This product is out of stock.', 'error');
       return;
@@ -105,7 +112,7 @@ const ProductCard = ({ product, fromCategory, compact = false }) => {
       notify('Product added to cart successfully!', 'success');
     } catch (err) {
       console.error('Failed to add product to cart:', err);
-      notify('Failed to add product to cart.', 'error');
+      notify(err?.response?.data?.error?.message || err?.response?.data?.message || 'Failed to add product to cart.', 'error');
     }
   };
 
@@ -395,11 +402,11 @@ const ProductCard = ({ product, fromCategory, compact = false }) => {
           <Button
             variant="contained"
             size="small"
-            disabled={!quickAddStockAvailable}
+            disabled={!hasVariants && !quickAddStockAvailable}
             onClick={handleAddToCart}
             sx={{ flexGrow: 1, height: 44, borderRadius: 'var(--store-radius-button, 8px)', fontWeight: 700 }}
           >
-            {quickAddStockAvailable ? 'Add to Cart' : 'Out of Stock'}
+            {hasVariants ? 'Select Options' : quickAddStockAvailable ? 'Add to Cart' : 'Out of Stock'}
           </Button>
         )}
       </CardActions>

@@ -323,14 +323,20 @@ const ProductDetailPage = () => {
         visibleReviews,
     });
 
+    const hasVariants = Array.isArray(product?.variants) && product.variants.some((v) => v?.isActive !== false);
+
     const addSelectedItemToCart = async (action) => {
+        if (hasVariants && !selectedVariant) {
+            setCartMsg({ type: 'error', text: 'Please select an option before adding to cart.' });
+            return false;
+        }
         setPendingAction(action);
         setCartMsg(null);
         try {
             await addItem(product.id, Math.min(qty, maxStock), selectedVariant?.id || null);
             return true;
         } catch (err) {
-            setCartMsg({ type: 'error', text: err?.response?.data?.message || 'Failed to add to cart' });
+            setCartMsg({ type: 'error', text: err?.response?.data?.error?.message || err?.response?.data?.message || 'Failed to add to cart' });
             return false;
         } finally {
             setPendingAction(null);
@@ -346,6 +352,10 @@ const ProductDetailPage = () => {
 
     const handleBuyNow = async () => {
         if (!stockAvailable) {
+            return;
+        }
+        if (hasVariants && !selectedVariant) {
+            setCartMsg({ type: 'error', text: 'Please select an option before checkout.' });
             return;
         }
 
