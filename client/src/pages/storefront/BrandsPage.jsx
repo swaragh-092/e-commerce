@@ -252,7 +252,7 @@ const BrandsPage = () => {
                 bgcolor: 'action.hover',
               }}
             >
-              <Typography variant="h1" fontWeight={800} color="text.secondary">
+              <Typography variant="h1" component="div" fontWeight={800} color="text.secondary">
                 {brand.name?.[0]?.toUpperCase() || 'B'}
               </Typography>
             </Box>
@@ -404,6 +404,7 @@ const BrandsPage = () => {
       <Box sx={{ mb: { xs: 4, md: 6 }, textAlign: 'center', maxWidth: 720, mx: 'auto' }}>
         <Typography
           variant="h3"
+          component="h1"
           fontWeight={800}
           gutterBottom
           sx={{ fontSize: { xs: '1.75rem', md: '2.5rem' }, letterSpacing: '-0.02em' }}
@@ -472,7 +473,7 @@ const BrandsPage = () => {
                             bgcolor: 'action.hover',
                           }}
                         >
-                          <Typography variant="h1" fontWeight={800} color="text.secondary">
+                          <Typography variant="h1" component="div" fontWeight={800} color="text.secondary">
                             {brand.name?.[0]?.toUpperCase() || 'B'}
                           </Typography>
                         </Box>
@@ -558,7 +559,7 @@ const BrandsPage = () => {
                       )}
                       <Box sx={{ position: 'absolute', inset: 0, background: 'linear-gradient(to top, rgba(0,0,0,0.7) 0%, rgba(0,0,0,0.2) 40%, rgba(0,0,0,0) 100%)' }} />
                       <Box sx={{ position: 'relative', p: 3, color: '#fff' }}>
-                        <Typography variant="h6" fontWeight={800} gutterBottom sx={{ textShadow: '0 2px 8px rgba(0,0,0,0.4)' }}>{brand.name}</Typography>
+                        <Typography variant="h6" component="h2" fontWeight={800} gutterBottom sx={{ textShadow: '0 2px 8px rgba(0,0,0,0.4)' }}>{brand.name}</Typography>
                         <Button component={RouterLink} to={`/brands/${brand.slug}`} variant="contained" size="small" sx={{ bgcolor: '#fff', color: '#000', borderRadius: 2, textTransform: 'none', fontWeight: 600, '&:hover': { bgcolor: 'rgba(255,255,255,0.9)' } }}>
                           View Brand
                         </Button>

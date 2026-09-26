@@ -25,7 +25,10 @@ const DashboardPage = () => {
         if (s.status === 'fulfilled') setStats(s.value.data.data);
         else errors.stats = getApiErrorMessage(s.reason, 'Failed to load stats.');
 
-        if (ls.status === 'fulfilled') setLowStock(ls.value.data.data || []);
+        if (ls.status === 'fulfilled') {
+          const lowStockPayload = ls.value.data.data || [];
+          setLowStock(Array.isArray(lowStockPayload) ? lowStockPayload : lowStockPayload.rows || []);
+        }
         else errors.lowStock = getApiErrorMessage(ls.reason, 'Failed to load low stock.');
 
         if (ro.status === 'fulfilled') setRecentOrders(ro.value.data.data || []);
@@ -82,7 +85,7 @@ const DashboardPage = () => {
 
   return (
     <Box>
-      <Typography variant="h5" fontWeight={700} mb={spacing.page}>Dashboard Overview</Typography>
+      <Typography variant="h5" component="h1" fontWeight={700} mb={spacing.page}>Dashboard Overview</Typography>
 
       {error && (
         <Alert

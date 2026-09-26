@@ -9,7 +9,10 @@ dotenv.config({ path: path.resolve(__dirname, '../../../.env') });
 module.exports = {
     development: {
         username: process.env.DB_USER || 'postgres',
-        password: process.env.DB_PASSWORD || 'postgres',
+        // Do not silently fall back to a known database password. Local
+        // development should provide DB_PASSWORD explicitly (or fail with a
+        // useful database authentication error).
+        password: process.env.DB_PASSWORD || '',
         database: process.env.DB_NAME || 'ecommerce',
         host: process.env.DB_HOST || 'localhost',
         port: parseInt(process.env.DB_PORT, 10) || 5432,
@@ -37,7 +40,7 @@ module.exports = {
     },
     test: {
         username: process.env.DB_USER || 'postgres',
-        password: process.env.DB_PASSWORD || 'postgres',
+        password: process.env.DB_PASSWORD || '',
         database: process.env.DB_NAME ? `${process.env.DB_NAME}_test` : 'ecommerce_test',
         host: process.env.DB_HOST || 'localhost',
         port: parseInt(process.env.DB_PORT, 10) || 5432,
@@ -78,4 +81,5 @@ module.exports = {
     },
 };
 
-// docker run -d --name ecommerce_postgres -e POSTGRES_USER=postgres -e POSTGRES_PASSWORD=postgres -e POSTGRES_DB=ecommerce_dev -p 5432:5432 -v postgres_data:/var/lib/postgresql/data postgres:15
+// For local containers, use docker-compose.yml with DB_PASSWORD supplied by
+// an untracked .env file. Never commit database credentials in this module.

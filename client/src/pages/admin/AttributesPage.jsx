@@ -481,7 +481,7 @@ const AttributesPage = () => {
       {/* Header */}
       <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: { xs: 'flex-start', sm: 'center' }, flexDirection: { xs: 'column', sm: 'row' }, gap: 2, mb: 3 }}>
         <Box>
-          <Typography variant="h5" fontWeight="bold">Attribute Templates</Typography>
+          <Typography variant="h5" component="h1" fontWeight="bold">Attribute Templates</Typography>
           <Typography variant="body2" color="text.secondary" sx={{ mt: 0.5 }}>
             Manage product variation attributes, swatches, and specifications
           </Typography>

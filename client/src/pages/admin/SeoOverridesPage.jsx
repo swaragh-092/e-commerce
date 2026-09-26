@@ -150,7 +150,7 @@ const SeoOverridesPage = () => {
     <Box sx={{ p: 3 }}>
       <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 3 }}>
         <Box>
-          <Typography variant="h5" fontWeight={700}>SEO URL Overrides</Typography>
+          <Typography variant="h5" component="h1" fontWeight={700}>SEO URL Overrides</Typography>
           <Typography variant="body2" color="text.secondary">
             Manage custom metadata for specific URL paths (e.g., Homepage, About Us, Custom Search).
           </Typography>

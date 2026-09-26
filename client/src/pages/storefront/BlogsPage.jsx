@@ -105,7 +105,7 @@ const BlogsPage = () => {
       </Breadcrumbs>
 
       <Box sx={{ mb: 4 }}>
-        <Typography variant="h4" fontWeight="bold" gutterBottom>
+        <Typography variant="h4" component="h1" fontWeight="bold" gutterBottom>
           Blogs
         </Typography>
         {!loading && (
@@ -175,7 +175,7 @@ const BlogsPage = () => {
                         <Chip key={category.id} label={category.name} size="small" variant="outlined" />
                       ))}
                     </Stack>
-                    <Typography variant="h5" fontWeight={800} sx={{ mb: 1.2, lineHeight: 1.25 }}>
+                    <Typography variant="h5" component="h2" fontWeight={800} sx={{ mb: 1.2, lineHeight: 1.25 }}>
                       {post.title}
                     </Typography>
                     {(showDate || (showAuthor && formatAuthorName(post.author))) && (
@@ -211,7 +211,7 @@ const BlogsPage = () => {
 
       {!loading && posts.length === 0 && (
         <Box sx={{ py: 10, textAlign: 'center' }}>
-          <Typography variant="h5" fontWeight={800} gutterBottom>
+          <Typography variant="h5" component="h2" fontWeight={800} gutterBottom>
             No blog posts found
           </Typography>
           <Typography variant="body1" color="text.secondary" sx={{ mb: 2 }}>

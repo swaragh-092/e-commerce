@@ -31,6 +31,7 @@ const twoFactorController = require('./twoFactor.controller');
 const otpController = require('./otp.controller');
 const passport = require('passport');
 const { initializeGoogleStrategy } = require('./oauth.service');
+const { setAuthCookies } = require('./authCookies');
 
 initializeGoogleStrategy();
 
@@ -81,7 +82,8 @@ if (process.env.GOOGLE_CLIENT_ID) {
       res.redirect(`${clientUrl}/login?requiresTwoFactor=true&tempToken=${encodeURIComponent(req.user.tempToken)}`);
     } else {
       const { tokens } = req.user;
-      res.redirect(`${clientUrl}/oauth/callback#accessToken=${encodeURIComponent(tokens.accessToken)}&refreshToken=${encodeURIComponent(tokens.refreshToken)}`);
+      setAuthCookies(res, tokens);
+      res.redirect(`${clientUrl}/oauth/callback`);
     }
   });
 }

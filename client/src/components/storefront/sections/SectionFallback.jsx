@@ -364,36 +364,76 @@ export const SectionFrame = ({ section, index = 0, children, preview = false, se
     ...(isFullWidth ? contentExtraSx : {}),
   };
 
-  const previewHoverSx = preview ? {
+  const canSelect = preview && typeof onSelect === 'function';
+  const sectionLabel = getSectionLabel(section);
+  const selectionLabel = selected ? `Editing ${sectionLabel}` : `${sectionLabel} (Click to edit)`;
+  const previewInteractionSx = canSelect ? {
     position: 'relative',
     cursor: 'pointer',
-    '&:hover::after': {
-      content: `"${getSectionLabel(section)} (Click to edit)"`,
+    outline: selected ? '3px solid' : 'none',
+    outlineColor: selected ? 'primary.main' : 'transparent',
+    outlineOffset: isFullWidth || isHero ? '-2px' : '2px',
+    '&::after': selected ? {
+      content: `"${selectionLabel}"`,
       position: 'absolute',
       top: 8,
       left: 8,
       backgroundColor: 'primary.main',
-      color: 'white',
+      color: 'primary.contrastText',
+      pointerEvents: 'none',
       padding: '2px 8px',
       borderRadius: '4px',
-      fontSize: '10px',
+      fontSize: '0.7rem',
       fontWeight: 'bold',
       zIndex: 10,
-    },
+    } : undefined,
     '&:hover': {
-      outline: '2px dashed #1976d2',
+      outline: selected ? '3px solid' : '2px dashed',
+      outlineColor: 'primary.main',
       outlineOffset: isFullWidth || isHero ? '-2px' : '2px',
-    }
+    },
+    '&:focus-visible': {
+      outline: '3px solid',
+      outlineColor: 'primary.main',
+      outlineOffset: isFullWidth || isHero ? '-2px' : '2px',
+    },
+    '&:hover::after': !selected ? {
+      content: `"${selectionLabel}"`,
+      position: 'absolute',
+      top: 8,
+      left: 8,
+      backgroundColor: 'primary.main',
+      color: 'primary.contrastText',
+      pointerEvents: 'none',
+      padding: '2px 8px',
+      borderRadius: '4px',
+      fontSize: '0.7rem',
+      fontWeight: 'bold',
+      zIndex: 10,
+    } : undefined,
   } : {};
 
-  const mergedWrapperSx = { ...wrapperSx, ...previewHoverSx };
+  const mergedWrapperSx = { ...wrapperSx, ...previewInteractionSx };
+  const selectionProps = canSelect ? {
+    role: 'group',
+    tabIndex: 0,
+    'aria-label': `Edit ${sectionLabel} section`,
+    'aria-current': selected ? 'true' : undefined,
+    onKeyDown: (event) => {
+      if (event.key === 'Enter' || event.key === ' ') {
+        event.preventDefault();
+        onSelect();
+      }
+    },
+  } : {};
 
   if (isHero || isFullWidth) {
     return (
       <Box
         key={wrapperKey}
         className={customClassName || undefined}
-        onClick={preview ? onSelect : undefined}
+        onClick={canSelect ? onSelect : undefined}
+        {...selectionProps}
         sx={mergedWrapperSx}
       >
         {children}
@@ -404,7 +444,8 @@ export const SectionFrame = ({ section, index = 0, children, preview = false, se
   return (
     <Box
       className={customClassName || undefined}
-      onClick={preview ? onSelect : undefined}
+      onClick={canSelect ? onSelect : undefined}
+      {...selectionProps}
       sx={mergedWrapperSx}
     >
       <Container

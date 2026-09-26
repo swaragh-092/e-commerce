@@ -5,6 +5,7 @@ const AuthService = require('./auth.service');
 const NotificationService = require('../notification/notification.service');
 const { success } = require('../../utils/response');
 const logger = require('../../utils/logger');
+const { setAuthCookies, stripAuthTokens } = require('./authCookies');
 
 const sendOtp = async (req, res, next) => {
   try {
@@ -29,7 +30,8 @@ const verifyOtp = async (req, res, next) => {
     const { phone, code } = req.validated;
     await OtpService.verify(phone, code, 'login');
     const result = await AuthService.loginByPhone(phone, req.ip);
-    return success(res, result, 'Login successful');
+    if (result?.tokens) setAuthCookies(res, result.tokens);
+    return success(res, stripAuthTokens(result), 'Login successful');
   } catch (err) { next(err); }
 };
 

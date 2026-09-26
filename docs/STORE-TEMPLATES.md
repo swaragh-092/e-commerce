@@ -255,11 +255,12 @@ featured, sale, bestSellers, newest, recommended
 1. Find activation by ID
 2. Reject if already rolled back
 3. BEGIN TRANSACTION
-4. Write beforeSnapshot back into settings via bulkUpdate
-5. Deactivate template-owned API definitions (if still owned)
-6. Mark activation as rolled back
-7. Write audit log
-8. COMMIT
+4. Write beforeSnapshot back into settings via bulkUpdate, preserving newer conflicting edits
+5. Compare each template-owned API definition with the activation's after-state
+6. Restore or deactivate only unchanged data sources; preserve changed or legacy sources and report conflicts
+7. Mark activation as rolled back
+8. Write audit log
+9. COMMIT
 ```
 
 ---
@@ -1003,4 +1004,3 @@ Admins can use these in Advanced custom CSS, for example:
 ```
 
 Product cards, category cards, promo banners, and trust cards now consume the shared shadow/border/overlay tokens for core surfaces. The remaining design-token work is a deeper semantic/component token hierarchy and wider adoption across every storefront component.
-

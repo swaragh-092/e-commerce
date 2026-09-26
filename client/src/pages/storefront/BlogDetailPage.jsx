@@ -53,7 +53,7 @@ const BlogDetailPage = () => {
   if (!loading && !post) {
     return (
       <Container maxWidth="md" sx={{ py: 10, textAlign: 'center' }}>
-        <Typography variant="h4" fontWeight={800} gutterBottom>
+        <Typography variant="h4" component="h1" fontWeight={800} gutterBottom>
           Blog post not found
         </Typography>
         <Typography variant="body1" color="text.secondary" sx={{ mb: 3 }}>
@@ -127,7 +127,7 @@ const BlogDetailPage = () => {
               }}
             >
               <Box sx={{ maxWidth: 880 }}>
-                <Typography variant="h2" fontWeight={900} sx={{ mb: 2, lineHeight: 1.05 }}>
+                <Typography variant="h2" component="h1" fontWeight={900} sx={{ mb: 2, lineHeight: 1.05 }}>
                   {post.title}
                 </Typography>
                 {(showDate || (showAuthor && authorName)) && (
@@ -141,7 +141,7 @@ const BlogDetailPage = () => {
             </Box>
           ) : (
             <>
-              <Typography variant="h3" fontWeight={800} sx={{ mb: 2 }}>
+              <Typography variant="h3" component="h1" fontWeight={800} sx={{ mb: 2 }}>
                 {post.title}
               </Typography>
 
@@ -203,7 +203,7 @@ const BlogDetailPage = () => {
 
           {post.gallery?.items?.length ? (
             <Box sx={{ mt: 6 }}>
-              <Typography variant="h5" fontWeight={700} sx={{ mb: 2.5 }}>
+              <Typography variant="h5" component="h2" fontWeight={700} sx={{ mb: 2.5 }}>
                 {post.gallery.title || 'Gallery'}
               </Typography>
               <Box

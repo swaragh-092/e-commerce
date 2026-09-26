@@ -126,7 +126,7 @@ const BlogsManagePage = () => {
   return (
     <Box p={3}>
       <Box display="flex" justifyContent="space-between" alignItems="center" mb={3} gap={2} flexWrap="wrap">
-        <Typography variant="h4">Blog Posts</Typography>
+        <Typography variant="h4" component="h1">Blog Posts</Typography>
         <Box display="flex" gap={1}>
           <Button variant="outlined" onClick={() => navigate('/admin/blogs/categories')}>Manage Categories</Button>
           {canManageBlogs && (

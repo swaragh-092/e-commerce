@@ -5,6 +5,7 @@ import { seoService } from '../../services/seoService';
 import { SettingsContext } from '../../context/ThemeContext';
 import { useContext } from 'react';
 import { getStoreName } from '../../utils/store';
+import { buildOrganizationJsonLd } from '../../utils/seo/buildOrganizationJsonLd';
 
 const SEO = () => {
     const { settings } = useContext(SettingsContext);
@@ -37,6 +38,7 @@ const SEO = () => {
     return (
         <Helmet>
             <title>{title}</title>
+            <script type="application/ld+json">{JSON.stringify(buildOrganizationJsonLd({ settings }))}</script>
             {metadata.description && <meta name="description" content={metadata.description} />}
             {metadata.keywords && <meta name="keywords" content={metadata.keywords} />}
             {metadata.canonicalUrl && <link rel="canonical" href={metadata.canonicalUrl} />}

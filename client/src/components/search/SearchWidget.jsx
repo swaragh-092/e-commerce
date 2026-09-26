@@ -356,11 +356,18 @@ const SearchWidget = ({
                   {loading ? (
                     <CircularProgress size={18} color="inherit" />
                   ) : (
-                    <SearchIcon 
-                      color={variant === 'header' ? 'inherit' : 'action'} 
-                      fontSize="small" 
-                      sx={{ opacity: variant === 'header' ? 0.8 : 1 }}
-                    />
+                    <IconButton
+                      size="small"
+                      aria-label="Search"
+                      onClick={() => executeSearch(query)}
+                      sx={{ color: 'inherit', p: 0.25 }}
+                    >
+                      <SearchIcon
+                        color={variant === 'header' ? 'inherit' : 'action'}
+                        fontSize="small"
+                        sx={{ opacity: variant === 'header' ? 0.8 : 1 }}
+                      />
+                    </IconButton>
                   )}
                 </InputAdornment>
               ),
@@ -397,6 +404,7 @@ const SearchWidget = ({
             open={open && (hasAnyResults || hasRecentSearches)}
             anchorEl={inputRef.current}
             placement="bottom-start"
+            disablePortal
             style={{
               zIndex: 1400,
               width: popperWidth,
@@ -438,6 +446,7 @@ const SearchWidget = ({
            open={true}
            anchorEl={inputRef.current}
            placement="bottom-start"
+           disablePortal
            style={{
              zIndex: 1400,
              width: popperWidth,

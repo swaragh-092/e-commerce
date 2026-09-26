@@ -208,6 +208,7 @@ const buildPageTemplateRows = (pkg, scopes) => {
 };
 
 const readCurrentSettings = async (groups, transaction = null, { lock = false } = {}) => {
+  if (!groups.length) return {};
   const opts = { where: { group: groups } };
   if (transaction) opts.transaction = transaction;
   if (lock && transaction) {
@@ -220,6 +221,155 @@ const readCurrentSettings = async (groups, transaction = null, { lock = false } 
     snapshot[s.group][s.key] = s.value;
   }
   return snapshot;
+};
+
+const readCurrentDataSourceRows = async (refs, transaction = null, { lock = false } = {}) => {
+  const ids = [...new Set((refs || []).map((ref) => ref?.id).filter(Boolean))];
+  if (!ids.length) return new Map();
+
+  const options = { where: { id: ids }, paranoid: false };
+  if (transaction) options.transaction = transaction;
+  if (lock && transaction) options.lock = transaction.LOCK ? transaction.LOCK.UPDATE : 'UPDATE';
+
+  const rows = await ApiDefinition.findAll(options);
+  return new Map(rows.map((row) => [row.id, row]));
+};
+
+const valuesEqual = (left, right) => JSON.stringify(left) === JSON.stringify(right);
+
+const DATA_SOURCE_SNAPSHOT_FIELDS = [
+  'id',
+  'slug',
+  'name',
+  'description',
+  'isActive',
+  'config',
+  'createdByTemplateId',
+  'deletedAt',
+];
+
+const toDataSourceSnapshot = (api) => {
+  if (!api) return null;
+  const value = typeof api.toJSON === 'function' ? api.toJSON() : api;
+  return {
+    id: value.id,
+    slug: value.slug,
+    name: value.name,
+    description: value.description ?? null,
+    isActive: value.isActive !== false,
+    config: value.config || {},
+    createdByTemplateId: value.createdByTemplateId ?? null,
+    deletedAt: value.deletedAt ? new Date(value.deletedAt).toISOString() : null,
+  };
+};
+
+const dataSourceSnapshotsEqual = (left, right) => {
+  if (!left || !right) return left === right;
+  return DATA_SOURCE_SNAPSHOT_FIELDS.every((field) => valuesEqual(left[field], right[field]));
+};
+
+/**
+ * Build a safe rollback plan for template-owned API definitions. A source is
+ * only changed when its current persisted state still matches the state this
+ * activation wrote. This prevents an older activation from disabling a newer
+ * activation or a merchant-edited source.
+ */
+const buildDataSourceRollbackPlan = (refs = [], currentSnapshots = {}) => {
+  const actions = [];
+  const conflicts = [];
+
+  for (const ref of refs) {
+    const baseConflict = {
+      type: 'dataSource',
+      key: ref?.key || null,
+      id: ref?.id || null,
+      slug: ref?.slug || null,
+    };
+
+    if (!ref?.id || !ref.after) {
+      conflicts.push({ ...baseConflict, reason: 'missing_activation_snapshot' });
+      continue;
+    }
+
+    const current = currentSnapshots[ref.id] || null;
+    if (!current) {
+      conflicts.push({ ...baseConflict, reason: 'source_missing' });
+      continue;
+    }
+
+    if (!dataSourceSnapshotsEqual(current, ref.after)) {
+      conflicts.push({ ...baseConflict, reason: 'source_changed_after_activation' });
+      continue;
+    }
+
+    actions.push({
+      type: ref.before ? 'restore' : 'deactivate',
+      ref,
+      before: ref.before || null,
+    });
+  }
+
+  return { actions, conflicts };
+};
+
+/**
+ * Build a rollback plan without overwriting values changed after an activation.
+ * Snapshots contain persisted settings only, so an absent key means there was
+ * no Setting row at that point in time and should be deleted on a clean rollback.
+ */
+const buildRollbackPlan = (beforeSnapshot = {}, afterSnapshot = {}, currentSnapshot = {}) => {
+  const rows = [];
+  const deletes = [];
+  const conflicts = [];
+  const groups = new Set([
+    ...Object.keys(beforeSnapshot || {}),
+    ...Object.keys(afterSnapshot || {}),
+  ]);
+
+  for (const group of groups) {
+    const beforeKeys = beforeSnapshot[group] || {};
+    const afterKeys = afterSnapshot[group] || {};
+    const currentKeys = currentSnapshot[group] || {};
+    const keys = new Set([...Object.keys(beforeKeys), ...Object.keys(afterKeys)]);
+
+    for (const key of keys) {
+      const hadBefore = Object.prototype.hasOwnProperty.call(beforeKeys, key);
+      const hadAfter = Object.prototype.hasOwnProperty.call(afterKeys, key);
+      const hasCurrent = Object.prototype.hasOwnProperty.call(currentKeys, key);
+      const currentValue = currentKeys[key];
+
+      // The activation changed this key. Only reverse it if nobody changed it
+      // after the activation. A missing current value is meaningful here too.
+      if (hadAfter && (!hasCurrent || !valuesEqual(currentValue, afterKeys[key]))) {
+        conflicts.push({ group, key });
+        continue;
+      }
+
+      if (hadAfter) {
+        if (hadBefore) {
+          rows.push({ group, key, value: beforeKeys[key] });
+        } else {
+          // A key that was absent before the activation must be removed, not
+          // set to null or left behind as a template override.
+          deletes.push({ group, key });
+        }
+        continue;
+      }
+
+      if (hadBefore && !hadAfter) {
+        // This is an unusual snapshot shape because template apply does not
+        // delete settings. If the row is still present, leave it alone rather
+        // than guessing which later write should win.
+        if (hasCurrent) {
+          conflicts.push({ group, key });
+        } else {
+          rows.push({ group, key, value: beforeKeys[key] });
+        }
+      }
+    }
+  }
+
+  return { rows, deletes, conflicts };
 };
 
 const affectedGroups = (scopes, replaceDemoContent) => {
@@ -312,6 +462,7 @@ const upsertTemplateDataSources = async (pkg, user, transaction) => {
     };
 
     const existing = await ApiDefinition.findOne({ where: { slug }, transaction, paranoid: false });
+    const beforeSnapshot = toDataSourceSnapshot(existing);
     let api;
     if (existing) {
       const isOwnedByTemplate = existing.createdByTemplateId === pkg.meta.slug ||
@@ -326,7 +477,15 @@ const upsertTemplateDataSources = async (pkg, user, transaction) => {
       api = await ApiDefinition.create({ ...payload, createdBy: user.id }, { transaction });
     }
 
-    refs.push({ key: source.key, type: source.type, id: api.id, slug: api.slug, url: `/api/api-builder/public/${api.slug}` });
+    refs.push({
+      key: source.key,
+      type: source.type,
+      id: api.id,
+      slug: api.slug,
+      url: `/api/api-builder/public/${api.slug}`,
+      before: beforeSnapshot,
+      after: toDataSourceSnapshot(api),
+    });
   }
 
   return refs;
@@ -694,21 +853,55 @@ const rollback = async (activationId, user) => {
     if (!activation) throw new AppError('NOT_FOUND', 404, 'Activation not found.');
     if (activation.rolledBackAt) throw new AppError('VALIDATION_ERROR', 400, 'This activation has already been rolled back.');
 
-    const snapshot = activation.beforeSnapshot;
-    const rows = [];
-    for (const [group, keys] of Object.entries(snapshot)) {
-      for (const [key, value] of Object.entries(keys)) {
-        rows.push({ key, value, group });
-      }
-    }
+    const beforeSnapshot = activation.beforeSnapshot || {};
+    const afterSnapshot = activation.afterSnapshot || {};
+    const groups = [...new Set([
+      ...Object.keys(beforeSnapshot),
+      ...Object.keys(afterSnapshot),
+    ])];
+    const currentSnapshot = await readCurrentSettings(groups, t, { lock: true });
+    const { rows, deletes, conflicts } = buildRollbackPlan(beforeSnapshot, afterSnapshot, currentSnapshot);
+    const dataSourceRefs = Array.isArray(activation.dataSourceRefs) ? activation.dataSourceRefs : [];
+    const dataSourceRows = await readCurrentDataSourceRows(dataSourceRefs, t, { lock: true });
+    const currentDataSourceSnapshots = Object.fromEntries(
+      dataSourceRefs.map((ref) => [ref.id, toDataSourceSnapshot(dataSourceRows.get(ref.id))]),
+    );
+    const {
+      actions: dataSourceActions,
+      conflicts: dataSourceConflicts,
+    } = buildDataSourceRollbackPlan(dataSourceRefs, currentDataSourceSnapshots);
 
     if (rows.length) await SettingsService.bulkUpdate(rows, user.id, user, { transaction: t });
+    for (const { group, key } of deletes) {
+      await Setting.destroy({ where: { group, key }, transaction: t });
+    }
 
-    for (const ref of activation.dataSourceRefs || []) {
-      const api = await ApiDefinition.findByPk(ref.id, { transaction: t });
-      if (api && (api.createdByTemplateId || String(api.description || '').includes(TEMPLATE_API_DESCRIPTION_PREFIX))) {
+    let restoredDataSources = 0;
+    let deactivatedDataSources = 0;
+    for (const action of dataSourceActions) {
+      const api = dataSourceRows.get(action.ref.id);
+      if (!api) continue;
+
+      if (action.type === 'deactivate') {
         await api.update({ isActive: false, updatedBy: user.id }, { transaction: t });
+        deactivatedDataSources += 1;
+        continue;
       }
+
+      if (action.before?.deletedAt) {
+        await api.destroy({ transaction: t });
+      } else {
+        await api.update({
+          name: action.before.name,
+          slug: action.before.slug,
+          description: action.before.description,
+          isActive: action.before.isActive,
+          config: action.before.config,
+          createdByTemplateId: action.before.createdByTemplateId,
+          updatedBy: user.id,
+        }, { transaction: t });
+      }
+      restoredDataSources += 1;
     }
 
     await activation.update({ rolledBackAt: new Date(), rolledBackBy: user.id }, { transaction: t });
@@ -719,11 +912,28 @@ const rollback = async (activationId, user) => {
         action: 'UPDATE',
         entity: 'Theme',
         entityId: activationId,
-        changes: { action: 'rollback', themeName: activation.themeName },
+        changes: {
+          action: 'rollback',
+          themeName: activation.themeName,
+          restoredKeys: rows.length,
+          removedKeys: deletes.length,
+          conflicts,
+          dataSourceConflicts,
+          restoredDataSources,
+          deactivatedDataSources,
+        },
       }, t);
     } catch (e) { /* audit failure must not break rollback */ }
 
-    return activation.reload({ transaction: t });
+    const result = await activation.reload({ transaction: t });
+    return {
+      ...result.toJSON(),
+      rollbackConflicts: conflicts,
+      dataSourceRollbackConflicts: dataSourceConflicts,
+      rolledBackKeys: rows.length + deletes.length,
+      restoredDataSources,
+      deactivatedDataSources,
+    };
   });
 };
 
@@ -760,7 +970,8 @@ module.exports = {
   apply,
   listActivations,
   rollback,
+  buildRollbackPlan,
+  buildDataSourceRollbackPlan,
   removeLibraryTheme,
   getStoreStatus,
 };
-

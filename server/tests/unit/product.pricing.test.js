@@ -38,12 +38,22 @@ describe('Product Pricing & Variant Sale Logic', () => {
       expect(unitPrice).toBe(100);
     });
 
-    it('returns precomputed unitPrice or effectivePrice if explicitly set', () => {
+    it('recalculates from the stored variant price instead of trusting stale precomputed values', () => {
       const product = { price: 100, salePrice: 80 };
       const variant = { price: 100, unitPrice: 75 };
 
       const unitPrice = getVariantUnitPrice(product, variant);
-      expect(unitPrice).toBe(75);
+      expect(unitPrice).toBe(80);
+    });
+
+    it('does not double-discount variant prices already below the parent regular price', () => {
+      const test1 = { price: 10, salePrice: 5 };
+      const demo = { price: 101, salePrice: 50 };
+
+      expect(getVariantUnitPrice(test1, { price: 5, unitPrice: 0 })).toBe(5);
+      expect(getVariantUnitPrice(demo, { price: 50, unitPrice: 0 })).toBe(50);
+      expect(getVariantUnitPrice(demo, { price: 60, unitPrice: 9 })).toBe(60);
+      expect(getVariantUnitPrice(demo, { price: 45, unitPrice: 0 })).toBe(45);
     });
 
     it('serializes variant with correct discounted unitPrice', () => {
@@ -293,8 +303,11 @@ describe('Product Pricing & Variant Sale Logic', () => {
     });
 
     it('P2: getCategoryWithProducts supports includeSubcategories option', async () => {
-      const { getCategoryWithProducts } = await import('../../src/modules/category/category.service');
+      const { getCategoryWithProducts, CATEGORY_PRODUCT_VARIANT_ATTRIBUTES } = await import('../../src/modules/category/category.service');
+      const { ProductVariant } = await import('../../src/modules');
       expect(typeof getCategoryWithProducts).toBe('function');
+      expect(CATEGORY_PRODUCT_VARIANT_ATTRIBUTES).not.toContain('salePrice');
+      expect(CATEGORY_PRODUCT_VARIANT_ATTRIBUTES.every((attribute) => ProductVariant.rawAttributes[attribute])).toBe(true);
     });
 
     it('P2: getCategoryProductsQuerySchema properly casts and validates includeSubcategories', async () => {
@@ -334,4 +347,3 @@ describe('Product Pricing & Variant Sale Logic', () => {
     });
   });
 });
-

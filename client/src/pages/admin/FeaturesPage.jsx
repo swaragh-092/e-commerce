@@ -159,7 +159,7 @@ const FeaturesPage = () => {
   return (
     <Box>
       <Box sx={{ mb: 4 }}>
-        <Typography variant="h4" fontWeight={800} gutterBottom>
+        <Typography variant="h4" component="h1" fontWeight={800} gutterBottom>
           Platform Features
         </Typography>
         <Typography variant="body1" color="text.secondary">

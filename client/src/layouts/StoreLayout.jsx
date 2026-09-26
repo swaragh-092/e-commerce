@@ -10,7 +10,7 @@ import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
 import MenuIcon from '@mui/icons-material/Menu';
 import { Outlet, Link as RouterLink, useLocation } from 'react-router-dom';
 import { useAuth } from '../hooks/useAuth';
-import { useSettings, useFeature } from '../hooks/useSettings';
+import { useSettings, useFeature, useCurrency } from '../hooks/useSettings';
 import { useCart } from '../hooks/useCart';
 import FavoriteBorderIcon from '@mui/icons-material/FavoriteBorder';
 import CategoryNav from '../components/layout/CategoryNav';
@@ -25,12 +25,14 @@ import { ADMIN_ACCESS_PERMISSIONS, getFirstAccessibleAdminPath } from '../utils/
 import SEO from '../components/common/SEO';
 import { isExternalUrl } from '../utils/urls';
 import { getStoreName } from '../utils/store';
+import { resolveShippingAnnouncement } from '../utils/shippingAnnouncement';
 
 const DEFAULT_ACTIONS_ORDER = ['search', 'cart', 'wishlist', 'account'];
 
 const StoreLayout = () => {
   const { isAuthenticated, logout, hasAnyPermission, user } = useAuth();
   const { settings } = useSettings();
+  const { formatPrice } = useCurrency();
   const location = useLocation();
   const storeName = getStoreName(settings);
   const { cartCount } = useCart();
@@ -105,7 +107,12 @@ const StoreLayout = () => {
 
   const themeSettings = settings?.theme || {};
   const announcement = settings?.announcement || {};
-  const showAnnouncement = announcement.enabled && !announcementDismissed;
+  const announcementText = resolveShippingAnnouncement({
+    announcement,
+    shipping: settings?.shipping,
+    formatPrice,
+  });
+  const showAnnouncement = announcement.enabled && Boolean(announcementText) && !announcementDismissed;
   const navPosition  = nav.sticky !== false ? 'sticky' : 'static';
   const headerStyle = themeSettings.headerStyle || 'gradient';
   const hasDynamicHeaderItems = Array.isArray(headerMenu?.items) && headerMenu.items.length > 0;
@@ -281,10 +288,10 @@ const StoreLayout = () => {
           {announcement.link ? (
             <Typography variant="body2" component={RouterLink} to={announcement.link}
               sx={{ color: 'inherit', textDecoration: 'underline', '&:hover': { opacity: 0.85 } }}>
-              {announcement.text}
+              {announcementText}
             </Typography>
           ) : (
-            <Typography variant="body2">{announcement.text}</Typography>
+            <Typography variant="body2">{announcementText}</Typography>
           )}
           {announcement.dismissible !== false && (
             <IconButton size="small" onClick={() => setAnnouncementDismissed(true)}

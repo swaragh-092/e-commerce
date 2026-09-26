@@ -7,6 +7,7 @@ const { ACTIONS, ENTITIES } = require('../../config/constants');
 const { buildFeatures, isTier1Feature, TIER1_KEYS } = require('../../config/modes');
 const { getPermissionsForUser, PERMISSIONS } = require('../../config/permissions');
 const { invalidateFeature } = require('../../middleware/featureGate.middleware');
+const { DESIGN_SETTINGS_GROUPS, isDesignSettingTarget } = require('./designSettings');
 
 const fs = require('fs');
 const path = require('path');
@@ -177,6 +178,11 @@ const getAll = async () => {
     brandsPage: { ...defaultSettings.brandsPage },
     cartPage: { ...defaultSettings.cartPage },
     accountPage: { ...defaultSettings.accountPage },
+    checkoutPage: { ...defaultSettings.checkoutPage },
+    wishlistPage: { ...defaultSettings.wishlistPage },
+    searchPage: { ...defaultSettings.searchPage },
+    notFoundPage: { ...defaultSettings.notFoundPage },
+    ordersPage: { ...defaultSettings.ordersPage },
     admin: { ...defaultSettings.admin },
     invoice: { ...defaultSettings.invoice },
     messaging: { ...defaultSettings.messaging },
@@ -217,7 +223,7 @@ const getAll = async () => {
 
 const getByGroup = async (groupName, options = {}) => {
   const { maskSensitive = true } = options;
-  const validGroups = ['theme', 'componentStyles', 'sectionPresets', 'features', 'payments', 'sales', 'seo', 'general', 'shipping', 'tax', 'sku', 'logo', 'hero', 'auth', 'footer', 'announcement', 'nav', 'catalog', 'homepage', 'productPage', 'categoryPage', 'blogPage', 'brandsPage', 'cartPage', 'accountPage', 'admin', 'invoice', 'gateway_credentials', 'messaging_credentials', 'messaging', 'ai', 'ai_credentials', 'advanced'];
+  const validGroups = ['theme', 'componentStyles', 'sectionPresets', 'features', 'payments', 'sales', 'seo', 'general', 'shipping', 'tax', 'sku', 'logo', 'hero', 'auth', 'footer', 'announcement', 'nav', 'catalog', 'homepage', 'productPage', 'categoryPage', 'blogPage', 'brandsPage', 'cartPage', 'accountPage', 'checkoutPage', 'wishlistPage', 'searchPage', 'notFoundPage', 'ordersPage', 'admin', 'invoice', 'gateway_credentials', 'messaging_credentials', 'messaging', 'ai', 'ai_credentials', 'advanced'];
   if (!validGroups.includes(groupName)) {
     throw new AppError('VALIDATION_ERROR', 400, 'Invalid setting group');
   }
@@ -251,6 +257,85 @@ const getByGroup = async (groupName, options = {}) => {
   });
 
   return result;
+};
+
+/**
+ * Return resolved visual settings together with whether each value comes from
+ * the server default or a persisted store override. The normal settings
+ * endpoints intentionally keep returning the existing resolved shape; this
+ * metadata is opt-in for Store Designer only.
+ */
+const getDesignState = async () => {
+  const groups = {};
+  const sources = {};
+  const defaultsByGroup = {};
+
+  const groupEntries = await Promise.all(DESIGN_SETTINGS_GROUPS.map(async (groupName) => {
+    const defaults = { ...(defaultSettings[groupName] || {}) };
+    const rows = await Setting.findAll({ where: { group: groupName } });
+    const values = { ...defaults };
+    const groupSources = Object.fromEntries(Object.keys(defaults).map((key) => [key, 'default']));
+
+    rows.forEach((row) => {
+      let parsedValue = row.value;
+      if (parsedValue === 'true') parsedValue = true;
+      else if (parsedValue === 'false') parsedValue = false;
+      values[row.key] = parsedValue;
+      groupSources[row.key] = 'custom';
+    });
+
+    return [groupName, { values, sources: groupSources }];
+  }));
+
+  groupEntries.forEach(([groupName, state]) => {
+    groups[groupName] = state.values;
+    sources[groupName] = state.sources;
+    defaultsByGroup[groupName] = { ...(defaultSettings[groupName] || {}) };
+  });
+
+  const customCss = await Setting.findOne({ where: { group: 'advanced', key: 'customCSS' } });
+  groups.advanced = { customCSS: customCss?.value || '' };
+  sources.advanced = { customCSS: customCss ? 'custom' : 'default' };
+  defaultsByGroup.advanced = { customCSS: defaultSettings.advanced?.customCSS || '' };
+
+  return { groups, sources, defaults: defaultsByGroup };
+};
+
+/**
+ * Remove only a visual override so the existing server default becomes
+ * effective again. The group/key guard is deliberately stricter than the
+ * generic settings update API.
+ */
+const resetDesignSetting = async ({ group, key }, actingUserId) => {
+  if (!isDesignSettingTarget(group, key)) {
+    throw new AppError('VALIDATION_ERROR', 400, 'Only visual design settings can be reset.');
+  }
+  if (group === 'advanced' && key !== 'customCSS') {
+    throw new AppError('VALIDATION_ERROR', 400, 'Only custom CSS can be reset from Store Designer.');
+  }
+
+  const where = { group };
+  if (key) where.key = key;
+
+  const deletedCount = await sequelize.transaction(async (t) => {
+    const deleted = await Setting.destroy({ where, transaction: t });
+    try {
+      if (AuditService && AuditService.log) {
+        await AuditService.log({
+          userId: actingUserId,
+          action: ACTIONS.UPDATE,
+          entity: ENTITIES.SETTING,
+          entityId: key ? `${group}.${key}` : group,
+          changes: { reset: true, group, key: key || null },
+        }, t);
+      }
+    } catch (err) {
+      // Audit failures must not prevent a safe reset from completing.
+    }
+    return deleted;
+  });
+
+  return { group, key: key || null, deletedCount };
 };
 
 const updateKey = async (key, value, group, actingUserId, actingUser = null) => {
@@ -319,7 +404,7 @@ const updateKey = async (key, value, group, actingUserId, actingUser = null) => 
 
 const bulkUpdate = async (settingsInput, actingUserId, actingUser = null, options = {}) => {
   const { transaction: outerTransaction = null } = options;
-  const validGroups = ['theme', 'componentStyles', 'sectionPresets', 'features', 'payments', 'sales', 'seo', 'general', 'shipping', 'tax', 'sku', 'logo', 'hero', 'auth', 'footer', 'announcement', 'nav', 'catalog', 'homepage', 'productPage', 'categoryPage', 'blogPage', 'brandsPage', 'cartPage', 'accountPage', 'admin', 'invoice', 'gateway_credentials', 'messaging_credentials', 'messaging', 'ai', 'ai_credentials', 'advanced'];
+  const validGroups = ['theme', 'componentStyles', 'sectionPresets', 'features', 'payments', 'sales', 'seo', 'general', 'shipping', 'tax', 'sku', 'logo', 'hero', 'auth', 'footer', 'announcement', 'nav', 'catalog', 'homepage', 'productPage', 'categoryPage', 'blogPage', 'brandsPage', 'cartPage', 'accountPage', 'checkoutPage', 'wishlistPage', 'searchPage', 'notFoundPage', 'ordersPage', 'admin', 'invoice', 'gateway_credentials', 'messaging_credentials', 'messaging', 'ai', 'ai_credentials', 'advanced'];
   const credentialGroups = ['gateway_credentials', 'messaging_credentials', 'ai_credentials'];
 
     // Normalize input to an array of { key, value, group }
@@ -456,4 +541,12 @@ const getFeatures = async () => {
     };
 };
 
-module.exports = { getAll, getByGroup, updateKey, bulkUpdate, getFeatures };
+module.exports = {
+  getAll,
+  getByGroup,
+  getDesignState,
+  resetDesignSetting,
+  updateKey,
+  bulkUpdate,
+  getFeatures,
+};

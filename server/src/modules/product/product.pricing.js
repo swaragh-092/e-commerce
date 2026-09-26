@@ -131,35 +131,74 @@ const getEffectivePrice = (product, referenceDate = new Date()) => {
   return isSaleActive(product, referenceDate) ? Number(product.salePrice) : Number(product.price);
 };
 
-const getVariantUnitPrice = (product, variant, referenceDate = new Date()) => {
-  if (!variant) {
-    return Number(getEffectivePrice(product, referenceDate).toFixed(2));
-  }
+const roundMoney = (value) => Number(Number(value).toFixed(2));
 
-  // If the variant already has a pre-calculated unitPrice or effectivePrice, respect it
-  const precalculatedPrice = toFiniteNumber(variant.unitPrice ?? variant.effectivePrice);
-  if (precalculatedPrice !== null) {
-    return Number(precalculatedPrice.toFixed(2));
+/**
+ * Resolve the canonical price pair for a selected variant.
+ *
+ * Variant prices are stored as the SKU's MRP. Older/admin-created catalog
+ * rows can already contain a price below the product MRP (for example a
+ * variant saved at the current sale price). In that case applying the parent
+ * discount again is incorrect, so the variant amount is treated as the
+ * selected SKU price and the parent discount is reflected in its regular
+ * display price. Variants at or above the product MRP receive the parent's
+ * fixed discount once.
+ */
+const getVariantPricing = (product, variant, referenceDate = new Date()) => {
+  if (!variant) {
+    const regularPrice = toFiniteNumber(product?.price) ?? 0;
+    const unitPrice = getEffectivePrice(product, referenceDate);
+    return {
+      regularPrice: roundMoney(regularPrice),
+      unitPrice: roundMoney(unitPrice),
+      savingsAmount: roundMoney(Math.max(regularPrice - unitPrice, 0)),
+    };
   }
 
   const rawVariantPrice = toFiniteNumber(variant.price);
   if (rawVariantPrice === null) {
-    return Number(getEffectivePrice(product, referenceDate).toFixed(2));
+    const fallback = toFiniteNumber(variant.unitPrice ?? variant.effectivePrice);
+    const unitPrice = fallback ?? getEffectivePrice(product, referenceDate);
+    return {
+      regularPrice: roundMoney(unitPrice),
+      unitPrice: roundMoney(unitPrice),
+      savingsAmount: 0,
+    };
   }
 
-  // If a sale is active on the parent product, apply the discount to the variant
+  let regularPrice = rawVariantPrice;
+  let unitPrice = rawVariantPrice;
+
   if (isSaleActive(product, referenceDate)) {
     const productPrice = toFiniteNumber(product?.price);
     const productSalePrice = toFiniteNumber(product?.salePrice);
 
     if (productPrice !== null && productSalePrice !== null && productSalePrice < productPrice) {
       const discountAmount = productPrice - productSalePrice;
-      const variantSalePrice = Math.max(0, rawVariantPrice - discountAmount);
-      return Number(variantSalePrice.toFixed(2));
+      if (rawVariantPrice < productPrice) {
+        // This SKU is already below the parent MRP; do not discount twice.
+        regularPrice = rawVariantPrice + discountAmount;
+        unitPrice = rawVariantPrice;
+      } else {
+        regularPrice = rawVariantPrice;
+        unitPrice = Math.max(0, rawVariantPrice - discountAmount);
+      }
     }
   }
 
-  return Number(rawVariantPrice.toFixed(2));
+  return {
+    regularPrice: roundMoney(regularPrice),
+    unitPrice: roundMoney(unitPrice),
+    savingsAmount: roundMoney(Math.max(regularPrice - unitPrice, 0)),
+  };
+};
+
+const getVariantUnitPrice = (product, variant, referenceDate = new Date()) => {
+  if (!variant) {
+    return roundMoney(getEffectivePrice(product, referenceDate));
+  }
+
+  return getVariantPricing(product, variant, referenceDate).unitPrice;
 };
 
 const getDiscountPercent = (product) => {
@@ -188,10 +227,18 @@ const serializeVariantPricing = (product, variant, referenceDate = new Date()) =
   if (!variant) return variant;
 
   const plainVariant = typeof variant.toJSON === 'function' ? variant.toJSON() : { ...variant };
+  const pricing = getVariantPricing(product, plainVariant, referenceDate);
 
   return {
     ...plainVariant,
-    unitPrice: getVariantUnitPrice(product, plainVariant, referenceDate),
+    regularPrice: pricing.regularPrice,
+    unitPrice: pricing.unitPrice,
+    effectivePrice: pricing.unitPrice,
+    salePrice: pricing.savingsAmount > 0 ? pricing.unitPrice : null,
+    discountPercent: pricing.regularPrice > 0
+      ? Math.round((pricing.savingsAmount / pricing.regularPrice) * 100)
+      : 0,
+    savingsAmount: pricing.savingsAmount,
     optionLabel: plainVariant.optionLabel || getVariantOptionLabel(plainVariant),
     optionMap: plainVariant.optionMap || getVariantOptionMap(plainVariant),
   };
@@ -377,6 +424,7 @@ module.exports = {
   getDiscountPercent,
   getEffectivePrice,
   getVariantUnitPrice,
+  getVariantPricing,
   getSaleStatus,
   getSavingsAmount,
   isSaleActive,

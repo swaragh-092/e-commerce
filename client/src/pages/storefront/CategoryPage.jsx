@@ -16,6 +16,7 @@ import PageSEO from '../../components/common/PageSEO';
 import { useSettings, useFeature } from '../../hooks/useSettings';
 import { getCategoryWithProducts } from '../../services/categoryService';
 import { getMediaUrl } from '../../utils/media';
+import { buildBreadcrumbJsonLd } from '../../utils/seo/buildStructuredData';
 
 // ─── Subcategory chip rail (maps service response to CategorySection format) ─
 
@@ -241,17 +242,19 @@ const CategoryPage = () => {
         { label: category?.name || '…', to: null }, // current page
     ];
 
-    // Build structured data for BreadcrumbList (SEO)
-    const breadcrumbStructuredData = {
-        '@context': 'https://schema.org',
-        '@type': 'BreadcrumbList',
-        itemListElement: breadcrumbSegments.map((seg, i) => ({
-            '@type': 'ListItem',
-            position: i + 1,
-            name: seg.label,
-            ...(seg.to ? { item: `${window.location.origin}${seg.to}` } : {}),
-        })),
-    };
+    const categoryPath = `/category/${category?.slug || categorySlug}`;
+    const categoryBaseUrl = settings?.seo?.canonicalBaseUrl || window.location.origin;
+    let categoryUrl = `${window.location.origin}${categoryPath}`;
+    try {
+        categoryUrl = new URL(categoryPath, categoryBaseUrl).toString();
+    } catch (_) {
+        // Keep the browser-origin fallback when the configured canonical URL is invalid.
+    }
+    const breadcrumbStructuredData = buildBreadcrumbJsonLd({
+        items: breadcrumbSegments.map((segment) => ({ name: segment.label, url: segment.to })),
+        canonicalBaseUrl: settings?.seo?.canonicalBaseUrl,
+        pageUrl: categoryUrl,
+    });
 
     // Map subcategories → tiles expected by CategorySection
     const subcategoryTiles = normalizeSubs(subcategories);
@@ -264,6 +267,7 @@ const CategoryPage = () => {
                 title={category?.metaTitle || pageTitle}
                 description={category?.metaDescription || category?.description}
                 image={category?.bannerImage ? getMediaUrl(category.bannerImage) : undefined}
+                url={categoryUrl}
                 structuredData={breadcrumbStructuredData}
             />
 

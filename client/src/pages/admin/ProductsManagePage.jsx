@@ -822,7 +822,7 @@ const ProductsManagePage = () => {
         }}
       >
         <Box>
-          <Typography variant="h5" fontWeight={700}>Manage Products</Typography>
+          <Typography variant="h5" component="h1" fontWeight={700}>Manage Products</Typography>
           <Typography variant="body2" color="text.secondary">{total} products total</Typography>
         </Box>
         <Stack

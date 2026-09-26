@@ -1,6 +1,6 @@
 import React, { useEffect } from 'react';
 import { keyframes } from '@emotion/react';
-import { Box, Container, Typography, Button, Paper, Stack, Chip, Divider } from '@mui/material';
+import { Alert, Box, CircularProgress, Container, Typography, Button, Paper, Stack, Chip, Divider } from '@mui/material';
 import CheckCircleOutlineIcon from '@mui/icons-material/CheckCircleOutline';
 import ReceiptLongIcon from '@mui/icons-material/ReceiptLong';
 import LocalShippingOutlinedIcon from '@mui/icons-material/LocalShippingOutlined';
@@ -69,29 +69,109 @@ const confettiPieces = [
     { left: '84%', top: 2, color: '#fb7185', delay: '0.34s', rotate: '-10deg' },
 ];
 
+const PAYMENT_SETTLED_STATUSES = new Set(['paid_online', 'paid_cod', 'completed', 'cod_collected']);
+const ORDER_READY_STATUSES = new Set(['confirmed', 'processing', 'ready_for_shipment', 'closed', 'on_hold']);
+
+const getPaymentRecord = (order) => {
+    if (Array.isArray(order?.Payment)) return order.Payment[0] || null;
+    return order?.Payment || order?.payment || null;
+};
+
+const getVerificationState = (verifiedOrder) => {
+    if (!verifiedOrder || String(verifiedOrder.status || '').toLowerCase() === 'cancelled') {
+        return 'error';
+    }
+
+    const orderStatus = String(verifiedOrder.status || '').toLowerCase();
+    const payment = getPaymentRecord(verifiedOrder);
+    const paymentStatus = String(payment?.status || verifiedOrder.paymentStatus || '').toLowerCase();
+
+    if (verifiedOrder.paymentMethod === 'cod' && ORDER_READY_STATUSES.has(orderStatus)) {
+        return 'success';
+    }
+    if (PAYMENT_SETTLED_STATUSES.has(paymentStatus) && ORDER_READY_STATUSES.has(orderStatus)) {
+        return 'success';
+    }
+    if (['pending_payment', 'payment_pending', 'pending', 'created', 'initiated'].includes(orderStatus)
+        || ['pending', 'payment_pending', 'pending_cod', 'created', 'initiated'].includes(paymentStatus)) {
+        return 'pending';
+    }
+    return 'error';
+};
+
 const PaymentSuccessPage = () => {
     const location = useLocation();
     const { fetchCart } = useCart();
     const query = new URLSearchParams(location.search);
     const orderId = location.state?.orderId || query.get('orderId');
-    const isCod = location.state?.isCod;
     
     const [order, setOrder] = React.useState(null);
-    const [fetchingOrder, setFetchingOrder] = React.useState(!!orderId && !location.state?.orderNumber);
+    const [verificationState, setVerificationState] = React.useState(orderId ? 'loading' : 'missing');
+    const [verificationError, setVerificationError] = React.useState('');
 
-    const orderNumber = location.state?.orderNumber || order?.orderNumber;
+    const orderNumber = order?.orderNumber;
+    const isCod = order?.paymentMethod === 'cod';
     const orderDetailPath = orderId ? `/account/orders/${orderId}` : '/orders';
 
     useEffect(() => {
         fetchCart();
-        
-        if (orderId && !location.state?.orderNumber) {
-            orderService.getMyOrderById(orderId)
-                .then(setOrder)
-                .catch(console.error)
-                .finally(() => setFetchingOrder(false));
+
+        let active = true;
+        if (!orderId) {
+            setVerificationState('missing');
+            setOrder(null);
+            return () => { active = false; };
         }
-    }, [fetchCart, orderId, location.state?.orderNumber]);
+
+        setVerificationState('loading');
+        setVerificationError('');
+        orderService.getMyOrderById(orderId)
+            .then((verifiedOrder) => {
+                if (!active) return;
+                setOrder(verifiedOrder || null);
+                setVerificationState(getVerificationState(verifiedOrder));
+            })
+            .catch(() => {
+                if (!active) return;
+                setOrder(null);
+                setVerificationError('Could not verify this order from the server. Please check your orders before trying again.');
+                setVerificationState('error');
+            });
+
+        return () => { active = false; };
+    }, [fetchCart, orderId]);
+
+    if (verificationState !== 'success') {
+        const isPending = verificationState === 'pending';
+        const isLoading = verificationState === 'loading';
+        const title = isLoading
+            ? 'Verifying your order'
+            : isPending
+                ? 'Payment is still being confirmed'
+                : 'We could not confirm this order';
+        const message = isLoading
+            ? 'We are checking the order and payment status with the server.'
+            : isPending
+                ? 'Your payment provider or webhook has not confirmed this order yet. We will update the order once confirmation arrives.'
+                : verificationState === 'missing'
+                    ? 'The order reference is missing. Open this page from a checkout result or your orders list.'
+                    : verificationError || 'The server did not confirm a completed order. No success has been recorded.';
+
+        return (
+            <Container maxWidth="sm" sx={{ py: { xs: 5, md: 8 } }}>
+                <Paper elevation={0} sx={{ p: { xs: 3, sm: 5 }, borderRadius: 3, border: '1px solid', borderColor: 'divider', textAlign: 'center' }}>
+                    {isLoading && <CircularProgress color="primary" sx={{ mb: 2 }} />}
+                    <Typography variant="h4" component="h1" fontWeight={800} sx={{ mb: 1 }}>{title}</Typography>
+                    <Alert severity={isPending ? 'info' : isLoading ? 'info' : 'warning'} sx={{ mb: 3, textAlign: 'left' }}>
+                        {message}
+                    </Alert>
+                    <Button variant="contained" component={Link} to="/orders">
+                        View Orders
+                    </Button>
+                </Paper>
+            </Container>
+        );
+    }
 
     return (
         <Container maxWidth="md" sx={{ py: { xs: 5, md: 8 } }}>
@@ -109,11 +189,15 @@ const PaymentSuccessPage = () => {
                     background:
                         'linear-gradient(180deg, rgba(34,197,94,0.10) 0%, rgba(255,255,255,0.025) 42%, rgba(255,255,255,0.015) 100%)',
                     animation: `${floatUp} 520ms ease-out both`,
+                    '@media (prefers-reduced-motion: reduce)': {
+                        animation: 'none',
+                    },
                 }}
             >
                 {confettiPieces.map((piece, index) => (
                     <Box
                         key={index}
+                        aria-hidden="true"
                         sx={{
                             position: 'absolute',
                             left: piece.left,
@@ -125,6 +209,9 @@ const PaymentSuccessPage = () => {
                             opacity: 0,
                             transform: `rotate(${piece.rotate})`,
                             animation: `${confettiDrop} 1.8s ease-in-out ${piece.delay} both`,
+                            '@media (prefers-reduced-motion: reduce)': {
+                                display: 'none',
+                            },
                         }}
                     />
                 ))}
@@ -148,6 +235,10 @@ const PaymentSuccessPage = () => {
                             border: '2px solid',
                             borderColor: 'success.main',
                             animation: `${ringPulse} 1.5s ease-out 220ms both`,
+                            '@media (prefers-reduced-motion: reduce)': {
+                                animation: 'none',
+                                opacity: 0,
+                            },
                         }}
                     />
                     <Box
@@ -162,6 +253,9 @@ const PaymentSuccessPage = () => {
                             borderColor: 'success.main',
                             boxShadow: '0 18px 44px rgba(34, 197, 94, 0.18)',
                             animation: `${checkPop} 620ms cubic-bezier(.2,.9,.2,1.2) both`,
+                            '@media (prefers-reduced-motion: reduce)': {
+                                animation: 'none',
+                            },
                         }}
                     >
                         <CheckCircleOutlineIcon sx={{ fontSize: 58, color: 'success.main' }} />
@@ -227,6 +321,9 @@ const PaymentSuccessPage = () => {
                                 color: 'inherit',
                                 textDecoration: 'none',
                                 transition: 'transform 160ms ease, border-color 160ms ease, background-color 160ms ease',
+                                '@media (prefers-reduced-motion: reduce)': {
+                                    transition: 'none',
+                                },
                                 '&:hover, &:focus-visible': {
                                     transform: 'translateY(-2px)',
                                     borderColor: 'success.main',

@@ -812,7 +812,7 @@ const ApiBuilderPage = () => {
     <Box>
       <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 3, gap: 2, flexWrap: 'wrap' }}>
         <Box>
-          <Typography variant="h4">API Builder</Typography>
+          <Typography variant="h4" component="h1">API Builder</Typography>
           <Typography variant="body2" color="text.secondary">
             Build public, dynamic API responses from catalog, content, menu, and setting data.
           </Typography>

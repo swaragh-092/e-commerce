@@ -11,7 +11,12 @@ import DeleteIcon from '@mui/icons-material/Delete';
 import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
 import AutoFixHighIcon from '@mui/icons-material/AutoFixHigh';
 import ImageIcon from '@mui/icons-material/Image';
-import VisibilityIcon from '@mui/icons-material/Visibility';
+import TextFieldsIcon from '@mui/icons-material/TextFields';
+import ViewQuiltIcon from '@mui/icons-material/ViewQuilt';
+import PaletteIcon from '@mui/icons-material/Palette';
+import DevicesIcon from '@mui/icons-material/Devices';
+import TuneIcon from '@mui/icons-material/Tune';
+import StorageIcon from '@mui/icons-material/Storage';
 import { SECTION_VARIANTS } from '../../../storefront/sections/sectionRegistry';
 import { SHADOW_PRESETS, WIDTH_PRESETS } from '../../../storefront/sections/SectionFallback';
 import MediaPicker from '../../../common/MediaPicker';
@@ -32,7 +37,7 @@ const BLOCK_FIELD_PRESETS = {
     title: 'Slides',
     addLabel: 'Add Slide',
     label: (item, index) => item?.title || item?.heading || `Slide ${index + 1}`,
-    create: () => ({ eyebrow: 'New arrival', title: 'Campaign headline', subtitle: 'Add supporting copy for this slide.', buttonText: 'Shop now', buttonLink: '/products', secondaryButtonText: '', secondaryButtonLink: '', image: '', position: 'center', color: '#ffffff' }),
+    create: () => ({ eyebrow: 'New arrival', title: 'Fresh arrivals are here', subtitle: 'Discover new products selected for your next shop.', buttonText: 'Shop now', buttonLink: '/products', secondaryButtonText: '', secondaryButtonLink: '', image: '', position: 'center', color: '#ffffff' }),
     fields: [
       { key: 'eyebrow', label: 'Eyebrow' },
       { key: 'title', label: 'Heading' },
@@ -298,7 +303,7 @@ const BlockListEditor = ({ section, schema, onChange, onBlur, onBlockFocus, acti
   };
 
   return (
-    <FieldGroup label={schema.title} defaultOpen>
+    <FieldGroup label={schema.title} defaultOpen={activeBlockKey === schema.key} icon={<TextFieldsIcon sx={{ fontSize: 15 }} />}>
       {blocks.length ? (
         blocks.map((block, index) => (
           <Accordion
@@ -583,7 +588,7 @@ const DesignerSectionEditor = ({
 
           {/* ── CONTENT (skip for pure system sections) ── */}
           {!isSystemSection && (
-          <FieldGroup label="Content" defaultOpen>
+          <FieldGroup label="Content" defaultOpen icon={<TextFieldsIcon sx={{ fontSize: 15 }} />}>
             <TextField
               label="Title"
               value={section.title || ''}
@@ -714,7 +719,7 @@ const DesignerSectionEditor = ({
           )}
 
           {/* ── LAYOUT ── */}
-          <FieldGroup label="Layout" defaultOpen={false}>
+          <FieldGroup label="Layout" defaultOpen={false} icon={<ViewQuiltIcon sx={{ fontSize: 15 }} />}>
             <Box>
               <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mb: 0.75 }}>
                 Text Alignment
@@ -846,7 +851,7 @@ const DesignerSectionEditor = ({
           </FieldGroup>
 
           {/* ── APPEARANCE ── */}
-          <FieldGroup label="Appearance" defaultOpen={false}>
+          <FieldGroup label="Style" defaultOpen={false} icon={<PaletteIcon sx={{ fontSize: 15 }} />}>
             <Typography variant="caption" color="text.secondary" sx={{ display: 'block', fontWeight: 700, fontSize: '0.72rem', textTransform: 'uppercase', letterSpacing: 0.5 }}>
               Background
             </Typography>
@@ -1030,10 +1035,10 @@ const DesignerSectionEditor = ({
             )}
           </FieldGroup>
 
-          {/* ── VISIBILITY ── */}
+          {/* ── RESPONSIVE ── */}
           <FieldGroup
-            label="Visibility"
-            icon={<VisibilityIcon sx={{ fontSize: 15 }} />}
+            label="Responsive"
+            icon={<DevicesIcon sx={{ fontSize: 15 }} />}
             defaultOpen={false}
           >
             <FormControlLabel
@@ -1056,6 +1061,10 @@ const DesignerSectionEditor = ({
               }
               label={<Typography variant="body2" sx={{ fontSize: '0.8rem' }}>Hide on desktop</Typography>}
             />
+          </FieldGroup>
+
+          {/* ── ADVANCED ── */}
+          <FieldGroup label="Advanced" icon={<TuneIcon sx={{ fontSize: 15 }} />} defaultOpen={false}>
             <TextField
               label="Anchor ID"
               value={section.anchorId || ''}
@@ -1080,7 +1089,7 @@ const DesignerSectionEditor = ({
 
           {/* ── DATA SOURCE (product-row / category sections) ── */}
           {(isProductRow || hasCategories) && (
-            <FieldGroup label="Data Source" defaultOpen>
+            <FieldGroup label="Content source" icon={<StorageIcon sx={{ fontSize: 15 }} />} defaultOpen={false}>
               {isProductRow && (
                 <>
                   <FormControl size="small" fullWidth>
@@ -1131,7 +1140,7 @@ const DesignerSectionEditor = ({
 
           {/* ── CAROUSEL settings ── */}
           {isHero && (
-            <FieldGroup label="Carousel Settings" defaultOpen>
+            <FieldGroup label="Carousel behavior" defaultOpen={false}>
               <TextField
                 label="Auto-play interval (ms)"
                 type="number"

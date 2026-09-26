@@ -1,6 +1,8 @@
+import { useState } from 'react';
 import {
-  Box, Stack, Typography, IconButton, Button, Divider, Alert,
-  TextField, Switch, FormControlLabel,
+  Box, Stack, Typography, IconButton, Button, Alert, Chip,
+  Dialog, DialogActions, DialogContent, DialogContentText, DialogTitle,
+  Switch, FormControlLabel,
 } from '@mui/material';
 import { Link } from 'react-router-dom';
 import ArrowBackIcon from '@mui/icons-material/ArrowBack';
@@ -28,68 +30,39 @@ import {
   FormControlStyleEditor,
   BadgeChipStyleEditor,
 } from '../../settings/CardStyleEditors';
-import CssVarsPanel from '../../settings/CssVarsPanel';
 import { DesignTokensEditor } from '../DesignTokensEditor';
 import CustomCssEditor from '../../settings/CustomCssEditor';
+import { DESIGN_COMPONENT_GROUPS, getDesignComponentControlSchema, getDesignComponentsForGroup } from '../../../../utils/designRegistry';
+import { DesignSchemaFields } from './DesignSchemaFields';
 
 
-const splitMenuItems = (value) => String(value || '')
-  .split(',')
-  .map((item) => item.trim())
-  .filter(Boolean)
-  .join(', ');
-
-const PanelField = ({ label, value, onChange, helperText, placeholder, type = 'text' }) => (
-  <TextField
-    fullWidth
-    size="small"
-    type={type}
-    label={label}
-    value={value || ''}
-    onChange={(event) => onChange(event.target.value)}
-    helperText={helperText}
-    placeholder={placeholder}
-    InputLabelProps={type === 'color' ? { shrink: true } : undefined}
+const HeaderLayoutEditor = ({ value = {}, onChange }) => (
+  <DesignSchemaFields
+    schema={getDesignComponentControlSchema('headerLayout')}
+    value={value}
+    onChange={onChange}
   />
 );
 
-const HeaderLayoutEditor = ({ value = {}, onChange }) => {
-  const patch = (key, next) => onChange({ ...(value || {}), [key]: next });
-  return (
-    <Stack spacing={2}>
-      <Typography variant="subtitle2" fontWeight={900}>Header Layout</Typography>
-      <FormControlLabel control={<Switch size="small" checked={value.sticky !== false} onChange={(e) => patch('sticky', e.target.checked)} />} label="Sticky header" />
-      <FormControlLabel control={<Switch size="small" checked={value.showCategoryBar === true} onChange={(e) => patch('showCategoryBar', e.target.checked)} />} label="Show category bar below menu" />
-      <PanelField label="Header background" type="color" value={value.bgColor || '#0f766e'} onChange={(v) => patch('bgColor', v)} />
-      <PanelField label="Header text color" type="color" value={value.fgColor || '#ffffff'} onChange={(v) => patch('fgColor', v)} />
-    </Stack>
-  );
-};
-
-const HeaderLogoEditor = ({ value = {}, onChange }) => {
-  const patch = (key, next) => onChange({ ...(value || {}), [key]: next });
-  return (
-    <Stack spacing={2}>
-      <Typography variant="subtitle2" fontWeight={900}>Logo</Typography>
-      <PanelField label="Store name override" value={value.logoText || ''} placeholder="Uses store name when empty" onChange={(v) => patch('logoText', v)} />
-      <PanelField label="Logo image URL" value={value.logoUrl || ''} placeholder="Optional logo image URL" onChange={(v) => patch('logoUrl', v)} />
-      <FormControlLabel control={<Switch size="small" checked={value.showStoreName !== false} onChange={(e) => patch('showStoreName', e.target.checked)} />} label="Show store name text" />
-      <PanelField label="Logo max width" value={value.logoMaxWidth || ''} placeholder="120px" onChange={(v) => patch('logoMaxWidth', v)} />
-    </Stack>
-  );
-};
+const HeaderLogoEditor = ({ value = {}, onChange }) => (
+  <DesignSchemaFields
+    schema={getDesignComponentControlSchema('headerLogo')}
+    value={value}
+    onChange={onChange}
+  />
+);
 
 const HeaderMenuEditor = ({ value = {}, onChange }) => {
-  const patch = (key, next) => onChange({ ...(value || {}), [key]: next });
   return (
     <Stack spacing={2}>
-      <Typography variant="subtitle2" fontWeight={900}>Menu</Typography>
       <Alert severity="info" action={<Button component={Link} to="/admin/menus" size="small" color="inherit">Open</Button>}>
         Published header links come from Menu Builder. These fallback labels are used only when no header menu or top pages exist.
       </Alert>
-      <PanelField label="Fallback menu labels" value={splitMenuItems(value.menuItems)} helperText="Comma separated fallback labels for empty stores." placeholder="Shop, Collections, Contact" onChange={(v) => patch('menuItems', v)} />
-      <FormControlLabel control={<Switch size="small" checked={value.showMenu !== false} onChange={(e) => patch('showMenu', e.target.checked)} />} label="Show menu links" />
-      <FormControlLabel control={<Switch size="small" checked={value.showCategoryBar === true} onChange={(e) => patch('showCategoryBar', e.target.checked)} />} label="Show category bar" />
+      <DesignSchemaFields
+        schema={getDesignComponentControlSchema('headerMenu')}
+        value={value}
+        onChange={onChange}
+      />
     </Stack>
   );
 };
@@ -167,71 +140,65 @@ const HeaderActionsEditor = ({ value = {}, onChange }) => {
   );
 };
 
-const AnnouncementBarEditor = ({ value = {}, onChange }) => {
-  const patch = (key, next) => onChange({ ...(value || {}), [key]: next });
-  const enabled = value.enabled === true || value.enabled === 'true';
-  return (
-    <Stack spacing={2}>
-      <Typography variant="subtitle2" fontWeight={900}>Announcement Bar</Typography>
-      <FormControlLabel control={<Switch size="small" checked={enabled} onChange={(e) => patch('enabled', e.target.checked)} />} label="Show announcement bar" />
-      {enabled && (
-        <>
-          <PanelField label="Message text" value={value.text || ''} helperText={`${(value.text || '').length}/200`} onChange={(v) => patch('text', v.slice(0, 200))} />
-          <PanelField label="Link URL" value={value.link || ''} placeholder="/products" onChange={(v) => patch('link', v)} />
-          <PanelField label="Background color" type="color" value={value.bgColor || '#0f766e'} onChange={(v) => patch('bgColor', v)} />
-          <PanelField label="Text color" type="color" value={value.fgColor || '#ffffff'} onChange={(v) => patch('fgColor', v)} />
-          <FormControlLabel control={<Switch size="small" checked={value.dismissible !== false} onChange={(e) => patch('dismissible', e.target.checked)} />} label="Show dismiss button" />
-        </>
-      )}
-    </Stack>
-  );
+const AnnouncementBarEditor = ({ value = {}, onChange }) => (
+  <DesignSchemaFields
+    schema={getDesignComponentControlSchema('announcementBar')}
+    value={value}
+    onChange={onChange}
+  />
+);
+
+const COMPONENT_ICON_BY_KEY = {
+  designTokens: <PaletteIcon sx={{ fontSize: 16 }} />,
+  productCard: <LoyaltyIcon sx={{ fontSize: 16 }} />,
+  categoryCard: <GridViewIcon sx={{ fontSize: 16 }} />,
+  promoCard: <StorefrontIcon sx={{ fontSize: 16 }} />,
+  brandCard: <BadgeIcon sx={{ fontSize: 16 }} />,
+  trustCard: <BadgeIcon sx={{ fontSize: 16 }} />,
+  headerLayout: <NavigationIcon sx={{ fontSize: 16 }} />,
+  announcementBar: <BadgeIcon sx={{ fontSize: 16 }} />,
+  headerLogo: <StorefrontIcon sx={{ fontSize: 16 }} />,
+  headerMenu: <GridViewIcon sx={{ fontSize: 16 }} />,
+  headerActions: <ShoppingCartIcon sx={{ fontSize: 16 }} />,
+  footer: <StorefrontIcon sx={{ fontSize: 16 }} />,
+  cartItem: <ShoppingCartIcon sx={{ fontSize: 16 }} />,
+  checkoutBlock: <PaymentIcon sx={{ fontSize: 16 }} />,
+  formControl: <InputIcon sx={{ fontSize: 16 }} />,
+  badgeChip: <BadgeIcon sx={{ fontSize: 16 }} />,
+  customCss: <CodeIcon sx={{ fontSize: 16 }} />,
 };
 
-// Groups of DESIGNER_COMPONENTS with icons and section labels
-const COMPONENT_GROUPS = [
-  {
-    label: 'Global Tokens',
-    items: [
-      { value: 'designTokens', label: 'Design Tokens', icon: <PaletteIcon sx={{ fontSize: 16 }} />, Editor: DesignTokensEditor },
-    ],
-  },
-  {
-    label: 'Cards & Product',
-    items: [
-      { value: 'productCard',  label: 'Product Card',   icon: <LoyaltyIcon sx={{ fontSize: 16 }} />,    Editor: ProductCardStyleEditor },
-      { value: 'categoryCard', label: 'Category Card',  icon: <GridViewIcon sx={{ fontSize: 16 }} />,    Editor: CategoryCardStyleEditor },
-      { value: 'promoCard',    label: 'Promo Banner',   icon: <StorefrontIcon sx={{ fontSize: 16 }} />,  Editor: PromoCardStyleEditor },
-      { value: 'brandCard',    label: 'Brand Card',     icon: <BadgeIcon sx={{ fontSize: 16 }} />,       Editor: BrandCardStyleEditor },
-      { value: 'trustCard',    label: 'Trust Item',     icon: <BadgeIcon sx={{ fontSize: 16 }} />,       Editor: TrustCardStyleEditor },
-    ],
-  },
-  {
-    label: 'Site Structure',
-    items: [
-      { value: 'headerLayout', label: 'Header Layout', icon: <NavigationIcon sx={{ fontSize: 16 }} />, Editor: HeaderLayoutEditor },
-      { value: 'announcementBar', label: 'Announcement Bar', icon: <BadgeIcon sx={{ fontSize: 16 }} />, Editor: AnnouncementBarEditor },
-      { value: 'headerLogo', label: 'Logo', icon: <StorefrontIcon sx={{ fontSize: 16 }} />, Editor: HeaderLogoEditor },
-      { value: 'headerMenu', label: 'Menu', icon: <GridViewIcon sx={{ fontSize: 16 }} />, Editor: HeaderMenuEditor },
-      { value: 'headerActions', label: 'Search, Account & Cart', icon: <ShoppingCartIcon sx={{ fontSize: 16 }} />, Editor: HeaderActionsEditor },
-      { value: 'footer', label: 'Footer Settings',     icon: <StorefrontIcon sx={{ fontSize: 16 }} />, Editor: FooterStyleEditor },
-    ],
-  },
-  {
-    label: 'Commerce',
-    items: [
-      { value: 'cartItem',      label: 'Cart Item Row',    icon: <ShoppingCartIcon sx={{ fontSize: 16 }} />, Editor: CartItemStyleEditor },
-      { value: 'checkoutBlock', label: 'Checkout Blocks',  icon: <PaymentIcon sx={{ fontSize: 16 }} />,      Editor: CheckoutBlockStyleEditor },
-      { value: 'formControl',   label: 'Forms & Inputs',   icon: <InputIcon sx={{ fontSize: 16 }} />,        Editor: FormControlStyleEditor },
-      { value: 'badgeChip',     label: 'Badges & Chips',   icon: <BadgeIcon sx={{ fontSize: 16 }} />,        Editor: BadgeChipStyleEditor },
-    ],
-  },
-  {
-    label: 'Advanced',
-    items: [
-      { value: 'customCss', label: 'Custom CSS', icon: <CodeIcon sx={{ fontSize: 16 }} />, Editor: CustomCssEditor, requiresAdvanced: true },
-    ],
-  },
-];
+const COMPONENT_EDITOR_BY_KEY = {
+  designTokens: DesignTokensEditor,
+  productCard: ProductCardStyleEditor,
+  categoryCard: CategoryCardStyleEditor,
+  promoCard: PromoCardStyleEditor,
+  brandCard: BrandCardStyleEditor,
+  trustCard: TrustCardStyleEditor,
+  headerLayout: HeaderLayoutEditor,
+  announcementBar: AnnouncementBarEditor,
+  headerLogo: HeaderLogoEditor,
+  headerMenu: HeaderMenuEditor,
+  headerActions: HeaderActionsEditor,
+  footer: FooterStyleEditor,
+  cartItem: CartItemStyleEditor,
+  checkoutBlock: CheckoutBlockStyleEditor,
+  formControl: FormControlStyleEditor,
+  badgeChip: BadgeChipStyleEditor,
+  customCss: CustomCssEditor,
+};
+
+// The registry owns labels, descriptions, grouping, and permissions. This
+// file only binds those definitions to the actual editor and icon components.
+const COMPONENT_GROUPS = DESIGN_COMPONENT_GROUPS.map((group) => ({
+  ...group,
+  items: getDesignComponentsForGroup(group.key).map((item) => ({
+    ...item,
+    value: item.key,
+    icon: COMPONENT_ICON_BY_KEY[item.key],
+    Editor: COMPONENT_EDITOR_BY_KEY[item.key],
+  })),
+}));
 
 // Flatten for lookup
 const ALL_COMPONENTS = COMPONENT_GROUPS.flatMap((g) => g.items);
@@ -239,6 +206,16 @@ const ALL_COMPONENTS = COMPONENT_GROUPS.flatMap((g) => g.items);
 const ComponentRow = ({ item, isSelected, onClick }) => (
   <Box
     onClick={() => onClick(item)}
+    onKeyDown={(event) => {
+      if (event.key === 'Enter' || event.key === ' ') {
+        event.preventDefault();
+        onClick(item);
+      }
+    }}
+    title={item.description}
+    aria-label={`${item.label}: ${item.description}`}
+    role="button"
+    tabIndex={0}
     sx={{
       display: 'flex',
       alignItems: 'center',
@@ -278,6 +255,9 @@ const DesignerThemePanel = ({
   announcementSettings,
   footerSettings,
   advancedSettings,
+  designSource,
+  onReset,
+  resetting,
   // Change handlers
   onThemeSettingsChange,
   onComponentStyleChange,
@@ -287,8 +267,11 @@ const DesignerThemePanel = ({
   onAdvancedChange,
   canManageAdvancedSettings,
 }) => {
+  const [resetOpen, setResetOpen] = useState(false);
   const activeItem = ALL_COMPONENTS.find((c) => c.value === activeComponent) || ALL_COMPONENTS[0];
   const ActiveEditor = activeItem?.Editor;
+  const isCustomized = designSource === 'custom';
+  const isDraft = designSource === 'draft';
 
   // Compute the "value" for the active editor
   const activeValue = (() => {
@@ -322,9 +305,9 @@ const DesignerThemePanel = ({
           <ArrowBackIcon fontSize="small" />
         </IconButton>
         <Box>
-          <Typography variant="subtitle2" fontWeight={800} sx={{ fontSize: '0.88rem' }}>Theme Settings</Typography>
+          <Typography variant="subtitle2" fontWeight={800} sx={{ fontSize: '0.88rem' }}>Design system &amp; components</Typography>
           <Typography variant="caption" color="text.secondary" sx={{ fontSize: '0.7rem' }}>
-            Global styles applied to every storefront page.
+            Select an item in the editor preview for contextual controls, or use the library below.
           </Typography>
         </Box>
       </Box>
@@ -332,9 +315,30 @@ const DesignerThemePanel = ({
       {activeComponent ? (
         // Inspector sub-view — showing a specific component editor
         <Box sx={{ display: 'flex', flexDirection: 'column', flex: 1, overflow: 'hidden' }}>
-          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, px: 1.5, py: 0.75, bgcolor: 'action.hover', borderBottom: '1px solid', borderColor: 'divider' }}>
+          <Box sx={{ display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: 1, rowGap: 0.5, px: 1.5, py: 0.75, bgcolor: 'action.hover', borderBottom: '1px solid', borderColor: 'divider' }}>
             <Box sx={{ color: 'primary.main' }}>{activeItem.icon}</Box>
-            <Typography variant="body2" fontWeight={700} sx={{ flex: 1, fontSize: '0.82rem' }}>{activeItem.label}</Typography>
+            <Box sx={{ flex: 1, minWidth: 0 }}>
+              <Typography variant="body2" fontWeight={700} sx={{ fontSize: '0.82rem' }}>{activeItem.label}</Typography>
+              <Typography variant="caption" color="text.secondary" sx={{ display: 'block', fontSize: '0.68rem' }}>
+                {activeItem.description}
+              </Typography>
+            </Box>
+            <Chip
+              label={isDraft ? 'Draft' : isCustomized ? 'Customized' : 'Default'}
+              size="small"
+              color={isDraft || isCustomized ? 'primary' : 'default'}
+              variant={isDraft || isCustomized ? 'filled' : 'outlined'}
+              sx={{ height: 22, fontSize: '0.66rem', fontWeight: 700 }}
+            />
+            <Button
+              size="small"
+              color="inherit"
+              onClick={() => setResetOpen(true)}
+              disabled={(!isCustomized && !isDraft) || resetting}
+              sx={{ minWidth: 0, px: 0.75, fontSize: '0.7rem', whiteSpace: 'nowrap' }}
+            >
+              {resetting ? 'Resetting…' : 'Reset'}
+            </Button>
             <Button size="small" variant="text" onClick={() => onComponentSelect(null)}
               sx={{ fontSize: '0.72rem', minWidth: 0, px: 1 }}>
               ← All
@@ -359,6 +363,9 @@ const DesignerThemePanel = ({
       ) : (
         // Component list view
         <Box sx={{ flex: 1, overflowY: 'auto', py: 1 }}>
+          <Alert severity="info" variant="outlined" sx={{ mx: 1.5, mb: 1.25, py: 0, '& .MuiAlert-message': { py: 0.6, fontSize: '0.74rem' } }}>
+            Start with the preview: click a header, card, or footer item to open only the controls for that item. This library is for global recipes and advanced styles.
+          </Alert>
           {COMPONENT_GROUPS.map((group) => (
             <Box key={group.label} sx={{ mb: 0.5 }}>
               <Typography
@@ -382,6 +389,27 @@ const DesignerThemePanel = ({
           ))}
         </Box>
       )}
+      <Dialog open={resetOpen} onClose={() => setResetOpen(false)} maxWidth="xs" fullWidth>
+        <DialogTitle>Reset {activeItem.label}?</DialogTitle>
+        <DialogContent>
+          <DialogContentText>
+            This stages removal of the saved override for this design scope and restores the store default in the preview. The live storefront changes only after you publish the draft.
+          </DialogContentText>
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setResetOpen(false)}>Cancel</Button>
+          <Button
+            color="error"
+            variant="contained"
+            onClick={() => {
+              setResetOpen(false);
+              onReset(activeComponent);
+            }}
+          >
+            Reset to default
+          </Button>
+        </DialogActions>
+      </Dialog>
     </Box>
   );
 };

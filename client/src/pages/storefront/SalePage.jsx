@@ -57,7 +57,7 @@ const SalePage = () => {
             
             <Box sx={{ mb: 4, display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 2 }}>
                 <Box>
-                    <Typography variant="h4" fontWeight={800} color="error.main">
+                    <Typography variant="h4" component="h1" fontWeight={800} color="error.main">
                         Special Offers & Sales
                     </Typography>
                     <Typography variant="body1" color="text.secondary">

@@ -338,7 +338,7 @@ const MediaPage = () => {
     <Box>
       {/* Header */}
       <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 3 }}>
-        <Typography variant="h5" fontWeight={700}>Media Library</Typography>
+        <Typography variant="h5" component="h1" fontWeight={700}>Media Library</Typography>
         {canUploadMedia && (
           <Button
             variant="contained"

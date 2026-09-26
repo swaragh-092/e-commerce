@@ -549,7 +549,7 @@ const CouponsPage = () => {
     <Box>
       <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 3 }}>
         <Box>
-          <Typography variant="h5" fontWeight={700}>Coupons & Promotions</Typography>
+          <Typography variant="h5" component="h1" fontWeight={700}>Coupons & Promotions</Typography>
           <Typography variant="body2" color="text.secondary">Build targeted offers with schedule, visibility, exclusions, and eligibility rules.</Typography>
         </Box>
         {canManageCoupons && <Button variant="contained" startIcon={<AddIcon />} onClick={openCreate}>New Promotion</Button>}

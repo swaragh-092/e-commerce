@@ -1,7 +1,7 @@
 # API Reference (v2)
 
 > **Base URL**: `http://localhost:5000/api`  
-> **Auth**: Bearer JWT token in `Authorization` header  
+> **Auth**: The storefront uses HttpOnly access and refresh cookies (Secure in production). Bearer JWT headers remain accepted for compatible API clients.
 > **Content-Type**: `application/json`  
 > **Key Updates in v2**: Coupon endpoints, health check, 409 for price conflicts, 429 for rate limits
 
@@ -84,7 +84,7 @@
 { "email": "user@example.com", "password": "Secure123!" }
 
 // Response 200
-{ "success": true, "data": { "user": {...}, "accessToken": "eyJ...", "refreshToken": "eyJ..." } }
+{ "success": true, "data": { "user": {...} } }
 
 // Error 429 (rate limited)
 { "success": false, "error": { "code": "RATE_LIMIT", "message": "Too many attempts. Try again in 15 minutes." } }

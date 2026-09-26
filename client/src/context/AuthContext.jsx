@@ -27,22 +27,15 @@ export const AuthProvider = ({ children }) => {
 
   useEffect(() => {
     const initAuth = async () => {
-      const token = localStorage.getItem('accessToken');
-      if (token) {
-        try {
-          const userData = await userService.getMe();
-          setUser(userData);
-          setIsAuthenticated(true);
-          localStorage.setItem('userProfile', JSON.stringify(userData));
-        } catch (error) {
-          console.error('Failed to restore session', error);
-          localStorage.removeItem('accessToken');
-          localStorage.removeItem('refreshToken');
-          localStorage.removeItem('userProfile');
-          setUser(null);
-          setIsAuthenticated(false);
-        }
-      } else {
+      try {
+        // The browser sends the HttpOnly access cookie automatically. If it
+        // has expired, api.js refreshes it using the HttpOnly refresh cookie.
+        const userData = await userService.getMe();
+        setUser(userData);
+        setIsAuthenticated(true);
+        localStorage.setItem('userProfile', JSON.stringify(userData));
+      } catch (error) {
+        if (import.meta.env.DEV) console.debug('No authenticated session to restore', error);
         localStorage.removeItem('userProfile');
         setUser(null);
         setIsAuthenticated(false);
@@ -53,8 +46,6 @@ export const AuthProvider = ({ children }) => {
     initAuth();
 
     const handleUnauthorized = () => {
-      localStorage.removeItem('accessToken');
-      localStorage.removeItem('refreshToken');
       localStorage.removeItem('userProfile');
       setUser(null);
       setIsAuthenticated(false);

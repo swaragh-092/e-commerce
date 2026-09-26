@@ -324,7 +324,7 @@ const BrandsPage = () => {
     <Box>
       <Stack direction="row" justifyContent="space-between" alignItems="center" mb={3}>
         <Box>
-          <Typography variant="h5" fontWeight={700}>
+          <Typography variant="h5" component="h1" fontWeight={700}>
             Brands
           </Typography>
           <Typography variant="body2" color="text.secondary">

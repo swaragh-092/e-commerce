@@ -7,7 +7,7 @@ const AdminProfilePage = () => {
 
   return (
     <Box>
-      <Typography variant="h4" sx={{ fontWeight: 700, mb: 3 }}>My Profile</Typography>
+      <Typography variant="h4" component="h1" sx={{ fontWeight: 700, mb: 3 }}>My Profile</Typography>
 
       <Paper sx={{ p: 3, mb: 3 }}>
         <Box sx={{ display: 'flex', alignItems: 'center', gap: 2, mb: 2 }}>

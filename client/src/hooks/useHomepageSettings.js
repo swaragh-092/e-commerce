@@ -136,7 +136,7 @@ const useHomepageSettings = ({ form, set, brandPrimary }) => {
     const current = getHeroSlides();
     setHeroSlides([
       ...current,
-      { eyebrow: 'New Collection', title: 'Your next hero banner', subtitle: 'Promote a launch, sale, or category.', buttonText: 'Shop Now', buttonLink: '/products', secondaryButtonText: '', secondaryButtonLink: '', image: '', position: 'center', color: '#ffffff' },
+      { eyebrow: 'New Collection', title: 'Fresh arrivals are here', subtitle: 'Discover new products selected for your next shop.', buttonText: 'Shop Now', buttonLink: '/products', secondaryButtonText: '', secondaryButtonLink: '', image: '', position: 'center', color: '#ffffff' },
     ]);
   };
   const removeHeroSlide = (index) => {
@@ -158,7 +158,7 @@ const useHomepageSettings = ({ form, set, brandPrimary }) => {
     const current = getHomepagePromos();
     setHomepagePromos([
       ...current,
-      { id: createId('promo'), kicker: 'Offer', title: 'New Promo', subtitle: 'Add a short promotion message.', ctaText: 'Shop Now', link: '/products', color: '#F8FAFC', accentColor: brandPrimary },
+      { id: createId('promo'), kicker: 'Featured', title: 'Shop the latest picks', subtitle: 'Explore new products and customer favorites.', ctaText: 'Shop Now', link: '/products', color: '#F8FAFC', accentColor: brandPrimary },
     ]);
   };
   const removeHomepagePromo = (index) => {

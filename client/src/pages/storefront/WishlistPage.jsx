@@ -116,7 +116,7 @@ const WishlistPage = () => {
     return (
         <Container maxWidth="md" sx={{ py: 4 }}>
             <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 2, mb: 2, flexWrap: 'wrap' }}>
-                <Typography variant="h4">My Wishlist ({filteredCount})</Typography>
+                <Typography variant="h4" component="h1">My Wishlist ({filteredCount})</Typography>
                 {filteredCount > 0 && (
                     <Stack direction={{ xs: 'column', sm: 'row' }} spacing={1}>
                         {cartEnabled && (
@@ -212,4 +212,3 @@ const WishlistPage = () => {
 };
 
 export default WishlistPage;
-

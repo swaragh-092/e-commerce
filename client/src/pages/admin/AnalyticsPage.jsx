@@ -188,7 +188,7 @@ const AnalyticsPage = () => {
   return (
     <Box ref={pageRef}>
       <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 3, flexWrap: 'wrap', gap: 2 }}>
-        <Typography variant="h5" fontWeight={700}>Analytics</Typography>
+        <Typography variant="h5" component="h1" fontWeight={700}>Analytics</Typography>
         <Box sx={{ display: 'flex', gap: 1, alignItems: 'center' }}>
           <FormControlLabel
             control={<Switch size="small" checked={compare} onChange={(e) => setCompare(e.target.checked)} />}

@@ -47,41 +47,86 @@ export const getProductBasePrice = (product, referenceDate) => {
 };
 
 export const getVariantPriceAdjustment = (product, variant, referenceDate) => {
-  const explicitUnitPrice = toFiniteNumber(variant?.unitPrice ?? variant?.effectivePrice);
-  if (explicitUnitPrice !== null && !referenceDate) {
-    return Number((explicitUnitPrice - getProductBasePrice(product, referenceDate)).toFixed(2));
+  const rawVariantPrice = toFiniteNumber(variant?.price);
+  if (rawVariantPrice !== null) {
+    return Number((getVariantRegularPrice(product, variant, referenceDate) - (toFiniteNumber(product?.price) ?? 0)).toFixed(2));
   }
 
   const modifier = toFiniteNumber(variant?.priceModifier);
-  if (modifier === null) {
-    return 0;
-  }
+  if (modifier === null) return 0;
 
   const basePrice = getProductBasePrice(product, referenceDate);
   const looksLikeLegacyAbsolutePrice = modifier >= 0 && basePrice > 0 && modifier >= basePrice;
   return Number((looksLikeLegacyAbsolutePrice ? modifier - basePrice : modifier).toFixed(2));
 };
 
+const getParentDiscountAmount = (product, referenceDate) => {
+  if (!isSaleActive(product, referenceDate)) return 0;
+
+  const regularPrice = toFiniteNumber(product?.price);
+  const salePrice = toFiniteNumber(product?.salePrice);
+  if (regularPrice === null || salePrice === null || salePrice >= regularPrice) return 0;
+  return regularPrice - salePrice;
+};
+
+const getCanonicalVariantPricing = (product, variant, referenceDate) => {
+  if (!variant) {
+    const regularPrice = toFiniteNumber(product?.price) ?? 0;
+    const unitPrice = getProductBasePrice(product, referenceDate);
+    return { regularPrice, unitPrice };
+  }
+
+  const serverUnitPrice = toFiniteNumber(variant?.unitPrice);
+  const serverRegularPrice = toFiniteNumber(variant?.regularPrice);
+  if (!referenceDate && serverUnitPrice !== null && serverRegularPrice !== null) {
+    return { regularPrice: serverRegularPrice, unitPrice: serverUnitPrice };
+  }
+
+  const rawVariantPrice = toFiniteNumber(variant?.price);
+  if (rawVariantPrice === null) {
+    const fallback = toFiniteNumber(variant?.unitPrice ?? variant?.effectivePrice)
+      ?? getProductBasePrice(product, referenceDate);
+    return { regularPrice: fallback, unitPrice: fallback };
+  }
+
+  const discountAmount = getParentDiscountAmount(product, referenceDate);
+  if (discountAmount <= 0) {
+    return { regularPrice: rawVariantPrice, unitPrice: rawVariantPrice };
+  }
+
+  if (rawVariantPrice < (toFiniteNumber(product?.price) ?? 0)) {
+    return {
+      regularPrice: rawVariantPrice + discountAmount,
+      unitPrice: rawVariantPrice,
+    };
+  }
+
+  return {
+    regularPrice: rawVariantPrice,
+    unitPrice: Math.max(0, rawVariantPrice - discountAmount),
+  };
+};
+
 export const getVariantRegularPrice = (product, variant, referenceDate) => {
-  const regularPrice = toFiniteNumber(product?.price) ?? 0;
-  return Number((regularPrice + getVariantPriceAdjustment(product, variant, referenceDate)).toFixed(2));
+  const { regularPrice } = getCanonicalVariantPricing(product, variant, referenceDate);
+  return Number(regularPrice.toFixed(2));
 };
 
 export const getVariantSalePrice = (product, variant, referenceDate) => {
-  const salePrice = toFiniteNumber(product?.salePrice);
-  if (salePrice === null) {
-    return null;
+  const canonical = getCanonicalVariantPricing(product, variant, referenceDate);
+  if (canonical.unitPrice < canonical.regularPrice) {
+    return Number(canonical.unitPrice.toFixed(2));
   }
+
+  const salePrice = toFiniteNumber(product?.salePrice);
+  if (salePrice === null) return null;
 
   return Number((salePrice + getVariantPriceAdjustment(product, variant, referenceDate)).toFixed(2));
 };
 
 export const getVariantUnitPrice = (product, variant, referenceDate) => {
-  const explicit = toFiniteNumber(variant?.unitPrice ?? variant?.effectivePrice);
-  if (explicit !== null && !referenceDate) {
-    return explicit;
-  }
-  return Number((getProductBasePrice(product, referenceDate) + getVariantPriceAdjustment(product, variant, referenceDate)).toFixed(2));
+  const { unitPrice } = getCanonicalVariantPricing(product, variant, referenceDate);
+  return Number(unitPrice.toFixed(2));
 };
 
 export const getCartItemUnitPrice = (item, referenceDate) =>

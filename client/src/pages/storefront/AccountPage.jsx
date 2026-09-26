@@ -42,7 +42,7 @@ const AccountPage = () => {
     return (
         <Container maxWidth="md" sx={{ py: 4 }}>
             <PageSEO title="My Account" type="noindex" />
-            <Typography variant="h4" gutterBottom>My Account</Typography>
+            <Typography variant="h4" component="h1" gutterBottom>My Account</Typography>
             <Paper sx={{ width: '100%', display: useSidebarLayout ? { xs: 'block', md: 'grid' } : 'block', gridTemplateColumns: useSidebarLayout ? '220px minmax(0, 1fr)' : undefined }}>
                 <Box sx={{ borderBottom: useSidebarLayout ? { xs: 1, md: 0 } : 1, borderRight: useSidebarLayout ? { md: 1 } : 0, borderColor: 'divider' }}>
                     <Tabs

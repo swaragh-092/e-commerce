@@ -6,6 +6,7 @@ const { User, Role, Permission } = require('../modules');
 const { enrichUserAuthorization } = require('../config/permissions');
 const logger = require('../utils/logger');
 const tokenBlocklist = require('../utils/tokenBlocklist');
+const { getAccessToken } = require('../modules/auth/authCookies');
 
 const JWT_VERIFY_OPTS = { algorithms: ['HS256'], issuer: process.env.JWT_ISSUER || 'ecommerce-pro', audience: process.env.JWT_AUDIENCE || 'ecommerce-pro-client' };
 
@@ -23,12 +24,10 @@ const authUserInclude = [
  */
 const authenticate = async (req, res, next) => {
   try {
-    const authHeader = req.headers.authorization;
-    if (!authHeader || !authHeader.startsWith('Bearer ')) {
+    const token = getAccessToken(req);
+    if (!token) {
       throw new AppError('UNAUTHORIZED', 401, 'Please log in to access this resource');
     }
-
-    const token = authHeader.split(' ')[1];
     
     // Verify token
     let decoded;
@@ -66,12 +65,10 @@ const authenticate = async (req, res, next) => {
 
 const optionalAuth = async (req, res, next) => {
   try {
-    const authHeader = req.headers.authorization;
-    if (!authHeader || !authHeader.startsWith('Bearer ')) {
+    const token = getAccessToken(req);
+    if (!token) {
       return next();
     }
-
-    const token = authHeader.split(' ')[1];
     
     let decoded;
     try {

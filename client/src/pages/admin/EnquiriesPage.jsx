@@ -217,7 +217,7 @@ const EnquiriesPage = () => {
     <Box sx={{ p: 3 }}>
       <PageSEO title="Enquiries | Admin" type="noindex" />
 
-      <Typography variant="h5" fontWeight={700} mb={3}>
+      <Typography variant="h5" component="h1" fontWeight={700} mb={3}>
         Enquiries
       </Typography>
 

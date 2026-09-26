@@ -416,7 +416,7 @@ const AccessControlPage = () => {
         sx={{ mb: 3 }}
       >
         <Box sx={{ flex: 1, minWidth: 0 }}>
-          <Typography variant="h4" fontWeight={700} gutterBottom>
+          <Typography variant="h4" component="h1" fontWeight={700} gutterBottom>
             Access Control
           </Typography>
           <Typography variant="body1" color="text.secondary" sx={{ lineHeight: 1.5 }}>

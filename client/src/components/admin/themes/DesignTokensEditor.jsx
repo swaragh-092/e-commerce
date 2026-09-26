@@ -3,8 +3,10 @@ import { Box, Typography, Grid, FormControl, InputLabel, Select, MenuItem, TextF
 import CloudUploadIcon from '@mui/icons-material/CloudUpload';
 import DeleteOutlineIcon from '@mui/icons-material/DeleteOutline';
 import { mediaService } from '../../../services/mediaService';
+import { ThemeContrastPanel } from '../settings/ContrastBadge';
+import { getDesignComponentControlSchema } from '../../../utils/designRegistry';
+import { DesignSchemaFields } from './designer/DesignSchemaFields';
 
-const WEIGHT_OPTIONS = ['300', '400', '500', '600', '700', '800', '900'];
 const SCALE_PRESETS = [
   { value: 'compact', label: 'Compact' },
   { value: 'default', label: 'Default' },
@@ -245,60 +247,36 @@ export const DesignTokensEditor = ({ value = {}, onChange }) => {
         These controls affect the whole storefront — buttons, cards, backgrounds, border radius, typography rhythm, and density.
       </Typography>
 
-      <Grid container spacing={2}>
-        <Grid item xs={12} sm={6}>
-          <SelectField label="Button Style" value={value.buttonStyle || 'solid'} onChange={(next) => patch('buttonStyle', next)} options={[
-            { value: 'solid', label: 'Solid' }, { value: 'outline', label: 'Outline' }, { value: 'soft', label: 'Soft' }, { value: 'pill', label: 'Pill' },
-          ]} />
-        </Grid>
-        <Grid item xs={12} sm={6}>
-          <SelectField label="Card Style" value={value.cardStyle || 'elevated'} onChange={(next) => patch('cardStyle', next)} options={[
-            { value: 'elevated', label: 'Elevated' }, { value: 'flat', label: 'Flat' }, { value: 'outlined', label: 'Outlined' },
-          ]} />
-        </Grid>
-        <Grid item xs={12} sm={6}>
-          <SelectField label="Background Style" value={value.backgroundStyle || 'softGradient'} onChange={(next) => patch('backgroundStyle', next)} options={[
-            { value: 'solid', label: 'Solid' }, { value: 'softGradient', label: 'Soft Gradient' },
-          ]} />
-        </Grid>
-        <Grid item xs={12} sm={6}>
-          <SelectField label="Header Style" value={value.headerStyle || 'glass'} onChange={(next) => patch('headerStyle', next)} options={[
-            { value: 'solid', label: 'Solid' }, { value: 'glass', label: 'Glass' }, { value: 'minimal', label: 'Minimal' }, { value: 'bordered', label: 'Bordered' },
-          ]} />
-        </Grid>
-        <Grid item xs={12} sm={6}>
-          <Field label="Border Radius" value={value.borderRadius || '8px'} onChange={(next) => patch('borderRadius', next)} helperText="Example: 4px, 8px, 16px" />
-        </Grid>
-        <Grid item xs={12} sm={6}>
-          <Field label="Line Height" value={value.lineHeight || '1.5'} onChange={(next) => patch('lineHeight', next)} />
-        </Grid>
-        <Grid item xs={12} sm={6}>
-          <Field label="Letter Spacing" value={value.letterSpacing || '0px'} onChange={(next) => patch('letterSpacing', next)} />
-        </Grid>
-        <Grid item xs={12} sm={6}>
-          <Field label="Heading Letter Spacing" value={value.headingLetterSpacing || '0px'} onChange={(next) => patch('headingLetterSpacing', next)} />
-        </Grid>
-      </Grid>
+      <DesignSchemaFields
+        schema={getDesignComponentControlSchema('designTokens')}
+        value={value}
+        onChange={onChange}
+      />
 
       <Divider sx={{ my: 2 }} />
-      <Typography variant="subtitle2" fontWeight={800} sx={{ mb: 1 }}>State Colors</Typography>
-      <Grid container spacing={2}>
-        <Grid item xs={12} sm={6}>
-          <Field label="Error Color" type="color" value={value.errorColor || '#e11d48'} onChange={(next) => patch('errorColor', next)} />
-        </Grid>
-        <Grid item xs={12} sm={6}>
-          <Field label="Warning Color" type="color" value={value.warningColor || '#d97706'} onChange={(next) => patch('warningColor', next)} />
-        </Grid>
-        <Grid item xs={12} sm={6}>
-          <Field label="Success Color" type="color" value={value.successColor || '#059669'} onChange={(next) => patch('successColor', next)} />
-        </Grid>
-        <Grid item xs={12} sm={6}>
-          <Field label="Info Color" type="color" value={value.infoColor || '#0284c7'} onChange={(next) => patch('infoColor', next)} />
-        </Grid>
-      </Grid>
+      <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mb: 1.5 }}>
+        These colors are the storefront foundation. Check the WCAG status before publishing changes.
+      </Typography>
+      <DesignSchemaFields
+        schema={{ groups: [getDesignComponentControlSchema('designTokens').groups[1]] }}
+        value={value}
+        onChange={onChange}
+      />
+      <ThemeContrastPanel
+        primaryColor={value.primaryColor || '#0f766e'}
+        secondaryColor={value.secondaryColor || '#f97316'}
+        backgroundColor={value.backgroundColor || '#f7f3ec'}
+        textColor={value.textColor || '#1f2933'}
+      />
 
       <Divider sx={{ my: 2 }} />
-      <Typography variant="subtitle2" fontWeight={800} sx={{ mb: 1 }}>Advanced Typography</Typography>
+      <DesignSchemaFields
+        schema={{ groups: [getDesignComponentControlSchema('designTokens').groups[2]] }}
+        value={value}
+        onChange={onChange}
+      />
+
+      <Divider sx={{ my: 2 }} />
       <Grid container spacing={2}>
         <Grid item xs={12} sm={6}>
           <SelectField label="Typography Scale" value={typographyScale.preset || 'default'} onChange={(next) => patchNested('typographyScale', 'preset', next)} options={SCALE_PRESETS} />
@@ -308,19 +286,12 @@ export const DesignTokensEditor = ({ value = {}, onChange }) => {
             { value: 'fluid', label: 'Fluid clamp()' }, { value: 'fixed', label: 'Fixed sizes' },
           ]} />
         </Grid>
-        <Grid item xs={12} sm={6}>
-          <Field label="Body Font" value={value.fontFamily || ''} placeholder="Inter" onChange={(next) => patch('fontFamily', next)} />
-        </Grid>
-        <Grid item xs={12} sm={6}>
-          <Field label="Heading Font" value={value.headingFont || ''} placeholder="Playfair Display" onChange={(next) => patch('headingFont', next)} />
-        </Grid>
-        <Grid item xs={12} sm={6}>
-          <SelectField label="Body Weight" value={String(value.bodyWeight || '400')} onChange={(next) => patch('bodyWeight', next)} options={WEIGHT_OPTIONS} />
-        </Grid>
-        <Grid item xs={12} sm={6}>
-          <SelectField label="Heading Weight" value={String(value.headingWeight || '700')} onChange={(next) => patch('headingWeight', next)} options={WEIGHT_OPTIONS} />
-        </Grid>
       </Grid>
+      <DesignSchemaFields
+        schema={{ groups: [getDesignComponentControlSchema('designTokens').groups[3]] }}
+        value={value}
+        onChange={onChange}
+      />
 
       {/* Custom Font Uploads */}
       <Divider sx={{ my: 2 }} />

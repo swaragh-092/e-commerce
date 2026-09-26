@@ -14,10 +14,12 @@ import WarningIcon from '@mui/icons-material/Warning';
 import { useNavigate } from 'react-router-dom';
 import { getPanelSx } from './dashboardUtils';
 
-const LowStockWidget = ({ lowStock, loading, spacing }) => {
+const LowStockWidget = ({ lowStock, loading, spacing, stats }) => {
   const navigate = useNavigate();
+  const totalAtRisk = Number(stats?.inventory?.totalAtRisk ?? stats?.lowStockCount ?? lowStock.length);
+  const outOfStockCount = Number(stats?.inventory?.outOfStockCount ?? stats?.outOfStockCount ?? lowStock.filter((item) => item.availableQty <= 0).length);
 
-  if (lowStock.length === 0) {
+  if (totalAtRisk === 0 && lowStock.length === 0) {
     return !loading ? (
       <Alert severity="success" sx={{ borderRadius: 2 }}>
         All products have adequate stock levels.
@@ -29,8 +31,13 @@ const LowStockWidget = ({ lowStock, loading, spacing }) => {
     <Paper elevation={0} sx={{ ...getPanelSx(spacing), height: 'auto' }}>
       <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 2 }}>
         <WarningIcon color="warning" />
-        <Typography variant="h6" fontWeight={600}>Low Stock Alerts ({lowStock.length})</Typography>
+        <Typography variant="h6" fontWeight={600}>Low Stock Alerts ({totalAtRisk})</Typography>
       </Box>
+      {outOfStockCount > 0 && (
+        <Alert severity="error" sx={{ mb: 2, borderRadius: 2 }}>
+          {outOfStockCount} product{outOfStockCount === 1 ? '' : 's'} out of stock.
+        </Alert>
+      )}
       <Box sx={{ overflowX: 'auto' }}>
         <Table size="small" sx={{ minWidth: 400 }}>
           <TableHead>
@@ -53,7 +60,11 @@ const LowStockWidget = ({ lowStock, loading, spacing }) => {
               <TableCell align="right">{product.quantity}</TableCell>
               <TableCell align="right">{product.reservedQty}</TableCell>
               <TableCell align="right">
-                <Chip label={product.availableQty} size="small" color={product.availableQty <= 0 ? 'error' : 'warning'} />
+                <Chip
+                  label={product.availableQty <= 0 ? 'Out of stock' : product.availableQty}
+                  size="small"
+                  color={product.availableQty <= 0 ? 'error' : 'warning'}
+                />
               </TableCell>
             </TableRow>
           ))}

@@ -280,7 +280,7 @@ const PageEditPage = () => {
             <ArrowBackIcon />
           </IconButton>
           <Box>
-            <Typography variant="h5" fontWeight={700}>
+            <Typography variant="h5" component="h1" fontWeight={700}>
               {isNew ? 'Create New Page' : `Edit: ${formData.title}`}
             </Typography>
             {slug && (

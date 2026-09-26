@@ -320,7 +320,7 @@ const MenuBuilderPage = () => {
   return (
     <Box p={3}>
       <Stack direction="row" justifyContent="space-between" alignItems="center" mb={3}>
-        <Typography variant="h4">Menu Builder</Typography>
+        <Typography variant="h4" component="h1">Menu Builder</Typography>
         {canManage && (
           <Button variant="contained" onClick={() => openMenuDialog()}>New Menu</Button>
         )}
