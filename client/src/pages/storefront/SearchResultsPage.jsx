@@ -18,7 +18,7 @@ import SearchWidget from '../../components/search/SearchWidget';
 import PageSEO from '../../components/common/PageSEO';
 import { useSettings } from '../../hooks/useSettings';
 import { searchProducts } from '../../services/searchService';
-import normalizeSearchQuery from '../../utils/searchQuery';
+import normalizeSearchQuery, { getSearchQueryLength } from '../../utils/searchQuery';
 
 /**
  * SearchResultsPage — renders full-text search results.
@@ -56,7 +56,7 @@ const SearchResultsPage = () => {
 
   // Fetch normalized results; cancellation prevents an older query overwriting a newer one.
   useEffect(() => {
-    if (normalizedQuery.length < 2) {
+    if (getSearchQueryLength(normalizedQuery) < 2) {
       setProducts([]);
       setBrands([]);
       setCategories([]);
@@ -69,7 +69,7 @@ const SearchResultsPage = () => {
       return undefined;
     }
 
-    if (normalizedQuery.length > 100) {
+    if (getSearchQueryLength(normalizedQuery) > 100) {
       setProducts([]);
       setBrands([]);
       setCategories([]);
@@ -311,7 +311,7 @@ const SearchResultsPage = () => {
       )}
 
       {/* Initial State (no query) */}
-      {!loading && !hasSearched && normalizedQuery.length < 2 && (
+      {!loading && !hasSearched && getSearchQueryLength(normalizedQuery) < 2 && (
         <Box
           sx={{
             textAlign: 'center',
