@@ -96,7 +96,7 @@ module.exports = (sequelize, DataTypes) => {
             type: DataTypes.STRING(20),
             defaultValue: 'draft',
             validate: {
-                isIn: [['draft', 'published']],
+                isIn: [['draft', 'published', 'archived']],
             },
         },
         // Product type: simple (no variants), variable (has variants), combo (bundle of other products)

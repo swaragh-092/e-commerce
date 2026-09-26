@@ -77,6 +77,13 @@ import { toDateTimeLocal } from '../../utils/dates';
 
 import { generateSlug } from '../../utils/strings';
 import { walkCategoryTree } from '../../utils/categories';
+import {
+  PRODUCT_STOREFRONT_STATES,
+  PRODUCT_STOREFRONT_STATE_LABELS,
+  getProductStorefrontFields,
+  getProductStorefrontState,
+  getProductStorefrontStateHelp,
+} from '../../utils/productStorefrontState';
 
 const escapeHtml = (value = '') => String(value)
   .replaceAll('&', '&amp;')
@@ -1021,18 +1028,26 @@ const ProductEditPage = () => {
           <Grid item xs={12} md={4}>
             <Paper sx={{ p: 3, mb: 3 }}>
               <Typography variant="h6" gutterBottom>
-                Status
+                Storefront
               </Typography>
               <FormControl fullWidth margin="normal">
-                <InputLabel>Status</InputLabel>
+                <InputLabel id="product-storefront-state-label">Storefront state</InputLabel>
                 <Select
-                  value={formData.status}
-                  label="Status"
-                  onChange={(e) => setField('status', e.target.value)}
+                  value={getProductStorefrontState(formData)}
+                  labelId="product-storefront-state-label"
+                  label="Storefront state"
+                  onChange={(event) => {
+                    const storefrontFields = getProductStorefrontFields(event.target.value);
+                    setFormData((current) => ({ ...current, ...storefrontFields }));
+                  }}
                 >
-                  <MenuItem value="draft">Draft</MenuItem>
-                  <MenuItem value="published">Published</MenuItem>
+                  {Object.values(PRODUCT_STOREFRONT_STATES).map((state) => (
+                    <MenuItem key={state} value={state} disabled={isNew && state === PRODUCT_STOREFRONT_STATES.ARCHIVED}>
+                      {PRODUCT_STOREFRONT_STATE_LABELS[state]}
+                    </MenuItem>
+                  ))}
                 </Select>
+                <FormHelperText>{getProductStorefrontStateHelp(getProductStorefrontState(formData))}</FormHelperText>
               </FormControl>
 
               <FormControl fullWidth margin="normal" error={Boolean(errors.type)}>
@@ -1063,17 +1078,6 @@ const ProductEditPage = () => {
                 {errors.type && <FormHelperText>{errors.type}</FormHelperText>}
               </FormControl>
 
-              <FormControlLabel
-                control={
-                  <Switch
-                    checked={formData.isEnabled}
-                    onChange={(e) => setField('isEnabled', e.target.checked)}
-                    color="success"
-                  />
-                }
-                label="Enabled on storefront"
-                sx={{ mt: 2 }}
-              />
             </Paper>
             
             {pricingEnabled && (

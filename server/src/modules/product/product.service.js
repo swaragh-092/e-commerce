@@ -31,6 +31,11 @@ const logger = require('../../utils/logger');
 const { ACTIONS, ENTITIES } = require('../../config/constants');
 const { getCategoryAndDescendantIds } = require('../category/category.service');
 const { normalizeSalePayload, serializeProductPricing } = require('./product.pricing');
+const {
+  applyProductStorefrontFilters,
+  buildProductStorefrontCountsWhere,
+  mapProductStorefrontCounts,
+} = require('./product.storefrontState');
 const { events, PRODUCT_EVENTS } = require('../../utils/events');
 const { getSaleLabels } = require('../settings/saleLabel.service');
 const SettingsService = require('../settings/settings.service');
@@ -461,18 +466,8 @@ exports.getProducts = async (filters, page, limit, isAdmin = false) => {
   const now = new Date();
   const labelPresets = await getLabelPresets();
 
-  // Always restrict to published + enabled products for storefront; admins can filter by any status
-  if (!isAdmin) {
-    where.status = 'published';
-    where.isEnabled = true;
-  } else {
-    if (filters.status) {
-      where.status = filters.status;
-    }
-    if (filters.isEnabled !== undefined) {
-      where.isEnabled = filters.isEnabled === 'true' || filters.isEnabled === true;
-    }
-  }
+  // Always restrict storefront results to published + enabled products. Admins can filter by state.
+  applyProductStorefrontFilters(where, filters, isAdmin);
 
   // Filter Logic
   if (typeof filters.search === 'string' && filters.search.length > 0) {
@@ -735,8 +730,7 @@ exports.getProducts = async (filters, page, limit, isAdmin = false) => {
 
   let counts = {};
   if (isAdmin) {
-    const countWhere = { ...where };
-    delete countWhere.status;
+    const countWhere = buildProductStorefrontCountsWhere(where, filters);
 
     // For status counts, we need to preserve any required includes (joins used for filtering)
     // like categories or tags, but strip out attributes to keep it light.
@@ -759,18 +753,15 @@ exports.getProducts = async (filters, page, limit, isAdmin = false) => {
       include: countInclude,
       attributes: [
         'status',
+        'isEnabled',
         [Sequelize.fn('COUNT', Sequelize.literal('DISTINCT "Product"."id"')), 'count']
       ],
-      group: ['Product.status'],
+      group: ['Product.status', 'Product.isEnabled'],
       subQuery: false, // Prevent complex subqueries that break GROUP BY
       raw: true
     });
     
-    counts = statusCounts.reduce((acc, curr) => {
-      // Sequelize raw result with group often has count as a string
-      acc[curr.status] = parseInt(curr.count || 0, 10);
-      return acc;
-    }, {});
+    counts = mapProductStorefrontCounts(statusCounts);
 
     // Low stock count
     const catalogSettings = await SettingsService.getByGroup('catalog', { maskSensitive: false });

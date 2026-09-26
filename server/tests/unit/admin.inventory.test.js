@@ -1,5 +1,12 @@
-import { describe, expect, it } from 'vitest';
-import { buildInventorySummary } from '../../src/modules/admin/admin.service';
+import { createRequire } from 'node:module';
+import { afterEach, describe, expect, it, vi } from 'vitest';
+import { buildInventorySummary, getStats } from '../../src/modules/admin/admin.service';
+
+const require = createRequire(import.meta.url);
+const db = require('../../src/modules');
+const SettingsService = require('../../src/modules/settings/settings.service');
+
+afterEach(() => vi.restoreAllMocks());
 
 describe('Admin inventory health', () => {
   it('classifies available stock using active variant totals', () => {
@@ -62,5 +69,25 @@ describe('Admin inventory health', () => {
 
     expect(summary.totalAtRisk).toBe(0);
     expect(summary.rows).toHaveLength(0);
+  });
+});
+
+
+describe('Admin dashboard product count', () => {
+  it('counts only storefront-visible published products', async () => {
+    vi.spyOn(SettingsService, 'getByGroup').mockResolvedValue({ lowStockThreshold: 10 });
+    vi.spyOn(db.Order, 'findOne').mockResolvedValue({ totalRevenue: '0' });
+    vi.spyOn(db.Order, 'count').mockResolvedValue(0);
+    vi.spyOn(db.User, 'count').mockResolvedValue(0);
+    vi.spyOn(db.Product, 'count').mockResolvedValue(3);
+    vi.spyOn(db.Product, 'findAll').mockResolvedValue([]);
+    vi.spyOn(db.Review, 'count').mockResolvedValue(0);
+
+    const stats = await getStats();
+
+    expect(stats.productCount).toBe(3);
+    expect(db.Product.count).toHaveBeenCalledWith({
+      where: { status: 'published', isEnabled: true },
+    });
   });
 });
