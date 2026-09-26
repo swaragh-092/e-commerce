@@ -3,14 +3,13 @@ import {
   Box, Typography, Button, Chip, IconButton, TextField,
   FormControl, InputLabel, Select, MenuItem, Stack, Tooltip,
   Avatar, Dialog, DialogTitle, DialogContent, DialogActions,
-  DialogContentText, InputAdornment, Paper, Switch, FormHelperText,
+  DialogContentText, InputAdornment, Paper, FormHelperText,
 } from '@mui/material';
 import { DataGrid } from '@mui/x-data-grid';
 import {
   Add as AddIcon, Edit as EditIcon, Delete as DeleteIcon,
   OpenInNew as OpenInNewIcon, Clear as ClearIcon,
-  CheckCircle as CheckCircleIcon, RemoveCircle as RemoveCircleIcon,
-  DeleteSweep as DeleteSweepIcon, Download as DownloadIcon, EditNote as EditNoteIcon,
+  RemoveCircle as RemoveCircleIcon, DeleteSweep as DeleteSweepIcon, Download as DownloadIcon, EditNote as EditNoteIcon,
   Inventory as InventoryIcon, History as HistoryIcon,
   LocalOffer as LocalOfferIcon,
 } from '@mui/icons-material';
@@ -26,6 +25,13 @@ import { useAuth } from '../../hooks/useAuth';
 import { PERMISSIONS } from '../../utils/permissions';
 import { getApiErrorMessage } from '../../utils/apiErrors';
 import { formatOpenEndedDateRange, toDateTimeLocal } from '../../utils/dates';
+import {
+  PRODUCT_STOREFRONT_STATES,
+  PRODUCT_STOREFRONT_STATE_LABELS,
+  getProductStorefrontFields,
+  getProductStorefrontState,
+  getProductStorefrontStateHelp,
+} from '../../utils/productStorefrontState';
 
 const STOREFRONT_BASE = (import.meta.env.VITE_APP_URL || window.location.origin);
 const toIsoOrNull = (value) => (value ? new Date(value).toISOString() : null);
@@ -134,7 +140,7 @@ const ProductsManagePage = () => {
   // Server-side sorting
   const [sortModel, setSortModel] = useState([]);
 
-  // Quick-edit dialog (stock + MRP + sale + status)
+  // Quick-edit dialog (stock + MRP + sale + storefront state)
   const [editDialog, setEditDialog] = useState({
     open: false,
     row: null,
@@ -147,7 +153,7 @@ const ProductsManagePage = () => {
     saleStartAt: '',
     saleEndAt: '',
     saleLabel: '',
-    status: 'draft',
+    storefrontState: PRODUCT_STOREFRONT_STATES.DRAFT,
     saving: false,
   });
   const [bulkSaleDialog, setBulkSaleDialog] = useState({
@@ -160,7 +166,7 @@ const ProductsManagePage = () => {
     saleEndAt: '',
     saving: false,
   });
-  const [counts, setCounts] = useState({ published: 0, draft: 0 });
+  const [counts, setCounts] = useState({ published: 0, paused: 0, draft: 0, archived: 0 });
   const hasActiveFilters = Boolean(search || status || saleFilter || categoryFilter || lowStockOnly);
 
   // Step amount for the stock stepper — persists between quick-edit opens
@@ -200,8 +206,7 @@ const ProductsManagePage = () => {
       saleStartAt: toDateTimeLocal(row.saleStartAt),
       saleEndAt: toDateTimeLocal(row.saleEndAt),
       saleLabel: row.saleLabel || '',
-      status: row.status || 'draft',
-      isEnabled: row.isEnabled !== false,
+      storefrontState: getProductStorefrontState(row),
       saving: false,
     });
   };
@@ -218,8 +223,7 @@ const ProductsManagePage = () => {
         slug: editDialog.slug.trim(),
         ...(cartEnabled && !(editDialog.row?.variants?.length > 0) && { quantity: parseInt(editDialog.quantity, 10) || 0 }),
         price: parseFloat(editDialog.price),
-        status: editDialog.status,
-        isEnabled: editDialog.isEnabled,
+        ...getProductStorefrontFields(editDialog.storefrontState),
         ...(editDialog.saleEnabled && editDialog.salePrice !== ''
           ? {
               salePrice: parseFloat(editDialog.salePrice),
@@ -238,6 +242,7 @@ const ProductsManagePage = () => {
       } : r));
       notify('Product updated successfully.', 'success');
       setEditDialog((s) => ({ ...s, open: false }));
+      fetchProducts();
     } catch (err) {
       notify(`Failed to update: ${getApiErrorMessage(err)}`, 'error');
       setEditDialog((s) => ({ ...s, saving: false }));
@@ -246,7 +251,7 @@ const ProductsManagePage = () => {
 
   // CSV export — exports the current page's visible rows
   const handleExportCSV = () => {
-    const headers = ['Name', 'SKU', 'MRP', 'Sale Price', 'Stock', 'Status'];
+    const headers = ['Name', 'SKU', 'MRP', 'Sale Price', 'Stock', 'Storefront state'];
     const csvRows = [headers.join(',')];
     rows.forEach((r) => {
       const total = Number(r?.quantity || 0);
@@ -258,7 +263,7 @@ const ProductsManagePage = () => {
         r.price,
         r.salePrice ?? '',
         available,
-        r.status,
+        PRODUCT_STOREFRONT_STATE_LABELS[getProductStorefrontState(r)],
       ].join(','));
     });
     const blob = new Blob([csvRows.join('\n')], { type: 'text/csv;charset=utf-8;' });
@@ -313,7 +318,7 @@ const ProductsManagePage = () => {
       .then((res) => {
         setRows(res?.data || []);
         setTotal(res?.meta?.total || 0);
-        setCounts(res?.counts || res?.meta?.counts || { published: 0, draft: 0 });
+        setCounts(res?.counts || res?.meta?.counts || { published: 0, paused: 0, draft: 0, archived: 0 });
       })
       .catch(console.error)
       .finally(() => setLoading(false));
@@ -370,53 +375,40 @@ const ProductsManagePage = () => {
     }
   };
 
-  const handleBulkStatus = async (newStatus) => {
+  const handleBulkStorefrontState = async (storefrontState) => {
     if (!canUpdateProducts) {
       notify('You do not have permission to update products.', 'error');
       return;
     }
 
+    const storefrontFields = getProductStorefrontFields(storefrontState);
     try {
-      await bulkUpdateProducts(selectedIds, { status: newStatus });
+      await bulkUpdateProducts(selectedIds, storefrontFields);
       setRows((prev) =>
-        prev.map((r) => selectedIds.includes(r.id) ? { ...r, status: newStatus } : r)
+        prev.map((r) => selectedIds.includes(r.id) ? { ...r, ...storefrontFields } : r)
       );
-      notify(`${selectedIds.length} products updated to ${newStatus} successfully.`, 'success');
+      notify(`${selectedIds.length} products set to ${PRODUCT_STOREFRONT_STATE_LABELS[storefrontState]}.`, 'success');
       setSelectedIds([]);
+      fetchProducts();
     } catch (err) {
       notify('Bulk update failed: ' + getApiErrorMessage(err), 'error');
     }
   };
 
-  const handleToggleEnabled = async (row) => {
+  const handleChangeStorefrontState = async (row, storefrontState) => {
     if (!canUpdateProducts) {
       notify('You do not have permission to update products.', 'error');
       return;
     }
-    const newVal = !row.isEnabled;
-    try {
-      await updateProduct(row.id, { isEnabled: newVal });
-      setRows((prev) => prev.map((r) => r.id === row.id ? { ...r, isEnabled: newVal } : r));
-      notify(`Product ${newVal ? 'enabled' : 'disabled'} successfully.`, 'success');
-    } catch (err) {
-      notify(`Failed to toggle visibility: ${getApiErrorMessage(err)}`, 'error');
-    }
-  };
 
-  const handleBulkEnable = async (enable) => {
-    if (!canUpdateProducts) {
-      notify('You do not have permission to update products.', 'error');
-      return;
-    }
+    const storefrontFields = getProductStorefrontFields(storefrontState);
     try {
-      await bulkUpdateProducts(selectedIds, { isEnabled: enable });
-      setRows((prev) =>
-        prev.map((r) => selectedIds.includes(r.id) ? { ...r, isEnabled: enable } : r)
-      );
-      notify(`${selectedIds.length} products ${enable ? 'enabled' : 'disabled'} successfully.`, 'success');
-      setSelectedIds([]);
+      await updateProduct(row.id, storefrontFields);
+      setRows((prev) => prev.map((r) => r.id === row.id ? { ...r, ...storefrontFields } : r));
+      notify(`Product storefront state set to ${PRODUCT_STOREFRONT_STATE_LABELS[storefrontState]}.`, 'success');
+      fetchProducts();
     } catch (err) {
-      notify(`Bulk update failed: ${getApiErrorMessage(err)}`, 'error');
+      notify(`Failed to update storefront state: ${getApiErrorMessage(err)}`, 'error');
     }
   };
 
@@ -452,22 +444,6 @@ const ProductsManagePage = () => {
     } catch (err) {
       notify(`Bulk sale update failed: ${getApiErrorMessage(err)}`, 'error');
       setBulkSaleDialog((s) => ({ ...s, saving: false }));
-    }
-  };
-
-  const handleToggleStatus = async (row) => {
-    if (!canUpdateProducts) {
-      notify('You do not have permission to update products.', 'error');
-      return;
-    }
-
-    const newStatus = row.status === 'published' ? 'draft' : 'published';
-    try {
-      await updateProduct(row.id, { status: newStatus });
-      setRows((prev) => prev.map((r) => r.id === row.id ? { ...r, status: newStatus } : r));
-      notify(`Product status updated to ${newStatus} successfully.`, 'success');
-    } catch (err) {
-      notify(`Failed to update status: ${getApiErrorMessage(err)}`, 'error');
     }
   };
 
@@ -646,35 +622,26 @@ const ProductsManagePage = () => {
         );
       },
     },
-    // 5. Click-to-toggle status chip
+    // 5. One control for the product's effective storefront state.
     {
-      field: 'status',
-      headerName: 'Status',
-      width: 120,
-      renderCell: ({ row }) => (
-        <Chip
-          label={row.status}
-          size="small"
-          color={row.status === 'published' ? 'success' : 'default'}
-          sx={{ fontWeight: 600, textTransform: 'capitalize' }}
-        />
-      ),
-    },
-    // 5b. Enabled toggle switch
-    {
-      field: 'isEnabled',
-      headerName: 'Enabled',
-      width: 90,
+      field: 'storefrontState',
+      headerName: 'Storefront state',
+      width: 170,
       sortable: false,
       renderCell: ({ row }) => (
-        <Tooltip title={row.isEnabled ? 'Visible on storefront — click to disable' : 'Hidden from storefront — click to enable'}>
-          <Switch
-            checked={!!row.isEnabled}
-            color="success"
-            size="small"
-            onChange={() => handleToggleEnabled(row)}
-            disabled={!canUpdateProducts}
-          />
+        <Tooltip title={getProductStorefrontStateHelp(getProductStorefrontState(row))}>
+          <FormControl size="small" fullWidth>
+            <Select
+              value={getProductStorefrontState(row)}
+              onChange={(event) => handleChangeStorefrontState(row, event.target.value)}
+              disabled={!canUpdateProducts}
+              inputProps={{ 'aria-label': `Storefront state for ${row.name}` }}
+            >
+              {Object.values(PRODUCT_STOREFRONT_STATES).map((state) => (
+                <MenuItem key={state} value={state}>{PRODUCT_STOREFRONT_STATE_LABELS[state]}</MenuItem>
+              ))}
+            </Select>
+          </FormControl>
         </Tooltip>
       ),
     },
@@ -687,7 +654,7 @@ const ProductsManagePage = () => {
       renderCell: ({ row }) => (
         <Stack direction="row" spacing={0.25}>
           {canUpdateProducts && (
-            <Tooltip title="Quick edit stock, pricing and status">
+            <Tooltip title="Quick edit stock, pricing and storefront state">
               <IconButton size="small" color="primary" onClick={() => openEditDialog(row)}>
                 <EditNoteIcon fontSize="small" />
               </IconButton>
@@ -780,12 +747,23 @@ const ProductsManagePage = () => {
           }}
         />
         <ClickableSummaryCard 
-          label="Published" 
+          label="Published"
           value={counts.published || 0} 
           tone="success"
           active={status === 'published' && !lowStockOnly}
           onClick={() => {
             setStatus('published');
+            setLowStockOnly(false);
+            setPaginationModel(p => ({ ...p, page: 0 }));
+          }}
+        />
+        <ClickableSummaryCard
+          label="Paused"
+          value={counts.paused || 0}
+          tone="warning"
+          active={status === 'paused' && !lowStockOnly}
+          onClick={() => {
+            setStatus('paused');
             setLowStockOnly(false);
             setPaginationModel(p => ({ ...p, page: 0 }));
           }}
@@ -891,15 +869,18 @@ const ProductsManagePage = () => {
           }}
         />
         <FormControl size="small" sx={{ minWidth: 140 }}>
-          <InputLabel>Status</InputLabel>
+          <InputLabel id="storefront-state-filter-label">Storefront state</InputLabel>
           <Select
             value={status}
-            label="Status"
+            labelId="storefront-state-filter-label"
+            label="Storefront state"
             onChange={(e) => { setStatus(e.target.value); setPaginationModel((p) => ({ ...p, page: 0 })); }}
           >
             <MenuItem value="">All</MenuItem>
             <MenuItem value="published">Published</MenuItem>
+            <MenuItem value="paused">Paused</MenuItem>
             <MenuItem value="draft">Draft</MenuItem>
+            <MenuItem value="archived">Archived</MenuItem>
           </Select>
         </FormControl>
         {pricingEnabled && (
@@ -948,34 +929,20 @@ const ProductsManagePage = () => {
             {selectedIds.length} selected
           </Typography>
           {canUpdateProducts && (
-            <>
-              <Button
-                size="small" variant="outlined" color="success"
-                startIcon={<CheckCircleIcon />}
-                onClick={() => handleBulkStatus('published')}
+            <FormControl size="small" sx={{ minWidth: 190 }}>
+              <InputLabel id="bulk-storefront-state-label">Set storefront state</InputLabel>
+              <Select
+                labelId="bulk-storefront-state-label"
+                label="Set storefront state"
+                value=""
+                onChange={(event) => handleBulkStorefrontState(event.target.value)}
               >
-                Publish
-              </Button>
-              <Button
-                size="small" variant="outlined" color="inherit"
-                startIcon={<RemoveCircleIcon />}
-                onClick={() => handleBulkStatus('draft')}
-              >
-                Set Draft
-              </Button>
-              <Button
-                size="small" variant="outlined" color="success"
-                onClick={() => handleBulkEnable(true)}
-              >
-                Enable
-              </Button>
-              <Button
-                size="small" variant="outlined" color="warning"
-                onClick={() => handleBulkEnable(false)}
-              >
-                Disable
-              </Button>
-            </>
+                <MenuItem value="" disabled>Choose a state</MenuItem>
+                {Object.values(PRODUCT_STOREFRONT_STATES).map((state) => (
+                  <MenuItem key={state} value={state}>{PRODUCT_STOREFRONT_STATE_LABELS[state]}</MenuItem>
+                ))}
+              </Select>
+            </FormControl>
           )}
           {canDeleteProducts && (
             <Button
@@ -1389,38 +1356,23 @@ const ProductsManagePage = () => {
                 )}
               </>
             )}
-            <Stack direction="row" justifyContent="space-between" alignItems="center" sx={{ pt: 0.5 }}>
-              <Box>
-                <Typography variant="body2" fontWeight={600}>Visibility</Typography>
-                <Typography variant="caption" color="text.secondary">
-                  Control whether this product appears on the storefront.
-                </Typography>
-              </Box>
-              <Button
-                size="small"
-                variant={editDialog.status === 'published' ? 'contained' : 'outlined'}
-                color={editDialog.status === 'published' ? 'success' : 'inherit'}
-                onClick={() => setEditDialog((s) => ({
-                  ...s,
-                  status: s.status === 'published' ? 'draft' : 'published',
+            <FormControl fullWidth size="small" sx={{ pt: 0.5 }}>
+              <InputLabel id="quick-edit-storefront-state-label">Storefront state</InputLabel>
+              <Select
+                value={editDialog.storefrontState}
+                labelId="quick-edit-storefront-state-label"
+                label="Storefront state"
+                onChange={(event) => setEditDialog((current) => ({
+                  ...current,
+                  storefrontState: event.target.value,
                 }))}
               >
-                {editDialog.status === 'published' ? 'Published' : 'Draft'}
-              </Button>
-            </Stack>
-            <Stack direction="row" justifyContent="space-between" alignItems="center" sx={{ pt: 0.5 }}>
-              <Box>
-                <Typography variant="body2" fontWeight={600}>Enabled</Typography>
-                <Typography variant="caption" color="text.secondary">
-                  Disabled products are hidden from the storefront.
-                </Typography>
-              </Box>
-              <Switch
-                checked={editDialog.isEnabled}
-                color="success"
-                onChange={() => setEditDialog((s) => ({ ...s, isEnabled: !s.isEnabled }))}
-              />
-            </Stack>
+                {Object.values(PRODUCT_STOREFRONT_STATES).map((state) => (
+                  <MenuItem key={state} value={state}>{PRODUCT_STOREFRONT_STATE_LABELS[state]}</MenuItem>
+                ))}
+              </Select>
+              <FormHelperText>{getProductStorefrontStateHelp(editDialog.storefrontState)}</FormHelperText>
+            </FormControl>
           </Stack>
         </DialogContent>
         <DialogActions sx={{ px: 3, pb: 2 }}>
