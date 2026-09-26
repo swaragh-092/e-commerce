@@ -14,10 +14,11 @@ import {
   LocalOffer as LocalOfferIcon,
 } from '@mui/icons-material';
 import { Link, useNavigate, useSearchParams } from 'react-router-dom';
-import { getProducts, deleteProduct, updateProduct, bulkUpdateSale, bulkDeleteProducts, bulkUpdateProducts, getStockHistory } from '../../services/productService';
+import { getProducts, getProductById, deleteProduct, updateProduct, bulkUpdateSale, bulkDeleteProducts, bulkUpdateProducts, getStockHistory } from '../../services/productService';
 import { getCategoryTree } from '../../services/categoryService';
 import { getSaleLabels } from '../../services/adminService';
 import { getMediaUrl } from '../../utils/media';
+import { getVariantOptionLabel } from '../../utils/variantOptions';
 import { useCurrency, useSettings, useFeature } from '../../hooks/useSettings';
 import { useNotification } from '../../context/NotificationContext';
 import { formatSaleDateTime, isEndingSoon } from '../../utils/pricing';
@@ -209,6 +210,26 @@ const ProductsManagePage = () => {
       storefrontState: getProductStorefrontState(row),
       saving: false,
     });
+
+    if (row.variants?.length > 0 && !row.variants.some((v) => v.optionLabel || v.options?.length > 0)) {
+      getProductById(row.id)
+        .then((fullProduct) => {
+          const fetchedVariants = fullProduct?.data?.variants || fullProduct?.variants;
+          if (Array.isArray(fetchedVariants) && fetchedVariants.length > 0) {
+            setEditDialog((prev) => {
+              if (prev.row?.id !== row.id) return prev;
+              return {
+                ...prev,
+                row: {
+                  ...prev.row,
+                  variants: fetchedVariants,
+                },
+              };
+            });
+          }
+        })
+        .catch(() => {});
+    }
   };
   const handleQuickSave = async () => {
     if (!canUpdateProducts) {
@@ -1080,14 +1101,22 @@ const ProductsManagePage = () => {
                       </Typography>
                     </Stack>
                     <Stack spacing={0.5} sx={{ maxHeight: 140, overflowY: 'auto' }}>
-                      {editDialog.row.variants.filter(v => v.isActive !== false).map((v) => (
-                        <Stack key={v.id} direction="row" justifyContent="space-between" alignItems="center">
-                          <Typography variant="caption" color="text.secondary" noWrap sx={{ maxWidth: 160 }}>
-                            {v.sku || v.options?.map(o => o.value?.value || o.value?.displayLabel).join(' / ') || 'Variant'}
-                          </Typography>
-                          <Chip label={v.stockQty ?? 0} size="small" variant="outlined" sx={{ fontWeight: 700, minWidth: 40 }} />
-                        </Stack>
-                      ))}
+                      {editDialog.row.variants.filter(v => v.isActive !== false).map((v, index) => {
+                        const optionText = v.optionLabel || getVariantOptionLabel(v) || (v.options?.map((o) => o.value?.value || o.value?.displayLabel || o.value).filter(Boolean).join(' / '));
+                        const variantName = optionText && v.sku
+                          ? `${optionText} (${v.sku})`
+                          : (optionText || v.sku || `Variant #${index + 1}`);
+                        return (
+                          <Stack key={v.id} direction="row" justifyContent="space-between" alignItems="center">
+                            <Tooltip title={variantName}>
+                              <Typography variant="caption" color="text.secondary" noWrap sx={{ maxWidth: 220 }}>
+                                {variantName}
+                              </Typography>
+                            </Tooltip>
+                            <Chip label={v.stockQty ?? 0} size="small" variant="outlined" sx={{ fontWeight: 700, minWidth: 40 }} />
+                          </Stack>
+                        );
+                      })}
                     </Stack>
                   </Paper>
                   <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mt: 0.5 }}>
