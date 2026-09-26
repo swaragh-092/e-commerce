@@ -327,6 +327,7 @@ const ProductsManagePage = () => {
     const params = {
       page: paginationModel.page + 1,
       limit: paginationModel.pageSize,
+      include: 'variants',
       ...(search && { search }),
       ...(status && { status }),
       ...(saleFilter && { saleStatus: saleFilter }),

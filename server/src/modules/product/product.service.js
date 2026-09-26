@@ -622,17 +622,7 @@ exports.getProducts = async (filters, page, limit, isAdmin = false) => {
   if (requestedIncludes.includes('variants')) {
     include.push(getVariantInclude());
   } else {
-    include.push({
-      model: ProductVariant,
-      as: 'variants',
-      include: [
-        {
-          model: VariantOption,
-          as: 'options',
-          include: getCommonAttributeIncludes(),
-        },
-      ],
-    });
+    include.push({ model: ProductVariant, as: 'variants' });
   }
 
   if (requestedIncludes.includes('attributes')) {
