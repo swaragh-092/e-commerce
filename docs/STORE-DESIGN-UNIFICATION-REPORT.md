@@ -777,8 +777,8 @@ The ownership, contextual-inspector, and canonical-registry slices are now in pl
 Minimum verification after implementation:
 
 ```bash
-cd /home/sr-user91/Documents/Projects/e-commerce/client && npm run build
-cd /home/sr-user91/Documents/Projects/e-commerce/server && npm test
+cd client && npm run build
+cd server && npm test
 ```
 
 Add targeted tests for template apply/rollback, settings ownership, draft/publish, preview state, component token resolution, accessibility, and concurrent edits before shipping.
