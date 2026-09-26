@@ -9,4 +9,6 @@ const normalizeSearchQuery = (query) => {
     .trim();
 };
 
+export const getSearchQueryLength = (query) => Array.from(normalizeSearchQuery(query)).length;
+
 export default normalizeSearchQuery;
