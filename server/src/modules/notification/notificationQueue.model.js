@@ -20,6 +20,7 @@ module.exports = (sequelize, DataTypes) => {
         },
         recipientEmail: DataTypes.STRING(255),
         recipientPhone: DataTypes.STRING(30),
+        dedupeKey: { type: DataTypes.STRING(255), allowNull: true },
         variables: {
             type: DataTypes.JSONB,
             defaultValue: () => ({}),

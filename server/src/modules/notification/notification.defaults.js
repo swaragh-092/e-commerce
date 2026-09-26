@@ -225,6 +225,24 @@ const DEFAULTS = {
     bodyText: 'Low stock alert: {{productName}} (SKU: {{sku}}) — {{stock}} units remaining.\n\nManage: {{website_url}}/admin/products\n\n{{store_name}}',
   },
 
+  inventory_alert_digest: {
+    subject: '{{#if isTest}}[Test] {{/if}}[{{store_name}}] Inventory alerts: {{alert_count}} items need attention',
+    bodyHtml: EMAIL_WRAPPER(`
+    <h2>{{#if isTest}}Inventory alert test{{else}}Inventory needs attention{{/if}}</h2>
+    {{#if isTest}}<p>This test confirms that inventory alert email delivery is configured.</p>{{else}}<p>{{alert_count}} published catalog item(s) need attention.</p>{{/if}}
+    {{#if out_of_stock_count}}<h3>Out of stock ({{out_of_stock_count}})</h3>{{/if}}
+    {{#each alerts}}
+      <div class="info-box">
+        <p><strong>{{product_name}}</strong>{{#if sku}} — SKU {{sku}}{{/if}}</p>
+        <p>Status: {{status_label}} | Available: {{available_qty}} | Threshold: {{threshold}}</p>
+        <p><a href="{{../website_url}}/admin/products/{{product_id}}/edit">Open inventory</a></p>
+      </div>
+    {{/each}}
+    {{#unless isTest}}<p>Assign an owner and update the expected restock date in the admin dashboard. The dashboard shows current stock.</p>{{/unless}}
+`, ''),
+    bodyText: '{{#if isTest}}Test inventory alert email from {{store_name}}.{{else}}Inventory alert digest: {{alert_count}} items need attention.{{/if}}\n\n{{#each alerts}}- {{product_name}}{{#if sku}} ({{sku}}){{/if}}: {{status_label}}, {{available_qty}} available (threshold {{threshold}}). Manage: {{../website_url}}/admin/products/{{product_id}}/edit\n{{/each}}',
+  },
+
   admin_new_order: {
     subject: '[{{store_name}}] New Order #{{order_number}} — {{order_total}}',
     bodyHtml: EMAIL_WRAPPER(`
@@ -361,6 +379,7 @@ const TEMPLATE_VARIABLES = {
   password_reset:    ['name','reset_url','store_name','support_email'],
   low_stock_alert:   ['productName','sku','stock','website_url','store_name','support_email'],
   low_stock_admin:   ['productName','sku','stock','website_url','store_name','support_email'],
+  inventory_alert_digest: ['alerts','alert_count','out_of_stock_count','isTest','website_url','store_name','support_email'],
   admin_new_order:      ['customer_name','customer_email','order_number','order_date','order_id','order_total','order_subtotal','shipping_total','tax_total','discount_total','payment_method','items','website_url','store_name','support_email'],
   admin_order_cancelled:['customer_name','customer_email','order_number','order_id','cancel_reason','refund_amount','items','order_total','website_url','store_name','support_email'],
   admin_order_failed:   ['customer_name','customer_email','order_number','order_date','order_id','order_total','payment_method','failure_reason','items','website_url','store_name','support_email'],
@@ -399,6 +418,10 @@ const SAMPLE_VARIABLES = {
   productSku: 'WHP-001',
   sku: 'WHP-001',
   stock: 3,
+  alert_count: 2,
+  out_of_stock_count: 1,
+  isTest: false,
+  alerts: [{ product_id: 'preview-id', product_name: 'Seed pack', sku: 'SEED-OUT', severity: 'out_of_stock', status_label: 'Out of stock', available_qty: 0, threshold: 10 }],
   quantity: 1,
   store_name: 'My Store',
   website_url: 'http://localhost:3000',

@@ -19,6 +19,7 @@ import {
   Grid,
   InputAdornment,
 } from '@mui/material';
+import InventoryAlertSettingsPanel from '../../components/admin/settings/InventoryAlertSettingsPanel';
 import { updateSettings, getEmailTemplates, updateEmailTemplate, sendTestEmail as sendTestEmailApi } from '../../services/adminService';
 import { getAllSettings } from '../../services/settingsService';
 import { useNotification } from '../../context/NotificationContext';
@@ -605,53 +606,56 @@ const SettingsPage = () => {
             </Tabs>
             <Divider />
             <Box sx={{ p: 3 }}>
-              <Box sx={{ pointerEvents: canManageSettings ? 'auto' : 'none', opacity: canManageSettings ? 1 : 0.75 }}>
-                {isMessagingTab ? (
-                  <Box>
+              {isMessagingTab ? (
+                <Box>
+                  <Box sx={{ pointerEvents: canManageSettings ? 'auto' : 'none', opacity: canManageSettings ? 1 : 0.75 }}>
                     <MessagingSettingsPanel form={form} set={set} />
-                    <Divider sx={{ my: 4 }} />
-                    <Box sx={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', mb: 2, flexWrap: 'wrap', gap: 2 }}>
-                      <Box>
-                        <Typography variant="h6" fontWeight={700} sx={{ mb: 0.5 }}>Email Templates</Typography>
-                        <Typography variant="body2" color="text.secondary">
-                          Manage transactional email templates — order confirmations, shipping updates, password resets, and more.
-                          Templates support Handlebars <code style={{ background: 'rgba(0,0,0,0.06)', padding: '1px 5px', borderRadius: 4 }}>{'{{variable}}'}</code> syntax and include a live preview.
-                        </Typography>
-                      </Box>
-                      <Button
-                        variant="contained"
-                        component={Link}
-                        to="/admin/email-templates"
-                        startIcon={<span style={{ fontSize: 18 }}>✉️</span>}
-                        sx={{ whiteSpace: 'nowrap', flexShrink: 0 }}
-                      >
-                        Manage Email Templates
-                      </Button>
-                    </Box>
-                    <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', sm: '1fr 1fr 1fr' }, gap: 2 }}>
-                      {[
-                        { icon: '🛍️', label: 'Order Placed' },
-                        { icon: '📦', label: 'Order Shipped' },
-                        { icon: '✅', label: 'Order Delivered' },
-                        { icon: '❌', label: 'Order Cancelled' },
-                        { icon: '💳', label: 'Order Refunded' },
-                        { icon: '👋', label: 'Welcome' },
-                        { icon: '✉️', label: 'Email Verification' },
-                        { icon: '🔑', label: 'Password Reset' },
-                        { icon: '⚠️', label: 'Low Stock Alert' },
-                      ].map(({ icon, label }) => (
-                        <Box key={label} sx={{ display: 'flex', alignItems: 'center', gap: 1.5, p: 1.5, border: '1px solid', borderColor: 'divider', borderRadius: 2 }}>
-                          <Typography fontSize={20}>{icon}</Typography>
-                          <Typography variant="body2" fontWeight={500}>{label}</Typography>
-                        </Box>
-                      ))}
-                    </Box>
                   </Box>
-                ) : (
-                  renderSections(panels[originalIndex])
-                )}
-
-              </Box>
+                  <Divider sx={{ my: 4 }} />
+                  <InventoryAlertSettingsPanel />
+                  <Divider sx={{ my: 4 }} />
+                  <Box sx={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', mb: 2, flexWrap: 'wrap', gap: 2 }}>
+                    <Box>
+                      <Typography variant="h6" fontWeight={700} sx={{ mb: 0.5 }}>Email Templates</Typography>
+                      <Typography variant="body2" color="text.secondary">
+                        Manage transactional email templates — order confirmations, shipping updates, password resets, and more.
+                        Templates support Handlebars <code style={{ background: 'rgba(0,0,0,0.06)', padding: '1px 5px', borderRadius: 4 }}>{'{{variable}}'}</code> syntax and include a live preview.
+                      </Typography>
+                    </Box>
+                    <Button
+                      variant="contained"
+                      component={Link}
+                      to="/admin/email-templates"
+                      startIcon={<span style={{ fontSize: 18 }}>✉️</span>}
+                      sx={{ whiteSpace: 'nowrap', flexShrink: 0 }}
+                    >
+                      Manage Email Templates
+                    </Button>
+                  </Box>
+                  <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', sm: '1fr 1fr 1fr' }, gap: 2 }}>
+                    {[
+                      { icon: '🛍️', label: 'Order Placed' },
+                      { icon: '📦', label: 'Order Shipped' },
+                      { icon: '✅', label: 'Order Delivered' },
+                      { icon: '❌', label: 'Order Cancelled' },
+                      { icon: '💳', label: 'Order Refunded' },
+                      { icon: '👋', label: 'Welcome' },
+                      { icon: '✉️', label: 'Email Verification' },
+                      { icon: '🔑', label: 'Password Reset' },
+                      { icon: '⚠️', label: 'Low Stock Alert' },
+                    ].map(({ icon, label }) => (
+                      <Box key={label} sx={{ display: 'flex', alignItems: 'center', gap: 1.5, p: 1.5, border: '1px solid', borderColor: 'divider', borderRadius: 2 }}>
+                        <Typography fontSize={20}>{icon}</Typography>
+                        <Typography variant="body2" fontWeight={500}>{label}</Typography>
+                      </Box>
+                    ))}
+                  </Box>
+                </Box>
+              ) : (
+                <Box sx={{ pointerEvents: canManageSettings ? 'auto' : 'none', opacity: canManageSettings ? 1 : 0.75 }}>
+                  {renderSections(panels[originalIndex])}
+                </Box>
+              )}
             </Box>
           </Paper>
         </Grid>

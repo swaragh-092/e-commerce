@@ -108,7 +108,8 @@ const send = async (
     userId = null,
     orderId = null,
     channel = 'email',
-    t = null
+    t = null,
+    dedupeKey = null
 ) => {
     // Defensively handle positional argument variations (e.g. if a transaction is passed as channel or orderId)
     if (orderId && typeof orderId === 'object' && !Array.isArray(orderId)) {
@@ -150,6 +151,7 @@ const send = async (
             variables: normalizedVariables,
             status: 'queued',
             nextAttemptAt: new Date(),
+            ...(dedupeKey ? { dedupeKey } : {}),
         };
 
         if (channel === 'email') {
@@ -158,6 +160,14 @@ const send = async (
             jobData.recipientPhone = recipient;
         }
 
+        if (dedupeKey) {
+            const [, created] = await NotificationQueue.findOrCreate({
+                where: { dedupeKey },
+                defaults: jobData,
+                ...queryOptions,
+            });
+            return created;
+        }
         await NotificationQueue.create(jobData, queryOptions);
 
         return true;
@@ -362,4 +372,8 @@ const sendDeliveryUpdate = async (userId, orderId, status) => {
     }
 };
 
-module.exports = { send, sendImmediate, sendToUser, sendToAdmins, sendDeliveryUpdate, processQueued };
+const sendOnce = (templateName, recipient, variables = {}, userId = null, orderId = null, channel = 'email', dedupeKey) => {
+    if (!dedupeKey) return Promise.resolve(false);
+    return send(templateName, recipient, variables, userId, orderId, channel, null, dedupeKey);
+};
+module.exports = { send, sendOnce, sendImmediate, sendToUser, sendToAdmins, sendDeliveryUpdate, processQueued };
