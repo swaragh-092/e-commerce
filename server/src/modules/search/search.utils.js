@@ -1,5 +1,6 @@
 'use strict';
 
+const MIN_SEARCH_QUERY_LENGTH = 2;
 const MAX_SEARCH_QUERY_LENGTH = 100;
 
 const normalizeSearchQuery = (query) => {
@@ -16,6 +17,7 @@ const normalizeSearchQuery = (query) => {
 const buildSearchPattern = (query) => `%${query.replace(/[\\%_]/g, '\\$&')}%`;
 
 module.exports = {
+  MIN_SEARCH_QUERY_LENGTH,
   MAX_SEARCH_QUERY_LENGTH,
   normalizeSearchQuery,
   buildSearchPattern,

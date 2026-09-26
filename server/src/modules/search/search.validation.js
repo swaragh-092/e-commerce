@@ -1,7 +1,7 @@
 'use strict';
 
 const Joi = require('joi');
-const { MAX_SEARCH_QUERY_LENGTH, normalizeSearchQuery } = require('./search.utils');
+const { MIN_SEARCH_QUERY_LENGTH, MAX_SEARCH_QUERY_LENGTH, normalizeSearchQuery } = require('./search.utils');
 
 /**
  * Search query validation.
@@ -9,18 +9,17 @@ const { MAX_SEARCH_QUERY_LENGTH, normalizeSearchQuery } = require('./search.util
  * WHY min(2): Single-character searches return too many irrelevant results
  * and create unnecessary DB load.
  *
- * WHY max(100): Prevents oversized query strings that could slow down
- * to_tsvector parsing or be used for DoS.
+ * WHY max(100): Caps the normalized query length to bound search work.
  *
  * WHY limit max(50): Caps the maximum page size to prevent clients from
  * requesting the entire catalog in one request.
  */
 const searchQuerySchema = Joi.object({
   q: Joi.string().custom((value, helpers) => {
-    if (Array.from(value).length > MAX_SEARCH_QUERY_LENGTH) return helpers.error('search.max');
     const normalized = normalizeSearchQuery(value);
-    if (normalized.length < 2) return helpers.error('search.min');
-    if (normalized.length > MAX_SEARCH_QUERY_LENGTH) return helpers.error('search.max');
+    const normalizedLength = Array.from(normalized).length;
+    if (normalizedLength < MIN_SEARCH_QUERY_LENGTH) return helpers.error('search.min');
+    if (normalizedLength > MAX_SEARCH_QUERY_LENGTH) return helpers.error('search.max');
     return normalized;
   }).required()
     .messages({
