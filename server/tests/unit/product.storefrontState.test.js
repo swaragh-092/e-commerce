@@ -97,3 +97,40 @@ describe('product storefront summary counts', () => {
     expect(mapProductStorefrontCounts()).toEqual({ published: 0, paused: 0, draft: 0, archived: 0 });
   });
 });
+
+describe('admin product status counts query execution', () => {
+  it('groups by canonical status and physical is_enabled column', async () => {
+    const { vi } = await import('vitest');
+    const { Product } = require('../../src/modules');
+    const productService = require('../../src/modules/product/product.service');
+    const SettingsService = require('../../src/modules/settings/settings.service');
+
+    vi.spyOn(Product, 'findAndCountAll').mockResolvedValue({ count: 0, rows: [] });
+    vi.spyOn(Product, 'findOne').mockResolvedValue({ min: 0, max: 0 });
+    vi.spyOn(Product, 'count').mockResolvedValue(0);
+    vi.spyOn(SettingsService, 'getByGroup').mockResolvedValue({ lowStockThreshold: 10 });
+    vi.spyOn(SettingsService, 'getFeatures').mockResolvedValue({ features: {} });
+
+    const findAllSpy = vi.spyOn(Product, 'findAll').mockResolvedValue([
+      { status: 'published', isEnabled: true, count: '5' },
+    ]);
+
+    const result = await productService.getProducts({}, 1, 20, true);
+
+    expect(findAllSpy).toHaveBeenCalledWith(
+      expect.objectContaining({
+        group: ['Product.status', 'Product.is_enabled'],
+      }),
+    );
+    expect(result.counts).toEqual({
+      published: 5,
+      paused: 0,
+      draft: 0,
+      archived: 0,
+      lowStock: 0,
+    });
+    vi.restoreAllMocks();
+  });
+});
+
+

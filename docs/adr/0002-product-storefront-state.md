@@ -1,4 +1,4 @@
-# 0001 - Unify product storefront state
+# 0002 - Unify product storefront state
 
 **Status:** accepted
 **Date:** 2026-09-26

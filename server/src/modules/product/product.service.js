@@ -756,7 +756,7 @@ exports.getProducts = async (filters, page, limit, isAdmin = false) => {
         'isEnabled',
         [Sequelize.fn('COUNT', Sequelize.literal('DISTINCT "Product"."id"')), 'count']
       ],
-      group: ['Product.status', 'Product.isEnabled'],
+      group: ['Product.status', 'Product.is_enabled'],
       subQuery: false, // Prevent complex subqueries that break GROUP BY
       raw: true
     });
