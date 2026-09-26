@@ -30,7 +30,7 @@ import DeleteOutlineIcon from '@mui/icons-material/DeleteOutline';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { useDebounce } from '../../hooks/useDebounce';
 import { searchProducts } from '../../services/searchService';
-import normalizeSearchQuery from '../../utils/searchQuery';
+import normalizeSearchQuery, { getSearchQueryLength } from '../../utils/searchQuery';
 
 const PRODUCT_LIMIT = 5;
 const DEBOUNCE_MS = 300;
@@ -116,7 +116,7 @@ const SearchWidget = ({
         ? parsed
             .filter((item) => typeof item === 'string')
             .map(normalizeSearchQuery)
-            .filter((item) => item.length >= MIN_QUERY_LENGTH && item.length <= MAX_QUERY_LENGTH)
+            .filter((item) => getSearchQueryLength(item) >= MIN_QUERY_LENGTH && getSearchQueryLength(item) <= MAX_QUERY_LENGTH)
             .slice(0, MAX_RECENT_SEARCHES)
         : [];
       setRecentSearches(validSearches);
@@ -127,7 +127,7 @@ const SearchWidget = ({
 
   const saveRecentSearch = (term) => {
     const normalized = normalizeSearchQuery(term);
-    if (normalized.length < MIN_QUERY_LENGTH || normalized.length > MAX_QUERY_LENGTH) return;
+    if (getSearchQueryLength(normalized) < MIN_QUERY_LENGTH || getSearchQueryLength(normalized) > MAX_QUERY_LENGTH) return;
 
     setRecentSearches((prev) => {
       const filtered = prev.filter((item) => (
@@ -175,8 +175,8 @@ const SearchWidget = ({
   useEffect(() => {
     if (
       !showSuggestions
-      || normalizedDebouncedQuery.length < MIN_QUERY_LENGTH
-      || normalizedDebouncedQuery.length > MAX_QUERY_LENGTH
+      || getSearchQueryLength(normalizedDebouncedQuery) < MIN_QUERY_LENGTH
+      || getSearchQueryLength(normalizedDebouncedQuery) > MAX_QUERY_LENGTH
     ) {
       setResults(null);
       setSuggestion(null);
@@ -373,15 +373,14 @@ const SearchWidget = ({
             size="small"
             fullWidth
             placeholder={placeholder}
-            inputProps={{ maxLength: MAX_QUERY_LENGTH }}
             value={query || ''}
             onChange={(e) => setQuery(e.target.value)}
             onKeyDown={handleKeyDown}
             onFocus={() => {
               setIsExpanded(true);
-              if (normalizedQuery.length < MIN_QUERY_LENGTH && recentSearches.length > 0) {
+              if (getSearchQueryLength(normalizedQuery) < MIN_QUERY_LENGTH && recentSearches.length > 0) {
                 setOpen(true);
-              } else if (results && normalizedDebouncedQuery.length >= MIN_QUERY_LENGTH) {
+              } else if (results && getSearchQueryLength(normalizedDebouncedQuery) >= MIN_QUERY_LENGTH) {
                 setOpen(true);
               }
             }}
@@ -476,7 +475,7 @@ const SearchWidget = ({
         )}
 
         {/* No Results Popper */}
-        {showSuggestions && open && !loading && normalizedDebouncedQuery.length >= MIN_QUERY_LENGTH && !hasAnyResults && (
+        {showSuggestions && open && !loading && getSearchQueryLength(normalizedDebouncedQuery) >= MIN_QUERY_LENGTH && !hasAnyResults && (
         <Popper
            open={true}
            anchorEl={inputRef.current}
