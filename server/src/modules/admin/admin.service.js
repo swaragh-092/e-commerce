@@ -111,7 +111,7 @@ const getStats = async () => {
     }),
     Order.count(),
     User.count({ where: { role: 'customer' } }),
-    Product.count({ where: { status: 'published' } }),
+    Product.count({ where: { status: 'published', isEnabled: true } }),
     Order.count({ where: { status: 'pending_payment' } }),
     getInventorySummary(threshold),
     Review.count({ where: { status: 'pending' } }),

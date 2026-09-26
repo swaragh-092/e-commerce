@@ -134,7 +134,7 @@ const updateProductSchema = Joi.object({
     igst: Joi.number().min(0).max(1),
   }).allow(null),
   type: Joi.string().valid('simple', 'variable', 'combo'),
-  status: Joi.string().valid('draft', 'published'),
+  status: Joi.string().valid('draft', 'published', 'archived'),
   isFeatured: Joi.boolean(),
   categoryIds: Joi.array().items(Joi.string().uuid()),
   brandId: Joi.string().uuid().allow(null),
@@ -215,7 +215,7 @@ const bulkDeleteSchema = Joi.object({
 const bulkUpdateSchema = Joi.object({
   productIds: Joi.array().items(Joi.string().uuid()).min(1).required(),
   data: Joi.object({
-    status: Joi.string().valid('draft', 'published'),
+    status: Joi.string().valid('draft', 'published', 'archived'),
     isEnabled: Joi.boolean(),
     saleLabel: Joi.string().max(100).allow('', null),
   }).min(1).required(),
