@@ -1,6 +1,13 @@
 'use strict';
 const Joi = require('joi');
 
+
+const productListQuerySchema = Joi.object({
+  page: Joi.number().integer().min(1).default(1),
+  limit: Joi.number().integer().min(1).max(1000).default(20),
+  search: Joi.string().max(100).allow('').optional(),
+}).unknown();
+
 const createProductSchema = Joi.object({
   name: Joi.string().max(255).required(),
   slug: Joi.string().max(255).allow('', null),
@@ -204,4 +211,4 @@ const bulkUpdateSchema = Joi.object({
   }).min(1).required(),
 });
 
-module.exports = { createProductSchema, updateProductSchema, bulkSaleSchema, bulkDeleteSchema, bulkUpdateSchema };
+module.exports = { productListQuerySchema, createProductSchema, updateProductSchema, bulkSaleSchema, bulkDeleteSchema, bulkUpdateSchema };

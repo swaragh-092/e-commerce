@@ -1,6 +1,7 @@
 'use strict';
 
 const Joi = require('joi');
+const { MAX_SEARCH_QUERY_LENGTH, normalizeSearchQuery } = require('./search.utils');
 
 /**
  * Search query validation.
@@ -15,10 +16,16 @@ const Joi = require('joi');
  * requesting the entire catalog in one request.
  */
 const searchQuerySchema = Joi.object({
-  q: Joi.string().trim().min(2).max(100).required()
+  q: Joi.string().custom((value, helpers) => {
+    if (Array.from(value).length > MAX_SEARCH_QUERY_LENGTH) return helpers.error('search.max');
+    const normalized = normalizeSearchQuery(value);
+    if (normalized.length < 2) return helpers.error('search.min');
+    if (normalized.length > MAX_SEARCH_QUERY_LENGTH) return helpers.error('search.max');
+    return normalized;
+  }).required()
     .messages({
-      'string.min': 'Search query must be at least 2 characters',
-      'string.max': 'Search query must be at most 100 characters',
+      'search.min': 'Search query must be at least 2 characters',
+      'search.max': 'Search query must be at most 100 characters',
       'any.required': 'Search query is required',
     }),
   page: Joi.number().integer().min(1).default(1),

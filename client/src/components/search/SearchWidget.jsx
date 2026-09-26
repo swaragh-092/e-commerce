@@ -30,10 +30,12 @@ import DeleteOutlineIcon from '@mui/icons-material/DeleteOutline';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { useDebounce } from '../../hooks/useDebounce';
 import { searchProducts } from '../../services/searchService';
+import normalizeSearchQuery from '../../utils/searchQuery';
 
 const PRODUCT_LIMIT = 5;
 const DEBOUNCE_MS = 300;
 const MIN_QUERY_LENGTH = 2;
+const MAX_QUERY_LENGTH = 100;
 const MAX_RECENT_SEARCHES = 5;
 const RECENT_SEARCHES_KEY = 'store_recent_searches';
 
@@ -62,7 +64,8 @@ const SearchWidget = ({
   const location = useLocation();
   const theme = useTheme();
 
-  const routeSearchValue = new URLSearchParams(location.search).get('search') || '';
+  const routeParams = new URLSearchParams(location.search);
+  const routeSearchValue = routeParams.get('search') || routeParams.get('q') || '';
   const [query, setQuery] = useState(initialValue || (variant === 'header' ? routeSearchValue : ''));
   const [results, setResults] = useState(null);
   const [suggestion, setSuggestion] = useState(null);
@@ -74,6 +77,8 @@ const SearchWidget = ({
 
   const inputRef = useRef(null);
   const debouncedQuery = useDebounce(query, DEBOUNCE_MS);
+  const normalizedQuery = normalizeSearchQuery(query);
+  const normalizedDebouncedQuery = normalizeSearchQuery(debouncedQuery);
 
   // Reactive Popper width
   const [popperWidth, setPopperWidth] = useState(280);
@@ -101,65 +106,90 @@ const SearchWidget = ({
     }
   }, [isExpanded, onExpandedChange]);
 
-  // Load recent searches from localStorage
+  // Load and validate recent searches; localStorage can contain stale or malformed values.
   useEffect(() => {
-    const saved = localStorage.getItem(RECENT_SEARCHES_KEY);
-    if (saved) {
-      try {
-        setRecentSearches(JSON.parse(saved));
-      } catch (e) {
-        setRecentSearches([]);
-      }
+    try {
+      const saved = localStorage.getItem(RECENT_SEARCHES_KEY);
+      if (!saved) return;
+      const parsed = JSON.parse(saved);
+      const validSearches = Array.isArray(parsed)
+        ? parsed
+            .filter((item) => typeof item === 'string')
+            .map(normalizeSearchQuery)
+            .filter((item) => item.length >= MIN_QUERY_LENGTH && item.length <= MAX_QUERY_LENGTH)
+            .slice(0, MAX_RECENT_SEARCHES)
+        : [];
+      setRecentSearches(validSearches);
+    } catch (_error) {
+      setRecentSearches([]);
     }
   }, []);
 
   const saveRecentSearch = (term) => {
-    const trimmed = term.trim();
-    if (!trimmed || trimmed.length < 2) return;
-    
-    setRecentSearches(prev => {
-      const filtered = prev.filter(s => s.toLowerCase() !== trimmed.toLowerCase());
-      const updated = [trimmed, ...filtered].slice(0, MAX_RECENT_SEARCHES);
-      localStorage.setItem(RECENT_SEARCHES_KEY, JSON.stringify(updated));
+    const normalized = normalizeSearchQuery(term);
+    if (normalized.length < MIN_QUERY_LENGTH || normalized.length > MAX_QUERY_LENGTH) return;
+
+    setRecentSearches((prev) => {
+      const filtered = prev.filter((item) => (
+        typeof item === 'string' && normalizeSearchQuery(item).toLowerCase() !== normalized.toLowerCase()
+      ));
+      const updated = [normalized, ...filtered].slice(0, MAX_RECENT_SEARCHES);
+      try {
+        localStorage.setItem(RECENT_SEARCHES_KEY, JSON.stringify(updated));
+      } catch (_error) {
+        // Search remains usable when browser storage is unavailable.
+      }
       return updated;
     });
   };
 
   const removeRecentSearch = (term) => {
-    setRecentSearches(prev => {
-      const updated = prev.filter(s => s !== term);
-      localStorage.setItem(RECENT_SEARCHES_KEY, JSON.stringify(updated));
+    setRecentSearches((prev) => {
+      const updated = prev.filter((item) => item !== term);
+      try {
+        localStorage.setItem(RECENT_SEARCHES_KEY, JSON.stringify(updated));
+      } catch (_error) {
+        // Ignore storage failures; this only affects persistence.
+      }
       return updated;
     });
   };
 
   const clearAllRecent = () => {
     setRecentSearches([]);
-    localStorage.removeItem(RECENT_SEARCHES_KEY);
+    try {
+      localStorage.removeItem(RECENT_SEARCHES_KEY);
+    } catch (_error) {
+      // Ignore storage failures; this only affects persistence.
+    }
   };
 
-  const allItems = buildItemList(results, !query ? recentSearches : []);
+  const allItems = buildItemList(results, !normalizedQuery ? recentSearches : []);
 
   // Sync initial value
   useEffect(() => {
     setQuery(initialValue || (variant === 'header' ? routeSearchValue : ''));
   }, [initialValue, routeSearchValue, variant]);
 
-  // Fetch results when debounced query changes
+  // Fetch normalized suggestions and discard responses from obsolete queries.
   useEffect(() => {
-    if (!showSuggestions || !debouncedQuery || debouncedQuery.length < MIN_QUERY_LENGTH) {
+    if (
+      !showSuggestions
+      || normalizedDebouncedQuery.length < MIN_QUERY_LENGTH
+      || normalizedDebouncedQuery.length > MAX_QUERY_LENGTH
+    ) {
       setResults(null);
       setSuggestion(null);
       setOpen(false);
-      return;
+      setLoading(false);
+      return undefined;
     }
 
     let cancelled = false;
-
     const fetchResults = async () => {
       setLoading(true);
       try {
-        const res = await searchProducts({ q: debouncedQuery, limit: PRODUCT_LIMIT });
+        const res = await searchProducts({ q: normalizedDebouncedQuery, limit: PRODUCT_LIMIT });
         if (!cancelled) {
           setResults(res.data);
           setSuggestion(res.data?.suggestion || null);
@@ -167,7 +197,11 @@ const SearchWidget = ({
           setSelectedIndex(-1);
         }
       } catch (_err) {
-        if (!cancelled) setResults(null);
+        if (!cancelled) {
+          setResults(null);
+          setSuggestion(null);
+          setOpen(false);
+        }
       } finally {
         if (!cancelled) setLoading(false);
       }
@@ -175,7 +209,7 @@ const SearchWidget = ({
 
     fetchResults();
     return () => { cancelled = true; };
-  }, [debouncedQuery, showSuggestions]);
+  }, [normalizedDebouncedQuery, showSuggestions]);
 
   const closeDropdown = useCallback(() => {
     setOpen(false);
@@ -183,15 +217,15 @@ const SearchWidget = ({
   }, []);
 
   const executeSearch = (q) => {
-    const searchTrimmed = q.trim();
-    if (!searchTrimmed) return;
+    const searchTerm = normalizeSearchQuery(q);
+    if (!searchTerm) return;
 
     if (onSearch) {
-      onSearch(searchTrimmed);
+      onSearch(searchTerm);
     } else {
-      navigate(`/products?search=${encodeURIComponent(searchTrimmed)}`);
+      navigate(`/search?q=${encodeURIComponent(searchTerm)}`);
     }
-    saveRecentSearch(searchTrimmed);
+    saveRecentSearch(searchTerm);
     closeDropdown();
   };
 
@@ -339,14 +373,15 @@ const SearchWidget = ({
             size="small"
             fullWidth
             placeholder={placeholder}
+            inputProps={{ maxLength: MAX_QUERY_LENGTH }}
             value={query || ''}
             onChange={(e) => setQuery(e.target.value)}
             onKeyDown={handleKeyDown}
             onFocus={() => {
               setIsExpanded(true);
-              if (query.length < MIN_QUERY_LENGTH && recentSearches.length > 0) {
+              if (normalizedQuery.length < MIN_QUERY_LENGTH && recentSearches.length > 0) {
                 setOpen(true);
-              } else if (results && debouncedQuery.length >= MIN_QUERY_LENGTH) {
+              } else if (results && normalizedDebouncedQuery.length >= MIN_QUERY_LENGTH) {
                 setOpen(true);
               }
             }}
@@ -441,7 +476,7 @@ const SearchWidget = ({
         )}
 
         {/* No Results Popper */}
-        {showSuggestions && open && !loading && debouncedQuery.length >= MIN_QUERY_LENGTH && !hasAnyResults && (
+        {showSuggestions && open && !loading && normalizedDebouncedQuery.length >= MIN_QUERY_LENGTH && !hasAnyResults && (
         <Popper
            open={true}
            anchorEl={inputRef.current}
@@ -456,7 +491,7 @@ const SearchWidget = ({
            <Paper elevation={0} sx={{ mt: 1, borderRadius: 2, p: 3, textAlign: 'center', border: `1px solid ${alpha(theme.palette.common.black, 0.08)}`, boxShadow: '0 14px 40px rgba(15, 23, 42, 0.18)' }}>
              <SearchOffIcon sx={{ fontSize: 40, color: 'text.disabled', mb: 1.5 }} />
              <Typography variant="body2" color="text.secondary" sx={{ mb: 1 }}>
-               No matching results for <strong>"{debouncedQuery}"</strong>
+               No matching results for <strong>"{normalizedDebouncedQuery}"</strong>
              </Typography>
              {suggestion && (
                <Chip
