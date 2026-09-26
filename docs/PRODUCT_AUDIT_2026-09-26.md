@@ -12,6 +12,7 @@ The product is a custom React/Node commerce platform branded Swaragh, currently 
 - Browsed the deployed storefront at https://ecom.gururajhr.in at 390 px, 768 px, and desktop width. Signed in to admin with the supplied account to inspect read-only dashboard, catalog, orders, customers, analytics, reviews, settings, payment gateways, shipping, audit log, access control, features, and coupons pages. Logged out after the review.
 - Inspected public home, product list, product detail, search, categories, brands, login/register, cart/checkout, payment result routes, and 404. No order, payment, product, or settings mutation was performed.
 - Browser evidence is from the deployed site on 2026-09-26. Code and tests are from the repository’s then-current working tree. The repository already had 49 modified/untracked working-tree entries; this report is not a clean-branch comparison.
+- Follow-up after the live review: the current local working tree contains edits for the category query’s invalid variant column, variant price recalculation, verified payment success, and variant-aware inventory health. I also aligned the dashboard’s stock threshold to include equality, matching the admin product filter. These are local working-tree changes; they have not been deployed or verified against the production site.
 - The local API was not running, so local storefront pages that require it could not provide a useful end-to-end check. The deployed site supplied the live behavioral evidence. A complete sandbox payment, email delivery, shipping-label, refund, and multi-user authorization test was not performed.
 
 ## Product and feature inventory
@@ -62,7 +63,7 @@ The product is a custom React/Node commerce platform branded Swaragh, currently 
 
 8. **Heading hierarchy is inconsistent.** The live /products page has no H1; “Our Products” is an H4. Several other page titles use H4/H5 and product-card prices use heading elements, creating a noisy document outline. Use one descriptive H1 per page and reserve heading levels for section structure. The mobile 390 px listing had no horizontal overflow and the inspected listing images had alt text.
 
-9. **Initial JavaScript weight needs a measured budget.** The current production build passes but Vite warns about chunks above 500 KB. The largest listed JS chunk is 773.48 KB minified (245.93 KB gzip). The HTML also loads the Razorpay checkout script globally, although only payment flows need it. Measure storefront Web Vitals on production, split heavy admin/chart/editor/document dependencies, and load the payment SDK only when needed. No production LCP/CLS/INP or throttled network measurement was available for this audit.
+9. **Initial JavaScript weight needs a measured budget.** The latest production build passes without a chunk-size warning. The largest listed JS chunk is 455.86 KB minified (151.49 KB gzip). The HTML also loads the Razorpay checkout script globally, although only payment flows need it. Measure storefront Web Vitals on production, split heavy admin/chart/editor/document dependencies, and load the payment SDK only when needed. No production LCP/CLS/INP or throttled network measurement was available for this audit.
 
 10. **Access tokens are stored in localStorage.** client/src/services/authService.js stores access and refresh tokens there. A successful script injection could read them. Prefer secure HttpOnly/SameSite cookies where the API architecture allows; otherwise use short-lived access tokens, tightly scoped refresh handling, strong CSP and regression checks for stored/reflected content. This is a hardening concern, not evidence of an exploitable XSS found during this review.
 
@@ -98,9 +99,9 @@ The product is a custom React/Node commerce platform branded Swaragh, currently 
 - Client: React 18, Vite and MUI; route structure separates storefront, account and protected admin areas.
 - Server: Node/Express with Sequelize/PostgreSQL and distinct domain modules for catalog, cart, orders, payments, inventory, content and administration.
 - Background jobs cover cleanup, inventory alerts, notifications, analytics and shipping operations.
-- Existing automated suites passed on the latest working tree: client 14 files / 44 tests; server 20 files / 178 tests.
-- Commands run: cd client && npm test; cd server && npm test -- --run; cd client && npm run build -- --outDir /tmp/ecommerce-audit-current --emptyOutDir; cd client && node --check src/utils/seo/buildStructuredData.js.
-- The current frontend production build passed in 52 seconds after transforming 14,491 modules. It emitted a chunk-size warning; the largest listed JS chunk is 773.48 KB minified / 245.93 KB gzip.
+- Existing automated suites passed on the latest working tree: client 19 files / 61 tests; server 23 files / 186 tests.
+- Commands run: cd client && npm test; cd server && npm test -- --run; cd client && npm run build -- --outDir /tmp/ecommerce-audit-followup --emptyOutDir; cd client && node --check src/utils/seo/buildStructuredData.js.
+- The latest frontend production build passed in 17.32 seconds after transforming 14,495 modules. It emitted no chunk-size warning; the largest listed JS chunk is 455.86 KB minified / 151.49 KB gzip.
 - No end-to-end browser test configuration was found. Unit/server tests do not cover the live category, pricing, payment confirmation or inventory-health issues found here.
 - The local database/API was not running during the initial local app review. The final build and test results describe the current working-tree snapshot, which contained substantial existing work in progress.
 
@@ -175,7 +176,7 @@ The competitors set a high bar through integrated ecosystems and dependable orde
 | Performance | 5 | Build succeeds and assets are split, but the main chunk triggers a size warning; production vitals were not measured. |
 | Security posture | 6 | RBAC, rate limiting, Helmet and audit trails exist; token storage and deployment-secret guardrails need review. |
 | Operations and observability | 4 | Rich admin tools exist, but the stock-health contradiction undermines operational confidence. |
-| Test confidence | 6 | 222 client/server tests pass; no E2E suite was found for the critical browser journeys. |
+| Test confidence | 6 | 247 client/server tests pass; no E2E suite was found for the critical browser journeys. |
 | Competitive readiness | 4 | Custom feature breadth is strong; core reliability and ecosystem breadth trail mature platforms. |
 
 ## Recommended acceptance checklist
