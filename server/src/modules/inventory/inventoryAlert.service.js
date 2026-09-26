@@ -339,20 +339,28 @@ const synchronizeInventoryAlerts = async ({ now = new Date() } = {}) => {
     const byKey = new Map(existingRows.map((row) => [row.inventoryKey, row]));
 
     for (const target of targets) {
-      const row = byKey.get(target.inventoryKey);
-      if (!row) {
-        const created = await InventoryAlert.create({
-          ...target,
-          firstDetectedAt: now,
-          lastDetectedAt: now,
-          status: 'open',
-        }, { transaction });
-        if (target.severity === 'out_of_stock') newlyOutOfStock.push({ ...target, id: created.id });
-        continue;
+      let alertRow = byKey.get(target.inventoryKey);
+      if (!alertRow) {
+        const [foundOrCreated, wasCreated] = await InventoryAlert.findOrCreate({
+          where: { inventoryKey: target.inventoryKey },
+          defaults: {
+            ...target,
+            firstDetectedAt: now,
+            lastDetectedAt: now,
+            status: 'open',
+          },
+          transaction,
+          lock: transaction.LOCK.UPDATE,
+        });
+        if (wasCreated) {
+          if (target.severity === 'out_of_stock') newlyOutOfStock.push({ ...target, id: foundOrCreated.id });
+          continue;
+        }
+        alertRow = foundOrCreated;
       }
 
-      if (row.status === 'resolved') {
-        await row.update({
+      if (alertRow.status === 'resolved') {
+        await alertRow.update({
           ...target,
           status: 'open',
           firstDetectedAt: now,
@@ -362,13 +370,13 @@ const synchronizeInventoryAlerts = async ({ now = new Date() } = {}) => {
           acknowledgedAt: null,
           resolvedAt: null,
         }, { transaction });
-        if (target.severity === 'out_of_stock') newlyOutOfStock.push({ ...target, id: row.id });
+        if (target.severity === 'out_of_stock') newlyOutOfStock.push({ ...target, id: alertRow.id });
         byKey.delete(target.inventoryKey);
         continue;
       }
 
-      const worsened = row.severity === 'low_stock' && target.severity === 'out_of_stock';
-      await row.update({
+      const worsened = alertRow.severity === 'low_stock' && target.severity === 'out_of_stock';
+      await alertRow.update({
         severity: target.severity,
         quantity: target.quantity,
         reservedQty: target.reservedQty,
@@ -382,7 +390,7 @@ const synchronizeInventoryAlerts = async ({ now = new Date() } = {}) => {
           resolvedAt: null,
         } : {}),
       }, { transaction });
-      if (worsened) newlyOutOfStock.push({ ...target, id: row.id });
+      if (worsened) newlyOutOfStock.push({ ...target, id: alertRow.id });
       byKey.delete(target.inventoryKey);
     }
 
@@ -390,28 +398,6 @@ const synchronizeInventoryAlerts = async ({ now = new Date() } = {}) => {
       if (currentKeys.has(inventoryKey)) continue;
       if (row.status === 'resolved') continue;
       await row.update({ status: 'resolved', resolvedAt: now, lastDetectedAt: now }, { transaction });
-    }
-
-    // Previously resolved items that have become at-risk are re-opened.
-    const resolvedRows = await InventoryAlert.findAll({
-      where: { inventoryKey: { [Op.in]: [...currentKeys] }, status: 'resolved' },
-      transaction,
-      lock: transaction.LOCK.UPDATE,
-    });
-    for (const row of resolvedRows) {
-      const target = targets.find((item) => item.inventoryKey === row.inventoryKey);
-      if (!target) continue;
-      await row.update({
-        ...target,
-        status: 'open',
-        firstDetectedAt: now,
-        lastDetectedAt: now,
-        lastNotifiedAt: null,
-        acknowledgedBy: null,
-        acknowledgedAt: null,
-        resolvedAt: null,
-      }, { transaction });
-      if (target.severity === 'out_of_stock') newlyOutOfStock.push({ ...target, id: row.id });
     }
   });
 
@@ -425,7 +411,7 @@ const alertIncludes = [
   { model: User, as: 'acknowledger', attributes: ['id', 'firstName', 'lastName'] },
 ];
 
-const listActiveAlerts = async ({ synchronize = true, limit = 200 } = {}) => {
+const listActiveAlerts = async ({ synchronize = false, limit = 200 } = {}) => {
   if (synchronize) await synchronizeInventoryAlerts();
   const query = {
     where: { status: { [Op.in]: ACTIVE_ALERT_STATES } },
@@ -542,7 +528,7 @@ const sendAlertToRecipients = async ({ recipients, variables, dedupePrefix, now 
 };
 
 const runAlertCycle = async ({ now = new Date() } = {}) => {
-  const { threshold, newlyOutOfStock } = await synchronizeInventoryAlerts({ now });
+  const { newlyOutOfStock } = await synchronizeInventoryAlerts({ now });
   const config = await getConfig();
   const { recipients } = await getRecipientsForConfig(config);
   if (!recipients.length) {

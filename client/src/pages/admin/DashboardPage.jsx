@@ -6,8 +6,12 @@ import { useAuth } from '../../hooks/useAuth';
 import { getEnabledDashboardWidgets, getOrderedDashboardWidgets } from '../../components/admin/dashboard/dashboardWidgets';
 import { densitySpacing, sizeToGrid } from '../../components/admin/dashboard/dashboardUtils';
 import { getApiErrorMessage } from '../../utils/apiErrors';
+import { PERMISSIONS } from '../../utils/permissions';
 
 const DashboardPage = () => {
+  const { hasPermission, hasAnyPermission } = useAuth();
+  const canReadProducts = hasPermission(PERMISSIONS.PRODUCTS_READ);
+
   const [stats, setStats] = useState(null);
   const [lowStock, setLowStock] = useState([]);
   const [recentOrders, setRecentOrders] = useState([]);
@@ -20,7 +24,10 @@ const DashboardPage = () => {
     setLoading(true);
     setError('');
     setSectionErrors({});
-    return Promise.allSettled([getStats(), getLowStock(), getRecentOrders(), getInventoryAlerts()])
+    const lowStockPromise = canReadProducts ? getLowStock() : Promise.resolve({ data: { data: [] } });
+    const inventoryAlertsPromise = canReadProducts ? getInventoryAlerts() : Promise.resolve({ data: { data: null } });
+
+    return Promise.allSettled([getStats(), lowStockPromise, getRecentOrders(), inventoryAlertsPromise])
       .then(([s, ls, ro, ia]) => {
         const errors = {};
         if (s.status === 'fulfilled') setStats(s.value.data.data);
@@ -47,11 +54,10 @@ const DashboardPage = () => {
 
   useEffect(() => {
     loadDashboard();
-  }, []);
+  }, [canReadProducts]);
 
   const { settings } = useSettings();
   const { formatPrice } = useCurrency();
-  const { hasAnyPermission } = useAuth();
   const adminSettings = settings?.admin || {};
 
   const defaultChartPeriod = adminSettings['dashboard.defaultChartPeriod'] || 'monthly';

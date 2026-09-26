@@ -12,6 +12,8 @@ const { inventoryAlertConfigSchema, updateInventoryAlertSchema } = require('../i
 
 
 
+const { inventoryAlertLimiter, inventoryAlertTestLimiter } = require('../../middleware/rateLimiter.middleware');
+
 const adminOnly = [authenticate, authorizePermissions(PERMISSIONS.DASHBOARD_VIEW)];
 const accessReadOnly = [
 	authenticate,
@@ -33,11 +35,44 @@ router.get(
 	validate(salesChartQuerySchema, 'query'),
 	adminController.getSalesChart
 );
-router.get('/dashboard/inventory-alerts', ...adminOnly, adminController.getInventoryAlerts);
-router.patch('/dashboard/inventory-alerts/:id', authenticate, authorizePermissions(PERMISSIONS.PRODUCTS_UPDATE), validate(idParamSchema, 'params'), validate(updateInventoryAlertSchema), adminController.updateInventoryAlert);
-router.get('/inventory-alerts/config', authenticate, authorizePermissions(PERMISSIONS.SETTINGS_READ), adminController.getInventoryAlertConfig);
-router.put('/inventory-alerts/config', authenticate, authorizePermissions(PERMISSIONS.NOTIFICATIONS_MANAGE), validate(inventoryAlertConfigSchema), adminController.saveInventoryAlertConfig);
-router.post('/inventory-alerts/test', authenticate, authorizePermissions(PERMISSIONS.NOTIFICATIONS_MANAGE), adminController.testInventoryAlertEmail);
+router.get(
+	'/dashboard/inventory-alerts',
+	authenticate,
+	authorizePermissions(PERMISSIONS.DASHBOARD_VIEW, PERMISSIONS.PRODUCTS_READ),
+	inventoryAlertLimiter,
+	adminController.getInventoryAlerts
+);
+router.patch(
+	'/dashboard/inventory-alerts/:id',
+	authenticate,
+	authorizePermissions(PERMISSIONS.PRODUCTS_UPDATE),
+	inventoryAlertLimiter,
+	validate(idParamSchema, 'params'),
+	validate(updateInventoryAlertSchema),
+	adminController.updateInventoryAlert
+);
+router.get(
+	'/inventory-alerts/config',
+	authenticate,
+	authorizePermissions(PERMISSIONS.SETTINGS_READ),
+	inventoryAlertLimiter,
+	adminController.getInventoryAlertConfig
+);
+router.put(
+	'/inventory-alerts/config',
+	authenticate,
+	authorizePermissions(PERMISSIONS.NOTIFICATIONS_MANAGE),
+	inventoryAlertLimiter,
+	validate(inventoryAlertConfigSchema),
+	adminController.saveInventoryAlertConfig
+);
+router.post(
+	'/inventory-alerts/test',
+	authenticate,
+	authorizePermissions(PERMISSIONS.NOTIFICATIONS_MANAGE),
+	inventoryAlertTestLimiter,
+	adminController.testInventoryAlertEmail
+);
 router.get('/dashboard/low-stock', ...adminOnly, validate(lowStockQuerySchema, 'query'), adminController.getLowStock);
 router.get('/dashboard/recent-orders', ...adminOnly, adminController.getRecentOrders);
 router.get('/access-control/roles', ...accessReadOnly, adminController.getAccessRoles);
