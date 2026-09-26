@@ -484,6 +484,7 @@ exports.getProducts = async (filters, page, limit, isAdmin = false) => {
       where[Op.or] = [
         { name: { [Op.iLike]: searchPattern } },
         { description: { [Op.iLike]: searchPattern } },
+        { shortDescription: { [Op.iLike]: searchPattern } },
         { sku: { [Op.iLike]: searchPattern } },
         Sequelize.literal(`"Product"."search_vector" @@ plainto_tsquery('simple', ${escapedQuery})`),
         Sequelize.literal(`EXISTS (
