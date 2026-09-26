@@ -19,6 +19,7 @@ import {
   Grid,
   InputAdornment,
 } from '@mui/material';
+import InventoryAlertSettingsPanel from '../../components/admin/settings/InventoryAlertSettingsPanel';
 import { updateSettings, getEmailTemplates, updateEmailTemplate, sendTestEmail as sendTestEmailApi } from '../../services/adminService';
 import { getAllSettings } from '../../services/settingsService';
 import { useNotification } from '../../context/NotificationContext';
@@ -609,6 +610,8 @@ const SettingsPage = () => {
                 {isMessagingTab ? (
                   <Box>
                     <MessagingSettingsPanel form={form} set={set} />
+                    <Divider sx={{ my: 4 }} />
+                    <InventoryAlertSettingsPanel />
                     <Divider sx={{ my: 4 }} />
                     <Box sx={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', mb: 2, flexWrap: 'wrap', gap: 2 }}>
                       <Box>

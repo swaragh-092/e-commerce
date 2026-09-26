@@ -1,5 +1,5 @@
 import KpiCardsWidget from './KpiCardsWidget';
-import LowStockWidget from './LowStockWidget';
+import LowStockWidget from './InventoryAlertsWidget';
 import OperationsSummaryWidget from './OperationsSummaryWidget';
 import RecentOrdersWidget from './RecentOrdersWidget';
 import SalesChartWidget from './SalesChartWidget';

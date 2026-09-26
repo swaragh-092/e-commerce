@@ -14,6 +14,7 @@ const {
   getPermissionsForUser,
 } = require('../../config/permissions');
 const { getPagination } = require('../../utils/pagination');
+const { buildInventorySummary, normalizeInventoryThreshold } = require('../inventory/inventoryHealth.service');
 
 const roleInclude = [
   {
@@ -65,79 +66,14 @@ const serializeAccessUser = (user) => {
 const canManageCustomRoles = (user) => getPermissionsForUser(user).includes(PERMISSIONS.ROLES_MANAGE);
 const canManageSystemRoles = (user) => getPermissionsForUser(user).includes(PERMISSIONS.SYSTEM_ROLES_MANAGE);
 
-const normalizeInventoryThreshold = (threshold) => {
-  const parsed = Number(threshold);
-  return Number.isFinite(parsed) && parsed >= 0 ? parsed : 10;
-};
-
-const getInventoryValues = (product) => {
-  const variants = Array.isArray(product?.variants) ? product.variants : [];
-  const activeVariants = variants.filter((variant) => variant?.isActive !== false);
-  const hasVariantRows = variants.length > 0;
-  const quantity = hasVariantRows
-    ? activeVariants.reduce((sum, variant) => sum + Math.max(Number(variant?.stockQty || 0), 0), 0)
-    : Math.max(Number(product?.quantity || 0), 0);
-  const reservedQty = hasVariantRows
-    ? activeVariants.reduce((sum, variant) => sum + Math.max(Number(variant?.reservedQty || 0), 0), 0)
-    : Math.max(Number(product?.reservedQty || 0), 0);
-
-  return {
-    quantity,
-    reservedQty,
-    availableQty: Math.max(quantity - reservedQty, 0),
-  };
-};
-
-const buildInventorySummary = (products, threshold = 10) => {
-  const normalizedThreshold = normalizeInventoryThreshold(threshold);
-  const rows = (Array.isArray(products) ? products : [])
-    .filter((product) => product?.status === 'published' && product?.isEnabled !== false)
-    .map((product) => {
-      const values = getInventoryValues(product);
-      const status = values.availableQty <= 0
-        ? 'out_of_stock'
-        : values.availableQty <= normalizedThreshold
-          ? 'low_stock'
-          : 'healthy';
-      return {
-        id: product.id,
-        name: product.name,
-        quantity: values.quantity,
-        reservedQty: values.reservedQty,
-        availableQty: values.availableQty,
-        threshold: normalizedThreshold,
-        status,
-      };
-    });
-
-  const atRiskRows = rows
-    .filter((row) => row.status !== 'healthy')
-    .sort((a, b) => (
-      (a.status === 'out_of_stock' ? 0 : 1) - (b.status === 'out_of_stock' ? 0 : 1)
-      || a.availableQty - b.availableQty
-      || String(a.name || '').localeCompare(String(b.name || ''))
-    ));
-
-  const outOfStockCount = atRiskRows.filter((row) => row.status === 'out_of_stock').length;
-  const lowStockCount = atRiskRows.length - outOfStockCount;
-
-  return {
-    rows: atRiskRows,
-    totalAtRisk: atRiskRows.length,
-    lowStockCount,
-    outOfStockCount,
-    threshold: normalizedThreshold,
-    health: atRiskRows.length === 0 ? 'healthy' : outOfStockCount > 0 ? 'out_of_stock' : 'low_stock',
-  };
-};
 
 const loadInventoryProducts = async () => Product.findAll({
-  attributes: ['id', 'name', 'quantity', 'reservedQty', 'status', 'isEnabled'],
+  attributes: ['id', 'name', 'sku', 'type', 'quantity', 'reservedQty', 'status', 'isEnabled'],
   where: { status: 'published', isEnabled: true },
   include: [{
     model: ProductVariant,
     as: 'variants',
-    attributes: ['id', 'stockQty', 'reservedQty', 'isActive'],
+    attributes: ['id', 'sku', 'stockQty', 'reservedQty', 'isActive'],
     required: false,
   }],
 });
@@ -155,7 +91,7 @@ const getInventorySummary = async (threshold) => {
 const getStats = async () => {
   const SettingsService = require('../settings/settings.service');
   const catalog = await SettingsService.getByGroup('catalog', { maskSensitive: false });
-  const threshold = parseInt(catalog.lowStockThreshold, 10) || 10;
+  const threshold = normalizeInventoryThreshold(catalog.lowStockThreshold);
 
   const [
     revenueResult,
@@ -315,7 +251,7 @@ const getLowStock = async (threshold) => {
   if (threshold === undefined || threshold === null) {
     const SettingsService = require('../settings/settings.service');
     const catalog = await SettingsService.getByGroup('catalog', { maskSensitive: false });
-    threshold = parseInt(catalog.lowStockThreshold, 10) || 10;
+    threshold = normalizeInventoryThreshold(catalog.lowStockThreshold);
   }
   const summary = await getInventorySummary(threshold);
   return {
