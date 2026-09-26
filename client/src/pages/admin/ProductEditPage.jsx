@@ -558,7 +558,7 @@ const ProductEditPage = () => {
 
   return (
     <Box sx={{ p: 3, mx: 'auto' }}>
-      <Typography variant="h5" fontWeight={700} gutterBottom>
+      <Typography variant="h5" component="h1" fontWeight={700} gutterBottom>
         {isNew ? 'Create Product' : 'Edit Product'}
       </Typography>
       <form onSubmit={handleSave} noValidate>

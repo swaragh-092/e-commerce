@@ -25,9 +25,10 @@
 ```
 POST /api/auth/register
 Body: { firstName, lastName, email, password, confirmPassword }
-Response: { user, tokens: { accessToken, refreshToken } }
+Response: { user, verificationEmail }
 ```
 - Auto-logs in after registration
+- Sets the access and refresh sessions in HttpOnly cookies (Secure in production); tokens are not returned to browser JavaScript
 - Sends email verification link
 - Rate limit: 20 requests / 60 min
 
@@ -35,19 +36,19 @@ Response: { user, tokens: { accessToken, refreshToken } }
 ```
 POST /api/auth/login
 Body: { email, password, rememberMe? }
-Response: { user, tokens } OR { requiresTwoFactor: true, tempToken }
+Response: { user } OR { requiresTwoFactor: true, tempToken }
 ```
 - `rememberMe: true` → refresh token lasts 30 days (default: 7 days)
 - Email pre-filled on next visit from localStorage
-- If 2FA enabled → returns `tempToken` instead of full tokens
+- If 2FA enabled → returns `tempToken` instead of creating an authenticated cookie session
 - Rate limit: 20 requests / 15 min
 - New device/IP triggers email notification
 
 ### Refresh Token
 ```
 POST /api/auth/refresh
-Body: { refreshToken }
-Response: { accessToken, refreshToken }
+Body: optional (the HttpOnly refresh cookie is used by the storefront)
+Response: `{}` (rotated cookies are set by the server)
 ```
 - Rotates refresh token (old one invalidated)
 - Reuse detection: replaying a revoked token revokes ALL user sessions
@@ -56,7 +57,7 @@ Response: { accessToken, refreshToken }
 ### Logout
 ```
 POST /api/auth/logout (requires auth)
-Body: { refreshToken }
+Body: optional (the HttpOnly refresh cookie is used by the storefront)
 ```
 - Revokes ALL refresh tokens for the user
 - Access token added to blocklist (immediate invalidation)
@@ -183,7 +184,7 @@ GET /api/auth/google → Redirects to Google consent screen
 ```
 GET /api/auth/google/callback → Redirects to client with tokens in URL fragment
 ```
-- Client URL: `/oauth/callback#accessToken=...&refreshToken=...`
+- Client URL: `/oauth/callback`; the server sets the authenticated HttpOnly cookies before redirecting
 - Creates account if email is new (email auto-verified)
 - Links to existing account if email matches
 - Only active when `GOOGLE_CLIENT_ID` is set

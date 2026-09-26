@@ -421,7 +421,7 @@ const ShippingPage = () => {
   return (
     <Box>
       <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 3 }}>
-        <Typography variant="h5" fontWeight={700}>
+        <Typography variant="h5" component="h1" fontWeight={700}>
           Shipping Management
         </Typography>
       </Box>

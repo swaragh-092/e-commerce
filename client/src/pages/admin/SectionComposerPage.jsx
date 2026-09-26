@@ -3,7 +3,8 @@ import {
   Box, Button, Card, Container, Divider, IconButton, Stack, Switch,
   Typography, CircularProgress, ToggleButtonGroup, ToggleButton,
   TextField, FormControl, InputLabel, Select, MenuItem, Paper, Chip, Breadcrumbs,
-  Popover, List, ListItemButton, ListItemText, Grid,
+  Popover, List, ListItemButton, ListItemText, Grid, Alert, Dialog, DialogTitle,
+  DialogContent, DialogActions,
 } from '@mui/material';
 import AddIcon from '@mui/icons-material/Add';
 import DragIndicatorIcon from '@mui/icons-material/DragIndicator';
@@ -13,19 +14,35 @@ import ArrowUpwardIcon from '@mui/icons-material/ArrowUpward';
 import ArrowDownwardIcon from '@mui/icons-material/ArrowDownward';
 import ArrowBackIcon from '@mui/icons-material/ArrowBack';
 import SaveIcon from '@mui/icons-material/Save';
+import HistoryIcon from '@mui/icons-material/History';
 import UndoIcon from '@mui/icons-material/Undo';
 import RedoIcon from '@mui/icons-material/Redo';
 import DesktopWindowsIcon from '@mui/icons-material/DesktopWindows';
 import TabletMacIcon from '@mui/icons-material/TabletMac';
 import PhoneIphoneIcon from '@mui/icons-material/PhoneIphone';
+import HomeOutlinedIcon from '@mui/icons-material/HomeOutlined';
+import ShoppingBagOutlinedIcon from '@mui/icons-material/ShoppingBagOutlined';
+import CategoryOutlinedIcon from '@mui/icons-material/CategoryOutlined';
+import CollectionsBookmarkOutlinedIcon from '@mui/icons-material/CollectionsBookmarkOutlined';
+import SearchOutlinedIcon from '@mui/icons-material/SearchOutlined';
+import ShoppingCartOutlinedIcon from '@mui/icons-material/ShoppingCartOutlined';
+import CreditCardOutlinedIcon from '@mui/icons-material/CreditCardOutlined';
+import PersonOutlineOutlinedIcon from '@mui/icons-material/PersonOutlineOutlined';
+import Inventory2OutlinedIcon from '@mui/icons-material/Inventory2Outlined';
+import FavoriteBorderOutlinedIcon from '@mui/icons-material/FavoriteBorderOutlined';
+import LocalOfferOutlinedIcon from '@mui/icons-material/LocalOfferOutlined';
+import ArticleOutlinedIcon from '@mui/icons-material/ArticleOutlined';
+import ErrorOutlineIcon from '@mui/icons-material/ErrorOutline';
+import { useSearchParams } from 'react-router-dom';
 
-import { getSettingsGroup, updateSettingsBulk } from '../../services/settingsService';
+import { getDesignDraft, getDesignState, getDesignVersions, getSettingsGroup, publishDesignDraft, restoreDesignVersion, saveDesignDraft } from '../../services/settingsService';
 import { useNotification } from '../../context/NotificationContext';
 import { SettingsContext } from '../../context/ThemeContext';
 import { getSectionLabel, SECTION_VARIANTS } from '../../components/storefront/sections/sectionRegistry';
 import { createDefaultSection } from '../../utils/sectionPresets';
 import AddSectionDialog from '../../components/admin/sections/AddSectionDialog';
 import SaveAsTemplateDialog from '../../components/admin/themes/SaveAsTemplateDialog';
+import DesignVersionHistoryDialog from '../../components/admin/themes/DesignVersionHistoryDialog';
 import StorefrontTemplatePreview from '../../components/admin/themes/StorefrontTemplatePreview';
 import DesignerTreePanel from '../../components/admin/themes/designer/DesignerTreePanel';
 import DesignerSectionEditor from '../../components/admin/themes/designer/DesignerSectionEditor';
@@ -38,6 +55,7 @@ import { ProductCardStyleEditor, CategoryCardStyleEditor, PromoCardStyleEditor, 
 import { ProductPageStyleEditor, CategoryPageStyleEditor, CatalogPageStyleEditor, BlogPageStyleEditor, BrandsPageStyleEditor, AccountPageStyleEditor } from '../../components/admin/settings/PageStyleEditors';
 import { useAuth } from '../../hooks/useAuth';
 import { PERMISSIONS } from '../../utils/permissions';
+import { DESIGN_COMPONENT_REGISTRY, DESIGN_PAGE_REGISTRY, getDesignResetTarget, getDesignSource } from '../../utils/designRegistry';
 
 const PRODUCT_SOURCES = [
   { value: 'featured', label: 'Featured' },
@@ -53,42 +71,55 @@ const PREVIEW_WIDTHS = {
   mobile: '375px',
 };
 
-const DESIGNER_PAGES = [
-  { value: 'home',      label: 'Home',       status: 'active', previewPath: '/',                icon: '🏠' },
-  { value: 'product',   label: 'Product',    status: 'active', previewPath: '/products',        icon: '🛍️' },
-  { value: 'category',  label: 'Category',   status: 'active', previewPath: '/category/all',    icon: '📂' },
-  { value: 'collection', label: 'Collection', status: 'active', previewPath: '/products',       icon: '🗂️' },
-  { value: 'search',    label: 'Search',     status: 'active', previewPath: '/search',          icon: '🔍' },
-  { value: 'cart',      label: 'Cart',       status: 'active', previewPath: '/cart',            icon: '🛒' },
-  { value: 'checkout',  label: 'Checkout',   status: 'active', previewPath: '/checkout',        icon: '💳' },
-  { value: 'account',   label: 'Account',    status: 'active', previewPath: '/account',         icon: '👤' },
-  { value: 'orders',    label: 'Orders',     status: 'active', previewPath: '/account/orders',  icon: '📦' },
-  { value: 'wishlist',  label: 'Wishlist',   status: 'active', previewPath: '/wishlist',        icon: '❤️' },
-  { value: 'brand',     label: 'Brands',     status: 'active', previewPath: '/brands',          icon: '🏷️' },
-  { value: 'blog',      label: 'Blog',       status: 'active', previewPath: '/blogs',           icon: '📝' },
-  { value: 'not-found', label: '404 Page',   status: 'active', previewPath: '/not-found-preview', icon: '⚠️' },
-];
+const PAGE_ICON_BY_KEY = {
+  home: <HomeOutlinedIcon fontSize="small" />,
+  product: <ShoppingBagOutlinedIcon fontSize="small" />,
+  category: <CategoryOutlinedIcon fontSize="small" />,
+  collection: <CollectionsBookmarkOutlinedIcon fontSize="small" />,
+  search: <SearchOutlinedIcon fontSize="small" />,
+  cart: <ShoppingCartOutlinedIcon fontSize="small" />,
+  checkout: <CreditCardOutlinedIcon fontSize="small" />,
+  account: <PersonOutlineOutlinedIcon fontSize="small" />,
+  orders: <Inventory2OutlinedIcon fontSize="small" />,
+  wishlist: <FavoriteBorderOutlinedIcon fontSize="small" />,
+  brand: <LocalOfferOutlinedIcon fontSize="small" />,
+  blog: <ArticleOutlinedIcon fontSize="small" />,
+  'not-found': <ErrorOutlineIcon fontSize="small" />,
+};
 
+const COMPONENT_EDITOR_BY_KEY = {
+  designTokens: DesignTokensEditor,
+  productCard: ProductCardStyleEditor,
+  categoryCard: CategoryCardStyleEditor,
+  promoCard: PromoCardStyleEditor,
+  brandCard: BrandCardStyleEditor,
+  trustCard: TrustCardStyleEditor,
+  headerLayout: HeaderStyleEditor,
+  announcementBar: HeaderStyleEditor,
+  headerLogo: HeaderStyleEditor,
+  headerMenu: HeaderStyleEditor,
+  headerActions: HeaderStyleEditor,
+  footer: FooterStyleEditor,
+  cartItem: CartItemStyleEditor,
+  checkoutBlock: CheckoutBlockStyleEditor,
+  formControl: FormControlStyleEditor,
+  badgeChip: BadgeChipStyleEditor,
+  customCss: CustomCssEditor,
+};
 
-const DESIGNER_COMPONENTS = [
-  { value: 'designTokens', label: 'Design Tokens', Editor: DesignTokensEditor },
-  { value: 'productCard', label: 'Product Card', Editor: ProductCardStyleEditor },
-  { value: 'categoryCard', label: 'Category Card', Editor: CategoryCardStyleEditor },
-  { value: 'promoCard', label: 'Promo Banner', Editor: PromoCardStyleEditor },
-  { value: 'brandCard', label: 'Brand Card', Editor: BrandCardStyleEditor },
-  { value: 'trustCard', label: 'Trust Item', Editor: TrustCardStyleEditor },
-  { value: 'headerLayout', label: 'Header Layout', Editor: HeaderStyleEditor },
-  { value: 'announcementBar', label: 'Announcement Bar', Editor: HeaderStyleEditor },
-  { value: 'headerLogo', label: 'Logo', Editor: HeaderStyleEditor },
-  { value: 'headerMenu', label: 'Menu', Editor: HeaderStyleEditor },
-  { value: 'headerActions', label: 'Search, Account & Cart', Editor: HeaderStyleEditor },
-  { value: 'footer', label: 'Footer Settings', Editor: FooterStyleEditor },
-  { value: 'cartItem', label: 'Cart Item Row', Editor: CartItemStyleEditor },
-  { value: 'checkoutBlock', label: 'Checkout Blocks', Editor: CheckoutBlockStyleEditor },
-  { value: 'formControl', label: 'Forms & Inputs', Editor: FormControlStyleEditor },
-  { value: 'badgeChip', label: 'Badges & Chips', Editor: BadgeChipStyleEditor },
-  { value: 'customCss', label: 'Advanced CSS', Editor: CustomCssEditor, requiresAdvanced: true },
-];
+// The registry owns labels, routes, statuses, and permissions. This page
+// only attaches the existing preview icons and editor components.
+const DESIGNER_PAGES = DESIGN_PAGE_REGISTRY.map((page) => ({
+  ...page,
+  value: page.key,
+  icon: PAGE_ICON_BY_KEY[page.key],
+}));
+
+const DESIGNER_COMPONENTS = DESIGN_COMPONENT_REGISTRY.map((component) => ({
+  ...component,
+  value: component.key,
+  Editor: COMPONENT_EDITOR_BY_KEY[component.key],
+}));
 
 const SECTION_COMPONENT_MAP = {
   'product-row': 'productCard',
@@ -101,11 +132,37 @@ const SECTION_COMPONENT_MAP = {
   'trust-badges': 'trustCard',
 };
 
+const DESIGNER_PAGE_GROUP_MAP = {
+  product: 'productPage',
+  category: 'categoryPage',
+  collection: 'catalog',
+  blog: 'blogPage',
+  brand: 'brandsPage',
+  account: 'accountPage',
+  cart: 'cartPage',
+  checkout: 'checkoutPage',
+  wishlist: 'wishlistPage',
+  search: 'searchPage',
+  'not-found': 'notFoundPage',
+  orders: 'ordersPage',
+};
+
 const SectionComposerPage = () => {
+  const [searchParams] = useSearchParams();
   const [sections, setSections] = useState([]);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+  const [publishing, setPublishing] = useState(false);
   const [dirty, setDirty] = useState(false);
+  const [draft, setDraft] = useState(null);
+  const [draftDeletes, setDraftDeletes] = useState([]);
+  const [publishOpen, setPublishOpen] = useState(false);
+  const [historyOpen, setHistoryOpen] = useState(false);
+  const [historyLoading, setHistoryLoading] = useState(false);
+  const [designVersions, setDesignVersions] = useState([]);
+  const [pendingVersion, setPendingVersion] = useState(null);
+  const [restoringVersionId, setRestoringVersionId] = useState(null);
+  const draftHydratedRef = useRef(false);
   
   // Unified FSM State for the designer panel view
   const [panelView, setPanelView] = useState({ mode: 'tree', sectionId: null, componentKey: null, blockKey: null, blockIndex: null });
@@ -119,6 +176,9 @@ const SectionComposerPage = () => {
   const [footerSettings, setFooterSettings] = useState({});
   const [announcementSettings, setAnnouncementSettings] = useState({});
   const [advancedSettings, setAdvancedSettings] = useState({ customCSS: '' });
+  const [designSources, setDesignSources] = useState({});
+  const [designDefaults, setDesignDefaults] = useState({});
+  const [resettingDesign, setResettingDesign] = useState(false);
   
   // Unified page style settings state
   const [pageSettings, setPageSettings] = useState({});
@@ -129,7 +189,9 @@ const SectionComposerPage = () => {
 
   // Viewport mode state for live preview
   const [viewportMode, setViewportMode] = useState('desktop');
-  const [previewRenderMode, setPreviewRenderMode] = useState('live');
+  // The editor canvas is the primary selection surface. The live route remains
+  // available as a read-only verification view.
+  const [previewRenderMode, setPreviewRenderMode] = useState('mock');
   const [activePage, setActivePage] = useState('home');
   const [pagePickerAnchor, setPagePickerAnchor] = useState(null);
   const [pageSearch, setPageSearch] = useState('');
@@ -137,7 +199,7 @@ const SectionComposerPage = () => {
   const { notify } = useNotification();
   const { hasPermission } = useAuth();
   const canManageAdvancedSettings = hasPermission(PERMISSIONS.SETTINGS_ADVANCED);
-  const { settings } = useContext(SettingsContext) || {};
+  const { settings, refreshSettings } = useContext(SettingsContext) || {};
 
   // FSM helper transitions
   const selectSection = (section) => {
@@ -181,6 +243,7 @@ const SectionComposerPage = () => {
 
   useEffect(() => {
     if (!settings) return;
+    if (draftHydratedRef.current) return;
     if (settings.theme)          setThemeSettings(settings.theme);
     if (settings.componentStyles) setComponentStyles(settings.componentStyles);
     if (settings.nav)            setNavSettings(settings.nav);
@@ -195,11 +258,97 @@ const SectionComposerPage = () => {
     setPageSettings(pgs);
   }, [settings]);
 
+  // Compatibility links from System Settings can open the relevant page or
+  // inspector without creating a second editor surface.
+  useEffect(() => {
+    const requestedPage = searchParams.get('page');
+    const requestedComponent = searchParams.get('component');
+    if (requestedPage && DESIGNER_PAGES.some((page) => page.value === requestedPage && page.status === 'active')) {
+      setActivePage(requestedPage);
+    }
+    if (requestedComponent && DESIGNER_COMPONENTS.some((component) => (
+      component.value === requestedComponent
+      && (!component.requiresAdvanced || canManageAdvancedSettings)
+    ))) {
+      setPanelView({ mode: 'theme-settings', sectionId: null, componentKey: requestedComponent, blockKey: null, blockIndex: null });
+    }
+  }, [searchParams, canManageAdvancedSettings]);
+
+  const applyDraftPayload = useCallback((payload = [], baseGroups = {}, defaults = {}) => {
+    const grouped = payload.reduce((result, entry) => {
+      if (!entry?.group || !entry?.key) return result;
+      if (entry.operation === 'delete') return result;
+      if (!result[entry.group]) result[entry.group] = {};
+      result[entry.group][entry.key] = entry.value;
+      return result;
+    }, {});
+
+    const resetTargets = payload
+      .filter((entry) => entry?.operation === 'delete')
+      .map(({ group, key }) => ({ group, key }));
+    const mergeGroup = (group) => {
+      const next = { ...(baseGroups[group] || {}) };
+      const defaultGroup = defaults[group] || {};
+      resetTargets
+        .filter((target) => target.group === group)
+        .forEach(({ key }) => {
+          if (key === null) {
+            Object.keys(next).forEach((existingKey) => delete next[existingKey]);
+            Object.assign(next, defaultGroup);
+          } else if (Object.prototype.hasOwnProperty.call(defaultGroup, key)) next[key] = defaultGroup[key];
+          else delete next[key];
+        });
+      Object.assign(next, grouped[group] || {});
+      return next;
+    };
+
+    const merged = {};
+    [...new Set([
+      ...Object.keys(baseGroups || {}),
+      ...Object.keys(grouped),
+      ...resetTargets.map((target) => target.group),
+    ])].forEach((group) => {
+      merged[group] = mergeGroup(group);
+    });
+
+    if (merged.theme) setThemeSettings(merged.theme);
+    if (merged.componentStyles) setComponentStyles(merged.componentStyles);
+    if (merged.nav) setNavSettings(merged.nav);
+    if (merged.footer) setFooterSettings(merged.footer);
+    if (merged.announcement) setAnnouncementSettings(merged.announcement);
+    if (merged.advanced) setAdvancedSettings({ customCSS: merged.advanced.customCSS || '' });
+
+    const nextPages = Object.entries(DESIGNER_PAGE_GROUP_MAP).reduce((result, [page, group]) => {
+      if (merged[group]) result[page] = merged[group];
+      return result;
+    }, {});
+    if (Object.keys(nextPages).length) setPageSettings(nextPages);
+    if (merged.homepage?.sections) setSections(merged.homepage.sections);
+    return { groups: merged, resetTargets };
+  }, []);
+
   const fetchSections = useCallback(async () => {
     setLoading(true);
     try {
-      const homepage = await getSettingsGroup('homepage');
-      const initialSections = homepage?.sections || [];
+      const [homepage, draftState, designState] = await Promise.all([
+        getSettingsGroup('homepage'),
+        getDesignDraft().catch(() => ({ draft: null })),
+        getDesignState().catch(() => ({ groups: {}, sources: {}, defaults: {} })),
+      ]);
+      setDesignSources(designState?.sources || {});
+      setDesignDefaults(designState?.defaults || {});
+      const existingDraft = draftState?.draft || null;
+      const draftResult = existingDraft
+        ? applyDraftPayload(existingDraft.payload || [], designState?.groups || {}, designState?.defaults || {})
+        : null;
+      const initialSections = draftResult?.groups?.homepage?.sections || homepage?.sections || [];
+      if (existingDraft) {
+        draftHydratedRef.current = true;
+        setDraft(existingDraft);
+        setDraftDeletes(draftResult?.resetTargets || []);
+      } else {
+        setDraftDeletes([]);
+      }
       setSections(initialSections);
       setHistory([initialSections]);
       setHistoryIndex(0);
@@ -208,34 +357,58 @@ const SectionComposerPage = () => {
     } finally {
       setLoading(false);
     }
-  }, [notify]);
+  }, [applyDraftPayload, notify]);
 
   useEffect(() => {
     fetchSections();
   }, [fetchSections]);
 
+  const clearDraftDelete = (group, key = null) => {
+    setDraftDeletes((current) => current.filter((target) => (
+      target.group !== group || (key !== null && target.key !== null && target.key !== key)
+    )));
+  };
+
+  const buildDraftPayload = (basePayload) => {
+    const groupResets = new Set(draftDeletes.filter((target) => target.key === null).map((target) => target.group));
+    const keyResets = new Set(draftDeletes.filter((target) => target.key !== null).map((target) => `${target.group}.${target.key}`));
+    const deleteKeys = new Set();
+    const writes = basePayload.filter((entry) => {
+      const targetKey = `${entry.group}.${entry.key}`;
+      const shouldDelete = groupResets.has(entry.group) || keyResets.has(targetKey);
+      if (shouldDelete) deleteKeys.add(targetKey);
+      return !shouldDelete;
+    });
+
+    draftDeletes.forEach(({ group, key }) => {
+      if (key !== null) deleteKeys.add(`${group}.${key}`);
+    });
+    Object.entries(designSources || {}).forEach(([group, sources]) => {
+      if (!groupResets.has(group)) return;
+      Object.entries(sources || {})
+        .filter(([, source]) => source === 'custom')
+        .forEach(([key]) => deleteKeys.add(`${group}.${key}`));
+    });
+
+    const deletes = [...deleteKeys].map((target) => {
+      const separator = target.indexOf('.');
+      return {
+        group: target.slice(0, separator),
+        key: target.slice(separator + 1),
+        operation: 'delete',
+      };
+    });
+    return [...writes, ...deletes];
+  };
+
   const handleSave = async () => {
     setSaving(true);
     try {
       // Map unified pageSettings back to their API groups
-      const pageGroupMap = {
-        product:     'productPage',
-        category:    'categoryPage',
-        collection:  'catalog',
-        blog:        'blogPage',
-        brand:       'brandsPage',
-        account:     'accountPage',
-        cart:        'cartPage',
-        checkout:    'checkoutPage',
-        wishlist:    'wishlistPage',
-        search:      'searchPage',
-        'not-found': 'notFoundPage',
-        orders:      'ordersPage',
-      };
       const pageEntries = Object.entries(pageSettings || {}).flatMap(([pg, vals]) =>
-        Object.entries(vals || {}).map(([key, value]) => ({ key, value, group: pageGroupMap[pg] || pg }))
+        Object.entries(vals || {}).map(([key, value]) => ({ key, value, group: DESIGNER_PAGE_GROUP_MAP[pg] || pg }))
       );
-      await updateSettingsBulk([
+      const payload = buildDraftPayload([
         { key: 'sections', value: sections, group: 'homepage' },
         ...Object.entries(themeSettings || {}).map(([key, value]) => ({ key, value, group: 'theme' })),
         ...Object.entries(componentStyles || {}).map(([key, value]) => ({ key, value, group: 'componentStyles' })),
@@ -245,20 +418,96 @@ const SectionComposerPage = () => {
         ...(canManageAdvancedSettings ? Object.entries(advancedSettings || {}).map(([key, value]) => ({ key, value, group: 'advanced' })) : []),
         ...pageEntries,
       ]);
-      notify('Store Designer changes saved', 'success');
+      const savedDraft = await saveDesignDraft(payload, draft?.revision);
+      setDraft(savedDraft);
+      setDraftDeletes((savedDraft?.payload || []).filter((entry) => entry.operation === 'delete').map(({ group, key }) => ({ group, key })));
+      notify('Design draft saved. Publish it when the storefront is ready.', 'success');
       setDirty(false);
       // Reset history baseline to current state
       setHistory([sections]);
       setHistoryIndex(0);
-    } catch {
-      notify('Failed to save Store Designer changes', 'error');
+    } catch (error) {
+      notify(error.response?.data?.error?.message || 'Failed to save design draft', 'error');
     } finally {
       setSaving(false);
     }
   };
 
+  const openVersionHistory = async () => {
+    setHistoryOpen(true);
+    setHistoryLoading(true);
+    try {
+      const result = await getDesignVersions(30);
+      setDesignVersions(result?.versions || []);
+    } catch (error) {
+      notify(error.response?.data?.error?.message || 'Failed to load published design history', 'error');
+    } finally {
+      setHistoryLoading(false);
+    }
+  };
+
+  const requestVersionRestore = (version) => {
+    setHistoryOpen(false);
+    setPendingVersion(version);
+  };
+
+  const handleRestoreVersion = async () => {
+    if (!pendingVersion) return;
+    setRestoringVersionId(pendingVersion.id);
+    try {
+      const restored = await restoreDesignVersion(pendingVersion.id, draft?.revision);
+      const designState = await getDesignState().catch(() => ({
+        groups: settings || {},
+        sources: designSources,
+        defaults: designDefaults,
+      }));
+      const draftResult = applyDraftPayload(
+        restored?.draft?.payload || [],
+        designState?.groups || {},
+        designState?.defaults || {},
+      );
+      setDesignSources(designState?.sources || {});
+      setDesignDefaults(designState?.defaults || {});
+      setDraft(restored?.draft || null);
+      setDraftDeletes(draftResult.resetTargets || []);
+      draftHydratedRef.current = true;
+      const nextSections = draftResult.groups?.homepage?.sections || [];
+      setHistory([nextSections]);
+      setHistoryIndex(0);
+      setDirty(false);
+      setPendingVersion(null);
+      notify(`Version ${pendingVersion.revision} restored into the design draft. Review it, then publish when ready.`, 'success');
+    } catch (error) {
+      notify(error.response?.data?.error?.message || 'Failed to restore published design version', 'error');
+    } finally {
+      setRestoringVersionId(null);
+    }
+  };
+
+  const handlePublish = async () => {
+    if (!draft || dirty) return;
+    setPublishing(true);
+    try {
+      await publishDesignDraft(draft.revision);
+      draftHydratedRef.current = false;
+      setDraft(null);
+      setDraftDeletes([]);
+      if (refreshSettings) await refreshSettings();
+      const state = await getDesignState();
+      setDesignSources(state?.sources || {});
+      setDesignDefaults(state?.defaults || {});
+      notify('Design draft published to the storefront.', 'success');
+      setPublishOpen(false);
+    } catch (error) {
+      notify(error.response?.data?.error?.message || 'Publish failed. Review the latest design changes and try again.', 'error');
+    } finally {
+      setPublishing(false);
+    }
+  };
+
   const update = (next, skipHistory = false) => {
     setSections(next);
+    clearDraftDelete('homepage');
     setDirty(true);
     if (!skipHistory) {
       const nextHistory = history.slice(0, historyIndex + 1);
@@ -381,6 +630,7 @@ const SectionComposerPage = () => {
   };
 
   const handlePageSettingChange = (page, value) => {
+    clearDraftDelete(DESIGNER_PAGE_GROUP_MAP[page] || page);
     setPageSettings((current) => ({
       ...current,
       [page]: value,
@@ -500,11 +750,37 @@ const SectionComposerPage = () => {
   };
 
   const handleComponentStyleChange = (componentName, nextValue) => {
+    clearDraftDelete('componentStyles', componentName);
     setComponentStyles((current) => ({
       ...(current || {}),
       [componentName]: nextValue,
     }));
     setDirty(true);
+  };
+
+  const handleResetDesign = (componentKey) => {
+    const target = getDesignResetTarget(componentKey);
+    if (!target) return;
+    const defaults = designDefaults[target.group] || {};
+    if (target.group === 'theme') setThemeSettings({ ...defaults });
+    else if (target.group === 'nav') setNavSettings({ ...defaults });
+    else if (target.group === 'footer') setFooterSettings({ ...defaults });
+    else if (target.group === 'announcement') setAnnouncementSettings({ ...defaults });
+    else if (target.group === 'advanced') setAdvancedSettings({ customCSS: defaults.customCSS || '' });
+    else if (target.key) {
+      setComponentStyles((current) => {
+        const next = { ...(current || {}) };
+        if (Object.prototype.hasOwnProperty.call(defaults, target.key)) next[target.key] = defaults[target.key];
+        else delete next[target.key];
+        return next;
+      });
+    }
+    setDraftDeletes((current) => {
+      const next = current.filter((entry) => entry.group !== target.group || entry.key !== target.key);
+      return [...next, { group: target.group, key: target.key || null }];
+    });
+    setDirty(true);
+    notify('Reset staged in the design draft. Publish to make it live.', 'success');
   };
 
   // Extract live block items from sections for demo content fallback
@@ -606,6 +882,18 @@ const SectionComposerPage = () => {
   const variants = editSection ? (SECTION_VARIANTS[editSection.type] || []) : [];
   const activeComponentConfig = DESIGNER_COMPONENTS.find((item) => item.value === activeComponent) || DESIGNER_COMPONENTS[0];
   const ActiveComponentEditor = activeComponentConfig.Editor;
+  const activeResetTarget = getDesignResetTarget(activeComponent);
+  const activeDraftDelete = activeResetTarget && draftDeletes.some((entry) => (
+    entry.group === activeResetTarget.group && (entry.key === null || entry.key === activeResetTarget.key)
+  ));
+  const activeDraftTouch = activeResetTarget && draft?.payload?.some((entry) => (
+    entry.group === activeResetTarget.group && (!activeResetTarget.key || entry.key === activeResetTarget.key)
+  ));
+  const activeComponentSource = activeDraftDelete
+    ? 'default'
+    : activeDraftTouch
+      ? 'draft'
+      : getDesignSource(activeComponent, designSources);
 
   const editMappedComponent = editSection ? SECTION_COMPONENT_MAP[editSection.type] : null;
   const editMappedComponentLabel = editMappedComponent ? DESIGNER_COMPONENTS.find((item) => item.value === editMappedComponent)?.label : null;
@@ -648,7 +936,13 @@ const SectionComposerPage = () => {
             <Typography variant="subtitle2" fontWeight={800} noWrap>
               Store Designer
             </Typography>
-            <Chip label={dirty ? 'Unsaved' : 'Saved'} size="small" color={dirty ? 'warning' : 'success'} variant={dirty ? 'outlined' : 'filled'} sx={{ height: 22, fontWeight: 700 }} />
+            <Chip
+              label={dirty ? 'Unsaved changes' : draft ? 'Draft saved' : 'Live'}
+              size="small"
+              color={dirty ? 'warning' : draft ? 'info' : 'success'}
+              variant={dirty ? 'outlined' : 'filled'}
+              sx={{ height: 22, fontWeight: 700 }}
+            />
           </Stack>
 
           <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, justifyContent: 'center', minWidth: 0 }}>
@@ -720,9 +1014,15 @@ const SectionComposerPage = () => {
             </IconButton>
             <Divider orientation="vertical" flexItem sx={{ mx: 0.5 }} />
             <Button size="small" variant="text" onClick={() => setSaveTemplateOpen(true)}>Save as Template</Button>
+            <Button size="small" variant="text" startIcon={<HistoryIcon />} onClick={openVersionHistory} disabled={saving || publishing}>
+              History
+            </Button>
             <Button size="small" variant="outlined" startIcon={<AddIcon />} onClick={() => openAddSection(sections.length, 'template')}>Add Section</Button>
-            <Button size="small" variant="contained" startIcon={<SaveIcon />} onClick={handleSave} disabled={!dirty || saving}>
-              {saving ? 'Saving...' : 'Save'}
+            <Button size="small" variant="outlined" startIcon={<SaveIcon />} onClick={handleSave} disabled={!dirty || saving || publishing}>
+              {saving ? 'Saving...' : 'Save draft'}
+            </Button>
+            <Button size="small" variant="contained" onClick={() => setPublishOpen(true)} disabled={!draft || dirty || saving || publishing}>
+              Publish
             </Button>
           </Stack>
         </Box>
@@ -791,24 +1091,32 @@ const SectionComposerPage = () => {
               announcementSettings={announcementSettings}
               footerSettings={footerSettings}
               advancedSettings={advancedSettings}
+              designSource={activeComponentSource}
+              onReset={handleResetDesign}
+              resetting={resettingDesign}
               onThemeSettingsChange={(value) => {
+                clearDraftDelete('theme');
                 setThemeSettings(value);
                 setDirty(true);
               }}
               onComponentStyleChange={handleComponentStyleChange}
               onNavChange={(value) => {
+                clearDraftDelete('nav');
                 setNavSettings(value);
                 setDirty(true);
               }}
               onAnnouncementChange={(value) => {
+                clearDraftDelete('announcement');
                 setAnnouncementSettings(value);
                 setDirty(true);
               }}
               onFooterChange={(value) => {
+                clearDraftDelete('footer');
                 setFooterSettings(value);
                 setDirty(true);
               }}
               onAdvancedChange={(value) => {
+                clearDraftDelete('advanced', 'customCSS');
                 setAdvancedSettings(value);
                 setDirty(true);
               }}
@@ -851,8 +1159,8 @@ const SectionComposerPage = () => {
                 onChange={(_, v) => v && setPreviewRenderMode(v)}
                 size="small"
               >
-                <ToggleButton value="live" aria-label="Live storefront iframe">Live Storefront</ToggleButton>
-                <ToggleButton value="mock" aria-label="Editable canvas preview">Editable Canvas</ToggleButton>
+                <ToggleButton value="mock" aria-label="Interactive editor preview">Editor Preview</ToggleButton>
+                <ToggleButton value="live" aria-label="Read-only live storefront preview">Live Storefront</ToggleButton>
               </ToggleButtonGroup>
             </Stack>
             <ToggleButtonGroup
@@ -865,6 +1173,31 @@ const SectionComposerPage = () => {
               <ToggleButton value="tablet" aria-label="Tablet" title="Tablet View"><TabletMacIcon fontSize="small" /></ToggleButton>
               <ToggleButton value="mobile" aria-label="Mobile" title="Mobile View"><PhoneIphoneIcon fontSize="small" /></ToggleButton>
             </ToggleButtonGroup>
+          </Box>
+
+          <Box sx={{ px: 1.5, py: 0.75, borderBottom: '1px solid', borderColor: 'divider', bgcolor: 'background.paper' }}>
+            {previewRenderMode === 'live' ? (
+              <Alert
+                severity="info"
+                variant="outlined"
+                action={(
+                  <Button size="small" onClick={() => setPreviewRenderMode('mock')} sx={{ whiteSpace: 'nowrap' }}>
+                    Open editor
+                  </Button>
+                )}
+                sx={{ py: 0, alignItems: 'center', '& .MuiAlert-message': { py: 0.5, fontSize: '0.78rem' } }}
+              >
+                Live Storefront is read-only. Switch to Editor Preview to select sections and components.
+              </Alert>
+            ) : (
+              <Alert
+                severity="success"
+                variant="outlined"
+                sx={{ py: 0, alignItems: 'center', '& .MuiAlert-message': { py: 0.5, fontSize: '0.78rem' } }}
+              >
+                Select a section, header item, card, or footer in the preview to edit it. Changes stay in this draft until you save.
+              </Alert>
+            )}
           </Box>
 
           {/* Preview Canvas Area */}
@@ -940,6 +1273,50 @@ const SectionComposerPage = () => {
         onClose={() => setSaveTemplateOpen(false)}
         onSaved={() => notify('Template saved to library', 'success')}
       />
+
+      <DesignVersionHistoryDialog
+        open={historyOpen}
+        onClose={() => setHistoryOpen(false)}
+        versions={designVersions}
+        loading={historyLoading}
+        restoringId={restoringVersionId}
+        onRestore={requestVersionRestore}
+      />
+
+      <Dialog
+        open={Boolean(pendingVersion)}
+        onClose={() => !restoringVersionId && setPendingVersion(null)}
+        maxWidth="xs"
+        fullWidth
+      >
+        <DialogTitle>Restore version {pendingVersion?.revision}?</DialogTitle>
+        <DialogContent>
+          <Typography variant="body2" color="text.secondary">
+            This replaces the current saved draft with the published version. It does not change the live storefront. Any unsaved editor changes will be discarded.
+          </Typography>
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setPendingVersion(null)} disabled={Boolean(restoringVersionId)}>Cancel</Button>
+          <Button variant="contained" onClick={handleRestoreVersion} disabled={Boolean(restoringVersionId)}>
+            {restoringVersionId ? 'Restoring...' : 'Restore to draft'}
+          </Button>
+        </DialogActions>
+      </Dialog>
+
+      <Dialog open={publishOpen} onClose={() => !publishing && setPublishOpen(false)} maxWidth="xs" fullWidth>
+        <DialogTitle>Publish design draft?</DialogTitle>
+        <DialogContent>
+          <Typography variant="body2" color="text.secondary">
+            This will make the saved draft live across the storefront. The server will stop the publish if the live design changed since this draft was started.
+          </Typography>
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setPublishOpen(false)} disabled={publishing}>Cancel</Button>
+          <Button variant="contained" onClick={handlePublish} disabled={publishing}>
+            {publishing ? 'Publishing...' : 'Publish design'}
+          </Button>
+        </DialogActions>
+      </Dialog>
 
     </Box>
   );

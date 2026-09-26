@@ -34,7 +34,7 @@ import ProductTabsAccordion from '../../components/storefront/ProductTabsAccordi
 import { getApiErrorMessage } from '../../utils/apiErrors';
 import { getStoreName } from '../../utils/store';
 import { trackRecentlyViewed } from '../../components/storefront/sections/RecentlyViewedSection';
-import { buildProductJsonLd } from '../../utils/seo/buildProductJsonLd';
+import { buildBreadcrumbJsonLd, buildProductJsonLd } from '../../utils/seo/buildStructuredData';
 import { getBadgeChipProps } from '../../utils/componentStyles';
 
 const getAvailableStock = (entity, stockKey) => {
@@ -119,7 +119,15 @@ const ProductDetailPage = () => {
             setProduct(nextProduct);
             trackRecentlyViewed(nextProduct);
             if (nextProduct?.variants?.length > 0) {
-                const initialVariant = nextProduct.variants.find((variant) => variant?.isActive !== false && getAvailableStock(variant, 'stockQty') > 0)
+                const requestedVariant = new URLSearchParams(location.search).get('variant');
+                const requestedVariantMatch = requestedVariant
+                    ? nextProduct.variants.find((variant) => (
+                        variant?.isActive !== false
+                        && (String(variant.id) === requestedVariant || String(variant.sku || '') === requestedVariant)
+                    ))
+                    : null;
+                const initialVariant = requestedVariantMatch
+                    || nextProduct.variants.find((variant) => variant?.isActive !== false && getAvailableStock(variant, 'stockQty') > 0)
                     || nextProduct.variants.find((variant) => variant?.isActive !== false)
                     || nextProduct.variants[0];
                 setSelectedVariant(initialVariant || null);
@@ -300,14 +308,13 @@ const ProductDetailPage = () => {
     const displaySku = selectedVariant?.sku || product.sku;
     const displayUnit = product.unit ? String(product.unit).trim() : '';
     const canonicalBaseUrl = settings?.seo?.canonicalBaseUrl;
-    const base = String(canonicalBaseUrl || '').trim();
-    let resolvedPageUrl = window.location.href;
-    if (base) {
-        try {
-            resolvedPageUrl = new URL(location.pathname, base).toString();
-        } catch (_) {
-            resolvedPageUrl = window.location.href;
-        }
+    const canonicalPath = `/products/${product.slug || slug}`;
+    const base = String(canonicalBaseUrl || '').trim() || window.location.origin;
+    let resolvedPageUrl = new URL(canonicalPath, window.location.origin).toString();
+    try {
+        resolvedPageUrl = new URL(canonicalPath, base).toString();
+    } catch (_) {
+        // Keep the browser-origin fallback when the configured canonical URL is invalid.
     }
 
     const productJsonLd = buildProductJsonLd({
@@ -317,13 +324,33 @@ const ProductDetailPage = () => {
         currency,
         stockAvailable,
         displaySku,
-        storeName,
         pageUrl: resolvedPageUrl,
         canonicalBaseUrl,
         visibleReviews,
     });
 
+    const breadcrumbStructuredData = buildBreadcrumbJsonLd({
+        items: [
+            { name: 'Home', url: '/' },
+            { name: 'Products', url: '/products' },
+            { name: product.name },
+        ],
+        canonicalBaseUrl,
+        pageUrl: resolvedPageUrl,
+    });
+
+    const productStructuredData = [productJsonLd, breadcrumbStructuredData].filter(Boolean);
+
     const hasVariants = Array.isArray(product?.variants) && product.variants.some((v) => v?.isActive !== false);
+
+    const handleVariantSelect = (variant) => {
+        setSelectedVariant(variant);
+        const variantKey = variant?.sku || variant?.id;
+        if (!variantKey) return;
+        const params = new URLSearchParams(location.search);
+        params.set('variant', String(variantKey));
+        navigate({ pathname: location.pathname, search: `?${params.toString()}` }, { replace: true });
+    };
 
     const addSelectedItemToCart = async (action) => {
         if (hasVariants && !selectedVariant) {
@@ -406,7 +433,7 @@ const ProductDetailPage = () => {
                 image={product.ogImage || product.images?.[0]?.url}
                 type="product"
                 url={resolvedPageUrl}
-                structuredData={productJsonLd}
+                structuredData={productStructuredData}
             />
             <Grid
                 container
@@ -540,13 +567,13 @@ const ProductDetailPage = () => {
                         <Box sx={{ display: 'flex', alignItems: 'baseline', gap: 2, mb: 2.5, flexWrap: 'wrap' }}>
                             {hasSale ? (
                                 <>
-                                    <Typography variant="h3" color="primary" fontWeight={900} sx={{ fontSize: { xs: '2rem', lg: '2.4rem' } }}>{formatPrice(currentPrice)}</Typography>
+                                    <Typography variant="h3" component="div" color="primary" fontWeight={900} sx={{ fontSize: { xs: '2rem', lg: '2.4rem' } }}>{formatPrice(currentPrice)}</Typography>
                                     <Typography variant="h6" color="text.secondary" sx={{ textDecoration: 'line-through' }}>
                                         {formatPrice(regularPrice)}
                                     </Typography>
                                 </>
                             ) : (
-                                <Typography variant="h3" fontWeight={900} sx={{ fontSize: { xs: '2rem', lg: '2.4rem' } }}>{formatPrice(currentPrice)}</Typography>
+                                <Typography variant="h3" component="div" fontWeight={900} sx={{ fontSize: { xs: '2rem', lg: '2.4rem' } }}>{formatPrice(currentPrice)}</Typography>
                             )}
                             {pricingEnabled && hasSale && showDiscountPercent && discountPercent > 0 && <Chip {...themedChipProps({ label: `${discountPercent}% OFF`, color: "error" })} />}
                             {pricingEnabled && isScheduledSale && <Chip {...themedChipProps({ label: "Sale Starts Soon", color: "warning" })} />}
@@ -637,7 +664,7 @@ const ProductDetailPage = () => {
                         <VariantSelector
                             variants={activeVariants}
                             selectedVariantId={selectedVariant?.id}
-                            onSelect={setSelectedVariant}
+                            onSelect={handleVariantSelect}
                         />
                     )}
 
@@ -748,7 +775,7 @@ const ProductDetailPage = () => {
 
                     {displayAttributes.length > 0 && (
                         <>
-                            <Typography variant="h6" fontWeight={900} gutterBottom>Specifications</Typography>
+                            <Typography variant="h6" component="h2" fontWeight={900} gutterBottom>Specifications</Typography>
                             <Box sx={{ display: 'grid', gap: 1.25 }}>
                                 {displayAttributes.map((attributeRow) => {
                                     const label = attributeRow.displayLabel;
@@ -781,7 +808,7 @@ const ProductDetailPage = () => {
 
                     {product.description && (
                         <>
-                            <Typography variant="h6" fontWeight={900} sx={{ mt: 4 }} gutterBottom>Product Details</Typography>
+                            <Typography variant="h6" component="h2" fontWeight={900} sx={{ mt: 4 }} gutterBottom>Product Details</Typography>
                             <Box dangerouslySetInnerHTML={{ __html: DOMPurify.sanitize(product.description || '') }} sx={{ typography: 'body2', color: 'text.secondary', '& p': { mt: 0, mb: 2 } }} />
                         </>
                     )}
@@ -828,7 +855,7 @@ const ProductDetailPage = () => {
                                         <Typography variant="body2" color="error.main" fontWeight={800}>
                                             -{discountPercent}% deal
                                         </Typography>
-                                        <Typography variant="h4" fontWeight={900} sx={{ lineHeight: 1.15 }}>
+                                        <Typography variant="h4" component="div" fontWeight={900} sx={{ lineHeight: 1.15 }}>
                                             {formatPrice(currentPrice)}
                                         </Typography>
                                         <Typography variant="caption" color="text.secondary" sx={{ textDecoration: 'line-through' }}>
@@ -836,7 +863,7 @@ const ProductDetailPage = () => {
                                         </Typography>
                                     </>
                                 ) : (
-                                    <Typography variant="h4" fontWeight={900}>{formatPrice(currentPrice)}</Typography>
+                                    <Typography variant="h4" component="div" fontWeight={900}>{formatPrice(currentPrice)}</Typography>
                                 )}
                                 {displayUnit && (
                                     <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mt: 0.25 }}>

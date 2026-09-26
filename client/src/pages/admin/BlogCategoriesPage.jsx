@@ -135,7 +135,7 @@ const BlogCategoriesPage = () => {
   return (
     <Box p={3}>
       <Box display="flex" justifyContent="space-between" alignItems="center" mb={3}>
-        <Typography variant="h4">Blog Categories</Typography>
+        <Typography variant="h4" component="h1">Blog Categories</Typography>
         {canManageBlogs && (
           <Button
             variant="contained"

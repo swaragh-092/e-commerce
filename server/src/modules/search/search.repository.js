@@ -68,28 +68,61 @@ const TRIGRAM_FALLBACK_THRESHOLD = 3;
 // Minimum similarity score for a trigram match to be considered relevant.
 const TRIGRAM_MIN_SIMILARITY = 0.2;
 
+// Category names are stored in the many-to-many category table, so they are
+// not part of products.search_vector. Keep an exact category match in the
+// product query and give it the highest relevance band. This makes a search
+// for "marigold" return products in the Marigold category before loose name
+// matches such as MARS or MARBLE.
+const categoryMatchSql = () => `EXISTS (
+  SELECT 1
+  FROM "product_categories" AS "search_product_categories"
+  INNER JOIN "categories" AS "search_categories"
+    ON "search_categories"."id" = "search_product_categories"."category_id"
+  WHERE "search_product_categories"."product_id" = "Product"."id"
+    AND (
+      LOWER("search_categories"."name") = LOWER($queryText)
+      OR LOWER("search_categories"."slug") = LOWER($queryText)
+    )
+)`;
+
+const buildRelevanceSql = (baseRelevanceSql) => `(
+  CASE WHEN ${categoryMatchSql()} THEN 100000 ELSE 0 END
+  + CASE WHEN LOWER("Product"."name") = LOWER($queryText) THEN 10000 ELSE 0 END
+  + CASE WHEN LOWER(COALESCE("Product"."sku", '')) = LOWER($queryText) THEN 9000 ELSE 0 END
+  + CASE WHEN LOWER("Product"."name") LIKE LOWER($queryText) || '%' THEN 1000 ELSE 0 END
+  + (${baseRelevanceSql})
+)`;
+
 const ftsWhere = (queryText) => ({
   ...PUBLISHED_WHERE,
   [Op.and]: [
-    Sequelize.literal(`"Product"."search_vector" @@ plainto_tsquery('simple', $queryText)`),
+    Sequelize.literal(`(
+      "Product"."search_vector" @@ plainto_tsquery('simple', $queryText)
+      OR ${categoryMatchSql()}
+    )`),
   ],
 });
 
 const ftsRelevance = (queryText) => [
-  Sequelize.literal(`ts_rank("Product"."search_vector", plainto_tsquery('simple', $queryText))`),
+  Sequelize.literal(buildRelevanceSql(
+    `ts_rank("Product"."search_vector", plainto_tsquery('simple', $queryText))`
+  )),
   'relevance',
 ];
 
 const trigramWhere = (queryText) => ({
   ...PUBLISHED_WHERE,
   [Op.or]: [
+    Sequelize.literal(categoryMatchSql()),
     Sequelize.literal(`similarity("Product"."name", $queryText) > ${TRIGRAM_MIN_SIMILARITY}`),
     Sequelize.literal(`similarity("Product"."sku", $queryText) > 0.3`),
   ],
 });
 
 const trigramRelevance = (queryText) => [
-  Sequelize.literal(`GREATEST(similarity("Product"."name", $queryText), similarity("Product"."sku", $queryText))`),
+  Sequelize.literal(buildRelevanceSql(
+    `GREATEST(similarity("Product"."name", $queryText), similarity("Product"."sku", $queryText))`
+  )),
   'relevance',
 ];
 
@@ -184,7 +217,10 @@ const searchBrands = async (queryText, limit = 5) => {
         ],
       },
       attributes: ['id', 'name', 'slug', 'image'],
-      order: [[Sequelize.literal(`similarity(name, $queryText)`), 'DESC']],
+      order: [[Sequelize.literal(`
+        CASE WHEN LOWER(name) = LOWER($queryText) OR LOWER(slug) = LOWER($queryText)
+          THEN 1 ELSE 0 END
+      `), 'DESC'], [Sequelize.literal(`similarity(name, $queryText)`), 'DESC']],
       limit,
       bind: { queryText },
     });
@@ -206,9 +242,20 @@ const searchCategories = async (queryText, limit = 5) => {
     // Note: Category currently lacks visibility filters (isActive/status) in the schema.
     // If these are added later, they should be included here.
     return await Category.findAll({
-      where: Sequelize.literal(`name % $queryText`),
+      where: Sequelize.literal(`(
+        LOWER(name) = LOWER($queryText)
+        OR LOWER(slug) = LOWER($queryText)
+        OR name % $queryText
+        OR slug % $queryText
+      )`),
       attributes: ['id', 'name', 'slug', 'image'],
-      order: [[Sequelize.literal(`similarity(name, $queryText)`), 'DESC']],
+      order: [
+        [Sequelize.literal(`
+          CASE WHEN LOWER(name) = LOWER($queryText) OR LOWER(slug) = LOWER($queryText)
+            THEN 1 ELSE 0 END
+        `), 'DESC'],
+        [Sequelize.literal(`similarity(name, $queryText)`), 'DESC'],
+      ],
       limit,
       bind: { queryText },
     });
@@ -290,4 +337,11 @@ const suggestCorrection = async (queryText) => {
   }
 };
 
-module.exports = { searchProducts, searchBrands, searchCategories, suggestCorrection };
+module.exports = {
+  searchProducts,
+  searchBrands,
+  searchCategories,
+  suggestCorrection,
+  categoryMatchSql,
+  buildRelevanceSql,
+};

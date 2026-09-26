@@ -102,6 +102,9 @@ const SearchResultsPage = () => {
           border: `1px solid ${alpha(theme.palette.primary.main, 0.08)}`,
         }}
       >
+        <Typography variant="h4" component="h1" fontWeight={700} sx={{ mb: 2 }}>
+          {urlQuery ? `Search results for "${urlQuery}"` : 'Search products'}
+        </Typography>
         <Box
           sx={{
             display: 'flex',

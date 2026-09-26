@@ -676,7 +676,7 @@ const CategoriesPage = () => {
             {/* Page Header */}
             <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', mb: 3, flexWrap: 'wrap', gap: 2, flexShrink: 0 }}>
                 <Box>
-                    <Typography variant="h4" fontWeight={700} gutterBottom>
+                    <Typography variant="h4" component="h1" fontWeight={700} gutterBottom>
                         Categories Management
                     </Typography>
                     {!loading && (

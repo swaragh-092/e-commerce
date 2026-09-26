@@ -1,7 +1,10 @@
-import { Box, Typography, Button, Chip, Paper, Stack } from '@mui/material';
+import { useState } from 'react';
+import { Box, Typography, Button, Chip, Paper, Stack, Dialog, DialogTitle, DialogContent, DialogActions } from '@mui/material';
 import RestoreIcon from '@mui/icons-material/Restore';
 
 const ThemeHistoryPanel = ({ activations, onRollback, loading }) => {
+  const [pendingRollback, setPendingRollback] = useState(null);
+
   if (!activations?.length) {
     return <Typography color="text.secondary">No theme installations yet.</Typography>;
   }
@@ -24,7 +27,7 @@ const ThemeHistoryPanel = ({ activations, onRollback, loading }) => {
               {a.rolledBackAt ? (
                 <Chip label="Rolled back" size="small" color="warning" />
               ) : (
-                <Button size="small" startIcon={<RestoreIcon />} onClick={() => onRollback(a.id)} disabled={loading}>
+                <Button size="small" startIcon={<RestoreIcon />} onClick={() => setPendingRollback(a)} disabled={loading}>
                   Rollback
                 </Button>
               )}
@@ -32,6 +35,30 @@ const ThemeHistoryPanel = ({ activations, onRollback, loading }) => {
           </Box>
         </Paper>
       ))}
+      <Dialog open={!!pendingRollback} onClose={() => !loading && setPendingRollback(null)} maxWidth="xs" fullWidth>
+        <DialogTitle>Rollback this template installation?</DialogTitle>
+        <DialogContent>
+          <Typography variant="body2" color="text.secondary">
+            Settings and dynamic sources that still match this installation will be restored to their previous state. Newer edits made after the installation will be preserved and reported after rollback.
+          </Typography>
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setPendingRollback(null)} disabled={loading}>Cancel</Button>
+          <Button
+            variant="contained"
+            color="warning"
+            startIcon={<RestoreIcon />}
+            onClick={() => {
+              const activationId = pendingRollback?.id;
+              setPendingRollback(null);
+              if (activationId) onRollback(activationId);
+            }}
+            disabled={loading}
+          >
+            Confirm rollback
+          </Button>
+        </DialogActions>
+      </Dialog>
     </Stack>
   );
 };

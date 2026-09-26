@@ -8,6 +8,10 @@ const SettingsService = require('../settings/settings.service');
 const { getSaleLabels } = require('../settings/saleLabel.service');
 const { serializeProductPricing } = require('../product/product.pricing');
 
+// ProductVariant has no salePrice column. Product-level sale rules are
+// applied by serializeProductPricing after the query returns.
+const CATEGORY_PRODUCT_VARIANT_ATTRIBUTES = ['id', 'price', 'stockQty', 'reservedQty', 'isActive'];
+
 const getLabelPresets = () => getSaleLabels().catch(() => []);
 
 /**
@@ -223,7 +227,7 @@ exports.getCategoryWithProducts = async (slug, pageOrOptions = 1, limitArg = 20,
                 model: ProductVariant,
                 as: 'variants',
                 required: false,
-                attributes: ['id', 'price', 'salePrice', 'stockQty', 'isActive'],
+                attributes: CATEGORY_PRODUCT_VARIANT_ATTRIBUTES,
             },
         ],
         limit: parseInt(limit, 10),
@@ -253,6 +257,8 @@ exports.getCategoryWithProducts = async (slug, pageOrOptions = 1, limitArg = 20,
         },
     };
 };
+
+exports.CATEGORY_PRODUCT_VARIANT_ATTRIBUTES = CATEGORY_PRODUCT_VARIANT_ATTRIBUTES;
 
 
 /**

@@ -152,7 +152,7 @@ const ProductListPage = () => {
                 borderColor: 'divider',
                 background: isEditorialCatalog ? (theme) => `linear-gradient(135deg, ${alpha(theme.palette.primary.main, 0.10)}, ${alpha(theme.palette.secondary.main, 0.06)})` : 'transparent',
             }}>
-                <Typography variant="h4" fontWeight="bold">Our Products</Typography>
+                <Typography variant="h4" component="h1" fontWeight="bold">Our Products</Typography>
 
                 <Box sx={{ display: 'flex', gap: 2, alignItems: 'center' }}>
                     {showFilters && isMobile && (

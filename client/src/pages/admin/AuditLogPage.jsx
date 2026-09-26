@@ -201,7 +201,7 @@ const AuditLogPage = () => {
     <Box sx={{ p: 1 }}>
       <Stack direction="row" justifyContent="space-between" alignItems="center" mb={4}>
         <Box>
-          <Typography variant="h4" fontWeight={800} sx={{ letterSpacing: '-0.02em', mb: 0.5 }}>
+          <Typography variant="h4" component="h1" fontWeight={800} sx={{ letterSpacing: '-0.02em', mb: 0.5 }}>
             Audit Infrastructure
           </Typography>
           <Typography variant="body2" color="text.secondary">

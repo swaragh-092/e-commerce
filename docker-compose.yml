@@ -2,18 +2,30 @@ services:
   db:
     image: postgres:15-alpine
     environment:
-      POSTGRES_DB: ecommerce
-      POSTGRES_USER: postgres
-      POSTGRES_PASSWORD: secret
+      POSTGRES_DB: ${DB_NAME:-ecommerce}
+      POSTGRES_USER: ${DB_USER:-postgres}
+      POSTGRES_PASSWORD: ${DB_PASSWORD:?DB_PASSWORD must be set in .env before starting Compose}
       POSTGRES_HOST_AUTH_METHOD: scram-sha-256
       POSTGRES_INITDB_ARGS: "--auth-host=scram-sha-256"
     volumes: [pgdata:/var/lib/postgresql/data]
-    ports: ["5432:5432"]
-    healthcheck: { test: [CMD, pg_isready, -U, postgres], interval: 5s, timeout: 5s, retries: 5 }
+    # PostgreSQL is for local/container-network access only; do not expose it
+    # on every host interface.
+    ports: ["127.0.0.1:${DB_PORT:-5432}:5432"]
+    healthcheck:
+      test: ["CMD", "pg_isready", "-U", "${DB_USER:-postgres}"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
 
   server:
     build: ./server
     env_file: ./server/.env
+    environment:
+      DB_HOST: db
+      DB_PORT: 5432
+      DB_NAME: ${DB_NAME:-ecommerce}
+      DB_USER: ${DB_USER:-postgres}
+      DB_PASSWORD: ${DB_PASSWORD:?DB_PASSWORD must be set in .env before starting Compose}
     depends_on: { db: { condition: service_healthy } }
     volumes: [./server/uploads:/app/uploads]
     ports: [5000:5000]

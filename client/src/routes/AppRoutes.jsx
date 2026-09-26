@@ -1,12 +1,12 @@
 import React, { Suspense, lazy } from 'react';
-import { Routes, Route, Navigate } from 'react-router-dom';
+import { Routes, Route, Navigate, useLocation } from 'react-router-dom';
 import { Box, CircularProgress } from '@mui/material';
 import { useFeature, useMode } from '../hooks/useSettings';
 import { Outlet } from 'react-router-dom';
 
 // Layouts
-import StoreLayout from '../layouts/StoreLayout';
-import AdminLayout from '../layouts/AdminLayout';
+const StoreLayout = lazy(() => import('../layouts/StoreLayout'));
+const AdminLayout = lazy(() => import('../layouts/AdminLayout'));
 import { ProtectedRoute } from './ProtectedRoute';
 import { ADMIN_ACCESS_PERMISSIONS, PERMISSIONS, getFirstAccessibleAdminPath } from '../utils/permissions';
 import { useAuth } from '../hooks/useAuth';
@@ -27,6 +27,16 @@ const FeatureRoute = ({ feature, redirectTo = '/products' }) => {
 const ModeRoute = ({ requiredMode, redirectTo = '/admin' }) => {
   const currentMode = useMode();
   return currentMode === requiredMode ? <Outlet /> : <Navigate to={redirectTo} replace />;
+};
+
+const LegacySectionsRedirect = () => {
+  const location = useLocation();
+  return (
+    <Navigate
+      to={{ pathname: '/admin/store-designer', search: location.search, hash: location.hash }}
+      replace
+    />
+  );
 };
 
 // Storefront pages
@@ -239,7 +249,7 @@ const AppRoutes = () => (
             <Route path="email-templates" element={<EmailTemplatesPage />} />
             <Route path="themes" element={<ThemeGalleryPage />} />
             <Route path="store-designer" element={<SectionComposerPage />} />
-            <Route path="sections" element={<SectionComposerPage />} />
+            <Route path="sections" element={<LegacySectionsRedirect />} />
             <Route path="newsletter" element={<NewsletterSubscribersPage />} />
           </Route>
           {/* Payment Gateways, Shipping, Sale Labels — ecommerce only */}

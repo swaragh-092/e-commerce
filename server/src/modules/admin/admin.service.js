@@ -3,7 +3,7 @@
 const { Op, fn, col, literal, UniqueConstraintError } = require('sequelize');
 const slugify = require('slugify');
 const db = require('../index');
-const { Order, User, Product, Role, Permission, Review } = db;
+const { Order, User, Product, ProductVariant, Role, Permission, Review } = db;
 const AppError = require('../../utils/AppError');
 const AuditService = require('../audit/audit.service');
 const { ACTIONS, ENTITIES, ROLES } = require('../../config/constants');
@@ -65,6 +65,88 @@ const serializeAccessUser = (user) => {
 const canManageCustomRoles = (user) => getPermissionsForUser(user).includes(PERMISSIONS.ROLES_MANAGE);
 const canManageSystemRoles = (user) => getPermissionsForUser(user).includes(PERMISSIONS.SYSTEM_ROLES_MANAGE);
 
+const normalizeInventoryThreshold = (threshold) => {
+  const parsed = Number(threshold);
+  return Number.isFinite(parsed) && parsed >= 0 ? parsed : 10;
+};
+
+const getInventoryValues = (product) => {
+  const variants = Array.isArray(product?.variants) ? product.variants : [];
+  const activeVariants = variants.filter((variant) => variant?.isActive !== false);
+  const hasVariantRows = variants.length > 0;
+  const quantity = hasVariantRows
+    ? activeVariants.reduce((sum, variant) => sum + Math.max(Number(variant?.stockQty || 0), 0), 0)
+    : Math.max(Number(product?.quantity || 0), 0);
+  const reservedQty = hasVariantRows
+    ? activeVariants.reduce((sum, variant) => sum + Math.max(Number(variant?.reservedQty || 0), 0), 0)
+    : Math.max(Number(product?.reservedQty || 0), 0);
+
+  return {
+    quantity,
+    reservedQty,
+    availableQty: Math.max(quantity - reservedQty, 0),
+  };
+};
+
+const buildInventorySummary = (products, threshold = 10) => {
+  const normalizedThreshold = normalizeInventoryThreshold(threshold);
+  const rows = (Array.isArray(products) ? products : [])
+    .filter((product) => product?.status === 'published' && product?.isEnabled !== false)
+    .map((product) => {
+      const values = getInventoryValues(product);
+      const status = values.availableQty <= 0
+        ? 'out_of_stock'
+        : values.availableQty <= normalizedThreshold
+          ? 'low_stock'
+          : 'healthy';
+      return {
+        id: product.id,
+        name: product.name,
+        quantity: values.quantity,
+        reservedQty: values.reservedQty,
+        availableQty: values.availableQty,
+        threshold: normalizedThreshold,
+        status,
+      };
+    });
+
+  const atRiskRows = rows
+    .filter((row) => row.status !== 'healthy')
+    .sort((a, b) => (
+      (a.status === 'out_of_stock' ? 0 : 1) - (b.status === 'out_of_stock' ? 0 : 1)
+      || a.availableQty - b.availableQty
+      || String(a.name || '').localeCompare(String(b.name || ''))
+    ));
+
+  const outOfStockCount = atRiskRows.filter((row) => row.status === 'out_of_stock').length;
+  const lowStockCount = atRiskRows.length - outOfStockCount;
+
+  return {
+    rows: atRiskRows,
+    totalAtRisk: atRiskRows.length,
+    lowStockCount,
+    outOfStockCount,
+    threshold: normalizedThreshold,
+    health: atRiskRows.length === 0 ? 'healthy' : outOfStockCount > 0 ? 'out_of_stock' : 'low_stock',
+  };
+};
+
+const loadInventoryProducts = async () => Product.findAll({
+  attributes: ['id', 'name', 'quantity', 'reservedQty', 'status', 'isEnabled'],
+  where: { status: 'published', isEnabled: true },
+  include: [{
+    model: ProductVariant,
+    as: 'variants',
+    attributes: ['id', 'stockQty', 'reservedQty', 'isActive'],
+    required: false,
+  }],
+});
+
+const getInventorySummary = async (threshold) => {
+  const products = await loadInventoryProducts();
+  return buildInventorySummary(products, threshold);
+};
+
 /**
  * Overall dashboard stats:
  *  totalRevenue, orderCount, customerCount, productCount,
@@ -81,7 +163,7 @@ const getStats = async () => {
     customerCount,
     productCount,
     pendingOrders,
-    lowStockCount,
+    inventorySummary,
     pendingReviewsCount,
     totalReviewsCount,
   ] = await Promise.all([
@@ -95,9 +177,7 @@ const getStats = async () => {
     User.count({ where: { role: 'customer' } }),
     Product.count({ where: { status: 'published' } }),
     Order.count({ where: { status: 'pending_payment' } }),
-    Product.count({
-      where: literal(`"Product".quantity - "Product".reserved_qty < ${parseInt(threshold, 10)}`),
-    }),
+    getInventorySummary(threshold),
     Review.count({ where: { status: 'pending' } }),
     Review.count(),
   ]);
@@ -108,7 +188,17 @@ const getStats = async () => {
     customerCount,
     productCount,
     pendingOrders,
-    lowStockCount,
+    lowStockCount: inventorySummary.totalAtRisk,
+    lowStockOnlyCount: inventorySummary.lowStockCount,
+    outOfStockCount: inventorySummary.outOfStockCount,
+    inventoryHealth: inventorySummary.health,
+    inventory: {
+      totalAtRisk: inventorySummary.totalAtRisk,
+      lowStockCount: inventorySummary.lowStockCount,
+      outOfStockCount: inventorySummary.outOfStockCount,
+      threshold: inventorySummary.threshold,
+      health: inventorySummary.health,
+    },
     pendingReviewsCount,
     totalReviewsCount,
   };
@@ -227,23 +317,15 @@ const getLowStock = async (threshold) => {
     const catalog = await SettingsService.getByGroup('catalog', { maskSensitive: false });
     threshold = parseInt(catalog.lowStockThreshold, 10) || 10;
   }
-  const rows = await Product.findAll({
-    attributes: ['id', 'name', 'quantity', 'reservedQty'],
-    where: {
-      status: 'published',
-      [Op.and]: literal(`"Product".quantity - "Product".reserved_qty < ${parseInt(threshold, 10)}`),
-    },
-    order: [['quantity', 'ASC']],
-    limit: 50,
-  });
-
-  return rows.map((p) => ({
-    id: p.id,
-    name: p.name,
-    quantity: p.quantity,
-    reservedQty: p.reservedQty,
-    availableQty: p.quantity - p.reservedQty,
-  }));
+  const summary = await getInventorySummary(threshold);
+  return {
+    rows: summary.rows.slice(0, 50),
+    totalCount: summary.totalAtRisk,
+    lowStockCount: summary.lowStockCount,
+    outOfStockCount: summary.outOfStockCount,
+    threshold: summary.threshold,
+    health: summary.health,
+  };
 };
 
 /**
@@ -660,6 +742,7 @@ module.exports = {
   getStats,
   getSalesChart,
   getLowStock,
+  buildInventorySummary,
   getRecentOrders,
   getAccessRoles,
   getAccessPermissions,

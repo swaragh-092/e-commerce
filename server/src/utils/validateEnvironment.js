@@ -34,6 +34,9 @@ const validateEnvironment = () => {
     if (!process.env.DATABASE_URL && !process.env.DB_HOST) {
         errors.push('Neither DATABASE_URL nor DB_HOST is set. Cannot connect to database.');
     }
+    if (process.env.NODE_ENV === 'production' && !process.env.DATABASE_URL && !process.env.DB_PASSWORD) {
+        errors.push('DB_PASSWORD must be set in production. Refusing to start without a deployment-managed database secret.');
+    }
 
     // ── Payment (warn only — Razorpay is optional in dev) ────────────────────
     const warnings = [];

@@ -159,6 +159,113 @@ describe('Theme data source security', () => {
   });
 });
 
+// ─── Conflict-aware Rollback Tests ─────────────────────────────────────────
+
+describe('Conflict-aware theme rollback', () => {
+  const ThemeService = require('../../src/modules/theme/theme.service');
+
+  it('restores unchanged activation values and removes newly created rows', () => {
+    const plan = ThemeService.buildRollbackPlan(
+      { theme: { primaryColor: '#0f766e' } },
+      { theme: { primaryColor: '#111827', radius: 12 } },
+      { theme: { primaryColor: '#111827', radius: 12 } },
+    );
+
+    expect(plan.rows).toEqual([{ group: 'theme', key: 'primaryColor', value: '#0f766e' }]);
+    expect(plan.deletes).toEqual([{ group: 'theme', key: 'radius' }]);
+    expect(plan.conflicts).toEqual([]);
+  });
+
+  it('preserves a value changed after activation', () => {
+    const plan = ThemeService.buildRollbackPlan(
+      { theme: { primaryColor: '#0f766e' } },
+      { theme: { primaryColor: '#111827' } },
+      { theme: { primaryColor: '#be123c' } },
+    );
+
+    expect(plan.rows).toEqual([]);
+    expect(plan.deletes).toEqual([]);
+    expect(plan.conflicts).toEqual([{ group: 'theme', key: 'primaryColor' }]);
+  });
+
+  it('recreates a before value when a post-activation value was removed', () => {
+    const plan = ThemeService.buildRollbackPlan(
+      { theme: { primaryColor: '#0f766e' } },
+      { theme: { primaryColor: '#111827' } },
+      { theme: {} },
+    );
+
+    expect(plan.rows).toEqual([]);
+    expect(plan.conflicts).toEqual([{ group: 'theme', key: 'primaryColor' }]);
+  });
+});
+
+describe('Conflict-aware template data source rollback', () => {
+  const ThemeService = require('../../src/modules/theme/theme.service');
+
+  const source = (overrides = {}) => ({
+    id: 'source-1',
+    slug: 'template-demo-featured',
+    name: 'Featured Products',
+    description: '[template-data-source] template=demo key=featured',
+    isActive: true,
+    config: { blocks: [{ resource: 'products', limit: 8 }] },
+    createdByTemplateId: 'demo',
+    deletedAt: null,
+    ...overrides,
+  });
+
+  it('deactivates a source created by the activation when unchanged', () => {
+    const plan = ThemeService.buildDataSourceRollbackPlan(
+      [{ key: 'featured', id: 'source-1', slug: 'template-demo-featured', before: null, after: source() }],
+      { 'source-1': source() },
+    );
+
+    expect(plan.actions).toHaveLength(1);
+    expect(plan.actions[0].type).toBe('deactivate');
+    expect(plan.conflicts).toEqual([]);
+  });
+
+  it('restores the previous source configuration when unchanged', () => {
+    const before = source({ name: 'Original source', config: { blocks: [{ resource: 'products', limit: 4 }] } });
+    const after = source();
+    const plan = ThemeService.buildDataSourceRollbackPlan(
+      [{ key: 'featured', id: 'source-1', slug: after.slug, before, after }],
+      { 'source-1': after },
+    );
+
+    expect(plan.actions).toEqual([{ type: 'restore', ref: expect.any(Object), before }]);
+    expect(plan.conflicts).toEqual([]);
+  });
+
+  it('preserves a source changed by a newer activation or merchant edit', () => {
+    const after = source();
+    const plan = ThemeService.buildDataSourceRollbackPlan(
+      [{ key: 'featured', id: 'source-1', slug: after.slug, before: null, after }],
+      { 'source-1': source({ config: { blocks: [{ resource: 'products', limit: 12 }] } }) },
+    );
+
+    expect(plan.actions).toEqual([]);
+    expect(plan.conflicts).toEqual([{
+      type: 'dataSource',
+      key: 'featured',
+      id: 'source-1',
+      slug: after.slug,
+      reason: 'source_changed_after_activation',
+    }]);
+  });
+
+  it('preserves legacy activations without a source snapshot', () => {
+    const plan = ThemeService.buildDataSourceRollbackPlan(
+      [{ key: 'featured', id: 'source-1', slug: 'template-demo-featured' }],
+      { 'source-1': source() },
+    );
+
+    expect(plan.actions).toEqual([]);
+    expect(plan.conflicts[0].reason).toBe('missing_activation_snapshot');
+  });
+});
+
 // ─── Dark Palette Validation ────────────────────────────────────────────────
 
 describe('Dark palette validation', () => {

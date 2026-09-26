@@ -95,7 +95,7 @@ const SettingsPreviewPanel = ({
         <>
           {announcementEnabled && (
             <Box sx={{ mb: 1.5, px: 1.5, py: 1, bgcolor: form['announcement.bgColor'] || brandPrimary, color: form['announcement.fgColor'] || '#fff', borderRadius: 2, fontSize: 12, textAlign: 'center' }}>
-              {form['announcement.text'] || 'Free shipping on orders over $50!'}
+              {form['announcement.text'] || 'Fresh arrivals and curated picks are live.'}
             </Box>
           )}
           <Box sx={{ ...previewCardSx, p: 1.5, mb: 1.5 }}>

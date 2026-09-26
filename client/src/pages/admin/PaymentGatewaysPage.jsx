@@ -437,7 +437,7 @@ const PaymentGatewaysPage = () => {
     <Box sx={{ maxWidth: 860, mx: 'auto' }}>
       {/* Header */}
       <Box sx={{ mb: 3 }}>
-        <Typography variant="h5" fontWeight={800} gutterBottom>Payment Gateways</Typography>
+        <Typography variant="h5" component="h1" fontWeight={800} gutterBottom>Payment Gateways</Typography>
         <Typography variant="body2" color="text.secondary">
           Choose which payment methods are available at checkout. Configure a gateway first,
           then enable it for customers — no server restart needed.

@@ -80,7 +80,7 @@ const BrandDetailPage = () => {
   if (!loadingBrand && !brand) {
     return (
       <Container maxWidth="lg" sx={{ py: 8, textAlign: 'center' }}>
-        <Typography variant="h5" color="text.secondary" gutterBottom>
+        <Typography variant="h5" component="h1" color="text.secondary" gutterBottom>
           Brand not found.
         </Typography>
         <Button component={RouterLink} to="/brands" variant="contained">
@@ -155,7 +155,7 @@ const BrandDetailPage = () => {
               <Typography variant="overline" color="primary" sx={{ fontWeight: 700 }}>
                 Brand
               </Typography>
-              <Typography variant="h3" fontWeight={800} gutterBottom>
+              <Typography variant="h3" component="h1" fontWeight={800} gutterBottom>
                 {brand?.name}
               </Typography>
               <Typography variant="body1" color="text.secondary" sx={{ maxWidth: 720, mb: 2 }}>
@@ -175,7 +175,7 @@ const BrandDetailPage = () => {
       </Box>
 
       <Box sx={{ mb: 3, display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 2, flexWrap: 'wrap' }}>
-        <Typography variant="h5" fontWeight={700}>
+        <Typography variant="h5" component="h2" fontWeight={700}>
           Products from {brand?.name || 'this brand'}
         </Typography>
         {!loadingProducts && meta.total > 0 && (

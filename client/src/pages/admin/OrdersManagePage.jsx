@@ -454,7 +454,7 @@ const OrdersManagePage = () => {
 
   return (
     <Box>
-      <Typography variant="h5" fontWeight={700} mb={3}>
+      <Typography variant="h5" component="h1" fontWeight={700} mb={3}>
         Orders
       </Typography>
 

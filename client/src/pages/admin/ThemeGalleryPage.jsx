@@ -247,8 +247,28 @@ const ThemeGalleryPage = () => {
   const handleRollback = async (activationId) => {
     setActionLoading(true);
     try {
-      await themeService.rollbackTheme(activationId);
-      notify('Template install rolled back successfully.', 'success');
+      const result = await themeService.rollbackTheme(activationId);
+      const conflictCount = Array.isArray(result?.rollbackConflicts) ? result.rollbackConflicts.length : 0;
+      const dataSourceConflicts = Array.isArray(result?.dataSourceRollbackConflicts)
+        ? result.dataSourceRollbackConflicts
+        : [];
+      const totalConflictCount = conflictCount + dataSourceConflicts.length;
+      if (totalConflictCount) {
+        const sourceNames = dataSourceConflicts
+          .map((conflict) => conflict.slug || conflict.key)
+          .filter(Boolean)
+          .slice(0, 2)
+          .join(', ');
+        const detail = [
+          conflictCount ? `${conflictCount} newer setting${conflictCount === 1 ? '' : 's'}` : null,
+          dataSourceConflicts.length
+            ? `${dataSourceConflicts.length} dynamic source${dataSourceConflicts.length === 1 ? '' : 's'}${sourceNames ? ` (${sourceNames})` : ''}`
+            : null,
+        ].filter(Boolean).join(' and ');
+        notify(`Rollback completed; preserved ${detail}.`, 'warning');
+      } else {
+        notify('Template install rolled back successfully.', 'success');
+      }
       if (refreshSettings) await refreshSettings();
       await fetchData();
     } catch (e) {
@@ -340,7 +360,7 @@ const ThemeGalleryPage = () => {
     <Box sx={{ p: 3 }}>
       <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', mb: 3, gap: 2 }}>
         <Box>
-          <Typography variant="h5" fontWeight={800}>Store Templates</Typography>
+          <Typography variant="h5" component="h1" fontWeight={800}>Store Templates</Typography>
           <Typography variant="body2" color="text.secondary" sx={{ mt: 0.5, maxWidth: 760 }}>
             Install launch-ready storefront blueprints. Templates can apply brand design, layout styling, homepage structure, demo content, and rollback history without touching custom code.
           </Typography>

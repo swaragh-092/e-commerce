@@ -260,7 +260,7 @@ const SaleLabelsPage = () => {
     <Box sx={{ p: 3, maxWidth: 900, mx: 'auto' }}>
       <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 3 }}>
         <Box>
-          <Typography variant="h5" fontWeight={700}>Sale Labels</Typography>
+          <Typography variant="h5" component="h1" fontWeight={700}>Sale Labels</Typography>
           <Typography variant="body2" color="text.secondary">
             Manage the central catalog of sale labels available for products. Drag to reorder.
           </Typography>

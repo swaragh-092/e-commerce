@@ -7,13 +7,7 @@ const authService = {
     const response = await api.post('/auth/login', { email, password, rememberMe });
     const data = response.data.data;
     // If 2FA is required, don't store tokens yet
-    if (data.requiresTwoFactor) {
-      return data;
-    }
-    if (data.tokens) {
-      localStorage.setItem('accessToken', data.tokens.accessToken);
-      localStorage.setItem('refreshToken', data.tokens.refreshToken);
-    }
+    if (data.requiresTwoFactor) return data;
     // Persist email for "remember me"
     if (rememberMe) {
       localStorage.setItem('rememberedEmail', email);
@@ -25,12 +19,7 @@ const authService = {
 
   verifyTwoFactor: async (tempToken, code, trustDevice = false) => {
     const response = await api.post('/auth/2fa/verify', { tempToken, code, trustDevice });
-    const data = response.data.data;
-    if (data.tokens) {
-      localStorage.setItem('accessToken', data.tokens.accessToken);
-      localStorage.setItem('refreshToken', data.tokens.refreshToken);
-    }
-    return data;
+    return response.data.data;
   },
 
   setup2FA: async () => {
@@ -62,35 +51,20 @@ const authService = {
 
   verifyOtp: async (phone, code) => {
     const response = await api.post('/auth/otp/verify', { phone, code });
-    const data = response.data.data;
-    if (data.tokens) {
-      localStorage.setItem('accessToken', data.tokens.accessToken);
-      localStorage.setItem('refreshToken', data.tokens.refreshToken);
-    }
-    return data;
+    return response.data.data;
   },
 
   register: async (userData) => {
     const response = await api.post('/auth/register', userData);
-    // Store tokens so the user is logged in immediately after registering
-    if (response.data.data.tokens) {
-      localStorage.setItem('accessToken', response.data.data.tokens.accessToken);
-      localStorage.setItem('refreshToken', response.data.data.tokens.refreshToken);
-    }
-    return response.data.data; // { user, tokens }
+    return response.data.data; // { user, verificationEmail }
   },
 
   logout: async () => {
-    const refreshToken = localStorage.getItem('refreshToken');
-    if (refreshToken) {
-      try {
-        await api.post('/auth/logout', { refreshToken });
-      } catch (e) {
-        console.error('Logout error', e);
-      }
+    try {
+      await api.post('/auth/logout');
+    } catch (e) {
+      console.error('Logout error', e);
     }
-    localStorage.removeItem('accessToken');
-    localStorage.removeItem('refreshToken');
   },
 
   forgotPassword: async (email) => {

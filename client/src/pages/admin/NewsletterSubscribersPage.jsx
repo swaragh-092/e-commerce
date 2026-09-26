@@ -59,7 +59,7 @@ const NewsletterSubscribersPage = () => {
     <Container maxWidth="lg" sx={{ py: 4 }}>
       <Stack direction="row" justifyContent="space-between" alignItems="center" sx={{ mb: 3 }}>
         <Box>
-          <Typography variant="h5" fontWeight={800}>Newsletter Subscribers</Typography>
+          <Typography variant="h5" component="h1" fontWeight={800}>Newsletter Subscribers</Typography>
           <Typography variant="body2" color="text.secondary">
             {total} total • {activeCount} active on this page
           </Typography>

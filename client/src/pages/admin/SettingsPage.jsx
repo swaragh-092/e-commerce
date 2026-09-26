@@ -37,6 +37,7 @@ import buildSettingsPanels from '../../components/admin/settings/buildSettingsPa
 import { getMediaUrl } from '../../utils/media';
 import { DEFAULT_STORE_NAME } from '../../utils/store';
 import { INDIAN_STATES } from '../../utils/indianStates';
+import { isDesignerOwnedSetting } from '../../utils/storeDesign';
 
 const CURRENCIES = [
   { code: 'USD', symbol: '$',  name: 'US Dollar' },
@@ -64,78 +65,6 @@ const MASKED_SECRET = '********';
 
 const isMaskedSecret = (value) =>
   typeof value === 'string' && value.trim() === MASKED_SECRET;
-
-const FONTS = [
-  'Roboto',
-  'Inter',
-  'Open Sans',
-  'Lato',
-  'Poppins',
-  'Montserrat',
-  'Source Sans Pro',
-  'Ubuntu',
-  'IBM Plex Sans',
-  'Work Sans',
-  'Quicksand',
-  'Raleway',
-];
-
-const THEME_PRESETS = [
-  {
-    name: 'Premium Retail',
-    description: 'Warm storefront with emerald actions and coral accents.',
-    values: {
-      'theme.mode': 'light',
-      'theme.primaryColor': '#0f766e',
-      'theme.secondaryColor': '#f97316',
-      'theme.backgroundColor': '#f7f3ec',
-      'theme.surfaceColor': '#fffaf2',
-      'theme.textColor': '#1f2933',
-      'theme.fontFamily': 'Inter',
-      'theme.borderRadius': '12px',
-      'theme.headerStyle': 'gradient',
-      'theme.buttonStyle': 'solid',
-      'theme.cardStyle': 'elevated',
-      'theme.backgroundStyle': 'softGradient',
-    },
-  },
-  {
-    name: 'Clean Minimal',
-    description: 'Bright, simple, and product-first.',
-    values: {
-      'theme.mode': 'light',
-      'theme.primaryColor': '#111827',
-      'theme.secondaryColor': '#2563eb',
-      'theme.backgroundColor': '#f8fafc',
-      'theme.surfaceColor': '#ffffff',
-      'theme.textColor': '#111827',
-      'theme.fontFamily': 'Inter',
-      'theme.borderRadius': '8px',
-      'theme.headerStyle': 'solid',
-      'theme.buttonStyle': 'solid',
-      'theme.cardStyle': 'outlined',
-      'theme.backgroundStyle': 'solid',
-    },
-  },
-  {
-    name: 'Luxury Dark',
-    description: 'Dark premium theme with gold accents.',
-    values: {
-      'theme.mode': 'dark',
-      'theme.primaryColor': '#d4af37',
-      'theme.secondaryColor': '#8b5cf6',
-      'theme.backgroundColor': '#0f1115',
-      'theme.surfaceColor': '#181b22',
-      'theme.textColor': '#f8fafc',
-      'theme.fontFamily': 'Montserrat',
-      'theme.borderRadius': '10px',
-      'theme.headerStyle': 'gradient',
-      'theme.buttonStyle': 'solid',
-      'theme.cardStyle': 'elevated',
-      'theme.backgroundStyle': 'softGradient',
-    },
-  },
-];
 
 const DASHBOARD_ORDER_WIDGETS = [
   { id: 'salesChart', label: 'Sales Overview', description: 'Revenue and order trend chart' },
@@ -263,7 +192,6 @@ const SettingsPage = () => {
   }, [form['theme.fontFamily'], form['theme.headingFont']]);
 
   const set = (key, value) => setForm((f) => ({ ...f, [key]: value }));
-  const applyThemePreset = (preset) => setForm((f) => ({ ...f, ...preset.values }));
   const dashboardOrder = parseDashboardOrder(form['admin.dashboard.widgetOrder']);
   const setDashboardOrder = (order) => set('admin.dashboard.widgetOrder', order.join(','));
   const applyDashboardProfile = (profileKey) => {
@@ -305,8 +233,9 @@ const SettingsPage = () => {
       const payload = Object.entries(form).map(([flatKey, value]) => {
         const [group, ...keyParts] = flatKey.split('.');
         return { group, key: keyParts.join('.'), value };
-      }).filter(({ group, value }) => (
-        !isMaskedSecret(value)
+      }).filter(({ group, key, value }) => (
+        !isDesignerOwnedSetting(group, key)
+        && !isMaskedSecret(value)
         && (canManageAdvancedSettings || !['advanced', 'ai', 'ai_credentials'].includes(group))
       ));
       await updateSettings(payload);
@@ -559,8 +488,8 @@ const SettingsPage = () => {
     currSymbol, links, setLinks,
     headerStyle, buttonStyle, cardStyle, backgroundStyle, brandPrimary,
     dashboardOrder, handleDashboardOrderDragEnd,
-    applyThemePreset, applyDashboardProfile,
-    THEME_PRESETS, FONTS, CURRENCIES, DASHBOARD_ORDER_WIDGETS, DASHBOARD_PROFILES,
+    applyDashboardProfile,
+    CURRENCIES, DASHBOARD_ORDER_WIDGETS, DASHBOARD_PROFILES,
     HOMEPAGE_SECTION_TYPES, HOMEPAGE_PRODUCT_SOURCES, HOMEPAGE_VALUE_ICONS,
     homepageSections, heroSlides, homepagePromos, homepageValueProps,
     updateHomepageSection, moveHomepageSection, removeHomepageSection, addHomepageSection,
@@ -573,7 +502,7 @@ const SettingsPage = () => {
   return (
     <Box>
       <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 3 }}>
-        <Typography variant="h5" fontWeight={700}>
+        <Typography variant="h5" component="h1" fontWeight={700}>
           Settings
         </Typography>
         <Button variant="contained" onClick={handleSave} disabled={saving || !canManageSettings}>

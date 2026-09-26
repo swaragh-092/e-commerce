@@ -35,7 +35,7 @@ class SeoService {
     // Products
     for (const product of products) {
       xml += `  <url>\n`;
-      xml += `    <loc>${clientUrl}/product/${product.slug}</loc>\n`;
+      xml += `    <loc>${clientUrl}/products/${product.slug}</loc>\n`;
       xml += `    <lastmod>${product.updatedAt ? product.updatedAt.toISOString() : new Date().toISOString()}</lastmod>\n`;
       xml += `    <changefreq>weekly</changefreq>\n`;
       xml += `    <priority>0.6</priority>\n`;
@@ -64,8 +64,8 @@ class SeoService {
     }
 
     // 2. Check for Entity Specific SEO (Products/Categories)
-    // Extract slug from common patterns: /product/slug or /category/slug
-    const productMatch = urlPath.match(/^\/product\/([^\/]+)/);
+    // Extract slug from common patterns: /products/slug or the legacy /product/slug
+    const productMatch = urlPath.match(/^\/products?\/([^\/]+)/);
     const categoryMatch = urlPath.match(/^\/category\/([^\/]+)/);
 
     if (productMatch) {
@@ -77,7 +77,7 @@ class SeoService {
       }
       const product = await Product.findOne({ where: { slug } });
       if (product) {
-        return this._formatMetadata(product, 'product', urlPath);
+        return this._formatMetadata(product, 'product', `/products/${slug}`);
       }
     }
 

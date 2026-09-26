@@ -6,8 +6,8 @@ import { Link } from 'react-router-dom';
 const NotFoundPage = () => (
     <Container maxWidth="sm" sx={{ py: 10, textAlign: 'center' }}>
         <SearchOffIcon sx={{ fontSize: 100, color: 'text.disabled', mb: 2 }} />
-        <Typography variant="h2" fontWeight={800} gutterBottom>404</Typography>
-        <Typography variant="h5" gutterBottom>Page Not Found</Typography>
+        <Typography variant="h2" component="div" fontWeight={800} gutterBottom>404</Typography>
+        <Typography variant="h5" component="h1" gutterBottom>Page Not Found</Typography>
         <Typography color="text.secondary" sx={{ mb: 4 }}>
             Sorry, the page you're looking for doesn't exist or has been moved.
         </Typography>

@@ -7,6 +7,7 @@ const PageSEO = ({ title, description, image, url, type = 'website', structuredD
   const { settings } = useSettings();
   const siteName = getStoreName(settings);
   const fullTitle = title ? `${title} | ${siteName}` : siteName;
+  const schemas = (Array.isArray(structuredData) ? structuredData : [structuredData]).filter(Boolean);
 
   return (
     <Helmet>
@@ -30,11 +31,11 @@ const PageSEO = ({ title, description, image, url, type = 'website', structuredD
       {/* Canonical URL */}
       {url ? <link rel="canonical" href={url} /> : null}
 
-      {structuredData ? (
-        <script type="application/ld+json">
-          {JSON.stringify(structuredData)}
+      {schemas.map((schema, index) => (
+        <script key={schema['@id'] || `${schema['@type'] || 'schema'}-${index}`} type="application/ld+json">
+          {JSON.stringify(schema)}
         </script>
-      ) : null}
+      ))}
       
       {type === 'noindex' && <meta name="robots" content="noindex,nofollow" />}
     </Helmet>

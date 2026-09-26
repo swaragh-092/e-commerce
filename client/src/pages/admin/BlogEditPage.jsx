@@ -299,7 +299,7 @@ const BlogEditPage = () => {
           <IconButton onClick={() => navigate('/admin/blogs')}>
             <ArrowBackIcon />
           </IconButton>
-          <Typography variant="h5" fontWeight={700}>{isNew ? 'Create Blog Post' : `Edit: ${form.title}`}</Typography>
+          <Typography variant="h5" component="h1" fontWeight={700}>{isNew ? 'Create Blog Post' : `Edit: ${form.title}`}</Typography>
           {slug ? <Typography variant="caption" color="text.secondary">Slug: <code>{slug}</code></Typography> : null}
         </Box>
         <Button variant="contained" startIcon={<SaveIcon />} onClick={handleSave} disabled={saving || !canManageBlogs}>

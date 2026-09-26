@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { Box, FormControl, FormControlLabel, Grid, InputLabel, MenuItem, Paper, Select, Switch, Typography, Chip, Button, Stack, TextField, IconButton, Divider, Accordion, AccordionSummary, AccordionDetails } from '@mui/material';
+import { Box, FormControlLabel, Grid, Paper, Switch, Typography, Chip, Button, Stack, TextField, IconButton, Divider, Accordion, AccordionSummary, AccordionDetails } from '@mui/material';
 import DeleteOutlineIcon from '@mui/icons-material/DeleteOutline';
 import AddIcon from '@mui/icons-material/Add';
 import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
@@ -8,6 +8,8 @@ import { resolveRadius, resolveShadow } from '../../../utils/styleMaps';
 import { getProducts } from '../../../services/productService';
 import { getCategories } from '../../../services/categoryService';
 import { getMediaUrl } from '../../../utils/media';
+import { getDesignComponentControlSchema } from '../../../utils/designRegistry';
+import { DesignSchemaFields } from '../themes/designer/DesignSchemaFields';
 
 const usePreviewData = () => {
   const [product, setProduct] = useState(null);
@@ -30,43 +32,6 @@ const mergeStyle = (componentName, value) => ({
   ...(COMPONENT_STYLE_DEFAULTS[componentName] || {}),
   ...(value && typeof value === 'object' ? value : {}),
 });
-
-const option = (value, label) => <MenuItem key={value} value={value}>{label}</MenuItem>;
-
-const SELECT_MENU_PROPS = {
-  disableScrollLock: true,
-  PaperProps: {
-    sx: {
-      mt: 0.5,
-      maxHeight: 280,
-      maxWidth: 'min(360px, calc(100vw - 32px))',
-      '& .MuiMenuItem-root': { minHeight: 38, whiteSpace: 'normal' },
-    },
-  },
-};
-
-const SelectField = ({ label, value, onChange, children }) => (
-  <FormControl fullWidth size="small" sx={{ minWidth: 0 }}>
-    <InputLabel>{label}</InputLabel>
-    <Select
-      label={label}
-      value={value || ''}
-      onChange={(event) => onChange(event.target.value)}
-      MenuProps={SELECT_MENU_PROPS}
-    >
-      {children}
-    </Select>
-  </FormControl>
-);
-
-const ToggleField = ({ label, checked, onChange }) => (
-  <FormControlLabel
-    control={<Switch size="small" checked={checked !== false} onChange={(event) => onChange(event.target.checked)} />}
-    label={label}
-    sx={{ m: 0, minHeight: 38, '& .MuiFormControlLabel-label': { fontSize: 13 } }}
-  />
-);
-
 
 const PresetPicker = ({ title = 'Start with a preset', presets = [], activeValue, onApply }) => (
   <Box sx={{ mb: 2.5 }}>
@@ -332,7 +297,6 @@ const TrustCardPreview = ({ style }) => (
 
 export const ProductCardStyleEditor = ({ value, onChange, isSidebar }) => {
   const style = mergeStyle('productCard', value);
-  const patch = (key, nextValue) => onChange({ ...style, [key]: nextValue });
   const { product } = usePreviewData();
 
   return (
@@ -344,125 +308,11 @@ export const ProductCardStyleEditor = ({ value, onChange, isSidebar }) => {
           activeValue={style.variant}
           onApply={(values) => onChange({ ...style, ...values })}
         />
-        <Grid container spacing={1.25}>
-          <Grid item xs={12}>
-            <SelectField label="Product Card Variant" value={style.variant} onChange={(v) => patch('variant', v)}>
-              {option('classic', 'Classic')}
-              {option('compact', 'Compact')}
-              {option('editorial', 'Editorial')}
-              {option('marketplace', 'Marketplace')}
-              {option('minimal', 'Minimal')}
-              {option('deal', 'Deal')}
-            </SelectField>
-          </Grid>
-          <Grid item xs={12}>
-            <SelectField label="Image Ratio" value={style.imageRatio} onChange={(v) => patch('imageRatio', v)}>
-              {option('1/1', 'Square 1:1')}
-              {option('4/5', 'Portrait 4:5')}
-              {option('4/3', 'Landscape 4:3')}
-              {option('3/4', 'Tall 3:4')}
-              {option('16/9', 'Wide 16:9')}
-            </SelectField>
-          </Grid>
-          <Grid item xs={12}>
-            <SelectField label="Image Fit" value={style.imageFit} onChange={(v) => patch('imageFit', v)}>
-              {option('cover', 'Cover')}
-              {option('contain', 'Contain')}
-            </SelectField>
-          </Grid>
-          <Grid item xs={12}>
-            <SelectField label="Density" value={style.density} onChange={(v) => patch('density', v)}>
-              {option('compact', 'Compact')}
-              {option('comfortable', 'Comfortable')}
-              {option('spacious', 'Spacious')}
-            </SelectField>
-          </Grid>
-          <Grid item xs={12}>
-            <SelectField label="Content Alignment" value={style.contentAlign} onChange={(v) => patch('contentAlign', v)}>
-              {option('left', 'Left')}
-              {option('center', 'Center')}
-              {option('right', 'Right')}
-            </SelectField>
-          </Grid>
-          <Grid item xs={12}>
-            <SelectField label="Image Padding" value={style.imagePadding} onChange={(v) => patch('imagePadding', v)}>
-              {option('none', 'None')}
-              {option('comfortable', 'Comfortable')}
-              {option('spacious', 'Spacious')}
-            </SelectField>
-          </Grid>
-          <Grid item xs={12}>
-            <SelectField label="Title Lines" value={String(style.titleLines || 2)} onChange={(v) => patch('titleLines', Number(v))}>
-              {option('1', '1 line')}
-              {option('2', '2 lines')}
-              {option('3', '3 lines')}
-              {option('4', '4 lines')}
-            </SelectField>
-          </Grid>
-          <Grid item xs={12}>
-            <SelectField label="Price Style" value={style.priceStyle} onChange={(v) => patch('priceStyle', v)}>
-              {option('regular', 'Regular')}
-              {option('bold', 'Bold')}
-            </SelectField>
-          </Grid>
-          <Grid item xs={12}>
-            <SelectField label="Hover Effect" value={style.hoverEffect} onChange={(v) => patch('hoverEffect', v)}>
-              {option('none', 'None')}
-              {option('lift', 'Lift')}
-              {option('zoom', 'Zoom Image')}
-              {option('fade', 'Fade')}
-            </SelectField>
-          </Grid>
-          <Grid item xs={12}>
-            <SelectField label="Shadow" value={style.shadow} onChange={(v) => patch('shadow', v)}>
-              {option('none', 'None')}
-              {option('soft', 'Soft')}
-              {option('medium', 'Medium')}
-              {option('strong', 'Strong')}
-            </SelectField>
-          </Grid>
-          <Grid item xs={12}>
-            <SelectField label="Radius" value={style.radius} onChange={(v) => patch('radius', v)}>
-              {option('none', 'None')}
-              {option('small', 'Small')}
-              {option('medium', 'Medium')}
-              {option('large', 'Large')}
-              {option('pill', 'Pill')}
-            </SelectField>
-          </Grid>
-          <Grid item xs={12}>
-            <SelectField label="Badge Position" value={style.badgePosition} onChange={(v) => patch('badgePosition', v)}>
-              {option('top-right', 'Top Right')}
-              {option('top-left', 'Top Left')}
-              {option('bottom-right', 'Bottom Right')}
-              {option('bottom-left', 'Bottom Left')}
-            </SelectField>
-          </Grid>
-          <Grid item xs={12}>
-            <SelectField label="Wishlist/Share Position" value={style.wishlistPosition} onChange={(v) => patch('wishlistPosition', v)}>
-              {option('top-right', 'Top Right')}
-              {option('top-left', 'Top Left')}
-              {option('bottom-right', 'Bottom Right')}
-              {option('bottom-left', 'Bottom Left')}
-            </SelectField>
-          </Grid>
-          <Grid item xs={12}>
-            <SelectField label="Action Placement" value={style.actionPlacement} onChange={(v) => patch('actionPlacement', v)}>
-              {option('footer', 'Below content')}
-              {option('image-overlay', 'Image overlay')}
-            </SelectField>
-          </Grid>
-          <Grid item xs={12}>
-            <Box sx={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(170px, 1fr))', gap: 1 }}>
-              <ToggleField label="Show Brand" checked={style.showBrand} onChange={(v) => patch('showBrand', v)} />
-              <ToggleField label="Show Category" checked={style.showCategory} onChange={(v) => patch('showCategory', v)} />
-              <ToggleField label="Show Rating" checked={style.showRating} onChange={(v) => patch('showRating', v)} />
-              <ToggleField label="Show Wishlist" checked={style.showWishlist} onChange={(v) => patch('showWishlist', v)} />
-              <ToggleField label="Show Share" checked={style.showShare} onChange={(v) => patch('showShare', v)} />
-              <ToggleField label="Show Sale Countdown" checked={style.showSaleCountdown} onChange={(v) => patch('showSaleCountdown', v)} />
-            </Box>
-          </Grid>
-        </Grid>
+        <DesignSchemaFields
+          schema={getDesignComponentControlSchema('productCard')}
+          value={style}
+          onChange={onChange}
+        />
       </Box>
       {!isSidebar && (
         <Box sx={{ minWidth: 0, position: { xl: 'sticky' }, top: { xl: 12 } }}>
@@ -475,7 +325,6 @@ export const ProductCardStyleEditor = ({ value, onChange, isSidebar }) => {
 
 export const CategoryCardStyleEditor = ({ value, onChange, isSidebar }) => {
   const style = mergeStyle('categoryCard', value);
-  const patch = (key, nextValue) => onChange({ ...style, [key]: nextValue });
   const { category } = usePreviewData();
 
   return (
@@ -487,59 +336,11 @@ export const CategoryCardStyleEditor = ({ value, onChange, isSidebar }) => {
           activeValue={style.variant}
           onApply={(values) => onChange({ ...style, ...values })}
         />
-        <Grid container spacing={2}>
-          <Grid item xs={12} sm={6}>
-            <SelectField label="Category Card Variant" value={style.variant} onChange={(v) => patch('variant', v)}>
-              {option('image-tile', 'Image Tile')}
-              {option('icon-grid', 'Icon Grid')}
-              {option('compact-chips', 'Compact Chips')}
-            </SelectField>
-          </Grid>
-          <Grid item xs={12} sm={6}>
-            <SelectField label="Title Placement" value={style.titlePlacement} onChange={(v) => patch('titlePlacement', v)}>
-              {option('below', 'Below Image')}
-              {option('overlay', 'Overlay Bottom')}
-              {option('centered', 'Centered Overlay')}
-            </SelectField>
-          </Grid>
-          <Grid item xs={12} sm={6}>
-            <SelectField label="Image Ratio" value={style.imageRatio} onChange={(v) => patch('imageRatio', v)}>
-              {option('1/1', 'Square 1:1')}
-              {option('4/5', 'Portrait 4:5')}
-              {option('4/3', 'Landscape 4:3')}
-              {option('16/9', 'Wide 16:9')}
-            </SelectField>
-          </Grid>
-          <Grid item xs={12} sm={6}>
-            <SelectField label="Density" value={style.density} onChange={(v) => patch('density', v)}>
-              {option('compact', 'Compact')}
-              {option('comfortable', 'Comfortable')}
-              {option('spacious', 'Spacious')}
-            </SelectField>
-          </Grid>
-          <Grid item xs={12} sm={6}>
-            <SelectField label="Hover Effect" value={style.hoverEffect} onChange={(v) => patch('hoverEffect', v)}>
-              {option('none', 'None')}
-              {option('lift', 'Lift')}
-              {option('zoom', 'Zoom Image')}
-              {option('fade', 'Fade')}
-            </SelectField>
-          </Grid>
-          <Grid item xs={12} sm={6}>
-            <SelectField label="Shadow" value={style.shadow} onChange={(v) => patch('shadow', v)}>
-              {option('none', 'None')}
-              {option('soft', 'Soft')}
-              {option('medium', 'Medium')}
-              {option('strong', 'Strong')}
-            </SelectField>
-          </Grid>
-          <Grid item xs={12}>
-            <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', sm: 'repeat(2, 1fr)' }, gap: 1 }}>
-              <ToggleField label="Show Subtitle" checked={style.showSubtitle} onChange={(v) => patch('showSubtitle', v)} />
-              <ToggleField label="Show Product Count" checked={style.showProductCount} onChange={(v) => patch('showProductCount', v)} />
-            </Box>
-          </Grid>
-        </Grid>
+        <DesignSchemaFields
+          schema={getDesignComponentControlSchema('categoryCard')}
+          value={style}
+          onChange={onChange}
+        />
       </Grid>
       {!isSidebar && (
         <Grid item xs={12} md={4}>
@@ -553,60 +354,11 @@ export const CategoryCardStyleEditor = ({ value, onChange, isSidebar }) => {
 
 export const PromoCardStyleEditor = ({ value, onChange, isSidebar }) => {
   const style = mergeStyle('promoCard', value);
-  const patch = (key, nextValue) => onChange({ ...style, [key]: nextValue });
 
   return (
     <Grid container spacing={2}>
       <Grid item xs={12} md={isSidebar ? 12 : 8}>
-        <Grid container spacing={2}>
-          <Grid item xs={12} sm={6}>
-            <SelectField label="Promo Variant" value={style.variant} onChange={(v) => patch('variant', v)}>
-              {option('cards', 'Cards')}
-              {option('split-image', 'Split Image')}
-              {option('banner-stack', 'Banner Stack')}
-              {option('asymmetric', 'Asymmetric')}
-            </SelectField>
-          </Grid>
-          <Grid item xs={12} sm={6}>
-            <SelectField label="Image Placement" value={style.imagePlacement} onChange={(v) => patch('imagePlacement', v)}>
-              {option('right', 'Right')}
-              {option('left', 'Left')}
-              {option('top', 'Top')}
-              {option('background', 'Background')}
-            </SelectField>
-          </Grid>
-          <Grid item xs={12} sm={6}>
-            <SelectField label="Title Size" value={style.titleSize} onChange={(v) => patch('titleSize', v)}>
-              {option('small', 'Small')}
-              {option('medium', 'Medium')}
-              {option('large', 'Large')}
-            </SelectField>
-          </Grid>
-          <Grid item xs={12} sm={6}>
-            <SelectField label="CTA Style" value={style.ctaStyle} onChange={(v) => patch('ctaStyle', v)}>
-              {option('button', 'Button')}
-              {option('text-link', 'Text Link')}
-              {option('hidden', 'Hidden')}
-            </SelectField>
-          </Grid>
-          <Grid item xs={12} sm={6}>
-            <SelectField label="Radius" value={style.radius} onChange={(v) => patch('radius', v)}>
-              {option('none', 'None')}
-              {option('small', 'Small')}
-              {option('medium', 'Medium')}
-              {option('large', 'Large')}
-              {option('pill', 'Pill')}
-            </SelectField>
-          </Grid>
-          <Grid item xs={12} sm={6}>
-            <SelectField label="Shadow" value={style.shadow} onChange={(v) => patch('shadow', v)}>
-              {option('none', 'None')}
-              {option('soft', 'Soft')}
-              {option('medium', 'Medium')}
-              {option('strong', 'Strong')}
-            </SelectField>
-          </Grid>
-        </Grid>
+        <DesignSchemaFields schema={getDesignComponentControlSchema('promoCard')} value={style} onChange={onChange} />
       </Grid>
       {!isSidebar && <Grid item xs={12} md={4}><PromoCardPreview style={style} /></Grid>}
     </Grid>
@@ -615,43 +367,11 @@ export const PromoCardStyleEditor = ({ value, onChange, isSidebar }) => {
 
 export const BrandCardStyleEditor = ({ value, onChange, isSidebar }) => {
   const style = mergeStyle('brandCard', value);
-  const patch = (key, nextValue) => onChange({ ...style, [key]: nextValue });
 
   return (
     <Grid container spacing={2}>
       <Grid item xs={12} md={isSidebar ? 12 : 8}>
-        <Grid container spacing={2}>
-          <Grid item xs={12} sm={6}>
-            <SelectField label="Brand Variant" value={style.variant} onChange={(v) => patch('variant', v)}>
-              {option('logo-card', 'Logo Card')}
-              {option('logo-only', 'Logo Only')}
-            </SelectField>
-          </Grid>
-          <Grid item xs={12} sm={6}>
-            <SelectField label="Hover Effect" value={style.hoverEffect} onChange={(v) => patch('hoverEffect', v)}>
-              {option('none', 'None')}
-              {option('lift', 'Lift')}
-              {option('fade', 'Fade')}
-            </SelectField>
-          </Grid>
-          <Grid item xs={12} sm={6}>
-            <SelectField label="Radius" value={style.radius} onChange={(v) => patch('radius', v)}>
-              {option('none', 'None')}
-              {option('small', 'Small')}
-              {option('medium', 'Medium')}
-              {option('large', 'Large')}
-              {option('pill', 'Pill')}
-            </SelectField>
-          </Grid>
-          <Grid item xs={12} sm={6}>
-            <SelectField label="Shadow" value={style.shadow} onChange={(v) => patch('shadow', v)}>
-              {option('none', 'None')}
-              {option('soft', 'Soft')}
-              {option('medium', 'Medium')}
-              {option('strong', 'Strong')}
-            </SelectField>
-          </Grid>
-        </Grid>
+        <DesignSchemaFields schema={getDesignComponentControlSchema('brandCard')} value={style} onChange={onChange} />
       </Grid>
       {!isSidebar && <Grid item xs={12} md={4}><BrandCardPreview style={style} /></Grid>}
     </Grid>
@@ -660,43 +380,11 @@ export const BrandCardStyleEditor = ({ value, onChange, isSidebar }) => {
 
 export const TrustCardStyleEditor = ({ value, onChange, isSidebar }) => {
   const style = mergeStyle('trustCard', value);
-  const patch = (key, nextValue) => onChange({ ...style, [key]: nextValue });
 
   return (
     <Grid container spacing={2}>
       <Grid item xs={12} md={isSidebar ? 12 : 8}>
-        <Grid container spacing={2}>
-          <Grid item xs={12} sm={6}>
-            <SelectField label="Trust Variant" value={style.variant} onChange={(v) => patch('variant', v)}>
-              {option('icon-row', 'Icon Row')}
-              {option('card-grid', 'Card Grid')}
-            </SelectField>
-          </Grid>
-          <Grid item xs={12} sm={6}>
-            <SelectField label="Title Size" value={style.titleSize} onChange={(v) => patch('titleSize', v)}>
-              {option('small', 'Small')}
-              {option('medium', 'Medium')}
-              {option('large', 'Large')}
-            </SelectField>
-          </Grid>
-          <Grid item xs={12} sm={6}>
-            <SelectField label="Radius" value={style.radius} onChange={(v) => patch('radius', v)}>
-              {option('none', 'None')}
-              {option('small', 'Small')}
-              {option('medium', 'Medium')}
-              {option('large', 'Large')}
-              {option('pill', 'Pill')}
-            </SelectField>
-          </Grid>
-          <Grid item xs={12} sm={6}>
-            <SelectField label="Shadow" value={style.shadow} onChange={(v) => patch('shadow', v)}>
-              {option('none', 'None')}
-              {option('soft', 'Soft')}
-              {option('medium', 'Medium')}
-              {option('strong', 'Strong')}
-            </SelectField>
-          </Grid>
-        </Grid>
+        <DesignSchemaFields schema={getDesignComponentControlSchema('trustCard')} value={style} onChange={onChange} />
       </Grid>
       {!isSidebar && <Grid item xs={12} md={4}><TrustCardPreview style={style} /></Grid>}
     </Grid>
@@ -706,160 +394,24 @@ export const TrustCardStyleEditor = ({ value, onChange, isSidebar }) => {
 
 export const CartItemStyleEditor = ({ value, onChange }) => {
   const style = mergeStyle('cartItem', value);
-  const patch = (key, nextValue) => onChange({ ...style, [key]: nextValue });
 
-  return (
-    <Grid container spacing={2}>
-      <Grid item xs={12} sm={6}>
-        <SelectField label="Cart Item Layout" value={style.variant} onChange={(v) => patch('variant', v)}>
-          {option('standard', 'Standard')}
-          {option('compact', 'Compact')}
-          {option('editorial', 'Editorial')}
-        </SelectField>
-      </Grid>
-      <Grid item xs={12} sm={6}>
-        <SelectField label="Density" value={style.density} onChange={(v) => patch('density', v)}>
-          {option('compact', 'Compact')}
-          {option('comfortable', 'Comfortable')}
-          {option('spacious', 'Spacious')}
-        </SelectField>
-      </Grid>
-      <Grid item xs={12} sm={6}>
-        <SelectField label="Radius" value={style.radius} onChange={(v) => patch('radius', v)}>
-          {option('none', 'None')}
-          {option('small', 'Small')}
-          {option('medium', 'Medium')}
-          {option('large', 'Large')}
-        </SelectField>
-      </Grid>
-      <Grid item xs={12} sm={6}>
-        <SelectField label="Shadow" value={style.shadow} onChange={(v) => patch('shadow', v)}>
-          {option('none', 'None')}
-          {option('soft', 'Soft')}
-          {option('medium', 'Medium')}
-          {option('strong', 'Strong')}
-        </SelectField>
-      </Grid>
-      <Grid item xs={12} sm={6}>
-        <SelectField label="Hover Effect" value={style.hoverEffect} onChange={(v) => patch('hoverEffect', v)}>
-          {option('none', 'None')}
-          {option('lift', 'Lift')}
-          {option('fade', 'Fade')}
-        </SelectField>
-      </Grid>
-      <Grid item xs={12} sm={6}>
-        <ToggleField label="Show variant pill" checked={style.showVariantPill} onChange={(v) => patch('showVariantPill', v)} />
-      </Grid>
-    </Grid>
-  );
+  return <DesignSchemaFields schema={getDesignComponentControlSchema('cartItem')} value={style} onChange={onChange} />;
 };
 
 export const CheckoutBlockStyleEditor = ({ value, onChange }) => {
   const style = mergeStyle('checkoutBlock', value);
-  const patch = (key, nextValue) => onChange({ ...style, [key]: nextValue });
 
-  return (
-    <Grid container spacing={2}>
-      <Grid item xs={12} sm={6}>
-        <SelectField label="Checkout Block Variant" value={style.variant} onChange={(v) => patch('variant', v)}>
-          {option('boxed', 'Boxed')}
-          {option('minimal', 'Minimal')}
-          {option('elevated', 'Elevated')}
-        </SelectField>
-      </Grid>
-      <Grid item xs={12} sm={6}>
-        <SelectField label="Header Style" value={style.headerStyle} onChange={(v) => patch('headerStyle', v)}>
-          {option('stripe', 'Stripe')}
-          {option('plain', 'Plain')}
-          {option('accent', 'Accent')}
-        </SelectField>
-      </Grid>
-      <Grid item xs={12} sm={6}>
-        <SelectField label="Density" value={style.density} onChange={(v) => patch('density', v)}>
-          {option('compact', 'Compact')}
-          {option('comfortable', 'Comfortable')}
-          {option('spacious', 'Spacious')}
-        </SelectField>
-      </Grid>
-      <Grid item xs={12} sm={6}>
-        <SelectField label="CTA Style" value={style.ctaStyle} onChange={(v) => patch('ctaStyle', v)}>
-          {option('solid', 'Solid')}
-          {option('soft', 'Soft')}
-          {option('outline', 'Outline')}
-        </SelectField>
-      </Grid>
-      <Grid item xs={12} sm={6}>
-        <SelectField label="Radius" value={style.radius} onChange={(v) => patch('radius', v)}>
-          {option('none', 'None')}
-          {option('small', 'Small')}
-          {option('medium', 'Medium')}
-          {option('large', 'Large')}
-        </SelectField>
-      </Grid>
-      <Grid item xs={12} sm={6}>
-        <SelectField label="Shadow" value={style.shadow} onChange={(v) => patch('shadow', v)}>
-          {option('none', 'None')}
-          {option('soft', 'Soft')}
-          {option('medium', 'Medium')}
-          {option('strong', 'Strong')}
-        </SelectField>
-      </Grid>
-    </Grid>
-  );
+  return <DesignSchemaFields schema={getDesignComponentControlSchema('checkoutBlock')} value={style} onChange={onChange} />;
 };
 
 
 export const FormControlStyleEditor = ({ value, onChange, isSidebar }) => {
   const style = mergeStyle('formControl', value);
-  const patch = (key, nextValue) => onChange({ ...style, [key]: nextValue });
 
   return (
     <Grid container spacing={2} alignItems="stretch">
       <Grid item xs={12} md={isSidebar ? 12 : 8}>
-        <Grid container spacing={2}>
-          <Grid item xs={12} sm={6}>
-            <SelectField label="Input Variant" value={style.variant} onChange={(v) => patch('variant', v)}>
-              {option('outlined', 'Outlined')}
-              {option('filled', 'Filled')}
-            </SelectField>
-          </Grid>
-          <Grid item xs={12} sm={6}>
-            <SelectField label="Density" value={style.density} onChange={(v) => patch('density', v)}>
-              {option('compact', 'Compact')}
-              {option('comfortable', 'Comfortable')}
-              {option('spacious', 'Spacious')}
-            </SelectField>
-          </Grid>
-          <Grid item xs={12} sm={6}>
-            <SelectField label="Radius" value={style.radius} onChange={(v) => patch('radius', v)}>
-              {option('none', 'None')}
-              {option('small', 'Small')}
-              {option('medium', 'Medium')}
-              {option('large', 'Large')}
-              {option('pill', 'Pill')}
-            </SelectField>
-          </Grid>
-          <Grid item xs={12} sm={6}>
-            <SelectField label="Fill" value={style.fill} onChange={(v) => patch('fill', v)}>
-              {option('paper', 'Paper')}
-              {option('muted', 'Muted')}
-              {option('transparent', 'Transparent')}
-            </SelectField>
-          </Grid>
-          <Grid item xs={12} sm={6}>
-            <SelectField label="Focus Style" value={style.focusStyle} onChange={(v) => patch('focusStyle', v)}>
-              {option('brand', 'Brand Border')}
-              {option('glow', 'Soft Glow')}
-              {option('underline', 'Underline')}
-            </SelectField>
-          </Grid>
-          <Grid item xs={12} sm={6}>
-            <SelectField label="Label Style" value={style.labelStyle} onChange={(v) => patch('labelStyle', v)}>
-              {option('floating', 'Floating')}
-              {option('placeholder', 'Placeholder First')}
-            </SelectField>
-          </Grid>
-        </Grid>
+        <DesignSchemaFields schema={getDesignComponentControlSchema('formControl')} value={style} onChange={onChange} />
       </Grid>
       {!isSidebar && (
         <Grid item xs={12} md={4}>
@@ -878,51 +430,11 @@ export const FormControlStyleEditor = ({ value, onChange, isSidebar }) => {
 
 export const BadgeChipStyleEditor = ({ value, onChange }) => {
   const style = mergeStyle('badgeChip', value);
-  const patch = (key, nextValue) => onChange({ ...style, [key]: nextValue });
 
   return (
     <Grid container spacing={2} alignItems="stretch">
       <Grid item xs={12} md={8}>
-        <Grid container spacing={2}>
-          <Grid item xs={12} sm={6}>
-            <SelectField label="Badge Variant" value={style.variant} onChange={(v) => patch('variant', v)}>
-              {option('soft', 'Soft')}
-              {option('solid', 'Solid')}
-              {option('outline', 'Outline')}
-            </SelectField>
-          </Grid>
-          <Grid item xs={12} sm={6}>
-            <SelectField label="Size" value={style.size} onChange={(v) => patch('size', v)}>
-              {option('small', 'Small')}
-              {option('medium', 'Medium')}
-            </SelectField>
-          </Grid>
-          <Grid item xs={12} sm={6}>
-            <SelectField label="Radius" value={style.radius} onChange={(v) => patch('radius', v)}>
-              {option('none', 'None')}
-              {option('small', 'Small')}
-              {option('medium', 'Medium')}
-              {option('large', 'Large')}
-              {option('pill', 'Pill')}
-            </SelectField>
-          </Grid>
-          <Grid item xs={12} sm={6}>
-            <SelectField label="Weight" value={style.weight} onChange={(v) => patch('weight', v)}>
-              {option('regular', 'Regular')}
-              {option('bold', 'Bold')}
-              {option('black', 'Black')}
-            </SelectField>
-          </Grid>
-          <Grid item xs={12} sm={6}>
-            <SelectField label="Text Case" value={style.textTransform} onChange={(v) => patch('textTransform', v)}>
-              {option('uppercase', 'Uppercase')}
-              {option('none', 'Normal')}
-            </SelectField>
-          </Grid>
-          <Grid item xs={12} sm={6}>
-            <TextField fullWidth size="small" label="Letter Spacing" value={style.letterSpacing || ''} onChange={(e) => patch('letterSpacing', e.target.value)} placeholder="0.04em" />
-          </Grid>
-        </Grid>
+        <DesignSchemaFields schema={getDesignComponentControlSchema('badgeChip')} value={style} onChange={onChange} />
       </Grid>
       <Grid item xs={12} md={4}>
         <Paper variant="outlined" sx={{ p: 2, borderRadius: 3 }}>

@@ -16,11 +16,21 @@ const StoreHealthWidget = ({ stats, allSettings, spacing }) => {
     payments.cashfreeEnabled,
     payments.codEnabled,
   ].filter(Boolean).length;
+  const inventoryRiskCount = Number(stats?.inventory?.totalAtRisk ?? stats?.lowStockCount ?? 0);
+  const outOfStockCount = Number(stats?.inventory?.outOfStockCount ?? stats?.outOfStockCount ?? 0);
 
   const checks = [
     { label: 'Payment method enabled', ok: enabledGateways > 0, to: '/admin/settings' },
     { label: 'Published products available', ok: Number(stats?.productCount || 0) > 0, to: '/admin/products' },
-    { label: 'Inventory healthy', ok: Number(stats?.lowStockCount || 0) === 0, to: '/admin/products?stock=low' },
+    {
+      label: inventoryRiskCount === 0
+        ? 'Inventory healthy'
+        : outOfStockCount > 0
+          ? `${outOfStockCount} out of stock`
+          : `${inventoryRiskCount} low-stock items`,
+      ok: inventoryRiskCount === 0,
+      to: '/admin/products?stock=low',
+    },
     { label: 'Logo configured', ok: Boolean(logo.main), to: '/admin/settings' },
     { label: 'Guest checkout configured', ok: features.guestCheckout !== undefined, to: '/admin/settings' },
   ];

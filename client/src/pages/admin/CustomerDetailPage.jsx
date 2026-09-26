@@ -111,7 +111,7 @@ const CustomerDetailPage = () => {
 
       <Box sx={{ display: 'flex', justifyContent: 'space-between', gap: 2, alignItems: 'flex-start', mb: 3, flexWrap: 'wrap' }}>
         <Box>
-          <Typography variant="h5" fontWeight={800}>
+          <Typography variant="h5" component="h1" fontWeight={800}>
             {fullName}
           </Typography>
           <Typography variant="body2" color="text.secondary">

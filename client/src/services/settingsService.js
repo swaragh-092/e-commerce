@@ -10,6 +10,49 @@ export const getSettingsGroup = async (groupName) => {
   return response.data.data;
 };
 
+export const getDesignState = async () => {
+  const response = await api.get('/settings/design-state');
+  return response.data.data;
+};
+
+export const resetDesignSetting = async (group, key = null) => {
+  const response = await api.post('/settings/design-reset', { group, key });
+  return response.data.data;
+};
+
+export const getDesignDraft = async () => {
+  const response = await api.get('/settings/design-draft');
+  return response.data.data;
+};
+
+export const getDesignVersions = async (limit = 30) => {
+  const response = await api.get('/settings/design-versions', { params: { limit } });
+  return response.data.data;
+};
+
+export const saveDesignDraft = async (settings, expectedRevision = undefined) => {
+  const response = await api.post('/settings/design-draft', {
+    settings,
+    ...(expectedRevision == null ? {} : { expectedRevision }),
+  });
+  return response.data.data;
+};
+
+export const publishDesignDraft = async (expectedRevision = undefined) => {
+  const response = await api.post('/settings/design-draft/publish', expectedRevision == null ? {} : { expectedRevision });
+  return response.data.data;
+};
+
+export const restoreDesignVersion = async (versionId, expectedRevision = undefined) => {
+  const response = await api.post(`/settings/design-versions/${versionId}/restore`, expectedRevision == null ? {} : { expectedRevision });
+  return response.data.data;
+};
+
+export const discardDesignDraft = async () => {
+  const response = await api.delete('/settings/design-draft');
+  return response.data.data;
+};
+
 /**
  * Returns the fully resolved feature map for the current APP_MODE.
  * Mode-core features always override DB settings.
@@ -33,6 +76,14 @@ export const updateSingleSetting = async (key, value, group) => {
 const settingsService = {
   getAllSettings,
   getSettingsGroup,
+  getDesignState,
+  resetDesignSetting,
+  getDesignDraft,
+  getDesignVersions,
+  saveDesignDraft,
+  publishDesignDraft,
+  restoreDesignVersion,
+  discardDesignDraft,
   getFeatures,
   updateSettingsBulk,
   updateSingleSetting,

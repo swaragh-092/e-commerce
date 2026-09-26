@@ -1056,7 +1056,7 @@ const OrderDetailPage = () => {
             ← Back
           </Button>
           <Stack direction="row" spacing={1.5} alignItems="center" useFlexGap flexWrap="wrap">
-            <Typography variant="h5" fontWeight={700}>
+            <Typography variant="h5" component="h1" fontWeight={700}>
               {order.orderNumber}
             </Typography>
             <Chip label={getOrderStatusLabel(order.status)} color={getOrderStatusColor(order.status)} />

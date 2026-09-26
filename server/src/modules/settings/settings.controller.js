@@ -1,6 +1,7 @@
 'use strict';
 
 const SettingsService = require('./settings.service');
+const DesignDraftService = require('./designDraft.service');
 const { success } = require('../../utils/response');
 const { getMode } = require('../../config/modes');
 
@@ -17,6 +18,78 @@ const getByGroup = async (req, res, next) => {
   try {
     const result = await SettingsService.getByGroup(req.params.group);
     return success(res, result);
+  } catch (err) {
+    next(err);
+  }
+};
+
+const getDesignState = async (req, res, next) => {
+  try {
+    const result = await SettingsService.getDesignState();
+    return success(res, result);
+  } catch (err) {
+    next(err);
+  }
+};
+
+const resetDesignSetting = async (req, res, next) => {
+  try {
+    const result = await SettingsService.resetDesignSetting(req.body, req.user.id);
+    return success(res, result, 'Visual setting reset to default.');
+  } catch (err) {
+    next(err);
+  }
+};
+
+const getDesignDraft = async (req, res, next) => {
+  try {
+    return success(res, await DesignDraftService.getDraft());
+  } catch (err) {
+    next(err);
+  }
+};
+
+const getDesignVersions = async (req, res, next) => {
+  try {
+    return success(res, await DesignDraftService.getPublishedVersions({ limit: req.query.limit }));
+  } catch (err) {
+    next(err);
+  }
+};
+
+const saveDesignDraft = async (req, res, next) => {
+  try {
+    const draft = await DesignDraftService.saveDraft(req.body, req.user);
+    return success(res, draft, 'Design draft saved.');
+  } catch (err) {
+    next(err);
+  }
+};
+
+const publishDesignDraft = async (req, res, next) => {
+  try {
+    const result = await DesignDraftService.publishDraft(req.body, req.user);
+    return success(res, result, 'Design draft published.');
+  } catch (err) {
+    next(err);
+  }
+};
+
+const restoreDesignVersion = async (req, res, next) => {
+  try {
+    return success(res, await DesignDraftService.restorePublishedVersion({
+      versionId: req.params.id,
+      expectedRevision: req.body.expectedRevision,
+    }, req.user), 'Published design version restored into draft.');
+  } catch (err) {
+    next(err);
+  }
+};
+
+const discardDesignDraft = async (req, res, next) => {
+  try {
+    const result = await DesignDraftService.discardDraft(req.user);
+    return success(res, result, 'Design draft discarded.');
   } catch (err) {
     next(err);
   }
@@ -62,4 +135,18 @@ const getFeatures = async (req, res, next) => {
   }
 };
 
-module.exports = { getAll, getByGroup, updateSingle, updateBulk, getFeatures };
+module.exports = {
+  getAll,
+  getByGroup,
+  getDesignState,
+  resetDesignSetting,
+  getDesignDraft,
+  getDesignVersions,
+  saveDesignDraft,
+  publishDesignDraft,
+  restoreDesignVersion,
+  discardDesignDraft,
+  updateSingle,
+  updateBulk,
+  getFeatures,
+};
