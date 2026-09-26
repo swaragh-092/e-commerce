@@ -1,10 +1,10 @@
 import { useState } from 'react';
-import { Box, Typography, TextField, Button, Alert, useTheme, InputAdornment, Divider, CircularProgress } from '@mui/material';
+import { Box, Typography, TextField, Button, Alert, useTheme, IconButton, InputAdornment, Divider, CircularProgress } from '@mui/material';
 import { useNavigate, Link as RouterLink } from 'react-router-dom';
 import { useAuth } from '../../hooks/useAuth';
 import { validateEmail, validatePassword, validateRequired, getPasswordChecks } from '../../utils/authValidation';
 import { getApiErrorMessage } from '../../utils/apiErrors';
-import { EmailOutlined, LockOutlined, PersonOutline } from '@mui/icons-material';
+import { EmailOutlined, LockOutlined, PersonOutline, Visibility, VisibilityOff } from '@mui/icons-material';
 import AuthPageShell from '../../components/storefront/AuthPageShell';
 
 const RegisterPage = () => {
@@ -17,6 +17,8 @@ const RegisterPage = () => {
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
   const [touched, setTouched] = useState({});
+  const [showPassword, setShowPassword] = useState(false);
+  const [showConfirmPassword, setShowConfirmPassword] = useState(false);
 
   const validateForm = (values) => ({
     firstName: validateRequired(values.firstName, 'First name'),
@@ -225,7 +227,7 @@ const RegisterPage = () => {
           id="register-password"
           fullWidth
           name="password"
-          type="password"
+          type={showPassword ? 'text' : 'password'}
           placeholder="Enter your password"
           value={formData.password}
           onChange={handleChange}
@@ -241,6 +243,18 @@ const RegisterPage = () => {
               <InputAdornment position="start">
                 <LockOutlined fontSize="small" />
               </InputAdornment>
+            ),
+            endAdornment: (
+              <InputAdornment position="end">
+                <IconButton
+                  aria-label={showPassword ? 'Hide password' : 'Show password'}
+                  onClick={() => setShowPassword(prev => !prev)}
+                  onMouseDown={(e) => e.preventDefault()}
+                  edge="end"
+                >
+                  {showPassword ? <VisibilityOff /> : <Visibility />}
+                </IconButton>
+              </InputAdornment>
             )
           }}
         />
@@ -251,7 +265,7 @@ const RegisterPage = () => {
           id="register-confirm-password"
           fullWidth
           name="confirmPassword"
-          type="password"
+          type={showConfirmPassword ? 'text' : 'password'}
           placeholder="Confirm your password"
           value={formData.confirmPassword}
           onChange={handleChange}
@@ -264,6 +278,18 @@ const RegisterPage = () => {
             startAdornment: (
               <InputAdornment position="start">
                 <LockOutlined fontSize="small" />
+              </InputAdornment>
+            ),
+            endAdornment: (
+              <InputAdornment position="end">
+                <IconButton
+                  aria-label={showConfirmPassword ? 'Hide password' : 'Show password'}
+                  onClick={() => setShowConfirmPassword(prev => !prev)}
+                  onMouseDown={(e) => e.preventDefault()}
+                  edge="end"
+                >
+                  {showConfirmPassword ? <VisibilityOff /> : <Visibility />}
+                </IconButton>
               </InputAdornment>
             )
           }}

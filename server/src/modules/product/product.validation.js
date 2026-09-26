@@ -1,5 +1,22 @@
 'use strict';
 const Joi = require('joi');
+const { MIN_SEARCH_QUERY_LENGTH, MAX_SEARCH_QUERY_LENGTH, normalizeSearchQuery } = require('../search/search.utils');
+
+
+const productListQuerySchema = Joi.object({
+  page: Joi.number().integer().min(1).default(1),
+  limit: Joi.number().integer().min(1).max(1000).default(20),
+  search: Joi.string().allow('').custom((value, helpers) => {
+    const normalized = normalizeSearchQuery(value);
+    const normalizedLength = Array.from(normalized).length;
+    if (normalizedLength < MIN_SEARCH_QUERY_LENGTH) return helpers.error('search.min');
+    if (normalizedLength > MAX_SEARCH_QUERY_LENGTH) return helpers.error('search.max');
+    return normalized;
+  }).optional().messages({
+    'search.min': 'Search query must be at least 2 characters',
+    'search.max': 'Search query must be at most 100 characters',
+  }),
+}).unknown();
 
 const createProductSchema = Joi.object({
   name: Joi.string().max(255).required(),
@@ -204,4 +221,4 @@ const bulkUpdateSchema = Joi.object({
   }).min(1).required(),
 });
 
-module.exports = { createProductSchema, updateProductSchema, bulkSaleSchema, bulkDeleteSchema, bulkUpdateSchema };
+module.exports = { productListQuerySchema, createProductSchema, updateProductSchema, bulkSaleSchema, bulkDeleteSchema, bulkUpdateSchema };

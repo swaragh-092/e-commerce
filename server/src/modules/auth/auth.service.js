@@ -141,6 +141,21 @@ const register = async (payload) => {
     });
   }
 
+  try {
+    if (NotificationService && NotificationService.send) {
+      await NotificationService.send('welcome', registrationResult.verificationEmail.email, {
+        name: registrationResult.verificationEmail.firstName,
+      }, registrationResult.verificationEmail.userId);
+    }
+  } catch (e) {
+    logger.error('Registration welcome email failed', {
+      userId: registrationResult.verificationEmail.userId,
+      operation: 'NotificationService.send.welcome',
+      errorMessage: e.message,
+      stack: e.stack,
+    });
+  }
+
   return registrationResult;
 };
 

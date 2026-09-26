@@ -17,6 +17,7 @@ const { getSaleLabels } = require('../settings/saleLabel.service');
 const SettingsService = require('../settings/settings.service');
 const SearchRepository = require('./search.repository');
 const { events, PRODUCT_EVENTS } = require('../../utils/events');
+const { normalizeSearchQuery } = require('./search.utils');
 
 // ── Search response cache ────────────────────────────────────────────────
 // Follows the same 60s TTL pattern used by saleLabelCache and featureCache.
@@ -28,7 +29,7 @@ const MAX_CACHE_ENTRIES = 200;
 const _cache = new Map();
 
 const buildCacheKey = (query, page, limit) =>
-  `${query.trim().toLowerCase()}:${page}:${limit}`;
+  `${normalizeSearchQuery(query).toLowerCase()}:${page}:${limit}`;
 
 const cacheGet = (key) => {
   const entry = _cache.get(key);
@@ -82,7 +83,8 @@ events.on(PRODUCT_EVENTS.BULK_DELETED, invalidateCache);
  * @returns {object} { products, brands, categories, suggestion?, fromCache }
  */
 const search = async (query, page = 1, limit = 20) => {
-  const cacheKey = buildCacheKey(query, page, limit);
+  const normalizedQuery = normalizeSearchQuery(query);
+  const cacheKey = buildCacheKey(normalizedQuery, page, limit);
 
   // Serve from cache if available (hot path)
   const cached = cacheGet(cacheKey);
@@ -95,9 +97,9 @@ const search = async (query, page = 1, limit = 20) => {
   // Run product, brand, and category searches in parallel
   const [productResults, brands, categories, labelPresets, { features }] =
     await Promise.all([
-      SearchRepository.searchProducts(query, queryLimit, offset),
-      SearchRepository.searchBrands(query, 5),
-      SearchRepository.searchCategories(query, 5),
+      SearchRepository.searchProducts(normalizedQuery, queryLimit, offset),
+      SearchRepository.searchBrands(normalizedQuery, 5),
+      SearchRepository.searchCategories(normalizedQuery, 5),
       getSaleLabels().catch(() => []),
       SettingsService.getFeatures(),
     ]);
@@ -113,7 +115,7 @@ const search = async (query, page = 1, limit = 20) => {
   const isEmpty =
     productResults.count === 0 && brands.length === 0 && categories.length === 0;
 
-  const suggestion = isEmpty ? await SearchRepository.suggestCorrection(query) : null;
+  const suggestion = isEmpty ? await SearchRepository.suggestCorrection(normalizedQuery) : null;
 
   const result = {
     products: productsPaged,

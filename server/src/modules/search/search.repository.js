@@ -26,6 +26,7 @@ const {
   Sequelize,
 } = require('../index');
 const logger = require('../../utils/logger');
+const { buildSearchPattern } = require('./search.utils');
 
 const { Op } = Sequelize;
 
@@ -68,11 +69,8 @@ const TRIGRAM_FALLBACK_THRESHOLD = 3;
 // Minimum similarity score for a trigram match to be considered relevant.
 const TRIGRAM_MIN_SIMILARITY = 0.2;
 
-// Category names are stored in the many-to-many category table, so they are
-// not part of products.search_vector. Keep an exact category match in the
-// product query and give it the highest relevance band. This makes a search
-// for "marigold" return products in the Marigold category before loose name
-// matches such as MARS or MARBLE.
+// Category, brand, and tag data are stored outside products.search_vector.
+// Match them directly so the full search and catalog filter use the same terms.
 const categoryMatchSql = () => `EXISTS (
   SELECT 1
   FROM "product_categories" AS "search_product_categories"
@@ -85,11 +83,67 @@ const categoryMatchSql = () => `EXISTS (
     )
 )`;
 
+const categoryPartialMatchSql = () => `EXISTS (
+  SELECT 1
+  FROM "product_categories" AS "search_product_categories"
+  INNER JOIN "categories" AS "search_categories"
+    ON "search_categories"."id" = "search_product_categories"."category_id"
+  WHERE "search_product_categories"."product_id" = "Product"."id"
+    AND (
+      LOWER("search_categories"."name") LIKE LOWER($queryPattern)
+      OR LOWER("search_categories"."slug") LIKE LOWER($queryPattern)
+    )
+)`;
+
+const exactBrandMatchSql = () => `EXISTS (
+  SELECT 1
+  FROM "brands" AS "search_brands"
+  WHERE "search_brands"."id" = "Product"."brand_id"
+    AND (
+      LOWER("search_brands"."name") = LOWER($queryText)
+      OR LOWER("search_brands"."slug") = LOWER($queryText)
+    )
+)`;
+
+const brandMatchSql = () => `EXISTS (
+  SELECT 1
+  FROM "brands" AS "search_brands"
+  WHERE "search_brands"."id" = "Product"."brand_id"
+    AND (
+      LOWER("search_brands"."name") LIKE LOWER($queryPattern)
+      OR LOWER("search_brands"."slug") LIKE LOWER($queryPattern)
+    )
+)`;
+
+const tagMatchSql = () => `EXISTS (
+  SELECT 1
+  FROM "product_tags" AS "search_product_tags"
+  INNER JOIN "tags" AS "search_tags"
+    ON "search_tags"."id" = "search_product_tags"."tag_id"
+  WHERE "search_product_tags"."product_id" = "Product"."id"
+    AND (
+      LOWER("search_tags"."name") LIKE LOWER($queryPattern)
+      OR LOWER("search_tags"."slug") LIKE LOWER($queryPattern)
+    )
+)`;
+
+const productPartialMatchSql = () => `(
+  LOWER(COALESCE("Product"."name", '')) LIKE LOWER($queryPattern)
+  OR LOWER(COALESCE("Product"."sku", '')) LIKE LOWER($queryPattern)
+  OR LOWER(COALESCE("Product"."short_description", '')) LIKE LOWER($queryPattern)
+  OR LOWER(COALESCE("Product"."description", '')) LIKE LOWER($queryPattern)
+)`;
+
 const buildRelevanceSql = (baseRelevanceSql) => `(
   CASE WHEN ${categoryMatchSql()} THEN 100000 ELSE 0 END
+  + CASE WHEN ${exactBrandMatchSql()} THEN 90000 ELSE 0 END
   + CASE WHEN LOWER("Product"."name") = LOWER($queryText) THEN 10000 ELSE 0 END
   + CASE WHEN LOWER(COALESCE("Product"."sku", '')) = LOWER($queryText) THEN 9000 ELSE 0 END
+  + CASE WHEN ${categoryPartialMatchSql()} THEN 500 ELSE 0 END
+  + CASE WHEN ${brandMatchSql()} THEN 400 ELSE 0 END
+  + CASE WHEN ${tagMatchSql()} THEN 200 ELSE 0 END
   + CASE WHEN LOWER("Product"."name") LIKE LOWER($queryText) || '%' THEN 1000 ELSE 0 END
+  + CASE WHEN LOWER("Product"."name") LIKE LOWER($queryPattern) THEN 100 ELSE 0 END
   + (${baseRelevanceSql})
 )`;
 
@@ -98,7 +152,10 @@ const ftsWhere = (queryText) => ({
   [Op.and]: [
     Sequelize.literal(`(
       "Product"."search_vector" @@ plainto_tsquery('simple', $queryText)
-      OR ${categoryMatchSql()}
+      OR ${productPartialMatchSql()}
+      OR ${categoryPartialMatchSql()}
+      OR ${brandMatchSql()}
+      OR ${tagMatchSql()}
     )`),
   ],
 });
@@ -113,7 +170,10 @@ const ftsRelevance = (queryText) => [
 const trigramWhere = (queryText) => ({
   ...PUBLISHED_WHERE,
   [Op.or]: [
-    Sequelize.literal(categoryMatchSql()),
+    Sequelize.literal(productPartialMatchSql()),
+    Sequelize.literal(categoryPartialMatchSql()),
+    Sequelize.literal(brandMatchSql()),
+    Sequelize.literal(tagMatchSql()),
     Sequelize.literal(`similarity("Product"."name", $queryText) > ${TRIGRAM_MIN_SIMILARITY}`),
     Sequelize.literal(`similarity("Product"."sku", $queryText) > 0.3`),
   ],
@@ -133,7 +193,7 @@ const baseQueryOptions = (queryText, limit, offset, relevanceAttr, whereClause) 
     include: [relevanceAttr],
   },
   include: SHARED_INCLUDES,
-  bind: { queryText },
+  bind: { queryText, queryPattern: buildSearchPattern(queryText) },
   order: [
     [Sequelize.literal('"relevance"'), 'DESC'],
     ['createdAt', 'DESC'],
@@ -213,7 +273,12 @@ const searchBrands = async (queryText, limit = 5) => {
       where: {
         isActive: true,
         [Op.and]: [
-          Sequelize.literal(`name % $queryText`),
+          Sequelize.literal(`(
+            LOWER(name) LIKE LOWER($queryPattern)
+            OR LOWER(slug) LIKE LOWER($queryPattern)
+            OR name % $queryText
+            OR slug % $queryText
+          )`),
         ],
       },
       attributes: ['id', 'name', 'slug', 'image'],
@@ -222,7 +287,7 @@ const searchBrands = async (queryText, limit = 5) => {
           THEN 1 ELSE 0 END
       `), 'DESC'], [Sequelize.literal(`similarity(name, $queryText)`), 'DESC']],
       limit,
-      bind: { queryText },
+      bind: { queryText, queryPattern: buildSearchPattern(queryText) },
     });
   } catch (err) {
     logger.error('Brand search failed:', err);
@@ -243,8 +308,8 @@ const searchCategories = async (queryText, limit = 5) => {
     // If these are added later, they should be included here.
     return await Category.findAll({
       where: Sequelize.literal(`(
-        LOWER(name) = LOWER($queryText)
-        OR LOWER(slug) = LOWER($queryText)
+        LOWER(name) LIKE LOWER($queryPattern)
+        OR LOWER(slug) LIKE LOWER($queryPattern)
         OR name % $queryText
         OR slug % $queryText
       )`),
@@ -257,7 +322,7 @@ const searchCategories = async (queryText, limit = 5) => {
         [Sequelize.literal(`similarity(name, $queryText)`), 'DESC'],
       ],
       limit,
-      bind: { queryText },
+      bind: { queryText, queryPattern: buildSearchPattern(queryText) },
     });
   } catch (err) {
     logger.error('Category search failed:', err);

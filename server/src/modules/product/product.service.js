@@ -35,6 +35,7 @@ const { events, PRODUCT_EVENTS } = require('../../utils/events');
 const { getSaleLabels } = require('../settings/saleLabel.service');
 const SettingsService = require('../settings/settings.service');
 const inventoryService = require('../inventory/inventory.service');
+const { normalizeSearchQuery, buildSearchPattern } = require('../search/search.utils');
 
 
 // Fetch the active label catalog once per request (the service caches for 60 s)
@@ -474,16 +475,49 @@ exports.getProducts = async (filters, page, limit, isAdmin = false) => {
   }
 
   // Filter Logic
-  if (filters.search) {
-    const trimmed = String(filters.search).trim();
+  if (typeof filters.search === 'string' && filters.search.length > 0) {
+    const trimmed = normalizeSearchQuery(filters.search);
     if (trimmed) {
-      const searchPattern = `%${trimmed}%`;
+      const searchPattern = buildSearchPattern(trimmed);
       const escapedQuery = sequelize.escape(trimmed);
+      const escapedSearchPattern = sequelize.escape(searchPattern);
       where[Op.or] = [
         { name: { [Op.iLike]: searchPattern } },
         { description: { [Op.iLike]: searchPattern } },
+        { shortDescription: { [Op.iLike]: searchPattern } },
         { sku: { [Op.iLike]: searchPattern } },
         Sequelize.literal(`"Product"."search_vector" @@ plainto_tsquery('simple', ${escapedQuery})`),
+        Sequelize.literal(`EXISTS (
+          SELECT 1
+          FROM "product_categories" AS "search_product_categories"
+          INNER JOIN "categories" AS "search_categories"
+            ON "search_categories"."id" = "search_product_categories"."category_id"
+          WHERE "search_product_categories"."product_id" = "Product"."id"
+            AND (
+              LOWER("search_categories"."name") LIKE LOWER(${escapedSearchPattern})
+              OR LOWER("search_categories"."slug") LIKE LOWER(${escapedSearchPattern})
+            )
+        )`),
+        Sequelize.literal(`EXISTS (
+          SELECT 1
+          FROM "brands" AS "search_brands"
+          WHERE "search_brands"."id" = "Product"."brand_id"
+            AND (
+              LOWER("search_brands"."name") LIKE LOWER(${escapedSearchPattern})
+              OR LOWER("search_brands"."slug") LIKE LOWER(${escapedSearchPattern})
+            )
+        )`),
+        Sequelize.literal(`EXISTS (
+          SELECT 1
+          FROM "product_tags" AS "search_product_tags"
+          INNER JOIN "tags" AS "search_tags"
+            ON "search_tags"."id" = "search_product_tags"."tag_id"
+          WHERE "search_product_tags"."product_id" = "Product"."id"
+            AND (
+              LOWER("search_tags"."name") LIKE LOWER(${escapedSearchPattern})
+              OR LOWER("search_tags"."slug") LIKE LOWER(${escapedSearchPattern})
+            )
+        )`),
       ];
     }
   }
