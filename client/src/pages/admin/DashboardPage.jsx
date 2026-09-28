@@ -11,6 +11,8 @@ import { PERMISSIONS } from '../../utils/permissions';
 const DashboardPage = () => {
   const { hasPermission, hasAnyPermission } = useAuth();
   const canReadProducts = hasPermission(PERMISSIONS.PRODUCTS_READ);
+  const { settings, features, mode } = useSettings();
+  const isOrdersAllowed = mode !== 'catalog' && features?.orders !== false;
 
   const [stats, setStats] = useState(null);
   const [lowStock, setLowStock] = useState([]);
@@ -26,8 +28,9 @@ const DashboardPage = () => {
     setSectionErrors({});
     const lowStockPromise = canReadProducts ? getLowStock() : Promise.resolve({ data: { data: [] } });
     const inventoryAlertsPromise = canReadProducts ? getInventoryAlerts() : Promise.resolve({ data: { data: null } });
+    const recentOrdersPromise = isOrdersAllowed ? getRecentOrders() : Promise.resolve({ data: { data: [] } });
 
-    return Promise.allSettled([getStats(), lowStockPromise, getRecentOrders(), inventoryAlertsPromise])
+    return Promise.allSettled([getStats(), lowStockPromise, recentOrdersPromise, inventoryAlertsPromise])
       .then(([s, ls, ro, ia]) => {
         const errors = {};
         if (s.status === 'fulfilled') setStats(s.value.data.data);
@@ -54,11 +57,11 @@ const DashboardPage = () => {
 
   useEffect(() => {
     loadDashboard();
-  }, [canReadProducts]);
+  }, [canReadProducts, isOrdersAllowed]);
 
-  const { settings } = useSettings();
   const { formatPrice } = useCurrency();
   const adminSettings = settings?.admin || {};
+  const widgetContext = { features, mode };
 
   const defaultChartPeriod = adminSettings['dashboard.defaultChartPeriod'] || 'monthly';
   const dashboardLayout = adminSettings['dashboard.layout'] || 'balanced';
@@ -80,6 +83,8 @@ const DashboardPage = () => {
     sectionErrors,
     settings: adminSettings,
     allSettings: settings,
+    features,
+    mode,
     formatPrice,
     spacing,
     defaultChartPeriod,
@@ -126,12 +131,12 @@ const DashboardPage = () => {
         </Alert>
       )}
 
-      {getEnabledDashboardWidgets(adminSettings, 'top', hasAnyPermission).map(({ id, component: Widget }) => (
+      {getEnabledDashboardWidgets(adminSettings, 'top', hasAnyPermission, widgetContext).map(({ id, component: Widget }) => (
         <Widget key={id} {...widgetProps} />
       ))}
 
       <Grid container spacing={spacing.grid} mb={spacing.page}>
-        {getOrderedDashboardWidgets(adminSettings, hasAnyPermission).map(({ id, component: Widget, defaultSize }) => (
+        {getOrderedDashboardWidgets(adminSettings, hasAnyPermission, widgetContext).map(({ id, component: Widget, defaultSize }) => (
           <Grid item {...(sizeToGrid[widgetSizes[id] || defaultSize] || sizeToGrid.medium)} key={id}>
             <Widget {...widgetProps} />
           </Grid>

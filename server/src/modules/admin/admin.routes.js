@@ -13,8 +13,10 @@ const { inventoryAlertConfigSchema, updateInventoryAlertSchema } = require('../i
 
 
 const { inventoryAlertLimiter, inventoryAlertTestLimiter } = require('../../middleware/rateLimiter.middleware');
+const { featureGate } = require('../../middleware/featureGate.middleware');
 
 const adminOnly = [authenticate, authorizePermissions(PERMISSIONS.DASHBOARD_VIEW)];
+const ordersFeature = featureGate('orders');
 const accessReadOnly = [
 	authenticate,
 	authorizeAnyPermission(
@@ -32,6 +34,7 @@ router.get('/dashboard/stats', ...adminOnly, adminController.getStats);
 router.get(
 	'/dashboard/sales-chart',
 	...adminOnly,
+	ordersFeature,
 	validate(salesChartQuerySchema, 'query'),
 	adminController.getSalesChart
 );
@@ -74,7 +77,7 @@ router.post(
 	adminController.testInventoryAlertEmail
 );
 router.get('/dashboard/low-stock', ...adminOnly, validate(lowStockQuerySchema, 'query'), adminController.getLowStock);
-router.get('/dashboard/recent-orders', ...adminOnly, adminController.getRecentOrders);
+router.get('/dashboard/recent-orders', ...adminOnly, ordersFeature, adminController.getRecentOrders);
 router.get('/access-control/roles', ...accessReadOnly, adminController.getAccessRoles);
 router.get('/access-control/permissions', ...accessReadOnly, adminController.getAccessPermissions);
 router.post('/access-control/roles', ...roleManageOnly, validate(createRoleSchema), adminController.createAccessRole);
@@ -89,26 +92,33 @@ router.delete('/access-control/users/:id', ...accessManageOnly, validate(idParam
 
 // Analytics
 router.get('/analytics/top-products', ...adminOnly, validate(analyticsQuerySchema, 'query'), adminController.getTopProducts);
-router.get('/analytics/aov-trend', ...adminOnly, validate(analyticsTrendSchema, 'query'), adminController.getAovTrend);
-router.get('/analytics/abandoned-carts', ...adminOnly, validate(analyticsQuerySchema, 'query'), adminController.getAbandonedCarts);
-router.get('/analytics/revenue-by-category', ...adminOnly, validate(analyticsQuerySchema, 'query'), adminController.getRevenueByCategory);
-router.get('/analytics/repeat-customers', ...adminOnly, validate(analyticsQuerySchema, 'query'), adminController.getRepeatCustomers);
-router.get('/analytics/refund-rate', ...adminOnly, validate(analyticsTrendSchema, 'query'), adminController.getRefundRate);
-router.get('/analytics/geographic-sales', ...adminOnly, validate(analyticsQuerySchema, 'query'), adminController.getGeographicSales);
-router.get('/analytics/revenue-by-payment', ...adminOnly, validate(analyticsQuerySchema, 'query'), adminController.getRevenueByPaymentMethod);
-router.get('/analytics/customer-lifetime-value', ...adminOnly, validate(analyticsQuerySchema, 'query'), adminController.getCustomerLifetimeValue);
-router.get('/analytics/conversion-rate', ...adminOnly, validate(analyticsQuerySchema, 'query'), adminController.getConversionRate);
+router.get('/analytics/aov-trend', ...adminOnly, ordersFeature, validate(analyticsTrendSchema, 'query'), adminController.getAovTrend);
+router.get('/analytics/abandoned-carts', ...adminOnly, ordersFeature, validate(analyticsQuerySchema, 'query'), adminController.getAbandonedCarts);
+router.get('/analytics/revenue-by-category', ...adminOnly, ordersFeature, validate(analyticsQuerySchema, 'query'), adminController.getRevenueByCategory);
+router.get('/analytics/repeat-customers', ...adminOnly, ordersFeature, validate(analyticsQuerySchema, 'query'), adminController.getRepeatCustomers);
+router.get('/analytics/refund-rate', ...adminOnly, ordersFeature, validate(analyticsTrendSchema, 'query'), adminController.getRefundRate);
+router.get('/analytics/geographic-sales', ...adminOnly, ordersFeature, validate(analyticsQuerySchema, 'query'), adminController.getGeographicSales);
+router.get('/analytics/revenue-by-payment', ...adminOnly, ordersFeature, validate(analyticsQuerySchema, 'query'), adminController.getRevenueByPaymentMethod);
+router.get('/analytics/customer-lifetime-value', ...adminOnly, ordersFeature, validate(analyticsQuerySchema, 'query'), adminController.getCustomerLifetimeValue);
+router.get('/analytics/conversion-rate', ...adminOnly, ordersFeature, validate(analyticsQuerySchema, 'query'), adminController.getConversionRate);
 router.get('/analytics/traffic-sources', ...adminOnly, validate(analyticsQuerySchema, 'query'), adminController.getTrafficSources);
 router.get('/analytics/product-funnel', ...adminOnly, validate(analyticsQuerySchema, 'query'), adminController.getProductFunnel);
 router.get('/analytics/utm-attribution', ...adminOnly, validate(analyticsQuerySchema, 'query'), adminController.getUtmAttribution);
-router.get('/analytics/coupon-performance', ...adminOnly, validate(analyticsQuerySchema, 'query'), adminController.getCouponPerformance);
-router.get('/analytics/cohort-retention', ...adminOnly, validate(analyticsQuerySchema, 'query'), adminController.getCohortRetention);
-router.get('/analytics/rfm-segmentation', ...adminOnly, validate(analyticsQuerySchema, 'query'), adminController.getRfmSegmentation);
-router.get('/analytics/order-heatmap', ...adminOnly, validate(analyticsQuerySchema, 'query'), adminController.getOrderHeatmap);
-router.get('/analytics/revenue-forecast', ...adminOnly, validate(analyticsQuerySchema, 'query'), adminController.getRevenueForecast);
-router.get('/analytics/drill-down', ...adminOnly, adminController.getDrillDown);
-router.post('/analytics/send-test-report', ...adminOnly, adminController.sendTestReport);
-router.get('/analytics/export/:metric', ...adminOnly, adminController.exportAnalyticsCsv);
+router.get('/analytics/coupon-performance', ...adminOnly, ordersFeature, featureGate('coupons'), validate(analyticsQuerySchema, 'query'), adminController.getCouponPerformance);
+router.get('/analytics/cohort-retention', ...adminOnly, ordersFeature, validate(analyticsQuerySchema, 'query'), adminController.getCohortRetention);
+router.get('/analytics/rfm-segmentation', ...adminOnly, ordersFeature, validate(analyticsQuerySchema, 'query'), adminController.getRfmSegmentation);
+router.get('/analytics/order-heatmap', ...adminOnly, ordersFeature, validate(analyticsQuerySchema, 'query'), adminController.getOrderHeatmap);
+router.get('/analytics/revenue-forecast', ...adminOnly, ordersFeature, validate(analyticsQuerySchema, 'query'), adminController.getRevenueForecast);
+router.get('/analytics/drill-down', ...adminOnly, ordersFeature, adminController.getDrillDown);
+router.post('/analytics/send-test-report', ...adminOnly, ordersFeature, adminController.sendTestReport);
+const exportMetricFeatureGate = (req, res, next) => {
+	if (req.params.metric === 'coupon-performance') {
+		return featureGate('coupons')(req, res, next);
+	}
+	next();
+};
+
+router.get('/analytics/export/:metric', ...adminOnly, ordersFeature, exportMetricFeatureGate, adminController.exportAnalyticsCsv);
 
 
 module.exports = router;

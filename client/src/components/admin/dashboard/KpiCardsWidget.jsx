@@ -14,10 +14,11 @@ const CurrencyIcon = () => {
   return <Typography fontSize="inherit" fontWeight={700} component="span">{symbol}</Typography>;
 };
 
-const KpiCardsWidget = ({ stats, loading, settings, formatPrice, spacing, hasAnyPermission }) => {
+const KpiCardsWidget = ({ stats, loading, settings, formatPrice, spacing, hasAnyPermission, features, mode }) => {
   const navigate = useNavigate();
   const showStatCards = checkBool(settings['dashboard.showStatCards']);
-  const canViewOrders = typeof hasAnyPermission === 'function' ? hasAnyPermission([PERMISSIONS.ORDERS_READ]) : true;
+  const isOrdersAllowed = mode !== 'catalog' && features?.orders !== false;
+  const canViewOrders = isOrdersAllowed && (typeof hasAnyPermission === 'function' ? hasAnyPermission([PERMISSIONS.ORDERS_READ]) : true);
   const canViewCustomers = typeof hasAnyPermission === 'function' ? hasAnyPermission([PERMISSIONS.CUSTOMERS_READ]) : true;
   const canViewProducts = typeof hasAnyPermission === 'function' ? hasAnyPermission([PERMISSIONS.PRODUCTS_READ]) : true;
   const canViewReviews = typeof hasAnyPermission === 'function' ? hasAnyPermission([PERMISSIONS.REVIEWS_READ]) : true;

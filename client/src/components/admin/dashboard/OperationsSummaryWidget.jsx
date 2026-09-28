@@ -6,11 +6,12 @@ import StorefrontIcon from '@mui/icons-material/Storefront';
 import { useNavigate } from 'react-router-dom';
 import { getPanelSx } from './dashboardUtils';
 
-const OperationsSummaryWidget = ({ stats, spacing }) => {
+const OperationsSummaryWidget = ({ stats, spacing, features, mode }) => {
   const navigate = useNavigate();
+  const isOrdersAllowed = mode !== 'catalog' && features?.orders !== false;
 
   const items = [
-    {
+    isOrdersAllowed && {
       label: 'Pending Payment',
       value: stats?.pendingOrders ?? 0,
       icon: <ShoppingCartIcon />,
@@ -47,7 +48,7 @@ const OperationsSummaryWidget = ({ stats, spacing }) => {
       color: 'secondary.main',
       to: '/admin/reviews?status=pending',
     },
-  ];
+  ].filter(Boolean);
 
   return (
     <Paper elevation={0} sx={getPanelSx(spacing)}>

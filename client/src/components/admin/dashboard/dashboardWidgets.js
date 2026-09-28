@@ -152,6 +152,16 @@ const hasWidgetPermission = (widget, hasAnyPermission) => {
   return hasAnyPermission(widget.permissions);
 };
 
+const isWidgetAllowedByModeAndFeatures = (widgetId, context = {}) => {
+  const { features = {}, mode } = context;
+  if (mode === 'catalog' || features.orders === false) {
+    if (widgetId === 'salesChart' || widgetId === 'recentOrders') {
+      return false;
+    }
+  }
+  return true;
+};
+
 export const parseWidgetOrder = (value) => {
   const savedOrder = String(value || '')
     .split(',')
@@ -164,15 +174,25 @@ export const parseWidgetOrder = (value) => {
   ];
 };
 
-export const getEnabledDashboardWidgets = (settings, section, hasAnyPermission) =>
+export const getEnabledDashboardWidgets = (settings, section, hasAnyPermission, context = {}) =>
   Object.entries(DASHBOARD_WIDGETS)
-    .filter(([, widget]) => widget.section === section && widget.isEnabled(settings) && hasWidgetPermission(widget, hasAnyPermission))
+    .filter(([id, widget]) =>
+      widget.section === section &&
+      widget.isEnabled(settings) &&
+      hasWidgetPermission(widget, hasAnyPermission) &&
+      isWidgetAllowedByModeAndFeatures(id, context)
+    )
     .map(([id, widget]) => ({ id, ...widget }))
     .sort((a, b) => a.defaultOrder - b.defaultOrder);
 
-export const getOrderedDashboardWidgets = (settings, hasAnyPermission) => {
+export const getOrderedDashboardWidgets = (settings, hasAnyPermission, context = {}) => {
   const order = parseWidgetOrder(settings['dashboard.widgetOrder']);
   return order
     .map((id) => ({ id, ...DASHBOARD_WIDGETS[id] }))
-    .filter((widget) => widget.component && widget.isEnabled(settings) && hasWidgetPermission(widget, hasAnyPermission));
+    .filter((widget) =>
+      widget.component &&
+      widget.isEnabled(settings) &&
+      hasWidgetPermission(widget, hasAnyPermission) &&
+      isWidgetAllowedByModeAndFeatures(widget.id, context)
+    );
 };

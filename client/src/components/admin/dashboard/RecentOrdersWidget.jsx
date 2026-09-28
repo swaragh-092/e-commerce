@@ -3,8 +3,9 @@ import { useNavigate } from 'react-router-dom';
 import { getOrderStatusColor, getOrderStatusLabel } from '../../../utils/orderWorkflow';
 import { getPanelSx } from './dashboardUtils';
 
-const RecentOrdersWidget = ({ recentOrders, loading, formatPrice, spacing }) => {
+const RecentOrdersWidget = ({ recentOrders = [], loading, formatPrice, spacing, features, mode }) => {
   const navigate = useNavigate();
+  if (mode === 'catalog' || features?.orders === false) return null;
 
   return (
     <Paper elevation={0} sx={getPanelSx(spacing)}>

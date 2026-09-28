@@ -197,8 +197,10 @@ const AppRoutes = () => (
         <Route element={<AdminLayout />}>
           <Route index element={<AdminIndex />} />
           <Route path="profile" element={<AdminProfilePage />} />
-          <Route element={<ProtectedRoute permission={PERMISSIONS.DASHBOARD_VIEW} />}>
-            <Route path="analytics" element={<AnalyticsPage />} />
+          <Route element={<ModeRoute requiredMode="ecommerce" />}>
+            <Route element={<ProtectedRoute permission={PERMISSIONS.DASHBOARD_VIEW} />}>
+              <Route path="analytics" element={<AnalyticsPage />} />
+            </Route>
           </Route>
           <Route element={<ProtectedRoute permission={PERMISSIONS.PRODUCTS_READ} />}>
             <Route path="products" element={<ProductsManagePage />} />
