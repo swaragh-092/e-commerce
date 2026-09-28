@@ -92,8 +92,7 @@ const AccessControlPage = () => {
   const [search, setSearch] = useState('');
   const [debouncedSearch, setDebouncedSearch] = useState('');
   const [roleFilter, setRoleFilter] = useState('');
-  const [showCustomers, setShowCustomers] = useState(false);
-  const [paginationModel, setPaginationModel] = useState({ page: 0, pageSize: 10 });
+  const [paginationModel, setPaginationModel] = useState({ page: 0, pageSize: 5 });
   const [updatingUserId, setUpdatingUserId] = useState(null);
   const [roleDialogOpen, setRoleDialogOpen] = useState(false);
   const [savingRole, setSavingRole] = useState(false);
@@ -153,7 +152,7 @@ const AccessControlPage = () => {
             limit: paginationModel.pageSize,
             search: debouncedSearch,
             roleId: roleFilter,
-            includeCustomers: showCustomers || Boolean(debouncedSearch),
+            includeCustomers: Boolean(debouncedSearch),
           })
         );
       }
@@ -169,7 +168,7 @@ const AccessControlPage = () => {
     } finally {
       setLoading(false);
     }
-  }, [canAssignRoles, debouncedSearch, notify, paginationModel.page, paginationModel.pageSize, roleFilter, showCustomers]);
+  }, [canAssignRoles, debouncedSearch, notify, paginationModel.page, paginationModel.pageSize, roleFilter]);
 
   useEffect(() => {
     fetchAccessControl();
@@ -684,8 +683,7 @@ const AccessControlPage = () => {
             Assign Roles to Users
           </Typography>
           <Typography variant="body2" color="text.secondary" sx={{ mb: 2, lineHeight: 1.6 }}>
-            By default this table shows only elevated-access users. Use search or enable customers
-            when you want to promote a shopper into a managed role.
+            By default this table shows elevated-access users. Use the role filter or search to view and assign roles to users.
           </Typography>
 
           <Stack
@@ -702,7 +700,7 @@ const AccessControlPage = () => {
                 setPaginationModel((current) => ({ ...current, page: 0 }));
               }}
               sx={{
-                minWidth: { xs: 0, sm: 240 },
+                minWidth: { xs: 0, sm: 260 },
                 flex: { xs: 1, sm: '0 0 auto' },
               }}
               fullWidth={isMobile}
@@ -724,7 +722,7 @@ const AccessControlPage = () => {
                   setPaginationModel((current) => ({ ...current, page: 0 }));
                 }}
               >
-                <MenuItem value="">All roles</MenuItem>
+                <MenuItem value="">All elevated roles</MenuItem>
                 {roleOptions.map((role) => (
                   <MenuItem key={role.id} value={role.id}>
                     {role.name}
@@ -732,28 +730,16 @@ const AccessControlPage = () => {
                 ))}
               </Select>
             </FormControl>
-            <FormControlLabel
-              control={
-                <Checkbox
-                  checked={showCustomers}
-                  onChange={(event) => {
-                    setShowCustomers(event.target.checked);
-                    setPaginationModel((current) => ({ ...current, page: 0 }));
-                  }}
-                />
-              }
-              label="Show customers"
-              sx={{ whiteSpace: 'nowrap' }}
-            />
           </Stack>
 
           <Box
             sx={{
-              height: { xs: 400, sm: 520 },
+              width: '100%',
               border: '1px solid',
               borderColor: 'divider',
               borderRadius: 2,
               overflow: 'hidden',
+              bgcolor: 'background.paper',
             }}
           >
             <DataGrid
@@ -761,17 +747,26 @@ const AccessControlPage = () => {
               columns={columns}
               rowCount={total}
               loading={loading}
+              pagination
               paginationMode="server"
               paginationModel={paginationModel}
               onPaginationModelChange={setPaginationModel}
-              pageSizeOptions={[10, 25, 50]}
+              pageSizeOptions={[5, 10, 25]}
               disableRowSelectionOnClick
+              autoHeight
               sx={{
+                border: 0,
                 '& .MuiDataGrid-cell': {
                   px: { xs: 1, sm: 2 },
                 },
                 '& .MuiDataGrid-columnHeaders': {
                   bgcolor: 'background.default',
+                  borderBottom: '1px solid',
+                  borderColor: 'divider',
+                },
+                '& .MuiDataGrid-footerContainer': {
+                  borderTop: '1px solid',
+                  borderColor: 'divider',
                 },
               }}
             />

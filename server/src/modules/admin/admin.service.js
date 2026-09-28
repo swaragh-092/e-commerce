@@ -50,9 +50,13 @@ const serializeRole = (role) => ({
   })),
 });
 
-const serializeAccessUser = (user) => {
+const serializeAccessUser = (user, systemRoleMap = {}) => {
   const enriched = enrichUserAuthorization(user);
-  const assignedRole = Array.isArray(user.roles) && user.roles.length ? serializeRole(user.roles[0]) : null;
+  let assignedRole = Array.isArray(user.roles) && user.roles.length ? serializeRole(user.roles[0]) : null;
+
+  if (!assignedRole && user.role && systemRoleMap[user.role]) {
+    assignedRole = serializeRole(systemRoleMap[user.role]);
+  }
 
   return {
     ...enriched,
@@ -566,10 +570,32 @@ const listAccessUsers = async ({ page, limit, search, roleId, includeCustomers =
   const include = [...userRoleInclude];
 
   if (roleId) {
-    include[0] = {
-      ...include[0],
-      where: { id: roleId },
-    };
+    const targetRole = await Role.findByPk(roleId);
+    if (targetRole) {
+      andClauses.push({
+        [Op.or]: [
+          literal(`EXISTS (
+            SELECT 1 FROM user_roles ur
+            WHERE ur.user_id = "User"."id"
+            AND ur.role_id = '${roleId}'
+          )`),
+          {
+            [Op.and]: [
+              { role: targetRole.slug },
+              literal(`NOT EXISTS (
+                SELECT 1 FROM user_roles ur2
+                WHERE ur2.user_id = "User"."id"
+              )`),
+            ],
+          },
+        ],
+      });
+    } else {
+      include[0] = {
+        ...include[0],
+        where: { id: roleId },
+      };
+    }
   }
 
   if (search) {
@@ -582,7 +608,9 @@ const listAccessUsers = async ({ page, limit, search, roleId, includeCustomers =
     });
   }
 
-  if (!includeCustomers) {
+  // By default (when no specific roleId is selected and includeCustomers is false),
+  // show only elevated-access users (staff, admins, etc.), excluding regular customers.
+  if (!includeCustomers && !roleId) {
     andClauses.push({
       [Op.or]: [
         { role: { [Op.ne]: ROLES.CUSTOMER } },
@@ -610,9 +638,16 @@ const listAccessUsers = async ({ page, limit, search, roleId, includeCustomers =
     order: [['createdAt', 'DESC']],
   });
 
+  const systemRoles = await Role.findAll({ where: { isSystem: true }, include: roleInclude });
+  const systemRoleMap = systemRoles.reduce((acc, r) => {
+    acc[r.slug] = r;
+    acc[r.baseRole] = r;
+    return acc;
+  }, {});
+
   return {
     count: result.count,
-    rows: result.rows.map((user) => serializeAccessUser(user)),
+    rows: result.rows.map((user) => serializeAccessUser(user, systemRoleMap)),
   };
 };
 
