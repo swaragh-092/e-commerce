@@ -563,6 +563,69 @@ const updateAccessRole = async (roleId, payload, actingUser) => {
   });
 };
 
+const deleteAccessRole = async (roleId, actingUser) => {
+  return db.sequelize.transaction(async (transaction) => {
+    const actingUserId = typeof actingUser === 'object' && actingUser ? actingUser.id : actingUser;
+
+    const role = await Role.findByPk(roleId, { transaction });
+    if (!role) {
+      throw new AppError('NOT_FOUND', 404, 'Role not found');
+    }
+
+    if (role.isSystem) {
+      throw new AppError('FORBIDDEN', 403, 'System roles cannot be deleted');
+    }
+
+    if (!canManageCustomRoles(actingUser)) {
+      throw new AppError('FORBIDDEN', 403, 'You do not have permission to delete custom roles');
+    }
+
+    // Check if any users are currently assigned to this role in user_roles
+    const assignedUsers = await db.sequelize.query(
+      'SELECT COUNT(*)::int AS count FROM user_roles WHERE role_id = :roleId',
+      { replacements: { roleId: role.id }, type: db.sequelize.QueryTypes.SELECT, transaction }
+    );
+    const count = Number(assignedUsers[0]?.count || 0);
+
+    // Also check if any users have their legacy/base role set to this role's slug
+    const legacyCount = await User.count({
+      where: { role: role.slug },
+      transaction,
+    });
+
+    const totalAssigned = Math.max(count, legacyCount);
+    if (totalAssigned > 0) {
+      throw new AppError(
+        'CONFLICT',
+        409,
+        `Cannot delete role '${role.name}' because it is assigned to ${totalAssigned} user${totalAssigned === 1 ? '' : 's'}. Please reassign those users before deleting this role.`
+      );
+    }
+
+    // Clean up permission associations
+    await role.setPermissions([], { transaction });
+
+    // Delete role
+    await role.destroy({ transaction });
+
+    try {
+      await AuditService.log({
+        userId: actingUserId,
+        action: ACTIONS.DELETE,
+        entity: 'Role',
+        entityId: role.id,
+        changes: {
+          name: role.name,
+          slug: role.slug,
+          baseRole: role.baseRole,
+        },
+      }, transaction);
+    } catch (error) {}
+
+    return true;
+  });
+};
+
 const listAccessUsers = async ({ page, limit, search, roleId, includeCustomers = false }) => {
   const { limit: pageSize, offset } = getPagination(page, limit);
   const where = {};
@@ -783,6 +846,7 @@ module.exports = {
   getAccessPermissions,
   createAccessRole,
   updateAccessRole,
+  deleteAccessRole,
   listAccessUsers,
   updateUserRole,
   createStaffUser,

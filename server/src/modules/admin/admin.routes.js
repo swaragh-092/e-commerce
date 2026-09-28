@@ -38,6 +38,7 @@ router.get('/access-control/roles', ...accessReadOnly, adminController.getAccess
 router.get('/access-control/permissions', ...accessReadOnly, adminController.getAccessPermissions);
 router.post('/access-control/roles', ...roleManageOnly, validate(createRoleSchema), adminController.createAccessRole);
 router.put('/access-control/roles/:id', ...roleEditOnly, validate(idParamSchema, 'params'), validate(updateRoleSchema), adminController.updateAccessRole);
+router.delete('/access-control/roles/:id', ...roleManageOnly, validate(idParamSchema, 'params'), adminController.deleteAccessRole);
 
 router.get('/access-control/users', ...accessManageOnly, validate(paginationQuerySchema, 'query'), adminController.getAccessUsers);
 

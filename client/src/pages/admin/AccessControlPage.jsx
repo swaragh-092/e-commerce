@@ -10,6 +10,7 @@ import {
   Dialog,
   DialogActions,
   DialogContent,
+  DialogContentText,
   DialogTitle,
   FormControl,
   Grid,
@@ -30,6 +31,7 @@ import SecurityIcon from '@mui/icons-material/Security';
 import AdminPanelSettingsIcon from '@mui/icons-material/AdminPanelSettings';
 import VpnKeyIcon from '@mui/icons-material/VpnKey';
 import EditIcon from '@mui/icons-material/Edit';
+import DeleteIcon from '@mui/icons-material/Delete';
 import AddIcon from '@mui/icons-material/Add';
 import PersonAddIcon from '@mui/icons-material/PersonAdd';
 import Visibility from '@mui/icons-material/Visibility';
@@ -39,6 +41,7 @@ import { DataGrid } from '@mui/x-data-grid';
 import {
   createAccessRole,
   createAccessUser,
+  deleteAccessRole,
   getAccessPermissions,
   getAccessRoles,
   getAccessUsers,
@@ -97,6 +100,9 @@ const AccessControlPage = () => {
   const [roleDialogOpen, setRoleDialogOpen] = useState(false);
   const [savingRole, setSavingRole] = useState(false);
   const [roleForm, setRoleForm] = useState(emptyRoleForm);
+  const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
+  const [roleToDelete, setRoleToDelete] = useState(null);
+  const [deletingRole, setDeletingRole] = useState(false);
 
   const canManageCustomRoles = hasPermission(PERMISSIONS.ROLES_MANAGE);
   const canManageSystemRoles = hasPermission(PERMISSIONS.SYSTEM_ROLES_MANAGE);
@@ -254,6 +260,38 @@ const AccessControlPage = () => {
     }
   };
 
+  const openDeleteDialog = (role) => {
+    setRoleToDelete(role);
+    setDeleteDialogOpen(true);
+  };
+
+  const closeDeleteDialog = () => {
+    if (deletingRole) return;
+    setDeleteDialogOpen(false);
+    setRoleToDelete(null);
+  };
+
+  const handleDeleteRole = async () => {
+    if (!roleToDelete) return;
+    setDeletingRole(true);
+    try {
+      await deleteAccessRole(roleToDelete.id);
+      notify(`Role "${roleToDelete.name}" deleted successfully.`, 'success');
+      if (roleFilter === roleToDelete.id) {
+        setRoleFilter('');
+      }
+      closeDeleteDialog();
+      if (roleDialogOpen && roleForm.id === roleToDelete.id) {
+        closeRoleDialog();
+      }
+      fetchAccessControl();
+    } catch (error) {
+      notify(getApiErrorMessage(error, 'Failed to delete role.'), 'error');
+    } finally {
+      setDeletingRole(false);
+    }
+  };
+
   const handleRoleAssignment = async (userId, nextRoleId) => {
     setUpdatingUserId(userId);
     try {
@@ -404,6 +442,9 @@ const AccessControlPage = () => {
 
   const canEditRole = (role) =>
     (role.isSystem && canManageSystemRoles) || (!role.isSystem && canManageCustomRoles);
+
+  const canDeleteRole = (role) =>
+    Boolean(role && !role.isSystem && canManageCustomRoles);
 
   return (
     <Box>
@@ -580,17 +621,29 @@ const AccessControlPage = () => {
                     </Box>
                   </Box>
                 </Box>
-                {canEditRole(role) && (
-                  <Tooltip title="Edit Role">
-                    <IconButton
-                      size="small"
-                      onClick={() => openEditDialog(role)}
-                      sx={{ mt: -0.5, mr: -0.5, flexShrink: 0 }}
-                    >
-                      <EditIcon fontSize="small" />
-                    </IconButton>
-                  </Tooltip>
-                )}
+                <Stack direction="row" spacing={0.5} sx={{ mt: -0.5, mr: -0.5, flexShrink: 0 }}>
+                  {canEditRole(role) && (
+                    <Tooltip title="Edit Role">
+                      <IconButton
+                        size="small"
+                        onClick={() => openEditDialog(role)}
+                      >
+                        <EditIcon fontSize="small" />
+                      </IconButton>
+                    </Tooltip>
+                  )}
+                  {canDeleteRole(role) && (
+                    <Tooltip title="Delete Role">
+                      <IconButton
+                        size="small"
+                        color="error"
+                        onClick={() => openDeleteDialog(role)}
+                      >
+                        <DeleteIcon fontSize="small" />
+                      </IconButton>
+                    </Tooltip>
+                  )}
+                </Stack>
               </Box>
 
               {/* Description */}
@@ -994,12 +1047,62 @@ const AccessControlPage = () => {
             </Box>
           </Stack>
         </DialogContent>
-        <DialogActions>
-          <Button onClick={closeRoleDialog} disabled={savingRole}>
+        <DialogActions sx={{ justifyContent: roleForm.id && !roleForm.isSystem && canManageCustomRoles ? 'space-between' : 'flex-end', px: 3, py: 2 }}>
+          {roleForm.id && !roleForm.isSystem && canManageCustomRoles && (
+            <Button
+              color="error"
+              variant="outlined"
+              startIcon={<DeleteIcon />}
+              onClick={() => {
+                const found = roles.find((r) => r.id === roleForm.id);
+                if (found) openDeleteDialog(found);
+              }}
+              disabled={savingRole || deletingRole}
+            >
+              Delete Role
+            </Button>
+          )}
+          <Box sx={{ display: 'flex', gap: 1 }}>
+            <Button onClick={closeRoleDialog} disabled={savingRole || deletingRole}>
+              Cancel
+            </Button>
+            <Button onClick={handleSaveRole} variant="contained" disabled={savingRole || deletingRole}>
+              {savingRole ? 'Saving…' : roleForm.id ? 'Update Role' : 'Create Role'}
+            </Button>
+          </Box>
+        </DialogActions>
+      </Dialog>
+
+      {/* Delete Role Confirmation Dialog */}
+      <Dialog
+        open={deleteDialogOpen}
+        onClose={closeDeleteDialog}
+        maxWidth="xs"
+        fullWidth
+      >
+        <DialogTitle sx={{ fontWeight: 700 }}>
+          Delete Custom Role
+        </DialogTitle>
+        <DialogContent>
+          <DialogContentText>
+            Are you sure you want to delete the role <strong>"{roleToDelete?.name}"</strong>?
+          </DialogContentText>
+          <DialogContentText sx={{ mt: 1, fontSize: '0.85rem', color: 'text.secondary' }}>
+            This will permanently remove the custom role and its associated permissions. This action cannot be undone.
+          </DialogContentText>
+        </DialogContent>
+        <DialogActions sx={{ px: 3, pb: 2 }}>
+          <Button onClick={closeDeleteDialog} disabled={deletingRole}>
             Cancel
           </Button>
-          <Button onClick={handleSaveRole} variant="contained" disabled={savingRole}>
-            {savingRole ? 'Saving…' : roleForm.id ? 'Update Role' : 'Create Role'}
+          <Button
+            onClick={handleDeleteRole}
+            color="error"
+            variant="contained"
+            disabled={deletingRole}
+            startIcon={deletingRole ? <CircularProgress size={16} color="inherit" /> : <DeleteIcon />}
+          >
+            {deletingRole ? 'Deleting…' : 'Delete Role'}
           </Button>
         </DialogActions>
       </Dialog>
