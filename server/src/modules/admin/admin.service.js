@@ -829,15 +829,86 @@ const createStaffUser = async ({ firstName, lastName, email, password, roleId },
       throw new AppError('FORBIDDEN', 403, 'Only super admins can create super admin accounts');
     }
 
-    const existing = await User.findOne({ where: { email: email.toLowerCase() }, transaction });
+    const normalizedEmail = email.toLowerCase().trim();
+
+    // Query with paranoid: false to catch soft-deleted records and handle recreation cleanly
+    const existing = await User.findOne({
+      where: { email: normalizedEmail },
+      paranoid: false,
+      transaction,
+    });
+
     if (existing) {
-      throw new AppError('CONFLICT', 409, 'A user with this email already exists');
+      // If user is currently active (not soft-deleted)
+      if (!existing.deletedAt) {
+        if (existing.role === 'customer') {
+          throw new AppError(
+            'CONFLICT',
+            409,
+            'An active customer account with this email already exists. You can assign them a staff role directly from the Access Control table.'
+          );
+        }
+        throw new AppError('CONFLICT', 409, 'A user with this email already exists');
+      }
+
+      // User was previously soft-deleted — handle account recreation & restoration
+      // Guard: only super admins can recreate / restore a former super admin account
+      if (existing.role === ROLES.SUPER_ADMIN && actingUser.role !== ROLES.SUPER_ADMIN) {
+        throw new AppError('FORBIDDEN', 403, 'Only super admins can recreate super admin accounts');
+      }
+
+      // Restore the user row (clears deleted_at)
+      await existing.restore({ transaction });
+
+      // Update credentials and reset security tokens
+      existing.firstName = firstName.trim();
+      existing.lastName = lastName.trim();
+      existing.password = password; // triggers User model beforeUpdate hook to re-hash
+      existing.role = role.baseRole;
+      existing.status = 'active';
+      existing.emailVerified = true;
+      existing.scheduledDeletionAt = null;
+      existing.twoFactorEnabled = false;
+      existing.twoFactorSecret = null;
+      existing.twoFactorBackupCodes = null;
+      await existing.save({ transaction });
+
+      await existing.setRoles([role], { transaction });
+
+      // Invalidate any old refresh tokens
+      const { RefreshToken } = db;
+      if (RefreshToken) {
+        await RefreshToken.update(
+          { revokedAt: new Date() },
+          { where: { userId: existing.id, revokedAt: null }, transaction }
+        );
+      }
+
+      const restoredUser = await User.findByPk(existing.id, { include: userRoleInclude, transaction });
+
+      try {
+        await AuditService.log({
+          userId: actingUser.id,
+          action: ACTIONS.CREATE,
+          entity: ENTITIES.USER,
+          entityId: existing.id,
+          changes: {
+            email: existing.email,
+            baseRole: role.baseRole,
+            assignedRole: role.slug,
+            recreated: true,
+            createdBy: actingUser.id,
+          },
+        }, transaction);
+      } catch (_) {}
+
+      return serializeAccessUser(restoredUser);
     }
 
     const newUser = await User.create({
       firstName: firstName.trim(),
       lastName: lastName.trim(),
-      email: email.toLowerCase().trim(),
+      email: normalizedEmail,
       password, // auto-hashed by User model's beforeSave hook
       role: role.baseRole,
       status: 'active',
@@ -869,9 +940,13 @@ const createStaffUser = async ({ firstName, lastName, email, password, roleId },
 
 /**
  * Delete a staff user account.
- * Guards against self-deletion, deleting the last active super admin,
- * and deleting accounts that have placed storefront orders.
- * Revokes all refresh tokens and soft-deletes the user.
+ * Guards against:
+ * 1. Self-deletion
+ * 2. Deleting pure customer accounts (customers are protected; manage from Customers page)
+ * 3. Non-super-admins deleting super admins
+ * 4. Deleting the last active super admin
+ * 5. Deleting accounts that have placed storefront orders
+ * Revokes all refresh tokens, unassigns roles, and soft-deletes the user.
  */
 const deleteStaffUser = async (userId, actingUser) => {
   return db.sequelize.transaction(async (transaction) => {
@@ -885,6 +960,17 @@ const deleteStaffUser = async (userId, actingUser) => {
     const user = await User.findByPk(userId, { include: userRoleInclude, transaction });
     if (!user) {
       throw new AppError('NOT_FOUND', 404, 'User not found');
+    }
+
+    // Customer accounts must not be deleted from Access Control (preserve customer data & order integrity)
+    const assignedRoles = user.roles || [];
+    const hasStaffRole = assignedRoles.some((r) => r.slug !== 'customer' && r.baseRole !== 'customer');
+    if (user.role === 'customer' && !hasStaffRole) {
+      throw new AppError(
+        'VALIDATION_ERROR',
+        400,
+        'Customer accounts cannot be deleted. Customer data must be preserved. You can deactivate or suspend the account from the Customers page.'
+      );
     }
 
     if (user.role === ROLES.SUPER_ADMIN) {

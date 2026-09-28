@@ -440,20 +440,32 @@ const AccessControlPage = () => {
       width: 70,
       sortable: false,
       align: 'right',
-      renderCell: ({ row }) => (
-        <Tooltip title={row.id === currentUser?.id ? 'You cannot delete your own account' : 'Delete user'}>
-          <span>
-            <IconButton
-              size="small"
-              color="error"
-              onClick={() => openDeleteUserDialog(row)}
-              disabled={deletingUser || row.id === currentUser?.id}
-            >
-              <DeleteIcon fontSize="small" />
-            </IconButton>
-          </span>
-        </Tooltip>
-      ),
+      renderCell: ({ row }) => {
+        const isCustomer =
+          row.assignedRole?.slug === 'customer' ||
+          (row.role === 'customer' && (!row.assignedRole || row.assignedRole.slug === 'customer'));
+        const isSelf = row.id === currentUser?.id;
+        let tooltipTitle = 'Delete user';
+        if (isCustomer) {
+          tooltipTitle = 'Customer accounts cannot be deleted (manage from Customers page)';
+        } else if (isSelf) {
+          tooltipTitle = 'You cannot delete your own account';
+        }
+        return (
+          <Tooltip title={tooltipTitle}>
+            <span>
+              <IconButton
+                size="small"
+                color="error"
+                onClick={() => openDeleteUserDialog(row)}
+                disabled={deletingUser || isSelf || isCustomer}
+              >
+                <DeleteIcon fontSize="small" />
+              </IconButton>
+            </span>
+          </Tooltip>
+        );
+      },
     },
   ];
 
