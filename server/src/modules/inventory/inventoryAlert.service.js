@@ -487,6 +487,7 @@ const digestAlertVariables = (alerts, isTest = false) => ({
   isTest,
   alert_count: alerts.length,
   out_of_stock_count: alerts.filter((alert) => alert.severity === 'out_of_stock').length,
+  inventory_alert_ids: alerts.map((alert) => alert.id),
   alerts: alerts.map((alert) => ({
     product_id: alert.productId,
     product_name: alert.productName || alert.product?.name || 'Product',
@@ -564,12 +565,6 @@ const runAlertCycle = async ({ now = new Date() } = {}) => {
         now,
       });
       queued += sent.length;
-      if (sent.length) {
-        await InventoryAlert.update(
-          { lastNotifiedAt: now },
-          { where: { id: { [Op.in]: immediateAlerts.map((row) => row.id) } } },
-        );
-      }
     }
   }
 
@@ -595,12 +590,6 @@ const runAlertCycle = async ({ now = new Date() } = {}) => {
     now,
   });
   queued += sent.length;
-  if (sent.length) {
-    await InventoryAlert.update(
-      { lastNotifiedAt: now },
-      { where: { id: { [Op.in]: dueAlerts.map((alert) => alert.id) } } },
-    );
-  }
   return { queued, reason: sent.length ? 'digest_queued' : 'already_queued' };
 };
 

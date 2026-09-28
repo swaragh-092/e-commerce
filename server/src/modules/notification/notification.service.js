@@ -2,9 +2,11 @@
 
 const handlebars = require('handlebars');
 const { Op } = require('sequelize');
-const { NotificationTemplate, NotificationLog, NotificationQueue } = require('../index');
+const { NotificationTemplate, NotificationLog, NotificationQueue, InventoryAlert } = require('../index');
 const { dispatch } = require('./notification.dispatcher');
 const logger = require('../../utils/logger');
+
+const INVENTORY_ALERT_TEMPLATE = 'inventory_alert_digest';
 
 /**
  * Build the channel-specific payload from a compiled template.
@@ -86,6 +88,26 @@ const createLog = async ({ job, subject = null, status, error = null }, transact
     }
 
     await NotificationLog.create(logData, transaction ? { transaction } : {});
+};
+
+const markInventoryAlertsDelivered = async (job, deliveredAt) => {
+    const alertIds = [...new Set(job?.variables?.inventory_alert_ids || [])].filter(Boolean);
+    if (job?.templateName !== INVENTORY_ALERT_TEMPLATE || !alertIds.length) return;
+
+    try {
+        await InventoryAlert.update(
+            { lastNotifiedAt: deliveredAt },
+            {
+                where: {
+                    id: { [Op.in]: alertIds },
+                    status: { [Op.in]: ['open', 'acknowledged'] },
+                },
+            },
+        );
+    } catch (error) {
+        // Delivery succeeded; a bookkeeping failure must not re-send the email.
+        logger.error('[notification.service] Failed to record inventory alert delivery:', error);
+    }
 };
 
 /**
@@ -259,6 +281,7 @@ const processQueued = async ({ limit = 25 } = {}) => {
             const status = dispatched ? 'sent' : 'skipped';
 
             await job.update({ status, sentAt: dispatched ? new Date() : null, error: dispatched ? null : 'Channel disabled' });
+            if (dispatched) await markInventoryAlertsDelivered(job, job.sentAt || new Date());
             await createLog({ job, subject, status, error: dispatched ? null : 'Channel disabled' });
         } catch (err) {
             const attempts = Number(job.attempts || 0);

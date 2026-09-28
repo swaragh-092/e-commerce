@@ -111,7 +111,16 @@ describe('Inventory alert notification cycle', () => {
     await runAlertCycle({ now: new Date(now.getTime() + 120_000) });
 
     expect(NotificationService.sendOnce).toHaveBeenCalledOnce();
-    expect(alert.lastNotifiedAt).toEqual(new Date(now.getTime() + 60_000));
+    expect(alert.lastNotifiedAt).toBeNull();
+    expect(NotificationService.sendOnce).toHaveBeenCalledWith(
+      'inventory_alert_digest',
+      recipient.email,
+      expect.objectContaining({ inventory_alert_ids: [alert.id] }),
+      recipient.id,
+      null,
+      'email',
+      expect.any(String),
+    );
   });
 
   it('pauses acknowledged reminders until the expected restock date, then resumes them', () => {
