@@ -277,8 +277,10 @@ const ProductsManagePage = () => {
 
   const handleVariantStockStep = (variantId, delta, minQty = 0) => {
     setEditDialog((prev) => {
-      const current = Number(prev.variantStocks[variantId]) || 0;
-      const next = Math.max(minQty, current + delta);
+      const raw = prev.variantStocks[variantId];
+      const num = Number(raw);
+      const base = Number.isFinite(num) ? Math.floor(num) : 0;
+      const next = Math.max(minQty, base + delta);
       return {
         ...prev,
         variantStocks: {
@@ -614,7 +616,7 @@ const ProductsManagePage = () => {
   const liveVariantTotalStock = activeVariants.reduce((sum, v) => {
     const qty = editDialog.variantStocks[v.id] !== undefined ? editDialog.variantStocks[v.id] : v.stockQty;
     const num = Number(qty);
-    return sum + (Number.isNaN(num) || num < 0 ? 0 : num);
+    return sum + (Number.isNaN(num) || num < 0 || !Number.isInteger(num) ? 0 : num);
   }, 0);
   // Include reservations across all variants (active, inactive, and soft-deleted captured in row.reservedQty)
   const liveVariantReservedStock = Math.max(
@@ -1288,13 +1290,21 @@ const ProductsManagePage = () => {
                                     {variantName}
                                   </Typography>
                                 </Tooltip>
-                                {Number(v.reservedQty) > 0 ? (
-                                  <Typography variant="caption" color={Number(currentQty) < minQty ? 'error.main' : 'warning.dark'} sx={{ fontSize: '0.68rem', display: 'block', fontWeight: Number(currentQty) < minQty ? 700 : 400 }}>
-                                    {Number(currentQty) < minQty ? `Must be ≥ ${v.reservedQty} (reserved)` : `${v.reservedQty} reserved`}
-                                  </Typography>
-                                ) : isInvalid ? (
+                                {isInvalid ? (
                                   <Typography variant="caption" color="error.main" sx={{ fontSize: '0.68rem', display: 'block', fontWeight: 600 }}>
-                                    {currentQty === '' ? 'Quantity required' : 'Invalid quantity'}
+                                    {currentQty === ''
+                                      ? 'Quantity required'
+                                      : Number.isNaN(Number(currentQty))
+                                        ? 'Invalid number'
+                                        : Number(currentQty) < minQty
+                                          ? `Must be ≥ ${minQty} (reserved)`
+                                          : !Number.isInteger(Number(currentQty))
+                                            ? 'Must be a whole number'
+                                            : 'Invalid quantity'}
+                                  </Typography>
+                                ) : Number(v.reservedQty) > 0 ? (
+                                  <Typography variant="caption" color="warning.dark" sx={{ fontSize: '0.68rem', display: 'block' }}>
+                                    {`${v.reservedQty} reserved`}
                                   </Typography>
                                 ) : null}
                               </Box>
@@ -1333,10 +1343,7 @@ const ProductsManagePage = () => {
                                     },
                                   }}
                                   value={currentQty}
-                                  onChange={(e) => {
-                                    const raw = e.target.value;
-                                    handleVariantStockChange(v.id, raw === '' ? '' : Math.max(0, parseInt(raw, 10) || 0));
-                                  }}
+                                  onChange={(e) => handleVariantStockChange(v.id, e.target.value)}
                                   sx={{ width: 64 }}
                                 />
                                 <Tooltip title="Increase stock">
