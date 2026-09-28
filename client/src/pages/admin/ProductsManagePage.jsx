@@ -151,6 +151,7 @@ const ProductsManagePage = () => {
     quantity: '',
     variantStocks: {},
     userEditedVariantIds: {},
+    loadingVariants: false,
     price: '',
     salePrice: '',
     saleEnabled: false,
@@ -203,6 +204,9 @@ const ProductsManagePage = () => {
       initialVariantStocks[v.id] = v.stockQty ?? 0;
     });
 
+    const isVariable = Boolean(row.variants?.length > 0 || row.hasVariants || row.type === 'variable');
+    const needsFetch = isVariable && (!row.variants || row.variants.length === 0 || !row.variants.some((v) => v.optionLabel || v.options?.length > 0));
+
     setEditDialog({
       open: true,
       row,
@@ -211,6 +215,7 @@ const ProductsManagePage = () => {
       quantity: row.quantity,
       variantStocks: initialVariantStocks,
       userEditedVariantIds: {},
+      loadingVariants: needsFetch,
       price: row.price,
       salePrice: row.salePrice ?? '',
       saleEnabled: row.salePrice !== null && row.salePrice !== undefined && row.salePrice !== '',
@@ -221,7 +226,7 @@ const ProductsManagePage = () => {
       saving: false,
     });
 
-    if (row.variants?.length > 0 || row.hasVariants || row.type === 'variable') {
+    if (isVariable) {
       getProductById(row.id)
         .then((fullProduct) => {
           const fetchedVariants = fullProduct?.data?.variants || fullProduct?.variants;
@@ -238,15 +243,20 @@ const ProductsManagePage = () => {
               return {
                 ...prev,
                 variantStocks: mergedVariantStocks,
+                loadingVariants: false,
                 row: {
                   ...prev.row,
                   variants: fetchedVariants,
                 },
               };
             });
+          } else {
+            setEditDialog((prev) => (prev.row?.id === row.id ? { ...prev, loadingVariants: false } : prev));
           }
         })
-        .catch(() => {});
+        .catch(() => {
+          setEditDialog((prev) => (prev.row?.id === row.id ? { ...prev, loadingVariants: false } : prev));
+        });
     }
   };
 
@@ -577,9 +587,21 @@ const ProductsManagePage = () => {
   );
   const editDiscountAmount = hasValidEditDiscount ? editPriceValue - editSalePriceValue : 0;
   const editDiscountPercent = hasValidEditDiscount ? Math.round(((editPriceValue - editSalePriceValue) / editPriceValue) * 100) : 0;
-  const hasInvalidQuantity = cartEnabled && editDialog.open && !(editDialog.row?.variants?.length > 0) && (Number.isNaN(Number(editDialog.quantity)) || Number(editDialog.quantity) < 0);
+  const isVariableProduct = Boolean(
+    editDialog.row?.variants?.length > 0 ||
+    editDialog.row?.hasVariants ||
+    editDialog.row?.type === 'variable'
+  );
+  const minSimpleStockQty = Math.max(0, Number(editDialog.row?.reservedQty || 0));
+  const numSimpleQuantity = Number(editDialog.quantity);
+  const hasInvalidQuantity = cartEnabled && editDialog.open && !isVariableProduct && (
+    editDialog.quantity === '' ||
+    Number.isNaN(numSimpleQuantity) ||
+    !Number.isInteger(numSimpleQuantity) ||
+    numSimpleQuantity < minSimpleStockQty
+  );
   const activeVariants = (editDialog.row?.variants || []).filter((v) => v.isActive !== false);
-  const hasInvalidVariantQuantity = cartEnabled && editDialog.open && (editDialog.row?.variants?.length > 0) && activeVariants.some((v) => {
+  const hasInvalidVariantQuantity = cartEnabled && editDialog.open && isVariableProduct && activeVariants.some((v) => {
     const qty = editDialog.variantStocks[v.id] !== undefined ? editDialog.variantStocks[v.id] : v.stockQty;
     if (qty === '' || qty === undefined || qty === null) return true;
     const num = Number(qty);
@@ -733,13 +755,17 @@ const ProductsManagePage = () => {
         const reserved = Number(row?.reservedQty || 0);
         const available = Math.max(0, total - reserved);
         const color = available === 0 ? 'error' : available <= lowStockThreshold ? 'warning' : 'success';
+        const isVariable = Boolean(row?.variants?.length > 0 || row?.hasVariants || row?.type === 'variable');
+        const variantCount = row?.variants?.length;
+        const tooltipTitle = isVariable && variantCount > 0
+          ? `${variantCount} variant${variantCount === 1 ? '' : 's'} · Available: ${available} | Total: ${total} | Reserved: ${reserved}`
+          : `Available: ${available} | Total: ${total} | Reserved: ${reserved}`;
         return (
-          <Tooltip title={`Available: ${available} | Total: ${total} | Reserved: ${reserved}`}>
+          <Tooltip title={tooltipTitle}>
             <Chip
               label={row.unit ? `${available} ${row.unit}` : available}
               size="small"
               color={color}
-
               variant={available === 0 ? 'filled' : 'outlined'}
               sx={{ fontWeight: 700, minWidth: 54 }}
             />
@@ -1189,8 +1215,18 @@ const ProductsManagePage = () => {
             {/* ── Stock Stepper — only in ecommerce mode (cart Tier-1 feature) ── */}
             {cartEnabled && (
             <Box>
-              {(editDialog.row?.variants?.length > 0) ? (
+              {isVariableProduct ? (
                 /* ── Variant-managed stock: interactive quick edit ── */
+                editDialog.loadingVariants ? (
+                  <Paper variant="outlined" sx={{ p: 2, borderRadius: 2, textAlign: 'center', bgcolor: 'action.hover' }}>
+                    <Stack direction="row" alignItems="center" justifyContent="center" spacing={1}>
+                      <CircularProgress size={18} />
+                      <Typography variant="body2" color="text.secondary">
+                        Loading variant stock...
+                      </Typography>
+                    </Stack>
+                  </Paper>
+                ) : (
                 <>
                   <Typography variant="caption" color="text.secondary" fontWeight={600} sx={{ mb: 0.5, display: 'block' }}>
                     Stock (managed by variants)
@@ -1209,115 +1245,122 @@ const ProductsManagePage = () => {
                         )}
                       </Typography>
                     </Stack>
-                    <Stack spacing={0.75} sx={{ maxHeight: 180, overflowY: 'auto', pr: 0.5 }}>
-                      {activeVariants.map((v, index) => {
-                        const optionText = v.optionLabel || getVariantOptionLabel(v) || (v.options?.map((o) => o.value?.value || o.value?.displayLabel || o.value).filter(Boolean).join(' / '));
-                        const variantName = optionText && v.sku
-                          ? `${optionText} (${v.sku})`
-                          : (optionText || v.sku || `Variant #${index + 1}`);
-                        const minQty = Math.max(0, Number(v.reservedQty || 0));
-                        const currentQty = editDialog.variantStocks[v.id] !== undefined ? editDialog.variantStocks[v.id] : (v.stockQty ?? 0);
-                        const isInvalid = currentQty === '' || Number.isNaN(Number(currentQty)) || Number(currentQty) < minQty || !Number.isInteger(Number(currentQty));
+                    {activeVariants.length === 0 ? (
+                      <Typography variant="caption" color="text.secondary" sx={{ fontStyle: 'italic', display: 'block', p: 1, textAlign: 'center' }}>
+                        No active variants found. Manage variants on the product edit page.
+                      </Typography>
+                    ) : (
+                      <Stack spacing={0.75} sx={{ maxHeight: 180, overflowY: 'auto', pr: 0.5 }}>
+                        {activeVariants.map((v, index) => {
+                          const optionText = v.optionLabel || getVariantOptionLabel(v) || (v.options?.map((o) => o.value?.value || o.value?.displayLabel || o.value).filter(Boolean).join(' / '));
+                          const variantName = optionText && v.sku
+                            ? `${optionText} (${v.sku})`
+                            : (optionText || v.sku || `Variant #${index + 1}`);
+                          const minQty = Math.max(0, Number(v.reservedQty || 0));
+                          const currentQty = editDialog.variantStocks[v.id] !== undefined ? editDialog.variantStocks[v.id] : (v.stockQty ?? 0);
+                          const isInvalid = currentQty === '' || Number.isNaN(Number(currentQty)) || Number(currentQty) < minQty || !Number.isInteger(Number(currentQty));
 
-                        return (
-                          <Stack
-                            key={v.id}
-                            direction="row"
-                            justifyContent="space-between"
-                            alignItems="center"
-                            spacing={1}
-                            sx={{
-                              py: 0.5,
-                              px: 0.75,
-                              borderRadius: 1,
-                              bgcolor: 'background.paper',
-                              border: '1px solid',
-                              borderColor: isInvalid ? 'error.main' : 'divider',
-                            }}
-                          >
-                            <Box sx={{ minWidth: 0, flex: 1 }}>
-                              <Tooltip title={variantName}>
-                                <Typography variant="caption" fontWeight={600} color="text.primary" noWrap sx={{ display: 'block', maxWidth: 210 }}>
-                                  {variantName}
-                                </Typography>
-                              </Tooltip>
-                              {Number(v.reservedQty) > 0 ? (
-                                <Typography variant="caption" color={Number(currentQty) < minQty ? 'error.main' : 'warning.dark'} sx={{ fontSize: '0.68rem', display: 'block', fontWeight: Number(currentQty) < minQty ? 700 : 400 }}>
-                                  {Number(currentQty) < minQty ? `Must be ≥ ${v.reservedQty} (reserved)` : `${v.reservedQty} reserved`}
-                                </Typography>
-                              ) : isInvalid ? (
-                                <Typography variant="caption" color="error.main" sx={{ fontSize: '0.68rem', display: 'block', fontWeight: 600 }}>
-                                  {currentQty === '' ? 'Quantity required' : 'Invalid quantity'}
-                                </Typography>
-                              ) : null}
-                            </Box>
-                            <Stack direction="row" alignItems="center" spacing={0.5}>
-                              <Tooltip title={Number(currentQty) <= minQty && minQty > 0 ? `Cannot decrease below reserved stock (${minQty})` : 'Decrease stock'}>
-                                <span>
+                          return (
+                            <Stack
+                              key={v.id}
+                              direction="row"
+                              justifyContent="space-between"
+                              alignItems="center"
+                              spacing={1}
+                              sx={{
+                                py: 0.5,
+                                px: 0.75,
+                                borderRadius: 1,
+                                bgcolor: 'background.paper',
+                                border: '1px solid',
+                                borderColor: isInvalid ? 'error.main' : 'divider',
+                              }}
+                            >
+                              <Box sx={{ minWidth: 0, flex: 1 }}>
+                                <Tooltip title={variantName}>
+                                  <Typography variant="caption" fontWeight={600} color="text.primary" noWrap sx={{ display: 'block', maxWidth: 210 }}>
+                                    {variantName}
+                                  </Typography>
+                                </Tooltip>
+                                {Number(v.reservedQty) > 0 ? (
+                                  <Typography variant="caption" color={Number(currentQty) < minQty ? 'error.main' : 'warning.dark'} sx={{ fontSize: '0.68rem', display: 'block', fontWeight: Number(currentQty) < minQty ? 700 : 400 }}>
+                                    {Number(currentQty) < minQty ? `Must be ≥ ${v.reservedQty} (reserved)` : `${v.reservedQty} reserved`}
+                                  </Typography>
+                                ) : isInvalid ? (
+                                  <Typography variant="caption" color="error.main" sx={{ fontSize: '0.68rem', display: 'block', fontWeight: 600 }}>
+                                    {currentQty === '' ? 'Quantity required' : 'Invalid quantity'}
+                                  </Typography>
+                                ) : null}
+                              </Box>
+                              <Stack direction="row" alignItems="center" spacing={0.5}>
+                                <Tooltip title={Number(currentQty) <= minQty && minQty > 0 ? `Cannot decrease below reserved stock (${minQty})` : 'Decrease stock'}>
+                                  <span>
+                                    <IconButton
+                                      size="small"
+                                      color="error"
+                                      onClick={() => handleVariantStockStep(v.id, -1, minQty)}
+                                      disabled={Number(currentQty) <= minQty}
+                                      sx={{
+                                        p: 0.25,
+                                        border: '1px solid',
+                                        borderColor: 'divider',
+                                        borderRadius: 1,
+                                        '&:hover': { borderColor: 'error.main', bgcolor: 'error.50' },
+                                      }}
+                                    >
+                                      <RemoveCircleIcon sx={{ fontSize: 18 }} />
+                                    </IconButton>
+                                  </span>
+                                </Tooltip>
+                                <TextField
+                                  type="number"
+                                  size="small"
+                                  error={isInvalid}
+                                  inputProps={{
+                                    min: minQty,
+                                    style: {
+                                      textAlign: 'center',
+                                      fontWeight: 700,
+                                      fontSize: '0.85rem',
+                                      padding: '3px 4px',
+                                      width: 44,
+                                    },
+                                  }}
+                                  value={currentQty}
+                                  onChange={(e) => {
+                                    const raw = e.target.value;
+                                    handleVariantStockChange(v.id, raw === '' ? '' : Math.max(0, parseInt(raw, 10) || 0));
+                                  }}
+                                  sx={{ width: 64 }}
+                                />
+                                <Tooltip title="Increase stock">
                                   <IconButton
                                     size="small"
-                                    color="error"
-                                    onClick={() => handleVariantStockStep(v.id, -1, minQty)}
-                                    disabled={Number(currentQty) <= minQty}
+                                    color="success"
+                                    onClick={() => handleVariantStockStep(v.id, 1)}
                                     sx={{
                                       p: 0.25,
                                       border: '1px solid',
                                       borderColor: 'divider',
                                       borderRadius: 1,
-                                      '&:hover': { borderColor: 'error.main', bgcolor: 'error.50' },
+                                      '&:hover': { borderColor: 'success.main', bgcolor: 'success.50' },
                                     }}
                                   >
-                                    <RemoveCircleIcon sx={{ fontSize: 18 }} />
+                                    <AddCircleIcon sx={{ fontSize: 18 }} />
                                   </IconButton>
-                                </span>
-                              </Tooltip>
-                              <TextField
-                                type="number"
-                                size="small"
-                                error={isInvalid}
-                                inputProps={{
-                                  min: 0,
-                                  style: {
-                                    textAlign: 'center',
-                                    fontWeight: 700,
-                                    fontSize: '0.85rem',
-                                    padding: '3px 4px',
-                                    width: 44,
-                                  },
-                                }}
-                                value={currentQty}
-                                onChange={(e) => {
-                                  const raw = e.target.value;
-                                  handleVariantStockChange(v.id, raw === '' ? '' : Math.max(0, parseInt(raw, 10) || 0));
-                                }}
-                                sx={{ width: 64 }}
-                              />
-                              <Tooltip title="Increase stock">
-                                <IconButton
-                                  size="small"
-                                  color="success"
-                                  onClick={() => handleVariantStockStep(v.id, 1)}
-                                  sx={{
-                                    p: 0.25,
-                                    border: '1px solid',
-                                    borderColor: 'divider',
-                                    borderRadius: 1,
-                                    '&:hover': { borderColor: 'success.main', bgcolor: 'success.50' },
-                                  }}
-                                >
-                                  <AddCircleIcon sx={{ fontSize: 18 }} />
-                                </IconButton>
-                              </Tooltip>
+                                </Tooltip>
+                              </Stack>
                             </Stack>
-                          </Stack>
-                        );
-                      })}
-                    </Stack>
+                          );
+                        })}
+                      </Stack>
+                    )}
                   </Paper>
                   <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mt: 0.5 }}>
                     Adjust stock quantities per variant directly above. For pricing and images, use the full product edit page.
                   </Typography>
                 </>
+                )
               ) : (
                 /* ── Simple product: editable stock stepper ── */
                 <>
@@ -1349,7 +1392,7 @@ const ProductsManagePage = () => {
 
               {/* Decrement | Input | Increment row */}
               <Stack direction="row" alignItems="center" spacing={1}>
-                <Tooltip title="Increase stock">
+                <Tooltip title={Number(editDialog.quantity) <= minSimpleStockQty && minSimpleStockQty > 0 ? `Cannot decrease below reserved stock (${minSimpleStockQty})` : 'Decrease stock'}>
                   <span>
                     <IconButton
                       size="small"
@@ -1357,10 +1400,10 @@ const ProductsManagePage = () => {
                       onClick={() =>
                         setEditDialog((s) => ({
                           ...s,
-                          quantity: Math.max(0, (Number(s.quantity) || 0) - 1),
+                          quantity: Math.max(minSimpleStockQty, (Number(s.quantity) || 0) - 1),
                         }))
                       }
-                      disabled={Number(editDialog.quantity) <= 0}
+                      disabled={Number(editDialog.quantity) <= minSimpleStockQty}
                       sx={{
                         border: '1px solid',
                         borderColor: 'divider',
@@ -1377,13 +1420,13 @@ const ProductsManagePage = () => {
                   type="number"
                   size="small"
                   error={hasInvalidQuantity}
-                  inputProps={{ min: 0, style: { textAlign: 'center', fontWeight: 700, fontSize: '1rem', width: 64 } }}
+                  inputProps={{ min: minSimpleStockQty, style: { textAlign: 'center', fontWeight: 700, fontSize: '1rem', width: 64 } }}
                   value={editDialog.quantity}
                   onChange={(e) => setEditDialog((s) => ({ ...s, quantity: e.target.value }))}
                   sx={{ width: 96 }}
                 />
 
-                <Tooltip title="Decrease stock">
+                <Tooltip title="Increase stock">
                   <IconButton
                     size="small"
                     color="success"
@@ -1406,8 +1449,10 @@ const ProductsManagePage = () => {
               </Stack>
 
               {hasInvalidQuantity && (
-                <Typography variant="caption" color="error" sx={{ display: 'block', mt: 0.5 }}>
-                  Stock cannot be negative.
+                <Typography variant="caption" color="error" sx={{ display: 'block', mt: 0.5, fontWeight: 600 }}>
+                  {numSimpleQuantity < minSimpleStockQty
+                    ? `Stock cannot be less than reserved stock (${minSimpleStockQty}).`
+                    : 'Quantity must be a valid non-negative integer.'}
                 </Typography>
               )}
                 </>
@@ -1606,7 +1651,7 @@ const ProductsManagePage = () => {
           <Button
             variant="contained"
             onClick={handleQuickSave}
-            disabled={editDialog.saving || hasInvalidPrice || hasInvalidSalePrice || hasInvalidQuantity || hasInvalidVariantQuantity || hasInvalidSaleDates}
+            disabled={editDialog.saving || editDialog.loadingVariants || hasInvalidPrice || hasInvalidSalePrice || hasInvalidQuantity || hasInvalidVariantQuantity || hasInvalidSaleDates}
           >
             {editDialog.saving ? 'Saving…' : 'Save'}
           </Button>
