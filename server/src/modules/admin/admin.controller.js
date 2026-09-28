@@ -122,6 +122,15 @@ const createStaffUser = async (req, res, next) => {
   }
 };
 
+const deleteStaffUser = async (req, res, next) => {
+  try {
+    await AdminService.deleteStaffUser(req.params.id, req.user);
+    return success(res, null, 'User deleted successfully');
+  } catch (err) {
+    next(err);
+  }
+};
+
 // Analytics — helper to support comparison mode
 const analyticsWithCompare = async (methodName, query) => {
   if (query.compare) {
@@ -326,6 +335,7 @@ module.exports = {
   getAccessUsers,
   updateUserRole,
   createStaffUser,
+  deleteStaffUser,
   getTopProducts,
   getAovTrend,
   getAbandonedCarts,

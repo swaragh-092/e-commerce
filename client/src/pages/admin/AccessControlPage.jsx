@@ -42,6 +42,7 @@ import {
   createAccessRole,
   createAccessUser,
   deleteAccessRole,
+  deleteAccessUser,
   getAccessPermissions,
   getAccessRoles,
   getAccessUsers,
@@ -86,7 +87,7 @@ const AccessControlPage = () => {
   const theme = useTheme();
   const isMobile = useMediaQuery(theme.breakpoints.down('sm'));
   const { notify } = useNotification();
-  const { hasPermission } = useAuth();
+  const { hasPermission, user: currentUser } = useAuth();
   const [roles, setRoles] = useState([]);
   const [permissions, setPermissions] = useState([]);
   const [rows, setRows] = useState([]);
@@ -103,6 +104,9 @@ const AccessControlPage = () => {
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   const [roleToDelete, setRoleToDelete] = useState(null);
   const [deletingRole, setDeletingRole] = useState(false);
+  const [deleteUserDialogOpen, setDeleteUserDialogOpen] = useState(false);
+  const [userToDelete, setUserToDelete] = useState(null);
+  const [deletingUser, setDeletingUser] = useState(false);
 
   const canManageCustomRoles = hasPermission(PERMISSIONS.ROLES_MANAGE);
   const canManageSystemRoles = hasPermission(PERMISSIONS.SYSTEM_ROLES_MANAGE);
@@ -305,6 +309,31 @@ const AccessControlPage = () => {
     }
   };
 
+  const openDeleteUserDialog = (user) => {
+    setUserToDelete(user);
+    setDeleteUserDialogOpen(true);
+  };
+
+  const closeDeleteUserDialog = () => {
+    setDeleteUserDialogOpen(false);
+    setUserToDelete(null);
+  };
+
+  const handleDeleteUser = async () => {
+    if (!userToDelete) return;
+    setDeletingUser(true);
+    try {
+      await deleteAccessUser(userToDelete.id);
+      notify(`Staff user "${userToDelete.email}" deleted successfully.`, 'success');
+      closeDeleteUserDialog();
+      fetchAccessControl();
+    } catch (error) {
+      notify(getApiErrorMessage(error, 'Failed to delete user.'), 'error');
+    } finally {
+      setDeletingUser(false);
+    }
+  };
+
   const openCreateUserDialog = () => {
     setCreateUserForm(emptyUserForm);
     setShowPassword(false);
@@ -404,6 +433,27 @@ const AccessControlPage = () => {
           </FormControl>
         );
       },
+    },
+    {
+      field: 'actions',
+      headerName: '',
+      width: 70,
+      sortable: false,
+      align: 'right',
+      renderCell: ({ row }) => (
+        <Tooltip title={row.id === currentUser?.id ? 'You cannot delete your own account' : 'Delete user'}>
+          <span>
+            <IconButton
+              size="small"
+              color="error"
+              onClick={() => openDeleteUserDialog(row)}
+              disabled={deletingUser || row.id === currentUser?.id}
+            >
+              <DeleteIcon fontSize="small" />
+            </IconButton>
+          </span>
+        </Tooltip>
+      ),
     },
   ];
 
@@ -1103,6 +1153,40 @@ const AccessControlPage = () => {
             startIcon={deletingRole ? <CircularProgress size={16} color="inherit" /> : <DeleteIcon />}
           >
             {deletingRole ? 'Deleting…' : 'Delete Role'}
+          </Button>
+        </DialogActions>
+      </Dialog>
+
+      {/* Delete User Confirmation Dialog */}
+      <Dialog
+        open={deleteUserDialogOpen}
+        onClose={closeDeleteUserDialog}
+        maxWidth="xs"
+        fullWidth
+      >
+        <DialogTitle sx={{ fontWeight: 700 }}>
+          Delete Staff Account
+        </DialogTitle>
+        <DialogContent>
+          <DialogContentText>
+            Are you sure you want to delete the staff account for <strong>"{userToDelete?.email}"</strong>?
+          </DialogContentText>
+          <DialogContentText sx={{ mt: 1, fontSize: '0.85rem', color: 'text.secondary' }}>
+            This will permanently revoke all roles, active login sessions, and permissions for this user.
+          </DialogContentText>
+        </DialogContent>
+        <DialogActions sx={{ px: 3, pb: 2 }}>
+          <Button onClick={closeDeleteUserDialog} disabled={deletingUser}>
+            Cancel
+          </Button>
+          <Button
+            onClick={handleDeleteUser}
+            color="error"
+            variant="contained"
+            disabled={deletingUser}
+            startIcon={deletingUser ? <CircularProgress size={16} color="inherit" /> : <DeleteIcon />}
+          >
+            {deletingUser ? 'Deleting…' : 'Delete User'}
           </Button>
         </DialogActions>
       </Dialog>

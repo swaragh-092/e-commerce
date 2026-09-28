@@ -44,6 +44,7 @@ router.get('/access-control/users', ...accessManageOnly, validate(paginationQuer
 
 router.post('/access-control/users', ...accessManageOnly, validate(createStaffUserSchema), adminController.createStaffUser);
 router.put('/access-control/users/:id/role', ...accessManageOnly, validate(idParamSchema, 'params'), validate(updateUserRoleSchema), adminController.updateUserRole);
+router.delete('/access-control/users/:id', ...accessManageOnly, validate(idParamSchema, 'params'), adminController.deleteStaffUser);
 
 // Analytics
 router.get('/analytics/top-products', ...adminOnly, validate(analyticsQuerySchema, 'query'), adminController.getTopProducts);

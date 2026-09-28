@@ -867,6 +867,81 @@ const createStaffUser = async ({ firstName, lastName, email, password, roleId },
   });
 };
 
+/**
+ * Delete a staff user account.
+ * Guards against self-deletion, deleting the last active super admin,
+ * and deleting accounts that have placed storefront orders.
+ * Revokes all refresh tokens and soft-deletes the user.
+ */
+const deleteStaffUser = async (userId, actingUser) => {
+  return db.sequelize.transaction(async (transaction) => {
+    const actingUserId = typeof actingUser === 'object' && actingUser ? actingUser.id : actingUser;
+    const isSuperAdmin = actingUser?.role === ROLES.SUPER_ADMIN;
+
+    if (userId === actingUserId) {
+      throw new AppError('VALIDATION_ERROR', 400, 'You cannot delete your own account');
+    }
+
+    const user = await User.findByPk(userId, { include: userRoleInclude, transaction });
+    if (!user) {
+      throw new AppError('NOT_FOUND', 404, 'User not found');
+    }
+
+    if (user.role === ROLES.SUPER_ADMIN) {
+      if (!isSuperAdmin) {
+        throw new AppError('FORBIDDEN', 403, 'Only super admins can delete super admin accounts');
+      }
+      const superAdminCount = await User.count({
+        where: { role: ROLES.SUPER_ADMIN, status: 'active' },
+        transaction,
+      });
+      if (superAdminCount <= 1) {
+        throw new AppError('VALIDATION_ERROR', 400, 'Cannot delete the last active super admin');
+      }
+    }
+
+    const orderCount = await Order.count({
+      where: { userId },
+      transaction,
+    });
+
+    if (orderCount > 0) {
+      throw new AppError(
+        'CONFLICT',
+        409,
+        `Cannot delete this user because they have ${orderCount} associated order(s). Demote them to Customer or deactivate their account instead.`
+      );
+    }
+
+    const { RefreshToken } = db;
+    if (RefreshToken) {
+      await RefreshToken.update(
+        { revokedAt: new Date() },
+        { where: { userId, revokedAt: null }, transaction }
+      );
+    }
+
+    await user.setRoles([], { transaction });
+    await user.destroy({ transaction });
+
+    try {
+      await AuditService.log({
+        userId: actingUserId,
+        action: ACTIONS.DELETE,
+        entity: ENTITIES.USER,
+        entityId: user.id,
+        changes: {
+          email: user.email,
+          role: user.role,
+          deletedBy: actingUserId,
+        },
+      }, transaction);
+    } catch (_) {}
+
+    return { id: user.id, email: user.email };
+  });
+};
+
 module.exports = {
   getStats,
   getSalesChart,
@@ -881,4 +956,5 @@ module.exports = {
   listAccessUsers,
   updateUserRole,
   createStaffUser,
+  deleteStaffUser,
 };
