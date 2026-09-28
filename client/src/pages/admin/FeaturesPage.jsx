@@ -238,11 +238,8 @@ const FeaturesPage = () => {
               { key: 'features.requirePurchaseForReview', label: 'Verified Purchase Reviews', desc: 'Only allow reviews from customers who bought the product.', defaultE: false, defaultC: false },
               { key: 'features.enquiry', label: 'Enquire Now Button', desc: 'Show an enquiry button on the product detail page.', defaultE: false, defaultC: true },
               { key: 'features.coupons', label: 'Coupons & Discounts', desc: 'Enable coupon codes at checkout.', defaultE: true, defaultC: false },
-              { key: 'features.guestCheckout', label: 'Guest Checkout', desc: 'Allow purchasing without creating an account.', defaultE: true, defaultC: null },
-              { key: 'features.socialLogin', label: 'Social Login (OAuth)', desc: 'Enable Google / OAuth login providers.', defaultE: false, defaultC: false },
               { key: 'features.emailVerification', label: 'Email Verification', desc: 'Require email confirmation after registration.', defaultE: false, defaultC: false },
               { key: 'features.showAvailableCoupons', label: 'Show Available Coupons', desc: 'Display applicable coupon codes on the cart page.', defaultE: true, defaultC: false },
-              { key: 'features.multiCurrency', label: 'Multi-Currency', desc: 'Support multiple display currencies (experimental).', defaultE: false, defaultC: false },
               { key: 'features.showPrice', label: 'Show Product Prices', desc: 'Control whether prices are displayed on the storefront.', defaultE: true, defaultC: false },
               { key: 'features.productAssistant', label: 'AI Product Assistant', desc: 'Show the AI product creation assistant on product forms.', defaultE: true, defaultC: true },
             ].filter(item => {
@@ -250,7 +247,6 @@ const FeaturesPage = () => {
               return true;
             }).map(({ key, label, desc, defaultE, defaultC }) => {
               const modeDefault = selectedMode === 'catalog' ? defaultC : defaultE;
-              const isNA = key === 'features.guestCheckout' && selectedMode === 'catalog';
               const isDependent = key === 'features.requirePurchaseForReview';
               const parentDisabled = isDependent && !Boolean(form['features.reviews']);
               
@@ -265,7 +261,7 @@ const FeaturesPage = () => {
                     border: '1px solid', 
                     borderColor: 'divider', 
                     borderRadius: 2, 
-                    opacity: (isNA || parentDisabled) ? 0.45 : 1,
+                    opacity: parentDisabled ? 0.45 : 1,
                     ml: isDependent ? 4 : 0,
                     bgcolor: isDependent ? 'action.hover' : 'transparent'
                   }}
@@ -281,7 +277,6 @@ const FeaturesPage = () => {
                           sx={{ height: 18, fontSize: 9, fontWeight: 700, color: 'text.secondary' }}
                         />
                       )}
-                      {isNA && <Chip label="N/A — checkout disabled" size="small" sx={{ height: 18, fontSize: 9, bgcolor: 'action.selected' }} />}
                       {isDependent && parentDisabled && <Chip label="Requires Reviews ON" size="small" sx={{ height: 18, fontSize: 9, bgcolor: 'action.selected' }} />}
                     </Box>
                     <Typography variant="caption" color="text.secondary">{desc}</Typography>
@@ -289,7 +284,7 @@ const FeaturesPage = () => {
                   <Switch
                     checked={Boolean(form[key])}
                     onChange={(e) => set(key, e.target.checked)}
-                    disabled={isNA || parentDisabled || !isSuperAdmin}
+                    disabled={parentDisabled || !isSuperAdmin}
                     size="small"
                   />
                 </Box>
