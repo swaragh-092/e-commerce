@@ -59,6 +59,7 @@ const SearchWidget = ({
   fullWidth = true,
   collapseToIcon = false,
   onExpandedChange,
+  headerStyle,
 }) => {
   const navigate = useNavigate();
   const location = useLocation();
@@ -280,33 +281,67 @@ const SearchWidget = ({
 
   // Styles based on variant
   const getStyles = () => {
+    const isDarkMode = theme.palette.mode === 'dark';
+
     if (variant === 'header') {
+      if (isDarkMode) {
+        return {
+          bgcolor: alpha(theme.palette.common.white, 0.15),
+          color: '#ffffff',
+          borderRadius: 2,
+          transition: 'all 0.3s cubic-bezier(0.4, 0, 0.2, 1)',
+          '&:hover': { bgcolor: alpha(theme.palette.common.white, 0.22) },
+          '&.Mui-focused': { bgcolor: alpha(theme.palette.common.white, 0.28) },
+          '& fieldset': { borderColor: 'transparent' },
+          '&:hover fieldset': { borderColor: 'transparent' },
+          '&.Mui-focused fieldset': { borderColor: alpha('#fff', 0.3) },
+          '& .MuiInputBase-input': { color: '#ffffff' },
+          '& .MuiInputBase-input::placeholder': { color: alpha('#fff', 0.7), opacity: 1 },
+        };
+      }
+
+      // Light mode: make the search box clearly visible with black text and clear placeholder
+      const isGlass = headerStyle === 'glass' || !headerStyle;
       return {
-        bgcolor: alpha(theme.palette.common.white, 0.15),
-        color: '#fff',
+        bgcolor: isGlass ? 'rgba(0, 0, 0, 0.04)' : '#ffffff',
+        color: '#000000',
         borderRadius: 2,
+        border: '1px solid',
+        borderColor: isGlass ? 'rgba(0, 0, 0, 0.15)' : 'rgba(0, 0, 0, 0.12)',
         transition: 'all 0.3s cubic-bezier(0.4, 0, 0.2, 1)',
-        '&:hover': { bgcolor: alpha(theme.palette.common.white, 0.22) },
-        '&.Mui-focused': { bgcolor: alpha(theme.palette.common.white, 0.28) },
+        '&:hover': {
+          bgcolor: isGlass ? 'rgba(0, 0, 0, 0.07)' : '#ffffff',
+          borderColor: isGlass ? 'rgba(0, 0, 0, 0.3)' : 'rgba(0, 0, 0, 0.25)',
+        },
+        '&.Mui-focused': {
+          bgcolor: '#ffffff',
+          borderColor: theme.palette.primary.main,
+          boxShadow: `0 0 0 2px ${alpha(theme.palette.primary.main, 0.18)}`,
+        },
         '& fieldset': { borderColor: 'transparent' },
         '&:hover fieldset': { borderColor: 'transparent' },
-        '&.Mui-focused fieldset': { borderColor: alpha('#fff', 0.3) },
-        '& .MuiInputBase-input::placeholder': { color: alpha('#fff', 0.7), opacity: 1 },
+        '&.Mui-focused fieldset': { borderColor: 'transparent' },
+        '& .MuiInputBase-input': { color: '#000000' },
+        '& .MuiInputBase-input::placeholder': { color: 'rgba(0, 0, 0, 0.6)', opacity: 1 },
       };
     }
     
     if (variant === 'inline') {
       return {
         bgcolor: 'background.paper',
+        color: isDarkMode ? '#ffffff' : '#000000',
         borderRadius: 1.5,
         '& fieldset': { borderColor: alpha(theme.palette.divider, 0.8) },
         '&:hover fieldset': { borderColor: theme.palette.primary.main },
+        '& .MuiInputBase-input': { color: isDarkMode ? '#ffffff' : '#000000' },
+        '& .MuiInputBase-input::placeholder': { color: isDarkMode ? 'rgba(255, 255, 255, 0.6)' : 'rgba(0, 0, 0, 0.6)', opacity: 1 },
       };
     }
 
     // Default premium pill look
     return {
       bgcolor: 'background.paper',
+      color: isDarkMode ? '#ffffff' : '#000000',
       borderRadius: 50,
       boxShadow: '0 4px 20px rgba(0,0,0,0.05)',
       '& fieldset': { borderColor: 'transparent' },
@@ -314,9 +349,12 @@ const SearchWidget = ({
       '&.Mui-focused fieldset': { borderColor: theme.palette.primary.main },
       transition: 'all 0.2s',
       '&:hover': { boxShadow: '0 6px 24px rgba(0,0,0,0.08)' },
+      '& .MuiInputBase-input': { color: isDarkMode ? '#ffffff' : '#000000' },
+      '& .MuiInputBase-input::placeholder': { color: isDarkMode ? 'rgba(255, 255, 255, 0.6)' : 'rgba(0, 0, 0, 0.6)', opacity: 1 },
     };
   };
 
+  const isDarkMode = theme.palette.mode === 'dark';
   const hasRecentSearches = !query && recentSearches.length > 0;
   const hasAnyResults =
     (results?.products?.data?.length || 0) > 0 ||
@@ -359,10 +397,11 @@ const SearchWidget = ({
             aria-label="Open search"
             onClick={() => setIsExpanded(true)}
             sx={{
-              color: 'inherit',
-              bgcolor: alpha(theme.palette.common.white, 0.15),
+              color: isDarkMode ? 'inherit' : '#000000',
+              bgcolor: isDarkMode ? alpha(theme.palette.common.white, 0.15) : 'rgba(0, 0, 0, 0.05)',
+              border: isDarkMode ? 'none' : '1px solid rgba(0, 0, 0, 0.12)',
               borderRadius: 2,
-              '&:hover': { bgcolor: alpha(theme.palette.common.white, 0.22) },
+              '&:hover': { bgcolor: isDarkMode ? alpha(theme.palette.common.white, 0.22) : 'rgba(0, 0, 0, 0.09)' },
             }}
           >
             <SearchIcon fontSize="small" />
@@ -394,12 +433,11 @@ const SearchWidget = ({
                       size="small"
                       aria-label="Search"
                       onClick={() => executeSearch(query)}
-                      sx={{ color: 'inherit', p: 0.25 }}
+                      sx={{ color: isDarkMode ? 'inherit' : '#000000', p: 0.25 }}
                     >
                       <SearchIcon
-                        color={variant === 'header' ? 'inherit' : 'action'}
                         fontSize="small"
-                        sx={{ opacity: variant === 'header' ? 0.8 : 1 }}
+                        sx={{ color: isDarkMode ? 'inherit' : '#000000', opacity: 0.85 }}
                       />
                     </IconButton>
                   )}
@@ -408,8 +446,8 @@ const SearchWidget = ({
               endAdornment: (
                 <InputAdornment position="end">
                   {query && (
-                    <IconButton size="small" onClick={handleClear} sx={{ color: 'inherit', p: 0.5, mr: 0.5 }}>
-                      <CloseIcon sx={{ fontSize: 16, opacity: 0.7 }} />
+                    <IconButton size="small" onClick={handleClear} sx={{ color: isDarkMode ? 'inherit' : '#000000', p: 0.5, mr: 0.5 }}>
+                      <CloseIcon sx={{ fontSize: 16, opacity: isDarkMode ? 0.7 : 0.85 }} />
                     </IconButton>
                   )}
                   {query && variant !== 'header' && results?.products?.totalItems !== undefined && (
@@ -428,6 +466,12 @@ const SearchWidget = ({
               '& .MuiInputBase-input': {
                 py: variant === 'header' ? 1 : 1.2,
                 fontSize: '0.9rem',
+                color: isDarkMode ? '#ffffff' : '#000000',
+                caretColor: isDarkMode ? '#ffffff' : '#000000',
+                '&::placeholder': {
+                  color: isDarkMode ? 'rgba(255, 255, 255, 0.7)' : 'rgba(0, 0, 0, 0.6)',
+                  opacity: 1,
+                },
               }
             }}
           />

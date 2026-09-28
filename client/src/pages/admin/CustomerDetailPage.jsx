@@ -83,6 +83,23 @@ const CustomerDetailPage = () => {
   const orders = customer?.Orders || customer?.orders || [];
   const totalSpend = orders.reduce((sum, order) => sum + Number(order.total || 0), 0);
 
+  const roleLabel = useMemo(() => {
+    if (!customer) return '-';
+    if (customer.roleName) return customer.roleName;
+    if (customer.assignedRole?.name) return customer.assignedRole.name;
+    if (Array.isArray(customer.roles) && customer.roles.length > 0) {
+      const firstRole = customer.roles[0];
+      if (typeof firstRole === 'object' && firstRole?.name) return firstRole.name;
+      if (typeof firstRole === 'string') {
+        return firstRole.replace(/_/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase());
+      }
+    }
+    if (customer.role) {
+      return customer.role.replace(/_/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase());
+    }
+    return '-';
+  }, [customer]);
+
   if (loading) {
     return (
       <Box sx={{ display: 'flex', justifyContent: 'center', mt: 8 }}>
@@ -132,7 +149,7 @@ const CustomerDetailPage = () => {
                 <Field label="Customer ID" value={customer.id} />
                 <Field label="First name" value={customer.firstName} />
                 <Field label="Last name" value={customer.lastName} />
-                <Field label="Role" value={customer.role} />
+                <Field label="Role" value={roleLabel} />
                 <Field label="Joined" value={formatCustomerDateTime(customer.createdAt)} />
                 <Field label="Last login" value={formatCustomerDateTime(customer.lastLoginAt)} />
               </Stack>

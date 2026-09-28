@@ -25,8 +25,10 @@ const getAccessUsers = (params = {}) =>
   api.get(withQueryString(`/${A}/access-control/users`, params, { omitEmpty: true }));
 const createAccessRole = (data) => api.post(`/${A}/access-control/roles`, data);
 const updateAccessRole = (id, data) => api.put(`/${A}/access-control/roles/${id}`, data);
+const deleteAccessRole = (id) => api.delete(`/${A}/access-control/roles/${id}`);
 const updateAccessUserRole = (id, roleId) => api.put(`/${A}/access-control/users/${id}/role`, { roleId });
 const createAccessUser = (data) => api.post(`/${A}/access-control/users`, data);
+const deleteAccessUser = (id) => api.delete(`/${A}/access-control/users/${id}`);
 
 // Audit Logs
 const getAuditLogs = (params = {}) =>
@@ -150,7 +152,7 @@ const exportAnalyticsCsv = (metric, params = {}) => {
 export {
   getStats, getSalesChart, getLowStock, getInventoryAlerts, updateInventoryAlert, getRecentOrders,
   getInventoryAlertConfig, saveInventoryAlertConfig, testInventoryAlertEmail,
-  getAccessRoles, getAccessPermissions, getAccessUsers, createAccessRole, updateAccessRole, updateAccessUserRole, createAccessUser,
+  getAccessRoles, getAccessPermissions, getAccessUsers, createAccessRole, updateAccessRole, deleteAccessRole, updateAccessUserRole, createAccessUser, deleteAccessUser,
   getAuditLogs,
   getUsers, getUserById, updateUserStatus,
   getAdminReviews, updateReviewStatus, deleteReview,

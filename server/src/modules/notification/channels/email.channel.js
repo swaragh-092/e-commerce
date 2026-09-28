@@ -67,10 +67,25 @@ const createTransporter = async () => {
     const user = requireSetting(smtp.user, 'SMTP User');
     const pass = requireSetting(smtp.pass, 'SMTP Password');
 
+    // In SMTP & Nodemailer:
+    // - Port 465 is SMTPS (Implicit TLS): MUST have secure: true
+    // - Port 587 is submission (STARTTLS): MUST have secure: false
+    // - Port 25 / 2525: MUST have secure: false
+    // Mismatching port and secure causes socket hangs and "Greeting never received" errors.
+    let isSecure;
+    if (port === 465) {
+        isSecure = true;
+    } else if (port === 587 || port === 25 || port === 2525) {
+        isSecure = false;
+    } else {
+        isSecure = toBoolean(smtp.secure, false);
+    }
+
     return nodemailer.createTransport({
         host,
         port,
-        secure: toBoolean(smtp.secure, port === 465),
+        secure: isSecure,
+        family: 4, // Force IPv4 to prevent hanging on broken or unrouted IPv6 VPS networks
         auth: {
             user,
             pass,

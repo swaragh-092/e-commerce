@@ -180,17 +180,49 @@ const listAll = async ({ page, limit, status, role, search }) => {
 
   if (status) andClauses.push({ status });
   if (role) {
-    andClauses.push({
-      [Op.or]: [
-        { role },
-        sequelize.literal(`EXISTS (
+    if (role === 'customer') {
+      andClauses.push(
+        sequelize.literal(`NOT EXISTS (
           SELECT 1 FROM user_roles ur
           JOIN roles r ON r.id = ur.role_id
           WHERE ur.user_id = "User"."id"
-          AND (r.slug = ${sequelize.escape(role)} OR r.name ILIKE ${sequelize.escape(role)})
+            AND r.slug != 'customer'
         )`),
-      ],
-    });
+        {
+          [Op.or]: [
+            { role: 'customer' },
+            sequelize.literal(`EXISTS (
+              SELECT 1 FROM user_roles ur
+              JOIN roles r ON r.id = ur.role_id
+              WHERE ur.user_id = "User"."id"
+                AND (r.slug = 'customer' OR r.name ILIKE 'customer')
+            )`),
+          ],
+        }
+      );
+    } else {
+      andClauses.push({
+        [Op.or]: [
+          sequelize.literal(`EXISTS (
+            SELECT 1 FROM user_roles ur
+            JOIN roles r ON r.id = ur.role_id
+            WHERE ur.user_id = "User"."id"
+              AND (r.slug = ${sequelize.escape(role)} OR r.name ILIKE ${sequelize.escape(role)})
+          )`),
+          {
+            [Op.and]: [
+              { role },
+              sequelize.literal(`NOT EXISTS (
+                SELECT 1 FROM user_roles ur
+                JOIN roles r ON r.id = ur.role_id
+                WHERE ur.user_id = "User"."id"
+                  AND r.slug != ${sequelize.escape(role)}
+              )`),
+            ],
+          },
+        ],
+      });
+    }
   }
   if (search && search.trim()) {
     const pattern = `%${search.trim()}%`;
@@ -246,7 +278,7 @@ const getById = async (id) => {
 const updateStatus = async (id, status, actingUserId) => {
   const { RefreshToken } = require('../index');
   return sequelize.transaction(async (t) => {
-    const user = await User.findByPk(id, { transaction: t });
+    const user = await User.findByPk(id, { include: authzInclude, transaction: t });
     if (!user) throw new AppError('NOT_FOUND', 404, 'User not found');
     
     if (user.id === actingUserId) {

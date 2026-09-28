@@ -51,9 +51,13 @@ const serializeRole = (role) => ({
   })),
 });
 
-const serializeAccessUser = (user) => {
+const serializeAccessUser = (user, systemRoleMap = {}) => {
   const enriched = enrichUserAuthorization(user);
-  const assignedRole = Array.isArray(user.roles) && user.roles.length ? serializeRole(user.roles[0]) : null;
+  let assignedRole = Array.isArray(user.roles) && user.roles.length ? serializeRole(user.roles[0]) : null;
+
+  if (!assignedRole && user.role && systemRoleMap[user.role]) {
+    assignedRole = serializeRole(systemRoleMap[user.role]);
+  }
 
   return {
     ...enriched,
@@ -110,7 +114,29 @@ const getStats = async () => {
       raw: true,
     }),
     Order.count(),
-    User.count({ where: { role: 'customer' } }),
+    User.count({
+      where: {
+        [Op.and]: [
+          literal(`NOT EXISTS (
+            SELECT 1 FROM user_roles ur
+            JOIN roles r ON r.id = ur.role_id
+            WHERE ur.user_id = "User"."id"
+            AND r.slug != 'customer'
+          )`),
+          {
+            [Op.or]: [
+              { role: 'customer' },
+              literal(`EXISTS (
+                SELECT 1 FROM user_roles ur
+                JOIN roles r ON r.id = ur.role_id
+                WHERE ur.user_id = "User"."id"
+                AND (r.slug = 'customer' OR r.name ILIKE 'customer')
+              )`),
+            ],
+          },
+        ],
+      },
+    }),
     Product.count({ where: { status: 'published', isEnabled: true } }),
     Order.count({ where: { status: 'pending_payment' } }),
     getInventorySummary(threshold),
@@ -495,6 +521,69 @@ const updateAccessRole = async (roleId, payload, actingUser) => {
   });
 };
 
+const deleteAccessRole = async (roleId, actingUser) => {
+  return db.sequelize.transaction(async (transaction) => {
+    const actingUserId = typeof actingUser === 'object' && actingUser ? actingUser.id : actingUser;
+
+    const role = await Role.findByPk(roleId, { transaction });
+    if (!role) {
+      throw new AppError('NOT_FOUND', 404, 'Role not found');
+    }
+
+    if (role.isSystem) {
+      throw new AppError('FORBIDDEN', 403, 'System roles cannot be deleted');
+    }
+
+    if (!canManageCustomRoles(actingUser)) {
+      throw new AppError('FORBIDDEN', 403, 'You do not have permission to delete custom roles');
+    }
+
+    // Check if any users are currently assigned to this role in user_roles
+    const assignedUsers = await db.sequelize.query(
+      'SELECT COUNT(*)::int AS count FROM user_roles WHERE role_id = :roleId',
+      { replacements: { roleId: role.id }, type: db.sequelize.QueryTypes.SELECT, transaction }
+    );
+    const count = Number(assignedUsers[0]?.count || 0);
+
+    // Also check if any users have their legacy/base role set to this role's slug
+    const legacyCount = await User.count({
+      where: { role: role.slug },
+      transaction,
+    });
+
+    const totalAssigned = Math.max(count, legacyCount);
+    if (totalAssigned > 0) {
+      throw new AppError(
+        'CONFLICT',
+        409,
+        `Cannot delete role '${role.name}' because it is assigned to ${totalAssigned} user${totalAssigned === 1 ? '' : 's'}. Please reassign those users before deleting this role.`
+      );
+    }
+
+    // Clean up permission associations
+    await role.setPermissions([], { transaction });
+
+    // Delete role
+    await role.destroy({ transaction });
+
+    try {
+      await AuditService.log({
+        userId: actingUserId,
+        action: ACTIONS.DELETE,
+        entity: 'Role',
+        entityId: role.id,
+        changes: {
+          name: role.name,
+          slug: role.slug,
+          baseRole: role.baseRole,
+        },
+      }, transaction);
+    } catch (error) {}
+
+    return true;
+  });
+};
+
 const listAccessUsers = async ({ page, limit, search, roleId, includeCustomers = false }) => {
   const { limit: pageSize, offset } = getPagination(page, limit);
   const where = {};
@@ -502,10 +591,32 @@ const listAccessUsers = async ({ page, limit, search, roleId, includeCustomers =
   const include = [...userRoleInclude];
 
   if (roleId) {
-    include[0] = {
-      ...include[0],
-      where: { id: roleId },
-    };
+    const targetRole = await Role.findByPk(roleId);
+    if (targetRole) {
+      andClauses.push({
+        [Op.or]: [
+          literal(`EXISTS (
+            SELECT 1 FROM user_roles ur
+            WHERE ur.user_id = "User"."id"
+            AND ur.role_id = ${db.sequelize.escape(roleId)}
+          )`),
+          {
+            [Op.and]: [
+              { role: targetRole.slug },
+              literal(`NOT EXISTS (
+                SELECT 1 FROM user_roles ur2
+                WHERE ur2.user_id = "User"."id"
+              )`),
+            ],
+          },
+        ],
+      });
+    } else {
+      include[0] = {
+        ...include[0],
+        where: { id: roleId },
+      };
+    }
   }
 
   if (search) {
@@ -518,16 +629,27 @@ const listAccessUsers = async ({ page, limit, search, roleId, includeCustomers =
     });
   }
 
-  if (!includeCustomers) {
+  // By default (when no specific roleId is selected and includeCustomers is false),
+  // show only elevated-access users (staff, admins, custom roles, etc.), excluding regular customers.
+  if (!includeCustomers && !roleId) {
     andClauses.push({
       [Op.or]: [
-        { role: { [Op.ne]: ROLES.CUSTOMER } },
+        {
+          [Op.and]: [
+            { role: { [Op.ne]: ROLES.CUSTOMER } },
+            literal(`NOT EXISTS (
+              SELECT 1 FROM user_roles ur
+              JOIN roles r ON r.id = ur.role_id
+              WHERE ur.user_id = "User"."id"
+              AND r.slug = 'customer'
+            )`),
+          ],
+        },
         literal(`EXISTS (
           SELECT 1 FROM user_roles ur
           JOIN roles r ON r.id = ur.role_id
           WHERE ur.user_id = "User"."id"
           AND r.slug != 'customer'
-          AND r.base_role != 'customer'
         )`),
       ],
     });
@@ -546,9 +668,16 @@ const listAccessUsers = async ({ page, limit, search, roleId, includeCustomers =
     order: [['createdAt', 'DESC']],
   });
 
+  const systemRoles = await Role.findAll({ where: { isSystem: true }, include: roleInclude });
+  const systemRoleMap = systemRoles.reduce((acc, r) => {
+    acc[r.slug] = r;
+    acc[r.baseRole] = r;
+    return acc;
+  }, {});
+
   return {
     count: result.count,
-    rows: result.rows.map((user) => serializeAccessUser(user)),
+    rows: result.rows.map((user) => serializeAccessUser(user, systemRoleMap)),
   };
 };
 
@@ -636,15 +765,86 @@ const createStaffUser = async ({ firstName, lastName, email, password, roleId },
       throw new AppError('FORBIDDEN', 403, 'Only super admins can create super admin accounts');
     }
 
-    const existing = await User.findOne({ where: { email: email.toLowerCase() }, transaction });
+    const normalizedEmail = email.toLowerCase().trim();
+
+    // Query with paranoid: false to catch soft-deleted records and handle recreation cleanly
+    const existing = await User.findOne({
+      where: { email: normalizedEmail },
+      paranoid: false,
+      transaction,
+    });
+
     if (existing) {
-      throw new AppError('CONFLICT', 409, 'A user with this email already exists');
+      // If user is currently active (not soft-deleted)
+      if (!existing.deletedAt) {
+        if (existing.role === 'customer') {
+          throw new AppError(
+            'CONFLICT',
+            409,
+            'An active customer account with this email already exists. You can assign them a staff role directly from the Access Control table.'
+          );
+        }
+        throw new AppError('CONFLICT', 409, 'A user with this email already exists');
+      }
+
+      // User was previously soft-deleted — handle account recreation & restoration
+      // Guard: only super admins can recreate / restore a former super admin account
+      if (existing.role === ROLES.SUPER_ADMIN && actingUser.role !== ROLES.SUPER_ADMIN) {
+        throw new AppError('FORBIDDEN', 403, 'Only super admins can recreate super admin accounts');
+      }
+
+      // Restore the user row (clears deleted_at)
+      await existing.restore({ transaction });
+
+      // Update credentials and reset security tokens
+      existing.firstName = firstName.trim();
+      existing.lastName = lastName.trim();
+      existing.password = password; // triggers User model beforeUpdate hook to re-hash
+      existing.role = role.baseRole;
+      existing.status = 'active';
+      existing.emailVerified = true;
+      existing.scheduledDeletionAt = null;
+      existing.twoFactorEnabled = false;
+      existing.twoFactorSecret = null;
+      existing.twoFactorBackupCodes = null;
+      await existing.save({ transaction });
+
+      await existing.setRoles([role], { transaction });
+
+      // Invalidate any old refresh tokens
+      const { RefreshToken } = db;
+      if (RefreshToken) {
+        await RefreshToken.update(
+          { revokedAt: new Date() },
+          { where: { userId: existing.id, revokedAt: null }, transaction }
+        );
+      }
+
+      const restoredUser = await User.findByPk(existing.id, { include: userRoleInclude, transaction });
+
+      try {
+        await AuditService.log({
+          userId: actingUser.id,
+          action: ACTIONS.CREATE,
+          entity: ENTITIES.USER,
+          entityId: existing.id,
+          changes: {
+            email: existing.email,
+            baseRole: role.baseRole,
+            assignedRole: role.slug,
+            recreated: true,
+            createdBy: actingUser.id,
+          },
+        }, transaction);
+      } catch (_) {}
+
+      return serializeAccessUser(restoredUser);
     }
 
     const newUser = await User.create({
       firstName: firstName.trim(),
       lastName: lastName.trim(),
-      email: email.toLowerCase().trim(),
+      email: normalizedEmail,
       password, // auto-hashed by User model's beforeSave hook
       role: role.baseRole,
       status: 'active',
@@ -674,6 +874,102 @@ const createStaffUser = async ({ firstName, lastName, email, password, roleId },
   });
 };
 
+/**
+ * Delete a staff user account.
+ * Guards against:
+ * 1. Self-deletion
+ * 2. Deleting pure customer accounts (customers are protected; manage from Customers page)
+ * 3. Non-super-admins deleting super admins
+ * 4. Deleting the last active super admin
+ * 5. Deleting accounts that have placed storefront orders
+ * Revokes all refresh tokens, unassigns roles, and soft-deletes the user.
+ */
+const deleteStaffUser = async (userId, actingUser) => {
+  return db.sequelize.transaction(async (transaction) => {
+    const actingUserId = typeof actingUser === 'object' && actingUser ? actingUser.id : actingUser;
+    const isSuperAdmin = actingUser?.role === ROLES.SUPER_ADMIN;
+
+    if (userId === actingUserId) {
+      throw new AppError('VALIDATION_ERROR', 400, 'You cannot delete your own account');
+    }
+
+    const user = await User.findByPk(userId, { include: userRoleInclude, transaction });
+    if (!user) {
+      throw new AppError('NOT_FOUND', 404, 'User not found');
+    }
+
+    // Customer accounts must not be deleted from Access Control (preserve customer data & order integrity)
+    const assignedRoles = user.roles || [];
+    const hasStaffRole = assignedRoles.some((r) => r.slug !== 'customer');
+    if (user.role === 'customer' && !hasStaffRole) {
+      throw new AppError(
+        'VALIDATION_ERROR',
+        400,
+        'Customer accounts cannot be deleted. Customer data must be preserved. You can deactivate or suspend the account from the Customers page.'
+      );
+    }
+
+    if (user.role === ROLES.SUPER_ADMIN) {
+      if (!isSuperAdmin) {
+        throw new AppError('FORBIDDEN', 403, 'Only super admins can delete super admin accounts');
+      }
+      // Only enforce last-active guard when deleting an active super admin
+      if (user.status === 'active') {
+        // Lock rows with transaction.LOCK.UPDATE to serialize concurrent deletions
+        const activeSuperAdmins = await User.findAll({
+          attributes: ['id'],
+          where: { role: ROLES.SUPER_ADMIN, status: 'active' },
+          lock: transaction.LOCK?.UPDATE || true,
+          transaction,
+        });
+        if (activeSuperAdmins.length <= 1) {
+          throw new AppError('VALIDATION_ERROR', 400, 'Cannot delete the last active super admin');
+        }
+      }
+    }
+
+    const orderCount = await Order.count({
+      where: { userId },
+      transaction,
+    });
+
+    if (orderCount > 0) {
+      throw new AppError(
+        'CONFLICT',
+        409,
+        `Cannot delete this user because they have ${orderCount} associated order(s). Demote them to Customer or deactivate their account instead.`
+      );
+    }
+
+    const { RefreshToken } = db;
+    if (RefreshToken) {
+      await RefreshToken.update(
+        { revokedAt: new Date() },
+        { where: { userId, revokedAt: null }, transaction }
+      );
+    }
+
+    await user.setRoles([], { transaction });
+    await user.destroy({ transaction });
+
+    try {
+      await AuditService.log({
+        userId: actingUserId,
+        action: ACTIONS.DELETE,
+        entity: ENTITIES.USER,
+        entityId: user.id,
+        changes: {
+          email: user.email,
+          role: user.role,
+          deletedBy: actingUserId,
+        },
+      }, transaction);
+    } catch (_) {}
+
+    return { id: user.id, email: user.email };
+  });
+};
+
 module.exports = {
   getStats,
   getSalesChart,
@@ -684,7 +980,9 @@ module.exports = {
   getAccessPermissions,
   createAccessRole,
   updateAccessRole,
+  deleteAccessRole,
   listAccessUsers,
   updateUserRole,
   createStaffUser,
+  deleteStaffUser,
 };

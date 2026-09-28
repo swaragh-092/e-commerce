@@ -122,7 +122,16 @@ const MessagingSettingsPanel = ({ form, set }) => {
               label="SMTP Port"
               placeholder="587"
               value={form['messaging_credentials.smtp_port'] || ''}
-              onChange={(e) => set('messaging_credentials.smtp_port', e.target.value)}
+              helperText="Port 587 (STARTTLS) or 465 (SSL/TLS)"
+              onChange={(e) => {
+                const nextPort = e.target.value;
+                set('messaging_credentials.smtp_port', nextPort);
+                if (String(nextPort).trim() === '465') {
+                  set('messaging_credentials.smtp_secure', true);
+                } else if (String(nextPort).trim() === '587') {
+                  set('messaging_credentials.smtp_secure', false);
+                }
+              }}
             />
           </Box>
           <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', sm: '1fr 1fr' }, gap: 2, mb: 2 }}>
@@ -132,6 +141,7 @@ const MessagingSettingsPanel = ({ form, set }) => {
               label="SMTP User"
               autoComplete="off"
               name="smtp-user-setting"
+              placeholder="your_email@gmail.com"
               value={form['messaging_credentials.smtp_user'] || ''}
               onChange={(e) => set('messaging_credentials.smtp_user', e.target.value)}
             />
@@ -142,6 +152,8 @@ const MessagingSettingsPanel = ({ form, set }) => {
               type="password"
               autoComplete="new-password"
               name="smtp-password-setting"
+              placeholder="16-character App Password"
+              helperText="For Gmail, generate an App Password from your Google Account"
               value={form['messaging_credentials.smtp_pass'] || ''}
               onChange={(e) => set('messaging_credentials.smtp_pass', e.target.value)}
             />
@@ -160,7 +172,15 @@ const MessagingSettingsPanel = ({ form, set }) => {
                 <Switch
                   size="small"
                   checked={form['messaging_credentials.smtp_secure'] === 'true' || form['messaging_credentials.smtp_secure'] === true}
-                  onChange={(e) => set('messaging_credentials.smtp_secure', e.target.checked)}
+                  onChange={(e) => {
+                    const isChecked = e.target.checked;
+                    set('messaging_credentials.smtp_secure', isChecked);
+                    if (isChecked && (!form['messaging_credentials.smtp_port'] || form['messaging_credentials.smtp_port'] === '587')) {
+                      set('messaging_credentials.smtp_port', '465');
+                    } else if (!isChecked && form['messaging_credentials.smtp_port'] === '465') {
+                      set('messaging_credentials.smtp_port', '587');
+                    }
+                  }}
                 />
               }
               label="Use SSL/TLS (Port 465)"

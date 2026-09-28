@@ -79,11 +79,13 @@ router.get('/access-control/roles', ...accessReadOnly, adminController.getAccess
 router.get('/access-control/permissions', ...accessReadOnly, adminController.getAccessPermissions);
 router.post('/access-control/roles', ...roleManageOnly, validate(createRoleSchema), adminController.createAccessRole);
 router.put('/access-control/roles/:id', ...roleEditOnly, validate(idParamSchema, 'params'), validate(updateRoleSchema), adminController.updateAccessRole);
+router.delete('/access-control/roles/:id', ...roleManageOnly, validate(idParamSchema, 'params'), adminController.deleteAccessRole);
 
 router.get('/access-control/users', ...accessManageOnly, validate(paginationQuerySchema, 'query'), adminController.getAccessUsers);
 
 router.post('/access-control/users', ...accessManageOnly, validate(createStaffUserSchema), adminController.createStaffUser);
 router.put('/access-control/users/:id/role', ...accessManageOnly, validate(idParamSchema, 'params'), validate(updateUserRoleSchema), adminController.updateUserRole);
+router.delete('/access-control/users/:id', ...accessManageOnly, validate(idParamSchema, 'params'), adminController.deleteStaffUser);
 
 // Analytics
 router.get('/analytics/top-products', ...adminOnly, validate(analyticsQuerySchema, 'query'), adminController.getTopProducts);

@@ -99,6 +99,15 @@ const updateAccessRole = async (req, res, next) => {
   }
 };
 
+const deleteAccessRole = async (req, res, next) => {
+  try {
+    await AdminService.deleteAccessRole(req.params.id, req.user);
+    return success(res, null, 'Role deleted successfully');
+  } catch (err) {
+    next(err);
+  }
+};
+
 const getAccessUsers = async (req, res, next) => {
   try {
     const { page = 1, limit = 20, search, roleId, includeCustomers } = req.query;
@@ -128,6 +137,15 @@ const createStaffUser = async (req, res, next) => {
   try {
     const user = await AdminService.createStaffUser(req.validated, req.user);
     return success(res, user, 'Staff user created successfully', 201);
+  } catch (err) {
+    next(err);
+  }
+};
+
+const deleteStaffUser = async (req, res, next) => {
+  try {
+    await AdminService.deleteStaffUser(req.params.id, req.user);
+    return success(res, null, 'User deleted successfully');
   } catch (err) {
     next(err);
   }
@@ -338,9 +356,11 @@ module.exports = {
   getAccessPermissions,
   createAccessRole,
   updateAccessRole,
+  deleteAccessRole,
   getAccessUsers,
   updateUserRole,
   createStaffUser,
+  deleteStaffUser,
   getTopProducts,
   getAovTrend,
   getAbandonedCarts,
