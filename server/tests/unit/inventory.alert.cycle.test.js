@@ -99,7 +99,9 @@ describe('Inventory alert notification cycle', () => {
     });
     vi.spyOn(db.InventoryAlertConfig, 'findOrCreate').mockResolvedValue([config, false]);
     vi.spyOn(db.User, 'findAll').mockImplementation(async () => users);
-    vi.spyOn(NotificationService, 'sendOnce').mockResolvedValue(true);
+    vi.spyOn(NotificationService, 'sendOnce')
+      .mockResolvedValueOnce(true)
+      .mockResolvedValue(false);
 
     const firstCycle = await runAlertCycle({ now });
     expect(firstCycle).toEqual({ queued: 0, reason: 'no_recipients' });
