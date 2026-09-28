@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import {
-  Alert, Box, Button, Chip, FormControl, MenuItem, Paper, Select, Stack,
-  Table, TableBody, TableCell, TableHead, TableRow, TextField, Typography,
+  Alert, Box, Button, Chip, Paper, Stack, Table, TableBody, TableCell,
+  TableHead, TableRow, TextField, Typography,
 } from '@mui/material';
 import WarningIcon from '@mui/icons-material/Warning';
 import { useNavigate } from 'react-router-dom';
@@ -10,9 +10,8 @@ import { useNotification } from '../../../context/NotificationContext';
 import { PERMISSIONS } from '../../../utils/permissions';
 import { getPanelSx } from './dashboardUtils';
 
-const InventoryAlertActions = ({ alert, eligibleAssignees, canUpdate, onUpdated }) => {
+const InventoryAlertActions = ({ alert, canUpdate, onUpdated }) => {
   const { notify } = useNotification();
-  const [assignedTo, setAssignedTo] = useState(alert.assignedTo || '');
   const [note, setNote] = useState(alert.note || '');
   const [restockDate, setRestockDate] = useState(alert.expectedRestockAt ? new Date(alert.expectedRestockAt).toISOString().slice(0, 10) : '');
   const [saving, setSaving] = useState(false);
@@ -21,7 +20,6 @@ const InventoryAlertActions = ({ alert, eligibleAssignees, canUpdate, onUpdated 
     setSaving(true);
     try {
       await updateInventoryAlert(alert.id, {
-        assignedTo: assignedTo || null,
         status,
         note,
         expectedRestockAt: restockDate ? new Date(`${restockDate}T12:00:00`).toISOString() : null,
@@ -37,17 +35,11 @@ const InventoryAlertActions = ({ alert, eligibleAssignees, canUpdate, onUpdated 
   return (
     <TableCell onClick={(event) => event.stopPropagation()}>
       <Stack spacing={1} sx={{ minWidth: 240 }}>
-        <FormControl size="small" fullWidth disabled={!canUpdate}>
-          <Select value={assignedTo} displayEmpty onChange={(event) => setAssignedTo(event.target.value)} aria-label="Assign inventory owner">
-            <MenuItem value=""><em>Choose owner</em></MenuItem>
-            {eligibleAssignees.map((user) => <MenuItem key={user.id} value={user.id}>{user.name}</MenuItem>)}
-          </Select>
-        </FormControl>
         <TextField size="small" label="Expected restock" type="date" value={restockDate} disabled={!canUpdate} onChange={(event) => setRestockDate(event.target.value)} InputLabelProps={{ shrink: true }} />
-        <TextField size="small" label="Owner note" value={note} disabled={!canUpdate} onChange={(event) => setNote(event.target.value)} inputProps={{ maxLength: 1000 }} />
+        <TextField size="small" label="Follow-up note" value={note} disabled={!canUpdate} onChange={(event) => setNote(event.target.value)} inputProps={{ maxLength: 1000 }} />
         <Stack direction="row" spacing={1}>
-          <Button size="small" variant="contained" disabled={!canUpdate || !assignedTo || saving} onClick={() => save('acknowledged')}>
-            {saving ? 'Saving…' : alert.status === 'acknowledged' ? 'Save update' : 'Assign & acknowledge'}
+          <Button size="small" variant="contained" disabled={!canUpdate || saving} onClick={() => save('acknowledged')}>
+            {saving ? 'Saving…' : alert.status === 'acknowledged' ? 'Save update' : 'Acknowledge'}
           </Button>
           {alert.status === 'acknowledged' && <Button size="small" disabled={!canUpdate || saving} onClick={() => save('open')}>Reopen</Button>}
         </Stack>
@@ -76,11 +68,11 @@ const InventoryAlertsWidget = ({ lowStock = [], inventoryAlerts, loading, spacin
       {outOfStockCount > 0 && <Alert severity="error" sx={{ mb: 2, borderRadius: 2 }}>{outOfStockCount} item{outOfStockCount === 1 ? '' : 's'} out of stock.</Alert>}
       {inventoryAlerts && rows.length < totalAtRisk && <Alert severity="info" sx={{ mb: 2, borderRadius: 2 }}>Showing the first {rows.length} of {totalAtRisk} inventory alerts.</Alert>}
       <Box sx={{ overflowX: 'auto' }}>
-        <Table size="small" sx={{ minWidth: inventoryAlerts ? 980 : 400 }}>
+        <Table size="small" sx={{ minWidth: inventoryAlerts ? 820 : 400 }}>
           <TableHead><TableRow>
             <TableCell>Product / SKU</TableCell><TableCell align="right">Total Qty</TableCell>
             <TableCell align="right">Reserved</TableCell><TableCell align="right">Available / Threshold</TableCell>
-            {inventoryAlerts && <TableCell>Owner / follow-up</TableCell>}
+            {inventoryAlerts && <TableCell>Follow-up</TableCell>}
           </TableRow></TableHead>
           <TableBody>
             {rows.map((alert) => {
@@ -96,7 +88,7 @@ const InventoryAlertsWidget = ({ lowStock = [], inventoryAlerts, loading, spacin
                   </TableCell>
                   <TableCell align="right">{alert.quantity}</TableCell><TableCell align="right">{alert.reservedQty}</TableCell>
                   <TableCell align="right"><Chip label={`${outOfStock ? 'Out of stock' : availableQty} / ${alert.threshold ?? '—'}`} size="small" color={outOfStock ? 'error' : 'warning'} /></TableCell>
-                  {inventoryAlerts && <InventoryAlertActions alert={alert} eligibleAssignees={inventoryAlerts.eligibleAssignees || []} canUpdate={canUpdate} onUpdated={onInventoryAlertUpdated} />}
+                  {inventoryAlerts && <InventoryAlertActions alert={alert} canUpdate={canUpdate} onUpdated={onInventoryAlertUpdated} />}
                 </TableRow>
               );
             })}
