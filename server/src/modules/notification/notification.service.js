@@ -2,9 +2,12 @@
 
 const handlebars = require('handlebars');
 const { Op } = require('sequelize');
-const { NotificationTemplate, NotificationLog, NotificationQueue } = require('../index');
+const { NotificationTemplate, NotificationLog, NotificationQueue, InventoryAlert } = require('../index');
 const { dispatch } = require('./notification.dispatcher');
 const logger = require('../../utils/logger');
+
+const INVENTORY_ALERT_TEMPLATE = 'inventory_alert_digest';
+const INVENTORY_ALERT_RETRY_DELAY_MS = 15 * 60 * 1000;
 
 /**
  * Build the channel-specific payload from a compiled template.
@@ -88,6 +91,26 @@ const createLog = async ({ job, subject = null, status, error = null }, transact
     await NotificationLog.create(logData, transaction ? { transaction } : {});
 };
 
+const markInventoryAlertsDelivered = async (job, deliveredAt) => {
+    const alertIds = [...new Set(job?.variables?.inventory_alert_ids || [])].filter(Boolean);
+    if (job?.templateName !== INVENTORY_ALERT_TEMPLATE || !alertIds.length) return;
+
+    try {
+        await InventoryAlert.update(
+            { lastNotifiedAt: deliveredAt },
+            {
+                where: {
+                    id: { [Op.in]: alertIds },
+                    status: { [Op.in]: ['open', 'acknowledged'] },
+                },
+            },
+        );
+    } catch (error) {
+        // Delivery succeeded; a bookkeeping failure must not re-send the email.
+        logger.error('[notification.service] Failed to record inventory alert delivery:', error);
+    }
+};
+
 /**
  * Core send — look up a template by (name + channel), compile it,
  * dispatch to the correct channel, and log the result.
@@ -108,7 +131,8 @@ const send = async (
     userId = null,
     orderId = null,
     channel = 'email',
-    t = null
+    t = null,
+    dedupeKey = null
 ) => {
     // Defensively handle positional argument variations (e.g. if a transaction is passed as channel or orderId)
     if (orderId && typeof orderId === 'object' && !Array.isArray(orderId)) {
@@ -150,6 +174,7 @@ const send = async (
             variables: normalizedVariables,
             status: 'queued',
             nextAttemptAt: new Date(),
+            ...(dedupeKey ? { dedupeKey } : {}),
         };
 
         if (channel === 'email') {
@@ -158,6 +183,30 @@ const send = async (
             jobData.recipientPhone = recipient;
         }
 
+        if (dedupeKey) {
+            const [existing, created] = await NotificationQueue.findOrCreate({
+                where: { dedupeKey },
+                defaults: jobData,
+                ...queryOptions,
+            });
+            if (created) return true;
+
+            const lastAttemptAt = new Date(existing.updatedAt || existing.createdAt).getTime();
+            const retryableInventoryAlert = templateName === INVENTORY_ALERT_TEMPLATE
+                && ['failed', 'skipped'].includes(existing.status)
+                && Number.isFinite(lastAttemptAt)
+                && Date.now() - lastAttemptAt >= INVENTORY_ALERT_RETRY_DELAY_MS;
+            if (!retryableInventoryAlert) return false;
+
+            await existing.update({
+                ...jobData,
+                attempts: 0,
+                lockedAt: null,
+                sentAt: null,
+                error: null,
+            });
+            return true;
+        }
         await NotificationQueue.create(jobData, queryOptions);
 
         return true;
@@ -249,6 +298,7 @@ const processQueued = async ({ limit = 25 } = {}) => {
             const status = dispatched ? 'sent' : 'skipped';
 
             await job.update({ status, sentAt: dispatched ? new Date() : null, error: dispatched ? null : 'Channel disabled' });
+            if (dispatched) await markInventoryAlertsDelivered(job, job.sentAt || new Date());
             await createLog({ job, subject, status, error: dispatched ? null : 'Channel disabled' });
         } catch (err) {
             const attempts = Number(job.attempts || 0);
@@ -362,4 +412,8 @@ const sendDeliveryUpdate = async (userId, orderId, status) => {
     }
 };
 
-module.exports = { send, sendImmediate, sendToUser, sendToAdmins, sendDeliveryUpdate, processQueued };
+const sendOnce = (templateName, recipient, variables = {}, userId = null, orderId = null, channel = 'email', dedupeKey) => {
+    if (!dedupeKey) return Promise.resolve(false);
+    return send(templateName, recipient, variables, userId, orderId, channel, null, dedupeKey);
+};
+module.exports = { send, sendOnce, sendImmediate, sendToUser, sendToAdmins, sendDeliveryUpdate, processQueued };

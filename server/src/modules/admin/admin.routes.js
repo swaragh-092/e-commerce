@@ -8,8 +8,11 @@ const { PERMISSIONS } = require('../../config/permissions');
 const { validate } = require('../../middleware/validate.middleware');
 const { updateUserRoleSchema, createRoleSchema, updateRoleSchema, salesChartQuerySchema, lowStockQuerySchema, createStaffUserSchema, analyticsQuerySchema, analyticsTrendSchema } = require('./admin.validation');
 const { idParamSchema, paginationQuerySchema } = require('../../utils/common.validation');
+const { inventoryAlertConfigSchema, updateInventoryAlertSchema } = require('../inventory/inventoryAlert.validation');
 
 
+
+const { inventoryAlertLimiter, inventoryAlertTestLimiter } = require('../../middleware/rateLimiter.middleware');
 
 const adminOnly = [authenticate, authorizePermissions(PERMISSIONS.DASHBOARD_VIEW)];
 const accessReadOnly = [
@@ -31,6 +34,44 @@ router.get(
 	...adminOnly,
 	validate(salesChartQuerySchema, 'query'),
 	adminController.getSalesChart
+);
+router.get(
+	'/dashboard/inventory-alerts',
+	inventoryAlertLimiter,
+	authenticate,
+	authorizePermissions(PERMISSIONS.DASHBOARD_VIEW, PERMISSIONS.PRODUCTS_READ),
+	adminController.getInventoryAlerts
+);
+router.patch(
+	'/dashboard/inventory-alerts/:id',
+	inventoryAlertLimiter,
+	authenticate,
+	authorizePermissions(PERMISSIONS.PRODUCTS_UPDATE),
+	validate(idParamSchema, 'params'),
+	validate(updateInventoryAlertSchema),
+	adminController.updateInventoryAlert
+);
+router.get(
+	'/inventory-alerts/config',
+	inventoryAlertLimiter,
+	authenticate,
+	authorizePermissions(PERMISSIONS.SETTINGS_READ),
+	adminController.getInventoryAlertConfig
+);
+router.put(
+	'/inventory-alerts/config',
+	inventoryAlertLimiter,
+	authenticate,
+	authorizePermissions(PERMISSIONS.NOTIFICATIONS_MANAGE),
+	validate(inventoryAlertConfigSchema),
+	adminController.saveInventoryAlertConfig
+);
+router.post(
+	'/inventory-alerts/test',
+	inventoryAlertTestLimiter,
+	authenticate,
+	authorizePermissions(PERMISSIONS.NOTIFICATIONS_MANAGE),
+	adminController.testInventoryAlertEmail
 );
 router.get('/dashboard/low-stock', ...adminOnly, validate(lowStockQuerySchema, 'query'), adminController.getLowStock);
 router.get('/dashboard/recent-orders', ...adminOnly, adminController.getRecentOrders);

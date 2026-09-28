@@ -37,6 +37,11 @@ import {
 } from '../../utils/productStorefrontState';
 
 const STOREFRONT_BASE = (import.meta.env.VITE_APP_URL || window.location.origin);
+const normalizeInventoryThreshold = (threshold) => {
+  if (threshold === undefined || threshold === null || threshold === '') return 10;
+  const parsed = Number(threshold);
+  return Number.isFinite(parsed) && parsed >= 0 ? parsed : 10;
+};
 const toIsoOrNull = (value) => (value ? new Date(value).toISOString() : null);
 
 const SummaryCard = ({ label, value, tone = 'default' }) => (
@@ -111,7 +116,7 @@ const ProductsManagePage = () => {
   // In catalog mode cart=false, so we hide stock column + stepper entirely.
   const cartEnabled = useFeature('cart');
   const sales = settings?.sales || {};
-  const lowStockThreshold = Number(settings?.catalog?.lowStockThreshold) || 10;
+  const lowStockThreshold = normalizeInventoryThreshold(settings?.catalog?.lowStockThreshold);
   const canCreateProducts = hasPermission(PERMISSIONS.PRODUCTS_CREATE);
   const canUpdateProducts = hasPermission(PERMISSIONS.PRODUCTS_UPDATE);
   const canDeleteProducts = hasPermission(PERMISSIONS.PRODUCTS_DELETE);
