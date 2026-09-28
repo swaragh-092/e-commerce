@@ -5,7 +5,7 @@ const router = express.Router();
 const controller = require('./attribute.controller');
 const { validate } = require('../../middleware/validate.middleware');
 const { authenticate } = require('../../middleware/auth.middleware');
-const { authorizePermissions } = require('../../middleware/role.middleware');
+const { authorizePermissions, authorizeAnyPermission } = require('../../middleware/role.middleware');
 const { bulkOperationLimiter } = require('../../middleware/rateLimiter.middleware');
 
 const { cloneVariantsSchema } = require('./attribute.validation');
@@ -18,8 +18,8 @@ const { PERMISSIONS } = require('../../config/permissions');
 const { idParamSchema, idAndVariantIdParamSchema } = require('../../utils/common.validation');
 
 
-const variantRead = [authenticate, authorizePermissions(PERMISSIONS.ATTRIBUTES_READ)];
-const variantManage = [authenticate, authorizePermissions(PERMISSIONS.ATTRIBUTES_MANAGE)];
+const variantRead = [authenticate, authorizeAnyPermission(PERMISSIONS.ATTRIBUTES_READ, PERMISSIONS.PRODUCTS_READ)];
+const variantManage = [authenticate, authorizeAnyPermission(PERMISSIONS.ATTRIBUTES_MANAGE, PERMISSIONS.PRODUCTS_UPDATE)];
 
 // --- Bulk Variant Generator ---
 router.post('/:id/variants/generate', ...variantManage, bulkOperationLimiter, validate(idParamSchema, 'params'), validate(generateVariantsSchema), controller.bulkGenerateVariants);

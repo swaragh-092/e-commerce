@@ -72,12 +72,6 @@ const getEligibleInventoryUsers = async () => {
 
   return users.filter((user) => {
     if (user.status !== 'active' || user.emailVerified !== true) return false;
-    const roles = user.roles || [];
-    const isStaff = user.role === 'admin' || user.role === 'super_admin' || roles.some((role) => {
-      if (typeof role === 'string') return ['admin', 'super_admin'].includes(role);
-      return ['admin', 'super_admin'].includes(role.baseRole) || ['admin', 'super_admin'].includes(role.slug);
-    });
-    if (!isStaff) return false;
     const permissions = new Set(getPermissionsForUser(user.toJSON()));
     return INVENTORY_PERMISSION_KEYS.every((permission) => permissions.has(permission));
   });
@@ -323,7 +317,6 @@ const synchronizeInventoryAlerts = async ({ now = new Date() } = {}) => {
   const threshold = await getConfiguredThreshold();
   const targets = await getCurrentTargets(threshold);
   const currentKeys = new Set(targets.map((target) => target.inventoryKey));
-  const newlyOutOfStock = [];
 
   await db.sequelize.transaction(async (transaction) => {
     const existingRows = await InventoryAlert.findAll({
@@ -353,7 +346,6 @@ const synchronizeInventoryAlerts = async ({ now = new Date() } = {}) => {
           lock: transaction.LOCK.UPDATE,
         });
         if (wasCreated) {
-          if (target.severity === 'out_of_stock') newlyOutOfStock.push({ ...target, id: foundOrCreated.id });
           continue;
         }
         alertRow = foundOrCreated;
@@ -370,7 +362,6 @@ const synchronizeInventoryAlerts = async ({ now = new Date() } = {}) => {
           acknowledgedAt: null,
           resolvedAt: null,
         }, { transaction });
-        if (target.severity === 'out_of_stock') newlyOutOfStock.push({ ...target, id: alertRow.id });
         byKey.delete(target.inventoryKey);
         continue;
       }
@@ -385,12 +376,12 @@ const synchronizeInventoryAlerts = async ({ now = new Date() } = {}) => {
         lastDetectedAt: now,
         ...(worsened ? {
           status: 'open',
+          lastNotifiedAt: null,
           acknowledgedBy: null,
           acknowledgedAt: null,
           resolvedAt: null,
         } : {}),
       }, { transaction });
-      if (worsened) newlyOutOfStock.push({ ...target, id: alertRow.id });
       byKey.delete(target.inventoryKey);
     }
 
@@ -401,7 +392,7 @@ const synchronizeInventoryAlerts = async ({ now = new Date() } = {}) => {
     }
   });
 
-  return { threshold, targets, newlyOutOfStock };
+  return { threshold, targets };
 };
 
 const alertIncludes = [
@@ -527,8 +518,21 @@ const sendAlertToRecipients = async ({ recipients, variables, dedupePrefix, now 
   return sentRecipients;
 };
 
+const getDueAlerts = (alerts, now, reminderIntervalDays) => {
+  const reminderMs = Number(reminderIntervalDays || 1) * 24 * 60 * 60 * 1000;
+  return alerts.filter((alert) => {
+    if (alert.status === 'acknowledged') {
+      if (!alert.expectedRestockAt) return false;
+      const expectedRestockAt = new Date(alert.expectedRestockAt).getTime();
+      if (!Number.isFinite(expectedRestockAt) || expectedRestockAt > now.getTime()) return false;
+    }
+    return !alert.lastNotifiedAt
+      || now.getTime() - new Date(alert.lastNotifiedAt).getTime() >= reminderMs;
+  });
+};
+
 const runAlertCycle = async ({ now = new Date() } = {}) => {
-  const { newlyOutOfStock } = await synchronizeInventoryAlerts({ now });
+  await synchronizeInventoryAlerts({ now });
   const config = await getConfig();
   const { recipients } = await getRecipientsForConfig(config);
   if (!recipients.length) {
@@ -538,20 +542,34 @@ const runAlertCycle = async ({ now = new Date() } = {}) => {
   }
 
   let queued = 0;
-  if (config.immediateOutOfStock && newlyOutOfStock.length) {
-    const immediateAlerts = newlyOutOfStock;
-    const sent = await sendAlertToRecipients({
-      recipients,
-      variables: digestAlertVariables(immediateAlerts),
-      dedupePrefix: `inventory-out:${now.toISOString()}`,
-      now,
+  if (config.immediateOutOfStock) {
+    const immediateAlerts = await InventoryAlert.findAll({
+      where: {
+        status: 'open',
+        severity: 'out_of_stock',
+        lastNotifiedAt: null,
+      },
+      order: [['firstDetectedAt', 'ASC']],
     });
-    queued += sent.length;
-    if (sent.length) {
-      await InventoryAlert.update(
-        { lastNotifiedAt: now },
-        { where: { id: { [Op.in]: newlyOutOfStock.map((row) => row.id) } } },
-      );
+    if (immediateAlerts.length) {
+      const episodeKey = immediateAlerts
+        .map((alert) => [alert.id, new Date(alert.firstDetectedAt).toISOString()].join(':'))
+        .sort()
+        .join('|');
+      const dedupeHash = crypto.createHash('sha256').update(episodeKey).digest('hex');
+      const sent = await sendAlertToRecipients({
+        recipients,
+        variables: digestAlertVariables(immediateAlerts),
+        dedupePrefix: 'inventory-out:' + dedupeHash,
+        now,
+      });
+      queued += sent.length;
+      if (sent.length) {
+        await InventoryAlert.update(
+          { lastNotifiedAt: now },
+          { where: { id: { [Op.in]: immediateAlerts.map((row) => row.id) } } },
+        );
+      }
     }
   }
 
@@ -565,11 +583,8 @@ const runAlertCycle = async ({ now = new Date() } = {}) => {
     return { queued, reason: 'outside_digest_window' };
   }
 
-  const reminderMs = Number(config.reminderIntervalDays || 1) * 24 * 60 * 60 * 1000;
   const alerts = await listActiveAlerts({ synchronize: false, limit: null });
-  const dueAlerts = alerts.filter((alert) => (
-    !alert.lastNotifiedAt || now.getTime() - new Date(alert.lastNotifiedAt).getTime() >= reminderMs
-  ));
+  const dueAlerts = getDueAlerts(alerts, now, config.reminderIntervalDays);
   if (!dueAlerts.length) return { queued, reason: 'no_due_alerts' };
 
   const dateKey = `${localTime.year}-${localTime.month}-${localTime.day}`;
@@ -625,5 +640,6 @@ module.exports = {
   updateAlertOwnership,
   getDashboardAlertData,
   runAlertCycle,
+  getDueAlerts,
   getLocalTimeParts,
 };

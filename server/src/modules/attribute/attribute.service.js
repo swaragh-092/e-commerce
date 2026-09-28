@@ -3,11 +3,13 @@
 const { Op, Sequelize } = require('sequelize');
 const {
     AttributeTemplate, AttributeValue, CategoryAttribute, Category,
-    Product, ProductImage, ProductAttribute, ProductVariant, VariantOption, Media, sequelize,
+    Product, ProductImage, ProductAttribute, ProductVariant, VariantOption, Media,
+    sequelize,
 } = require('../index');
 const { generateSlug } = require('../../utils/slugify');
 const AppError = require('../../utils/AppError');
 const logger = require('../../utils/logger');
+const inventoryService = require('../inventory/inventory.service');
 
 const ATTRIBUTE_TEMPLATE_FIELDS = ['id', 'name', 'slug', 'sortOrder', 'displayType', 'valueType', 'unit', 'createdAt'];
 const ATTRIBUTE_VALUE_FIELDS = ['id', 'value', 'slug', 'sortOrder', 'displayLabel', 'swatchColor', 'imageUrl', 'unitLabel', 'metadata'];
@@ -728,7 +730,7 @@ const addProductVariant = async (productId, data) => {
     }
 };
 
-const updateProductVariant = async (productId, variantId, data) => {
+const updateProductVariant = async (productId, variantId, data, auditContext = null) => {
     const variant = await ProductVariant.findOne({ where: { id: variantId, productId } });
     if (!variant) throw new AppError('NOT_FOUND', 404, 'Variant not found');
     if (Array.isArray(data.images)) {
@@ -749,8 +751,36 @@ const updateProductVariant = async (productId, variantId, data) => {
         }
     }
 
+    if (updates.stockQty !== undefined) {
+        const nextQty = Number(updates.stockQty);
+        if (!Number.isInteger(nextQty) || nextQty < 0) {
+            throw new AppError('VALIDATION_ERROR', 400, 'Quantity must be a non-negative integer');
+        }
+        const reservedQty = Number(variant.reservedQty || 0);
+        if (nextQty < reservedQty) {
+            throw new AppError('VALIDATION_ERROR', 400, `Stock quantity (${nextQty}) cannot be less than reserved quantity (${reservedQty})`);
+        }
+        updates.stockQty = nextQty;
+    }
+
     await sequelize.transaction(async (t) => {
-        await variant.update(updates, { transaction: t });
+        if (updates.stockQty !== undefined) {
+            await inventoryService.adjust({
+                productId,
+                variantId,
+                newQuantity: updates.stockQty,
+                reason: data.stockAdjustmentReason || 'Admin variant stock adjustment',
+                createdBy: auditContext?.userId || null,
+                metadata: { source: 'variant_update' },
+                transaction: t,
+                syncParent: false,
+            });
+            delete updates.stockQty;
+        }
+
+        if (Object.keys(updates).length > 0) {
+            await variant.update(updates, { transaction: t });
+        }
         if (Array.isArray(data.images)) {
             await replaceVariantImageRows({
                 productId,

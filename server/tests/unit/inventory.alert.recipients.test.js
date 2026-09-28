@@ -5,12 +5,19 @@ const require = createRequire(import.meta.url);
 const db = require('../../src/modules/index');
 const { getEligibleInventoryUsers } = require('../../src/modules/inventory/inventoryAlert.service');
 
-const makeUser = ({ id, role, baseRole, status = 'active', emailVerified = true }) => {
+const makeUser = ({
+  id,
+  role,
+  baseRole,
+  status = 'active',
+  emailVerified = true,
+  permissions = ['products.read', 'products.update'],
+}) => {
   const roles = [{
     slug: `${id}-role`,
     name: `${baseRole} role`,
     baseRole,
-    permissions: [{ key: 'products.read' }, { key: 'products.update' }],
+    permissions: permissions.map((key) => ({ key })),
   }];
   return {
     id,
@@ -28,9 +35,9 @@ const makeUser = ({ id, role, baseRole, status = 'active', emailVerified = true 
 describe('Inventory alert recipient eligibility', () => {
   afterEach(() => vi.restoreAllMocks());
 
-  it('allows only active, verified admin staff with both product permissions', async () => {
+  it('allows only active, verified users with both product permissions', async () => {
     const staff = makeUser({ id: 'staff', role: 'admin', baseRole: 'admin' });
-    const customer = makeUser({ id: 'customer', role: 'customer', baseRole: 'customer' });
+    const customer = makeUser({ id: 'customer', role: 'customer', baseRole: 'customer', permissions: [] });
     const unverified = makeUser({ id: 'unverified', role: 'admin', baseRole: 'admin', emailVerified: false });
     const inactive = makeUser({ id: 'inactive', role: 'admin', baseRole: 'admin', status: 'disabled' });
     vi.spyOn(db.User, 'findAll').mockResolvedValue([staff, customer, unverified, inactive]);
@@ -38,5 +45,18 @@ describe('Inventory alert recipient eligibility', () => {
     const eligible = await getEligibleInventoryUsers();
 
     expect(eligible.map((user) => user.id)).toEqual(['staff']);
+  });
+
+  it('allows a custom inventory role even when the legacy user role is customer', async () => {
+    const customInventoryManager = makeUser({
+      id: 'inventory-manager',
+      role: 'customer',
+      baseRole: 'inventory_manager',
+    });
+    vi.spyOn(db.User, 'findAll').mockResolvedValue([customInventoryManager]);
+
+    const eligible = await getEligibleInventoryUsers();
+
+    expect(eligible.map((user) => user.id)).toEqual(['inventory-manager']);
   });
 });

@@ -7,7 +7,10 @@ import { bulkUpdateProducts, getProducts, updateProduct } from '../../../service
 import { getCategoryTree } from '../../../services/categoryService';
 import { getSaleLabels } from '../../../services/adminService';
 
-const { notifyMock } = vi.hoisted(() => ({ notifyMock: vi.fn() }));
+const { notifyMock, settingsMock } = vi.hoisted(() => ({
+  notifyMock: vi.fn(),
+  settingsMock: { sales: { allowBulkSales: false }, catalog: { lowStockThreshold: 10 } },
+}));
 
 vi.mock('@mui/x-data-grid', () => ({
   DataGrid: ({ rows, columns, onRowSelectionModelChange }) => (
@@ -42,7 +45,7 @@ vi.mock('../../../services/categoryService', () => ({ getCategoryTree: vi.fn().m
 vi.mock('../../../services/adminService', () => ({ getSaleLabels: vi.fn().mockResolvedValue({ data: { data: [] } }) }));
 vi.mock('../../../hooks/useSettings', () => ({
   useCurrency: () => ({ symbol: '₹', formatPrice: (amount) => `₹${amount}` }),
-  useSettings: () => ({ settings: { sales: { allowBulkSales: false }, catalog: { lowStockThreshold: 10 } } }),
+  useSettings: () => ({ settings: settingsMock }),
   useFeature: () => true,
 }));
 vi.mock('../../../hooks/useAuth', () => ({ useAuth: () => ({ hasPermission: () => true }) }));
@@ -75,6 +78,7 @@ describe('ProductsManagePage storefront state controls', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     vi.unstubAllGlobals();
+    settingsMock.catalog.lowStockThreshold = 10;
     getCategoryTree.mockResolvedValue({ data: [] });
     getSaleLabels.mockResolvedValue({ data: { data: [] } });
     getProducts.mockResolvedValue({
@@ -149,6 +153,17 @@ describe('ProductsManagePage storefront state controls', () => {
     fireEvent.click(screen.getByRole('button', { name: /Paused/ }));
 
     await waitFor(() => expect(getProducts).toHaveBeenLastCalledWith(expect.objectContaining({ status: 'paused' })));
+  });
+
+  it('preserves an explicitly configured zero low-stock threshold in the product request', async () => {
+    settingsMock.catalog.lowStockThreshold = 0;
+    renderProductsPage();
+
+    await screen.findByText('Test product');
+    fireEvent.click(screen.getByRole('button', { name: /Low Stock/ }));
+
+    await waitFor(() => expect(getProducts).toHaveBeenLastCalledWith(expect.objectContaining({ maxQty: 0 })));
+    expect(screen.getByText('Showing low-stock products (qty ≤ 0)')).toBeInTheDocument();
   });
 
   it('shows a recoverable error when a row state update fails', async () => {

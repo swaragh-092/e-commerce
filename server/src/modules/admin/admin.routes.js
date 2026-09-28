@@ -37,40 +37,40 @@ router.get(
 );
 router.get(
 	'/dashboard/inventory-alerts',
+	inventoryAlertLimiter,
 	authenticate,
 	authorizePermissions(PERMISSIONS.DASHBOARD_VIEW, PERMISSIONS.PRODUCTS_READ),
-	inventoryAlertLimiter,
 	adminController.getInventoryAlerts
 );
 router.patch(
 	'/dashboard/inventory-alerts/:id',
+	inventoryAlertLimiter,
 	authenticate,
 	authorizePermissions(PERMISSIONS.PRODUCTS_UPDATE),
-	inventoryAlertLimiter,
 	validate(idParamSchema, 'params'),
 	validate(updateInventoryAlertSchema),
 	adminController.updateInventoryAlert
 );
 router.get(
 	'/inventory-alerts/config',
+	inventoryAlertLimiter,
 	authenticate,
 	authorizePermissions(PERMISSIONS.SETTINGS_READ),
-	inventoryAlertLimiter,
 	adminController.getInventoryAlertConfig
 );
 router.put(
 	'/inventory-alerts/config',
+	inventoryAlertLimiter,
 	authenticate,
 	authorizePermissions(PERMISSIONS.NOTIFICATIONS_MANAGE),
-	inventoryAlertLimiter,
 	validate(inventoryAlertConfigSchema),
 	adminController.saveInventoryAlertConfig
 );
 router.post(
 	'/inventory-alerts/test',
+	inventoryAlertTestLimiter,
 	authenticate,
 	authorizePermissions(PERMISSIONS.NOTIFICATIONS_MANAGE),
-	inventoryAlertTestLimiter,
 	adminController.testInventoryAlertEmail
 );
 router.get('/dashboard/low-stock', ...adminOnly, validate(lowStockQuerySchema, 'query'), adminController.getLowStock);
