@@ -4,6 +4,7 @@ const AdminService = require('./admin.service');
 const AnalyticsService = require('./analytics.service');
 const AnalyticsReportService = require('./analyticsReport.service');
 const InventoryAlertService = require('../inventory/inventoryAlert.service');
+const AppError = require('../../utils/AppError');
 const { success, paginated } = require('../../utils/response');
 
 const getStats = async (req, res, next) => {
@@ -281,7 +282,20 @@ const exportAnalyticsCsv = async (req, res, next) => {
       'revenue-forecast': 'getRevenueForecast',
     };
     const method = methodMap[metric];
-    if (!method) return res.status(400).json({ success: false, error: { message: 'Invalid metric' } });
+    if (!method) throw new AppError('INVALID_METRIC', 400, 'Invalid metric');
+
+    if (metric === 'coupon-performance') {
+      const { getResolvedFeature } = require('../../middleware/featureGate.middleware');
+      let couponsEnabled = false;
+      try {
+        couponsEnabled = await getResolvedFeature('coupons');
+      } catch (_) {
+        couponsEnabled = false;
+      }
+      if (!couponsEnabled) {
+        throw new AppError('FEATURE_DISABLED', 403, "The feature 'coupons' is not available in the current mode");
+      }
+    }
 
     const data = await AnalyticsService[method](req.query);
     const rows = Array.isArray(data) ? data : (data.actual || [data]);

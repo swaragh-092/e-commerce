@@ -111,7 +111,14 @@ router.get('/analytics/order-heatmap', ...adminOnly, ordersFeature, validate(ana
 router.get('/analytics/revenue-forecast', ...adminOnly, ordersFeature, validate(analyticsQuerySchema, 'query'), adminController.getRevenueForecast);
 router.get('/analytics/drill-down', ...adminOnly, ordersFeature, adminController.getDrillDown);
 router.post('/analytics/send-test-report', ...adminOnly, ordersFeature, adminController.sendTestReport);
-router.get('/analytics/export/:metric', ...adminOnly, ordersFeature, adminController.exportAnalyticsCsv);
+const exportMetricFeatureGate = (req, res, next) => {
+	if (req.params.metric === 'coupon-performance') {
+		return featureGate('coupons')(req, res, next);
+	}
+	next();
+};
+
+router.get('/analytics/export/:metric', ...adminOnly, ordersFeature, exportMetricFeatureGate, adminController.exportAnalyticsCsv);
 
 
 module.exports = router;

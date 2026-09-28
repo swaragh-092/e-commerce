@@ -107,6 +107,8 @@ describe('Admin inventory health', () => {
 
 describe('Admin dashboard product count', () => {
   it('counts only storefront-visible published products', async () => {
+    const featureGate = require('../../src/middleware/featureGate.middleware');
+    vi.spyOn(featureGate, 'getResolvedFeature').mockResolvedValue(true);
     vi.spyOn(SettingsService, 'getByGroup').mockResolvedValue({ lowStockThreshold: 10 });
     vi.spyOn(db.Order, 'findOne').mockResolvedValue({ totalRevenue: '0' });
     vi.spyOn(db.Order, 'count').mockResolvedValue(0);
@@ -141,6 +143,28 @@ describe('Admin dashboard product count', () => {
     expect(stats.pendingOrders).toBe(0);
     expect(stats.productCount).toBe(3);
     expect(stats.customerCount).toBe(5);
+    expect(findOneOrderSpy).not.toHaveBeenCalled();
+    expect(countOrderSpy).not.toHaveBeenCalled();
+  });
+
+  it('fails closed by omitting order queries and zeroing stats when orders feature resolution errors', async () => {
+    const featureGate = require('../../src/middleware/featureGate.middleware');
+    vi.spyOn(featureGate, 'getResolvedFeature').mockRejectedValue(new Error('DB connection timeout'));
+    vi.spyOn(SettingsService, 'getByGroup').mockResolvedValue({ lowStockThreshold: 10 });
+    const findOneOrderSpy = vi.spyOn(db.Order, 'findOne');
+    const countOrderSpy = vi.spyOn(db.Order, 'count');
+    vi.spyOn(db.User, 'count').mockResolvedValue(4);
+    vi.spyOn(db.Product, 'count').mockResolvedValue(2);
+    vi.spyOn(db.Product, 'findAll').mockResolvedValue([]);
+    vi.spyOn(db.Review, 'count').mockResolvedValue(0);
+
+    const stats = await getStats();
+
+    expect(stats.totalRevenue).toBe(0);
+    expect(stats.orderCount).toBe(0);
+    expect(stats.pendingOrders).toBe(0);
+    expect(stats.productCount).toBe(2);
+    expect(stats.customerCount).toBe(4);
     expect(findOneOrderSpy).not.toHaveBeenCalled();
     expect(countOrderSpy).not.toHaveBeenCalled();
   });

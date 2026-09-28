@@ -5,6 +5,7 @@ const slugify = require('slugify');
 const db = require('../index');
 const { Order, User, Product, ProductVariant, Role, Permission, Review } = db;
 const AppError = require('../../utils/AppError');
+const logger = require('../../utils/logger');
 const AuditService = require('../audit/audit.service');
 const { ACTIONS, ENTITIES, ROLES } = require('../../config/constants');
 const {
@@ -98,10 +99,13 @@ const getStats = async () => {
   const catalog = await SettingsService.getByGroup('catalog', { maskSensitive: false });
   const threshold = normalizeInventoryThreshold(catalog.lowStockThreshold);
 
-  let ordersEnabled = true;
+  let ordersEnabled = false;
   try {
     ordersEnabled = await getResolvedFeature('orders');
-  } catch (_) {}
+  } catch (err) {
+    logger.error('[admin.getStats] Error resolving orders feature; defaulting to disabled (fail closed):', err);
+    ordersEnabled = false;
+  }
 
   const revenuePromise = ordersEnabled
     ? Order.findOne({
