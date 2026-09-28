@@ -144,7 +144,7 @@ describe('Attribute Templates Search & Filters', () => {
 
       await updateProductVariant('prod-1', 'var-1', { stockQty: 5 }, { userId: 'admin-1' });
 
-      expect(mockVariant.update).toHaveBeenCalledWith(expect.objectContaining({ stockQty: 5 }), expect.anything());
+      expect(mockVariant.update).not.toHaveBeenCalled();
       expect(db.InventoryTransaction.create).not.toHaveBeenCalled();
     });
 

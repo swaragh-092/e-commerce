@@ -150,6 +150,7 @@ const ProductsManagePage = () => {
     slug: '',
     quantity: '',
     variantStocks: {},
+    userEditedVariantIds: {},
     price: '',
     salePrice: '',
     saleEnabled: false,
@@ -209,6 +210,7 @@ const ProductsManagePage = () => {
       slug: row.slug || '',
       quantity: row.quantity,
       variantStocks: initialVariantStocks,
+      userEditedVariantIds: {},
       price: row.price,
       salePrice: row.salePrice ?? '',
       saleEnabled: row.salePrice !== null && row.salePrice !== undefined && row.salePrice !== '',
@@ -228,7 +230,8 @@ const ProductsManagePage = () => {
               if (prev.row?.id !== row.id) return prev;
               const mergedVariantStocks = { ...prev.variantStocks };
               fetchedVariants.forEach((v) => {
-                if (mergedVariantStocks[v.id] === undefined) {
+                // If user hasn't explicitly edited this variant, refresh it with the latest fetched stockQty
+                if (!prev.userEditedVariantIds?.[v.id]) {
                   mergedVariantStocks[v.id] = v.stockQty ?? 0;
                 }
               });
@@ -254,6 +257,10 @@ const ProductsManagePage = () => {
         ...prev.variantStocks,
         [variantId]: newQty,
       },
+      userEditedVariantIds: {
+        ...prev.userEditedVariantIds,
+        [variantId]: true,
+      },
     }));
   };
 
@@ -266,6 +273,10 @@ const ProductsManagePage = () => {
         variantStocks: {
           ...prev.variantStocks,
           [variantId]: next,
+        },
+        userEditedVariantIds: {
+          ...prev.userEditedVariantIds,
+          [variantId]: true,
         },
       };
     });
@@ -285,6 +296,7 @@ const ProductsManagePage = () => {
       // 1. If product has variants, update modified variant stocks
       if (hasVariants) {
         const dirtyVariants = updatedVariants.filter((variant) => {
+          if (!editDialog.userEditedVariantIds?.[variant.id]) return false;
           const editedVal = editDialog.variantStocks[variant.id];
           return editedVal !== undefined && Number(editedVal) !== Number(variant.stockQty ?? 0);
         });

@@ -9,6 +9,7 @@ const {
 const { generateSlug } = require('../../utils/slugify');
 const AppError = require('../../utils/AppError');
 const logger = require('../../utils/logger');
+const inventoryService = require('../inventory/inventory.service');
 
 const ATTRIBUTE_TEMPLATE_FIELDS = ['id', 'name', 'slug', 'sortOrder', 'displayType', 'valueType', 'unit', 'createdAt'];
 const ATTRIBUTE_VALUE_FIELDS = ['id', 'value', 'slug', 'sortOrder', 'displayLabel', 'swatchColor', 'imageUrl', 'unitLabel', 'metadata'];
@@ -763,26 +764,23 @@ const updateProductVariant = async (productId, variantId, data, auditContext = n
     }
 
     await sequelize.transaction(async (t) => {
-        if (updates.stockQty !== undefined && Number(updates.stockQty) !== Number(variant.stockQty || 0)) {
-            const beforeStock = Number(variant.stockQty || 0);
-            const nextQty = Number(updates.stockQty);
-            const beforeReserved = Number(variant.reservedQty || 0);
-            if (InventoryTransaction) {
-                await InventoryTransaction.create({
-                    type: 'ADJUSTMENT',
-                    qty: Math.abs(nextQty - beforeStock),
-                    productId,
-                    variantId,
-                    beforeStock,
-                    afterStock: nextQty,
-                    beforeReserved,
-                    afterReserved: beforeReserved,
-                    createdBy: auditContext?.userId || null,
-                    metadata: { source: 'variant_update', reason: 'Admin variant stock adjustment', direction: nextQty > beforeStock ? 'increase' : 'decrease' },
-                }, { transaction: t });
-            }
+        if (updates.stockQty !== undefined) {
+            await inventoryService.adjust({
+                productId,
+                variantId,
+                newQuantity: updates.stockQty,
+                reason: data.stockAdjustmentReason || 'Admin variant stock adjustment',
+                createdBy: auditContext?.userId || null,
+                metadata: { source: 'variant_update' },
+                transaction: t,
+                syncParent: false,
+            });
+            delete updates.stockQty;
         }
-        await variant.update(updates, { transaction: t });
+
+        if (Object.keys(updates).length > 0) {
+            await variant.update(updates, { transaction: t });
+        }
         if (Array.isArray(data.images)) {
             await replaceVariantImageRows({
                 productId,
