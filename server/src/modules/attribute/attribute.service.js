@@ -3,7 +3,8 @@
 const { Op, Sequelize } = require('sequelize');
 const {
     AttributeTemplate, AttributeValue, CategoryAttribute, Category,
-    Product, ProductImage, ProductAttribute, ProductVariant, VariantOption, Media, sequelize,
+    Product, ProductImage, ProductAttribute, ProductVariant, VariantOption, Media,
+    InventoryTransaction, sequelize,
 } = require('../index');
 const { generateSlug } = require('../../utils/slugify');
 const AppError = require('../../utils/AppError');
@@ -728,7 +729,7 @@ const addProductVariant = async (productId, data) => {
     }
 };
 
-const updateProductVariant = async (productId, variantId, data) => {
+const updateProductVariant = async (productId, variantId, data, auditContext = null) => {
     const variant = await ProductVariant.findOne({ where: { id: variantId, productId } });
     if (!variant) throw new AppError('NOT_FOUND', 404, 'Variant not found');
     if (Array.isArray(data.images)) {
@@ -750,6 +751,25 @@ const updateProductVariant = async (productId, variantId, data) => {
     }
 
     await sequelize.transaction(async (t) => {
+        if (updates.stockQty !== undefined && Number(updates.stockQty) !== Number(variant.stockQty || 0)) {
+            const beforeStock = Number(variant.stockQty || 0);
+            const nextQty = Number(updates.stockQty);
+            const beforeReserved = Number(variant.reservedQty || 0);
+            if (InventoryTransaction) {
+                await InventoryTransaction.create({
+                    type: 'ADJUSTMENT',
+                    qty: Math.abs(nextQty - beforeStock),
+                    productId,
+                    variantId,
+                    beforeStock,
+                    afterStock: nextQty,
+                    beforeReserved,
+                    afterReserved: beforeReserved,
+                    createdBy: auditContext?.userId || null,
+                    metadata: { source: 'variant_update', reason: 'Admin variant stock adjustment', direction: nextQty > beforeStock ? 'increase' : 'decrease' },
+                }, { transaction: t });
+            }
+        }
         await variant.update(updates, { transaction: t });
         if (Array.isArray(data.images)) {
             await replaceVariantImageRows({

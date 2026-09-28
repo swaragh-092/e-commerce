@@ -1,7 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 const { getAttributesQuerySchema } = require('../../src/modules/attribute/attribute.validation');
 const db = require('../../src/modules/index');
-const { getAllAttributes } = require('../../src/modules/attribute/attribute.service');
+const { getAllAttributes, updateProductVariant } = require('../../src/modules/attribute/attribute.service');
 
 describe('Attribute Templates Search & Filters', () => {
   describe('Query Schema Validation (getAttributesQuerySchema)', () => {
@@ -94,4 +94,59 @@ describe('Attribute Templates Search & Filters', () => {
       expect(capturedOptions.offset).toBe(15);
     });
   });
+
+  describe('updateProductVariant', () => {
+    it('updates stockQty and records an InventoryTransaction when stock changes', async () => {
+      const mockVariant = {
+        id: 'var-1',
+        productId: 'prod-1',
+        stockQty: 5,
+        reservedQty: 0,
+        update: vi.fn().mockResolvedValue(true),
+      };
+
+      db.ProductVariant.findOne = vi.fn().mockResolvedValue(mockVariant);
+      db.ProductVariant.findByPk = vi.fn().mockResolvedValue(mockVariant);
+      db.ProductVariant.sum = vi.fn().mockResolvedValue(10);
+      db.Product.update = vi.fn().mockResolvedValue([1]);
+      db.sequelize.transaction = vi.fn().mockImplementation(async (callback) => callback({}));
+      db.InventoryTransaction.create = vi.fn().mockResolvedValue({});
+
+      const result = await updateProductVariant('prod-1', 'var-1', { stockQty: 10 }, { userId: 'admin-1' });
+
+      expect(mockVariant.update).toHaveBeenCalledWith(expect.objectContaining({ stockQty: 10 }), expect.anything());
+      expect(db.InventoryTransaction.create).toHaveBeenCalledWith(expect.objectContaining({
+        type: 'ADJUSTMENT',
+        qty: 5,
+        productId: 'prod-1',
+        variantId: 'var-1',
+        beforeStock: 5,
+        afterStock: 10,
+        createdBy: 'admin-1',
+      }), expect.anything());
+    });
+
+    it('does not create InventoryTransaction when stockQty is unchanged', async () => {
+      const mockVariant = {
+        id: 'var-1',
+        productId: 'prod-1',
+        stockQty: 5,
+        reservedQty: 0,
+        update: vi.fn().mockResolvedValue(true),
+      };
+
+      db.ProductVariant.findOne = vi.fn().mockResolvedValue(mockVariant);
+      db.ProductVariant.findByPk = vi.fn().mockResolvedValue(mockVariant);
+      db.ProductVariant.sum = vi.fn().mockResolvedValue(5);
+      db.Product.update = vi.fn().mockResolvedValue([1]);
+      db.sequelize.transaction = vi.fn().mockImplementation(async (callback) => callback({}));
+      db.InventoryTransaction.create = vi.fn().mockResolvedValue({});
+
+      await updateProductVariant('prod-1', 'var-1', { stockQty: 5 }, { userId: 'admin-1' });
+
+      expect(mockVariant.update).toHaveBeenCalledWith(expect.objectContaining({ stockQty: 5 }), expect.anything());
+      expect(db.InventoryTransaction.create).not.toHaveBeenCalled();
+    });
+  });
 });
+
