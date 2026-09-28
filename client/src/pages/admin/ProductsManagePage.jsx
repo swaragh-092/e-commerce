@@ -4,6 +4,7 @@ import {
   FormControl, InputLabel, Select, MenuItem, Stack, Tooltip,
   Avatar, Dialog, DialogTitle, DialogContent, DialogActions,
   DialogContentText, InputAdornment, Paper, FormHelperText,
+  CircularProgress,
 } from '@mui/material';
 import { DataGrid } from '@mui/x-data-grid';
 import {
@@ -600,7 +601,8 @@ const ProductsManagePage = () => {
     !Number.isInteger(numSimpleQuantity) ||
     numSimpleQuantity < minSimpleStockQty
   );
-  const activeVariants = (editDialog.row?.variants || []).filter((v) => v.isActive !== false);
+  const allVariants = editDialog.row?.variants || [];
+  const activeVariants = allVariants.filter((v) => v.isActive !== false);
   const hasInvalidVariantQuantity = cartEnabled && editDialog.open && isVariableProduct && activeVariants.some((v) => {
     const qty = editDialog.variantStocks[v.id] !== undefined ? editDialog.variantStocks[v.id] : v.stockQty;
     if (qty === '' || qty === undefined || qty === null) return true;
@@ -614,7 +616,11 @@ const ProductsManagePage = () => {
     const num = Number(qty);
     return sum + (Number.isNaN(num) || num < 0 ? 0 : num);
   }, 0);
-  const liveVariantReservedStock = activeVariants.reduce((sum, v) => sum + (Number(v.reservedQty) || 0), 0);
+  // Include reservations across all variants (active, inactive, and soft-deleted captured in row.reservedQty)
+  const liveVariantReservedStock = Math.max(
+    Number(editDialog.row?.reservedQty || 0),
+    allVariants.reduce((sum, v) => sum + (Number(v.reservedQty) || 0), 0)
+  );
   const liveVariantAvailableStock = Math.max(0, liveVariantTotalStock - liveVariantReservedStock);
   const hasInvalidSaleDates = Boolean(editDialog.open && editDialog.saleEnabled && editDialog.saleStartAt && editDialog.saleEndAt && new Date(editDialog.saleEndAt) <= new Date(editDialog.saleStartAt));
   const bulkSaleValue = Number(bulkSaleDialog.value);

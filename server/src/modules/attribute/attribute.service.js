@@ -4,7 +4,7 @@ const { Op, Sequelize } = require('sequelize');
 const {
     AttributeTemplate, AttributeValue, CategoryAttribute, Category,
     Product, ProductImage, ProductAttribute, ProductVariant, VariantOption, Media,
-    InventoryTransaction, sequelize,
+    sequelize,
 } = require('../index');
 const { generateSlug } = require('../../utils/slugify');
 const AppError = require('../../utils/AppError');
