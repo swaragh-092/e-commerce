@@ -7,6 +7,7 @@ const { dispatch } = require('./notification.dispatcher');
 const logger = require('../../utils/logger');
 
 const INVENTORY_ALERT_TEMPLATE = 'inventory_alert_digest';
+const INVENTORY_ALERT_RETRY_DELAY_MS = 15 * 60 * 1000;
 
 /**
  * Build the channel-specific payload from a compiled template.
@@ -183,12 +184,28 @@ const send = async (
         }
 
         if (dedupeKey) {
-            const [, created] = await NotificationQueue.findOrCreate({
+            const [existing, created] = await NotificationQueue.findOrCreate({
                 where: { dedupeKey },
                 defaults: jobData,
                 ...queryOptions,
             });
-            return created;
+            if (created) return true;
+
+            const lastAttemptAt = new Date(existing.updatedAt || existing.createdAt).getTime();
+            const retryableInventoryAlert = templateName === INVENTORY_ALERT_TEMPLATE
+                && ['failed', 'skipped'].includes(existing.status)
+                && Number.isFinite(lastAttemptAt)
+                && Date.now() - lastAttemptAt >= INVENTORY_ALERT_RETRY_DELAY_MS;
+            if (!retryableInventoryAlert) return false;
+
+            await existing.update({
+                ...jobData,
+                attempts: 0,
+                lockedAt: null,
+                sentAt: null,
+                error: null,
+            });
+            return true;
         }
         await NotificationQueue.create(jobData, queryOptions);
 

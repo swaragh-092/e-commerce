@@ -112,7 +112,7 @@ describe('Inventory alert notification cycle', () => {
     await runAlertCycle({ now: new Date(now.getTime() + 60_000) });
     await runAlertCycle({ now: new Date(now.getTime() + 120_000) });
 
-    expect(NotificationService.sendOnce).toHaveBeenCalledOnce();
+    expect(NotificationService.sendOnce).toHaveBeenCalledTimes(2);
     expect(alert.lastNotifiedAt).toBeNull();
     expect(NotificationService.sendOnce).toHaveBeenCalledWith(
       'inventory_alert_digest',
