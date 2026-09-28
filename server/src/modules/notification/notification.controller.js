@@ -245,7 +245,15 @@ const sendTestNotification = async (req, res, next) => {
         }
       }
     } catch (sendErr) {
-      return error(res, `Failed to send test ${channel}: ${sendErr.message}`, 400, 'SEND_FAILED');
+      let friendlyMessage = sendErr.message;
+      if (sendErr.message?.includes('Greeting never received')) {
+        friendlyMessage = 'Greeting never received from SMTP server. This usually happens if Port and SSL/TLS settings mismatch (e.g. Port 587 with SSL/TLS on, or Port 465 with SSL/TLS off), or if your VPS/hosting provider blocks outbound SMTP ports (465/587).';
+      } else if (sendErr.message?.includes('BadCredentials') || sendErr.code === 'EAUTH' || sendErr.responseCode === 535) {
+        friendlyMessage = 'SMTP authentication failed. If using Gmail, please ensure 2-Step Verification is enabled and use a 16-character Google App Password (not your personal account password).';
+      } else if (sendErr.code === 'ETIMEDOUT' || sendErr.code === 'ECONNREFUSED' || sendErr.code === 'ENETUNREACH') {
+        friendlyMessage = `Could not connect to SMTP server (${sendErr.message}). Check SMTP Host, Port, and ensure outbound connections to ports 465/587 are not blocked by the hosting firewall.`;
+      }
+      return error(res, `Failed to send test ${channel}: ${friendlyMessage}`, 400, 'SEND_FAILED');
     }
 
     let extraInfo = '';
