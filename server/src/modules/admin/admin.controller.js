@@ -3,6 +3,7 @@
 const AdminService = require('./admin.service');
 const AnalyticsService = require('./analytics.service');
 const AnalyticsReportService = require('./analyticsReport.service');
+const InventoryAlertService = require('../inventory/inventoryAlert.service');
 const { success, paginated } = require('../../utils/response');
 
 const getStats = async (req, res, next) => {
@@ -34,6 +35,25 @@ const getLowStock = async (req, res, next) => {
   }
 };
 
+const getInventoryAlerts = async (req, res, next) => {
+  try { return success(res, await InventoryAlertService.getDashboardAlertData()); } catch (err) { next(err); }
+};
+
+const getInventoryAlertConfig = async (req, res, next) => {
+  try { return success(res, await InventoryAlertService.getRecipientConfig()); } catch (err) { next(err); }
+};
+
+const saveInventoryAlertConfig = async (req, res, next) => {
+  try { return success(res, await InventoryAlertService.saveRecipientConfig(req.validated, req.user)); } catch (err) { next(err); }
+};
+
+const testInventoryAlertEmail = async (req, res, next) => {
+  try { const delivered = await InventoryAlertService.testRecipientDelivery(req.user); return success(res, { delivered }, delivered ? 'Test inventory email sent.' : 'Email delivery failed; check SMTP settings.'); } catch (err) { next(err); }
+};
+
+const updateInventoryAlert = async (req, res, next) => {
+  try { return success(res, await InventoryAlertService.updateAlertOwnership(req.params.id, req.validated, req.user)); } catch (err) { next(err); }
+};
 const getRecentOrders = async (req, res, next) => {
   try {
     const data = await AdminService.getRecentOrders();
@@ -308,6 +328,11 @@ module.exports = {
   getStats,
   getSalesChart,
   getLowStock,
+  getInventoryAlerts,
+  getInventoryAlertConfig,
+  saveInventoryAlertConfig,
+  testInventoryAlertEmail,
+  updateInventoryAlert,
   getRecentOrders,
   getAccessRoles,
   getAccessPermissions,

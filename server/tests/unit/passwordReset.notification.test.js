@@ -44,6 +44,43 @@ describe('Password Reset & Notification Service', () => {
     );
   });
 
+  it('requeues a terminal inventory alert notification after the retry delay', async () => {
+    const NotificationService = require('../../src/modules/notification/notification.service');
+    const { NotificationTemplate, NotificationQueue } = require('../../src/modules');
+    const oldDate = new Date(Date.now() - 16 * 60 * 1000);
+    const existing = {
+      status: 'failed',
+      updatedAt: oldDate,
+      createdAt: oldDate,
+      update: vi.fn().mockResolvedValue(undefined),
+    };
+
+    vi.spyOn(NotificationTemplate, 'findOne').mockResolvedValue({
+      id: 'tpl-inventory',
+      name: 'inventory_alert_digest',
+      channel: 'email',
+      isActive: true,
+    });
+    vi.spyOn(NotificationQueue, 'findOrCreate').mockResolvedValue([existing, false]);
+
+    const queued = await NotificationService.sendOnce(
+      'inventory_alert_digest',
+      'inventory@example.test',
+      { inventory_alert_ids: ['alert-1'] },
+      'user-1',
+      null,
+      'email',
+      'inventory-out:episode:user-1',
+    );
+
+    expect(queued).toBe(true);
+    expect(existing.update).toHaveBeenCalledWith(expect.objectContaining({
+      status: 'queued',
+      attempts: 0,
+      error: null,
+    }));
+  });
+
   it('email.channel detects placeholder credentials and simulates delivery in development', async () => {
     const originalEnv = process.env.NODE_ENV;
     process.env.NODE_ENV = 'development';

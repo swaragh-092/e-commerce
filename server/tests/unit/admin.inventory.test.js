@@ -1,6 +1,7 @@
 import { createRequire } from 'node:module';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { buildInventorySummary, getStats } from '../../src/modules/admin/admin.service';
+import { normalizeInventoryThreshold } from '../../src/modules/inventory/inventoryHealth.service';
 
 const require = createRequire(import.meta.url);
 const db = require('../../src/modules');
@@ -9,6 +10,13 @@ const SettingsService = require('../../src/modules/settings/settings.service');
 afterEach(() => vi.restoreAllMocks());
 
 describe('Admin inventory health', () => {
+  it('uses the default only for missing thresholds while preserving explicit zero', () => {
+    expect(normalizeInventoryThreshold(undefined)).toBe(10);
+    expect(normalizeInventoryThreshold(null)).toBe(10);
+    expect(normalizeInventoryThreshold('')).toBe(10);
+    expect(normalizeInventoryThreshold(0)).toBe(0);
+  });
+
   it('classifies available stock using active variant totals', () => {
     const summary = buildInventorySummary([
       {
@@ -69,6 +77,30 @@ describe('Admin inventory health', () => {
 
     expect(summary.totalAtRisk).toBe(0);
     expect(summary.rows).toHaveLength(0);
+  });
+
+  it('counts active variants separately and ignores inactive or unsellable variants', () => {
+    const summary = buildInventorySummary([
+      {
+        id: 'variable-product',
+        type: 'variable',
+        name: 'Seed pack',
+        status: 'published',
+        isEnabled: true,
+        variants: [
+          { id: 'variant-low', sku: 'SEED-LOW', stockQty: 12, reservedQty: 3, isActive: true },
+          { id: 'variant-out', sku: 'SEED-OUT', stockQty: 4, reservedQty: 4, isActive: true },
+          { id: 'variant-disabled', sku: 'SEED-OFF', stockQty: 0, reservedQty: 0, isActive: false },
+        ],
+      },
+      { id: 'empty-variable', type: 'variable', status: 'published', isEnabled: true, variants: [] },
+    ], 10);
+
+    expect(summary.totalAtRisk).toBe(2);
+    expect(summary.lowStockCount).toBe(1);
+    expect(summary.outOfStockCount).toBe(1);
+    expect(summary.rows.map((row) => row.inventoryKey)).toEqual(['variant:variant-out', 'variant:variant-low']);
+    expect(summary.rows.map((row) => row.availableQty)).toEqual([0, 9]);
   });
 });
 

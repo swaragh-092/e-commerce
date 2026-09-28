@@ -13,6 +13,11 @@ const getSalesChart = ({ period = 'monthly', startDate, endDate } = {}) => {
   return api.get(`/${A}/dashboard/sales-chart?${query}`);
 };
 const getLowStock = (threshold) => api.get(`/${A}/dashboard/low-stock${threshold != null ? `?threshold=${threshold}` : ''}`);
+const getInventoryAlerts = () => api.get(`/${A}/dashboard/inventory-alerts`);
+const updateInventoryAlert = (id, data) => api.patch(`/${A}/dashboard/inventory-alerts/${id}`, data);
+const getInventoryAlertConfig = () => api.get(`/${A}/inventory-alerts/config`);
+const saveInventoryAlertConfig = (data) => api.put(`/${A}/inventory-alerts/config`, data);
+const testInventoryAlertEmail = () => api.post(`/${A}/inventory-alerts/test`);
 const getRecentOrders = () => api.get(`/${A}/dashboard/recent-orders`);
 const getAccessRoles = () => api.get(`/${A}/access-control/roles`);
 const getAccessPermissions = () => api.get(`/${A}/access-control/permissions`);
@@ -143,7 +148,8 @@ const exportAnalyticsCsv = (metric, params = {}) => {
 };
 
 export {
-  getStats, getSalesChart, getLowStock, getRecentOrders,
+  getStats, getSalesChart, getLowStock, getInventoryAlerts, updateInventoryAlert, getRecentOrders,
+  getInventoryAlertConfig, saveInventoryAlertConfig, testInventoryAlertEmail,
   getAccessRoles, getAccessPermissions, getAccessUsers, createAccessRole, updateAccessRole, updateAccessUserRole, createAccessUser,
   getAuditLogs,
   getUsers, getUserById, updateUserStatus,

@@ -1,16 +1,21 @@
 import { useEffect, useState } from 'react';
 import { Alert, Box, Button, Grid, Typography } from '@mui/material';
-import { getStats, getLowStock, getRecentOrders } from '../../services/adminService';
+import { getStats, getLowStock, getRecentOrders, getInventoryAlerts } from '../../services/adminService';
 import { useSettings, useCurrency } from '../../hooks/useSettings';
 import { useAuth } from '../../hooks/useAuth';
 import { getEnabledDashboardWidgets, getOrderedDashboardWidgets } from '../../components/admin/dashboard/dashboardWidgets';
 import { densitySpacing, sizeToGrid } from '../../components/admin/dashboard/dashboardUtils';
 import { getApiErrorMessage } from '../../utils/apiErrors';
+import { PERMISSIONS } from '../../utils/permissions';
 
 const DashboardPage = () => {
+  const { hasPermission, hasAnyPermission } = useAuth();
+  const canReadProducts = hasPermission(PERMISSIONS.PRODUCTS_READ);
+
   const [stats, setStats] = useState(null);
   const [lowStock, setLowStock] = useState([]);
   const [recentOrders, setRecentOrders] = useState([]);
+  const [inventoryAlerts, setInventoryAlerts] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [sectionErrors, setSectionErrors] = useState({});
@@ -19,8 +24,11 @@ const DashboardPage = () => {
     setLoading(true);
     setError('');
     setSectionErrors({});
-    Promise.allSettled([getStats(), getLowStock(), getRecentOrders()])
-      .then(([s, ls, ro]) => {
+    const lowStockPromise = canReadProducts ? getLowStock() : Promise.resolve({ data: { data: [] } });
+    const inventoryAlertsPromise = canReadProducts ? getInventoryAlerts() : Promise.resolve({ data: { data: null } });
+
+    return Promise.allSettled([getStats(), lowStockPromise, getRecentOrders(), inventoryAlertsPromise])
+      .then(([s, ls, ro, ia]) => {
         const errors = {};
         if (s.status === 'fulfilled') setStats(s.value.data.data);
         else errors.stats = getApiErrorMessage(s.reason, 'Failed to load stats.');
@@ -34,7 +42,9 @@ const DashboardPage = () => {
         if (ro.status === 'fulfilled') setRecentOrders(ro.value.data.data || []);
         else errors.recentOrders = getApiErrorMessage(ro.reason, 'Failed to load recent orders.');
 
-        if (Object.keys(errors).length === 3) {
+        if (ia.status === 'fulfilled') setInventoryAlerts(ia.value.data.data);
+        else errors.inventoryAlerts = getApiErrorMessage(ia.reason, 'Failed to load inventory alerts.');
+        if (Object.keys(errors).length === 4) {
           setError('Failed to load dashboard data.');
         }
         setSectionErrors(errors);
@@ -44,11 +54,10 @@ const DashboardPage = () => {
 
   useEffect(() => {
     loadDashboard();
-  }, []);
+  }, [canReadProducts]);
 
   const { settings } = useSettings();
   const { formatPrice } = useCurrency();
-  const { hasAnyPermission } = useAuth();
   const adminSettings = settings?.admin || {};
 
   const defaultChartPeriod = adminSettings['dashboard.defaultChartPeriod'] || 'monthly';
@@ -64,6 +73,8 @@ const DashboardPage = () => {
   const widgetProps = {
     stats,
     lowStock,
+    inventoryAlerts,
+    onInventoryAlertUpdated: loadDashboard,
     recentOrders,
     loading,
     sectionErrors,
