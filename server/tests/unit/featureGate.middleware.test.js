@@ -10,6 +10,7 @@ const {
 const {
   clearFeatureCache,
   featureGate,
+  featureGateUnlessPermission,
   invalidateFeature,
 } = require('../../src/middleware/featureGate.middleware');
 
@@ -89,5 +90,31 @@ describe('featureGate middleware', () => {
     invalidateFeature('brands');
     const allowed = await runGate('brands');
     expect(allowed).toHaveBeenCalledWith();
+  });
+
+  it('bypasses a disabled storefront feature for an authorized admin consumer', async () => {
+    featureRows = [{ key: 'brands', value: 'false' }];
+    const next = vi.fn();
+
+    await featureGateUnlessPermission('brands', 'products.read')(
+      { user: { permissions: ['products.read'] } },
+      {},
+      next,
+    );
+
+    expect(next).toHaveBeenCalledWith();
+  });
+
+  it('does not bypass a disabled storefront feature for unrelated permissions', async () => {
+    featureRows = [{ key: 'brands', value: 'false' }];
+    const next = vi.fn();
+
+    await featureGateUnlessPermission('brands', 'products.read')(
+      { user: { permissions: ['orders.read'] } },
+      {},
+      next,
+    );
+
+    expect(next.mock.calls[0][0]).toMatchObject({ code: 'FEATURE_DISABLED', statusCode: 403 });
   });
 });

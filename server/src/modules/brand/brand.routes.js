@@ -9,13 +9,34 @@ const { authorizePermissions } = require('../../middleware/role.middleware');
 const { PERMISSIONS } = require('../../config/permissions');
 const { auditLog } = require('../audit/audit.middleware');
 const { idParamSchema } = require('../../utils/common.validation');
-const { featureGate } = require('../../middleware/featureGate.middleware');
+const { featureGateUnlessPermission } = require('../../middleware/featureGate.middleware');
 
 
 const router = express.Router();
 
-router.get('/', featureGate('brands'), optionalAuth, validate(brandValidation.queryBrandSchema, 'query'), brandController.getBrands);
-router.get('/:slug', featureGate('brands'), optionalAuth, validate(brandValidation.slugParamSchema, 'params'), validate(brandValidation.getBrandBySlugSchema, 'query'), brandController.getBrandBySlug);
+const allowInternalBrandReads = featureGateUnlessPermission(
+    'brands',
+    PERMISSIONS.BRANDS_READ,
+    PERMISSIONS.PRODUCTS_READ,
+    PERMISSIONS.COUPONS_READ,
+    PERMISSIONS.SETTINGS_READ
+);
+
+router.get(
+    '/',
+    optionalAuth,
+    allowInternalBrandReads,
+    validate(brandValidation.queryBrandSchema, 'query'),
+    brandController.getBrands
+);
+router.get(
+    '/:slug',
+    optionalAuth,
+    allowInternalBrandReads,
+    validate(brandValidation.slugParamSchema, 'params'),
+    validate(brandValidation.getBrandBySlugSchema, 'query'),
+    brandController.getBrandBySlug
+);
 
 // Protected Admin Routes
 router.post(

@@ -3,6 +3,7 @@
 const AppError = require('../utils/AppError');
 const logger   = require('../utils/logger');
 const { buildFeatures } = require('../config/modes');
+const { getPermissionsForUser } = require('../config/permissions');
 
 // ─── In-memory TTL cache ──────────────────────────────────────────────────────
 // Stores the fully-resolved (mode + DB) boolean for each feature key.
@@ -107,6 +108,29 @@ const featureGate = (featureKey) => {
 };
 
 /**
+ * Guards a storefront feature while allowing authenticated internal consumers
+ * that hold one of the explicitly listed permissions. Authentication must run
+ * before this middleware so req.user is available.
+ *
+ * @param {string} featureKey
+ * @param {...string} permissions
+ */
+const featureGateUnlessPermission = (featureKey, ...permissions) => {
+  const gate = featureGate(featureKey);
+
+  return async (req, res, next) => {
+    if (req.user) {
+      const userPermissions = getPermissionsForUser(req.user);
+      if (permissions.some((permission) => userPermissions.includes(permission))) {
+        return next();
+      }
+    }
+
+    return gate(req, res, next);
+  };
+};
+
+/**
  * Invalidates a single feature key from the cache.
  * Call this after a feature setting is updated in the DB so the next request
  * immediately re-reads the fresh value instead of waiting for TTL expiry.
@@ -127,4 +151,4 @@ const invalidateFeature = (featureKey) => {
  */
 const clearFeatureCache = () => featureCache.clear();
 
-module.exports = { featureGate, getResolvedFeature, invalidateFeature, clearFeatureCache };
+module.exports = { featureGate, featureGateUnlessPermission, getResolvedFeature, invalidateFeature, clearFeatureCache };
