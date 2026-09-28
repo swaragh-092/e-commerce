@@ -587,9 +587,13 @@ const adjust = async ({
     if (!variant) throw new AppError('NOT_FOUND', 404, 'Variant not found');
 
     const beforeStock = Number(variant.stockQty || 0);
+    const beforeReserved = Number(variant.reservedQty || 0);
+    if (newQty < beforeReserved) {
+      throw new AppError('VALIDATION_ERROR', 400, `Stock quantity (${newQty}) cannot be less than reserved quantity (${beforeReserved})`);
+    }
+
     if (beforeStock === newQty) return { productId, variantId, changed: false };
 
-    const beforeReserved = Number(variant.reservedQty || 0);
     await variant.update({ stockQty: newQty }, { transaction });
 
     await createLedgerEntry({
@@ -617,9 +621,12 @@ const adjust = async ({
   if (!product) throw new AppError('NOT_FOUND', 404, 'Product not found');
 
   const beforeStock = Number(product.quantity || 0);
-  if (beforeStock === newQty) return { productId, variantId: null, changed: false };
-
   const beforeReserved = Number(product.reservedQty || 0);
+  if (newQty < beforeReserved) {
+    throw new AppError('VALIDATION_ERROR', 400, `Stock quantity (${newQty}) cannot be less than reserved quantity (${beforeReserved})`);
+  }
+
+  if (beforeStock === newQty) return { productId, variantId: null, changed: false };
   await product.update({ quantity: newQty }, { transaction });
 
   await createLedgerEntry({

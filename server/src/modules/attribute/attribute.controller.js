@@ -161,7 +161,8 @@ exports.addProductVariant = async (req, res, next) => {
 
 exports.updateProductVariant = async (req, res, next) => {
     try {
-        const result = await attributeService.updateProductVariant(req.params.id, req.params.variantId, req.body);
+        const auditContext = { userId: req.user?.id, ip: req.ip, userAgent: req.get('user-agent') };
+        const result = await attributeService.updateProductVariant(req.params.id, req.params.variantId, req.body, auditContext);
         return success(res, result, 'Variant updated');
     } catch (err) {
         next(err);
