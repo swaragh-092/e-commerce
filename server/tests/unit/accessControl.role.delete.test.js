@@ -1,5 +1,4 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-const AppError = require('../../src/utils/AppError');
 const AdminService = require('../../src/modules/admin/admin.service');
 const db = require('../../src/modules/index');
 const { Role, User } = db;

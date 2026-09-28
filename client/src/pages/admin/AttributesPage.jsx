@@ -825,6 +825,19 @@ const AttributesPage = () => {
                 </Select>
               </FormControl>
             </Grid>
+            {Boolean(editing) && (
+              <Grid item xs={12}>
+                <UnitSelector
+                  label="Default unit"
+                  placeholder="Select or type unit (e.g. kg, cm, ml)"
+                  size="small"
+                  margin="none"
+                  value={formData.unit}
+                  onChange={(val) => setFormData((current) => ({ ...current, unit: val }))}
+                  helperText="Optional. Used to format values like 500g, 1kg, or 1L."
+                />
+              </Grid>
+            )}
           </Grid>
         </DialogContent>
         <DialogActions sx={{ px: 3, pb: 2 }}>

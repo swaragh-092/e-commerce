@@ -900,7 +900,7 @@ const deleteStaffUser = async (userId, actingUser) => {
 
     // Customer accounts must not be deleted from Access Control (preserve customer data & order integrity)
     const assignedRoles = user.roles || [];
-    const hasStaffRole = assignedRoles.some((r) => r.slug !== 'customer' && r.baseRole !== 'customer');
+    const hasStaffRole = assignedRoles.some((r) => r.slug !== 'customer');
     if (user.role === 'customer' && !hasStaffRole) {
       throw new AppError(
         'VALIDATION_ERROR',
@@ -913,12 +913,18 @@ const deleteStaffUser = async (userId, actingUser) => {
       if (!isSuperAdmin) {
         throw new AppError('FORBIDDEN', 403, 'Only super admins can delete super admin accounts');
       }
-      const superAdminCount = await User.count({
-        where: { role: ROLES.SUPER_ADMIN, status: 'active' },
-        transaction,
-      });
-      if (superAdminCount <= 1) {
-        throw new AppError('VALIDATION_ERROR', 400, 'Cannot delete the last active super admin');
+      // Only enforce last-active guard when deleting an active super admin
+      if (user.status === 'active') {
+        // Lock rows with transaction.LOCK.UPDATE to serialize concurrent deletions
+        const activeSuperAdmins = await User.findAll({
+          attributes: ['id'],
+          where: { role: ROLES.SUPER_ADMIN, status: 'active' },
+          lock: transaction.LOCK?.UPDATE || true,
+          transaction,
+        });
+        if (activeSuperAdmins.length <= 1) {
+          throw new AppError('VALIDATION_ERROR', 400, 'Cannot delete the last active super admin');
+        }
       }
     }
 

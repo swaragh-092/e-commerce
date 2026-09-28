@@ -1,5 +1,4 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-const AppError = require('../../src/utils/AppError');
 const AdminService = require('../../src/modules/admin/admin.service');
 const db = require('../../src/modules/index');
 const { User, Order, RefreshToken } = db;
@@ -64,8 +63,9 @@ describe('AdminService.deleteStaffUser edge cases & functionality', () => {
       id: 'last-super-admin-id',
       email: 'last_sa@example.com',
       role: 'super_admin',
+      status: 'active',
     });
-    vi.spyOn(User, 'count').mockResolvedValue(1);
+    vi.spyOn(User, 'findAll').mockResolvedValue([{ id: 'last-super-admin-id' }]);
 
     await expect(
       AdminService.deleteStaffUser('last-super-admin-id', superAdminCaller)
@@ -74,6 +74,28 @@ describe('AdminService.deleteStaffUser edge cases & functionality', () => {
       statusCode: 400,
       message: 'Cannot delete the last active super admin',
     });
+  });
+
+  it('allows deleting an inactive super admin even when only one active super admin exists', async () => {
+    const mockInactiveSA = {
+      id: 'inactive-sa-id',
+      email: 'inactive_sa@example.com',
+      role: 'super_admin',
+      status: 'inactive',
+      setRoles: vi.fn().mockResolvedValue(true),
+      destroy: vi.fn().mockResolvedValue(true),
+    };
+    vi.spyOn(User, 'findByPk').mockResolvedValue(mockInactiveSA);
+    vi.spyOn(Order, 'count').mockResolvedValue(0);
+    vi.spyOn(RefreshToken, 'update').mockResolvedValue([0]);
+    vi.spyOn(AuditService, 'log').mockResolvedValue(true);
+    // findAll should not be called because status !== 'active'
+    const findAllSpy = vi.spyOn(User, 'findAll');
+
+    const result = await AdminService.deleteStaffUser('inactive-sa-id', superAdminCaller);
+    expect(result).toEqual({ id: 'inactive-sa-id', email: 'inactive_sa@example.com' });
+    expect(findAllSpy).not.toHaveBeenCalled();
+    expect(mockInactiveSA.destroy).toHaveBeenCalledTimes(1);
   });
 
   it('rejects with 409 if user has associated storefront orders', async () => {
@@ -117,6 +139,26 @@ describe('AdminService.deleteStaffUser edge cases & functionality', () => {
       expect.objectContaining({ where: { userId: 'staff-to-delete-id', revokedAt: null } })
     );
     expect(auditSpy).toHaveBeenCalledTimes(1);
+  });
+
+  it('allows deleting a staff user with a custom role whose baseRole is customer', async () => {
+    const mockCustomRoleUser = {
+      id: 'custom-role-user-id',
+      email: 'custom_role@example.com',
+      role: 'customer',
+      roles: [{ slug: 'testing', baseRole: 'customer' }],
+      setRoles: vi.fn().mockResolvedValue(true),
+      destroy: vi.fn().mockResolvedValue(true),
+    };
+
+    vi.spyOn(User, 'findByPk').mockResolvedValue(mockCustomRoleUser);
+    vi.spyOn(Order, 'count').mockResolvedValue(0);
+    vi.spyOn(RefreshToken, 'update').mockResolvedValue([1]);
+    vi.spyOn(AuditService, 'log').mockResolvedValue(true);
+
+    const result = await AdminService.deleteStaffUser('custom-role-user-id', superAdminCaller);
+    expect(result).toEqual({ id: 'custom-role-user-id', email: 'custom_role@example.com' });
+    expect(mockCustomRoleUser.destroy).toHaveBeenCalledTimes(1);
   });
 
   it('rejects with 400 if attempting to delete a customer user from Access Control', async () => {
