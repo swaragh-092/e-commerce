@@ -101,6 +101,28 @@ describe('permissions config', () => {
     });
   });
 
+  it('sets effective role to custom role when user is assigned custom role', () => {
+    const userWithCustomRole = {
+      toJSON: () => ({
+        id: 'user-testing',
+        role: ROLES.CUSTOMER,
+        roles: [
+          {
+            id: 'role-testing-uuid',
+            name: 'Testing',
+            slug: 'testing',
+            permissions: [{ key: PERMISSIONS.PRODUCTS_READ }],
+          },
+        ],
+      }),
+    };
+
+    const enriched = enrichUserAuthorization(userWithCustomRole);
+    expect(enriched.role).toBe('testing');
+    expect(enriched.roles).toEqual(['testing']);
+    expect(enriched.permissions).toContain(PERMISSIONS.PRODUCTS_READ);
+  });
+
   it('returns system roles with resolved permission sets', () => {
     const systemRoles = getSystemRoles();
 

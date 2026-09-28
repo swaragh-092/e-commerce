@@ -178,7 +178,29 @@ const getStats = async () => {
       raw: true,
     }),
     Order.count(),
-    User.count({ where: { role: 'customer' } }),
+    User.count({
+      where: {
+        [Op.and]: [
+          literal(`NOT EXISTS (
+            SELECT 1 FROM user_roles ur
+            JOIN roles r ON r.id = ur.role_id
+            WHERE ur.user_id = "User"."id"
+            AND r.slug != 'customer'
+          )`),
+          {
+            [Op.or]: [
+              { role: 'customer' },
+              literal(`EXISTS (
+                SELECT 1 FROM user_roles ur
+                JOIN roles r ON r.id = ur.role_id
+                WHERE ur.user_id = "User"."id"
+                AND (r.slug = 'customer' OR r.name ILIKE 'customer')
+              )`),
+            ],
+          },
+        ],
+      },
+    }),
     Product.count({ where: { status: 'published', isEnabled: true } }),
     Order.count({ where: { status: 'pending_payment' } }),
     getInventorySummary(threshold),
@@ -640,7 +662,7 @@ const listAccessUsers = async ({ page, limit, search, roleId, includeCustomers =
           literal(`EXISTS (
             SELECT 1 FROM user_roles ur
             WHERE ur.user_id = "User"."id"
-            AND ur.role_id = '${roleId}'
+            AND ur.role_id = ${db.sequelize.escape(roleId)}
           )`),
           {
             [Op.and]: [
@@ -672,17 +694,26 @@ const listAccessUsers = async ({ page, limit, search, roleId, includeCustomers =
   }
 
   // By default (when no specific roleId is selected and includeCustomers is false),
-  // show only elevated-access users (staff, admins, etc.), excluding regular customers.
+  // show only elevated-access users (staff, admins, custom roles, etc.), excluding regular customers.
   if (!includeCustomers && !roleId) {
     andClauses.push({
       [Op.or]: [
-        { role: { [Op.ne]: ROLES.CUSTOMER } },
+        {
+          [Op.and]: [
+            { role: { [Op.ne]: ROLES.CUSTOMER } },
+            literal(`NOT EXISTS (
+              SELECT 1 FROM user_roles ur
+              JOIN roles r ON r.id = ur.role_id
+              WHERE ur.user_id = "User"."id"
+              AND r.slug = 'customer'
+            )`),
+          ],
+        },
         literal(`EXISTS (
           SELECT 1 FROM user_roles ur
           JOIN roles r ON r.id = ur.role_id
           WHERE ur.user_id = "User"."id"
           AND r.slug != 'customer'
-          AND r.base_role != 'customer'
         )`),
       ],
     });

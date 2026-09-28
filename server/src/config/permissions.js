@@ -89,10 +89,12 @@ const getPermissionsForUser = (user) => {
 
 const enrichUserAuthorization = (user) => {
   const plainUser = typeof user?.toJSON === 'function' ? user.toJSON() : { ...(user || {}) };
+  const userRoles = getRolesForUser(plainUser);
 
   return {
     ...plainUser,
-    roles: getRolesForUser(plainUser),
+    role: userRoles[0] || plainUser.role,
+    roles: userRoles,
     permissions: getPermissionsForUser(plainUser),
   };
 };
