@@ -4,11 +4,15 @@ import ErrorOutlineIcon from '@mui/icons-material/ErrorOutline';
 import { useNavigate } from 'react-router-dom';
 import { getPanelSx } from './dashboardUtils';
 
-const StoreHealthWidget = ({ stats, allSettings, spacing }) => {
+const StoreHealthWidget = ({ stats, allSettings, spacing, features: featuresProp, mode: modeProp }) => {
   const navigate = useNavigate();
   const payments = allSettings?.payments || {};
-  const features = allSettings?.features || {};
+  const features = featuresProp || allSettings?.features || {};
+  const mode = modeProp || allSettings?.general?.mode || allSettings?.mode || 'ecommerce';
   const logo = allSettings?.logo || {};
+
+  const isOrdersAllowed = mode !== 'catalog' && features?.orders !== false;
+
   const enabledGateways = [
     payments.razorpayEnabled,
     payments.stripeEnabled,
@@ -20,7 +24,11 @@ const StoreHealthWidget = ({ stats, allSettings, spacing }) => {
   const outOfStockCount = Number(stats?.inventory?.outOfStockCount ?? stats?.outOfStockCount ?? 0);
 
   const checks = [
-    { label: 'Payment method enabled', ok: enabledGateways > 0, to: '/admin/settings' },
+    isOrdersAllowed && features?.payments !== false && {
+      label: 'Payment method enabled',
+      ok: enabledGateways > 0,
+      to: '/admin/settings',
+    },
     { label: 'Published products available', ok: Number(stats?.productCount || 0) > 0, to: '/admin/products' },
     {
       label: inventoryRiskCount === 0
@@ -32,10 +40,14 @@ const StoreHealthWidget = ({ stats, allSettings, spacing }) => {
       to: '/admin/products?stock=low',
     },
     { label: 'Logo configured', ok: Boolean(logo.main), to: '/admin/settings' },
-    { label: 'Guest checkout configured', ok: features.guestCheckout !== undefined, to: '/admin/settings' },
-  ];
+    isOrdersAllowed && features?.checkout !== false && {
+      label: 'Guest checkout configured',
+      ok: features.guestCheckout === true && features.checkout !== false,
+      to: '/admin/settings',
+    },
+  ].filter(Boolean);
   const healthy = checks.filter((check) => check.ok).length;
-  const score = Math.round((healthy / checks.length) * 100);
+  const score = checks.length > 0 ? Math.round((healthy / checks.length) * 100) : 100;
 
   return (
     <Paper elevation={0} sx={getPanelSx(spacing)}>

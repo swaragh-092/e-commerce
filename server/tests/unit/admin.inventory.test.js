@@ -122,4 +122,26 @@ describe('Admin dashboard product count', () => {
       where: { status: 'published', isEnabled: true },
     });
   });
+
+  it('omits order queries and zeroes out order/revenue stats when orders feature is disabled', async () => {
+    const featureGate = require('../../src/middleware/featureGate.middleware');
+    vi.spyOn(featureGate, 'getResolvedFeature').mockResolvedValue(false);
+    vi.spyOn(SettingsService, 'getByGroup').mockResolvedValue({ lowStockThreshold: 10 });
+    const findOneOrderSpy = vi.spyOn(db.Order, 'findOne');
+    const countOrderSpy = vi.spyOn(db.Order, 'count');
+    vi.spyOn(db.User, 'count').mockResolvedValue(5);
+    vi.spyOn(db.Product, 'count').mockResolvedValue(3);
+    vi.spyOn(db.Product, 'findAll').mockResolvedValue([]);
+    vi.spyOn(db.Review, 'count').mockResolvedValue(0);
+
+    const stats = await getStats();
+
+    expect(stats.totalRevenue).toBe(0);
+    expect(stats.orderCount).toBe(0);
+    expect(stats.pendingOrders).toBe(0);
+    expect(stats.productCount).toBe(3);
+    expect(stats.customerCount).toBe(5);
+    expect(findOneOrderSpy).not.toHaveBeenCalled();
+    expect(countOrderSpy).not.toHaveBeenCalled();
+  });
 });

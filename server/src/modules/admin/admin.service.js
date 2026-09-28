@@ -94,8 +94,27 @@ const getInventorySummary = async (threshold) => {
  */
 const getStats = async () => {
   const SettingsService = require('../settings/settings.service');
+  const { getResolvedFeature } = require('../../middleware/featureGate.middleware');
   const catalog = await SettingsService.getByGroup('catalog', { maskSensitive: false });
   const threshold = normalizeInventoryThreshold(catalog.lowStockThreshold);
+
+  let ordersEnabled = true;
+  try {
+    ordersEnabled = await getResolvedFeature('orders');
+  } catch (_) {}
+
+  const revenuePromise = ordersEnabled
+    ? Order.findOne({
+        attributes: [[fn('COALESCE', fn('SUM', col('"Order".total')), 0), 'totalRevenue']],
+        where: { status: { [Op.in]: ['confirmed', 'processing', 'ready_for_shipment', 'closed', 'on_hold'] } },
+        raw: true,
+      })
+    : Promise.resolve({ totalRevenue: 0 });
+
+  const orderCountPromise = ordersEnabled ? Order.count() : Promise.resolve(0);
+  const pendingOrdersPromise = ordersEnabled
+    ? Order.count({ where: { status: 'pending_payment' } })
+    : Promise.resolve(0);
 
   const [
     revenueResult,
@@ -107,13 +126,8 @@ const getStats = async () => {
     pendingReviewsCount,
     totalReviewsCount,
   ] = await Promise.all([
-    // Total revenue from confirmed/processing/ready/closed/on_hold orders (excludes pending_payment & cancelled)
-    Order.findOne({
-      attributes: [[fn('COALESCE', fn('SUM', col('"Order".total')), 0), 'totalRevenue']],
-      where: { status: { [Op.in]: ['confirmed', 'processing', 'ready_for_shipment', 'closed', 'on_hold'] } },
-      raw: true,
-    }),
-    Order.count(),
+    revenuePromise,
+    orderCountPromise,
     User.count({
       where: {
         [Op.and]: [
@@ -138,7 +152,7 @@ const getStats = async () => {
       },
     }),
     Product.count({ where: { status: 'published', isEnabled: true } }),
-    Order.count({ where: { status: 'pending_payment' } }),
+    pendingOrdersPromise,
     getInventorySummary(threshold),
     Review.count({ where: { status: 'pending' } }),
     Review.count(),
