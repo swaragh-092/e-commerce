@@ -750,6 +750,18 @@ const updateProductVariant = async (productId, variantId, data, auditContext = n
         }
     }
 
+    if (updates.stockQty !== undefined) {
+        const nextQty = Number(updates.stockQty);
+        if (!Number.isInteger(nextQty) || nextQty < 0) {
+            throw new AppError('VALIDATION_ERROR', 400, 'Quantity must be a non-negative integer');
+        }
+        const reservedQty = Number(variant.reservedQty || 0);
+        if (nextQty < reservedQty) {
+            throw new AppError('VALIDATION_ERROR', 400, `Stock quantity (${nextQty}) cannot be less than reserved quantity (${reservedQty})`);
+        }
+        updates.stockQty = nextQty;
+    }
+
     await sequelize.transaction(async (t) => {
         if (updates.stockQty !== undefined && Number(updates.stockQty) !== Number(variant.stockQty || 0)) {
             const beforeStock = Number(variant.stockQty || 0);
