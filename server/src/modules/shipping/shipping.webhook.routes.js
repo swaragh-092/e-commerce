@@ -40,6 +40,10 @@ const ipAllowlist = (req, res, next) => {
 
 // Shiprocket sends POST webhooks on shipment status updates
 router.post('/shiprocket', ipAllowlist, shippingWebhookController.handleShiprocketWebhook);
+// Neutral public alias for Shiprocket's webhook URL validation. Shiprocket
+// rejects callback URLs containing provider-specific keywords such as
+// "shiprocket", "sr", or "kr".
+router.post('/status', ipAllowlist, shippingWebhookController.handleShiprocketWebhook);
 
 // Add other providers here later (e.g. ekart)
 
