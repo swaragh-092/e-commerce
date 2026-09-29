@@ -80,7 +80,11 @@ const processWebhook = async (providerCode, payload, headers = {}) => {
             },
             include: [{ model: Fulfillment, as: 'fulfillment' }, { model: Order, as: 'order' }],
             transaction: t,
-            lock: t.LOCK?.UPDATE,
+            // PostgreSQL rejects a plain FOR UPDATE when this query also
+            // contains LEFT JOINs for optional fulfillment/order rows.
+            // Lock only the shipment row; the joined rows remain readable
+            // without attempting to lock the nullable side of the joins.
+            lock: t.LOCK?.UPDATE ? { level: t.LOCK.UPDATE, of: Shipment } : undefined,
         });
 
         if (!shipment) return { accepted: true, ignored: true, reason: 'unknown_shipment' };
