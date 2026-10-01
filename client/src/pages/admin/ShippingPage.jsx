@@ -675,7 +675,7 @@ const ShippingPage = () => {
           <TabPanel value={tabIndex} index={5} idPrefix="shipping">
             <Typography variant="subtitle1" fontWeight={600}>Measured package types</Typography>
             <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
-              Add the boxes or mailers you really use. For each product, record the maximum quantity you have confirmed fits in that package. The planner splits quantities by these rules and keeps different products in separate parcels until mixed packing is explicitly supported.
+              Add your measured small, medium and large boxes or mailers. For each product, record the maximum quantity confirmed to fit. The planner uses the fewest parcels and selects the smallest suitable box for each parcel, including a smaller box for remaining items. Different products are currently packed separately; individual product fit limits do not confirm that a mixed order fits together.
             </Typography>
             <Alert severity="warning" sx={{ mb: 2 }}>Do not enter a package until you have measured its outside dimensions and empty weight. Every shippable product also needs its actual item weight. This does not confirm Shiprocket MPS API booking eligibility.</Alert>
             <Stack spacing={1} sx={{ mb: 2 }}>

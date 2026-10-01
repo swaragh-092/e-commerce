@@ -68,12 +68,20 @@ const planParcels = (items, profiles, { volumetricDivisor = 5000, defaultPackage
                 candidates.sort((a, b) => b.capacity - a.capacity || a.volume - b.volume || String(a.profile.id).localeCompare(String(b.profile.id)));
             }
         }
-        const selectedCandidate = candidates[0];
-        if (!selectedCandidate) {
+        if (!candidates.length) {
             throw new AppError('SHIPPING_PACKAGE_CAPACITY_EXCEEDED', 400, `No configured package is confirmed to fit ${item.name || 'one of the products'} at the ordered quantity. Update its package fit rules or contact support.`, { productId: item.productId, variantId: item.variantId || null });
         }
         let remaining = quantity;
         while (remaining > 0) {
+            // Preserve the minimum parcel count, then use the smallest eligible
+            // box. Re-evaluate the remainder instead of reusing an oversized box.
+            const maxCapacity = Math.max(...candidates.map((candidate) => candidate.capacity));
+            const minimumParcels = Math.ceil(remaining / maxCapacity);
+            const eligible = candidates.filter((candidate) =>
+                1 + Math.ceil(Math.max(0, remaining - candidate.capacity) / maxCapacity) === minimumParcels);
+            const selectedCandidate = eligible.sort((a, b) => a.volume - b.volume ||
+                Number(a.profile.emptyWeightGrams) - Number(b.profile.emptyWeightGrams) ||
+                String(a.profile.id).localeCompare(String(b.profile.id)))[0];
             const packedQuantity = Math.min(remaining, selectedCandidate.capacity);
             const profile = selectedCandidate.profile;
             const actualWeightGrams = Math.ceil(Number(profile.emptyWeightGrams) + weight * packedQuantity);
