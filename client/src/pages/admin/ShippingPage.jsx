@@ -73,7 +73,7 @@ const ShippingPage = () => {
   const [packageProducts, setPackageProducts] = useState([]);
   const [packageDialogOpen, setPackageDialogOpen] = useState(false);
   const [packageDraft, setPackageDraft] = useState(null);
-  const [fitDraft, setFitDraft] = useState({ productId: '', variantId: '', maxQuantity: 1 });
+  const [fitDraft, setFitDraft] = useState({ productId: '', variantId: '', maxQuantity: 1, mixGroup: '' });
   const [deliverySettings, setDeliverySettings] = useState({ pricingMode: '', method: 'flat_rate', flatRate: '', freeThreshold: '', serviceablePincodes: '', blockedPincodes: '' });
   const [savingDelivery, setSavingDelivery] = useState(false);
   const enabledRules = rules.filter((rule) => rule.enabled);
@@ -216,7 +216,7 @@ const ShippingPage = () => {
       id: uuidv4(), name: '', enabled: true, lengthCm: '', breadthCm: '', heightCm: '',
       emptyWeightGrams: '', maxItems: '', maxContentsWeightGrams: '', fits: [],
     });
-    setFitDraft({ productId: '', variantId: '', maxQuantity: 1 });
+    setFitDraft({ productId: '', variantId: '', maxQuantity: 1, mixGroup: '' });
     setPackageDialogOpen(true);
   };
 
@@ -240,6 +240,7 @@ const ShippingPage = () => {
       return;
     }
     const next = { ...packageDraft };
+    delete next.allowMixedContents;
     for (const key of ['lengthCm', 'breadthCm', 'heightCm', 'emptyWeightGrams', 'maxItems', 'maxContentsWeightGrams']) {
       next[key] = Number(next[key]);
     }
@@ -257,14 +258,14 @@ const ShippingPage = () => {
       notify('Choose a product and enter the confirmed maximum quantity per package.', 'warning');
       return;
     }
-    const fit = { productId: fitDraft.productId, ...(fitDraft.variantId ? { variantId: fitDraft.variantId } : {}), maxQuantity: Number(fitDraft.maxQuantity) };
+    const fit = { productId: fitDraft.productId, ...(fitDraft.variantId ? { variantId: fitDraft.variantId } : {}), maxQuantity: Number(fitDraft.maxQuantity), ...(fitDraft.mixGroup.trim() ? { mixGroup: fitDraft.mixGroup.trim() } : {}) };
     const key = `${fit.productId}:${fit.variantId || ''}`;
     if (packageDraft.fits.some((row) => `${row.productId}:${row.variantId || ''}` === key)) {
       notify('That product/variant already has a fit rule in this package.', 'warning');
       return;
     }
     setPackageDraft((current) => ({ ...current, fits: [...current.fits, fit] }));
-    setFitDraft({ productId: '', variantId: '', maxQuantity: 1 });
+    setFitDraft({ productId: '', variantId: '', maxQuantity: 1, mixGroup: '' });
   };
 
   useEffect(() => {
@@ -675,7 +676,7 @@ const ShippingPage = () => {
           <TabPanel value={tabIndex} index={5} idPrefix="shipping">
             <Typography variant="subtitle1" fontWeight={600}>Measured package types</Typography>
             <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
-              Add your measured small, medium and large boxes or mailers. For each product, record the maximum quantity confirmed to fit. The planner uses the fewest parcels and selects the smallest suitable box for each parcel, including a smaller box for remaining items. Different products are currently packed separately; individual product fit limits do not confirm that a mixed order fits together.
+              Add your measured small, medium and large boxes or mailers. Set a mix-group name only for products you have confirmed can share a box. Products with blank or different group names stay separate.
             </Typography>
             <Alert severity="warning" sx={{ mb: 2 }}>Do not enter a package until you have measured its outside dimensions and empty weight. Every shippable product also needs its actual item weight. This does not confirm Shiprocket MPS API booking eligibility.</Alert>
             <Stack spacing={1} sx={{ mb: 2 }}>
@@ -686,7 +687,7 @@ const ShippingPage = () => {
                     <Box>
                       <Typography fontWeight={600}>{profile.name}{profile.enabled === false ? ' (inactive)' : ''}</Typography>
                       <Typography variant="body2" color="text.secondary">{profile.lengthCm} × {profile.breadthCm} × {profile.heightCm} cm · {profile.emptyWeightGrams} g empty · up to {profile.maxItems} items / {profile.maxContentsWeightGrams} g contents</Typography>
-                      <Typography variant="body2" color="text.secondary">Confirmed product fits: {(profile.fits || []).length}</Typography>
+                      <Typography variant="body2" color="text.secondary">Confirmed product fits: {(profile.fits || []).length} · mix groups: {[...new Set((profile.fits || []).map((fit) => fit.mixGroup).filter(Boolean))].join(', ') || 'none'}</Typography>
                     </Box>
                     <Stack direction="row" spacing={1}>
                       <Button onClick={() => openPackageDialog(profile)}>Edit</Button>
@@ -720,7 +721,7 @@ const ShippingPage = () => {
             <DialogTitle>{packageProfiles.some((profile) => profile.id === packageDraft?.id) ? 'Edit measured package' : 'Add measured package'}</DialogTitle>
             <DialogContent dividers>
               {packageDraft && <Stack spacing={2} sx={{ mt: 1 }}>
-                <Alert severity="info">Measure the packed parcel’s outside L × W × H and the empty box/mailer's weight. Product fit limits are merchant-confirmed quantities per parcel, not automatic guesses from product weight.</Alert>
+                <Alert severity="info">Measure the packed parcel’s outside L × W × H and the empty box/mailer's weight. Product fit limits are merchant-confirmed quantities per parcel, not guesses from product weight.</Alert>
                 <TextField label="Package name" required value={packageDraft.name} onChange={(event) => setPackageDraft((current) => ({ ...current, name: event.target.value }))} />
                 <Grid container spacing={2}>
                   {[
@@ -731,21 +732,23 @@ const ShippingPage = () => {
                 <FormControlLabel control={<Switch checked={packageDraft.enabled !== false} onChange={(event) => setPackageDraft((current) => ({ ...current, enabled: event.target.checked }))} />} label="Use this package for new checkout plans" />
                 <Paper variant="outlined" sx={{ p: 2 }}>
                   <Typography fontWeight={600} sx={{ mb: 1 }}>Confirmed product fit</Typography>
-                  <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>Maximum quantity of the selected product or variant that fits in one parcel. Different products remain in separate parcels.</Typography>
+                  <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>Maximum quantity of each selected product or variant that fits in one parcel.</Typography>
+                  <Alert severity="info" sx={{ mb: 2 }}>Products with the same mix-group name may share this package. Leave the group blank to keep a product separate. The planner enforces per-product quantity limits and package-wide item and contents-weight limits.</Alert>
                   <Grid container spacing={1} alignItems="center">
-                    <Grid item xs={12} md={5}>
-                      <TextField select fullWidth label="Product" value={fitDraft.productId} onChange={(event) => setFitDraft({ productId: event.target.value, variantId: '', maxQuantity: fitDraft.maxQuantity })}>
+                    <Grid item xs={12} md={4}>
+                      <TextField select fullWidth label="Product" value={fitDraft.productId} onChange={(event) => setFitDraft((current) => ({ ...current, productId: event.target.value, variantId: '' }))}>
                         <MenuItem value="">Choose product</MenuItem>
                         {packageProducts.map((product) => <MenuItem key={product.id} value={product.id}>{product.name}</MenuItem>)}
                       </TextField>
                     </Grid>
-                    <Grid item xs={12} md={4}>
+                    <Grid item xs={12} md={3}>
                       <TextField select fullWidth label="Variant" value={fitDraft.variantId} disabled={!fitDraft.productId || !(packageProducts.find((product) => product.id === fitDraft.productId)?.variants || []).length} onChange={(event) => setFitDraft((current) => ({ ...current, variantId: event.target.value }))}>
                         <MenuItem value="">All variants / no variants</MenuItem>
                         {(packageProducts.find((product) => product.id === fitDraft.productId)?.variants || []).map((variant) => <MenuItem key={variant.id} value={variant.id}>{variant.optionLabel || variant.name || variant.sku || variant.id}</MenuItem>)}
                       </TextField>
                     </Grid>
                     <Grid item xs={8} md={2}><TextField fullWidth type="number" label="Qty / parcel" inputProps={{ min: 1, step: 1 }} value={fitDraft.maxQuantity} onChange={(event) => setFitDraft((current) => ({ ...current, maxQuantity: event.target.value }))} /></Grid>
+                    <Grid item xs={8} md={2}><TextField fullWidth label="Mix group (optional)" value={fitDraft.mixGroup} inputProps={{ maxLength: 80 }} onChange={(event) => setFitDraft((current) => ({ ...current, mixGroup: event.target.value }))} helperText="Same group = confirmed compatible" /></Grid>
                     <Grid item xs={4} md={1}><Button aria-label="Add product fit" onClick={addFitToDraft}>Add</Button></Grid>
                   </Grid>
                   <Stack spacing={1} sx={{ mt: 2 }}>
@@ -753,7 +756,7 @@ const ShippingPage = () => {
                       const product = packageProducts.find((entry) => entry.id === fit.productId);
                       const variant = product?.variants?.find((entry) => entry.id === fit.variantId);
                       return <Stack key={`${fit.productId}:${fit.variantId || ''}`} direction="row" justifyContent="space-between" alignItems="center" sx={{ borderTop: 1, borderColor: 'divider', pt: 1 }}>
-                        <Typography variant="body2">{product?.name || fit.productId}{variant ? ` · ${variant.optionLabel || variant.name || variant.sku || 'Variant'}` : ''} — up to {fit.maxQuantity} per parcel</Typography>
+                        <Typography variant="body2">{product?.name || fit.productId}{variant ? ` · ${variant.optionLabel || variant.name || variant.sku || 'Variant'}` : ''} — up to {fit.maxQuantity} per parcel{fit.mixGroup ? ` · mixes with “${fit.mixGroup}”` : ' · packed separately'}</Typography>
                         <Button color="error" aria-label={`Remove fit ${index + 1}`} onClick={() => setPackageDraft((current) => ({ ...current, fits: current.fits.filter((_, rowIndex) => rowIndex !== index) }))}>Remove</Button>
                       </Stack>;
                     })}
