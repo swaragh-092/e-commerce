@@ -949,16 +949,21 @@ const deleteStaffUser = async (userId, actingUser) => {
       }
       // Only enforce last-active guard when deleting an active super admin.
       // Count legacy-column AND join-assigned super admins (either suffices).
+      // Row lock candidate active super admins with FOR UPDATE OF u to serialize concurrent deletions.
       if (user.status === 'active') {
         const rows = await db.sequelize.query(
-          `SELECT COUNT(DISTINCT u.id) AS "count" FROM users u
+          `SELECT u.id FROM users u
            LEFT JOIN user_roles ur ON ur.user_id = u.id
            LEFT JOIN roles r ON r.id = ur.role_id
            WHERE u.status = 'active' AND u.deleted_at IS NULL
-             AND (u.role = 'super_admin' OR r.slug = 'super_admin')`,
+             AND (u.role = 'super_admin' OR r.slug = 'super_admin')
+           FOR UPDATE OF u`,
           { transaction, type: db.sequelize.QueryTypes.SELECT }
         );
-        if (Number(rows?.[0]?.count || 0) <= 1) {
+        const count = rows?.[0]?.count !== undefined
+          ? Number(rows[0].count)
+          : new Set((rows || []).map((r) => r.id).filter(Boolean)).size;
+        if (count <= 1) {
           throw new AppError('VALIDATION_ERROR', 400, 'Cannot delete the last active super admin');
         }
       }

@@ -90,14 +90,87 @@ const buildCombinationResult = (evaluations, context, { source = 'manual' } = {}
     );
     const totalDiscount = Number((orderDiscount + shippingDiscount).toFixed(2));
 
-    const lineDiscounts = {};
+    const rawLineDiscounts = {};
     safeEvaluations.forEach((evaluation) => {
         if (evaluation.lineDiscounts && typeof evaluation.lineDiscounts === 'object') {
             Object.entries(evaluation.lineDiscounts).forEach(([key, val]) => {
-                lineDiscounts[key] = Number(((lineDiscounts[key] || 0) + Number(val || 0)).toFixed(2));
+                rawLineDiscounts[key] = Number(((rawLineDiscounts[key] || 0) + Number(val || 0)).toFixed(2));
             });
         }
     });
+
+    const itemCaps = {};
+    if (Array.isArray(context.cartItems)) {
+        context.cartItems.forEach((item) => {
+            const key = item.variantId ? `${item.productId}:${item.variantId}` : item.productId;
+            itemCaps[key] = (itemCaps[key] || 0) + (Number(item.lineSubtotal) || 0);
+            if (item.variantId && item.productId) {
+                itemCaps[item.productId] = (itemCaps[item.productId] || 0) + (Number(item.lineSubtotal) || 0);
+            }
+        });
+    }
+
+    const lineDiscounts = {};
+    const rawSum = Number(Object.values(rawLineDiscounts).reduce((sum, v) => sum + v, 0).toFixed(2));
+
+    if (orderDiscount <= 0 || rawSum <= 0) {
+        // No discount to distribute
+    } else if (rawSum <= orderDiscount && Object.keys(rawLineDiscounts).every((k) => itemCaps[k] === undefined || rawLineDiscounts[k] <= itemCaps[k])) {
+        Object.assign(lineDiscounts, rawLineDiscounts);
+    } else {
+        // Cap per-line discounts by their item subtotal and ensure total sums exactly to orderDiscount
+        const keys = Object.keys(rawLineDiscounts);
+        const caps = {};
+        keys.forEach((k) => {
+            caps[k] = itemCaps[k] !== undefined ? itemCaps[k] : (rawLineDiscounts[k] || orderDiscount);
+        });
+
+        let remainingBudget = orderDiscount;
+        let activeKeys = keys.filter((k) => caps[k] > 0 && rawLineDiscounts[k] > 0);
+        keys.forEach((k) => { lineDiscounts[k] = 0; });
+
+        while (remainingBudget > 0.005 && activeKeys.length > 0) {
+            const currentWeightsSum = activeKeys.reduce((sum, k) => sum + (rawLineDiscounts[k] || 1), 0);
+            if (currentWeightsSum <= 0) break;
+
+            let allocatedInPass = 0;
+            const nextActiveKeys = [];
+
+            for (const k of activeKeys) {
+                const share = (rawLineDiscounts[k] / currentWeightsSum) * remainingBudget;
+                const availableCap = caps[k] - lineDiscounts[k];
+                if (share >= availableCap) {
+                    lineDiscounts[k] = Number((lineDiscounts[k] + availableCap).toFixed(2));
+                    allocatedInPass += availableCap;
+                } else {
+                    lineDiscounts[k] = Number((lineDiscounts[k] + share).toFixed(2));
+                    allocatedInPass += share;
+                    nextActiveKeys.push(k);
+                }
+            }
+
+            remainingBudget = Math.max(0, Number((remainingBudget - allocatedInPass).toFixed(2)));
+            if (allocatedInPass <= 0.005 || nextActiveKeys.length === activeKeys.length) {
+                if (remainingBudget > 0.005) {
+                    for (const k of keys) {
+                        const room = Number((caps[k] - lineDiscounts[k]).toFixed(2));
+                        if (room > 0) {
+                            const add = Math.min(room, remainingBudget);
+                            lineDiscounts[k] = Number((lineDiscounts[k] + add).toFixed(2));
+                            remainingBudget = Number((remainingBudget - add).toFixed(2));
+                            if (remainingBudget <= 0.005) break;
+                        }
+                    }
+                }
+                break;
+            }
+            activeKeys = nextActiveKeys;
+        }
+
+        keys.forEach((k) => {
+            lineDiscounts[k] = Number(Number(lineDiscounts[k]).toFixed(2));
+        });
+    }
 
     const hasFreeShippingBenefit = shippingDiscount > 0 || safeEvaluations.some((evaluation) => Boolean(evaluation.freeShipping || evaluation.coupon?.type === 'free_shipping'));
 
@@ -911,4 +984,4 @@ const listPublic = async ({ page = 1, limit = 20 } = {}) => {
     };
 };
 
-module.exports = { list, findById, create, update, remove, validateCoupon, resolveCoupons, listPublic, getEligibleCoupons, matchesCouponTarget };
+module.exports = { list, findById, create, update, remove, validateCoupon, resolveCoupons, listPublic, getEligibleCoupons, matchesCouponTarget, buildCombinationResult };

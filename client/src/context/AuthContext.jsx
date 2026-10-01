@@ -77,7 +77,7 @@ export const AuthProvider = ({ children }) => {
     const data = await authService.register(userData);
     // When email verification is mandatory the server issues no session —
     // return early so the caller can route to the verification prompt.
-    if (data.requiresVerification || !data.tokens) {
+    if (data.requiresVerification) {
       return data;
     }
     const fullUser = await finalizeAuthenticatedSession();

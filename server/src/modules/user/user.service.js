@@ -789,8 +789,8 @@ const confirmPhoneChange = async (userId, newPhone, code) => {
       throw new AppError('CONFLICT', 409, 'This phone number is already registered to another account');
     }
     try {
-      let profile = await UserProfile.findOne({ where: { userId }, transaction: t, lock: t.LOCK.UPDATE });
-      if (!profile) profile = await UserProfile.create({ userId, phone: normalizedPhone }, { transaction: t });
+      const profile = await UserProfile.findOne({ where: { userId }, transaction: t, lock: t.LOCK.UPDATE });
+      if (!profile) await UserProfile.create({ userId, phone: normalizedPhone }, { transaction: t });
       else await profile.update({ phone: normalizedPhone }, { transaction: t });
     } catch (err) {
       if (err.name === 'SequelizeUniqueConstraintError') {

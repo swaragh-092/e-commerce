@@ -79,7 +79,11 @@ const verifyTrustedDevice = (cookieValue, userId) => {
 const setTrustedDeviceCookie = (res, userId) => {
     const token = signTrustedDevice(userId);
     res.cookie(TRUSTED_DEVICE_COOKIE, token, {
-        ...getCookieOptions(),
+        httpOnly: true,
+        secure: process.env.NODE_ENV === 'production',
+        sameSite: process.env.AUTH_COOKIE_SAMESITE || 'lax',
+        path: '/',
+        ...(process.env.AUTH_COOKIE_DOMAIN ? { domain: process.env.AUTH_COOKIE_DOMAIN } : {}),
         maxAge: 30 * 24 * 60 * 60 * 1000,
     });
 };

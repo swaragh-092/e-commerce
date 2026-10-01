@@ -120,3 +120,87 @@ describe('Coupon Stacking Rules', () => {
     });
 
 });
+
+describe('Coupon buildCombinationResult Line Allocations', () => {
+    const { createRequire } = require('node:module') || {};
+    // eslint-disable-next-line
+    const req = typeof require !== 'undefined' ? require : (createRequire ? createRequire(import.meta.url) : null);
+    const { buildCombinationResult } = req ? req('../../src/modules/coupon/coupon.service') : {};
+
+    it('caps stacked line allocations to line subtotal and normalizes to aggregate orderDiscount', () => {
+        // Context: Two items of ₹100 each. Total subtotal = ₹200.
+        const context = {
+            cartSubtotal: 200,
+            shippingCost: 0,
+            cartItems: [
+                { productId: 'item-A', lineSubtotal: 100 },
+                { productId: 'item-B', lineSubtotal: 100 },
+            ],
+        };
+
+        // Coupon 1: Targeted ₹75 on line A
+        const eval1 = {
+            coupon: { id: 'c-1', code: 'TARGET75', type: 'fixed' },
+            orderDiscount: 75,
+            shippingDiscount: 0,
+            totalDiscount: 75,
+            lineDiscounts: { 'item-A': 75 },
+        };
+
+        // Coupon 2: Cart-wide ₹150 (allocates ₹75 to A and ₹75 to B)
+        const eval2 = {
+            coupon: { id: 'c-2', code: 'CART150', type: 'fixed' },
+            orderDiscount: 150,
+            shippingDiscount: 0,
+            totalDiscount: 150,
+            lineDiscounts: { 'item-A': 75, 'item-B': 75 },
+        };
+
+        const result = buildCombinationResult([eval1, eval2], context);
+
+        // Aggregate discount is capped at cartSubtotal: ₹200
+        expect(result.orderDiscount).toBe(200);
+
+        // Line A: cannot exceed item subtotal (100)
+        expect(result.lineDiscounts['item-A']).toBe(100);
+
+        // Line B: absorbs remaining discount so total line discounts sum exactly to orderDiscount (100)
+        expect(result.lineDiscounts['item-B']).toBe(100);
+
+        // Sum of all line discounts must equal orderDiscount exactly
+        const totalLineDiscounts = Object.values(result.lineDiscounts).reduce((sum, v) => sum + v, 0);
+        expect(totalLineDiscounts).toBe(200);
+    });
+
+    it('preserves valid per-line discounts when within subtotal limits', () => {
+        const context = {
+            cartSubtotal: 200,
+            shippingCost: 0,
+            cartItems: [
+                { productId: 'item-A', lineSubtotal: 100 },
+                { productId: 'item-B', lineSubtotal: 100 },
+            ],
+        };
+
+        const eval1 = {
+            coupon: { id: 'c-1', code: 'TEN_A', type: 'fixed' },
+            orderDiscount: 30,
+            shippingDiscount: 0,
+            totalDiscount: 30,
+            lineDiscounts: { 'item-A': 30 },
+        };
+
+        const eval2 = {
+            coupon: { id: 'c-2', code: 'TWENTY_B', type: 'fixed' },
+            orderDiscount: 20,
+            shippingDiscount: 0,
+            totalDiscount: 20,
+            lineDiscounts: { 'item-B': 20 },
+        };
+
+        const result = buildCombinationResult([eval1, eval2], context);
+        expect(result.orderDiscount).toBe(50);
+        expect(result.lineDiscounts['item-A']).toBe(30);
+        expect(result.lineDiscounts['item-B']).toBe(20);
+    });
+});
