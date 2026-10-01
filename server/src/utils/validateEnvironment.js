@@ -8,6 +8,7 @@
  */
 const validateEnvironment = () => {
     const errors = [];
+    const warnings = [];
 
     // ── JWT secrets ───────────────────────────────────────────────────────────
     const JWT_ACCESS_SECRET = process.env.JWT_ACCESS_SECRET;
@@ -50,7 +51,6 @@ const validateEnvironment = () => {
     }
 
     // ── Payment (warn only — Razorpay is optional in dev) ────────────────────
-    const warnings = [];
     if (!process.env.RAZORPAY_KEY_ID || !process.env.RAZORPAY_KEY_SECRET) {
         warnings.push('RAZORPAY_KEY_ID / RAZORPAY_KEY_SECRET not set — payment features will be disabled.');
     }

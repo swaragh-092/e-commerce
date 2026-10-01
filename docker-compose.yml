@@ -34,7 +34,13 @@ services:
     restart: unless-stopped
 
   client:
-    build: ./client
+    build:
+      context: ./client
+      args:
+        ADMIN_ROUTE_PREFIX: ${ADMIN_ROUTE_PREFIX:-/api/admin}
+        VITE_ADMIN_ROUTE_PREFIX: ${VITE_ADMIN_ROUTE_PREFIX:-}
+        VITE_API_URL: ${VITE_API_URL:-/api}
+        VITE_APP_URL: ${VITE_APP_URL:-}
     ports: [80:80]
     depends_on: [server]
     restart: unless-stopped
