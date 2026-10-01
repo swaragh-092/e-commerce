@@ -24,19 +24,20 @@ const manageShipping = [
 
 router.get('/shipping/providers', ...manageShipping, shippingController.listProviders);
 router.patch('/shipping/providers/:id', ...manageShipping, validate(idParamSchema, 'params'), validate(providerUpdateSchema), shippingController.updateProvider);
+router.post('/shipping/providers/:id/test-connection', ...manageShipping, validate(idParamSchema, 'params'), shippingController.testConnection);
 router.post('/shipping/test', ...manageShipping, validate(shippingTestSchema), shippingController.testCalculation);
 
+router.get('/shipping/operations/failed', ...manageShipping, shippingController.listFailedOperations);
+router.post('/shipping/operations/:id/retry', ...manageShipping, validate(idParamSchema, 'params'), shippingController.retryOperation);
 
 router.get('/shipping/zones', ...manageShipping, shippingController.listZones);
 router.post('/shipping/zones', ...manageShipping, validate(zoneSchema), shippingController.createZone);
 router.patch('/shipping/zones/:id', ...manageShipping, validate(idParamSchema, 'params'), validate(zoneUpdateSchema), shippingController.updateZone);
 router.delete('/shipping/zones/:id', ...manageShipping, validate(idParamSchema, 'params'), shippingController.deleteZone);
 
-
 router.get('/shipping/rules', ...manageShipping, shippingController.listRules);
 router.post('/shipping/rules', ...manageShipping, validate(ruleSchema), shippingController.createRule);
 router.patch('/shipping/rules/:id', ...manageShipping, validate(idParamSchema, 'params'), validate(ruleUpdateSchema), shippingController.updateRule);
 router.delete('/shipping/rules/:id', ...manageShipping, validate(idParamSchema, 'params'), shippingController.deleteRule);
-
 
 module.exports = router;

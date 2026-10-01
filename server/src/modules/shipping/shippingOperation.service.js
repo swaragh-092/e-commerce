@@ -9,6 +9,7 @@ const {
     Fulfillment,
 } = require('../index');
 const { resolveProvider } = require('./providers');
+const { resolveDispatchOrigin } = require('./shipping.service');
 const logger = require('../../utils/logger');
 
 const MAX_LOCK_AGE_MS = 10 * 60 * 1000;
@@ -36,7 +37,7 @@ const enqueueCreateOperation = async ({ shipment, provider, requestPayload, tran
 const claimOperation = async (operationId, transaction) => {
     const operation = await ShippingOperation.findByPk(operationId, {
         transaction,
-        lock: transaction.LOCK.UPDATE,
+        lock: transaction?.LOCK?.UPDATE,
     });
     if (!operation) return null;
 
@@ -70,10 +71,16 @@ const processOperation = async (operationId) => {
         if (!provider || !provider.enabled) throw new Error('Shipping provider is missing or disabled');
 
         const adapter = resolveProvider(provider);
+        const dispatchOrigin = await resolveDispatchOrigin(provider);
+        if (operation.requestPayload?.shipment) {
+            operation.requestPayload.shipment.pickupLocationName = dispatchOrigin.pickupLocationName;
+            operation.requestPayload.shipment.pickupPincode = dispatchOrigin.pincode;
+        }
+
         if (typeof adapter.getServiceability === 'function') {
             const serviceability = await adapter.getServiceability({
                 pincode: operation.requestPayload.address?.postalCode,
-                pickupPincode: provider.settings?.pickupPincode || null,
+                pickupPincode: dispatchOrigin.pincode || null,
                 weightGrams: operation.requestPayload.shipment?.actualWeightGrams || 500,
                 paymentMode: operation.requestPayload.order?.paymentMethod === 'cod' ? 'cod' : 'prepaid',
             });
@@ -81,7 +88,21 @@ const processOperation = async (operationId) => {
                 throw new Error(`Shipping provider cannot fulfill this shipment: ${serviceability.reason || 'unserviceable destination'}`);
             }
         }
-        providerResult = await adapter.createShipment(operation.requestPayload);
+
+        // Reconcile before retrying (Edge Case 9): If prior attempt timed out, check if shipment was already created in carrier
+        if (typeof adapter.checkShipmentExists === 'function') {
+            const existing = await adapter.checkShipmentExists({
+                providerRequestId: operation.requestPayload.shipment?.providerRequestId,
+                orderNumber: operation.requestPayload.order?.orderNumber,
+            });
+            if (existing && existing.awbCode) {
+                providerResult = existing;
+            }
+        }
+
+        if (!providerResult) {
+            providerResult = await adapter.createShipment(operation.requestPayload);
+        }
 
         await sequelize.transaction(async (t) => {
             const shipment = await Shipment.findByPk(operation.shipmentId, { transaction: t, lock: t.LOCK.UPDATE });
@@ -170,8 +191,83 @@ const processQueued = async ({ limit = 20 } = {}) => {
     return processed;
 };
 
+const listFailedOperations = async ({ page = 1, limit = 20 } = {}) => {
+    const offset = (page - 1) * limit;
+    const { count, rows } = await ShippingOperation.findAndCountAll({
+        where: {
+            [Op.or]: [
+                { status: 'failed' },
+                { attempts: { [Op.gt]: 0 }, status: 'queued' },
+            ],
+        },
+        include: [
+            {
+                model: Shipment,
+                as: 'shipment',
+                include: [
+                    {
+                        model: require('../index').Order,
+                        as: 'order',
+                        attributes: ['id', 'orderNumber', 'total', 'status'],
+                    },
+                ],
+            },
+            {
+                model: ShippingProvider,
+                as: 'provider',
+                attributes: ['id', 'name', 'code'],
+            },
+        ],
+        order: [['updatedAt', 'DESC']],
+        limit,
+        offset,
+    });
+
+    return {
+        total: count,
+        page,
+        totalPages: Math.ceil(count / limit),
+        operations: rows,
+    };
+};
+
+const retryOperation = async (operationId) => {
+    await sequelize.transaction(async (t) => {
+        const operation = await ShippingOperation.findByPk(operationId, {
+            transaction: t,
+            lock: t?.LOCK?.UPDATE,
+        });
+        if (!operation) throw new Error('Shipping operation not found');
+
+        if (operation.status === 'completed') {
+            throw new Error('Completed shipping operations cannot be retried.');
+        }
+
+        const isLocked = operation.lockedAt && (Date.now() - new Date(operation.lockedAt).getTime() <= MAX_LOCK_AGE_MS);
+        if (operation.status === 'processing' && isLocked) {
+            throw new Error('Shipping operation is currently processing and cannot be retried.');
+        }
+
+        if (operation.status !== 'failed' && operation.status !== 'queued' && !(operation.status === 'processing' && !isLocked)) {
+            throw new Error(`Cannot retry shipping operation with status: ${operation.status}`);
+        }
+
+        await operation.update({
+            status: 'queued',
+            attempts: 0,
+            nextAttemptAt: new Date(),
+            lockedAt: null,
+            lastError: null,
+        }, { transaction: t });
+    });
+
+    return module.exports.processOperation(operationId);
+};
+
 module.exports = {
     enqueueCreateOperation,
     processOperation,
     processQueued,
+    listFailedOperations,
+    retryOperation,
 };

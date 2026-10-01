@@ -275,6 +275,24 @@ const StoreLayout = () => {
   return (
     <Box sx={{ display: 'flex', flexDirection: 'column', minHeight: '100vh' }}>
       <SEO />
+      <Box
+        component="a"
+        href="#main"
+        sx={{
+          position: 'absolute',
+          left: -9999,
+          top: 0,
+          zIndex: 1300,
+          bgcolor: 'primary.main',
+          color: '#fff',
+          px: 2,
+          py: 1,
+          borderRadius: 1,
+          '&:focus': { left: 8, top: 8 },
+        }}
+      >
+        Skip to content
+      </Box>
       {/* Announcement Bar */}
       {showAnnouncement && (
         <Box sx={{
@@ -295,6 +313,7 @@ const StoreLayout = () => {
           )}
           {announcement.dismissible !== false && (
             <IconButton size="small" onClick={() => setAnnouncementDismissed(true)}
+              aria-label="Dismiss announcement"
               sx={{ color: 'inherit', position: 'absolute', right: 8, p: 0.5 }}>
               <CloseIcon fontSize="small" />
             </IconButton>
@@ -589,7 +608,7 @@ const StoreLayout = () => {
         </Alert>
       )}
 
-      <Box component="main" sx={{ flexGrow: 1 }}>
+      <Box component="main" id="main" tabIndex={-1} sx={{ flexGrow: 1 }}>
         <Outlet />
       </Box>
 

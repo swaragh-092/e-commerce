@@ -78,16 +78,15 @@ const processWebhook = async (providerCode, payload, headers = {}) => {
                     normalizedEvent.providerOrderId ? { providerRequestId: normalizedEvent.providerOrderId } : null,
                 ].filter(Boolean),
             },
-            include: [{ model: Fulfillment, as: 'fulfillment' }, { model: Order, as: 'order' }],
             transaction: t,
-            // PostgreSQL rejects a plain FOR UPDATE when this query also
-            // contains LEFT JOINs for optional fulfillment/order rows.
-            // Lock only the shipment row; the joined rows remain readable
-            // without attempting to lock the nullable side of the joins.
+            // Prevent outer-join lock errors by locking the primary shipment row
             lock: t.LOCK?.UPDATE ? { level: t.LOCK.UPDATE, of: Shipment } : undefined,
         });
 
         if (!shipment) return { accepted: true, ignored: true, reason: 'unknown_shipment' };
+
+        const fulfillment = shipment.fulfillment || (shipment.fulfillmentId ? await Fulfillment.findByPk(shipment.fulfillmentId, { transaction: t }) : null);
+        const order = shipment.order || (shipment.orderId ? await Order.findByPk(shipment.orderId, { transaction: t }) : null);
 
         const payloadHash = crypto.createHash('sha256').update(asRawBuffer(payload)).digest('hex');
         const eventWhere = normalizedEvent.providerEventId
@@ -126,7 +125,23 @@ const processWebhook = async (providerCode, payload, headers = {}) => {
         if (isRegression(shipment.status || 'created', normalizedEvent.status)) {
             return { accepted: true, ignored: true, reason: 'stale_status', shipmentId: shipment.id };
         }
+
+        // Record unknown statuses in statusHistory (Edge Case 10)
         if (normalizedEvent.status === 'unknown') {
+            const rawStatus = parsedPayload?.current_status || parsedPayload?.status || 'unknown';
+            await shipment.update({
+                lastProviderError: `Unrecognized carrier status: ${rawStatus}`,
+                statusHistory: [
+                    ...(Array.isArray(shipment.statusHistory) ? shipment.statusHistory : []),
+                    {
+                        status: 'unknown',
+                        rawStatus,
+                        at: new Date(normalizedEvent.timestamp || Date.now()).toISOString(),
+                        source: 'webhook',
+                        location: normalizedEvent.location || null,
+                    },
+                ],
+            }, { transaction: t });
             return { accepted: true, ignored: true, reason: 'unknown_status', shipmentId: shipment.id };
         }
 
@@ -145,21 +160,20 @@ const processWebhook = async (providerCode, payload, headers = {}) => {
             }, { transaction: t });
         }
 
-        if (shipment.fulfillment) {
+        if (fulfillment) {
             const nextFulfillmentStatus = ['delivered', 'rto'].includes(normalizedEvent.status)
                 ? (normalizedEvent.status === 'rto' ? 'returned' : 'delivered')
                 : normalizedEvent.status === 'in_transit' || normalizedEvent.status === 'out_for_delivery'
                     ? 'shipped'
                     : ['packed', 'shipped', 'delivery_failed', 'rto_initiated', 'rto_in_transit'].includes(normalizedEvent.status)
                         ? normalizedEvent.status
-                    : shipment.fulfillment.status;
-            if (nextFulfillmentStatus !== shipment.fulfillment.status) {
-                await shipment.fulfillment.update({ status: nextFulfillmentStatus }, { transaction: t });
+                    : fulfillment.status;
+            if (nextFulfillmentStatus !== fulfillment.status) {
+                await fulfillment.update({ status: nextFulfillmentStatus }, { transaction: t });
             }
         }
 
         let notification = null;
-        const order = shipment.order || await Order.findByPk(shipment.orderId, { transaction: t });
         if (order) {
             const orderShipments = await Shipment.findAll({ where: { orderId: order.id }, transaction: t });
             const derivedShippingStatus = deriveOrderShippingStatus(orderShipments);
@@ -193,4 +207,133 @@ const processWebhook = async (providerCode, payload, headers = {}) => {
     return result;
 };
 
-module.exports = { processWebhook };
+/**
+ * Reconcile tracking status for active shipments directly from carrier API.
+ * Used when webhooks are delayed, dropped, or out of sync (Edge Case 10).
+ */
+const reconcileTracking = async ({ limit = 20 } = {}) => {
+    const activeShipments = await Shipment.findAll({
+        where: {
+            providerState: 'completed',
+            status: {
+                [Op.in]: ['created', 'packed', 'shipped', 'in_transit', 'out_for_delivery', 'rto_in_transit'],
+            },
+            awb: { [Op.ne]: null },
+        },
+        include: [
+            { model: ShippingProvider, as: 'provider' },
+            { model: Fulfillment, as: 'fulfillment' },
+            { model: Order, as: 'order' },
+        ],
+        order: [['updatedAt', 'ASC']],
+        limit,
+    });
+
+    let reconciledCount = 0;
+    for (const shipment of activeShipments) {
+        if (!shipment.provider || !shipment.awb) continue;
+        try {
+            const adapter = resolveProvider(shipment.provider);
+            if (typeof adapter.getTracking !== 'function') continue;
+
+            const tracking = await adapter.getTracking({ awbCode: shipment.awb });
+            let statusUpdated = false;
+            let touchedInTx = false;
+            if (tracking && tracking.status && tracking.status !== 'unknown') {
+                await sequelize.transaction(async (t) => {
+                    const freshShipment = await Shipment.findByPk(shipment.id, {
+                        transaction: t,
+                        lock: t.LOCK?.UPDATE ? { level: t.LOCK.UPDATE, of: Shipment } : undefined,
+                    });
+                    if (!freshShipment) return;
+
+                    const currentStatus = freshShipment.status || 'created';
+
+                    // Check for status regression against the fresh, locked database status
+                    if (tracking.status === currentStatus || isRegression(currentStatus, tracking.status)) {
+                        // Do not overwrite newer status from webhook! Touch updatedAt to keep round-robin rotation.
+                        await freshShipment.update({
+                            updatedAt: new Date(),
+                            rawResponse: {
+                                ...(freshShipment.rawResponse || {}),
+                                lastPolledAt: new Date().toISOString(),
+                                lastPolledStatus: tracking.status,
+                            },
+                        }, { transaction: t });
+                        touchedInTx = true;
+                        return;
+                    }
+
+                    await freshShipment.update({
+                        status: tracking.status,
+                        statusHistory: [
+                            ...(Array.isArray(freshShipment.statusHistory) ? freshShipment.statusHistory : []),
+                            {
+                                status: tracking.status,
+                                at: new Date().toISOString(),
+                                source: 'reconciliation_poll',
+                                location: tracking.location || null,
+                            },
+                        ],
+                        rawResponse: {
+                            ...(freshShipment.rawResponse || {}),
+                            lastPolledAt: new Date().toISOString(),
+                            lastPolledStatus: tracking.status,
+                        },
+                    }, { transaction: t });
+
+                    const fulfillment = freshShipment.fulfillmentId
+                        ? await Fulfillment.findByPk(freshShipment.fulfillmentId, { transaction: t })
+                        : null;
+                    if (fulfillment) {
+                        const nextFulfillmentStatus = ['delivered', 'rto'].includes(tracking.status)
+                            ? (tracking.status === 'rto' ? 'returned' : 'delivered')
+                            : ['shipped', 'in_transit', 'out_for_delivery'].includes(tracking.status)
+                                ? 'shipped'
+                                : fulfillment.status;
+                        if (nextFulfillmentStatus !== fulfillment.status) {
+                            await fulfillment.update({ status: nextFulfillmentStatus }, { transaction: t });
+                        }
+                    }
+
+                    if (freshShipment.orderId) {
+                        const orderShipments = await Shipment.findAll({ where: { orderId: freshShipment.orderId }, transaction: t });
+                        const derivedShippingStatus = deriveOrderShippingStatus(orderShipments);
+                        await Order.update({
+                            orderShippingStatus: derivedShippingStatus,
+                            shipmentStatus: derivedShippingStatus,
+                        }, { where: { id: freshShipment.orderId }, transaction: t });
+                    }
+
+                    touchedInTx = true;
+                    reconciledCount++;
+                    statusUpdated = true;
+                });
+            }
+
+            // Avoid queue starvation (Edge Case 10): If status was not touched in transaction, touch updatedAt so
+            // subsequent polling runs rotate fairly through all active shipments.
+            if (!statusUpdated && !touchedInTx && typeof shipment.update === 'function') {
+                await shipment.update({
+                    updatedAt: new Date(),
+                    rawResponse: {
+                        ...(shipment.rawResponse || {}),
+                        lastPolledAt: new Date().toISOString(),
+                    },
+                }).catch(() => null);
+            }
+        } catch (err) {
+            console.error(`[reconcileTracking] Failed for shipment ${shipment.id} (AWB: ${shipment.awb}):`, err.message);
+            // Touch record on error so a single failing carrier call does not block other shipments
+            if (typeof shipment.update === 'function') {
+                await shipment.update({
+                    updatedAt: new Date(),
+                    lastProviderError: `Tracking poll failed: ${err.message}`,
+                }).catch(() => null);
+            }
+        }
+    }
+    return reconciledCount;
+};
+
+module.exports = { processWebhook, reconcileTracking };

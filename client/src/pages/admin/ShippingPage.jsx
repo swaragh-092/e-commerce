@@ -31,6 +31,9 @@ import EditIcon from '@mui/icons-material/Edit';
 import DeleteIcon from '@mui/icons-material/Delete';
 import AddIcon from '@mui/icons-material/Add';
 import StarIcon from '@mui/icons-material/Star';
+import RefreshIcon from '@mui/icons-material/Refresh';
+import CheckCircleIcon from '@mui/icons-material/CheckCircle';
+import ErrorIcon from '@mui/icons-material/Error';
 import { useNotification } from '../../context/NotificationContext';
 import {
   getShippingProviders,
@@ -44,6 +47,9 @@ import {
   updateShippingRule,
   deleteShippingRule,
   testShippingCalculation,
+  testShippingProviderConnection,
+  getFailedShippingOperations,
+  retryShippingOperation,
 } from '../../services/adminService';
 import { useCurrency } from '../../hooks/useSettings';
 import TabPanel from '../../components/common/TabPanel';
@@ -60,9 +66,20 @@ const ShippingPage = () => {
   const [loading, setLoading] = useState(true);
   
   // Test Panel State
-  const [testParams, setTestParams] = useState({ pincode: '', subtotal: 0, paymentMethod: 'prepaid' });
+  const [testParams, setTestParams] = useState({ pincode: '', subtotal: 0, paymentMethod: 'prepaid', weightGrams: 500 });
   const [testResult, setTestResult] = useState(null);
   const [testingEngine, setTestingEngine] = useState(false);
+
+  // Provider Connection Testing State
+  const [testingConnectionId, setTestingConnectionId] = useState(null);
+  const [connectionResults, setConnectionResults] = useState({});
+
+  // Failed Operations State
+  const [failedOperations, setFailedOperations] = useState([]);
+  const [failedOpsLoading, setFailedOpsLoading] = useState(false);
+  const [failedOpsTotal, setFailedOpsTotal] = useState(0);
+  const [failedOpsPage, setFailedOpsPage] = useState(1);
+  const [retryingOpId, setRetryingOpId] = useState(null);
 
   // Dialog states
   const [providerDialogOpen, setProviderDialogOpen] = useState(false);
@@ -131,6 +148,69 @@ const ShippingPage = () => {
   const handleTabChange = (event, newValue) => {
     setTabIndex(newValue);
   };
+
+  const handleTestConnection = async (provider) => {
+    setTestingConnectionId(provider.id);
+    try {
+      const res = await testShippingProviderConnection(provider.id);
+      const data = res.data?.data || {};
+      setConnectionResults((prev) => ({
+        ...prev,
+        [provider.id]: data,
+      }));
+      if (data.success) {
+        notify(data.message || `Connected to ${provider.name} successfully`, 'success');
+      } else {
+        notify(data.message || `Failed to connect to ${provider.name}`, 'error');
+      }
+    } catch (err) {
+      const errMsg = err.response?.data?.message || err.message || 'Connection test failed';
+      setConnectionResults((prev) => ({
+        ...prev,
+        [provider.id]: { success: false, message: errMsg },
+      }));
+      notify(errMsg, 'error');
+    } finally {
+      setTestingConnectionId(null);
+    }
+  };
+
+  const fetchFailedOperations = async (page = 1) => {
+    setFailedOpsLoading(true);
+    try {
+      const res = await getFailedShippingOperations({ page, limit: 10 });
+      setFailedOperations(res.data?.data || []);
+      setFailedOpsTotal(res.data?.meta?.total || 0);
+      setFailedOpsPage(page);
+    } catch (err) {
+      notify('Failed to load shipping operations', 'error');
+    } finally {
+      setFailedOpsLoading(false);
+    }
+  };
+
+  const handleRetryOperation = async (opId) => {
+    setRetryingOpId(opId);
+    try {
+      const res = await retryShippingOperation(opId);
+      if (res.data?.data?.success) {
+        notify('Operation dispatched and reconciled successfully', 'success');
+      } else {
+        notify(res.data?.data?.error || 'Operation failed during retry', 'warning');
+      }
+      fetchFailedOperations(failedOpsPage);
+    } catch (err) {
+      notify(err.response?.data?.message || 'Failed to retry operation', 'error');
+    } finally {
+      setRetryingOpId(null);
+    }
+  };
+
+  useEffect(() => {
+    if (tabIndex === 4) {
+      fetchFailedOperations(1);
+    }
+  }, [tabIndex]);
 
   // --- Providers ---
   const handleToggleProvider = async (provider) => {
@@ -401,7 +481,8 @@ const ShippingPage = () => {
       const payload = {
         pincode: testParams.pincode,
         subtotal: Number(testParams.subtotal) || 0,
-        paymentMethod: testParams.paymentMethod || 'prepaid'
+        paymentMethod: testParams.paymentMethod || 'prepaid',
+        weightGrams: Number(testParams.weightGrams) || 500,
       };
       const res = await testShippingCalculation(payload);
       setTestResult(res.data.data);
@@ -432,13 +513,14 @@ const ShippingPage = () => {
           <Tab label="Shipping Zones" />
           <Tab label="Shipping Rules" />
           <Tab label="Test Panel" />
+          <Tab label="Operations & Failures" />
         </Tabs>
 
         <Box sx={{ p: 3 }}>
           {/* PROVIDERS TAB */}
             <TabPanel value={tabIndex} index={0} idPrefix="shipping" sx={{ pt: 3 }}>
             <Alert severity="info" sx={{ mb: 3 }}>
-              Providers handle the actual delivery. Enable/disable providers and set default capabilities here.
+              Providers handle the actual delivery. Enable/disable providers, test remote carrier credentials, and set default capabilities here.
             </Alert>
             <TableContainer>
               <Table size="small">
@@ -449,6 +531,7 @@ const ShippingPage = () => {
                     <TableCell>Default</TableCell>
                     <TableCell>COD Support</TableCell>
                     <TableCell>Status</TableCell>
+                    <TableCell>Connection Status</TableCell>
                     <TableCell align="right">Actions</TableCell>
                   </TableRow>
                 </TableHead>
@@ -485,7 +568,40 @@ const ShippingPage = () => {
                           onChange={() => handleToggleProvider(p)} 
                         />
                       </TableCell>
+                      <TableCell>
+                        {connectionResults[p.id] ? (
+                          connectionResults[p.id].success ? (
+                            <Chip
+                              size="small"
+                              color="success"
+                              variant="outlined"
+                              icon={<CheckCircleIcon sx={{ '&&': { fontSize: '0.9rem' } }} />}
+                              label={connectionResults[p.id].locations?.length != null ? `Online (${connectionResults[p.id].locations.length} pickups)` : 'Online'}
+                            />
+                          ) : (
+                            <Chip
+                              size="small"
+                              color="error"
+                              variant="outlined"
+                              icon={<ErrorIcon sx={{ '&&': { fontSize: '0.9rem' } }} />}
+                              label="Failed"
+                              title={connectionResults[p.id].message}
+                            />
+                          )
+                        ) : (
+                          <Typography variant="caption" color="text.secondary">Untested</Typography>
+                        )}
+                      </TableCell>
                       <TableCell align="right">
+                        <Button
+                          size="small"
+                          variant="outlined"
+                          disabled={testingConnectionId === p.id}
+                          onClick={() => handleTestConnection(p)}
+                          sx={{ textTransform: 'none', mr: 1, py: 0.25, px: 1, fontSize: '0.75rem' }}
+                        >
+                          {testingConnectionId === p.id ? 'Testing...' : 'Test Connection'}
+                        </Button>
                         <IconButton size="small" onClick={() => handleEditProvider(p)}><EditIcon fontSize="small" /></IconButton>
                       </TableCell>
                     </TableRow>
@@ -611,6 +727,7 @@ const ShippingPage = () => {
                   <Stack spacing={2}>
                     <TextField label="Pincode" size="small" fullWidth value={testParams.pincode} onChange={e => setTestParams({...testParams, pincode: e.target.value})} />
                     <TextField label="Cart Subtotal" type="number" size="small" fullWidth value={testParams.subtotal} onChange={e => setTestParams({...testParams, subtotal: e.target.value})} />
+                    <TextField label="Weight (grams)" type="number" size="small" fullWidth value={testParams.weightGrams ?? 500} onChange={e => setTestParams({...testParams, weightGrams: e.target.value})} />
                     <TextField select label="Payment Method" size="small" fullWidth value={testParams.paymentMethod} onChange={e => setTestParams({...testParams, paymentMethod: e.target.value})}>
                       <MenuItem value="prepaid">Prepaid (Online)</MenuItem>
                       <MenuItem value="cod">Cash on Delivery (COD)</MenuItem>
@@ -634,6 +751,89 @@ const ShippingPage = () => {
                 </Paper>
               </Grid>
             </Grid>
+          </TabPanel>
+
+          {/* OPERATIONS & FAILURES TAB */}
+          <TabPanel value={tabIndex} index={4} idPrefix="shipping" sx={{ pt: 3 }}>
+            <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2 }}>
+              <div>
+                <Typography variant="subtitle1" fontWeight={600}>Failed Shipping Operations</Typography>
+                <Typography variant="caption" color="text.secondary">
+                  Track background carrier dispatch failures, timeouts, and reconcile duplicate shipment attempts.
+                </Typography>
+              </div>
+              <Button
+                variant="outlined"
+                size="small"
+                startIcon={<RefreshIcon />}
+                onClick={() => fetchFailedOperations(1)}
+                disabled={failedOpsLoading}
+              >
+                Refresh
+              </Button>
+            </Box>
+
+            {failedOpsLoading ? (
+              <Box sx={{ display: 'flex', justifyContent: 'center', py: 4 }}><CircularProgress size={32} /></Box>
+            ) : failedOperations.length === 0 ? (
+              <Alert severity="success" sx={{ my: 2 }}>
+                All shipping operations and carrier dispatches are healthy! No unresolved failures found.
+              </Alert>
+            ) : (
+              <TableContainer>
+                <Table size="small">
+                  <TableHead>
+                    <TableRow>
+                      <TableCell>Order</TableCell>
+                      <TableCell>Type</TableCell>
+                      <TableCell>Provider</TableCell>
+                      <TableCell>Attempts</TableCell>
+                      <TableCell>Last Error</TableCell>
+                      <TableCell>Updated</TableCell>
+                      <TableCell align="right">Actions</TableCell>
+                    </TableRow>
+                  </TableHead>
+                  <TableBody>
+                    {failedOperations.map((op) => (
+                      <TableRow key={op.id}>
+                        <TableCell sx={{ fontWeight: 600 }}>
+                          {op.shipment?.order?.orderNumber || op.orderId || op.shipmentId || 'N/A'}
+                        </TableCell>
+                        <TableCell>
+                          <Chip size="small" label={op.type} />
+                        </TableCell>
+                        <TableCell>{op.provider?.name || op.providerId || 'Provider'}</TableCell>
+                        <TableCell>
+                          <Chip
+                            size="small"
+                            color={op.attempts >= op.maxAttempts ? 'error' : 'warning'}
+                            label={`${op.attempts}/${op.maxAttempts}`}
+                          />
+                        </TableCell>
+                        <TableCell sx={{ maxWidth: 320, color: 'error.main', fontSize: '0.8rem' }}>
+                          {op.lastError || 'Unknown failure'}
+                        </TableCell>
+                        <TableCell sx={{ fontSize: '0.75rem', color: 'text.secondary' }}>
+                          {new Date(op.updatedAt).toLocaleString()}
+                        </TableCell>
+                        <TableCell align="right">
+                          <Button
+                            size="small"
+                            variant="contained"
+                            color="warning"
+                            disabled={retryingOpId === op.id}
+                            onClick={() => handleRetryOperation(op.id)}
+                            sx={{ textTransform: 'none', py: 0.25, px: 1, fontSize: '0.75rem' }}
+                          >
+                            {retryingOpId === op.id ? 'Retrying...' : 'Retry Now'}
+                          </Button>
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              </TableContainer>
+            )}
           </TabPanel>
 
         </Box>

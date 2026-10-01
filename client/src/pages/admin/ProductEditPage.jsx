@@ -37,16 +37,14 @@ import {
   LinearProgress,
 } from '@mui/material';
 
-import {
-  Add as AddIcon,
-  Delete as DeleteIcon,
-  ContentCopy as ContentCopyIcon,
-  ElectricBolt as ElectricBoltIcon,
-  Star as StarIcon,
-  StarBorder as StarBorderIcon,
-  ExpandMore as ExpandMoreIcon,
-  Image as ImageIcon,
-} from '@mui/icons-material';
+import AddIcon from '@mui/icons-material/Add';
+import DeleteIcon from '@mui/icons-material/Delete';
+import ContentCopyIcon from '@mui/icons-material/ContentCopy';
+import ElectricBoltIcon from '@mui/icons-material/ElectricBolt';
+import StarIcon from '@mui/icons-material/Star';
+import StarBorderIcon from '@mui/icons-material/StarBorder';
+import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
+import ImageIcon from '@mui/icons-material/Image';
 import { getMediaUrl } from '../../utils/media';
 import useSKUGenerator from '../../hooks/useSKUGenerator';
 import {

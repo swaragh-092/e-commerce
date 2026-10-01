@@ -8,6 +8,7 @@
  */
 const validateEnvironment = () => {
     const errors = [];
+    const warnings = [];
 
     // ── JWT secrets ───────────────────────────────────────────────────────────
     const JWT_ACCESS_SECRET = process.env.JWT_ACCESS_SECRET;
@@ -38,8 +39,18 @@ const validateEnvironment = () => {
         errors.push('DB_PASSWORD must be set in production. Refusing to start without a deployment-managed database secret.');
     }
 
+    // ── Credential encryption (AES-256-GCM at rest) ─────────────────────────
+    // crypto.js throws on first use; fail fast here instead with a clear message.
+    if (!process.env.CREDENTIAL_ENCRYPTION_KEY) {
+        const msg = 'CREDENTIAL_ENCRYPTION_KEY is not set. Payment/shipping credentials cannot be encrypted.';
+        if (process.env.NODE_ENV === 'production') {
+            errors.push(msg);
+        } else {
+            warnings.push(msg + ' (blocking in production)');
+        }
+    }
+
     // ── Payment (warn only — Razorpay is optional in dev) ────────────────────
-    const warnings = [];
     if (!process.env.RAZORPAY_KEY_ID || !process.env.RAZORPAY_KEY_SECRET) {
         warnings.push('RAZORPAY_KEY_ID / RAZORPAY_KEY_SECRET not set — payment features will be disabled.');
     }

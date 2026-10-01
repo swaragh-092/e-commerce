@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { Box, CardMedia, Grid, Typography } from '@mui/material';
 import { getMediaUrl } from '../../utils/media';
 
@@ -38,12 +38,19 @@ const ProductImages = ({ images, variantImages = [], selectedVariantId, thumbnai
     setZoom({ active: false, x: 50, y: 50 });
   }, [defaultImage, selectedVariantId]); 
 
-  const handleZoomMove = (event) => {
+  const handleZoomMove = useCallback((event) => {
     const rect = event.currentTarget.getBoundingClientRect();
     const x = clamp(((event.clientX - rect.left) / rect.width) * 100);
     const y = clamp(((event.clientY - rect.top) / rect.height) * 100);
     setZoom({ active: true, x, y });
-  };
+  }, []);
+
+  const handleThumbnailKeyDown = useCallback((event, url) => {
+    if (event.key === 'Enter' || event.key === ' ') {
+      event.preventDefault();
+      setSelectedImage(url);
+    }
+  }, []);
 
   return (
     <Box
@@ -73,6 +80,11 @@ const ProductImages = ({ images, variantImages = [], selectedVariantId, thumbnai
             <Box
               key={`${img.scope}-${img.id || img.url}`}
               onClick={() => setSelectedImage(img.url)}
+              role="button"
+              tabIndex={0}
+              aria-label={`View ${productName || 'product'} image`}
+              aria-pressed={selectedImage === img.url}
+              onKeyDown={(e) => handleThumbnailKeyDown(e, img.url)}
               sx={{
                 width: thumbnailSize,
                 height: thumbnailSize,
@@ -91,6 +103,8 @@ const ProductImages = ({ images, variantImages = [], selectedVariantId, thumbnai
                 component="img"
                 image={img.url}
                 alt={`${productName || 'Product'} thumbnail${img.scope === 'variant' ? ' (variant)' : ''}`}
+                loading="lazy"
+                decoding="async"
                 sx={{
                   width: '100%',
                   height: '100%',
@@ -125,6 +139,8 @@ const ProductImages = ({ images, variantImages = [], selectedVariantId, thumbnai
           component="img"
           image={selectedImage}
           alt={productName || 'Product image'}
+          loading="eager"
+          fetchpriority="high"
           sx={{
             position: 'absolute',
             top: 0,
@@ -201,6 +217,11 @@ const ProductImages = ({ images, variantImages = [], selectedVariantId, thumbnai
             <Grid item key={`${img.scope}-${img.id || img.url}`}>
               <Box
                 onClick={() => setSelectedImage(img.url)}
+                role="button"
+                tabIndex={0}
+                aria-label={`View ${productName || 'product'} image`}
+                aria-pressed={selectedImage === img.url}
+                onKeyDown={(e) => handleThumbnailKeyDown(e, img.url)}
                 sx={{
                   width: { xs: 68, sm: thumbnailSize, md: thumbnailSize },
                   height: { xs: 68, sm: thumbnailSize, md: thumbnailSize },
@@ -218,6 +239,8 @@ const ProductImages = ({ images, variantImages = [], selectedVariantId, thumbnai
                   component="img"
                   image={img.url}
                   alt={`${productName || 'Product'} thumbnail${img.scope === 'variant' ? ' (variant)' : ''}`}
+                loading="lazy"
+                decoding="async"
                   sx={{
                     width: '100%',
                     height: '100%',

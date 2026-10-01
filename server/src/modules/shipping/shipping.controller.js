@@ -1,7 +1,8 @@
 'use strict';
 
 const ShippingService = require('./shipping.service');
-const { success } = require('../../utils/response');
+const ShippingOperationService = require('./shippingOperation.service');
+const { success, paginated } = require('../../utils/response');
 
 const calculate = async (req, res, next) => {
     try {
@@ -23,6 +24,15 @@ const listProviders = async (req, res, next) => {
 const updateProvider = async (req, res, next) => {
     try {
         return success(res, await ShippingService.updateProvider(req.params.id, req.validated), 'Shipping provider updated successfully');
+    } catch (err) {
+        next(err);
+    }
+};
+
+const testConnection = async (req, res, next) => {
+    try {
+        const result = await ShippingService.testProviderConnection(req.params.id);
+        return success(res, result, 'Shipping provider connection tested');
     } catch (err) {
         next(err);
     }
@@ -101,10 +111,30 @@ const testCalculation = async (req, res, next) => {
     }
 };
 
+const listFailedOperations = async (req, res, next) => {
+    try {
+        const { page = 1, limit = 20 } = req.query;
+        const result = await ShippingOperationService.listFailedOperations({ page, limit });
+        return paginated(res, result.operations, result.total, result.page, limit, 'Failed shipping operations retrieved');
+    } catch (err) {
+        next(err);
+    }
+};
+
+const retryOperation = async (req, res, next) => {
+    try {
+        const result = await ShippingOperationService.retryOperation(req.params.id);
+        return success(res, result, 'Shipping operation retried');
+    } catch (err) {
+        next(err);
+    }
+};
+
 module.exports = {
     calculate,
     listProviders,
     updateProvider,
+    testConnection,
     listZones,
     createZone,
     updateZone,
@@ -114,4 +144,6 @@ module.exports = {
     updateRule,
     deleteRule,
     testCalculation,
+    listFailedOperations,
+    retryOperation,
 };
