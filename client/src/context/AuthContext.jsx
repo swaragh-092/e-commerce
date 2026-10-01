@@ -22,7 +22,9 @@ export const AuthProvider = ({ children }) => {
   })();
 
   const [user, setUser] = useState(cachedUser);
-  const [isAuthenticated, setIsAuthenticated] = useState(Boolean(cachedUser));
+  // Start unauthenticated until /users/me confirms the session — cached profile
+  // is display-only and must never grant permissions before verification.
+  const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -72,8 +74,12 @@ export const AuthProvider = ({ children }) => {
   };
 
   const register = async (userData) => {
-    // Option B: log in immediately after register and redirect to home
     const data = await authService.register(userData);
+    // When email verification is mandatory the server issues no session —
+    // return early so the caller can route to the verification prompt.
+    if (data.requiresVerification) {
+      return data;
+    }
     const fullUser = await finalizeAuthenticatedSession();
     return { ...data, user: fullUser };
   };

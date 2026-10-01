@@ -69,3 +69,108 @@ describe('Measured default shipping package', () => {
         }
     });
 });
+
+describe('Parcel planner & remainder box optimization', () => {
+    const { planParcels, validatePackageProfiles } = require('../../src/modules/shipping/shipping.packages');
+
+    const profiles = [
+        {
+            id: 'pkg-large',
+            name: 'Large Box',
+            lengthCm: 30,
+            breadthCm: 20,
+            heightCm: 15,
+            emptyWeightGrams: 150,
+            maxItems: 10,
+            maxContentsWeightGrams: 5000,
+            fits: [{ productId: 'prod-1', maxQuantity: 10 }],
+        },
+        {
+            id: 'pkg-small',
+            name: 'Small Box',
+            lengthCm: 15,
+            breadthCm: 10,
+            heightCm: 5,
+            emptyWeightGrams: 50,
+            maxItems: 2,
+            maxContentsWeightGrams: 1000,
+            fits: [{ productId: 'prod-1', maxQuantity: 2 }],
+        },
+    ];
+
+    it('validates package profiles schema correctly', () => {
+        expect(() => validatePackageProfiles(null)).toThrow('must be a list');
+        expect(() => validatePackageProfiles([{ id: 'p1' }])).toThrow();
+        expect(validatePackageProfiles(profiles)).toHaveLength(2);
+    });
+
+    it('packs remainders into the smallest suitable box without increasing parcel count', () => {
+        const items = [{ productId: 'prod-1', name: 'Widget', weightGrams: 100, quantity: 11, requiresShipping: true }];
+        const parcels = planParcels(items, profiles);
+
+        expect(parcels).toHaveLength(2);
+        const smallParcel = parcels.find((p) => p.packageId === 'pkg-small');
+        const largeParcel = parcels.find((p) => p.packageId === 'pkg-large');
+        expect(smallParcel).toBeDefined();
+        expect(largeParcel).toBeDefined();
+        expect(smallParcel.items[0].quantity + largeParcel.items[0].quantity).toBe(11);
+    });
+
+    it('excludes digital items from planned parcels', () => {
+        const items = [
+            { productId: 'digital-1', name: 'E-Book', requiresShipping: false, quantity: 5 },
+            { productId: 'prod-1', name: 'Widget', weightGrams: 100, quantity: 2, requiresShipping: true },
+        ];
+        const parcels = planParcels(items, profiles);
+        expect(parcels).toHaveLength(1);
+        expect(parcels[0].items[0].productId).toBe('prod-1');
+    });
+
+    it('throws when no package fits the product', () => {
+        const items = [{ productId: 'unknown-prod', name: 'Unknown', weightGrams: 100, quantity: 1, requiresShipping: true }];
+        expect(() => planParcels(items, profiles)).toThrow('No configured package is confirmed to fit');
+    });
+
+    it('counts product-wide package limits across all variants when fit omits variantId', () => {
+        const mixProfiles = [
+            {
+                id: 'pkg-mix',
+                name: 'Mix Box',
+                lengthCm: 20,
+                breadthCm: 15,
+                heightCm: 10,
+                emptyWeightGrams: 50,
+                maxItems: 10,
+                maxContentsWeightGrams: 2000,
+                fits: [{ productId: 'prod-shirt', maxQuantity: 2, mixGroup: 'apparel' }],
+            },
+        ];
+        const items = [
+            { productId: 'prod-shirt', variantId: 'var-red', name: 'Shirt Red', weightGrams: 100, quantity: 2, requiresShipping: true },
+            { productId: 'prod-shirt', variantId: 'var-blue', name: 'Shirt Blue', weightGrams: 100, quantity: 2, requiresShipping: true },
+        ];
+        const parcels = planParcels(items, mixProfiles);
+        // Product-wide limit is 2, so 4 total units must not be packed into a single parcel.
+        expect(parcels.length).toBe(2);
+        expect(parcels[0].items.reduce((s, i) => s + i.quantity, 0)).toBe(2);
+        expect(parcels[1].items.reduce((s, i) => s + i.quantity, 0)).toBe(2);
+    });
+
+    it('guards fallback candidate without fit when default package is used', () => {
+        const items = [{ productId: 'prod-no-profile', name: 'Book', weightGrams: 100, quantity: 1, requiresShipping: true }];
+        const defaultPackage = {
+            id: 'legacy-box',
+            name: 'Default Box',
+            enabled: true,
+            lengthCm: 25,
+            breadthCm: 20,
+            heightCm: 10,
+            maxItems: 5,
+            maxContentsWeightGrams: 3000,
+            emptyWeightGrams: 50,
+        };
+        const parcels = planParcels(items, profiles, { defaultPackage });
+        expect(parcels).toHaveLength(1);
+        expect(parcels[0].packageId).toBe('legacy-box');
+    });
+});

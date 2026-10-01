@@ -23,6 +23,7 @@ const AppError = require('../../utils/AppError');
 const { getVariantUnitPrice } = require('../product/product.pricing');
 const { resolveProvider } = require('./providers');
 const { validateDefaultPackage } = require('./shipping.package');
+const { planParcels } = require('./shipping.packages');
 
 const QUOTE_TTL_MINUTES = Number(process.env.SHIPPING_QUOTE_TTL_MINUTES || 10);
 const EMPTY_HASH = hashObject(null);
@@ -63,7 +64,9 @@ const applyStorewidePincodeCoverage = (decision, pincode, { allowedPincodes = []
     const allowed = normalizeList(allowedPincodes);
     const blocked = normalizeList(blockedPincodes);
     let message = null;
-    if (blocked.includes(normalizedPincode)) {
+    if (!/^\d{6}$/.test(normalizedPincode)) {
+        message = 'Enter a valid 6-digit delivery pincode.';
+    } else if (blocked.includes(normalizedPincode)) {
         message = 'Delivery is unavailable to this pincode.';
     } else if (allowed.length > 0 && !allowed.includes(normalizedPincode)) {
         message = 'Delivery is not enabled for this pincode.';
@@ -111,19 +114,26 @@ const computePackageDimensions = (checkoutItems, packagingWeightGrams = 0, { str
             contentsWeight += weight * quantity;
             units += quantity;
         }
-        if (!units) return { maxL: 0, maxB: 0, totalH: 0, totalWeightGrams: 0, volumeCm3: 0 };
+        if (!units) {
+            const res = { maxL: 0, maxB: 0, totalH: 0, totalWeightGrams: 0, volumeCm3: 0 };
+            Object.defineProperty(res, 'isAllDigital', { value: true, enumerable: false, writable: true });
+            return res;
+        }
         if (units > Number(savedPackage.maxItems) || contentsWeight > Number(savedPackage.maxContentsWeightGrams)) {
             throw new AppError('SHIPPING_PACKAGE_CAPACITY_EXCEEDED', 400, 'This order exceeds our available packaging capacity. Please reduce the quantity or contact support.');
         }
         const maxL = Number(savedPackage.lengthCm);
         const maxB = Number(savedPackage.breadthCm);
         const totalH = Number(savedPackage.heightCm);
-        return { maxL, maxB, totalH, totalWeightGrams: contentsWeight + Number(savedPackage.emptyWeightGrams), volumeCm3: maxL * maxB * totalH };
+        const res = { maxL, maxB, totalH, totalWeightGrams: contentsWeight + Number(savedPackage.emptyWeightGrams), volumeCm3: maxL * maxB * totalH };
+        Object.defineProperty(res, 'isAllDigital', { value: false, enumerable: false, writable: true });
+        return res;
     }
     let maxL = 0;
     let maxB = 0;
     let totalH = 0;
-    let totalWeightGrams = Number(packagingWeightGrams || 0);
+    let totalWeightGrams = 0;
+    let shippableItemsCount = 0;
     let hasMissingMeasurements = false;
     const missingProducts = [];
 
@@ -131,6 +141,7 @@ const computePackageDimensions = (checkoutItems, packagingWeightGrams = 0, { str
         const p = item.product;
         // Skip digital or non-shippable items
         if (!p || p.requiresShipping === false) continue;
+        shippableItemsCount++;
         
         const qty = Number(item.quantity || 1);
         const weight = Number(p.weightGrams);
@@ -153,6 +164,25 @@ const computePackageDimensions = (checkoutItems, packagingWeightGrams = 0, { str
         totalWeightGrams += Number(p.weightGrams || 500) * qty;
     }
 
+    if (shippableItemsCount === 0) {
+        const result = {
+            maxL: 0,
+            maxB: 0,
+            totalH: 0,
+            totalWeightGrams: 0,
+            volumeCm3: 0,
+        };
+        Object.defineProperties(result, {
+            hasMissingMeasurements: { value: false, enumerable: false, writable: true },
+            missingProducts: { value: [], enumerable: false, writable: true },
+            isAllDigital: { value: true, enumerable: false, writable: true },
+        });
+        return result;
+    }
+
+    // Only add packaging tare weight if physical items are present
+    totalWeightGrams += Number(packagingWeightGrams || 0);
+
     const result = {
         maxL,
         maxB,
@@ -163,6 +193,7 @@ const computePackageDimensions = (checkoutItems, packagingWeightGrams = 0, { str
     Object.defineProperties(result, {
         hasMissingMeasurements: { value: hasMissingMeasurements, enumerable: false, writable: true },
         missingProducts: { value: missingProducts, enumerable: false, writable: true },
+        isAllDigital: { value: false, enumerable: false, writable: true },
     });
     return result;
 };
@@ -174,6 +205,9 @@ const computePackageDimensions = (checkoutItems, packagingWeightGrams = 0, { str
  * FIX 4: divisor comes from rateConfig.volumetricDivisor, not a hardcoded 5000.
  */
 const computeChargeableWeight = (dims, divisor = 5000) => {
+    if (!dims || (dims.totalWeightGrams <= 0 && dims.volumeCm3 <= 0)) {
+        return 0;
+    }
     const SLAB_GRAMS = 500;
     const volumetricGrams = (dims.volumeCm3 / divisor) * 1000;
     const raw = Math.max(dims.totalWeightGrams, volumetricGrams);
@@ -321,6 +355,11 @@ const buildCartSnapshot = (items) => items.map((item) => ({
     variantId: item.variantId || null,
     quantity: Number(item.quantity),
     unitPrice: normalizeMoney(item.currentPrice),
+    weightGrams: Number(item.weightGrams ?? item.product?.weightGrams ?? 0),
+    lengthCm: Number(item.lengthCm ?? item.product?.lengthCm ?? 0),
+    breadthCm: Number(item.breadthCm ?? item.product?.breadthCm ?? 0),
+    heightCm: Number(item.heightCm ?? item.product?.heightCm ?? 0),
+    requiresShipping: item.requiresShipping ?? item.product?.requiresShipping ?? true,
 })).sort((a, b) => `${a.productId}:${a.variantId || ''}`.localeCompare(`${b.productId}:${b.variantId || ''}`));
 
 const buildCheckoutContext = async (userId, payload) => {
@@ -351,8 +390,18 @@ const buildCheckoutContext = async (userId, payload) => {
             variant,
         }];
     } else {
+        const cartWhere = { status: 'active' };
+        if (userId) {
+            cartWhere.userId = userId;
+        } else if (payload.sessionId || payload.checkoutSessionId) {
+            cartWhere.sessionId = payload.sessionId || payload.checkoutSessionId;
+            cartWhere.userId = null;
+        } else {
+            cartWhere.userId = null;
+        }
+
         const cart = await Cart.findOne({
-            where: { userId, status: 'active' },
+            where: cartWhere,
             include: [{
                 model: CartItem,
                 as: 'items',
@@ -376,6 +425,8 @@ const buildCheckoutContext = async (userId, payload) => {
         checkoutItems = cart.items;
     }
 
+    const hasPhysicalItems = checkoutItems.some(item => item.product?.requiresShipping !== false);
+
     let subtotal = 0;
     const items = checkoutItems.map((item) => {
         if (!item.product) {
@@ -387,15 +438,33 @@ const buildCheckoutContext = async (userId, payload) => {
         return {
             productId: item.productId,
             variantId: item.variantId || item.variant?.id || null,
+            name: item.product.name,
             quantity,
             currentPrice: unitPrice,
+            weightGrams: Number(item.product.weightGrams || 0),
+            lengthCm: Number(item.product.lengthCm || 0),
+            breadthCm: Number(item.product.breadthCm || 0),
+            heightCm: Number(item.product.heightCm || 0),
+            requiresShipping: item.product.requiresShipping !== false,
         };
     });
 
-    const address = await Address.findOne({ where: { id: payload.shippingAddressId, userId } });
-    if (!address) throw new AppError('NOT_FOUND', 404, 'Shipping address not found');
+    let address = null;
+    let addressSnapshot = { id: null, fullName: '', postalCode: '', country: 'India', state: '' };
+    if (payload.shippingAddressId) {
+        const addressWhere = { id: payload.shippingAddressId };
+        if (userId) {
+            addressWhere.userId = userId;
+        } else {
+            addressWhere.userId = null;
+        }
+        address = await Address.findOne({ where: addressWhere });
+        if (!address && hasPhysicalItems) throw new AppError('NOT_FOUND', 404, 'Shipping address not found');
+        if (address) addressSnapshot = buildAddressSnapshot(address);
+    } else if (hasPhysicalItems) {
+        throw new AppError('NOT_FOUND', 404, 'Shipping address not found');
+    }
 
-    const addressSnapshot = buildAddressSnapshot(address);
     const cartSnapshot = buildCartSnapshot(items);
     const couponCodes = normalizeCouponCodes(payload);
 
@@ -403,7 +472,12 @@ const buildCheckoutContext = async (userId, payload) => {
     const shippingSettings = await getSettingMap(['shipping']);
     const packagingTare = Number(shippingSettings['shipping.packagingWeightGrams'] ?? 50);
     const defaultPackage = shippingSettings['shipping.defaultPackage'] || null;
-    const dims = computePackageDimensions(checkoutItems, packagingTare, { defaultPackage });
+    const parcelPlan = shippingSettings['shipping.packageProfiles']?.length
+        ? planParcels(items, shippingSettings['shipping.packageProfiles'], { volumetricDivisor: Number(shippingSettings['shipping.volumetricDivisor'] || 5000), defaultPackage })
+        : null;
+    const dims = parcelPlan?.length
+        ? { maxL: Math.max(...parcelPlan.map((parcel) => parcel.lengthCm)), maxB: Math.max(...parcelPlan.map((parcel) => parcel.breadthCm)), totalH: Math.max(...parcelPlan.map((parcel) => parcel.heightCm)), totalWeightGrams: parcelPlan.reduce((sum, parcel) => sum + parcel.actualWeightGrams, 0), volumeCm3: parcelPlan.reduce((sum, parcel) => sum + parcel.lengthCm * parcel.breadthCm * parcel.heightCm, 0) }
+        : computePackageDimensions(checkoutItems, packagingTare, { defaultPackage });
 
     return {
         items,
@@ -412,9 +486,11 @@ const buildCheckoutContext = async (userId, payload) => {
         addressSnapshot,
         cartSnapshot,
         couponCodes,
+        isAllDigital: !hasPhysicalItems,
         // Volumetric shipping context
         packageDims: dims,
         defaultPackage,
+        parcelPlan,
         cartHash: hashObject(cartSnapshot),
         addressHash: hashObject(addressSnapshot),
         couponHash: couponCodes.length ? hashObject(couponCodes) : EMPTY_HASH,
@@ -427,8 +503,6 @@ const calculateManualDecision = async ({ subtotal, chargeableWeightGrams = 0, ad
     const flatRate = Number(settings['shipping.flatRate'] ?? 0);
     const freeThreshold = Number(settings['shipping.freeThreshold'] ?? 0);
     const currency = String(settings['general.currency'] || 'INR').toUpperCase();
-    const allowedPincodes = normalizeList(settings['shipping.serviceablePincodes']);
-    const blockedPincodes = normalizeList(settings['shipping.blockedPincodes']);
 
     let shippingCost = 0;
     if (shippingMethod === 'flat_rate') {
@@ -451,9 +525,7 @@ const calculateManualDecision = async ({ subtotal, chargeableWeightGrams = 0, ad
     const serviceable = Boolean(postalCode)
         && isIndia
         && isStandardPincode
-        && !isOverweight
-        && !blockedPincodes.includes(postalCode)
-        && (allowedPincodes.length === 0 || allowedPincodes.includes(postalCode));
+        && !isOverweight;
 
     let unavailableMessage = 'Delivery is not available for this pincode';
     if (!postalCode) {
@@ -469,6 +541,8 @@ const calculateManualDecision = async ({ subtotal, chargeableWeightGrams = 0, ad
     return {
         serviceable,
         shippingCost: normalizeMoney(shippingCost),
+        pricingSource: 'standard',
+        pricingReason: shippingMethod === 'free' ? 'Free delivery' : shippingMethod === 'free_above_threshold' && subtotal >= freeThreshold ? 'Free delivery threshold reached' : 'Fixed delivery fee',
         currency,
         taxIncluded: false,
         taxAmount: 0,
@@ -599,7 +673,7 @@ const providerSupportsDecision = (provider, { paymentMethod }) => {
     return true;
 };
 
-const calculateRuleDecision = async ({ subtotal, chargeableWeightGrams = 0, packageCount = 1, zone = 'national', addressSnapshot, paymentMethod }) => {
+const calculateRuleDecision = async ({ subtotal, chargeableWeightGrams = 0, packageCount = 1, parcelWeightsGrams = [], zone = 'national', addressSnapshot, paymentMethod }) => {
     const country = lower(addressSnapshot?.country || 'india');
     const isIndia = country === 'india' || country === 'in';
     // Intended delivery area guard (Edge Case 7): store rules are intended for domestic delivery; avoid accidentally allowing delivery outside India
@@ -628,7 +702,8 @@ const calculateRuleDecision = async ({ subtotal, chargeableWeightGrams = 0, pack
         const effectiveProvider = rule.provider || defaultProvider;
         if (effectiveProvider && effectiveProvider.maxWeightKg) {
             const maxWeightGrams = Number(effectiveProvider.maxWeightKg) * 1000;
-            if (chargeableWeightGrams > maxWeightGrams * packageCount) {
+            const parcelWeights = parcelWeightsGrams.length ? parcelWeightsGrams : [chargeableWeightGrams];
+            if (parcelWeights.some((weight) => weight > maxWeightGrams)) {
                 return false;
             }
         }
@@ -641,17 +716,45 @@ const calculateRuleDecision = async ({ subtotal, chargeableWeightGrams = 0, pack
 
     const provider = matchedRule.provider || defaultProvider;
 
-    const rateBreakdown = calculateRuleRate(matchedRule, {
-        subtotal,
-        chargeableWeightGrams,
-        paymentMethod,
-        zone,
-    });
+    const parcelWeights = parcelWeightsGrams.length ? parcelWeightsGrams : [chargeableWeightGrams];
+    let totalFreight;
+    let rateBreakdown;
+    let codFee;
+
+    if (matchedRule.rateType === 'percent_of_order') {
+        const singleBreakdown = calculateRuleRate(matchedRule, {
+            subtotal,
+            chargeableWeightGrams,
+            paymentMethod,
+            zone,
+        });
+        totalFreight = normalizeMoney(singleBreakdown.freight);
+        codFee = Number(singleBreakdown.codFee || 0);
+        rateBreakdown = {
+            ...singleBreakdown,
+            freight: totalFreight,
+            codFee,
+            total: normalizeMoney(totalFreight + codFee),
+        };
+    } else {
+        const parcelRateBreakdowns = parcelWeights.map((parcelWeight) => calculateRuleRate(matchedRule, {
+            subtotal,
+            chargeableWeightGrams: parcelWeight,
+            paymentMethod,
+            zone,
+        }));
+        totalFreight = normalizeMoney(parcelRateBreakdowns.reduce((sum, breakdown) => sum + Number(breakdown.freight || 0), 0));
+        codFee = Number(parcelRateBreakdowns[0]?.codFee || 0); // COD is an order-level fee, charged once.
+        rateBreakdown = {
+            ...parcelRateBreakdowns[0],
+            freight: totalFreight,
+            codFee,
+            total: normalizeMoney(totalFreight + codFee),
+        };
+    }
 
     const codAvailable = matchedRule.codAllowed !== false && provider.supportsCod !== false;
-    // Per-package pricing: multiply freight by package count (FIX 9)
-    const totalFreight = normalizeMoney(rateBreakdown.freight * packageCount);
-    const shippingCost = normalizeMoney(totalFreight + rateBreakdown.codFee);
+    const shippingCost = normalizeMoney(totalFreight + codFee);
 
     return {
         serviceable: true,
@@ -669,10 +772,79 @@ const calculateRuleDecision = async ({ subtotal, chargeableWeightGrams = 0, pack
         providerId: provider.id,
         ruleId: matchedRule.id,
         ruleName: matchedRule.name,
+        pricingSource: 'rules',
+        pricingReason: `Shipping rule: ${matchedRule.name}`,
         // Expose breakdown for quote snapshot
         rateBreakdown: { ...rateBreakdown, packageCount, chargeableWeightGrams, zone },
         paymentMethod,
     };
+};
+
+// One policy selection shared by checkout and the admin quote preview.
+// Unconfigured stores retain their previous rules-first behavior until reviewed.
+const calculateDeliveryDecision = async (params, settings) => {
+    const mode = settings['shipping.pricingMode'] || 'legacy';
+    if (!['standard', 'rules', 'carrier', 'legacy'].includes(mode)) {
+        throw new AppError('INVALID_SHIPPING_CONFIGURATION', 503, 'Delivery configuration needs attention. Please contact support.');
+    }
+    if (params.isAllDigital || (params.chargeableWeightGrams === 0 && params.packageDims?.isAllDigital)) {
+        return {
+            serviceable: true,
+            shippingCost: 0,
+            currency: String(settings['general.currency'] || 'INR').toUpperCase(),
+            taxIncluded: false,
+            taxAmount: 0,
+            taxBreakdown: null,
+            codAvailable: false,
+            estimatedMinDays: 0,
+            estimatedMaxDays: 0,
+            message: 'Digital delivery',
+            pricingSource: 'digital',
+            pricingReason: 'Digital products do not require shipping',
+            pricingMode: mode,
+        };
+    }
+    if (mode === 'carrier') {
+        const provider = await getDefaultProvider();
+        let decision = {
+            serviceable: provider?.code === 'shiprocket' && provider.enabled,
+            shippingCost: 0,
+            currency: 'INR',
+            taxIncluded: false,
+            taxAmount: 0,
+            taxBreakdown: null,
+            codAvailable: Boolean(provider?.supportsCod),
+            message: provider?.code === 'shiprocket' && provider.enabled ? 'Checking carrier rates' : 'Enable Shiprocket as the default delivery provider to use carrier-calculated fees.',
+            providerId: provider?.id,
+            providerCode: provider?.code,
+            providerName: provider?.name,
+            pricingSource: 'carrier',
+            pricingReason: 'Carrier-calculated parcel total',
+        };
+        decision = applyStorewidePincodeCoverage(decision, params.addressSnapshot.postalCode, {
+            allowedPincodes: settings['shipping.serviceablePincodes'],
+            blockedPincodes: settings['shipping.blockedPincodes'],
+        });
+        if (!['india', 'in'].includes(lower(params.addressSnapshot.country))) {
+            decision = { ...decision, serviceable: false, shippingCost: 0, codAvailable: false, message: 'Delivery is currently only available within India.' };
+        }
+        return { ...decision, pricingMode: mode };
+    }
+    let decision = mode === 'standard' ? null : await calculateRuleDecision(params);
+    if (!decision) {
+        decision = await calculateManualDecision(params);
+        if (mode === 'rules') {
+            decision = { ...decision, serviceable: false, shippingCost: 0, codAvailable: false, pricingSource: 'rules', pricingReason: 'No matching shipping rule', message: 'Delivery is not available for this order.' };
+        }
+    }
+    decision = applyStorewidePincodeCoverage(decision, params.addressSnapshot.postalCode, {
+        allowedPincodes: settings['shipping.serviceablePincodes'],
+        blockedPincodes: settings['shipping.blockedPincodes'],
+    });
+    if (!['india', 'in'].includes(lower(params.addressSnapshot.country))) {
+        decision = { ...decision, serviceable: false, shippingCost: 0, codAvailable: false, message: 'Delivery is currently only available within India.' };
+    }
+    return { ...decision, pricingMode: mode };
 };
 
 const serializeQuote = (quote) => {
@@ -697,6 +869,11 @@ const serializeQuote = (quote) => {
         checkoutSessionId: quote.checkoutSessionId,
         expiresAt: quote.expiresAt,
         defaultPackage: quote.inputSnapshot?.defaultPackage || null,
+        parcelPlan: quote.inputSnapshot?.parcelPlan || [],
+        pricingSource: decision.pricingSource || null,
+        pricingReason: decision.pricingReason || null,
+        pricingMode: decision.pricingMode || 'legacy',
+        ruleName: decision.ruleName || null,
     };
 };
 
@@ -712,7 +889,19 @@ const createQuote = async (userId, payload) => {
     const deliveryPincode  = String(context.addressSnapshot.postalCode || '').trim();
 
     const volumetricDivisor = Number(settings['shipping.volumetricDivisor'] || 5000);
-    const chargeableWeightGrams = computeChargeableWeight(context.packageDims, volumetricDivisor);
+    const chargeableWeightGrams = context.parcelPlan?.length
+        ? Math.max(...context.parcelPlan.map((parcel) => parcel.chargeableWeightGrams))
+        : computeChargeableWeight(context.packageDims, volumetricDivisor);
+    const quoteParcels = context.isAllDigital ? [] : context.parcelPlan?.length ? context.parcelPlan : [{
+        packageId: context.defaultPackage?.id || 'single-order-package',
+        packageName: context.defaultPackage?.name || 'Order package',
+        lengthCm: context.packageDims.maxL,
+        breadthCm: context.packageDims.maxB,
+        heightCm: context.packageDims.totalH,
+        actualWeightGrams: context.packageDims.totalWeightGrams,
+        chargeableWeightGrams: computeChargeableWeight(context.packageDims, volumetricDivisor),
+        items: context.cartSnapshot.filter((item) => item.requiresShipping),
+    }];
     const zone = detectDeliveryZone(initialOrigin.pincode, deliveryPincode);
 
     const idempotencyKey = hashObject({
@@ -721,11 +910,13 @@ const createQuote = async (userId, payload) => {
         addressHash: context.addressHash,
         paymentMethod,
         couponHash: context.couponHash,
+        pricingHash: hashObject(settings),
         coverageHash: hashObject({
             allowedPincodes: normalizeList(settings['shipping.serviceablePincodes']),
             blockedPincodes: normalizeList(settings['shipping.blockedPincodes']),
         }),
         packageHash: hashObject({ dimensions: context.packageDims, defaultPackage: context.defaultPackage }),
+        parcelPlanHash: hashObject(quoteParcels),
     });
 
     const existing = await ShippingQuote.findOne({
@@ -738,46 +929,51 @@ const createQuote = async (userId, payload) => {
     });
     if (existing) return serializeQuote(existing);
 
-    let decision = await calculateRuleDecision({
-        subtotal:             context.subtotal,
+    let decision = await calculateDeliveryDecision({
+        subtotal: context.subtotal,
         chargeableWeightGrams,
-        packageCount:         1,
+        packageCount: quoteParcels.length,
+        parcelWeightsGrams: quoteParcels.map((parcel) => parcel.chargeableWeightGrams),
         zone,
-        addressSnapshot:      context.addressSnapshot,
-        paymentMethod,
-    }) || await calculateManualDecision({
-        subtotal:        context.subtotal,
-        chargeableWeightGrams,
         addressSnapshot: context.addressSnapshot,
         paymentMethod,
-    });
-
-    // Storewide restrictions apply after rate-rule/provider selection so a
-    // matching zone or courier result cannot bypass the merchant's coverage.
-    decision = applyStorewidePincodeCoverage(decision, deliveryPincode, {
-        allowedPincodes: settings['shipping.serviceablePincodes'],
-        blockedPincodes: settings['shipping.blockedPincodes'],
-    });
+        isAllDigital: context.isAllDigital,
+        packageDims: context.packageDims,
+    }, settings);
 
     const selectedProvider = decision.providerId === fallbackProvider.id
         ? fallbackProvider
         : await ShippingProvider.findByPk(decision.providerId || fallbackProvider.id);
     const selectedOrigin = await resolveDispatchOrigin(selectedProvider, settings);
 
-    // Courier limits check on single parcel (Edge Case 6: until actual splitting is implemented, block unsupported parcels)
+    // Shiprocket documents ordinary API order creation with one parcel. MPS is
+    // account-enabled in the merchant panel, but an API request contract for it
+    // has not been confirmed; don't accept orders we cannot book accurately.
+    if (quoteParcels.length > 1 && selectedProvider?.code !== 'manual' && decision.serviceable) {
+        decision = {
+            ...decision,
+            serviceable: false,
+            shippingCost: 0,
+            codAvailable: false,
+            message: `This order needs ${quoteParcels.length} packages. Multi-package booking is not enabled for the selected delivery provider yet. Please contact the store before placing this order.`,
+        };
+    }
+
+    // Validate every planned parcel independently against courier limits.
     const maxWeightKg = Number(selectedProvider?.maxWeightKg) || 20;
     const maxWeightGrams = maxWeightKg * 1000;
     const maxDimCm = Number(selectedProvider?.maxLengthCm) || 150;
     const dims = context.packageDims;
 
-    if (chargeableWeightGrams > maxWeightGrams) {
+    const overweightParcel = quoteParcels.find((parcel) => parcel.chargeableWeightGrams > maxWeightGrams);
+    if (overweightParcel) {
         decision = {
             ...decision,
             serviceable: false,
             codAvailable: false,
-            message: `Package weight (${(chargeableWeightGrams / 1000).toFixed(1)}kg) exceeds courier maximum limit (${maxWeightKg}kg). Until parcel splitting is enabled, please reduce item quantity or contact support.`,
+            message: `Package "${overweightParcel.packageName}" weighs ${(overweightParcel.chargeableWeightGrams / 1000).toFixed(1)} kg and exceeds the courier's ${maxWeightKg} kg limit. Review the package fit or choose a different package.`,
         };
-    } else if (dims.maxL > maxDimCm || dims.maxB > maxDimCm || dims.totalH > maxDimCm) {
+    } else if (quoteParcels.some((parcel) => Math.max(parcel.lengthCm, parcel.breadthCm, parcel.heightCm) > maxDimCm)) {
         decision = {
             ...decision,
             serviceable: false,
@@ -787,38 +983,77 @@ const createQuote = async (userId, payload) => {
     }
 
     let liveProviderResponse = null;
-    if (decision.serviceable && selectedProvider?.code === 'shiprocket' && selectedProvider.enabled) {
+    if (decision.serviceable && !context.isAllDigital && selectedProvider?.code === 'shiprocket' && selectedProvider.enabled) {
         try {
             const providerAdapter = resolveProvider(selectedProvider);
-            liveProviderResponse = await providerAdapter.getServiceability({
-                pincode: deliveryPincode,
-                pickupPincode: selectedOrigin.pincode,
-                weightGrams: chargeableWeightGrams,
-                paymentMode: paymentMethod === 'cod' ? 'cod' : 'prepaid',
-                lengthCm: dims.maxL,
-                breadthCm: dims.maxB,
-                heightCm: dims.totalH,
-            });
-
-            if (liveProviderResponse.serviceable === false) {
+            const parcelQuotes = await Promise.all(quoteParcels.map(async (parcel, index) => ({
+                parcelId: parcel.parcelId || `parcel-${index + 1}`,
+                packageId: parcel.packageId,
+                packageName: parcel.packageName,
+                ...await providerAdapter.getServiceability({
+                    pincode: deliveryPincode,
+                    pickupPincode: selectedOrigin.pincode,
+                    weightGrams: parcel.chargeableWeightGrams,
+                    paymentMode: paymentMethod === 'cod' ? 'cod' : 'prepaid',
+                    lengthCm: parcel.lengthCm,
+                    breadthCm: parcel.breadthCm,
+                    heightCm: parcel.heightCm,
+                }),
+            })));
+            liveProviderResponse = {
+                serviceable: parcelQuotes.every((parcel) => parcel.serviceable),
+                codAvailable: parcelQuotes.every((parcel) => parcel.codAvailable),
+                estimatedDeliveryDays: Math.max(0, ...parcelQuotes.map((parcel) => Number(parcel.estimatedDeliveryDays) || 0)) || null,
+                courierName: parcelQuotes.every((parcel) => parcel.courierName === parcelQuotes[0]?.courierName) ? parcelQuotes[0]?.courierName : null,
+                courierCompanyId: parcelQuotes.every((parcel) => parcel.courierCompanyId === parcelQuotes[0]?.courierCompanyId) ? parcelQuotes[0]?.courierCompanyId : null,
+                carrierCost: parcelQuotes.every((parcel) => Number.isFinite(Number(parcel.rate))) ? normalizeMoney(parcelQuotes.reduce((sum, parcel) => sum + Number(parcel.rate), 0)) : null,
+                parcels: parcelQuotes,
+            };
+            const hasCarrierQuoteForEveryParcel = parcelQuotes.every((parcel) => parcel.rate !== null && parcel.rate !== undefined && parcel.rate !== '' && Number.isFinite(Number(parcel.rate)) && Number(parcel.rate) >= 0);
+            if (settings['shipping.pricingMode'] === 'carrier' && !hasCarrierQuoteForEveryParcel) {
+                decision = { ...decision, serviceable: false, codAvailable: false, shippingCost: 0, message: 'The courier did not return a delivery rate for every package. Please try another delivery address or contact support.' };
+            } else if (liveProviderResponse.serviceable === false) {
                 decision = {
                     ...decision,
                     serviceable: false,
                     codAvailable: false,
-                    message: liveProviderResponse.reason || 'Delivery is not available for this pincode.',
+                    shippingCost: 0,
+                    message: parcelQuotes.find((parcel) => !parcel.serviceable)?.reason || 'Delivery is not available for every package at this pincode.',
                     liveServiceability: liveProviderResponse,
                 };
             } else {
+                const pricingMode = settings['shipping.pricingMode'] || 'legacy';
+                const perParcelPlan = quoteParcels.map((parcel, index) => ({
+                    ...parcel,
+                    parcelId: parcel.parcelId || `parcel-${index + 1}`,
+                    carrierRate: Number(parcelQuotes[index].rate) || 0,
+                    courierName: parcelQuotes[index].courierName || null,
+                    courierCompanyId: parcelQuotes[index].courierCompanyId || null,
+                }));
                 decision = {
                     ...decision,
                     serviceable: Boolean(decision.serviceable && liveProviderResponse.serviceable),
                     codAvailable: Boolean(decision.codAvailable && liveProviderResponse.codAvailable),
+                    ...(pricingMode === 'carrier' ? {
+                        shippingCost: liveProviderResponse.carrierCost,
+                        pricingSource: 'carrier',
+                        pricingReason: `Carrier quote for ${perParcelPlan.length} package${perParcelPlan.length === 1 ? '' : 's'}`,
+                    } : {}),
+                    estimatedMinDays: liveProviderResponse.estimatedDeliveryDays ?? decision.estimatedMinDays,
+                    estimatedMaxDays: liveProviderResponse.estimatedDeliveryDays ?? decision.estimatedMaxDays,
                     message: decision.serviceable && liveProviderResponse.serviceable
                         ? decision.message
-                        : (liveProviderResponse.reason || 'Shiprocket cannot deliver to this address'),
+                        : 'Shiprocket cannot deliver every package to this address.',
                     liveServiceability: {
                         serviceable: liveProviderResponse.serviceable,
                         codAvailable: liveProviderResponse.codAvailable,
+                        carrierRate: liveProviderResponse.carrierCost,
+                        carrierCost: liveProviderResponse.carrierCost,
+                        currency: 'INR',
+                        estimatedDays: liveProviderResponse.estimatedDeliveryDays ?? null,
+                        courierName: liveProviderResponse.courierName ?? null,
+                        courierCompanyId: liveProviderResponse.courierCompanyId ?? null,
+                        parcels: perParcelPlan,
                     },
                 };
             }
@@ -857,6 +1092,12 @@ const createQuote = async (userId, payload) => {
                 address: context.addressSnapshot,
                 couponCodes: context.couponCodes,
                 defaultPackage: context.defaultPackage,
+                parcelPlan: decision.liveServiceability?.parcels || quoteParcels.map((parcel, index) => ({ ...parcel, parcelId: `parcel-${index + 1}` })),
+                shippingSettingsHash: hashObject(settings),
+                coverageHash: hashObject({
+                    allowedPincodes: normalizeList(settings['shipping.serviceablePincodes']),
+                    blockedPincodes: normalizeList(settings['shipping.blockedPincodes']),
+                }),
             },
             decisionSnapshot: decision,
             rawResponse: liveProviderResponse,
@@ -910,8 +1151,26 @@ const updateProvider = async (id, payload) => {
             throw new AppError('BAD_REQUEST', 400, 'Cannot disable the default shipping provider. Please set another provider as default first.');
         }
 
-        // Allowlist safe fields
-        const permitted = ['name', 'enabled', 'isDefault', 'supportsCod', 'settings', 'webhookSecret'];
+        // Allowlist safe fields including admin limits and capabilities
+        const permitted = [
+            'name',
+            'enabled',
+            'isDefault',
+            'mode',
+            'supportsCod',
+            'supportsReturns',
+            'supportsReversePickup',
+            'supportsHeavyItems',
+            'supportsFragileItems',
+            'maxWeightKg',
+            'maxLengthCm',
+            'maxBreadthCm',
+            'maxHeightCm',
+            'supportedRegions',
+            'blockedRegions',
+            'settings',
+            'webhookSecret',
+        ];
         const filtered = Object.keys(payload)
             .filter(key => permitted.includes(key))
             .reduce((obj, key) => {
@@ -975,19 +1234,22 @@ const testCalculation = async ({ pincode, subtotal = 0, paymentMethod = 'razorpa
     const zone = detectDeliveryZone(warehousePincode, addressSnapshot.postalCode);
     const packageCount = 1;
 
-    const decision = await calculateRuleDecision({
+    let decision = await calculateDeliveryDecision({
         subtotal: Number(subtotal || 0),
         chargeableWeightGrams,
         packageCount,
         zone,
         addressSnapshot,
         paymentMethod: normalizedPaymentMethod,
-    }) || await calculateManualDecision({
-        subtotal: Number(subtotal || 0),
-        chargeableWeightGrams,
-        addressSnapshot,
-        paymentMethod: normalizedPaymentMethod,
+    }, settings);
+
+    decision = applyStorewidePincodeCoverage(decision, addressSnapshot.postalCode, {
+        allowedPincodes: settings['shipping.serviceablePincodes'],
+        blockedPincodes: settings['shipping.blockedPincodes'],
     });
+    if (!['india', 'in'].includes(lower(addressSnapshot.country))) {
+        decision = { ...decision, serviceable: false, shippingCost: 0, codAvailable: false, message: 'Delivery is currently only available within India.' };
+    }
 
     const selectedProvider = decision.providerId === defaultProvider.id
         ? defaultProvider
@@ -1096,7 +1358,9 @@ const validateQuoteForOrder = async (userId, payload) => {
     } else {
         const found = await ShippingQuote.findOne({ where: { id: payload.shippingQuoteId, userId } });
         if (!found) throw new AppError('SHIPPING_QUOTE_NOT_FOUND', 404, 'Shipping quote not found');
-        if (found.expiresAt <= new Date()) {
+        // Allow a 60-second grace window for quote expiry to absorb checkout payment/network latency
+        const GRACE_PERIOD_MS = 60 * 1000;
+        if (new Date(found.expiresAt).getTime() + GRACE_PERIOD_MS <= Date.now()) {
             throw new AppError('SHIPPING_QUOTE_EXPIRED', 400, 'Shipping quote expired. Please refresh shipping.');
         }
         if (!found.serviceable) {
@@ -1105,11 +1369,42 @@ const validateQuoteForOrder = async (userId, payload) => {
         if (payload.paymentMethod === 'cod' && found.codAvailable === false) {
             throw new AppError('COD_UNAVAILABLE', 400, 'Cash on delivery is not available for this delivery address or order.');
         }
-        if (payload.checkoutSessionId && found.checkoutSessionId !== payload.checkoutSessionId) {
+        if (payload.checkoutSessionId && found.checkoutSessionId && found.checkoutSessionId !== payload.checkoutSessionId) {
             throw new AppError('SHIPPING_QUOTE_STALE', 400, 'Shipping quote no longer matches this checkout session');
         }
 
+        const currentSettings = await getSettingMap(['shipping']);
+        if (found.inputSnapshot) {
+            const savedSettingsHash = found.inputSnapshot?.shippingSettingsHash;
+            if (!savedSettingsHash || savedSettingsHash !== hashObject(currentSettings)) {
+                throw new AppError('SHIPPING_QUOTE_STALE', 400, 'Delivery settings changed. Please refresh shipping.');
+            }
+            const currentCoverageHash = hashObject({
+                allowedPincodes: normalizeList(currentSettings['shipping.serviceablePincodes']),
+                blockedPincodes: normalizeList(currentSettings['shipping.blockedPincodes']),
+            });
+            const savedCoverageHash = found.inputSnapshot?.coverageHash;
+            if (savedCoverageHash && savedCoverageHash !== currentCoverageHash) {
+                throw new AppError('SHIPPING_QUOTE_STALE', 400, 'Delivery coverage changed. Please refresh shipping.');
+            }
+        }
+
         const context = await buildCheckoutContext(userId, payload);
+        const destinationPincode = context.addressSnapshot?.postalCode;
+        const coverageDecision = applyStorewidePincodeCoverage(
+            { serviceable: true, codAvailable: found.codAvailable },
+            destinationPincode,
+            {
+                allowedPincodes: currentSettings['shipping.serviceablePincodes'],
+                blockedPincodes: currentSettings['shipping.blockedPincodes'],
+            }
+        );
+        if (!coverageDecision.serviceable) {
+            throw new AppError('SHIPPING_UNAVAILABLE', 400, coverageDecision.message || 'Delivery is not available for this address');
+        }
+        if (payload.paymentMethod === 'cod' && coverageDecision.codAvailable === false) {
+            throw new AppError('COD_UNAVAILABLE', 400, 'Cash on delivery is not available for this delivery address or order.');
+        }
         const couponHash = context.couponHash;
         if (
             found.cartHash !== context.cartHash ||
@@ -1152,4 +1447,7 @@ module.exports = {
     createRule,
     updateRule,
     deleteRule,
+    buildCartSnapshot,
+    calculateDeliveryDecision,
+    calculateRuleDecision,
 };

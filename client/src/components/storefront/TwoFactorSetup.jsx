@@ -106,11 +106,16 @@ const TwoFactorSetup = ({ user, onUpdate }) => {
           
           <Box component="form" onSubmit={handleDisable} sx={{ mb: 3 }}>
             <TextField
-              size="small" placeholder="Enter 6-digit code to disable"
-              value={disableCode} onChange={(e) => setDisableCode(e.target.value.replace(/\D/g, '').slice(0, 6))}
-              inputProps={{ maxLength: 6, inputMode: 'numeric' }} sx={{ mr: 1 }}
+              size="small" placeholder="6-digit code or backup code"
+              value={disableCode}
+              onChange={(e) => {
+                const v = e.target.value;
+                // Allow digits (TOTP) or hex (backup code)
+                setDisableCode(/^[0-9a-fA-F]*$/.test(v) ? v.toLowerCase().slice(0, 8) : disableCode);
+              }}
+              inputProps={{ maxLength: 8, autoComplete: 'one-time-code' }} sx={{ mr: 1 }}
             />
-            <Button type="submit" variant="outlined" color="error" disabled={loading || disableCode.length !== 6}>
+            <Button type="submit" variant="outlined" color="error" disabled={loading || !(disableCode.length === 6 || disableCode.length === 8)}>
               Disable 2FA
             </Button>
           </Box>

@@ -27,6 +27,7 @@ import { orderService } from '../../services/orderService';
 import paymentService from '../../services/paymentService';
 import { validateCoupon, getEligibleCoupons } from '../../services/adminService';
 import { calculateShipping } from '../../services/shippingService';
+import { getProductById } from '../../services/productService';
 import PageSEO from '../../components/common/PageSEO';
 import { getCartItemUnitPrice } from '../../utils/variantPricing';
 import CenteredLoader from '../../components/common/CenteredLoader';
@@ -82,12 +83,21 @@ const normalizeBuyNowItem = (item) => {
         )
     );
     if (!hasProductIdentity || !hasPriceData) return null;
+    const requiresShipping = item.requiresShipping !== undefined
+        ? item.requiresShipping
+        : (product?.requiresShipping !== undefined ? product.requiresShipping : undefined);
     return {
         id: item.id || `${item.productId}-${item.variantId || variant?.id || 'base'}`,
         productId: item.productId,
         variantId: item.variantId ?? variant?.id ?? null,
         quantity: normalizeBuyNowQuantity(item.quantity),
-        product: { ...product, id: product.id || item.productId, name: product.name || 'Product' },
+        requiresShipping,
+        product: {
+            ...product,
+            id: product.id || item.productId,
+            name: product.name || 'Product',
+            requiresShipping,
+        },
         variant: variant ? { ...variant, id: variant.id || item.variantId || null } : null,
     };
 };
@@ -233,9 +243,38 @@ const CheckoutPage = () => {
     }, [checkoutEnabled, cartEnabled, navigate]);
 
     const isBuyNowFlow = useMemo(() => Boolean(buyNowItem), [buyNowItem]);
+    const [buyNowProductRequiresShipping, setBuyNowProductRequiresShipping] = useState(undefined);
+
+    useEffect(() => {
+        if (isBuyNowFlow && buyNowItem?.productId && buyNowItem?.requiresShipping === undefined && buyNowItem?.product?.requiresShipping === undefined) {
+            let active = true;
+            getProductById(buyNowItem.productId)
+                .then((data) => {
+                    const prod = data?.product || data;
+                    if (active && prod && typeof prod.requiresShipping === 'boolean') {
+                        setBuyNowProductRequiresShipping(prod.requiresShipping);
+                    }
+                })
+                .catch(() => {});
+            return () => { active = false; };
+        }
+    }, [isBuyNowFlow, buyNowItem?.productId, buyNowItem?.requiresShipping, buyNowItem?.product?.requiresShipping]);
+
+    const items = useMemo(() => (isBuyNowFlow ? [buyNowItem] : (cart?.items || [])), [isBuyNowFlow, buyNowItem, cart?.items]);
+    const hasPhysicalItems = useMemo(() => {
+        if (!items.length) return true;
+        return items.some((item) => {
+            const prod = item?.product || item;
+            let req = prod?.requiresShipping;
+            if (req === undefined) req = item?.requiresShipping;
+            if (req === undefined && isBuyNowFlow) req = buyNowProductRequiresShipping;
+            return req !== false;
+        });
+    }, [items, isBuyNowFlow, buyNowProductRequiresShipping]);
     const couponsEnabled = settings?.features?.coupons !== false;
     const paymentSettings = settings?.payments || {};
     const enabledPaymentMethods = PAYMENT_METHOD_OPTIONS.filter((method) => {
+        if (!hasPhysicalItems && method.id === 'cod') return false;
         const settingValue = paymentSettings[`${method.id}Enabled`];
         return settingValue === undefined
             ? DEFAULT_ENABLED_PAYMENT_METHODS[method.id]
@@ -251,6 +290,13 @@ const CheckoutPage = () => {
     const [activeSection, setActiveSection] = useState(1);
     const [completedSections, setCompletedSections] = useState([]);
     const [checkoutSessionId] = useState(createCheckoutSessionId);
+
+    useEffect(() => {
+        if (!hasPhysicalItems && activeSection === 1) {
+            setCompletedSections((prev) => [...new Set([...prev, 1])]);
+            setActiveSection(couponsEnabled ? 2 : 3);
+        }
+    }, [hasPhysicalItems, activeSection, couponsEnabled]);
 
     const completeSection = (section, nextSection) => {
         setCompletedSections((prev) => [...new Set([...prev, section])]);
@@ -348,8 +394,6 @@ const CheckoutPage = () => {
     }, [defaultPaymentMethod, enabledPaymentMethods, paymentMethod]);
 
 
-    const items = useMemo(() => (isBuyNowFlow ? [buyNowItem] : (cart?.items || [])), [isBuyNowFlow, buyNowItem, cart?.items]);
-
     const subtotal = items.reduce((sum, item) => {
         const quantity = normalizeBuyNowQuantity(item?.quantity);
         const itemPrice = item?.product ? getCartItemUnitPrice(item) : 0;
@@ -365,7 +409,7 @@ const CheckoutPage = () => {
 
     const shippingMethod = settings?.shipping?.method || 'flat_rate';
     const freeThreshold = parseFloat(settings?.shipping?.freeThreshold ?? 0);
-    const shippingCost = Number(shippingQuote?.shippingCost ?? 0);
+    const shippingCost = hasPhysicalItems ? Number(shippingQuote?.shippingCost ?? 0) : 0;
 
     const shippingDiscount = couponResult?.shippingDiscount || (couponResult?.freeShipping ? shippingCost : 0);
     const effectiveShippingCost = Math.max(0, shippingCost - shippingDiscount);
@@ -374,8 +418,24 @@ const CheckoutPage = () => {
         settings,
         destinationState: selectedAddress?.state || '',
         quantityResolver: (item) => normalizeBuyNowQuantity(item?.quantity),
-        priceResolver: (item) => (item?.product ? getCartItemUnitPrice(item) : 0),
-    }), [items, settings, selectedAddress?.state]);
+        priceResolver: (item) => {
+            if (!item?.product) return 0;
+            const unitPrice = getCartItemUnitPrice(item);
+            const quantity = normalizeBuyNowQuantity(item?.quantity);
+            const itemSubtotal = unitPrice * quantity;
+            if (itemSubtotal <= 0 || quantity <= 0) return 0;
+
+            const itemKey = item.variantId ? `${item.productId}:${item.variantId}` : item.productId;
+            let itemDiscount = 0;
+            if (couponResult?.lineDiscounts && typeof couponResult.lineDiscounts[itemKey] === 'number') {
+                itemDiscount = couponResult.lineDiscounts[itemKey];
+            } else if (orderDiscount > 0 && subtotal > 0) {
+                itemDiscount = (itemSubtotal / subtotal) * orderDiscount;
+            }
+            const taxableSubtotal = Math.max(0, itemSubtotal - itemDiscount);
+            return taxableSubtotal / quantity;
+        },
+    }), [items, settings, selectedAddress?.state, couponResult, orderDiscount, subtotal]);
     const taxAmount = taxSummary.totalTax;
     const total = Math.max(0, subtotal + effectiveShippingCost + taxAmount - orderDiscount);
     const itemSignature = useMemo(() => (
@@ -388,7 +448,7 @@ const CheckoutPage = () => {
         (typeof shippingError === 'string' && shippingError.toLowerCase().includes('temporarily')));
 
     useEffect(() => {
-        if (!selectedAddressId || items.length === 0) {
+        if (!hasPhysicalItems || !selectedAddressId || items.length === 0) {
             setShippingQuote(null);
             setShippingError('');
             setShippingErrorStatus(null);
@@ -559,7 +619,8 @@ const CheckoutPage = () => {
                 color: '#6C63FF',
             },
             modal: {
-                ondismiss: () => {
+                ondismiss: async () => {
+                    try { await paymentService.markFailed(orderId, { reason: 'checkout modal dismissed' }); } catch { /* keep order retryable */ }
                     setPlacing(false);
                 },
             },
@@ -572,6 +633,11 @@ const CheckoutPage = () => {
     const startOnlinePayment = async (orderId, orderNumber) => {
         const paymentResponse = await paymentService.createOrder(orderId);
         const paymentOrder = paymentResponse.data?.data || paymentResponse.data;
+        if (paymentOrder?.freeOrder) {
+            if (!isBuyNowFlow) await clearCart();
+            navigate('/payment/success', { state: { orderId, orderNumber } });
+            return;
+        }
         const provider = paymentOrder?.provider || paymentMethod;
 
         if (provider === 'stripe') {
@@ -629,10 +695,11 @@ const CheckoutPage = () => {
     };
 
     const handlePlaceOrder = async () => {
-        if (!selectedAddressId) { setError('Please select a shipping address.'); return; }
+        if (hasPhysicalItems && !selectedAddressId) { setError('Please select a shipping address.'); return; }
         if (!paymentMethod) { setError('No payment method is currently available.'); return; }
-        if (shippingLoading) { setError('Please wait while we confirm delivery availability.'); return; }
-        if (!shippingQuote?.quoteId || shippingQuote.serviceable === false) {
+        if (!hasPhysicalItems && paymentMethod === 'cod') { setError('Cash on delivery is not available for digital products.'); return; }
+        if (hasPhysicalItems && shippingLoading) { setError('Please wait while we confirm delivery availability.'); return; }
+        if (hasPhysicalItems && (!shippingQuote?.quoteId || shippingQuote.serviceable === false)) {
             setError(shippingError || 'Delivery is not available for the selected address.');
             return;
         }
@@ -641,8 +708,8 @@ const CheckoutPage = () => {
         let orderPlaced = false;
         try {
             const res = await orderService.placeOrder({
-                shippingAddressId: selectedAddressId,
-                shippingQuoteId: shippingQuote.quoteId,
+                ...(hasPhysicalItems && selectedAddressId ? { shippingAddressId: selectedAddressId } : {}),
+                ...(hasPhysicalItems && shippingQuote?.quoteId ? { shippingQuoteId: shippingQuote.quoteId } : {}),
                 checkoutSessionId,
                 paymentMethod,
                 ...(couponCode && couponResult && !couponResult.error && { couponCode }),
@@ -761,6 +828,21 @@ const CheckoutPage = () => {
                     )}
 
                     {/* ── Section 1: Delivery Address ── */}
+                    {!hasPhysicalItems ? (
+                        <Paper variant="outlined" sx={{ mb: 3, p: 2.5, borderRadius: blockRadius, bgcolor: 'background.paper' }}>
+                            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5 }}>
+                                <CheckCircleIcon color="success" sx={{ fontSize: 24 }} />
+                                <Box>
+                                    <Typography variant="subtitle2" fontWeight={600}>
+                                        Digital Delivery
+                                    </Typography>
+                                    <Typography variant="body2" color="text.secondary">
+                                        Your order contains only digital products. No shipping address is required; access will be delivered to your account and email.
+                                    </Typography>
+                                </Box>
+                            </Box>
+                        </Paper>
+                    ) : (
                     <Section
                         step={1}
                         radius={blockRadius}
@@ -972,6 +1054,7 @@ const CheckoutPage = () => {
                             </>
                         )}
                     </Section>
+                    )}
 
                     {/* ── Section 2: Coupons (optional) ── */}
                     {couponsEnabled && (
@@ -1242,10 +1325,14 @@ const CheckoutPage = () => {
                             {/* Shipping */}
                             <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 1 }}>
                                 <Typography variant="body2" color="text.secondary">Delivery Charges</Typography>
-                                {shippingLoading ? (
+                                {!hasPhysicalItems ? (
+                                    <Typography variant="body2" color="success.main" fontWeight={600}>FREE (Digital)</Typography>
+                                ) : shippingLoading ? (
                                     <CircularProgress size={16} />
-                                ) : shippingError ? (
+                                ) : shippingError || shippingQuote?.serviceable === false ? (
                                     <Typography variant="body2" color="warning.main" fontWeight={600}>Unavailable</Typography>
+                                ) : !shippingQuote?.quoteId ? (
+                                    <Typography variant="body2" color="text.secondary">Select a delivery address</Typography>
                                 ) : shippingCost === 0 ? (
                                     <Typography variant="body2" color="success.main" fontWeight={600}>FREE</Typography>
                                 ) : shippingDiscount > 0 ? (
@@ -1259,7 +1346,7 @@ const CheckoutPage = () => {
                                     <Typography variant="body2">{formatPrice(shippingCost)}</Typography>
                                 )}
                             </Box>
-                            {shippingMethod === 'free_above_threshold' && shippingCost > 0 && (
+                            {hasPhysicalItems && shippingQuote?.pricingSource === 'standard' && shippingMethod === 'free_above_threshold' && shippingCost > 0 && (
                                 <Typography variant="caption" color="success.main" display="block" mb={1}>
                                     Add {formatPrice(freeThreshold - subtotal)} more for free delivery
                                 </Typography>
@@ -1327,7 +1414,7 @@ const CheckoutPage = () => {
                                 color={checkoutBlockStyle.ctaStyle === 'soft' ? 'secondary' : 'primary'}
                                 size="large"
                                 onClick={handlePlaceOrder}
-                                disabled={placing || shippingLoading || !shippingQuote?.quoteId || shippingQuote?.serviceable === false || activeSection !== 3 || !selectedAddressId}
+                                disabled={placing || (hasPhysicalItems && (shippingLoading || !shippingQuote?.quoteId || shippingQuote?.serviceable === false || !selectedAddressId)) || activeSection !== 3}
                                 sx={{
                                     py: 1.5,
                                     fontSize: 16,
@@ -1346,11 +1433,13 @@ const CheckoutPage = () => {
 
                             {activeSection !== 3 && (
                                 <Typography variant="caption" color="text.secondary" display="block" textAlign="center" mt={1}>
-                                    Complete the steps above to place your order
+                                    {hasPhysicalItems && !selectedAddressId
+                                        ? 'Please select a delivery address to proceed'
+                                        : 'Complete the steps above to place your order'}
                                 </Typography>
                             )}
 
-                            {(shippingError || (shippingQuote && !shippingQuote.serviceable)) && (
+                            {hasPhysicalItems && (shippingError || (shippingQuote && !shippingQuote.serviceable)) && (
                                 <Alert severity="warning" sx={{ mt: 1.5, py: 0.5 }}>
                                     <Typography variant="caption" fontWeight={600} display="block">
                                         {isShippingSetupError ? 'Cannot place order: Please contact support or update your items.' : 'Cannot place order: Please retry or select a serviceable delivery address above.'}

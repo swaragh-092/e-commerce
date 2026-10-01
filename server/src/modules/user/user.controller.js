@@ -3,6 +3,7 @@
 const UserService = require('./user.service');
 const { success, paginated } = require('../../utils/response');
 const { enrichUserAuthorization } = require('../../config/permissions');
+const { getAccessToken } = require('../auth/authCookies');
 
 const getMe = async (req, res, next) => {
   try {
@@ -35,8 +36,21 @@ const updateAvatar = async (req, res, next) => {
 const changePassword = async (req, res, next) => {
   try {
     const { currentPassword, newPassword } = req.validated;
-    await UserService.changePassword(req.user.id, currentPassword, newPassword);
-    return success(res, null, 'Password changed successfully');
+    let keepSessionId = null;
+    try {
+      const jwt = require('jsonwebtoken');
+      const accessToken = getAccessToken(req);
+      if (accessToken) {
+        const decoded = jwt.verify(accessToken, process.env.JWT_ACCESS_SECRET, {
+          algorithms: ['HS256'],
+          issuer: process.env.JWT_ISSUER || 'ecommerce-pro',
+          audience: process.env.JWT_AUDIENCE || 'ecommerce-pro-client',
+        });
+        if (!decoded.purpose) keepSessionId = decoded.sid || null;
+      }
+    } catch { /* keep null → revoke all */ }
+    await UserService.changePassword(req.user.id, currentPassword, newPassword, keepSessionId);
+    return success(res, null, 'Password changed successfully. All other sessions have been logged out.');
   } catch (err) {
     next(err);
   }
@@ -132,7 +146,7 @@ const cancelAccountDeletion = async (req, res, next) => {
 
 const getSessions = async (req, res, next) => {
   try {
-    const result = await UserService.getSessions(req.user.id, req.headers.authorization?.split(' ')[1]);
+    const result = await UserService.getSessions(req.user.id, getAccessToken(req));
     return success(res, result);
   } catch (err) { next(err); }
 };
@@ -146,7 +160,7 @@ const revokeSession = async (req, res, next) => {
 
 const revokeAllOtherSessions = async (req, res, next) => {
   try {
-    const result = await UserService.revokeAllOtherSessions(req.user.id, req.headers.authorization?.split(' ')[1]);
+    const result = await UserService.revokeAllOtherSessions(req.user.id, getAccessToken(req));
     return success(res, result, 'All other sessions revoked');
   } catch (err) { next(err); }
 };

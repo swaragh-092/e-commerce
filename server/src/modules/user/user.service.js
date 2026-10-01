@@ -42,15 +42,23 @@ const updateMe = async (userId, payload) => {
 
     const before = user.toJSON();
 
-    if (payload.firstName || payload.lastName) {
-      await user.update({
-        firstName: payload.firstName || user.firstName,
-        lastName: payload.lastName || user.lastName
-      }, { transaction: t });
+    if (payload.firstName !== undefined || payload.lastName !== undefined) {
+      // Validate only the fields being set (phone-created accounts start with
+      // an empty lastName, so a combined non-empty requirement would block
+      // them from ever setting just a firstName).
+      if (payload.firstName !== undefined && !String(payload.firstName).trim()) {
+        throw new AppError('VALIDATION_ERROR', 400, 'First name cannot be empty');
+      }
+      if (payload.lastName !== undefined && !String(payload.lastName).trim()) {
+        throw new AppError('VALIDATION_ERROR', 400, 'Last name cannot be empty');
+      }
+      const nextFirst = payload.firstName !== undefined ? String(payload.firstName).trim() : user.firstName;
+      const nextLast = payload.lastName !== undefined ? String(payload.lastName).trim() : user.lastName;
+      await user.update({ firstName: nextFirst, lastName: nextLast }, { transaction: t });
     }
 
-    if (payload.phone || payload.gender || payload.dateOfBirth) {
-      if (payload.phone) {
+    if (payload.phone !== undefined || payload.gender !== undefined || payload.dateOfBirth !== undefined) {
+      if (payload.phone !== undefined && payload.phone !== null && payload.phone !== '') {
         const existingPhone = await UserProfile.findOne({
           where: { phone: payload.phone },
           transaction: t,
@@ -64,11 +72,18 @@ const updateMe = async (userId, payload) => {
       if (!profile) {
         profile = await UserProfile.create({ userId }, { transaction: t });
       }
-      await profile.update({
-        phone: payload.phone !== undefined ? payload.phone : profile.phone,
-        gender: payload.gender || profile.gender,
-        dateOfBirth: payload.dateOfBirth || profile.dateOfBirth
-      }, { transaction: t });
+      try {
+        await profile.update({
+          phone: payload.phone !== undefined ? (payload.phone === '' ? null : payload.phone) : profile.phone,
+          gender: payload.gender !== undefined ? payload.gender : profile.gender,
+          dateOfBirth: payload.dateOfBirth !== undefined ? payload.dateOfBirth : profile.dateOfBirth,
+        }, { transaction: t });
+      } catch (err) {
+        if (err.name === 'SequelizeUniqueConstraintError') {
+          throw new AppError('CONFLICT', 409, 'This phone number is already registered to another account');
+        }
+        throw err;
+      }
     }
     
     // fetch updated record
@@ -99,7 +114,8 @@ const updateMe = async (userId, payload) => {
   });
 };
 
-const changePassword = async (userId, currentPassword, newPassword) => {
+const changePassword = async (userId, currentPassword, newPassword, keepSessionId = null) => {
+  const { RefreshToken } = require('../index');
   return sequelize.transaction(async (t) => {
     const user = await User.scope('withPassword').findByPk(userId, { transaction: t });
     if (!user) throw new AppError('NOT_FOUND', 404, 'User not found');
@@ -108,7 +124,42 @@ const changePassword = async (userId, currentPassword, newPassword) => {
       throw new AppError('VALIDATION_ERROR', 400, 'Incorrect current password');
     }
 
+    if (await user.validatePassword(newPassword)) {
+      throw new AppError('VALIDATION_ERROR', 400, 'New password must be different from current password');
+    }
+
     await user.update({ password: newPassword }, { transaction: t });
+
+    // Revoke all other sessions — a password change must kill stolen sessions.
+    if (keepSessionId) {
+      const others = await RefreshToken.findAll({
+        where: { userId, revokedAt: null, id: { [Op.ne]: keepSessionId } },
+        attributes: ['id'],
+        transaction: t,
+      });
+      await RefreshToken.update(
+        { revokedAt: new Date() },
+        { where: { userId, revokedAt: null, id: { [Op.ne]: keepSessionId } }, transaction: t }
+      );
+      try {
+        const blocklist = require('../../utils/tokenBlocklist');
+        others.forEach((s) => blocklist.revokeSession(s.id));
+      } catch { /* kill-switch best-effort */ }
+    } else {
+      const others = await RefreshToken.findAll({
+        where: { userId, revokedAt: null },
+        attributes: ['id'],
+        transaction: t,
+      });
+      await RefreshToken.update(
+        { revokedAt: new Date() },
+        { where: { userId, revokedAt: null }, transaction: t }
+      );
+      try {
+        const blocklist = require('../../utils/tokenBlocklist');
+        others.forEach((s) => blocklist.revokeSession(s.id));
+      } catch { /* kill-switch best-effort */ }
+    }
 
     try {
       if (AuditService && AuditService.log) {
@@ -137,6 +188,9 @@ const updateAvatar = async (userId, mediaId) => {
   return sequelize.transaction(async (t) => {
     const media = await Media.findByPk(mediaId, { transaction: t });
     if (!media) throw new AppError('NOT_FOUND', 404, 'Media not found');
+    if (media.mimeType && !String(media.mimeType).startsWith('image/')) {
+      throw new AppError('VALIDATION_ERROR', 400, 'Avatar must be an image file');
+    }
 
     let profile = await UserProfile.findOne({ where: { userId }, transaction: t });
     if (!profile) {
@@ -249,7 +303,7 @@ const listAll = async ({ page, limit, status, role, search }) => {
     limit: lmt,
     offset,
     order: [['createdAt', 'DESC']],
-    attributes: { exclude: ['password'] },
+    attributes: { exclude: ['password', 'twoFactorSecret', 'twoFactorBackupCodes'] },
     include: authzInclude,
   });
 };
@@ -268,7 +322,7 @@ const getById = async (id) => {
         attributes: ['id', 'orderNumber', 'status', 'orderShippingStatus', 'total', 'paymentMethod', 'createdAt', 'updatedAt'],
       },
     ],
-    attributes: { exclude: ['password'] }
+    attributes: { exclude: ['password', 'twoFactorSecret', 'twoFactorBackupCodes'] }
   });
 
   if (!user) throw new AppError('NOT_FOUND', 404, 'User not found');
@@ -285,11 +339,23 @@ const updateStatus = async (id, status, actingUserId) => {
         throw new AppError('VALIDATION_ERROR', 400, 'You cannot change your own status');
     }
 
-    if (user.role === 'super_admin' && status !== 'active') {
-      const activeSuperAdminCount = await User.count({
-        where: { role: 'super_admin', status: 'active' },
-        transaction: t,
-      });
+    // Last-admin guard must consider BOTH the legacy `role` column and
+    // join-table assignments — a super_admin via roles join with legacy
+    // `admin` would otherwise bypass the check.
+    const assignedSlugs = Array.isArray(user.roles)
+      ? user.roles.map((r) => (typeof r === 'string' ? r : r?.slug || r?.name)).filter(Boolean)
+      : [];
+    const isSuperAdmin = user.role === 'super_admin' || assignedSlugs.includes('super_admin');
+    if (isSuperAdmin && status !== 'active') {
+      const rows = await sequelize.query(
+        `SELECT COUNT(DISTINCT u.id) AS "count" FROM users u
+         LEFT JOIN user_roles ur ON ur.user_id = u.id
+         LEFT JOIN roles r ON r.id = ur.role_id
+         WHERE u.status = 'active' AND u.deleted_at IS NULL
+           AND (u.role = 'super_admin' OR r.slug = 'super_admin')`,
+        { transaction: t, type: sequelize.QueryTypes.SELECT }
+      );
+      const activeSuperAdminCount = Number(rows?.[0]?.count || 0);
       if (activeSuperAdminCount <= 1) {
         throw new AppError('VALIDATION_ERROR', 400, 'Cannot deactivate or ban the last active super admin');
       }
@@ -300,10 +366,19 @@ const updateStatus = async (id, status, actingUserId) => {
 
     // Revoke refresh tokens on deactivation or ban so sessions cannot be resurrected
     if (status !== 'active') {
+      const active = await RefreshToken.findAll({
+        where: { userId: id, revokedAt: null },
+        attributes: ['id'],
+        transaction: t,
+      });
       await RefreshToken.update(
         { revokedAt: new Date() },
         { where: { userId: id, revokedAt: null }, transaction: t }
       );
+      try {
+        const blocklist = require('../../utils/tokenBlocklist');
+        active.forEach((s) => blocklist.revokeSession(s.id));
+      } catch { /* kill-switch best-effort */ }
     }
 
     try {
@@ -338,12 +413,17 @@ const getAddresses = async (userId) => {
   });
 };
 
+const MAX_ADDRESSES_PER_USER = 10;
+
 const createAddress = async (userId, payload) => {
   return sequelize.transaction(async (t) => {
+    const addressCount = await Address.count({ where: { userId }, transaction: t });
+    if (addressCount >= MAX_ADDRESSES_PER_USER) {
+      throw new AppError('VALIDATION_ERROR', 400, `You can save up to ${MAX_ADDRESSES_PER_USER} addresses. Delete one to add another.`);
+    }
     if (payload.isDefault) {
       await Address.update({ isDefault: false }, { where: { userId }, transaction: t });
     } else {
-      const addressCount = await Address.count({ where: { userId }, transaction: t });
       if (addressCount === 0) {
         payload.isDefault = true;
       }
@@ -382,6 +462,12 @@ const updateAddress = async (userId, addressId, payload) => {
     if (!address) throw new AppError('NOT_FOUND', 404, 'Address not found');
 
     const before = address.toJSON();
+
+    // Prevent ending up with zero defaults via direct unset — set another
+    // address as default instead.
+    if (payload.isDefault === false && address.isDefault) {
+      throw new AppError('VALIDATION_ERROR', 400, 'Cannot unset the default address. Set another address as default instead.');
+    }
 
     if (payload.isDefault && !address.isDefault) {
       await Address.update({ isDefault: false }, { where: { userId }, transaction: t });
@@ -497,24 +583,35 @@ const setDefaultAddress = async (userId, addressId) => {
 const ACTIVE_ORDER_STATUSES = ['pending_payment', 'confirmed', 'on_hold', 'processing', 'ready_for_shipment'];
 const DELETION_GRACE_DAYS = 30;
 
-const deleteAccount = async (userId, { password, oauthProvider } = {}) => {
-  const { RefreshToken } = require('../index');
+const deleteAccount = async (userId, { password, oauthProvider, otp } = {}) => {
   const NotificationService = require('../notification/notification.service');
 
   return sequelize.transaction(async (t) => {
-    const user = await User.scope('withPassword').findByPk(userId, { transaction: t });
+    const user = await User.scope('withPassword').findByPk(userId, { transaction: t, lock: t.LOCK.UPDATE });
     if (!user) throw new AppError('NOT_FOUND', 404, 'User not found');
 
-    // Verify identity: password for email users, oauthProvider flag for OAuth users
-    if (oauthProvider) {
-      if (!['google'].includes(oauthProvider)) {
-        throw new AppError('VALIDATION_ERROR', 400, 'Unsupported OAuth provider');
-      }
-    } else {
-      if (!password) throw new AppError('VALIDATION_ERROR', 400, 'Password is required');
+    const isPhoneUser = Boolean(user.email && user.email.endsWith('@phone.local'));
+
+    if (password) {
       if (!(await user.validatePassword(password))) {
         throw new AppError('VALIDATION_ERROR', 400, 'Incorrect password');
       }
+    } else if (otp && isPhoneUser) {
+      const OtpService = require('../auth/otp.service');
+      const { UserProfile } = require('../index');
+      const profile = await UserProfile.findOne({ where: { userId }, transaction: t });
+      if (!profile || !profile.phone) {
+        throw new AppError('VALIDATION_ERROR', 400, 'No phone number associated with account');
+      }
+      await OtpService.verify(profile.phone, otp, 'account_deletion');
+    } else if (isPhoneUser || oauthProvider) {
+      // Allowed for phone-only accounts (@phone.local) and OAuth users without a known password
+    } else {
+      throw new AppError('VALIDATION_ERROR', 400, 'Password is required');
+    }
+
+    if (user.scheduledDeletionAt) {
+      throw new AppError('VALIDATION_ERROR', 400, 'Account deletion is already scheduled');
     }
 
     // Block if active orders exist
@@ -566,25 +663,37 @@ const getSessions = async (userId, currentAccessToken) => {
 
   const sessions = await RefreshToken.findAll({
     where: { userId, revokedAt: null },
-    attributes: ['id', 'createdByIp', 'deviceName', 'lastActiveAt', 'createdAt', 'token'],
+    attributes: ['id', 'createdByIp', 'deviceName', 'lastActiveAt', 'createdAt'],
     order: [['lastActiveAt', 'DESC']],
   });
 
   let currentSessionId = null;
   if (currentAccessToken) {
     try {
-      const decoded = jwt.verify(currentAccessToken, process.env.JWT_ACCESS_SECRET, { algorithms: ['HS256'] });
-      currentSessionId = decoded.sid || null;
+      let decoded;
+      try {
+        decoded = jwt.verify(currentAccessToken, process.env.JWT_ACCESS_SECRET, {
+          algorithms: ['HS256'],
+          issuer: process.env.JWT_ISSUER || 'ecommerce-pro',
+          audience: process.env.JWT_AUDIENCE || 'ecommerce-pro-client',
+        });
+      } catch {
+        decoded = jwt.verify(currentAccessToken, process.env.JWT_ACCESS_SECRET, {
+          algorithms: ['HS256'],
+        });
+      }
+      if (!decoded.purpose) currentSessionId = decoded.sid || null;
     } catch (e) {}
   }
 
-  return sessions.map((s, idx) => ({
+  return sessions.map((s) => ({
     id: s.id,
     deviceName: s.deviceName || 'Unknown device',
     ipAddress: s.createdByIp,
     lastActiveAt: s.lastActiveAt || s.createdAt,
     createdAt: s.createdAt,
-    isCurrent: currentSessionId ? s.id === currentSessionId : idx === 0,
+    // Honest when the current session can't be determined (never guess idx 0).
+    isCurrent: currentSessionId ? s.id === currentSessionId : false,
   }));
 };
 
@@ -593,6 +702,9 @@ const revokeSession = async (userId, sessionId) => {
   const session = await RefreshToken.findOne({ where: { id: sessionId, userId, revokedAt: null } });
   if (!session) throw new AppError('NOT_FOUND', 404, 'Session not found');
   await session.update({ revokedAt: new Date() });
+  try {
+    require('../../utils/tokenBlocklist').revokeSession(sessionId);
+  } catch { /* kill-switch best-effort */ }
 };
 
 const revokeAllOtherSessions = async (userId, currentAccessToken) => {
@@ -602,8 +714,19 @@ const revokeAllOtherSessions = async (userId, currentAccessToken) => {
   let currentSessionId = null;
   if (currentAccessToken) {
     try {
-      const decoded = jwt.verify(currentAccessToken, process.env.JWT_ACCESS_SECRET, { algorithms: ['HS256'] });
-      currentSessionId = decoded.sid || null;
+      let decoded;
+      try {
+        decoded = jwt.verify(currentAccessToken, process.env.JWT_ACCESS_SECRET, {
+          algorithms: ['HS256'],
+          issuer: process.env.JWT_ISSUER || 'ecommerce-pro',
+          audience: process.env.JWT_AUDIENCE || 'ecommerce-pro-client',
+        });
+      } catch {
+        decoded = jwt.verify(currentAccessToken, process.env.JWT_ACCESS_SECRET, {
+          algorithms: ['HS256'],
+        });
+      }
+      if (!decoded.purpose) currentSessionId = decoded.sid || null;
     } catch (e) {}
   }
 
@@ -626,17 +749,22 @@ const revokeAllOtherSessions = async (userId, currentAccessToken) => {
     { revokedAt: new Date() },
     { where: { id: toRevoke } }
   );
+  try {
+    const blocklist = require('../../utils/tokenBlocklist');
+    toRevoke.forEach((sid) => blocklist.revokeSession(sid));
+  } catch { /* kill-switch best-effort */ }
 
   return { revoked: toRevoke.length };
 };
 
 const requestPhoneChange = async (userId, newPhone) => {
   const OtpService = require('../auth/otp.service');
-  const existing = await UserProfile.findOne({ where: { phone: newPhone } });
+  const normalizedPhone = String(newPhone || '').trim();
+  const existing = await UserProfile.findOne({ where: { phone: normalizedPhone } });
   if (existing && existing.userId !== userId) {
     throw new AppError('VALIDATION_ERROR', 400, 'This phone number is already in use');
   }
-  const otp = await OtpService.generate(newPhone, 'phone_change', null);
+  const otp = await OtpService.generate(normalizedPhone, 'phone_change', null);
   try {
     const NotificationService = require('../notification/notification.service');
     if (NotificationService && NotificationService.send) {
@@ -647,18 +775,26 @@ const requestPhoneChange = async (userId, newPhone) => {
 };
 
 const confirmPhoneChange = async (userId, newPhone, code) => {
+  const normalizedPhone = String(newPhone || '').trim();
   const OtpService = require('../auth/otp.service');
-  await OtpService.verify(newPhone, code, 'phone_change');
+  await OtpService.verify(normalizedPhone, code, 'phone_change');
 
   return sequelize.transaction(async (t) => {
-    const existing = await UserProfile.findOne({ where: { phone: newPhone }, transaction: t });
+    const existing = await UserProfile.findOne({ where: { phone: normalizedPhone }, transaction: t, lock: t.LOCK.UPDATE });
     if (existing && existing.userId !== userId) {
       throw new AppError('CONFLICT', 409, 'This phone number is already registered to another account');
     }
-    let profile = await UserProfile.findOne({ where: { userId }, transaction: t });
-    if (!profile) profile = await UserProfile.create({ userId, phone: newPhone }, { transaction: t });
-    else await profile.update({ phone: newPhone }, { transaction: t });
-    return { phone: newPhone };
+    try {
+      const profile = await UserProfile.findOne({ where: { userId }, transaction: t, lock: t.LOCK.UPDATE });
+      if (!profile) await UserProfile.create({ userId, phone: normalizedPhone }, { transaction: t });
+      else await profile.update({ phone: normalizedPhone }, { transaction: t });
+    } catch (err) {
+      if (err.name === 'SequelizeUniqueConstraintError') {
+        throw new AppError('CONFLICT', 409, 'This phone number is already registered to another account');
+      }
+      throw err;
+    }
+    return { phone: normalizedPhone };
   });
 };
 
@@ -667,34 +803,43 @@ const requestEmailChange = async (userId, newEmail, password) => {
   const { EmailVerificationToken } = require('../index');
   const NotificationService = require('../notification/notification.service');
 
-  const user = await User.scope('withPassword').findByPk(userId);
-  if (!user) throw new AppError('NOT_FOUND', 404, 'User not found');
-  if (!(await user.validatePassword(password))) throw new AppError('VALIDATION_ERROR', 400, 'Incorrect password');
+  const normalizedNewEmail = String(newEmail || '').trim().toLowerCase();
 
-  const existing = await User.findOne({ where: { email: newEmail } });
-  if (existing) throw new AppError('VALIDATION_ERROR', 400, 'This email is already in use');
+  return sequelize.transaction(async (t) => {
+    const user = await User.scope('withPassword').findByPk(userId, { transaction: t, lock: t.LOCK.UPDATE });
+    if (!user) throw new AppError('NOT_FOUND', 404, 'User not found');
+    if (!(await user.validatePassword(password))) throw new AppError('VALIDATION_ERROR', 400, 'Incorrect password');
 
-  const token = crypto.randomBytes(32).toString('hex');
-  const hashed = crypto.createHash('sha256').update(token).digest('hex');
+    const existing = await User.findOne({
+      where: sequelize.where(sequelize.fn('LOWER', sequelize.col('email')), normalizedNewEmail),
+      transaction: t,
+    });
+    if (existing && existing.id !== userId) throw new AppError('VALIDATION_ERROR', 400, 'This email is already in use');
 
-  // Only destroy previous tokens if the user is already email-verified, preserving registration verification token
-  if (user.emailVerified) {
-    await EmailVerificationToken.destroy({ where: { userId } });
-  }
-  await EmailVerificationToken.create({ userId, token: hashed, expiresAt: new Date(Date.now() + 24 * 60 * 60 * 1000) });
+    const token = crypto.randomBytes(32).toString('hex');
+    const hashed = crypto.createHash('sha256').update(token).digest('hex');
 
-  // Store pending new email on user record
-  await user.update({ pendingEmail: newEmail });
+    // Always invalidate prior verification tokens so a stale registration
+    // token can never confirm a new pending email (single-token invariant).
+    await EmailVerificationToken.destroy({ where: { userId }, transaction: t });
+    await EmailVerificationToken.create(
+      { userId, token: hashed, expiresAt: new Date(Date.now() + 24 * 60 * 60 * 1000) },
+      { transaction: t }
+    );
 
-  try {
-    if (NotificationService && NotificationService.send) {
-      await NotificationService.send('email_change_verification', newEmail, {
-        name: user.firstName,
-        verify_url: `${getClientBaseUrl()}/verify-email-change?token=${token}`,
-      }, userId, null, 'email');
-    }
-  } catch (e) {}
-  return { sent: true };
+    // Store pending new email on user record
+    await user.update({ pendingEmail: normalizedNewEmail }, { transaction: t });
+
+    try {
+      if (NotificationService && NotificationService.send) {
+        await NotificationService.send('email_change_verification', normalizedNewEmail, {
+          name: user.firstName,
+          verify_url: `${getClientBaseUrl()}/verify-email-change?token=${token}`,
+        }, userId, null, 'email', t);
+      }
+    } catch (e) {}
+    return { sent: true };
+  });
 };
 
 const confirmEmailChange = async (token) => {
@@ -703,15 +848,22 @@ const confirmEmailChange = async (token) => {
   const hashed = crypto.createHash('sha256').update(token).digest('hex');
 
   return sequelize.transaction(async (t) => {
-    const record = await EmailVerificationToken.findOne({ where: { token: hashed }, transaction: t });
+    const record = await EmailVerificationToken.findOne({
+      where: { token: hashed },
+      transaction: t,
+      lock: t.LOCK.UPDATE,
+    });
     if (!record || record.expiresAt < new Date()) throw new AppError('VALIDATION_ERROR', 400, 'Invalid or expired token');
 
-    const user = await User.findByPk(record.userId, { transaction: t });
+    const user = await User.findByPk(record.userId, { transaction: t, lock: t.LOCK.UPDATE });
     if (!user || !user.pendingEmail) throw new AppError('VALIDATION_ERROR', 400, 'No pending email change');
 
-    const newEmail = user.pendingEmail;
+    const newEmail = String(user.pendingEmail).trim().toLowerCase();
     // Re-verify uniqueness inside transaction to prevent TOCTOU race
-    const existing = await User.findOne({ where: { email: newEmail }, transaction: t });
+    const existing = await User.findOne({
+      where: sequelize.where(sequelize.fn('LOWER', sequelize.col('email')), newEmail),
+      transaction: t,
+    });
     if (existing && existing.id !== user.id) {
       throw new AppError('CONFLICT', 409, 'This email address is already registered to another account');
     }
@@ -727,10 +879,19 @@ const forceLogoutUser = async (userId) => {
   const user = await User.findByPk(userId);
   if (!user) throw new AppError('NOT_FOUND', 404, 'User not found');
 
+  const active = await RefreshToken.findAll({
+    where: { userId, revokedAt: null },
+    attributes: ['id'],
+  });
+
   const [revoked] = await RefreshToken.update(
     { revokedAt: new Date() },
     { where: { userId, revokedAt: null } }
   );
+  try {
+    const blocklist = require('../../utils/tokenBlocklist');
+    active.forEach((s) => blocklist.revokeSession(s.id));
+  } catch { /* kill-switch best-effort */ }
 
   return { revoked };
 };

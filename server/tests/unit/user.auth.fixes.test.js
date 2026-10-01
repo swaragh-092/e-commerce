@@ -317,12 +317,38 @@ describe('C8 — Super admin deactivation guard and refresh token revocation', (
       id: 'super-admin-target',
       role: 'super_admin',
       status: 'active',
+      roles: [],
       toJSON: () => ({ id: 'super-admin-target', role: 'super_admin', status: 'active' }),
     });
-    vi.spyOn(User, 'count').mockResolvedValue(1); // Only 1 active super admin left
+    // Join-aware guard counts via raw query (legacy column OR roles join)
+    vi.spyOn(sequelize, 'query').mockResolvedValue([{ count: 1 }]);
 
     await expect(
       UserService.updateStatus('super-admin-target', 'banned', 'super-admin-caller')
+    ).rejects.toMatchObject({
+      statusCode: 400,
+      code: 'VALIDATION_ERROR',
+      message: expect.stringContaining('last active super admin'),
+    });
+
+    vi.restoreAllMocks();
+  });
+
+  it('blocks deactivating a join-assigned super admin when they are the last one', async () => {
+    const UserService = require('../../src/modules/user/user.service');
+    const { User } = require('../../src/modules/index');
+
+    vi.spyOn(User, 'findByPk').mockResolvedValue({
+      id: 'join-super-admin',
+      role: 'admin',
+      status: 'active',
+      roles: [{ slug: 'super_admin', name: 'Super Admin' }],
+      toJSON: () => ({ id: 'join-super-admin', role: 'admin', status: 'active' }),
+    });
+    vi.spyOn(sequelize, 'query').mockResolvedValue([{ count: 1 }]);
+
+    await expect(
+      UserService.updateStatus('join-super-admin', 'inactive', 'super-admin-caller')
     ).rejects.toMatchObject({
       statusCode: 400,
       code: 'VALIDATION_ERROR',
@@ -345,6 +371,7 @@ describe('C8 — Super admin deactivation guard and refresh token revocation', (
     };
 
     vi.spyOn(User, 'findByPk').mockResolvedValue(mockUser);
+    vi.spyOn(RefreshToken, 'findAll').mockResolvedValue([]);
     const updateSpy = vi.spyOn(RefreshToken, 'update').mockResolvedValue([3]);
 
     await UserService.updateStatus('u-to-ban', 'banned', 'admin-caller');

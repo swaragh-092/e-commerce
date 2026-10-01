@@ -206,7 +206,13 @@ const syncOrderShippingStatus = async (order, transaction, actingUserId = null) 
     });
     const orderItems = await OrderItem.findAll({
         where: { orderId: order.id },
-        attributes: ['id', 'quantity'],
+        attributes: ['id', 'quantity', 'productId'],
+        include: [{
+            model: Product,
+            as: 'product',
+            attributes: ['id', 'requiresShipping'],
+            required: false,
+        }],
         transaction,
     });
     const nextStatus = deriveQuantityAwareOrderShippingStatus(orderItems, shipments);
@@ -230,7 +236,16 @@ const syncOrderShippingStatus = async (order, transaction, actingUserId = null) 
 
 const deriveQuantityAwareOrderShippingStatus = (orderItems = [], shipments = []) => {
     const fallbackStatus = deriveOrderShippingStatus(shipments);
-    const totalQuantity = orderItems.reduce((sum, item) => sum + Number(item.quantity || 0), 0);
+    const shippableItems = orderItems.filter((item) => {
+        if (item.requiresShipping === false) return false;
+        if (item.product && item.product.requiresShipping === false) return false;
+        return true;
+    });
+    // If order has items but none require shipping, the digital order is fulfilled
+    if (orderItems.length > 0 && shippableItems.length === 0) {
+        return 'delivered';
+    }
+    const totalQuantity = shippableItems.reduce((sum, item) => sum + Number(item.quantity || 0), 0);
     if (totalQuantity <= 0) return fallbackStatus;
 
     const deliveredQuantity = shipments
@@ -352,7 +367,13 @@ const repairInvalidClosedOrder = async (order, transaction = null) => {
     });
     const orderItems = await OrderItem.findAll({
         where: { orderId: order.id },
-        attributes: ['id', 'quantity'],
+        attributes: ['id', 'quantity', 'productId'],
+        include: [{
+            model: Product,
+            as: 'product',
+            attributes: ['id', 'requiresShipping'],
+            required: false,
+        }],
         transaction,
     });
     const derivedShippingStatus = deriveQuantityAwareOrderShippingStatus(orderItems, shipments);
@@ -397,7 +418,13 @@ const repairCompletableOrder = async (order, transaction = null) => {
     });
     const orderItems = await OrderItem.findAll({
         where: { orderId: order.id },
-        attributes: ['id', 'quantity'],
+        attributes: ['id', 'quantity', 'productId'],
+        include: [{
+            model: Product,
+            as: 'product',
+            attributes: ['id', 'requiresShipping'],
+            required: false,
+        }],
         transaction,
     });
     const derivedShippingStatus = deriveQuantityAwareOrderShippingStatus(orderItems, shipments);
@@ -716,7 +743,7 @@ const releaseOrderReservationsAndCoupons = async (order, transaction) => {
             syncParent: false,
         });
         if (item.variantId) variantProductIdsToSync.add(String(item.productId));
-        
+
         eventBuffer.push({
             name: PRODUCT_EVENTS.STOCK_CHANGED,
             payload: {
@@ -1056,8 +1083,20 @@ const placeOrder = async (userId, payload) => {
             variant,
         }];
     } else {
+        const cartWhere = { status: 'active' };
+        if (userId) {
+            cartWhere.userId = userId;
+        } else {
+            const guestSessionId = payload.sessionId || payload.checkoutSessionId;
+            if (!guestSessionId) {
+                throw new AppError('VALIDATION_ERROR', 400, 'Session ID is required for guest checkout');
+            }
+            cartWhere.sessionId = guestSessionId;
+            cartWhere.userId = null;
+        }
+
         cart = await Cart.findOne({
-            where: { userId, status: 'active' },
+            where: cartWhere,
             include: [{
                 model: CartItem,
                 as: 'items',
@@ -1083,14 +1122,31 @@ const placeOrder = async (userId, payload) => {
         checkoutItems = cart.items;
     }
 
-    const addressWhere = { id: shippingAddressId };
-    if (userId) addressWhere.userId = userId;
-    const address = await Address.findOne({ where: addressWhere });
-
-    if (!address) {
-        throw new AppError('NOT_FOUND', 404, 'Shipping address not found');
+    const hasPhysicalItems = checkoutItems.some(i => i.product?.requiresShipping !== false);
+    if (!hasPhysicalItems && paymentMethod === 'cod') {
+        throw new AppError('COD_UNAVAILABLE', 400, 'Cash on delivery is not available for orders containing only digital products. Please select an online payment method.');
     }
-    const shippingAddressSnapshot = address.toJSON();
+
+    let address = null;
+    let shippingAddressSnapshot = { digital: true };
+    if (shippingAddressId) {
+        const addressWhere = { id: shippingAddressId };
+        if (userId) {
+            addressWhere.userId = userId;
+        } else {
+            addressWhere.userId = null;
+        }
+        address = await Address.findOne({ where: addressWhere });
+
+        if (!address && hasPhysicalItems) {
+            throw new AppError('NOT_FOUND', 404, 'Shipping address not found');
+        }
+        if (address) {
+            shippingAddressSnapshot = address.toJSON();
+        }
+    } else if (hasPhysicalItems) {
+        throw new AppError('VALIDATION_ERROR', 400, 'Shipping address is required for items requiring delivery');
+    }
 
     const settingsMap = await buildSettingsSnapshot(['tax', 'shipping']);
     const getLocalSetting = (key, defaultVal) => settingsMap[key] !== undefined ? settingsMap[key] : defaultVal;
@@ -1154,17 +1210,97 @@ const placeOrder = async (userId, payload) => {
             };
         }
 
-        const originState = getLocalSetting('tax.originState', '');
+        const originState = getLocalSetting('tax.originState', '') || getLocalSetting('shipping.warehouseState', '') || getLocalSetting('general.state', '');
         const destinationState = shippingAddressSnapshot.state || '';
+
+        const requestedCouponCodes = [...new Set([
+            ...couponCodes,
+            couponCode,
+        ].filter(Boolean).map((code) => String(code).trim().toUpperCase()))];
+
+        let shippingQuote = null;
+        let shippingCost = 0;
+        let shippingTaxAmount = 0;
+
+        if (hasPhysicalItems) {
+            shippingQuote = await ShippingService.validateQuoteForOrder(userId, {
+                ...payload,
+                shippingAddressId,
+                paymentMethod,
+                couponCode,
+                couponCodes,
+                buyNowItem,
+            });
+            shippingCost = Number(shippingQuote.shippingCost || 0);
+            shippingTaxAmount = Number(shippingQuote.taxAmount || 0);
+        }
+
+        const quotedShippingCost = shippingCost;
+
+        let orderDiscountAmount = 0;
+        let appliedCoupon = null;
+        let couponBenefits = null;
+
+        // Harden: Check if coupons feature is enabled before resolving
+        const couponCodesToResolve = features.coupons ? requestedCouponCodes : [];
+
+        couponBenefits = await CouponService.resolveCoupons(couponCodesToResolve, userId, {
+            cartSubtotal: subtotal,
+            cartItems: checkoutItems,
+            shippingCost: quotedShippingCost,
+            transaction: t,
+        });
+
+        orderDiscountAmount = Number(couponBenefits?.orderDiscount || 0);
+        appliedCoupon = couponBenefits?.primaryCoupon || couponBenefits?.coupon || null;
+
+        let shippingDiscount = 0;
+        if (couponBenefits?.freeShipping && shippingCost > 0) {
+            shippingDiscount = Number(couponBenefits.shippingDiscount || shippingCost || 0);
+            if (shippingDiscount === 0) {
+                shippingDiscount = shippingCost;
+            }
+            shippingTaxAmount = 0;
+        }
 
         let totalTax = 0;
         const itemTaxBreakdowns = [];
         for (const item of checkoutItems) {
             const effectiveTax = TaxService.getEffectiveTax(item.currentProduct, settingsMap);
             const itemSubtotal = item.currentPrice * item.quantity;
+            const itemKey = item.variantId ? `${item.productId}:${item.variantId}` : item.productId;
+
+            // Allocate targeted discounts only to eligible tax lines
+            let itemDiscount = 0;
+            if (couponBenefits?.lineDiscounts && (couponBenefits.lineDiscounts[itemKey] !== undefined || couponBenefits.lineDiscounts[item.productId] !== undefined)) {
+                itemDiscount = Number(couponBenefits.lineDiscounts[itemKey] ?? couponBenefits.lineDiscounts[item.productId] ?? 0);
+            } else if (orderDiscountAmount > 0) {
+                const isEligible = appliedCoupon && typeof CouponService.matchesCouponTarget === 'function' ? CouponService.matchesCouponTarget(appliedCoupon, {
+                    productId: item.productId,
+                    brandId: item.currentProduct.brandId || item.currentProduct.brand?.id,
+                    categoryIds: Array.isArray(item.currentProduct.categories) ? item.currentProduct.categories.map((c) => c.id) : [],
+                    isSaleItem: Boolean(item.currentProduct.isSaleActive),
+                }) : true;
+                if (isEligible) {
+                    const eligibleSubtotal = checkoutItems.reduce((sum, ci) => {
+                        const match = appliedCoupon && typeof CouponService.matchesCouponTarget === 'function' ? CouponService.matchesCouponTarget(appliedCoupon, {
+                            productId: ci.productId,
+                            brandId: ci.currentProduct.brandId || ci.currentProduct.brand?.id,
+                            categoryIds: Array.isArray(ci.currentProduct.categories) ? ci.currentProduct.categories.map((c) => c.id) : [],
+                            isSaleItem: Boolean(ci.currentProduct.isSaleActive),
+                        }) : true;
+                        return match ? sum + (ci.currentPrice * ci.quantity) : sum;
+                    }, 0);
+                    itemDiscount = eligibleSubtotal > 0
+                        ? Math.round((itemSubtotal / eligibleSubtotal) * orderDiscountAmount * 100) / 100
+                        : 0;
+                }
+            }
+            const taxableItemSubtotal = Math.max(0, itemSubtotal - itemDiscount);
+
             const itemTaxBreakdown = TaxService.computeItemTax(
                 effectiveTax, 
-                itemSubtotal, 
+                taxableItemSubtotal,
                 destinationState, 
                 originState
             );
@@ -1177,7 +1313,7 @@ const placeOrder = async (userId, payload) => {
             itemTaxBreakdowns.push({
                 productId: item.productId,
                 variantId: item.variantId || null,
-                subtotal: Number(itemSubtotal.toFixed(2)),
+                subtotal: Number(taxableItemSubtotal.toFixed(2)),
                 ...itemTaxBreakdown,
             });
             totalTax += itemTaxBreakdown.totalTax;
@@ -1188,52 +1324,9 @@ const placeOrder = async (userId, payload) => {
             destinationState,
         });
 
-        const shippingQuote = await ShippingService.validateQuoteForOrder(userId, {
-            ...payload,
-            shippingAddressId,
-            paymentMethod,
-            couponCode,
-            couponCodes,
-            buyNowItem,
-        });
-        let shippingCost = Number(shippingQuote.shippingCost || 0);
-        const shippingTaxAmount = Number(shippingQuote.taxAmount || 0);
-
-        const requestedCouponCodes = [...new Set([
-            ...couponCodes,
-            couponCode,
-        ].filter(Boolean).map((code) => String(code).trim().toUpperCase()))];
-
-        let orderDiscountAmount = 0;
-        let appliedCoupon = null;
-        let couponBenefits = null;
-
-        // Harden: Check if coupons feature is enabled before resolving
-        const couponCodesToResolve = features.coupons ? requestedCouponCodes : [];
-        
-        couponBenefits = await CouponService.resolveCoupons(couponCodesToResolve, userId, {
-            cartSubtotal: subtotal,
-            cartItems: checkoutItems,
-            shippingCost,
-            transaction: t,
-        });
-
-        // If a code was provided but coupons are disabled, we might want to log it or just silently ignore
-        // For now, we silently ignore by resolving with empty array, which handles auto-coupons too (none will be returned if resolved with empty array and features.coupons is false)
-        // Wait, resolveCoupons itself should probably check the flag too for A-to-Z enforcement.
-
-        orderDiscountAmount = Number(couponBenefits?.orderDiscount || 0);
-        appliedCoupon = couponBenefits?.primaryCoupon || couponBenefits?.coupon || null;
-
-        let shippingDiscount = 0;
-        if (couponBenefits?.freeShipping) {
-            shippingDiscount = Number(couponBenefits.shippingDiscount || shippingCost || 0);
-            shippingCost = 0;
-        }
-
         const discountAmount = Number((orderDiscountAmount + shippingDiscount).toFixed(2));
 
-        const total = Number(Math.max(0, subtotal + totalTax + shippingCost - discountAmount).toFixed(2));
+        const total = Number(Math.max(0, subtotal + totalTax + quotedShippingCost - discountAmount).toFixed(2));
 
         const eventBuffer = [];
 
@@ -1282,14 +1375,16 @@ const placeOrder = async (userId, payload) => {
         const randStr = crypto.randomBytes(3).toString('hex').toUpperCase();
         const orderNumber = `ORD-${dateStr}-${randStr}`;
 
-        const initialOrderStatus = paymentMethod === 'cod' ? ORDER_DEFAULT_STATUS : 'pending_payment';
-        const initialPaymentStatus = paymentMethod === 'cod' ? 'pending_cod' : 'payment_pending';
+        // Free orders (100% coupon): settle immediately, no provider session.
+        const isFreeOnlineOrder = paymentMethod !== 'cod' && Number(total) <= 0.009;
+        const initialOrderStatus = paymentMethod === 'cod' ? ORDER_DEFAULT_STATUS : (isFreeOnlineOrder ? 'processing' : 'pending_payment');
+        const initialPaymentStatus = paymentMethod === 'cod' ? 'pending_cod' : (isFreeOnlineOrder ? 'paid_online' : 'payment_pending');
 
         const order = await Order.create({
             orderNumber,
             userId,
             status: initialOrderStatus,
-            orderShippingStatus: 'not_shipped',
+            orderShippingStatus: hasPhysicalItems ? 'not_shipped' : 'delivered',
             putBackStatus: null,
             putBackProcessingStatus: false,
             paymentMethod,
@@ -1297,8 +1392,8 @@ const placeOrder = async (userId, payload) => {
             tax: totalTax,
             taxBreakdown: orderTaxBreakdown,
             shippingCost,
-            shippingQuoteId: shippingQuote.quoteId || null,
-            shippingSnapshot: {
+            shippingQuoteId: shippingQuote?.quoteId || null,
+            shippingSnapshot: shippingQuote ? {
                 quoteId: shippingQuote.quoteId || null,
                 provider: shippingQuote.providerCode || shippingQuote.provider || 'manual',
                 providerName: shippingQuote.providerName || 'Manual Shipping',
@@ -1311,13 +1406,26 @@ const placeOrder = async (userId, payload) => {
                 estimatedDeliveryDays: shippingQuote.estimatedDeliveryDays || null,
                 serviceable: shippingQuote.serviceable === true,
                 defaultPackage: shippingQuote.defaultPackage || null,
+                parcelPlan: Array.isArray(shippingQuote.parcelPlan) ? shippingQuote.parcelPlan : [],
+                pricingMode: shippingQuote.pricingMode || null,
+            } : {
+                quoteId: null,
+                provider: 'digital',
+                providerName: 'Digital Delivery',
+                shippingCost: 0,
+                currency: 'INR',
+                taxIncluded: false,
+                taxAmount: 0,
+                taxBreakdown: null,
+                codAvailable: false,
+                serviceable: true,
+                digital: true,
             },
-            orderShippingStatus: 'not_shipped',
-            checkoutSessionId: shippingQuote.checkoutSessionId || payload.checkoutSessionId || null,
-            shippingCurrency: shippingQuote.currency || 'INR',
-            shippingTaxIncluded: shippingQuote.taxIncluded === true,
+            checkoutSessionId: shippingQuote?.checkoutSessionId || payload.checkoutSessionId || payload.sessionId || null,
+            shippingCurrency: shippingQuote?.currency || 'INR',
+            shippingTaxIncluded: shippingQuote?.taxIncluded === true,
             shippingTaxAmount,
-            shippingTaxBreakdown: shippingQuote.taxBreakdown || null,
+            shippingTaxBreakdown: shippingQuote?.taxBreakdown || null,
             discountAmount,
             total,
             couponId: appliedCoupon ? appliedCoupon.id : null,
@@ -1338,7 +1446,8 @@ const placeOrder = async (userId, payload) => {
         // For COD orders, create the Payment record immediately inside the transaction.
         // This mirrors how Razorpay creates a pending Payment; it is updated to 'completed'
         // by the admin "Mark COD as Collected" endpoint later.
-        if (paymentMethod === 'cod') {
+    const isFreeSettledOrder = paymentMethod !== 'cod' && Number(order.total) <= 0.009;
+    if (paymentMethod === 'cod' || isFreeSettledOrder) {
             const currencySetting = await Setting.findOne({ where: { group: 'general', key: 'currency' }, transaction: t });
             const currency = (currencySetting?.value || 'INR').toUpperCase();
             await Payment.create({
@@ -1348,6 +1457,18 @@ const placeOrder = async (userId, payload) => {
                 amount: total,
                 currency,
                 status: initialPaymentStatus,
+            }, { transaction: t });
+        } else if (isFreeOnlineOrder) {
+            const currencySetting = await Setting.findOne({ where: { group: 'general', key: 'currency' }, transaction: t });
+            const currency = (currencySetting?.value || 'INR').toUpperCase();
+            await Payment.create({
+                orderId: order.id,
+                provider: paymentMethod,
+                transactionId: `free_${order.id}`,
+                amount: 0,
+                currency,
+                status: 'paid_online',
+                metadata: { freeOrder: true, settledAt: new Date().toISOString() },
             }, { transaction: t });
         }
 
@@ -1394,11 +1515,11 @@ const placeOrder = async (userId, payload) => {
             transaction: t,
         });
 
-        if (paymentMethod === 'cod') {
+        if (paymentMethod === 'cod' || isFreeOnlineOrder) {
             await addOrderHistoryEvent({
                 orderId: order.id,
                 eventType: 'order_placed',
-                description: 'Order was placed successfully.',
+                description: isFreeOnlineOrder ? 'Free order was placed successfully (no payment required).' : 'Order was placed successfully.',
                 actorId: userId,
                 actorType: 'customer',
                 transaction: t,
@@ -1429,7 +1550,7 @@ const placeOrder = async (userId, payload) => {
             );
         }
 
-        if (cart && paymentMethod === 'cod') {
+        if (cart && (paymentMethod === 'cod' || isFreeOnlineOrder)) {
             await cart.update({ status: 'converted' }, { transaction: t });
         }
         
@@ -1449,18 +1570,9 @@ const placeOrder = async (userId, payload) => {
 
 
     // For COD orders skip the payment gateway entirely — order is already confirmed.
-    // For Razorpay orders, createIntent runs OUTSIDE the transaction so a gateway failure
-    // doesn't roll back the order — the order exists, payment can be retried.
-    let clientSecret = null;
-    if (paymentMethod !== 'cod') {
-        try {
-            const intent = await PaymentService.createIntent(order.userId, order.id);
-            clientSecret = intent.clientSecret;
-        } catch (err) {
-            // Log but don't fail — the order is saved; frontend can retry payment
-            clientSecret = null;
-        }
-    }
+    // For online orders the client starts the provider session via
+    // POST /payments/create-order (PaymentService.createOrder) after this
+    // returns, so there is intentionally no gateway call inside this transaction.
 
 
     try {
@@ -1538,7 +1650,6 @@ const placeOrder = async (userId, payload) => {
 
     return {
         order,
-        ...(clientSecret ? { clientSecret } : {}),
     };
 };
 
@@ -1799,7 +1910,7 @@ const getOrderById = async (id, userId, isAdmin) => {
 
 const createFulfillment = async (orderId, payload, actingUserId, auditContext = null) => {
     // payload: { trackingNumber, courier, notes, status, items: [{ orderItemId, quantity }], providerId }
-    const { trackingNumber, courier, expectedDeliveryDate, notes, status, items, providerId } = payload;
+    const { trackingNumber, courier, expectedDeliveryDate, notes, status, items, providerId, plannedParcelId, manualPackage } = payload;
     const normalizedExpectedDeliveryDate = normalizeDateOnly(expectedDeliveryDate);
 
     if (!items || items.length === 0) {
@@ -1934,10 +2045,12 @@ const createFulfillment = async (orderId, payload, actingUserId, auditContext = 
         // Determine Provider
         let provider = null;
         let adapter = null;
-        if (providerId) {
+        if (providerId === 'manual') {
+            provider = await ShippingProvider.findOne({ where: { code: 'manual' }, transaction: t });
+        } else if (providerId) {
             provider = await ShippingProvider.findByPk(providerId, { transaction: t });
         }
-        if (!provider && order?.shippingSnapshot?.provider) {
+        if (!provider && providerId !== 'manual' && order?.shippingSnapshot?.provider) {
             provider = await ShippingProvider.findOne({
                 where: {
                     [Op.or]: [
@@ -1948,17 +2061,21 @@ const createFulfillment = async (orderId, payload, actingUserId, auditContext = 
                 transaction: t,
             });
         }
-        if (!provider) {
+        if (!provider && providerId !== 'manual') {
             provider = await ShippingProvider.findOne({
                 where: { isDefault: true, enabled: true },
                 transaction: t,
             });
         }
-        if (!provider) {
+        if (!provider && providerId !== 'manual') {
             provider = await ShippingProvider.findOne({ where: { code: 'manual' }, transaction: t });
         }
         if (provider) {
             adapter = resolveProvider(provider);
+        }
+        const manualDeliverySelected = providerId === 'manual' || provider?.code === 'manual';
+        if (manualPackage && !manualDeliverySelected) {
+            throw new AppError('MANUAL_PACKAGE_REQUIRES_MANUAL_DELIVERY', 400, 'Measured manual packages can only be recorded with Manual / Own Delivery. Use the saved checkout package with a carrier provider.');
         }
 
         const productIds = items.map(reqItem => orderItemMap[reqItem.orderItemId]?.productId).filter(Boolean);
@@ -1975,11 +2092,67 @@ const createFulfillment = async (orderId, payload, actingUserId, auditContext = 
             product: productMap[orderItemMap[reqItem.orderItemId]?.productId],
             quantity: reqItem.quantity
         })).filter(i => i.product);
+
+        const hasShippableProducts = products.some(p => p.requiresShipping !== false);
+
+        const orderParcelPlan = Array.isArray(order.shippingSnapshot?.parcelPlan) ? order.shippingSnapshot.parcelPlan : [];
+        if (orderParcelPlan.length > 1 && !manualDeliverySelected) {
+            throw new AppError('MULTI_PARCEL_BOOKING_UNAVAILABLE', 409, 'This order has multiple planned packages, but the selected courier’s multi-package booking flow is not configured. Do not create separate labels for this order yet.');
+        }
+        let selectedPlannedParcel = null;
+        if (orderParcelPlan.length > 0 && hasShippableProducts && !manualPackage) {
+            if (orderParcelPlan.length > 1 && !plannedParcelId) {
+                throw new AppError('PLANNED_PARCEL_REQUIRED', 400, 'Choose one of the remaining planned packages for this shipment.');
+            }
+            selectedPlannedParcel = orderParcelPlan.find((parcel) => parcel.parcelId === (plannedParcelId || orderParcelPlan[0].parcelId));
+            if (!selectedPlannedParcel) {
+                throw new AppError('INVALID_PLANNED_PARCEL', 400, 'The selected package is not part of this order’s saved checkout plan.');
+            }
+            const bookedParcel = await Shipment.findOne({
+                where: { orderId: order.id, plannedParcelId: selectedPlannedParcel.parcelId },
+                transaction: t,
+                lock: Transaction.LOCK.UPDATE,
+            });
+            if (bookedParcel) throw new AppError('CONFLICT', 409, 'This planned package already has a shipment. Select another package.');
+            const requestedContents = new Map();
+            for (const reqItem of items) {
+                const info = orderItemMap[reqItem.orderItemId];
+                const product = productMap[info?.productId];
+                if (!product || product.requiresShipping === false) continue;
+                const key = `${info.productId}:${info.variantId || ''}`;
+                requestedContents.set(key, (requestedContents.get(key) || 0) + Number(reqItem.quantity));
+            }
+            const plannedContents = new Map();
+            for (const parcelItem of selectedPlannedParcel.items || []) {
+                const key = `${parcelItem.productId}:${parcelItem.variantId || ''}`;
+                plannedContents.set(key, (plannedContents.get(key) || 0) + Number(parcelItem.quantity));
+            }
+            const matches = requestedContents.size === plannedContents.size && [...requestedContents].every(([key, quantity]) => plannedContents.get(key) === quantity);
+            if (!matches) {
+                throw new AppError('FULFILLMENT_DOES_NOT_MATCH_PACKAGE_PLAN', 409, 'The shipment item quantities must exactly match the selected package from the checkout plan.');
+            }
+        }
+
         const shippingSettings = await SettingsService.getByGroup('shipping', { maskSensitive: false });
         const defaultPackage = Object.prototype.hasOwnProperty.call(order.shippingSnapshot || {}, 'defaultPackage')
             ? order.shippingSnapshot.defaultPackage
             : shippingSettings.defaultPackage || null;
-        const dims = ShippingService.computePackageDimensions(fulfillmentItemsForDims, Number(shippingSettings.packagingWeightGrams ?? 50), { defaultPackage });
+        const computedDims = selectedPlannedParcel || manualPackage ? null : ShippingService.computePackageDimensions(fulfillmentItemsForDims, Number(shippingSettings.packagingWeightGrams ?? 50), { defaultPackage });
+        const dims = manualPackage ? {
+            maxL: Number(manualPackage.lengthCm),
+            maxB: Number(manualPackage.breadthCm),
+            totalH: Number(manualPackage.heightCm),
+            totalWeightGrams: Math.ceil(Number(manualPackage.actualWeightGrams)),
+            volumeCm3: Number(manualPackage.lengthCm) * Number(manualPackage.breadthCm) * Number(manualPackage.heightCm),
+            hasMissingMeasurements: false,
+        } : selectedPlannedParcel ? {
+            maxL: Number(selectedPlannedParcel.lengthCm),
+            maxB: Number(selectedPlannedParcel.breadthCm),
+            totalH: Number(selectedPlannedParcel.heightCm),
+            totalWeightGrams: Number(selectedPlannedParcel.actualWeightGrams),
+            volumeCm3: Number(selectedPlannedParcel.lengthCm) * Number(selectedPlannedParcel.breadthCm) * Number(selectedPlannedParcel.heightCm),
+            hasMissingMeasurements: false,
+        } : computedDims;
         const totalWeightGrams = dims.totalWeightGrams;
 
         let providerOrderId = null;
@@ -1991,9 +2164,9 @@ const createFulfillment = async (orderId, payload, actingUserId, auditContext = 
         let manifestUrl = null;
         let invoiceUrl = null;
         let finalStatus = status === 'pending' ? SHIPMENT_DEFAULT_STATUS : (status || SHIPMENT_DEFAULT_STATUS);
-        let courierName = courier || (provider ? provider.name : 'Manual Shipping');
+        let courierName = courier || (!hasShippableProducts ? 'Digital Fulfillment' : (provider ? provider.name : 'Manual Shipping'));
         let rawResponse = null;
-        let providerState = provider && provider.code !== 'manual' ? 'pending' : 'not_required';
+        let providerState = hasShippableProducts && provider && provider.code !== 'manual' ? 'pending' : 'not_required';
         let providerRequestPayload = null;
 
         // Create the fulfillment record
@@ -2009,7 +2182,7 @@ const createFulfillment = async (orderId, payload, actingUserId, auditContext = 
         // External provider calls are queued after this transaction commits.
         // Local order/inventory state must never be held open while waiting on
         // Shiprocket, and retries must operate on a durable shipment record.
-        if (adapter && provider.code !== 'manual') {
+        if (hasShippableProducts && adapter && provider.code !== 'manual') {
             const user = await User.findByPk(order.userId, { transaction: t });
             order.user = user;
 
@@ -2063,6 +2236,9 @@ const createFulfillment = async (orderId, payload, actingUserId, auditContext = 
             orderId,
             fulfillmentId: fulfillment.id,
             providerId: provider?.id || null,
+            plannedParcelId: selectedPlannedParcel?.parcelId || null,
+            packageProfileId: selectedPlannedParcel?.packageId || null,
+            packageName: selectedPlannedParcel?.packageName || manualPackage?.packageName?.trim() || (manualPackage ? 'Staff packed' : null),
             providerOrderId,
             providerShipmentId,
             providerRequestId,
@@ -2107,7 +2283,7 @@ const createFulfillment = async (orderId, payload, actingUserId, auditContext = 
             }, { transaction: t });
         }
 
-        if (providerRequestPayload && provider) {
+        if (hasShippableProducts && providerRequestPayload && provider) {
             await ShippingOperationService.enqueueCreateOperation({
                 shipment,
                 provider,
@@ -3169,4 +3345,5 @@ module.exports = {
     getAllowedNextStatuses: (status) => getAllowedNextStatuses('order', normalizeOrderStatus(status)),
     addOrderHistoryEvent,
     addNote,
+    deriveQuantityAwareOrderShippingStatus,
 };

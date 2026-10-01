@@ -7,8 +7,8 @@ const updateAvatarSchema = Joi.object({
 });
 
 const updateProfileSchema = Joi.object({
-  firstName: Joi.string().max(50),
-  lastName: Joi.string().max(50),
+  firstName: Joi.string().trim().min(1).max(50),
+  lastName: Joi.string().trim().min(1).max(50),
   phone: Joi.string()
     .regex(/^\d{10,15}$/)
     .allow(null, '')
@@ -42,11 +42,11 @@ const createAddressSchema = Joi.object({
   label: Joi.string().max(50).optional().allow(null, ''),
   fullName: Joi.string().max(255).required(),
   phone: Joi.string()
-    .regex(/^\d{10,12}$/)
+    .regex(/^\d{10,15}$/)
     .optional()
     .allow(null, '')
     .messages({
-      'string.pattern.base': 'Phone number must be between 10 and 12 digits and contain only numbers'
+      'string.pattern.base': 'Phone number must be between 10 and 15 digits and contain only numbers'
     }),
   addressLine1: Joi.string().max(255).required(),
   addressLine2: Joi.string().max(255).optional().allow(null, ''),
@@ -68,11 +68,11 @@ const updateAddressSchema = Joi.object({
   label: Joi.string().max(50).optional().allow(null, ''),
   fullName: Joi.string().max(255).optional(),
   phone: Joi.string()
-    .regex(/^\d{10,12}$/)
+    .regex(/^\d{10,15}$/)
     .optional()
     .allow(null, '')
     .messages({
-      'string.pattern.base': 'Phone number must be between 10 and 12 digits and contain only numbers'
+      'string.pattern.base': 'Phone number must be between 10 and 15 digits and contain only numbers'
     }),
   addressLine1: Joi.string().max(255).optional(),
   addressLine2: Joi.string().max(255).optional().allow(null, ''),
@@ -92,8 +92,9 @@ const updateAddressSchema = Joi.object({
 
 const deleteAccountSchema = Joi.object({
   password: Joi.string().optional(),
-  oauthProvider: Joi.string().valid('google').optional(),
-}).or('password', 'oauthProvider');
+  oauthProvider: Joi.string().optional(),
+  otp: Joi.string().optional(),
+}).or('password', 'oauthProvider', 'otp');
 
 const phoneChangeRequestSchema = Joi.object({
   phone: Joi.string().pattern(/^\d{10,15}$/).required(),

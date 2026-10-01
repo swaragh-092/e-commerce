@@ -239,6 +239,7 @@ class ShiprocketProvider extends BaseShippingProvider {
             const available = res.data?.data?.available_courier_companies || [];
             let serviceable = available.length > 0;
             let codAvailable = available.some(c => c.cod === 1);
+            const recommended = available.find((courier) => courier.is_recommended) || available[0] || null;
 
             // Edge Case 4: COD unavailable but prepaid available!
             if (paymentMode === 'cod' && !codAvailable) {
@@ -255,9 +256,15 @@ class ShiprocketProvider extends BaseShippingProvider {
                     });
                     const prepaidCouriers = prepaidRes.data?.data?.available_courier_companies || [];
                     if (prepaidCouriers.length > 0) {
+                        const prepaidRecommended = prepaidCouriers.find((courier) => courier.is_recommended) || prepaidCouriers[0];
                         return {
                             serviceable: true,
                             codAvailable: false,
+                            rate: prepaidRecommended.rate !== null && prepaidRecommended.rate !== undefined && prepaidRecommended.rate !== '' && Number.isFinite(Number(prepaidRecommended.rate)) ? Number(prepaidRecommended.rate) : null,
+                            currency: 'INR',
+                            courierName: prepaidRecommended.courier_name || null,
+                            courierCompanyId: prepaidRecommended.courier_company_id || null,
+                            estimatedDeliveryDays: prepaidRecommended.estimated_delivery_days || null,
                             reason: 'Cash on Delivery is unavailable for this pincode, but prepaid delivery is available.',
                             rawResponse: { codAttempt: res.data, prepaidFallback: prepaidRes.data },
                         };
@@ -270,6 +277,11 @@ class ShiprocketProvider extends BaseShippingProvider {
             return {
                 serviceable,
                 codAvailable,
+                rate: recommended && recommended.rate !== null && recommended.rate !== undefined && recommended.rate !== '' && Number.isFinite(Number(recommended.rate)) ? Number(recommended.rate) : null,
+                currency: 'INR',
+                courierName: recommended?.courier_name || null,
+                courierCompanyId: recommended?.courier_company_id || null,
+                estimatedDeliveryDays: recommended?.estimated_delivery_days || null,
                 reason: serviceable ? null : 'No courier available for this pincode',
                 rawResponse: res.data,
             };
@@ -977,11 +989,14 @@ class ShiprocketProvider extends BaseShippingProvider {
 
         const providerOrderId = payload.order_id || payload.shipment_id || payload.provider_order_id || null;
 
-        const timestamp = payload.current_timestamp ||
+        const rawTimestamp = payload.current_timestamp ||
             payload.scan_date_time ||
             payload.timestamp ||
             payload.date ||
-            new Date();
+            null;
+
+        const parsedDate = rawTimestamp ? new Date(rawTimestamp) : null;
+        const validTimestamp = parsedDate && !Number.isNaN(parsedDate.getTime()) ? parsedDate : null;
 
         return {
             providerEventId: providerEventId ? String(providerEventId) : null,
@@ -989,7 +1004,7 @@ class ShiprocketProvider extends BaseShippingProvider {
             awbCode,
             status: this._normalizeStatus(status),
             location,
-            timestamp: Number.isNaN(new Date(timestamp).getTime()) ? new Date() : new Date(timestamp),
+            timestamp: validTimestamp,
             rawPayload: payload,
         };
     }

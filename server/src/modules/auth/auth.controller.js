@@ -9,6 +9,7 @@ const {
   getAccessToken,
   getRefreshToken,
   setAuthCookies,
+  setTrustedDeviceCookie,
   stripAuthTokens,
 } = require('./authCookies');
 
@@ -21,7 +22,7 @@ const sendAuthSuccess = (res, result, message, options = {}) => {
 
 const register = async (req, res, next) => {
   try {
-    const result = await AuthService.register(req.validated);
+    const result = await AuthService.register(req.validated, req.ip);
     if (result?.tokens) setAuthCookies(res, result.tokens);
     return res.status(201).json({
       success: true,
@@ -49,7 +50,9 @@ const refresh = async (req, res, next) => {
     const refreshToken = getRefreshToken(req);
     if (!refreshToken) throw new AppError('UNAUTHORIZED', 401, 'Refresh session not found');
     const result = await AuthService.refresh(refreshToken, req.ip, req.headers['user-agent']);
-    return sendAuthSuccess(res, result, 'Token refreshed');
+    // AuthService.refresh returns { tokens, rememberMe } (or legacy bare tokens)
+    const normalized = result?.tokens ? result : { tokens: result, rememberMe: false };
+    return sendAuthSuccess(res, normalized, 'Token refreshed', { rememberMe: normalized.rememberMe === true });
   } catch (err) {
     if (err.code === 'UNAUTHORIZED' || err.statusCode === 401) clearAuthCookies(res);
     next(err);
@@ -60,9 +63,17 @@ const logout = async (req, res, next) => {
   try {
     const refreshToken = getRefreshToken(req);
     if (refreshToken) await AuthService.logout(refreshToken, req.user?.id);
-    // Blocklist the current access token for its remaining lifetime
+    // Blocklist the current access token for its remaining lifetime, and kill
+    // its session id so any sibling access token for the session dies too.
     const accessToken = getAccessToken(req);
-    if (accessToken) tokenBlocklist.add(accessToken);
+    if (accessToken) {
+      tokenBlocklist.add(accessToken);
+      try {
+        const jwt = require('jsonwebtoken');
+        const decoded = jwt.decode(accessToken);
+        if (decoded?.sid) tokenBlocklist.revokeSession(decoded.sid);
+      } catch { /* decode-only, never throws logout */ }
+    }
     clearAuthCookies(res);
     return success(res, null, 'Logged out successfully');
   } catch (err) {
@@ -117,16 +128,9 @@ const verifyTwoFactor = async (req, res, next) => {
     const ipAddress = req.ip;
     const result = await AuthService.verifyTwoFactor(tempToken, code, ipAddress);
 
-    // Set trusted device cookie if requested (30 days)
+    // Set trusted device cookie if requested (30 days, signed JWT — not forgeable)
     if (trustDevice) {
-      const crypto = require('crypto');
-      const deviceId = crypto.createHash('sha256').update(`${result.user.id}:${req.headers['user-agent']}:${ipAddress}`).digest('hex').slice(0, 32);
-      res.cookie('trusted_device', deviceId, {
-        httpOnly: true,
-        secure: process.env.NODE_ENV === 'production',
-        sameSite: 'lax',
-        maxAge: 30 * 24 * 60 * 60 * 1000, // 30 days
-      });
+      setTrustedDeviceCookie(res, result.user.id);
     }
 
     return sendAuthSuccess(res, result, 'Login successful');

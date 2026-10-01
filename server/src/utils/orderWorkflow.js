@@ -194,8 +194,16 @@ const canCloseOrder = ({ order, payment, orderShippingStatus }) => {
     const paymentStatus = payment?.status || order?.paymentStatus;
     const paymentProvider = payment?.provider || order?.paymentMethod;
     const normalizedPaymentStatus = normalizePaymentStatus(paymentStatus, paymentProvider);
+    const shippingStatus = orderShippingStatus || order?.orderShippingStatus;
+
+    // A COD order returned to origin (RTO) never had payment collected and no refund is required.
+    // It is both physically and financially terminal and should be eligible to close.
+    if (paymentProvider === 'cod' && shippingStatus === 'rto') {
+        return true;
+    }
+
     const paymentResolved = isPaymentSettled(paymentStatus, paymentProvider) || normalizedPaymentStatus === 'refunded';
-    if (!paymentResolved || !isShippingTerminal(orderShippingStatus || order?.orderShippingStatus)) {
+    if (!paymentResolved || !isShippingTerminal(shippingStatus)) {
         return false;
     }
     if (paymentProvider === 'cod' && normalizedPaymentStatus !== 'refunded') {

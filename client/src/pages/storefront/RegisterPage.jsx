@@ -95,21 +95,27 @@ const RegisterPage = () => {
     setError('');
     const nextErrors = validateForm(formData);
     setFieldErrors(nextErrors);
+    setTouched({ firstName: true, lastName: true, email: true, password: true, confirmPassword: true });
 
-    // if (Object.values(nextErrors).some(Boolean)) {
-    //     return setError('Please fix the highlighted fields.');
-    // }
+    if (Object.values(nextErrors).some(Boolean)) {
+        return setError('Please fix the highlighted fields.');
+    }
 
     setLoading(true);
 
     try {
-      await register({
+      const result = await register({
           firstName: formData.firstName,
           lastName: formData.lastName,
           email: formData.email,
           password: formData.password,
           confirmPassword: formData.confirmPassword
       });
+      if (result?.requiresVerification) {
+        // Server issued no session — verification is mandatory for this account.
+        navigate('/login', { state: { message: 'Account created! Please check your email to verify your account, then log in.' } });
+        return;
+      }
       // register() auto-logs-in, redirect to home
       navigate('/');
     } catch (err) {

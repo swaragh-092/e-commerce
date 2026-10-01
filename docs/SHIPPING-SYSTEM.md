@@ -180,6 +180,19 @@ Disabling the default package restores product-based dimension calculation. New 
 
 ## Pincode coverage and rate zones
 
-**Admin → Settings → General → Checkout → Storewide Delivery Coverage** is the final storewide allow/block restriction. A blocked pincode always wins; a non-empty allowlist restricts delivery to its listed pincodes. The storewide restriction is applied to manual, rule-based, and Shiprocket quotes after the selected rate/provider is calculated.
+**Admin → Settings → Shipping → Delivery pricing & coverage** is the final storewide allow/block restriction. A blocked pincode always wins; a non-empty allowlist restricts delivery to its listed pincodes. The storewide restriction is applied to manual, rule-based, and Shiprocket quotes after the selected rate/provider is calculated.
 
 **Admin → Settings → Shipping → Rate Zones** groups pincodes for rules to select regional prices or providers. A zone is not a carrier serviceability guarantee and does not replace the storewide restriction. Leave both storewide lists empty to rely on carrier serviceability and matching shipping rules.
+
+
+## Customer delivery fees
+
+Configure default customer fees and storewide pincode restrictions in **Admin → Settings → Shipping → Delivery pricing & coverage**. General → Checkout links here and does not write shipping settings. Existing settings are preserved.
+
+Choose **Standard pricing** for a fixed fee, free delivery, or free delivery above an order amount. Shipping rules do not override this policy. Choose **Advanced shipping rules** for regional or weight-based pricing; the first matching enabled rule ordered by priority, strict override, then creation date supplies the fee. No matching rule means delivery is unavailable; there is no silent fallback to a second pricing system.
+
+Existing stores with no saved `shipping.pricingMode` keep the previous rules-first fallback behavior. The admin shows a migration notice and requires an explicit choice when saving. Saved quotes record the shipping settings hash; changes to pricing, coverage, or packaging require a fresh quote before an order can proceed.
+
+Allowed/blocked delivery pincodes belong only in Delivery pricing & coverage and apply to both policies, checkout, and the admin preview. Pincodes must contain six digits; blocked destinations take precedence. Domestic country and pincode checks also apply to rule-based quotes. Rate Zones group destinations for pricing and do not grant delivery permission. Pickup pincode is the courier collection origin and must match the registered warehouse; it is not a coverage list. Existing zone exclusions remain exclusions from that rate zone, not storewide delivery blocks.
+
+Shiprocket checks serviceability; its carrier cost is separate from the customer fee. The Test Panel reports the pricing reason and chosen courier, but does not make a live carrier call. Packaging shows an illustrative volumetric weight using divisor 5000; actual quotes use the configured divisor.

@@ -48,10 +48,14 @@ const lowStockQuerySchema = Joi.object({
 });
 
 const createStaffUserSchema = Joi.object({
-  firstName: Joi.string().max(100).required(),
-  lastName: Joi.string().max(100).required(),
-  email: Joi.string().email({ tlds: { allow: false } }).required(),
-  password: Joi.string().min(8).max(128).required(),
+  firstName: Joi.string().trim().min(1).max(100).required(),
+  lastName: Joi.string().trim().min(1).max(100).required(),
+  email: Joi.string().email({ tlds: { allow: false } }).required().lowercase().trim(),
+  password: Joi.string()
+    .min(8)
+    .pattern(new RegExp('^(?=.*[a-z])(?=.*[A-Z])(?=.*[0-9])(?=.*[!@#$%^&*])'))
+    .message('Password must be at least 8 characters long and include uppercase, lowercase, number, and special character (!@#$%^&*)')
+    .required(),
   roleId: Joi.string().uuid().required(),
 });
 
