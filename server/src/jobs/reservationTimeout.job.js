@@ -2,7 +2,7 @@
 
 const cron = require('node-cron');
 const { Op, Transaction } = require('sequelize');
-const { Order, OrderItem, Coupon, CouponUsage, sequelize } = require('../modules');
+const { Order, OrderItem, Coupon, CouponUsage, Payment, OrderStatusHistory, sequelize } = require('../modules');
 const AuditService = require('../modules/audit/audit.service');
 const InventoryService = require('../modules/inventory/inventory.service');
 const logger = require('../utils/logger');
@@ -98,6 +98,26 @@ const run = () => {
         }
 
         await order.update({ status: 'cancelled', inventoryReleasedAt: new Date() }, { transaction });
+
+        // Terminal payment state so retries cannot resurrect the order via
+        // create-order (guarded) and the timeline shows expiry, not limbo.
+        try {
+          const payment = await Payment.findOne({ where: { orderId: order.id }, transaction, lock: Transaction.LOCK.UPDATE });
+          if (payment && ['payment_pending', 'pending', 'payment_failed'].includes(payment.status)) {
+            const fromStatus = payment.status;
+            await payment.update({
+              status: 'payment_expired',
+              metadata: { ...(payment.metadata || {}), expiredAt: new Date().toISOString(), reason: 'pending_payment_timeout' },
+            }, { transaction });
+            await OrderStatusHistory.create({
+              orderId: order.id, entityType: 'Payment', entityId: payment.id,
+              statusGroup: 'payment', fromStatus, toStatus: 'payment_expired',
+              changedBy: null, metadata: { reason: 'pending_payment_timeout' },
+            }, { transaction });
+          }
+        } catch (paymentErr) {
+          logger.error('Failed to expire payment for timed-out order', { orderId: order.id, errorMessage: paymentErr.message });
+        }
 
         try {
           await AuditService.log({

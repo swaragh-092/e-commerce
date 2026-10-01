@@ -58,6 +58,24 @@ const handlePayUReturn = async (req, res, next) => {
     }
 };
 
+const markFailed = async (req, res, next) => {
+    try {
+        const { Order } = require('../index');
+        const order = await Order.findOne({ where: { id: req.params.orderId, userId: req.user.id } });
+        if (!order) {
+            const err = new Error('Order not found');
+            err.statusCode = 404;
+            throw err;
+        }
+        const result = await PaymentService.markPaymentFailed({
+            orderId: order.id,
+            provider: order.paymentMethod,
+            reason: req.validated?.reason || req.body?.reason || 'customer aborted payment',
+        });
+        return success(res, result, 'Payment marked as failed');
+    } catch (err) { next(err); }
+};
+
 const confirmCodPayment = async (req, res, next) => {
     try {
         const result = await PaymentService.confirmCodPayment(req.user.id, req.params.orderId, req.body || {});
@@ -80,4 +98,4 @@ const saveGatewayCredentials = async (req, res, next) => {
     } catch (err) { next(err); }
 };
 
-module.exports = { createOrder, verifyPayment, handleWebhook, handleCashfreeWebhook, handleStripeWebhook, handlePayUReturn, confirmCodPayment, getGatewayStatuses, saveGatewayCredentials };
+module.exports = { createOrder, verifyPayment, markFailed, handleWebhook, handleCashfreeWebhook, handleStripeWebhook, handlePayUReturn, confirmCodPayment, getGatewayStatuses, saveGatewayCredentials };

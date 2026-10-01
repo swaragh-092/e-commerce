@@ -59,7 +59,7 @@ const getEncryptionKey = () => {
     return crypto.createHash('sha256').update(secret).digest();
 };
 
-const encryptPayload = (plainText) => {
+const encrypt = (plainText) => {
     const iv = crypto.randomBytes(12);
     const cipher = crypto.createCipheriv('aes-256-gcm', getEncryptionKey(), iv);
     let encrypted = cipher.update(plainText, 'utf8', 'hex');
@@ -68,7 +68,7 @@ const encryptPayload = (plainText) => {
     return `${iv.toString('hex')}:${authTag}:${encrypted}`;
 };
 
-const decryptPayload = (encryptedText) => {
+const decrypt = (encryptedText) => {
     try {
         const parts = String(encryptedText || '').split(':');
         if (parts.length !== 3) return null;
@@ -87,20 +87,19 @@ const decryptPayload = (encryptedText) => {
 
 const getJwtSecret = () => process.env.JWT_ACCESS_SECRET || 'jwt-default-access-secret-32-chars-long';
 
-const signTrustedDevice = (userId) => {
+const createTrustedDeviceToken = (userId) => {
     const { issuer, audience } = getJwtIssAud();
-    const token = jwt.sign({ id: userId, purpose: 'trusted_device' }, getJwtSecret(), {
+    return jwt.sign({ id: userId, purpose: 'trusted_device' }, getJwtSecret(), {
         expiresIn: '30d',
         issuer,
         audience,
     });
-    return encryptPayload(token);
 };
 
 const verifyTrustedDevice = (cookieValue, userId) => {
     if (!cookieValue || !userId) return false;
     try {
-        const decrypted = decryptPayload(cookieValue) || cookieValue;
+        const decrypted = decrypt(cookieValue) || cookieValue;
         const { issuer, audience } = getJwtIssAud();
         const decoded = jwt.verify(decrypted, getJwtSecret(), {
             algorithms: ['HS256'],
@@ -114,8 +113,8 @@ const verifyTrustedDevice = (cookieValue, userId) => {
 };
 
 const setTrustedDeviceCookie = (res, userId) => {
-    const encryptedCookie = signTrustedDevice(userId);
-    res.cookie(TRUSTED_DEVICE_COOKIE, encryptedCookie, {
+    const rawToken = createTrustedDeviceToken(userId);
+    res.cookie(TRUSTED_DEVICE_COOKIE, encrypt(rawToken), {
         httpOnly: true,
         secure: true,
         sameSite: process.env.AUTH_COOKIE_SAMESITE || 'lax',
@@ -134,7 +133,10 @@ module.exports = {
     getRefreshToken,
     setAuthCookies,
     stripAuthTokens,
-    signTrustedDevice,
+    createTrustedDeviceToken,
     verifyTrustedDevice,
     setTrustedDeviceCookie,
+    encrypt,
+    decrypt,
 };
+

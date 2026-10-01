@@ -40,6 +40,55 @@ const getCredential = async (dbKey, envKey) => {
 
 
 
+// ─── Edge-case helpers ─────────────────────────────────────────────────────
+// Single-row `payments` (unique orderId) means retries orphan the previous
+// provider order id. We keep a bounded `attempts` list in metadata so late
+// webhooks for superseded ids can still settle the order instead of losing money.
+const MAX_ATTEMPTS_KEPT = 10;
+const isZeroTotal = (total) => Number(total || 0) <= 0.009;
+
+const getActiveCartIdForUser = async (userId) => {
+    if (!userId) return null;
+    try {
+        const cart = await Cart.findOne({ where: { userId, status: 'active' }, attributes: ['id'] });
+        return cart?.id || null;
+    } catch {
+        return null;
+    }
+};
+
+const buildAttemptMetadata = (existingPayment, extra = {}) => {
+    const prevMeta = existingPayment?.metadata || {};
+    const prevAttempts = Array.isArray(prevMeta.attempts) ? prevMeta.attempts : [];
+    const superseded = existingPayment?.transactionId ? [existingPayment.transactionId] : [];
+    const attempts = [...prevAttempts, ...superseded]
+        .filter(Boolean)
+        .filter((v, i, a) => a.indexOf(v) === i)
+        .slice(-MAX_ATTEMPTS_KEPT);
+    return { ...prevMeta, ...extra, ...(attempts.length ? { attempts } : {}) };
+};
+
+const extractOrderIdFromCashfreeId = (cashfreeOrderId) => {
+    if (!cashfreeOrderId || typeof cashfreeOrderId !== 'string') return null;
+    const m = cashfreeOrderId.match(/^cf_([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})_/i);
+    return m ? m[1] : null;
+};
+
+const extractOrderIdFromPayUTxn = (txnid) => {
+    if (!txnid || typeof txnid !== 'string') return null;
+    const m = txnid.match(/^pu_([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})_/i);
+    return m ? m[1] : null;
+};
+
+const candidateCashfreeIds = (payment) => {
+    const ids = [
+        payment?.metadata?.cashfreeOrderId,
+        payment?.transactionId,
+        ...(Array.isArray(payment?.metadata?.attempts) ? payment.metadata.attempts : []),
+    ].filter(Boolean);
+    return [...new Set(ids)];
+};
+
 const ensureCashfreeConfig = async () => {
     const appId  = await getCredential('cashfree.appId', 'CASHFREE_APP_ID');
     const secret = await getCredential('cashfree.secretKey', 'CASHFREE_SECRET_KEY');
@@ -133,6 +182,8 @@ const createRazorpayOrder = async (userId, order) => {
             },
         });
 
+        const existing = await Payment.findOne({ where: { orderId: order.id } });
+        const cartId = await getActiveCartIdForUser(userId);
         await Payment.upsert({
             orderId: order.id,
             provider: 'razorpay',
@@ -140,6 +191,7 @@ const createRazorpayOrder = async (userId, order) => {
             amount: order.total,
             currency,
             status: 'payment_pending',
+            metadata: buildAttemptMetadata(existing, { ...(cartId ? { cartId } : {}) }),
         });
 
         return {
@@ -186,6 +238,8 @@ const createCashfreeOrder = async (userId, order) => {
         },
     });
 
+    const existingCashfreePayment = await Payment.findOne({ where: { orderId: order.id } });
+    const cashfreeCartId = await getActiveCartIdForUser(userId);
     await Payment.upsert({
         orderId: order.id,
         provider: 'cashfree',
@@ -193,11 +247,15 @@ const createCashfreeOrder = async (userId, order) => {
         amount: order.total,
         currency,
         status: 'payment_pending',
-        metadata: {
-            cfOrderId: cashfreeOrder.cf_order_id,
-            cashfreeOrderId: cashfreeOrder.order_id,
-            orderStatus: cashfreeOrder.order_status,
-        },
+        metadata: buildAttemptMetadata(
+            existingCashfreePayment,
+            {
+                cfOrderId: cashfreeOrder.cf_order_id,
+                cashfreeOrderId: cashfreeOrder.order_id,
+                orderStatus: cashfreeOrder.order_status,
+                ...(cashfreeCartId ? { cartId: cashfreeCartId } : {}),
+            }
+        ),
     });
 
     return {
@@ -248,6 +306,8 @@ const createStripeOrder = async (userId, order) => {
             metadata: { orderId: order.id, userId: userId }
         });
 
+        const existingStripePayment = await Payment.findOne({ where: { orderId: order.id } });
+        const stripeCartId = await getActiveCartIdForUser(userId);
         await Payment.upsert({
             orderId: order.id,
             provider: 'stripe',
@@ -255,7 +315,7 @@ const createStripeOrder = async (userId, order) => {
             amount: order.total,
             currency: currency.toUpperCase(),
             status: 'payment_pending',
-            metadata: { sessionId: session.id },
+            metadata: buildAttemptMetadata(existingStripePayment, { sessionId: session.id, ...(stripeCartId ? { cartId: stripeCartId } : {}) }),
         });
 
         return { provider: 'stripe', url: session.url, sessionId: session.id };
@@ -283,6 +343,12 @@ const verifyStripePayment = async (userId, orderId, sessionId) => {
     const expectedSubunits = Math.round(Number(order.total) * 100);
     if (session.amount_total != null && Number(session.amount_total) !== expectedSubunits) {
         throw new AppError('PAYMENT_ERROR', 400, 'Stripe session amount does not match order total');
+    }
+    const stripePayment = await Payment.findOne({ where: { orderId: order.id, provider: 'stripe' } });
+    if (stripePayment?.currency && session.currency) {
+        if (String(session.currency).toUpperCase() !== String(stripePayment.currency).toUpperCase()) {
+            throw new AppError('PAYMENT_ERROR', 400, 'Stripe session currency does not match order');
+        }
     }
     if (session.payment_status === 'paid') {
         await markOrderPaid({
@@ -329,12 +395,29 @@ const handleStripeWebhook = async (rawBody, signature) => {
                     return { received: true, skipped: true };
                 }
             }
+            if (webhookOrder && session.currency) {
+                const paymentRow = await Payment.findOne({ where: { orderId, provider: 'stripe' } });
+                if (paymentRow?.currency && String(session.currency).toUpperCase() !== String(paymentRow.currency).toUpperCase()) {
+                    logger.error('Stripe webhook currency mismatch', { orderId });
+                    return { received: true, skipped: true };
+                }
+            }
             await markOrderPaid({
                 orderId: orderId,
                 provider: 'stripe',
                 transactionId: session.payment_intent || session.id,
                 metadata: { sessionId: session.id, paymentStatus: session.payment_status },
             });
+        }
+    } else if (event.type === 'checkout.session.expired' || event.type === 'payment_intent.payment_failed') {
+        const session = event.data.object;
+        const orderId = session.metadata?.orderId || session.client_reference_id;
+        if (orderId) {
+            try {
+                await markPaymentFailed({ orderId, provider: 'stripe', reason: event.type });
+            } catch (err) {
+                logger.error('Stripe failure webhook handling failed', { orderId, errorMessage: err.message });
+            }
         }
     }
     return { received: true };
@@ -368,6 +451,8 @@ const createPayUOrder = async (userId, order) => {
     const hash = crypto.createHash('sha512').update(hashString).digest('hex');
     const mode = await getCredential('payu.mode', null);
 
+    const existingPayUPayment = await Payment.findOne({ where: { orderId: order.id } });
+    const payuCartId = await getActiveCartIdForUser(userId);
     await Payment.upsert({
         orderId: order.id,
         provider: 'payu',
@@ -375,7 +460,7 @@ const createPayUOrder = async (userId, order) => {
         amount: order.total,
         currency: 'INR',
         status: 'payment_pending',
-        metadata: { payuTxnId: txnid },
+        metadata: buildAttemptMetadata(existingPayUPayment, { payuTxnId: txnid, ...(payuCartId ? { cartId: payuCartId } : {}) }),
     });
 
     return {
@@ -395,24 +480,34 @@ const handlePayUReturn = async (payload) => {
     const expectedHash = crypto.createHash('sha512').update(hashString).digest('hex');
 
     const payment = await Payment.findOne({ where: { provider: 'payu', transactionId: txnid } });
-    if (!payment) return { success: false, error: 'Payment not found' };
+    // Retry orphan: upsert overwrote transactionId, but old id lives in attempts.
+    const resolvedPayment = payment || await (async () => {
+        const orderIdFromTxn = extractOrderIdFromPayUTxn(txnid);
+        if (!orderIdFromTxn) return null;
+        const byOrder = await Payment.findOne({ where: { orderId: orderIdFromTxn, provider: 'payu' } });
+        const attempts = Array.isArray(byOrder?.metadata?.attempts) ? byOrder.metadata.attempts : [];
+        if (byOrder && (byOrder.transactionId === txnid || attempts.includes(txnid))) return byOrder;
+        return null;
+    })();
+    if (!resolvedPayment) return { success: false, error: 'Payment not found' };
+    const paymentForPayU = resolvedPayment;
 
     if (expectedHash === hash && status === 'success') {
         // Amount binding: posted amount must match what we quoted for this txn.
         const postedAmount = Number(amount);
-        const quotedAmount = Number(payment.amount);
+        const quotedAmount = Number(paymentForPayU.amount);
         if (Number.isFinite(postedAmount) && Number.isFinite(quotedAmount) && Number(postedAmount.toFixed(2)) !== Number(quotedAmount.toFixed(2))) {
-            return { success: false, orderId: payment.orderId, status: 'amount_mismatch' };
+            return { success: false, orderId: paymentForPayU.orderId, status: 'amount_mismatch' };
         }
         await markOrderPaid({
-            orderId: payment.orderId,
+            orderId: paymentForPayU.orderId,
             provider: 'payu',
             transactionId: mihpayid || txnid,
             metadata: { payuTxnId: txnid, payuId: mihpayid, status },
         });
-        return { success: true, orderId: payment.orderId };
+        return { success: true, orderId: paymentForPayU.orderId };
     }
-    return { success: false, orderId: payment.orderId, status };
+    return { success: false, orderId: paymentForPayU.orderId, status };
 };
 
 
@@ -432,6 +527,18 @@ const createOrder = async (userId, orderId) => {
     const existingPayment = await Payment.findOne({ where: { orderId: order.id } });
     if (existingPayment && ['paid_online', 'paid_cod', 'refunded', 'partially_refunded'].includes(existingPayment.status)) {
         throw new AppError('VALIDATION_ERROR', 400, `Payment is already ${existingPayment.status} for this order`);
+    }
+    // Zero-total (100% coupon) online orders never touch a provider.
+    // Settle immediately so the order does not stick in pending_payment with
+    // no payable session (providers reject amount 0).
+    if (isZeroTotal(order.total)) {
+        await markOrderPaid({
+            orderId: order.id,
+            provider: order.paymentMethod,
+            transactionId: existingPayment?.transactionId || `free_${order.id}`,
+            metadata: { freeOrder: true, settledAt: new Date().toISOString() },
+        });
+        return { provider: order.paymentMethod, freeOrder: true, amount: 0, currency: existingPayment?.currency || 'INR' };
     }
 
     if (order.paymentMethod === 'razorpay') {
@@ -489,6 +596,38 @@ const verifyRazorpayPayment = async (userId, orderId, paymentData) => {
 
     if (expectedSignature !== razorpay_signature) {
         throw new AppError('PAYMENT_ERROR', 400, 'Invalid payment signature');
+    }
+
+    // Amount + currency binding via provider fetch. A valid signature alone
+    // does not prove the captured amount matches this order.
+    try {
+        const razorpay = await getRazorpayClient();
+        if (razorpay?.payments?.fetch) {
+            const providerPayment = await razorpay.payments.fetch(razorpay_payment_id);
+            const providerOrderId = providerPayment?.order_id;
+            if (providerOrderId && providerOrderId !== razorpay_order_id) {
+                throw new AppError('PAYMENT_ERROR', 400, 'Razorpay payment does not belong to this order');
+            }
+            if (providerPayment?.amount != null) {
+                const expectedSubunits = Math.round(Number(order.total) * 100);
+                if (Number(providerPayment.amount) !== expectedSubunits) {
+                    throw new AppError('PAYMENT_ERROR', 400, 'Razorpay payment amount does not match order total');
+                }
+            }
+            if (providerPayment?.currency && payment.currency) {
+                if (String(providerPayment.currency).toUpperCase() !== String(payment.currency).toUpperCase()) {
+                    throw new AppError('PAYMENT_ERROR', 400, 'Razorpay payment currency does not match order');
+                }
+            }
+            if (providerPayment?.status && !['captured', 'authorized'].includes(providerPayment.status)) {
+                throw new AppError('PAYMENT_ERROR', 400, `Razorpay payment is ${providerPayment.status}`);
+            }
+        }
+    } catch (err) {
+        if (err instanceof AppError) throw err;
+        // Provider fetch failed (network/SDK). Fail closed with provider detail
+        // rather than marking paid on signature alone.
+        throw new AppError('PAYMENT_ERROR', 400, `Razorpay verification failed: ${getErrorMessage(err)}`);
     }
 
     await markOrderPaid({
@@ -602,10 +741,12 @@ const markOrderPaid = async ({ orderId, provider, transactionId, metadata = {} }
             await Cart.update(
                 { status: 'converted' },
                 {
-                    where: {
-                        userId: lockedOrder.userId,
-                        status: 'active',
-                    },
+                    where: payment?.metadata?.cartId
+                        ? { id: payment.metadata.cartId, status: 'active' }
+                        : {
+                            userId: lockedOrder.userId,
+                            status: 'active',
+                        },
                     transaction: t,
                 }
             );
@@ -677,33 +818,47 @@ const verifyCashfreePayment = async (userId, orderId) => {
     }
 
     const payment = await Payment.findOne({ where: { orderId, provider: 'cashfree' } });
-    const cashfreeOrderId = payment?.metadata?.cashfreeOrderId || payment?.transactionId || `cf_${order.id}`;
-    const cashfreeOrder = await cashfreeRequest(`/orders/${encodeURIComponent(cashfreeOrderId)}`);
+    if (!payment) throw new AppError('NOT_FOUND', 404, 'Payment record not found for this order');
+    if (payment.status === 'paid_online') return { success: true, status: 'paid' };
+    // Retry orphan: the latest transactionId may be unpaid while an older
+    // attempt (in metadata.attempts) was actually paid. Check all candidates.
+    const candidates = candidateCashfreeIds(payment);
+    if (candidates.length === 0) candidates.push(`cf_${order.id}`);
+    let lastStatus = 'pending';
+    for (const cashfreeOrderId of candidates) {
+        const cashfreeOrder = await cashfreeRequest(`/orders/${encodeURIComponent(cashfreeOrderId)}`);
 
-    // Amount binding when the provider echoes it back.
-    if (cashfreeOrder.order_amount != null) {
-        const providerAmount = Number(Number(cashfreeOrder.order_amount).toFixed(2));
-        const orderAmount = Number(Number(order.total).toFixed(2));
-        if (providerAmount !== orderAmount) {
-            throw new AppError('PAYMENT_ERROR', 400, 'Cashfree order amount does not match order total');
+        // Amount binding when the provider echoes it back.
+        if (cashfreeOrder.order_amount != null) {
+            const providerAmount = Number(Number(cashfreeOrder.order_amount).toFixed(2));
+            const orderAmount = Number(Number(order.total).toFixed(2));
+            if (providerAmount !== orderAmount) {
+                throw new AppError('PAYMENT_ERROR', 400, 'Cashfree order amount does not match order total');
+            }
+        }
+        if (payment.currency && cashfreeOrder.order_currency) {
+            if (String(cashfreeOrder.order_currency).toUpperCase() !== String(payment.currency).toUpperCase()) {
+                throw new AppError('PAYMENT_ERROR', 400, 'Cashfree order currency does not match order');
+            }
+        }
+        lastStatus = cashfreeOrder.order_status || lastStatus;
+        if (cashfreeOrder.order_status === 'PAID') {
+            await markOrderPaid({
+                orderId: order.id,
+                provider: 'cashfree',
+                transactionId: cashfreeOrder.order_id,
+                metadata: {
+                    cashfreeOrderId: cashfreeOrder.order_id,
+                    cfOrderId: cashfreeOrder.cf_order_id,
+                    orderStatus: cashfreeOrder.order_status,
+                    verifiedAt: new Date().toISOString(),
+                },
+            });
+            return { success: true, status: 'paid' };
         }
     }
-    if (cashfreeOrder.order_status === 'PAID') {
-        await markOrderPaid({
-            orderId: order.id,
-            provider: 'cashfree',
-            transactionId: cashfreeOrder.order_id,
-            metadata: {
-                cashfreeOrderId: cashfreeOrder.order_id,
-                cfOrderId: cashfreeOrder.cf_order_id,
-                orderStatus: cashfreeOrder.order_status,
-                verifiedAt: new Date().toISOString(),
-            },
-        });
-        return { success: true, status: 'paid' };
-    }
 
-    return { success: false, status: cashfreeOrder.order_status || 'pending' };
+    return { success: false, status: lastStatus || 'pending' };
 };
 
 const parseRawJsonBody = (rawBody) => {
@@ -764,9 +919,20 @@ const handleCashfreeWebhook = async (rawBody, headers = {}) => {
     const paymentStatus = paymentEntity.payment_status || payload?.payment_status;
 
     if (orderStatus === 'PAID' || paymentStatus === 'SUCCESS') {
-        const payment = await Payment.findOne({
+        let payment = await Payment.findOne({
             where: { provider: 'cashfree', transactionId: cashfreeOrderId },
         });
+        // Retry orphan fallback: superseded ids live in metadata.attempts.
+        if (!payment) {
+            const orderIdFromCf = extractOrderIdFromCashfreeId(cashfreeOrderId);
+            if (orderIdFromCf) {
+                const byOrder = await Payment.findOne({ where: { orderId: orderIdFromCf, provider: 'cashfree' } });
+                const attempts = Array.isArray(byOrder?.metadata?.attempts) ? byOrder.metadata.attempts : [];
+                if (byOrder && (byOrder.transactionId === cashfreeOrderId || attempts.includes(cashfreeOrderId))) {
+                    payment = byOrder;
+                }
+            }
+        }
 
         if (payment) {
             await markOrderPaid({
@@ -782,6 +948,13 @@ const handleCashfreeWebhook = async (rawBody, headers = {}) => {
                     webhookAt: new Date().toISOString(),
                 },
             });
+        }
+    } else if (orderStatus === 'FAILED' || paymentStatus === 'FAILED') {
+        // Record terminal failure so the order does not sit in limbo; the
+        // reservation-timeout job still owns inventory/coupon release.
+        const failed = await Payment.findOne({ where: { provider: 'cashfree', transactionId: cashfreeOrderId } });
+        if (failed && !['paid_online', 'refunded'].includes(failed.status)) {
+            await failed.update({ status: 'payment_failed', metadata: { ...(failed.metadata || {}), orderStatus, paymentStatus, failedAt: new Date().toISOString() } });
         }
     }
 
@@ -846,6 +1019,7 @@ const handleWebhook = async (rawOrParsedBody, signature) => {
     const razorpayEventId = `razorpay:${providerEventId}`;
 
     let capturedOrderId = null;
+    let failedOrderId = null;
     try {
         await sequelize.transaction(async (t) => {
             await WebhookEvent.create(
@@ -855,6 +1029,8 @@ const handleWebhook = async (rawOrParsedBody, signature) => {
 
             if (event === 'payment.captured') {
                 capturedOrderId = paymentEntity.notes?.orderId || null;
+            } else if (event === 'payment.failed') {
+                failedOrderId = paymentEntity.notes?.orderId || null;
             }
         });
     } catch (err) {
@@ -872,9 +1048,40 @@ const handleWebhook = async (rawOrParsedBody, signature) => {
             transactionId: paymentEntity.id,
             metadata: { webhookEvent: event },
         });
+    } else if (failedOrderId) {
+        try {
+            await markPaymentFailed({ orderId: failedOrderId, provider: 'razorpay', reason: paymentEntity.error_description || 'payment.failed webhook' });
+        } catch (err) {
+            logger.error('Razorpay failure webhook handling failed', { orderId: failedOrderId, errorMessage: err.message });
+        }
     }
 
     return { received: true };
+};
+
+const markPaymentFailed = async ({ orderId, provider, reason }) => {
+    return sequelize.transaction(async (t) => {
+        const order = await Order.findByPk(orderId, { transaction: t, lock: t.LOCK.UPDATE });
+        if (!order) throw new AppError('NOT_FOUND', 404, 'Order not found');
+        if (order.status !== 'pending_payment') {
+            throw new AppError('VALIDATION_ERROR', 400, `Cannot mark a ${order.status} order as failed`);
+        }
+        const payment = await Payment.findOne({ where: { orderId, provider }, transaction: t, lock: t.LOCK.UPDATE });
+        if (!payment) throw new AppError('NOT_FOUND', 404, 'Payment record not found');
+        if (['paid_online', 'paid_cod', 'refunded'].includes(payment.status)) {
+            throw new AppError('VALIDATION_ERROR', 400, `Cannot fail a ${payment.status} payment`);
+        }
+        await payment.update({
+            status: 'payment_failed',
+            metadata: { ...(payment.metadata || {}), failureReason: reason || null, failedAt: new Date().toISOString() },
+        }, { transaction: t });
+        await OrderStatusHistory.create({
+            orderId: order.id, entityType: 'Payment', entityId: payment.id,
+            statusGroup: 'payment', fromStatus: 'payment_pending', toStatus: 'payment_failed',
+            changedBy: order.userId, metadata: { reason: reason || null, provider },
+        }, { transaction: t });
+        return { success: true, orderId, status: 'payment_failed' };
+    });
 };
 
 const money = (value) => Number(Number(value || 0).toFixed(2));
@@ -1252,4 +1459,4 @@ const saveGatewayCredentials = async (gatewayId, credentials, actingUserId) => {
     return { success: true, gateway: gatewayId };
 };
 
-module.exports = { createOrder, verifyPayment, handleWebhook, handleCashfreeWebhook, handleStripeWebhook, handlePayUReturn, confirmCodPayment, getGatewayStatuses, saveGatewayCredentials };
+module.exports = { createOrder, verifyPayment, handleWebhook, handleCashfreeWebhook, handleStripeWebhook, handlePayUReturn, markPaymentFailed, confirmCodPayment, getGatewayStatuses, saveGatewayCredentials };

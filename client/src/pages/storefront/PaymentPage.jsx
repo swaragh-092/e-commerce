@@ -115,7 +115,15 @@ const PaymentPage = () => {
                 }
 
                 return paymentService.createOrder(orderId)
-                    .then((r) => setOrderData(r.data?.data || r.data));
+                    .then((r) => {
+                        const data = r.data?.data || r.data;
+                        if (data?.freeOrder) {
+                            fetchCart();
+                            navigate('/payment/success', { replace: true, state: { orderId, orderNumber: order?.orderNumber } });
+                            return null;
+                        }
+                        setOrderData(data);
+                    });
             })
             .catch((err) => {
                 setError(getApiErrorMessage(err, 'Failed to initialize payment. Please contact support.'));
@@ -164,7 +172,8 @@ const PaymentPage = () => {
                     color: "#6C63FF"
                 },
                 modal: {
-                    ondismiss: () => {
+                    ondismiss: async () => {
+                        try { await paymentService.markFailed(orderId, { reason: 'payment modal dismissed' }); } catch { /* retry stays available */ }
                         setProcessing(false);
                     }
                 }

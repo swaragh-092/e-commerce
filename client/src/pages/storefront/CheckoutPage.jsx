@@ -418,8 +418,24 @@ const CheckoutPage = () => {
         settings,
         destinationState: selectedAddress?.state || '',
         quantityResolver: (item) => normalizeBuyNowQuantity(item?.quantity),
-        priceResolver: (item) => (item?.product ? getCartItemUnitPrice(item) : 0),
-    }), [items, settings, selectedAddress?.state]);
+        priceResolver: (item) => {
+            if (!item?.product) return 0;
+            const unitPrice = getCartItemUnitPrice(item);
+            const quantity = normalizeBuyNowQuantity(item?.quantity);
+            const itemSubtotal = unitPrice * quantity;
+            if (itemSubtotal <= 0 || quantity <= 0) return 0;
+
+            const itemKey = item.variantId ? `${item.productId}:${item.variantId}` : item.productId;
+            let itemDiscount = 0;
+            if (couponResult?.lineDiscounts && typeof couponResult.lineDiscounts[itemKey] === 'number') {
+                itemDiscount = couponResult.lineDiscounts[itemKey];
+            } else if (orderDiscount > 0 && subtotal > 0) {
+                itemDiscount = (itemSubtotal / subtotal) * orderDiscount;
+            }
+            const taxableSubtotal = Math.max(0, itemSubtotal - itemDiscount);
+            return taxableSubtotal / quantity;
+        },
+    }), [items, settings, selectedAddress?.state, couponResult, orderDiscount, subtotal]);
     const taxAmount = taxSummary.totalTax;
     const total = Math.max(0, subtotal + effectiveShippingCost + taxAmount - orderDiscount);
     const itemSignature = useMemo(() => (
@@ -603,7 +619,8 @@ const CheckoutPage = () => {
                 color: '#6C63FF',
             },
             modal: {
-                ondismiss: () => {
+                ondismiss: async () => {
+                    try { await paymentService.markFailed(orderId, { reason: 'checkout modal dismissed' }); } catch { /* keep order retryable */ }
                     setPlacing(false);
                 },
             },
@@ -616,6 +633,11 @@ const CheckoutPage = () => {
     const startOnlinePayment = async (orderId, orderNumber) => {
         const paymentResponse = await paymentService.createOrder(orderId);
         const paymentOrder = paymentResponse.data?.data || paymentResponse.data;
+        if (paymentOrder?.freeOrder) {
+            if (!isBuyNowFlow) await clearCart();
+            navigate('/payment/success', { state: { orderId, orderNumber } });
+            return;
+        }
         const provider = paymentOrder?.provider || paymentMethod;
 
         if (provider === 'stripe') {

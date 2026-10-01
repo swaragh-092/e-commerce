@@ -166,3 +166,45 @@ describe('Shipping quote policy freshness', () => {
         }
     });
 });
+
+describe('Percent of order shipping rule multi-parcel handling', () => {
+    it('applies percent_of_order shipping rate once across multi-parcel orders instead of multiplying per parcel', async () => {
+        const { ShippingProvider, ShippingRule, Setting } = require('../../src/modules');
+        const percentRule = {
+            id: 'pct-rule',
+            name: '10 Percent Delivery',
+            rateType: 'percent_of_order',
+            rateConfig: { percent: 10 },
+            conditions: {},
+            codAllowed: true,
+            provider: null,
+            zone: null,
+        };
+
+        vi.spyOn(ShippingProvider, 'findOne').mockResolvedValue({ id: 'default', code: 'manual', name: 'Manual', enabled: true, supportsCod: true });
+        vi.spyOn(ShippingRule, 'findAll').mockResolvedValue([percentRule]);
+        vi.spyOn(Setting, 'findAll').mockResolvedValue([
+            { group: 'shipping', key: 'warehousePincode', value: '560001' },
+            { group: 'general', key: 'currency', value: 'INR' },
+        ]);
+
+        try {
+            const decision = await ShippingService.calculateDeliveryDecision({
+                subtotal: 1000,
+                chargeableWeightGrams: 1000,
+                parcelWeightsGrams: [500, 500],
+                packageCount: 2,
+                zone: 'national',
+                addressSnapshot: { postalCode: '560002', country: 'India' },
+                paymentMethod: 'razorpay',
+            }, {});
+
+            expect(decision.serviceable).toBe(true);
+            expect(decision.shippingCost).toBe(100);
+            expect(decision.rateBreakdown.freight).toBe(100);
+        } finally {
+            vi.restoreAllMocks();
+        }
+    });
+});
+

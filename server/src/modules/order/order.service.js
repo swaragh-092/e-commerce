@@ -1375,8 +1375,10 @@ const placeOrder = async (userId, payload) => {
         const randStr = crypto.randomBytes(3).toString('hex').toUpperCase();
         const orderNumber = `ORD-${dateStr}-${randStr}`;
 
-        const initialOrderStatus = paymentMethod === 'cod' ? ORDER_DEFAULT_STATUS : 'pending_payment';
-        const initialPaymentStatus = paymentMethod === 'cod' ? 'pending_cod' : 'payment_pending';
+        // Free orders (100% coupon): settle immediately, no provider session.
+        const isFreeOnlineOrder = paymentMethod !== 'cod' && Number(total) <= 0.009;
+        const initialOrderStatus = paymentMethod === 'cod' ? ORDER_DEFAULT_STATUS : (isFreeOnlineOrder ? 'processing' : 'pending_payment');
+        const initialPaymentStatus = paymentMethod === 'cod' ? 'pending_cod' : (isFreeOnlineOrder ? 'paid_online' : 'payment_pending');
 
         const order = await Order.create({
             orderNumber,
@@ -1444,7 +1446,8 @@ const placeOrder = async (userId, payload) => {
         // For COD orders, create the Payment record immediately inside the transaction.
         // This mirrors how Razorpay creates a pending Payment; it is updated to 'completed'
         // by the admin "Mark COD as Collected" endpoint later.
-        if (paymentMethod === 'cod') {
+    const isFreeSettledOrder = paymentMethod !== 'cod' && Number(order.total) <= 0.009;
+    if (paymentMethod === 'cod' || isFreeSettledOrder) {
             const currencySetting = await Setting.findOne({ where: { group: 'general', key: 'currency' }, transaction: t });
             const currency = (currencySetting?.value || 'INR').toUpperCase();
             await Payment.create({
@@ -1454,6 +1457,18 @@ const placeOrder = async (userId, payload) => {
                 amount: total,
                 currency,
                 status: initialPaymentStatus,
+            }, { transaction: t });
+        } else if (isFreeOnlineOrder) {
+            const currencySetting = await Setting.findOne({ where: { group: 'general', key: 'currency' }, transaction: t });
+            const currency = (currencySetting?.value || 'INR').toUpperCase();
+            await Payment.create({
+                orderId: order.id,
+                provider: paymentMethod,
+                transactionId: `free_${order.id}`,
+                amount: 0,
+                currency,
+                status: 'paid_online',
+                metadata: { freeOrder: true, settledAt: new Date().toISOString() },
             }, { transaction: t });
         }
 
@@ -1500,11 +1515,11 @@ const placeOrder = async (userId, payload) => {
             transaction: t,
         });
 
-        if (paymentMethod === 'cod') {
+        if (paymentMethod === 'cod' || isFreeOnlineOrder) {
             await addOrderHistoryEvent({
                 orderId: order.id,
                 eventType: 'order_placed',
-                description: 'Order was placed successfully.',
+                description: isFreeOnlineOrder ? 'Free order was placed successfully (no payment required).' : 'Order was placed successfully.',
                 actorId: userId,
                 actorType: 'customer',
                 transaction: t,
@@ -1535,7 +1550,7 @@ const placeOrder = async (userId, payload) => {
             );
         }
 
-        if (cart && paymentMethod === 'cod') {
+        if (cart && (paymentMethod === 'cod' || isFreeOnlineOrder)) {
             await cart.update({ status: 'converted' }, { transaction: t });
         }
         

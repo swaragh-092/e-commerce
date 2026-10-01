@@ -717,20 +717,41 @@ const calculateRuleDecision = async ({ subtotal, chargeableWeightGrams = 0, pack
     const provider = matchedRule.provider || defaultProvider;
 
     const parcelWeights = parcelWeightsGrams.length ? parcelWeightsGrams : [chargeableWeightGrams];
-    const parcelRateBreakdowns = parcelWeights.map((parcelWeight) => calculateRuleRate(matchedRule, {
-        subtotal,
-        chargeableWeightGrams: parcelWeight,
-        paymentMethod,
-        zone,
-    }));
-    const totalFreight = normalizeMoney(parcelRateBreakdowns.reduce((sum, breakdown) => sum + Number(breakdown.freight || 0), 0));
-    const codFee = Number(parcelRateBreakdowns[0]?.codFee || 0); // COD is an order-level fee, charged once.
-    const rateBreakdown = {
-        ...parcelRateBreakdowns[0],
-        freight: totalFreight,
-        codFee,
-        total: normalizeMoney(totalFreight + codFee),
-    };
+    let totalFreight;
+    let rateBreakdown;
+    let codFee;
+
+    if (matchedRule.rateType === 'percent_of_order') {
+        const singleBreakdown = calculateRuleRate(matchedRule, {
+            subtotal,
+            chargeableWeightGrams,
+            paymentMethod,
+            zone,
+        });
+        totalFreight = normalizeMoney(singleBreakdown.freight);
+        codFee = Number(singleBreakdown.codFee || 0);
+        rateBreakdown = {
+            ...singleBreakdown,
+            freight: totalFreight,
+            codFee,
+            total: normalizeMoney(totalFreight + codFee),
+        };
+    } else {
+        const parcelRateBreakdowns = parcelWeights.map((parcelWeight) => calculateRuleRate(matchedRule, {
+            subtotal,
+            chargeableWeightGrams: parcelWeight,
+            paymentMethod,
+            zone,
+        }));
+        totalFreight = normalizeMoney(parcelRateBreakdowns.reduce((sum, breakdown) => sum + Number(breakdown.freight || 0), 0));
+        codFee = Number(parcelRateBreakdowns[0]?.codFee || 0); // COD is an order-level fee, charged once.
+        rateBreakdown = {
+            ...parcelRateBreakdowns[0],
+            freight: totalFreight,
+            codFee,
+            total: normalizeMoney(totalFreight + codFee),
+        };
+    }
 
     const codAvailable = matchedRule.codAllowed !== false && provider.supportsCod !== false;
     const shippingCost = normalizeMoney(totalFreight + codFee);
@@ -1427,4 +1448,6 @@ module.exports = {
     updateRule,
     deleteRule,
     buildCartSnapshot,
+    calculateDeliveryDecision,
+    calculateRuleDecision,
 };

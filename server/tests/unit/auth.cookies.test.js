@@ -13,7 +13,6 @@ const {
   stripAuthTokens,
   setTrustedDeviceCookie,
   verifyTrustedDevice,
-  signTrustedDevice,
 } = require('../../src/modules/auth/authCookies');
 const { refreshSchema, logoutSchema } = require('../../src/modules/auth/auth.validation');
 
