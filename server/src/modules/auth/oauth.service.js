@@ -39,7 +39,10 @@ const findOrCreateOAuthUser = async (profile, clientIp) => {
   const email = String(rawEmail).trim().toLowerCase();
 
   return sequelize.transaction(async (t) => {
-    let user = await User.findOne({ where: { email }, transaction: t });
+    let user = await User.findOne({
+      where: sequelize.where(sequelize.fn('LOWER', sequelize.col('email')), email),
+      transaction: t,
+    });
     let isMerge = false;
 
     if (!user) {
@@ -60,6 +63,10 @@ const findOrCreateOAuthUser = async (profile, clientIp) => {
       throw new Error('Account is inactive');
     } else {
       isMerge = true;
+      if (user.email !== email) {
+        await user.update({ email }, { transaction: t });
+        user.email = email;
+      }
     }
 
     if (isMerge) {

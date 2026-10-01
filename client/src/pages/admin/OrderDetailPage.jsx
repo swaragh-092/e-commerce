@@ -512,6 +512,7 @@ const FulfillmentDialog = ({ open, onClose, orderItems, orderDate, order, onSave
   const [providers, setProviders] = useState([]);
   const [providerId, setProviderId] = useState('');
   const [packageMode, setPackageMode] = useState('planned');
+  const [plannedParcelId, setPlannedParcelId] = useState('');
   const [manualPackage, setManualPackage] = useState({ packageName: '', lengthCm: '', breadthCm: '', heightCm: '', actualWeightGrams: '' });
   const parcelPlan = Array.isArray(order?.shippingSnapshot?.parcelPlan) ? order.shippingSnapshot.parcelPlan : [];
   const bookedParcelIds = (order?.fulfillments || []).flatMap((fulfillment) => fulfillment.shipments || []).map((shipment) => shipment.plannedParcelId).filter(Boolean);
