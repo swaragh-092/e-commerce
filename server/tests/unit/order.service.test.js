@@ -135,7 +135,7 @@ describe('Order Service - Calculations & Safeguards', () => {
         expect(totalTax).toBe(22.00);
     });
 
-    it('correctly calculates order total when free shipping coupon eliminates quoted delivery fee', () => {
+    it('reconciles order components when free shipping coupon eliminates quoted delivery fee', () => {
         const subtotal = 1000;
         const totalTax = 180;
         const quotedShippingCost = 100;
@@ -145,18 +145,50 @@ describe('Order Service - Calculations & Safeguards', () => {
         let shippingDiscount = 0;
         if (freeShipping && shippingCost > 0) {
             shippingDiscount = quotedShippingCost;
-            shippingCost = 0;
         }
 
         const orderDiscountAmount = 0;
         const discountAmount = Number((orderDiscountAmount + shippingDiscount).toFixed(2));
         const total = Number(Math.max(0, subtotal + totalTax + quotedShippingCost - discountAmount).toFixed(2));
 
-        // Customer pays subtotal + tax = 1180, shipping is waived
-        expect(shippingCost).toBe(0);
+        // Customer pays subtotal + tax = 1180, shipping is preserved as quoted alongside discount
+        expect(shippingCost).toBe(100);
         expect(shippingDiscount).toBe(100);
         expect(discountAmount).toBe(100);
         expect(total).toBe(1180);
+        // Financial breakdown reconciles: subtotal + tax + shipping - discount = total
+        expect(subtotal + totalTax + shippingCost - discountAmount).toBe(total);
     });
 
+    it('excludes digital items from shipment completion totals in deriveQuantityAwareOrderShippingStatus', () => {
+        const { deriveQuantityAwareOrderShippingStatus } = require('../../src/modules/order/order.service');
+
+        const orderItems = [
+            { id: 'item-phys', quantity: 2, requiresShipping: true, product: { requiresShipping: true } },
+            { id: 'item-digi', quantity: 1, requiresShipping: false, product: { requiresShipping: false } },
+        ];
+
+        // Shipment contains only physical items and has delivered them
+        const shipments = [
+            {
+                id: 'ship-1',
+                status: 'delivered',
+                items: [{ orderItemId: 'item-phys', quantity: 2 }],
+            },
+        ];
+
+        const status = deriveQuantityAwareOrderShippingStatus(orderItems, shipments);
+        expect(status).toBe('delivered');
+    });
+
+    it('returns delivered for all-digital orders in deriveQuantityAwareOrderShippingStatus', () => {
+        const { deriveQuantityAwareOrderShippingStatus } = require('../../src/modules/order/order.service');
+
+        const orderItems = [
+            { id: 'item-digi', quantity: 1, requiresShipping: false, product: { requiresShipping: false } },
+        ];
+
+        const status = deriveQuantityAwareOrderShippingStatus(orderItems, []);
+        expect(status).toBe('delivered');
+    });
 });

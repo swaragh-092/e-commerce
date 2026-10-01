@@ -52,20 +52,57 @@ const stripAuthTokens = (result) => {
     return safeResult;
 };
 
+const crypto = require('crypto');
+
+const getEncryptionKey = () => {
+    const secret = process.env.JWT_ACCESS_SECRET || 'default-fallback-jwt-secret-min-32-chars';
+    return crypto.createHash('sha256').update(secret).digest();
+};
+
+const encryptPayload = (plainText) => {
+    const iv = crypto.randomBytes(12);
+    const cipher = crypto.createCipheriv('aes-256-gcm', getEncryptionKey(), iv);
+    let encrypted = cipher.update(plainText, 'utf8', 'hex');
+    encrypted += cipher.final('hex');
+    const authTag = cipher.getAuthTag().toString('hex');
+    return `${iv.toString('hex')}:${authTag}:${encrypted}`;
+};
+
+const decryptPayload = (encryptedText) => {
+    try {
+        const parts = String(encryptedText || '').split(':');
+        if (parts.length !== 3) return null;
+        const [ivHex, authTagHex, dataHex] = parts;
+        const iv = Buffer.from(ivHex, 'hex');
+        const authTag = Buffer.from(authTagHex, 'hex');
+        const decipher = crypto.createDecipheriv('aes-256-gcm', getEncryptionKey(), iv);
+        decipher.setAuthTag(authTag);
+        let decrypted = decipher.update(dataHex, 'hex', 'utf8');
+        decrypted += decipher.final('utf8');
+        return decrypted;
+    } catch {
+        return null;
+    }
+};
+
+const getJwtSecret = () => process.env.JWT_ACCESS_SECRET || 'jwt-default-access-secret-32-chars-long';
+
 const signTrustedDevice = (userId) => {
     const { issuer, audience } = getJwtIssAud();
-    return jwt.sign({ id: userId, purpose: 'trusted_device' }, process.env.JWT_ACCESS_SECRET, {
+    const token = jwt.sign({ id: userId, purpose: 'trusted_device' }, getJwtSecret(), {
         expiresIn: '30d',
         issuer,
         audience,
     });
+    return encryptPayload(token);
 };
 
 const verifyTrustedDevice = (cookieValue, userId) => {
     if (!cookieValue || !userId) return false;
     try {
+        const decrypted = decryptPayload(cookieValue) || cookieValue;
         const { issuer, audience } = getJwtIssAud();
-        const decoded = jwt.verify(cookieValue, process.env.JWT_ACCESS_SECRET, {
+        const decoded = jwt.verify(decrypted, getJwtSecret(), {
             algorithms: ['HS256'],
             issuer,
             audience,
@@ -77,10 +114,10 @@ const verifyTrustedDevice = (cookieValue, userId) => {
 };
 
 const setTrustedDeviceCookie = (res, userId) => {
-    const token = signTrustedDevice(userId);
-    res.cookie(TRUSTED_DEVICE_COOKIE, token, {
+    const encryptedCookie = signTrustedDevice(userId);
+    res.cookie(TRUSTED_DEVICE_COOKIE, encryptedCookie, {
         httpOnly: true,
-        secure: process.env.NODE_ENV === 'production',
+        secure: true,
         sameSite: process.env.AUTH_COOKIE_SAMESITE || 'lax',
         path: '/',
         ...(process.env.AUTH_COOKIE_DOMAIN ? { domain: process.env.AUTH_COOKIE_DOMAIN } : {}),

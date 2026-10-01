@@ -9,6 +9,20 @@
  */
 module.exports = {
   async up(queryInterface, Sequelize) {
+    const dialect = queryInterface.sequelize.getDialect();
+    if (dialect === 'postgres') {
+      const [existing] = await queryInterface.sequelize.query(`
+        SELECT 1 FROM pg_class c
+        JOIN pg_namespace n ON n.oid = c.relnamespace
+        WHERE c.relname = 'user_profiles_phone_unique'
+          AND n.nspname = CURRENT_SCHEMA()
+        LIMIT 1;
+      `);
+      if (existing && existing.length > 0) {
+        return; // user_profiles_phone_unique already exists (e.g. from 20260521120000)
+      }
+    }
+
     // Null out duplicate phones, keeping the earliest-created row per number.
     await queryInterface.sequelize.query(`
       UPDATE user_profiles p SET phone = NULL
@@ -25,6 +39,10 @@ module.exports = {
   },
 
   async down(queryInterface) {
-    await queryInterface.removeConstraint('user_profiles', 'user_profiles_phone_unique');
+    try {
+      await queryInterface.removeConstraint('user_profiles', 'user_profiles_phone_unique');
+    } catch {
+      // Constraint may not exist or may have been managed as an index
+    }
   },
 };

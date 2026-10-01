@@ -256,8 +256,8 @@ const login = async (email, password, ipAddress, rememberMe = false, userAgent, 
     throw new AppError('FORBIDDEN', 403, 'Your account is inactive or banned');
   }
 
-  if (user.scheduledDeletionAt) {
-    throw new AppError('FORBIDDEN', 403, 'Account deletion is scheduled. Cancel deletion to continue using your account.');
+  if (user.scheduledDeletionAt && new Date(user.scheduledDeletionAt) <= new Date()) {
+    throw new AppError('FORBIDDEN', 403, 'Account deletion period has expired');
   }
 
   if (await isEmailVerificationRequired()) {
@@ -386,8 +386,8 @@ const refresh = async (refreshTokenStr, ipAddress, userAgent) => {
         if (!user || user.status !== 'active') {
           throw new AppError('FORBIDDEN', 403, 'User inactive');
         }
-        if (user.scheduledDeletionAt) {
-          throw new AppError('FORBIDDEN', 403, 'Account deletion is scheduled. Cancel deletion to continue.');
+        if (user.scheduledDeletionAt && new Date(user.scheduledDeletionAt) <= new Date()) {
+          throw new AppError('FORBIDDEN', 403, 'Account deletion period has expired');
         }
 
         if (emailVerificationRequired) {
@@ -725,8 +725,8 @@ const verifyTwoFactor = async (tempToken, totpCode, ipAddress) => {
   if (!user || user.status !== 'active') {
     throw new AppError('FORBIDDEN', 403, 'User inactive');
   }
-  if (user.scheduledDeletionAt) {
-    throw new AppError('FORBIDDEN', 403, 'Account deletion is scheduled. Cancel deletion to continue.');
+  if (user.scheduledDeletionAt && new Date(user.scheduledDeletionAt) <= new Date()) {
+    throw new AppError('FORBIDDEN', 403, 'Account deletion period has expired');
   }
 
   const TwoFactorService = require('./twoFactor.service');
@@ -779,8 +779,8 @@ const loginByPhone = async (phone, ipAddress) => {
       if (!found || found.status !== 'active') {
         throw new AppError('FORBIDDEN', 403, 'Account is inactive');
       }
-      if (found.scheduledDeletionAt) {
-        throw new AppError('FORBIDDEN', 403, 'Account deletion is scheduled. Cancel deletion to continue.');
+      if (found.scheduledDeletionAt && new Date(found.scheduledDeletionAt) <= new Date()) {
+        throw new AppError('FORBIDDEN', 403, 'Account deletion period has expired');
       }
       return found;
     }

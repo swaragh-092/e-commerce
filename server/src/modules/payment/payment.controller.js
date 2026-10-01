@@ -19,8 +19,9 @@ const verifyPayment = async (req, res, next) => {
 const handleWebhook = async (req, res, next) => {
     try {
         const signature = req.headers['x-razorpay-signature'];
-        const payload = Buffer.isBuffer(req.body) ? JSON.parse(req.body.toString('utf8')) : req.body;
-        const result = await PaymentService.handleWebhook(payload, signature);
+        // Pass raw bytes through: service verifies HMAC over the exact raw
+        // body Razorpay signed. Pre-parsing + JSON.stringify breaks this.
+        const result = await PaymentService.handleWebhook(req.body, signature);
         return success(res, result, 'Webhook processed');
     } catch (err) { next(err); }
 };
@@ -52,7 +53,8 @@ const handlePayUReturn = async (req, res, next) => {
         }
     } catch (err) { 
         console.error(err);
-        res.redirect('/payment/failure');
+        const appUrl = process.env.CLIENT_URL?.split(',')[0] || process.env.APP_URL || 'http://localhost:3000';
+        res.redirect(`${appUrl}/payment/failure`);
     }
 };
 

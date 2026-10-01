@@ -27,6 +27,7 @@ import { orderService } from '../../services/orderService';
 import paymentService from '../../services/paymentService';
 import { validateCoupon, getEligibleCoupons } from '../../services/adminService';
 import { calculateShipping } from '../../services/shippingService';
+import { getProductById } from '../../services/productService';
 import PageSEO from '../../components/common/PageSEO';
 import { getCartItemUnitPrice } from '../../utils/variantPricing';
 import CenteredLoader from '../../components/common/CenteredLoader';
@@ -82,12 +83,21 @@ const normalizeBuyNowItem = (item) => {
         )
     );
     if (!hasProductIdentity || !hasPriceData) return null;
+    const requiresShipping = item.requiresShipping !== undefined
+        ? item.requiresShipping
+        : (product?.requiresShipping !== undefined ? product.requiresShipping : undefined);
     return {
         id: item.id || `${item.productId}-${item.variantId || variant?.id || 'base'}`,
         productId: item.productId,
         variantId: item.variantId ?? variant?.id ?? null,
         quantity: normalizeBuyNowQuantity(item.quantity),
-        product: { ...product, id: product.id || item.productId, name: product.name || 'Product' },
+        requiresShipping,
+        product: {
+            ...product,
+            id: product.id || item.productId,
+            name: product.name || 'Product',
+            requiresShipping,
+        },
         variant: variant ? { ...variant, id: variant.id || item.variantId || null } : null,
     };
 };
@@ -233,14 +243,34 @@ const CheckoutPage = () => {
     }, [checkoutEnabled, cartEnabled, navigate]);
 
     const isBuyNowFlow = useMemo(() => Boolean(buyNowItem), [buyNowItem]);
+    const [buyNowProductRequiresShipping, setBuyNowProductRequiresShipping] = useState(undefined);
+
+    useEffect(() => {
+        if (isBuyNowFlow && buyNowItem?.productId && buyNowItem?.requiresShipping === undefined && buyNowItem?.product?.requiresShipping === undefined) {
+            let active = true;
+            getProductById(buyNowItem.productId)
+                .then((data) => {
+                    const prod = data?.product || data;
+                    if (active && prod && typeof prod.requiresShipping === 'boolean') {
+                        setBuyNowProductRequiresShipping(prod.requiresShipping);
+                    }
+                })
+                .catch(() => {});
+            return () => { active = false; };
+        }
+    }, [isBuyNowFlow, buyNowItem?.productId, buyNowItem?.requiresShipping, buyNowItem?.product?.requiresShipping]);
+
     const items = useMemo(() => (isBuyNowFlow ? [buyNowItem] : (cart?.items || [])), [isBuyNowFlow, buyNowItem, cart?.items]);
     const hasPhysicalItems = useMemo(() => {
         if (!items.length) return true;
         return items.some((item) => {
             const prod = item?.product || item;
-            return prod?.requiresShipping !== false;
+            let req = prod?.requiresShipping;
+            if (req === undefined) req = item?.requiresShipping;
+            if (req === undefined && isBuyNowFlow) req = buyNowProductRequiresShipping;
+            return req !== false;
         });
-    }, [items]);
+    }, [items, isBuyNowFlow, buyNowProductRequiresShipping]);
     const couponsEnabled = settings?.features?.coupons !== false;
     const paymentSettings = settings?.payments || {};
     const enabledPaymentMethods = PAYMENT_METHOD_OPTIONS.filter((method) => {

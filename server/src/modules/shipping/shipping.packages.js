@@ -105,14 +105,17 @@ const planParcels = (items, profiles, { volumetricDivisor = 5000, defaultPackage
     for (const { item, weight, quantity, candidates } of shippingItems) {
         let remaining = quantity;
         while (remaining > 0) {
-            const mixedFits = candidates.filter((candidate) => typeof candidate.fit.mixGroup === 'string' && candidate.fit.mixGroup.trim());
+            const mixedFits = candidates.filter((candidate) => candidate.fit && typeof candidate.fit.mixGroup === 'string' && candidate.fit.mixGroup.trim());
             const existingMixed = parcels.flatMap((parcel) => {
                 if (!parcel._mixGroup) return [];
                 const candidate = mixedFits.find((entry) => entry.profile.id === parcel.packageId && entry.fit.mixGroup.trim() === parcel._mixGroup);
                 if (!candidate) return [];
-                const fit = parcel._profile.fits.find((rule) => rule.productId === item.productId && (rule.variantId || null) === (item.variantId || null)) ||
-                    parcel._profile.fits.find((rule) => rule.productId === item.productId && !rule.variantId);
-                const currentSkuQty = parcel.items.filter((entry) => entry.productId === item.productId && (entry.variantId || null) === (item.variantId || null)).reduce((sum, entry) => sum + Number(entry.quantity), 0);
+                const fit = parcel._profile.fits?.find((rule) => rule.productId === item.productId && (rule.variantId || null) === (item.variantId || null)) ||
+                    parcel._profile.fits?.find((rule) => rule.productId === item.productId && !rule.variantId);
+                if (!fit) return [];
+                const currentSkuQty = parcel.items
+                    .filter((entry) => entry.productId === item.productId && (!fit.variantId || (entry.variantId || null) === (fit.variantId || null)))
+                    .reduce((sum, entry) => sum + Number(entry.quantity), 0);
                 const fitRemaining = Number(fit.maxQuantity) - currentSkuQty;
                 const available = Math.min(fitRemaining, parcel._maxItems - parcel.items.reduce((sum, entry) => sum + Number(entry.quantity), 0),
                     Math.floor((parcel._maxContentsWeightGrams - parcel._contentsWeightGrams) / weight));
@@ -138,7 +141,7 @@ const planParcels = (items, profiles, { volumetricDivisor = 5000, defaultPackage
                 Number(a.profile.emptyWeightGrams) - Number(b.profile.emptyWeightGrams) ||
                 String(a.profile.id).localeCompare(String(b.profile.id)))[0];
             const packedQuantity = Math.min(remaining, selectedCandidate.capacity);
-            const parcel = makeParcel(selectedCandidate.profile, selectedCandidate.fit.mixGroup?.trim() || null);
+            const parcel = makeParcel(selectedCandidate.profile, selectedCandidate.fit?.mixGroup?.trim() || null);
             addToParcel(parcel, item, packedQuantity, weight);
             parcels.push(parcel);
             remaining -= packedQuantity;

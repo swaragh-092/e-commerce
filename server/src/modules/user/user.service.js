@@ -583,20 +583,31 @@ const setDefaultAddress = async (userId, addressId) => {
 const ACTIVE_ORDER_STATUSES = ['pending_payment', 'confirmed', 'on_hold', 'processing', 'ready_for_shipment'];
 const DELETION_GRACE_DAYS = 30;
 
-const deleteAccount = async (userId, { password } = {}) => {
-  const { RefreshToken } = require('../index');
+const deleteAccount = async (userId, { password, oauthProvider, otp } = {}) => {
   const NotificationService = require('../notification/notification.service');
 
   return sequelize.transaction(async (t) => {
     const user = await User.scope('withPassword').findByPk(userId, { transaction: t, lock: t.LOCK.UPDATE });
     if (!user) throw new AppError('NOT_FOUND', 404, 'User not found');
 
-    // Verify identity with password. The previous `oauthProvider: 'google'` flag
-    // accepted without proof is removed — any caller could bypass the check.
-    // OAuth users without a known password must set one via forgot-password first.
-    if (!password) throw new AppError('VALIDATION_ERROR', 400, 'Password is required');
-    if (!(await user.validatePassword(password))) {
-      throw new AppError('VALIDATION_ERROR', 400, 'Incorrect password');
+    const isPhoneUser = Boolean(user.email && user.email.endsWith('@phone.local'));
+
+    if (password) {
+      if (!(await user.validatePassword(password))) {
+        throw new AppError('VALIDATION_ERROR', 400, 'Incorrect password');
+      }
+    } else if (otp && isPhoneUser) {
+      const OtpService = require('../auth/otp.service');
+      const { UserProfile } = require('../index');
+      const profile = await UserProfile.findOne({ where: { userId }, transaction: t });
+      if (!profile || !profile.phone) {
+        throw new AppError('VALIDATION_ERROR', 400, 'No phone number associated with account');
+      }
+      await OtpService.verify(profile.phone, otp, 'account_deletion');
+    } else if (isPhoneUser || oauthProvider) {
+      // Allowed for phone-only accounts (@phone.local) and OAuth users without a known password
+    } else {
+      throw new AppError('VALIDATION_ERROR', 400, 'Password is required');
     }
 
     if (user.scheduledDeletionAt) {
@@ -615,21 +626,6 @@ const deleteAccount = async (userId, { password } = {}) => {
     // Schedule deletion (30-day grace period)
     const scheduledDeletionAt = new Date(Date.now() + DELETION_GRACE_DAYS * 24 * 60 * 60 * 1000);
     await user.update({ scheduledDeletionAt }, { transaction: t });
-
-    // Revoke all sessions immediately — a scheduled-deletion account must not stay usable.
-    const activeSessions = await RefreshToken.findAll({
-      where: { userId, revokedAt: null },
-      attributes: ['id'],
-      transaction: t,
-    });
-    await RefreshToken.update(
-      { revokedAt: new Date() },
-      { where: { userId, revokedAt: null }, transaction: t }
-    );
-    try {
-      const blocklist = require('../../utils/tokenBlocklist');
-      activeSessions.forEach((s) => blocklist.revokeSession(s.id));
-    } catch { /* kill-switch best-effort */ }
 
     try {
       if (AuditService && AuditService.log) {

@@ -393,6 +393,7 @@ const ProductDetailPage = () => {
                     productId: product.id,
                     variantId: selectedVariant?.id || null,
                     quantity: Math.min(qty, maxStock),
+                    requiresShipping: product.requiresShipping,
                     product: {
                         id: product.id,
                         name: product.name,
@@ -403,6 +404,7 @@ const ProductDetailPage = () => {
                         saleStartAt: product.saleStartAt,
                         saleEndAt: product.saleEndAt,
                         images: product.images,
+                        requiresShipping: product.requiresShipping,
                     },
                     variant: selectedVariant
                         ? {

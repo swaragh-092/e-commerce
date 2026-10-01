@@ -206,7 +206,13 @@ const syncOrderShippingStatus = async (order, transaction, actingUserId = null) 
     });
     const orderItems = await OrderItem.findAll({
         where: { orderId: order.id },
-        attributes: ['id', 'quantity'],
+        attributes: ['id', 'quantity', 'productId'],
+        include: [{
+            model: Product,
+            as: 'product',
+            attributes: ['id', 'requiresShipping'],
+            required: false,
+        }],
         transaction,
     });
     const nextStatus = deriveQuantityAwareOrderShippingStatus(orderItems, shipments);
@@ -230,7 +236,16 @@ const syncOrderShippingStatus = async (order, transaction, actingUserId = null) 
 
 const deriveQuantityAwareOrderShippingStatus = (orderItems = [], shipments = []) => {
     const fallbackStatus = deriveOrderShippingStatus(shipments);
-    const totalQuantity = orderItems.reduce((sum, item) => sum + Number(item.quantity || 0), 0);
+    const shippableItems = orderItems.filter((item) => {
+        if (item.requiresShipping === false) return false;
+        if (item.product && item.product.requiresShipping === false) return false;
+        return true;
+    });
+    // If order has items but none require shipping, the digital order is fulfilled
+    if (orderItems.length > 0 && shippableItems.length === 0) {
+        return 'delivered';
+    }
+    const totalQuantity = shippableItems.reduce((sum, item) => sum + Number(item.quantity || 0), 0);
     if (totalQuantity <= 0) return fallbackStatus;
 
     const deliveredQuantity = shipments
@@ -352,7 +367,13 @@ const repairInvalidClosedOrder = async (order, transaction = null) => {
     });
     const orderItems = await OrderItem.findAll({
         where: { orderId: order.id },
-        attributes: ['id', 'quantity'],
+        attributes: ['id', 'quantity', 'productId'],
+        include: [{
+            model: Product,
+            as: 'product',
+            attributes: ['id', 'requiresShipping'],
+            required: false,
+        }],
         transaction,
     });
     const derivedShippingStatus = deriveQuantityAwareOrderShippingStatus(orderItems, shipments);
@@ -397,7 +418,13 @@ const repairCompletableOrder = async (order, transaction = null) => {
     });
     const orderItems = await OrderItem.findAll({
         where: { orderId: order.id },
-        attributes: ['id', 'quantity'],
+        attributes: ['id', 'quantity', 'productId'],
+        include: [{
+            model: Product,
+            as: 'product',
+            attributes: ['id', 'requiresShipping'],
+            required: false,
+        }],
         transaction,
     });
     const derivedShippingStatus = deriveQuantityAwareOrderShippingStatus(orderItems, shipments);
@@ -1233,7 +1260,6 @@ const placeOrder = async (userId, payload) => {
             if (shippingDiscount === 0) {
                 shippingDiscount = shippingCost;
             }
-            shippingCost = 0;
             shippingTaxAmount = 0;
         }
 
@@ -1529,18 +1555,9 @@ const placeOrder = async (userId, payload) => {
 
 
     // For COD orders skip the payment gateway entirely — order is already confirmed.
-    // For Razorpay orders, createIntent runs OUTSIDE the transaction so a gateway failure
-    // doesn't roll back the order — the order exists, payment can be retried.
-    let clientSecret = null;
-    if (paymentMethod !== 'cod') {
-        try {
-            const intent = await PaymentService.createIntent(order.userId, order.id);
-            clientSecret = intent.clientSecret;
-        } catch (err) {
-            // Log but don't fail — the order is saved; frontend can retry payment
-            clientSecret = null;
-        }
-    }
+    // For online orders the client starts the provider session via
+    // POST /payments/create-order (PaymentService.createOrder) after this
+    // returns, so there is intentionally no gateway call inside this transaction.
 
 
     try {
@@ -1618,7 +1635,6 @@ const placeOrder = async (userId, payload) => {
 
     return {
         order,
-        ...(clientSecret ? { clientSecret } : {}),
     };
 };
 
@@ -3314,4 +3330,5 @@ module.exports = {
     getAllowedNextStatuses: (status) => getAllowedNextStatuses('order', normalizeOrderStatus(status)),
     addOrderHistoryEvent,
     addNote,
+    deriveQuantityAwareOrderShippingStatus,
 };

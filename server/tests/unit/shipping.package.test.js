@@ -130,4 +130,47 @@ describe('Parcel planner & remainder box optimization', () => {
         const items = [{ productId: 'unknown-prod', name: 'Unknown', weightGrams: 100, quantity: 1, requiresShipping: true }];
         expect(() => planParcels(items, profiles)).toThrow('No configured package is confirmed to fit');
     });
+
+    it('counts product-wide package limits across all variants when fit omits variantId', () => {
+        const mixProfiles = [
+            {
+                id: 'pkg-mix',
+                name: 'Mix Box',
+                lengthCm: 20,
+                breadthCm: 15,
+                heightCm: 10,
+                emptyWeightGrams: 50,
+                maxItems: 10,
+                maxContentsWeightGrams: 2000,
+                fits: [{ productId: 'prod-shirt', maxQuantity: 2, mixGroup: 'apparel' }],
+            },
+        ];
+        const items = [
+            { productId: 'prod-shirt', variantId: 'var-red', name: 'Shirt Red', weightGrams: 100, quantity: 2, requiresShipping: true },
+            { productId: 'prod-shirt', variantId: 'var-blue', name: 'Shirt Blue', weightGrams: 100, quantity: 2, requiresShipping: true },
+        ];
+        const parcels = planParcels(items, mixProfiles);
+        // Product-wide limit is 2, so 4 total units must not be packed into a single parcel.
+        expect(parcels.length).toBe(2);
+        expect(parcels[0].items.reduce((s, i) => s + i.quantity, 0)).toBe(2);
+        expect(parcels[1].items.reduce((s, i) => s + i.quantity, 0)).toBe(2);
+    });
+
+    it('guards fallback candidate without fit when default package is used', () => {
+        const items = [{ productId: 'prod-no-profile', name: 'Book', weightGrams: 100, quantity: 1, requiresShipping: true }];
+        const defaultPackage = {
+            id: 'legacy-box',
+            name: 'Default Box',
+            enabled: true,
+            lengthCm: 25,
+            breadthCm: 20,
+            heightCm: 10,
+            maxItems: 5,
+            maxContentsWeightGrams: 3000,
+            emptyWeightGrams: 50,
+        };
+        const parcels = planParcels(items, profiles, { defaultPackage });
+        expect(parcels).toHaveLength(1);
+        expect(parcels[0].packageId).toBe('legacy-box');
+    });
 });
