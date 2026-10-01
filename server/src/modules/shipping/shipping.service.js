@@ -1073,6 +1073,10 @@ const createQuote = async (userId, payload) => {
                 defaultPackage: context.defaultPackage,
                 parcelPlan: decision.liveServiceability?.parcels || quoteParcels.map((parcel, index) => ({ ...parcel, parcelId: `parcel-${index + 1}` })),
                 shippingSettingsHash: hashObject(settings),
+                coverageHash: hashObject({
+                    allowedPincodes: normalizeList(settings['shipping.serviceablePincodes']),
+                    blockedPincodes: normalizeList(settings['shipping.blockedPincodes']),
+                }),
             },
             decisionSnapshot: decision,
             rawResponse: liveProviderResponse,
@@ -1209,7 +1213,7 @@ const testCalculation = async ({ pincode, subtotal = 0, paymentMethod = 'razorpa
     const zone = detectDeliveryZone(warehousePincode, addressSnapshot.postalCode);
     const packageCount = 1;
 
-    const decision = await calculateDeliveryDecision({
+    let decision = await calculateDeliveryDecision({
         subtotal: Number(subtotal || 0),
         chargeableWeightGrams,
         packageCount,
@@ -1217,6 +1221,14 @@ const testCalculation = async ({ pincode, subtotal = 0, paymentMethod = 'razorpa
         addressSnapshot,
         paymentMethod: normalizedPaymentMethod,
     }, settings);
+
+    decision = applyStorewidePincodeCoverage(decision, addressSnapshot.postalCode, {
+        allowedPincodes: settings['shipping.serviceablePincodes'],
+        blockedPincodes: settings['shipping.blockedPincodes'],
+    });
+    if (!['india', 'in'].includes(lower(addressSnapshot.country))) {
+        decision = { ...decision, serviceable: false, shippingCost: 0, codAvailable: false, message: 'Delivery is currently only available within India.' };
+    }
 
     const selectedProvider = decision.providerId === defaultProvider.id
         ? defaultProvider
@@ -1340,15 +1352,38 @@ const validateQuoteForOrder = async (userId, payload) => {
             throw new AppError('SHIPPING_QUOTE_STALE', 400, 'Shipping quote no longer matches this checkout session');
         }
 
+        const currentSettings = await getSettingMap(['shipping']);
         if (found.inputSnapshot) {
-            const currentSettings = await getSettingMap(['shipping']);
             const savedSettingsHash = found.inputSnapshot?.shippingSettingsHash;
             if (!savedSettingsHash || savedSettingsHash !== hashObject(currentSettings)) {
                 throw new AppError('SHIPPING_QUOTE_STALE', 400, 'Delivery settings changed. Please refresh shipping.');
             }
+            const currentCoverageHash = hashObject({
+                allowedPincodes: normalizeList(currentSettings['shipping.serviceablePincodes']),
+                blockedPincodes: normalizeList(currentSettings['shipping.blockedPincodes']),
+            });
+            const savedCoverageHash = found.inputSnapshot?.coverageHash;
+            if (savedCoverageHash && savedCoverageHash !== currentCoverageHash) {
+                throw new AppError('SHIPPING_QUOTE_STALE', 400, 'Delivery coverage changed. Please refresh shipping.');
+            }
         }
 
         const context = await buildCheckoutContext(userId, payload);
+        const destinationPincode = context.addressSnapshot?.postalCode;
+        const coverageDecision = applyStorewidePincodeCoverage(
+            { serviceable: true, codAvailable: found.codAvailable },
+            destinationPincode,
+            {
+                allowedPincodes: currentSettings['shipping.serviceablePincodes'],
+                blockedPincodes: currentSettings['shipping.blockedPincodes'],
+            }
+        );
+        if (!coverageDecision.serviceable) {
+            throw new AppError('SHIPPING_UNAVAILABLE', 400, coverageDecision.message || 'Delivery is not available for this address');
+        }
+        if (payload.paymentMethod === 'cod' && coverageDecision.codAvailable === false) {
+            throw new AppError('COD_UNAVAILABLE', 400, 'Cash on delivery is not available for this delivery address or order.');
+        }
         const couponHash = context.couponHash;
         if (
             found.cartHash !== context.cartHash ||

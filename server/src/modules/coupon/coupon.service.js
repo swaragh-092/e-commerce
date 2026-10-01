@@ -90,6 +90,17 @@ const buildCombinationResult = (evaluations, context, { source = 'manual' } = {}
     );
     const totalDiscount = Number((orderDiscount + shippingDiscount).toFixed(2));
 
+    const lineDiscounts = {};
+    safeEvaluations.forEach((evaluation) => {
+        if (evaluation.lineDiscounts && typeof evaluation.lineDiscounts === 'object') {
+            Object.entries(evaluation.lineDiscounts).forEach(([key, val]) => {
+                lineDiscounts[key] = Number(((lineDiscounts[key] || 0) + Number(val || 0)).toFixed(2));
+            });
+        }
+    });
+
+    const hasFreeShippingBenefit = shippingDiscount > 0 || safeEvaluations.some((evaluation) => Boolean(evaluation.freeShipping || evaluation.coupon?.type === 'free_shipping'));
+
     return {
         appliedCoupons: safeEvaluations.map((evaluation) => ({
             ...evaluation.coupon,
@@ -101,7 +112,8 @@ const buildCombinationResult = (evaluations, context, { source = 'manual' } = {}
         orderDiscount,
         shippingDiscount,
         totalDiscount,
-        freeShipping: shippingDiscount > 0,
+        freeShipping: hasFreeShippingBenefit,
+        lineDiscounts,
         source,
         message: safeEvaluations.length === 0
             ? 'No eligible coupon applied'
@@ -433,17 +445,23 @@ const mapCartLine = (item, labelPresets = []) => {
         plainProduct.saleLabelResolved = resolveSaleLabel(plainProduct.saleLabel, labelPresets);
     }
 
-    const unitPrice = getVariantUnitPrice(plainProduct, item.variant);
+    const unitPrice = item.unitPrice !== undefined && Number.isFinite(Number(item.unitPrice))
+        ? Number(item.unitPrice)
+        : getVariantUnitPrice(plainProduct, item.variant);
     const quantity = Number(item.quantity || 0);
+    const lineSubtotal = item.lineSubtotal !== undefined && Number.isFinite(Number(item.lineSubtotal))
+        ? Number(item.lineSubtotal)
+        : Number((unitPrice * quantity).toFixed(2));
 
     return {
         productId: plainProduct.id,
+        variantId: item.variantId || item.variant?.id || null,
         productName: plainProduct.name,
         brandId: plainProduct.brandId || plainProduct.brand?.id || null,
         categoryIds: Array.isArray(plainProduct.categories) ? plainProduct.categories.map((category) => category.id) : [],
         quantity,
         unitPrice,
-        lineSubtotal: Number((unitPrice * quantity).toFixed(2)),
+        lineSubtotal,
         isSaleItem: plainProduct.isSaleActive !== undefined ? Boolean(plainProduct.isSaleActive) : isSaleActive(plainProduct),
     };
 };
@@ -611,6 +629,23 @@ const evaluateCouponAgainstContext = async (coupon, userId, context) => {
     const shippingDiscount = freeShipping ? context.shippingCost : 0;
     const totalDiscount = Number((orderDiscount + shippingDiscount).toFixed(2));
 
+    const lineDiscounts = {};
+    if (orderDiscount > 0 && eligibleSubtotal > 0 && eligibleItems.length > 0) {
+        let remaining = orderDiscount;
+        eligibleItems.forEach((item, idx) => {
+            const key = item.variantId ? `${item.productId}:${item.variantId}` : item.productId;
+            let allocated;
+            if (idx === eligibleItems.length - 1) {
+                allocated = Math.min(item.lineSubtotal, Number(remaining.toFixed(2)));
+            } else {
+                const share = Number(((item.lineSubtotal / eligibleSubtotal) * orderDiscount).toFixed(2));
+                allocated = Math.min(item.lineSubtotal, share);
+                remaining = Math.max(0, remaining - allocated);
+            }
+            lineDiscounts[key] = Number(((lineDiscounts[key] || 0) + allocated).toFixed(2));
+        });
+    }
+
     return {
         coupon: {
             id: coupon.id,
@@ -634,6 +669,7 @@ const evaluateCouponAgainstContext = async (coupon, userId, context) => {
         shippingDiscount: Number(shippingDiscount.toFixed(2)),
         totalDiscount,
         freeShipping,
+        lineDiscounts,
         message: freeShipping
             ? 'Coupon applied: Free shipping'
             : `Coupon applied: ${coupon.type === 'percentage' ? `${coupon.value}% off` : 'Fixed amount off'}`,
@@ -875,4 +911,4 @@ const listPublic = async ({ page = 1, limit = 20 } = {}) => {
     };
 };
 
-module.exports = { list, findById, create, update, remove, validateCoupon, resolveCoupons, listPublic, getEligibleCoupons };
+module.exports = { list, findById, create, update, remove, validateCoupon, resolveCoupons, listPublic, getEligibleCoupons, matchesCouponTarget };

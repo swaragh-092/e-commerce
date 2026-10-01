@@ -41,9 +41,14 @@ const parsePayload = (payload) => {
     }
 };
 
+const ALLOWED_RETRY_TRANSITIONS = new Set([
+    'delivery_failed->out_for_delivery',
+]);
+
 const isRegression = (current, incoming) => {
     if (!incoming || incoming === 'unknown' || current === incoming) return false;
     if (TERMINAL_STATUSES.has(current)) return true;
+    if (ALLOWED_RETRY_TRANSITIONS.has(`${current}->${incoming}`)) return false;
     const currentRank = STATUS_RANK[current] !== undefined ? STATUS_RANK[current] : 0;
     const incomingRank = STATUS_RANK[incoming] !== undefined ? STATUS_RANK[incoming] : -1;
     return incomingRank <= currentRank;

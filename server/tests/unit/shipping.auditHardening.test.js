@@ -13,6 +13,7 @@ const SettingsService = require('../../src/modules/settings/settings.service');
 const TaxService = require('../../src/modules/tax/tax.service');
 const OrderService = require('../../src/modules/order/order.service');
 const { placeOrderSchema } = require('../../src/modules/order/order.validation');
+const CouponService = require('../../src/modules/coupon/coupon.service');
 const {
     sequelize,
     ShippingProvider,
@@ -23,12 +24,19 @@ const {
     Setting,
     Order,
     Fulfillment,
+    ShippingQuote,
+    ShippingRule,
+    Coupon,
+    CouponUsage,
 } = require('../../src/modules');
 
 describe('Audit Hardening & Verification Suite (11 Findings)', () => {
     beforeEach(() => {
         vi.clearAllMocks();
         vi.spyOn(sequelize, 'transaction').mockImplementation(async (cb) => cb({ LOCK: { UPDATE: 'UPDATE' } }));
+        if (CouponUsage && typeof CouponUsage.count === 'function') {
+            vi.spyOn(CouponUsage, 'count').mockResolvedValue(0);
+        }
     });
 
     describe('1. Admin limits silently dropped', () => {
@@ -415,6 +423,308 @@ describe('Audit Hardening & Verification Suite (11 Findings)', () => {
                     code: 'SECRET_DECRYPTION_FAILED',
                     statusCode: 500,
                 })
+            );
+        });
+    });
+
+    describe('12. Recheck coverage before accepting an existing quote', () => {
+        it('rejects an existing quote when destination pincode is newly blocked in store settings', async () => {
+            const foundQuote = {
+                id: 'quote-active-1',
+                userId: 'user-1',
+                serviceable: true,
+                codAvailable: true,
+                shippingCost: 50,
+                expiresAt: new Date(Date.now() + 10 * 60 * 1000),
+                cartHash: 'cart-hash-1',
+                addressHash: 'addr-hash-1',
+                paymentMethod: 'razorpay',
+                couponHash: 'coupon-hash-1',
+                inputSnapshot: {
+                    shippingSettingsHash: 'prev-settings-hash',
+                    coverageHash: 'prev-coverage-hash',
+                },
+            };
+
+            vi.spyOn(ShippingQuote, 'findOne').mockResolvedValue(foundQuote);
+            vi.spyOn(Setting, 'findAll').mockResolvedValue([
+                { group: 'shipping', key: 'serviceablePincodes', value: '' },
+                { group: 'shipping', key: 'blockedPincodes', value: '560002' },
+            ]);
+            vi.spyOn(Address, 'findOne').mockResolvedValue({
+                id: 'addr-1',
+                postalCode: '560002',
+                country: 'India',
+                state: 'Karnataka',
+                fullName: 'Test User',
+                toJSON: () => ({ id: 'addr-1', postalCode: '560002', country: 'India', state: 'Karnataka' }),
+            });
+            vi.spyOn(Cart, 'findOne').mockResolvedValue({
+                items: [{
+                    productId: 'prod-1',
+                    quantity: 1,
+                    product: { id: 'prod-1', name: 'Shirt', weightGrams: 200, requiresShipping: true },
+                }],
+            });
+
+            await expect(ShippingService.validateQuoteForOrder('user-1', {
+                shippingQuoteId: 'quote-active-1',
+                shippingAddressId: 'addr-1',
+                paymentMethod: 'razorpay',
+            })).rejects.toThrow();
+        });
+    });
+
+    describe('13. Apply storewide coverage in admin test path', () => {
+        it('reports destination as unserviceable when pincode is blocked, even if rule would match', async () => {
+            vi.spyOn(ShippingProvider, 'findOne').mockResolvedValue({
+                id: 'prov-1',
+                code: 'manual',
+                name: 'Standard Courier',
+                enabled: true,
+                isDefault: true,
+            });
+            vi.spyOn(ShippingRule, 'findAll').mockResolvedValue([]);
+            vi.spyOn(Setting, 'findAll').mockResolvedValue([
+                { group: 'shipping', key: 'warehousePincode', value: '560001' },
+                { group: 'shipping', key: 'blockedPincodes', value: '560099' },
+            ]);
+
+            const result = await ShippingService.testCalculation({
+                pincode: '560099',
+                subtotal: 1500,
+                weightGrams: 500,
+            });
+
+            expect(result.decision.serviceable).toBe(false);
+            expect(result.decision.message).toContain('unavailable to this pincode');
+        });
+    });
+
+    describe('14. Resolve free-shipping coupons with the quoted cost', () => {
+        it('preserves freeShipping flag and eliminates shippingCost when resolved against quoted shipping', async () => {
+            const freeShippingCoupon = {
+                id: 'coup-fs-1',
+                code: 'FREESHIP',
+                name: 'Free Delivery',
+                type: 'free_shipping',
+                value: 0,
+                isActive: true,
+                campaignStatus: 'active',
+                applicableTo: 'all',
+                minOrderAmount: 0,
+                perUserLimit: 10,
+                toJSON: () => ({
+                    id: 'coup-fs-1',
+                    code: 'FREESHIP',
+                    name: 'Free Delivery',
+                    type: 'free_shipping',
+                    value: 0,
+                    isActive: true,
+                    campaignStatus: 'active',
+                    applicableTo: 'all',
+                    minOrderAmount: 0,
+                    perUserLimit: 10,
+                }),
+            };
+
+            vi.spyOn(SettingsService, 'getFeatures').mockResolvedValue({ features: { coupons: true } });
+            vi.spyOn(Coupon, 'findOne').mockResolvedValue(freeShippingCoupon);
+            vi.spyOn(Coupon, 'findAll').mockResolvedValue([]);
+            vi.spyOn(Setting, 'findOne').mockResolvedValue({ value: 'true' });
+
+            const resolved = await CouponService.resolveCoupons(['FREESHIP'], 'user-1', {
+                cartSubtotal: 500,
+                cartItems: [{ lineSubtotal: 500 }],
+                shippingCost: 80,
+            });
+
+            expect(resolved.freeShipping).toBe(true);
+            expect(resolved.shippingDiscount).toBe(80);
+            expect(resolved.totalDiscount).toBe(80);
+        });
+
+        it('retains freeShipping true even if initial evaluation was performed with shippingCost: 0', async () => {
+            const freeShippingCoupon = {
+                id: 'coup-fs-2',
+                code: 'FREEZERO',
+                name: 'Free Zero',
+                type: 'free_shipping',
+                value: 0,
+                isActive: true,
+                campaignStatus: 'active',
+                applicableTo: 'all',
+                minOrderAmount: 0,
+                perUserLimit: 10,
+                toJSON: () => ({
+                    id: 'coup-fs-2',
+                    code: 'FREEZERO',
+                    name: 'Free Zero',
+                    type: 'free_shipping',
+                    value: 0,
+                    isActive: true,
+                    campaignStatus: 'active',
+                    applicableTo: 'all',
+                    minOrderAmount: 0,
+                    perUserLimit: 10,
+                }),
+            };
+
+            vi.spyOn(SettingsService, 'getFeatures').mockResolvedValue({ features: { coupons: true } });
+            vi.spyOn(Coupon, 'findOne').mockResolvedValue(freeShippingCoupon);
+            vi.spyOn(Coupon, 'findAll').mockResolvedValue([]);
+            vi.spyOn(Setting, 'findOne').mockResolvedValue({ value: 'true' });
+
+            const resolvedWithZero = await CouponService.resolveCoupons(['FREEZERO'], 'user-1', {
+                cartSubtotal: 500,
+                cartItems: [{ lineSubtotal: 500 }],
+                shippingCost: 0,
+            });
+
+            expect(resolvedWithZero.freeShipping).toBe(true);
+        });
+    });
+
+    describe('15. Reject COD when an order has no collectible shipment', () => {
+        it('rejects COD payment method when cart contains only digital goods', async () => {
+            vi.spyOn(Cart, 'findOne').mockResolvedValue({
+                items: [{
+                    productId: 'digital-p1',
+                    quantity: 1,
+                    product: {
+                        id: 'digital-p1',
+                        name: 'E-Book PDF',
+                        requiresShipping: false,
+                        status: 'published',
+                        isEnabled: true,
+                        toJSON: () => ({ id: 'digital-p1', name: 'E-Book PDF', requiresShipping: false }),
+                    },
+                }],
+            });
+
+            await expect(OrderService.placeOrder('user-1', {
+                paymentMethod: 'cod',
+            })).rejects.toThrowError(
+                expect.objectContaining({
+                    code: 'COD_UNAVAILABLE',
+                    statusCode: 400,
+                })
+            );
+        });
+    });
+
+    describe('16. Allocate targeted discounts only to eligible tax lines', () => {
+        it('allocates line discounts only to eligible items preventing GST distortion on ineligible supplies', async () => {
+            const targetedCoupon = {
+                id: 'coup-target-1',
+                code: 'BOOK20',
+                name: '20 Off Books',
+                type: 'fixed_amount',
+                value: 20,
+                isActive: true,
+                campaignStatus: 'active',
+                applicableTo: 'category',
+                applicableIds: ['cat-books'],
+                minOrderAmount: 0,
+                perUserLimit: 10,
+                toJSON: () => ({
+                    id: 'coup-target-1',
+                    code: 'BOOK20',
+                    name: '20 Off Books',
+                    type: 'fixed_amount',
+                    value: 20,
+                    isActive: true,
+                    campaignStatus: 'active',
+                    applicableTo: 'category',
+                    applicableIds: ['cat-books'],
+                    minOrderAmount: 0,
+                    perUserLimit: 10,
+                }),
+            };
+
+            vi.spyOn(SettingsService, 'getFeatures').mockResolvedValue({ features: { coupons: true } });
+            vi.spyOn(Coupon, 'findOne').mockResolvedValue(targetedCoupon);
+            vi.spyOn(Coupon, 'findAll').mockResolvedValue([]);
+            vi.spyOn(Setting, 'findOne').mockResolvedValue({ value: 'true' });
+
+            const resolved = await CouponService.resolveCoupons(['BOOK20'], 'user-1', {
+                cartSubtotal: 200,
+                cartItems: [
+                    {
+                        productId: 'book-1',
+                        lineSubtotal: 100,
+                        unitPrice: 100,
+                        quantity: 1,
+                        product: { id: 'book-1', name: 'Novel', categories: [{ id: 'cat-books' }] },
+                    },
+                    {
+                        productId: 'phone-1',
+                        lineSubtotal: 100,
+                        unitPrice: 100,
+                        quantity: 1,
+                        product: { id: 'phone-1', name: 'Earphones', categories: [{ id: 'cat-electronics' }] },
+                    },
+                ],
+                shippingCost: 0,
+            });
+
+            expect(resolved.orderDiscount).toBe(20);
+            expect(resolved.lineDiscounts['book-1']).toBe(20);
+            expect(resolved.lineDiscounts['phone-1']).toBeUndefined();
+        });
+    });
+
+    describe('17. Allow delivery retries after a failed attempt', () => {
+        it('permits delivery_failed -> out_for_delivery retry transition via webhook without dropping as stale status', async () => {
+            const mockShipmentRecord = {
+                id: 'ship-failed-1',
+                awb: 'SR-RETRY-123',
+                status: 'delivery_failed',
+                orderId: 'ord-retry-1',
+                fulfillmentId: 'ful-retry-1',
+                statusHistory: [{ status: 'delivery_failed', at: new Date().toISOString() }],
+                update: vi.fn().mockImplementation(async (updates) => Object.assign(mockShipmentRecord, updates)),
+            };
+
+            const mockFulfillmentRecord = {
+                id: 'ful-retry-1',
+                status: 'delivery_failed',
+                update: vi.fn().mockImplementation(async (updates) => Object.assign(mockFulfillmentRecord, updates)),
+            };
+
+            const mockOrderRecord = {
+                id: 'ord-retry-1',
+                orderShippingStatus: 'delivery_failed',
+                shipmentStatus: 'delivery_failed',
+                userId: 'user-retry-1',
+                update: vi.fn().mockImplementation(async (updates) => Object.assign(mockOrderRecord, updates)),
+            };
+
+            vi.spyOn(ShippingProvider, 'findOne').mockResolvedValue({
+                id: 'prov-sr',
+                code: 'shiprocket',
+                name: 'Shiprocket',
+                enabled: true,
+                webhookSecret: 'test-secret',
+            });
+            vi.spyOn(Shipment, 'findOne').mockResolvedValue(mockShipmentRecord);
+            vi.spyOn(Fulfillment, 'findByPk').mockResolvedValue(mockFulfillmentRecord);
+            vi.spyOn(Order, 'findByPk').mockResolvedValue(mockOrderRecord);
+            vi.spyOn(Shipment, 'findAll').mockResolvedValue([mockShipmentRecord]);
+            vi.spyOn(ShipmentEvent, 'findOne').mockResolvedValue(null);
+            vi.spyOn(ShipmentEvent, 'create').mockResolvedValue({ id: 'evt-retry-1' });
+
+            const result = await ShippingWebhookService.processWebhook('shiprocket', {
+                awb: 'SR-RETRY-123',
+                current_status: 'OUT FOR DELIVERY',
+                scan_id: 'SCAN-RETRY-1',
+            }, { 'x-api-key': 'test-secret' });
+
+            expect(result.accepted).toBe(true);
+            expect(result.ignored).toBeUndefined();
+            expect(mockShipmentRecord.update).toHaveBeenCalledWith(
+                expect.objectContaining({ status: 'out_for_delivery' }),
+                expect.anything()
             );
         });
     });

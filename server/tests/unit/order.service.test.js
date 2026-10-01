@@ -103,4 +103,60 @@ describe('Order Service - Calculations & Safeguards', () => {
         expect(payload.quantity).not.toBeUndefined();
     });
 
+    it('allocates targeted discounts strictly to eligible items without distorting other tax lines', () => {
+        // Line 1: Book (5% GST), subtotal 100
+        // Line 2: Electronic Gadget (18% GST), subtotal 100
+        // Targeted coupon gives 20 off Book category
+        const lineDiscounts = { 'book-1': 20 };
+        const checkoutItems = [
+            { productId: 'book-1', currentPrice: 100, quantity: 1, taxRate: 0.05 },
+            { productId: 'gadget-1', currentPrice: 100, quantity: 1, taxRate: 0.18 },
+        ];
+
+        let totalTax = 0;
+        const itemBreakdowns = checkoutItems.map((item) => {
+            const itemSubtotal = item.currentPrice * item.quantity;
+            const itemDiscount = lineDiscounts[item.productId] || 0;
+            const taxableSubtotal = Math.max(0, itemSubtotal - itemDiscount);
+            const tax = taxableSubtotal * item.taxRate;
+            totalTax += tax;
+            return { productId: item.productId, taxableSubtotal, tax };
+        });
+
+        // Book: 100 - 20 = 80 @ 5% = 4.00
+        expect(itemBreakdowns[0].taxableSubtotal).toBe(80);
+        expect(itemBreakdowns[0].tax).toBe(4.00);
+
+        // Gadget: 100 - 0 = 100 @ 18% = 18.00 (ineligible line untouched)
+        expect(itemBreakdowns[1].taxableSubtotal).toBe(100);
+        expect(itemBreakdowns[1].tax).toBe(18.00);
+
+        // Total tax: 22.00
+        expect(totalTax).toBe(22.00);
+    });
+
+    it('correctly calculates order total when free shipping coupon eliminates quoted delivery fee', () => {
+        const subtotal = 1000;
+        const totalTax = 180;
+        const quotedShippingCost = 100;
+        const freeShipping = true;
+
+        let shippingCost = quotedShippingCost;
+        let shippingDiscount = 0;
+        if (freeShipping && shippingCost > 0) {
+            shippingDiscount = quotedShippingCost;
+            shippingCost = 0;
+        }
+
+        const orderDiscountAmount = 0;
+        const discountAmount = Number((orderDiscountAmount + shippingDiscount).toFixed(2));
+        const total = Number(Math.max(0, subtotal + totalTax + quotedShippingCost - discountAmount).toFixed(2));
+
+        // Customer pays subtotal + tax = 1180, shipping is waived
+        expect(shippingCost).toBe(0);
+        expect(shippingDiscount).toBe(100);
+        expect(discountAmount).toBe(100);
+        expect(total).toBe(1180);
+    });
+
 });

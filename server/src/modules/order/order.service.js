@@ -1096,6 +1096,9 @@ const placeOrder = async (userId, payload) => {
     }
 
     const hasPhysicalItems = checkoutItems.some(i => i.product?.requiresShipping !== false);
+    if (!hasPhysicalItems && paymentMethod === 'cod') {
+        throw new AppError('COD_UNAVAILABLE', 400, 'Cash on delivery is not available for orders containing only digital products. Please select an online payment method.');
+    }
 
     let address = null;
     let shippingAddressSnapshot = { digital: true };
@@ -1188,6 +1191,25 @@ const placeOrder = async (userId, payload) => {
             couponCode,
         ].filter(Boolean).map((code) => String(code).trim().toUpperCase()))];
 
+        let shippingQuote = null;
+        let shippingCost = 0;
+        let shippingTaxAmount = 0;
+
+        if (hasPhysicalItems) {
+            shippingQuote = await ShippingService.validateQuoteForOrder(userId, {
+                ...payload,
+                shippingAddressId,
+                paymentMethod,
+                couponCode,
+                couponCodes,
+                buyNowItem,
+            });
+            shippingCost = Number(shippingQuote.shippingCost || 0);
+            shippingTaxAmount = Number(shippingQuote.taxAmount || 0);
+        }
+
+        const quotedShippingCost = shippingCost;
+
         let orderDiscountAmount = 0;
         let appliedCoupon = null;
         let couponBenefits = null;
@@ -1198,22 +1220,56 @@ const placeOrder = async (userId, payload) => {
         couponBenefits = await CouponService.resolveCoupons(couponCodesToResolve, userId, {
             cartSubtotal: subtotal,
             cartItems: checkoutItems,
-            shippingCost: 0,
+            shippingCost: quotedShippingCost,
             transaction: t,
         });
 
         orderDiscountAmount = Number(couponBenefits?.orderDiscount || 0);
         appliedCoupon = couponBenefits?.primaryCoupon || couponBenefits?.coupon || null;
 
+        let shippingDiscount = 0;
+        if (couponBenefits?.freeShipping && shippingCost > 0) {
+            shippingDiscount = Number(couponBenefits.shippingDiscount || shippingCost || 0);
+            if (shippingDiscount === 0) {
+                shippingDiscount = shippingCost;
+            }
+            shippingCost = 0;
+            shippingTaxAmount = 0;
+        }
+
         let totalTax = 0;
         const itemTaxBreakdowns = [];
         for (const item of checkoutItems) {
             const effectiveTax = TaxService.getEffectiveTax(item.currentProduct, settingsMap);
             const itemSubtotal = item.currentPrice * item.quantity;
-            // Pro-rate order discount to compute net taxable base
-            const itemDiscount = subtotal > 0
-                ? Math.round((itemSubtotal / subtotal) * orderDiscountAmount * 100) / 100
-                : 0;
+            const itemKey = item.variantId ? `${item.productId}:${item.variantId}` : item.productId;
+
+            // Allocate targeted discounts only to eligible tax lines
+            let itemDiscount = 0;
+            if (couponBenefits?.lineDiscounts && (couponBenefits.lineDiscounts[itemKey] !== undefined || couponBenefits.lineDiscounts[item.productId] !== undefined)) {
+                itemDiscount = Number(couponBenefits.lineDiscounts[itemKey] ?? couponBenefits.lineDiscounts[item.productId] ?? 0);
+            } else if (orderDiscountAmount > 0) {
+                const isEligible = appliedCoupon && typeof CouponService.matchesCouponTarget === 'function' ? CouponService.matchesCouponTarget(appliedCoupon, {
+                    productId: item.productId,
+                    brandId: item.currentProduct.brandId || item.currentProduct.brand?.id,
+                    categoryIds: Array.isArray(item.currentProduct.categories) ? item.currentProduct.categories.map((c) => c.id) : [],
+                    isSaleItem: Boolean(item.currentProduct.isSaleActive),
+                }) : true;
+                if (isEligible) {
+                    const eligibleSubtotal = checkoutItems.reduce((sum, ci) => {
+                        const match = appliedCoupon && typeof CouponService.matchesCouponTarget === 'function' ? CouponService.matchesCouponTarget(appliedCoupon, {
+                            productId: ci.productId,
+                            brandId: ci.currentProduct.brandId || ci.currentProduct.brand?.id,
+                            categoryIds: Array.isArray(ci.currentProduct.categories) ? ci.currentProduct.categories.map((c) => c.id) : [],
+                            isSaleItem: Boolean(ci.currentProduct.isSaleActive),
+                        }) : true;
+                        return match ? sum + (ci.currentPrice * ci.quantity) : sum;
+                    }, 0);
+                    itemDiscount = eligibleSubtotal > 0
+                        ? Math.round((itemSubtotal / eligibleSubtotal) * orderDiscountAmount * 100) / 100
+                        : 0;
+                }
+            }
             const taxableItemSubtotal = Math.max(0, itemSubtotal - itemDiscount);
 
             const itemTaxBreakdown = TaxService.computeItemTax(
@@ -1242,32 +1298,9 @@ const placeOrder = async (userId, payload) => {
             destinationState,
         });
 
-        let shippingQuote = null;
-        let shippingCost = 0;
-        let shippingTaxAmount = 0;
-
-        if (hasPhysicalItems) {
-            shippingQuote = await ShippingService.validateQuoteForOrder(userId, {
-                ...payload,
-                shippingAddressId,
-                paymentMethod,
-                couponCode,
-                couponCodes,
-                buyNowItem,
-            });
-            shippingCost = Number(shippingQuote.shippingCost || 0);
-            shippingTaxAmount = Number(shippingQuote.taxAmount || 0);
-        }
-
-        let shippingDiscount = 0;
-        if (couponBenefits?.freeShipping && shippingCost > 0) {
-            shippingDiscount = Number(couponBenefits.shippingDiscount || shippingCost || 0);
-            shippingCost = 0;
-        }
-
         const discountAmount = Number((orderDiscountAmount + shippingDiscount).toFixed(2));
 
-        const total = Number(Math.max(0, subtotal + totalTax + shippingCost - discountAmount).toFixed(2));
+        const total = Number(Math.max(0, subtotal + totalTax + quotedShippingCost - discountAmount).toFixed(2));
 
         const eventBuffer = [];
 
