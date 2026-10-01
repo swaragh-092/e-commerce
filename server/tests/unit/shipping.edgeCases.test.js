@@ -399,7 +399,7 @@ describe('Shipping System 10 Edge Cases A-to-Z', () => {
 
             expect(() => {
                 ShippingService.computePackageDimensions(items, 0, { strict: true });
-            }).toThrow(/missing or invalid weight\/dimensions/i);
+            }).toThrow(/Shipping is temporarily unavailable for this item/i);
         });
 
         it('createShipment refuses to create carrier shipment if product measurements are missing', async () => {

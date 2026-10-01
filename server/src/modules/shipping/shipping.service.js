@@ -22,6 +22,7 @@ const {
 const AppError = require('../../utils/AppError');
 const { getVariantUnitPrice } = require('../product/product.pricing');
 const { resolveProvider } = require('./providers');
+const { validateDefaultPackage } = require('./shipping.package');
 
 const QUOTE_TTL_MINUTES = Number(process.env.SHIPPING_QUOTE_TTL_MINUTES || 10);
 const EMPTY_HASH = hashObject(null);
@@ -69,7 +70,42 @@ const lower = (value) => String(value || '').trim().toLowerCase();
  *
  * FIX 1: replaced naïve sum(L*B*H*qty) with max/max/sum stacking.
  */
-const computePackageDimensions = (checkoutItems, packagingWeightGrams = 0, { strict = (process.env.NODE_ENV === 'production') } = {}) => {
+const computePackageDimensions = (checkoutItems, packagingWeightGrams = 0, { strict = (process.env.NODE_ENV === 'production'), defaultPackage = null } = {}) => {
+    const savedPackage = validateDefaultPackage(defaultPackage);
+    if (savedPackage) {
+        let contentsWeight = 0;
+        let units = 0;
+        for (const item of checkoutItems) {
+            const product = item.product;
+            if (product?.requiresShipping === false) continue;
+            const weight = Number(product?.weightGrams);
+            const quantity = Number(item.quantity);
+            if (!Number.isFinite(weight) || weight <= 0) {
+                throw new AppError('MISSING_PRODUCT_MEASUREMENTS', 400, 'Shipping is temporarily unavailable for this item. Please contact support.', { productId: product?.id, reason: 'missing_weight' });
+            }
+            if (!Number.isSafeInteger(quantity) || quantity < 1) {
+                throw new AppError('VALIDATION_ERROR', 400, 'Shipping quantity must be a positive whole number.');
+            }
+            const itemSides = [product.lengthCm, product.breadthCm, product.heightCm].map(Number);
+            if (itemSides.every((side) => Number.isFinite(side) && side > 0.5)) {
+                const packageSides = [savedPackage.lengthCm, savedPackage.breadthCm, savedPackage.heightCm].map(Number).sort((a, b) => a - b);
+                itemSides.sort((a, b) => a - b);
+                if (itemSides.some((side, index) => side > packageSides[index])) {
+                    throw new AppError('SHIPPING_PACKAGE_CAPACITY_EXCEEDED', 400, 'This item requires different packaging. Please contact support.');
+                }
+            }
+            contentsWeight += weight * quantity;
+            units += quantity;
+        }
+        if (!units) return { maxL: 0, maxB: 0, totalH: 0, totalWeightGrams: 0, volumeCm3: 0 };
+        if (units > Number(savedPackage.maxItems) || contentsWeight > Number(savedPackage.maxContentsWeightGrams)) {
+            throw new AppError('SHIPPING_PACKAGE_CAPACITY_EXCEEDED', 400, 'This order exceeds our available packaging capacity. Please reduce the quantity or contact support.');
+        }
+        const maxL = Number(savedPackage.lengthCm);
+        const maxB = Number(savedPackage.breadthCm);
+        const totalH = Number(savedPackage.heightCm);
+        return { maxL, maxB, totalH, totalWeightGrams: contentsWeight + Number(savedPackage.emptyWeightGrams), volumeCm3: maxL * maxB * totalH };
+    }
     let maxL = 0;
     let maxB = 0;
     let totalH = 0;
@@ -88,12 +124,12 @@ const computePackageDimensions = (checkoutItems, packagingWeightGrams = 0, { str
         const b = Number(p.breadthCm);
         const h = Number(p.heightCm);
 
-        const isMissing = !weight || weight <= 0 || !l || l <= 0 || !b || b <= 0 || !h || h <= 0;
+        const isMissing = !Number.isFinite(weight) || weight <= 0 || !Number.isFinite(l) || l <= 0.5 || !Number.isFinite(b) || b <= 0.5 || !Number.isFinite(h) || h <= 0.5;
         if (isMissing) {
             hasMissingMeasurements = true;
             missingProducts.push(p.name || p.id || 'Product');
             if (strict) {
-                throw new AppError('MISSING_PRODUCT_MEASUREMENTS', 400, `Product "${p.name || p.id}" requires shipping but has missing or invalid weight/dimensions. Measurements must be set before shipping.`);
+                throw new AppError('MISSING_PRODUCT_MEASUREMENTS', 400, 'Shipping is temporarily unavailable for this item. Please contact support.', { productId: p.id, reason: 'missing_weight_or_dimensions' });
             }
         }
 
@@ -351,8 +387,9 @@ const buildCheckoutContext = async (userId, payload) => {
 
     // Compute package dimensions from products, including packaging tare weight (Edge Case 5)
     const shippingSettings = await getSettingMap(['shipping']);
-    const packagingTare = Number(shippingSettings['shipping.packagingWeightGrams'] || 50);
-    const dims = computePackageDimensions(checkoutItems, packagingTare);
+    const packagingTare = Number(shippingSettings['shipping.packagingWeightGrams'] ?? 50);
+    const defaultPackage = shippingSettings['shipping.defaultPackage'] || null;
+    const dims = computePackageDimensions(checkoutItems, packagingTare, { defaultPackage });
 
     return {
         items,
@@ -363,6 +400,7 @@ const buildCheckoutContext = async (userId, payload) => {
         couponCodes,
         // Volumetric shipping context
         packageDims: dims,
+        defaultPackage,
         cartHash: hashObject(cartSnapshot),
         addressHash: hashObject(addressSnapshot),
         couponHash: couponCodes.length ? hashObject(couponCodes) : EMPTY_HASH,
@@ -644,6 +682,7 @@ const serializeQuote = (quote) => {
         quoteId: quote.id,
         checkoutSessionId: quote.checkoutSessionId,
         expiresAt: quote.expiresAt,
+        defaultPackage: quote.inputSnapshot?.defaultPackage || null,
     };
 };
 
@@ -668,6 +707,7 @@ const createQuote = async (userId, payload) => {
         addressHash: context.addressHash,
         paymentMethod,
         couponHash: context.couponHash,
+        packageHash: hashObject({ dimensions: context.packageDims, defaultPackage: context.defaultPackage }),
     });
 
     const existing = await ShippingQuote.findOne({
@@ -791,6 +831,7 @@ const createQuote = async (userId, payload) => {
                 items: context.cartSnapshot,
                 address: context.addressSnapshot,
                 couponCodes: context.couponCodes,
+                defaultPackage: context.defaultPackage,
             },
             decisionSnapshot: decision,
             rawResponse: liveProviderResponse,

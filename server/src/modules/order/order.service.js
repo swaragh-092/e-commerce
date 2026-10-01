@@ -1310,6 +1310,7 @@ const placeOrder = async (userId, payload) => {
                 codAvailable: shippingQuote.codAvailable === true,
                 estimatedDeliveryDays: shippingQuote.estimatedDeliveryDays || null,
                 serviceable: shippingQuote.serviceable === true,
+                defaultPackage: shippingQuote.defaultPackage || null,
             },
             orderShippingStatus: 'not_shipped',
             checkoutSessionId: shippingQuote.checkoutSessionId || payload.checkoutSessionId || null,
@@ -1974,7 +1975,11 @@ const createFulfillment = async (orderId, payload, actingUserId, auditContext = 
             product: productMap[orderItemMap[reqItem.orderItemId]?.productId],
             quantity: reqItem.quantity
         })).filter(i => i.product);
-        const dims = ShippingService.computePackageDimensions(fulfillmentItemsForDims);
+        const shippingSettings = await SettingsService.getByGroup('shipping', { maskSensitive: false });
+        const defaultPackage = Object.prototype.hasOwnProperty.call(order.shippingSnapshot || {}, 'defaultPackage')
+            ? order.shippingSnapshot.defaultPackage
+            : shippingSettings.defaultPackage || null;
+        const dims = ShippingService.computePackageDimensions(fulfillmentItemsForDims, Number(shippingSettings.packagingWeightGrams ?? 50), { defaultPackage });
         const totalWeightGrams = dims.totalWeightGrams;
 
         let providerOrderId = null;
