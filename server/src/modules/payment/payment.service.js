@@ -514,6 +514,24 @@ const handlePayUReturn = async (payload) => {
 const createOrder = async (userId, orderId) => {
     const order = await Order.findOne({ where: { id: orderId, userId } });
     if (!order) throw new AppError('NOT_FOUND', 404, 'Order not found');
+    // Zero-total (100% coupon) online orders never touch a provider.
+    // Checked first so free orders placed as `processing/paid_online` return
+    // idempotently instead of hitting the pending-only guard below.
+    if (isZeroTotal(order.total) && order.paymentMethod !== 'cod') {
+        const existingFree = await Payment.findOne({ where: { orderId: order.id } });
+        if (existingFree?.status === 'paid_online') {
+            return { provider: order.paymentMethod, freeOrder: true, amount: 0, currency: existingFree?.currency || 'INR' };
+        }
+        if (order.status === 'pending_payment') {
+            await markOrderPaid({
+                orderId: order.id,
+                provider: order.paymentMethod,
+                transactionId: existingFree?.transactionId || `free_${order.id}`,
+                metadata: { freeOrder: true, settledAt: new Date().toISOString() },
+            });
+            return { provider: order.paymentMethod, freeOrder: true, amount: 0, currency: existingFree?.currency || 'INR' };
+        }
+    }
     if (order.status === 'cancelled' || order.status === 'closed') {
         throw new AppError('VALIDATION_ERROR', 400, `Cannot create payment for a ${order.status} order`);
     }
@@ -527,18 +545,6 @@ const createOrder = async (userId, orderId) => {
     const existingPayment = await Payment.findOne({ where: { orderId: order.id } });
     if (existingPayment && ['paid_online', 'paid_cod', 'refunded', 'partially_refunded'].includes(existingPayment.status)) {
         throw new AppError('VALIDATION_ERROR', 400, `Payment is already ${existingPayment.status} for this order`);
-    }
-    // Zero-total (100% coupon) online orders never touch a provider.
-    // Settle immediately so the order does not stick in pending_payment with
-    // no payable session (providers reject amount 0).
-    if (isZeroTotal(order.total)) {
-        await markOrderPaid({
-            orderId: order.id,
-            provider: order.paymentMethod,
-            transactionId: existingPayment?.transactionId || `free_${order.id}`,
-            metadata: { freeOrder: true, settledAt: new Date().toISOString() },
-        });
-        return { provider: order.paymentMethod, freeOrder: true, amount: 0, currency: existingPayment?.currency || 'INR' };
     }
 
     if (order.paymentMethod === 'razorpay') {
@@ -1077,7 +1083,7 @@ const markPaymentFailed = async ({ orderId, provider, reason }) => {
         }, { transaction: t });
         await OrderStatusHistory.create({
             orderId: order.id, entityType: 'Payment', entityId: payment.id,
-            statusGroup: 'payment', fromStatus: 'payment_pending', toStatus: 'payment_failed',
+            statusGroup: 'payment', fromStatus: payment.status, toStatus: 'payment_failed',
             changedBy: order.userId, metadata: { reason: reason || null, provider },
         }, { transaction: t });
         return { success: true, orderId, status: 'payment_failed' };
