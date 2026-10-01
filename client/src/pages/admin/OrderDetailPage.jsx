@@ -511,6 +511,27 @@ const FulfillmentDialog = ({ open, onClose, orderItems, orderDate, order, onSave
   const [items, setItems] = useState({});
   const [providers, setProviders] = useState([]);
   const [providerId, setProviderId] = useState('');
+  const [packageMode, setPackageMode] = useState('planned');
+  const [manualPackage, setManualPackage] = useState({ packageName: '', lengthCm: '', breadthCm: '', heightCm: '', actualWeightGrams: '' });
+  const parcelPlan = Array.isArray(order?.shippingSnapshot?.parcelPlan) ? order.shippingSnapshot.parcelPlan : [];
+  const bookedParcelIds = (order?.fulfillments || []).flatMap((fulfillment) => fulfillment.shipments || []).map((shipment) => shipment.plannedParcelId).filter(Boolean);
+  const setParcelItems = (parcel) => {
+    const nextItems = {};
+    const contents = new Map();
+    for (const parcelItem of parcel?.items || []) {
+      const key = `${parcelItem.productId}:${parcelItem.variantId || ''}`;
+      contents.set(key, (contents.get(key) || 0) + Number(parcelItem.quantity));
+    }
+    for (const oi of orderItems) {
+      const key = `${oi.productId}:${oi.variantId || ''}`;
+      const plannedQuantity = contents.get(key) || 0;
+      const remainingQuantity = Math.max(0, Number(oi.quantity) - getDispatchedQuantity(oi));
+      const quantity = Math.min(plannedQuantity, remainingQuantity);
+      nextItems[oi.id] = quantity;
+      contents.set(key, Math.max(0, plannedQuantity - quantity));
+    }
+    setItems(nextItems);
+  };
   const minExpectedDate = normalizeDateInputValue(orderDate);
 
   useEffect(() => {
@@ -519,11 +540,14 @@ const FulfillmentDialog = ({ open, onClose, orderItems, orderDate, order, onSave
       orderItems.forEach(oi => {
         const shipped = getDispatchedQuantity(oi);
         const remaining = oi.quantity - shipped;
-        if (remaining > 0) {
-          initialItems[oi.id] = remaining;
-        }
+        if (remaining > 0) initialItems[oi.id] = remaining;
       });
-      setItems(initialItems);
+      const nextParcel = parcelPlan.find((parcel) => !bookedParcelIds.includes(parcel.parcelId));
+      setPlannedParcelId(nextParcel?.parcelId || '');
+      setPackageMode(nextParcel ? 'planned' : parcelPlan.length > 0 ? 'manual' : 'planned');
+      if (nextParcel) setParcelItems(nextParcel);
+      else setItems(initialItems);
+      setManualPackage({ packageName: '', lengthCm: '', breadthCm: '', heightCm: '', actualWeightGrams: '' });
       setTrackingNumber('');
       setCourier('');
       setExpectedDeliveryDate('');
@@ -569,8 +593,15 @@ const FulfillmentDialog = ({ open, onClose, orderItems, orderDate, order, onSave
       .map(([orderItemId, quantity]) => ({ orderItemId, quantity }));
 
     if (shipmentItems.length === 0) return;
+    if (packageMode === 'manual' && (
+      ['lengthCm', 'breadthCm', 'heightCm'].some((key) => !Number.isFinite(Number(manualPackage[key])) || Number(manualPackage[key]) <= 0.5) ||
+      !Number.isFinite(Number(manualPackage.actualWeightGrams)) || Number(manualPackage.actualWeightGrams) <= 0
+    )) {
+      notify('For manual packing, enter measured outside dimensions and the packed weight from a scale.', 'error');
+      return;
+    }
     const selectedProvider = providers.find(p => p.id === providerId || p.code === providerId);
-    const finalProviderId = selectedProvider ? selectedProvider.id : (providerId === 'manual' ? null : providerId);
+    const finalProviderId = selectedProvider ? selectedProvider.id : providerId === 'manual' ? 'manual' : providerId;
     onSave({
       trackingNumber,
       courier,
@@ -578,11 +609,15 @@ const FulfillmentDialog = ({ open, onClose, orderItems, orderDate, order, onSave
       notes,
       status,
       providerId: finalProviderId,
+      ...(packageMode === 'planned' && plannedParcelId ? { plannedParcelId } : {}),
+      ...(packageMode === 'manual' ? { manualPackage: { ...manualPackage, lengthCm: Number(manualPackage.lengthCm), breadthCm: Number(manualPackage.breadthCm), heightCm: Number(manualPackage.heightCm), actualWeightGrams: Number(manualPackage.actualWeightGrams) } } : {}),
       items: shipmentItems,
     });
   };
 
   const isManualProvider = providerId === 'manual' || providers.find(p => p.id === providerId)?.code === 'manual';
+  const selectedPlannedParcel = parcelPlan.find((parcel) => parcel.parcelId === plannedParcelId);
+  const usesPlannedPackage = packageMode === 'planned' && Boolean(selectedPlannedParcel);
 
   return (
     <Dialog open={open} onClose={onClose} fullWidth maxWidth="sm">
@@ -595,7 +630,17 @@ const FulfillmentDialog = ({ open, onClose, orderItems, orderDate, order, onSave
             fullWidth
             size="small"
             value={providerId}
-            onChange={(e) => setProviderId(e.target.value)}
+            onChange={(e) => {
+              const nextProviderId = e.target.value;
+              setProviderId(nextProviderId);
+              const nextProvider = providers.find((provider) => provider.id === nextProviderId || provider.code === nextProviderId);
+              if (packageMode === 'manual' && nextProvider?.code !== 'manual') {
+                setPackageMode('planned');
+                const nextParcel = parcelPlan.find((parcel) => !bookedParcelIds.includes(parcel.parcelId));
+                setPlannedParcelId(nextParcel?.parcelId || '');
+                if (nextParcel) setParcelItems(nextParcel);
+              }
+            }}
           >
             {providers.map(p => (
               <MenuItem key={p.id} value={p.id}>
@@ -655,6 +700,54 @@ const FulfillmentDialog = ({ open, onClose, orderItems, orderDate, order, onSave
             onChange={(e) => setNotes(e.target.value)}
           />
         </Stack>
+        {(parcelPlan.length > 0 || isManualProvider) && (
+          <Stack spacing={1} sx={{ mb: 2 }}>
+            {isManualProvider && <TextField select label="Packing method" value={packageMode} disabled={loading} onChange={(event) => {
+              const mode = event.target.value;
+              setPackageMode(mode);
+              if (mode === 'manual') {
+                setPlannedParcelId('');
+                const remainingItems = {};
+                orderItems.forEach((oi) => { remainingItems[oi.id] = Math.max(0, oi.quantity - getDispatchedQuantity(oi)); });
+                setItems(remainingItems);
+              } else {
+                const nextParcel = parcelPlan.find((parcel) => !bookedParcelIds.includes(parcel.parcelId));
+                setPlannedParcelId(nextParcel?.parcelId || '');
+                if (nextParcel) setParcelItems(nextParcel);
+              }
+            }}>
+              <MenuItem value="planned" disabled={!parcelPlan.some((parcel) => !bookedParcelIds.includes(parcel.parcelId))}>Use a checkout package plan</MenuItem>
+              <MenuItem value="manual">Pack and measure manually</MenuItem>
+            </TextField>}
+            {packageMode === 'planned' && <TextField
+              select
+              label="Package from checkout plan"
+              value={plannedParcelId}
+              disabled={loading}
+              onChange={(event) => {
+                const nextParcelId = event.target.value;
+                setPlannedParcelId(nextParcelId);
+                setParcelItems(parcelPlan.find((parcel) => parcel.parcelId === nextParcelId));
+              }}
+              helperText="Select one package. Its item quantities and measured dimensions are saved with this shipment."
+            >
+              {parcelPlan.map((parcel, index) => {
+                const itemsSummary = (parcel.items || []).map((item) => `${item.quantity} × ${item.name || orderItems.find((oi) => oi.productId === item.productId && (oi.variantId || null) === (item.variantId || null))?.snapshotName || 'item'}`).join(', ');
+                const booked = bookedParcelIds.includes(parcel.parcelId);
+                return <MenuItem key={parcel.parcelId} value={parcel.parcelId} disabled={booked}>{parcel.packageName || `Package ${index + 1}`} — {itemsSummary}{booked ? ' (already shipped)' : ''}</MenuItem>;
+              })}
+            </TextField>}
+            {usesPlannedPackage && <Alert severity="info">{selectedPlannedParcel.lengthCm} × {selectedPlannedParcel.breadthCm} × {selectedPlannedParcel.heightCm} cm · {(Number(selectedPlannedParcel.actualWeightGrams) / 1000).toFixed(2)} kg packed. Item quantities below come from the saved checkout plan.</Alert>}
+            {packageMode === 'manual' && <>
+              <Alert severity="info">Pack the selected items, measure the outside of the finished parcel, and weigh it including the packaging. Enter one measured parcel per shipment.</Alert>
+              <Grid container spacing={1}>
+                <Grid item xs={12}><TextField fullWidth size="small" label="Package name (optional)" value={manualPackage.packageName} onChange={(event) => setManualPackage((current) => ({ ...current, packageName: event.target.value }))} /></Grid>
+                {[["lengthCm", "Length (cm)"], ["breadthCm", "Width (cm)"], ["heightCm", "Height (cm)"], ["actualWeightGrams", "Packed weight (g)"]].map(([key, label]) => <Grid item xs={6} key={key}><TextField fullWidth size="small" type="number" label={label} inputProps={{ min: key === 'actualWeightGrams' ? 0.1 : 0.51, step: 'any' }} value={manualPackage[key]} onChange={(event) => setManualPackage((current) => ({ ...current, [key]: event.target.value }))} /></Grid>)}
+              </Grid>
+            </>}
+            {parcelPlan.length > 1 && !isManualProvider && <Alert severity="warning">The selected courier’s multi-package API workflow is not configured. Select Manual / Own Delivery only if staff will book and track each package separately.</Alert>}
+          </Stack>
+        )}
         <Typography variant="subtitle2" sx={{ mb: 1, fontWeight: 700 }}>Items to Ship</Typography>
         <TableContainer component={Paper} elevation={0} sx={{ border: '1px solid', borderColor: 'divider' }}>
           <Table size="small">
@@ -684,7 +777,7 @@ const FulfillmentDialog = ({ open, onClose, orderItems, orderDate, order, onSave
                         size="small"
                         value={items[oi.id] || 0}
                         onChange={(e) => handleQtyChange(oi.id, e.target.value, remaining)}
-                        inputProps={{ min: 0, max: remaining, style: { textAlign: 'right' } }}
+                        inputProps={{ readOnly: usesPlannedPackage, min: 0, max: remaining, style: { textAlign: 'right' } }}
                       />
                     </TableCell>
                   </TableRow>
@@ -699,7 +792,7 @@ const FulfillmentDialog = ({ open, onClose, orderItems, orderDate, order, onSave
         <Button 
           onClick={handleSubmit} 
           variant="contained" 
-          disabled={loading || Object.values(items).every(v => v === 0)}
+          disabled={loading || Object.values(items).every(v => v === 0) || (packageMode === 'planned' && parcelPlan.length > 0 && !selectedPlannedParcel) || (parcelPlan.length > 1 && !isManualProvider)}
         >
           {loading ? 'Creating...' : 'Create Shipment'}
         </Button>

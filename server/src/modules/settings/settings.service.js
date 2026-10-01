@@ -4,6 +4,7 @@ const { sequelize, Setting } = require('../index');
 const AuditService = require('../audit/audit.service');
 const AppError = require('../../utils/AppError');
 const { validateDefaultPackage } = require('../shipping/shipping.package');
+const { validateShippingSetting } = require('../shipping/shipping.settings');
 const { ACTIONS, ENTITIES } = require('../../config/constants');
 const { buildFeatures, isTier1Feature, TIER1_KEYS } = require('../../config/modes');
 const { getPermissionsForUser, PERMISSIONS } = require('../../config/permissions');
@@ -354,6 +355,7 @@ const updateKey = async (key, value, group, actingUserId, actingUser = null) => 
 
   ensureAdvancedSettingsAllowed([{ key, value, group }], actingUser);
   await ensurePaymentGatewaySettingsAreValid([{ key, value, group }]);
+  if (group === 'shipping') validateShippingSetting(key, value);
   if (group === 'shipping' && key === 'defaultPackage') validateDefaultPackage(value);
 
   // Capture the transaction result so we can invalidate the feature cache
@@ -416,6 +418,7 @@ const bulkUpdate = async (settingsInput, actingUserId, actingUser = null, option
 
     ensureAdvancedSettingsAllowed(settingsArray, actingUser);
     for (const setting of settingsArray) {
+        if (setting.group === 'shipping') validateShippingSetting(setting.key, setting.value);
         if (setting.group === 'shipping' && setting.key === 'defaultPackage') validateDefaultPackage(setting.value);
     }
     await ensurePaymentGatewaySettingsAreValid(settingsArray);

@@ -68,8 +68,9 @@ const getEffectiveTax = (product, settingsMap) => {
  * @returns {Object} Breakdown with individual tax components
  */
 const computeItemTax = (effectiveTax, itemSubtotal, destinationState = '', originState = '') => {
-    const isIntraState = !destinationState || !originState || 
-        destinationState.trim().toLowerCase() === originState.trim().toLowerCase();
+    const normOrigin = (originState || '').trim().toLowerCase();
+    const normDest = (destinationState || '').trim().toLowerCase();
+    const isIntraState = Boolean(normOrigin && normDest ? normOrigin === normDest : (!normOrigin && !normDest));
 
     let sgst = 0;
     let cgst = 0;

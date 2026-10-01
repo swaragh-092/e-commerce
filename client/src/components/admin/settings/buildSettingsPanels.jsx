@@ -321,26 +321,8 @@ function buildCheckoutPanel({ form, set, section, field, toggle, currSymbol, ena
   return [
     section(
       'Shipping',
-      'Set how shipping is calculated at checkout and when customers qualify for free delivery.',
-      <>
-        <FormControl fullWidth size="small" sx={{ mb: 2 }}>
-          <InputLabel>Shipping Method</InputLabel>
-          <Select label="Shipping Method" value={form['shipping.method'] || 'flat_rate'} onChange={(e) => set('shipping.method', e.target.value)}>
-            <MenuItem value="flat_rate">Flat Rate — charge a fixed fee on every order</MenuItem>
-            <MenuItem value="free_above_threshold">Free above threshold — flat rate until a minimum order amount</MenuItem>
-            <MenuItem value="free">Always Free — no shipping charge</MenuItem>
-          </Select>
-        </FormControl>
-        {form['shipping.method'] !== 'free' && field('shipping.flatRate', `Flat Rate (${currSymbol})`, 'number', { InputProps: { startAdornment: <InputAdornment position="start">{currSymbol}</InputAdornment> } })}
-        {form['shipping.method'] === 'free_above_threshold' && field('shipping.freeThreshold', `Free Shipping Above (${currSymbol})`, 'number', { InputProps: { startAdornment: <InputAdornment position="start">{currSymbol}</InputAdornment> } })}
-        <Divider sx={{ my: 2 }} />
-        <Typography variant="subtitle2" fontWeight={600} color="text.secondary" mb={0.5}>Storewide Delivery Coverage</Typography>
-        <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mb: 2 }}>
-          These restrictions apply across all shipping methods. An allowlist limits delivery to listed pincodes; blocked pincodes always take priority. Shiprocket must also confirm that it serves the destination.
-        </Typography>
-        {field('shipping.serviceablePincodes', 'Serviceable pincodes', 'text', { placeholder: '560001, 600001, 110001' })}
-        {field('shipping.blockedPincodes', 'Blocked pincodes', 'text', { placeholder: '194101, 744101' })}
-      </>,
+      'Manage customer delivery fees, delivery coverage, couriers and packaging in one place.',
+      <Button component={Link} to="/admin/shipping" variant="outlined">Manage shipping</Button>,
       ['shipping', 'free shipping', 'delivery', 'pincode', 'serviceable']
     ),
     section(

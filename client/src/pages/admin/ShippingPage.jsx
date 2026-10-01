@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { v4 as uuidv4 } from 'uuid';
 import {
   Box,
   Typography,
@@ -51,6 +52,7 @@ import {
   getFailedShippingOperations,
   retryShippingOperation,
 } from '../../services/adminService';
+import { getProducts } from '../../services/productService';
 import { useCurrency } from '../../hooks/useSettings';
 import TabPanel from '../../components/common/TabPanel';
 import { getSettingsGroup, updateSettingsBulk } from '../../services/settingsService';
@@ -58,7 +60,7 @@ import { getSettingsGroup, updateSettingsBulk } from '../../services/settingsSer
 const ShippingPage = () => {
   const { notify } = useNotification();
   const { symbol, formatPrice } = useCurrency();
-  const [tabIndex, setTabIndex] = useState(0);
+  const [tabIndex, setTabIndex] = useState(6);
 
   // Data states
   const [providers, setProviders] = useState([]);
@@ -67,6 +69,40 @@ const ShippingPage = () => {
   const [loading, setLoading] = useState(true);
   const [defaultPackage, setDefaultPackage] = useState({ enabled: false, lengthCm: '', breadthCm: '', heightCm: '', emptyWeightGrams: '', maxItems: '', maxContentsWeightGrams: '' });
   const [savingPackage, setSavingPackage] = useState(false);
+  const [packageProfiles, setPackageProfiles] = useState([]);
+  const [packageProducts, setPackageProducts] = useState([]);
+  const [packageDialogOpen, setPackageDialogOpen] = useState(false);
+  const [packageDraft, setPackageDraft] = useState(null);
+  const [fitDraft, setFitDraft] = useState({ productId: '', variantId: '', maxQuantity: 1 });
+  const [deliverySettings, setDeliverySettings] = useState({ pricingMode: '', method: 'flat_rate', flatRate: '', freeThreshold: '', serviceablePincodes: '', blockedPincodes: '' });
+  const [savingDelivery, setSavingDelivery] = useState(false);
+  const enabledRules = rules.filter((rule) => rule.enabled);
+  const setDeliveryField = (key, value) => setDeliverySettings((current) => ({ ...current, [key]: value }));
+  const handleSaveDelivery = async () => {
+    if (!['standard', 'rules', 'carrier'].includes(deliverySettings.pricingMode)) {
+      notify('Choose standard pricing, advanced shipping rules, or carrier-calculated delivery.', 'warning');
+      return;
+    }
+    if (['serviceablePincodes', 'blockedPincodes'].some((key) => deliverySettings[key].trim() && deliverySettings[key].split(',').some((entry) => !/^\d{6}$/.test(entry.trim())))) {
+      notify('Enter 6-digit delivery pincodes separated by commas.', 'warning');
+      return;
+    }
+    const keys = deliverySettings.pricingMode !== 'standard' || deliverySettings.method === 'free' ? [] : deliverySettings.method === 'free_above_threshold' ? ['flatRate', 'freeThreshold'] : ['flatRate'];
+    if (keys.some((key) => deliverySettings[key] === '' || !Number.isFinite(Number(deliverySettings[key])) || Number(deliverySettings[key]) < 0)) {
+      notify('Enter a non-negative delivery fee and minimum order amount.', 'warning');
+      return;
+    }
+    const settings = ['pricingMode', ...(deliverySettings.pricingMode === 'standard' ? ['method'] : []), 'serviceablePincodes', 'blockedPincodes', ...keys].map((key) => ({ group: 'shipping', key, value: keys.includes(key) ? Number(deliverySettings[key]) : deliverySettings[key] }));
+    setSavingDelivery(true);
+    try {
+      await updateSettingsBulk(settings);
+      notify('Delivery pricing and coverage saved', 'success');
+    } catch (err) {
+      notify(err.response?.data?.error?.message || 'Could not save delivery settings', 'error');
+    } finally {
+      setSavingDelivery(false);
+    }
+  };
   
   // Test Panel State
   const [testParams, setTestParams] = useState({ pincode: '', subtotal: 0, paymentMethod: 'prepaid', weightGrams: 500 });
@@ -129,16 +165,20 @@ const ShippingPage = () => {
   const fetchData = async () => {
     setLoading(true);
     try {
-      const [providersRes, zonesRes, rulesRes, shippingSettings] = await Promise.all([
+      const [providersRes, zonesRes, rulesRes, shippingSettings, productsRes] = await Promise.all([
         getShippingProviders(),
         getShippingZones(),
         getShippingRules(),
         getSettingsGroup('shipping'),
+        getProducts({ page: 1, limit: 1000, status: 'published', include: 'variants' }).catch(() => ({ data: [] })),
       ]);
       setProviders(providersRes.data.data || []);
       setZones(zonesRes.data.data || []);
       setRules(rulesRes.data.data || []);
+      setDeliverySettings((previous) => Object.fromEntries(Object.keys(previous).map((key) => [key, Array.isArray(shippingSettings[key]) ? shippingSettings[key].join(', ') : shippingSettings[key] ?? previous[key]])));
       setDefaultPackage((previous) => ({ ...previous, ...(shippingSettings.defaultPackage || {}) }));
+      setPackageProfiles(Array.isArray(shippingSettings.packageProfiles) ? shippingSettings.packageProfiles : []);
+      setPackageProducts((productsRes?.data || []).filter((product) => product.requiresShipping !== false));
     } catch (err) {
       notify('Failed to load shipping data', 'error');
     } finally {
@@ -169,6 +209,62 @@ const ShippingPage = () => {
     } finally {
       setSavingPackage(false);
     }
+  };
+
+  const openPackageDialog = (profile = null) => {
+    setPackageDraft(profile ? { ...profile, fits: [...(profile.fits || [])] } : {
+      id: uuidv4(), name: '', enabled: true, lengthCm: '', breadthCm: '', heightCm: '',
+      emptyWeightGrams: '', maxItems: '', maxContentsWeightGrams: '', fits: [],
+    });
+    setFitDraft({ productId: '', variantId: '', maxQuantity: 1 });
+    setPackageDialogOpen(true);
+  };
+
+  const savePackageProfiles = async (nextProfiles) => {
+    setSavingPackage(true);
+    try {
+      await updateSettingsBulk([{ group: 'shipping', key: 'packageProfiles', value: nextProfiles }]);
+      setPackageProfiles(nextProfiles);
+      notify('Package types saved', 'success');
+      setPackageDialogOpen(false);
+    } catch (err) {
+      notify(err.response?.data?.error?.message || 'Could not save package types', 'error');
+    } finally {
+      setSavingPackage(false);
+    }
+  };
+
+  const savePackageDraft = async () => {
+    if (!packageDraft || !packageDraft.name.trim()) {
+      notify('Enter a package name.', 'warning');
+      return;
+    }
+    const next = { ...packageDraft };
+    for (const key of ['lengthCm', 'breadthCm', 'heightCm', 'emptyWeightGrams', 'maxItems', 'maxContentsWeightGrams']) {
+      next[key] = Number(next[key]);
+    }
+    if (['lengthCm', 'breadthCm', 'heightCm'].some((key) => !Number.isFinite(next[key]) || next[key] <= 0.5) ||
+      !Number.isFinite(next.emptyWeightGrams) || next.emptyWeightGrams < 0 || !Number.isSafeInteger(next.maxItems) || next.maxItems < 1 ||
+      !Number.isFinite(next.maxContentsWeightGrams) || next.maxContentsWeightGrams <= 0 || next.fits.length === 0) {
+      notify('Enter measured package values and at least one confirmed product fit.', 'warning');
+      return;
+    }
+    await savePackageProfiles([...packageProfiles.filter((profile) => profile.id !== next.id), next]);
+  };
+
+  const addFitToDraft = () => {
+    if (!fitDraft.productId || !Number.isSafeInteger(Number(fitDraft.maxQuantity)) || Number(fitDraft.maxQuantity) < 1) {
+      notify('Choose a product and enter the confirmed maximum quantity per package.', 'warning');
+      return;
+    }
+    const fit = { productId: fitDraft.productId, ...(fitDraft.variantId ? { variantId: fitDraft.variantId } : {}), maxQuantity: Number(fitDraft.maxQuantity) };
+    const key = `${fit.productId}:${fit.variantId || ''}`;
+    if (packageDraft.fits.some((row) => `${row.productId}:${row.variantId || ''}` === key)) {
+      notify('That product/variant already has a fit rule in this package.', 'warning');
+      return;
+    }
+    setPackageDraft((current) => ({ ...current, fits: [...current.fits, fit] }));
+    setFitDraft({ productId: '', variantId: '', maxQuantity: 1 });
   };
 
   useEffect(() => {
@@ -538,37 +634,136 @@ const ShippingPage = () => {
       </Box>
 
       <Paper elevation={0} sx={{ border: '1px solid', borderColor: 'divider', borderRadius: 2 }}>
-        <Tabs value={tabIndex} onChange={handleTabChange} sx={{ borderBottom: 1, borderColor: 'divider', px: 2 }}>
-          <Tab label="Shipping Providers" />
-          <Tab label="Rate Zones" />
-          <Tab label="Shipping Rules" />
-          <Tab label="Test Panel" />
-          <Tab label="Operations & Failures" />
-          <Tab label="Packaging" />
+        <Tabs variant="scrollable" scrollButtons="auto" value={tabIndex} onChange={handleTabChange} sx={{ borderBottom: 1, borderColor: 'divider', px: 2 }}>
+          <Tab value={6} id="shipping-tab-6" aria-controls="shipping-tabpanel-6" label="Delivery pricing & coverage" />
+          <Tab value={0} id="shipping-tab-0" aria-controls="shipping-tabpanel-0" label="Shipping Providers" />
+          <Tab value={1} id="shipping-tab-1" aria-controls="shipping-tabpanel-1" label="Rate Zones" />
+          <Tab value={2} id="shipping-tab-2" aria-controls="shipping-tabpanel-2" label="Shipping Rules" />
+          <Tab value={3} id="shipping-tab-3" aria-controls="shipping-tabpanel-3" label="Test Panel" />
+          <Tab value={4} id="shipping-tab-4" aria-controls="shipping-tabpanel-4" label="Operations & Failures" />
+          <Tab value={5} id="shipping-tab-5" aria-controls="shipping-tabpanel-5" label="Packaging" />
         </Tabs>
 
         <Box sx={{ p: 3 }}>
-          <TabPanel value={tabIndex} index={5} idPrefix="shipping">
-            <Typography variant="subtitle1" fontWeight={600}>Default shipping package</Typography>
-            <Typography variant="body2" sx={{ mb: 2 }}>
-              Measure the outside of your packed box or envelope. Product weights are added to the empty package weight once per order.
-              Enable this only after confirming your products fit within the capacities below. Larger orders require different packaging.
-            </Typography>
-            <FormControlLabel control={<Switch checked={defaultPackage.enabled} onChange={(event) => setDefaultPackage((current) => ({ ...current, enabled: event.target.checked }))} />} label="Use one measured package for all products" />
-            <Grid container spacing={2} sx={{ mt: 1, mb: 2 }}>
-              {[
-                ['lengthCm', 'Length (cm)'], ['breadthCm', 'Width (cm)'], ['heightCm', 'Height (cm)'],
-                ['emptyWeightGrams', 'Empty package weight (grams)'], ['maxItems', 'Maximum items confirmed to fit'],
-                ['maxContentsWeightGrams', 'Maximum contents weight (grams)'],
-              ].map(([key, label]) => (
-                <Grid item xs={12} sm={6} md={4} key={key}>
-                  <TextField fullWidth required={defaultPackage.enabled} disabled={!defaultPackage.enabled || savingPackage} label={label} type="number" value={defaultPackage[key]} inputProps={{ min: key === 'emptyWeightGrams' ? 0 : key === 'maxItems' ? 1 : 0.51, step: key === 'maxItems' ? 1 : 'any' }} onChange={(event) => setDefaultPackage((current) => ({ ...current, [key]: event.target.value }))} />
-                </Grid>
-              ))}
-            </Grid>
-            <Alert severity="info" sx={{ mb: 2 }}>Each physical product still needs its actual weight. With this package enabled, product dimensions are optional. Flat and free shipping rules still apply to the customer charge.</Alert>
-            <Button variant="contained" disabled={savingPackage} onClick={handleSavePackage}>{savingPackage ? 'Saving…' : 'Save package'}</Button>
+          <TabPanel value={tabIndex} index={6} idPrefix="shipping">
+            <Typography variant="subtitle1" fontWeight={600}>Customer delivery fee</Typography>
+            <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>Choose one checkout policy. Standard and rules charge your configured customer fee; carrier-calculated uses a live Shiprocket quote for a supported single parcel.</Typography>
+            {!deliverySettings.pricingMode && <Alert severity="warning" sx={{ mb: 2 }}>Existing pricing is preserved until you choose and save a pricing policy. Previously, matching rules could override the standard fee.</Alert>}
+            {deliverySettings.pricingMode === 'rules' && <Alert severity={enabledRules.length ? 'info' : 'warning'} sx={{ mb: 2 }}>Only matching advanced rules set the customer fee. Orders without a matching rule cannot proceed. {enabledRules.length} rule(s) enabled.<Button size="small" onClick={() => setTabIndex(2)}>Manage rules</Button></Alert>}
+            <Stack spacing={2} sx={{ mb: 3 }}>
+              <TextField select label="Customer delivery pricing" value={deliverySettings.pricingMode} disabled={savingDelivery} onChange={(event) => setDeliveryField('pricingMode', event.target.value)} helperText="Choose one policy; only the selected policy sets the delivery line at checkout.">
+                <MenuItem value="" disabled>Choose a pricing policy</MenuItem>
+                <MenuItem value="standard">Standard pricing — fixed fee or free delivery</MenuItem>
+                <MenuItem value="rules">Advanced shipping rules — regional or weight-based fees</MenuItem>
+                <MenuItem value="carrier">Carrier-calculated — live Shiprocket parcel rates</MenuItem>
+              </TextField>
+              {deliverySettings.pricingMode === 'carrier' && <Alert severity="warning">Checkout will block orders that need multiple parcels until Shiprocket confirms the MPS API request for your account. Account activation alone does not confirm the API flow.</Alert>}
+              {deliverySettings.pricingMode === 'standard' && <TextField select label="Delivery fee method" value={deliverySettings.method} disabled={savingDelivery} onChange={(event) => setDeliveryField('method', event.target.value)}>
+                <MenuItem value="flat_rate">Fixed fee per order</MenuItem>
+                <MenuItem value="free_above_threshold">Free above an order amount</MenuItem>
+                <MenuItem value="free">Always free for customers</MenuItem>
+              </TextField>}
+              {deliverySettings.pricingMode === 'standard' && deliverySettings.method !== 'free' && <TextField label={`Default delivery fee (${symbol})`} type="number" inputProps={{ min: 0 }} value={deliverySettings.flatRate} disabled={savingDelivery} onChange={(event) => setDeliveryField('flatRate', event.target.value)} helperText="Applies to every eligible order. Advanced rules do not override standard pricing. A fee of 0 means free delivery." />}
+              {deliverySettings.pricingMode === 'standard' && deliverySettings.method === 'free_above_threshold' && <TextField label={`Free delivery from order amount (${symbol})`} type="number" inputProps={{ min: 0 }} value={deliverySettings.freeThreshold} disabled={savingDelivery} onChange={(event) => setDeliveryField('freeThreshold', event.target.value)} />}
+              <Typography variant="subtitle1" fontWeight={600}>Delivery coverage</Typography>
+              <Typography variant="body2" color="text.secondary">These restrictions apply to every shipping rule and courier. Leave allowed pincodes empty to allow any destination the courier serves. Blocked pincodes always take priority. Rate Zones group pincodes for pricing rules.</Typography>
+              <TextField label="Allowed delivery pincodes" value={deliverySettings.serviceablePincodes} disabled={savingDelivery} onChange={(event) => setDeliveryField('serviceablePincodes', event.target.value)} helperText="Separate pincodes with commas." />
+              <TextField label="Blocked delivery pincodes" value={deliverySettings.blockedPincodes} disabled={savingDelivery} onChange={(event) => setDeliveryField('blockedPincodes', event.target.value)} helperText="Separate pincodes with commas." />
+            </Stack>
+            <Stack direction="row" spacing={2}><Button variant="contained" disabled={savingDelivery} onClick={handleSaveDelivery}>{savingDelivery ? 'Saving…' : 'Save pricing and coverage'}</Button><Button onClick={() => setTabIndex(3)}>Check which fee applies</Button></Stack>
           </TabPanel>
+          <TabPanel value={tabIndex} index={5} idPrefix="shipping">
+            <Typography variant="subtitle1" fontWeight={600}>Measured package types</Typography>
+            <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
+              Add the boxes or mailers you really use. For each product, record the maximum quantity you have confirmed fits in that package. The planner splits quantities by these rules and keeps different products in separate parcels until mixed packing is explicitly supported.
+            </Typography>
+            <Alert severity="warning" sx={{ mb: 2 }}>Do not enter a package until you have measured its outside dimensions and empty weight. Every shippable product also needs its actual item weight. This does not confirm Shiprocket MPS API booking eligibility.</Alert>
+            <Stack spacing={1} sx={{ mb: 2 }}>
+              {packageProfiles.length === 0 && <Alert severity="info">No measured package types yet. Checkout will use the existing single-package settings, if enabled.</Alert>}
+              {packageProfiles.map((profile) => (
+                <Paper key={profile.id} variant="outlined" sx={{ p: 2 }}>
+                  <Stack direction={{ xs: 'column', sm: 'row' }} alignItems={{ xs: 'stretch', sm: 'center' }} justifyContent="space-between" gap={1}>
+                    <Box>
+                      <Typography fontWeight={600}>{profile.name}{profile.enabled === false ? ' (inactive)' : ''}</Typography>
+                      <Typography variant="body2" color="text.secondary">{profile.lengthCm} × {profile.breadthCm} × {profile.heightCm} cm · {profile.emptyWeightGrams} g empty · up to {profile.maxItems} items / {profile.maxContentsWeightGrams} g contents</Typography>
+                      <Typography variant="body2" color="text.secondary">Confirmed product fits: {(profile.fits || []).length}</Typography>
+                    </Box>
+                    <Stack direction="row" spacing={1}>
+                      <Button onClick={() => openPackageDialog(profile)}>Edit</Button>
+                      <Button color="error" onClick={() => savePackageProfiles(packageProfiles.filter((item) => item.id !== profile.id))}>Remove</Button>
+                    </Stack>
+                  </Stack>
+                </Paper>
+              ))}
+            </Stack>
+            <Button variant="contained" startIcon={<AddIcon />} sx={{ mb: 3 }} disabled={savingPackage} onClick={() => openPackageDialog()}>Add measured package</Button>
+            <Paper variant="outlined" sx={{ p: 2 }}>
+              <Typography variant="subtitle2" fontWeight={600}>Single measured package fallback</Typography>
+              <Typography variant="body2" color="text.secondary" sx={{ mb: 1 }}>Use this only if the same measured box is confirmed to fit every product. It remains for older product setups without package-fit records.</Typography>
+              <FormControlLabel control={<Switch checked={defaultPackage.enabled} onChange={(event) => setDefaultPackage((current) => ({ ...current, enabled: event.target.checked }))} />} label="Use one measured package for all products" />
+              <Grid container spacing={2} sx={{ mt: 1, mb: 2 }}>
+                {[
+                  ['lengthCm', 'Length (cm)'], ['breadthCm', 'Width (cm)'], ['heightCm', 'Height (cm)'],
+                  ['emptyWeightGrams', 'Empty package weight (grams)'], ['maxItems', 'Maximum items confirmed to fit'],
+                  ['maxContentsWeightGrams', 'Maximum contents weight (grams)'],
+                ].map(([key, label]) => (
+                  <Grid item xs={12} sm={6} md={4} key={key}>
+                    <TextField fullWidth required={defaultPackage.enabled} disabled={!defaultPackage.enabled || savingPackage} label={label} type="number" value={defaultPackage[key]} inputProps={{ min: key === 'emptyWeightGrams' ? 0 : key === 'maxItems' ? 1 : 0.51, step: key === 'maxItems' ? 1 : 'any' }} onChange={(event) => setDefaultPackage((current) => ({ ...current, [key]: event.target.value }))} />
+                  </Grid>
+                ))}
+              </Grid>
+              {defaultPackage.enabled && ['lengthCm', 'breadthCm', 'heightCm'].every((key) => Number(defaultPackage[key]) > 0.5) && <Alert severity="info" sx={{ mb: 2 }}>Volumetric equivalent at divisor 5000: {(Number(defaultPackage.lengthCm) * Number(defaultPackage.breadthCm) * Number(defaultPackage.heightCm) / 5000).toFixed(2)} kg. Courier chargeable weight uses the larger of actual packed and volumetric weight.</Alert>}
+              <Button variant="outlined" disabled={savingPackage} onClick={handleSavePackage}>{savingPackage ? 'Saving…' : 'Save fallback package'}</Button>
+            </Paper>
+          </TabPanel>
+          <Dialog open={packageDialogOpen} onClose={() => setPackageDialogOpen(false)} maxWidth="md" fullWidth>
+            <DialogTitle>{packageProfiles.some((profile) => profile.id === packageDraft?.id) ? 'Edit measured package' : 'Add measured package'}</DialogTitle>
+            <DialogContent dividers>
+              {packageDraft && <Stack spacing={2} sx={{ mt: 1 }}>
+                <Alert severity="info">Measure the packed parcel’s outside L × W × H and the empty box/mailer's weight. Product fit limits are merchant-confirmed quantities per parcel, not automatic guesses from product weight.</Alert>
+                <TextField label="Package name" required value={packageDraft.name} onChange={(event) => setPackageDraft((current) => ({ ...current, name: event.target.value }))} />
+                <Grid container spacing={2}>
+                  {[
+                    ['lengthCm', 'Length (cm)'], ['breadthCm', 'Width (cm)'], ['heightCm', 'Height (cm)'],
+                    ['emptyWeightGrams', 'Empty package weight (g)'], ['maxItems', 'Maximum total items'], ['maxContentsWeightGrams', 'Maximum contents weight (g)'],
+                  ].map(([key, label]) => <Grid item xs={12} sm={6} key={key}><TextField fullWidth label={label} required type="number" inputProps={{ min: key === 'emptyWeightGrams' ? 0 : key === 'maxItems' ? 1 : 0.51, step: key === 'maxItems' ? 1 : 'any' }} value={packageDraft[key]} onChange={(event) => setPackageDraft((current) => ({ ...current, [key]: event.target.value }))} /></Grid>)}
+                </Grid>
+                <FormControlLabel control={<Switch checked={packageDraft.enabled !== false} onChange={(event) => setPackageDraft((current) => ({ ...current, enabled: event.target.checked }))} />} label="Use this package for new checkout plans" />
+                <Paper variant="outlined" sx={{ p: 2 }}>
+                  <Typography fontWeight={600} sx={{ mb: 1 }}>Confirmed product fit</Typography>
+                  <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>Maximum quantity of the selected product or variant that fits in one parcel. Different products remain in separate parcels.</Typography>
+                  <Grid container spacing={1} alignItems="center">
+                    <Grid item xs={12} md={5}>
+                      <TextField select fullWidth label="Product" value={fitDraft.productId} onChange={(event) => setFitDraft({ productId: event.target.value, variantId: '', maxQuantity: fitDraft.maxQuantity })}>
+                        <MenuItem value="">Choose product</MenuItem>
+                        {packageProducts.map((product) => <MenuItem key={product.id} value={product.id}>{product.name}</MenuItem>)}
+                      </TextField>
+                    </Grid>
+                    <Grid item xs={12} md={4}>
+                      <TextField select fullWidth label="Variant" value={fitDraft.variantId} disabled={!fitDraft.productId || !(packageProducts.find((product) => product.id === fitDraft.productId)?.variants || []).length} onChange={(event) => setFitDraft((current) => ({ ...current, variantId: event.target.value }))}>
+                        <MenuItem value="">All variants / no variants</MenuItem>
+                        {(packageProducts.find((product) => product.id === fitDraft.productId)?.variants || []).map((variant) => <MenuItem key={variant.id} value={variant.id}>{variant.optionLabel || variant.name || variant.sku || variant.id}</MenuItem>)}
+                      </TextField>
+                    </Grid>
+                    <Grid item xs={8} md={2}><TextField fullWidth type="number" label="Qty / parcel" inputProps={{ min: 1, step: 1 }} value={fitDraft.maxQuantity} onChange={(event) => setFitDraft((current) => ({ ...current, maxQuantity: event.target.value }))} /></Grid>
+                    <Grid item xs={4} md={1}><Button aria-label="Add product fit" onClick={addFitToDraft}>Add</Button></Grid>
+                  </Grid>
+                  <Stack spacing={1} sx={{ mt: 2 }}>
+                    {packageDraft.fits.map((fit, index) => {
+                      const product = packageProducts.find((entry) => entry.id === fit.productId);
+                      const variant = product?.variants?.find((entry) => entry.id === fit.variantId);
+                      return <Stack key={`${fit.productId}:${fit.variantId || ''}`} direction="row" justifyContent="space-between" alignItems="center" sx={{ borderTop: 1, borderColor: 'divider', pt: 1 }}>
+                        <Typography variant="body2">{product?.name || fit.productId}{variant ? ` · ${variant.optionLabel || variant.name || variant.sku || 'Variant'}` : ''} — up to {fit.maxQuantity} per parcel</Typography>
+                        <Button color="error" aria-label={`Remove fit ${index + 1}`} onClick={() => setPackageDraft((current) => ({ ...current, fits: current.fits.filter((_, rowIndex) => rowIndex !== index) }))}>Remove</Button>
+                      </Stack>;
+                    })}
+                    {!packageDraft.fits.length && <Typography variant="body2" color="text.secondary">No product fit rules added yet.</Typography>}
+                  </Stack>
+                </Paper>
+              </Stack>}
+            </DialogContent>
+            <DialogActions sx={{ p: 2 }}><Button onClick={() => setPackageDialogOpen(false)}>Cancel</Button><Button variant="contained" disabled={savingPackage} onClick={savePackageDraft}>{savingPackage ? 'Saving…' : 'Save package type'}</Button></DialogActions>
+          </Dialog>
           {/* PROVIDERS TAB */}
             <TabPanel value={tabIndex} index={0} idPrefix="shipping" sx={{ pt: 3 }}>
             <Alert severity="info" sx={{ mb: 3 }}>
@@ -768,12 +963,12 @@ const ShippingPage = () => {
           </TabPanel>
 
           {/* TEST PANEL TAB */}
-          <TabPanel value={tabIndex} index={3}>
+          <TabPanel value={tabIndex} index={3} idPrefix="shipping">
             <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 2 }}>
               <Typography variant="subtitle1" fontWeight={600}>Test Shipping Engine</Typography>
             </Box>
             <Alert severity="info" sx={{ mb: 3 }}>
-              Enter order details below to see which rule and provider the shipping engine selects.
+              Preview the saved pricing policy and delivery coverage for an order. Use chargeable weight including packaging. This preview does not make a live Shiprocket delivery check.
             </Alert>
             <Grid container spacing={3}>
               <Grid item xs={12} md={6}>
@@ -797,9 +992,14 @@ const ShippingPage = () => {
                 <Paper variant="outlined" sx={{ p: 2, height: '100%', minHeight: 200 }}>
                   <Typography variant="subtitle2" mb={2}>Decision Result</Typography>
                   {testResult ? (
-                     <pre style={{ fontSize: '12px', overflowX: 'auto', whiteSpace: 'pre-wrap', wordWrap: 'break-word' }}>
-                       {JSON.stringify(testResult, null, 2)}
-                     </pre>
+                     <Stack spacing={1}>
+                       <Alert severity={testResult.decision?.serviceable ? 'success' : 'warning'}>{testResult.decision?.message}</Alert>
+                       <Typography>Customer fee: {formatPrice(testResult.decision?.shippingCost || 0)}</Typography>
+                       <Typography>{testResult.decision?.pricingReason}</Typography>
+                       <Typography>Courier: {testResult.decision?.providerName}</Typography>
+                       <Typography>Pickup pincode: {testResult.warehousePincode} · Delivery pincode: {testResult.deliveryPincode}</Typography>
+                       <Typography variant="caption">Confirm live courier availability at checkout. This result evaluates saved store settings.</Typography>
+                     </Stack>
                   ) : (
                     <Typography variant="body2" color="text.secondary">Run a test to see results here.</Typography>
                   )}
@@ -945,12 +1145,12 @@ const ShippingPage = () => {
                     onChange={(e) => setEditingProvider({...editingProvider, credPassword: e.target.value})} 
                   />
                   <TextField
-                    label="Pickup Pincode"
+                    label="Pickup pincode (warehouse origin)"
                     fullWidth
                     size="small"
                     value={editingProvider?.pickupPincode || ''}
                     onChange={(e) => setEditingProvider({...editingProvider, pickupPincode: e.target.value})}
-                    helperText="Warehouse pincode registered in Shiprocket"
+                    helperText="Where the courier collects parcels. This must match the registered Shiprocket pickup location; it does not define customer delivery coverage."
                   />
                   <TextField
                     label="Shiprocket Pickup Location"
@@ -958,7 +1158,7 @@ const ShippingPage = () => {
                     size="small"
                     value={editingProvider?.pickupLocationName || ''}
                     onChange={(e) => setEditingProvider({...editingProvider, pickupLocationName: e.target.value})}
-                    helperText="Must exactly match the Shiprocket pickup location name"
+                    helperText="Choose the registered Shiprocket warehouse name whose pincode matches the pickup pincode above."
                   />
                   <TextField
                     label="Webhook Header Key"

@@ -11,16 +11,16 @@ const AppError = require('../../utils/AppError');
 const STATUS_RANK = Object.freeze({
     unknown: -1,
     created: 0,
-    packed: 0,
-    shipped: 1,
-    in_transit: 1,
-    out_for_delivery: 2,
-    delivery_failed: 2,
-    delivered: 3,
-    rto_initiated: 3,
-    rto_in_transit: 4,
-    rto: 5,
-    cancelled: 5,
+    packed: 1,
+    shipped: 2,
+    in_transit: 3,
+    out_for_delivery: 4,
+    delivery_failed: 5,
+    delivered: 6,
+    rto_initiated: 7,
+    rto_in_transit: 8,
+    rto: 9,
+    cancelled: 10,
 });
 
 const TERMINAL_STATUSES = new Set(['delivered', 'rto', 'cancelled']);
@@ -44,7 +44,9 @@ const parsePayload = (payload) => {
 const isRegression = (current, incoming) => {
     if (!incoming || incoming === 'unknown' || current === incoming) return false;
     if (TERMINAL_STATUSES.has(current)) return true;
-    return STATUS_RANK[incoming] < STATUS_RANK[current];
+    const currentRank = STATUS_RANK[current] !== undefined ? STATUS_RANK[current] : 0;
+    const incomingRank = STATUS_RANK[incoming] !== undefined ? STATUS_RANK[incoming] : -1;
+    return incomingRank <= currentRank;
 };
 
 const processWebhook = async (providerCode, payload, headers = {}) => {
@@ -88,6 +90,17 @@ const processWebhook = async (providerCode, payload, headers = {}) => {
         const fulfillment = shipment.fulfillment || (shipment.fulfillmentId ? await Fulfillment.findByPk(shipment.fulfillmentId, { transaction: t }) : null);
         const order = shipment.order || (shipment.orderId ? await Order.findByPk(shipment.orderId, { transaction: t }) : null);
 
+        // Perform regression check before inserting events or updating state
+        if (isRegression(shipment.status || 'created', normalizedEvent.status)) {
+            return { accepted: true, ignored: true, reason: 'stale_status', shipmentId: shipment.id };
+        }
+
+        // Stable timestamp: use parsed timestamp from carrier, or a fixed epoch sentinel
+        // so retries without timestamps produce the exact same fallback dedupe key.
+        const stableTimestamp = normalizedEvent.timestamp && !Number.isNaN(new Date(normalizedEvent.timestamp).getTime())
+            ? new Date(normalizedEvent.timestamp)
+            : new Date(0);
+
         const payloadHash = crypto.createHash('sha256').update(asRawBuffer(payload)).digest('hex');
         const eventWhere = normalizedEvent.providerEventId
             ? { providerId: provider.id, providerEventId: normalizedEvent.providerEventId }
@@ -95,7 +108,7 @@ const processWebhook = async (providerCode, payload, headers = {}) => {
                 providerId: provider.id,
                 awb: normalizedEvent.awbCode || shipment.awb,
                 eventStatus: normalizedEvent.status,
-                eventTimestamp: normalizedEvent.timestamp,
+                eventTimestamp: stableTimestamp,
                 payloadHash,
             };
         if (await ShipmentEvent.findOne({ where: eventWhere, transaction: t })) {
@@ -110,7 +123,7 @@ const processWebhook = async (providerCode, payload, headers = {}) => {
                 awb: normalizedEvent.awbCode || shipment.awb,
                 eventType: 'status_update',
                 eventStatus: normalizedEvent.status,
-                eventTimestamp: normalizedEvent.timestamp || new Date(),
+                eventTimestamp: stableTimestamp,
                 payloadHash,
                 rawPayload: parsedPayload,
                 processedAt: new Date(),
@@ -120,10 +133,6 @@ const processWebhook = async (providerCode, payload, headers = {}) => {
                 return { accepted: true, duplicate: true, shipmentId: shipment.id };
             }
             throw error;
-        }
-
-        if (isRegression(shipment.status || 'created', normalizedEvent.status)) {
-            return { accepted: true, ignored: true, reason: 'stale_status', shipmentId: shipment.id };
         }
 
         // Record unknown statuses in statusHistory (Edge Case 10)
@@ -161,8 +170,8 @@ const processWebhook = async (providerCode, payload, headers = {}) => {
         }
 
         if (fulfillment) {
-            const nextFulfillmentStatus = ['delivered', 'rto'].includes(normalizedEvent.status)
-                ? (normalizedEvent.status === 'rto' ? 'returned' : 'delivered')
+            const nextFulfillmentStatus = ['delivered', 'rto', 'cancelled'].includes(normalizedEvent.status)
+                ? (normalizedEvent.status === 'rto' ? 'returned' : normalizedEvent.status === 'cancelled' ? 'cancelled' : 'delivered')
                 : normalizedEvent.status === 'in_transit' || normalizedEvent.status === 'out_for_delivery'
                     ? 'shipped'
                     : ['packed', 'shipped', 'delivery_failed', 'rto_initiated', 'rto_in_transit'].includes(normalizedEvent.status)

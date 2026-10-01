@@ -10,13 +10,14 @@ const {
 } = require('../../utils/orderWorkflow');
 
 const placeOrderSchema = Joi.object({
-    shippingAddressId: Joi.string().uuid().required(),
+    shippingAddressId: Joi.string().uuid().optional().allow(null, ''),
     couponCode: Joi.string().max(50).uppercase().optional().allow(null, ''),
     couponCodes: Joi.array().items(Joi.string().max(50).uppercase()).optional().default([]),
     notes: Joi.string().allow(null, ''),
     paymentMethod: Joi.string().valid('razorpay', 'stripe', 'payu', 'cashfree', 'cod').default('razorpay'),
     shippingQuoteId: Joi.string().uuid().optional(),
     checkoutSessionId: Joi.string().uuid().optional(),
+    sessionId: Joi.string().optional(),
     buyNowItem: Joi.object({
         productId: Joi.string().uuid().required(),
         variantId: Joi.string().uuid().allow(null),
@@ -36,7 +37,15 @@ const createFulfillmentSchema = Joi.object({
     expectedDeliveryDate: Joi.date().iso().allow(null).optional(),
     notes: Joi.string().allow(null, ''),
     status: Joi.string().valid(...FULFILLMENT_STATUS_VALUES).default('pending'),
-    providerId: Joi.string().uuid().allow(null).optional(),
+    providerId: Joi.alternatives().try(Joi.string().uuid(), Joi.string().valid('manual')).allow(null).optional(),
+    plannedParcelId: Joi.string().max(100).allow(null, '').optional(),
+    manualPackage: Joi.object({
+        packageName: Joi.string().max(100).allow(null, ''),
+        lengthCm: Joi.number().greater(0.5).required(),
+        breadthCm: Joi.number().greater(0.5).required(),
+        heightCm: Joi.number().greater(0.5).required(),
+        actualWeightGrams: Joi.number().greater(0).required(),
+    }).optional(),
     items: Joi.array().items(Joi.object({
         orderItemId: Joi.string().uuid().required(),
         quantity: Joi.number().integer().min(1).required(),

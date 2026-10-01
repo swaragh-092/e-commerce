@@ -1244,8 +1244,10 @@ const CheckoutPage = () => {
                                 <Typography variant="body2" color="text.secondary">Delivery Charges</Typography>
                                 {shippingLoading ? (
                                     <CircularProgress size={16} />
-                                ) : shippingError ? (
+                                ) : shippingError || shippingQuote?.serviceable === false ? (
                                     <Typography variant="body2" color="warning.main" fontWeight={600}>Unavailable</Typography>
+                                ) : !shippingQuote?.quoteId ? (
+                                    <Typography variant="body2" color="text.secondary">Select a delivery address</Typography>
                                 ) : shippingCost === 0 ? (
                                     <Typography variant="body2" color="success.main" fontWeight={600}>FREE</Typography>
                                 ) : shippingDiscount > 0 ? (
@@ -1259,7 +1261,7 @@ const CheckoutPage = () => {
                                     <Typography variant="body2">{formatPrice(shippingCost)}</Typography>
                                 )}
                             </Box>
-                            {shippingMethod === 'free_above_threshold' && shippingCost > 0 && (
+                            {shippingQuote?.pricingSource === 'standard' && shippingMethod === 'free_above_threshold' && shippingCost > 0 && (
                                 <Typography variant="caption" color="success.main" display="block" mb={1}>
                                     Add {formatPrice(freeThreshold - subtotal)} more for free delivery
                                 </Typography>

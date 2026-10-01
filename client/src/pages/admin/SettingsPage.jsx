@@ -235,7 +235,8 @@ const SettingsPage = () => {
         const [group, ...keyParts] = flatKey.split('.');
         return { group, key: keyParts.join('.'), value };
       }).filter(({ group, key, value }) => (
-        !isDesignerOwnedSetting(group, key)
+        group !== 'shipping'
+        && !isDesignerOwnedSetting(group, key)
         && !isMaskedSecret(value)
         && (canManageAdvancedSettings || !['advanced', 'ai', 'ai_credentials'].includes(group))
       ));
