@@ -12,6 +12,8 @@ module.exports = {
     );
     const existingNames = existing.map((r) => r.name);
 
+    const addLogo = (bodyHtml) => bodyHtml.replace(/(<h[12]\b)/i, '{{#if store_logo}}<img src="{{store_logo}}" alt="{{store_name}}" style="max-height:48px;max-width:160px;margin-bottom:12px;">{{/if}}$1');
+
     const templates = [
       // ──────────────────────────────────────────
       // Email Verification
@@ -176,7 +178,9 @@ Please restock this item to avoid lost sales.`,
     ];
 
     // Only insert templates that do not already exist
-    const toInsert = templates.filter((t) => !existingNames.includes(t.name));
+    const toInsert = templates
+      .filter((t) => !existingNames.includes(t.name))
+      .map((t) => ({ ...t, body_html: addLogo(t.body_html) }));
     if (toInsert.length > 0) {
       await queryInterface.bulkInsert('notification_templates', toInsert);
       console.log(`Seeded ${toInsert.length} notification template(s).`);

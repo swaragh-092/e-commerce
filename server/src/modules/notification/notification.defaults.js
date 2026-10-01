@@ -326,8 +326,9 @@ const DEFAULTS = {
   new_enquiry_customer: {
     subject: 'We received your enquiry — {{store_name}}',
     bodyHtml: EMAIL_WRAPPER(`
-    <h2>Hi {{customerName}},</h2>
-    <p>Thank you for getting in touch with us! We have received your enquiry regarding <strong>{{productName}}</strong> and our team will get back to you shortly.</p>
+    <h2>We received your enquiry</h2>
+    <p>Hi {{customerName}},</p>
+    <p>Thank you for getting in touch with us about <strong>{{productName}}</strong>. Our team will review your message and get back to you shortly.</p>
     {{#if cartItems}}
     <table class="items">
       <thead><tr><th>Product</th><th>Qty</th></tr></thead>
@@ -342,7 +343,7 @@ const DEFAULTS = {
     </table>
     {{/if}}
     <div class="info-box">
-      <p><strong>Your Message:</strong></p>
+      <p><strong>Your enquiry</strong></p>
       <p style="white-space: pre-wrap;">{{message}}</p>
     </div>
     <p>If you have any additional information to add, simply reply to this email.</p>
@@ -353,13 +354,17 @@ const DEFAULTS = {
   enquiry_reply_customer: {
     subject: 'Re: Your Enquiry regarding {{productName}} — {{store_name}}',
     bodyHtml: EMAIL_WRAPPER(`
-    <h2>Hi {{customerName}},</h2>
-    <p style="white-space: pre-wrap; font-size: 16px;">{{replyMessage}}</p>
-    <br/>
+    <h2>Reply to your enquiry</h2>
+    <p>Hi {{customerName}},</p>
+    <p>Thank you for contacting us about <strong>{{productName}}</strong>. Here is a reply from our team:</p>
+    <div class="info-box">
+      <p><strong>Our reply</strong></p>
+      <p style="white-space: pre-wrap;">{{replyMessage}}</p>
+    </div>
     <hr class="divider">
-    <p><strong>Your original message:</strong></p>
-    <div class="info-box" style="margin-top: 10px;">
-      <p style="white-space: pre-wrap; color: #555;">{{message}}</p>
+    <div class="info-box">
+      <p><strong>Your original enquiry</strong></p>
+      <p style="white-space: pre-wrap;">{{message}}</p>
     </div>
     <p>If you have any further questions, simply reply to this email.</p>
 `, ''),

@@ -23,6 +23,7 @@ module.exports = {
     <tr><td align="center">
       <table width="600" cellpadding="0" cellspacing="0" style="background:#fff;border-radius:8px;overflow:hidden;box-shadow:0 2px 12px rgba(0,0,0,0.08);">
         <tr><td style="background:${headerBg};padding:32px 40px;text-align:center;">
+          {{#if store_logo}}<img src="{{store_logo}}" alt="{{store_name}}" style="max-height:48px;max-width:160px;margin-bottom:12px;display:block;margin-left:auto;margin-right:auto;">{{/if}}
           <h1 style="margin:0;color:#fff;font-size:22px;font-weight:700;">${headerText}</h1>
         </td></tr>
         <tr><td style="padding:40px;">

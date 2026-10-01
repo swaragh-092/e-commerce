@@ -9,6 +9,8 @@ module.exports = {
     );
     const existingNames = existing.map(r => r.name);
 
+    const addLogo = (bodyHtml) => bodyHtml.replace(/(<h[12]\b)/i, '{{#if store_logo}}<img src="{{store_logo}}" alt="{{store_name}}" style="max-height:48px;max-width:160px;margin-bottom:12px;">{{/if}}$1');
+
     // Fix: rename verify_email → email_verification if it exists
     if (existingNames.includes('verify_email') && !existingNames.includes('email_verification')) {
       await queryInterface.sequelize.query(
@@ -51,7 +53,9 @@ module.exports = {
       },
     ];
 
-    const toInsert = templates.filter(t => !existingNames.includes(t.name));
+    const toInsert = templates
+      .filter(t => !existingNames.includes(t.name))
+      .map(t => ({ ...t, body_html: addLogo(t.body_html) }));
     if (toInsert.length > 0) {
       await queryInterface.bulkInsert('notification_templates', toInsert);
     }
