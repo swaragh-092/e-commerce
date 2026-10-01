@@ -49,6 +49,8 @@
 ### Operations & Security
 | Doc | What It Covers |
 |-----|---------------|
+| [PHASE-6-POLISH-AND-DEPLOYMENT.md](PHASE-6-POLISH-AND-DEPLOYMENT.md) | Phase 6 — Polish, background jobs, SEO architecture, Docker & AWS EC2 deployment |
+| [TODAY-WORK-AND-COMMITS-2026-10-01.md](TODAY-WORK-AND-COMMITS-2026-10-01.md) | Master audit and commit log for October 1, 2026 (all sessions and AI agents) |
 | [DEPLOYMENT.md](DEPLOYMENT.md) | Docker deployment, AWS EC2 setup, environment config, backup strategy |
 | [TESTING_GUIDE.md](TESTING_GUIDE.md) | Manual & automated testing framework, QA workflows |
 | [../SECURITY.md](../SECURITY.md) | Security policy, supported versions, vulnerability reporting |
