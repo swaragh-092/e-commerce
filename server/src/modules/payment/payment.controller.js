@@ -1,5 +1,6 @@
 'use strict';
 const PaymentService = require('./payment.service');
+const AppError = require('../../utils/AppError');
 const { success } = require('../../utils/response');
 
 const createOrder = async (req, res, next) => {
@@ -46,10 +47,12 @@ const handlePayUReturn = async (req, res, next) => {
     try {
         const result = await PaymentService.handlePayUReturn(req.body);
         const appUrl = process.env.CLIENT_URL?.split(',')[0] || process.env.APP_URL || 'http://localhost:3000';
-        if (result.success) {
+        if (result.success && result.orderId) {
             res.redirect(`${appUrl}/payment/success?orderId=${result.orderId}`);
+        } else if (result.orderId) {
+            res.redirect(`${appUrl}/payment/failure?orderId=${result.orderId}&status=${result.status || 'failed'}`);
         } else {
-            res.redirect(`${appUrl}/payment/failure?orderId=${result.orderId}&status=${result.status}`);
+            res.redirect(`${appUrl}/payment/failure`);
         }
     } catch (err) { 
         console.error(err);
@@ -62,11 +65,7 @@ const markFailed = async (req, res, next) => {
     try {
         const { Order } = require('../index');
         const order = await Order.findOne({ where: { id: req.params.orderId, userId: req.user.id } });
-        if (!order) {
-            const err = new Error('Order not found');
-            err.statusCode = 404;
-            throw err;
-        }
+        if (!order) throw new AppError('NOT_FOUND', 404, 'Order not found');
         const result = await PaymentService.markPaymentFailed({
             orderId: order.id,
             provider: order.paymentMethod,

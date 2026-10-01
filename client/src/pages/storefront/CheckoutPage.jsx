@@ -726,6 +726,7 @@ const CheckoutPage = () => {
 
             const orderId = res?.order?.id;
             const orderNumber = res?.order?.orderNumber;
+            const orderTotal = Number(res?.order?.total);
             orderPlaced = true;
             if (!orderId) {
                 throw new Error('Order was created, but the order id is missing. Please check your orders and retry payment.');
@@ -733,6 +734,10 @@ const CheckoutPage = () => {
             if (paymentMethod === 'cod') {
                 if (!isBuyNowFlow) await clearCart();
                 navigate('/payment/success', { state: { orderId, orderNumber, isCod: true } });
+            } else if (Number.isFinite(orderTotal) && orderTotal <= 0.009) {
+                // Free order already settled server-side; no provider session.
+                if (!isBuyNowFlow) await clearCart();
+                navigate('/payment/success', { state: { orderId, orderNumber } });
             } else {
                 await startOnlinePayment(orderId, orderNumber);
             }
