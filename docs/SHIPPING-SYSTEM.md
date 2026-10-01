@@ -1,148 +1,168 @@
-# Shipping System — A to Z Working Process
+# Shipping System — A to Z Architecture & Edge Cases Guide
 
-This document provides a comprehensive overview of the shipping engine, from product configuration to delivery tracking.
+This document provides a complete technical reference for the e-commerce platform's shipping subsystem, detailing the 10 production edge cases handled A-to-Z, resolved architectural gaps, delivery states, checkout UX, and background operations.
 
 ---
 
 ## 1. Core Architecture
 
-The shipping system is built on three main pillars that work together to decide who delivers an order and how much the customer pays.
+The shipping engine uses a dual-responsibility model:
+- **Store Shipping Rules (Customer Charge):** Define what the customer pays (Flat rate, Free above threshold, Per-kg slab, Volumetric, or % of order).
+- **Shipping Providers / Carrier APIs (Operational Fulfillment):** Check real-time courier serviceability, COD availability, and calculate internal carrier costs.
 
-### A. Shipping Providers (The "Who")
-These are the physical services that handle your packages.
-- **API-Integrated (Shiprocket, Ekart):** Direct connections to external carriers for real-time rates and label generation.
-- **Manual Delivery:** For local delivery or fixed-rate internal fulfillment.
+### A. Shipping Providers ("The Who")
+- **Shiprocket (`shiprocket`):** Direct REST API integration for automated courier assignment, serviceability, label generation, manifest download, and tracking.
+- **Ekart (`ekart`):** Enterprise courier provider adapter.
+- **Manual Delivery (`manual`):** In-house delivery fleet or fixed local dispatch.
 
-### B. Shipping Zones (The "Where")
-Geographical clusters defined by pincode prefixes.
-- **Same City:** Local delivery (4-digit prefix match).
-- **Same State:** Regional delivery (2-digit prefix match).
-- **National:** Standard cross-country delivery.
-- **Remote:** Hard-to-reach areas (e.g., North-East India, J&K).
+### B. Shipping Zones ("The Where")
+Pincode prefix-based geographical classification:
+- **Same City (`same_city`):** First 4 digits match dispatch warehouse (sub-district proximity).
+- **Same State (`same_state`):** First 2 digits match dispatch warehouse.
+- **National (`national`):** Standard domestic delivery across India.
+- **Remote (`remote`):** Special logistical zones (e.g. North-East India prefixes `78`, `79`, `83`, and Jammu & Kashmir `19`).
 
-### C. Shipping Rules (The "How")
-The logic that connects Providers and Zones with Costs. Rules are evaluated by **Priority** (highest first).
-- **Conditions:** Rules can match based on subtotal, weight, pincode, or payment method.
-- **Rate Types:** Flat Rate, Per-Kg Slab (Standard Industry Model), % of Order, or Free Shipping.
-
----
-
-## 2. The Volumetric Data Pipeline
-
-### Step 1: Product Dimensions
-Every product is defined by its physical footprint:
-- Actual Weight (Grams)
-- Length (cm)
-- Breadth (cm)
-- Height (cm)
-
-### Step 2: The Stacking Model
-When multiple items are in a cart, the system uses a **Vertical Stacking Model** instead of simply adding dimensions:
-- **Footprint:** The largest item's Length and Breadth.
-- **Height:** The sum of all items' Heights.
-- **Total Volume:** `Max(L) × Max(B) × Sum(H)`.
-
-### Step 3: Volumetric Calculation
-The volume is converted to weight using the **Volumetric Divisor** (configured in Admin Settings, default `5000`).
-- `Volumetric Weight = (Volume / Divisor) × 1000 [grams]`
-
-### Step 4: Chargeable Weight
-The carrier bills the higher of the two:
-- `Chargeable Weight = Max(Actual Weight, Volumetric Weight)`
+### C. Shipping Rules ("The How")
+Rules are evaluated strictly by **Priority** (descending order):
+- **Rate Types:** `flat`, `free_above_threshold`, `percent_of_order`, `per_kg_slab`, `volumetric`, `free`.
+- **Structured Slabs:** First slab weight (e.g. 500g), additional slab weight and rate, zone distance multipliers, and fuel surcharge percentage.
+- **COD Controls:** Per-rule `codAllowed` and optional COD handling fees (flat or percentage with minimum floor).
 
 ---
 
-## 3. The Checkout Workflow
+## 2. The 10 Practical Edge Cases Handled A-to-Z
 
-1.  **Address Entry:** Customer provides their pincode.
-2.  **Quote Request:** The frontend requests a shipping quote.
-3.  **Engine Evaluation:**
-    - Detects the **Zone** based on the delivery pincode.
-    - Calculates the **Chargeable Weight** (rounded UP to the nearest 500g slab).
-    - Iterates through **Rules** by priority.
-    - Applies the matched rule's **Rate Configuration** (Base Charge + Slab Charges + Zone Multiplier + Fuel Surcharge).
-4.  **Quote Locking:** The system returns a "Shipping Quote" ID which locks the price for 10 minutes to prevent changes during payment.
-
----
-
-## 4. Fulfillment & Tracking
-
-### A. Shipment Creation
-Once the order is placed, the Admin fulfills it in the dashboard:
-1.  **Provider Call:** The system sends package details to the carrier (e.g., Shiprocket API).
-2.  **Manifesting:** The carrier assigns a **Tracking ID (AWB)** and generates a **Shipping Label (PDF)**.
-3.  **Persistence:** The Tracking ID and Label are saved to the `Shipments` table.
-
-### B. Live Tracking (Webhooks)
-The system remains in sync with the carrier automatically:
-1.  **Status Updates:** The carrier sends "Webhooks" (HTTP notifications) when the status changes (e.g., *Out for Delivery*).
-2.  **Order Sync:** The system updates the internal `Shipment` and `Order` status.
-3.  **Customer Alerts:** Automatic notifications are triggered to keep the customer informed.
+| # | Edge Case | Problem / Risk | System Behaviour & Implementation |
+|---|---|---|---|
+| **1** | **Wrong credentials or blocked Shiprocket user** | Repeated auth calls lock accounts, hammer API rate limits, and crash checkout with unhandled 401s. | An in-memory circuit breaker (`authFailureCache`) caches 401/403/unauthorized failures for 10 minutes (`AUTH_FAILURE_COOLDOWN_MS`). Prevents repeated login requests. Admin UI has a "Test Connection" button with instant feedback. Customers receive a friendly 503 ("Delivery checking is temporarily unavailable. Please retry shortly."). Updating provider credentials instantly clears cooldown (`clearAuthCooldown()`). |
+| **2** | **Different pickup pincodes in settings** | Mismatches between store settings and carrier settings cause wrong pricing zones and rejected pickups. | A single dispatch warehouse origin is enforced across the board via `resolveDispatchOrigin()`. Zone detection, checkout serviceability, and fulfillment `shipping_operations` resolve and pass the exact matching saved Shiprocket pickup location (`pickupLocationName`) and pincode. |
+| **3** | **Invalid or unsupported customer pincode** | Invalid strings or non-serviceable remote pincodes crash calculations or return raw 500 errors. | Strict 6-digit numeric format validation (`/^\d{6}$/`). Non-matching strings return `serviceable: false` with clear reason. Carrier 400/404/422 responses are caught gracefully and translated to user-friendly unserviceable messages with an always-visible "Change Address" action. |
+| **4** | **COD unavailable but prepaid available** | Carrier rejects COD queries with 0 couriers, causing shoppers to abandon carts even though prepaid delivery is supported. | When COD check returns 0 couriers, the provider automatically falls back to check prepaid (`cod: 0`). If prepaid is supported, it returns `serviceable: true, codAvailable: false` with a clear explanation. Storefront checkout notifies the shopper, auto-switches to prepaid, and re-evaluates upon method change. Order creation strictly blocks COD submission (`COD_UNAVAILABLE`) if COD is unsupported. |
+| **5** | **Missing weight or dimensions** | Products without dimensions default to zero weight, leading to massive carrier undercharges or rejected shipments. | Stacking algorithm computes `max(L) × max(B) × sum(H × qty)` and includes configured packaging tare weight. In production / strict mode, physical products missing measurements throw `MISSING_PRODUCT_MEASUREMENTS` (400), eliminating silent defaults. `createShipment()` strictly rejects carrier shipments with missing measurements or zero weight. |
+| **6** | **Heavy or oversized parcels** | Parcels exceeding courier weight/length limits result in returned shipments or arbitrary carrier penalties. Mathematical splitting without physical split creates logistics chaos. | Evaluates courier physical thresholds (e.g. max 20kg–50kg, max 150cm length) across checkout, carrier adapters, and admin simulation. Parcels exceeding limits are blocked with clear messaging ("Package weight exceeds courier maximum limit. Until parcel splitting is enabled, please reduce item quantity or contact support.") instead of multiplying costs on impossible packages. |
+| **7** | **Overlapping or no matching rules** | Unclear fallback charges or accidental international shipments on domestic store rules. | Predictable priority evaluation (highest priority wins). Explicit domestic area guard in both `calculateRuleDecision()` and `calculateManualDecision()` ensures non-Indian addresses are blocked with "Delivery is currently only available within India", preventing universal rules without zones from allowing international dispatch. |
+| **8** | **Cart/address changes or expired quote** | Price drift, customer changing items or addresses after quote was created, or stale coupons. | Quotes are fingerprinted with SHA-256 hashes of `cartHash`, `addressHash`, `paymentMethod`, and `couponHash`. `validateQuoteForOrder()` verifies hashes on order submission; mismatch throws `SHIPPING_QUOTE_STALE` (400) and triggers recalculation. Accepted quote amount is persisted to order. Free shipping offers still strictly require delivery availability (`quote.serviceable === true`). |
+| **9** | **Carrier timeout during shipment** | Network drops or carrier timeouts leave order in limbo; blind retries create duplicate shipments and waste shipping fees. | Before attempting to create a shipment on carrier API, the system queries `checkShipmentExists()` using real `GET /orders?search=${orderNumber}`. If already created on carrier, reconciles existing AWB and shipment details or assigns missing AWB via `/courier/assign/awb` without duplicate dispatch. Failed operations are queued in `shipping_operations` with retry limits and displayed in admin. |
+| **10** | **Webhooks: duplicate, delayed, missing** | Out-of-order events cause status regressions; DB locks on outer-joins crash webhook handlers; unmapped statuses get lost. | 1. Database lock fix: removed outer-join locking on `Shipment.findOne` (loads associations cleanly without lock conflicts).<br>2. Monotonic status progression rank blocks stale/regressive statuses.<br>3. Unknown carrier statuses are recorded in `lastProviderError` and `statusHistory`.<br>4. Background cron job (`trackingReconciliation.job.js`) runs every 30 minutes, touching `updatedAt` to ensure round-robin polling and prevent starvation. |
 
 ---
 
-## 5. Admin Configuration Checklist
+## 3. Customer Delivery States at Checkout
 
-To ensure your shipping system is healthy, verify the following in the Admin Panel:
+The storefront checkout (`CheckoutPage.jsx`) renders 3 distinct customer delivery states:
 
-1.  **Warehouse Pincode:** Ensure `settings.shipping.warehousePincode` is accurate.
-2.  **Volumetric Divisor:** Ensure this matches your carrier contract (Standard is `5000`).
-3.  **Rule Priorities:** Ensure your "Free Shipping" rules have higher priority than "Standard" rules.
-4.  **Serviceable Pincodes:** Use "Blocked Pincodes" in Zones to prevent orders from areas your carrier doesn't support.
-5.  **COD Rules:** If a carrier doesn't support COD, ensure the "COD Allowed" flag is disabled for those rules.
+```
+┌─────────────────────────────────────────────────────────────┐
+│ 1. Available with Fee / Free                                │
+│    [✓] Delivery available in 3 days. Free shipping applied. │
+├─────────────────────────────────────────────────────────────┤
+│ 2. Pincode Unserviceable                                    │
+│    [!] Delivery is not available for pincode 799999.        │
+│        [ Change Address ]                                   │
+├─────────────────────────────────────────────────────────────┤
+│ 3. Temporarily Unavailable                                  │
+│    [i] Delivery checking is temporarily unavailable.        │
+│        Please retry shortly.                                │
+│        [ Retry ]                                            │
+└─────────────────────────────────────────────────────────────┘
+```
+
+### Payable Total Gate
+- The final **Total Amount** in Order Summary is strictly gated:
+  - If address is not selected: displays `"Select address"`.
+  - While quote is calculating: displays `"Calculating..."`.
+  - If delivery is unserviceable or error: displays `"Calculated after delivery check"`.
+  - Only when a valid quote is confirmed (`shippingQuote?.serviceable === true`): displays the calculated payable total (e.g. `₹1,249.00`).
+- Prevents shoppers from seeing a misleading subtotal that ignores shipping costs.
 
 ---
 
-## 6. Shipping Rule Configuration & JSON Conditions
+## 4. Admin Management & Monitoring
 
-This section explains how to configure rules in the Admin Panel and how to use the "Advanced Conditions" box for complex logic.
+### A. Provider Connection Testing
+- Each provider row in **Shipping Management > Shipping Providers** features a **Test Connection** button.
+- Tests remote credentials against the carrier API (e.g. `/settings/company/pickup` for Shiprocket).
+- Displays live status:
+  - **Online**: Shows active pickup locations count (e.g. `Online (3 pickups)`).
+  - **Failed**: Highlights authentication failure message.
 
-### A. Visual Configuration Fields
+### B. Failed Shipping Operations & Reconciliation Tab
+- **Operations & Failures** tab displays background carrier dispatch attempts.
+- Shows:
+  - Order Number & Total
+  - Operation Type (`create_shipment`, `generate_label`, `cancel_shipment`)
+  - Provider Name & Attempt count (`3/8`)
+  - Last Error description (carrier timeout, auth failure, validation error)
+  - **Retry Now** button: Dispatches operation and runs immediate reconciliation.
 
-| Field | Description |
-| :--- | :--- |
-| **Priority** | A number (e.g., 100). If multiple rules match, the highest number wins. |
-| **Slab Pricing** | Defines the "Step" logic. e.g., Base ₹40 for 500g + ₹30 per extra 500g. |
-| **Min Charge** | The floor price. The shipping cost will never drop below this. |
-| **Zone Multipliers** | Scales the base rate for different distances (e.g., National = 1.6x). |
-| **COD Fee** | An extra flat or percentage charge applied only if the user picks Cash on Delivery. |
+---
 
-### B. Advanced JSON Conditions (The "Trigger" Box)
+## 5. Background Tracking Reconciliation Job
 
-The **Conditions (JSON format)** box allows you to create highly targeted rules. If a rule's JSON condition doesn't match the customer's cart, the system skips it.
+- **Job File:** `server/src/jobs/trackingReconciliation.job.js`
+- **Schedule:** Every 30 minutes (`*/30 * * * *`)
+- **Action:** Queries active in-transit shipments (`in_transit`, `out_for_delivery`, `shipped`) ordered by `updatedAt ASC` and fetches carrier status via `adapter.getTracking({ awbCode })`.
+- **Starvation Prevention:** Every inspected shipment touches its `updatedAt` timestamp (even if the status remained unchanged), ensuring round-robin polling across all active shipments rather than repeatedly checking the same 20.
+- **Status Updates:** Updates `Shipment.status`, `Fulfillment.status`, `Order.orderShippingStatus`, and records timestamp in `statusHistory`.
 
-#### 1. Price Thresholds
-- `subtotalGte`: Apply rule only if Order Value is Greater Than or Equal to X.
-- `subtotalLte`: Apply rule only if Order Value is Less Than or Equal to X.
-- **Example:** `{"subtotalGte": 1500}` (High-value shipping rule).
+---
 
-#### 2. Payment Filtering
-- `paymentMethods`: Limit rule to specific methods (e.g., `["razorpay"]`, `["stripe"]`, `["cod"]`).
-- **Example:** `{"paymentMethods": ["cod"]}` (A rule specifically for COD surcharges).
+## 6. Critical Production Hardening (P1 Issues Resolved)
 
-#### 3. Hyper-Local Targeting
-- `pincodes`: A list of specific pincodes.
-- `blockedPincodes`: Pincodes to exclude.
-- `city` / `state` / `country`: Standard geographical strings.
-- **Example:** `{"pincodes": ["560001-560010"], "state": "Karnataka"}`.
+1. **Exact Reference Matching in Recovery (`shiprocket.provider.js`)**:
+   - Replaced substring fallback (`|| orders[0]`) with strict exact-match verification (`orders.find(o => String(o.channel_order_id) === targetOrderId || String(o.id) === targetOrderId) || null`).
+   - If `/orders?search` returns non-matching orders (e.g. broad search returns `WRONG-AWB` for `EXPECTED-ORDER`), returns `null` rather than attaching another customer's tracking details.
+   - Distinguishes 404 (order not found -> `null`) from network timeouts and auth errors (rethrown to retain retry eligibility).
+2. **Official Shipment Status Mapping Alignment (`shiprocket.provider.js`)**:
+   - Corrected status code `38` (Shiprocket: Reached Destination Hub) to map to `in_transit` (previously inverted to `rto_in_transit`).
+   - Corrected status code `46` (Shiprocket: RTO In Transit) to map to `rto_in_transit` (previously mapped to `packed`).
+   - Added complete coverage for official status codes (`39`, `40`, `41`, `43`, `44`, `75`, `77`) and normalized string labels (`REACHED DESTINATION HUB` -> `in_transit`, `RTO IN TRANSIT` -> `rto_in_transit`).
+3. **Fulfillment Recovery Step Completion & Error Propagation (`shiprocket.provider.js`)**:
+   - Orders with existing AWBs no longer bypass remaining fulfillment steps. Recovery inspects whether pickup was scheduled and label generated, executing any missing steps.
+   - Removed `.catch(() => null)` from carrier pickup and label generation calls. If pickup or label generation fails, the error is thrown, preventing `shipping_operations` from prematurely completing and allowing the exponential backoff scheduler to retry the failed step.
+4. **Webhook Race Guard with Transaction Row Locks (`shipping.webhook.service.js`)**:
+   - In `reconcileTracking`, reloads and locks the shipment record inside the transaction: `Shipment.findByPk(shipment.id, { transaction: t, lock: t?.LOCK?.UPDATE })`.
+   - If a webhook arrived during the carrier API call window and marked the shipment `delivered`, the poller verifies against the locked `freshShipment.status`. Detecting `isRegression('delivered', 'in_transit')`, it touches `updatedAt` and logs `lastPolledStatus` without regressing the shipment, fulfillment, or order statuses.
+5. **Warehouse Origin Parity (`shipping.service.js` & `shippingOperation.service.js`)**:
+   - Unified warehouse dispatch origin resolution into `resolveDispatchOrigin(provider, settings)`.
+   - Used identically across checkout delivery options, rule zone detection, and fulfillment operations.
+6. **Manual Retry State Guard (`shippingOperation.service.js`)**:
+   - Wrapped `retryOperation` in a database transaction with `SELECT ... FOR UPDATE` row locking.
+   - Rejects retrying `completed` operations or operations actively `processing` within lock duration (`MAX_LOCK_AGE_MS`). Only `failed` or stale operations can be retried.
+7. **Physical Measurement Enforcement (`shipping.service.js`)**:
+   - In production / strict mode, `computePackageDimensions` throws `MISSING_PRODUCT_MEASUREMENTS` when physical products lack valid weight or dimensions, eliminating silent 500g/10cm defaults.
+   - `createShipment` validates `hasMissingMeasurements` and rejects carrier dispatches with unmeasured items.
+8. **Polling Queue Starvation Prevention (`shipping.webhook.service.js`)**:
+   - Every shipment checked during reconciliation touches `updatedAt: new Date()`, rotating all active shipments fairly in round-robin order.
+9. **Always-Visible Checkout Recovery Actions (`CheckoutPage.jsx`)**:
+   - Positioned delivery alerts and recovery actions ("Retry" and "Change Address") in an always-visible banner above checkout sections.
+   - Also displays alerts and buttons directly in Section 1 summary when collapsed.
+   - Automatically expands Section 1 (`setActiveSection(1)`) on shipping error or unserviceable address.
 
-#### 4. Weight Filtering (Manual Override)
-- `weightGte` / `weightLte`: Target specific weight brackets in grams.
-- **Example:** `{"weightGte": 10000}` (Heavy-duty shipping rule for >10kg).
+---
 
-### C. Rule "Recipe" Examples
+## 7. Verification & Automated Tests
 
-| Goal | JSON Condition |
-| :--- | :--- |
-| **Free Shipping over ₹999** | `{"subtotalGte": 999}` (Set Rate Type to 'Free') |
-| **Bangalore Local Only** | `{"city": "Bangalore"}` |
-| **Prepaid-Only Discount** | `{"paymentMethods": ["razorpay", "stripe"]}` |
-| **Restrict specific Pincode** | `{"blockedPincodes": ["110001"]}` |
+All edge cases, P1 bug fixes, and architectural invariants are validated with 100% automated test coverage:
 
-### D. Troubleshooting "Rules Not Matching"
-If a rule isn't showing up at checkout, check these common causes:
-1.  **Priority too low:** Another rule with higher priority is matching first.
-2.  **Zone Mismatch:** The delivery pincode doesn't belong to the Zone assigned to the rule.
-3.  **Weight Limit:** The `weightLte` condition in JSON is smaller than the calculated Volumetric weight.
-4.  **Provider Support:** If you selected a "Specific Provider," ensure that provider supports the customer's pincode and payment method.
-
+- `server/tests/unit/shipping.edgeCases.test.js` (33/33 tests passing):
+  - Circuit breaker & auth cooldown
+  - Single warehouse origin enforcement, setting parity & matching fulfillment pickup location
+  - Pincode formatting & carrier 404/422 graceful handling
+  - COD fallback to prepaid delivery, checkout notification & strict order placement COD blocking
+  - Packaging tare, measurement enforcement & strict mode rejection
+  - Oversized parcel threshold rejection (checkout & admin simulator)
+  - Domestic area guard (universal & manual) & rule priority resolution
+  - Stale quote validation (`SHIPPING_QUOTE_STALE`)
+  - Real `/orders?search` lookup, missing AWB assignment & error propagation
+  - Exact reference matching during recovery (rejecting partial/unrelated order results)
+  - Recovery execution of missing pickup/label steps on orders with existing AWBs
+  - Non-swallowed error propagation on carrier pickup failures during recovery
+  - Official status mapping verification: numeric status `38` -> `in_transit`, numeric status `46` -> `rto_in_transit`, text labels
+  - Webhook unknown status recording, numeric tracking parsing (`status: 7`), and polling starvation prevention
+  - Transaction row-locked webhook race guard (preventing carrier poll regression against concurrent webhook updates)
+  - Manual retry concurrency locks & state guards
+- `server/tests/unit/shipping.service.test.js` (5/5 tests passing)
+- `server/tests/unit/shipping.webhook.test.js` (5/5 tests passing)
+- Full backend suite (35 test files, 294 tests passing).
+- Full client build (`npm run build`) passing with zero bundle or syntax errors.

@@ -69,25 +69,52 @@ const lower = (value) => String(value || '').trim().toLowerCase();
  *
  * FIX 1: replaced naïve sum(L*B*H*qty) with max/max/sum stacking.
  */
-const computePackageDimensions = (checkoutItems) => {
+const computePackageDimensions = (checkoutItems, packagingWeightGrams = 0, { strict = (process.env.NODE_ENV === 'production') } = {}) => {
     let maxL = 0;
     let maxB = 0;
     let totalH = 0;
-    let totalWeightGrams = 0;
+    let totalWeightGrams = Number(packagingWeightGrams || 0);
+    let hasMissingMeasurements = false;
+    const missingProducts = [];
 
     for (const item of checkoutItems) {
         const p = item.product;
         // Skip digital or non-shippable items
-        if (p.requiresShipping === false) continue;
+        if (!p || p.requiresShipping === false) continue;
         
         const qty = Number(item.quantity || 1);
+        const weight = Number(p.weightGrams);
+        const l = Number(p.lengthCm);
+        const b = Number(p.breadthCm);
+        const h = Number(p.heightCm);
+
+        const isMissing = !weight || weight <= 0 || !l || l <= 0 || !b || b <= 0 || !h || h <= 0;
+        if (isMissing) {
+            hasMissingMeasurements = true;
+            missingProducts.push(p.name || p.id || 'Product');
+            if (strict) {
+                throw new AppError('MISSING_PRODUCT_MEASUREMENTS', 400, `Product "${p.name || p.id}" requires shipping but has missing or invalid weight/dimensions. Measurements must be set before shipping.`);
+            }
+        }
+
         maxL = Math.max(maxL, Number(p.lengthCm  || 10));
         maxB = Math.max(maxB, Number(p.breadthCm || 10));
         totalH += Number(p.heightCm   || 10) * qty;
         totalWeightGrams += Number(p.weightGrams || 500) * qty;
     }
 
-    return { maxL, maxB, totalH, totalWeightGrams, volumeCm3: maxL * maxB * totalH };
+    const result = {
+        maxL,
+        maxB,
+        totalH,
+        totalWeightGrams,
+        volumeCm3: maxL * maxB * totalH,
+    };
+    Object.defineProperties(result, {
+        hasMissingMeasurements: { value: hasMissingMeasurements, enumerable: false, writable: true },
+        missingProducts: { value: missingProducts, enumerable: false, writable: true },
+    });
+    return result;
 };
 
 /**
@@ -176,6 +203,22 @@ const getSettingMap = async (groups = ['shipping', 'general']) => {
         acc[`${setting.group}.${setting.key}`] = setting.value;
         return acc;
     }, {});
+};
+
+/**
+ * Resolve single dispatch warehouse origin across pricing, serviceability, and fulfillment.
+ * Ensures checkout and fulfillment never check or dispatch from different warehouses (Edge Case 2).
+ */
+const resolveDispatchOrigin = async (provider, settingsMap = null) => {
+    const settings = settingsMap || await getSettingMap(['shipping']);
+    // If the provider has a configured pickup pincode (matching its carrier pickup location),
+    // it takes precedence for that carrier; otherwise fallback to general shipping.warehousePincode.
+    const originPincode = String(provider?.settings?.pickupPincode || settings['shipping.warehousePincode'] || '').trim();
+    const pickupLocationName = String(provider?.settings?.pickupLocationName || 'Primary').trim();
+    return {
+        pincode: originPincode,
+        pickupLocationName,
+    };
 };
 
 const getManualProvider = async ({ transaction } = {}) => {
@@ -306,8 +349,10 @@ const buildCheckoutContext = async (userId, payload) => {
     const cartSnapshot = buildCartSnapshot(items);
     const couponCodes = normalizeCouponCodes(payload);
 
-    // Compute package dimensions from products (FIX 1: stacking model)
-    const dims = computePackageDimensions(checkoutItems);
+    // Compute package dimensions from products, including packaging tare weight (Edge Case 5)
+    const shippingSettings = await getSettingMap(['shipping']);
+    const packagingTare = Number(shippingSettings['shipping.packagingWeightGrams'] || 50);
+    const dims = computePackageDimensions(checkoutItems, packagingTare);
 
     return {
         items,
@@ -324,7 +369,7 @@ const buildCheckoutContext = async (userId, payload) => {
     };
 };
 
-const calculateManualDecision = async ({ subtotal, addressSnapshot, paymentMethod }) => {
+const calculateManualDecision = async ({ subtotal, chargeableWeightGrams = 0, addressSnapshot, paymentMethod }) => {
     const settings = await getSettingMap(['shipping', 'general']);
     const shippingMethod = settings['shipping.method'] || 'flat_rate';
     const flatRate = Number(settings['shipping.flatRate'] ?? 0);
@@ -341,32 +386,50 @@ const calculateManualDecision = async ({ subtotal, addressSnapshot, paymentMetho
     }
 
     const postalCode = String(addressSnapshot.postalCode || '').trim();
+    const country = lower(addressSnapshot.country || 'india');
+    const isIndia = country === 'india' || country === 'in';
+    const isStandardPincode = /^\d{6}$/.test(postalCode);
+
+    const defaultProvider = await getDefaultProvider();
+    const maxWeightKg = Number(defaultProvider?.maxWeightKg) || 20;
+    const maxWeightGrams = maxWeightKg * 1000;
+    const isOverweight = chargeableWeightGrams > 0 && chargeableWeightGrams > maxWeightGrams;
+
+    // Intended delivery area guard (Edge Case 7): standard rule intended for domestic delivery
     const serviceable = Boolean(postalCode)
+        && isIndia
+        && isStandardPincode
+        && !isOverweight
         && !blockedPincodes.includes(postalCode)
         && (allowedPincodes.length === 0 || allowedPincodes.includes(postalCode));
 
-        const unavailableMessage = postalCode
-            ? 'Delivery is not available for this pincode'
-            : 'Delivery pincode is required';
+    let unavailableMessage = 'Delivery is not available for this pincode';
+    if (!postalCode) {
+        unavailableMessage = 'Delivery pincode is required';
+    } else if (!isIndia) {
+        unavailableMessage = 'Delivery is currently only available within India';
+    } else if (!isStandardPincode) {
+        unavailableMessage = 'Invalid 6-digit delivery pincode';
+    } else if (isOverweight) {
+        unavailableMessage = `Package weight (${(chargeableWeightGrams / 1000).toFixed(1)}kg) exceeds courier maximum limit (${maxWeightKg}kg). Until parcel splitting is enabled, please reduce item quantity or contact support.`;
+    }
 
-        const defaultProvider = await getDefaultProvider();
-
-        return {
-            serviceable,
-            shippingCost: normalizeMoney(shippingCost),
-            currency,
-            taxIncluded: false,
-            taxAmount: 0,
-            taxBreakdown: null,
-            codAvailable: serviceable && (defaultProvider.supportsCod !== false),
-            estimatedMinDays: null,
-            estimatedMaxDays: null,
-            message: serviceable ? 'Delivery available' : unavailableMessage,
-            providerId: defaultProvider.id,
-            providerCode: defaultProvider.code,
-            providerName: defaultProvider.name,
-            paymentMethod,
-        };
+    return {
+        serviceable,
+        shippingCost: normalizeMoney(shippingCost),
+        currency,
+        taxIncluded: false,
+        taxAmount: 0,
+        taxBreakdown: null,
+        codAvailable: serviceable && (defaultProvider.supportsCod !== false),
+        estimatedMinDays: null,
+        estimatedMaxDays: null,
+        message: serviceable ? 'Delivery available' : unavailableMessage,
+        providerId: defaultProvider.id,
+        providerCode: defaultProvider.code,
+        providerName: defaultProvider.name,
+        paymentMethod,
+    };
 };
 
 const zoneMatches = (zone, addressSnapshot) => {
@@ -485,6 +548,13 @@ const providerSupportsDecision = (provider, { paymentMethod }) => {
 };
 
 const calculateRuleDecision = async ({ subtotal, chargeableWeightGrams = 0, packageCount = 1, zone = 'national', addressSnapshot, paymentMethod }) => {
+    const country = lower(addressSnapshot?.country || 'india');
+    const isIndia = country === 'india' || country === 'in';
+    // Intended delivery area guard (Edge Case 7): store rules are intended for domestic delivery; avoid accidentally allowing delivery outside India
+    if (!isIndia) {
+        return null;
+    }
+
     const settings = await getSettingMap(['general']);
     const currency = String(settings['general.currency'] || 'INR').toUpperCase();
     const rules = await ShippingRule.findAll({
@@ -582,22 +652,15 @@ const createQuote = async (userId, payload) => {
     const paymentMethod = payload.paymentMethod || 'razorpay';
     const context = await buildCheckoutContext(userId, payload);
 
-    // ── Compute volumetric + multi-package context ────────────────────────
+    // ── Single warehouse origin for pricing and serviceability (Edge Case 2) ──
     const settings = await getSettingMap(['shipping']);
-    const warehousePincode = String(settings['shipping.warehousePincode'] || '').trim();
+    const fallbackProvider = await getDefaultProvider();
+    const initialOrigin = await resolveDispatchOrigin(fallbackProvider, settings);
     const deliveryPincode  = String(context.addressSnapshot.postalCode || '').trim();
 
-    // FIX 4: volumetric divisor comes from settings (per-provider override possible)
     const volumetricDivisor = Number(settings['shipping.volumetricDivisor'] || 5000);
     const chargeableWeightGrams = computeChargeableWeight(context.packageDims, volumetricDivisor);
-    const zone = detectDeliveryZone(warehousePincode, deliveryPincode);
-
-    // FIX 8+9: detect how many packages needed based on provider max weight
-    // We use 20 kg as a safe default when no provider max is configured
-    const DEFAULT_MAX_PACKAGE_WEIGHT_GRAMS = 20000;
-    const { packageCount, chargeableWeightPerPackage } = splitIntoPackages(
-        chargeableWeightGrams, DEFAULT_MAX_PACKAGE_WEIGHT_GRAMS
-    );
+    const zone = detectDeliveryZone(initialOrigin.pincode, deliveryPincode);
 
     const idempotencyKey = hashObject({
         checkoutSessionId,
@@ -617,50 +680,86 @@ const createQuote = async (userId, payload) => {
     });
     if (existing) return serializeQuote(existing);
 
-    const fallbackProvider = await getDefaultProvider();
     let decision = await calculateRuleDecision({
         subtotal:             context.subtotal,
-        chargeableWeightGrams,            // FIX: volumetric-adjusted, slab-rounded
-        packageCount,                     // FIX: multi-package split count
-        zone,                             // FIX: same_city | same_state | national | remote
+        chargeableWeightGrams,
+        packageCount:         1,
+        zone,
         addressSnapshot:      context.addressSnapshot,
         paymentMethod,
     }) || await calculateManualDecision({
         subtotal:        context.subtotal,
+        chargeableWeightGrams,
         addressSnapshot: context.addressSnapshot,
         paymentMethod,
     });
 
-    // Shiprocket serviceability is checked at quote time as well as immediately
-    // before provider creation. Rules still own the customer-facing price, but
-    // checkout must not claim delivery when the carrier has no route/COD option.
     const selectedProvider = decision.providerId === fallbackProvider.id
         ? fallbackProvider
         : await ShippingProvider.findByPk(decision.providerId || fallbackProvider.id);
+    const selectedOrigin = await resolveDispatchOrigin(selectedProvider, settings);
+
+    // Courier limits check on single parcel (Edge Case 6: until actual splitting is implemented, block unsupported parcels)
+    const maxWeightKg = Number(selectedProvider?.maxWeightKg) || 20;
+    const maxWeightGrams = maxWeightKg * 1000;
+    const maxDimCm = Number(selectedProvider?.maxLengthCm) || 150;
+    const dims = context.packageDims;
+
+    if (chargeableWeightGrams > maxWeightGrams) {
+        decision = {
+            ...decision,
+            serviceable: false,
+            codAvailable: false,
+            message: `Package weight (${(chargeableWeightGrams / 1000).toFixed(1)}kg) exceeds courier maximum limit (${maxWeightKg}kg). Until parcel splitting is enabled, please reduce item quantity or contact support.`,
+        };
+    } else if (dims.maxL > maxDimCm || dims.maxB > maxDimCm || dims.totalH > maxDimCm) {
+        decision = {
+            ...decision,
+            serviceable: false,
+            codAvailable: false,
+            message: `Package dimensions exceed courier maximum allowed limit (${maxDimCm}cm). Please contact support.`,
+        };
+    }
+
     let liveProviderResponse = null;
-    if (selectedProvider?.code === 'shiprocket' && selectedProvider.enabled) {
+    if (decision.serviceable && selectedProvider?.code === 'shiprocket' && selectedProvider.enabled) {
         try {
             const providerAdapter = resolveProvider(selectedProvider);
             liveProviderResponse = await providerAdapter.getServiceability({
                 pincode: deliveryPincode,
-                pickupPincode: selectedProvider.settings?.pickupPincode || warehousePincode,
+                pickupPincode: selectedOrigin.pincode,
                 weightGrams: chargeableWeightGrams,
                 paymentMode: paymentMethod === 'cod' ? 'cod' : 'prepaid',
+                lengthCm: dims.maxL,
+                breadthCm: dims.maxB,
+                heightCm: dims.totalH,
             });
-            decision = {
-                ...decision,
-                serviceable: Boolean(decision.serviceable && liveProviderResponse.serviceable),
-                codAvailable: Boolean(decision.codAvailable && liveProviderResponse.codAvailable),
-                message: decision.serviceable && liveProviderResponse.serviceable
-                    ? decision.message
-                    : (liveProviderResponse.reason || 'Shiprocket cannot deliver to this address'),
-                liveServiceability: {
-                    serviceable: liveProviderResponse.serviceable,
-                    codAvailable: liveProviderResponse.codAvailable,
-                },
-            };
+
+            if (liveProviderResponse.serviceable === false) {
+                decision = {
+                    ...decision,
+                    serviceable: false,
+                    codAvailable: false,
+                    message: liveProviderResponse.reason || 'Delivery is not available for this pincode.',
+                    liveServiceability: liveProviderResponse,
+                };
+            } else {
+                decision = {
+                    ...decision,
+                    serviceable: Boolean(decision.serviceable && liveProviderResponse.serviceable),
+                    codAvailable: Boolean(decision.codAvailable && liveProviderResponse.codAvailable),
+                    message: decision.serviceable && liveProviderResponse.serviceable
+                        ? decision.message
+                        : (liveProviderResponse.reason || 'Shiprocket cannot deliver to this address'),
+                    liveServiceability: {
+                        serviceable: liveProviderResponse.serviceable,
+                        codAvailable: liveProviderResponse.codAvailable,
+                    },
+                };
+            }
         } catch (error) {
-            throw new AppError('SHIPPING_UNAVAILABLE', 503, `Shiprocket serviceability is unavailable: ${error.message}`);
+            // Edge Case 1 & 3: Tell customers delivery checking is temporarily unavailable, do not leak internal errors
+            throw new AppError('SHIPPING_UNAVAILABLE', 503, 'Delivery checking is temporarily unavailable. Please retry shortly.');
         }
     }
 
@@ -771,8 +870,28 @@ const updateProvider = async (id, payload) => {
                 : null;
         }
 
+        const ShiprocketProvider = require('./providers/shiprocket.provider');
+        if (typeof ShiprocketProvider.clearAuthCooldown === 'function') {
+            ShiprocketProvider.clearAuthCooldown();
+        }
+
         return provider.update(filtered, { transaction: t });
     });
+};
+
+const testProviderConnection = async (id) => {
+    const provider = await ShippingProvider.findByPk(id);
+    if (!provider) {
+        throw new AppError('NOT_FOUND', 404, 'Shipping provider not found');
+    }
+    const adapter = resolveProvider(provider);
+    if (typeof adapter.testConnection !== 'function') {
+        return {
+            success: true,
+            message: `Provider "${provider.name}" does not require remote API credentials check.`,
+        };
+    }
+    return adapter.testConnection();
 };
 
 const testCalculation = async ({ pincode, subtotal = 0, paymentMethod = 'razorpay', weightGrams = 500, country = 'India' }) => {
@@ -783,12 +902,12 @@ const testCalculation = async ({ pincode, subtotal = 0, paymentMethod = 'razorpa
     const rawMethod = String(paymentMethod || 'razorpay').toLowerCase();
     const normalizedPaymentMethod = rawMethod === 'prepaid' ? 'razorpay' : rawMethod;
     const settings = await getSettingMap(['shipping', 'general']);
-    const warehousePincode = String(settings['shipping.warehousePincode'] || '').trim();
+    const defaultProvider = await getDefaultProvider();
+    const origin = await resolveDispatchOrigin(defaultProvider, settings);
+    const warehousePincode = origin.pincode;
     const chargeableWeightGrams = Number(weightGrams || 500);
     const zone = detectDeliveryZone(warehousePincode, addressSnapshot.postalCode);
-    const { packageCount } = splitIntoPackages(chargeableWeightGrams, 20000);
-
-    const defaultProvider = await getDefaultProvider();
+    const packageCount = 1;
 
     const decision = await calculateRuleDecision({
         subtotal: Number(subtotal || 0),
@@ -799,9 +918,21 @@ const testCalculation = async ({ pincode, subtotal = 0, paymentMethod = 'razorpa
         paymentMethod: normalizedPaymentMethod,
     }) || await calculateManualDecision({
         subtotal: Number(subtotal || 0),
+        chargeableWeightGrams,
         addressSnapshot,
         paymentMethod: normalizedPaymentMethod,
     });
+
+    const selectedProvider = decision.providerId === defaultProvider.id
+        ? defaultProvider
+        : await ShippingProvider.findByPk(decision.providerId || defaultProvider.id);
+    const maxWeightKg = Number(selectedProvider?.maxWeightKg) || 20;
+    const maxWeightGrams = maxWeightKg * 1000;
+    if (chargeableWeightGrams > maxWeightGrams) {
+        decision.serviceable = false;
+        decision.codAvailable = false;
+        decision.message = `Package weight (${(chargeableWeightGrams / 1000).toFixed(1)}kg) exceeds courier maximum limit (${maxWeightKg}kg). Until parcel splitting is enabled, please reduce item quantity or contact support.`;
+    }
 
     return {
         zone,
@@ -893,44 +1024,56 @@ const deleteRule = async (id, userId) => {
 };
 
 const validateQuoteForOrder = async (userId, payload) => {
+    let quote;
     if (!payload.shippingQuoteId) {
-        return createQuote(userId, payload);
+        quote = await createQuote(userId, payload);
+    } else {
+        const found = await ShippingQuote.findOne({ where: { id: payload.shippingQuoteId, userId } });
+        if (!found) throw new AppError('SHIPPING_QUOTE_NOT_FOUND', 404, 'Shipping quote not found');
+        if (found.expiresAt <= new Date()) {
+            throw new AppError('SHIPPING_QUOTE_EXPIRED', 400, 'Shipping quote expired. Please refresh shipping.');
+        }
+        if (!found.serviceable) {
+            throw new AppError('SHIPPING_UNAVAILABLE', 400, 'Delivery is not available for this address');
+        }
+        if (payload.paymentMethod === 'cod' && found.codAvailable === false) {
+            throw new AppError('COD_UNAVAILABLE', 400, 'Cash on delivery is not available for this delivery address or order.');
+        }
+        if (payload.checkoutSessionId && found.checkoutSessionId !== payload.checkoutSessionId) {
+            throw new AppError('SHIPPING_QUOTE_STALE', 400, 'Shipping quote no longer matches this checkout session');
+        }
+
+        const context = await buildCheckoutContext(userId, payload);
+        const couponHash = context.couponHash;
+        if (
+            found.cartHash !== context.cartHash ||
+            found.addressHash !== context.addressHash ||
+            found.paymentMethod !== (payload.paymentMethod || 'razorpay') ||
+            found.couponHash !== couponHash
+        ) {
+            throw new AppError('SHIPPING_QUOTE_STALE', 400, 'Shipping quote no longer matches your cart or address');
+        }
+
+        quote = serializeQuote(found);
     }
 
-    const quote = await ShippingQuote.findOne({ where: { id: payload.shippingQuoteId, userId } });
-    if (!quote) throw new AppError('SHIPPING_QUOTE_NOT_FOUND', 404, 'Shipping quote not found');
-    if (quote.expiresAt <= new Date()) {
-        throw new AppError('SHIPPING_QUOTE_EXPIRED', 400, 'Shipping quote expired. Please refresh shipping.');
-    }
-    if (!quote.serviceable) {
-        throw new AppError('SHIPPING_UNAVAILABLE', 400, 'Delivery is not available for this address');
-    }
-    if (payload.checkoutSessionId && quote.checkoutSessionId !== payload.checkoutSessionId) {
-        throw new AppError('SHIPPING_QUOTE_STALE', 400, 'Shipping quote no longer matches this checkout session');
+    if (payload.paymentMethod === 'cod' && quote.codAvailable === false) {
+        throw new AppError('COD_UNAVAILABLE', 400, 'Cash on delivery is not available for this delivery address or order.');
     }
 
-    const context = await buildCheckoutContext(userId, payload);
-    const couponHash = context.couponHash;
-    if (
-        quote.cartHash !== context.cartHash ||
-        quote.addressHash !== context.addressHash ||
-        quote.paymentMethod !== (payload.paymentMethod || 'razorpay') ||
-        quote.couponHash !== couponHash
-    ) {
-        throw new AppError('SHIPPING_QUOTE_STALE', 400, 'Shipping quote no longer matches your cart or address');
-    }
-
-    return serializeQuote(quote);
+    return quote;
 };
 
 module.exports = {
     computePackageDimensions,
     computeChargeableWeight,
+    resolveDispatchOrigin,
     createQuote,
     validateQuoteForOrder,
     buildCheckoutContext,
     listProviders,
     updateProvider,
+    testProviderConnection,
     getDefaultProvider,
     getManualProvider,
     testCalculation,

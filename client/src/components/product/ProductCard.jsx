@@ -37,7 +37,7 @@ const badgePositionSx = (position = 'top-right', offset = 8) => {
   };
 };
 
-const ProductCard = ({ product, fromCategory, compact = false }) => {
+const ProductCard = React.memo(({ product, fromCategory, compact = false }) => {
   const navigate = useNavigate();
   const { formatPrice } = useCurrency();
   const { settings } = useSettings();
@@ -234,6 +234,8 @@ const ProductCard = ({ product, fromCategory, compact = false }) => {
           component="img"
           image={primaryImage}
           alt={product.name}
+          loading="lazy"
+          decoding="async"
           sx={{
             position: 'absolute',
             top: imageInset ? (theme) => theme.spacing(imageInset) : 0,
@@ -412,6 +414,6 @@ const ProductCard = ({ product, fromCategory, compact = false }) => {
       </CardActions>
     </Card>
   );
-};
+});
 
 export default ProductCard;

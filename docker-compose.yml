@@ -18,8 +18,10 @@ services:
       retries: 5
 
   server:
-    build: ./server
-    env_file: ./server/.env
+    build: { context: ., dockerfile: server/Dockerfile }
+    # Root .env is the single source of truth (server/index.js loads ../.env first).
+    # ./server/.env does not exist locally, so referencing it breaks `docker compose up`.
+    env_file: ./.env
     environment:
       DB_HOST: db
       DB_PORT: 5432
@@ -27,12 +29,14 @@ services:
       DB_USER: ${DB_USER:-postgres}
       DB_PASSWORD: ${DB_PASSWORD:?DB_PASSWORD must be set in .env before starting Compose}
     depends_on: { db: { condition: service_healthy } }
-    volumes: [./server/uploads:/app/uploads]
-    ports: [5000:5000]
+    volumes: [./server/uploads:/app/server/uploads]
+    ports: ["127.0.0.1:5000:5000"]
+    restart: unless-stopped
 
   client:
     build: ./client
     ports: [80:80]
     depends_on: [server]
+    restart: unless-stopped
 
 volumes: { pgdata: }

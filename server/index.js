@@ -17,6 +17,14 @@ const { validateEnvironment } = require('./src/utils/validateEnvironment');
 // Fail fast — verify secrets before touching the DB or network
 validateEnvironment();
 
+// Crash safely: log async failures outside try/catch instead of dying silently.
+process.on('unhandledRejection', (reason) => {
+  logger.error('Unhandled promise rejection:', reason);
+});
+process.on('uncaughtException', (err) => {
+  logger.error('Uncaught exception:', err);
+});
+
 
 const PORT = process.env.PORT || 5000;
 let poolStatsInterval = null;

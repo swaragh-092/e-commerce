@@ -20,14 +20,12 @@ import {
   Alert,
   Chip,
 } from '@mui/material';
-import {
-  ArrowBack as ArrowBackIcon,
-  OpenInNew as OpenInNewIcon,
-  Code as CodeIcon,
-  FormatColorText as VisualIcon,
-  Visibility as PreviewIcon,
-  Save as SaveIcon,
-} from '@mui/icons-material';
+import ArrowBackIcon from '@mui/icons-material/ArrowBack';
+import OpenInNewIcon from '@mui/icons-material/OpenInNew';
+import CodeIcon from '@mui/icons-material/Code';
+import VisualIcon from '@mui/icons-material/FormatColorText';
+import PreviewIcon from '@mui/icons-material/Visibility';
+import SaveIcon from '@mui/icons-material/Save';
 import PageService from '../../services/pageService';
 import MediaPicker from '../../components/common/MediaPicker';
 import { getMediaUrl } from '../../utils/media';

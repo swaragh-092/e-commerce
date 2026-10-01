@@ -28,18 +28,16 @@ import {
   Tooltip,
   Alert,
 } from '@mui/material';
-import {
-  Search as SearchIcon,
-  CloudUpload as CloudUploadIcon,
-  PhotoLibrary as PhotoLibraryIcon,
-  CheckCircle as CheckCircleIcon,
-  Close as CloseIcon,
-  ArrowUpward as ArrowUpwardIcon,
-  ArrowDownward as ArrowDownwardIcon,
-  CalendarToday as CalendarTodayIcon,
-  Storage as StorageIcon,
-  Category as CategoryIcon,
-} from '@mui/icons-material';
+import SearchIcon from '@mui/icons-material/Search';
+import CloudUploadIcon from '@mui/icons-material/CloudUpload';
+import PhotoLibraryIcon from '@mui/icons-material/PhotoLibrary';
+import CheckCircleIcon from '@mui/icons-material/CheckCircle';
+import CloseIcon from '@mui/icons-material/Close';
+import ArrowUpwardIcon from '@mui/icons-material/ArrowUpward';
+import ArrowDownwardIcon from '@mui/icons-material/ArrowDownward';
+import CalendarTodayIcon from '@mui/icons-material/CalendarToday';
+import StorageIcon from '@mui/icons-material/Storage';
+import CategoryIcon from '@mui/icons-material/Category';
 import { mediaService } from '../../services/mediaService';
 import MediaUploader from './MediaUploader';
 import { getMediaUrl } from '../../utils/media';

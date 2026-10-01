@@ -54,9 +54,15 @@ const corsOptionsDelegate = (req, callback) => {
   } else {
     const cleanOrigin = origin.trim().replace(/\/+$/, '');
 
-    if (configuredOrigins.includes('*') || configuredOrigins.includes(cleanOrigin)) {
+    // Never allow '*' together with credentials — that would reflect any
+    // origin with cookies. Fail closed and require explicit origins.
+    const hasWildcard = configuredOrigins.includes('*');
+    if (hasWildcard) {
+      logger.warn('CORS misconfigured: wildcard origin with credentials is rejected. Set explicit CORS_URL.');
+    }
+    if (!hasWildcard && configuredOrigins.includes(cleanOrigin)) {
       isAllowed = true;
-    } else if (host) {
+    } else if (host && !hasWildcard) {
       // Allow if origin hostname matches the request host (e.g. https://soft.swaragh.net)
       const cleanHost = host.split(':')[0].toLowerCase();
       try {
@@ -227,7 +233,12 @@ app.use('/api/blogs', blogRoutes);
 app.use('/api/themes', themeRoutes);
 app.use('/api/newsletter', newsletterRoutes);
 
-// Health check endpoint
+// Health check endpoints
+// /healthz is lightweight (no DB round-trip) for Docker/K8s probes.
+// /health keeps the legacy DB check for readiness dashboards.
+app.get('/healthz', (req, res) => {
+  return success(res, { status: 'ok', uptime: process.uptime() }, 'Health check OK');
+});
 app.get('/health', async (req, res) => {
   try {
     const { sequelize } = require('./modules');

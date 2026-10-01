@@ -23,5 +23,15 @@ export default defineConfig({
   build: {
     outDir: 'dist',
     sourcemap: false,
+    chunkSizeWarningLimit: 600,
+    rollupOptions: {
+      output: {
+        manualChunks: {
+          vendor: ['react', 'react-dom', 'react-router-dom', 'axios'],
+          mui: ['@mui/material', '@mui/system', '@emotion/react', '@emotion/styled'],
+          charts: ['recharts'],
+        },
+      },
+    },
   },
 });

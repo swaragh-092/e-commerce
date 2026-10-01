@@ -2040,6 +2040,7 @@ const createFulfillment = async (orderId, payload, actingUserId, auditContext = 
                     breadthCm: dims.maxB,
                     heightCm: dims.totalH,
                     volumetricWeightGrams: Math.ceil((dims.volumeCm3 / 5000) * 1000),
+                    hasMissingMeasurements: Boolean(dims.hasMissingMeasurements),
                 },
                 address: {
                     ...address,

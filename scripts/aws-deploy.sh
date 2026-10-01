@@ -161,13 +161,13 @@ else
     sudo systemctl enable --now postgresql
     sudo systemctl enable --now nginx
 
-    # Fix PostgreSQL Ident Authentication issue on Amazon Linux / RedHat / Ubuntu
+    # Fix PostgreSQL authentication without disabling it.
+    # Never use trust/ident/peer rewrites — keep scram-sha-256 + password auth.
     PG_HBA=$(sudo find /etc /var/lib/pgsql -name "pg_hba.conf" 2>/dev/null | head -n 1)
     if [ -n "$PG_HBA" ]; then
-        echo -e "${BLUE}🔧 Configuring PostgreSQL authentication in ${PG_HBA}...${NC}"
-        sudo sed -i 's/\bident\b/trust/g' "$PG_HBA"
-        sudo sed -i 's/\bpeer\b/trust/g' "$PG_HBA"
-        sudo systemctl restart postgresql
+        echo -e "${BLUE}🔧 Verifying PostgreSQL auth in ${PG_HBA} uses scram-sha-256...${NC}"
+        sudo grep -E "^(local|host)" "$PG_HBA" || true
+        echo -e "${YELLOW}Ensure DB_USER uses a strong DB_PASSWORD (already generated in .env). Manual review required if auth is not scram-sha-256.${NC}"
     fi
 
     # Install PM2 globally
@@ -189,7 +189,8 @@ else
 
     # Update DB_HOST to localhost in .env for non-docker
     sed -i "s|DB_HOST=.*|DB_HOST=localhost|" .env
-    cp -f .env server/.env
+cp -f .env server/.env
+chmod 600 .env server/.env 2>/dev/null || true
 
     # Setup Backend
     echo -e "${BLUE}⚙️ Installing Backend Dependencies & Migrating DB...${NC}"
@@ -250,10 +251,10 @@ EOF
         sudo ln -sf /etc/nginx/sites-available/ecommerce /etc/nginx/sites-enabled/default
     fi
 
-    # Set directory permissions for Nginx user
+    # Set directory permissions for Nginx user (scoped — never chmod $HOME recursively)
     chmod 755 "$(dirname "$CLIENT_BUILD_DIR")" 2>/dev/null || true
     chmod 755 "$CLIENT_BUILD_DIR" 2>/dev/null || true
-    chmod -R 755 "$HOME" 2>/dev/null || true
+    chmod 600 .env server/.env 2>/dev/null || true
 
     sudo nginx -t
     sudo systemctl restart nginx

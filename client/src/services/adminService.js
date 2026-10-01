@@ -78,6 +78,9 @@ const createShippingRule = (data) => api.post(`/${A}/shipping/rules`, data);
 const updateShippingRule = (id, data) => api.patch(`/${A}/shipping/rules/${id}`, data);
 const deleteShippingRule = (id) => api.delete(`/${A}/shipping/rules/${id}`);
 const testShippingCalculation = (data) => api.post(`/${A}/shipping/test`, data);
+const testShippingProviderConnection = (id) => api.post(`/${A}/shipping/providers/${id}/test-connection`);
+const getFailedShippingOperations = (params) => api.get(`/${A}/shipping/operations/failed`, { params });
+const retryShippingOperation = (id) => api.post(`/${A}/shipping/operations/${id}/retry`);
 
 // Settings bulk update
 const updateSettings = (settings) => api.put('/settings/bulk', settings);
@@ -161,6 +164,7 @@ export {
   updateShipment, createReturnRequest, createReplacementRequest, updateReturnStatus, processRefund, confirmCodPayment, addOrderNote,
   getShippingProviders, updateShippingProvider, getShippingZones, createShippingZone, updateShippingZone, deleteShippingZone,
   getShippingRules, createShippingRule, updateShippingRule, deleteShippingRule, testShippingCalculation,
+  testShippingProviderConnection, getFailedShippingOperations, retryShippingOperation,
   updateSettings,
   getEmailTemplates, getEmailTemplate, updateEmailTemplate, previewEmailTemplate, resetEmailTemplate, getEmailTemplateDefault, sendTestEmail, sendTestNotification,
   validateCoupon, getPublicCoupons, getEligibleCoupons,

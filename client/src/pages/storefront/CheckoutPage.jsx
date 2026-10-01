@@ -19,6 +19,7 @@ import PaymentsIcon from '@mui/icons-material/Payments';
 import CreditCardIcon from '@mui/icons-material/CreditCard';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { AuthContext } from '../../context/AuthContext';
+import { useNotification } from '../../context/NotificationContext';
 import { useSettings, useCurrency, useFeature, useComponentStyles } from '../../hooks/useSettings';
 import { useCart } from '../../hooks/useCart';
 import { userService } from '../../services/userService';
@@ -200,6 +201,7 @@ const CheckoutPage = () => {
     const { settings } = useSettings();
     const storeName = getStoreName(settings);
     const { formatPrice } = useCurrency();
+    const { notify } = useNotification();
     const checkoutBlockStyle = useComponentStyles('checkoutBlock');
     const formControlStyle = useComponentStyles('formControl');
     const badgeChipStyle = useComponentStyles('badgeChip');
@@ -282,6 +284,8 @@ const CheckoutPage = () => {
     const [shippingQuote, setShippingQuote] = useState(null);
     const [shippingLoading, setShippingLoading] = useState(false);
     const [shippingError, setShippingError] = useState('');
+    const [shippingErrorStatus, setShippingErrorStatus] = useState(null);
+    const [shippingRetryTrigger, setShippingRetryTrigger] = useState(0);
 
     // Address dialog
     const blockRadius = checkoutBlockStyle.radius === 'none' ? 0 : checkoutBlockStyle.radius === 'small' ? 1 : checkoutBlockStyle.radius === 'large' ? 3 : 2;
@@ -378,10 +382,14 @@ const CheckoutPage = () => {
     ), [items]);
     const appliedCouponCodes = useMemo(() => appliedCoupons.map((coupon) => coupon.code).sort().join('|'), [appliedCoupons]);
 
+    const isTemporaryShippingError = shippingErrorStatus === 503 ||
+        (typeof shippingError === 'string' && shippingError.toLowerCase().includes('temporarily'));
+
     useEffect(() => {
         if (!selectedAddressId || items.length === 0) {
             setShippingQuote(null);
             setShippingError('');
+            setShippingErrorStatus(null);
             return undefined;
         }
 
@@ -389,6 +397,7 @@ const CheckoutPage = () => {
         const timer = setTimeout(async () => {
             setShippingLoading(true);
             setShippingError('');
+            setShippingErrorStatus(null);
             try {
                 const response = await calculateShipping({
                     shippingAddressId: selectedAddressId,
@@ -407,13 +416,22 @@ const CheckoutPage = () => {
                 if (cancelled) return;
                 const quote = response.data?.data || null;
                 setShippingQuote(quote);
+                setShippingErrorStatus(null);
                 if (!quote?.serviceable) {
                     setShippingError(quote?.message || 'Delivery is not available for this address.');
+                    // Reopen address section so user can select or add another address
+                    setActiveSection(1);
+                    setCompletedSections((prev) => prev.filter((s) => s !== 1));
                 }
             } catch (err) {
                 if (!cancelled) {
                     setShippingQuote(null);
+                    const status = err.response?.status;
+                    setShippingErrorStatus(status || 500);
                     setShippingError(getApiErrorMessage(err, 'Could not calculate delivery for this address.'));
+                    // Reopen address section so user can review or change address
+                    setActiveSection(1);
+                    setCompletedSections((prev) => prev.filter((s) => s !== 1));
                 }
             } finally {
                 if (!cancelled) setShippingLoading(false);
@@ -424,14 +442,17 @@ const CheckoutPage = () => {
             cancelled = true;
             clearTimeout(timer);
         };
-    }, [selectedAddressId, checkoutSessionId, paymentMethod, couponCode, couponResult, appliedCouponCodes, itemSignature, isBuyNowFlow, buyNowItem]);
+    }, [selectedAddressId, checkoutSessionId, paymentMethod, couponCode, couponResult, appliedCouponCodes, itemSignature, isBuyNowFlow, buyNowItem, shippingRetryTrigger]);
 
     useEffect(() => {
         if (paymentMethod === 'cod' && shippingQuote && shippingQuote.codAvailable === false) {
             const fallback = enabledPaymentMethods.find((method) => method.id !== 'cod');
-            if (fallback) setPaymentMethod(fallback.id);
+            if (fallback) {
+                setPaymentMethod(fallback.id);
+                notify('Cash on delivery is not available for this address. Switched to online payment.', 'info');
+            }
         }
-    }, [paymentMethod, shippingQuote, enabledPaymentMethods]);
+    }, [paymentMethod, shippingQuote, enabledPaymentMethods, notify]);
 
     useEffect(() => {
         userService.getAddresses()
@@ -685,6 +706,49 @@ const CheckoutPage = () => {
 
                 {/* ── Left: sections ── */}
                 <Box>
+                    {/* Always-visible Shipping Alert & Recovery Action Banner (Edge Case 3 & 4) */}
+                    {(shippingError || (shippingQuote && !shippingQuote.serviceable) || isTemporaryShippingError) && (
+                        <Alert
+                            severity={isTemporaryShippingError ? 'info' : 'warning'}
+                            sx={{ mb: 2.5, borderRadius: blockRadius }}
+                            action={
+                                <Box sx={{ display: 'flex', gap: 1, alignItems: 'center' }}>
+                                    {isTemporaryShippingError && (
+                                        <Button
+                                            color="inherit"
+                                            size="small"
+                                            variant="outlined"
+                                            onClick={() => setShippingRetryTrigger((v) => v + 1)}
+                                            sx={{ fontWeight: 600, textTransform: 'none' }}
+                                        >
+                                            Retry
+                                        </Button>
+                                    )}
+                                    <Button
+                                        color="inherit"
+                                        size="small"
+                                        variant="outlined"
+                                        onClick={() => {
+                                            editSection(1);
+                                            if (addresses.length <= 1) {
+                                                openAddAddrDialog();
+                                            }
+                                        }}
+                                        sx={{ fontWeight: 600, textTransform: 'none' }}
+                                    >
+                                        Change Address
+                                    </Button>
+                                </Box>
+                            }
+                        >
+                            <Typography variant="subtitle2" fontWeight={700}>
+                                {isTemporaryShippingError ? 'Delivery Checking Temporarily Unavailable' : 'Delivery Not Available'}
+                            </Typography>
+                            <Typography variant="body2">
+                                {shippingError || (shippingQuote && !shippingQuote.serviceable ? shippingQuote.message : 'Delivery is not available for this pincode. Please retry or change your address.')}
+                            </Typography>
+                        </Alert>
+                    )}
 
                     {/* ── Section 1: Delivery Address ── */}
                     <Section
@@ -696,26 +760,65 @@ const CheckoutPage = () => {
                         onEdit={() => editSection(1)}
                         summary={
                             selectedAddress && (
-                                <Box sx={{ display: 'flex', gap: 1, alignItems: 'flex-start' }}>
-                                    <LocationOnIcon sx={{ fontSize: 16, color: 'primary.main', mt: 0.2, flexShrink: 0 }} />
-                                    <Box>
-                                        <Typography variant="body2" fontWeight={600}>
-                                            {selectedAddress.fullName}
-                                            {selectedAddress.label ? ` · ${selectedAddress.label}` : ''}
-                                        </Typography>
-                                        <Typography variant="body2" color="text.secondary">
-                                            {selectedAddress.addressLine1}{selectedAddress.addressLine2 ? `, ${selectedAddress.addressLine2}` : ''},{' '}
-                                            {selectedAddress.city}{selectedAddress.state ? `, ${selectedAddress.state}` : ''} {selectedAddress.postalCode}, {selectedAddress.country}
-                                        </Typography>
-                                        {selectedAddress.phone && (
-                                            <Typography variant="body2" color="text.secondary" sx={{ display: 'flex', alignItems: 'center', gap: 0.5, mt: 0.25 }}>
-                                                <PhoneIcon sx={{ fontSize: 16 }} /> {selectedAddress.phone}
+                                <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1.5 }}>
+                                    <Box sx={{ display: 'flex', gap: 1, alignItems: 'flex-start' }}>
+                                        <LocationOnIcon sx={{ fontSize: 16, color: 'primary.main', mt: 0.2, flexShrink: 0 }} />
+                                        <Box>
+                                            <Typography variant="body2" fontWeight={600}>
+                                                {selectedAddress.fullName}
+                                                {selectedAddress.label ? ` · ${selectedAddress.label}` : ''}
                                             </Typography>
-                                        )}
-                                        {selectedAddress.gstin && (
-                                            <Typography variant="body2" color="text.secondary">GSTIN: {selectedAddress.gstin}</Typography>
-                                        )}
+                                            <Typography variant="body2" color="text.secondary">
+                                                {selectedAddress.addressLine1}{selectedAddress.addressLine2 ? `, ${selectedAddress.addressLine2}` : ''},{' '}
+                                                {selectedAddress.city}{selectedAddress.state ? `, ${selectedAddress.state}` : ''} {selectedAddress.postalCode}, {selectedAddress.country}
+                                            </Typography>
+                                            {selectedAddress.phone && (
+                                                <Typography variant="body2" color="text.secondary" sx={{ display: 'flex', alignItems: 'center', gap: 0.5, mt: 0.25 }}>
+                                                    <PhoneIcon sx={{ fontSize: 16 }} /> {selectedAddress.phone}
+                                                </Typography>
+                                            )}
+                                            {selectedAddress.gstin && (
+                                                <Typography variant="body2" color="text.secondary">GSTIN: {selectedAddress.gstin}</Typography>
+                                            )}
+                                        </Box>
                                     </Box>
+
+                                    {(shippingError || (shippingQuote && !shippingQuote.serviceable) || isTemporaryShippingError) && (
+                                        <Alert
+                                            severity={isTemporaryShippingError ? 'info' : 'warning'}
+                                            sx={{ mt: 1 }}
+                                            action={
+                                                <Box sx={{ display: 'flex', gap: 1 }}>
+                                                    {isTemporaryShippingError && (
+                                                        <Button
+                                                            color="inherit"
+                                                            size="small"
+                                                            onClick={(e) => {
+                                                                e.stopPropagation();
+                                                                setShippingRetryTrigger((v) => v + 1);
+                                                            }}
+                                                            sx={{ fontWeight: 600, textTransform: 'none' }}
+                                                        >
+                                                            Retry
+                                                        </Button>
+                                                    )}
+                                                    <Button
+                                                        color="inherit"
+                                                        size="small"
+                                                        onClick={(e) => {
+                                                            e.stopPropagation();
+                                                            editSection(1);
+                                                        }}
+                                                        sx={{ fontWeight: 600, textTransform: 'none' }}
+                                                    >
+                                                        Change Address
+                                                    </Button>
+                                                </Box>
+                                            }
+                                        >
+                                            {shippingError || (shippingQuote && !shippingQuote.serviceable ? shippingQuote.message : 'Delivery is not available for this address.')}
+                                        </Alert>
+                                    )}
                                 </Box>
                             )
                         }
@@ -804,11 +907,43 @@ const CheckoutPage = () => {
                                             <Alert severity="info" icon={<CircularProgress size={16} />}>
                                                 Checking delivery availability...
                                             </Alert>
-                                        ) : shippingError ? (
-                                            <Alert severity="warning">{shippingError}</Alert>
+                                        ) : isTemporaryShippingError ? (
+                                            <Alert
+                                                severity="info"
+                                                action={
+                                                    <Button
+                                                        color="inherit"
+                                                        size="small"
+                                                        variant="outlined"
+                                                        onClick={() => setShippingRetryTrigger((v) => v + 1)}
+                                                        sx={{ fontWeight: 600, textTransform: 'none' }}
+                                                    >
+                                                        Retry
+                                                    </Button>
+                                                }
+                                            >
+                                                {shippingError || 'Delivery checking is temporarily unavailable. Please retry shortly.'}
+                                            </Alert>
+                                        ) : shippingError || (shippingQuote && !shippingQuote.serviceable) ? (
+                                            <Alert
+                                                severity="warning"
+                                                action={
+                                                    <Button
+                                                        color="inherit"
+                                                        size="small"
+                                                        onClick={openAddAddrDialog}
+                                                        sx={{ fontWeight: 600, textTransform: 'none' }}
+                                                    >
+                                                        Change Address
+                                                    </Button>
+                                                }
+                                            >
+                                                {shippingError || 'Delivery is not available for this pincode. Please select or add a different address.'}
+                                            </Alert>
                                         ) : shippingQuote?.serviceable ? (
                                             <Alert severity="success">
                                                 Delivery available{shippingQuote.estimatedDeliveryDays ? ` in ${shippingQuote.estimatedDeliveryDays} days` : ''}.
+                                                {effectiveShippingCost === 0 ? ' Free shipping applied.' : ` Delivery fee: ${formatPrice(effectiveShippingCost)}.`}
                                             </Alert>
                                         ) : null}
                                     </Box>
@@ -1154,9 +1289,17 @@ const CheckoutPage = () => {
                             <Divider sx={{ my: 1.5 }} />
 
                             {/* Total */}
-                            <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 0.5 }}>
+                            <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 0.5 }}>
                                 <Typography variant="subtitle1" fontWeight={700}>Total Amount</Typography>
-                                <Typography variant="subtitle1" fontWeight={700}>{formatPrice(total)}</Typography>
+                                {shippingLoading ? (
+                                    <Typography variant="body2" color="text.secondary">Calculating...</Typography>
+                                ) : !selectedAddressId ? (
+                                    <Typography variant="body2" color="text.secondary">Select address</Typography>
+                                ) : !shippingQuote?.quoteId || shippingQuote?.serviceable === false ? (
+                                    <Typography variant="body2" color="warning.main" fontWeight={600}>Calculated after delivery check</Typography>
+                                ) : (
+                                    <Typography variant="subtitle1" fontWeight={700}>{formatPrice(total)}</Typography>
+                                )}
                             </Box>
 
                             {totalSavings > 0 && (
@@ -1195,6 +1338,14 @@ const CheckoutPage = () => {
                                 <Typography variant="caption" color="text.secondary" display="block" textAlign="center" mt={1}>
                                     Complete the steps above to place your order
                                 </Typography>
+                            )}
+
+                            {(shippingError || (shippingQuote && !shippingQuote.serviceable)) && (
+                                <Alert severity="warning" sx={{ mt: 1.5, py: 0.5 }}>
+                                    <Typography variant="caption" fontWeight={600} display="block">
+                                        Cannot place order: Please retry or select a serviceable delivery address above.
+                                    </Typography>
+                                </Alert>
                             )}
 
                             <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 0.5, mt: 1.5 }}>

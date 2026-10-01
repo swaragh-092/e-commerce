@@ -7,6 +7,7 @@ const lowStockAlertJob = require('./lowStockAlert.job');
 const shippingQuoteCleanupJob = require('./shippingQuoteCleanup.job');
 const notificationQueueJob = require('./notificationQueue.job');
 const shippingOperationJob = require('./shippingOperation.job');
+const trackingReconciliationJob = require('./trackingReconciliation.job');
 const authCleanupJob = require('./authCleanup.job');
 const analyticsReportJob = require('./analyticsReport.job');
 const logger = require('../utils/logger');
@@ -20,6 +21,7 @@ const startJobs = () => {
   shippingQuoteCleanupJob.run();
   notificationQueueJob.run();
   shippingOperationJob.run();
+  trackingReconciliationJob.run();
   authCleanupJob.run();
   analyticsReportJob.run();
 };
