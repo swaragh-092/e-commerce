@@ -3,23 +3,10 @@
 const passport = require('passport');
 const GoogleStrategy = require('passport-google-oauth20').Strategy;
 const crypto = require('crypto');
-const jwt = require('jsonwebtoken');
 const { sequelize, User, RefreshToken, Role, Permission } = require('../index');
 const { enrichUserAuthorization } = require('../../config/permissions');
 const { AUTH_TIME } = require('../../config/constants');
-
-const hashToken = (token) => crypto.createHash('sha256').update(token).digest('hex');
-
-const generateTokens = (user, sessionId = null) => {
-  const payload = { id: user.id, role: user.role };
-  if (sessionId) payload.sid = sessionId;
-  const iss = process.env.JWT_ISSUER || 'ecommerce-pro';
-  const aud = process.env.JWT_AUDIENCE || 'ecommerce-pro-client';
-  return {
-    accessToken: jwt.sign(payload, process.env.JWT_ACCESS_SECRET, { expiresIn: process.env.JWT_ACCESS_EXPIRY || '15m', issuer: iss, audience: aud }),
-    refreshToken: jwt.sign(payload, process.env.JWT_REFRESH_SECRET, { expiresIn: process.env.JWT_REFRESH_EXPIRY || '7d', issuer: iss, audience: aud }),
-  };
-};
+const { hashToken, generateTokens, signTempTwoFactorToken } = require('./tokenUtils');
 
 const authUserInclude = [
   { model: Role, as: 'roles', through: { attributes: [] }, include: [{ model: Permission, as: 'permissions', through: { attributes: [] } }] },
@@ -53,12 +40,13 @@ const findOrCreateOAuthUser = async (profile, clientIp) => {
 
   return sequelize.transaction(async (t) => {
     let user = await User.findOne({ where: { email }, transaction: t });
+    let isMerge = false;
 
     if (!user) {
       user = await User.create({
         email,
-        firstName: profile.name?.givenName || profile.displayName || 'User',
-        lastName: profile.name?.familyName || '',
+        firstName: String(profile.name?.givenName || profile.displayName || 'User').trim().slice(0, 100),
+        lastName: String(profile.name?.familyName || '').trim().slice(0, 100),
         password: crypto.randomBytes(32).toString('hex'),
         role: 'customer',
         status: 'active',
@@ -70,18 +58,31 @@ const findOrCreateOAuthUser = async (profile, clientIp) => {
       await user.setRoles([customerRole], { transaction: t });
     } else if (user.status !== 'active') {
       throw new Error('Account is inactive');
+    } else {
+      isMerge = true;
+    }
+
+    if (isMerge) {
+      // Merging into a pre-existing password row: kill any sessions the
+      // password holder may hold so a squatted account can't stay logged in.
+      await RefreshToken.update(
+        { revokedAt: new Date() },
+        { where: { userId: user.id, revokedAt: null }, transaction: t }
+      );
+      try {
+        const sessions = await RefreshToken.findAll({
+          where: { userId: user.id },
+          attributes: ['id'],
+          transaction: t,
+        });
+        const blocklist = require('../../utils/tokenBlocklist');
+        sessions.forEach((s) => blocklist.revokeSession(s.id));
+      } catch { /* kill-switch best-effort */ }
     }
 
     // Check if 2FA is enabled — return temp token instead of full auth
     if (user.twoFactorEnabled) {
-      const iss = process.env.JWT_ISSUER || 'ecommerce-pro';
-      const aud = process.env.JWT_AUDIENCE || 'ecommerce-pro-client';
-      const tempToken = jwt.sign(
-        { id: user.id, purpose: '2fa' },
-        process.env.JWT_ACCESS_SECRET,
-        { expiresIn: '5m', issuer: iss, audience: aud }
-      );
-      return { requiresTwoFactor: true, tempToken };
+      return { requiresTwoFactor: true, tempToken: signTempTwoFactorToken(user.id) };
     }
 
     const sessionId = crypto.randomUUID();

@@ -732,14 +732,21 @@ const updateUserRole = async (userId, roleId, actingUser) => {
 
     const previousRole = user.role;
     const previousAssignedRole = Array.isArray(user.roles) && user.roles.length ? user.roles[0] : null;
+    const wasSuperAdmin = previousRole === ROLES.SUPER_ADMIN
+      || previousAssignedRole?.slug === ROLES.SUPER_ADMIN
+      || previousAssignedRole?.baseRole === ROLES.SUPER_ADMIN;
 
-    if (previousRole === ROLES.SUPER_ADMIN && role.baseRole !== ROLES.SUPER_ADMIN) {
-      const superAdminCount = await User.count({
-        where: { role: ROLES.SUPER_ADMIN, status: 'active' },
-        transaction,
-      });
+    if (wasSuperAdmin && role.baseRole !== ROLES.SUPER_ADMIN) {
+      const rows = await db.sequelize.query(
+        `SELECT COUNT(DISTINCT u.id) AS "count" FROM users u
+         LEFT JOIN user_roles ur ON ur.user_id = u.id
+         LEFT JOIN roles r ON r.id = ur.role_id
+         WHERE u.status = 'active' AND u.deleted_at IS NULL
+           AND (u.role = 'super_admin' OR r.slug = 'super_admin')`,
+        { transaction, type: db.sequelize.QueryTypes.SELECT }
+      );
 
-      if (superAdminCount <= 1) {
+      if (Number(rows?.[0]?.count || 0) <= 1) {
         throw new AppError('VALIDATION_ERROR', 400, 'You cannot demote the last active super admin');
       }
     }
@@ -832,10 +839,19 @@ const createStaffUser = async ({ firstName, lastName, email, password, roleId },
       // Invalidate any old refresh tokens
       const { RefreshToken } = db;
       if (RefreshToken) {
+        const stale = await RefreshToken.findAll({
+          where: { userId: existing.id, revokedAt: null },
+          attributes: ['id'],
+          transaction,
+        });
         await RefreshToken.update(
           { revokedAt: new Date() },
           { where: { userId: existing.id, revokedAt: null }, transaction }
         );
+        try {
+          const blocklist = require('../../utils/tokenBlocklist');
+          stale.forEach((s) => blocklist.revokeSession(s.id));
+        } catch { /* kill-switch best-effort */ }
       }
 
       const restoredUser = await User.findByPk(existing.id, { include: userRoleInclude, transaction });
@@ -927,20 +943,22 @@ const deleteStaffUser = async (userId, actingUser) => {
       );
     }
 
-    if (user.role === ROLES.SUPER_ADMIN) {
+    if (user.role === ROLES.SUPER_ADMIN || assignedRoles.some((r) => r.slug === ROLES.SUPER_ADMIN)) {
       if (!isSuperAdmin) {
         throw new AppError('FORBIDDEN', 403, 'Only super admins can delete super admin accounts');
       }
-      // Only enforce last-active guard when deleting an active super admin
+      // Only enforce last-active guard when deleting an active super admin.
+      // Count legacy-column AND join-assigned super admins (either suffices).
       if (user.status === 'active') {
-        // Lock rows with transaction.LOCK.UPDATE to serialize concurrent deletions
-        const activeSuperAdmins = await User.findAll({
-          attributes: ['id'],
-          where: { role: ROLES.SUPER_ADMIN, status: 'active' },
-          lock: transaction.LOCK?.UPDATE || true,
-          transaction,
-        });
-        if (activeSuperAdmins.length <= 1) {
+        const rows = await db.sequelize.query(
+          `SELECT COUNT(DISTINCT u.id) AS "count" FROM users u
+           LEFT JOIN user_roles ur ON ur.user_id = u.id
+           LEFT JOIN roles r ON r.id = ur.role_id
+           WHERE u.status = 'active' AND u.deleted_at IS NULL
+             AND (u.role = 'super_admin' OR r.slug = 'super_admin')`,
+          { transaction, type: db.sequelize.QueryTypes.SELECT }
+        );
+        if (Number(rows?.[0]?.count || 0) <= 1) {
           throw new AppError('VALIDATION_ERROR', 400, 'Cannot delete the last active super admin');
         }
       }
@@ -961,10 +979,19 @@ const deleteStaffUser = async (userId, actingUser) => {
 
     const { RefreshToken } = db;
     if (RefreshToken) {
+      const active = await RefreshToken.findAll({
+        where: { userId, revokedAt: null },
+        attributes: ['id'],
+        transaction,
+      });
       await RefreshToken.update(
         { revokedAt: new Date() },
         { where: { userId, revokedAt: null }, transaction }
       );
+      try {
+        const blocklist = require('../../utils/tokenBlocklist');
+        active.forEach((s) => blocklist.revokeSession(s.id));
+      } catch { /* kill-switch best-effort */ }
     }
 
     await user.setRoles([], { transaction });

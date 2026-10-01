@@ -22,7 +22,7 @@ const sendAuthSuccess = (res, result, message, options = {}) => {
 
 const register = async (req, res, next) => {
   try {
-    const result = await AuthService.register(req.validated);
+    const result = await AuthService.register(req.validated, req.ip);
     if (result?.tokens) setAuthCookies(res, result.tokens);
     return res.status(201).json({
       success: true,
@@ -63,9 +63,17 @@ const logout = async (req, res, next) => {
   try {
     const refreshToken = getRefreshToken(req);
     if (refreshToken) await AuthService.logout(refreshToken, req.user?.id);
-    // Blocklist the current access token for its remaining lifetime
+    // Blocklist the current access token for its remaining lifetime, and kill
+    // its session id so any sibling access token for the session dies too.
     const accessToken = getAccessToken(req);
-    if (accessToken) tokenBlocklist.add(accessToken);
+    if (accessToken) {
+      tokenBlocklist.add(accessToken);
+      try {
+        const jwt = require('jsonwebtoken');
+        const decoded = jwt.decode(accessToken);
+        if (decoded?.sid) tokenBlocklist.revokeSession(decoded.sid);
+      } catch { /* decode-only, never throws logout */ }
+    }
     clearAuthCookies(res);
     return success(res, null, 'Logged out successfully');
   } catch (err) {

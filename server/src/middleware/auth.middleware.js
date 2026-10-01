@@ -43,6 +43,11 @@ const authenticate = async (req, res, next) => {
       throw new AppError('UNAUTHORIZED', 401, 'Invalid token purpose');
     }
 
+    // Reject sessions revoked via sid kill-switch (revoke/force-logout/ban).
+    if (decoded.sid && tokenBlocklist.isSessionRevoked(decoded.sid)) {
+      throw new AppError('UNAUTHORIZED', 401, 'Session has been revoked');
+    }
+
     // Check blocklist (tokens invalidated on logout)
     if (tokenBlocklist.isBlocked(token)) {
       throw new AppError('UNAUTHORIZED', 401, 'Token has been revoked');
@@ -85,6 +90,11 @@ const optionalAuth = async (req, res, next) => {
 
     // Single-purpose tokens must never authenticate a session.
     if (decoded.purpose) {
+      return next();
+    }
+
+    // Revoked sessions proceed as unauthenticated.
+    if (decoded.sid && tokenBlocklist.isSessionRevoked(decoded.sid)) {
       return next();
     }
 

@@ -80,7 +80,16 @@ const disable = async (userId, totpCode) => {
   } catch {
     throw new AppError('VALIDATION_ERROR', 400, '2FA secret is corrupted. Please contact support to reset 2FA.');
   }
-  if (!authenticator.verify({ token: totpCode, secret })) {
+  // Accept a TOTP code OR a backup code, so a lost device alone is not a
+  // permanent lockout. Backup codes are single-use and consumed here.
+  let valid = false;
+  try {
+    valid = authenticator.verify({ token: totpCode, secret });
+  } catch { valid = false; }
+  if (!valid) {
+    valid = await verifyBackupCode(user, totpCode);
+  }
+  if (!valid) {
     throw new AppError('VALIDATION_ERROR', 400, 'Invalid verification code');
   }
 
@@ -102,7 +111,7 @@ const verify = (user, totpCode) => {
 const verifyBackupCode = async (user, code) => {
   if (!user.twoFactorBackupCodes || !Array.isArray(user.twoFactorBackupCodes)) return false;
 
-  const hashed = hashCode(code);
+  const hashed = hashCode(String(code || '').trim().toLowerCase());
   if (!user.twoFactorBackupCodes.includes(hashed)) return false;
 
   const { sequelize } = require('../index');

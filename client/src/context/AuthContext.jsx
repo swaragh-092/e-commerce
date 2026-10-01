@@ -74,8 +74,12 @@ export const AuthProvider = ({ children }) => {
   };
 
   const register = async (userData) => {
-    // Option B: log in immediately after register and redirect to home
     const data = await authService.register(userData);
+    // When email verification is mandatory the server issues no session —
+    // return early so the caller can route to the verification prompt.
+    if (data.requiresVerification || !data.tokens) {
+      return data;
+    }
     const fullUser = await finalizeAuthenticatedSession();
     return { ...data, user: fullUser };
   };

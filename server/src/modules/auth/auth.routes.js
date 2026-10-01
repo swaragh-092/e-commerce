@@ -37,9 +37,15 @@ initializeGoogleStrategy();
 
 const Joi = require('joi');
 const totpCodeSchema = Joi.object({ code: Joi.string().length(6).pattern(/^\d+$/).required() });
+// Disable accepts a TOTP code OR a single-use backup code (lost-device recovery).
+const disableTwoFactorSchema = Joi.object({
+  code: Joi.string().required().pattern(/^(\d{6}|[a-f0-9]{8})$/i).messages({
+    'string.pattern.base': 'Code must be a 6-digit TOTP or 8-character backup code',
+  }),
+});
 const twoFactorVerifySchema = Joi.object({
   tempToken: Joi.string().required(),
-  code: Joi.string().required().pattern(/^(\d{6}|[a-f0-9]{8})$/).messages({
+  code: Joi.string().required().pattern(/^(\d{6}|[a-f0-9]{8})$/i).messages({
     'string.pattern.base': 'Code must be a 6-digit TOTP or 8-character backup code',
   }),
   trustDevice: Joi.boolean().default(false),
@@ -68,7 +74,7 @@ router.post('/verify-email', verifyEmailLimiter, validate(verifyEmailSchema), au
 router.post('/2fa/verify', twoFactorLimiter, validate(twoFactorVerifySchema), authController.verifyTwoFactor);
 router.post('/2fa/setup', authenticate, twoFactorLimiter, twoFactorController.setup);
 router.post('/2fa/enable', authenticate, twoFactorLimiter, validate(totpCodeSchema), twoFactorController.enable);
-router.post('/2fa/disable', authenticate, twoFactorLimiter, validate(totpCodeSchema), twoFactorController.disable);
+router.post('/2fa/disable', authenticate, twoFactorLimiter, validate(disableTwoFactorSchema), twoFactorController.disable);
 router.post('/2fa/backup-codes', authenticate, twoFactorLimiter, validate(totpCodeSchema), twoFactorController.regenerateBackupCodes);
 
 // Phone OTP routes

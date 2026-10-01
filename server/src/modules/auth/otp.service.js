@@ -10,14 +10,21 @@ const OTP_EXPIRY_MS = 5 * 60 * 1000; // 5 minutes
 const OTP_COOLDOWN_MS = 60 * 1000; // 60 seconds between sends
 const MAX_ATTEMPTS = 3;
 
-const hashOtp = (otp) => crypto.createHash('sha256').update(otp).digest('hex');
+const OTP_PEPPER = process.env.OTP_PEPPER || process.env.CREDENTIAL_ENCRYPTION_KEY || '';
+
+// 6-digit codes have only ~20 bits of entropy — hash with a server-side pepper
+// so a DB read alone doesn't enable offline brute-force. Changing the pepper
+// invalidates outstanding OTPs (5-min TTL, negligible).
+const hashOtp = (otp) => crypto.createHash('sha256').update(`${OTP_PEPPER}:${otp}`).digest('hex');
 
 const generate = async (identifier, purpose = 'login', ip) => {
-  // Cooldown check: 1 request per 60s per identifier
+  const normalizedId = String(identifier || '').trim();
+  if (!normalizedId) throw new AppError('VALIDATION_ERROR', 400, 'Phone number is required');
+  // Cooldown check: 1 request per 60s per identifier ACROSS purposes, so
+  // alternating `login` / `phone_change` for the same number can't spam SMS.
   const recent = await OtpToken.findOne({
     where: {
-      identifier,
-      purpose,
+      identifier: normalizedId,
       createdAt: { [Op.gte]: new Date(Date.now() - OTP_COOLDOWN_MS) },
     },
     order: [['createdAt', 'DESC']],
@@ -28,13 +35,13 @@ const generate = async (identifier, purpose = 'login', ip) => {
   }
 
   // Invalidate any existing OTPs for this identifier+purpose
-  await OtpToken.destroy({ where: { identifier, purpose } });
+  await OtpToken.destroy({ where: { identifier: normalizedId, purpose } });
 
   // Generate 6-digit OTP
   const otp = String(crypto.randomInt(100000, 1000000));
 
   await OtpToken.create({
-    identifier,
+    identifier: normalizedId,
     otpHash: hashOtp(otp),
     purpose,
     expiresAt: new Date(Date.now() + OTP_EXPIRY_MS),
@@ -47,8 +54,10 @@ const generate = async (identifier, purpose = 'login', ip) => {
 };
 
 const verify = async (identifier, otp, purpose = 'login') => {
+  const normalizedId = String(identifier || '').trim();
+  const normalizedOtp = String(otp || '').trim();
   const record = await OtpToken.findOne({
-    where: { identifier, purpose },
+    where: { identifier: normalizedId, purpose },
     order: [['createdAt', 'DESC']],
   });
 
@@ -66,10 +75,15 @@ const verify = async (identifier, otp, purpose = 'login') => {
     throw new AppError('VALIDATION_ERROR', 400, 'Too many failed attempts. Please request a new OTP.');
   }
 
-  if (hashOtp(otp) !== record.otpHash) {
+  if (hashOtp(normalizedOtp) !== record.otpHash) {
+    const attemptsNow = (record.attempts || 0) + 1;
     await record.increment('attempts');
-    const remaining = record.maxAttempts - record.attempts - 1;
-    throw new AppError('VALIDATION_ERROR', 400, `Invalid OTP. ${remaining > 0 ? remaining + ' attempts remaining.' : 'OTP invalidated.'}`);
+    const remaining = record.maxAttempts - attemptsNow;
+    if (remaining <= 0) {
+      await record.destroy();
+      throw new AppError('VALIDATION_ERROR', 400, 'Too many failed attempts. Please request a new OTP.');
+    }
+    throw new AppError('VALIDATION_ERROR', 400, `Invalid OTP. ${remaining} attempt${remaining === 1 ? '' : 's'} remaining.`);
   }
 
   // Success — destroy the token
