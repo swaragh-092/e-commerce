@@ -42,7 +42,7 @@ const createProductSchema = Joi.object({
   }),
   weight: Joi.number().precision(2).min(0).allow(null), // legacy field
   requiresShipping: Joi.boolean().default(true),
-  weightGrams: Joi.number().integer().min(0).allow(null),
+  weightGrams: Joi.number().min(0).allow(null),
   lengthCm: Joi.number().min(0).allow(null),
   breadthCm: Joi.number().min(0).allow(null),
   heightCm: Joi.number().min(0).allow(null),
@@ -122,7 +122,7 @@ const updateProductSchema = Joi.object({
   quantity: Joi.number().integer().min(0),
   weight: Joi.number().precision(2).min(0).allow(null),
   requiresShipping: Joi.boolean(),
-  weightGrams: Joi.number().integer().min(0).allow(null),
+  weightGrams: Joi.number().min(0).allow(null),
   lengthCm: Joi.number().min(0).allow(null),
   breadthCm: Joi.number().min(0).allow(null),
   heightCm: Joi.number().min(0).allow(null),

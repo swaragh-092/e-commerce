@@ -285,6 +285,7 @@ const CheckoutPage = () => {
     const [shippingLoading, setShippingLoading] = useState(false);
     const [shippingError, setShippingError] = useState('');
     const [shippingErrorStatus, setShippingErrorStatus] = useState(null);
+    const [shippingErrorCode, setShippingErrorCode] = useState(null);
     const [shippingRetryTrigger, setShippingRetryTrigger] = useState(0);
 
     // Address dialog
@@ -382,14 +383,16 @@ const CheckoutPage = () => {
     ), [items]);
     const appliedCouponCodes = useMemo(() => appliedCoupons.map((coupon) => coupon.code).sort().join('|'), [appliedCoupons]);
 
-    const isTemporaryShippingError = shippingErrorStatus === 503 ||
-        (typeof shippingError === 'string' && shippingError.toLowerCase().includes('temporarily'));
+    const isShippingSetupError = ['MISSING_PRODUCT_MEASUREMENTS', 'INVALID_SHIPPING_PACKAGE', 'SHIPPING_PACKAGE_CAPACITY_EXCEEDED'].includes(shippingErrorCode);
+    const isTemporaryShippingError = !isShippingSetupError && (shippingErrorStatus === 503 ||
+        (typeof shippingError === 'string' && shippingError.toLowerCase().includes('temporarily')));
 
     useEffect(() => {
         if (!selectedAddressId || items.length === 0) {
             setShippingQuote(null);
             setShippingError('');
             setShippingErrorStatus(null);
+            setShippingErrorCode(null);
             return undefined;
         }
 
@@ -398,6 +401,7 @@ const CheckoutPage = () => {
             setShippingLoading(true);
             setShippingError('');
             setShippingErrorStatus(null);
+            setShippingErrorCode(null);
             try {
                 const response = await calculateShipping({
                     shippingAddressId: selectedAddressId,
@@ -417,6 +421,7 @@ const CheckoutPage = () => {
                 const quote = response.data?.data || null;
                 setShippingQuote(quote);
                 setShippingErrorStatus(null);
+                setShippingErrorCode(null);
                 if (!quote?.serviceable) {
                     setShippingError(quote?.message || 'Delivery is not available for this address.');
                     // Reopen address section so user can select or add another address
@@ -427,11 +432,16 @@ const CheckoutPage = () => {
                 if (!cancelled) {
                     setShippingQuote(null);
                     const status = err.response?.status;
+                    const code = err.response?.data?.error?.code;
+                    setShippingErrorCode(code || null);
                     setShippingErrorStatus(status || 500);
-                    setShippingError(getApiErrorMessage(err, 'Could not calculate delivery for this address.'));
-                    // Reopen address section so user can review or change address
-                    setActiveSection(1);
-                    setCompletedSections((prev) => prev.filter((s) => s !== 1));
+                    setShippingError(['MISSING_PRODUCT_MEASUREMENTS', 'INVALID_SHIPPING_PACKAGE'].includes(code)
+                        ? 'Shipping is temporarily unavailable for this item. Please contact support.'
+                        : getApiErrorMessage(err, 'Could not calculate delivery for this address.'));
+                    if (!['MISSING_PRODUCT_MEASUREMENTS', 'INVALID_SHIPPING_PACKAGE', 'SHIPPING_PACKAGE_CAPACITY_EXCEEDED'].includes(code)) {
+                        setActiveSection(1);
+                        setCompletedSections((prev) => prev.filter((s) => s !== 1));
+                    }
                 }
             } finally {
                 if (!cancelled) setShippingLoading(false);
@@ -724,7 +734,7 @@ const CheckoutPage = () => {
                                             Retry
                                         </Button>
                                     )}
-                                    <Button
+                                    {!isShippingSetupError && (<Button
                                         color="inherit"
                                         size="small"
                                         variant="outlined"
@@ -737,12 +747,12 @@ const CheckoutPage = () => {
                                         sx={{ fontWeight: 600, textTransform: 'none' }}
                                     >
                                         Change Address
-                                    </Button>
+                                    </Button>)}
                                 </Box>
                             }
                         >
                             <Typography variant="subtitle2" fontWeight={700}>
-                                {isTemporaryShippingError ? 'Delivery Checking Temporarily Unavailable' : 'Delivery Not Available'}
+                                {isShippingSetupError ? 'Shipping unavailable' : isTemporaryShippingError ? 'Delivery Checking Temporarily Unavailable' : 'Delivery Not Available'}
                             </Typography>
                             <Typography variant="body2">
                                 {shippingError || (shippingQuote && !shippingQuote.serviceable ? shippingQuote.message : 'Delivery is not available for this pincode. Please retry or change your address.')}
@@ -802,7 +812,7 @@ const CheckoutPage = () => {
                                                             Retry
                                                         </Button>
                                                     )}
-                                                    <Button
+                                                    {!isShippingSetupError && (<Button
                                                         color="inherit"
                                                         size="small"
                                                         onClick={(e) => {
@@ -812,7 +822,7 @@ const CheckoutPage = () => {
                                                         sx={{ fontWeight: 600, textTransform: 'none' }}
                                                     >
                                                         Change Address
-                                                    </Button>
+                                                    </Button>)}
                                                 </Box>
                                             }
                                         >
@@ -928,14 +938,14 @@ const CheckoutPage = () => {
                                             <Alert
                                                 severity="warning"
                                                 action={
-                                                    <Button
+                                                    !isShippingSetupError && (<Button
                                                         color="inherit"
                                                         size="small"
                                                         onClick={openAddAddrDialog}
                                                         sx={{ fontWeight: 600, textTransform: 'none' }}
                                                     >
                                                         Change Address
-                                                    </Button>
+                                                    </Button>)
                                                 }
                                             >
                                                 {shippingError || 'Delivery is not available for this pincode. Please select or add a different address.'}
@@ -1343,7 +1353,7 @@ const CheckoutPage = () => {
                             {(shippingError || (shippingQuote && !shippingQuote.serviceable)) && (
                                 <Alert severity="warning" sx={{ mt: 1.5, py: 0.5 }}>
                                     <Typography variant="caption" fontWeight={600} display="block">
-                                        Cannot place order: Please retry or select a serviceable delivery address above.
+                                        {isShippingSetupError ? 'Cannot place order: Please contact support or update your items.' : 'Cannot place order: Please retry or select a serviceable delivery address above.'}
                                     </Typography>
                                 </Alert>
                             )}

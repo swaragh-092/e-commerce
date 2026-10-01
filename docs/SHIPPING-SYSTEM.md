@@ -166,3 +166,14 @@ All edge cases, P1 bug fixes, and architectural invariants are validated with 10
 - `server/tests/unit/shipping.webhook.test.js` (5/5 tests passing)
 - Full backend suite (35 test files, 294 tests passing).
 - Full client build (`npm run build`) passing with zero bundle or syntax errors.
+
+
+## One measured default package
+
+Configure **Admin → Shipping → Packaging** to use one measured box or envelope for the store. No dimensions or capacities are prefilled. Enter the exterior dimensions in centimetres, empty package weight in grams, maximum item count confirmed to fit, and maximum contents weight in grams. Dimensions must exceed 0.5 cm. The merchant must check fit across the products and item combinations sold; item count is a declared capacity, not an automatic packing algorithm.
+
+With this option enabled, each physical product requires its actual weight without the shipping box or envelope. Product dimensions are optional. Checkout uses the saved package dimensions and adds its empty weight once to the sum of product weights. Known oversized products and orders above the configured count or weight capacity are blocked with a support message. Digital items do not consume capacity. Flat/free shipping rules still determine customer charges; carrier shipment measurements remain required.
+
+The package configuration is included in the quote cache key and saved in the order shipping snapshot. Fulfillment uses that saved configuration, including for partial fulfillment, so changing the default package does not change existing orders. Confirm actual packed measurements before dispatch. This feature does not split orders into multiple parcels.
+
+Disabling the default package restores product-based dimension calculation. New products no longer receive invented weight or dimension defaults; existing measurements are preserved. Missing measurements are shown to customers as an item shipping issue, with no suggestion to change their address.

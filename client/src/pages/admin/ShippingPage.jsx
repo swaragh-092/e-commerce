@@ -53,6 +53,7 @@ import {
 } from '../../services/adminService';
 import { useCurrency } from '../../hooks/useSettings';
 import TabPanel from '../../components/common/TabPanel';
+import { getSettingsGroup, updateSettingsBulk } from '../../services/settingsService';
 
 const ShippingPage = () => {
   const { notify } = useNotification();
@@ -64,6 +65,8 @@ const ShippingPage = () => {
   const [zones, setZones] = useState([]);
   const [rules, setRules] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [defaultPackage, setDefaultPackage] = useState({ enabled: false, lengthCm: '', breadthCm: '', heightCm: '', emptyWeightGrams: '', maxItems: '', maxContentsWeightGrams: '' });
+  const [savingPackage, setSavingPackage] = useState(false);
   
   // Test Panel State
   const [testParams, setTestParams] = useState({ pincode: '', subtotal: 0, paymentMethod: 'prepaid', weightGrams: 500 });
@@ -126,18 +129,45 @@ const ShippingPage = () => {
   const fetchData = async () => {
     setLoading(true);
     try {
-      const [providersRes, zonesRes, rulesRes] = await Promise.all([
+      const [providersRes, zonesRes, rulesRes, shippingSettings] = await Promise.all([
         getShippingProviders(),
         getShippingZones(),
-        getShippingRules()
+        getShippingRules(),
+        getSettingsGroup('shipping'),
       ]);
       setProviders(providersRes.data.data || []);
       setZones(zonesRes.data.data || []);
       setRules(rulesRes.data.data || []);
+      setDefaultPackage((previous) => ({ ...previous, ...(shippingSettings.defaultPackage || {}) }));
     } catch (err) {
       notify('Failed to load shipping data', 'error');
     } finally {
       setLoading(false);
+    }
+  };
+
+  const handleSavePackage = async () => {
+    const value = { enabled: defaultPackage.enabled };
+    for (const key of ['lengthCm', 'breadthCm', 'heightCm', 'emptyWeightGrams', 'maxItems', 'maxContentsWeightGrams']) {
+      value[key] = defaultPackage[key] === '' ? null : Number(defaultPackage[key]);
+    }
+    if (value.enabled && (
+      ['lengthCm', 'breadthCm', 'heightCm'].some((key) => !Number.isFinite(value[key]) || value[key] <= 0.5) ||
+      value.emptyWeightGrams == null || !Number.isFinite(value.emptyWeightGrams) || value.emptyWeightGrams < 0 ||
+      !Number.isSafeInteger(value.maxItems) || value.maxItems < 1 ||
+      !Number.isFinite(value.maxContentsWeightGrams) || value.maxContentsWeightGrams <= 0
+    )) {
+      notify('Enter measured dimensions, empty package weight, and confirmed item and weight capacity.', 'warning');
+      return;
+    }
+    setSavingPackage(true);
+    try {
+      await updateSettingsBulk([{ group: 'shipping', key: 'defaultPackage', value }]);
+      notify('Default package saved', 'success');
+    } catch (err) {
+      notify(err.response?.data?.error?.message || 'Could not save the default package', 'error');
+    } finally {
+      setSavingPackage(false);
     }
   };
 
@@ -514,9 +544,31 @@ const ShippingPage = () => {
           <Tab label="Shipping Rules" />
           <Tab label="Test Panel" />
           <Tab label="Operations & Failures" />
+          <Tab label="Packaging" />
         </Tabs>
 
         <Box sx={{ p: 3 }}>
+          <TabPanel value={tabIndex} index={5} idPrefix="shipping">
+            <Typography variant="subtitle1" fontWeight={600}>Default shipping package</Typography>
+            <Typography variant="body2" sx={{ mb: 2 }}>
+              Measure the outside of your packed box or envelope. Product weights are added to the empty package weight once per order.
+              Enable this only after confirming your products fit within the capacities below. Larger orders require different packaging.
+            </Typography>
+            <FormControlLabel control={<Switch checked={defaultPackage.enabled} onChange={(event) => setDefaultPackage((current) => ({ ...current, enabled: event.target.checked }))} />} label="Use one measured package for all products" />
+            <Grid container spacing={2} sx={{ mt: 1, mb: 2 }}>
+              {[
+                ['lengthCm', 'Length (cm)'], ['breadthCm', 'Width (cm)'], ['heightCm', 'Height (cm)'],
+                ['emptyWeightGrams', 'Empty package weight (grams)'], ['maxItems', 'Maximum items confirmed to fit'],
+                ['maxContentsWeightGrams', 'Maximum contents weight (grams)'],
+              ].map(([key, label]) => (
+                <Grid item xs={12} sm={6} md={4} key={key}>
+                  <TextField fullWidth required={defaultPackage.enabled} disabled={!defaultPackage.enabled || savingPackage} label={label} type="number" value={defaultPackage[key]} inputProps={{ min: key === 'emptyWeightGrams' ? 0 : key === 'maxItems' ? 1 : 0.51, step: key === 'maxItems' ? 1 : 'any' }} onChange={(event) => setDefaultPackage((current) => ({ ...current, [key]: event.target.value }))} />
+                </Grid>
+              ))}
+            </Grid>
+            <Alert severity="info" sx={{ mb: 2 }}>Each physical product still needs its actual weight. With this package enabled, product dimensions are optional. Flat and free shipping rules still apply to the customer charge.</Alert>
+            <Button variant="contained" disabled={savingPackage} onClick={handleSavePackage}>{savingPackage ? 'Saving…' : 'Save package'}</Button>
+          </TabPanel>
           {/* PROVIDERS TAB */}
             <TabPanel value={tabIndex} index={0} idPrefix="shipping" sx={{ pt: 3 }}>
             <Alert severity="info" sx={{ mb: 3 }}>

@@ -463,10 +463,10 @@ const ProductEditPage = () => {
         type: formData.type || 'simple',
         // Shipping dimensions — null when blank so DB stores NULL cleanly
         requiresShipping: formData.requiresShipping,
-        weightGrams: formData.weightGrams !== '' ? parseInt(formData.weightGrams, 10) : null,
-        lengthCm:    formData.lengthCm    !== '' ? parseInt(formData.lengthCm, 10)    : null,
-        breadthCm:   formData.breadthCm   !== '' ? parseInt(formData.breadthCm, 10)   : null,
-        heightCm:    formData.heightCm    !== '' ? parseInt(formData.heightCm, 10)    : null,
+        weightGrams: formData.weightGrams !== '' ? Number(formData.weightGrams) : null,
+        lengthCm:    formData.lengthCm    !== '' ? Number(formData.lengthCm)    : null,
+        breadthCm:   formData.breadthCm   !== '' ? Number(formData.breadthCm)   : null,
+        heightCm:    formData.heightCm    !== '' ? Number(formData.heightCm)    : null,
         // SEO Fields
         metaTitle: formData.metaTitle || null,
         metaDescription: formData.metaDescription || null,
@@ -957,9 +957,10 @@ const ProductEditPage = () => {
                       }}
                       value={formData.weightGrams}
                       onChange={(e) => setField('weightGrams', e.target.value)}
-                      helperText="Actual product weight (packaging included)"
+                      helperText="Actual product weight without the shipping box or envelope. Package weight is added separately."
                     />
                     <Typography variant="subtitle2" sx={{ mt: 2, mb: 1 }}>Dimensions (cm)</Typography>
+                    <Typography variant="body2" color="text.secondary" sx={{ mb: 1 }}>Optional when a default package is enabled in Shipping → Packaging. Otherwise, enter measured dimensions for shipping.</Typography>
                     <Grid container spacing={1.5}>
                       <Grid item xs={4}>
                         <TextField
@@ -991,11 +992,11 @@ const ProductEditPage = () => {
                     </Grid>
 
                     {/* Live volumetric weight preview */}
-                    {formData.lengthCm && formData.breadthCm && formData.heightCm && (
+                    {!settings?.shipping?.defaultPackage?.enabled && formData.lengthCm && formData.breadthCm && formData.heightCm && (
                       (() => {
                         const volWeight = Math.ceil(
-                          (Number(formData.lengthCm) * Number(formData.breadthCm) * Number(formData.heightCm)) / 4000
-                        ) * 1000; // in grams, divisor 4000 → result in kg × 1000
+                          (Number(formData.lengthCm) * Number(formData.breadthCm) * Number(formData.heightCm)) / (Number(settings?.shipping?.volumetricDivisor) || 5000) * 1000
+                        );
                         const actual = Number(formData.weightGrams) || 0;
                         const chargeable = Math.ceil(Math.max(actual, volWeight) / 500) * 500;
                         return (
@@ -1011,7 +1012,7 @@ const ProductEditPage = () => {
                               Actual weight: <strong>{actual} g</strong>
                             </Typography>
                             <Typography variant="caption" color="primary.main" fontWeight={700} display="block">
-                              Chargeable weight (rounded): {chargeable} g
+                              Estimated chargeable weight before packaging: {chargeable} g
                             </Typography>
                           </Box>
                         );

@@ -64,22 +64,22 @@ module.exports = (sequelize, DataTypes) => {
         weightGrams: {
             type: DataTypes.DECIMAL(10, 2),
             allowNull: true,
-            defaultValue: 500,
+            defaultValue: null,
         },
         lengthCm: {
             type: DataTypes.DECIMAL(8, 2),
             allowNull: true,
-            defaultValue: 10,
+            defaultValue: null,
         },
         breadthCm: {
             type: DataTypes.DECIMAL(8, 2),
             allowNull: true,
-            defaultValue: 10,
+            defaultValue: null,
         },
         heightCm: {
             type: DataTypes.DECIMAL(8, 2),
             allowNull: true,
-            defaultValue: 10,
+            defaultValue: null,
         },
         requiresShipping: {
             type: DataTypes.BOOLEAN,
