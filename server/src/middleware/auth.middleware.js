@@ -37,6 +37,12 @@ const authenticate = async (req, res, next) => {
       throw new AppError('UNAUTHORIZED', 401, 'Invalid or expired token');
     }
 
+    // Reject single-purpose tokens (2FA temp, trusted-device) — they must
+    // never be accepted as access tokens.
+    if (decoded.purpose) {
+      throw new AppError('UNAUTHORIZED', 401, 'Invalid token purpose');
+    }
+
     // Check blocklist (tokens invalidated on logout)
     if (tokenBlocklist.isBlocked(token)) {
       throw new AppError('UNAUTHORIZED', 401, 'Token has been revoked');
@@ -74,6 +80,11 @@ const optionalAuth = async (req, res, next) => {
     try {
       decoded = jwt.verify(token, process.env.JWT_ACCESS_SECRET, JWT_VERIFY_OPTS);
     } catch (err) {
+      return next();
+    }
+
+    // Single-purpose tokens must never authenticate a session.
+    if (decoded.purpose) {
       return next();
     }
 

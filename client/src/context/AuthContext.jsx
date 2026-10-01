@@ -22,7 +22,9 @@ export const AuthProvider = ({ children }) => {
   })();
 
   const [user, setUser] = useState(cachedUser);
-  const [isAuthenticated, setIsAuthenticated] = useState(Boolean(cachedUser));
+  // Start unauthenticated until /users/me confirms the session — cached profile
+  // is display-only and must never grant permissions before verification.
+  const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {

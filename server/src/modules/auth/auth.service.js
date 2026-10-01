@@ -51,22 +51,35 @@ const generateTokens = (user, sessionId = null) => {
 };
 
 const register = async (payload) => {
+  const normalizedEmail = String(payload.email || '').trim().toLowerCase();
   const registrationResult = await sequelize.transaction(async (t) => {
-    // Check if email exists
-    const existingUser = await User.findOne({ where: { email: payload.email }, transaction: t });
+    // Check if email exists (case-insensitive — DB unique is case-sensitive,
+    // so normalize + check LOWER() to prevent Test@x.com / test@x.com dupes)
+    const existingUser = await User.findOne({
+      where: sequelize.where(sequelize.fn('LOWER', sequelize.col('email')), normalizedEmail),
+      transaction: t,
+    });
     if (existingUser) {
       throw new AppError('VALIDATION_ERROR', 400, 'User with this email already exists');
     }
 
     // Create User & Profile
-    const user = await User.create({
-      firstName: payload.firstName,
-      lastName: payload.lastName,
-      email: payload.email,
-      password: payload.password, // model hook will hash this
-      role: 'customer',
-      status: 'active'
-    }, { transaction: t });
+    let user;
+    try {
+      user = await User.create({
+        firstName: String(payload.firstName || '').trim(),
+        lastName: String(payload.lastName || '').trim(),
+        email: normalizedEmail,
+        password: payload.password, // model hook will hash this
+        role: 'customer',
+        status: 'active'
+      }, { transaction: t });
+    } catch (err) {
+      if (err.name === 'SequelizeUniqueConstraintError') {
+        throw new AppError('VALIDATION_ERROR', 400, 'User with this email already exists');
+      }
+      throw err;
+    }
 
     const customerRole = await Role.findOne({ where: { slug: 'customer' }, transaction: t });
     if (customerRole) {
@@ -169,8 +182,9 @@ const { parseDeviceName } = require('../../utils/deviceParser');
 const AccountEvents = require('./accountEvents');
 
 const login = async (email, password, ipAddress, rememberMe = false, userAgent, trustedDevice) => {
+  const normalizedEmail = String(email || '').trim().toLowerCase();
   const user = await User.scope('withPassword').findOne({
-    where: { email },
+    where: { email: normalizedEmail },
     include: authUserInclude,
   });
 
@@ -193,16 +207,18 @@ const login = async (email, password, ipAddress, rememberMe = false, userAgent, 
     }
   }
 
-  // If 2FA is enabled, check trusted device cookie before requiring TOTP
+  // If 2FA is enabled, check trusted device cookie before requiring TOTP.
+  // The cookie is a signed JWT (see authCookies.signTrustedDevice) — never a
+  // deterministic hash, so it cannot be forged without the JWT secret.
   if (user.twoFactorEnabled) {
-    const expectedDeviceId = crypto.createHash('sha256').update(`${user.id}:${userAgent}:${ipAddress}`).digest('hex').slice(0, 32);
-    if (trustedDevice && trustedDevice === expectedDeviceId) {
+    const { verifyTrustedDevice } = require('./authCookies');
+    if (trustedDevice && verifyTrustedDevice(trustedDevice, user.id)) {
       // Trusted device — skip 2FA
     } else {
       const tempToken = jwt.sign(
         { id: user.id, purpose: '2fa' },
         process.env.JWT_ACCESS_SECRET,
-        { expiresIn: '5m' }
+        { expiresIn: '5m', issuer: JWT_ISS, audience: JWT_AUD }
       );
       return { requiresTwoFactor: true, tempToken };
     }
@@ -326,12 +342,23 @@ const refresh = async (refreshTokenStr, ipAddress, userAgent) => {
         const sessionId = crypto.randomUUID();
         const tokens = generateTokens(user, sessionId);
 
+        // Preserve the original session duration (remember-me 30d vs default 7d)
+        // so a remember-me session doesn't shrink to 7d after the first rotation.
+        let rememberMe = false;
+        try {
+          const createdAt = new Date(tokenRecord.createdAt).getTime();
+          const expiresAt = new Date(tokenRecord.expiresAt).getTime();
+          const originalTtl = expiresAt - createdAt;
+          rememberMe = originalTtl > 8 * 24 * 60 * 60 * 1000;
+        } catch { rememberMe = false; }
+        const newExpiry = new Date(Date.now() + (rememberMe ? AUTH_TIME.REMEMBER_ME_TTL_MS : AUTH_TIME.REFRESH_TOKEN_TTL_MS));
+
         await tokenRecord.update({ revokedAt: new Date() }, { transaction: t });
         await RefreshToken.create({
           id: sessionId,
           userId: user.id,
           token: hashToken(tokens.refreshToken),
-          expiresAt: getRefreshTokenExpiryDate(),
+          expiresAt: newExpiry,
           createdByIp: ipAddress,
           userAgent: userAgent || tokenRecord.userAgent,
           deviceName: userAgent ? parseDeviceName(userAgent) : tokenRecord.deviceName,
@@ -357,7 +384,7 @@ const refresh = async (refreshTokenStr, ipAddress, userAgent) => {
           });
         }
 
-        return tokens;
+        return { tokens, rememberMe };
       }
     );
   } catch (err) {
@@ -367,31 +394,48 @@ const refresh = async (refreshTokenStr, ipAddress, userAgent) => {
 };
 
 const logout = async (refreshTokenStr, userId) => {
-  const tokenRecord = await RefreshToken.findOne({ where: { token: hashToken(refreshTokenStr) } });
+  const tokenRecord = refreshTokenStr
+    ? await RefreshToken.findOne({ where: { token: hashToken(refreshTokenStr) } })
+    : null;
+  // Resolve userId from the refresh JWT when the caller has no access token
+  // (e.g. access expired but refresh still valid). This allows refresh-only logout.
+  let effectiveUserId = userId;
+  if (!effectiveUserId && refreshTokenStr) {
+    try {
+      const decoded = jwt.verify(refreshTokenStr, process.env.JWT_REFRESH_SECRET, {
+        algorithms: ['HS256'],
+        issuer: JWT_ISS,
+        audience: JWT_AUD,
+      });
+      effectiveUserId = decoded.id || null;
+    } catch { /* expired/invalid — fall through to tokenRecord check */ }
+  }
   if (tokenRecord) {
-    if (!userId || tokenRecord.userId !== userId) {
+    const ownerId = tokenRecord.userId;
+    if (!effectiveUserId || ownerId !== effectiveUserId) {
       throw new AppError('FORBIDDEN', 403, 'You do not have permission to revoke this token');
     }
 
-    // Revoke ALL active refresh tokens for this user (full session termination)
+    // Revoke ONLY the presented session. Use "revoke all others" or admin
+    // force-logout for full termination — single logout must not kill mobile+desktop.
     await RefreshToken.update(
       { revokedAt: new Date() },
-      { where: { userId, revokedAt: null } }
+      { where: { id: tokenRecord.id, revokedAt: null } }
     );
   }
   
   try {
       if (AuditService && AuditService.log) {
           await AuditService.log({
-              userId: userId || tokenRecord?.userId,
+              userId: effectiveUserId || tokenRecord?.userId,
               action: ACTIONS.LOGOUT,
               entity: ENTITIES.USER,
-              entityId: userId || tokenRecord?.userId
+              entityId: effectiveUserId || tokenRecord?.userId
           });
       }
   } catch(e) {}
 
-  AccountEvents.emit('logout', { userId: userId || tokenRecord?.userId });
+  AccountEvents.emit('logout', { userId: effectiveUserId || tokenRecord?.userId });
 };
 
 const forgotPassword = async (email) => {
@@ -482,8 +526,12 @@ const resetPassword = async (token, newPassword) => {
 };
 
 const resendVerification = async (email) => {
+  const normalizedEmail = String(email || '').trim().toLowerCase();
   await sequelize.transaction(async (t) => {
-    const user = await User.findOne({ where: { email }, transaction: t });
+    const user = await User.findOne({
+      where: sequelize.where(sequelize.fn('LOWER', sequelize.col('email')), normalizedEmail),
+      transaction: t,
+    });
     if (!user || user.emailVerified) return; // Silent return — no state leak
 
     await EmailVerificationToken.destroy({ where: { userId: user.id }, transaction: t });
@@ -566,7 +614,11 @@ const verifyEmail = async (token) => {
 const verifyTwoFactor = async (tempToken, totpCode, ipAddress) => {
   let decoded;
   try {
-    decoded = jwt.verify(tempToken, process.env.JWT_ACCESS_SECRET, JWT_ALGORITHMS);
+    decoded = jwt.verify(tempToken, process.env.JWT_ACCESS_SECRET, {
+      algorithms: ['HS256'],
+      issuer: JWT_ISS,
+      audience: JWT_AUD,
+    });
   } catch (err) {
     throw new AppError('UNAUTHORIZED', 401, 'Invalid or expired 2FA token');
   }
@@ -650,7 +702,7 @@ const loginByPhone = async (phone, ipAddress) => {
     const tempToken = jwt.sign(
       { id: user.id, purpose: '2fa' },
       process.env.JWT_ACCESS_SECRET,
-      { expiresIn: '5m' }
+      { expiresIn: '5m', issuer: JWT_ISS, audience: JWT_AUD }
     );
     return { requiresTwoFactor: true, tempToken };
   }

@@ -42,15 +42,17 @@ const updateMe = async (userId, payload) => {
 
     const before = user.toJSON();
 
-    if (payload.firstName || payload.lastName) {
-      await user.update({
-        firstName: payload.firstName || user.firstName,
-        lastName: payload.lastName || user.lastName
-      }, { transaction: t });
+    if (payload.firstName !== undefined || payload.lastName !== undefined) {
+      const nextFirst = payload.firstName !== undefined ? String(payload.firstName).trim() : user.firstName;
+      const nextLast = payload.lastName !== undefined ? String(payload.lastName).trim() : user.lastName;
+      if (!nextFirst || !nextLast) {
+        throw new AppError('VALIDATION_ERROR', 400, 'First name and last name cannot be empty');
+      }
+      await user.update({ firstName: nextFirst, lastName: nextLast }, { transaction: t });
     }
 
-    if (payload.phone || payload.gender || payload.dateOfBirth) {
-      if (payload.phone) {
+    if (payload.phone !== undefined || payload.gender !== undefined || payload.dateOfBirth !== undefined) {
+      if (payload.phone !== undefined && payload.phone !== null && payload.phone !== '') {
         const existingPhone = await UserProfile.findOne({
           where: { phone: payload.phone },
           transaction: t,
@@ -65,9 +67,9 @@ const updateMe = async (userId, payload) => {
         profile = await UserProfile.create({ userId }, { transaction: t });
       }
       await profile.update({
-        phone: payload.phone !== undefined ? payload.phone : profile.phone,
-        gender: payload.gender || profile.gender,
-        dateOfBirth: payload.dateOfBirth || profile.dateOfBirth
+        phone: payload.phone !== undefined ? (payload.phone === '' ? null : payload.phone) : profile.phone,
+        gender: payload.gender !== undefined ? payload.gender : profile.gender,
+        dateOfBirth: payload.dateOfBirth !== undefined ? payload.dateOfBirth : profile.dateOfBirth,
       }, { transaction: t });
     }
     
@@ -99,7 +101,8 @@ const updateMe = async (userId, payload) => {
   });
 };
 
-const changePassword = async (userId, currentPassword, newPassword) => {
+const changePassword = async (userId, currentPassword, newPassword, keepSessionId = null) => {
+  const { RefreshToken } = require('../index');
   return sequelize.transaction(async (t) => {
     const user = await User.scope('withPassword').findByPk(userId, { transaction: t });
     if (!user) throw new AppError('NOT_FOUND', 404, 'User not found');
@@ -108,7 +111,24 @@ const changePassword = async (userId, currentPassword, newPassword) => {
       throw new AppError('VALIDATION_ERROR', 400, 'Incorrect current password');
     }
 
+    if (await user.validatePassword(newPassword)) {
+      throw new AppError('VALIDATION_ERROR', 400, 'New password must be different from current password');
+    }
+
     await user.update({ password: newPassword }, { transaction: t });
+
+    // Revoke all other sessions — a password change must kill stolen sessions.
+    if (keepSessionId) {
+      await RefreshToken.update(
+        { revokedAt: new Date() },
+        { where: { userId, revokedAt: null, id: { [Op.ne]: keepSessionId } }, transaction: t }
+      );
+    } else {
+      await RefreshToken.update(
+        { revokedAt: new Date() },
+        { where: { userId, revokedAt: null }, transaction: t }
+      );
+    }
 
     try {
       if (AuditService && AuditService.log) {
@@ -137,6 +157,9 @@ const updateAvatar = async (userId, mediaId) => {
   return sequelize.transaction(async (t) => {
     const media = await Media.findByPk(mediaId, { transaction: t });
     if (!media) throw new AppError('NOT_FOUND', 404, 'Media not found');
+    if (media.mimeType && !String(media.mimeType).startsWith('image/')) {
+      throw new AppError('VALIDATION_ERROR', 400, 'Avatar must be an image file');
+    }
 
     let profile = await UserProfile.findOne({ where: { userId }, transaction: t });
     if (!profile) {
@@ -249,7 +272,7 @@ const listAll = async ({ page, limit, status, role, search }) => {
     limit: lmt,
     offset,
     order: [['createdAt', 'DESC']],
-    attributes: { exclude: ['password'] },
+    attributes: { exclude: ['password', 'twoFactorSecret', 'twoFactorBackupCodes'] },
     include: authzInclude,
   });
 };
@@ -268,7 +291,7 @@ const getById = async (id) => {
         attributes: ['id', 'orderNumber', 'status', 'orderShippingStatus', 'total', 'paymentMethod', 'createdAt', 'updatedAt'],
       },
     ],
-    attributes: { exclude: ['password'] }
+    attributes: { exclude: ['password', 'twoFactorSecret', 'twoFactorBackupCodes'] }
   });
 
   if (!user) throw new AppError('NOT_FOUND', 404, 'User not found');
@@ -382,6 +405,12 @@ const updateAddress = async (userId, addressId, payload) => {
     if (!address) throw new AppError('NOT_FOUND', 404, 'Address not found');
 
     const before = address.toJSON();
+
+    // Prevent ending up with zero defaults via direct unset — set another
+    // address as default instead.
+    if (payload.isDefault === false && address.isDefault) {
+      throw new AppError('VALIDATION_ERROR', 400, 'Cannot unset the default address. Set another address as default instead.');
+    }
 
     if (payload.isDefault && !address.isDefault) {
       await Address.update({ isDefault: false }, { where: { userId }, transaction: t });
@@ -497,24 +526,24 @@ const setDefaultAddress = async (userId, addressId) => {
 const ACTIVE_ORDER_STATUSES = ['pending_payment', 'confirmed', 'on_hold', 'processing', 'ready_for_shipment'];
 const DELETION_GRACE_DAYS = 30;
 
-const deleteAccount = async (userId, { password, oauthProvider } = {}) => {
+const deleteAccount = async (userId, { password } = {}) => {
   const { RefreshToken } = require('../index');
   const NotificationService = require('../notification/notification.service');
 
   return sequelize.transaction(async (t) => {
-    const user = await User.scope('withPassword').findByPk(userId, { transaction: t });
+    const user = await User.scope('withPassword').findByPk(userId, { transaction: t, lock: t.LOCK.UPDATE });
     if (!user) throw new AppError('NOT_FOUND', 404, 'User not found');
 
-    // Verify identity: password for email users, oauthProvider flag for OAuth users
-    if (oauthProvider) {
-      if (!['google'].includes(oauthProvider)) {
-        throw new AppError('VALIDATION_ERROR', 400, 'Unsupported OAuth provider');
-      }
-    } else {
-      if (!password) throw new AppError('VALIDATION_ERROR', 400, 'Password is required');
-      if (!(await user.validatePassword(password))) {
-        throw new AppError('VALIDATION_ERROR', 400, 'Incorrect password');
-      }
+    // Verify identity with password. The previous `oauthProvider: 'google'` flag
+    // accepted without proof is removed — any caller could bypass the check.
+    // OAuth users without a known password must set one via forgot-password first.
+    if (!password) throw new AppError('VALIDATION_ERROR', 400, 'Password is required');
+    if (!(await user.validatePassword(password))) {
+      throw new AppError('VALIDATION_ERROR', 400, 'Incorrect password');
+    }
+
+    if (user.scheduledDeletionAt) {
+      throw new AppError('VALIDATION_ERROR', 400, 'Account deletion is already scheduled');
     }
 
     // Block if active orders exist
@@ -529,6 +558,12 @@ const deleteAccount = async (userId, { password, oauthProvider } = {}) => {
     // Schedule deletion (30-day grace period)
     const scheduledDeletionAt = new Date(Date.now() + DELETION_GRACE_DAYS * 24 * 60 * 60 * 1000);
     await user.update({ scheduledDeletionAt }, { transaction: t });
+
+    // Revoke all sessions immediately — a scheduled-deletion account must not stay usable.
+    await RefreshToken.update(
+      { revokedAt: new Date() },
+      { where: { userId, revokedAt: null }, transaction: t }
+    );
 
     try {
       if (AuditService && AuditService.log) {
@@ -566,15 +601,26 @@ const getSessions = async (userId, currentAccessToken) => {
 
   const sessions = await RefreshToken.findAll({
     where: { userId, revokedAt: null },
-    attributes: ['id', 'createdByIp', 'deviceName', 'lastActiveAt', 'createdAt', 'token'],
+    attributes: ['id', 'createdByIp', 'deviceName', 'lastActiveAt', 'createdAt'],
     order: [['lastActiveAt', 'DESC']],
   });
 
   let currentSessionId = null;
   if (currentAccessToken) {
     try {
-      const decoded = jwt.verify(currentAccessToken, process.env.JWT_ACCESS_SECRET, { algorithms: ['HS256'] });
-      currentSessionId = decoded.sid || null;
+      let decoded;
+      try {
+        decoded = jwt.verify(currentAccessToken, process.env.JWT_ACCESS_SECRET, {
+          algorithms: ['HS256'],
+          issuer: process.env.JWT_ISSUER || 'ecommerce-pro',
+          audience: process.env.JWT_AUDIENCE || 'ecommerce-pro-client',
+        });
+      } catch {
+        decoded = jwt.verify(currentAccessToken, process.env.JWT_ACCESS_SECRET, {
+          algorithms: ['HS256'],
+        });
+      }
+      if (!decoded.purpose) currentSessionId = decoded.sid || null;
     } catch (e) {}
   }
 
@@ -602,8 +648,19 @@ const revokeAllOtherSessions = async (userId, currentAccessToken) => {
   let currentSessionId = null;
   if (currentAccessToken) {
     try {
-      const decoded = jwt.verify(currentAccessToken, process.env.JWT_ACCESS_SECRET, { algorithms: ['HS256'] });
-      currentSessionId = decoded.sid || null;
+      let decoded;
+      try {
+        decoded = jwt.verify(currentAccessToken, process.env.JWT_ACCESS_SECRET, {
+          algorithms: ['HS256'],
+          issuer: process.env.JWT_ISSUER || 'ecommerce-pro',
+          audience: process.env.JWT_AUDIENCE || 'ecommerce-pro-client',
+        });
+      } catch {
+        decoded = jwt.verify(currentAccessToken, process.env.JWT_ACCESS_SECRET, {
+          algorithms: ['HS256'],
+        });
+      }
+      if (!decoded.purpose) currentSessionId = decoded.sid || null;
     } catch (e) {}
   }
 
@@ -667,34 +724,43 @@ const requestEmailChange = async (userId, newEmail, password) => {
   const { EmailVerificationToken } = require('../index');
   const NotificationService = require('../notification/notification.service');
 
-  const user = await User.scope('withPassword').findByPk(userId);
-  if (!user) throw new AppError('NOT_FOUND', 404, 'User not found');
-  if (!(await user.validatePassword(password))) throw new AppError('VALIDATION_ERROR', 400, 'Incorrect password');
+  const normalizedNewEmail = String(newEmail || '').trim().toLowerCase();
 
-  const existing = await User.findOne({ where: { email: newEmail } });
-  if (existing) throw new AppError('VALIDATION_ERROR', 400, 'This email is already in use');
+  return sequelize.transaction(async (t) => {
+    const user = await User.scope('withPassword').findByPk(userId, { transaction: t, lock: t.LOCK.UPDATE });
+    if (!user) throw new AppError('NOT_FOUND', 404, 'User not found');
+    if (!(await user.validatePassword(password))) throw new AppError('VALIDATION_ERROR', 400, 'Incorrect password');
 
-  const token = crypto.randomBytes(32).toString('hex');
-  const hashed = crypto.createHash('sha256').update(token).digest('hex');
+    const existing = await User.findOne({
+      where: sequelize.where(sequelize.fn('LOWER', sequelize.col('email')), normalizedNewEmail),
+      transaction: t,
+    });
+    if (existing && existing.id !== userId) throw new AppError('VALIDATION_ERROR', 400, 'This email is already in use');
 
-  // Only destroy previous tokens if the user is already email-verified, preserving registration verification token
-  if (user.emailVerified) {
-    await EmailVerificationToken.destroy({ where: { userId } });
-  }
-  await EmailVerificationToken.create({ userId, token: hashed, expiresAt: new Date(Date.now() + 24 * 60 * 60 * 1000) });
+    const token = crypto.randomBytes(32).toString('hex');
+    const hashed = crypto.createHash('sha256').update(token).digest('hex');
 
-  // Store pending new email on user record
-  await user.update({ pendingEmail: newEmail });
+    // Always invalidate prior verification tokens so a stale registration
+    // token can never confirm a new pending email (single-token invariant).
+    await EmailVerificationToken.destroy({ where: { userId }, transaction: t });
+    await EmailVerificationToken.create(
+      { userId, token: hashed, expiresAt: new Date(Date.now() + 24 * 60 * 60 * 1000) },
+      { transaction: t }
+    );
 
-  try {
-    if (NotificationService && NotificationService.send) {
-      await NotificationService.send('email_change_verification', newEmail, {
-        name: user.firstName,
-        verify_url: `${getClientBaseUrl()}/verify-email-change?token=${token}`,
-      }, userId, null, 'email');
-    }
-  } catch (e) {}
-  return { sent: true };
+    // Store pending new email on user record
+    await user.update({ pendingEmail: normalizedNewEmail }, { transaction: t });
+
+    try {
+      if (NotificationService && NotificationService.send) {
+        await NotificationService.send('email_change_verification', normalizedNewEmail, {
+          name: user.firstName,
+          verify_url: `${getClientBaseUrl()}/verify-email-change?token=${token}`,
+        }, userId, null, 'email', t);
+      }
+    } catch (e) {}
+    return { sent: true };
+  });
 };
 
 const confirmEmailChange = async (token) => {
@@ -709,9 +775,12 @@ const confirmEmailChange = async (token) => {
     const user = await User.findByPk(record.userId, { transaction: t });
     if (!user || !user.pendingEmail) throw new AppError('VALIDATION_ERROR', 400, 'No pending email change');
 
-    const newEmail = user.pendingEmail;
+    const newEmail = String(user.pendingEmail).trim().toLowerCase();
     // Re-verify uniqueness inside transaction to prevent TOCTOU race
-    const existing = await User.findOne({ where: { email: newEmail }, transaction: t });
+    const existing = await User.findOne({
+      where: sequelize.where(sequelize.fn('LOWER', sequelize.col('email')), newEmail),
+      transaction: t,
+    });
     if (existing && existing.id !== user.id) {
       throw new AppError('CONFLICT', 409, 'This email address is already registered to another account');
     }

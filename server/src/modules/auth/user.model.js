@@ -80,11 +80,21 @@ module.exports = (sequelize, DataTypes) => {
         },
         hooks: {
             beforeCreate: async (user) => {
+                if (user.email && typeof user.email === 'string') {
+                    user.email = user.email.trim().toLowerCase();
+                }
+                if (typeof user.firstName === 'string') user.firstName = user.firstName.trim();
+                if (typeof user.lastName === 'string') user.lastName = user.lastName.trim();
                 if (user.password) {
                     user.password = await bcrypt.hash(user.password, 12);
                 }
             },
             beforeUpdate: async (user) => {
+                if (user.changed('email') && user.email && typeof user.email === 'string') {
+                    user.email = user.email.trim().toLowerCase();
+                }
+                if (user.changed('firstName') && typeof user.firstName === 'string') user.firstName = user.firstName.trim();
+                if (user.changed('lastName') && typeof user.lastName === 'string') user.lastName = user.lastName.trim();
                 if (user.changed('password')) {
                     user.password = await bcrypt.hash(user.password, 12);
                 }

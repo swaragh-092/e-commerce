@@ -47,8 +47,9 @@ const initializeGoogleStrategy = () => {
 };
 
 const findOrCreateOAuthUser = async (profile, clientIp) => {
-  const email = profile.emails?.[0]?.value;
-  if (!email) throw new Error('No email returned from Google');
+  const rawEmail = profile.emails?.[0]?.value;
+  if (!rawEmail) throw new Error('No email returned from Google');
+  const email = String(rawEmail).trim().toLowerCase();
 
   return sequelize.transaction(async (t) => {
     let user = await User.findOne({ where: { email }, transaction: t });
@@ -73,10 +74,12 @@ const findOrCreateOAuthUser = async (profile, clientIp) => {
 
     // Check if 2FA is enabled — return temp token instead of full auth
     if (user.twoFactorEnabled) {
+      const iss = process.env.JWT_ISSUER || 'ecommerce-pro';
+      const aud = process.env.JWT_AUDIENCE || 'ecommerce-pro-client';
       const tempToken = jwt.sign(
         { id: user.id, purpose: '2fa' },
         process.env.JWT_ACCESS_SECRET,
-        { expiresIn: '5m' }
+        { expiresIn: '5m', issuer: iss, audience: aud }
       );
       return { requiresTwoFactor: true, tempToken };
     }

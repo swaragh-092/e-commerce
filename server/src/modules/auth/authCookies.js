@@ -1,9 +1,16 @@
 'use strict';
 
+const jwt = require('jsonwebtoken');
 const { AUTH_TIME } = require('../../config/constants');
 
 const ACCESS_COOKIE = 'auth_access_token';
 const REFRESH_COOKIE = 'auth_refresh_token';
+const TRUSTED_DEVICE_COOKIE = 'trusted_device';
+
+const getJwtIssAud = () => ({
+  issuer: process.env.JWT_ISSUER || 'ecommerce-pro',
+  audience: process.env.JWT_AUDIENCE || 'ecommerce-pro-client',
+});
 
 const getCookieOptions = () => ({
     httpOnly: true,
@@ -45,12 +52,48 @@ const stripAuthTokens = (result) => {
     return safeResult;
 };
 
+const signTrustedDevice = (userId) => {
+    const { issuer, audience } = getJwtIssAud();
+    return jwt.sign({ id: userId, purpose: 'trusted_device' }, process.env.JWT_ACCESS_SECRET, {
+        expiresIn: '30d',
+        issuer,
+        audience,
+    });
+};
+
+const verifyTrustedDevice = (cookieValue, userId) => {
+    if (!cookieValue || !userId) return false;
+    try {
+        const { issuer, audience } = getJwtIssAud();
+        const decoded = jwt.verify(cookieValue, process.env.JWT_ACCESS_SECRET, {
+            algorithms: ['HS256'],
+            issuer,
+            audience,
+        });
+        return decoded.purpose === 'trusted_device' && decoded.id === userId;
+    } catch {
+        return false;
+    }
+};
+
+const setTrustedDeviceCookie = (res, userId) => {
+    const token = signTrustedDevice(userId);
+    res.cookie(TRUSTED_DEVICE_COOKIE, token, {
+        ...getCookieOptions(),
+        maxAge: 30 * 24 * 60 * 60 * 1000,
+    });
+};
+
 module.exports = {
     ACCESS_COOKIE,
     REFRESH_COOKIE,
+    TRUSTED_DEVICE_COOKIE,
     clearAuthCookies,
     getAccessToken,
     getRefreshToken,
     setAuthCookies,
     stripAuthTokens,
+    signTrustedDevice,
+    verifyTrustedDevice,
+    setTrustedDeviceCookie,
 };

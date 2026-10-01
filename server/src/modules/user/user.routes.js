@@ -4,7 +4,7 @@ const router = require('express').Router();
 const { authenticate } = require('../../middleware/auth.middleware');
 const { authorizePermissions } = require('../../middleware/role.middleware');
 const { validate } = require('../../middleware/validate.middleware');
-const { loginLimiter } = require('../../middleware/rateLimiter.middleware');
+const { loginLimiter, otpSendLimiter, otpVerifyLimiter, verifyEmailLimiter } = require('../../middleware/rateLimiter.middleware');
 const { 
   updateProfileSchema, 
   changePasswordSchema, 
@@ -24,24 +24,25 @@ const userController = require('./user.controller');
 router.get('/me', authenticate, authorizePermissions(PERMISSIONS.ACCOUNT_SELF), userController.getMe);
 router.put('/me', authenticate, authorizePermissions(PERMISSIONS.ACCOUNT_SELF), validate(updateProfileSchema), userController.updateMe);
 router.post('/me/avatar', authenticate, authorizePermissions(PERMISSIONS.ACCOUNT_SELF), validate(updateAvatarSchema), userController.updateAvatar);
-router.put('/me/password', authenticate, authorizePermissions(PERMISSIONS.ACCOUNT_SELF), validate(changePasswordSchema), userController.changePassword);
+// Brute-force guard: current-password guessing via stolen session
+router.put('/me/password', authenticate, authorizePermissions(PERMISSIONS.ACCOUNT_SELF), loginLimiter, validate(changePasswordSchema), userController.changePassword);
 
-// Delete Account (rate limited: 1 per minute via loginLimiter)
+// Delete Account (destructive — rate limited)
 router.delete('/me', authenticate, authorizePermissions(PERMISSIONS.ACCOUNT_SELF), loginLimiter, validate(require('./user.validation').deleteAccountSchema), userController.deleteAccount);
 router.post('/me/cancel-deletion', authenticate, authorizePermissions(PERMISSIONS.ACCOUNT_SELF), userController.cancelAccountDeletion);
 
 // Session Management
 router.get('/me/sessions', authenticate, authorizePermissions(PERMISSIONS.ACCOUNT_SELF), userController.getSessions);
-router.delete('/me/sessions/:id', authenticate, authorizePermissions(PERMISSIONS.ACCOUNT_SELF), userController.revokeSession);
+router.delete('/me/sessions/:id', authenticate, authorizePermissions(PERMISSIONS.ACCOUNT_SELF), validate(idParamSchema, 'params'), userController.revokeSession);
 router.delete('/me/sessions', authenticate, authorizePermissions(PERMISSIONS.ACCOUNT_SELF), userController.revokeAllOtherSessions);
 
 // Phone Change (OTP verified)
-router.post('/me/phone/request', authenticate, authorizePermissions(PERMISSIONS.ACCOUNT_SELF), validate(require('./user.validation').phoneChangeRequestSchema), userController.requestPhoneChange);
-router.post('/me/phone/confirm', authenticate, authorizePermissions(PERMISSIONS.ACCOUNT_SELF), validate(require('./user.validation').phoneChangeConfirmSchema), userController.confirmPhoneChange);
+router.post('/me/phone/request', authenticate, authorizePermissions(PERMISSIONS.ACCOUNT_SELF), otpSendLimiter, validate(require('./user.validation').phoneChangeRequestSchema), userController.requestPhoneChange);
+router.post('/me/phone/confirm', authenticate, authorizePermissions(PERMISSIONS.ACCOUNT_SELF), otpVerifyLimiter, validate(require('./user.validation').phoneChangeConfirmSchema), userController.confirmPhoneChange);
 
 // Email Change (verify new email)
-router.post('/me/email/request', authenticate, authorizePermissions(PERMISSIONS.ACCOUNT_SELF), validate(require('./user.validation').emailChangeRequestSchema), userController.requestEmailChange);
-router.post('/me/email/confirm', validate(require('./user.validation').emailChangeConfirmSchema), userController.confirmEmailChange);
+router.post('/me/email/request', authenticate, authorizePermissions(PERMISSIONS.ACCOUNT_SELF), verifyEmailLimiter, validate(require('./user.validation').emailChangeRequestSchema), userController.requestEmailChange);
+router.post('/me/email/confirm', verifyEmailLimiter, validate(require('./user.validation').emailChangeConfirmSchema), userController.confirmEmailChange);
 
 // Address Endpoints
 router.get('/me/addresses', authenticate, authorizePermissions(PERMISSIONS.ACCOUNT_SELF), userController.getAddresses);

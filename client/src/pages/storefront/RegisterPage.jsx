@@ -95,10 +95,11 @@ const RegisterPage = () => {
     setError('');
     const nextErrors = validateForm(formData);
     setFieldErrors(nextErrors);
+    setTouched({ firstName: true, lastName: true, email: true, password: true, confirmPassword: true });
 
-    // if (Object.values(nextErrors).some(Boolean)) {
-    //     return setError('Please fix the highlighted fields.');
-    // }
+    if (Object.values(nextErrors).some(Boolean)) {
+        return setError('Please fix the highlighted fields.');
+    }
 
     setLoading(true);
 

@@ -9,6 +9,7 @@ const {
   getAccessToken,
   getRefreshToken,
   setAuthCookies,
+  setTrustedDeviceCookie,
   stripAuthTokens,
 } = require('./authCookies');
 
@@ -49,7 +50,9 @@ const refresh = async (req, res, next) => {
     const refreshToken = getRefreshToken(req);
     if (!refreshToken) throw new AppError('UNAUTHORIZED', 401, 'Refresh session not found');
     const result = await AuthService.refresh(refreshToken, req.ip, req.headers['user-agent']);
-    return sendAuthSuccess(res, result, 'Token refreshed');
+    // AuthService.refresh returns { tokens, rememberMe } (or legacy bare tokens)
+    const normalized = result?.tokens ? result : { tokens: result, rememberMe: false };
+    return sendAuthSuccess(res, normalized, 'Token refreshed', { rememberMe: normalized.rememberMe === true });
   } catch (err) {
     if (err.code === 'UNAUTHORIZED' || err.statusCode === 401) clearAuthCookies(res);
     next(err);
@@ -117,16 +120,9 @@ const verifyTwoFactor = async (req, res, next) => {
     const ipAddress = req.ip;
     const result = await AuthService.verifyTwoFactor(tempToken, code, ipAddress);
 
-    // Set trusted device cookie if requested (30 days)
+    // Set trusted device cookie if requested (30 days, signed JWT — not forgeable)
     if (trustDevice) {
-      const crypto = require('crypto');
-      const deviceId = crypto.createHash('sha256').update(`${result.user.id}:${req.headers['user-agent']}:${ipAddress}`).digest('hex').slice(0, 32);
-      res.cookie('trusted_device', deviceId, {
-        httpOnly: true,
-        secure: process.env.NODE_ENV === 'production',
-        sameSite: 'lax',
-        maxAge: 30 * 24 * 60 * 60 * 1000, // 30 days
-      });
+      setTrustedDeviceCookie(res, result.user.id);
     }
 
     return sendAuthSuccess(res, result, 'Login successful');

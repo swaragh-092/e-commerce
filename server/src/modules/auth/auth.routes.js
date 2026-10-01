@@ -53,18 +53,20 @@ const otpVerifySchema = Joi.object({
 router.post('/register', registerLimiter, validate(registerSchema), authController.register);
 router.post('/login', loginLimiter, validate(loginSchema), authController.login);
 router.post('/refresh', refreshLimiter, validate(refreshSchema), authController.refresh);
-router.post('/logout', authenticate, validate(logoutSchema), authController.logout);
+// Logout accepts refresh-only (no `authenticate`) so an expired access token
+// doesn't block logout; ownership is proven by the signed refresh JWT itself.
+router.post('/logout', validate(logoutSchema), authController.logout);
 
 router.post('/forgot-password', forgotPasswordLimiter, validate(forgotPasswordSchema), authController.forgotPassword);
 router.post('/reset-password', resetPasswordLimiter, validate(resetPasswordSchema), authController.resetPassword);
 
-router.post('/resend-verification', forgotPasswordLimiter, validate(resendVerificationSchema), authController.resendVerification);
+router.post('/resend-verification', verifyEmailLimiter, validate(resendVerificationSchema), authController.resendVerification);
 
 router.post('/verify-email', verifyEmailLimiter, validate(verifyEmailSchema), authController.verifyEmail);
 
 // 2FA routes
 router.post('/2fa/verify', twoFactorLimiter, validate(twoFactorVerifySchema), authController.verifyTwoFactor);
-router.post('/2fa/setup', authenticate, twoFactorController.setup);
+router.post('/2fa/setup', authenticate, twoFactorLimiter, twoFactorController.setup);
 router.post('/2fa/enable', authenticate, twoFactorLimiter, validate(totpCodeSchema), twoFactorController.enable);
 router.post('/2fa/disable', authenticate, twoFactorLimiter, validate(totpCodeSchema), twoFactorController.disable);
 router.post('/2fa/backup-codes', authenticate, twoFactorLimiter, validate(totpCodeSchema), twoFactorController.regenerateBackupCodes);

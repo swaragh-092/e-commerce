@@ -39,7 +39,7 @@ const LoginPage = () => {
       setTwoFactorStep(true);
       setTempToken(searchParams.get('tempToken'));
     }
-  }, []);
+  }, [searchParams]);
 
   // Phone login state
   const [loginMode, setLoginMode] = useState('email'); // 'email' | 'phone'
