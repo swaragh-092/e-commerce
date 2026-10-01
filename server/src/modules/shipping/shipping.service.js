@@ -58,6 +58,20 @@ const normalizeList = (value) => {
     return [];
 };
 
+const applyStorewidePincodeCoverage = (decision, pincode, { allowedPincodes = [], blockedPincodes = [] } = {}) => {
+    const normalizedPincode = String(pincode || '').trim();
+    const allowed = normalizeList(allowedPincodes);
+    const blocked = normalizeList(blockedPincodes);
+    let message = null;
+    if (blocked.includes(normalizedPincode)) {
+        message = 'Delivery is unavailable to this pincode.';
+    } else if (allowed.length > 0 && !allowed.includes(normalizedPincode)) {
+        message = 'Delivery is not enabled for this pincode.';
+    }
+    if (!message) return decision;
+    return { ...decision, serviceable: false, shippingCost: 0, taxAmount: 0, taxBreakdown: null, codAvailable: false, message };
+};
+
 const lower = (value) => String(value || '').trim().toLowerCase();
 
 // ─── Volumetric weight helpers ────────────────────────────────────────────────
@@ -707,6 +721,10 @@ const createQuote = async (userId, payload) => {
         addressHash: context.addressHash,
         paymentMethod,
         couponHash: context.couponHash,
+        coverageHash: hashObject({
+            allowedPincodes: normalizeList(settings['shipping.serviceablePincodes']),
+            blockedPincodes: normalizeList(settings['shipping.blockedPincodes']),
+        }),
         packageHash: hashObject({ dimensions: context.packageDims, defaultPackage: context.defaultPackage }),
     });
 
@@ -732,6 +750,13 @@ const createQuote = async (userId, payload) => {
         chargeableWeightGrams,
         addressSnapshot: context.addressSnapshot,
         paymentMethod,
+    });
+
+    // Storewide restrictions apply after rate-rule/provider selection so a
+    // matching zone or courier result cannot bypass the merchant's coverage.
+    decision = applyStorewidePincodeCoverage(decision, deliveryPincode, {
+        allowedPincodes: settings['shipping.serviceablePincodes'],
+        blockedPincodes: settings['shipping.blockedPincodes'],
     });
 
     const selectedProvider = decision.providerId === fallbackProvider.id
@@ -1106,6 +1131,7 @@ const validateQuoteForOrder = async (userId, payload) => {
 };
 
 module.exports = {
+    applyStorewidePincodeCoverage,
     computePackageDimensions,
     computeChargeableWeight,
     resolveDispatchOrigin,

@@ -31,6 +31,22 @@ describe('Shipping service helpers', () => {
         expect(typeof ShippingService.testCalculation).toBe('function');
     });
 
+    it('applies storewide allow and block coverage to any provider or rule result', () => {
+        const ruleQuote = { serviceable: true, shippingCost: 25, codAvailable: true, providerCode: 'shiprocket' };
+        expect(ShippingService.applyStorewidePincodeCoverage(ruleQuote, '560001', {
+            allowedPincodes: ['560001', '600001'], blockedPincodes: ['560001'],
+        })).toMatchObject({ serviceable: false, shippingCost: 0, codAvailable: false });
+
+        expect(ShippingService.applyStorewidePincodeCoverage(ruleQuote, '500001', {
+            allowedPincodes: ['560001', '600001'],
+        })).toMatchObject({ serviceable: false, shippingCost: 0, codAvailable: false });
+
+        expect(ShippingService.applyStorewidePincodeCoverage(ruleQuote, '560001', {
+            allowedPincodes: ['560001'], blockedPincodes: [],
+        })).toBe(ruleQuote);
+        expect(ShippingService.applyStorewidePincodeCoverage(ruleQuote, '500001')).toBe(ruleQuote);
+    });
+
     it('resolves active default provider from ShippingProvider model', async () => {
         const mockProvider = {
             id: 'mock-provider-id',

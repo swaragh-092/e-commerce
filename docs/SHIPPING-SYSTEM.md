@@ -177,3 +177,9 @@ With this option enabled, each physical product requires its actual weight witho
 The package configuration is included in the quote cache key and saved in the order shipping snapshot. Fulfillment uses that saved configuration, including for partial fulfillment, so changing the default package does not change existing orders. Confirm actual packed measurements before dispatch. This feature does not split orders into multiple parcels.
 
 Disabling the default package restores product-based dimension calculation. New products no longer receive invented weight or dimension defaults; existing measurements are preserved. Missing measurements are shown to customers as an item shipping issue, with no suggestion to change their address.
+
+## Pincode coverage and rate zones
+
+**Admin → Settings → General → Checkout → Storewide Delivery Coverage** is the final storewide allow/block restriction. A blocked pincode always wins; a non-empty allowlist restricts delivery to its listed pincodes. The storewide restriction is applied to manual, rule-based, and Shiprocket quotes after the selected rate/provider is calculated.
+
+**Admin → Settings → Shipping → Rate Zones** groups pincodes for rules to select regional prices or providers. A zone is not a carrier serviceability guarantee and does not replace the storewide restriction. Leave both storewide lists empty to rely on carrier serviceability and matching shipping rules.

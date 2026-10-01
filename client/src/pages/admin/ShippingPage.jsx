@@ -540,7 +540,7 @@ const ShippingPage = () => {
       <Paper elevation={0} sx={{ border: '1px solid', borderColor: 'divider', borderRadius: 2 }}>
         <Tabs value={tabIndex} onChange={handleTabChange} sx={{ borderBottom: 1, borderColor: 'divider', px: 2 }}>
           <Tab label="Shipping Providers" />
-          <Tab label="Shipping Zones" />
+          <Tab label="Rate Zones" />
           <Tab label="Shipping Rules" />
           <Tab label="Test Panel" />
           <Tab label="Operations & Failures" />
@@ -666,7 +666,10 @@ const ShippingPage = () => {
           {/* ZONES TAB */}
             <TabPanel value={tabIndex} index={1} idPrefix="shipping" sx={{ pt: 3 }}>
             <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 2 }}>
-              <Typography variant="subtitle1" fontWeight={600}>Delivery Zones</Typography>
+              <Box>
+                <Typography variant="subtitle1" fontWeight={600}>Rate Zones</Typography>
+                <Typography variant="body2" color="text.secondary">Assign these pincode groups to Shipping Rules for regional rates or providers. They do not replace Storewide Delivery Coverage.</Typography>
+              </Box>
               <Button variant="contained" size="small" startIcon={<AddIcon />} onClick={() => handleOpenZoneDialog()}>
                 Add Zone
               </Button>
@@ -1046,7 +1049,7 @@ const ShippingPage = () => {
             <Box sx={{ display: 'flex', gap: 2 }}>
               <TextField 
                 select
-                label="Applies to Zone" 
+                label="Rate Zone"
                 fullWidth 
                 size="small" 
                 value={ruleFormData.zoneId} 

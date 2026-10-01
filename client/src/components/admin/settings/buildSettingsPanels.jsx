@@ -334,9 +334,9 @@ function buildCheckoutPanel({ form, set, section, field, toggle, currSymbol, ena
         {form['shipping.method'] !== 'free' && field('shipping.flatRate', `Flat Rate (${currSymbol})`, 'number', { InputProps: { startAdornment: <InputAdornment position="start">{currSymbol}</InputAdornment> } })}
         {form['shipping.method'] === 'free_above_threshold' && field('shipping.freeThreshold', `Free Shipping Above (${currSymbol})`, 'number', { InputProps: { startAdornment: <InputAdornment position="start">{currSymbol}</InputAdornment> } })}
         <Divider sx={{ my: 2 }} />
-        <Typography variant="subtitle2" fontWeight={600} color="text.secondary" mb={0.5}>Delivery Coverage</Typography>
+        <Typography variant="subtitle2" fontWeight={600} color="text.secondary" mb={0.5}>Storewide Delivery Coverage</Typography>
         <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mb: 2 }}>
-          Use comma-separated pincodes. Leave serviceable pincodes empty to allow all pincodes except blocked ones.
+          These restrictions apply across all shipping methods. An allowlist limits delivery to listed pincodes; blocked pincodes always take priority. Shiprocket must also confirm that it serves the destination.
         </Typography>
         {field('shipping.serviceablePincodes', 'Serviceable pincodes', 'text', { placeholder: '560001, 600001, 110001' })}
         {field('shipping.blockedPincodes', 'Blocked pincodes', 'text', { placeholder: '194101, 744101' })}
