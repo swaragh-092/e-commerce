@@ -60,7 +60,7 @@ import { getSettingsGroup, updateSettingsBulk } from '../../services/settingsSer
 const ShippingPage = () => {
   const { notify } = useNotification();
   const { symbol, formatPrice } = useCurrency();
-  const [tabIndex, setTabIndex] = useState(6);
+  const [tabIndex, setTabIndex] = useState(0);
 
   // Data states
   const [providers, setProviders] = useState([]);
@@ -636,21 +636,21 @@ const ShippingPage = () => {
 
       <Paper elevation={0} sx={{ border: '1px solid', borderColor: 'divider', borderRadius: 2 }}>
         <Tabs variant="scrollable" scrollButtons="auto" value={tabIndex} onChange={handleTabChange} sx={{ borderBottom: 1, borderColor: 'divider', px: 2 }}>
-          <Tab value={6} id="shipping-tab-6" aria-controls="shipping-tabpanel-6" label="Delivery pricing & coverage" />
-          <Tab value={0} id="shipping-tab-0" aria-controls="shipping-tabpanel-0" label="Shipping Providers" />
-          <Tab value={1} id="shipping-tab-1" aria-controls="shipping-tabpanel-1" label="Rate Zones" />
-          <Tab value={2} id="shipping-tab-2" aria-controls="shipping-tabpanel-2" label="Shipping Rules" />
-          <Tab value={3} id="shipping-tab-3" aria-controls="shipping-tabpanel-3" label="Test Panel" />
-          <Tab value={4} id="shipping-tab-4" aria-controls="shipping-tabpanel-4" label="Operations & Failures" />
-          <Tab value={5} id="shipping-tab-5" aria-controls="shipping-tabpanel-5" label="Packaging" />
+          <Tab value={0} id="shipping-tab-0" aria-controls="shipping-tabpanel-0" label="Delivery pricing & coverage" />
+          <Tab value={1} id="shipping-tab-1" aria-controls="shipping-tabpanel-1" label="Shipping Providers" />
+          <Tab value={2} id="shipping-tab-2" aria-controls="shipping-tabpanel-2" label="Rate Zones" />
+          <Tab value={3} id="shipping-tab-3" aria-controls="shipping-tabpanel-3" label="Shipping Rules" />
+          <Tab value={4} id="shipping-tab-4" aria-controls="shipping-tabpanel-4" label="Test Panel" />
+          <Tab value={5} id="shipping-tab-5" aria-controls="shipping-tabpanel-5" label="Operations & Failures" />
+          <Tab value={6} id="shipping-tab-6" aria-controls="shipping-tabpanel-6" label="Packaging" />
         </Tabs>
 
         <Box sx={{ p: 3 }}>
-          <TabPanel value={tabIndex} index={6} idPrefix="shipping">
+          <TabPanel value={tabIndex} index={0} idPrefix="shipping">
             <Typography variant="subtitle1" fontWeight={600}>Customer delivery fee</Typography>
             <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>Choose one checkout policy. Standard and rules charge your configured customer fee; carrier-calculated uses a live Shiprocket quote for a supported single parcel.</Typography>
             {!deliverySettings.pricingMode && <Alert severity="warning" sx={{ mb: 2 }}>Existing pricing is preserved until you choose and save a pricing policy. Previously, matching rules could override the standard fee.</Alert>}
-            {deliverySettings.pricingMode === 'rules' && <Alert severity={enabledRules.length ? 'info' : 'warning'} sx={{ mb: 2 }}>Only matching advanced rules set the customer fee. Orders without a matching rule cannot proceed. {enabledRules.length} rule(s) enabled.<Button size="small" onClick={() => setTabIndex(2)}>Manage rules</Button></Alert>}
+            {deliverySettings.pricingMode === 'rules' && <Alert severity={enabledRules.length ? 'info' : 'warning'} sx={{ mb: 2 }}>Only matching advanced rules set the customer fee. Orders without a matching rule cannot proceed. {enabledRules.length} rule(s) enabled.<Button size="small" onClick={() => setTabIndex(3)}>Manage rules</Button></Alert>}
             <Stack spacing={2} sx={{ mb: 3 }}>
               <TextField select label="Customer delivery pricing" value={deliverySettings.pricingMode} disabled={savingDelivery} onChange={(event) => setDeliveryField('pricingMode', event.target.value)} helperText="Choose one policy; only the selected policy sets the delivery line at checkout.">
                 <MenuItem value="" disabled>Choose a pricing policy</MenuItem>
@@ -671,9 +671,9 @@ const ShippingPage = () => {
               <TextField label="Allowed delivery pincodes" value={deliverySettings.serviceablePincodes} disabled={savingDelivery} onChange={(event) => setDeliveryField('serviceablePincodes', event.target.value)} helperText="Separate pincodes with commas." />
               <TextField label="Blocked delivery pincodes" value={deliverySettings.blockedPincodes} disabled={savingDelivery} onChange={(event) => setDeliveryField('blockedPincodes', event.target.value)} helperText="Separate pincodes with commas." />
             </Stack>
-            <Stack direction="row" spacing={2}><Button variant="contained" disabled={savingDelivery} onClick={handleSaveDelivery}>{savingDelivery ? 'Saving…' : 'Save pricing and coverage'}</Button><Button onClick={() => setTabIndex(3)}>Check which fee applies</Button></Stack>
+            <Stack direction="row" spacing={2}><Button variant="contained" disabled={savingDelivery} onClick={handleSaveDelivery}>{savingDelivery ? 'Saving…' : 'Save pricing and coverage'}</Button><Button onClick={() => setTabIndex(4)}>Check which fee applies</Button></Stack>
           </TabPanel>
-          <TabPanel value={tabIndex} index={5} idPrefix="shipping">
+          <TabPanel value={tabIndex} index={6} idPrefix="shipping">
             <Typography variant="subtitle1" fontWeight={600}>Measured package types</Typography>
             <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
               Add your measured small, medium and large boxes or mailers. Set a mix-group name only for products you have confirmed can share a box. Products with blank or different group names stay separate.
@@ -768,7 +768,7 @@ const ShippingPage = () => {
             <DialogActions sx={{ p: 2 }}><Button onClick={() => setPackageDialogOpen(false)}>Cancel</Button><Button variant="contained" disabled={savingPackage} onClick={savePackageDraft}>{savingPackage ? 'Saving…' : 'Save package type'}</Button></DialogActions>
           </Dialog>
           {/* PROVIDERS TAB */}
-            <TabPanel value={tabIndex} index={0} idPrefix="shipping" sx={{ pt: 3 }}>
+            <TabPanel value={tabIndex} index={1} idPrefix="shipping" sx={{ pt: 3 }}>
             <Alert severity="info" sx={{ mb: 3 }}>
               Providers handle the actual delivery. Enable/disable providers, test remote carrier credentials, and set default capabilities here.
             </Alert>
@@ -862,7 +862,7 @@ const ShippingPage = () => {
           </TabPanel>
 
           {/* ZONES TAB */}
-            <TabPanel value={tabIndex} index={1} idPrefix="shipping" sx={{ pt: 3 }}>
+            <TabPanel value={tabIndex} index={2} idPrefix="shipping" sx={{ pt: 3 }}>
             <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 2 }}>
               <Box>
                 <Typography variant="subtitle1" fontWeight={600}>Rate Zones</Typography>
@@ -906,7 +906,7 @@ const ShippingPage = () => {
           </TabPanel>
 
           {/* RULES TAB */}
-            <TabPanel value={tabIndex} index={2} idPrefix="shipping" sx={{ pt: 3 }}>
+            <TabPanel value={tabIndex} index={3} idPrefix="shipping" sx={{ pt: 3 }}>
             <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 2 }}>
               <Typography variant="subtitle1" fontWeight={600}>Shipping Rules</Typography>
               <Button variant="contained" size="small" startIcon={<AddIcon />} onClick={() => handleOpenRuleDialog()}>
@@ -966,7 +966,7 @@ const ShippingPage = () => {
           </TabPanel>
 
           {/* TEST PANEL TAB */}
-          <TabPanel value={tabIndex} index={3} idPrefix="shipping">
+          <TabPanel value={tabIndex} index={4} idPrefix="shipping">
             <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 2 }}>
               <Typography variant="subtitle1" fontWeight={600}>Test Shipping Engine</Typography>
             </Box>
@@ -997,7 +997,7 @@ const ShippingPage = () => {
                   {testResult ? (
                      <Stack spacing={1}>
                        <Alert severity={testResult.decision?.serviceable ? 'success' : 'warning'}>{testResult.decision?.message}</Alert>
-                       <Typography>Customer fee: {formatPrice(testResult.decision?.shippingCost || 0)}</Typography>
+                       <Typography>Customer fee: {testResult.decision?.pricingSource === 'carrier' ? 'Live quote required at checkout' : formatPrice(testResult.decision?.shippingCost || 0)}</Typography>
                        <Typography>{testResult.decision?.pricingReason}</Typography>
                        <Typography>Courier: {testResult.decision?.providerName}</Typography>
                        <Typography>Pickup pincode: {testResult.warehousePincode} · Delivery pincode: {testResult.deliveryPincode}</Typography>
@@ -1012,7 +1012,7 @@ const ShippingPage = () => {
           </TabPanel>
 
           {/* OPERATIONS & FAILURES TAB */}
-          <TabPanel value={tabIndex} index={4} idPrefix="shipping" sx={{ pt: 3 }}>
+          <TabPanel value={tabIndex} index={5} idPrefix="shipping" sx={{ pt: 3 }}>
             <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2 }}>
               <div>
                 <Typography variant="subtitle1" fontWeight={600}>Failed Shipping Operations</Typography>

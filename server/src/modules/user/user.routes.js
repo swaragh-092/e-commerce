@@ -1,7 +1,7 @@
 'use strict';
 
 const router = require('express').Router();
-const { authenticate } = require('../../middleware/auth.middleware');
+const { authenticate, optionalAuth } = require('../../middleware/auth.middleware');
 const { authorizePermissions } = require('../../middleware/role.middleware');
 const { validate } = require('../../middleware/validate.middleware');
 const { loginLimiter, otpSendLimiter, otpVerifyLimiter, verifyEmailLimiter } = require('../../middleware/rateLimiter.middleware');
@@ -46,7 +46,12 @@ router.post('/me/email/confirm', verifyEmailLimiter, validate(require('./user.va
 
 // Address Endpoints
 router.get('/me/addresses', authenticate, authorizePermissions(PERMISSIONS.ACCOUNT_SELF), userController.getAddresses);
-router.post('/me/addresses', authenticate, authorizePermissions(PERMISSIONS.ACCOUNT_SELF), validate(createAddressSchema), userController.createAddress);
+router.post('/me/addresses', optionalAuth, (req, res, next) => {
+  if (req.user) {
+    return authorizePermissions(PERMISSIONS.ACCOUNT_SELF)(req, res, next);
+  }
+  next();
+}, validate(createAddressSchema), userController.createAddress);
 router.put('/me/addresses/:id', authenticate, authorizePermissions(PERMISSIONS.ACCOUNT_SELF), validate(idParamSchema, 'params'), validate(updateAddressSchema), userController.updateAddress);
 router.delete('/me/addresses/:id', authenticate, authorizePermissions(PERMISSIONS.ACCOUNT_SELF), validate(idParamSchema, 'params'), userController.deleteAddress);
 router.put('/me/addresses/:id/default', authenticate, authorizePermissions(PERMISSIONS.ACCOUNT_SELF), validate(idParamSchema, 'params'), userController.setDefaultAddress);

@@ -14,7 +14,7 @@ const {
   addOrderNoteSchema,
   listOrdersQuerySchema,
 } = require('./order.validation');
-const { authenticate } = require('../../middleware/auth.middleware');
+const { authenticate, optionalAuth } = require('../../middleware/auth.middleware');
 const { authorizePermissions } = require('../../middleware/role.middleware');
 const { auditLog } = require('../audit/audit.middleware');
 const { PERMISSIONS } = require('../../config/permissions');
@@ -26,7 +26,12 @@ const { featureGate } = require('../../middleware/featureGate.middleware');
 
 router.use(featureGate('orders'));
 
-router.post('/', authenticate, authorizePermissions(PERMISSIONS.CHECKOUT_SELF), validate(placeOrderSchema), orderController.placeOrder);
+router.post('/', optionalAuth, (req, res, next) => {
+  if (req.user) {
+    return authorizePermissions(PERMISSIONS.CHECKOUT_SELF)(req, res, next);
+  }
+  next();
+}, validate(placeOrderSchema), orderController.placeOrder);
 
 router.get('/', authenticate, authorizePermissions(PERMISSIONS.ACCOUNT_SELF), validate(listOrdersQuerySchema, 'query'), orderController.getOrders);
 router.get('/:id/tracking', authenticate, authorizePermissions(PERMISSIONS.ACCOUNT_SELF), validate(idParamSchema, 'params'), orderController.getFulfillmentTracking);

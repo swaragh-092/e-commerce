@@ -20,10 +20,11 @@ export const ORDER_STATUSES = [
     { value: 'cancelled',  label: 'Cancelled' },
 ];
 
+const currentYear = new Date().getFullYear();
 export const TIME_FILTERS = [
     { value: '30',    label: 'Last 30 days' },
-    { value: '2024',  label: '2024' },
-    { value: '2023',  label: '2023' },
+    { value: String(currentYear),     label: String(currentYear) },
+    { value: String(currentYear - 1), label: String(currentYear - 1) },
     { value: 'older', label: 'Older' },
 ];
 

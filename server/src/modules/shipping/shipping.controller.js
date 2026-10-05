@@ -6,7 +6,9 @@ const { success, paginated } = require('../../utils/response');
 
 const calculate = async (req, res, next) => {
     try {
-        const quote = await ShippingService.createQuote(req.user.id, req.validated);
+        const userId = req.user?.id || null;
+        const sessionId = req.validated?.sessionId || req.headers['x-session-id'] || req.cookies?.sessionId || null;
+        const quote = await ShippingService.createQuote(userId, { ...req.validated, sessionId });
         return success(res, quote, 'Shipping calculated successfully');
     } catch (err) {
         next(err);

@@ -272,7 +272,7 @@ describe('Audit Hardening & Verification Suite (11 Findings)', () => {
 
             expect(addressFindSpy).toHaveBeenCalledWith(
                 expect.objectContaining({
-                    where: { id: 'addr-uuid-456', userId: null },
+                    where: { id: 'addr-uuid-456', userId: null, sessionId: 'guest-session-123' },
                 })
             );
         });
@@ -726,6 +726,254 @@ describe('Audit Hardening & Verification Suite (11 Findings)', () => {
                 expect.objectContaining({ status: 'out_for_delivery' }),
                 expect.anything()
             );
+        });
+    });
+
+    describe('18. Multi-parcel resolveWorkflow & fulfillment guard', () => {
+        it('resolves workflow according to carrier capability and parcel plan', () => {
+            // 1 parcel -> ordinary shipment
+            expect(ShippingService.resolveWorkflow({ parcelCount: 1 })).toEqual({
+                status: 'eligible',
+                workflow: 'ordinary_shipment',
+            });
+
+            // Multi-parcel manual delivery -> manual split
+            expect(ShippingService.resolveWorkflow({
+                parcelCount: 3,
+                provider: { code: 'manual' },
+            })).toEqual({
+                status: 'eligible',
+                workflow: 'manual_split',
+            });
+
+            // Multi-parcel manual delivery selected by admin -> manual split
+            expect(ShippingService.resolveWorkflow({
+                parcelCount: 3,
+                provider: { code: 'shiprocket' },
+                manualSelected: true,
+            })).toEqual({
+                status: 'eligible',
+                workflow: 'manual_split',
+            });
+
+            // Multi-parcel with carrier supporting MPS -> fail-closed blocked until true group-booking exists
+            expect(ShippingService.resolveWorkflow({
+                parcelCount: 2,
+                provider: { code: 'shiprocket', settings: { supportsMps: true } },
+            })).toEqual({
+                status: 'blocked',
+                code: 'MULTI_PARCEL_BOOKING_UNAVAILABLE',
+                message: expect.stringContaining('multi-package carrier delivery is not configured'),
+            });
+
+            // Multi-parcel carrier without MPS -> blocked with MULTI_PARCEL_BOOKING_UNAVAILABLE
+            expect(ShippingService.resolveWorkflow({
+                parcelCount: 2,
+                provider: { code: 'shiprocket', settings: { supportsMps: false } },
+            })).toEqual({
+                status: 'blocked',
+                code: 'MULTI_PARCEL_BOOKING_UNAVAILABLE',
+                message: expect.stringContaining('multi-package carrier delivery is not configured'),
+            });
+        });
+    });
+
+    describe('19. GST freight tax calculation (18%)', () => {
+        it('computes 18% GST with CGST/SGST intra-state and IGST inter-state when opted in', () => {
+            // Zero shipping cost
+            expect(ShippingService.calculateShippingTax(0)).toEqual({
+                taxIncluded: false,
+                taxAmount: 0,
+                taxBreakdown: null,
+            });
+
+            const gstSettings = {
+                'tax.enableCGST': true,
+                'tax.enableSGST': true,
+                'tax.enableIGST': true,
+            };
+
+            // Intra-state (9% CGST + 9% SGST = 18%)
+            const intraState = ShippingService.calculateShippingTax(100, {
+                originState: 'Maharashtra',
+                destinationState: 'Maharashtra',
+                taxSettings: gstSettings,
+            });
+            expect(intraState.taxAmount).toBe(18);
+            expect(intraState.taxBreakdown).toMatchObject({
+                cgst: 9,
+                sgst: 9,
+                igst: 0,
+                rate: 18,
+                inclusive: false,
+            });
+
+            // Inter-state (18% IGST)
+            const interState = ShippingService.calculateShippingTax(150, {
+                originState: 'Maharashtra',
+                destinationState: 'Karnataka',
+                taxSettings: gstSettings,
+            });
+            expect(interState.taxAmount).toBe(27);
+            expect(interState.taxBreakdown).toMatchObject({
+                cgst: 0,
+                sgst: 0,
+                igst: 27,
+                rate: 18,
+                inclusive: false,
+            });
+        });
+    });
+
+    describe('20. ConditionType (AND vs OR) & strictOverride', () => {
+        it('supports conditionType: any (OR logic) and all (AND logic)', () => {
+            const context = {
+                subtotal: 500,
+                chargeableWeightGrams: 2000,
+                addressSnapshot: { postalCode: '400001', state: 'Maharashtra', country: 'India' },
+                paymentMethod: 'razorpay',
+            };
+
+            const conditions = {
+                subtotalGte: 1000, // Fails
+                state: 'Maharashtra', // Passes
+            };
+
+            // 'all' requires all conditions to pass -> fails
+            expect(ShippingService.conditionsMatch(conditions, context, 'all')).toBe(false);
+
+            // 'any' passes because state matches
+            expect(ShippingService.conditionsMatch(conditions, context, 'any')).toBe(true);
+
+            // Blocked pincodes always disqualify even with conditionType: any
+            const blockedConditions = {
+                ...conditions,
+                blockedPincodes: ['400001'],
+            };
+            expect(ShippingService.conditionsMatch(blockedConditions, context, 'any')).toBe(false);
+        });
+    });
+
+    describe('21. Variant physical measurement overrides', () => {
+        it('uses variant dimensions and weight over base product dimensions', () => {
+            const baseProduct = {
+                id: 'prod-1',
+                name: 'T-Shirt',
+                weightGrams: 200,
+                lengthCm: 10,
+                breadthCm: 10,
+                heightCm: 2,
+                requiresShipping: true,
+            };
+
+            const heavyVariant = {
+                id: 'var-xl',
+                weightGrams: 800,
+                lengthCm: 25,
+                breadthCm: 20,
+                heightCm: 5,
+            };
+
+            const checkoutItems = [{
+                quantity: 2,
+                product: baseProduct,
+                variant: heavyVariant,
+            }];
+
+            const dims = ShippingService.computePackageDimensions(checkoutItems, 0, { strict: false });
+            // Total height should be variant height * 2 = 10
+            expect(dims.totalH).toBe(10);
+            // Footprint should be variant maxL (25) and maxB (20)
+            expect(dims.maxL).toBe(25);
+            expect(dims.maxB).toBe(20);
+            // Total weight should be variant weight * 2 = 1600 (not product weight 400)
+            expect(dims.totalWeightGrams).toBe(1600);
+        });
+    });
+
+    describe('22. Merchant taxSettings integration & fail-closed MPS policy', () => {
+        it('keeps carrier multi-parcel orders fail-closed until group-booking is implemented', () => {
+            expect(ShippingService.resolveWorkflow({
+                parcelCount: 2,
+                provider: { code: 'shiprocket', settings: { supports_mps: true } },
+            })).toEqual({
+                status: 'blocked',
+                code: 'MULTI_PARCEL_BOOKING_UNAVAILABLE',
+                message: expect.stringContaining('multi-package carrier delivery is not configured'),
+            });
+
+            expect(ShippingService.resolveWorkflow({
+                parcelCount: 2,
+                manualSelected: true,
+            })).toEqual({
+                status: 'eligible',
+                workflow: 'manual_split',
+            });
+        });
+
+        it('respects strict tax opt-in parity with tax.service.js in calculateShippingTax', () => {
+            // Unconfigured store (zero tax config) -> untaxed shipping
+            const unconfiguredTax = ShippingService.calculateShippingTax(100, {
+                originState: 'Maharashtra',
+                destinationState: 'Maharashtra',
+                taxSettings: {},
+            });
+            expect(unconfiguredTax.taxAmount).toBe(0);
+
+            // Flat rate inclusive tax mode
+            const flatRateInclusive = ShippingService.calculateShippingTax(118, {
+                taxSettings: {
+                    'tax.rate': 0.18,
+                    'tax.inclusive': true,
+                },
+            });
+            expect(flatRateInclusive.taxIncluded).toBe(true);
+            expect(flatRateInclusive.taxAmount).toBe(18);
+
+            // GST enabled: Custom merchant rates (e.g. 5% GST = 2.5% CGST + 2.5% SGST)
+            const customRates = ShippingService.calculateShippingTax(200, {
+                originState: 'Delhi',
+                destinationState: 'Delhi',
+                taxSettings: {
+                    'tax.enableCGST': true,
+                    'tax.enableSGST': true,
+                    'tax.cgstRate': 0.025,
+                    'tax.sgstRate': 0.025,
+                },
+            });
+            expect(customRates.taxAmount).toBe(10);
+            expect(customRates.taxBreakdown.cgst).toBe(5);
+            expect(customRates.taxBreakdown.sgst).toBe(5);
+            expect(customRates.taxBreakdown.rate).toBe(5);
+
+            // GST enabled: Interstate IGST default
+            const interstateGst = ShippingService.calculateShippingTax(100, {
+                originState: 'Delhi',
+                destinationState: 'Maharashtra',
+                taxSettings: {
+                    'tax.enableIGST': true,
+                },
+            });
+            expect(interstateGst.taxAmount).toBe(18);
+            expect(interstateGst.taxBreakdown.igst).toBe(18);
+        });
+
+        it('rethrows DB errors in syncOrderShippingStatus without regressing status to pending', async () => {
+            const { Shipment } = require('../../src/modules');
+            vi.spyOn(Shipment, 'findAll').mockRejectedValueOnce(new Error('DB read failure'));
+
+            const mockOrder = {
+                id: 'order-fail-closed',
+                orderShippingStatus: 'shipped',
+                update: vi.fn(),
+            };
+
+            await expect(
+                OrderService.syncOrderShippingStatus(mockOrder)
+            ).rejects.toThrow('DB read failure');
+
+            expect(mockOrder.update).not.toHaveBeenCalled();
+            expect(mockOrder.orderShippingStatus).toBe('shipped');
         });
     });
 });

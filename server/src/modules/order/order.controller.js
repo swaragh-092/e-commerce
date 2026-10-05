@@ -9,7 +9,10 @@ const hasOrderAdminAccess = (user) => getPermissionsForUser(user).includes(PERMI
 
 const placeOrder = async (req, res, next) => {
   try {
-    const result = await OrderService.placeOrder(req.user.id, req.validated);
+    const result = await OrderService.placeOrder(req.user?.id || null, {
+      ...req.validated,
+      sessionId: req.validated.sessionId || req.headers['x-session-id'] || null,
+    });
     return success(res, result, 'Order placed successfully', 201);
   } catch (err) {
     next(err);

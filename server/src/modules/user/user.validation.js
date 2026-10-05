@@ -61,7 +61,8 @@ const createAddressSchema = Joi.object({
       'string.pattern.base': 'Please enter a valid GSTIN (e.g., 22AAAAA0000A1Z5)'
     }),
   country: Joi.string().max(100).required(),
-  isDefault: Joi.boolean().default(false)
+  isDefault: Joi.boolean().default(false),
+  sessionId: Joi.string().max(255).optional().allow(null, '')
 });
 
 const updateAddressSchema = Joi.object({
