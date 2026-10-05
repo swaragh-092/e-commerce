@@ -6,6 +6,7 @@ const { sequelize, Shipment, ShipmentEvent, ShippingProvider, Order, Fulfillment
 const { resolveProvider } = require('./providers');
 const { deriveOrderShippingStatus } = require('../../utils/orderWorkflow');
 const NotificationService = require('../notification/notification.service');
+const OrderService = require('../order/order.service');
 const AppError = require('../../utils/AppError');
 
 const STATUS_RANK = Object.freeze({
@@ -189,13 +190,18 @@ const processWebhook = async (providerCode, payload, headers = {}) => {
 
         let notification = null;
         if (order) {
-            const orderShipments = await Shipment.findAll({ where: { orderId: order.id }, transaction: t });
-            const derivedShippingStatus = deriveOrderShippingStatus(orderShipments);
-            if (order.orderShippingStatus !== derivedShippingStatus || order.shipmentStatus !== derivedShippingStatus) {
-                await order.update({
-                    orderShippingStatus: derivedShippingStatus,
-                    shipmentStatus: derivedShippingStatus,
-                }, { transaction: t });
+            try {
+                await OrderService.syncOrderShippingStatus(order, t);
+            } catch (err) {
+                console.warn('[Webhook] OrderService.syncOrderShippingStatus fallback triggered:', err.message);
+                const orderShipments = await Shipment.findAll({ where: { orderId: order.id }, transaction: t });
+                const derivedShippingStatus = deriveOrderShippingStatus(orderShipments);
+                if (order.orderShippingStatus !== derivedShippingStatus || order.shipmentStatus !== derivedShippingStatus) {
+                    await order.update({
+                        orderShippingStatus: derivedShippingStatus,
+                        shipmentStatus: derivedShippingStatus,
+                    }, { transaction: t });
+                }
             }
             if (['out_for_delivery', 'delivered'].includes(normalizedEvent.status) && order.userId) {
                 notification = { userId: order.userId, orderId: order.id, status: normalizedEvent.status };
@@ -311,12 +317,20 @@ const reconcileTracking = async ({ limit = 20 } = {}) => {
                     }
 
                     if (freshShipment.orderId) {
-                        const orderShipments = await Shipment.findAll({ where: { orderId: freshShipment.orderId }, transaction: t });
-                        const derivedShippingStatus = deriveOrderShippingStatus(orderShipments);
-                        await Order.update({
-                            orderShippingStatus: derivedShippingStatus,
-                            shipmentStatus: derivedShippingStatus,
-                        }, { where: { id: freshShipment.orderId }, transaction: t });
+                        try {
+                            const targetOrder = await Order.findByPk(freshShipment.orderId, { transaction: t });
+                            if (targetOrder) {
+                                await OrderService.syncOrderShippingStatus(targetOrder, t);
+                            }
+                        } catch (err) {
+                            console.warn('[Webhook] Tracking reconcile syncOrderShippingStatus fallback triggered:', err.message);
+                            const orderShipments = await Shipment.findAll({ where: { orderId: freshShipment.orderId }, transaction: t });
+                            const derivedShippingStatus = deriveOrderShippingStatus(orderShipments);
+                            await Order.update({
+                                orderShippingStatus: derivedShippingStatus,
+                                shipmentStatus: derivedShippingStatus,
+                            }, { where: { id: freshShipment.orderId }, transaction: t });
+                        }
                     }
 
                     touchedInTx = true;

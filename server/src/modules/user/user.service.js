@@ -417,19 +417,26 @@ const MAX_ADDRESSES_PER_USER = 10;
 
 const createAddress = async (userId, payload) => {
   return sequelize.transaction(async (t) => {
-    const addressCount = await Address.count({ where: { userId }, transaction: t });
-    if (addressCount >= MAX_ADDRESSES_PER_USER) {
-      throw new AppError('VALIDATION_ERROR', 400, `You can save up to ${MAX_ADDRESSES_PER_USER} addresses. Delete one to add another.`);
-    }
-    if (payload.isDefault) {
-      await Address.update({ isDefault: false }, { where: { userId }, transaction: t });
-    } else {
-      if (addressCount === 0) {
-        payload.isDefault = true;
+    if (userId) {
+      const addressCount = await Address.count({ where: { userId }, transaction: t });
+      if (addressCount >= MAX_ADDRESSES_PER_USER) {
+        throw new AppError('VALIDATION_ERROR', 400, `You can save up to ${MAX_ADDRESSES_PER_USER} addresses. Delete one to add another.`);
       }
+      if (payload.isDefault) {
+        await Address.update({ isDefault: false }, { where: { userId }, transaction: t });
+      } else {
+        if (addressCount === 0) {
+          payload.isDefault = true;
+        }
+      }
+    } else {
+      if (!payload.sessionId) {
+        throw new AppError('VALIDATION_ERROR', 400, 'Session ID is required for guest address creation');
+      }
+      payload.isDefault = false;
     }
     
-    const address = await Address.create({ ...payload, userId }, { transaction: t });
+    const address = await Address.create({ ...payload, userId: userId || null }, { transaction: t });
 
     try {
       if (AuditService && AuditService.log) {

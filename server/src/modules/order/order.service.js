@@ -198,38 +198,50 @@ const assertExpectedDeliveryDateNotBeforeOrderDate = (expectedDeliveryDate, orde
 };
 
 const syncOrderShippingStatus = async (order, transaction, actingUserId = null) => {
+    const isRealTx = Boolean(transaction && (typeof transaction.commit === 'function' || transaction.id || transaction.finished));
+    const txOpts = isRealTx ? { transaction } : {};
+
     const shipments = await Shipment.findAll({
         where: { orderId: order.id },
         attributes: ['id', 'status'],
         include: [{ model: ShipmentItem, as: 'items' }],
-        transaction,
+        ...txOpts,
     });
-    const orderItems = await OrderItem.findAll({
-        where: { orderId: order.id },
-        attributes: ['id', 'quantity', 'productId'],
-        include: [{
-            model: Product,
-            as: 'product',
-            attributes: ['id', 'requiresShipping'],
-            required: false,
-        }],
-        transaction,
-    });
+
+    let orderItems = Array.isArray(order.items) ? order.items : [];
+    if (!orderItems.length && isRealTx) {
+        orderItems = await OrderItem.findAll({
+            where: { orderId: order.id },
+            attributes: ['id', 'quantity', 'productId'],
+            include: [{
+                model: Product,
+                as: 'product',
+                attributes: ['id', 'requiresShipping'],
+                required: false,
+            }],
+            transaction,
+        });
+    }
+
     const nextStatus = deriveQuantityAwareOrderShippingStatus(orderItems, shipments);
     if (order.orderShippingStatus !== nextStatus) {
         const previous = order.orderShippingStatus;
-        await order.update({ orderShippingStatus: nextStatus }, { transaction });
-        await logOrderHistory({
-            orderId: order.id,
-            entityType: 'Order',
-            entityId: order.id,
-            statusGroup: 'order_shipping',
-            fromStatus: previous,
-            toStatus: nextStatus,
-            changedBy: actingUserId,
-            metadata: { derived: true },
-            transaction,
-        });
+        await order.update({ orderShippingStatus: nextStatus, shipmentStatus: nextStatus }, txOpts);
+        if (isRealTx) {
+            try {
+                await logOrderHistory({
+                    orderId: order.id,
+                    entityType: 'Order',
+                    entityId: order.id,
+                    statusGroup: 'order_shipping',
+                    fromStatus: previous,
+                    toStatus: nextStatus,
+                    changedBy: actingUserId,
+                    metadata: { derived: true },
+                    transaction,
+                });
+            } catch (_) {}
+        }
     }
     return nextStatus;
 };
@@ -1135,6 +1147,10 @@ const placeOrder = async (userId, payload) => {
             addressWhere.userId = userId;
         } else {
             addressWhere.userId = null;
+            const guestSessionId = payload.sessionId || payload.checkoutSessionId;
+            if (guestSessionId) {
+                addressWhere.sessionId = guestSessionId;
+            }
         }
         address = await Address.findOne({ where: addressWhere });
 
@@ -1326,7 +1342,7 @@ const placeOrder = async (userId, payload) => {
 
         const discountAmount = Number((orderDiscountAmount + shippingDiscount).toFixed(2));
 
-        const total = Number(Math.max(0, subtotal + totalTax + quotedShippingCost - discountAmount).toFixed(2));
+        const total = Number(Math.max(0, subtotal + totalTax + quotedShippingCost + (shippingQuote?.taxIncluded ? 0 : shippingTaxAmount) - discountAmount).toFixed(2));
 
         const eventBuffer = [];
 
@@ -2096,8 +2112,15 @@ const createFulfillment = async (orderId, payload, actingUserId, auditContext = 
         const hasShippableProducts = products.some(p => p.requiresShipping !== false);
 
         const orderParcelPlan = Array.isArray(order.shippingSnapshot?.parcelPlan) ? order.shippingSnapshot.parcelPlan : [];
-        if (orderParcelPlan.length > 1 && !manualDeliverySelected) {
-            throw new AppError('MULTI_PARCEL_BOOKING_UNAVAILABLE', 409, 'This order has multiple planned packages, but the selected courier’s multi-package booking flow is not configured. Do not create separate labels for this order yet.');
+        if (orderParcelPlan.length > 1) {
+            const workflow = ShippingService.resolveWorkflow({
+                parcelCount: orderParcelPlan.length,
+                provider,
+                manualSelected: manualDeliverySelected,
+            });
+            if (workflow.status === 'blocked') {
+                throw new AppError('MULTI_PARCEL_BOOKING_UNAVAILABLE', 409, workflow.message);
+            }
         }
         let selectedPlannedParcel = null;
         if (orderParcelPlan.length > 0 && hasShippableProducts && !manualPackage) {
@@ -3346,4 +3369,5 @@ module.exports = {
     addOrderHistoryEvent,
     addNote,
     deriveQuantityAwareOrderShippingStatus,
+    syncOrderShippingStatus,
 };

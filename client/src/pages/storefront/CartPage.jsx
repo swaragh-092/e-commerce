@@ -264,7 +264,7 @@ const TrustBadge = ({ icon, title, sub }) => (
 );
 
 // ── Order Summary ─────────────────────────────────────────────────────────────
-const OrderSummary = ({ visibleCount, subtotal, shippingCost, shippingMethod, freeThreshold, taxRows, taxInclusive, estimatedTotal, offerSummary, formatPrice, onCheckout, setEnquiryOpen, checkoutEnabled, enquiryEnabled, showTrustBadges = true, checkoutBlockStyle = {} }) => {
+const OrderSummary = ({ visibleCount, subtotal, shippingCost, shippingPending, shippingMethod, freeThreshold, taxRows, taxInclusive, estimatedTotal, offerSummary, formatPrice, onCheckout, setEnquiryOpen, checkoutEnabled, enquiryEnabled, showTrustBadges = true, checkoutBlockStyle = {} }) => {
     const shippingFree = shippingMethod === 'free' || shippingCost === 0;
     const progressPct = freeThreshold > 0 ? Math.min((subtotal / freeThreshold) * 100, 100) : 0;
     const blockRadius = checkoutBlockStyle.radius === 'none' ? 0 : checkoutBlockStyle.radius === 'small' ? 1 : checkoutBlockStyle.radius === 'large' ? 3 : 2;
@@ -291,12 +291,12 @@ const OrderSummary = ({ visibleCount, subtotal, shippingCost, shippingMethod, fr
                 <Box sx={blockPadding}>
                     <PriceRow label="Subtotal" value={formatPrice(subtotal)} />
                     <PriceRow label="Shipping" icon={<LocalShippingOutlinedIcon />}
-                        value={shippingFree ? 'Free' : formatPrice(shippingCost)} green={shippingFree} />
+                        value={shippingPending ? 'Calculated at checkout' : shippingFree ? 'Free' : formatPrice(shippingCost)} green={!shippingPending && shippingFree} />
                     {taxRows.map(r => <PriceRow key={r.label} label={r.label} value={r.value} />)}
                     {taxInclusive && <Typography sx={{ fontSize: '0.7rem', color: 'text.disabled', mt: 0.25, mb: 0.5 }}>Taxes included in price</Typography>}
 
                     {/* Free shipping bar */}
-                    {shippingMethod === 'free_above_threshold' && shippingCost > 0 && freeThreshold > 0 && (
+                    {!shippingPending && shippingMethod === 'free_above_threshold' && shippingCost > 0 && freeThreshold > 0 && (
                         <Fade in>
                             <Box sx={{ mt: 1.5, p: 1.5, borderRadius: 1.5, border: '1px solid', borderColor: 'divider', bgcolor: 'action.hover' }}>
                                 <Box sx={{ ...row('center', 'space-between'), mb: 0.9 }}>
@@ -333,7 +333,7 @@ const OrderSummary = ({ visibleCount, subtotal, shippingCost, shippingMethod, fr
                     <Box sx={{ ...row('flex-end', 'space-between'), mb: 0.25 }}>
                         <Box>
                             <Typography sx={{ fontSize: '0.8rem', fontWeight: 700 }}>Estimated Total</Typography>
-                            <Typography sx={{ fontSize: '0.68rem', color: 'text.disabled' }}>Incl. all taxes & fees</Typography>
+                            <Typography sx={{ fontSize: '0.68rem', color: 'text.disabled' }}>Final delivery fee and tax confirmed at checkout</Typography>
                         </Box>
                         <Typography sx={{ fontSize: '1.55rem', fontWeight: 900, letterSpacing: -1, color: 'primary.main', lineHeight: 1.1 }}>
                             {formatPrice(estimatedTotal)}
@@ -429,9 +429,13 @@ const CartPage = () => {
     const shippingMethod = settings?.shipping?.method || 'flat_rate';
     const flatRate = parseFloat(settings?.shipping?.flatRate || 0);
     const freeThreshold = parseFloat(settings?.shipping?.freeThreshold || 0);
+    const hasPhysicalItems = items.some((item) => item.product?.requiresShipping !== false);
+    const shippingPending = hasPhysicalItems && settings?.shipping?.pricingMode !== 'standard';
     let shippingCost = 0;
-    if (shippingMethod === 'flat_rate') shippingCost = flatRate;
-    else if (shippingMethod === 'free_above_threshold') shippingCost = subtotal >= freeThreshold ? 0 : flatRate;
+    if (hasPhysicalItems && !shippingPending) {
+        if (shippingMethod === 'flat_rate') shippingCost = flatRate;
+        else if (shippingMethod === 'free_above_threshold') shippingCost = subtotal >= freeThreshold ? 0 : flatRate;
+    }
 
     const taxSummary = useMemo(() => calculateTaxSummary({
         items,
@@ -546,7 +550,7 @@ const CartPage = () => {
                 {/* Summary */}
                 <OrderSummary
                     visibleCount={visibleCount} subtotal={subtotal}
-                    shippingCost={shippingCost} shippingMethod={shippingMethod} freeThreshold={freeThreshold}
+                    shippingCost={shippingCost} shippingPending={shippingPending} shippingMethod={shippingMethod} freeThreshold={freeThreshold}
                     taxRows={taxRows} taxInclusive={taxInclusive}
                     estimatedTotal={estimatedTotal} offerSummary={offerSummary}
                     formatPrice={formatPrice} onCheckout={handleCheckout}

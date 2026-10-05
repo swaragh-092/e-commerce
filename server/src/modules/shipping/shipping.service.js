@@ -75,6 +75,109 @@ const applyStorewidePincodeCoverage = (decision, pincode, { allowedPincodes = []
     return { ...decision, serviceable: false, shippingCost: 0, taxAmount: 0, taxBreakdown: null, codAvailable: false, message };
 };
 
+const resolveWorkflow = ({ parcelCount = 1, provider = null, manualSelected = false } = {}) => {
+    if (parcelCount <= 1) {
+        return { status: 'eligible', workflow: 'ordinary_shipment' };
+    }
+    if (manualSelected || provider?.code === 'manual') {
+        return { status: 'eligible', workflow: 'manual_split' };
+    }
+    // Automated carrier MPS (Master-Child Multi-Piece Shipments) is not yet implemented in provider APIs
+    // (shiprocket /orders/create/adhoc only books single adhoc parcels without master-child linkage).
+    // Fail-closed to protect shipments from unlinked per-parcel adhoc carrier bookings.
+    return {
+        status: 'blocked',
+        code: 'MULTI_PARCEL_BOOKING_UNAVAILABLE',
+        message: `This order requires ${parcelCount} packages, but multi-package carrier delivery is not configured.`,
+    };
+};
+
+const normalizeTaxRate = (value) => {
+    const number = Number(value);
+    if (!Number.isFinite(number)) return 0;
+    if (Math.abs(number) <= 1) return number;
+    return number / 100;
+};
+
+const calculateShippingTax = (shippingCost, { originState = '', destinationState = '', taxSettings = {} } = {}) => {
+    const cost = normalizeMoney(shippingCost);
+    if (cost <= 0) return { taxIncluded: false, taxAmount: 0, taxBreakdown: null };
+
+    // Strict opt-in parity with tax.service.js:42-45
+    const enableCGST = taxSettings['tax.enableCGST'] === true || taxSettings['tax.enableCGST'] === 'true';
+    const enableSGST = taxSettings['tax.enableSGST'] === true || taxSettings['tax.enableSGST'] === 'true';
+    const enableIGST = taxSettings['tax.enableIGST'] === true || taxSettings['tax.enableIGST'] === 'true';
+    const useGST = enableCGST || enableSGST || enableIGST;
+
+    if (!useGST) {
+        const flatTaxRate = normalizeTaxRate(taxSettings['tax.rate'] || 0);
+        const inclusive = taxSettings['tax.inclusive'] === true || taxSettings['tax.inclusive'] === 'true';
+        if (flatTaxRate <= 0) {
+            return { taxIncluded: false, taxAmount: 0, taxBreakdown: null };
+        }
+        const taxAmount = inclusive
+            ? normalizeMoney(cost - (cost / (1 + flatTaxRate)))
+            : normalizeMoney(cost * flatTaxRate);
+        return {
+            taxIncluded: inclusive,
+            taxAmount,
+            taxRate: Math.round(flatTaxRate * 10000) / 100,
+            taxBreakdown: {
+                taxableAmount: inclusive ? normalizeMoney(cost - taxAmount) : cost,
+                rate: Math.round(flatTaxRate * 10000) / 100,
+                taxAmount,
+                cgst: 0,
+                sgst: 0,
+                igst: 0,
+                inclusive,
+            },
+        };
+    }
+
+    const normOrigin = (originState || taxSettings['tax.originState'] || taxSettings['shipping.warehouseState'] || taxSettings['general.state'] || '').trim().toLowerCase();
+    const normDest = (destinationState || '').trim().toLowerCase();
+    const isIntraState = Boolean(normOrigin && normDest ? normOrigin === normDest : (!normOrigin && !normDest));
+
+    // Per tax.service.js:48: inclusive only applies if not using GST components (Global logic)
+    // For GST components, rates default to merchant configured rates or SAC 9965 (9/9/18) when enabled
+    const cgstRate = enableCGST ? (taxSettings['tax.cgstRate'] !== undefined ? normalizeTaxRate(taxSettings['tax.cgstRate']) : 0.09) : 0;
+    const sgstRate = enableSGST ? (taxSettings['tax.sgstRate'] !== undefined ? normalizeTaxRate(taxSettings['tax.sgstRate']) : 0.09) : 0;
+    const igstRate = enableIGST ? (taxSettings['tax.igstRate'] !== undefined ? normalizeTaxRate(taxSettings['tax.igstRate']) : 0.18) : 0;
+
+    let cgst = 0;
+    let sgst = 0;
+    let igst = 0;
+
+    if (isIntraState) {
+        cgst = normalizeMoney(cost * cgstRate);
+        sgst = normalizeMoney(cost * sgstRate);
+    } else {
+        igst = normalizeMoney(cost * igstRate);
+    }
+
+    const roundedCgst = normalizeMoney(cgst);
+    const roundedSgst = normalizeMoney(sgst);
+    const roundedIgst = normalizeMoney(igst);
+    const taxAmount = normalizeMoney(roundedCgst + roundedSgst + roundedIgst);
+    const applicableRate = isIntraState ? (cgstRate + sgstRate) : igstRate;
+
+    return {
+        taxIncluded: false,
+        taxAmount,
+        taxRate: Math.round(applicableRate * 10000) / 100,
+        taxBreakdown: {
+            taxableAmount: cost,
+            rate: Math.round(applicableRate * 10000) / 100,
+            taxAmount,
+            cgst: roundedCgst,
+            sgst: roundedSgst,
+            igst: roundedIgst,
+            inclusive: false,
+            hsnCode: '9965',
+        },
+    };
+};
+
 const lower = (value) => String(value || '').trim().toLowerCase();
 
 // ─── Volumetric weight helpers ────────────────────────────────────────────────
@@ -94,8 +197,9 @@ const computePackageDimensions = (checkoutItems, packagingWeightGrams = 0, { str
         let units = 0;
         for (const item of checkoutItems) {
             const product = item.product;
+            const variant = item.variant;
             if (product?.requiresShipping === false) continue;
-            const weight = Number(product?.weightGrams);
+            const weight = Number(variant?.weightGrams ?? product?.weightGrams);
             const quantity = Number(item.quantity);
             if (!Number.isFinite(weight) || weight <= 0) {
                 throw new AppError('MISSING_PRODUCT_MEASUREMENTS', 400, 'Shipping is temporarily unavailable for this item. Please contact support.', { productId: product?.id, reason: 'missing_weight' });
@@ -103,7 +207,11 @@ const computePackageDimensions = (checkoutItems, packagingWeightGrams = 0, { str
             if (!Number.isSafeInteger(quantity) || quantity < 1) {
                 throw new AppError('VALIDATION_ERROR', 400, 'Shipping quantity must be a positive whole number.');
             }
-            const itemSides = [product.lengthCm, product.breadthCm, product.heightCm].map(Number);
+            const itemSides = [
+                variant?.lengthCm ?? product.lengthCm,
+                variant?.breadthCm ?? product.breadthCm,
+                variant?.heightCm ?? product.heightCm,
+            ].map(Number);
             if (itemSides.every((side) => Number.isFinite(side) && side > 0.5)) {
                 const packageSides = [savedPackage.lengthCm, savedPackage.breadthCm, savedPackage.heightCm].map(Number).sort((a, b) => a - b);
                 itemSides.sort((a, b) => a - b);
@@ -144,10 +252,11 @@ const computePackageDimensions = (checkoutItems, packagingWeightGrams = 0, { str
         shippableItemsCount++;
         
         const qty = Number(item.quantity || 1);
-        const weight = Number(p.weightGrams);
-        const l = Number(p.lengthCm);
-        const b = Number(p.breadthCm);
-        const h = Number(p.heightCm);
+        const v = item.variant;
+        const weight = Number(v?.weightGrams ?? p.weightGrams);
+        const l = Number(v?.lengthCm ?? p.lengthCm);
+        const b = Number(v?.breadthCm ?? p.breadthCm);
+        const h = Number(v?.heightCm ?? p.heightCm);
 
         const isMissing = !Number.isFinite(weight) || weight <= 0 || !Number.isFinite(l) || l <= 0.5 || !Number.isFinite(b) || b <= 0.5 || !Number.isFinite(h) || h <= 0.5;
         if (isMissing) {
@@ -158,10 +267,10 @@ const computePackageDimensions = (checkoutItems, packagingWeightGrams = 0, { str
             }
         }
 
-        maxL = Math.max(maxL, Number(p.lengthCm  || 10));
-        maxB = Math.max(maxB, Number(p.breadthCm || 10));
-        totalH += Number(p.heightCm   || 10) * qty;
-        totalWeightGrams += Number(p.weightGrams || 500) * qty;
+        maxL = Math.max(maxL, Number(v?.lengthCm ?? p.lengthCm ?? 10));
+        maxB = Math.max(maxB, Number(v?.breadthCm ?? p.breadthCm ?? 10));
+        totalH += Number(v?.heightCm ?? p.heightCm ?? 10) * qty;
+        totalWeightGrams += Number(v?.weightGrams ?? p.weightGrams ?? 500) * qty;
     }
 
     if (shippableItemsCount === 0) {
@@ -393,10 +502,12 @@ const buildCheckoutContext = async (userId, payload) => {
         const cartWhere = { status: 'active' };
         if (userId) {
             cartWhere.userId = userId;
-        } else if (payload.sessionId || payload.checkoutSessionId) {
-            cartWhere.sessionId = payload.sessionId || payload.checkoutSessionId;
-            cartWhere.userId = null;
         } else {
+            const guestSessionId = payload.sessionId || payload.checkoutSessionId;
+            if (!guestSessionId) {
+                throw new AppError('VALIDATION_ERROR', 400, 'Session ID is required for guest checkout');
+            }
+            cartWhere.sessionId = guestSessionId;
             cartWhere.userId = null;
         }
 
@@ -441,10 +552,10 @@ const buildCheckoutContext = async (userId, payload) => {
             name: item.product.name,
             quantity,
             currentPrice: unitPrice,
-            weightGrams: Number(item.product.weightGrams || 0),
-            lengthCm: Number(item.product.lengthCm || 0),
-            breadthCm: Number(item.product.breadthCm || 0),
-            heightCm: Number(item.product.heightCm || 0),
+            weightGrams: Number(item.variant?.weightGrams ?? item.product.weightGrams ?? 0),
+            lengthCm: Number(item.variant?.lengthCm ?? item.product.lengthCm ?? 0),
+            breadthCm: Number(item.variant?.breadthCm ?? item.product.breadthCm ?? 0),
+            heightCm: Number(item.variant?.heightCm ?? item.product.heightCm ?? 0),
             requiresShipping: item.product.requiresShipping !== false,
         };
     });
@@ -457,6 +568,10 @@ const buildCheckoutContext = async (userId, payload) => {
             addressWhere.userId = userId;
         } else {
             addressWhere.userId = null;
+            const guestSessionId = payload.sessionId || payload.checkoutSessionId;
+            if (guestSessionId) {
+                addressWhere.sessionId = guestSessionId;
+            }
         }
         address = await Address.findOne({ where: addressWhere });
         if (!address && hasPhysicalItems) throw new AppError('NOT_FOUND', 404, 'Shipping address not found');
@@ -491,6 +606,7 @@ const buildCheckoutContext = async (userId, payload) => {
         packageDims: dims,
         defaultPackage,
         parcelPlan,
+        sessionId: payload.sessionId || payload.checkoutSessionId || null,
         cartHash: hashObject(cartSnapshot),
         addressHash: hashObject(addressSnapshot),
         couponHash: couponCodes.length ? hashObject(couponCodes) : EMPTY_HASH,
@@ -570,20 +686,46 @@ const zoneMatches = (zone, addressSnapshot) => {
     return pincodeMatches(zone.pincodes, pincode);
 };
 
-const conditionsMatch = (conditions = {}, { subtotal, chargeableWeightGrams = 0, addressSnapshot, paymentMethod }) => {
+const conditionsMatch = (conditions = {}, { subtotal, chargeableWeightGrams = 0, addressSnapshot, paymentMethod }, conditionType = 'all') => {
     const pincode = String(addressSnapshot.postalCode || '').trim();
-    if (conditions.country && lower(conditions.country) !== lower(addressSnapshot.country)) return false;
-    if (conditions.state && lower(conditions.state) !== lower(addressSnapshot.state)) return false;
-    if (conditions.city && lower(conditions.city) !== lower(addressSnapshot.city)) return false;
-    if (conditions.pincodes && !pincodeMatches(conditions.pincodes, pincode)) return false;
-    if (conditions.blockedPincodes && normalizeList(conditions.blockedPincodes).includes(pincode)) return false;
-    if (conditions.subtotalGte != null && subtotal < Number(conditions.subtotalGte)) return false;
-    if (conditions.subtotalLte != null && subtotal > Number(conditions.subtotalLte)) return false;
-    if (conditions.paymentMethods && !normalizeList(conditions.paymentMethods).includes(paymentMethod)) return false;
-    // Weight-based condition matching
-    if (conditions.weightGte != null && chargeableWeightGrams < Number(conditions.weightGte)) return false;
-    if (conditions.weightLte != null && chargeableWeightGrams > Number(conditions.weightLte)) return false;
-    return true;
+    if (conditions.blockedPincodes && normalizeList(conditions.blockedPincodes).includes(pincode)) {
+        return false;
+    }
+
+    const checks = [];
+    if (conditions.country) {
+        checks.push(lower(conditions.country) === lower(addressSnapshot.country));
+    }
+    if (conditions.state) {
+        checks.push(lower(conditions.state) === lower(addressSnapshot.state));
+    }
+    if (conditions.city) {
+        checks.push(lower(conditions.city) === lower(addressSnapshot.city));
+    }
+    if (conditions.pincodes && conditions.pincodes.length > 0) {
+        checks.push(pincodeMatches(conditions.pincodes, pincode));
+    }
+    if (conditions.subtotalGte != null) {
+        checks.push(subtotal >= Number(conditions.subtotalGte));
+    }
+    if (conditions.subtotalLte != null) {
+        checks.push(subtotal <= Number(conditions.subtotalLte));
+    }
+    if (conditions.paymentMethods && conditions.paymentMethods.length > 0) {
+        checks.push(normalizeList(conditions.paymentMethods).includes(paymentMethod));
+    }
+    if (conditions.weightGte != null) {
+        checks.push(chargeableWeightGrams >= Number(conditions.weightGte));
+    }
+    if (conditions.weightLte != null) {
+        checks.push(chargeableWeightGrams <= Number(conditions.weightLte));
+    }
+
+    if (checks.length === 0) return true;
+    if (conditionType === 'any') {
+        return checks.some(Boolean);
+    }
+    return checks.every(Boolean);
 };
 
 /**
@@ -692,8 +834,8 @@ const calculateRuleDecision = async ({ subtotal, chargeableWeightGrams = 0, pack
             { model: ShippingProvider, as: 'provider', required: false },
         ],
         order: [
-            ['priority', 'DESC'],
             ['strictOverride', 'DESC'],
+            ['priority', 'DESC'],
             ['createdAt', 'DESC'],
         ],
     });
@@ -713,7 +855,7 @@ const calculateRuleDecision = async ({ subtotal, chargeableWeightGrams = 0, pack
             }
         }
         return (!rule.zone || zoneMatches(rule.zone, addressSnapshot)) &&
-            conditionsMatch(rule.conditions || {}, { subtotal, chargeableWeightGrams: orderChargeableWeightGrams, addressSnapshot, paymentMethod }) &&
+            conditionsMatch(rule.conditions || {}, { subtotal, chargeableWeightGrams: orderChargeableWeightGrams, addressSnapshot, paymentMethod }, rule.conditionType || 'all') &&
             providerSupportsDecision(effectiveProvider, { paymentMethod });
     });
 
@@ -860,6 +1002,7 @@ const serializeQuote = (quote) => {
         currency: quote.currency,
         taxIncluded: quote.taxIncluded,
         taxAmount: normalizeMoney(quote.taxAmount),
+        taxRate: quote.taxBreakdown?.rate ?? decision.taxRate ?? null,
         taxBreakdown: quote.taxBreakdown,
         codAvailable: quote.codAvailable,
         estimatedMinDays: quote.estimatedMinDays,
@@ -888,7 +1031,7 @@ const createQuote = async (userId, payload) => {
     const context = await buildCheckoutContext(userId, payload);
 
     // ── Single warehouse origin for pricing and serviceability (Edge Case 2) ──
-    const settings = await getSettingMap(['shipping']);
+    const settings = await getSettingMap(['shipping', 'general', 'tax']);
     const fallbackProvider = await getDefaultProvider();
     const initialOrigin = await resolveDispatchOrigin(fallbackProvider, settings);
     const deliveryPincode  = String(context.addressSnapshot.postalCode || '').trim();
@@ -927,12 +1070,22 @@ const createQuote = async (userId, payload) => {
         parcelPlanHash: hashObject(quoteParcels),
     });
 
+    const quoteWhere = {
+        idempotencyKey,
+        expiresAt: { [Op.gt]: new Date() },
+    };
+    if (userId) {
+        quoteWhere.userId = userId;
+    } else {
+        quoteWhere.userId = null;
+        const guestSessionId = payload.sessionId || payload.checkoutSessionId || context.sessionId;
+        if (guestSessionId) {
+            quoteWhere.sessionId = guestSessionId;
+        }
+    }
+
     const existing = await ShippingQuote.findOne({
-        where: {
-            userId,
-            idempotencyKey,
-            expiresAt: { [Op.gt]: new Date() },
-        },
+        where: quoteWhere,
         order: [['createdAt', 'DESC']],
     });
     if (existing) return serializeQuote(existing);
@@ -954,16 +1107,18 @@ const createQuote = async (userId, payload) => {
         : await ShippingProvider.findByPk(decision.providerId || fallbackProvider.id);
     const selectedOrigin = await resolveDispatchOrigin(selectedProvider, settings);
 
-    // Shiprocket documents ordinary API order creation with one parcel. MPS is
-    // account-enabled in the merchant panel, but an API request contract for it
-    // has not been confirmed; don't accept orders we cannot book accurately.
-    if (quoteParcels.length > 1 && selectedProvider?.code !== 'manual' && decision.serviceable) {
+    const workflow = resolveWorkflow({
+        parcelCount: quoteParcels.length,
+        provider: selectedProvider,
+        manualSelected: false,
+    });
+    if (workflow.status === 'blocked' && decision.serviceable) {
         decision = {
             ...decision,
             serviceable: false,
             shippingCost: 0,
             codAvailable: false,
-            message: `This order needs ${quoteParcels.length} packages. Multi-package booking is not enabled for the selected delivery provider yet. Please contact the store before placing this order.`,
+            message: workflow.message,
         };
     }
 
@@ -1071,12 +1226,24 @@ const createQuote = async (userId, payload) => {
         }
     }
 
+    if (decision.serviceable && decision.shippingCost > 0) {
+        const shippingTax = calculateShippingTax(decision.shippingCost, {
+            originState: selectedOrigin?.state || settings['tax.originState'] || settings['shipping.warehouseState'] || settings['general.state'] || '',
+            destinationState: context.addressSnapshot?.state || '',
+            taxSettings: settings,
+        });
+        decision.taxIncluded = shippingTax.taxIncluded;
+        decision.taxAmount = shippingTax.taxAmount;
+        decision.taxBreakdown = shippingTax.taxBreakdown;
+    }
+
     const expiresAt = new Date(Date.now() + QUOTE_TTL_MINUTES * 60 * 1000);
     
     try {
         const quote = await ShippingQuote.create({
-            userId,
-            addressId: context.address.id,
+            userId: userId || null,
+            sessionId: payload.sessionId || payload.checkoutSessionId || context.sessionId || null,
+            addressId: context.address?.id || null,
             providerId: decision.providerId || fallbackProvider.id,
             ruleId: decision.ruleId || null,
             serviceable: decision.serviceable,
@@ -1364,7 +1531,17 @@ const validateQuoteForOrder = async (userId, payload) => {
     if (!payload.shippingQuoteId) {
         quote = await createQuote(userId, payload);
     } else {
-        const found = await ShippingQuote.findOne({ where: { id: payload.shippingQuoteId, userId } });
+        const quoteWhere = { id: payload.shippingQuoteId };
+        if (userId) {
+            quoteWhere.userId = userId;
+        } else {
+            quoteWhere.userId = null;
+            const guestSessionId = payload.sessionId || payload.checkoutSessionId;
+            if (guestSessionId) {
+                quoteWhere.sessionId = guestSessionId;
+            }
+        }
+        const found = await ShippingQuote.findOne({ where: quoteWhere });
         if (!found) throw new AppError('SHIPPING_QUOTE_NOT_FOUND', 404, 'Shipping quote not found');
         // Allow a 60-second grace window for quote expiry to absorb checkout payment/network latency
         const GRACE_PERIOD_MS = 60 * 1000;
@@ -1381,7 +1558,7 @@ const validateQuoteForOrder = async (userId, payload) => {
             throw new AppError('SHIPPING_QUOTE_STALE', 400, 'Shipping quote no longer matches this checkout session');
         }
 
-        const currentSettings = await getSettingMap(['shipping']);
+        const currentSettings = await getSettingMap(['shipping', 'general', 'tax']);
         if (found.inputSnapshot) {
             const savedSettingsHash = found.inputSnapshot?.shippingSettingsHash;
             if (!savedSettingsHash || savedSettingsHash !== hashObject(currentSettings)) {
@@ -1458,4 +1635,7 @@ module.exports = {
     buildCartSnapshot,
     calculateDeliveryDecision,
     calculateRuleDecision,
+    resolveWorkflow,
+    calculateShippingTax,
+    conditionsMatch,
 };

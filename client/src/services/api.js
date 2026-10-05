@@ -1,4 +1,5 @@
 import axios from 'axios';
+import { getSessionId } from './session';
 
 const api = axios.create({
   baseURL: import.meta.env.VITE_API_URL || '/api',
@@ -24,6 +25,14 @@ const processQueue = (error, token = null) => {
 
 api.interceptors.request.use(
   (config) => {
+    try {
+      if (config && config.headers && !config.headers['X-Session-Id'] && !config.headers['x-session-id']) {
+        const sessionId = getSessionId();
+        if (sessionId) {
+          config.headers['X-Session-Id'] = sessionId;
+        }
+      }
+    } catch (_) {}
     return config;
   },
   (error) => {

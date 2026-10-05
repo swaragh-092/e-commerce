@@ -22,6 +22,7 @@ import { AuthContext } from '../../context/AuthContext';
 import { useNotification } from '../../context/NotificationContext';
 import { useSettings, useCurrency, useFeature, useComponentStyles } from '../../hooks/useSettings';
 import { useCart } from '../../hooks/useCart';
+import { getSessionId } from '../../services/cartService';
 import { userService } from '../../services/userService';
 import { orderService } from '../../services/orderService';
 import paymentService from '../../services/paymentService';
@@ -103,7 +104,16 @@ const normalizeBuyNowItem = (item) => {
 };
 
 const createCheckoutSessionId = () => {
-    return uuidv4();
+    try {
+        let id = sessionStorage.getItem('checkoutSessionId');
+        if (!id) {
+            id = uuidv4();
+            sessionStorage.setItem('checkoutSessionId', id);
+        }
+        return id;
+    } catch (_) {
+        return uuidv4();
+    }
 };
 
 const loadScript = (src, globalName) => new Promise((resolve, reject) => {
@@ -235,6 +245,7 @@ const CheckoutPage = () => {
 
     const checkoutEnabled = useFeature('checkout');
     const cartEnabled = useFeature('cart');
+    const guestCheckoutEnabled = useFeature('guestCheckout');
 
     useEffect(() => {
         if (!checkoutEnabled || !cartEnabled) {
@@ -362,12 +373,29 @@ const CheckoutPage = () => {
         setAddrDialog((s) => ({ ...s, saving: true, errors: {} }));
         try {
             let saved;
-            if (mode === 'add') saved = await userService.createAddress(form);
-            else saved = await userService.updateAddress(addrId, form);
-            const list = await userService.getAddresses();
-            const addrList = Array.isArray(list) ? list : list?.rows || [];
-            setAddresses(addrList);
-            if (mode === 'add' && saved?.id) setSelectedAddressId(saved.id);
+            if (mode === 'add' || !user) {
+                saved = await userService.createAddress({
+                    ...form,
+                    ...(!user ? { sessionId: getSessionId() } : {}),
+                });
+            } else {
+                saved = await userService.updateAddress(addrId, form);
+            }
+            if (user) {
+                const list = await userService.getAddresses();
+                const addrList = Array.isArray(list) ? list : list?.rows || [];
+                setAddresses(addrList);
+            } else {
+                setAddresses([saved]);
+                try {
+                    localStorage.setItem('guestCheckoutAddress', JSON.stringify(saved));
+                } catch (_) {}
+            }
+            if (saved?.id) {
+                setSelectedAddressId(saved.id);
+                setCompletedSections([1]);
+                setActiveSection(couponsEnabled ? 2 : 3);
+            }
             setAddrDialog((s) => ({ ...s, open: false }));
         } catch (err) {
             const errData = err?.response?.data?.error;
@@ -437,7 +465,10 @@ const CheckoutPage = () => {
         },
     }), [items, settings, selectedAddress?.state, couponResult, orderDiscount, subtotal]);
     const taxAmount = taxSummary.totalTax;
-    const total = Math.max(0, subtotal + effectiveShippingCost + taxAmount - orderDiscount);
+    const shippingTaxAmount = Number(shippingQuote?.taxAmount || 0);
+    const shippingTaxIncluded = Boolean(shippingQuote?.taxIncluded);
+    const effectiveDeliveryTax = (!shippingTaxIncluded && effectiveShippingCost > 0) ? shippingTaxAmount : 0;
+    const total = Math.max(0, subtotal + effectiveShippingCost + taxAmount + effectiveDeliveryTax - orderDiscount);
     const itemSignature = useMemo(() => (
         items.map((item) => `${item?.productId || item?.product?.id}:${item?.variantId || item?.variant?.id || 'base'}:${normalizeBuyNowQuantity(item?.quantity)}`).join('|')
     ), [items]);
@@ -466,6 +497,7 @@ const CheckoutPage = () => {
                 const response = await calculateShipping({
                     shippingAddressId: selectedAddressId,
                     checkoutSessionId,
+                    sessionId: getSessionId(),
                     paymentMethod,
                     ...(couponCode && couponResult && !couponResult.error && { couponCode }),
                     ...(appliedCouponCodes && { couponCodes: appliedCouponCodes.split('|') }),
@@ -515,6 +547,17 @@ const CheckoutPage = () => {
     }, [selectedAddressId, checkoutSessionId, paymentMethod, couponCode, couponResult, appliedCouponCodes, itemSignature, isBuyNowFlow, buyNowItem, shippingRetryTrigger]);
 
     useEffect(() => {
+        if (!shippingQuote?.expiresAt || !shippingQuote?.quoteId) return undefined;
+        const expiresMs = new Date(shippingQuote.expiresAt).getTime() - Date.now();
+        // If already expired (e.g. slept tab or clock skew), refresh on next tick; otherwise schedule 1s after expiry
+        const delay = expiresMs <= 0 ? 0 : Math.min(expiresMs + 1000, 2147483647);
+        const timer = setTimeout(() => {
+            setShippingRetryTrigger((v) => v + 1);
+        }, delay);
+        return () => clearTimeout(timer);
+    }, [shippingQuote?.expiresAt, shippingQuote?.quoteId]);
+
+    useEffect(() => {
         if (paymentMethod === 'cod' && shippingQuote && shippingQuote.codAvailable === false) {
             const fallback = enabledPaymentMethods.find((method) => method.id !== 'cod');
             if (fallback) {
@@ -525,6 +568,22 @@ const CheckoutPage = () => {
     }, [paymentMethod, shippingQuote, enabledPaymentMethods, notify]);
 
     useEffect(() => {
+        if (!user) {
+            setLoadingAddresses(false);
+            const savedGuest = localStorage.getItem('guestCheckoutAddress');
+            if (savedGuest) {
+                try {
+                    const parsed = JSON.parse(savedGuest);
+                    if (parsed && parsed.id) {
+                        setAddresses([parsed]);
+                        setSelectedAddressId(parsed.id);
+                        setCompletedSections([1]);
+                        setActiveSection(couponsEnabled ? 2 : 3);
+                    }
+                } catch (_) {}
+            }
+            return;
+        }
         userService.getAddresses()
             .then((data) => {
                 const list = Array.isArray(data) ? data : data?.rows || [];
@@ -540,7 +599,7 @@ const CheckoutPage = () => {
             })
             .catch(() => {})
             .finally(() => setLoadingAddresses(false));
-    }, []);
+    }, [user, couponsEnabled]);
 
     useEffect(() => {
         if (activeSection === 2 && couponsEnabled && showAvailableCoupons) {
@@ -695,6 +754,10 @@ const CheckoutPage = () => {
     };
 
     const handlePlaceOrder = async () => {
+        if (!user && guestCheckoutEnabled === false) {
+            navigate('/login', { state: { from: '/checkout' } });
+            return;
+        }
         if (hasPhysicalItems && !selectedAddressId) { setError('Please select a shipping address.'); return; }
         if (!paymentMethod) { setError('No payment method is currently available.'); return; }
         if (!hasPhysicalItems && paymentMethod === 'cod') { setError('Cash on delivery is not available for digital products.'); return; }
@@ -711,6 +774,7 @@ const CheckoutPage = () => {
                 ...(hasPhysicalItems && selectedAddressId ? { shippingAddressId: selectedAddressId } : {}),
                 ...(hasPhysicalItems && shippingQuote?.quoteId ? { shippingQuoteId: shippingQuote.quoteId } : {}),
                 checkoutSessionId,
+                sessionId: getSessionId(),
                 paymentMethod,
                 ...(couponCode && couponResult && !couponResult.error && { couponCode }),
                 ...(appliedCoupons.length > 0 && { couponCodes: appliedCoupons.map((c) => c.code) }),
@@ -731,6 +795,7 @@ const CheckoutPage = () => {
             if (!orderId) {
                 throw new Error('Order was created, but the order id is missing. Please check your orders and retry payment.');
             }
+            try { sessionStorage.removeItem('checkoutSessionId'); } catch (_) {}
             if (paymentMethod === 'cod') {
                 if (!isBuyNowFlow) await clearCart();
                 navigate('/payment/success', { state: { orderId, orderNumber, isCod: true } });
@@ -743,6 +808,14 @@ const CheckoutPage = () => {
             }
 
         } catch (err) {
+            const errCode = err?.response?.data?.error?.code;
+            if (errCode === 'SHIPPING_QUOTE_STALE' || errCode === 'SHIPPING_QUOTE_EXPIRED') {
+                notify('Delivery details updated. Refreshing shipping rates...', 'info');
+                setShippingRetryTrigger((prev) => prev + 1);
+                setError(null);
+                setPlacing(false);
+                return;
+            }
             setError(getApiErrorMessage(
                 err,
                 orderPlaced
@@ -881,40 +954,9 @@ const CheckoutPage = () => {
                                     </Box>
 
                                     {(shippingError || (shippingQuote && !shippingQuote.serviceable) || isTemporaryShippingError) && (
-                                        <Alert
-                                            severity={isTemporaryShippingError ? 'info' : 'warning'}
-                                            sx={{ mt: 1 }}
-                                            action={
-                                                <Box sx={{ display: 'flex', gap: 1 }}>
-                                                    {isTemporaryShippingError && (
-                                                        <Button
-                                                            color="inherit"
-                                                            size="small"
-                                                            onClick={(e) => {
-                                                                e.stopPropagation();
-                                                                setShippingRetryTrigger((v) => v + 1);
-                                                            }}
-                                                            sx={{ fontWeight: 600, textTransform: 'none' }}
-                                                        >
-                                                            Retry
-                                                        </Button>
-                                                    )}
-                                                    {!isShippingSetupError && (<Button
-                                                        color="inherit"
-                                                        size="small"
-                                                        onClick={(e) => {
-                                                            e.stopPropagation();
-                                                            editSection(1);
-                                                        }}
-                                                        sx={{ fontWeight: 600, textTransform: 'none' }}
-                                                    >
-                                                        Change Address
-                                                    </Button>)}
-                                                </Box>
-                                            }
-                                        >
-                                            {shippingError || (shippingQuote && !shippingQuote.serviceable ? shippingQuote.message : 'Delivery is not available for this address.')}
-                                        </Alert>
+                                        <Typography variant="caption" color="warning.main" sx={{ display: 'flex', alignItems: 'center', gap: 0.5, mt: 0.5, fontWeight: 600 }}>
+                                            ⚠️ {shippingError || (shippingQuote && !shippingQuote.serviceable ? shippingQuote.message : 'Delivery is not available for this address.')}
+                                        </Typography>
                                     )}
                                 </Box>
                             )
@@ -924,6 +966,41 @@ const CheckoutPage = () => {
                             <CenteredLoader message="Loading addresses..." minHeight="120px" />
                         ) : (
                             <>
+                                {!user && (guestCheckoutEnabled === false ? (
+                                    <Alert
+                                        severity="warning"
+                                        sx={{ mb: 2 }}
+                                        action={
+                                            <Button
+                                                color="inherit"
+                                                size="small"
+                                                onClick={() => navigate('/login', { state: { from: '/checkout' } })}
+                                                sx={{ fontWeight: 600, textTransform: 'none' }}
+                                            >
+                                                Log In
+                                            </Button>
+                                        }
+                                    >
+                                        Guest checkout is disabled for this store. Please log in or create an account to complete your purchase.
+                                    </Alert>
+                                ) : (
+                                    <Alert
+                                        severity="info"
+                                        sx={{ mb: 2 }}
+                                        action={
+                                            <Button
+                                                color="inherit"
+                                                size="small"
+                                                onClick={() => navigate('/login', { state: { from: '/checkout' } })}
+                                                sx={{ fontWeight: 600, textTransform: 'none' }}
+                                            >
+                                                Log In
+                                            </Button>
+                                        }
+                                    >
+                                        Checking out as guest. Address is stored for this browser session only.
+                                    </Alert>
+                                ))}
                                 {addresses.length === 0 ? (
                                     <Box sx={{ textAlign: 'center', py: 3 }}>
                                         <Typography color="text.secondary" mb={2}>No saved addresses yet.</Typography>
@@ -1312,7 +1389,7 @@ const CheckoutPage = () => {
                 </Box>
 
                 {/* ── Right: Price breakdown + CTA ── */}
-                <Box sx={{ position: 'sticky', top: 80 }}>
+                <Box sx={{ position: { xs: 'static', md: 'sticky' }, top: { md: 80 } }}>
                     <Paper elevation={0} sx={{ border: '1px solid', borderColor: 'divider', borderRadius: blockRadius, boxShadow: blockShadow, overflow: 'hidden' }}>
                         <Box sx={{ px: 2.5, py: 2, borderBottom: '1px solid', borderColor: 'divider' }}>
                             <Typography variant="subtitle2" fontWeight={700} color="text.secondary" letterSpacing={0.5}>
@@ -1357,6 +1434,7 @@ const CheckoutPage = () => {
                                 </Typography>
                             )}
 
+
                             {/* GST breakdown */}
                             {taxSummary.taxRows.map((row) => (
                                 <Box key={row.key} sx={{ display: 'flex', justifyContent: 'space-between', mb: 0.5 }}>
@@ -1364,9 +1442,22 @@ const CheckoutPage = () => {
                                     <Typography variant="body2">{formatPrice(row.amount)}</Typography>
                                 </Box>
                             ))}
+                            {hasPhysicalItems && effectiveDeliveryTax > 0 && (
+                                <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 0.5 }}>
+                                    <Typography variant="body2" color="text.secondary">
+                                        Tax on delivery
+                                    </Typography>
+                                    <Typography variant="body2">{formatPrice(effectiveDeliveryTax)}</Typography>
+                                </Box>
+                            )}
+                            {hasPhysicalItems && shippingTaxIncluded && effectiveShippingCost > 0 && (
+                                <Typography variant="caption" color="text.secondary" display="block" mb={0.5} textAlign="right">
+                                    Delivery charges include tax
+                                </Typography>
+                            )}
                             {taxSummary.isInclusive && (
                                 <Typography variant="caption" color="text.secondary" display="block" mb={1} textAlign="right">
-                                    Inclusive of all taxes
+                                    Product prices inclusive of all taxes
                                 </Typography>
                             )}
 
@@ -1419,7 +1510,7 @@ const CheckoutPage = () => {
                                 color={checkoutBlockStyle.ctaStyle === 'soft' ? 'secondary' : 'primary'}
                                 size="large"
                                 onClick={handlePlaceOrder}
-                                disabled={placing || (hasPhysicalItems && (shippingLoading || !shippingQuote?.quoteId || shippingQuote?.serviceable === false || !selectedAddressId)) || activeSection !== 3}
+                                disabled={placing || (!user && guestCheckoutEnabled === false) || (hasPhysicalItems && (shippingLoading || !shippingQuote?.quoteId || shippingQuote?.serviceable === false || !selectedAddressId)) || activeSection !== 3}
                                 sx={{
                                     py: 1.5,
                                     fontSize: 16,
@@ -1429,6 +1520,13 @@ const CheckoutPage = () => {
                             >
                                 {placing ? (
                                     <CircularProgress size={22} color="inherit" />
+                                ) : !user && guestCheckoutEnabled === false ? (
+                                    'Log In to Complete Order'
+                                ) : (hasPhysicalItems && shippingLoading) ? (
+                                    <Box sx={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: 1 }}>
+                                        <CircularProgress size={18} color="inherit" />
+                                        <span>Updating Delivery Rates...</span>
+                                    </Box>
                                 ) : paymentMethod === 'cod' ? (
                                     'Place Order'
                                 ) : (
@@ -1445,11 +1543,9 @@ const CheckoutPage = () => {
                             )}
 
                             {hasPhysicalItems && (shippingError || (shippingQuote && !shippingQuote.serviceable)) && (
-                                <Alert severity="warning" sx={{ mt: 1.5, py: 0.5 }}>
-                                    <Typography variant="caption" fontWeight={600} display="block">
-                                        {isShippingSetupError ? 'Cannot place order: Please contact support or update your items.' : 'Cannot place order: Please retry or select a serviceable delivery address above.'}
-                                    </Typography>
-                                </Alert>
+                                <Typography variant="caption" color="warning.main" display="block" textAlign="center" mt={1} fontWeight={600}>
+                                    {isShippingSetupError ? 'Cannot place order: Update items or contact support.' : 'Cannot place order: Change address to proceed.'}
+                                </Typography>
                             )}
 
                             <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 0.5, mt: 1.5 }}>

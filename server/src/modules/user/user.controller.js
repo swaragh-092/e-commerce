@@ -96,7 +96,9 @@ const getAddresses = async (req, res, next) => {
 
 const createAddress = async (req, res, next) => {
   try {
-    const address = await UserService.createAddress(req.user.id, req.validated);
+    const userId = req.user?.id || null;
+    const sessionId = req.validated?.sessionId || req.headers['x-session-id'] || req.cookies?.sessionId || null;
+    const address = await UserService.createAddress(userId, { ...req.validated, sessionId });
     return success(res, address, 'Address added successfully', 201);
   } catch (err) {
     next(err);
