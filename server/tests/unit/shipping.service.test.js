@@ -208,3 +208,56 @@ describe('Percent of order shipping rule multi-parcel handling', () => {
     });
 });
 
+describe('Advanced shipping rule order and parcel charging', () => {
+    const { ShippingRule, Setting } = require('../../src/modules');
+    const baseParams = {
+        subtotal: 1000,
+        chargeableWeightGrams: 1000,
+        parcelWeightsGrams: [500, 500],
+        packageCount: 2,
+        zone: 'national',
+        addressSnapshot: { postalCode: '560002', country: 'India' },
+        paymentMethod: 'cod',
+    };
+    const setMocks = (rule) => {
+        vi.spyOn(ShippingProvider, 'findOne').mockResolvedValue({ id: 'manual', code: 'manual', name: 'Manual', enabled: true, supportsCod: true });
+        vi.spyOn(ShippingRule, 'findAll').mockResolvedValue([rule]);
+        vi.spyOn(Setting, 'findAll').mockResolvedValue([{ group: 'general', key: 'currency', value: 'INR' }]);
+    };
+
+    it.each([
+        [{ rateType: 'percent_of_order', rateConfig: { percent: 10, codFeeType: 'flat', codFeeValue: 40 } }, 140],
+        [{ rateType: 'free_above_threshold', rateConfig: { threshold: 2000, amount: 50, codFeeType: 'flat', codFeeValue: 40 } }, 90],
+        [{ rateType: 'free_above_threshold', rateConfig: { threshold: 500, amount: 50, codFeeType: 'flat', codFeeValue: 40 } }, 40],
+        [{ rateType: 'flat', rateConfig: { flatRate: 50, codFeeType: 'flat', codFeeValue: 40 } }, 90],
+    ])('charges order-level freight and COD once for %s', async (config, expectedTotal) => {
+        setMocks({ id: 'rule', name: 'Rule', conditions: {}, codAllowed: true, provider: null, zone: null, ...config });
+        try {
+            const decision = await ShippingService.calculateRuleDecision(baseParams);
+            expect(decision.shippingCost).toBe(expectedTotal);
+        } finally {
+            vi.restoreAllMocks();
+        }
+    });
+
+    it('matches weight conditions against total parcel chargeable weight', async () => {
+        setMocks({ id: 'rule', name: 'Light order', rateType: 'flat', rateConfig: { flatRate: 50 }, conditions: { weightLte: 800 }, codAllowed: true, provider: null, zone: null });
+        try {
+            const decision = await ShippingService.calculateRuleDecision(baseParams);
+            expect(decision).toBeNull();
+        } finally {
+            vi.restoreAllMocks();
+        }
+    });
+
+    it('continues to rate per-kg freight per parcel while charging the COD fee once', async () => {
+        setMocks({ id: 'rule', name: 'Weight rate', rateType: 'per_kg_slab', rateConfig: { baseCharge: 20, additionalSlabRate: 10, codFeeType: 'flat', codFeeValue: 40 }, conditions: {}, codAllowed: true, provider: null, zone: null });
+        try {
+            const decision = await ShippingService.calculateRuleDecision(baseParams);
+            expect(decision.shippingCost).toBe(80);
+            expect(decision.rateBreakdown.codFee).toBe(40);
+        } finally {
+            vi.restoreAllMocks();
+        }
+    });
+});

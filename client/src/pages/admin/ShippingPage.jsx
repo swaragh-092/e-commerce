@@ -1282,6 +1282,9 @@ const ShippingPage = () => {
                 fullWidth
                 size="small"
                 value={ruleFormData.rateType}
+                helperText={['per_kg_slab', 'volumetric'].includes(ruleFormData.rateType)
+                  ? 'Calculated for each parcel, then added together.'
+                  : 'Charged once per order, even when the order has multiple parcels.'}
                 onChange={(e) => setRuleFormData({...ruleFormData, rateType: e.target.value})}
               >
                 <MenuItem value="flat">Flat Rate</MenuItem>
@@ -1390,6 +1393,7 @@ const ShippingPage = () => {
             {ruleFormData.rateType !== 'free' && (
               <Box sx={{ border: '1px solid', borderColor: 'divider', borderRadius: 1, p: 2 }}>
                 <Typography variant="subtitle2" fontWeight={600} mb={2}>COD Fee</Typography>
+                <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>Added once per order when the customer chooses Cash on Delivery. Free delivery waives the delivery fee; a configured COD fee still applies.</Typography>
                 <Grid container spacing={2}>
                   <Grid item xs={12} sm={4}>
                     <TextField select label="Fee Type" fullWidth size="small"
@@ -1419,6 +1423,7 @@ const ShippingPage = () => {
             {/* WEIGHT CONDITIONS */}
             <Box sx={{ border: '1px solid', borderColor: 'divider', borderRadius: 1, p: 2 }}>
               <Typography variant="subtitle2" fontWeight={600} mb={2}>Weight Conditions (optional)</Typography>
+              <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>Compared with the order’s total chargeable weight (the sum across its parcels).</Typography>
               <Grid container spacing={2}>
                 <Grid item xs={6}>
                   <TextField label="Chargeable Weight ≥ (g)" type="number" fullWidth size="small"
