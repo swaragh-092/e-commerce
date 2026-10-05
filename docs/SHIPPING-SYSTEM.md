@@ -89,11 +89,11 @@ The storefront checkout (`CheckoutPage.jsx`) renders 3 distinct customer deliver
   - **Failed**: Highlights authentication failure message.
 
 ### B. Failed Shipping Operations & Reconciliation Tab
-- **Operations & Failures** tab displays background carrier dispatch attempts.
+- **Operations & Failures** tab separates failed bookings from queued/processing work, so in-flight attempts do not appear as failures.
 - Shows:
   - Order Number & Total
-  - Operation Type (`create_shipment`, `generate_label`, `cancel_shipment`)
-  - Provider Name & Attempt count (`3/8`)
+  - Operation Type (`create` currently; cancellation is confirmed synchronously with the carrier and then persisted locally)
+  - Provider Name, status, and attempt count (for example, `3/8` before a manual retry; a manual retry grants up to eight more attempts)
   - Last Error description (carrier timeout, auth failure, validation error)
   - **Retry Now** button: Dispatches operation and runs immediate reconciliation.
 
@@ -145,9 +145,9 @@ The storefront checkout (`CheckoutPage.jsx`) renders 3 distinct customer deliver
 
 ## 7. Verification & Automated Tests
 
-All edge cases, P1 bug fixes, and architectural invariants are validated with 100% automated test coverage:
+The automated suites cover the following scenarios. Passing these checks does not establish complete coverage or verify live carrier behavior:
 
-- `server/tests/unit/shipping.edgeCases.test.js` (33/33 tests passing):
+- `server/tests/unit/shipping.edgeCases.test.js`:
   - Circuit breaker & auth cooldown
   - Single warehouse origin enforcement, setting parity & matching fulfillment pickup location
   - Pincode formatting & carrier 404/422 graceful handling
@@ -164,10 +164,12 @@ All edge cases, P1 bug fixes, and architectural invariants are validated with 10
   - Webhook unknown status recording, numeric tracking parsing (`status: 7`), and polling starvation prevention
   - Transaction row-locked webhook race guard (preventing carrier poll regression against concurrent webhook updates)
   - Manual retry concurrency locks & state guards
-- `server/tests/unit/shipping.service.test.js` (5/5 tests passing)
-- `server/tests/unit/shipping.webhook.test.js` (5/5 tests passing)
-- Full backend suite (35 test files, 294 tests passing).
-- Full client build (`npm run build`) passing with zero bundle or syntax errors.
+- `server/tests/unit/shipping.service.test.js`: shipping configuration and calculation checks.
+- `server/tests/unit/shipping.webhook.test.js`: lifecycle, authentication, event deduplication and delivery notifications.
+- `server/tests/unit/payment.codClosure.test.js`: COD collection closes processing and ready-for-shipment orders only after full collection and delivery completion.
+- `server/tests/unit/inventory.shipmentCancellation.test.js`: restored parcel stock remains reserved and can be deducted for replacement shipping.
+- Run the backend suite with `cd server && npx vitest run tests/unit`.
+- Build the client with `cd client && npm run build`.
 
 
 ## One measured default package

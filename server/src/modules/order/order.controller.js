@@ -9,8 +9,16 @@ const hasOrderAdminAccess = (user) => getPermissionsForUser(user).includes(PERMI
 
 const placeOrder = async (req, res, next) => {
   try {
+    const idempotencyHeader = req.get('Idempotency-Key');
+    if (idempotencyHeader && !/^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(idempotencyHeader)) {
+      throw new AppError('VALIDATION_ERROR', 400, 'Idempotency-Key must be a UUID.');
+    }
+    if (idempotencyHeader && req.validated.idempotencyKey && idempotencyHeader.toLowerCase() !== req.validated.idempotencyKey.toLowerCase()) {
+      throw new AppError('VALIDATION_ERROR', 400, 'The Idempotency-Key header and request body must match.');
+    }
     const result = await OrderService.placeOrder(req.user?.id || null, {
       ...req.validated,
+      idempotencyKey: req.validated.idempotencyKey || idempotencyHeader || req.validated.checkoutSessionId || null,
       sessionId: req.validated.sessionId || req.headers['x-session-id'] || null,
     });
     return success(res, result, 'Order placed successfully', 201);
@@ -52,8 +60,17 @@ const getOrders = async (req, res, next) => {
 const getOrderById = async (req, res, next) => {
   try {
     const isAdminSession = hasOrderAdminAccess(req.user);
-    const order = await OrderService.getOrderById(req.params.id, req.user.id, isAdminSession);
+    const order = await OrderService.getOrderById(req.params.id, req.user?.id || null, isAdminSession, req.headers['x-session-id'] || null);
     return success(res, order);
+  } catch (err) {
+    next(err);
+  }
+};
+
+const updateContactEmail = async (req, res, next) => {
+  try {
+    const order = await OrderService.updateContactEmail(req.params.id, req.validated.email);
+    return success(res, order, 'Guest email updated');
   } catch (err) {
     next(err);
   }
@@ -110,7 +127,14 @@ const createFulfillment = async (req, res, next) => {
   try {
     const auditContext = { userId: req.user?.id, ip: req.ip, userAgent: req.get('User-Agent'), method: req.method, path: req.originalUrl };
     const fulfillment = await OrderService.createFulfillment(req.params.id, req.validated, req.user.id, auditContext);
-    return success(res, fulfillment, 'Shipment created successfully', 201);
+    const shipments = fulfillment?.fulfillment?.shipments || fulfillment?.shipments || [];
+    const states = shipments.map((shipment) => shipment.providerState).filter(Boolean);
+    const message = states.includes('failed')
+      ? 'Shipment saved, but carrier booking failed. Review the shipment error and retry if appropriate.'
+      : states.some((state) => ['pending', 'retrying'].includes(state))
+        ? 'Shipment saved. Carrier booking is still pending; check the shipment status before taking action.'
+        : 'Shipment created and carrier booking completed.';
+    return success(res, fulfillment, message, 201);
   } catch (err) {
     next(err);
   }
@@ -218,6 +242,7 @@ module.exports = {
   placeOrder,
   getOrders,
   getOrderById,
+  updateContactEmail,
   getFulfillmentTracking,
   updateStatus,
   cancelOrder,

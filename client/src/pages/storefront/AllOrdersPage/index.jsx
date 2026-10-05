@@ -69,12 +69,12 @@ const AllOrdersPage = () => {
         const now = new Date();
         if (timeFilter === '30')
             return { from: new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000) };
-        if (timeFilter === '2024')
-            return { from: new Date('2024-01-01'), to: new Date('2025-01-01') };
-        if (timeFilter === '2023')
-            return { from: new Date('2023-01-01'), to: new Date('2024-01-01') };
+        if (/^\d{4}$/.test(String(timeFilter))) {
+            const year = Number(timeFilter);
+            return { from: new Date(year, 0, 1), to: new Date(year + 1, 0, 1) };
+        }
         if (timeFilter === 'older')
-            return { olderThan: new Date('2023-01-01') };
+            return { olderThan: new Date(new Date().getFullYear() - 1, 0, 1) };
         return {};
     }, []);
 

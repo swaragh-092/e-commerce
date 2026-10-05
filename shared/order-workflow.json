@@ -31,7 +31,8 @@
       "delivery_failed",
       "rto_initiated",
       "rto_in_transit",
-      "rto"
+      "rto",
+      "cancelled"
     ],
 
     "order_shipping": [
@@ -108,8 +109,8 @@
     },
 
     "shipment": {
-      "created": ["packed"],
-      "packed": ["shipped"],
+      "created": ["packed", "cancelled"],
+      "packed": ["shipped", "cancelled"],
       "shipped": ["in_transit", "out_for_delivery"],
       "in_transit": ["out_for_delivery"],
       "out_for_delivery": ["delivered", "delivery_failed"],
@@ -118,6 +119,7 @@
       "rto_in_transit": ["rto"],
       "delivered": [],
       "rto": [],
+      "cancelled": [],
       "default": ["created"]
     },
 

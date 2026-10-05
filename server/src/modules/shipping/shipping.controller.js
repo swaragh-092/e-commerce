@@ -3,6 +3,7 @@
 const ShippingService = require('./shipping.service');
 const ShippingOperationService = require('./shippingOperation.service');
 const { success, paginated } = require('../../utils/response');
+const AppError = require('../../utils/AppError');
 
 const calculate = async (req, res, next) => {
     try {
@@ -116,8 +117,12 @@ const testCalculation = async (req, res, next) => {
 const listFailedOperations = async (req, res, next) => {
     try {
         const { page = 1, limit = 20 } = req.query;
-        const result = await ShippingOperationService.listFailedOperations({ page, limit });
-        return paginated(res, result.operations, result.total, result.page, limit, 'Failed shipping operations retrieved');
+        const status = req.query.status || 'failed';
+        if (!['all', 'failed', 'active'].includes(status)) {
+            throw new AppError('VALIDATION_ERROR', 400, 'Status must be all, failed, or active');
+        }
+        const result = await ShippingOperationService.listFailedOperations({ page, limit, status });
+        return paginated(res, result.operations, result.total, result.page, limit, 'Shipping operations retrieved');
     } catch (err) {
         next(err);
     }

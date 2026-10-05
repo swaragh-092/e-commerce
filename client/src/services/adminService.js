@@ -56,6 +56,7 @@ const getAllOrders = (params = {}) => api.get(withQueryString('/orders', params)
 const getOrderById = (id) => api.get(`/orders/${id}`);
 const getOrderTracking = (id) => api.get(`/orders/${id}/tracking`);
 const updateOrderStatus = (id, status) => api.put(`/orders/${id}/status`, { status });
+const updateOrderContactEmail = (id, email) => api.patch(`/orders/${id}/contact-email`, { email });
 const createFulfillment = (orderId, data) => api.post(`/orders/${orderId}/fulfillments`, data);
 const updateFulfillmentStatus = (orderId, fulfillmentId, status) => api.patch(`/orders/${orderId}/fulfillments/${fulfillmentId}/status`, { status });
 const updateShipment = (orderId, shipmentId, data) => api.patch(`/orders/${orderId}/shipments/${shipmentId}`, data);
@@ -79,7 +80,8 @@ const updateShippingRule = (id, data) => api.patch(`/${A}/shipping/rules/${id}`,
 const deleteShippingRule = (id) => api.delete(`/${A}/shipping/rules/${id}`);
 const testShippingCalculation = (data) => api.post(`/${A}/shipping/test`, data);
 const testShippingProviderConnection = (id) => api.post(`/${A}/shipping/providers/${id}/test-connection`);
-const getFailedShippingOperations = (params) => api.get(`/${A}/shipping/operations/failed`, { params });
+const getShippingOperations = (params) => api.get(`/${A}/shipping/operations`, { params });
+const getFailedShippingOperations = getShippingOperations;
 const retryShippingOperation = (id) => api.post(`/${A}/shipping/operations/${id}/retry`);
 
 // Settings bulk update
@@ -160,11 +162,11 @@ export {
   getUsers, getUserById, updateUserStatus,
   getAdminReviews, updateReviewStatus, deleteReview,
   getCoupons, createCoupon, updateCoupon, deleteCoupon,
-  getAllOrders, getOrderById, getOrderTracking, updateOrderStatus, createFulfillment, updateFulfillmentStatus,
+  getAllOrders, getOrderById, getOrderTracking, updateOrderStatus, updateOrderContactEmail, createFulfillment, updateFulfillmentStatus,
   updateShipment, createReturnRequest, createReplacementRequest, updateReturnStatus, processRefund, confirmCodPayment, addOrderNote,
   getShippingProviders, updateShippingProvider, getShippingZones, createShippingZone, updateShippingZone, deleteShippingZone,
   getShippingRules, createShippingRule, updateShippingRule, deleteShippingRule, testShippingCalculation,
-  testShippingProviderConnection, getFailedShippingOperations, retryShippingOperation,
+  testShippingProviderConnection, getShippingOperations, getFailedShippingOperations, retryShippingOperation,
   updateSettings,
   getEmailTemplates, getEmailTemplate, updateEmailTemplate, previewEmailTemplate, resetEmailTemplate, getEmailTemplateDefault, sendTestEmail, sendTestNotification,
   validateCoupon, getPublicCoupons, getEligibleCoupons,

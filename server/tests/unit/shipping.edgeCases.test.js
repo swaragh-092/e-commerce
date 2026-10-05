@@ -159,8 +159,8 @@ describe('Shipping System 10 Edge Cases A-to-Z', () => {
                 attempts: 0,
                 maxAttempts: 8,
                 requestPayload: {
-                    order: { orderNumber: 'ORD-PICKUP', paymentMethod: 'prepaid' },
-                    shipment: { actualWeightGrams: 500, providerRequestId: 'ORD-PICKUP' },
+                    order: { orderNumber: 'ORD-PICKUP', paymentMethod: 'prepaid', subtotal: 125 },
+                    shipment: { actualWeightGrams: 500, providerRequestId: 'ORD-PICKUP', lengthCm: 10, breadthCm: 8, heightCm: 4 },
                     address: { postalCode: '110001' },
                     items: [],
                 },
@@ -171,8 +171,8 @@ describe('Shipping System 10 Edge Cases A-to-Z', () => {
                     attempts: 0,
                     maxAttempts: 8,
                     requestPayload: {
-                        order: { orderNumber: 'ORD-PICKUP', paymentMethod: 'prepaid' },
-                        shipment: { actualWeightGrams: 500, providerRequestId: 'ORD-PICKUP' },
+                        order: { orderNumber: 'ORD-PICKUP', paymentMethod: 'prepaid', subtotal: 125 },
+                        shipment: { actualWeightGrams: 500, providerRequestId: 'ORD-PICKUP', lengthCm: 10, breadthCm: 8, heightCm: 4 },
                         address: { postalCode: '110001' },
                         items: [],
                     },
@@ -185,7 +185,7 @@ describe('Shipping System 10 Edge Cases A-to-Z', () => {
             vi.spyOn(Shipment, 'update').mockResolvedValue([1]);
             vi.spyOn(ShippingProvider, 'findByPk').mockResolvedValue(mockProvider);
             vi.spyOn(Setting, 'findAll').mockResolvedValue([]);
-            vi.spyOn(ShiprocketProvider.prototype, 'getServiceability').mockResolvedValue({ serviceable: true, codAvailable: true });
+            const serviceabilitySpy = vi.spyOn(ShiprocketProvider.prototype, 'getServiceability').mockResolvedValue({ serviceable: true, codAvailable: true });
             vi.spyOn(ShiprocketProvider.prototype, 'checkShipmentExists').mockResolvedValue(null);
             const createShipmentSpy = vi.spyOn(ShiprocketProvider.prototype, 'createShipment').mockResolvedValue({
                 awbCode: 'AWB-PICKUP-123',
@@ -203,6 +203,12 @@ describe('Shipping System 10 Edge Cases A-to-Z', () => {
             const calledPayload = createShipmentSpy.mock.calls[0][0];
             expect(calledPayload.shipment.pickupLocationName).toBe('Saved Warehouse');
             expect(calledPayload.shipment.pickupPincode).toBe('560001');
+            expect(serviceabilitySpy).toHaveBeenCalledWith(expect.objectContaining({
+                declaredValue: 125,
+                lengthCm: 10,
+                breadthCm: 8,
+                heightCm: 4,
+            }));
         });
     });
 
@@ -767,7 +773,12 @@ describe('Shipping System 10 Edge Cases A-to-Z', () => {
             const recovered = await provider.checkShipmentExists({ orderNumber: 'ORD-EXPLICIT-SHIPMENT' });
             expect(recovered.providerOrderId).toBe('112233');
             expect(recovered.providerShipmentId).toBe('445566');
-            expect(request).toHaveBeenCalledTimes(1);
+            expect(request).toHaveBeenCalledTimes(2);
+            expect(request.mock.calls[1][0]).toMatchObject({
+                method: 'post',
+                url: '/manifests/print',
+                data: { order_ids: ['112233'] },
+            });
         });
 
         it('assigns AWB via /courier/assign/awb when order exists on Shiprocket but lacks AWB', async () => {
@@ -1183,6 +1194,15 @@ describe('Shipping System 10 Edge Cases A-to-Z', () => {
     // Edge Case 11: Manual Retry state guard and concurrency lock
     // ─────────────────────────────────────────────────────────────
     describe('Manual Retry State Guard & Concurrency Lock', () => {
+        it('rejects retrying a cancelled shipment even when its booking operation failed', async () => {
+            const operation = { id: 'op-cancelled', shipmentId: 'ship-cancelled', status: 'failed', update: vi.fn() };
+            vi.spyOn(ShippingOperation, 'findByPk').mockResolvedValue(operation);
+            vi.spyOn(Shipment, 'findByPk').mockResolvedValue({ status: 'cancelled', providerState: 'cancelled' });
+            const processSpy = vi.spyOn(ShippingOperationService, 'processOperation');
+            await expect(ShippingOperationService.retryOperation(operation.id)).rejects.toThrow('Cancelled or missing shipments');
+            expect(operation.update).not.toHaveBeenCalled();
+            expect(processSpy).not.toHaveBeenCalled();
+        });
         it('refuses to retry an operation that is already completed', async () => {
             const mockCompletedOp = {
                 id: 'op-comp-1',
@@ -1210,16 +1230,23 @@ describe('Shipping System 10 Edge Cases A-to-Z', () => {
             const mockFailedOp = {
                 id: 'op-fail-1',
                 status: 'failed',
+                shipmentId: 'ship-retry-1',
+                attempts: 8,
+                maxAttempts: 8,
+                requestPayload: { shipment: { providerRequestId: 'stable-1', lengthCm: 99 }, order: { subtotal: 125 } },
                 update: vi.fn().mockResolvedValue(true),
             };
             vi.spyOn(ShippingOperation, 'findByPk').mockResolvedValue(mockFailedOp);
+            vi.spyOn(Shipment, 'findByPk').mockResolvedValue({ status: 'created', actualWeightGrams: 200, lengthCm: 10, breadthCm: 8, heightCm: 4 });
             vi.spyOn(ShippingOperationService, 'processOperation').mockResolvedValue({ success: true });
 
             const result = await ShippingOperationService.retryOperation('op-fail-1');
             expect(mockFailedOp.update).toHaveBeenCalledWith(expect.objectContaining({
                 status: 'queued',
-                attempts: 0,
+                maxAttempts: 16,
+                requestPayload: expect.objectContaining({ shipment: expect.objectContaining({ providerRequestId: 'stable-1', lengthCm: 10, actualWeightGrams: 200 }) }),
             }), expect.any(Object));
+            expect(mockFailedOp.update.mock.calls[0][0]).not.toHaveProperty('attempts');
             expect(result.success).toBe(true);
         });
     });

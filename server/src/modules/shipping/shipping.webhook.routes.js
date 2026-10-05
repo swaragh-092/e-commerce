@@ -2,11 +2,11 @@
 
 const router = require('express').Router();
 const shippingWebhookController = require('./shipping.webhook.controller');
-const { webhookLimiter } = require('../../middleware/rateLimiter.middleware');
+const { shippingWebhookLimiter } = require('../../middleware/rateLimiter.middleware');
 
 const AppError = require('../../utils/AppError');
 
-router.use(webhookLimiter);
+router.use(shippingWebhookLimiter);
 
 const ipv4ToNumber = (ip) => {
     const parts = String(ip || '').replace(/^::ffff:/, '').split('.').map(Number);

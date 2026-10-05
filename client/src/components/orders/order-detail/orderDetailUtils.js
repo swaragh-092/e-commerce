@@ -4,6 +4,25 @@ import {
   getShipmentStatusLabel,
 } from '../../../utils/orderWorkflow';
 import { PAYMENT_SETTLED_STATUSES } from '../../../utils/constants';
+
+export const getShipmentTimeline = (shipment = {}) => {
+  const events = new Map();
+  const history = Array.isArray(shipment.statusHistory) ? shipment.statusHistory : [];
+  const carrierEvents = Array.isArray(shipment.events) ? shipment.events : [];
+  for (const entry of [...history, ...carrierEvents]) {
+    const status = entry.eventStatus || entry.status;
+    const carrierTimestamp = new Date(entry.eventTimestamp).getTime();
+    const at = entry.timestamp || entry.at || (carrierTimestamp > 0 ? entry.eventTimestamp : entry.createdAt);
+    if (!status) continue;
+    const timestamp = new Date(at).getTime();
+    const key = `${status}:${Number.isFinite(timestamp) ? timestamp : at || entry.id}`;
+    events.set(key, {
+      ...events.get(key), ...entry, status, at,
+      source: entry.eventStatus ? 'carrier' : entry.source || 'admin',
+    });
+  }
+  return [...events.values()].sort((a, b) => (new Date(b.at).getTime() || 0) - (new Date(a.at).getTime() || 0));
+};
 export {
   formatCompactDateTime,
   formatDateOnly,
@@ -66,8 +85,11 @@ export const getTaxRows = (order = {}) => {
     { label: 'Tax', value: breakdown.flatTax },
   ].filter((row) => Number(row.value || 0) > 0);
 
-  if (rows.length > 0) return rows;
-  return Number(order.tax || 0) > 0 ? [{ label: 'Tax', value: order.tax }] : [];
+  if (rows.length === 0 && Number(order.tax || 0) > 0) rows.push({ label: 'Tax', value: order.tax });
+  if (Number(order.shippingTaxAmount || 0) > 0 && order.shippingTaxIncluded !== true) {
+    rows.push({ label: 'Shipping tax', value: order.shippingTaxAmount });
+  }
+  return rows;
 };
 
 const normalizeShipmentStatus = (status) => {

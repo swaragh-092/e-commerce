@@ -56,7 +56,11 @@ export const orderService = {
    */
   placeOrder: async (data) => {
     if (!data) throw new Error('orderService.placeOrder: missing order data');
-    const response = await api.post('/orders', data);
+    const response = await api.post('/orders', data, {
+      headers: data.idempotencyKey || data.checkoutSessionId
+        ? { 'Idempotency-Key': data.idempotencyKey || data.checkoutSessionId }
+        : undefined,
+    });
     return response.data.data;
   }
 };

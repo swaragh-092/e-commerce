@@ -45,6 +45,7 @@ const getCredential = async (dbKey, envKey) => {
 // provider order id. We keep a bounded `attempts` list in metadata so late
 // webhooks for superseded ids can still settle the order instead of losing money.
 const MAX_ATTEMPTS_KEPT = 10;
+const PAYMENT_RESERVATION_TTL_MS = 15 * 60 * 1000;
 const isZeroTotal = (total) => Number(total || 0) <= 0.009;
 
 const getActiveCartIdForUser = async (userId) => {
@@ -191,6 +192,7 @@ const createRazorpayOrder = async (userId, order) => {
             amount: order.total,
             currency,
             status: 'payment_pending',
+            expiresAt: existing?.expiresAt || null,
             metadata: buildAttemptMetadata(existing, { ...(cartId ? { cartId } : {}) }),
         });
 
@@ -247,6 +249,7 @@ const createCashfreeOrder = async (userId, order) => {
         amount: order.total,
         currency,
         status: 'payment_pending',
+        expiresAt: existingCashfreePayment?.expiresAt || null,
         metadata: buildAttemptMetadata(
             existingCashfreePayment,
             {
@@ -315,6 +318,7 @@ const createStripeOrder = async (userId, order) => {
             amount: order.total,
             currency: currency.toUpperCase(),
             status: 'payment_pending',
+            expiresAt: existingStripePayment?.expiresAt || null,
             metadata: buildAttemptMetadata(existingStripePayment, { sessionId: session.id, ...(stripeCartId ? { cartId: stripeCartId } : {}) }),
         });
 
@@ -351,13 +355,15 @@ const verifyStripePayment = async (userId, orderId, sessionId) => {
         }
     }
     if (session.payment_status === 'paid') {
-        await markOrderPaid({
+        const settlement = await markOrderPaid({
             orderId: order.id,
             provider: 'stripe',
             transactionId: session.payment_intent || session.id,
             metadata: { sessionId: session.id, paymentStatus: session.payment_status },
         });
-        return { success: true, status: 'paid' };
+        return settlement.lateSettlement
+            ? { success: true, status: 'late_settlement', orderCancelled: true, message: 'Payment was captured after this order was cancelled. Contact support for refund handling.' }
+            : { success: true, status: 'paid' };
     }
     return { success: false, status: session.payment_status };
 };
@@ -460,6 +466,7 @@ const createPayUOrder = async (userId, order) => {
         amount: order.total,
         currency: 'INR',
         status: 'payment_pending',
+        expiresAt: existingPayUPayment?.expiresAt || null,
         metadata: buildAttemptMetadata(existingPayUPayment, { payuTxnId: txnid, ...(payuCartId ? { cartId: payuCartId } : {}) }),
     });
 
@@ -499,13 +506,15 @@ const handlePayUReturn = async (payload) => {
         if (Number.isFinite(postedAmount) && Number.isFinite(quotedAmount) && Number(postedAmount.toFixed(2)) !== Number(quotedAmount.toFixed(2))) {
             return { success: false, orderId: paymentForPayU.orderId, status: 'amount_mismatch' };
         }
-        await markOrderPaid({
+        const settlement = await markOrderPaid({
             orderId: paymentForPayU.orderId,
             provider: 'payu',
             transactionId: mihpayid || txnid,
             metadata: { payuTxnId: txnid, payuId: mihpayid, status },
         });
-        return { success: true, orderId: paymentForPayU.orderId };
+        return settlement.lateSettlement
+            ? { success: true, orderId: paymentForPayU.orderId, status: 'late_settlement', orderCancelled: true, message: 'Payment was captured after this order was cancelled. Contact support for refund handling.' }
+            : { success: true, orderId: paymentForPayU.orderId, status: 'paid' };
     }
     return { success: false, orderId: paymentForPayU.orderId, status };
 };
@@ -547,17 +556,63 @@ const createOrder = async (userId, orderId) => {
         throw new AppError('VALIDATION_ERROR', 400, `Payment is already ${existingPayment.status} for this order`);
     }
 
+    // Claim a fresh payment attempt before calling the gateway. The reservation
+    // expiry job uses this timestamp so it cannot release stock while a retry
+    // is opening a new provider session.
+    let paymentExpiresAt;
+    await sequelize.transaction(async (t) => {
+        const lockedOrder = await Order.findOne({ where: { id: order.id, userId }, transaction: t, lock: t.LOCK.UPDATE });
+        if (!lockedOrder || !['pending_payment', 'confirmed', 'on_hold'].includes(lockedOrder.status)) {
+            throw new AppError('VALIDATION_ERROR', 400, 'This order can no longer accept a payment attempt. Please start a new order.');
+        }
+        const lockedPayment = await Payment.findOne({ where: { orderId: lockedOrder.id }, transaction: t, lock: t.LOCK.UPDATE });
+        if (lockedPayment && ['paid_online', 'paid_cod', 'refunded', 'partially_refunded'].includes(lockedPayment.status)) {
+            throw new AppError('VALIDATION_ERROR', 400, `Payment is already ${lockedPayment.status} for this order`);
+        }
+        const storedAttemptBase = lockedPayment?.status === 'payment_failed'
+            ? Date.parse(lockedPayment.metadata?.failedAt || '')
+            : Date.parse(lockedPayment?.metadata?.retryStartedAt || '');
+        const attemptBase = Number.isFinite(storedAttemptBase) ? storedAttemptBase : new Date(lockedOrder.createdAt).getTime();
+        const storedExpiry = Date.parse(lockedPayment?.expiresAt || '');
+        const attemptExpired = Number.isFinite(storedExpiry)
+            ? Date.now() >= storedExpiry
+            : Number.isFinite(attemptBase) && Date.now() >= attemptBase + PAYMENT_RESERVATION_TTL_MS;
+        if (attemptExpired) {
+            throw new AppError('PAYMENT_EXPIRED', 410, 'This payment window has expired. Start a new checkout to reserve the items again.');
+        }
+        const attemptStartedAt = new Date().toISOString();
+        paymentExpiresAt = new Date(Date.now() + PAYMENT_RESERVATION_TTL_MS);
+        if (lockedPayment) {
+            await lockedPayment.update({
+                status: 'payment_pending',
+                expiresAt: paymentExpiresAt,
+                metadata: { ...(lockedPayment.metadata || {}), retryStartedAt: attemptStartedAt },
+            }, { transaction: t });
+        } else {
+            const currencySetting = await Setting.findOne({ where: { group: 'general', key: 'currency' }, transaction: t });
+            await Payment.create({
+                orderId: lockedOrder.id,
+                provider: lockedOrder.paymentMethod,
+                amount: lockedOrder.total,
+                currency: (currencySetting?.value || 'INR').toUpperCase(),
+                status: 'payment_pending',
+                expiresAt: paymentExpiresAt,
+                metadata: { retryStartedAt: attemptStartedAt },
+            }, { transaction: t });
+        }
+    });
+
     if (order.paymentMethod === 'razorpay') {
-        return createRazorpayOrder(userId, order);
+        return { ...(await createRazorpayOrder(userId, order)), expiresAt: paymentExpiresAt.toISOString() };
     }
     if (order.paymentMethod === 'cashfree') {
-        return createCashfreeOrder(userId, order);
+        return { ...(await createCashfreeOrder(userId, order)), expiresAt: paymentExpiresAt.toISOString() };
     }
     if (order.paymentMethod === 'stripe') {
-        return createStripeOrder(userId, order);
+        return { ...(await createStripeOrder(userId, order)), expiresAt: paymentExpiresAt.toISOString() };
     }
     if (order.paymentMethod === 'payu') {
-        return createPayUOrder(userId, order);
+        return { ...(await createPayUOrder(userId, order)), expiresAt: paymentExpiresAt.toISOString() };
     }
 
     throw new AppError('PAYMENT_UNAVAILABLE', 503, `${order.paymentMethod} payment is not connected yet`);
@@ -636,19 +691,22 @@ const verifyRazorpayPayment = async (userId, orderId, paymentData) => {
         throw new AppError('PAYMENT_ERROR', 400, `Razorpay verification failed: ${getErrorMessage(err)}`);
     }
 
-    await markOrderPaid({
+    const settlement = await markOrderPaid({
         orderId: order.id,
         provider: 'razorpay',
         transactionId: razorpay_payment_id,
         metadata: { razorpay_order_id },
     });
 
-    return { success: true };
+    return settlement.lateSettlement
+        ? { success: true, status: 'late_settlement', orderCancelled: true, message: 'Payment was captured after this order was cancelled. Contact support for refund handling.' }
+        : { success: true, status: 'paid' };
 };
 
 const markOrderPaid = async ({ orderId, provider, transactionId, metadata = {} }) => {
     let sendOrderPlacedNotification = false;
     let notificationPayload = null;
+    let lateSettlement = false;
 
     await sequelize.transaction(async (t) => {
         const lockedOrder = await Order.findByPk(orderId, {
@@ -671,15 +729,32 @@ const markOrderPaid = async ({ orderId, provider, transactionId, metadata = {} }
             transaction: t,
             lock: t.LOCK.UPDATE,
         });
+        const paymentAttemptExpired = Boolean(payment?.expiresAt && new Date(payment.expiresAt).getTime() <= Date.now());
         const paymentWasAlreadyPaid = payment?.status === 'paid_online';
+        lateSettlement = !paymentWasAlreadyPaid && ['cancelled', 'closed'].includes(previousOrderStatus);
 
         if (payment && payment.status !== 'paid_online') {
+            const lateSettlementMetadata = lateSettlement ? {
+                detectedAt: new Date().toISOString(),
+                reason: `payment_captured_after_order_${previousOrderStatus}`,
+                previousOrderStatus,
+                paymentExpiresAt: payment.expiresAt ? new Date(payment.expiresAt).toISOString() : null,
+                actionRequired: previousOrderStatus === 'cancelled'
+                    ? 'Review captured funds and issue a refund if appropriate. Do not fulfill this order.'
+                    : 'Review this capture against prior payment records. Do not reopen or duplicate fulfillment.',
+            } : null;
             await payment.update({
                 status: 'paid_online',
+                expiresAt: null,
                 transactionId: transactionId || payment.transactionId,
                 metadata: {
                     ...(payment.metadata || {}),
                     ...metadata,
+                    ...(paymentAttemptExpired ? {
+                        settlementObservedAfterAttemptExpiry: true,
+                        expiredPaymentAttemptAt: new Date(payment.expiresAt).toISOString(),
+                    } : {}),
+                    ...(lateSettlementMetadata ? { lateSettlement: lateSettlementMetadata } : {}),
                 },
             }, { transaction: t });
             // Late money (e.g. delayed webhook) on a cancelled/closed order is
@@ -692,6 +767,16 @@ const markOrderPaid = async ({ orderId, provider, transactionId, metadata = {} }
                     previousOrderStatus,
                     transactionId,
                 });
+                await OrderStatusHistory.create({
+                    orderId: lockedOrder.id,
+                    entityType: 'Payment',
+                    entityId: payment.id,
+                    statusGroup: 'payment',
+                    fromStatus: payment.status,
+                    toStatus: 'paid_online',
+                    changedBy: null,
+                    metadata: { lateSettlement: true, previousOrderStatus, provider, transactionId },
+                }, { transaction: t });
             }
         }
 
@@ -814,6 +899,7 @@ const markOrderPaid = async ({ orderId, provider, transactionId, metadata = {} }
             });
         }
     }
+    return { lateSettlement };
 };
 
 const verifyCashfreePayment = async (userId, orderId) => {
@@ -849,7 +935,7 @@ const verifyCashfreePayment = async (userId, orderId) => {
         }
         lastStatus = cashfreeOrder.order_status || lastStatus;
         if (cashfreeOrder.order_status === 'PAID') {
-            await markOrderPaid({
+            const settlement = await markOrderPaid({
                 orderId: order.id,
                 provider: 'cashfree',
                 transactionId: cashfreeOrder.order_id,
@@ -860,7 +946,9 @@ const verifyCashfreePayment = async (userId, orderId) => {
                     verifiedAt: new Date().toISOString(),
                 },
             });
-            return { success: true, status: 'paid' };
+            return settlement.lateSettlement
+                ? { success: true, status: 'late_settlement', orderCancelled: true, message: 'Payment was captured after this order was cancelled. Contact support for refund handling.' }
+                : { success: true, status: 'paid' };
         }
     }
 
@@ -1079,6 +1167,7 @@ const markPaymentFailed = async ({ orderId, provider, reason }) => {
         }
         await payment.update({
             status: 'payment_failed',
+            expiresAt: new Date(Date.now() + PAYMENT_RESERVATION_TTL_MS),
             metadata: { ...(payment.metadata || {}), failureReason: reason || null, failedAt: new Date().toISOString() },
         }, { transaction: t });
         await OrderStatusHistory.create({
@@ -1265,7 +1354,7 @@ const confirmCodPayment = async (actingUserId, orderId, payload = {}) => {
             },
         }, { transaction: t });
 
-        if (fullyCollected && collectionState.allDelivered && order.status === 'ready_for_shipment') {
+        if (fullyCollected && collectionState.allDelivered && ['processing', 'ready_for_shipment'].includes(order.status)) {
             await order.update({ status: 'closed' }, { transaction: t });
             await OrderStatusHistory.create({
                 orderId: order.id,
@@ -1465,4 +1554,4 @@ const saveGatewayCredentials = async (gatewayId, credentials, actingUserId) => {
     return { success: true, gateway: gatewayId };
 };
 
-module.exports = { createOrder, verifyPayment, handleWebhook, handleCashfreeWebhook, handleStripeWebhook, handlePayUReturn, markPaymentFailed, confirmCodPayment, getGatewayStatuses, saveGatewayCredentials };
+module.exports = { createOrder, verifyPayment, handleWebhook, handleCashfreeWebhook, handleStripeWebhook, handlePayUReturn, markPaymentFailed, markOrderPaid, confirmCodPayment, getGatewayStatuses, saveGatewayCredentials };
