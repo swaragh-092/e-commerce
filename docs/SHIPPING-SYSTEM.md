@@ -28,6 +28,8 @@ Rules are evaluated strictly by **Priority** (descending order):
 - **Structured Slabs:** First slab weight (e.g. 500g), additional slab weight and rate, zone distance multipliers, and fuel surcharge percentage.
 - **COD Controls:** Per-rule `codAllowed` and optional COD handling fees (flat or percentage with minimum floor).
 
+For multi-parcel orders, flat, free-above-threshold, and percentage-of-order delivery fees apply once per order. Per-kg and volumetric rates are calculated for each parcel and summed. Weight conditions use the sum of all parcel chargeable weights; courier maximum-weight limits apply to each parcel separately. A configured COD fee is added once to a COD order for non-`free` rules, including when free-delivery thresholds waive freight.
+
 ---
 
 ## 2. The 10 Practical Edge Cases Handled A-to-Z

@@ -497,7 +497,7 @@ const buildCheckoutContext = async (userId, payload) => {
     };
 };
 
-const calculateManualDecision = async ({ subtotal, chargeableWeightGrams = 0, addressSnapshot, paymentMethod }) => {
+const calculateManualDecision = async ({ subtotal, chargeableWeightGrams = 0, parcelWeightsGrams = [], addressSnapshot, paymentMethod }) => {
     const settings = await getSettingMap(['shipping', 'general']);
     const shippingMethod = settings['shipping.method'] || 'flat_rate';
     const flatRate = Number(settings['shipping.flatRate'] ?? 0);
@@ -519,7 +519,8 @@ const calculateManualDecision = async ({ subtotal, chargeableWeightGrams = 0, ad
     const defaultProvider = await getDefaultProvider();
     const maxWeightKg = Number(defaultProvider?.maxWeightKg) || 20;
     const maxWeightGrams = maxWeightKg * 1000;
-    const isOverweight = chargeableWeightGrams > 0 && chargeableWeightGrams > maxWeightGrams;
+    const weightsToCheck = parcelWeightsGrams.length ? parcelWeightsGrams : [chargeableWeightGrams];
+    const isOverweight = weightsToCheck.some((weight) => Number(weight) > maxWeightGrams);
 
     // Intended delivery area guard (Edge Case 7): standard rule intended for domestic delivery
     const serviceable = Boolean(postalCode)
@@ -535,7 +536,8 @@ const calculateManualDecision = async ({ subtotal, chargeableWeightGrams = 0, ad
     } else if (!isStandardPincode) {
         unavailableMessage = 'Invalid 6-digit delivery pincode';
     } else if (isOverweight) {
-        unavailableMessage = `Package weight (${(chargeableWeightGrams / 1000).toFixed(1)}kg) exceeds courier maximum limit (${maxWeightKg}kg). Until parcel splitting is enabled, please reduce item quantity or contact support.`;
+        const heaviestParcelGrams = Math.max(...weightsToCheck.map(Number));
+        unavailableMessage = `A package weighs ${(heaviestParcelGrams / 1000).toFixed(1)}kg and exceeds this courier's ${maxWeightKg}kg per-package limit. Review the package fit or choose another delivery option.`;
     }
 
     return {
@@ -597,24 +599,38 @@ const conditionsMatch = (conditions = {}, { subtotal, chargeableWeightGrams = 0,
  */
 const calculateRuleRate = (rule, { subtotal, chargeableWeightGrams = 0, paymentMethod = 'razorpay', zone = 'national' }) => {
     const config = rule.rateConfig || {};
+    const calculateCodFee = () => {
+        if (paymentMethod !== 'cod' || rule.rateType === 'free') return 0;
+        if (config.codFeeType === 'percent' && config.codFeeValue) {
+            const pctFee = subtotal * (Number(config.codFeeValue) / 100);
+            return normalizeMoney(Math.max(Number(config.codFeeMin || 0), pctFee));
+        }
+        if (config.codFeeValue) return normalizeMoney(Number(config.codFeeValue));
+        return rule.codFee ? normalizeMoney(Number(rule.codFee)) : 0;
+    };
+    const result = (freight) => {
+        const normalizedFreight = normalizeMoney(freight);
+        const codFee = calculateCodFee();
+        return { freight: normalizedFreight, codFee, total: normalizeMoney(normalizedFreight + codFee) };
+    };
 
     // ── Free shortcuts ────────────────────────────────────────────────────
-    if (rule.rateType === 'free') return { freight: 0, codFee: 0, total: 0 };
+    if (rule.rateType === 'free') return result(0);
 
     if (config.freeAboveSubtotal != null && subtotal >= Number(config.freeAboveSubtotal)) {
-        return { freight: 0, codFee: 0, total: 0 };
+        return result(0);
     }
 
     if (rule.rateType === 'free_above_threshold') {
         const thresholdFree = subtotal >= Number(config.threshold || 0);
         const freight = thresholdFree ? 0 : Number(config.amount || config.flatRate || 0);
-        return { freight, codFee: 0, total: freight };
+        return result(freight);
     }
 
     // ── Percent of order ──────────────────────────────────────────────────
     if (rule.rateType === 'percent_of_order') {
         const freight = normalizeMoney(subtotal * (Number(config.percent || 0) / 100));
-        return { freight, codFee: 0, total: freight };
+        return result(freight);
     }
 
     // ── Flat rate ─────────────────────────────────────────────────────────
@@ -650,21 +666,7 @@ const calculateRuleRate = (rule, { subtotal, chargeableWeightGrams = 0, paymentM
 
     freight = normalizeMoney(freight);
 
-    // FIX 3: COD fee from rateConfig (separate from freight)
-    let codFee = 0;
-    if (paymentMethod === 'cod') {
-        if (config.codFeeType === 'percent' && config.codFeeValue) {
-            const pctFee = subtotal * (Number(config.codFeeValue) / 100);
-            codFee = normalizeMoney(Math.max(Number(config.codFeeMin || 0), pctFee));
-        } else if (config.codFeeValue) {
-            codFee = normalizeMoney(Number(config.codFeeValue));
-        } else if (rule.codFee) {
-            // Fallback to rule-level flat codFee column
-            codFee = normalizeMoney(Number(rule.codFee));
-        }
-    }
-
-    return { freight, codFee, total: normalizeMoney(freight + codFee) };
+    return result(freight);
 };
 
 const providerSupportsDecision = (provider, { paymentMethod }) => {
@@ -698,6 +700,9 @@ const calculateRuleDecision = async ({ subtotal, chargeableWeightGrams = 0, pack
 
     const defaultProvider = await getDefaultProvider();
 
+    const orderChargeableWeightGrams = parcelWeightsGrams.length
+        ? parcelWeightsGrams.reduce((sum, weight) => sum + Number(weight || 0), 0)
+        : chargeableWeightGrams;
     const matchedRule = rules.find((rule) => {
         const effectiveProvider = rule.provider || defaultProvider;
         if (effectiveProvider && effectiveProvider.maxWeightKg) {
@@ -708,7 +713,7 @@ const calculateRuleDecision = async ({ subtotal, chargeableWeightGrams = 0, pack
             }
         }
         return (!rule.zone || zoneMatches(rule.zone, addressSnapshot)) &&
-            conditionsMatch(rule.conditions || {}, { subtotal, chargeableWeightGrams, addressSnapshot, paymentMethod }) &&
+            conditionsMatch(rule.conditions || {}, { subtotal, chargeableWeightGrams: orderChargeableWeightGrams, addressSnapshot, paymentMethod }) &&
             providerSupportsDecision(effectiveProvider, { paymentMethod });
     });
 
@@ -721,10 +726,10 @@ const calculateRuleDecision = async ({ subtotal, chargeableWeightGrams = 0, pack
     let rateBreakdown;
     let codFee;
 
-    if (matchedRule.rateType === 'percent_of_order') {
+    if (!['per_kg_slab', 'volumetric'].includes(matchedRule.rateType)) {
         const singleBreakdown = calculateRuleRate(matchedRule, {
             subtotal,
-            chargeableWeightGrams,
+            chargeableWeightGrams: orderChargeableWeightGrams,
             paymentMethod,
             zone,
         });
@@ -889,8 +894,11 @@ const createQuote = async (userId, payload) => {
     const deliveryPincode  = String(context.addressSnapshot.postalCode || '').trim();
 
     const volumetricDivisor = Number(settings['shipping.volumetricDivisor'] || 5000);
-    const chargeableWeightGrams = context.parcelPlan?.length
-        ? Math.max(...context.parcelPlan.map((parcel) => parcel.chargeableWeightGrams))
+    const parcelWeightsGrams = context.parcelPlan?.length
+        ? context.parcelPlan.map((parcel) => parcel.chargeableWeightGrams)
+        : [];
+    const chargeableWeightGrams = parcelWeightsGrams.length
+        ? parcelWeightsGrams.reduce((sum, weight) => sum + Number(weight || 0), 0)
         : computeChargeableWeight(context.packageDims, volumetricDivisor);
     const quoteParcels = context.isAllDigital ? [] : context.parcelPlan?.length ? context.parcelPlan : [{
         packageId: context.defaultPackage?.id || 'single-order-package',
