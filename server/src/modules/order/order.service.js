@@ -1527,7 +1527,6 @@ const placeOrder = async (userId, payload) => {
             checkoutSessionId: shippingQuote?.checkoutSessionId || payload.checkoutSessionId || payload.sessionId || null,
             idempotencyKey,
             idempotencyPayloadHash,
-            guestSessionId,
             shippingCurrency: shippingQuote?.currency || 'INR',
             shippingTaxIncluded: shippingQuote?.taxIncluded === true,
             shippingTaxAmount,
@@ -2280,9 +2279,6 @@ const createFulfillment = async (orderId, payload, actingUserId, auditContext = 
         if (order.paymentMethod === 'cod' && provider && provider.supportsCod === false) {
             throw new AppError('VALIDATION_ERROR', 400, `${provider.name} does not support cash on delivery. Choose another provider.`);
         }
-        if (provider?.maxWeightKg && totalWeightGrams > Number(provider.maxWeightKg) * 1000) {
-            throw new AppError('VALIDATION_ERROR', 400, `This package exceeds ${provider.name}'s ${provider.maxWeightKg} kg per-package weight limit.`);
-        }
         if (manualPackage && !manualDeliverySelected) {
             throw new AppError('MANUAL_PACKAGE_REQUIRES_MANUAL_DELIVERY', 400, 'Measured manual packages can only be recorded with Manual / Own Delivery. Use the saved checkout package with a carrier provider.');
         }
@@ -2374,6 +2370,9 @@ const createFulfillment = async (orderId, payload, actingUserId, auditContext = 
             hasMissingMeasurements: false,
         } : computedDims;
         const totalWeightGrams = dims.totalWeightGrams;
+        if (provider?.maxWeightKg && totalWeightGrams > Number(provider.maxWeightKg) * 1000) {
+            throw new AppError('VALIDATION_ERROR', 400, `This package exceeds ${provider.name}'s ${provider.maxWeightKg} kg per-package weight limit.`);
+        }
 
         let providerOrderId = null;
         let providerShipmentId = null;
