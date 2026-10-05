@@ -17,7 +17,9 @@ const placeOrderSchema = Joi.object({
     paymentMethod: Joi.string().valid('razorpay', 'stripe', 'payu', 'cashfree', 'cod').default('razorpay'),
     shippingQuoteId: Joi.string().uuid().optional(),
     checkoutSessionId: Joi.string().uuid().optional(),
-    sessionId: Joi.string().optional(),
+    idempotencyKey: Joi.string().uuid().optional(),
+    sessionId: Joi.string().max(255).optional(),
+    guestEmail: Joi.string().trim().email().max(255).optional(),
     buyNowItem: Joi.object({
         productId: Joi.string().uuid().required(),
         variantId: Joi.string().uuid().allow(null),
@@ -28,8 +30,11 @@ const placeOrderSchema = Joi.object({
 const updateOrderStatusSchema = Joi.object({
     status: Joi.string().valid(...ORDER_STATUS_VALUES).required()
 });
+const updateOrderContactEmailSchema = Joi.object({
+    email: Joi.string().trim().email().max(255).required(),
+});
 
-const FULFILLMENT_STATUS_VALUES = ['pending', ...SHIPMENT_STATUS_VALUES];
+const FULFILLMENT_STATUS_VALUES = ['pending', ...SHIPMENT_STATUS_VALUES.filter((status) => status !== 'cancelled')];
 
 const createFulfillmentSchema = Joi.object({
     trackingNumber: Joi.string().max(255).allow(null, ''),
@@ -117,6 +122,7 @@ const listOrdersQuerySchema = Joi.object({
 module.exports = {
     placeOrderSchema,
     updateOrderStatusSchema,
+    updateOrderContactEmailSchema,
     createFulfillmentSchema,
     updateFulfillmentStatusSchema,
     updateShipmentStatusSchema,

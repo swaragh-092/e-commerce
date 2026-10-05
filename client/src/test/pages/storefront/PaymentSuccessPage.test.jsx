@@ -75,4 +75,17 @@ describe('PaymentSuccessPage', () => {
     await waitFor(() => expect(screen.getByText('Order Placed!')).toBeInTheDocument());
     expect(screen.getByText(/payment successful/i)).toBeInTheDocument();
   });
+
+  it('explains a captured payment on a cancelled order without calling it a successful order', async () => {
+    getMyOrderById.mockResolvedValue({
+      id: 'order-1', orderNumber: 'ORD-1', status: 'cancelled', paymentMethod: 'razorpay',
+      Payment: { status: 'paid_online' },
+    });
+
+    renderPage('/payment/success?orderId=order-1');
+
+    await waitFor(() => expect(screen.getByText(/payment received for a cancelled order/i)).toBeInTheDocument());
+    expect(screen.getByText(/remains cancelled and will not be shipped/i)).toBeInTheDocument();
+    expect(screen.queryByText('Order Placed!')).not.toBeInTheDocument();
+  });
 });

@@ -49,7 +49,7 @@ import {
   deleteShippingRule,
   testShippingCalculation,
   testShippingProviderConnection,
-  getFailedShippingOperations,
+  getShippingOperations,
   retryShippingOperation,
 } from '../../services/adminService';
 import { getProducts } from '../../services/productService';
@@ -119,6 +119,7 @@ const ShippingPage = () => {
   const [failedOpsTotal, setFailedOpsTotal] = useState(0);
   const [failedOpsPage, setFailedOpsPage] = useState(1);
   const [retryingOpId, setRetryingOpId] = useState(null);
+  const [operationStatus, setOperationStatus] = useState('failed');
 
   // Dialog states
   const [providerDialogOpen, setProviderDialogOpen] = useState(false);
@@ -302,10 +303,10 @@ const ShippingPage = () => {
     }
   };
 
-  const fetchFailedOperations = async (page = 1) => {
+  const fetchFailedOperations = async (page = 1, status = operationStatus) => {
     setFailedOpsLoading(true);
     try {
-      const res = await getFailedShippingOperations({ page, limit: 10 });
+      const res = await getShippingOperations({ page, limit: 10, status });
       setFailedOperations(res.data?.data || []);
       setFailedOpsTotal(res.data?.meta?.total || 0);
       setFailedOpsPage(page);
@@ -321,9 +322,9 @@ const ShippingPage = () => {
     try {
       const res = await retryShippingOperation(opId);
       if (res.data?.data?.success) {
-        notify('Operation dispatched and reconciled successfully', 'success');
+        notify('Carrier booking completed successfully.', 'success');
       } else {
-        notify(res.data?.data?.error || 'Operation failed during retry', 'warning');
+        notify(res.data?.data?.error || 'Retry was queued or is still processing. Check the operation status before trying again.', 'warning');
       }
       fetchFailedOperations(failedOpsPage);
     } catch (err) {
@@ -335,7 +336,7 @@ const ShippingPage = () => {
 
   useEffect(() => {
     if (tabIndex === 4) {
-      fetchFailedOperations(1);
+      fetchFailedOperations(1, 'failed');
     }
   }, [tabIndex]);
 
@@ -1015,27 +1016,32 @@ const ShippingPage = () => {
           <TabPanel value={tabIndex} index={5} idPrefix="shipping" sx={{ pt: 3 }}>
             <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2 }}>
               <div>
-                <Typography variant="subtitle1" fontWeight={600}>Failed Shipping Operations</Typography>
+                <Typography variant="subtitle1" fontWeight={600}>{operationStatus === 'failed' ? 'Failed shipping operations' : 'In-progress shipping operations'}</Typography>
                 <Typography variant="caption" color="text.secondary">
-                  Track background carrier dispatch failures, timeouts, and reconcile duplicate shipment attempts.
+                  Review carrier booking failures or check operations currently queued and processing.
                 </Typography>
               </div>
               <Button
                 variant="outlined"
                 size="small"
                 startIcon={<RefreshIcon />}
-                onClick={() => fetchFailedOperations(1)}
+                onClick={() => fetchFailedOperations(1, operationStatus)}
                 disabled={failedOpsLoading}
               >
                 Refresh
               </Button>
             </Box>
 
+            <Tabs value={operationStatus} onChange={(_, value) => { setOperationStatus(value); fetchFailedOperations(1, value); }} sx={{ mb: 2 }}>
+              <Tab value="failed" label="Failed" />
+              <Tab value="active" label="In progress" />
+            </Tabs>
+
             {failedOpsLoading ? (
               <Box sx={{ display: 'flex', justifyContent: 'center', py: 4 }}><CircularProgress size={32} /></Box>
             ) : failedOperations.length === 0 ? (
-              <Alert severity="success" sx={{ my: 2 }}>
-                All shipping operations and carrier dispatches are healthy! No unresolved failures found.
+              <Alert severity={operationStatus === 'failed' ? 'success' : 'info'} sx={{ my: 2 }}>
+                {operationStatus === 'failed' ? 'No failed carrier bookings need attention.' : 'No carrier bookings are currently queued or processing.'}
               </Alert>
             ) : (
               <TableContainer>
@@ -1045,6 +1051,7 @@ const ShippingPage = () => {
                       <TableCell>Order</TableCell>
                       <TableCell>Type</TableCell>
                       <TableCell>Provider</TableCell>
+                      <TableCell>Status</TableCell>
                       <TableCell>Attempts</TableCell>
                       <TableCell>Last Error</TableCell>
                       <TableCell>Updated</TableCell>
@@ -1057,10 +1064,9 @@ const ShippingPage = () => {
                         <TableCell sx={{ fontWeight: 600 }}>
                           {op.shipment?.order?.orderNumber || op.orderId || op.shipmentId || 'N/A'}
                         </TableCell>
-                        <TableCell>
-                          <Chip size="small" label={op.type} />
-                        </TableCell>
+                        <TableCell><Chip size="small" label={op.operationType || op.type || 'create'} /></TableCell>
                         <TableCell>{op.provider?.name || op.providerId || 'Provider'}</TableCell>
+                        <TableCell><Chip size="small" color={op.status === 'failed' ? 'error' : 'info'} label={op.status} /></TableCell>
                         <TableCell>
                           <Chip
                             size="small"
@@ -1069,7 +1075,7 @@ const ShippingPage = () => {
                           />
                         </TableCell>
                         <TableCell sx={{ maxWidth: 320, color: 'error.main', fontSize: '0.8rem' }}>
-                          {op.lastError || 'Unknown failure'}
+                          {op.lastError || (op.status === 'failed' ? 'No error detail recorded' : 'No error reported; operation is still in progress.')}
                         </TableCell>
                         <TableCell sx={{ fontSize: '0.75rem', color: 'text.secondary' }}>
                           {new Date(op.updatedAt).toLocaleString()}
@@ -1079,11 +1085,11 @@ const ShippingPage = () => {
                             size="small"
                             variant="contained"
                             color="warning"
-                            disabled={retryingOpId === op.id}
+                            disabled={retryingOpId === op.id || op.status === 'processing'}
                             onClick={() => handleRetryOperation(op.id)}
                             sx={{ textTransform: 'none', py: 0.25, px: 1, fontSize: '0.75rem' }}
                           >
-                            {retryingOpId === op.id ? 'Retrying...' : 'Retry Now'}
+                            {retryingOpId === op.id ? 'Retrying...' : op.status === 'processing' ? 'Processing' : 'Retry Now'}
                           </Button>
                         </TableCell>
                       </TableRow>

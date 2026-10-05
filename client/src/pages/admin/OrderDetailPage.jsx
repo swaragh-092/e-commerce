@@ -33,9 +33,10 @@ import HistoryIcon from '@mui/icons-material/History';
 import CloseIcon from '@mui/icons-material/Close';
 import { useCurrency } from '../../hooks/useSettings';
 import { PAYMENT_SETTLED_STATUSES } from '../../utils/constants';
+import ShipmentTrackingTimeline from '../../components/orders/order-detail/ShipmentTrackingTimeline';
 import { getTaxRows } from '../../components/orders/order-detail/orderDetailUtils';
 import { formatDateOnly, formatDateTime } from '../../utils/dates';
-import { getOrderById, updateOrderStatus, createFulfillment, updateFulfillmentStatus, updateShipment, confirmCodPayment, getShippingProviders, addOrderNote, updateReturnStatus, processRefund } from '../../services/adminService';
+import { getOrderById, updateOrderStatus, updateOrderContactEmail, createFulfillment, updateFulfillmentStatus, updateShipment, retryShippingOperation, confirmCodPayment, getShippingProviders, addOrderNote, updateReturnStatus, processRefund } from '../../services/adminService';
 import { useNotification } from '../../context/NotificationContext';
 import {
   Dialog,
@@ -377,8 +378,8 @@ const getDeliveredItemsAmount = (items = [], fulfillments = []) => {
 };
 
 const getDispatchedQuantity = (item = {}) => {
-  const shipmentQty = (item.shipmentItems || []).reduce((sum, shipmentItem) => sum + Number(shipmentItem.quantity || 0), 0);
-  const fulfillmentQty = (item.fulfillmentItems || []).reduce((sum, fulfillmentItem) => sum + Number(fulfillmentItem.quantity || 0), 0);
+  const shipmentQty = (item.shipmentItems || []).filter((row) => row.shipment?.status !== 'cancelled').reduce((sum, shipmentItem) => sum + Number(shipmentItem.quantity || 0), 0);
+  const fulfillmentQty = (item.fulfillmentItems || []).filter((row) => row.fulfillment?.status !== 'cancelled').reduce((sum, fulfillmentItem) => sum + Number(fulfillmentItem.quantity || 0), 0);
   return Math.max(shipmentQty, fulfillmentQty);
 };
 
@@ -515,7 +516,7 @@ const FulfillmentDialog = ({ open, onClose, orderItems, orderDate, order, onSave
   const [plannedParcelId, setPlannedParcelId] = useState('');
   const [manualPackage, setManualPackage] = useState({ packageName: '', lengthCm: '', breadthCm: '', heightCm: '', actualWeightGrams: '' });
   const parcelPlan = Array.isArray(order?.shippingSnapshot?.parcelPlan) ? order.shippingSnapshot.parcelPlan : [];
-  const bookedParcelIds = (order?.fulfillments || []).flatMap((fulfillment) => fulfillment.shipments || []).map((shipment) => shipment.plannedParcelId).filter(Boolean);
+  const bookedParcelIds = (order?.fulfillments || []).flatMap((fulfillment) => fulfillment.shipments || []).filter((shipment) => shipment.status !== 'cancelled').map((shipment) => shipment.plannedParcelId).filter(Boolean);
   const setParcelItems = (parcel) => {
     const nextItems = {};
     const contents = new Map();
@@ -559,15 +560,21 @@ const FulfillmentDialog = ({ open, onClose, orderItems, orderDate, order, onSave
         .then(res => {
             const active = res.data?.data?.filter(p => p.enabled) || [];
             setProviders(active);
+            const eligible = active.filter((provider) => (
+              (order?.paymentMethod !== 'cod' || provider.supportsCod !== false)
+              && (!provider.maxWeightKg || !nextParcel?.actualWeightGrams || Number(nextParcel.actualWeightGrams) <= Number(provider.maxWeightKg) * 1000)
+            ));
             const quotedCode = order?.shippingSnapshot?.provider;
-            const matchedQuoted = active.find(p => p.code === quotedCode || p.id === quotedCode);
-            const defaultProv = active.find(p => p.isDefault);
+            const matchedQuoted = eligible.find(p => p.code === quotedCode || p.id === quotedCode);
+            const defaultProv = eligible.find(p => p.isDefault);
             if (matchedQuoted) {
               setProviderId(matchedQuoted.id);
             } else if (defaultProv) {
               setProviderId(defaultProv.id);
-            } else if (active.length > 0) {
-              setProviderId(active[0].id);
+            } else if (eligible.length === 1) {
+              setProviderId(eligible[0].id);
+            } else if (eligible.length > 0) {
+              setProviderId(eligible[0].id);
             } else {
               setProviderId('manual');
             }
@@ -643,11 +650,14 @@ const FulfillmentDialog = ({ open, onClose, orderItems, orderDate, order, onSave
               }
             }}
           >
-            {providers.map(p => (
-              <MenuItem key={p.id} value={p.id}>
+            {providers.map(p => {
+              const overweight = Boolean(selectedPlannedParcel?.actualWeightGrams && p.maxWeightKg && Number(selectedPlannedParcel.actualWeightGrams) > Number(p.maxWeightKg) * 1000);
+              const unsupportedCod = order?.paymentMethod === 'cod' && p.supportsCod === false;
+              return <MenuItem key={p.id} value={p.id} disabled={overweight || unsupportedCod}>
                 {p.name} ({p.code}){p.isDefault ? ' — Default' : ''}
-              </MenuItem>
-            ))}
+                {overweight ? ' — exceeds package weight limit' : unsupportedCod ? ' — COD unavailable' : ''}
+              </MenuItem>;
+            })}
             {!providers.some(p => p.code === 'manual') && (
               <MenuItem value="manual">Manual / Own Delivery</MenuItem>
             )}
@@ -866,11 +876,14 @@ const OrderDetailPage = () => {
   const [refundAmount, setRefundAmount] = useState('');
   const [fulfillmentLoading, setFulfillmentLoading] = useState(false);
   const [addingNote, setAddingNote] = useState(false);
+  const [guestContactEmail, setGuestContactEmail] = useState('');
+  const [savingContactEmail, setSavingContactEmail] = useState(false);
 
   const fetchOrder = async () => {
     try {
       const res = await getOrderById(id);
       setOrder(res.data.data);
+      setGuestContactEmail(res.data.data.shippingAddressSnapshot?.email || '');
       setNewStatus(res.data.data.status);
     } catch (fetchError) {
       console.error(fetchError);
@@ -879,6 +892,24 @@ const OrderDetailPage = () => {
       setError(getApiErrorMessage(fetchError, 'Failed to load order details.'));
     } finally {
       setLoading(false);
+    }
+  };
+
+  const handleSaveGuestEmail = async () => {
+    const email = guestContactEmail.trim();
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+      notify('Enter a valid customer email address.', 'error');
+      return;
+    }
+    setSavingContactEmail(true);
+    try {
+      await updateOrderContactEmail(id, email);
+      await fetchOrder();
+      notify('Guest email saved. Retry a failed carrier booking in Shipping → Operations & Failures.', 'success');
+    } catch (saveError) {
+      notify(getApiErrorMessage(saveError, 'Could not save guest email.'), 'error');
+    } finally {
+      setSavingContactEmail(false);
     }
   };
 
@@ -932,7 +963,8 @@ const OrderDetailPage = () => {
     });
   }, [order?.status, allowedNextStatuses, canCloseOrder]);
   const hasStatusTransitions = availableStatuses.length > 1;
-  const canFulfill = canUpdateOrderStatus && isFulfillable;
+  const awaitingOnlinePayment = order?.paymentMethod !== 'cod' && !PAYMENT_SETTLED_STATUSES.includes(payment?.status);
+  const canFulfill = canUpdateOrderStatus && isFulfillable && !awaitingOnlinePayment;
   const codCollectedAmount = Number(
     payment?.metadata?.codCollectedAmount
     || (order?.paymentMethod === 'cod' && payment?.status !== 'paid_cod' && Number(payment?.amount || 0) < Number(order?.total || 0)
@@ -1090,14 +1122,53 @@ const OrderDetailPage = () => {
   const handleCreateFulfillment = async (data) => {
     setFulfillmentLoading(true);
     try {
-      await createFulfillment(id, data);
-      notify('Shipment created successfully.', 'success');
+      const response = await createFulfillment(id, data);
+      const shipment = response.data?.data?.shipments?.[0];
+      if (shipment?.providerState === 'failed') {
+        notify(`Shipment saved, but carrier booking failed: ${shipment.lastProviderError || 'Retry from this order.'}`, 'error');
+      } else if (shipment?.providerState === 'retrying' || shipment?.providerState === 'pending') {
+        notify(`Shipment saved. Carrier booking is ${shipment.providerState === 'pending' ? 'pending' : 'retrying'}; check its status below.`, 'warning');
+      } else {
+        notify('Shipment created and carrier booking completed.', 'success');
+      }
       setFulfillmentDialogOpen(false);
       fetchOrder(); // Refresh to catch updated status and fulfills
     } catch (err) {
       notify(getApiErrorMessage(err, 'Failed to create shipment.'), 'error');
     } finally {
       setFulfillmentLoading(false);
+    }
+  };
+
+  const handleRetryShipmentBooking = async (operationId) => {
+    try {
+      const response = await retryShippingOperation(operationId);
+      await fetchOrder();
+      const result = response.data?.data;
+      if (result?.success) {
+        notify('Carrier booking completed successfully.', 'success');
+      } else if (result?.skipped) {
+        notify('This operation is already running or no longer needs a retry. Refresh to see its current status.', 'info');
+      } else if (result?.terminal) {
+        notify(result.error || 'Carrier booking failed after the retry. Review the shipment error.', 'error');
+      } else {
+        notify(result?.error || 'Retry was queued. Carrier booking is still pending; check the shipment status.', 'warning');
+      }
+    } catch (err) {
+      await fetchOrder();
+      notify(getApiErrorMessage(err, 'Carrier booking retry failed.'), 'error');
+    }
+  };
+
+  const handleCancelShipment = async (shipment) => {
+    const confirmed = window.confirm('Cancel this shipment with the carrier? The items will remain allocated to this order. Create a replacement shipment or cancel the order to release them.');
+    if (!confirmed) return;
+    try {
+      await updateShipment(id, shipment.id, { status: 'cancelled' });
+      await fetchOrder();
+      notify('Shipment cancelled. Items remain allocated to this order for replacement shipping or order cancellation.', 'success');
+    } catch (err) {
+      notify(getApiErrorMessage(err, 'Shipment cancellation failed.'), 'error');
     }
   };
 
@@ -1205,12 +1276,23 @@ const OrderDetailPage = () => {
                Create Shipment
              </Button>
           )}
+          {canUpdateOrderStatus && isFulfillable && awaitingOnlinePayment && (
+            <Tooltip title="Awaiting online payment capture">
+              <span><Button variant="contained" startIcon={<LocalShippingIcon />} disabled>Create Shipment</Button></span>
+            </Tooltip>
+          )}
         </Stack>
       </Box>
 
       {order.status === 'closed' && !hasResolvedPayment && (
         <Alert severity="warning" sx={{ mb: 3 }}>
           This order was previously marked closed before payment and shipping were complete. It will be reopened automatically when refreshed.
+        </Alert>
+      )}
+
+      {payment?.metadata?.lateSettlement && (
+        <Alert severity="error" sx={{ mb: 3 }}>
+          Payment was captured after this order was {payment.metadata.lateSettlement.previousOrderStatus || 'cancelled'}. Do not fulfill it. Review the payment and arrange a refund if appropriate.
         </Alert>
       )}
 
@@ -1483,24 +1565,58 @@ const OrderDetailPage = () => {
                               </Select>
                             </FormControl>
                           </Box>
+                          {shipment?.providerState && (
+                            <Chip
+                              size="small"
+                              sx={{ mt: 0.75 }}
+                              color={shipment.providerState === 'completed' ? 'success' : shipment.providerState === 'failed' ? 'error' : 'warning'}
+                              label={{ pending: 'Carrier booking pending', retrying: 'Carrier booking retrying', failed: 'Carrier booking failed', completed: 'Carrier booked', not_required: 'Manual fulfillment', cancelled: 'Carrier cancelled' }[shipment.providerState] || shipment.providerState}
+                            />
+                          )}
+                          {(shipment?.lastProviderError || shipment?.operationError) && (
+                            <Alert severity="error" sx={{ mt: 1 }}>
+                              {shipment.lastProviderError || shipment.operationError}
+                            </Alert>
+                          )}
                         </Box>
                         <Box sx={{ textAlign: 'right' }}>
                           <Typography variant="body2" fontWeight={600}>{f.courier || 'Standard Courier'}</Typography>
                           <Typography variant="body2" color="primary" sx={{ fontWeight: 500 }}>{f.trackingNumber || 'No tracking'}</Typography>
-                          {f.shipments && f.shipments.length > 0 && f.shipments[0].trackingUrl && (
-                            <Typography variant="caption" sx={{ display: 'block', mt: 0.5 }}>
-                              <a href={f.shipments[0].trackingUrl} target="_blank" rel="noreferrer" style={{ color: 'inherit', textDecoration: 'underline' }}>
-                                Track Package
-                              </a>
-                            </Typography>
-                          )}
-                          {f.shipments && f.shipments.length > 0 && f.shipments[0].labelUrl && (
-                            <Typography variant="caption" sx={{ display: 'block', mt: 0.5 }}>
-                              <a href={f.shipments[0].labelUrl} target="_blank" rel="noreferrer" style={{ color: 'inherit', textDecoration: 'underline' }}>
-                                Download Label
-                              </a>
-                            </Typography>
-                          )}
+                          {f.shipments?.map((documentShipment, shipmentIndex) => (
+                            <Box key={documentShipment.id || shipmentIndex} sx={{ mt: shipmentIndex ? 1 : 0 }}>
+                              {f.shipments.length > 1 && <Typography variant="caption" fontWeight={700}>Package {shipmentIndex + 1}</Typography>}
+                              {documentShipment.trackingUrl && (
+                                <Typography variant="caption" sx={{ display: 'block' }}>
+                                  <a href={documentShipment.trackingUrl} target="_blank" rel="noreferrer" style={{ color: 'inherit', textDecoration: 'underline' }}>Track Package</a>
+                                </Typography>
+                              )}
+                              {documentShipment.labelUrl && (
+                                <Typography variant="caption" sx={{ display: 'block' }}>
+                                  <a href={documentShipment.labelUrl} target="_blank" rel="noreferrer" style={{ color: 'inherit', textDecoration: 'underline' }}>Download Label</a>
+                                </Typography>
+                              )}
+                              {documentShipment.manifestUrl && (
+                                <Typography variant="caption" sx={{ display: 'block' }}>
+                                  <a href={documentShipment.manifestUrl} target="_blank" rel="noreferrer" style={{ color: 'inherit', textDecoration: 'underline' }}>Download Manifest</a>
+                                </Typography>
+                              )}
+                              {documentShipment.invoiceUrl && (
+                                <Typography variant="caption" sx={{ display: 'block' }}>
+                                  <a href={documentShipment.invoiceUrl} target="_blank" rel="noreferrer" style={{ color: 'inherit', textDecoration: 'underline' }}>Carrier Invoice</a>
+                                </Typography>
+                              )}
+                              {['retrying', 'failed'].includes(documentShipment.providerState) && documentShipment.operationId && (
+                                <Button size="small" onClick={() => handleRetryShipmentBooking(documentShipment.operationId)}>
+                                  Retry carrier booking
+                                </Button>
+                              )}
+                              {['created', 'packed'].includes(documentShipment.status) && documentShipment.providerState !== 'cancelled' && (
+                                <Button size="small" color="error" onClick={() => handleCancelShipment(documentShipment)}>
+                                  Cancel shipment
+                                </Button>
+                              )}
+                            </Box>
+                          ))}
                         </Box>
                       </Box>
 
@@ -1510,37 +1626,9 @@ const OrderDetailPage = () => {
                         />
                       )}
 
-                      {f.shipments && f.shipments.length > 0 && Array.isArray(f.shipments[0].statusHistory) && f.shipments[0].statusHistory.length > 0 && (
-                        <Box
-                          sx={{
-                            mt: 2,
-                            mb: 3,
-                            p: 2,
-                            bgcolor: 'action.hover',
-                            borderRadius: 1.5,
-                            border: '1px solid',
-                            borderColor: 'divider',
-                          }}
-                        >
-                          <Typography variant="subtitle2" sx={{ mb: 1.5 }}>Tracking Timeline</Typography>
-                          <Stack spacing={1.5}>
-                            {[...f.shipments[0].statusHistory].reverse().map((event, idx) => (
-                              <Box key={idx} sx={{ display: 'flex', gap: 2 }}>
-                                <Box sx={{ minWidth: 120 }}>
-                                  <Typography variant="caption" color="text.secondary" sx={{ display: 'block' }}>
-                                    {formatDateTime(event.timestamp || event.at || event.createdAt)}
-                                  </Typography>
-                                </Box>
-                                <Box>
-                                  <Typography variant="body2" fontWeight={600}>{event.status}</Typography>
-                                  {event.location && <Typography variant="caption" color="text.secondary">{event.location}</Typography>}
-                                  {event.message && <Typography variant="caption" color="text.secondary" sx={{ display: 'block' }}>{event.message}</Typography>}
-                                </Box>
-                              </Box>
-                            ))}
-                          </Stack>
-                        </Box>
-                      )}
+                      {f.shipments?.map((parcel, index) => (
+                        <ShipmentTrackingTimeline key={parcel.id || index} shipment={parcel} packageNumber={index + 1} />
+                      ))}
 
                       <Divider sx={{ mb: 2 }} />
                       <Stack spacing={1.25} sx={{ mb: f.notes ? 2 : 0 }}>
@@ -1669,7 +1757,25 @@ const OrderDetailPage = () => {
                   <Typography variant="caption" color="text.secondary">
                     Email
                   </Typography>
-                  <Typography variant="body2">{order.User?.email || 'No email available'}</Typography>
+                  <Typography variant="body2">{order.User?.email || order.shippingAddressSnapshot?.email || 'No email available'}</Typography>
+                  {!order.userId && canUpdateOrderStatus && (
+                    <Stack spacing={1} sx={{ mt: 1 }}>
+                      <TextField
+                        fullWidth
+                        size="small"
+                        type="email"
+                        label="Guest email"
+                        value={guestContactEmail}
+                        onChange={(event) => setGuestContactEmail(event.target.value)}
+                        disabled={savingContactEmail}
+                        inputProps={{ maxLength: 255 }}
+                        helperText="Use the customer's email for delivery updates."
+                      />
+                      <Button size="small" variant="outlined" onClick={handleSaveGuestEmail} disabled={savingContactEmail || !guestContactEmail.trim() || guestContactEmail.trim() === order.shippingAddressSnapshot?.email}>
+                        {savingContactEmail ? 'Saving…' : 'Save email'}
+                      </Button>
+                    </Stack>
+                  )}
                 </Box>
                 <Box>
                   <Typography variant="caption" color="text.secondary">

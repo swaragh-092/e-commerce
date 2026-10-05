@@ -82,9 +82,10 @@ const resolveWorkflow = ({ parcelCount = 1, provider = null, manualSelected = fa
     if (manualSelected || provider?.code === 'manual') {
         return { status: 'eligible', workflow: 'manual_split' };
     }
-    // Automated carrier MPS (Master-Child Multi-Piece Shipments) is not yet implemented in provider APIs
-    // (shiprocket /orders/create/adhoc only books single adhoc parcels without master-child linkage).
-    // Fail-closed to protect shipments from unlinked per-parcel adhoc carrier bookings.
+    // Shiprocket's public MPS guide describes panel creation and account training,
+    // but does not provide an API contract for MPS linkage. Until an account/API
+    // contract is verified and implemented, fail closed rather than create
+    // independent adhoc orders that are not linked under one master AWB.
     return {
         status: 'blocked',
         code: 'MULTI_PARCEL_BOOKING_UNAVAILABLE',
@@ -1158,6 +1159,7 @@ const createQuote = async (userId, payload) => {
                     pickupPincode: selectedOrigin.pincode,
                     weightGrams: parcel.chargeableWeightGrams,
                     paymentMode: paymentMethod === 'cod' ? 'cod' : 'prepaid',
+                    declaredValue: context.subtotal,
                     lengthCm: parcel.lengthCm,
                     breadthCm: parcel.breadthCm,
                     heightCm: parcel.heightCm,

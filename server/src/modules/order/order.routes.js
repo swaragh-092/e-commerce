@@ -4,7 +4,8 @@ const orderController = require('./order.controller');
 const { validate } = require('../../middleware/validate.middleware');
 const { 
   placeOrderSchema, 
-  updateOrderStatusSchema, 
+  updateOrderStatusSchema,
+  updateOrderContactEmailSchema,
   createFulfillmentSchema,
   updateFulfillmentStatusSchema,
   updateShipmentStatusSchema,
@@ -35,12 +36,18 @@ router.post('/', optionalAuth, (req, res, next) => {
 
 router.get('/', authenticate, authorizePermissions(PERMISSIONS.ACCOUNT_SELF), validate(listOrdersQuerySchema, 'query'), orderController.getOrders);
 router.get('/:id/tracking', authenticate, authorizePermissions(PERMISSIONS.ACCOUNT_SELF), validate(idParamSchema, 'params'), orderController.getFulfillmentTracking);
-router.get('/:id', authenticate, authorizePermissions(PERMISSIONS.ACCOUNT_SELF), validate(idParamSchema, 'params'), orderController.getOrderById);
+router.get('/:id', optionalAuth, (req, res, next) => {
+  if (req.user) {
+    return authorizePermissions(PERMISSIONS.ACCOUNT_SELF)(req, res, next);
+  }
+  next();
+}, validate(idParamSchema, 'params'), orderController.getOrderById);
 router.post('/:id/cancel', authenticate, authorizePermissions(PERMISSIONS.ACCOUNT_SELF), validate(idParamSchema, 'params'), orderController.cancelOrder);
 router.post('/:id/returns', authenticate, authorizePermissions(PERMISSIONS.ACCOUNT_SELF), validate(createPutBackSchema), orderController.createReturnRequest);
 router.post('/:id/replacements', authenticate, authorizePermissions(PERMISSIONS.ACCOUNT_SELF), validate(createPutBackSchema), orderController.createReplacementRequest);
 
 // Admin
+router.patch('/:id/contact-email', authenticate, authorizePermissions(PERMISSIONS.ORDERS_UPDATE_STATUS), validate(idParamSchema, 'params'), validate(updateOrderContactEmailSchema), auditLog('Order'), orderController.updateContactEmail);
 router.put('/:id/status', authenticate, authorizePermissions(PERMISSIONS.ORDERS_UPDATE_STATUS), validate(idParamSchema, 'params'), validate(updateOrderStatusSchema), auditLog('Order'), orderController.updateStatus);
 router.post('/:id/refund', authenticate, authorizePermissions(PERMISSIONS.ORDERS_REFUND), validate(processRefundSchema), auditLog('Order'), orderController.processRefund);
 router.post('/:id/fulfillments', authenticate, authorizePermissions(PERMISSIONS.ORDERS_UPDATE_STATUS), validate(idParamSchema, 'params'), validate(createFulfillmentSchema), auditLog('Order'), orderController.createFulfillment);
@@ -51,4 +58,3 @@ router.post('/:id/history/notes', authenticate, authorizePermissions(PERMISSIONS
 
 
 module.exports = router;
-

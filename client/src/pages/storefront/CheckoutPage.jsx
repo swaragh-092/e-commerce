@@ -116,6 +116,25 @@ const createCheckoutSessionId = () => {
     }
 };
 
+const getOrderSubmissionKey = async (checkoutSessionId, orderPayload) => {
+    const payloadForFingerprint = { ...orderPayload };
+    delete payloadForFingerprint.checkoutSessionId;
+    delete payloadForFingerprint.idempotencyKey;
+    const bytes = new TextEncoder().encode(JSON.stringify(payloadForFingerprint));
+    const digest = await crypto.subtle.digest('SHA-256', bytes);
+    const fingerprint = Array.from(new Uint8Array(digest), (byte) => byte.toString(16).padStart(2, '0')).join('');
+    const storageKey = `pendingOrderSubmission:${checkoutSessionId}`;
+    try {
+        const saved = JSON.parse(sessionStorage.getItem(storageKey) || 'null');
+        if (saved?.fingerprint === fingerprint && saved?.idempotencyKey) return saved.idempotencyKey;
+        const idempotencyKey = uuidv4();
+        sessionStorage.setItem(storageKey, JSON.stringify({ fingerprint, idempotencyKey }));
+        return idempotencyKey;
+    } catch (_) {
+        return uuidv4();
+    }
+};
+
 const loadScript = (src, globalName) => new Promise((resolve, reject) => {
     if (globalName && window[globalName]) {
         resolve(window[globalName]);
@@ -412,6 +431,8 @@ const CheckoutPage = () => {
 
     const [placing, setPlacing] = useState(false);
     const [error, setError] = useState(null);
+    const [guestEmail, setGuestEmail] = useState('');
+    const [guestEmailError, setGuestEmailError] = useState(false);
 
     const [paymentMethod, setPaymentMethod] = useState(defaultPaymentMethod || 'razorpay');
 
@@ -475,6 +496,7 @@ const CheckoutPage = () => {
     const appliedCouponCodes = useMemo(() => appliedCoupons.map((coupon) => coupon.code).sort().join('|'), [appliedCoupons]);
 
     const isShippingSetupError = ['MISSING_PRODUCT_MEASUREMENTS', 'INVALID_SHIPPING_PACKAGE', 'SHIPPING_PACKAGE_CAPACITY_EXCEEDED'].includes(shippingErrorCode);
+    const hasShippingIssue = hasPhysicalItems && Boolean(shippingError || shippingQuote?.serviceable === false);
     const isTemporaryShippingError = !isShippingSetupError && (shippingErrorStatus === 503 ||
         (typeof shippingError === 'string' && shippingError.toLowerCase().includes('temporarily')));
 
@@ -671,7 +693,7 @@ const CheckoutPage = () => {
             },
             prefill: {
                 name: selectedAddress?.fullName || '',
-                email: user?.email || '',
+                email: user?.email || guestEmail.trim(),
                 contact: selectedAddress?.phone || '',
             },
             theme: {
@@ -759,6 +781,11 @@ const CheckoutPage = () => {
             return;
         }
         if (hasPhysicalItems && !selectedAddressId) { setError('Please select a shipping address.'); return; }
+        if (!user && hasPhysicalItems && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(guestEmail.trim())) {
+            setGuestEmailError(true);
+            setError('Enter a valid email address for delivery updates.');
+            return;
+        }
         if (!paymentMethod) { setError('No payment method is currently available.'); return; }
         if (!hasPhysicalItems && paymentMethod === 'cod') { setError('Cash on delivery is not available for digital products.'); return; }
         if (hasPhysicalItems && shippingLoading) { setError('Please wait while we confirm delivery availability.'); return; }
@@ -770,11 +797,12 @@ const CheckoutPage = () => {
         setError(null);
         let orderPlaced = false;
         try {
-            const res = await orderService.placeOrder({
+            const orderPayload = {
                 ...(hasPhysicalItems && selectedAddressId ? { shippingAddressId: selectedAddressId } : {}),
                 ...(hasPhysicalItems && shippingQuote?.quoteId ? { shippingQuoteId: shippingQuote.quoteId } : {}),
                 checkoutSessionId,
                 sessionId: getSessionId(),
+                ...(!user && hasPhysicalItems ? { guestEmail: guestEmail.trim() } : {}),
                 paymentMethod,
                 ...(couponCode && couponResult && !couponResult.error && { couponCode }),
                 ...(appliedCoupons.length > 0 && { couponCodes: appliedCoupons.map((c) => c.code) }),
@@ -786,7 +814,9 @@ const CheckoutPage = () => {
                         quantity: buyNowItem.quantity,
                     },
                 }),
-            });
+            };
+            const idempotencyKey = await getOrderSubmissionKey(checkoutSessionId, orderPayload);
+            const res = await orderService.placeOrder({ ...orderPayload, idempotencyKey });
 
             const orderId = res?.order?.id;
             const orderNumber = res?.order?.orderNumber;
@@ -794,8 +824,9 @@ const CheckoutPage = () => {
             if (!orderId) {
                 throw new Error('Order was created, but the order id is missing. Please check your orders and retry payment.');
             }
-            try { sessionStorage.removeItem('checkoutSessionId'); } catch (_) {}
             if (paymentMethod === 'cod') {
+                try { sessionStorage.removeItem('checkoutSessionId'); } catch (_) {}
+                try { sessionStorage.removeItem(`pendingOrderSubmission:${checkoutSessionId}`); } catch (_) {}
                 if (!isBuyNowFlow) await clearCart();
                 navigate('/payment/success', { state: { orderId, orderNumber, isCod: true } });
             } else {
@@ -857,8 +888,11 @@ const CheckoutPage = () => {
                 {/* ── Left: sections ── */}
                 <Box>
                     {/* Always-visible Shipping Alert & Recovery Action Banner (Edge Case 3 & 4) */}
-                    {(shippingError || (shippingQuote && !shippingQuote.serviceable) || isTemporaryShippingError) && (
+                    {hasShippingIssue && (
                         <Alert
+                            id="checkout-shipping-error"
+                            aria-live="polite"
+                            aria-atomic="true"
                             severity={isTemporaryShippingError ? 'info' : 'warning'}
                             sx={{ mb: 2.5, borderRadius: blockRadius }}
                             action={
@@ -898,6 +932,27 @@ const CheckoutPage = () => {
                                 {shippingError || (shippingQuote && !shippingQuote.serviceable ? shippingQuote.message : 'Delivery is not available for this pincode. Please retry or change your address.')}
                             </Typography>
                         </Alert>
+                    )}
+
+                    {!user && hasPhysicalItems && guestCheckoutEnabled !== false && (
+                        <Paper variant="outlined" sx={{ mb: 1.5, p: 2.5, borderRadius: blockRadius }}>
+                            <TextField
+                                {...formFieldProps}
+                                fullWidth
+                                required
+                                type="email"
+                                autoComplete="email"
+                                label="Email address"
+                                value={guestEmail}
+                                onChange={(event) => {
+                                    setGuestEmail(event.target.value);
+                                    setGuestEmailError(false);
+                                }}
+                                error={guestEmailError}
+                                helperText={guestEmailError ? 'Enter a valid email address.' : 'Used for delivery updates.'}
+                                inputProps={{ maxLength: 255 }}
+                            />
+                        </Paper>
                     )}
 
                     {/* ── Section 1: Delivery Address ── */}
@@ -948,11 +1003,6 @@ const CheckoutPage = () => {
                                         </Box>
                                     </Box>
 
-                                    {(shippingError || (shippingQuote && !shippingQuote.serviceable) || isTemporaryShippingError) && (
-                                        <Typography variant="caption" color="warning.main" sx={{ display: 'flex', alignItems: 'center', gap: 0.5, mt: 0.5, fontWeight: 600 }}>
-                                            ⚠️ {shippingError || (shippingQuote && !shippingQuote.serviceable ? shippingQuote.message : 'Delivery is not available for this address.')}
-                                        </Typography>
-                                    )}
                                 </Box>
                             )
                         }
@@ -1004,7 +1054,7 @@ const CheckoutPage = () => {
                                         </Button>
                                     </Box>
                                 ) : (
-                                    <RadioGroup value={selectedAddressId} onChange={(e) => setSelectedAddressId(e.target.value)}>
+                                    <RadioGroup aria-label="Delivery address" value={selectedAddressId} onChange={(e) => setSelectedAddressId(e.target.value)}>
                                         {addresses.map((addr) => (
                                             <Paper
                                                 key={addr.id}
@@ -1015,11 +1065,13 @@ const CheckoutPage = () => {
                                                     bgcolor: selectedAddressId === addr.id ? 'action.selected' : 'background.paper',
                                                     transition: 'all 0.15s',
                                                     '&:hover': { borderColor: 'primary.main', bgcolor: 'action.hover' },
+                                                    '&:focus-within': { outline: '2px solid', outlineColor: 'primary.main', outlineOffset: 2 },
                                                 }}
                                                 onClick={() => setSelectedAddressId(addr.id)}
                                             >
                                                 <Box sx={{ display: 'flex', alignItems: 'flex-start' }}>
                                                     <Radio
+                                                        inputProps={{ 'aria-label': `${addr.fullName}, ${addr.addressLine1}, ${addr.city}, ${addr.postalCode}` }}
                                                         value={addr.id}
                                                         checked={selectedAddressId === addr.id}
                                                         size="small"
@@ -1051,7 +1103,7 @@ const CheckoutPage = () => {
                                                             </Typography>
                                                         )}
                                                     </Box>
-                                                    <IconButton size="small" onClick={(e) => { e.stopPropagation(); openEditAddrDialog(addr); }}>
+                                                    <IconButton aria-label={`Edit address for ${addr.fullName}`} size="small" onClick={(e) => { e.stopPropagation(); openEditAddrDialog(addr); }}>
                                                         <EditIcon fontSize="small" />
                                                     </IconButton>
                                                 </Box>
@@ -1076,39 +1128,6 @@ const CheckoutPage = () => {
                                             <Alert severity="info" icon={<CircularProgress size={16} />}>
                                                 Checking delivery availability...
                                             </Alert>
-                                        ) : isTemporaryShippingError ? (
-                                            <Alert
-                                                severity="info"
-                                                action={
-                                                    <Button
-                                                        color="inherit"
-                                                        size="small"
-                                                        variant="outlined"
-                                                        onClick={() => setShippingRetryTrigger((v) => v + 1)}
-                                                        sx={{ fontWeight: 600, textTransform: 'none' }}
-                                                    >
-                                                        Retry
-                                                    </Button>
-                                                }
-                                            >
-                                                {shippingError || 'Delivery checking is temporarily unavailable. Please retry shortly.'}
-                                            </Alert>
-                                        ) : shippingError || (shippingQuote && !shippingQuote.serviceable) ? (
-                                            <Alert
-                                                severity="warning"
-                                                action={
-                                                    !isShippingSetupError && (<Button
-                                                        color="inherit"
-                                                        size="small"
-                                                        onClick={openAddAddrDialog}
-                                                        sx={{ fontWeight: 600, textTransform: 'none' }}
-                                                    >
-                                                        Change Address
-                                                    </Button>)
-                                                }
-                                            >
-                                                {shippingError || 'Delivery is not available for this pincode. Please select or add a different address.'}
-                                            </Alert>
                                         ) : shippingQuote?.serviceable ? (
                                             <Alert severity="success">
                                                 Delivery available{shippingQuote.estimatedDeliveryDays ? ` in ${shippingQuote.estimatedDeliveryDays} days` : ''}.
@@ -1122,6 +1141,7 @@ const CheckoutPage = () => {
                                     <Button
                                         variant="contained"
                                         disabled={!selectedAddressId || shippingLoading || !shippingQuote?.quoteId || shippingQuote?.serviceable === false}
+                                        aria-describedby={hasShippingIssue ? 'checkout-shipping-error' : undefined}
                                         onClick={() => completeSection(1, couponsEnabled ? 2 : 3)}
                                         sx={{ px: 4 }}
                                     >
@@ -1285,6 +1305,7 @@ const CheckoutPage = () => {
                         }
                     >
                         <RadioGroup
+                            aria-label="Payment method"
                             value={paymentMethod}
                             onChange={(e) => {
                                 if (e.target.value === 'cod' && shippingQuote?.codAvailable === false) return;
@@ -1309,6 +1330,7 @@ const CheckoutPage = () => {
                                 >
                                     <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
                                         <Radio
+                                            inputProps={{ 'aria-label': method.title }}
                                             value={method.id}
                                             checked={paymentMethod === method.id}
                                             disabled={method.id === 'cod' && shippingQuote?.codAvailable === false}
@@ -1504,6 +1526,7 @@ const CheckoutPage = () => {
                                 variant={checkoutBlockStyle.ctaStyle === 'outline' ? 'outlined' : 'contained'}
                                 color={checkoutBlockStyle.ctaStyle === 'soft' ? 'secondary' : 'primary'}
                                 size="large"
+                                aria-describedby={hasShippingIssue ? 'checkout-shipping-error' : undefined}
                                 onClick={handlePlaceOrder}
                                 disabled={placing || (!user && guestCheckoutEnabled === false) || (hasPhysicalItems && (shippingLoading || !shippingQuote?.quoteId || shippingQuote?.serviceable === false || !selectedAddressId)) || activeSection !== 3}
                                 sx={{
@@ -1534,12 +1557,6 @@ const CheckoutPage = () => {
                                     {hasPhysicalItems && !selectedAddressId
                                         ? 'Please select a delivery address to proceed'
                                         : 'Complete the steps above to place your order'}
-                                </Typography>
-                            )}
-
-                            {hasPhysicalItems && (shippingError || (shippingQuote && !shippingQuote.serviceable)) && (
-                                <Typography variant="caption" color="warning.main" display="block" textAlign="center" mt={1} fontWeight={600}>
-                                    {isShippingSetupError ? 'Cannot place order: Update items or contact support.' : 'Cannot place order: Change address to proceed.'}
                                 </Typography>
                             )}
 

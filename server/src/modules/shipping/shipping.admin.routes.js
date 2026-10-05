@@ -27,7 +27,8 @@ router.patch('/shipping/providers/:id', ...manageShipping, validate(idParamSchem
 router.post('/shipping/providers/:id/test-connection', ...manageShipping, validate(idParamSchema, 'params'), shippingController.testConnection);
 router.post('/shipping/test', ...manageShipping, validate(shippingTestSchema), shippingController.testCalculation);
 
-router.get('/shipping/operations/failed', ...manageShipping, shippingController.listFailedOperations);
+router.get('/shipping/operations', ...manageShipping, shippingController.listFailedOperations);
+router.get('/shipping/operations/failed', ...manageShipping, shippingController.listFailedOperations); // Backward-compatible alias
 router.post('/shipping/operations/:id/retry', ...manageShipping, validate(idParamSchema, 'params'), shippingController.retryOperation);
 
 router.get('/shipping/zones', ...manageShipping, shippingController.listZones);

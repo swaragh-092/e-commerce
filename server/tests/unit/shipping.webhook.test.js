@@ -5,6 +5,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 const require = createRequire(import.meta.url);
 const ShiprocketProvider = require('../../src/modules/shipping/providers/shiprocket.provider');
 const ShippingWebhookService = require('../../src/modules/shipping/shipping.webhook.service');
+const OrderService = require('../../src/modules/order/order.service');
 const NotificationService = require('../../src/modules/notification/notification.service');
 const {
     sequelize,
@@ -23,6 +24,21 @@ describe('Shiprocket Provider Webhook Adapter', () => {
             settings: { webhookSecret: 'test-secret-key-123' },
             credentials: {},
         });
+    });
+
+    it('deduplicates reordered JSON fields while preserving array order and changed values', () => {
+        const hash = ShippingWebhookService.hashEventPayload;
+        expect(hash({ awb: 'AWB-1', detail: { status: 'DELIVERED', scans: [1, 2] } }))
+            .toBe(hash({ detail: { scans: [1, 2], status: 'DELIVERED' }, awb: 'AWB-1' }));
+        expect(hash({ scans: [1, 2] })).not.toBe(hash({ scans: [2, 1] }));
+        expect(hash({ status: 'DELIVERED' })).not.toBe(hash({ status: 'CANCELLED' }));
+    });
+
+    it('verifies HMAC against the original bytes including whitespace', async () => {
+        const raw = Buffer.from('{ "awb": "AWB-1",  "status": "DELIVERED" }\n');
+        const signature = crypto.createHmac('sha256', 'test-secret').update(raw).digest('hex');
+        expect(await provider.verifySignature(raw, signature, 'test-secret')).toBe(true);
+        expect(await provider.verifySignature(JSON.parse(raw.toString()), signature, 'test-secret')).toBe(false);
     });
 
     it('normalizes various Shiprocket webhook payload formats and statuses', async () => {
@@ -151,6 +167,39 @@ describe('ShippingWebhookService Lifecycle & Idempotency', () => {
         vi.spyOn(Order, 'findByPk').mockResolvedValue(mockOrderRecord);
         vi.spyOn(ShipmentEvent, 'create').mockResolvedValue({ id: 'event-1' });
         vi.spyOn(NotificationService, 'sendDeliveryUpdate').mockResolvedValue(true);
+        vi.spyOn(OrderService, 'syncOrderShippingStatus').mockImplementation(async (order) => {
+            const status = mockShipmentRecord.status === 'in_transit' ? 'shipped' : mockShipmentRecord.status;
+            await order.update({ orderShippingStatus: status, shipmentStatus: status });
+            return status;
+        });
+        vi.spyOn(OrderService, 'syncCodPaymentIfDelivered').mockResolvedValue(false);
+        vi.spyOn(OrderService, 'syncOrderClosureIfComplete').mockResolvedValue(false);
+    });
+
+    it('notifies after polling recovers a missed delivery webhook, and avoids notifying on unchanged polls', async () => {
+        mockShipmentRecord.provider = mockProviderRecord;
+        vi.spyOn(Shipment, 'findByPk').mockResolvedValue(mockShipmentRecord);
+        vi.spyOn(ShiprocketProvider.prototype, 'getTracking').mockResolvedValue({ status: 'delivered' });
+
+        expect(await ShippingWebhookService.reconcileTracking()).toBe(1);
+        expect(mockShipmentRecord.status).toBe('delivered');
+        expect(NotificationService.sendDeliveryUpdate).toHaveBeenCalledTimes(1);
+        expect(NotificationService.sendDeliveryUpdate).toHaveBeenCalledWith('user-1', 'order-1', 'delivered');
+
+        expect(await ShippingWebhookService.reconcileTracking()).toBe(0);
+        expect(NotificationService.sendDeliveryUpdate).toHaveBeenCalledTimes(1);
+    });
+
+    it('does not repeat delivery notifications for a new scan with an unchanged status', async () => {
+        vi.spyOn(ShipmentEvent, 'findOne').mockResolvedValue(null);
+        mockShipmentRecord.status = 'out_for_delivery';
+        await ShippingWebhookService.processWebhook('shiprocket', {
+            awb: mockShipmentRecord.awb,
+            current_status: 'OUT FOR DELIVERY',
+            scan_id: 'NEW-SCAN-SAME-STATUS',
+        }, { 'x-api-key': 'test-webhook-key' });
+        expect(ShipmentEvent.create).toHaveBeenCalled();
+        expect(NotificationService.sendDeliveryUpdate).not.toHaveBeenCalled();
     });
 
     it('progresses shipment lifecycle from created -> in_transit -> out_for_delivery -> delivered', async () => {
@@ -193,6 +242,8 @@ describe('ShippingWebhookService Lifecycle & Idempotency', () => {
         expect(mockShipmentRecord.status).toBe('delivered');
         expect(mockFulfillmentRecord.status).toBe('delivered');
         expect(mockOrderRecord.orderShippingStatus).toBe('delivered');
+        expect(OrderService.syncCodPaymentIfDelivered).toHaveBeenCalledWith(mockOrderRecord, expect.any(Object));
+        expect(OrderService.syncOrderClosureIfComplete).toHaveBeenCalledWith(mockOrderRecord, expect.any(Object));
         expect(NotificationService.sendDeliveryUpdate).toHaveBeenCalledWith('user-1', 'order-1', 'delivered');
     });
 
