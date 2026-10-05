@@ -549,11 +549,11 @@ const CheckoutPage = () => {
     useEffect(() => {
         if (!shippingQuote?.expiresAt || !shippingQuote?.quoteId) return undefined;
         const expiresMs = new Date(shippingQuote.expiresAt).getTime() - Date.now();
-        if (expiresMs <= 0) return undefined;
-        // Schedule auto-refresh 1s after expiration to silently obtain a fresh valid quote
+        // If already expired (e.g. slept tab or clock skew), refresh on next tick; otherwise schedule 1s after expiry
+        const delay = expiresMs <= 0 ? 0 : Math.min(expiresMs + 1000, 2147483647);
         const timer = setTimeout(() => {
             setShippingRetryTrigger((v) => v + 1);
-        }, Math.min(expiresMs + 1000, 2147483647));
+        }, delay);
         return () => clearTimeout(timer);
     }, [shippingQuote?.expiresAt, shippingQuote?.quoteId]);
 
