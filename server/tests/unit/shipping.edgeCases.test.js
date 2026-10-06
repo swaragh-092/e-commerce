@@ -618,6 +618,9 @@ describe('Shipping System 10 Edge Cases A-to-Z', () => {
                 name: 'Product 1',
                 price: 500,
                 weightGrams: 500,
+                lengthCm: 10,
+                breadthCm: 10,
+                heightCm: 10,
                 categories: [],
                 brand: null,
             });
@@ -627,7 +630,10 @@ describe('Shipping System 10 Edge Cases A-to-Z', () => {
                 state: 'Karnataka',
                 country: 'India',
             });
-            vi.spyOn(Setting, 'findAll').mockResolvedValue([]);
+            vi.spyOn(Setting, 'findAll').mockResolvedValue([
+                { group: 'shipping', key: 'packageProfiles', value: [{ id: 'test-box', name: 'Test Box', lengthCm: 30, breadthCm: 30, heightCm: 30, emptyWeightGrams: 50, maxItems: 10, maxContentsWeightGrams: 5000 }] },
+                { group: 'shipping', key: 'volumetricDivisor', value: 5000 },
+            ]);
 
             await expect(
                 ShippingService.validateQuoteForOrder('user-1', {

@@ -181,6 +181,22 @@ const validate = (formData) => {
     }
   }
 
+  // Shipping Readiness Validation for purchasable (published) products
+  if (formData.requiresShipping && formData.status === 'published') {
+    if (!formData.weightGrams || Number(formData.weightGrams) <= 0) {
+      errs.weightGrams = 'Weight (> 0 g) is required before publishing.';
+    }
+    if (!formData.lengthCm || Number(formData.lengthCm) <= 0.5) {
+      errs.lengthCm = 'Length (> 0.5 cm) is required before publishing.';
+    }
+    if (!formData.breadthCm || Number(formData.breadthCm) <= 0.5) {
+      errs.breadthCm = 'Breadth (> 0.5 cm) is required before publishing.';
+    }
+    if (!formData.heightCm || Number(formData.heightCm) <= 0.5) {
+      errs.heightCm = 'Height (> 0.5 cm) is required before publishing.';
+    }
+  }
+
   return errs;
 };
 
@@ -243,6 +259,7 @@ const ProductEditPage = () => {
     },
     // Shipping dimensions
     requiresShipping: true,
+    packingMode: 'standard',
     weightGrams: '',
     lengthCm: '',
     breadthCm: '',
@@ -323,6 +340,7 @@ const ProductEditPage = () => {
               },
               // Shipping dimensions
               requiresShipping: p.requiresShipping ?? true,
+              packingMode: p.packingMode || 'standard',
               weightGrams: p.weightGrams ?? '',
               lengthCm:    p.lengthCm    ?? '',
               breadthCm:   p.breadthCm   ?? '',
@@ -463,6 +481,7 @@ const ProductEditPage = () => {
         type: formData.type || 'simple',
         // Shipping dimensions — null when blank so DB stores NULL cleanly
         requiresShipping: formData.requiresShipping,
+        packingMode: formData.packingMode || 'standard',
         weightGrams: formData.weightGrams !== '' ? Number(formData.weightGrams) : null,
         lengthCm:    formData.lengthCm    !== '' ? Number(formData.lengthCm)    : null,
         breadthCm:   formData.breadthCm   !== '' ? Number(formData.breadthCm)   : null,
@@ -945,6 +964,16 @@ const ProductEditPage = () => {
 
                 {formData.requiresShipping && (
                   <>
+                    <FormControlLabel
+                      control={
+                        <Checkbox
+                          checked={formData.packingMode === 'separate'}
+                          onChange={(e) => setField('packingMode', e.target.checked ? 'separate' : 'standard')}
+                        />
+                      }
+                      label="Ship each unit separately (never combine in a single box)"
+                      sx={{ mb: 1, display: 'block' }}
+                    />
                     <TextField
                       fullWidth
                       label="Weight (grams)"
@@ -957,10 +986,11 @@ const ProductEditPage = () => {
                       }}
                       value={formData.weightGrams}
                       onChange={(e) => setField('weightGrams', e.target.value)}
-                      helperText="Actual product weight without the shipping box or envelope. Package weight is added separately."
+                      error={Boolean(errors.weightGrams)}
+                      helperText={errors.weightGrams || "Actual product weight without the shipping box or envelope. Package tare weight is added separately."}
                     />
-                    <Typography variant="subtitle2" sx={{ mt: 2, mb: 1 }}>Dimensions (cm)</Typography>
-                    <Typography variant="body2" color="text.secondary" sx={{ mb: 1 }}>Optional when a default package is enabled in Shipping → Packaging. Otherwise, enter measured dimensions for shipping.</Typography>
+                    <Typography variant="subtitle2" sx={{ mt: 2, mb: 0.5 }}>Dimensions (cm)</Typography>
+                    <Typography variant="body2" color="text.secondary" sx={{ mb: 1 }}>Variants inherit absent measurements from the base product. Enter measured package-ready dimensions.</Typography>
                     <Grid container spacing={1.5}>
                       <Grid item xs={4}>
                         <TextField
@@ -969,6 +999,8 @@ const ProductEditPage = () => {
                           InputProps={{ endAdornment: <InputAdornment position="end">cm</InputAdornment> }}
                           value={formData.lengthCm}
                           onChange={(e) => setField('lengthCm', e.target.value)}
+                          error={Boolean(errors.lengthCm)}
+                          helperText={errors.lengthCm}
                         />
                       </Grid>
                       <Grid item xs={4}>
@@ -978,6 +1010,8 @@ const ProductEditPage = () => {
                           InputProps={{ endAdornment: <InputAdornment position="end">cm</InputAdornment> }}
                           value={formData.breadthCm}
                           onChange={(e) => setField('breadthCm', e.target.value)}
+                          error={Boolean(errors.breadthCm)}
+                          helperText={errors.breadthCm}
                         />
                       </Grid>
                       <Grid item xs={4}>
@@ -987,12 +1021,14 @@ const ProductEditPage = () => {
                           InputProps={{ endAdornment: <InputAdornment position="end">cm</InputAdornment> }}
                           value={formData.heightCm}
                           onChange={(e) => setField('heightCm', e.target.value)}
+                          error={Boolean(errors.heightCm)}
+                          helperText={errors.heightCm}
                         />
                       </Grid>
                     </Grid>
 
                     {/* Live volumetric weight preview */}
-                    {!settings?.shipping?.defaultPackage?.enabled && formData.lengthCm && formData.breadthCm && formData.heightCm && (
+                    {Boolean(formData.lengthCm && formData.breadthCm && formData.heightCm) && (
                       (() => {
                         const volWeight = Math.ceil(
                           (Number(formData.lengthCm) * Number(formData.breadthCm) * Number(formData.heightCm)) / (Number(settings?.shipping?.volumetricDivisor) || 5000) * 1000

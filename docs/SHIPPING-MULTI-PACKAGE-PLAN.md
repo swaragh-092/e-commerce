@@ -6,18 +6,19 @@ Allow the store to define more than one real package and ship an order in one or
 
 ## What exists today
 
-- `shipping.defaultPackage` stores one package with dimensions, tare weight, max item count, and max contents weight.
-- Checkout uses that same package for the entire physical order. If it cannot contain the order, quote creation stops with a packaging-capacity error. There is no parcel-splitting planner.
+- `shipping.packageProfiles` stores the measured preset catalog (dimensions, tare weight, max item count, max contents weight, interior dimensions, active state) and `shipping.defaultPackageId` marks the tiebreak preset. The legacy single `shipping.defaultPackage` and per-product fit matrices are removed.
+- Checkout plans parcels from the preset catalog. If it cannot contain the order, quote creation stops with a packaging-capacity error. Physical orders cannot check out at all when no active preset exists.
 - `Shipment` already stores parcel dimensions and actual/volumetric weight. `ShipmentItem` associates order lines and quantities with a shipment. Fulfillment logic already tracks dispatched quantities. This can represent multiple parcels, but current Shiprocket booking builds one provider request with whole-order items, totals, weight, and dimensions.
 - Package count in shipping-rule calculations is currently `1`; it must not be mistaken for parcel planning.
 
 ## Implementation status
 
-- Added a measured package catalog setting with server validation and admin editing. Each package records outside dimensions, tare weight, item and content-weight limits, active state, product/variant quantities the merchant confirms fit, and optional merchant-defined mix groups.
-- Checkout plans parcels from confirmed fit declarations. Products can share a package only when their fit rules have the same non-empty mix-group name; blank or different group names stay separate. The planner enforces per-product quantities and package-wide item and weight limits, splits quantities when necessary, and computes actual and volumetric weight per parcel. Supported single-parcel Shiprocket quotes check serviceability and the live carrier rate.
-- The checkout quote's parcel plan is copied to the order shipping snapshot. Staff can select a planned parcel during fulfillment; the system saves its package ID/name and measured dimensions and weight with the shipment. It rejects selecting a package twice or sending item quantities that do not match it.
-- For Manual / Own Delivery, staff can also pack an exception, choose item quantities, and record the actual outer dimensions and packed weight. This is not available with an API courier because it would change the paid carrier quote after checkout.
-- Multi-parcel orders using an API courier are deliberately blocked at checkout and fulfillment until the provider's multi-parcel booking path is verified. The current Shiprocket API documentation shows the ordinary order request as a single parcel; account-level MPS activation does not by itself prove API booking is supported.
+- Added a measured package catalog setting with server validation and admin editing. Each package records outside dimensions, optional interior dimensions, tare weight, item and content-weight limits, active state, and the default-preset tiebreak. Per-product fit declarations were removed: packing recommendations use measured dimensions, weight, volume, and item count. Volume checks do not prove spatial fit; warehouse staff must confirm the actual packed parcel.
+- Checkout plans parcels physically: a unit without valid measured dimensions fits no preset and fails loudly. Goods share a parcel up to volume/weight/item limits; only explicitly incompatible item mix groups, or lines marked to ship each unit separately, stay separate (blank groups share). The planner splits quantities when necessary and computes actual and volumetric weight per parcel. Supported single-parcel Shiprocket quotes check serviceability and the live carrier rate.
+- The checkout quote's parcel plan is copied to the order shipping snapshot. Staff explicitly select a planned parcel during fulfillment; the system saves its package ID/name with the shipment and records confirmed scale measurements. A recommendation is linked only when explicitly selected, so custom packing never consumes a recommendation or triggers a conflict on it. It rejects selecting a package twice. For carrier bookings, staff must type the packed scale weight (estimates are never pre-filled) and confirm the scale reading.
+- For Manual / Own Delivery, staff pack with chosen item quantities and record the actual outer dimensions and packed weight. Tracking details are optional.
+- COD parcels persist their actual collectable per shipment and later parcels reuse the persisted sum, so split fulfilment collects exactly the order total.
+- The application permits multi-parcel API orders and ordinary fulfillment one measured parcel at a time, with independent AWBs and labels. This is not an automated MPS booking or a master-AWB shipment group. Live account compatibility still requires staging/operational verification; account-level MPS activation does not establish an implemented MPS API contract.
 - Delivery pricing now accepts a carrier-calculated policy and applies storewide allowed/blocked pincode coverage and India-only restrictions to that policy. Carrier quotes are only accepted when each parcel has a numeric rate, including a valid zero rate.
 
 ## Industry patterns and confirmed carrier constraints
@@ -65,6 +66,8 @@ Admin: package catalog → packing facts/constraints → test plan → fulfillme
 3. Use carrier-calculated parcel quotes in checkout, aggregated into one delivery line in the order total. Confirm GST treatment and who absorbs/refunds differences if staff changes the parcel plan after payment.
 4. Merchant reports Shiprocket MPS is enabled. Published support guidance lists Delhivery only, 10 kg minimum applicable weight, and a custom-order workflow. We must verify how MPS applies to the store's API-created checkout orders before relying on it.
 
+> Update: decisions 1–2 (fit declarations) were later superseded. Fit matrices are removed from validation, planning, and the admin UI: the planner proves fit purely from measured product dimensions against preset volume/weight/item limits, missing dimensions always fail, and isolation uses the per-product separate-pack flag plus explicit item mix groups.
+
 ## Acceptance checks
 
 - One item, multiple same-size items, mixed sizes, fragile/keep-together items, non-shipping items, missing product weight, oversized item, exact capacity boundary, and order beyond all configured package capacities.
@@ -77,9 +80,9 @@ Admin: package catalog → packing facts/constraints → test plan → fulfillme
 ## Release order
 
 1. Get Shiprocket confirmation for API-created order eligibility, minimum billable weight, courier, rate quote format, and tracking/webhook behavior. Merchant reports MPS activation; verify how it applies to this store's orders.
-2. Define measured fit profiles: which product/variant quantities fit each package, whether products may mix, and whether/how one order line can split across boxes.
+2. Define measured presets and product dimensions: which preset sizes and capacities the warehouse stocks, and accurate per-product weights and dimensions. Isolation uses the product “ship each unit separately” flag and explicit item mix groups, not a fit matrix.
 3. Decide how to handle package-plan changes after checkout and how to absorb/refund quote differences without surprise post-payment charges.
 4. Implement a package catalog and migrate the current default package without changing existing order snapshots.
-5. Implement deterministic checkout parcel suggestions from saved fit profiles, plus staff review/edit for exceptions.
+5. Implement deterministic checkout parcel suggestions from measured presets and product dimensions, plus staff review/edit for exceptions.
 6. Add carrier quote aggregation, verified MPS or eligible per-parcel booking, per-parcel tracking, COD/payment reconciliation, and recovery.
 7. Enable booking only after controlled-provider verification covers labels, AWBs, webhooks, cancellation/refunds, and idempotent retries.

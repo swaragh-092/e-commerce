@@ -39,6 +39,7 @@ const FULFILLMENT_STATUS_VALUES = ['pending', ...SHIPMENT_STATUS_VALUES.filter((
 
 const createFulfillmentSchema = Joi.object({
     trackingNumber: Joi.string().max(255).allow(null, ''),
+    trackingUrl: Joi.string().uri().max(500).allow(null, '').optional(),
     courier: Joi.string().max(100).allow(null, ''),
     expectedDeliveryDate: Joi.date().iso().allow(null).optional(),
     notes: Joi.string().allow(null, ''),
@@ -51,6 +52,7 @@ const createFulfillmentSchema = Joi.object({
         breadthCm: Joi.number().greater(0.5).required(),
         heightCm: Joi.number().greater(0.5).required(),
         actualWeightGrams: Joi.number().greater(0).required(),
+        weightConfirmed: Joi.boolean().optional(),
     }).optional(),
     items: Joi.array().items(Joi.object({
         orderItemId: Joi.string().uuid().required(),

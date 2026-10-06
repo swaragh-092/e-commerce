@@ -42,6 +42,7 @@ const createProductSchema = Joi.object({
   }),
   weight: Joi.number().precision(2).min(0).allow(null), // legacy field
   requiresShipping: Joi.boolean().default(true),
+  packingMode: Joi.string().valid('standard', 'separate').default('standard'),
   weightGrams: Joi.number().min(0).allow(null),
   lengthCm: Joi.number().min(0).allow(null),
   breadthCm: Joi.number().min(0).allow(null),
@@ -66,6 +67,10 @@ const createProductSchema = Joi.object({
       stockQty: Joi.number().integer().min(0).default(0),
       isActive: Joi.boolean().default(true),
       sortOrder: Joi.number().integer().min(0).default(0),
+      weightGrams: Joi.number().min(0).allow(null),
+      lengthCm: Joi.number().min(0).allow(null),
+      breadthCm: Joi.number().min(0).allow(null),
+      heightCm: Joi.number().min(0).allow(null),
       images: Joi.array().items(
         Joi.object({
           url: Joi.string().allow('', null),
@@ -122,6 +127,7 @@ const updateProductSchema = Joi.object({
   quantity: Joi.number().integer().min(0),
   weight: Joi.number().precision(2).min(0).allow(null),
   requiresShipping: Joi.boolean(),
+  packingMode: Joi.string().valid('standard', 'separate'),
   weightGrams: Joi.number().min(0).allow(null),
   lengthCm: Joi.number().min(0).allow(null),
   breadthCm: Joi.number().min(0).allow(null),
@@ -146,6 +152,10 @@ const updateProductSchema = Joi.object({
       stockQty: Joi.number().integer().min(0).default(0),
       isActive: Joi.boolean().default(true),
       sortOrder: Joi.number().integer().min(0).default(0),
+      weightGrams: Joi.number().min(0).allow(null),
+      lengthCm: Joi.number().min(0).allow(null),
+      breadthCm: Joi.number().min(0).allow(null),
+      heightCm: Joi.number().min(0).allow(null),
       images: Joi.array().items(
         Joi.object({
           url: Joi.string().allow('', null),

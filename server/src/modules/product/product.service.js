@@ -841,6 +841,44 @@ exports.getProductById = async (id) => {
   return serializeProductPricing(product, { adminView: true, features }, labelPresets);
 };
 
+const validateShippingReadiness = (data, existingProduct = null) => {
+  const status = data.status !== undefined ? data.status : existingProduct?.status;
+  if (status !== 'published') return;
+
+  const requiresShipping = data.requiresShipping !== undefined
+    ? data.requiresShipping
+    : (existingProduct?.requiresShipping !== false);
+  if (requiresShipping === false) return;
+
+  const weightGrams = data.weightGrams !== undefined ? data.weightGrams : existingProduct?.weightGrams;
+  const lengthCm = data.lengthCm !== undefined ? data.lengthCm : existingProduct?.lengthCm;
+  const breadthCm = data.breadthCm !== undefined ? data.breadthCm : existingProduct?.breadthCm;
+  const heightCm = data.heightCm !== undefined ? data.heightCm : existingProduct?.heightCm;
+
+  const missing = [];
+  if (!Number.isFinite(Number(weightGrams)) || Number(weightGrams) <= 0) {
+    missing.push('weight (greater than 0 g)');
+  }
+  if (!Number.isFinite(Number(lengthCm)) || Number(lengthCm) <= 0.5) {
+    missing.push('length (greater than 0.5 cm)');
+  }
+  if (!Number.isFinite(Number(breadthCm)) || Number(breadthCm) <= 0.5) {
+    missing.push('breadth (greater than 0.5 cm)');
+  }
+  if (!Number.isFinite(Number(heightCm)) || Number(heightCm) <= 0.5) {
+    missing.push('height (greater than 0.5 cm)');
+  }
+
+  if (missing.length > 0) {
+    const productName = data.name || existingProduct?.name || 'Product';
+    throw new AppError(
+      'SHIPPING_READINESS_ERROR',
+      400,
+      `Cannot publish "${productName}": physical products requiring shipping must have ${missing.join(', ')} before becoming purchasable.`
+    );
+  }
+};
+
 exports.createProduct = async (data, auditContext = null) => {
   const transaction = await Product.sequelize.transaction();
   const labelPresets = await getLabelPresets();
@@ -856,6 +894,7 @@ exports.createProduct = async (data, auditContext = null) => {
     }
 
     validateProductStock(data);
+    validateShippingReadiness(data);
     if (data.images) await validateProductImages(data.images);
 
     const product = await Product.create({ ...data, slug }, { transaction });
@@ -942,6 +981,7 @@ exports.updateProduct = async (id, data, auditContext = null) => {
     }
 
     validateProductStock(data, product);
+    validateShippingReadiness(data, product);
     if (data.images) await validateProductImages(data.images);
 
     // Log inventory ADJUSTMENT if quantity is being manually changed
@@ -1115,6 +1155,12 @@ exports.bulkUpdateProducts = async (ids, data, actingUserId = null, auditContext
       }
     }
 
+    if (updatePayload.status === 'published') {
+      for (const product of products) {
+        validateShippingReadiness(updatePayload, product);
+      }
+    }
+
     await Product.update(updatePayload, {
       where: { id: ids },
       transaction,
@@ -1268,3 +1314,4 @@ exports.getRelatedProducts = async (productId, limit = 6) => {
 exports.buildSqlSaleCondition = buildSqlSaleCondition;
 exports.getSqlEffectivePriceExpr = getSqlEffectivePriceExpr;
 exports.buildSqlSaleStatusCondition = buildSqlSaleStatusCondition;
+exports.validateShippingReadiness = validateShippingReadiness;

@@ -20,6 +20,19 @@ const validateDefaultPackage = (value) => {
         !Number.isSafeInteger(Number(value.maxItems)) || Number(value.maxItems) < 1) {
         throw new AppError('INVALID_SHIPPING_PACKAGE', 400, 'Package dimensions must exceed 0.5 cm; enter a nonnegative empty weight, a positive capacity weight, and a whole item capacity.');
     }
+    const hasInner = value.innerLengthCm != null || value.innerBreadthCm != null || value.innerHeightCm != null;
+    if (hasInner) {
+        for (const key of ['innerLengthCm', 'innerBreadthCm', 'innerHeightCm']) {
+            if (!Number.isFinite(Number(value[key])) || Number(value[key]) <= 0.5) {
+                throw new AppError('INVALID_SHIPPING_PACKAGE', 400, 'Default package inner dimensions must all be numbers greater than 0.5 cm.');
+            }
+        }
+        if (Number(value.innerLengthCm) > Number(value.lengthCm) ||
+            Number(value.innerBreadthCm) > Number(value.breadthCm) ||
+            Number(value.innerHeightCm) > Number(value.heightCm)) {
+            throw new AppError('INVALID_SHIPPING_PACKAGE', 400, 'Default package inner dimensions cannot exceed exterior dimensions.');
+        }
+    }
     return value;
 };
 

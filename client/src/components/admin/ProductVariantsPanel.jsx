@@ -106,6 +106,10 @@ const VariantsPanel = ({
         images: Array.isArray(variant.images) ? variant.images : [],
         price: variant.price ?? product?.effectivePrice ?? product?.price ?? 0,
         stockQty: variant.stockQty ?? 0,
+        weightGrams: variant.weightGrams ?? '',
+        lengthCm: variant.lengthCm ?? '',
+        breadthCm: variant.breadthCm ?? '',
+        heightCm: variant.heightCm ?? '',
         _dirty: false,
       })));
       setAttributes(attrData);
@@ -394,6 +398,10 @@ const VariantsPanel = ({
           sku: variant.sku?.trim() || null,
           price: Number(variant.price || 0),
           stockQty: Number(variant.stockQty || 0),
+          weightGrams: variant.weightGrams !== '' && variant.weightGrams != null ? Number(variant.weightGrams) : null,
+          lengthCm: variant.lengthCm !== '' && variant.lengthCm != null ? Number(variant.lengthCm) : null,
+          breadthCm: variant.breadthCm !== '' && variant.breadthCm != null ? Number(variant.breadthCm) : null,
+          heightCm: variant.heightCm !== '' && variant.heightCm != null ? Number(variant.heightCm) : null,
           isActive: variant.isActive !== false,
           sortOrder: Number(variant.sortOrder || 0),
           mediaId: variant.mediaId || null,
@@ -1055,6 +1063,65 @@ const VariantsPanel = ({
                               </Typography>
                             }
                           />
+                        </Grid>
+                        <Grid item xs={12}>
+                          <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mb: 0.5 }}>
+                            Shipping measurements (optional — leave blank to inherit from product):
+                          </Typography>
+                          <Grid container spacing={1}>
+                            <Grid item xs={6} sm={3}>
+                              <TextField
+                                fullWidth
+                                size="small"
+                                label="Weight (g)"
+                                type="number"
+                                value={variant.weightGrams ?? ''}
+                                placeholder="Inherited"
+                                onChange={(e) => handleVariantChange(index, 'weightGrams', e.target.value)}
+                                disabled={!canManageVariants}
+                                inputProps={{ min: 0, step: 1 }}
+                              />
+                            </Grid>
+                            <Grid item xs={6} sm={3}>
+                              <TextField
+                                fullWidth
+                                size="small"
+                                label="Length (cm)"
+                                type="number"
+                                value={variant.lengthCm ?? ''}
+                                placeholder="Inherited"
+                                onChange={(e) => handleVariantChange(index, 'lengthCm', e.target.value)}
+                                disabled={!canManageVariants}
+                                inputProps={{ min: 0.5, step: 0.5 }}
+                              />
+                            </Grid>
+                            <Grid item xs={6} sm={3}>
+                              <TextField
+                                fullWidth
+                                size="small"
+                                label="Width (cm)"
+                                type="number"
+                                value={variant.breadthCm ?? ''}
+                                placeholder="Inherited"
+                                onChange={(e) => handleVariantChange(index, 'breadthCm', e.target.value)}
+                                disabled={!canManageVariants}
+                                inputProps={{ min: 0.5, step: 0.5 }}
+                              />
+                            </Grid>
+                            <Grid item xs={6} sm={3}>
+                              <TextField
+                                fullWidth
+                                size="small"
+                                label="Height (cm)"
+                                type="number"
+                                value={variant.heightCm ?? ''}
+                                placeholder="Inherited"
+                                onChange={(e) => handleVariantChange(index, 'heightCm', e.target.value)}
+                                disabled={!canManageVariants}
+                                inputProps={{ min: 0.5, step: 0.5 }}
+                              />
+                            </Grid>
+                          </Grid>
                         </Grid>
                       </Grid>
                     </AccordionDetails>
