@@ -703,6 +703,10 @@ const addProductVariant = async (productId, data) => {
             stockQty: data.stockQty ?? 0,
             isActive: data.isActive ?? true,
             sortOrder: data.sortOrder ?? 0,
+            weightGrams: data.weightGrams ?? null,
+            lengthCm: data.lengthCm ?? null,
+            breadthCm: data.breadthCm ?? null,
+            heightCm: data.heightCm ?? null,
         }, { transaction: t });
 
         for (const opt of data.options) {
@@ -737,8 +741,7 @@ const updateProductVariant = async (productId, variantId, data, auditContext = n
         await validateImageRows(data.images);
     }
 
-    // Whitelist updatable scalar fields (options/dimensions are immutable after creation)
-    const allowed = ['sku', 'price', 'stockQty', 'isActive', 'sortOrder', 'mediaId', 'media_id'];
+    const allowed = ['sku', 'price', 'stockQty', 'isActive', 'sortOrder', 'mediaId', 'media_id', 'weightGrams', 'lengthCm', 'breadthCm', 'heightCm'];
     const updates = {};
     for (const field of allowed) {
         if (data[field] !== undefined) {
