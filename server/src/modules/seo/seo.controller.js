@@ -41,6 +41,19 @@ class SeoController {
       return error(res, 'INTERNAL_SERVER_ERROR', 500, 'Failed to fetch SEO metadata');
     }
   }
+
+  async prerender(req, res, next) {
+    try {
+      const targetPath = req.query.path || req.query.url || req.path || '/';
+      const html = await seoService.renderHtmlForPath(targetPath);
+      res.setHeader('Content-Type', 'text/html; charset=utf-8');
+      res.setHeader('Cache-Control', 'public, max-age=300, s-maxage=600');
+      return res.status(200).send(html);
+    } catch (err) {
+      logger.error('SEO prerender error:', err);
+      return next(err);
+    }
+  }
 }
 
 module.exports = new SeoController();

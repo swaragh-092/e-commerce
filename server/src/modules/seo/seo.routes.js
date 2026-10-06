@@ -19,6 +19,7 @@ router.use(featureGate('seo'));
 router.get('/sitemap.xml', seoController.getSitemap);
 router.get('/robots.txt', seoController.getRobots);
 router.get('/metadata', seoController.getMetadata);
+router.get('/prerender', seoController.prerender);
 
 // Admin routes - Overrides management
 router.get('/overrides', authenticate, authorizePermissions(PERMISSIONS.SETTINGS_READ), seoOverrideController.getAll);
