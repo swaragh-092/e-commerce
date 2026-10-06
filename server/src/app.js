@@ -253,6 +253,10 @@ app.get('/health', async (req, res) => {
   }
 });
 
+// Social media and search crawler dynamic SEO pre-rendering
+const { crawlerPrerender } = require('./middleware/crawlerPrerender.middleware');
+app.use(crawlerPrerender);
+
 // Handle 404
 app.use((req, res) => {
   return error(res, 'Endpoint not found', 404, 'NOT_FOUND');

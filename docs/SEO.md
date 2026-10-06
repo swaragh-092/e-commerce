@@ -16,10 +16,49 @@ The SEO Control System provides granular control over meta tags, Open Graph (OG)
 ---
 
 ## 2. Rendering Strategy (CRITICAL)
-To ensure reliable indexing and rich social previews, this platform uses a **Pre-rendering** strategy.
-*   **Recommendation**: Use `react-snap` or `vite-plugin-ssr`.
-*   **Process**: During the build process, the system crawls the sitemap and generates static HTML files for every product and category.
-*   **Why**: While Google can render JS, pre-rendering ensures faster indexing, 100% reliability for social crawlers (Facebook/Twitter), and zero performance penalty for SEO bots.
+
+Because normal client-side React apps send an empty `<div id="root"></div>` to the browser, social media bots (WhatsApp, Facebook, Twitter/X, LinkedIn, Telegram) and search engine crawlers cannot see product titles, images, or prices without running JavaScript.
+
+To solve this completely, the platform implements a **Dual Pre-rendering Architecture**:
+
+### A. Dynamic Real-Time Crawler Pre-rendering (Zero Build Delay)
+*   **Mechanism**: A dedicated crawler interception middleware (`crawlerPrerender.middleware.js`) and Nginx detection rule intercept requests coming from known social bots and search engines (`facebookexternalhit`, `whatsapp`, `twitterbot`, `linkedinbot`, `telegrambot`, `googlebot`, `bingbot`, etc.).
+*   **Live Database Query**: Instead of serving empty static HTML, `SeoService.renderHtmlForPath(path)` resolves the live product, category, or override metadata in < 20ms:
+    *   **Automatic Image Fallback**: If `og_image` is blank, it automatically selects the product's primary gallery image (`ProductImage.isPrimary`).
+    *   **Automatic Description Fallback**: If `meta_description` is blank, it falls back to a sanitized, plain-text excerpt of `shortDescription` or `description`.
+    *   **Rich Meta Tags**: Injects full Open Graph (`og:title`, `og:image`, `og:description`, `og:url`), Twitter cards (`summary_large_image`), e-commerce tags (`product:price:amount`, `product:price:currency`, `product:availability`), and Schema.org JSON-LD (`Product` or `WebSite`).
+    *   **Crawler Semantic Preview**: Injects a `<noscript>` preview inside `#root` with `<h1>`, `<p>`, and `<img>` so non-JS bots read full text, while real browsers mount React cleanly without hydration errors.
+*   **Direct API Endpoint**: Available at `GET /api/seo/prerender?path=/products/:slug` for testing or reverse-proxy routing.
+
+### B. Build-Time Static Snapshot Generation
+*   **Script**: `scripts/prerender.js`
+*   **Usage**: Run `node scripts/prerender.js` after `npm run build` in CI/CD or deployment pipelines.
+*   **Process**: Queries all published products and categories from PostgreSQL, generates static `index.html` snapshots inside `client/dist/products/:slug/` and `client/dist/category/:slug/`.
+
+### C. Nginx Reverse Proxy Configuration
+In `client/nginx.conf` and `scripts/aws-deploy.sh`, Nginx checks the `User-Agent`:
+```nginx
+set $is_crawler 0;
+if ($http_user_agent ~* "facebookexternalhit|facebot|whatsapp|twitterbot|linkedinbot|telegrambot|slackbot|discordbot|pinterest|googlebot|bingbot|applebot|yandex|duckduckbot") {
+    set $is_crawler 1;
+}
+if ($args ~ "_escaped_fragment_") {
+    set $is_crawler 1;
+}
+if ($uri ~* "\.(js|css|png|jpg|jpeg|gif|svg|ico|woff|woff2|ttf|eot|webp|json|map|xml|txt)$") {
+    set $is_crawler 0;
+}
+
+location / {
+    if ($is_crawler = 1) {
+        rewrite ^(.*)$ /api/seo/prerender?path=$1 break;
+        proxy_pass http://server:5000;
+    }
+    try_files $uri $uri/ /index.html;
+}
+```
+*   **Human visitors**: Served static assets and SPA `index.html` from disk at maximum speed.
+*   **Social & Search bots**: Seamlessly served live, pre-rendered HTML with full meta tags and images.
 
 ---
 
