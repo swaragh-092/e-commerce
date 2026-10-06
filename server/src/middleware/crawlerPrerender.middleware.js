@@ -43,9 +43,15 @@ const isCrawler = (userAgent) => {
 const crawlerPrerender = async (req, res, next) => {
   if (req.method !== 'GET') return next();
 
-  // Strip query params to check path
+  // Strip query params to check path safely
   const rawPath = req.originalUrl || req.url || '/';
-  const cleanPath = rawPath.split('?')[0].split('#')[0];
+  let cleanPath = '/';
+  try {
+    const parsed = new URL(String(rawPath), 'http://localhost');
+    cleanPath = parsed.pathname;
+  } catch {
+    cleanPath = '/';
+  }
 
   // Skip API routes, admin routes, static assets, uploads, and health endpoints
   if (

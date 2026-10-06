@@ -367,15 +367,33 @@ class SeoService {
     // Add semantic noscript preview inside #root for crawlers that don't execute JS
     const noscriptContent = `<noscript><div style="padding:20px;font-family:sans-serif;"><h1>${escapeHtml(fullTitle)}</h1><p>${escapeHtml(metadata.description)}</p>${metadata.ogImage ? `<p><img src="${escapeHtml(metadata.ogImage)}" alt="${escapeHtml(rawTitle)}" style="max-width:320px;" /></p>` : ''}${metadata.productData ? `<p>Price: ${escapeHtml(metadata.productData.currency)} ${escapeHtml(metadata.productData.price)} &middot; Status: ${escapeHtml(metadata.productData.availability)}</p>` : ''}</div></noscript>`;
 
-    if (/<div id=["']root["']>[\s\S]*?<\/div>/i.test(html)) {
-      html = html.replace(/<div id=["']root["']>[\s\S]*?<\/div>/i, `<div id="root">${noscriptContent}</div>`);
+    if (html.includes('<div id="root"></div>')) {
+      html = html.replace('<div id="root"></div>', `<div id="root">${noscriptContent}</div>`);
+    } else {
+      const rootPos = html.indexOf('id="root"');
+      if (rootPos !== -1) {
+        const openEnd = html.indexOf('>', rootPos);
+        if (openEnd !== -1) {
+          const closePos = html.indexOf('</div>', openEnd);
+          if (closePos !== -1) {
+            html = html.slice(0, openEnd + 1) + noscriptContent + html.slice(closePos);
+          }
+        }
+      }
     }
 
     return html;
   }
 
   async renderHtmlForPath(urlPath = '/') {
-    const metadata = await this.getMetadataByPath(urlPath);
+    let cleanPath = '/';
+    try {
+      const parsed = new URL(String(urlPath || '/'), 'http://localhost');
+      cleanPath = parsed.pathname;
+    } catch {
+      cleanPath = '/';
+    }
+    const metadata = await this.getMetadataByPath(cleanPath);
     return this.injectMetadataIntoHtml(metadata);
   }
 }

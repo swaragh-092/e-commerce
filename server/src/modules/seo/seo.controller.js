@@ -44,8 +44,15 @@ class SeoController {
 
   async prerender(req, res, next) {
     try {
-      const targetPath = req.query.path || req.query.url || req.path || '/';
-      const html = await seoService.renderHtmlForPath(targetPath);
+      const rawTarget = req.query.path || req.query.url || req.path || '/';
+      let cleanTarget = '/';
+      try {
+        const parsed = new URL(String(rawTarget), 'http://localhost');
+        cleanTarget = parsed.pathname;
+      } catch {
+        cleanTarget = '/';
+      }
+      const html = await seoService.renderHtmlForPath(cleanTarget);
       res.setHeader('Content-Type', 'text/html; charset=utf-8');
       res.setHeader('Cache-Control', 'public, max-age=300, s-maxage=600');
       return res.status(200).send(html);
