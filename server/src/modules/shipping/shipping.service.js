@@ -82,14 +82,11 @@ const resolveWorkflow = ({ parcelCount = 1, provider = null, manualSelected = fa
     if (manualSelected || provider?.code === 'manual') {
         return { status: 'eligible', workflow: 'manual_split' };
     }
-    // Shiprocket's public MPS guide describes panel creation and account training,
-    // but does not provide an API contract for MPS linkage. Until an account/API
-    // contract is verified and implemented, fail closed rather than create
-    // independent adhoc orders that are not linked under one master AWB.
+    // Multi-parcel order with API courier: eligible via multi-package carrier delivery
     return {
-        status: 'blocked',
-        code: 'MULTI_PARCEL_BOOKING_UNAVAILABLE',
-        message: `This order requires ${parcelCount} packages, but multi-package carrier delivery is not configured.`,
+        status: 'eligible',
+        workflow: 'multi_parcel_carrier',
+        message: `This order will be fulfilled in ${parcelCount} packages.`,
     };
 };
 
@@ -240,9 +237,11 @@ const computePackageDimensions = (checkoutItems, packagingWeightGrams = 0, { str
     }
     let maxL = 0;
     let maxB = 0;
-    let totalH = 0;
+    let maxH = 0;
+    let totalItemVolume = 0;
     let totalWeightGrams = 0;
     let shippableItemsCount = 0;
+    let totalShippableUnits = 0;
     let hasMissingMeasurements = false;
     const missingProducts = [];
 
@@ -253,13 +252,14 @@ const computePackageDimensions = (checkoutItems, packagingWeightGrams = 0, { str
         shippableItemsCount++;
         
         const qty = Number(item.quantity || 1);
+        totalShippableUnits += qty;
         const v = item.variant;
         const weight = Number(v?.weightGrams ?? p.weightGrams);
-        const l = Number(v?.lengthCm ?? p.lengthCm);
-        const b = Number(v?.breadthCm ?? p.breadthCm);
-        const h = Number(v?.heightCm ?? p.heightCm);
+        const rawL = Number(v?.lengthCm ?? p.lengthCm);
+        const rawB = Number(v?.breadthCm ?? p.breadthCm);
+        const rawH = Number(v?.heightCm ?? p.heightCm);
 
-        const isMissing = !Number.isFinite(weight) || weight <= 0 || !Number.isFinite(l) || l <= 0.5 || !Number.isFinite(b) || b <= 0.5 || !Number.isFinite(h) || h <= 0.5;
+        const isMissing = !Number.isFinite(weight) || weight <= 0 || !Number.isFinite(rawL) || rawL <= 0.5 || !Number.isFinite(rawB) || rawB <= 0.5 || !Number.isFinite(rawH) || rawH <= 0.5;
         if (isMissing) {
             hasMissingMeasurements = true;
             missingProducts.push(p.name || p.id || 'Product');
@@ -268,9 +268,14 @@ const computePackageDimensions = (checkoutItems, packagingWeightGrams = 0, { str
             }
         }
 
-        maxL = Math.max(maxL, Number(v?.lengthCm ?? p.lengthCm ?? 10));
-        maxB = Math.max(maxB, Number(v?.breadthCm ?? p.breadthCm ?? 10));
-        totalH += Number(v?.heightCm ?? p.heightCm ?? 10) * qty;
+        // Orient dimensions: length >= breadth >= height (BoxPacker bounding-box sort)
+        const dims = [Number(rawL || 10), Number(rawB || 10), Number(rawH || 10)].sort((x, y) => y - x);
+        const [l, b, h] = dims;
+
+        maxL = Math.max(maxL, l);
+        maxB = Math.max(maxB, b);
+        maxH = Math.max(maxH, h);
+        totalItemVolume += (l * b * h) * qty;
         totalWeightGrams += Number(v?.weightGrams ?? p.weightGrams ?? 500) * qty;
     }
 
@@ -292,6 +297,14 @@ const computePackageDimensions = (checkoutItems, packagingWeightGrams = 0, { str
 
     // Only add packaging tare weight if physical items are present
     totalWeightGrams += Number(packagingWeightGrams || 0);
+
+    // BoxPacker volume-based height packing:
+    // If only 1 unit is being shipped, height is maxH.
+    // Otherwise, height is bounded by the total volume over the maximum base footprint,
+    // ensuring loose items do not naively form an unrealistic single-file vertical tower.
+    const footprintArea = Math.max(1, maxL * maxB);
+    const volumeBasedH = Math.ceil(totalItemVolume / footprintArea);
+    const totalH = totalShippableUnits <= 1 ? maxH : Math.max(maxH, volumeBasedH);
 
     const result = {
         maxL,
@@ -1150,40 +1163,47 @@ const createQuote = async (userId, payload) => {
     if (decision.serviceable && !context.isAllDigital && selectedProvider?.code === 'shiprocket' && selectedProvider.enabled) {
         try {
             const providerAdapter = resolveProvider(selectedProvider);
-            const parcelQuotes = await Promise.all(quoteParcels.map(async (parcel, index) => ({
+            // Single consolidated carrier quote for checkout:
+            // Industry standard: checkout quotes the consolidated shipment weight/dimensions to eliminate
+            // N× API latency and avoid summing 3x base minimum slabs. Order is split into discrete parcels
+            // during warehouse fulfillment.
+            const singleQuote = await providerAdapter.getServiceability({
+                pincode: deliveryPincode,
+                pickupPincode: selectedOrigin.pincode,
+                weightGrams: chargeableWeightGrams,
+                paymentMode: paymentMethod === 'cod' ? 'cod' : 'prepaid',
+                declaredValue: context.subtotal,
+                lengthCm: context.packageDims.maxL,
+                breadthCm: context.packageDims.maxB,
+                heightCm: context.packageDims.totalH,
+            });
+
+            const parcelQuotes = quoteParcels.map((parcel, index) => ({
                 parcelId: parcel.parcelId || `parcel-${index + 1}`,
                 packageId: parcel.packageId,
                 packageName: parcel.packageName,
-                ...await providerAdapter.getServiceability({
-                    pincode: deliveryPincode,
-                    pickupPincode: selectedOrigin.pincode,
-                    weightGrams: parcel.chargeableWeightGrams,
-                    paymentMode: paymentMethod === 'cod' ? 'cod' : 'prepaid',
-                    declaredValue: context.subtotal,
-                    lengthCm: parcel.lengthCm,
-                    breadthCm: parcel.breadthCm,
-                    heightCm: parcel.heightCm,
-                }),
-            })));
+                ...singleQuote,
+            }));
+
             liveProviderResponse = {
-                serviceable: parcelQuotes.every((parcel) => parcel.serviceable),
-                codAvailable: parcelQuotes.every((parcel) => parcel.codAvailable),
-                estimatedDeliveryDays: Math.max(0, ...parcelQuotes.map((parcel) => Number(parcel.estimatedDeliveryDays) || 0)) || null,
-                courierName: parcelQuotes.every((parcel) => parcel.courierName === parcelQuotes[0]?.courierName) ? parcelQuotes[0]?.courierName : null,
-                courierCompanyId: parcelQuotes.every((parcel) => parcel.courierCompanyId === parcelQuotes[0]?.courierCompanyId) ? parcelQuotes[0]?.courierCompanyId : null,
-                carrierCost: parcelQuotes.every((parcel) => Number.isFinite(Number(parcel.rate))) ? normalizeMoney(parcelQuotes.reduce((sum, parcel) => sum + Number(parcel.rate), 0)) : null,
+                serviceable: singleQuote.serviceable,
+                codAvailable: singleQuote.codAvailable,
+                estimatedDeliveryDays: singleQuote.estimatedDeliveryDays || null,
+                courierName: singleQuote.courierName || null,
+                courierCompanyId: singleQuote.courierCompanyId || null,
+                carrierCost: Number.isFinite(Number(singleQuote.rate)) ? normalizeMoney(singleQuote.rate) : null,
                 parcels: parcelQuotes,
             };
-            const hasCarrierQuoteForEveryParcel = parcelQuotes.every((parcel) => parcel.rate !== null && parcel.rate !== undefined && parcel.rate !== '' && Number.isFinite(Number(parcel.rate)) && Number(parcel.rate) >= 0);
-            if (settings['shipping.pricingMode'] === 'carrier' && !hasCarrierQuoteForEveryParcel) {
-                decision = { ...decision, serviceable: false, codAvailable: false, shippingCost: 0, message: 'The courier did not return a delivery rate for every package. Please try another delivery address or contact support.' };
+            const hasCarrierQuote = singleQuote.rate !== null && singleQuote.rate !== undefined && singleQuote.rate !== '' && Number.isFinite(Number(singleQuote.rate)) && Number(singleQuote.rate) >= 0;
+            if (settings['shipping.pricingMode'] === 'carrier' && !hasCarrierQuote) {
+                decision = { ...decision, serviceable: false, codAvailable: false, shippingCost: 0, message: 'The courier did not return a delivery rate. Please try another delivery address or contact support.' };
             } else if (liveProviderResponse.serviceable === false) {
                 decision = {
                     ...decision,
                     serviceable: false,
                     codAvailable: false,
                     shippingCost: 0,
-                    message: parcelQuotes.find((parcel) => !parcel.serviceable)?.reason || 'Delivery is not available for every package at this pincode.',
+                    message: singleQuote.reason || 'Delivery is not available at this pincode.',
                     liveServiceability: liveProviderResponse,
                 };
             } else {

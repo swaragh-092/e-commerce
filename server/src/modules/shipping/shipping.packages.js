@@ -17,9 +17,10 @@ const validatePackageProfiles = (profiles) => {
         }
         if (['lengthCm', 'breadthCm', 'heightCm'].some((key) => Number(profile[key]) <= 0.5) ||
             Number(profile.emptyWeightGrams) < 0 || !Number.isSafeInteger(Number(profile.maxItems)) || Number(profile.maxItems) < 1 ||
-            Number(profile.maxContentsWeightGrams) <= 0 || !Array.isArray(profile.fits)) {
+            Number(profile.maxContentsWeightGrams) <= 0 || (profile.fits != null && !Array.isArray(profile.fits))) {
             throw new AppError('INVALID_SHIPPING_PACKAGES', 400, `Package "${profile.name}" has invalid dimensions or capacity.`);
         }
+        profile.fits = Array.isArray(profile.fits) ? profile.fits : [];
         const fitKeys = new Set();
         for (const fit of profile.fits) {
             const key = `${fit?.productId}:${fit?.variantId || ''}`;
@@ -34,8 +35,15 @@ const validatePackageProfiles = (profiles) => {
     return profiles;
 };
 
-// Uses merchant-confirmed per-product limits. Products can share a parcel only
-// when their fit rules have the same non-empty merchant-defined mix group.
+const areMixGroupsCompatible = (groupA, groupB) => {
+    const a = typeof groupA === 'string' && groupA.trim() ? groupA.trim().toLowerCase() : null;
+    const b = typeof groupB === 'string' && groupB.trim() ? groupB.trim().toLowerCase() : null;
+    if (!a && !b) return true; // Both are general goods without restrictions -> compatible!
+    if (a && b && a === b) return true; // Same explicit mix group -> compatible!
+    return false; // Incompatible mix groups -> must remain separate
+};
+
+// Uses merchant-confirmed per-product limits. Compatible products share a parcel up to box capacity.
 const planParcels = (items, profiles, { volumetricDivisor = 5000, defaultPackage = null } = {}) => {
     validatePackageProfiles(profiles);
     const parcels = [];
@@ -46,12 +54,44 @@ const planParcels = (items, profiles, { volumetricDivisor = 5000, defaultPackage
             throw new AppError('MISSING_PRODUCT_MEASUREMENTS', 400, 'A product is missing a valid weight or quantity. Check its shipping details.');
         }
         let candidates = profiles.filter((profile) => profile.enabled !== false).flatMap((profile) => {
-            const fit = profile.fits.find((rule) => rule.productId === item.productId && (rule.variantId || null) === (item.variantId || null)) ||
-                profile.fits.find((rule) => rule.productId === item.productId && !rule.variantId);
-            if (!fit) return [];
-            const capacity = Math.min(Number(profile.maxItems), Number(fit.maxQuantity), Math.floor(Number(profile.maxContentsWeightGrams) / weight));
-            return capacity > 0 ? [{ profile, fit, capacity, volume: Number(profile.lengthCm) * Number(profile.breadthCm) * Number(profile.heightCm) }] : [];
-        }).sort((a, b) => b.capacity - a.capacity || a.volume - b.volume || String(a.profile.id).localeCompare(String(b.profile.id)));
+            const fit = profile.fits?.find((rule) => rule.productId === item.productId && (rule.variantId || null) === (item.variantId || null)) ||
+                profile.fits?.find((rule) => rule.productId === item.productId && !rule.variantId);
+            
+            // 1. Explicit fit rule override if configured by merchant
+            if (fit) {
+                const capacity = Math.min(Number(profile.maxItems), Number(fit.maxQuantity), Math.floor(Number(profile.maxContentsWeightGrams) / weight));
+                return capacity > 0 ? [{
+                    profile,
+                    fit,
+                    capacity,
+                    volume: Number(profile.lengthCm) * Number(profile.breadthCm) * Number(profile.heightCm),
+                    mixGroup: fit.mixGroup || item.mixGroup || null,
+                }] : [];
+            }
+
+            // 2. Inverted matrix (Shopify model): box presets (fits: []) auto-fit products carrying physical dimensions
+            const isPresetBox = !profile.fits || profile.fits.length === 0;
+            if (!isPresetBox && !fit) return [];
+
+            const itemSides = [item.lengthCm, item.breadthCm, item.heightCm].map(Number);
+            const boxSides = [profile.lengthCm, profile.breadthCm, profile.heightCm].map(Number);
+            const hasValidDims = itemSides.every((side) => Number.isFinite(side) && side > 0.5);
+            if (!hasValidDims) return [];
+
+            itemSides.sort((a, b) => a - b);
+            boxSides.sort((a, b) => a - b);
+            const physicallyFits = itemSides.every((side, index) => side <= boxSides[index]);
+            if (!physicallyFits) return [];
+
+            const capacity = Math.min(Number(profile.maxItems), Math.floor(Number(profile.maxContentsWeightGrams) / weight));
+            return capacity > 0 ? [{
+                profile,
+                fit: null,
+                capacity,
+                volume: Number(profile.lengthCm) * Number(profile.breadthCm) * Number(profile.heightCm),
+                mixGroup: item.mixGroup || null,
+            }] : [];
+        }).sort((a, b) => a.volume - b.volume || b.capacity - a.capacity || String(a.profile.id).localeCompare(String(b.profile.id)));
         if (!candidates.length && defaultPackage?.enabled) {
             const sides = [item.lengthCm, item.breadthCm, item.heightCm].map(Number);
             const boxSides = [defaultPackage.lengthCm, defaultPackage.breadthCm, defaultPackage.heightCm].map(Number);
@@ -105,25 +145,28 @@ const planParcels = (items, profiles, { volumetricDivisor = 5000, defaultPackage
     for (const { item, weight, quantity, candidates } of shippingItems) {
         let remaining = quantity;
         while (remaining > 0) {
-            const mixedFits = candidates.filter((candidate) => candidate.fit && typeof candidate.fit.mixGroup === 'string' && candidate.fit.mixGroup.trim());
-            const existingMixed = parcels.flatMap((parcel) => {
-                if (!parcel._mixGroup) return [];
-                const candidate = mixedFits.find((entry) => entry.profile.id === parcel.packageId && entry.fit.mixGroup.trim() === parcel._mixGroup);
+            const existingCompatible = parcels.flatMap((parcel) => {
+                const candidate = candidates.find((entry) =>
+                    entry.profile.id === parcel.packageId &&
+                    areMixGroupsCompatible(parcel._mixGroup, entry.fit?.mixGroup || entry.mixGroup)
+                );
                 if (!candidate) return [];
                 const fit = parcel._profile.fits?.find((rule) => rule.productId === item.productId && (rule.variantId || null) === (item.variantId || null)) ||
                     parcel._profile.fits?.find((rule) => rule.productId === item.productId && !rule.variantId);
-                if (!fit) return [];
                 const currentSkuQty = parcel.items
-                    .filter((entry) => entry.productId === item.productId && (!fit.variantId || (entry.variantId || null) === (fit.variantId || null)))
+                    .filter((entry) => entry.productId === item.productId && (!fit?.variantId || (entry.variantId || null) === (fit.variantId || null)))
                     .reduce((sum, entry) => sum + Number(entry.quantity), 0);
-                const fitRemaining = Number(fit.maxQuantity) - currentSkuQty;
-                const available = Math.min(fitRemaining, parcel._maxItems - parcel.items.reduce((sum, entry) => sum + Number(entry.quantity), 0),
-                    Math.floor((parcel._maxContentsWeightGrams - parcel._contentsWeightGrams) / weight));
+                const fitRemaining = fit ? Number(fit.maxQuantity) - currentSkuQty : Infinity;
+                const available = Math.min(
+                    fitRemaining,
+                    parcel._maxItems - parcel.items.reduce((sum, entry) => sum + Number(entry.quantity), 0),
+                    Math.floor((parcel._maxContentsWeightGrams - parcel._contentsWeightGrams) / weight)
+                );
                 return available > 0 ? [{ parcel, available }] : [];
             }).sort((a, b) => b.available - a.available);
 
-            if (existingMixed.length) {
-                const { parcel, available } = existingMixed[0];
+            if (existingCompatible.length) {
+                const { parcel, available } = existingCompatible[0];
                 const packedQuantity = Math.min(remaining, available);
                 addToParcel(parcel, item, packedQuantity, weight);
                 remaining -= packedQuantity;
@@ -141,7 +184,8 @@ const planParcels = (items, profiles, { volumetricDivisor = 5000, defaultPackage
                 Number(a.profile.emptyWeightGrams) - Number(b.profile.emptyWeightGrams) ||
                 String(a.profile.id).localeCompare(String(b.profile.id)))[0];
             const packedQuantity = Math.min(remaining, selectedCandidate.capacity);
-            const parcel = makeParcel(selectedCandidate.profile, selectedCandidate.fit?.mixGroup?.trim() || null);
+            const parcelMixGroup = selectedCandidate.fit?.mixGroup?.trim() || selectedCandidate.mixGroup?.trim() || null;
+            const parcel = makeParcel(selectedCandidate.profile, parcelMixGroup);
             addToParcel(parcel, item, packedQuantity, weight);
             parcels.push(parcel);
             remaining -= packedQuantity;

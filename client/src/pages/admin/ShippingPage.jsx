@@ -247,8 +247,8 @@ const ShippingPage = () => {
     }
     if (['lengthCm', 'breadthCm', 'heightCm'].some((key) => !Number.isFinite(next[key]) || next[key] <= 0.5) ||
       !Number.isFinite(next.emptyWeightGrams) || next.emptyWeightGrams < 0 || !Number.isSafeInteger(next.maxItems) || next.maxItems < 1 ||
-      !Number.isFinite(next.maxContentsWeightGrams) || next.maxContentsWeightGrams <= 0 || next.fits.length === 0) {
-      notify('Enter measured package values and at least one confirmed product fit.', 'warning');
+      !Number.isFinite(next.maxContentsWeightGrams) || next.maxContentsWeightGrams <= 0) {
+      notify('Enter measured package values (dimensions, tare weight, capacity).', 'warning');
       return;
     }
     await savePackageProfiles([...packageProfiles.filter((profile) => profile.id !== next.id), next]);
@@ -757,7 +757,7 @@ const ShippingPage = () => {
                       const product = packageProducts.find((entry) => entry.id === fit.productId);
                       const variant = product?.variants?.find((entry) => entry.id === fit.variantId);
                       return <Stack key={`${fit.productId}:${fit.variantId || ''}`} direction="row" justifyContent="space-between" alignItems="center" sx={{ borderTop: 1, borderColor: 'divider', pt: 1 }}>
-                        <Typography variant="body2">{product?.name || fit.productId}{variant ? ` · ${variant.optionLabel || variant.name || variant.sku || 'Variant'}` : ''} — up to {fit.maxQuantity} per parcel{fit.mixGroup ? ` · mixes with “${fit.mixGroup}”` : ' · packed separately'}</Typography>
+                        <Typography variant="body2">{product?.name || fit.productId}{variant ? ` · ${variant.optionLabel || variant.name || variant.sku || 'Variant'}` : ''} — up to {fit.maxQuantity} per parcel{fit.mixGroup ? ` · restricted to “${fit.mixGroup}”` : ' · standard mixable'}</Typography>
                         <Button color="error" aria-label={`Remove fit ${index + 1}`} onClick={() => setPackageDraft((current) => ({ ...current, fits: current.fits.filter((_, rowIndex) => rowIndex !== index) }))}>Remove</Button>
                       </Stack>;
                     })}

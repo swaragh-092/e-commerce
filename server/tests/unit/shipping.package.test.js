@@ -173,4 +173,135 @@ describe('Parcel planner & remainder box optimization', () => {
         expect(parcels).toHaveLength(1);
         expect(parcels[0].packageId).toBe('legacy-box');
     });
+
+    it('allows different products without mixGroup to share a package up to capacity', () => {
+        const sharedProfiles = [
+            {
+                id: 'pkg-medium',
+                name: 'Medium Box',
+                lengthCm: 25,
+                breadthCm: 20,
+                heightCm: 15,
+                emptyWeightGrams: 80,
+                maxItems: 5,
+                maxContentsWeightGrams: 3000,
+                fits: [
+                    { productId: 'prod-shirt', maxQuantity: 3 },
+                    { productId: 'prod-mug', maxQuantity: 2 },
+                ],
+            },
+        ];
+        const items = [
+            { productId: 'prod-shirt', name: 'Shirt', weightGrams: 150, quantity: 2, requiresShipping: true },
+            { productId: 'prod-mug', name: 'Mug', weightGrams: 300, quantity: 1, requiresShipping: true },
+        ];
+        const parcels = planParcels(items, sharedProfiles);
+        // Both items should share 1 parcel because capacity (maxItems: 5, maxWeight: 3000g) allows it
+        expect(parcels).toHaveLength(1);
+        expect(parcels[0].packageId).toBe('pkg-medium');
+        expect(parcels[0].items).toHaveLength(2);
+    });
+
+    it('separates products with explicitly incompatible mix groups', () => {
+        const incompatibleProfiles = [
+            {
+                id: 'pkg-standard',
+                name: 'Standard Box',
+                lengthCm: 30,
+                breadthCm: 25,
+                heightCm: 20,
+                emptyWeightGrams: 100,
+                maxItems: 10,
+                maxContentsWeightGrams: 5000,
+                fits: [
+                    { productId: 'prod-chemicals', maxQuantity: 5, mixGroup: 'hazardous' },
+                    { productId: 'prod-food', maxQuantity: 5, mixGroup: 'edible' },
+                ],
+            },
+        ];
+        const items = [
+            { productId: 'prod-chemicals', name: 'Cleaner', weightGrams: 500, quantity: 1, requiresShipping: true },
+            { productId: 'prod-food', name: 'Snack', weightGrams: 200, quantity: 1, requiresShipping: true },
+        ];
+        const parcels = planParcels(items, incompatibleProfiles);
+        // Incompatible mix groups must be packed into separate parcels
+        expect(parcels).toHaveLength(2);
+    });
+
+    it('marks multi-parcel orders with carriers as eligible in resolveWorkflow', () => {
+        const workflow = ShippingService.resolveWorkflow({
+            parcelCount: 2,
+            provider: { code: 'shiprocket', name: 'Shiprocket' },
+            manualSelected: false,
+        });
+        expect(workflow.status).toBe('eligible');
+        expect(workflow.workflow).toBe('multi_parcel_carrier');
+    });
+
+    it('2-item blank-group cart => 1 parcel, serviceable true', () => {
+        const boxPresets = [
+            {
+                id: 'preset-standard',
+                name: 'Standard Box',
+                lengthCm: 30,
+                breadthCm: 25,
+                heightCm: 15,
+                emptyWeightGrams: 50,
+                maxItems: 10,
+                maxContentsWeightGrams: 5000,
+                fits: [], // Inverted model: no mandatory product fit matrix
+            },
+        ];
+        const items = [
+            { productId: 'prod-shirt', name: 'Shirt', lengthCm: 20, breadthCm: 15, heightCm: 3, weightGrams: 200, quantity: 1, requiresShipping: true },
+            { productId: 'prod-cap', name: 'Cap', lengthCm: 18, breadthCm: 14, heightCm: 8, weightGrams: 150, quantity: 1, requiresShipping: true },
+        ];
+        // Both items have blank / undefined mixGroup
+        const parcels = planParcels(items, boxPresets);
+        expect(parcels).toHaveLength(1);
+        expect(parcels[0].packageId).toBe('preset-standard');
+        expect(parcels[0].items).toHaveLength(2);
+
+        const workflow = ShippingService.resolveWorkflow({
+            parcelCount: parcels.length,
+            provider: { code: 'shiprocket', name: 'Shiprocket' },
+            manualSelected: false,
+        });
+        expect(workflow.status).toBe('eligible');
+        expect(workflow.workflow).toBe('ordinary_shipment');
+    });
+
+    it('auto-selects smallest fitting box by volume without explicit product fit rules (Shopify model)', () => {
+        const boxPresets = [
+            {
+                id: 'large-crate',
+                name: 'Large Crate',
+                lengthCm: 50,
+                breadthCm: 40,
+                heightCm: 30,
+                emptyWeightGrams: 200,
+                maxItems: 20,
+                maxContentsWeightGrams: 10000,
+                fits: [],
+            },
+            {
+                id: 'small-box',
+                name: 'Small Box',
+                lengthCm: 20,
+                breadthCm: 15,
+                heightCm: 10,
+                emptyWeightGrams: 40,
+                maxItems: 5,
+                maxContentsWeightGrams: 2000,
+                fits: [],
+            },
+        ];
+        const items = [
+            { productId: 'prod-mug', name: 'Coffee Mug', lengthCm: 12, breadthCm: 10, heightCm: 9, weightGrams: 350, quantity: 1, requiresShipping: true },
+        ];
+        const parcels = planParcels(items, boxPresets);
+        expect(parcels).toHaveLength(1);
+        // Small Box has smaller volume (3,000 cm³ vs 60,000 cm³), so it must be selected
+        expect(parcels[0].packageId).toBe('small-box');
+    });
 });

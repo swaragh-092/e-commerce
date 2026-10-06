@@ -12,6 +12,10 @@ const TOKEN_TTL_MS = 240 * 60 * 60 * 1000;
 const authFailureCache = new Map();
 const AUTH_FAILURE_COOLDOWN_MS = 10 * 60 * 1000; // 10 minutes
 
+// In-memory serviceability cache to kill N× API latency on repeated or multi-item quotes
+const serviceabilityCache = new Map();
+const SERVICEABILITY_CACHE_TTL_MS = 5 * 60 * 1000; // 5 minutes TTL
+
 function getAuthCacheKey(credentials) {
     return credentials?.email ? String(credentials.email).trim().toLowerCase() : 'default';
 }
@@ -236,6 +240,25 @@ class ShiprocketProvider extends BaseShippingProvider {
             const effectivePickup = String(pickupPincode || this.settings.pickupPincode || this.settings.warehousePincode || '').trim();
 
             const codParam = paymentMode === 'cod' ? 1 : 0;
+            const cacheKey = `${effectivePickup}:${normalizedPincode}:${weightKg}:${lengthCm || 0}:${breadthCm || 0}:${heightCm || 0}:${codParam}:${declaredValue || 0}:${courierCompanyId || ''}`;
+            const cachedEntry = serviceabilityCache.get(cacheKey);
+            if (cachedEntry && Date.now() < cachedEntry.expiresAt) {
+                return { ...cachedEntry.data };
+            }
+
+            const cacheAndReturn = (result) => {
+                if (result && typeof result === 'object' && !result.rawResponse?.mock) {
+                    serviceabilityCache.set(cacheKey, { data: result, expiresAt: Date.now() + SERVICEABILITY_CACHE_TTL_MS });
+                    if (serviceabilityCache.size > 1000) {
+                        const now = Date.now();
+                        for (const [k, v] of serviceabilityCache) {
+                            if (now >= v.expiresAt) serviceabilityCache.delete(k);
+                        }
+                    }
+                }
+                return result;
+            };
+
             const res = await this._request({
                 method: 'get',
                 url: '/courier/serviceability/',
@@ -255,7 +278,7 @@ class ShiprocketProvider extends BaseShippingProvider {
             const pinnedCourier = courierCompanyId == null ? null : available.find((courier) => Number(courier.courier_company_id) === Number(courierCompanyId));
             const recommended = pinnedCourier || available.find((courier) => courier.is_recommended) || available[0] || null;
             if (courierCompanyId != null && !pinnedCourier) {
-                return {
+                return cacheAndReturn({
                     serviceable: false,
                     codAvailable: false,
                     rate: null,
@@ -267,10 +290,10 @@ class ShiprocketProvider extends BaseShippingProvider {
                         ? 'The courier selected for this shipment is no longer available for COD on this parcel. Select a new courier or change payment method.'
                         : 'The courier selected for this shipment is no longer available for this parcel. Select a new courier and retry.',
                     rawResponse: res.data,
-                };
+                });
             }
             if (paymentMode === 'cod' && pinnedCourier && Number(pinnedCourier.cod) !== 1) {
-                return {
+                return cacheAndReturn({
                     serviceable: false,
                     codAvailable: false,
                     rate: null,
@@ -280,7 +303,7 @@ class ShiprocketProvider extends BaseShippingProvider {
                     estimatedDeliveryDays: pinnedCourier.estimated_delivery_days || null,
                     reason: 'The courier selected for this shipment no longer supports COD. Select a new courier or change payment method.',
                     rawResponse: res.data,
-                };
+                });
             }
 
             // Edge Case 4: COD unavailable but prepaid available!
@@ -300,7 +323,7 @@ class ShiprocketProvider extends BaseShippingProvider {
                     });
                     const prepaidCouriers = prepaidRes.data?.data?.available_courier_companies || [];
                     if (courierCompanyId != null && !prepaidCouriers.some((courier) => Number(courier.courier_company_id) === Number(courierCompanyId))) {
-                        return {
+                        return cacheAndReturn({
                             serviceable: false,
                             codAvailable: false,
                             rate: null,
@@ -310,11 +333,11 @@ class ShiprocketProvider extends BaseShippingProvider {
                             estimatedDeliveryDays: null,
                             reason: 'The selected courier no longer supports COD for this parcel. Select a new courier or change payment method.',
                             rawResponse: { codAttempt: res.data, prepaidFallback: prepaidRes.data },
-                        };
+                        });
                     }
                     if (prepaidCouriers.length > 0) {
                         const prepaidRecommended = prepaidCouriers.find((courier) => courier.is_recommended) || prepaidCouriers[0];
-                        return {
+                        return cacheAndReturn({
                             serviceable: true,
                             codAvailable: false,
                             rate: prepaidRecommended.rate !== null && prepaidRecommended.rate !== undefined && prepaidRecommended.rate !== '' && Number.isFinite(Number(prepaidRecommended.rate)) ? Number(prepaidRecommended.rate) : null,
@@ -324,14 +347,14 @@ class ShiprocketProvider extends BaseShippingProvider {
                             estimatedDeliveryDays: prepaidRecommended.estimated_delivery_days || null,
                             reason: 'Cash on Delivery is unavailable for this pincode, but prepaid delivery is available.',
                             rawResponse: { codAttempt: res.data, prepaidFallback: prepaidRes.data },
-                        };
+                        });
                     }
                 } catch (_) {
                     // Fall through to unserviceable
                 }
             }
 
-            return {
+            return cacheAndReturn({
                 serviceable,
                 codAvailable,
                 rate: recommended && recommended.rate !== null && recommended.rate !== undefined && recommended.rate !== '' && Number.isFinite(Number(recommended.rate)) ? Number(recommended.rate) : null,
@@ -341,7 +364,7 @@ class ShiprocketProvider extends BaseShippingProvider {
                 estimatedDeliveryDays: recommended?.estimated_delivery_days || null,
                 reason: serviceable ? null : 'No courier available for this pincode',
                 rawResponse: res.data,
-            };
+            });
         } catch (err) {
             console.error('[ShiprocketProvider] getServiceability API error:', err.message);
             const status = err.response?.status;
@@ -1195,6 +1218,7 @@ class ShiprocketProvider extends BaseShippingProvider {
 ShiprocketProvider.clearAuthCooldown = clearAuthCooldown;
 ShiprocketProvider.authFailureCache = authFailureCache;
 ShiprocketProvider.AUTH_FAILURE_COOLDOWN_MS = AUTH_FAILURE_COOLDOWN_MS;
+ShiprocketProvider.serviceabilityCache = serviceabilityCache;
 ShiprocketProvider.toShiprocketOrderId = toShiprocketOrderId;
 
 module.exports = ShiprocketProvider;
