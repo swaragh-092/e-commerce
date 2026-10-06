@@ -1,5 +1,6 @@
 'use strict';
 const Joi = require('joi');
+const { isGuestSessionId } = require('../../utils/guestSession');
 const {
     ORDER_STATUS_VALUES,
     SHIPMENT_STATUS_VALUES,
@@ -18,7 +19,7 @@ const placeOrderSchema = Joi.object({
     shippingQuoteId: Joi.string().uuid().optional(),
     checkoutSessionId: Joi.string().uuid().optional(),
     idempotencyKey: Joi.string().uuid().optional(),
-    sessionId: Joi.string().max(255).optional(),
+    sessionId: Joi.string().custom((value, helpers) => isGuestSessionId(value) ? value : helpers.error('string.guid')).optional(),
     guestEmail: Joi.string().trim().email().max(255).optional(),
     buyNowItem: Joi.object({
         productId: Joi.string().uuid().required(),
@@ -92,6 +93,8 @@ const processRefundSchema = Joi.object({
     amount: Joi.number().positive().optional(),
     status: Joi.string().valid(...REFUND_STATUS_VALUES).optional(),
     providerRefundId: Joi.string().max(255).allow(null, '').optional(),
+    offlineRefundConfirmed: Joi.boolean().optional(),
+    offlineRefundReference: Joi.string().max(255).trim().allow('', null).optional(),
     reason: Joi.string().allow(null, '').optional(),
     metadata: Joi.object().unknown(true).optional(),
 });

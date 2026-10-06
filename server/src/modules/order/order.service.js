@@ -33,6 +33,7 @@ const {
     UserProfile,
 } = require('../index');
 const AppError = require('../../utils/AppError');
+const { isGuestSessionId } = require('../../utils/guestSession');
 const logger = require('../../utils/logger');
 const AuditService = require('../audit/audit.service');
 const CouponService = require('../coupon/coupon.service');
@@ -864,6 +865,7 @@ const releaseOrderReservationsAndCoupons = async (order, transaction) => {
 };
 
 const FINAL_REFUND_STATUSES = Object.freeze(['refunded', 'partially_refunded']);
+const OPEN_REFUND_STATUSES = Object.freeze(['refund_initiated', 'refund_processing']);
 const money = (value) => Number(Number(value || 0).toFixed(2));
 
 const getCapturedPaymentAmount = (payment, order = {}) => {
@@ -986,6 +988,7 @@ const createRefundRecord = async ({
     refundScopeAmount = null,
     metadata = {},
     transaction,
+    existingRefund = null,
 }) => {
     const capturedAmount = getCapturedPaymentAmount(payment, order);
     const refundedAmount = await getRefundedAmount(order.id, transaction);
@@ -1008,13 +1011,14 @@ const createRefundRecord = async ({
     const nextPaymentStatus = isFullOrderRefund
         ? 'refunded'
         : getRestoredPaymentStatusAfterPartialRefund(payment, order);
-    const refund = await OrderRefund.create({
+    const refundAttributes = {
         orderId: order.id,
         returnId,
         paymentId: payment.id,
         amount: refundAmount,
         currency: payment.currency || 'INR',
         status: refundStatus,
+        providerRefundId: metadata.providerRefundId || existingRefund?.providerRefundId || null,
         reason,
         processedAt: new Date(),
         metadata: {
@@ -1024,7 +1028,13 @@ const createRefundRecord = async ({
             refundScopeAmount: scopedRefundBasis,
             itemScoped: Boolean(returnId),
         },
-    }, { transaction });
+    };
+    let refund = existingRefund;
+    if (refund) {
+        await refund.update(refundAttributes, { transaction });
+    } else {
+        refund = await OrderRefund.create(refundAttributes, { transaction });
+    }
 
     await payment.update({
         status: nextPaymentStatus,
@@ -1105,8 +1115,8 @@ const ensurePaymentMethodEnabled = async (paymentMethod) => {
 const placeOrder = async (userId, payload) => {
     const { shippingAddressId, couponCode, couponCodes = [], notes, buyNowItem = null, paymentMethod = 'razorpay' } = payload;
     const guestSessionId = userId ? null : (payload.sessionId || null);
-    if (!userId && !guestSessionId) {
-        throw new AppError('VALIDATION_ERROR', 400, 'Session ID is required for guest checkout');
+    if (!userId && !isGuestSessionId(guestSessionId)) {
+        throw new AppError('VALIDATION_ERROR', 400, 'A valid guest session ID is required for guest checkout');
     }
     const idempotencyKey = payload.idempotencyKey || payload.checkoutSessionId || null;
     const intentPayload = { ...payload };
@@ -1255,6 +1265,34 @@ const placeOrder = async (userId, payload) => {
         let transactionResult;
         try {
         transactionResult = await sequelize.transaction(async (t) => {
+        // A cart may have been read by two checkouts before either starts its
+        // order transaction. Lock and recheck it here so only one order can
+        // consume the same cart snapshot.
+        if (cart) {
+            const lockedCart = await Cart.findByPk(cart.id, { transaction: t, lock: Transaction.LOCK.UPDATE });
+            if (!lockedCart || lockedCart.status !== 'active') {
+                throw new AppError('CONFLICT', 409, 'This cart has already been submitted. Refresh your cart before placing another order.');
+            }
+            cart = lockedCart;
+            const currentCartItems = await CartItem.findAll({
+                where: { cartId: lockedCart.id },
+                transaction: t,
+                include: [
+                    { model: Product, as: 'product', include: [{ model: Category, as: 'categories' }, { model: Brand, as: 'brand' }, { model: ProductImage, as: 'images' }] },
+                    { model: ProductVariant, as: 'variant' },
+                ],
+            });
+            checkoutItems = currentCartItems.map((item) => ({
+                productId: item.productId,
+                variantId: item.variantId || null,
+                quantity: item.quantity,
+                product: item.product,
+                variant: item.variant || null,
+            }));
+            if (checkoutItems.length === 0) {
+                throw new AppError('VALIDATION_ERROR', 400, 'Your cart is empty. Add an item before placing an order.');
+            }
+        }
         let subtotal = 0;
 
         for (const item of checkoutItems) {
@@ -1351,6 +1389,7 @@ const placeOrder = async (userId, payload) => {
             cartItems: checkoutItems,
             shippingCost: quotedShippingCost,
             transaction: t,
+            guestSessionId,
         });
 
         orderDiscountAmount = Number(couponBenefits?.orderDiscount || 0);
@@ -1645,6 +1684,7 @@ const placeOrder = async (userId, payload) => {
             await CouponUsage.create({
                 couponId: appliedItem.id,
                 userId,
+                guestSessionId: userId ? null : guestSessionId,
                 orderId: order.id
             }, { transaction: t });
         }
@@ -1655,7 +1695,7 @@ const placeOrder = async (userId, payload) => {
             );
         }
 
-        if (cart && (paymentMethod === 'cod' || isFreeOnlineOrder)) {
+        if (cart) {
             await cart.update({ status: 'converted' }, { transaction: t });
         }
         
@@ -2709,12 +2749,12 @@ const updateStatus = async (id, status, actingUserId, auditContext = null) => {
             }
         } else if (status === 'cancelled') {
             if (payment && isPaymentSettled(payment.status, payment.provider)) {
-                await createRefundRecord({
-                    order,
-                    payment,
-                    reason: 'Order cancelled before shipment',
-                    actingUserId,
-                    metadata: { cancellationRefund: true },
+                await addOrderHistoryEvent({
+                    orderId: order.id,
+                    eventType: 'refund_required',
+                    description: 'Payment was captured before cancellation. Initiate a gateway refund and verify its provider status.',
+                    actorId: actingUserId,
+                    actorType: 'admin',
                     transaction: t,
                 });
             } else if (payment && ['payment_pending', 'pending_cod', 'pending'].includes(payment.status)) {
@@ -2852,12 +2892,12 @@ const cancelOrder = async (id, userId) => {
                 }
             }, { transaction: t });
         } else if (payment && isPaymentSettled(payment.status, payment.provider)) {
-            await createRefundRecord({
-                order,
-                payment,
-                reason: 'Order cancelled before shipment',
-                actingUserId: userId,
-                metadata: { cancellationRefund: true, cancelledBy: 'customer' },
+            await addOrderHistoryEvent({
+                orderId: order.id,
+                eventType: 'refund_required',
+                description: 'Payment was captured before cancellation. The store must initiate and verify a gateway refund.',
+                actorId: userId,
+                actorType: 'customer',
                 transaction: t,
             });
         }
@@ -3463,13 +3503,19 @@ const updatePutBackStatus = async (orderId, returnId, status, actingUserId, isAd
 
 const processRefund = async (orderId, payload, actingUserId, isAdmin, auditContext = null) => {
     if (!isAdmin) throw new AppError('FORBIDDEN', 403, 'You do not have permission to refund orders');
-    return sequelize.transaction(async (t) => {
+    const request = await sequelize.transaction(async (t) => {
         const order = await Order.findByPk(orderId, { transaction: t, lock: Transaction.LOCK.UPDATE });
         if (!order) throw new AppError('NOT_FOUND', 404, 'Order not found');
         const payment = await Payment.findOne({ where: { orderId }, transaction: t, lock: Transaction.LOCK.UPDATE });
         if (!canRefundCapturedPayment(payment, order)) {
             throw new AppError('VALIDATION_ERROR', 400, 'Cannot refund before payment has been captured');
         }
+        const isOfflineRefund = payment.provider === 'cod';
+        if (isOfflineRefund && (payload.offlineRefundConfirmed !== true || !String(payload.offlineRefundReference || '').trim())) {
+            throw new AppError('VALIDATION_ERROR', 400, 'For COD, first send the refund outside the payment gateway, then confirm it and enter the bank/UPI/cash reference.');
+        }
+        const openRefund = await OrderRefund.findOne({ where: { orderId, status: { [Op.in]: OPEN_REFUND_STATUSES } }, transaction: t, lock: Transaction.LOCK.UPDATE });
+        if (openRefund) throw new AppError('CONFLICT', 409, 'A refund is already being processed for this order. Check its provider reference before retrying.');
         let returnRequest = null;
         let refundAmount = payload.amount;
         if (payload.returnId) {
@@ -3505,47 +3551,143 @@ const processRefund = async (orderId, payload, actingUserId, isAdmin, auditConte
                 throw new AppError('VALIDATION_ERROR', 400, `Refund amount cannot exceed returned product amount ${remainingReturnRefundable.toFixed(2)}`);
             }
         }
-        const refund = await createRefundRecord({
-            order,
-            payment,
-            amount: refundAmount,
-            reason: payload.reason || (returnRequest ? 'Return refund' : 'Manual refund'),
-            actingUserId,
-            returnId: returnRequest?.id || null,
-            refundScopeAmount: returnRequest ? getReturnRequestItemAmount(returnRequest) : null,
-            metadata: {
-                ...(payload.metadata || {}),
-                providerRefundId: payload.providerRefundId || null,
-                requestedStatus: payload.status || null,
-                returnItemAmount: returnRequest ? getReturnRequestItemAmount(returnRequest) : null,
-            },
-            transaction: t,
+        const capturedAmount = getCapturedPaymentAmount(payment, order);
+        const exposures = await OrderRefund.findAll({
+            where: { orderId, status: { [Op.in]: [...FINAL_REFUND_STATUSES, ...OPEN_REFUND_STATUSES] } },
+            attributes: ['amount'], transaction: t,
         });
-        await syncPutBackCache(order, t, actingUserId);
-        await syncOrderClosureIfComplete(order, t, actingUserId);
+        const exposed = money(exposures.reduce((sum, row) => sum + Number(row.amount || 0), 0));
+        const amount = money(refundAmount ?? Math.max(capturedAmount - exposed, 0));
+        if (amount <= 0 || amount > money(capturedAmount - exposed)) {
+            throw new AppError('VALIDATION_ERROR', 400, `Refund amount exceeds the remaining refundable amount ${money(capturedAmount - exposed).toFixed(2)}`);
+        }
+        const refund = await OrderRefund.create({
+            orderId,
+            returnId: returnRequest?.id || null,
+            paymentId: payment.id,
+            amount,
+            currency: payment.currency || 'INR',
+            status: 'refund_initiated',
+            reason: payload.reason || (returnRequest ? 'Return refund' : 'Manual refund'),
+            metadata: {
+                returnItemAmount: returnRequest ? getReturnRequestItemAmount(returnRequest) : null,
+                requestedBy: actingUserId,
+                ...(isOfflineRefund ? { refundMethod: 'offline', manualReference: String(payload.offlineRefundReference).trim() } : {}),
+            },
+        }, { transaction: t });
+        await logOrderHistory({ orderId, entityType: 'OrderRefund', entityId: refund.id, statusGroup: 'refund', toStatus: 'refund_initiated', changedBy: actingUserId, metadata: { amount, reason: refund.reason }, transaction: t });
+        return { order, payment, refund, returnRequest };
+    });
 
+    let providerResult;
+    if (request.payment.provider === 'cod') {
+        providerResult = { status: 'succeeded', providerRefundId: `offline:${String(payload.offlineRefundReference).trim()}` };
+    }
+    try {
+        if (!providerResult) providerResult = await PaymentService.initiateProviderRefund({
+            payment: request.payment,
+            order: request.order,
+            refundId: request.refund.id,
+            amount: request.refund.amount,
+            reason: request.refund.reason,
+        });
+    } catch (error) {
+        const definitelyNotSent = error.code === 'PAYMENT_UNAVAILABLE'
+            || (Number(error.statusCode) >= 400 && Number(error.statusCode) < 500);
+        if (definitelyNotSent) {
+            await sequelize.transaction(async (t) => {
+                await request.refund.update({ status: 'refund_failed', metadata: { ...(request.refund.metadata || {}), providerError: error.message, outcomeUnknown: false } }, { transaction: t });
+                await logOrderHistory({ orderId, entityType: 'OrderRefund', entityId: request.refund.id, statusGroup: 'refund', fromStatus: 'refund_initiated', toStatus: 'refund_processing', changedBy: actingUserId, transaction: t });
+                await logOrderHistory({ orderId, entityType: 'OrderRefund', entityId: request.refund.id, statusGroup: 'refund', fromStatus: 'refund_processing', toStatus: 'refund_failed', changedBy: actingUserId, metadata: { message: error.message }, transaction: t });
+            });
+            throw error;
+        }
+        // A timeout can happen after the provider accepted the request. Keep the
+        // reservation open so a second click cannot accidentally refund twice.
+        await sequelize.transaction(async (t) => {
+            await request.refund.update({ status: 'refund_processing', metadata: { ...(request.refund.metadata || {}), providerError: error.message, outcomeUnknown: true } }, { transaction: t });
+            await logOrderHistory({ orderId, entityType: 'OrderRefund', entityId: request.refund.id, statusGroup: 'refund', fromStatus: 'refund_initiated', toStatus: 'refund_processing', changedBy: actingUserId, metadata: { outcomeUnknown: true }, transaction: t });
+        });
+        throw new AppError('PAYMENT_ERROR', 503, 'The provider refund outcome is not confirmed. Do not retry yet; verify the provider dashboard using refund reference ' + request.refund.id);
+    }
+
+    if (providerResult.status !== 'succeeded') {
+        await sequelize.transaction(async (t) => {
+            await request.refund.update({ status: 'refund_processing', providerRefundId: providerResult.providerRefundId, metadata: { ...(request.refund.metadata || {}), providerStatus: 'pending' } }, { transaction: t });
+            await logOrderHistory({ orderId, entityType: 'OrderRefund', entityId: request.refund.id, statusGroup: 'refund', fromStatus: 'refund_initiated', toStatus: 'refund_processing', changedBy: actingUserId, metadata: { providerRefundId: providerResult.providerRefundId }, transaction: t });
+        });
+        return request.refund.reload();
+    }
+
+    return finalizeProviderRefund(request.refund.id, providerResult, actingUserId).then(async (refund) => {
         try {
-            if (AuditService && AuditService.log) {
-                await AuditService.log({
-                    userId: actingUserId,
-                    action: 'CREATE',
-                    entity: 'OrderRefund',
-                    entityId: refund.id,
-                    changes: { 
-                        orderId, 
-                        amount: refund.amount, 
-                        reason: payload.reason,
-                        method: auditContext?.method,
-                        path: auditContext?.path
-                    },
-                    ipAddress: auditContext?.ip,
-                    userAgent: auditContext?.userAgent,
-                });
-            }
+            if (AuditService?.log) await AuditService.log({ userId: actingUserId, action: 'CREATE', entity: 'OrderRefund', entityId: refund.id, changes: { orderId, amount: refund.amount, providerRefundId: refund.providerRefundId, method: auditContext?.method, path: auditContext?.path }, ipAddress: auditContext?.ip, userAgent: auditContext?.userAgent });
         } catch (err) {}
-
         return refund;
     });
+};
+
+const finalizeProviderRefund = async (refundId, providerResult, actorId = null) => sequelize.transaction(async (t) => {
+    const refund = await OrderRefund.findByPk(refundId, { transaction: t, lock: Transaction.LOCK.UPDATE });
+    if (!refund || !OPEN_REFUND_STATUSES.includes(refund.status)) return refund;
+    const order = await Order.findByPk(refund.orderId, { transaction: t, lock: Transaction.LOCK.UPDATE });
+    const payment = await Payment.findByPk(refund.paymentId, { transaction: t, lock: Transaction.LOCK.UPDATE });
+    if (!order || !payment) throw new AppError('NOT_FOUND', 404, 'Order/payment for refund was not found');
+    if (refund.status === 'refund_initiated') {
+        await refund.update({ status: 'refund_processing' }, { transaction: t });
+        await logOrderHistory({ orderId: order.id, entityType: 'OrderRefund', entityId: refund.id, statusGroup: 'refund', fromStatus: 'refund_initiated', toStatus: 'refund_processing', changedBy: actorId, transaction: t });
+    }
+    if (providerResult.status === 'pending') {
+        await refund.update({ status: 'refund_processing', providerRefundId: providerResult.providerRefundId || refund.providerRefundId }, { transaction: t });
+        return refund;
+    }
+    if (providerResult.status === 'failed') {
+        await refund.update({ status: 'refund_failed', providerRefundId: providerResult.providerRefundId || refund.providerRefundId, metadata: { ...(refund.metadata || {}), providerStatus: 'failed' } }, { transaction: t });
+        await logOrderHistory({ orderId: order.id, entityType: 'OrderRefund', entityId: refund.id, statusGroup: 'refund', fromStatus: 'refund_processing', toStatus: 'refund_failed', changedBy: actorId, metadata: { providerRefundId: providerResult.providerRefundId || refund.providerRefundId }, transaction: t });
+        return refund;
+    }
+    const returnRequest = refund.returnId ? await OrderReturn.findOne({
+        where: { id: refund.returnId, orderId: order.id },
+        include: [{ model: OrderReturnItem, as: 'items', include: [{ model: OrderItem, as: 'orderItem', attributes: ['id', 'quantity', 'total', 'snapshotName'] }] }],
+        transaction: t,
+    }) : null;
+    const finalized = await createRefundRecord({
+        order,
+        payment,
+        amount: refund.amount,
+        reason: refund.reason,
+        actingUserId: actorId,
+        returnId: refund.returnId,
+        refundScopeAmount: returnRequest ? getReturnRequestItemAmount(returnRequest) : null,
+        metadata: { ...(refund.metadata || {}), providerRefundId: providerResult.providerRefundId || refund.providerRefundId, providerStatus: 'succeeded' },
+        transaction: t,
+        existingRefund: refund,
+    });
+    await syncPutBackCache(order, t, actorId);
+    await syncOrderClosureIfComplete(order, t, actorId);
+    return finalized;
+});
+
+const reconcileOpenRefunds = async ({ limit = 20 } = {}) => {
+    const pending = await OrderRefund.findAll({
+        where: { status: { [Op.in]: OPEN_REFUND_STATUSES } },
+        order: [['updatedAt', 'ASC']],
+        limit: Math.max(1, Math.min(Number(limit) || 20, 100)),
+    });
+    let reconciled = 0;
+    for (const refund of pending) {
+        try {
+            const payment = await Payment.findByPk(refund.paymentId);
+            if (!payment || payment.provider === 'cod') continue;
+            const result = await PaymentService.fetchProviderRefundStatus({ payment, refund });
+            if (result.status === 'pending' && !result.providerRefundId) continue;
+            await finalizeProviderRefund(refund.id, result);
+            reconciled += 1;
+        } catch (error) {
+            logger.warn('Refund status reconciliation failed; refund remains open for retry', { refundId: refund.id, provider: refund.metadata?.provider || null, message: error.message });
+        }
+    }
+    return reconciled;
 };
 
 const addNote = async (orderId, note, actorId, auditContext = null) => {
@@ -3602,6 +3744,7 @@ module.exports = {
     createReplacementRequest,
     updatePutBackStatus,
     processRefund,
+    reconcileOpenRefunds,
     getAllowedNextStatuses: (status) => getAllowedNextStatuses('order', normalizeOrderStatus(status)),
     addOrderHistoryEvent,
     addNote,

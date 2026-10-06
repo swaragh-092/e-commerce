@@ -13,7 +13,11 @@ module.exports = (sequelize, DataTypes) => {
         },
         userId: {
             type: DataTypes.UUID,
-            allowNull: false,
+            allowNull: true,
+        },
+        guestSessionId: {
+            type: DataTypes.STRING(255),
+            allowNull: true,
         },
         orderId: {
             type: DataTypes.UUID,

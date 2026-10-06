@@ -1,5 +1,6 @@
 'use strict';
 const Joi = require('joi');
+const { isGuestSessionId } = require('../../utils/guestSession');
 
 const addItemSchema = Joi.object({
   productId: Joi.string().uuid().required(),
@@ -12,7 +13,7 @@ const updateItemSchema = Joi.object({
 });
 
 const mergeCartSchema = Joi.object({
-  sessionId: Joi.string().required(),
+  sessionId: Joi.string().custom((value, helpers) => isGuestSessionId(value) ? value : helpers.error('string.guid')).required(),
 });
 
 module.exports = {
