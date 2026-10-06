@@ -87,6 +87,15 @@ module.exports = (sequelize, DataTypes) => {
             defaultValue: true,
             field: 'requires_shipping',
         },
+        packingMode: {
+            type: DataTypes.STRING(20),
+            allowNull: false,
+            defaultValue: 'standard',
+            field: 'packing_mode',
+            validate: {
+                isIn: [['standard', 'separate']],
+            },
+        },
         taxConfig: {
             type: DataTypes.JSONB,
             allowNull: true,

@@ -14,7 +14,37 @@ const AUTH_FAILURE_COOLDOWN_MS = 10 * 60 * 1000; // 10 minutes
 
 // In-memory serviceability cache to kill N× API latency on repeated or multi-item quotes
 const serviceabilityCache = new Map();
-const SERVICEABILITY_CACHE_TTL_MS = 5 * 60 * 1000; // 5 minutes TTL
+const inFlightRequests = new Map();
+const SERVICEABILITY_CACHE_TTL_MS = 5 * 60 * 1000; // 5 minutes TTL for success
+const UNSERVICEABLE_CACHE_TTL_MS = 30 * 1000; // 30 seconds TTL for deterministic unserviceable
+
+function getAccountNamespace(credentials, record) {
+    if (credentials?.email) return String(credentials.email).trim().toLowerCase();
+    if (record?.id) return String(record.id).trim();
+    return 'default';
+}
+
+function setCacheEntry(key, data, isServiceable) {
+    if (!data || typeof data !== 'object' || data.rawResponse?.mock) return;
+    const ttl = isServiceable ? SERVICEABILITY_CACHE_TTL_MS : UNSERVICEABLE_CACHE_TTL_MS;
+    const now = Date.now();
+    // 1. Purge expired entries
+    for (const [k, v] of serviceabilityCache) {
+        if (now >= v.expiresAt) serviceabilityCache.delete(k);
+    }
+    // 2. Hard-cap at 1000: bounded eviction of oldest entries
+    while (serviceabilityCache.size >= 1000) {
+        const oldestKey = serviceabilityCache.keys().next().value;
+        if (!oldestKey) break;
+        serviceabilityCache.delete(oldestKey);
+    }
+    serviceabilityCache.set(key, { data: { ...data }, expiresAt: now + ttl });
+}
+
+function clearServiceabilityCache() {
+    serviceabilityCache.clear();
+    inFlightRequests.clear();
+}
 
 function getAuthCacheKey(credentials) {
     return credentials?.email ? String(credentials.email).trim().toLowerCase() : 'default';
@@ -235,148 +265,169 @@ class ShiprocketProvider extends BaseShippingProvider {
             };
         }
 
-        try {
-            const weightKg = Math.max(0.1, weightGrams / 1000);
-            const effectivePickup = String(pickupPincode || this.settings.pickupPincode || this.settings.warehousePincode || '').trim();
+        const weightKg = Math.max(0.1, weightGrams / 1000);
+        const effectivePickup = String(pickupPincode || this.settings.pickupPincode || this.settings.warehousePincode || '').trim();
+        const codParam = paymentMode === 'cod' ? 1 : 0;
+        const normL = lengthCm && lengthCm > 0 ? Math.ceil(lengthCm) : 0;
+        const normB = breadthCm && breadthCm > 0 ? Math.ceil(breadthCm) : 0;
+        const normH = heightCm && heightCm > 0 ? Math.ceil(heightCm) : 0;
+        const normVal = Number(declaredValue) > 0 ? Math.ceil(Number(declaredValue)) : 0;
+        const normCourier = courierCompanyId != null ? String(courierCompanyId).trim() : '';
 
-            const codParam = paymentMode === 'cod' ? 1 : 0;
-            const cacheKey = `${effectivePickup}:${normalizedPincode}:${weightKg}:${lengthCm || 0}:${breadthCm || 0}:${heightCm || 0}:${codParam}:${declaredValue || 0}:${courierCompanyId || ''}`;
-            const cachedEntry = serviceabilityCache.get(cacheKey);
-            if (cachedEntry && Date.now() < cachedEntry.expiresAt) {
-                return { ...cachedEntry.data };
-            }
+        const accountNs = getAccountNamespace(this._credentials, this.record);
+        const cacheKey = `${accountNs}:${effectivePickup}:${normalizedPincode}:${weightKg}:${normL}:${normB}:${normH}:${codParam}:${normVal}:${normCourier}`;
 
-            const cacheAndReturn = (result) => {
-                if (result && typeof result === 'object' && !result.rawResponse?.mock) {
-                    serviceabilityCache.set(cacheKey, { data: result, expiresAt: Date.now() + SERVICEABILITY_CACHE_TTL_MS });
-                    if (serviceabilityCache.size > 1000) {
-                        const now = Date.now();
-                        for (const [k, v] of serviceabilityCache) {
-                            if (now >= v.expiresAt) serviceabilityCache.delete(k);
+        const cachedEntry = serviceabilityCache.get(cacheKey);
+        if (cachedEntry && Date.now() < cachedEntry.expiresAt) {
+            return { ...cachedEntry.data };
+        }
+
+        if (inFlightRequests.has(cacheKey)) {
+            const inFlightRes = await inFlightRequests.get(cacheKey);
+            return { ...inFlightRes };
+        }
+
+        const executeRequest = async () => {
+            try {
+                const res = await this._request({
+                    method: 'get',
+                    url: '/courier/serviceability/',
+                    params: {
+                        pickup_postcode: effectivePickup,
+                        delivery_postcode: normalizedPincode,
+                        weight: weightKg,
+                        cod: codParam,
+                        ...(normL && normB && normH ? { length: normL, breadth: normB, height: normH } : {}),
+                        ...(normVal > 0 ? { declared_value: normVal } : {}),
+                    },
+                });
+
+                const available = res.data?.data?.available_courier_companies || [];
+                let serviceable = available.length > 0;
+                let codAvailable = available.some(c => c.cod === 1);
+                const pinnedCourier = courierCompanyId == null ? null : available.find((courier) => Number(courier.courier_company_id) === Number(courierCompanyId));
+                const recommended = pinnedCourier || available.find((courier) => courier.is_recommended) || available[0] || null;
+                if (courierCompanyId != null && !pinnedCourier) {
+                    const result = {
+                        serviceable: false,
+                        codAvailable: false,
+                        rate: null,
+                        currency: 'INR',
+                        courierName: null,
+                        courierCompanyId: Number(courierCompanyId),
+                        estimatedDeliveryDays: null,
+                        reason: paymentMode === 'cod'
+                            ? 'The courier selected for this shipment is no longer available for COD on this parcel. Select a new courier or change payment method.'
+                            : 'The courier selected for this shipment is no longer available for this parcel. Select a new courier and retry.',
+                        rawResponse: res.data,
+                    };
+                    setCacheEntry(cacheKey, result, false);
+                    return result;
+                }
+                if (paymentMode === 'cod' && pinnedCourier && Number(pinnedCourier.cod) !== 1) {
+                    const result = {
+                        serviceable: false,
+                        codAvailable: false,
+                        rate: null,
+                        currency: 'INR',
+                        courierName: pinnedCourier.courier_name || null,
+                        courierCompanyId: Number(courierCompanyId),
+                        estimatedDeliveryDays: pinnedCourier.estimated_delivery_days || null,
+                        reason: 'The courier selected for this shipment no longer supports COD. Select a new courier or change payment method.',
+                        rawResponse: res.data,
+                    };
+                    setCacheEntry(cacheKey, result, false);
+                    return result;
+                }
+
+                // Edge Case 4: COD unavailable but prepaid available!
+                if (paymentMode === 'cod' && !codAvailable) {
+                    try {
+                        const prepaidRes = await this._request({
+                            method: 'get',
+                            url: '/courier/serviceability/',
+                            params: {
+                                pickup_postcode: effectivePickup,
+                                delivery_postcode: normalizedPincode,
+                                weight: weightKg,
+                                cod: 0,
+                                ...(normL && normB && normH ? { length: normL, breadth: normB, height: normH } : {}),
+                                ...(normVal > 0 ? { declared_value: normVal } : {}),
+                            },
+                        });
+                        const prepaidCouriers = prepaidRes.data?.data?.available_courier_companies || [];
+                        if (courierCompanyId != null && !prepaidCouriers.some((courier) => Number(courier.courier_company_id) === Number(courierCompanyId))) {
+                            const result = {
+                                serviceable: false,
+                                codAvailable: false,
+                                rate: null,
+                                currency: 'INR',
+                                courierName: null,
+                                courierCompanyId: Number(courierCompanyId),
+                                estimatedDeliveryDays: null,
+                                reason: 'The selected courier no longer supports COD for this parcel. Select a new courier or change payment method.',
+                                rawResponse: { codAttempt: res.data, prepaidFallback: prepaidRes.data },
+                            };
+                            setCacheEntry(cacheKey, result, false);
+                            return result;
                         }
+                        if (prepaidCouriers.length > 0) {
+                            const prepaidRecommended = prepaidCouriers.find((courier) => courier.is_recommended) || prepaidCouriers[0];
+                            const result = {
+                                serviceable: true,
+                                codAvailable: false,
+                                rate: prepaidRecommended.rate !== null && prepaidRecommended.rate !== undefined && prepaidRecommended.rate !== '' && Number.isFinite(Number(prepaidRecommended.rate)) ? Number(prepaidRecommended.rate) : null,
+                                currency: 'INR',
+                                courierName: prepaidRecommended.courier_name || null,
+                                courierCompanyId: prepaidRecommended.courier_company_id || null,
+                                estimatedDeliveryDays: prepaidRecommended.estimated_delivery_days || null,
+                                reason: 'Cash on Delivery is unavailable for this pincode, but prepaid delivery is available.',
+                                rawResponse: { codAttempt: res.data, prepaidFallback: prepaidRes.data },
+                            };
+                            setCacheEntry(cacheKey, result, true);
+                            return result;
+                        }
+                    } catch (_) {
+                        // Fall through to unserviceable
                     }
                 }
-                return result;
-            };
 
-            const res = await this._request({
-                method: 'get',
-                url: '/courier/serviceability/',
-                params: {
-                    pickup_postcode: effectivePickup,
-                    delivery_postcode: normalizedPincode,
-                    weight: weightKg,
-                    cod: codParam,
-                    ...(lengthCm && breadthCm && heightCm ? { length: Math.ceil(lengthCm), breadth: Math.ceil(breadthCm), height: Math.ceil(heightCm) } : {}),
-                    ...(Number(declaredValue) > 0 ? { declared_value: Math.ceil(Number(declaredValue)) } : {}),
-                },
-            });
-
-            const available = res.data?.data?.available_courier_companies || [];
-            let serviceable = available.length > 0;
-            let codAvailable = available.some(c => c.cod === 1);
-            const pinnedCourier = courierCompanyId == null ? null : available.find((courier) => Number(courier.courier_company_id) === Number(courierCompanyId));
-            const recommended = pinnedCourier || available.find((courier) => courier.is_recommended) || available[0] || null;
-            if (courierCompanyId != null && !pinnedCourier) {
-                return cacheAndReturn({
-                    serviceable: false,
-                    codAvailable: false,
-                    rate: null,
+                const result = {
+                    serviceable,
+                    codAvailable,
+                    rate: recommended && recommended.rate !== null && recommended.rate !== undefined && recommended.rate !== '' && Number.isFinite(Number(recommended.rate)) ? Number(recommended.rate) : null,
                     currency: 'INR',
-                    courierName: null,
-                    courierCompanyId: Number(courierCompanyId),
-                    estimatedDeliveryDays: null,
-                    reason: paymentMode === 'cod'
-                        ? 'The courier selected for this shipment is no longer available for COD on this parcel. Select a new courier or change payment method.'
-                        : 'The courier selected for this shipment is no longer available for this parcel. Select a new courier and retry.',
+                    courierName: recommended?.courier_name || null,
+                    courierCompanyId: recommended?.courier_company_id || null,
+                    estimatedDeliveryDays: recommended?.estimated_delivery_days || null,
+                    reason: serviceable ? null : 'No courier available for this pincode',
                     rawResponse: res.data,
-                });
-            }
-            if (paymentMode === 'cod' && pinnedCourier && Number(pinnedCourier.cod) !== 1) {
-                return cacheAndReturn({
-                    serviceable: false,
-                    codAvailable: false,
-                    rate: null,
-                    currency: 'INR',
-                    courierName: pinnedCourier.courier_name || null,
-                    courierCompanyId: Number(courierCompanyId),
-                    estimatedDeliveryDays: pinnedCourier.estimated_delivery_days || null,
-                    reason: 'The courier selected for this shipment no longer supports COD. Select a new courier or change payment method.',
-                    rawResponse: res.data,
-                });
-            }
-
-            // Edge Case 4: COD unavailable but prepaid available!
-            if (paymentMode === 'cod' && !codAvailable) {
-                try {
-                    const prepaidRes = await this._request({
-                        method: 'get',
-                        url: '/courier/serviceability/',
-                        params: {
-                            pickup_postcode: effectivePickup,
-                            delivery_postcode: normalizedPincode,
-                            weight: weightKg,
-                            cod: 0,
-                            ...(lengthCm && breadthCm && heightCm ? { length: Math.ceil(lengthCm), breadth: Math.ceil(breadthCm), height: Math.ceil(heightCm) } : {}),
-                            ...(Number(declaredValue) > 0 ? { declared_value: Math.ceil(Number(declaredValue)) } : {}),
-                        },
-                    });
-                    const prepaidCouriers = prepaidRes.data?.data?.available_courier_companies || [];
-                    if (courierCompanyId != null && !prepaidCouriers.some((courier) => Number(courier.courier_company_id) === Number(courierCompanyId))) {
-                        return cacheAndReturn({
-                            serviceable: false,
-                            codAvailable: false,
-                            rate: null,
-                            currency: 'INR',
-                            courierName: null,
-                            courierCompanyId: Number(courierCompanyId),
-                            estimatedDeliveryDays: null,
-                            reason: 'The selected courier no longer supports COD for this parcel. Select a new courier or change payment method.',
-                            rawResponse: { codAttempt: res.data, prepaidFallback: prepaidRes.data },
-                        });
-                    }
-                    if (prepaidCouriers.length > 0) {
-                        const prepaidRecommended = prepaidCouriers.find((courier) => courier.is_recommended) || prepaidCouriers[0];
-                        return cacheAndReturn({
-                            serviceable: true,
-                            codAvailable: false,
-                            rate: prepaidRecommended.rate !== null && prepaidRecommended.rate !== undefined && prepaidRecommended.rate !== '' && Number.isFinite(Number(prepaidRecommended.rate)) ? Number(prepaidRecommended.rate) : null,
-                            currency: 'INR',
-                            courierName: prepaidRecommended.courier_name || null,
-                            courierCompanyId: prepaidRecommended.courier_company_id || null,
-                            estimatedDeliveryDays: prepaidRecommended.estimated_delivery_days || null,
-                            reason: 'Cash on Delivery is unavailable for this pincode, but prepaid delivery is available.',
-                            rawResponse: { codAttempt: res.data, prepaidFallback: prepaidRes.data },
-                        });
-                    }
-                } catch (_) {
-                    // Fall through to unserviceable
-                }
-            }
-
-            return cacheAndReturn({
-                serviceable,
-                codAvailable,
-                rate: recommended && recommended.rate !== null && recommended.rate !== undefined && recommended.rate !== '' && Number.isFinite(Number(recommended.rate)) ? Number(recommended.rate) : null,
-                currency: 'INR',
-                courierName: recommended?.courier_name || null,
-                courierCompanyId: recommended?.courier_company_id || null,
-                estimatedDeliveryDays: recommended?.estimated_delivery_days || null,
-                reason: serviceable ? null : 'No courier available for this pincode',
-                rawResponse: res.data,
-            });
-        } catch (err) {
-            console.error('[ShiprocketProvider] getServiceability API error:', err.message);
-            const status = err.response?.status;
-            if (status === 400 || status === 404 || status === 422) {
-                return {
-                    serviceable: false,
-                    codAvailable: false,
-                    reason: err.response?.data?.message || 'Delivery is not available for this pincode.',
-                    rawResponse: err.response?.data,
                 };
+                setCacheEntry(cacheKey, result, serviceable);
+                return result;
+            } catch (err) {
+                console.error('[ShiprocketProvider] getServiceability API error:', err.message);
+                const status = err.response?.status;
+                if (status === 400 || status === 404 || status === 422) {
+                    const result = {
+                        serviceable: false,
+                        codAvailable: false,
+                        reason: err.response?.data?.message || 'Delivery is not available for this pincode.',
+                        rawResponse: err.response?.data,
+                    };
+                    setCacheEntry(cacheKey, result, false);
+                    return result;
+                }
+                throw new Error(`Shiprocket serviceability failed: ${err.response?.data?.message || err.message}`);
             }
-            throw new Error(`Shiprocket serviceability failed: ${err.response?.data?.message || err.message}`);
+        };
+
+        const inFlight = executeRequest();
+        inFlightRequests.set(cacheKey, inFlight);
+        try {
+            return await inFlight;
+        } finally {
+            inFlightRequests.delete(cacheKey);
         }
     }
 
@@ -1219,6 +1270,8 @@ ShiprocketProvider.clearAuthCooldown = clearAuthCooldown;
 ShiprocketProvider.authFailureCache = authFailureCache;
 ShiprocketProvider.AUTH_FAILURE_COOLDOWN_MS = AUTH_FAILURE_COOLDOWN_MS;
 ShiprocketProvider.serviceabilityCache = serviceabilityCache;
+ShiprocketProvider.inFlightRequests = inFlightRequests;
+ShiprocketProvider.clearServiceabilityCache = clearServiceabilityCache;
 ShiprocketProvider.toShiprocketOrderId = toShiprocketOrderId;
 
 module.exports = ShiprocketProvider;

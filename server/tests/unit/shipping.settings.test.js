@@ -16,7 +16,15 @@ describe('Shipping configuration validation', () => {
         ['pricingMode', 'standard'], ['pricingMode', 'rules'], ['flatRate', 0],
         ['freeThreshold', 500], ['serviceablePincodes', ''],
         ['blockedPincodes', ' 560001, 600001 '], ['serviceablePincodes', ['560001']],
+        ['defaultPackageId', 'box-medium'], ['defaultPackageId', ''],
+        ['defaultPackageId', null],
     ])('accepts valid %s', (key, value) => {
         expect(() => validateShippingSetting(key, value)).not.toThrow();
+    });
+    it.each([
+        ['defaultPackageId', 42], ['defaultPackageId', '   '],
+        ['defaultPackageId', 'x'.repeat(101)],
+    ])('rejects malformed %s', (key, value) => {
+        expect(() => validateShippingSetting(key, value)).toThrow();
     });
 });
