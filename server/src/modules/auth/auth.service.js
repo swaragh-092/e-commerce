@@ -782,6 +782,14 @@ const loginByPhone = async (phone, ipAddress) => {
       if (found.scheduledDeletionAt && new Date(found.scheduledDeletionAt) <= new Date()) {
         throw new AppError('FORBIDDEN', 403, 'Account deletion period has expired');
       }
+      // Phone OTP proves control of the phone, not of an email address. Keep
+      // phone-only accounts usable, but do not let OTP bypass a required email
+      // verification step after a real email has been attached to the account.
+      if (await isEmailVerificationRequired()
+          && !String(found.email || '').toLowerCase().endsWith('@phone.local')
+          && !found.emailVerified) {
+        throw new AppError('FORBIDDEN', 403, 'Please verify your email before signing in');
+      }
       return found;
     }
 

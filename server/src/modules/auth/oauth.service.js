@@ -35,7 +35,11 @@ const initializeGoogleStrategy = () => {
 
 const findOrCreateOAuthUser = async (profile, clientIp) => {
   const rawEmail = profile.emails?.[0]?.value;
-  if (!rawEmail) throw new Error('No email returned from Google');
+  const emailIsVerified = profile.emails?.[0]?.verified === true
+    || profile._json?.email_verified === true;
+  if (!rawEmail || !emailIsVerified) {
+    throw new Error('Google did not return a verified email address');
+  }
   const email = String(rawEmail).trim().toLowerCase();
 
   return sequelize.transaction(async (t) => {
@@ -43,8 +47,6 @@ const findOrCreateOAuthUser = async (profile, clientIp) => {
       where: sequelize.where(sequelize.fn('LOWER', sequelize.col('email')), email),
       transaction: t,
     });
-    let isMerge = false;
-
     if (!user) {
       user = await User.create({
         email,
@@ -62,29 +64,10 @@ const findOrCreateOAuthUser = async (profile, clientIp) => {
     } else if (user.status !== 'active') {
       throw new Error('Account is inactive');
     } else {
-      isMerge = true;
       if (user.email !== email) {
         await user.update({ email }, { transaction: t });
         user.email = email;
       }
-    }
-
-    if (isMerge) {
-      // Merging into a pre-existing password row: kill any sessions the
-      // password holder may hold so a squatted account can't stay logged in.
-      await RefreshToken.update(
-        { revokedAt: new Date() },
-        { where: { userId: user.id, revokedAt: null }, transaction: t }
-      );
-      try {
-        const sessions = await RefreshToken.findAll({
-          where: { userId: user.id },
-          attributes: ['id'],
-          transaction: t,
-        });
-        const blocklist = require('../../utils/tokenBlocklist');
-        sessions.forEach((s) => blocklist.revokeSession(s.id));
-      } catch { /* kill-switch best-effort */ }
     }
 
     // Check if 2FA is enabled — return temp token instead of full auth

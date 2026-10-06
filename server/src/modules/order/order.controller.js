@@ -4,6 +4,7 @@ const { success, paginated } = require('../../utils/response');
 const { PERMISSIONS, getPermissionsForUser } = require('../../config/permissions');
 const AppError = require('../../utils/AppError');
 const logger = require('../../utils/logger');
+const { isGuestSessionId } = require('../../utils/guestSession');
 
 const hasOrderAdminAccess = (user) => getPermissionsForUser(user).includes(PERMISSIONS.ORDERS_READ);
 
@@ -60,7 +61,11 @@ const getOrders = async (req, res, next) => {
 const getOrderById = async (req, res, next) => {
   try {
     const isAdminSession = hasOrderAdminAccess(req.user);
-    const order = await OrderService.getOrderById(req.params.id, req.user?.id || null, isAdminSession, req.headers['x-session-id'] || null);
+    const guestSessionId = req.headers['x-session-id'] || req.cookies?.sessionId || null;
+    if (!req.user && !isAdminSession && !isGuestSessionId(guestSessionId)) {
+      throw new AppError('UNAUTHORIZED', 401, 'A valid guest checkout session is required to view this order');
+    }
+    const order = await OrderService.getOrderById(req.params.id, req.user?.id || null, isAdminSession, guestSessionId);
     return success(res, order);
   } catch (err) {
     next(err);
@@ -219,7 +224,14 @@ const processRefund = async (req, res, next) => {
     const isAdmin = hasOrderAdminAccess(req.user);
     const auditContext = { userId: req.user?.id, ip: req.ip, userAgent: req.get('User-Agent'), method: req.method, path: req.originalUrl };
     const result = await OrderService.processRefund(req.params.id, req.validated, req.user.id, isAdmin, auditContext);
-    return success(res, result, 'Refund processed', 201);
+    req._auditAction = 'STATUS_CHANGE';
+    req._auditChanges = { status: result.status, amount: result.amount, providerRefundId: result.providerRefundId || null };
+    const message = result.status === 'refund_processing'
+      ? 'Refund request accepted by the provider and is still processing.'
+      : result.metadata?.refundMethod === 'offline'
+        ? 'Offline refund recorded with the submitted transfer reference.'
+        : 'Refund confirmed by the provider.';
+    return success(res, result, message, 201);
   } catch (err) {
     next(err);
   }

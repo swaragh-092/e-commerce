@@ -3,7 +3,7 @@ const router = require('express').Router();
 const couponController = require('./coupon.controller');
 const { validate } = require('../../middleware/validate.middleware');
 const { createCouponSchema, updateCouponSchema, validateCouponSchema, eligibleCouponsSchema } = require('./coupon.validation');
-const { authenticate } = require('../../middleware/auth.middleware');
+const { authenticate, optionalAuth } = require('../../middleware/auth.middleware');
 const { authorizePermissions } = require('../../middleware/role.middleware');
 const { auditLog } = require('../audit/audit.middleware');
 const { couponLimiter } = require('../../middleware/rateLimiter.middleware');
@@ -27,6 +27,6 @@ router.put('/:id', authenticate, authorizePermissions(PERMISSIONS.COUPONS_MANAGE
 router.delete('/:id', authenticate, authorizePermissions(PERMISSIONS.COUPONS_MANAGE), validate(idParamSchema, 'params'), auditLog('Coupon'), couponController.remove);
 
 
-router.post('/validate', authenticate, couponLimiter, validate(validateCouponSchema), couponController.validateCoupon);
+router.post('/validate', optionalAuth, couponLimiter, validate(validateCouponSchema), couponController.validateCoupon);
 
 module.exports = router;

@@ -6,8 +6,10 @@ import {
   Button,
   Chip,
   CircularProgress,
+  Checkbox,
   Divider,
   FormControl,
+  FormControlLabel,
   Grid,
   IconButton,
   InputLabel,
@@ -493,6 +495,14 @@ const getRefundedAmountForReturnRequest = (order = {}, returnId) => (
     .reduce((sum, refund) => sum + Number(refund.amount || 0), 0)
 );
 
+const hasPendingRefundForReturnRequest = (order = {}, returnId) => (
+  (order.refunds || order.Refunds || []).some((refund) => refund.returnId === returnId && ['refund_initiated', 'refund_processing'].includes(refund.status))
+);
+
+const getOpenRefunds = (order = {}) => (
+  (order.refunds || order.Refunds || []).filter((refund) => ['refund_initiated', 'refund_processing'].includes(refund.status))
+);
+
 const hasFullRefundForReturnRequest = (order = {}, request = {}) => {
   const refunds = (order.refunds || order.Refunds || [])
     .filter((refund) => refund.returnId === request.id && ['refunded', 'partially_refunded'].includes(refund.status));
@@ -874,6 +884,8 @@ const OrderDetailPage = () => {
   const [codCollectionAmount, setCodCollectionAmount] = useState('');
   const [refundDialogRequest, setRefundDialogRequest] = useState(null);
   const [refundAmount, setRefundAmount] = useState('');
+  const [offlineRefundReference, setOfflineRefundReference] = useState('');
+  const [offlineRefundConfirmed, setOfflineRefundConfirmed] = useState(false);
   const [fulfillmentLoading, setFulfillmentLoading] = useState(false);
   const [addingNote, setAddingNote] = useState(false);
   const [guestContactEmail, setGuestContactEmail] = useState('');
@@ -1085,11 +1097,15 @@ const OrderDetailPage = () => {
     }
     setRefundDialogRequest(returnRequest);
     setRefundAmount(maxAmount > 0 ? maxAmount.toFixed(2) : '');
+    setOfflineRefundReference('');
+    setOfflineRefundConfirmed(false);
   };
 
   const closeReturnRefundDialog = () => {
     setRefundDialogRequest(null);
     setRefundAmount('');
+    setOfflineRefundReference('');
+    setOfflineRefundConfirmed(false);
   };
 
   const handleReturnRefund = async () => {
@@ -1108,10 +1124,21 @@ const OrderDetailPage = () => {
 
     setUpdating(true);
     try {
-      await processRefund(id, { returnId: refundDialogRequest.id, amount, reason: refundDialogRequest.reason || 'Return refund' });
+      const isCodRefund = order?.paymentMethod === 'cod';
+      const response = await processRefund(id, {
+        returnId: refundDialogRequest.id,
+        amount,
+        reason: refundDialogRequest.reason || 'Return refund',
+        ...(isCodRefund ? { offlineRefundConfirmed, offlineRefundReference: offlineRefundReference.trim() } : {}),
+      });
+      const refund = response.data?.data;
       closeReturnRefundDialog();
       await fetchOrder();
-      notify('Return refund recorded.', 'success');
+      notify(refund?.status === 'refund_processing'
+        ? `Provider accepted refund ${refund.providerRefundId || refund.id}; it is still processing.`
+        : refund?.metadata?.refundMethod === 'offline'
+          ? `Offline refund recorded with reference ${refund.metadata.manualReference}.`
+          : 'Provider confirmed the refund.', refund?.status === 'refund_processing' ? 'warning' : 'success');
     } catch (err) {
       notify(getApiErrorMessage(err, 'Failed to process return refund.'), 'error');
     } finally {
@@ -1495,6 +1522,12 @@ const OrderDetailPage = () => {
                     </Box>
                   </>
                 )}
+                {getOpenRefunds(order).map((refund) => (
+                  <Box key={refund.id}>
+                    <Typography variant="caption" color="warning.main">Refund processing</Typography>
+                    <Typography variant="body2">{formatPrice(refund.amount)}{refund.providerRefundId ? ` · ${refund.providerRefundId}` : ''}</Typography>
+                  </Box>
+                ))}
               </Stack>
             </DetailCard>
 
@@ -1701,8 +1734,8 @@ const OrderDetailPage = () => {
                               </Select>
                             </FormControl>
                             {canRefundReturn && (
-                              <Button size="small" variant="outlined" color="error" onClick={() => openReturnRefundDialog(request)} disabled={updating}>
-                                Refund
+                              <Button size="small" variant="outlined" color="error" onClick={() => openReturnRefundDialog(request)} disabled={updating || hasPendingRefundForReturnRequest(order, request.id)}>
+                                {hasPendingRefundForReturnRequest(order, request.id) ? 'Refund processing' : 'Issue refund'}
                               </Button>
                             )}
                             {request.type === 'return' && isReturnFullyRefunded && (
@@ -1896,9 +1929,14 @@ const OrderDetailPage = () => {
         maxWidth="xs"
         fullWidth
       >
-        <DialogTitle>Record Return Refund</DialogTitle>
+        <DialogTitle>Issue Return Refund</DialogTitle>
         <DialogContent>
           <Stack spacing={2} sx={{ pt: 1 }}>
+            {order?.paymentMethod === 'cod' && (
+              <Alert severity="warning">
+                COD has no payment gateway to send money back through. Send this amount to the customer first, then enter the transfer reference and confirm below.
+              </Alert>
+            )}
             <Box>
               <Typography variant="caption" color="text.secondary">
                 Returned product limit
@@ -1946,14 +1984,30 @@ const OrderDetailPage = () => {
               helperText="Refunds cannot exceed the returned item amount or the captured payment available."
               fullWidth
             />
+            {order?.paymentMethod === 'cod' && (
+              <>
+                <TextField
+                  label="Bank / UPI / cash refund reference"
+                  value={offlineRefundReference}
+                  onChange={(event) => setOfflineRefundReference(event.target.value)}
+                  inputProps={{ maxLength: 255 }}
+                  required
+                  fullWidth
+                />
+                <FormControlLabel
+                  control={<Checkbox checked={offlineRefundConfirmed} onChange={(event) => setOfflineRefundConfirmed(event.target.checked)} />}
+                  label="I have sent this refund to the customer"
+                />
+              </>
+            )}
           </Stack>
         </DialogContent>
         <DialogActions>
           <Button onClick={closeReturnRefundDialog} disabled={updating}>
             Cancel
           </Button>
-          <Button variant="contained" color="error" onClick={handleReturnRefund} disabled={updating}>
-            {updating ? 'Saving…' : 'Record Refund'}
+          <Button variant="contained" color="error" onClick={handleReturnRefund} disabled={updating || (order?.paymentMethod === 'cod' && (!offlineRefundConfirmed || !offlineRefundReference.trim()))}>
+            {updating ? 'Processing refund…' : order?.paymentMethod === 'cod' ? 'Record sent refund' : 'Issue refund'}
           </Button>
         </DialogActions>
       </Dialog>

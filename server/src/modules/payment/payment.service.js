@@ -99,7 +99,7 @@ const ensureCashfreeConfig = async () => {
     return { appId, secret };
 };
 
-const cashfreeRequest = async (path, { method = 'GET', body } = {}) => {
+const cashfreeRequest = async (path, { method = 'GET', body, headers: extraHeaders = {} } = {}) => {
     const { appId, secret } = await ensureCashfreeConfig();
     const cfEnv = await getCredential('cashfree.mode', 'CASHFREE_ENV') || 'sandbox';
     const baseUrl = cfEnv === 'production'
@@ -112,6 +112,7 @@ const cashfreeRequest = async (path, { method = 'GET', body } = {}) => {
             'x-api-version': CASHFREE_API_VERSION,
             'x-client-id': appId,
             'x-client-secret': secret,
+            ...extraHeaders,
         },
         ...(body ? { body: JSON.stringify(body) } : {}),
     });
@@ -125,6 +126,136 @@ const cashfreeRequest = async (path, { method = 'GET', body } = {}) => {
         );
     }
     return data;
+};
+
+const initiateProviderRefund = async ({ payment, order, refundId, amount, reason }) => {
+    const provider = String(payment.provider || '').toLowerCase();
+    if (provider === 'razorpay') {
+        const paymentId = payment.transactionId;
+        if (!paymentId || !paymentId.startsWith('pay_')) throw new AppError('PAYMENT_ERROR', 409, 'The captured Razorpay payment ID is unavailable; refund was not sent.');
+        const razorpay = await getRazorpayClient();
+        const result = await razorpay.payments.refund(paymentId, {
+            amount: Math.round(Number(amount) * 100),
+            notes: { refund_id: refundId, reason: String(reason || '').slice(0, 200) },
+        });
+        return { providerRefundId: result.id, status: ['processed', 'succeeded'].includes(String(result.status).toLowerCase()) ? 'succeeded' : 'pending' };
+    }
+    if (provider === 'stripe') {
+        const { secret } = await ensureStripeConfig();
+        const stripe = require('stripe')(secret);
+        let paymentIntent = payment.transactionId;
+        if (paymentIntent?.startsWith('cs_')) {
+            const session = await stripe.checkout.sessions.retrieve(paymentIntent, { expand: ['payment_intent'] });
+            paymentIntent = typeof session.payment_intent === 'string' ? session.payment_intent : session.payment_intent?.id;
+        }
+        if (!paymentIntent?.startsWith('pi_')) throw new AppError('PAYMENT_ERROR', 409, 'The captured Stripe payment intent is unavailable; refund was not sent.');
+        const result = await stripe.refunds.create({
+            payment_intent: paymentIntent,
+            amount: Math.round(Number(amount) * 100),
+            metadata: { order_id: String(order.id), refund_id: String(refundId) },
+        }, { idempotencyKey: `order-refund-${refundId}` });
+        return { providerRefundId: result.id, status: result.status === 'succeeded' ? 'succeeded' : 'pending' };
+    }
+    if (provider === 'cashfree') {
+        const cashfreeOrderId = payment.metadata?.cashfreeOrderId || payment.transactionId;
+        if (!cashfreeOrderId) throw new AppError('PAYMENT_ERROR', 409, 'The Cashfree order ID is unavailable; refund was not sent.');
+        const result = await cashfreeRequest(`/orders/${encodeURIComponent(cashfreeOrderId)}/refunds`, {
+            method: 'POST',
+            headers: { 'x-idempotency-key': String(refundId) },
+            body: { refund_id: String(refundId), refund_amount: Number(amount), refund_note: String(reason || '').slice(0, 200) },
+        });
+        return { providerRefundId: result.cf_refund_id || result.refund_id || String(refundId), status: String(result.refund_status || '').toUpperCase() === 'SUCCESS' ? 'succeeded' : 'pending' };
+    }
+    if (provider === 'payu') {
+        const key = await getCredential('payu.key', 'PAYU_MERCHANT_KEY');
+        const salt = await getCredential('payu.salt', 'PAYU_MERCHANT_SALT');
+        const mode = await getCredential('payu.mode', null) || 'test';
+        const payuId = payment.metadata?.payuId;
+        if (!key || !salt || !payuId) throw new AppError('PAYMENT_ERROR', 409, 'PayU refund credentials or captured PayU transaction ID are unavailable; refund was not sent.');
+        const command = 'cancel_refund_transaction';
+        const token = String(refundId).replace(/-/g, '').slice(0, 20);
+        const hash = crypto.createHash('sha512').update(`${key}|${command}|${payuId}|${salt}`).digest('hex');
+        const body = new URLSearchParams({ key, command, var1: String(payuId), var2: token, var3: Number(amount).toFixed(2), var9: JSON.stringify({ refundDetails: { remarks: String(reason || '').slice(0, 200) } }), hash });
+        const endpoint = mode === 'production' ? 'https://info.payu.in/merchant/postservice.php?form=2' : 'https://test.payu.in/merchant/postservice.php?form=2';
+        const response = await fetch(endpoint, { method: 'POST', headers: { 'Content-Type': 'application/x-www-form-urlencoded' }, body });
+        const result = await response.json().catch(() => ({}));
+        if (!response.ok || Number(result.status) !== 1) throw new AppError('PAYMENT_ERROR', response.status || 502, result.msg || 'PayU did not accept the refund request');
+        return { providerRefundId: result.request_id || token, status: 'pending' };
+    }
+    throw new AppError('PAYMENT_ERROR', 409, `Refunds are not supported for payment provider "${provider}". Use the provider dashboard and record the refund reference.`);
+};
+
+const fetchProviderRefundStatus = async ({ payment, refund }) => {
+    const provider = String(payment.provider || '').toLowerCase();
+    const normalize = (status) => {
+        const value = String(status || '').toLowerCase();
+        if (['succeeded', 'success', 'processed', 'refunded'].includes(value)) return 'succeeded';
+        if (['failed', 'failure', 'rejected', 'cancelled', 'canceled'].includes(value)) return 'failed';
+        return 'pending';
+    };
+    if (provider === 'stripe') {
+        const { secret } = await ensureStripeConfig();
+        const stripe = require('stripe')(secret);
+        if (refund.providerRefundId) {
+            const result = await stripe.refunds.retrieve(refund.providerRefundId);
+            return { status: normalize(result.status), providerRefundId: result.id };
+        }
+        let intent = payment.transactionId;
+        if (intent?.startsWith('cs_')) {
+            const session = await stripe.checkout.sessions.retrieve(intent, { expand: ['payment_intent'] });
+            intent = typeof session.payment_intent === 'string' ? session.payment_intent : session.payment_intent?.id;
+        }
+        if (!intent?.startsWith('pi_')) return { status: 'pending' };
+        const results = await stripe.refunds.list({ payment_intent: intent, limit: 100 });
+        const match = results.data.find((item) => item.metadata?.refund_id === refund.id);
+        return match ? { status: normalize(match.status), providerRefundId: match.id } : { status: 'pending' };
+    }
+    if (provider === 'razorpay') {
+        const keyId = await getCredential('razorpay.keyId', 'RAZORPAY_KEY_ID');
+        const keySecret = await getCredential('razorpay.keySecret', 'RAZORPAY_KEY_SECRET');
+        if (!keyId || !keySecret) throw new AppError('PAYMENT_UNAVAILABLE', 503, 'Razorpay credentials are missing.');
+        const endpoint = refund.providerRefundId
+            ? `https://api.razorpay.com/v1/refunds/${encodeURIComponent(refund.providerRefundId)}`
+            : `https://api.razorpay.com/v1/payments/${encodeURIComponent(payment.transactionId)}/refunds`;
+        const response = await fetch(endpoint, { headers: { Authorization: `Basic ${Buffer.from(`${keyId}:${keySecret}`).toString('base64')}` } });
+        const result = await response.json().catch(() => ({}));
+        if (!response.ok) throw new AppError('PAYMENT_ERROR', response.status, result.error?.description || 'Razorpay refund status could not be fetched');
+        const refunds = result.items || [result];
+        const match = refunds.find((item) => item.id === refund.providerRefundId || item.notes?.refund_id === refund.id);
+        return match ? { status: normalize(match.status), providerRefundId: match.id } : { status: 'pending' };
+    }
+    if (provider === 'cashfree') {
+        const orderId = payment.metadata?.cashfreeOrderId || payment.transactionId;
+        const refundId = refund.providerRefundId || refund.id;
+        const result = await cashfreeRequest(`/orders/${encodeURIComponent(orderId)}/refunds/${encodeURIComponent(refundId)}`);
+        return { status: normalize(result.refund_status), providerRefundId: result.cf_refund_id || result.refund_id || refundId };
+    }
+    if (provider === 'payu') {
+        const key = await getCredential('payu.key', 'PAYU_MERCHANT_KEY');
+        const salt = await getCredential('payu.salt', 'PAYU_MERCHANT_SALT');
+        const mode = await getCredential('payu.mode', null) || 'test';
+        const payuId = payment.metadata?.payuId;
+        if (!key || !salt || !payuId) throw new AppError('PAYMENT_UNAVAILABLE', 503, 'PayU refund credentials or transaction ID are missing.');
+        const command = 'getAllRefundsFromTxnIds';
+        const hash = crypto.createHash('sha512').update(`${key}|${command}|${payuId}|${salt}`).digest('hex');
+        const body = new URLSearchParams({ key, command, var1: String(payuId), hash });
+        const endpoint = mode === 'production' ? 'https://info.payu.in/merchant/postservice.php?form=2' : 'https://test.payu.in/merchant/postservice.php?form=2';
+        const response = await fetch(endpoint, { method: 'POST', headers: { 'Content-Type': 'application/x-www-form-urlencoded' }, body });
+        const result = await response.json().catch(() => ({}));
+        if (!response.ok || Number(result.status) !== 1) throw new AppError('PAYMENT_ERROR', response.status || 502, result.msg || 'PayU refund status could not be fetched');
+        const flattened = [];
+        const visit = (value) => {
+            if (Array.isArray(value)) return value.forEach(visit);
+            if (!value || typeof value !== 'object') return;
+            if (value.request_id || value.RefundToken || value.refund_token) flattened.push(value);
+            Object.values(value).forEach(visit);
+        };
+        visit(result);
+        const payuToken = String(refund.id).replace(/-/g, '').slice(0, 20);
+        const match = flattened.find((item) => String(item.request_id || '') === String(refund.providerRefundId || '') || String(item.RefundToken || item.refund_token || '') === payuToken);
+        return match ? { status: normalize(match.Status || match.status), providerRefundId: match.request_id || refund.providerRefundId } : { status: 'pending' };
+    }
+    return { status: 'unsupported' };
 };
 
 const getErrorMessage = (error, fallback = 'Unexpected payment provider error') => {
@@ -659,31 +790,12 @@ const verifyRazorpayPayment = async (userId, orderId, paymentData) => {
         throw new AppError('PAYMENT_ERROR', 400, 'Invalid payment signature');
     }
 
-    // Amount + currency binding via provider fetch. A valid signature alone
-    // does not prove the captured amount matches this order.
+    // A signature proves this payment was created by Razorpay; it does not
+    // prove that the captured amount and currency match this order.
     try {
         const razorpay = await getRazorpayClient();
-        if (razorpay?.payments?.fetch) {
-            const providerPayment = await razorpay.payments.fetch(razorpay_payment_id);
-            const providerOrderId = providerPayment?.order_id;
-            if (providerOrderId && providerOrderId !== razorpay_order_id) {
-                throw new AppError('PAYMENT_ERROR', 400, 'Razorpay payment does not belong to this order');
-            }
-            if (providerPayment?.amount != null) {
-                const expectedSubunits = Math.round(Number(order.total) * 100);
-                if (Number(providerPayment.amount) !== expectedSubunits) {
-                    throw new AppError('PAYMENT_ERROR', 400, 'Razorpay payment amount does not match order total');
-                }
-            }
-            if (providerPayment?.currency && payment.currency) {
-                if (String(providerPayment.currency).toUpperCase() !== String(payment.currency).toUpperCase()) {
-                    throw new AppError('PAYMENT_ERROR', 400, 'Razorpay payment currency does not match order');
-                }
-            }
-            if (providerPayment?.status && !['captured', 'authorized'].includes(providerPayment.status)) {
-                throw new AppError('PAYMENT_ERROR', 400, `Razorpay payment is ${providerPayment.status}`);
-            }
-        }
+        const providerPayment = await razorpay.payments.fetch(razorpay_payment_id);
+        validateRazorpayPayment(providerPayment, { order, payment, expectedOrderId: razorpay_order_id });
     } catch (err) {
         if (err instanceof AppError) throw err;
         // Provider fetch failed (network/SDK). Fail closed with provider detail
@@ -701,6 +813,25 @@ const verifyRazorpayPayment = async (userId, orderId, paymentData) => {
     return settlement.lateSettlement
         ? { success: true, status: 'late_settlement', orderCancelled: true, message: 'Payment was captured after this order was cancelled. Contact support for refund handling.' }
         : { success: true, status: 'paid' };
+};
+
+const validateRazorpayPayment = (providerPayment, { order, payment, expectedOrderId }) => {
+    if (!providerPayment?.id || !providerPayment?.order_id || !providerPayment?.amount || !providerPayment?.currency) {
+        throw new AppError('PAYMENT_ERROR', 400, 'Razorpay returned incomplete payment details');
+    }
+    if (expectedOrderId && providerPayment.order_id !== expectedOrderId) {
+        throw new AppError('PAYMENT_ERROR', 400, 'Razorpay payment does not belong to this order');
+    }
+    if (Number(providerPayment.amount) !== Math.round(Number(order.total) * 100)) {
+        throw new AppError('PAYMENT_ERROR', 400, 'Razorpay payment amount does not match order total');
+    }
+    if (String(providerPayment.currency).toUpperCase() !== String(payment.currency).toUpperCase()) {
+        throw new AppError('PAYMENT_ERROR', 400, 'Razorpay payment currency does not match order');
+    }
+    if (String(providerPayment.status || '').toLowerCase() !== 'captured') {
+        throw new AppError('PAYMENT_ERROR', 400, `Razorpay payment is ${providerPayment.status || 'not captured'}`);
+    }
+    return providerPayment;
 };
 
 const markOrderPaid = async ({ orderId, provider, transactionId, metadata = {} }) => {
@@ -818,6 +949,7 @@ const markOrderPaid = async ({ orderId, provider, transactionId, metadata = {} }
                         appliedCouponIds.map((couponId) => ({
                             couponId,
                             userId: lockedOrder.userId,
+                            guestSessionId: lockedOrder.userId ? null : lockedOrder.guestSessionId,
                             orderId: lockedOrder.id,
                         })),
                         { transaction: t }
@@ -828,19 +960,6 @@ const markOrderPaid = async ({ orderId, provider, transactionId, metadata = {} }
                     );
                 }
             }
-
-            await Cart.update(
-                { status: 'converted' },
-                {
-                    where: payment?.metadata?.cartId
-                        ? { id: payment.metadata.cartId, status: 'active' }
-                        : {
-                            userId: lockedOrder.userId,
-                            status: 'active',
-                        },
-                    transaction: t,
-                }
-            );
 
             sendOrderPlacedNotification = true;
             notificationPayload = {
@@ -1107,13 +1226,46 @@ const handleWebhook = async (rawOrParsedBody, signature) => {
         // Malformed payload — acknowledge without processing
         return { received: true, skipped: true };
     }
+
+    let capturedOrderId = null;
+    let failedOrderId = null;
+    if (event === 'payment.captured') {
+        try {
+            const razorpay = await getRazorpayClient();
+            const providerPayment = await razorpay.payments.fetch(paymentId);
+            if (String(providerPayment?.status || '').toLowerCase() !== 'captured') {
+                throw new AppError('PAYMENT_ERROR', 400, 'Razorpay has not confirmed this payment as captured');
+            }
+            const noteOrderId = paymentEntity.notes?.orderId;
+            if (!noteOrderId) throw new AppError('PAYMENT_ERROR', 400, 'Razorpay webhook has no local order reference');
+            const payment = await Payment.findOne({ where: { provider: 'razorpay', orderId: noteOrderId } });
+            if (!payment) throw new AppError('PAYMENT_ERROR', 404, 'No local Razorpay payment matches this provider order');
+            const order = await Order.findByPk(payment.orderId);
+            if (!order || order.paymentMethod !== 'razorpay') {
+                throw new AppError('PAYMENT_ERROR', 404, 'No matching Razorpay checkout order exists');
+            }
+            const knownProviderOrderIds = [payment.transactionId, ...(Array.isArray(payment.metadata?.attempts) ? payment.metadata.attempts : [])];
+            if (!knownProviderOrderIds.includes(providerPayment.order_id)) {
+                throw new AppError('PAYMENT_ERROR', 400, 'Razorpay provider order is not a recorded attempt for this checkout');
+            }
+            validateRazorpayPayment(providerPayment, { order, payment, expectedOrderId: providerPayment.order_id });
+            if (String(noteOrderId) !== String(order.id)) {
+                throw new AppError('PAYMENT_ERROR', 400, 'Razorpay webhook order reference does not match this payment');
+            }
+            capturedOrderId = order.id;
+        } catch (err) {
+            if (err instanceof AppError) throw err;
+            throw new AppError('PAYMENT_ERROR', 503, `Could not verify Razorpay webhook payment: ${getErrorMessage(err)}`);
+        }
+    } else if (event === 'payment.failed') {
+        failedOrderId = paymentEntity.notes?.orderId || null;
+    }
+
     // Dedupe per event+payment: `payment.authorized` then `payment.captured`
     // share the same payment id and must not shadow each other.
     const providerEventId = payload.id ? String(payload.id) : `${event}:${paymentId}`;
     const razorpayEventId = `razorpay:${providerEventId}`;
 
-    let capturedOrderId = null;
-    let failedOrderId = null;
     try {
         await sequelize.transaction(async (t) => {
             await WebhookEvent.create(
@@ -1121,11 +1273,6 @@ const handleWebhook = async (rawOrParsedBody, signature) => {
                 { transaction: t }
             );
 
-            if (event === 'payment.captured') {
-                capturedOrderId = paymentEntity.notes?.orderId || null;
-            } else if (event === 'payment.failed') {
-                failedOrderId = paymentEntity.notes?.orderId || null;
-            }
         });
     } catch (err) {
         // Sequelize unique constraint violation = duplicate event — safe to ignore
@@ -1136,12 +1283,19 @@ const handleWebhook = async (rawOrParsedBody, signature) => {
     }
 
     if (capturedOrderId) {
-        await markOrderPaid({
-            orderId: capturedOrderId,
-            provider: 'razorpay',
-            transactionId: paymentEntity.id,
-            metadata: { webhookEvent: event },
-        });
+        try {
+            await markOrderPaid({
+                orderId: capturedOrderId,
+                provider: 'razorpay',
+                transactionId: paymentEntity.id,
+                metadata: { webhookEvent: event },
+            });
+        } catch (error) {
+            // Let Razorpay retry if settlement failed after the event was
+            // recorded; otherwise the dedupe row would suppress recovery.
+            await WebhookEvent.destroy({ where: { id: razorpayEventId } });
+            throw error;
+        }
     } else if (failedOrderId) {
         try {
             await markPaymentFailed({ orderId: failedOrderId, provider: 'razorpay', reason: paymentEntity.error_description || 'payment.failed webhook' });
@@ -1554,4 +1708,4 @@ const saveGatewayCredentials = async (gatewayId, credentials, actingUserId) => {
     return { success: true, gateway: gatewayId };
 };
 
-module.exports = { createOrder, verifyPayment, handleWebhook, handleCashfreeWebhook, handleStripeWebhook, handlePayUReturn, markPaymentFailed, markOrderPaid, confirmCodPayment, getGatewayStatuses, saveGatewayCredentials };
+module.exports = { createOrder, verifyPayment, handleWebhook, handleCashfreeWebhook, handleStripeWebhook, handlePayUReturn, markPaymentFailed, markOrderPaid, confirmCodPayment, getGatewayStatuses, saveGatewayCredentials, initiateProviderRefund, fetchProviderRefundStatus };
