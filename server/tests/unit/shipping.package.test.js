@@ -83,7 +83,6 @@ describe('Parcel planner & remainder box optimization', () => {
             emptyWeightGrams: 150,
             maxItems: 10,
             maxContentsWeightGrams: 5000,
-            fits: [{ productId: 'prod-1', maxQuantity: 10 }],
         },
         {
             id: 'pkg-small',
@@ -94,7 +93,6 @@ describe('Parcel planner & remainder box optimization', () => {
             emptyWeightGrams: 50,
             maxItems: 2,
             maxContentsWeightGrams: 1000,
-            fits: [{ productId: 'prod-1', maxQuantity: 2 }],
         },
     ];
 
@@ -104,8 +102,14 @@ describe('Parcel planner & remainder box optimization', () => {
         expect(validatePackageProfiles(profiles)).toHaveLength(2);
     });
 
+    it('drops legacy per-product fit rules instead of enforcing them', () => {
+        const legacy = [{ ...profiles[0], fits: [{ productId: 'prod-1', maxQuantity: 1 }] }];
+        const validated = validatePackageProfiles(legacy);
+        expect(validated[0].fits).toBeUndefined();
+    });
+
     it('packs remainders into the smallest suitable box without increasing parcel count', () => {
-        const items = [{ productId: 'prod-1', name: 'Widget', weightGrams: 100, quantity: 11, requiresShipping: true }];
+        const items = [{ productId: 'prod-1', name: 'Widget', lengthCm: 5, breadthCm: 5, heightCm: 5, weightGrams: 100, quantity: 11, requiresShipping: true }];
         const parcels = planParcels(items, profiles);
 
         expect(parcels).toHaveLength(2);
@@ -119,7 +123,7 @@ describe('Parcel planner & remainder box optimization', () => {
     it('excludes digital items from planned parcels', () => {
         const items = [
             { productId: 'digital-1', name: 'E-Book', requiresShipping: false, quantity: 5 },
-            { productId: 'prod-1', name: 'Widget', weightGrams: 100, quantity: 2, requiresShipping: true },
+            { productId: 'prod-1', name: 'Widget', lengthCm: 5, breadthCm: 5, heightCm: 5, weightGrams: 100, quantity: 2, requiresShipping: true },
         ];
         const parcels = planParcels(items, profiles);
         expect(parcels).toHaveLength(1);
@@ -127,11 +131,11 @@ describe('Parcel planner & remainder box optimization', () => {
     });
 
     it('throws when no package fits the product', () => {
-        const items = [{ productId: 'unknown-prod', name: 'Unknown', weightGrams: 100, quantity: 1, requiresShipping: true }];
+        const items = [{ productId: 'unknown-prod', name: 'Unknown', lengthCm: 99, breadthCm: 99, heightCm: 99, weightGrams: 100, quantity: 1, requiresShipping: true }];
         expect(() => planParcels(items, profiles)).toThrow('No configured package is confirmed to fit');
     });
 
-    it('counts product-wide package limits across all variants when fit omits variantId', () => {
+    it('enforces per-parcel item limits across variants without fit rules', () => {
         const mixProfiles = [
             {
                 id: 'pkg-mix',
@@ -140,38 +144,27 @@ describe('Parcel planner & remainder box optimization', () => {
                 breadthCm: 15,
                 heightCm: 10,
                 emptyWeightGrams: 50,
-                maxItems: 10,
+                maxItems: 2,
                 maxContentsWeightGrams: 2000,
-                fits: [{ productId: 'prod-shirt', maxQuantity: 2, mixGroup: 'apparel' }],
             },
         ];
         const items = [
-            { productId: 'prod-shirt', variantId: 'var-red', name: 'Shirt Red', weightGrams: 100, quantity: 2, requiresShipping: true },
-            { productId: 'prod-shirt', variantId: 'var-blue', name: 'Shirt Blue', weightGrams: 100, quantity: 2, requiresShipping: true },
+            { productId: 'prod-shirt', variantId: 'var-red', name: 'Shirt Red', lengthCm: 10, breadthCm: 8, heightCm: 4, weightGrams: 100, quantity: 2, requiresShipping: true },
+            { productId: 'prod-shirt', variantId: 'var-blue', name: 'Shirt Blue', lengthCm: 10, breadthCm: 8, heightCm: 4, weightGrams: 100, quantity: 2, requiresShipping: true },
         ];
         const parcels = planParcels(items, mixProfiles);
-        // Product-wide limit is 2, so 4 total units must not be packed into a single parcel.
+        // Per-parcel limit is 2, so 4 total units must not be packed into a single parcel.
         expect(parcels.length).toBe(2);
         expect(parcels[0].items.reduce((s, i) => s + i.quantity, 0)).toBe(2);
         expect(parcels[1].items.reduce((s, i) => s + i.quantity, 0)).toBe(2);
     });
 
-    it('guards fallback candidate without fit when default package is used', () => {
+    it('rejects planning when no measured package catalog exists', () => {
         const items = [{ productId: 'prod-no-profile', name: 'Book', weightGrams: 100, quantity: 1, requiresShipping: true }];
-        const defaultPackage = {
-            id: 'legacy-box',
-            name: 'Default Box',
-            enabled: true,
-            lengthCm: 25,
-            breadthCm: 20,
-            heightCm: 10,
-            maxItems: 5,
-            maxContentsWeightGrams: 3000,
-            emptyWeightGrams: 50,
-        };
-        const parcels = planParcels(items, profiles, { defaultPackage });
-        expect(parcels).toHaveLength(1);
-        expect(parcels[0].packageId).toBe('legacy-box');
+        // No presets and no legacy single-box fallback: merchants must add
+        // measured box presets instead of relying on an invented fit.
+        expect(() => planParcels(items, [])).toThrow('No active package types are configured');
+        expect(() => planParcels(items, [{ ...profiles[0], enabled: false }])).toThrow('No active package types are configured');
     });
 
     it('allows different products without mixGroup to share a package up to capacity', () => {
@@ -185,15 +178,11 @@ describe('Parcel planner & remainder box optimization', () => {
                 emptyWeightGrams: 80,
                 maxItems: 5,
                 maxContentsWeightGrams: 3000,
-                fits: [
-                    { productId: 'prod-shirt', maxQuantity: 3 },
-                    { productId: 'prod-mug', maxQuantity: 2 },
-                ],
             },
         ];
         const items = [
-            { productId: 'prod-shirt', name: 'Shirt', weightGrams: 150, quantity: 2, requiresShipping: true },
-            { productId: 'prod-mug', name: 'Mug', weightGrams: 300, quantity: 1, requiresShipping: true },
+            { productId: 'prod-shirt', name: 'Shirt', lengthCm: 10, breadthCm: 8, heightCm: 4, weightGrams: 150, quantity: 2, requiresShipping: true },
+            { productId: 'prod-mug', name: 'Mug', lengthCm: 8, breadthCm: 8, heightCm: 8, weightGrams: 300, quantity: 1, requiresShipping: true },
         ];
         const parcels = planParcels(items, sharedProfiles);
         // Both items should share 1 parcel because capacity (maxItems: 5, maxWeight: 3000g) allows it
@@ -213,18 +202,35 @@ describe('Parcel planner & remainder box optimization', () => {
                 emptyWeightGrams: 100,
                 maxItems: 10,
                 maxContentsWeightGrams: 5000,
-                fits: [
-                    { productId: 'prod-chemicals', maxQuantity: 5, mixGroup: 'hazardous' },
-                    { productId: 'prod-food', maxQuantity: 5, mixGroup: 'edible' },
-                ],
             },
         ];
         const items = [
-            { productId: 'prod-chemicals', name: 'Cleaner', weightGrams: 500, quantity: 1, requiresShipping: true },
-            { productId: 'prod-food', name: 'Snack', weightGrams: 200, quantity: 1, requiresShipping: true },
+            { productId: 'prod-chemicals', name: 'Cleaner', lengthCm: 10, breadthCm: 8, heightCm: 8, weightGrams: 500, quantity: 1, mixGroup: 'hazardous', requiresShipping: true },
+            { productId: 'prod-food', name: 'Snack', lengthCm: 10, breadthCm: 8, heightCm: 8, weightGrams: 200, quantity: 1, mixGroup: 'edible', requiresShipping: true },
         ];
         const parcels = planParcels(items, incompatibleProfiles);
         // Incompatible mix groups must be packed into separate parcels
+        expect(parcels).toHaveLength(2);
+    });
+
+    it('isolates restricted products marked separate from ordinary goods', () => {
+        const boxPresets = [
+            {
+                id: 'std-box',
+                name: 'Standard Box',
+                lengthCm: 30,
+                breadthCm: 25,
+                heightCm: 20,
+                emptyWeightGrams: 100,
+                maxItems: 10,
+                maxContentsWeightGrams: 5000,
+            },
+        ];
+        const items = [
+            { productId: 'prod-restricted', name: 'Restricted', lengthCm: 10, breadthCm: 8, heightCm: 8, weightGrams: 200, quantity: 1, packingMode: 'separate', requiresShipping: true },
+            { productId: 'prod-ordinary', name: 'Ordinary', lengthCm: 10, breadthCm: 8, heightCm: 8, weightGrams: 200, quantity: 1, requiresShipping: true },
+        ];
+        const parcels = planParcels(items, boxPresets);
         expect(parcels).toHaveLength(2);
     });
 
@@ -249,7 +255,6 @@ describe('Parcel planner & remainder box optimization', () => {
                 emptyWeightGrams: 50,
                 maxItems: 10,
                 maxContentsWeightGrams: 5000,
-                fits: [], // Inverted model: no mandatory product fit matrix
             },
         ];
         const items = [
@@ -282,7 +287,6 @@ describe('Parcel planner & remainder box optimization', () => {
                 emptyWeightGrams: 200,
                 maxItems: 20,
                 maxContentsWeightGrams: 10000,
-                fits: [],
             },
             {
                 id: 'small-box',
@@ -293,7 +297,6 @@ describe('Parcel planner & remainder box optimization', () => {
                 emptyWeightGrams: 40,
                 maxItems: 5,
                 maxContentsWeightGrams: 2000,
-                fits: [],
             },
         ];
         const items = [
@@ -304,4 +307,265 @@ describe('Parcel planner & remainder box optimization', () => {
         // Small Box has smaller volume (3,000 cm³ vs 60,000 cm³), so it must be selected
         expect(parcels[0].packageId).toBe('small-box');
     });
+
+    it('regression: two 9x9x9 cm items in 10x10x10 cm box split into 2 parcels due to cumulative volume overflow', () => {
+        const boxPresets = [
+            {
+                id: 'box-10',
+                name: '10cm Cube Box',
+                lengthCm: 10,
+                breadthCm: 10,
+                heightCm: 10,
+                emptyWeightGrams: 50,
+                maxItems: 10,
+                maxContentsWeightGrams: 5000,
+            },
+        ];
+        const items = [
+            {
+                productId: 'prod-cube-9',
+                name: '9cm Cube Item',
+                lengthCm: 9,
+                breadthCm: 9,
+                heightCm: 9,
+                weightGrams: 100,
+                quantity: 2,
+                requiresShipping: true,
+            },
+        ];
+        // 2 items * 729 cm³ = 1458 cm³ > 1000 cm³ (box volume).
+        // Must split into 2 parcels rather than cramming both into one 1000 cm³ box.
+        const parcels = planParcels(items, boxPresets);
+        expect(parcels).toHaveLength(2);
+        expect(parcels[0].packageId).toBe('box-10');
+        expect(parcels[1].packageId).toBe('box-10');
+        expect(parcels[0].items[0].quantity).toBe(1);
+        expect(parcels[1].items[0].quantity).toBe(1);
+    });
+
+    it('prefers one suitable larger box over several smaller boxes when available', () => {
+        const boxPresets = [
+            {
+                id: 'small-box',
+                name: 'Small Box',
+                lengthCm: 10,
+                breadthCm: 10,
+                heightCm: 10,
+                emptyWeightGrams: 50,
+                maxItems: 10,
+                maxContentsWeightGrams: 5000,
+            },
+            {
+                id: 'medium-box',
+                name: 'Medium Box',
+                lengthCm: 20,
+                breadthCm: 10,
+                heightCm: 10,
+                emptyWeightGrams: 90,
+                maxItems: 10,
+                maxContentsWeightGrams: 5000,
+            },
+        ];
+        const items = [
+            {
+                productId: 'prod-cube-9',
+                name: '9cm Cube Item',
+                lengthCm: 9,
+                breadthCm: 9,
+                heightCm: 9,
+                weightGrams: 100,
+                quantity: 2,
+                requiresShipping: true,
+            },
+        ];
+        // Medium Box (2000 cm³) can hold both items (1458 cm³).
+        // Small Box (1000 cm³) would require 2 boxes.
+        // Planner must score and pick 1 Medium Box.
+        const parcels = planParcels(items, boxPresets);
+        expect(parcels).toHaveLength(1);
+        expect(parcels[0].packageId).toBe('medium-box');
+        expect(parcels[0].items[0].quantity).toBe(2);
+    });
+
+    it('splits into individual parcels when packingMode is separate', () => {
+        const boxPresets = [
+            {
+                id: 'large-crate',
+                name: 'Large Crate',
+                lengthCm: 50,
+                breadthCm: 50,
+                heightCm: 50,
+                emptyWeightGrams: 100,
+                maxItems: 20,
+                maxContentsWeightGrams: 10000,
+            },
+        ];
+        const items = [
+            {
+                productId: 'fragile-mirror',
+                name: 'Delicate Framed Mirror',
+                lengthCm: 20,
+                breadthCm: 20,
+                heightCm: 5,
+                weightGrams: 500,
+                quantity: 3,
+                packingMode: 'separate',
+                requiresShipping: true,
+            },
+        ];
+        // Even though Large Crate has plenty of capacity for 3 mirrors,
+        // packingMode: 'separate' forces 1 parcel per unit.
+        const parcels = planParcels(items, boxPresets);
+        expect(parcels).toHaveLength(3);
+        expect(parcels.every((p) => p.packageId === 'large-crate')).toBe(true);
+        expect(parcels.every((p) => p.items[0].quantity === 1)).toBe(true);
+    });
+
+    it('enforces interior usable dimensions when configured', () => {
+        const boxPresets = [
+            {
+                id: 'padded-box',
+                name: 'Padded Box',
+                lengthCm: 20,
+                breadthCm: 20,
+                heightCm: 20,
+                innerLengthCm: 10,
+                innerBreadthCm: 10,
+                innerHeightCm: 10,
+                emptyWeightGrams: 100,
+                maxItems: 5,
+                maxContentsWeightGrams: 5000,
+            },
+        ];
+        // Item is 12x10x10. It fits exterior (20x20x20), but exceeds interior length (10).
+        const items = [
+            {
+                productId: 'item-12cm',
+                name: '12cm Item',
+                lengthCm: 12,
+                breadthCm: 10,
+                heightCm: 10,
+                weightGrams: 300,
+                quantity: 1,
+                requiresShipping: true,
+            },
+        ];
+        expect(() => planParcels(items, boxPresets)).toThrow('No configured package is confirmed to fit');
+    });
+
+    it('produces deterministic parcel ids for separate packing across runs', () => {
+        const boxPresets = [
+            {
+                id: 'std-box',
+                name: 'Standard Box',
+                lengthCm: 30,
+                breadthCm: 30,
+                heightCm: 30,
+                emptyWeightGrams: 100,
+                maxItems: 10,
+                maxContentsWeightGrams: 10000,
+            },
+        ];
+        const items = [
+            {
+                productId: 'solo-item',
+                name: 'Solo Item',
+                lengthCm: 10,
+                breadthCm: 10,
+                heightCm: 10,
+                weightGrams: 200,
+                quantity: 2,
+                packingMode: 'separate',
+                requiresShipping: true,
+            },
+        ];
+        const first = planParcels(items, boxPresets);
+        const second = planParcels(items, boxPresets);
+        expect(first).toHaveLength(2);
+        // Quote idempotency hashes the parcel plan: random ids would break it.
+        expect(second.map((p) => p.parcelId)).toEqual(first.map((p) => p.parcelId));
+        expect(JSON.stringify(second)).toBe(JSON.stringify(first));
+    });
+
+    it('refuses to guess a preset-box fit for items without dimensions', () => {
+        const boxPresets = [
+            {
+                id: 'preset-only',
+                name: 'Preset Only',
+                lengthCm: 30,
+                breadthCm: 30,
+                heightCm: 30,
+                emptyWeightGrams: 100,
+                maxItems: 10,
+                maxContentsWeightGrams: 10000,
+            },
+        ];
+        // No dimensions, no legacy fit rule, no legacy default package:
+        // must fail loudly instead of assuming the preset box fits.
+        const items = [{ productId: 'mystery', name: 'Mystery', weightGrams: 100, quantity: 1, requiresShipping: true }];
+        expect(() => planParcels(items, boxPresets)).toThrow('No configured package is confirmed to fit');
+    });
+
+    it('prefers the merchant default box only on exact candidate ties', () => {
+        const twinA = {
+            id: 'box-a',
+            name: 'Box A',
+            lengthCm: 20,
+            breadthCm: 20,
+            heightCm: 20,
+            emptyWeightGrams: 100,
+            maxItems: 5,
+            maxContentsWeightGrams: 5000,
+        };
+        const twinB = { ...twinA, id: 'box-b', name: 'Box B' };
+        const items = [
+            {
+                productId: 'widget',
+                name: 'Widget',
+                lengthCm: 10,
+                breadthCm: 10,
+                heightCm: 10,
+                weightGrams: 200,
+                quantity: 1,
+                requiresShipping: true,
+            },
+        ];
+        const withoutDefault = planParcels(items, [twinA, twinB]);
+        expect(withoutDefault[0].packageId).toBe('box-a');
+        const withDefault = planParcels(items, [twinA, twinB], { defaultPackageId: 'box-b' });
+        expect(withDefault[0].packageId).toBe('box-b');
+        // Unknown default ids are ignored safely.
+        const unknownDefault = planParcels(items, [twinA, twinB], { defaultPackageId: 'nope' });
+        expect(unknownDefault[0].packageId).toBe('box-a');
+    });
 });
+
+describe('Variant measurement inheritance', () => {
+    const { resolveUnitDimensions, resolveUnitWeight } = ShippingService;
+    const product = { id: 'prod-1', lengthCm: 10, breadthCm: 8, heightCm: 4, weightGrams: 200 };
+
+    it('inherits the full dimension tuple when the variant has none', () => {
+        expect(resolveUnitDimensions(null, product, {})).toEqual({ lengthCm: 10, breadthCm: 8, heightCm: 4 });
+        expect(resolveUnitDimensions({}, product, {})).toEqual({ lengthCm: 10, breadthCm: 8, heightCm: 4 });
+        expect(resolveUnitWeight(null, product, {})).toBe(200);
+    });
+
+    it.each([
+        [{ lengthCm: 12 }],
+        [{ lengthCm: 12, breadthCm: 8 }],
+        [{ lengthCm: 0, breadthCm: 8, heightCm: 4 }],
+        [{ lengthCm: -2, breadthCm: 8, heightCm: 4 }],
+        [{ lengthCm: 'x', breadthCm: 8, heightCm: 4 }],
+    ])('rejects partial or invalid variant dimensions %j instead of mixing with product sides', (variant) => {
+        expect(() => resolveUnitDimensions(variant, product, { productId: 'prod-1', variantId: 'var-1' })).toThrow('incomplete or invalid shipping dimensions');
+    });
+
+    it.each([
+        [{ weightGrams: 0 }],
+        [{ weightGrams: -50 }],
+        [{ weightGrams: 'heavy' }],
+    ])('rejects invalid variant weight %j instead of inheriting', (variant) => {
+        expect(() => resolveUnitWeight(variant, product, { productId: 'prod-1', variantId: 'var-1' })).toThrow('invalid shipping weight');
+    });
+});
+

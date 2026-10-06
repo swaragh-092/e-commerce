@@ -27,6 +27,9 @@ const { planParcels } = require('./shipping.packages');
 
 const QUOTE_TTL_MINUTES = Number(process.env.SHIPPING_QUOTE_TTL_MINUTES || 10);
 const EMPTY_HASH = hashObject(null);
+// Single planner revision for staged rollout (`shipping.packingVersion`).
+// Historical quotes keep whatever version is stored in their snapshot.
+const PACKING_VERSION = 'volume_v1';
 
 function stableStringify(value) {
     if (value === null || typeof value !== 'object') return JSON.stringify(value);
@@ -178,6 +181,56 @@ const calculateShippingTax = (shippingCost, { originState = '', destinationState
 
 const lower = (value) => String(value || '').trim().toLowerCase();
 
+const mapConcurrent = async (items, concurrency, fn) => {
+    const results = new Array(items.length);
+    let index = 0;
+    const workers = new Array(Math.min(concurrency, items.length)).fill(0).map(async () => {
+        while (index < items.length) {
+            const current = index++;
+            results[current] = await fn(items[current], current);
+        }
+    });
+    await Promise.all(workers);
+    return results;
+};
+
+// Variant dimensions inherit from the product only when the whole tuple is
+// absent. A partial tuple or a zero/negative/NaN override fails fast instead
+// of silently mixing variant and product sides.
+const resolveUnitDimensions = (variant, product, { productId, variantId } = {}) => {
+    const isAbsent = (v) => v == null || v === '';
+    const vRaw = [variant?.lengthCm, variant?.breadthCm, variant?.heightCm];
+    const presentCount = vRaw.filter((v) => !isAbsent(v)).length;
+    if (presentCount === 0) {
+        return {
+            lengthCm: product?.lengthCm,
+            breadthCm: product?.breadthCm,
+            heightCm: product?.heightCm,
+        };
+    }
+    const nums = vRaw.map(Number);
+    if (presentCount !== 3 || nums.some((n) => !Number.isFinite(n) || n <= 0)) {
+        throw new AppError('MISSING_PRODUCT_MEASUREMENTS', 400, 'A product variant has incomplete or invalid shipping dimensions. Complete all three dimensions or clear the override.', { productId, variantId: variantId || null });
+    }
+    return { lengthCm: vRaw[0], breadthCm: vRaw[1], heightCm: vRaw[2] };
+};
+
+const resolveUnitWeight = (variant, product, { productId, variantId } = {}) => {
+    const isAbsent = (v) => v == null || v === '';
+    if (isAbsent(variant?.weightGrams)) {
+        const pWeight = Number(product?.weightGrams);
+        if (!Number.isFinite(pWeight) || pWeight <= 0) {
+            return 0;
+        }
+        return pWeight;
+    }
+    const vWeight = Number(variant.weightGrams);
+    if (!Number.isFinite(vWeight) || vWeight <= 0) {
+        throw new AppError('MISSING_PRODUCT_MEASUREMENTS', 400, 'A product variant has incomplete or invalid shipping weight. Enter a positive weight or clear the override.', { productId, variantId: variantId || null });
+    }
+    return vWeight;
+};
+
 // ─── Volumetric weight helpers ────────────────────────────────────────────────
 
 /**
@@ -197,7 +250,7 @@ const computePackageDimensions = (checkoutItems, packagingWeightGrams = 0, { str
             const product = item.product;
             const variant = item.variant;
             if (product?.requiresShipping === false) continue;
-            const weight = Number(variant?.weightGrams ?? product?.weightGrams);
+            const weight = resolveUnitWeight(variant, product, { productId: product?.id, variantId: variant?.id || null });
             const quantity = Number(item.quantity);
             if (!Number.isFinite(weight) || weight <= 0) {
                 throw new AppError('MISSING_PRODUCT_MEASUREMENTS', 400, 'Shipping is temporarily unavailable for this item. Please contact support.', { productId: product?.id, reason: 'missing_weight' });
@@ -205,11 +258,10 @@ const computePackageDimensions = (checkoutItems, packagingWeightGrams = 0, { str
             if (!Number.isSafeInteger(quantity) || quantity < 1) {
                 throw new AppError('VALIDATION_ERROR', 400, 'Shipping quantity must be a positive whole number.');
             }
-            const itemSides = [
-                variant?.lengthCm ?? product.lengthCm,
-                variant?.breadthCm ?? product.breadthCm,
-                variant?.heightCm ?? product.heightCm,
-            ].map(Number);
+            const itemSides = (() => {
+                const resolved = resolveUnitDimensions(variant, product, { productId: product?.id, variantId: variant?.id || null });
+                return [resolved.lengthCm, resolved.breadthCm, resolved.heightCm];
+            })().map(Number);
             if (itemSides.every((side) => Number.isFinite(side) && side > 0.5)) {
                 const packageSides = [savedPackage.lengthCm, savedPackage.breadthCm, savedPackage.heightCm].map(Number).sort((a, b) => a - b);
                 itemSides.sort((a, b) => a - b);
@@ -254,10 +306,11 @@ const computePackageDimensions = (checkoutItems, packagingWeightGrams = 0, { str
         const qty = Number(item.quantity || 1);
         totalShippableUnits += qty;
         const v = item.variant;
-        const weight = Number(v?.weightGrams ?? p.weightGrams);
-        const rawL = Number(v?.lengthCm ?? p.lengthCm);
-        const rawB = Number(v?.breadthCm ?? p.breadthCm);
-        const rawH = Number(v?.heightCm ?? p.heightCm);
+        const weight = resolveUnitWeight(v, p, { productId: p?.id, variantId: v?.id || null });
+        const resolvedFallbackDims = resolveUnitDimensions(v, p, { productId: p?.id, variantId: v?.id || null });
+        const rawL = Number(resolvedFallbackDims.lengthCm);
+        const rawB = Number(resolvedFallbackDims.breadthCm);
+        const rawH = Number(resolvedFallbackDims.heightCm);
 
         const isMissing = !Number.isFinite(weight) || weight <= 0 || !Number.isFinite(rawL) || rawL <= 0.5 || !Number.isFinite(rawB) || rawB <= 0.5 || !Number.isFinite(rawH) || rawH <= 0.5;
         if (isMissing) {
@@ -276,7 +329,7 @@ const computePackageDimensions = (checkoutItems, packagingWeightGrams = 0, { str
         maxB = Math.max(maxB, b);
         maxH = Math.max(maxH, h);
         totalItemVolume += (l * b * h) * qty;
-        totalWeightGrams += Number(v?.weightGrams ?? p.weightGrams ?? 500) * qty;
+        totalWeightGrams += (weight || 500) * qty;
     }
 
     if (shippableItemsCount === 0) {
@@ -482,6 +535,7 @@ const buildCartSnapshot = (items) => items.map((item) => ({
     lengthCm: Number(item.lengthCm ?? item.product?.lengthCm ?? 0),
     breadthCm: Number(item.breadthCm ?? item.product?.breadthCm ?? 0),
     heightCm: Number(item.heightCm ?? item.product?.heightCm ?? 0),
+    packingMode: item.packingMode ?? item.product?.packingMode ?? 'standard',
     requiresShipping: item.requiresShipping ?? item.product?.requiresShipping ?? true,
 })).sort((a, b) => `${a.productId}:${a.variantId || ''}`.localeCompare(`${b.productId}:${b.variantId || ''}`));
 
@@ -560,16 +614,20 @@ const buildCheckoutContext = async (userId, payload) => {
         const unitPrice = getVariantUnitPrice(item.product, item.variant || null);
         const quantity = Number(item.quantity || 1);
         subtotal += unitPrice * quantity;
+        const unitDims = resolveUnitDimensions(item.variant, item.product, { productId: item.productId, variantId: item.variantId || item.variant?.id || null });
+        const weightGrams = resolveUnitWeight(item.variant, item.product, { productId: item.productId, variantId: item.variantId || item.variant?.id || null });
         return {
             productId: item.productId,
             variantId: item.variantId || item.variant?.id || null,
             name: item.product.name,
             quantity,
             currentPrice: unitPrice,
-            weightGrams: Number(item.variant?.weightGrams ?? item.product.weightGrams ?? 0),
-            lengthCm: Number(item.variant?.lengthCm ?? item.product.lengthCm ?? 0),
-            breadthCm: Number(item.variant?.breadthCm ?? item.product.breadthCm ?? 0),
-            heightCm: Number(item.variant?.heightCm ?? item.product.heightCm ?? 0),
+            weightGrams: Number(weightGrams || 0),
+            lengthCm: Number(unitDims.lengthCm ?? 0),
+            breadthCm: Number(unitDims.breadthCm ?? 0),
+            heightCm: Number(unitDims.heightCm ?? 0),
+            packingMode: item.product.packingMode || 'standard',
+            mixGroup: item.variant?.mixGroup || item.product?.mixGroup || null,
             requiresShipping: item.product.requiresShipping !== false,
         };
     });
@@ -600,13 +658,33 @@ const buildCheckoutContext = async (userId, payload) => {
     // Compute package dimensions from products, including packaging tare weight (Edge Case 5)
     const shippingSettings = await getSettingMap(['shipping']);
     const packagingTare = Number(shippingSettings['shipping.packagingWeightGrams'] ?? 50);
-    const defaultPackage = shippingSettings['shipping.defaultPackage'] || null;
-    const parcelPlan = shippingSettings['shipping.packageProfiles']?.length
-        ? planParcels(items, shippingSettings['shipping.packageProfiles'], { volumetricDivisor: Number(shippingSettings['shipping.volumetricDivisor'] || 5000), defaultPackage })
+    const packageProfiles = Array.isArray(shippingSettings['shipping.packageProfiles'])
+        ? shippingSettings['shipping.packageProfiles']
+        : [];
+    const defaultPackageId = shippingSettings['shipping.defaultPackageId'] || null;
+
+    // One box catalog only: physical orders must be planned from measured
+    // presets. Falling back to the dimension estimator when no presets exist
+    // would let customers check out with freight no warehouse box can honor.
+    if (hasPhysicalItems && packageProfiles.length === 0) {
+        throw new AppError('SHIPPING_PACKAGE_CATALOG_MISSING', 400, 'Delivery is temporarily unavailable: no measured package types are configured. Add a preset in Shipping → Packaging.');
+    }
+
+    const parcelPlan = packageProfiles.length
+        ? planParcels(items, packageProfiles, {
+            volumetricDivisor: Number(shippingSettings['shipping.volumetricDivisor'] || 5000),
+            defaultPackageId,
+        })
         : null;
     const dims = parcelPlan?.length
-        ? { maxL: Math.max(...parcelPlan.map((parcel) => parcel.lengthCm)), maxB: Math.max(...parcelPlan.map((parcel) => parcel.breadthCm)), totalH: Math.max(...parcelPlan.map((parcel) => parcel.heightCm)), totalWeightGrams: parcelPlan.reduce((sum, parcel) => sum + parcel.actualWeightGrams, 0), volumeCm3: parcelPlan.reduce((sum, parcel) => sum + parcel.lengthCm * parcel.breadthCm * parcel.heightCm, 0) }
-        : computePackageDimensions(checkoutItems, packagingTare, { defaultPackage });
+        ? {
+            maxL: Math.max(...parcelPlan.map((parcel) => parcel.lengthCm)),
+            maxB: Math.max(...parcelPlan.map((parcel) => parcel.breadthCm)),
+            totalH: Math.max(...parcelPlan.map((parcel) => parcel.heightCm)),
+            totalWeightGrams: parcelPlan.reduce((sum, parcel) => sum + parcel.actualWeightGrams, 0),
+            volumeCm3: parcelPlan.reduce((sum, parcel) => sum + parcel.lengthCm * parcel.breadthCm * parcel.heightCm, 0)
+        }
+        : computePackageDimensions(checkoutItems, packagingTare);
 
     return {
         items,
@@ -618,7 +696,7 @@ const buildCheckoutContext = async (userId, payload) => {
         isAllDigital: !hasPhysicalItems,
         // Volumetric shipping context
         packageDims: dims,
-        defaultPackage,
+        defaultPackageId,
         parcelPlan,
         sessionId: payload.sessionId || payload.checkoutSessionId || null,
         cartHash: hashObject(cartSnapshot),
@@ -1034,6 +1112,7 @@ const serializeQuote = (quote) => {
         parcelPlan: quote.inputSnapshot?.parcelPlan || [],
         pricingSource: decision.pricingSource || null,
         pricingReason: decision.pricingReason || null,
+        pricingBasis: decision.pricingBasis || null,
         pricingMode: decision.pricingMode || 'legacy',
         ruleName: decision.ruleName || null,
     };
@@ -1058,8 +1137,8 @@ const createQuote = async (userId, payload) => {
         ? parcelWeightsGrams.reduce((sum, weight) => sum + Number(weight || 0), 0)
         : computeChargeableWeight(context.packageDims, volumetricDivisor);
     const quoteParcels = context.isAllDigital ? [] : context.parcelPlan?.length ? context.parcelPlan : [{
-        packageId: context.defaultPackage?.id || 'single-order-package',
-        packageName: context.defaultPackage?.name || 'Order package',
+        packageId: 'single-order-package',
+        packageName: 'Order package',
         lengthCm: context.packageDims.maxL,
         breadthCm: context.packageDims.maxB,
         heightCm: context.packageDims.totalH,
@@ -1080,8 +1159,9 @@ const createQuote = async (userId, payload) => {
             allowedPincodes: normalizeList(settings['shipping.serviceablePincodes']),
             blockedPincodes: normalizeList(settings['shipping.blockedPincodes']),
         }),
-        packageHash: hashObject({ dimensions: context.packageDims, defaultPackage: context.defaultPackage }),
+        packageHash: hashObject({ dimensions: context.packageDims, defaultPackageId: context.defaultPackageId || null }),
         parcelPlanHash: hashObject(quoteParcels),
+        packingVersion: PACKING_VERSION,
     });
 
     const quoteWhere = {
@@ -1163,47 +1243,70 @@ const createQuote = async (userId, payload) => {
     if (decision.serviceable && !context.isAllDigital && selectedProvider?.code === 'shiprocket' && selectedProvider.enabled) {
         try {
             const providerAdapter = resolveProvider(selectedProvider);
-            // Single consolidated carrier quote for checkout:
-            // Industry standard: checkout quotes the consolidated shipment weight/dimensions to eliminate
-            // N× API latency and avoid summing 3x base minimum slabs. Order is split into discrete parcels
-            // during warehouse fulfillment.
-            const singleQuote = await providerAdapter.getServiceability({
-                pincode: deliveryPincode,
-                pickupPincode: selectedOrigin.pincode,
-                weightGrams: chargeableWeightGrams,
-                paymentMode: paymentMethod === 'cod' ? 'cod' : 'prepaid',
-                declaredValue: context.subtotal,
-                lengthCm: context.packageDims.maxL,
-                breadthCm: context.packageDims.maxB,
-                heightCm: context.packageDims.totalH,
+
+            const parcelQuotes = await mapConcurrent(quoteParcels, 3, async (parcel, index) => {
+                const parcelDeclaredValue = Array.isArray(parcel.items) && parcel.items.length
+                    ? parcel.items.reduce((sum, it) => sum + (Number(it.unitPrice || it.currentPrice || 0) * Number(it.quantity || 1)), 0)
+                    : Math.round(context.subtotal / quoteParcels.length);
+                const res = await providerAdapter.getServiceability({
+                    pincode: deliveryPincode,
+                    pickupPincode: selectedOrigin.pincode,
+                    weightGrams: parcel.chargeableWeightGrams,
+                    paymentMode: paymentMethod === 'cod' ? 'cod' : 'prepaid',
+                    declaredValue: parcelDeclaredValue,
+                    lengthCm: parcel.lengthCm,
+                    breadthCm: parcel.breadthCm,
+                    heightCm: parcel.heightCm,
+                });
+                return {
+                    parcelId: parcel.parcelId || `parcel-${index + 1}`,
+                    packageId: parcel.packageId,
+                    packageName: parcel.packageName,
+                    lengthCm: parcel.lengthCm,
+                    breadthCm: parcel.breadthCm,
+                    heightCm: parcel.heightCm,
+                    actualWeightGrams: parcel.actualWeightGrams,
+                    chargeableWeightGrams: parcel.chargeableWeightGrams,
+                    serviceable: Boolean(res.serviceable),
+                    codAvailable: Boolean(res.codAvailable),
+                    rate: res.rate,
+                    carrierCost: Number.isFinite(Number(res.rate)) ? normalizeMoney(res.rate) : null,
+                    courierName: res.courierName || null,
+                    courierCompanyId: res.courierCompanyId || null,
+                    estimatedDeliveryDays: res.estimatedDeliveryDays || null,
+                    reason: res.reason || null,
+                };
             });
 
-            const parcelQuotes = quoteParcels.map((parcel, index) => ({
-                parcelId: parcel.parcelId || `parcel-${index + 1}`,
-                packageId: parcel.packageId,
-                packageName: parcel.packageName,
-                ...singleQuote,
-            }));
+            const allParcelsServiceable = parcelQuotes.every((pq) => pq.serviceable);
+            const allParcelsCod = parcelQuotes.every((pq) => pq.codAvailable);
+            const totalCarrierCost = normalizeMoney(parcelQuotes.reduce((sum, pq) => sum + (Number(pq.rate) || 0), 0));
+            const estDeliveryDays = Math.max(...parcelQuotes.map((pq) => Number(pq.estimatedDeliveryDays) || 0).filter(Boolean)) || null;
+            const courierNames = [...new Set(parcelQuotes.map((pq) => pq.courierName).filter(Boolean))];
+            const primaryCourier = courierNames.length === 1 ? courierNames[0] : (courierNames.join(', ') || null);
+            const primaryCourierId = parcelQuotes[0]?.courierCompanyId || null;
 
             liveProviderResponse = {
-                serviceable: singleQuote.serviceable,
-                codAvailable: singleQuote.codAvailable,
-                estimatedDeliveryDays: singleQuote.estimatedDeliveryDays || null,
-                courierName: singleQuote.courierName || null,
-                courierCompanyId: singleQuote.courierCompanyId || null,
-                carrierCost: Number.isFinite(Number(singleQuote.rate)) ? normalizeMoney(singleQuote.rate) : null,
+                serviceable: allParcelsServiceable,
+                codAvailable: allParcelsCod,
+                estimatedDeliveryDays: estDeliveryDays,
+                courierName: primaryCourier,
+                courierCompanyId: primaryCourierId,
+                carrierCost: totalCarrierCost,
                 parcels: parcelQuotes,
             };
-            const hasCarrierQuote = singleQuote.rate !== null && singleQuote.rate !== undefined && singleQuote.rate !== '' && Number.isFinite(Number(singleQuote.rate)) && Number(singleQuote.rate) >= 0;
-            if (settings['shipping.pricingMode'] === 'carrier' && !hasCarrierQuote) {
-                decision = { ...decision, serviceable: false, codAvailable: false, shippingCost: 0, message: 'The courier did not return a delivery rate. Please try another delivery address or contact support.' };
-            } else if (liveProviderResponse.serviceable === false) {
+
+            const allHaveRates = parcelQuotes.every((pq) => pq.rate !== null && pq.rate !== undefined && pq.rate !== '' && Number.isFinite(Number(pq.rate)) && Number(pq.rate) >= 0);
+            if (settings['shipping.pricingMode'] === 'carrier' && !allHaveRates) {
+                decision = { ...decision, serviceable: false, codAvailable: false, shippingCost: 0, message: 'The courier did not return a delivery rate for all packages. Please try another delivery address or contact support.' };
+            } else if (!allParcelsServiceable) {
+                const failedParcel = parcelQuotes.find((pq) => !pq.serviceable);
                 decision = {
                     ...decision,
                     serviceable: false,
                     codAvailable: false,
                     shippingCost: 0,
-                    message: singleQuote.reason || 'Delivery is not available at this pincode.',
+                    message: failedParcel?.reason || 'Shiprocket cannot deliver every package to this address.',
                     liveServiceability: liveProviderResponse,
                 };
             } else {
@@ -1220,7 +1323,7 @@ const createQuote = async (userId, payload) => {
                     serviceable: Boolean(decision.serviceable && liveProviderResponse.serviceable),
                     codAvailable: Boolean(decision.codAvailable && liveProviderResponse.codAvailable),
                     ...(pricingMode === 'carrier' ? {
-                        shippingCost: liveProviderResponse.carrierCost,
+                        shippingCost: totalCarrierCost,
                         pricingSource: 'carrier',
                         pricingReason: `Carrier quote for ${perParcelPlan.length} package${perParcelPlan.length === 1 ? '' : 's'}`,
                     } : {}),
@@ -1232,12 +1335,12 @@ const createQuote = async (userId, payload) => {
                     liveServiceability: {
                         serviceable: liveProviderResponse.serviceable,
                         codAvailable: liveProviderResponse.codAvailable,
-                        carrierRate: liveProviderResponse.carrierCost,
-                        carrierCost: liveProviderResponse.carrierCost,
+                        carrierRate: totalCarrierCost,
+                        carrierCost: totalCarrierCost,
                         currency: 'INR',
                         estimatedDays: liveProviderResponse.estimatedDeliveryDays ?? null,
-                        courierName: liveProviderResponse.courierName ?? null,
-                        courierCompanyId: liveProviderResponse.courierCompanyId ?? null,
+                        courierName: primaryCourier,
+                        courierCompanyId: primaryCourierId,
                         parcels: perParcelPlan,
                     },
                 };
@@ -1260,7 +1363,34 @@ const createQuote = async (userId, payload) => {
     }
 
     const expiresAt = new Date(Date.now() + QUOTE_TTL_MINUTES * 60 * 1000);
-    
+
+    // Truthful quote basis (never present a merchant estimate as a proven
+    // multi-parcel carrier rate). `verified_mps` is reserved for a future
+    // documented group adapter and is never set here.
+    const effectivePricingMode = settings['shipping.pricingMode'] || 'legacy';
+    const pricingBasis = quoteParcels.length <= 1
+        ? 'ordinary_single'
+        : effectivePricingMode === 'carrier'
+            ? 'separate_shipments'
+            : 'merchant_rule';
+    const planHash = hashObject(quoteParcels);
+    const quoteWarnings = [];
+    const hasUnmeasuredItems = quoteParcels.some((parcel) =>
+        (parcel.items || []).some((it) => {
+            const sides = [it.lengthCm, it.breadthCm, it.heightCm].map(Number);
+            return !sides.every((s) => Number.isFinite(s) && s > 0.5);
+        })
+    );
+    if (hasUnmeasuredItems) {
+        quoteWarnings.push('Some items lack measured shipping dimensions; the recommendation relies on merchant-confirmed legacy fit rules and is low-confidence.');
+    } else {
+        quoteWarnings.push('Volume-based recommendation is an estimate; warehouse staff must confirm actual packed measurements before booking.');
+    }
+    if (quoteParcels.length > 1 && pricingBasis === 'merchant_rule') {
+        quoteWarnings.push('Multiple packages share one merchant-priced delivery fee; actual carrier costs may exceed the customer fee.');
+    }
+    decision.pricingBasis = pricingBasis;
+
     try {
         const quote = await ShippingQuote.create({
             userId: userId || null,
@@ -1288,8 +1418,16 @@ const createQuote = async (userId, payload) => {
                 items: context.cartSnapshot,
                 address: context.addressSnapshot,
                 couponCodes: context.couponCodes,
-                defaultPackage: context.defaultPackage,
+                defaultPackageId: context.defaultPackageId || null,
                 parcelPlan: decision.liveServiceability?.parcels || quoteParcels.map((parcel, index) => ({ ...parcel, parcelId: `parcel-${index + 1}` })),
+                packingVersion: PACKING_VERSION,
+                planHash,
+                // Volume recommendations are estimates even when all
+                // dimensions are known; only explicit warehouse measurement
+                // confirms a parcel.
+                confidence: 'estimated',
+                warnings: quoteWarnings,
+                pricingBasis,
                 shippingSettingsHash: hashObject(settings),
                 coverageHash: hashObject({
                     allowedPincodes: normalizeList(settings['shipping.serviceablePincodes']),
@@ -1658,6 +1796,8 @@ module.exports = {
     calculateDeliveryDecision,
     calculateRuleDecision,
     resolveWorkflow,
+    resolveUnitDimensions,
+    resolveUnitWeight,
     calculateShippingTax,
     conditionsMatch,
 };

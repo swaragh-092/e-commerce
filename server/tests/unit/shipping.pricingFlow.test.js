@@ -30,6 +30,7 @@ describe('Customer delivery policies through quote creation and order validation
             'general.currency': 'INR', 'tax.originState': 'Maharashtra',
             'tax.enableCGST': true, 'tax.enableSGST': true, 'tax.enableIGST': true,
             'tax.cgstRate': 0.09, 'tax.sgstRate': 0.09, 'tax.igstRate': 0.18,
+            'shipping.packageProfiles': [{ id: 'test-box', name: 'Test Box', lengthCm: 20, breadthCm: 20, heightCm: 20, emptyWeightGrams: 50, maxItems: 10, maxContentsWeightGrams: 5000 }],
         };
         const provider = { id: 'provider-1', code: 'shiprocket', name: 'Shiprocket', enabled: true, supportsCod: true, settings: {} };
         vi.spyOn(ShippingProvider, 'findOne').mockResolvedValue(provider);
@@ -105,6 +106,11 @@ describe('Customer delivery policies through quote creation and order validation
         settings['shipping.pricingMode'] = 'carrier';
         carrier.mockRejectedValue(new Error('timeout'));
         await expect(ShippingService.createQuote('user-1', payload)).rejects.toMatchObject({ code: 'SHIPPING_UNAVAILABLE', statusCode: 503 });
+    });
+
+    it('blocks physical checkout when no measured package catalog exists', async () => {
+        settings['shipping.packageProfiles'] = [];
+        await expect(ShippingService.createQuote('user-1', payload)).rejects.toMatchObject({ code: 'SHIPPING_PACKAGE_CATALOG_MISSING' });
     });
 
     it.each(['shipping.flatRate', 'general.currency', 'tax.cgstRate'])('invalidates a quote when %s changes', async (key) => {

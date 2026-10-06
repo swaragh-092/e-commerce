@@ -52,7 +52,6 @@ import {
   getShippingOperations,
   retryShippingOperation,
 } from '../../services/adminService';
-import { getProducts } from '../../services/productService';
 import { useCurrency } from '../../hooks/useSettings';
 import TabPanel from '../../components/common/TabPanel';
 import { getSettingsGroup, updateSettingsBulk } from '../../services/settingsService';
@@ -67,13 +66,11 @@ const ShippingPage = () => {
   const [zones, setZones] = useState([]);
   const [rules, setRules] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [defaultPackage, setDefaultPackage] = useState({ enabled: false, lengthCm: '', breadthCm: '', heightCm: '', emptyWeightGrams: '', maxItems: '', maxContentsWeightGrams: '' });
   const [savingPackage, setSavingPackage] = useState(false);
   const [packageProfiles, setPackageProfiles] = useState([]);
-  const [packageProducts, setPackageProducts] = useState([]);
+  const [defaultPackageId, setDefaultPackageId] = useState('');
   const [packageDialogOpen, setPackageDialogOpen] = useState(false);
   const [packageDraft, setPackageDraft] = useState(null);
-  const [fitDraft, setFitDraft] = useState({ productId: '', variantId: '', maxQuantity: 1, mixGroup: '' });
   const [deliverySettings, setDeliverySettings] = useState({ pricingMode: '', method: 'flat_rate', flatRate: '', freeThreshold: '', serviceablePincodes: '', blockedPincodes: '' });
   const [savingDelivery, setSavingDelivery] = useState(false);
   const enabledRules = rules.filter((rule) => rule.enabled);
@@ -166,20 +163,18 @@ const ShippingPage = () => {
   const fetchData = async () => {
     setLoading(true);
     try {
-      const [providersRes, zonesRes, rulesRes, shippingSettings, productsRes] = await Promise.all([
+      const [providersRes, zonesRes, rulesRes, shippingSettings] = await Promise.all([
         getShippingProviders(),
         getShippingZones(),
         getShippingRules(),
         getSettingsGroup('shipping'),
-        getProducts({ page: 1, limit: 1000, status: 'published', include: 'variants' }).catch(() => ({ data: [] })),
       ]);
       setProviders(providersRes.data.data || []);
       setZones(zonesRes.data.data || []);
       setRules(rulesRes.data.data || []);
       setDeliverySettings((previous) => Object.fromEntries(Object.keys(previous).map((key) => [key, Array.isArray(shippingSettings[key]) ? shippingSettings[key].join(', ') : shippingSettings[key] ?? previous[key]])));
-      setDefaultPackage((previous) => ({ ...previous, ...(shippingSettings.defaultPackage || {}) }));
       setPackageProfiles(Array.isArray(shippingSettings.packageProfiles) ? shippingSettings.packageProfiles : []);
-      setPackageProducts((productsRes?.data || []).filter((product) => product.requiresShipping !== false));
+      setDefaultPackageId(shippingSettings.defaultPackageId || '');
     } catch (err) {
       notify('Failed to load shipping data', 'error');
     } finally {
@@ -187,45 +182,34 @@ const ShippingPage = () => {
     }
   };
 
-  const handleSavePackage = async () => {
-    const value = { enabled: defaultPackage.enabled };
-    for (const key of ['lengthCm', 'breadthCm', 'heightCm', 'emptyWeightGrams', 'maxItems', 'maxContentsWeightGrams']) {
-      value[key] = defaultPackage[key] === '' ? null : Number(defaultPackage[key]);
-    }
-    if (value.enabled && (
-      ['lengthCm', 'breadthCm', 'heightCm'].some((key) => !Number.isFinite(value[key]) || value[key] <= 0.5) ||
-      value.emptyWeightGrams == null || !Number.isFinite(value.emptyWeightGrams) || value.emptyWeightGrams < 0 ||
-      !Number.isSafeInteger(value.maxItems) || value.maxItems < 1 ||
-      !Number.isFinite(value.maxContentsWeightGrams) || value.maxContentsWeightGrams <= 0
-    )) {
-      notify('Enter measured dimensions, empty package weight, and confirmed item and weight capacity.', 'warning');
-      return;
-    }
-    setSavingPackage(true);
-    try {
-      await updateSettingsBulk([{ group: 'shipping', key: 'defaultPackage', value }]);
-      notify('Default package saved', 'success');
-    } catch (err) {
-      notify(err.response?.data?.error?.message || 'Could not save the default package', 'error');
-    } finally {
-      setSavingPackage(false);
-    }
-  };
-
   const openPackageDialog = (profile = null) => {
-    setPackageDraft(profile ? { ...profile, fits: [...(profile.fits || [])] } : {
+    setPackageDraft(profile ? {
+      ...profile,
+      innerLengthCm: profile.innerLengthCm ?? '',
+      innerBreadthCm: profile.innerBreadthCm ?? '',
+      innerHeightCm: profile.innerHeightCm ?? '',
+      isDefault: profile.isDefault ?? (profile.id === defaultPackageId),
+    } : {
       id: uuidv4(), name: '', enabled: true, lengthCm: '', breadthCm: '', heightCm: '',
-      emptyWeightGrams: '', maxItems: '', maxContentsWeightGrams: '', fits: [],
+      innerLengthCm: '', innerBreadthCm: '', innerHeightCm: '',
+      emptyWeightGrams: '', maxItems: '', maxContentsWeightGrams: '',
+      isDefault: packageProfiles.length === 0,
     });
-    setFitDraft({ productId: '', variantId: '', maxQuantity: 1, mixGroup: '' });
     setPackageDialogOpen(true);
   };
 
-  const savePackageProfiles = async (nextProfiles) => {
+  const savePackageProfiles = async (nextProfiles, newDefaultId = undefined) => {
     setSavingPackage(true);
     try {
-      await updateSettingsBulk([{ group: 'shipping', key: 'packageProfiles', value: nextProfiles }]);
+      const updates = [{ group: 'shipping', key: 'packageProfiles', value: nextProfiles }];
+      if (newDefaultId !== undefined) {
+        updates.push({ group: 'shipping', key: 'defaultPackageId', value: newDefaultId });
+      }
+      await updateSettingsBulk(updates);
       setPackageProfiles(nextProfiles);
+      if (newDefaultId !== undefined) {
+        setDefaultPackageId(newDefaultId || '');
+      }
       notify('Package types saved', 'success');
       setPackageDialogOpen(false);
     } catch (err) {
@@ -235,6 +219,37 @@ const ShippingPage = () => {
     }
   };
 
+  const handleSetDefaultPackage = async (profileId) => {
+    setSavingPackage(true);
+    try {
+      const nextProfiles = packageProfiles.map((p) => ({
+        ...p,
+        isDefault: p.id === profileId,
+      }));
+      await updateSettingsBulk([
+        { group: 'shipping', key: 'defaultPackageId', value: profileId },
+        { group: 'shipping', key: 'packageProfiles', value: nextProfiles },
+      ]);
+      setDefaultPackageId(profileId);
+      setPackageProfiles(nextProfiles);
+      notify('Default package preset updated', 'success');
+    } catch (err) {
+      notify(err.response?.data?.error?.message || 'Could not set default package', 'error');
+    } finally {
+      setSavingPackage(false);
+    }
+  };
+
+  const handleRemoveProfile = async (profileId) => {
+    const nextProfiles = packageProfiles.filter((item) => item.id !== profileId);
+    let newDefaultId = undefined;
+    if (defaultPackageId === profileId) {
+      newDefaultId = nextProfiles[0]?.id || null;
+      if (nextProfiles[0]) nextProfiles[0].isDefault = true;
+    }
+    await savePackageProfiles(nextProfiles, newDefaultId);
+  };
+
   const savePackageDraft = async () => {
     if (!packageDraft || !packageDraft.name.trim()) {
       notify('Enter a package name.', 'warning');
@@ -242,8 +257,18 @@ const ShippingPage = () => {
     }
     const next = { ...packageDraft };
     delete next.allowMixedContents;
+    // Legacy per-product fit rules are no longer supported: planning is proven
+    // purely by measured dimensions, so stored fit matrices are dropped on save.
+    delete next.fits;
     for (const key of ['lengthCm', 'breadthCm', 'heightCm', 'emptyWeightGrams', 'maxItems', 'maxContentsWeightGrams']) {
       next[key] = Number(next[key]);
+    }
+    for (const key of ['innerLengthCm', 'innerBreadthCm', 'innerHeightCm']) {
+      if (next[key] !== '' && next[key] != null) {
+        next[key] = Number(next[key]);
+      } else {
+        delete next[key];
+      }
     }
     if (['lengthCm', 'breadthCm', 'heightCm'].some((key) => !Number.isFinite(next[key]) || next[key] <= 0.5) ||
       !Number.isFinite(next.emptyWeightGrams) || next.emptyWeightGrams < 0 || !Number.isSafeInteger(next.maxItems) || next.maxItems < 1 ||
@@ -251,22 +276,22 @@ const ShippingPage = () => {
       notify('Enter measured package values (dimensions, tare weight, capacity).', 'warning');
       return;
     }
-    await savePackageProfiles([...packageProfiles.filter((profile) => profile.id !== next.id), next]);
-  };
+    if (['innerLengthCm', 'innerBreadthCm', 'innerHeightCm'].some((k) => next[k] != null && (!Number.isFinite(next[k]) || next[k] <= 0.5))) {
+      notify('Usable interior dimensions must be greater than 0.5 cm.', 'warning');
+      return;
+    }
 
-  const addFitToDraft = () => {
-    if (!fitDraft.productId || !Number.isSafeInteger(Number(fitDraft.maxQuantity)) || Number(fitDraft.maxQuantity) < 1) {
-      notify('Choose a product and enter the confirmed maximum quantity per package.', 'warning');
-      return;
+    let nextProfiles = [...packageProfiles.filter((profile) => profile.id !== next.id), next];
+    let newDefaultId = undefined;
+    if (next.isDefault) {
+      nextProfiles = nextProfiles.map((p) => ({ ...p, isDefault: p.id === next.id }));
+      newDefaultId = next.id;
+    } else if (defaultPackageId === next.id && !next.isDefault) {
+      const other = nextProfiles.find((p) => p.id !== next.id);
+      newDefaultId = other ? other.id : null;
+      if (other) other.isDefault = true;
     }
-    const fit = { productId: fitDraft.productId, ...(fitDraft.variantId ? { variantId: fitDraft.variantId } : {}), maxQuantity: Number(fitDraft.maxQuantity), ...(fitDraft.mixGroup.trim() ? { mixGroup: fitDraft.mixGroup.trim() } : {}) };
-    const key = `${fit.productId}:${fit.variantId || ''}`;
-    if (packageDraft.fits.some((row) => `${row.productId}:${row.variantId || ''}` === key)) {
-      notify('That product/variant already has a fit rule in this package.', 'warning');
-      return;
-    }
-    setPackageDraft((current) => ({ ...current, fits: [...current.fits, fit] }));
-    setFitDraft({ productId: '', variantId: '', maxQuantity: 1, mixGroup: '' });
+    await savePackageProfiles(nextProfiles, newDefaultId);
   };
 
   useEffect(() => {
@@ -677,93 +702,71 @@ const ShippingPage = () => {
           <TabPanel value={tabIndex} index={6} idPrefix="shipping">
             <Typography variant="subtitle1" fontWeight={600}>Measured package types</Typography>
             <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
-              Add your measured small, medium and large boxes or mailers. Set a mix-group name only for products you have confirmed can share a box. Products with blank or different group names stay separate.
+              Add your measured box presets or mailers with outer dimensions and tare weight. General goods can share a box. Use a restriction only when those items must be packed separately.
             </Typography>
             <Alert severity="warning" sx={{ mb: 2 }}>Do not enter a package until you have measured its outside dimensions and empty weight. Every shippable product also needs its actual item weight. This does not confirm Shiprocket MPS API booking eligibility.</Alert>
             <Stack spacing={1} sx={{ mb: 2 }}>
               {packageProfiles.length === 0 && <Alert severity="info">No measured package types yet. Checkout will use the existing single-package settings, if enabled.</Alert>}
-              {packageProfiles.map((profile) => (
-                <Paper key={profile.id} variant="outlined" sx={{ p: 2 }}>
-                  <Stack direction={{ xs: 'column', sm: 'row' }} alignItems={{ xs: 'stretch', sm: 'center' }} justifyContent="space-between" gap={1}>
-                    <Box>
-                      <Typography fontWeight={600}>{profile.name}{profile.enabled === false ? ' (inactive)' : ''}</Typography>
-                      <Typography variant="body2" color="text.secondary">{profile.lengthCm} × {profile.breadthCm} × {profile.heightCm} cm · {profile.emptyWeightGrams} g empty · up to {profile.maxItems} items / {profile.maxContentsWeightGrams} g contents</Typography>
-                      <Typography variant="body2" color="text.secondary">Confirmed product fits: {(profile.fits || []).length} · mix groups: {[...new Set((profile.fits || []).map((fit) => fit.mixGroup).filter(Boolean))].join(', ') || 'none'}</Typography>
-                    </Box>
-                    <Stack direction="row" spacing={1}>
-                      <Button onClick={() => openPackageDialog(profile)}>Edit</Button>
-                      <Button color="error" onClick={() => savePackageProfiles(packageProfiles.filter((item) => item.id !== profile.id))}>Remove</Button>
+              {packageProfiles.map((profile) => {
+                const isDefault = profile.id === defaultPackageId || Boolean(profile.isDefault);
+                return (
+                  <Paper key={profile.id} variant="outlined" sx={{ p: 2 }}>
+                    <Stack direction={{ xs: 'column', sm: 'row' }} alignItems={{ xs: 'stretch', sm: 'center' }} justifyContent="space-between" gap={1}>
+                      <Box>
+                        <Stack direction="row" alignItems="center" spacing={1} sx={{ mb: 0.5 }}>
+                          <Typography fontWeight={600}>{profile.name}{profile.enabled === false ? ' (inactive)' : ''}</Typography>
+                          {isDefault && (
+                            <Chip
+                              size="small"
+                              color="primary"
+                              label="Default"
+                              icon={<StarIcon sx={{ '&&': { fontSize: '1rem' } }} />}
+                            />
+                          )}
+                        </Stack>
+                        <Typography variant="body2" color="text.secondary">
+                          Outer: {profile.lengthCm} × {profile.breadthCm} × {profile.heightCm} cm · {profile.emptyWeightGrams} g tare · up to {profile.maxItems} items / {profile.maxContentsWeightGrams} g contents
+                          {profile.innerLengthCm && profile.innerBreadthCm && profile.innerHeightCm ? ` · Inner: ${profile.innerLengthCm} × ${profile.innerBreadthCm} × ${profile.innerHeightCm} cm` : ''}
+                        </Typography>
+                      </Box>
+                      <Stack direction="row" spacing={1} alignItems="center">
+                        {!isDefault && (
+                          <Button size="small" variant="outlined" disabled={savingPackage} onClick={() => handleSetDefaultPackage(profile.id)}>
+                            Set Default
+                          </Button>
+                        )}
+                        <Button size="small" onClick={() => openPackageDialog(profile)}>Edit</Button>
+                        <Button size="small" color="error" disabled={savingPackage} onClick={() => handleRemoveProfile(profile.id)}>Remove</Button>
+                      </Stack>
                     </Stack>
-                  </Stack>
-                </Paper>
-              ))}
+                  </Paper>
+                );
+              })}
             </Stack>
             <Button variant="contained" startIcon={<AddIcon />} sx={{ mb: 3 }} disabled={savingPackage} onClick={() => openPackageDialog()}>Add measured package</Button>
-            <Paper variant="outlined" sx={{ p: 2 }}>
-              <Typography variant="subtitle2" fontWeight={600}>Single measured package fallback</Typography>
-              <Typography variant="body2" color="text.secondary" sx={{ mb: 1 }}>Use this only if the same measured box is confirmed to fit every product. It remains for older product setups without package-fit records.</Typography>
-              <FormControlLabel control={<Switch checked={defaultPackage.enabled} onChange={(event) => setDefaultPackage((current) => ({ ...current, enabled: event.target.checked }))} />} label="Use one measured package for all products" />
-              <Grid container spacing={2} sx={{ mt: 1, mb: 2 }}>
-                {[
-                  ['lengthCm', 'Length (cm)'], ['breadthCm', 'Width (cm)'], ['heightCm', 'Height (cm)'],
-                  ['emptyWeightGrams', 'Empty package weight (grams)'], ['maxItems', 'Maximum items confirmed to fit'],
-                  ['maxContentsWeightGrams', 'Maximum contents weight (grams)'],
-                ].map(([key, label]) => (
-                  <Grid item xs={12} sm={6} md={4} key={key}>
-                    <TextField fullWidth required={defaultPackage.enabled} disabled={!defaultPackage.enabled || savingPackage} label={label} type="number" value={defaultPackage[key]} inputProps={{ min: key === 'emptyWeightGrams' ? 0 : key === 'maxItems' ? 1 : 0.51, step: key === 'maxItems' ? 1 : 'any' }} onChange={(event) => setDefaultPackage((current) => ({ ...current, [key]: event.target.value }))} />
-                  </Grid>
-                ))}
-              </Grid>
-              {defaultPackage.enabled && ['lengthCm', 'breadthCm', 'heightCm'].every((key) => Number(defaultPackage[key]) > 0.5) && <Alert severity="info" sx={{ mb: 2 }}>Volumetric equivalent at divisor 5000: {(Number(defaultPackage.lengthCm) * Number(defaultPackage.breadthCm) * Number(defaultPackage.heightCm) / 5000).toFixed(2)} kg. Courier chargeable weight uses the larger of actual packed and volumetric weight.</Alert>}
-              <Button variant="outlined" disabled={savingPackage} onClick={handleSavePackage}>{savingPackage ? 'Saving…' : 'Save fallback package'}</Button>
-            </Paper>
+            <Alert severity="info">Every shippable order is planned from these measured presets based on product dimensions and weights. Products with &ldquo;Ship each unit separately&rdquo; enabled will be allocated individual parcels.</Alert>
           </TabPanel>
           <Dialog open={packageDialogOpen} onClose={() => setPackageDialogOpen(false)} maxWidth="md" fullWidth>
             <DialogTitle>{packageProfiles.some((profile) => profile.id === packageDraft?.id) ? 'Edit measured package' : 'Add measured package'}</DialogTitle>
             <DialogContent dividers>
               {packageDraft && <Stack spacing={2} sx={{ mt: 1 }}>
-                <Alert severity="info">Measure the packed parcel’s outside L × W × H and the empty box/mailer's weight. Product fit limits are merchant-confirmed quantities per parcel, not guesses from product weight.</Alert>
+                <Alert severity="info">Measure the packed parcel’s outside L × W × H and the empty box/mailer's tare weight. Outer dimensions are used for courier rating; interior dimensions (if specified) ensure contents physically fit inside box walls.</Alert>
                 <TextField label="Package name" required value={packageDraft.name} onChange={(event) => setPackageDraft((current) => ({ ...current, name: event.target.value }))} />
+                <Typography variant="subtitle2" fontWeight={600}>Outer dimensions & tare weight</Typography>
                 <Grid container spacing={2}>
                   {[
-                    ['lengthCm', 'Length (cm)'], ['breadthCm', 'Width (cm)'], ['heightCm', 'Height (cm)'],
-                    ['emptyWeightGrams', 'Empty package weight (g)'], ['maxItems', 'Maximum total items'], ['maxContentsWeightGrams', 'Maximum contents weight (g)'],
-                  ].map(([key, label]) => <Grid item xs={12} sm={6} key={key}><TextField fullWidth label={label} required type="number" inputProps={{ min: key === 'emptyWeightGrams' ? 0 : key === 'maxItems' ? 1 : 0.51, step: key === 'maxItems' ? 1 : 'any' }} value={packageDraft[key]} onChange={(event) => setPackageDraft((current) => ({ ...current, [key]: event.target.value }))} /></Grid>)}
+                    ['lengthCm', 'Outer Length (cm)'], ['breadthCm', 'Outer Width (cm)'], ['heightCm', 'Outer Height (cm)'],
+                    ['emptyWeightGrams', 'Empty package tare weight (g)'], ['maxItems', 'Maximum total items'], ['maxContentsWeightGrams', 'Maximum contents weight (g)'],
+                  ].map(([key, label]) => <Grid item xs={12} sm={6} md={4} key={key}><TextField fullWidth label={label} required type="number" inputProps={{ min: key === 'emptyWeightGrams' ? 0 : key === 'maxItems' ? 1 : 0.51, step: key === 'maxItems' ? 1 : 'any' }} value={packageDraft[key]} onChange={(event) => setPackageDraft((current) => ({ ...current, [key]: event.target.value }))} /></Grid>)}
                 </Grid>
+                <Typography variant="subtitle2" fontWeight={600}>Usable interior dimensions (optional)</Typography>
+                <Grid container spacing={2}>
+                  {[
+                    ['innerLengthCm', 'Inner Length (cm)'], ['innerBreadthCm', 'Inner Width (cm)'], ['innerHeightCm', 'Inner Height (cm)'],
+                  ].map(([key, label]) => <Grid item xs={12} sm={4} key={key}><TextField fullWidth label={label} type="number" helperText="Leave blank to use outer dimensions" inputProps={{ min: 0.51, step: 'any' }} value={packageDraft[key] ?? ''} onChange={(event) => setPackageDraft((current) => ({ ...current, [key]: event.target.value }))} /></Grid>)}
+                </Grid>
+                <FormControlLabel control={<Switch checked={Boolean(packageDraft.isDefault)} onChange={(event) => setPackageDraft((current) => ({ ...current, isDefault: event.target.checked }))} />} label="Set as default box preset" />
                 <FormControlLabel control={<Switch checked={packageDraft.enabled !== false} onChange={(event) => setPackageDraft((current) => ({ ...current, enabled: event.target.checked }))} />} label="Use this package for new checkout plans" />
-                <Paper variant="outlined" sx={{ p: 2 }}>
-                  <Typography fontWeight={600} sx={{ mb: 1 }}>Confirmed product fit</Typography>
-                  <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>Maximum quantity of each selected product or variant that fits in one parcel.</Typography>
-                  <Alert severity="info" sx={{ mb: 2 }}>Products with the same mix-group name may share this package. Leave the group blank to keep a product separate. The planner enforces per-product quantity limits and package-wide item and contents-weight limits.</Alert>
-                  <Grid container spacing={1} alignItems="center">
-                    <Grid item xs={12} md={4}>
-                      <TextField select fullWidth label="Product" value={fitDraft.productId} onChange={(event) => setFitDraft((current) => ({ ...current, productId: event.target.value, variantId: '' }))}>
-                        <MenuItem value="">Choose product</MenuItem>
-                        {packageProducts.map((product) => <MenuItem key={product.id} value={product.id}>{product.name}</MenuItem>)}
-                      </TextField>
-                    </Grid>
-                    <Grid item xs={12} md={3}>
-                      <TextField select fullWidth label="Variant" value={fitDraft.variantId} disabled={!fitDraft.productId || !(packageProducts.find((product) => product.id === fitDraft.productId)?.variants || []).length} onChange={(event) => setFitDraft((current) => ({ ...current, variantId: event.target.value }))}>
-                        <MenuItem value="">All variants / no variants</MenuItem>
-                        {(packageProducts.find((product) => product.id === fitDraft.productId)?.variants || []).map((variant) => <MenuItem key={variant.id} value={variant.id}>{variant.optionLabel || variant.name || variant.sku || variant.id}</MenuItem>)}
-                      </TextField>
-                    </Grid>
-                    <Grid item xs={8} md={2}><TextField fullWidth type="number" label="Qty / parcel" inputProps={{ min: 1, step: 1 }} value={fitDraft.maxQuantity} onChange={(event) => setFitDraft((current) => ({ ...current, maxQuantity: event.target.value }))} /></Grid>
-                    <Grid item xs={8} md={2}><TextField fullWidth label="Mix group (optional)" value={fitDraft.mixGroup} inputProps={{ maxLength: 80 }} onChange={(event) => setFitDraft((current) => ({ ...current, mixGroup: event.target.value }))} helperText="Same group = confirmed compatible" /></Grid>
-                    <Grid item xs={4} md={1}><Button aria-label="Add product fit" onClick={addFitToDraft}>Add</Button></Grid>
-                  </Grid>
-                  <Stack spacing={1} sx={{ mt: 2 }}>
-                    {packageDraft.fits.map((fit, index) => {
-                      const product = packageProducts.find((entry) => entry.id === fit.productId);
-                      const variant = product?.variants?.find((entry) => entry.id === fit.variantId);
-                      return <Stack key={`${fit.productId}:${fit.variantId || ''}`} direction="row" justifyContent="space-between" alignItems="center" sx={{ borderTop: 1, borderColor: 'divider', pt: 1 }}>
-                        <Typography variant="body2">{product?.name || fit.productId}{variant ? ` · ${variant.optionLabel || variant.name || variant.sku || 'Variant'}` : ''} — up to {fit.maxQuantity} per parcel{fit.mixGroup ? ` · restricted to “${fit.mixGroup}”` : ' · standard mixable'}</Typography>
-                        <Button color="error" aria-label={`Remove fit ${index + 1}`} onClick={() => setPackageDraft((current) => ({ ...current, fits: current.fits.filter((_, rowIndex) => rowIndex !== index) }))}>Remove</Button>
-                      </Stack>;
-                    })}
-                    {!packageDraft.fits.length && <Typography variant="body2" color="text.secondary">No product fit rules added yet.</Typography>}
-                  </Stack>
-                </Paper>
               </Stack>}
             </DialogContent>
             <DialogActions sx={{ p: 2 }}><Button onClick={() => setPackageDialogOpen(false)}>Cancel</Button><Button variant="contained" disabled={savingPackage} onClick={savePackageDraft}>{savingPackage ? 'Saving…' : 'Save package type'}</Button></DialogActions>

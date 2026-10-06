@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-const { calculateShipmentAmounts, buildOrderLookupWhere, getDispatchedQuantityForOrderItem, hashOrderIntent, assertMatchingOrderIntent, getOrderIdempotencyWhere } = require('../../src/modules/order/order.service');
+const { calculateShipmentAmounts, getPriorCodAllocatedTotal, buildOrderLookupWhere, getDispatchedQuantityForOrderItem, hashOrderIntent, assertMatchingOrderIntent, getOrderIdempotencyWhere } = require('../../src/modules/order/order.service');
 
 // We mock the database models and test the core constraints of placeOrder
 // This avoids spinning up a PG database just to test inventory calculation.
@@ -84,8 +84,92 @@ describe('Order Service - Calculations & Safeguards', () => {
         expect(firstParcel.total + secondParcel.total).toBe(3118);
     });
 
-    it('does not duplicate shipping tax or charges on later parcel payloads', () => {
-        const amounts = calculateShipmentAmounts({
+    it('conserves exact total in split COD fulfillment without penny drift', () => {
+        const order = {
+            total: 3118.75,
+            paymentMethod: 'cod',
+            subtotal: 3000,
+            tax: 300.75,
+            discountAmount: 300,
+            shippingCost: 100,
+            shippingTaxAmount: 18,
+            shippingTaxIncluded: false,
+        };
+        const firstParcel = calculateShipmentAmounts({
+            order,
+            parcelItems: [{ unitPrice: 1000, quantity: 1 }],
+            allocateOrderShipping: true,
+            priorAllocatedTotal: 0,
+            isFinalShipment: false,
+        });
+        const secondParcel = calculateShipmentAmounts({
+            order,
+            parcelItems: [{ unitPrice: 2000, quantity: 1 }],
+            allocateOrderShipping: false,
+            priorAllocatedTotal: firstParcel.total,
+            isFinalShipment: true,
+        });
+
+        expect(firstParcel.total + secondParcel.total).toBe(3118.75);
+    });
+
+    it('reuses persisted COD allocations so split parcels never exceed the order total', () => {
+        // Regression: a Rs.220 COD order allocated Rs.120 + Rs.120 because prior
+        // parcels were recomputed without the first parcel's shipping fee.
+        const order = {
+            total: 220,
+            paymentMethod: 'cod',
+            subtotal: 200,
+            tax: 0,
+            discountAmount: 0,
+            shippingCost: 20,
+            shippingTaxAmount: 0,
+            shippingTaxIncluded: true,
+        };
+        const orderItemMap = { 'item-1': { snapshotPrice: 100 } };
+        const firstParcel = calculateShipmentAmounts({
+            order,
+            parcelItems: [{ unitPrice: 100, quantity: 1 }],
+            allocateOrderShipping: true,
+            priorAllocatedTotal: 0,
+            isFinalShipment: false,
+        });
+        expect(firstParcel.total).toBe(120);
+
+        const persistedPrior = [{ codCollectableAmount: firstParcel.total, createdAt: new Date('2026-10-01'), items: [] }];
+        const priorAllocatedTotal = getPriorCodAllocatedTotal(persistedPrior, order, orderItemMap);
+        expect(priorAllocatedTotal).toBe(120);
+
+        const finalParcel = calculateShipmentAmounts({
+            order,
+            parcelItems: [{ unitPrice: 100, quantity: 1 }],
+            allocateOrderShipping: false,
+            priorAllocatedTotal,
+            isFinalShipment: true,
+        });
+        expect(firstParcel.total + finalParcel.total).toBe(220);
+    });
+
+    it('recomputes legacy COD priors with shipping on the earliest parcel', () => {
+        const order = {
+            total: 220,
+            paymentMethod: 'cod',
+            subtotal: 200,
+            tax: 0,
+            discountAmount: 0,
+            shippingCost: 20,
+            shippingTaxAmount: 0,
+            shippingTaxIncluded: true,
+        };
+        const orderItemMap = { 'item-1': { snapshotPrice: 100 } };
+        const legacyPriors = [
+            { codCollectableAmount: null, createdAt: new Date('2026-10-01'), items: [{ orderItemId: 'item-1', quantity: 1 }] },
+        ];
+        // Legacy row recomputed with its shipping fee: 100 + 20 = 120, not 100.
+        expect(getPriorCodAllocatedTotal(legacyPriors, order, orderItemMap)).toBe(120);
+    });
+
+    it('does not duplicate shipping tax or charges on later parcel payloads', () => {        const amounts = calculateShipmentAmounts({
             order: { subtotal: 1000, tax: 90, discountAmount: 0, shippingCost: 50, shippingTaxAmount: 4.5, shippingTaxIncluded: false },
             parcelItems: [{ unitPrice: 1000, quantity: 1 }],
             allocateOrderShipping: false,

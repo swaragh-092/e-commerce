@@ -40,6 +40,10 @@ module.exports = (sequelize, DataTypes) => {
         labelUrl: DataTypes.STRING(500),
         manifestUrl: DataTypes.STRING(500),
         invoiceUrl: DataTypes.STRING(500),
+        codCollectableAmount: {
+            type: DataTypes.DECIMAL(10, 2),
+            allowNull: true,
+        },
         status: {
             type: DataTypes.STRING(50),
             defaultValue: 'created',
