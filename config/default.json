@@ -192,8 +192,12 @@
     },
     "footer": {
         "enabled": true,
+        "template": "multi-column",
+        "columnOrder": ["brand", "links", "contact"],
         "bgColor": "",
         "fgColor": "",
+        "accentColor": "",
+        "borderColor": "",
         "tagline": "Premium online shopping experience.",
         "copyright": "© {year} {storeName}. All rights reserved.",
         "showSocial": false,
@@ -226,14 +230,25 @@
     "announcement": {
         "enabled": false,
         "text": "Fresh arrivals and curated picks are live.",
+        "position": "top",
         "bgColor": "",
         "fgColor": "",
         "link": "",
         "dismissible": true
     },
     "nav": {
+        "template": "classic",
+        "elementOrder": ["logo", "menu", "actions"],
+        "logoPosition": "left",
+        "menuPosition": "left",
+        "menuSpacing": "comfortable",
+        "headerHeight": "standard",
         "sticky": true,
-        "showCategoryBar": true
+        "showCategoryBar": true,
+        "bgColor": "",
+        "fgColor": "",
+        "accentColor": "",
+        "borderColor": ""
     },
     "catalog": {
         "lowStockThreshold": 10,

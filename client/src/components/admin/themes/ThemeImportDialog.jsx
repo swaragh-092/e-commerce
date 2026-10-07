@@ -11,6 +11,7 @@ const ThemeImportDialog = ({ open, onClose, onImport, onPreview, loading }) => {
   const [step, setStep] = useState(STEPS.UPLOAD);
   const [file, setFile] = useState(null);
   const [parsed, setParsed] = useState(null);
+  const [conflict, setConflict] = useState(null);
   const [error, setError] = useState('');
   const [validating, setValidating] = useState(false);
 
@@ -20,6 +21,7 @@ const ThemeImportDialog = ({ open, onClose, onImport, onPreview, loading }) => {
     setFile(f);
     setError('');
     setParsed(null);
+    setConflict(null);
     setStep(STEPS.UPLOAD);
     const reader = new FileReader();
     reader.onload = async (ev) => {
@@ -33,6 +35,15 @@ const ThemeImportDialog = ({ open, onClose, onImport, onPreview, loading }) => {
         setValidating(true);
         try {
           await themeService.validateTheme(data);
+          let collision = null;
+          try {
+            collision = await themeService.checkThemeConflict(data);
+          } catch (conflictError) {
+            // Conflict detection is advisory; validation can still proceed if
+            // an older server does not expose the optional endpoint.
+            console.warn('[ThemeImport] Conflict check unavailable:', conflictError);
+          }
+          setConflict(collision?.conflict ? collision : null);
           setParsed(data);
           setStep(STEPS.SUMMARY);
         } catch (err) {
@@ -73,6 +84,7 @@ const ThemeImportDialog = ({ open, onClose, onImport, onPreview, loading }) => {
   const handleClose = () => {
     setFile(null);
     setParsed(null);
+    setConflict(null);
     setError('');
     setStep(STEPS.UPLOAD);
     onClose();
@@ -103,6 +115,12 @@ const ThemeImportDialog = ({ open, onClose, onImport, onPreview, loading }) => {
         {step === STEPS.SUMMARY && parsed && (
           <>
             <Alert severity="success" sx={{ mb: 2 }}>Package is valid and ready to use.</Alert>
+            {conflict && (
+              <Alert severity="warning" sx={{ mb: 2 }}>
+                A library template with slug <strong>{conflict.slug}</strong> already exists
+                ({conflict.existing?.name || 'same template'}). Saving will update that library copy.
+              </Alert>
+            )}
             <Box sx={{ p: 2, bgcolor: 'action.hover', borderRadius: 1 }}>
               <Typography variant="subtitle1" fontWeight={700}>{meta.name}</Typography>
               <Typography variant="body2" color="text.secondary">
@@ -142,7 +160,7 @@ const ThemeImportDialog = ({ open, onClose, onImport, onPreview, loading }) => {
               <Button startIcon={<VisibilityIcon />} onClick={handlePreview}>Preview</Button>
             )}
             <Button variant="contained" startIcon={<SaveIcon />} onClick={handleSaveToLibrary} disabled={loading}>
-              {loading ? 'Saving...' : 'Save to Library'}
+              {loading ? 'Saving...' : conflict ? 'Update Library Copy' : 'Save to Library'}
             </Button>
           </>
         )}

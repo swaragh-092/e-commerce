@@ -35,6 +35,15 @@ const validate = async (req, res, next) => {
   } catch (err) { next(err); }
 };
 
+const checkConflict = async (req, res, next) => {
+  try {
+    const { error, value } = importRequestSchema.validate(req.body);
+    if (error) return res.status(400).json({ success: false, message: error.details[0].message });
+    const result = await ThemeService.checkLibraryConflict(value.packageData);
+    return success(res, result);
+  } catch (err) { next(err); }
+};
+
 const preview = async (req, res, next) => {
   try {
     const { error, value } = previewRequestSchema.validate(req.body);
@@ -94,4 +103,4 @@ const getStoreStatus = async (req, res, next) => {
   } catch (err) { next(err); }
 };
 
-module.exports = { getBuiltin, getLibrary, getActivations, validate, preview, importTheme, exportTheme, applyTheme, rollbackActivation, removeLibrary, getStoreStatus };
+module.exports = { getBuiltin, getLibrary, getActivations, validate, checkConflict, preview, importTheme, exportTheme, applyTheme, rollbackActivation, removeLibrary, getStoreStatus };

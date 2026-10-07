@@ -675,6 +675,22 @@ const importToLibrary = async (packageData, userId) => {
   });
 };
 
+const checkLibraryConflict = async (packageData) => {
+  const pkg = validatePackage(packageData);
+  const existing = await ThemePackage.findOne({ where: { slug: pkg.meta.slug } });
+  return {
+    conflict: Boolean(existing),
+    slug: pkg.meta.slug,
+    existing: existing ? {
+      id: existing.id,
+      name: existing.name,
+      version: existing.version,
+      source: existing.source,
+      updatedAt: existing.updatedAt,
+    } : null,
+  };
+};
+
 const exportCurrent = async (options = {}) => {
   const { includeHomepageSections = true, includeDemoContent = true, includeComponentStyles = true, includeSectionPresets = true } = options;
   const groups = ['theme', 'componentStyles', 'sectionPresets', 'nav', 'footer', 'announcement', 'homepage', 'productPage', 'catalog', 'brandsPage', 'cartPage', 'accountPage', 'blogPage'];
@@ -695,8 +711,8 @@ const exportCurrent = async (options = {}) => {
     design: { theme: snapshot.theme || {} },
     layout: {
       nav: snapshot.nav || {},
-      footerStyle: { bgColor: snapshot.footer?.bgColor, fgColor: snapshot.footer?.fgColor },
-      announcementStyle: { bgColor: snapshot.announcement?.bgColor, fgColor: snapshot.announcement?.fgColor },
+      footerStyle: snapshot.footer || {},
+      announcementStyle: snapshot.announcement || {},
     },
   };
 
@@ -964,6 +980,7 @@ module.exports = {
   listBuiltin,
   listLibrary,
   validatePackage,
+  checkLibraryConflict,
   preview,
   importToLibrary,
   exportCurrent,

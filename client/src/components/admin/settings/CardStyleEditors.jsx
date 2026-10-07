@@ -1,8 +1,10 @@
 import React, { useEffect, useState } from 'react';
-import { Box, FormControlLabel, Grid, Paper, Switch, Typography, Chip, Button, Stack, TextField, IconButton, Divider, Accordion, AccordionSummary, AccordionDetails } from '@mui/material';
+import { Box, FormControlLabel, Grid, Paper, Switch, Typography, Chip, Button, Stack, TextField, IconButton, Divider, Accordion, AccordionSummary, AccordionDetails, Alert } from '@mui/material';
 import DeleteOutlineIcon from '@mui/icons-material/DeleteOutline';
 import AddIcon from '@mui/icons-material/Add';
 import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
+import DragIndicatorIcon from '@mui/icons-material/DragIndicator';
+import { DragDropContext, Droppable, Draggable } from '@hello-pangea/dnd';
 import { COMPONENT_STYLE_DEFAULTS } from '../../../utils/componentStyles';
 import { resolveRadius, resolveShadow } from '../../../utils/styleMaps';
 import { getProducts } from '../../../services/productService';
@@ -10,6 +12,7 @@ import { getCategories } from '../../../services/categoryService';
 import { getMediaUrl } from '../../../utils/media';
 import { getDesignComponentControlSchema } from '../../../utils/designRegistry';
 import { DesignSchemaFields } from '../themes/designer/DesignSchemaFields';
+import { Link } from 'react-router-dom';
 
 const usePreviewData = () => {
   const [product, setProduct] = useState(null);
@@ -33,7 +36,7 @@ const mergeStyle = (componentName, value) => ({
   ...(value && typeof value === 'object' ? value : {}),
 });
 
-const PresetPicker = ({ title = 'Start with a preset', presets = [], activeValue, onApply }) => (
+export const PresetPicker = ({ title = 'Start with a preset', presets = [], activeValue, onApply }) => (
   <Box sx={{ mb: 2.5 }}>
     <Typography variant="subtitle2" fontWeight={900} sx={{ mb: 1 }}>
       {title}
@@ -44,11 +47,21 @@ const PresetPicker = ({ title = 'Start with a preset', presets = [], activeValue
           key={preset.id}
           variant="outlined"
           onClick={() => onApply(preset.values)}
+          onKeyDown={(event) => {
+            if (event.key === 'Enter' || event.key === ' ') {
+              event.preventDefault();
+              onApply(preset.values);
+            }
+          }}
+          role="button"
+          tabIndex={0}
+          aria-pressed={activeValue === preset.values.variant || activeValue === preset.values.template || activeValue === preset.id}
           sx={{
             p: 1.25,
+            minHeight: 76,
             cursor: 'pointer',
-            borderColor: activeValue === preset.values.variant || activeValue === preset.id ? 'primary.main' : 'divider',
-            bgcolor: activeValue === preset.values.variant || activeValue === preset.id ? 'action.hover' : 'background.paper',
+            borderColor: activeValue === preset.values.variant || activeValue === preset.values.template || activeValue === preset.id ? 'primary.main' : 'divider',
+            bgcolor: activeValue === preset.values.variant || activeValue === preset.values.template || activeValue === preset.id ? 'action.hover' : 'background.paper',
             transition: 'all 0.15s ease',
             '&:hover': { borderColor: 'primary.main', transform: 'translateY(-1px)' },
           }}
@@ -80,6 +93,47 @@ const HEADER_PRESETS = [
   { id: 'minimal', label: 'Minimal', description: 'Simple sticky header.', values: { nav: { sticky: true, showCategoryBar: false }, announcement: { enabled: false } } },
   { id: 'retail', label: 'Retail', description: 'Announcement + categories.', values: { nav: { sticky: true, showCategoryBar: true }, announcement: { enabled: true, dismissible: true, text: 'Free shipping on eligible orders' } } },
   { id: 'campaign', label: 'Campaign', description: 'Promo-first announcement.', values: { nav: { sticky: true, showCategoryBar: true }, announcement: { enabled: true, dismissible: true, text: 'Limited time sale - shop new offers', bgColor: '#111827', fgColor: '#ffffff' } } },
+];
+
+export const HEADER_LAYOUT_PRESETS = [
+  {
+    id: 'classic',
+    label: 'Classic',
+    description: 'Logo left, menu center, actions right.',
+    values: { template: 'classic', logoPosition: 'left', menuPosition: 'center', menuSpacing: 'comfortable', headerHeight: 'standard', showCategoryBar: false },
+  },
+  {
+    id: 'centered-logo',
+    label: 'Centered logo',
+    description: 'Centered brand with navigation below.',
+    values: { template: 'centered-logo', logoPosition: 'center', menuPosition: 'center', menuSpacing: 'spacious', headerHeight: 'tall', showCategoryBar: false },
+  },
+  {
+    id: 'minimal',
+    label: 'Minimal',
+    description: 'Compact header for focused shopping.',
+    values: { template: 'minimal', logoPosition: 'left', menuPosition: 'left', menuSpacing: 'compact', headerHeight: 'compact', showCategoryBar: false },
+  },
+  {
+    id: 'announcement',
+    label: 'Announcement',
+    description: 'Promotion-first header with a message bar.',
+    values: { template: 'announcement', logoPosition: 'left', menuPosition: 'center', menuSpacing: 'comfortable', headerHeight: 'standard', showCategoryBar: false },
+  },
+  {
+    id: 'mega-menu',
+    label: 'Mega-menu',
+    description: 'Search and category navigation for larger catalogs.',
+    values: { template: 'mega-menu', logoPosition: 'left', menuPosition: 'center', menuSpacing: 'spacious', headerHeight: 'tall', showCategoryBar: true },
+  },
+];
+
+export const FOOTER_PRESETS = [
+  { id: 'simple', label: 'Simple', description: 'Centered brand and copyright.', values: { template: 'simple', showLinks: false, showContact: false, showSocial: false } },
+  { id: 'multi-column', label: 'Multi-column', description: 'Brand, links, social, and contact columns.', values: { template: 'multi-column', showLinks: true, showContact: true } },
+  { id: 'newsletter', label: 'Newsletter', description: 'Brand and links with newsletter messaging.', values: { template: 'newsletter', showLinks: true, showContact: false, showSocial: true } },
+  { id: 'store-contact', label: 'Store contact', description: 'Contact-first footer for local stores.', values: { template: 'store-contact', showLinks: true, showContact: true, showSocial: true } },
+  { id: 'ecommerce', label: 'E-commerce', description: 'Full footer for larger catalogs.', values: { template: 'ecommerce', showLinks: true, showContact: true, showSocial: true } },
 ];
 
 // Admin preview tile radius scale. Kept as MUI theme multipliers so the
@@ -499,7 +553,7 @@ export const HeaderStyleEditor = ({ value, onChange }) => {
         <Typography variant="subtitle2" fontWeight={800} sx={{ mb: 1.5 }}>Announcement Bar</Typography>
         <FormControlLabel
           control={<Switch size="small" checked={announcement.enabled === true || announcement.enabled === 'true'} onChange={(e) => updateAnnouncement('enabled', e.target.checked)} />}
-          label="Show announcement bar at the top"
+          label="Show announcement bar"
         />
         {(announcement.enabled === true || announcement.enabled === 'true') && (
           <Stack spacing={2} sx={{ mt: 2 }}>
@@ -580,8 +634,82 @@ const FooterBlock = ({ title, children, defaultExpanded = false }) => (
   </Accordion>
 );
 
+const DEFAULT_FOOTER_COLUMN_ORDER = ['brand', 'links', 'contact'];
+const FOOTER_COLUMN_META = {
+  brand: { label: 'Brand', description: 'Logo, tagline, and social links.' },
+  links: { label: 'Navigation groups', description: 'Reusable footer menu columns.' },
+  contact: { label: 'Contact', description: 'Email, phone, and address.' },
+};
+
+const FooterColumnOrderEditor = ({ value = [], onChange }) => {
+  const order = Array.isArray(value) && value.length
+    ? [...new Set([...value, ...DEFAULT_FOOTER_COLUMN_ORDER])].filter((key) => FOOTER_COLUMN_META[key])
+    : DEFAULT_FOOTER_COLUMN_ORDER;
+
+  const handleDragEnd = (result) => {
+    if (!result.destination) return;
+    const next = Array.from(order);
+    const [moved] = next.splice(result.source.index, 1);
+    next.splice(result.destination.index, 0, moved);
+    onChange(next);
+  };
+
+  return (
+    <FooterBlock title="Footer column placement" defaultExpanded>
+      <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mb: 1.25 }}>
+        Drag the main footer columns into the order visitors should read them.
+      </Typography>
+      <DragDropContext onDragEnd={handleDragEnd}>
+        <Droppable droppableId="footer-column-order">
+          {(droppableProvided) => (
+            <Stack spacing={0.75} ref={droppableProvided.innerRef} {...droppableProvided.droppableProps}>
+              {order.map((columnKey, index) => {
+                const meta = FOOTER_COLUMN_META[columnKey];
+                return (
+                  <Draggable key={columnKey} draggableId={`footer-column-${columnKey}`} index={index}>
+                    {(dragProvided, dragSnapshot) => (
+                      <Box
+                        ref={dragProvided.innerRef}
+                        {...dragProvided.draggableProps}
+                        sx={{
+                          display: 'flex',
+                          alignItems: 'center',
+                          gap: 1,
+                          px: 1,
+                          py: 0.75,
+                          border: '1px solid',
+                          borderColor: dragSnapshot.isDragging ? 'primary.main' : 'divider',
+                          borderRadius: 1,
+                          bgcolor: dragSnapshot.isDragging ? 'action.hover' : 'transparent',
+                        }}
+                      >
+                        <Box
+                          {...dragProvided.dragHandleProps}
+                          aria-label={`Drag ${meta.label}`}
+                          sx={{ display: 'flex', color: 'text.disabled', cursor: 'grab' }}
+                        >
+                          <DragIndicatorIcon fontSize="small" />
+                        </Box>
+                        <Box sx={{ minWidth: 0 }}>
+                          <Typography variant="body2" fontWeight={800}>{meta.label}</Typography>
+                          <Typography variant="caption" color="text.secondary" noWrap>{meta.description}</Typography>
+                        </Box>
+                      </Box>
+                    )}
+                  </Draggable>
+                );
+              })}
+              {droppableProvided.placeholder}
+            </Stack>
+          )}
+        </Droppable>
+      </DragDropContext>
+    </FooterBlock>
+  );
+};
+
 export const FooterStyleEditor = ({ value, onChange }) => {
-   const footer = value || {};
+  const footer = value || {};
   const [links, setLinks] = useState(footer.links || []);
 
   useEffect(() => {
@@ -601,6 +729,12 @@ export const FooterStyleEditor = ({ value, onChange }) => {
 
   return (
     <Stack spacing={3}>
+      <PresetPicker
+        title="Footer templates"
+        presets={FOOTER_PRESETS}
+        activeValue={footer.template || 'multi-column'}
+        onApply={(values) => onChange({ ...footer, ...values })}
+      />
       <Box>
         <FormControlLabel
           control={<Switch size="small" checked={footer.enabled !== false} onChange={(e) => patch('enabled', e.target.checked)} />}
@@ -610,6 +744,20 @@ export const FooterStyleEditor = ({ value, onChange }) => {
 
       {footer.enabled !== false && (
         <>
+          <Alert
+            severity="info"
+            action={(
+              <Button component={Link} to="/admin/menus" size="small" color="inherit">
+                Open Menu Builder
+              </Button>
+            )}
+          >
+            Create reusable footer columns by nesting links under a footer-menu item. Drag to reorder or move links between groups.
+          </Alert>
+          <FooterColumnOrderEditor
+            value={footer.columnOrder}
+            onChange={(next) => patch('columnOrder', next)}
+          />
           <FooterBlock title="Appearance" defaultExpanded>
             <Grid container spacing={2}>
               <Grid item xs={6}>
@@ -634,6 +782,28 @@ export const FooterStyleEditor = ({ value, onChange }) => {
                   InputLabelProps={{ shrink: true }}
                 />
               </Grid>
+              <Grid item xs={6}>
+                <TextField
+                  fullWidth
+                  size="small"
+                  type="color"
+                  label="Accent Color"
+                  value={footer.accentColor || '#f97316'}
+                  onChange={(e) => patch('accentColor', e.target.value)}
+                  InputLabelProps={{ shrink: true }}
+                />
+              </Grid>
+              <Grid item xs={6}>
+                <TextField
+                  fullWidth
+                  size="small"
+                  type="color"
+                  label="Border Color"
+                  value={footer.borderColor || '#e5e7eb'}
+                  onChange={(e) => patch('borderColor', e.target.value)}
+                  InputLabelProps={{ shrink: true }}
+                />
+              </Grid>
             </Grid>
           </FooterBlock>
 
@@ -655,6 +825,28 @@ export const FooterStyleEditor = ({ value, onChange }) => {
                 onChange={(e) => patch('copyright', e.target.value)}
                 placeholder="e.g. © {year} {storeName}"
               />
+              {footer.template === 'newsletter' && (
+                <>
+                  <TextField
+                    fullWidth
+                    size="small"
+                    label="Newsletter Heading"
+                    value={footer.newsletterTitle || ''}
+                    onChange={(e) => patch('newsletterTitle', e.target.value)}
+                    placeholder="Stay in the loop"
+                  />
+                  <TextField
+                    fullWidth
+                    size="small"
+                    label="Newsletter Message"
+                    value={footer.newsletterText || ''}
+                    onChange={(e) => patch('newsletterText', e.target.value)}
+                    multiline
+                    rows={2}
+                    placeholder="Subscribe for new arrivals and special offers."
+                  />
+                </>
+              )}
             </Stack>
           </FooterBlock>
 

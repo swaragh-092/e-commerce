@@ -53,6 +53,33 @@ describe('Theme package schema validation', () => {
     expect(error).toBeDefined();
   });
 
+  it('accepts current header, footer, and announcement layout settings', () => {
+    const pkg = buildMinimalPackage();
+    pkg.layout = {
+      nav: {
+        template: 'mega-menu',
+        showAccount: true,
+        elementOrder: ['menu', 'logo', 'actions'],
+        actionsOrder: ['cart', 'search', 'account', 'wishlist'],
+        bgColor: '#111827',
+        fgColor: '#ffffff',
+      },
+      footerStyle: {
+        template: 'ecommerce',
+        columnOrder: ['links', 'brand', 'contact'],
+        links: [{ label: 'Shop', url: '/products', openInNewTab: false }],
+      },
+      announcementStyle: {
+        enabled: true,
+        position: 'bottom',
+        text: 'Free shipping this week',
+        link: '/products',
+      },
+    };
+    const { error } = packageSchema.validate(pkg, { abortEarly: false, stripUnknown: false });
+    expect(error).toBeUndefined();
+  });
+
   it('rejects unknown section types', () => {
     const pkg = buildMinimalPackage();
     pkg.layout = { homepageSections: [{ id: 'x', type: 'malicious-widget', enabled: true }] };

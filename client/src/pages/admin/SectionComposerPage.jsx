@@ -1132,6 +1132,7 @@ const SectionComposerPage = () => {
               onThemeSettingsClick={() => setPanelView({ mode: 'theme-settings', sectionId: null, componentKey: null })}
               onAddSection={openAddSection}
               onMoveSection={move}
+              onReorderSection={reorderSection}
               onToggleSection={toggle}
               onDeleteSection={remove}
               onPageSettingChange={handlePageSettingChange}

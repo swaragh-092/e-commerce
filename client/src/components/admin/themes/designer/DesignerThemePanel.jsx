@@ -29,6 +29,8 @@ import {
   CheckoutBlockStyleEditor,
   FormControlStyleEditor,
   BadgeChipStyleEditor,
+  PresetPicker,
+  HEADER_LAYOUT_PRESETS,
 } from '../../settings/CardStyleEditors';
 import { DesignTokensEditor } from '../DesignTokensEditor';
 import CustomCssEditor from '../../settings/CustomCssEditor';
@@ -37,11 +39,20 @@ import { DesignSchemaFields } from './DesignSchemaFields';
 
 
 const HeaderLayoutEditor = ({ value = {}, onChange }) => (
-  <DesignSchemaFields
-    schema={getDesignComponentControlSchema('headerLayout')}
-    value={value}
-    onChange={onChange}
-  />
+  <Stack spacing={2.5}>
+    <PresetPicker
+      title="Header templates"
+      presets={HEADER_LAYOUT_PRESETS}
+      activeValue={value.template || 'classic'}
+      onApply={(values) => onChange({ ...value, ...values })}
+    />
+    <HeaderElementOrderEditor value={value} onChange={onChange} />
+    <DesignSchemaFields
+      schema={getDesignComponentControlSchema('headerLayout')}
+      value={value}
+      onChange={onChange}
+    />
+  </Stack>
 );
 
 const HeaderLogoEditor = ({ value = {}, onChange }) => (
@@ -51,6 +62,81 @@ const HeaderLogoEditor = ({ value = {}, onChange }) => (
     onChange={onChange}
   />
 );
+
+const DEFAULT_HEADER_ELEMENT_ORDER = ['logo', 'menu', 'actions'];
+const HEADER_ELEMENT_META = {
+  logo: { label: 'Logo', description: 'Store identity and logo image.' },
+  menu: { label: 'Menu', description: 'Primary navigation links.' },
+  actions: { label: 'Actions', description: 'Search, account, wishlist, and cart.' },
+};
+
+const HeaderElementOrderEditor = ({ value = {}, onChange }) => {
+  const order = Array.isArray(value.elementOrder) && value.elementOrder.length
+    ? [...new Set([...value.elementOrder, ...DEFAULT_HEADER_ELEMENT_ORDER])].filter((key) => HEADER_ELEMENT_META[key])
+    : DEFAULT_HEADER_ELEMENT_ORDER;
+
+  const handleDragEnd = (result) => {
+    if (!result.destination) return;
+    const next = Array.from(order);
+    const [moved] = next.splice(result.source.index, 1);
+    next.splice(result.destination.index, 0, moved);
+    onChange({ ...value, elementOrder: next });
+  };
+
+  return (
+    <Stack spacing={1.25}>
+      <Typography variant="subtitle2" fontWeight={900}>Header element placement</Typography>
+      <Typography variant="caption" color="text.secondary">
+        Drag the logo, menu, and actions into the order used on desktop and mobile.
+      </Typography>
+      <DragDropContext onDragEnd={handleDragEnd}>
+        <Droppable droppableId="header-element-order">
+          {(droppableProvided) => (
+            <Stack spacing={0.75} ref={droppableProvided.innerRef} {...droppableProvided.droppableProps}>
+              {order.map((elementKey, index) => {
+                const meta = HEADER_ELEMENT_META[elementKey];
+                return (
+                  <Draggable key={elementKey} draggableId={`header-element-${elementKey}`} index={index}>
+                    {(dragProvided, dragSnapshot) => (
+                      <Box
+                        ref={dragProvided.innerRef}
+                        {...dragProvided.draggableProps}
+                        sx={{
+                          display: 'flex',
+                          alignItems: 'center',
+                          gap: 1,
+                          px: 1,
+                          py: 0.75,
+                          border: '1px solid',
+                          borderColor: dragSnapshot.isDragging ? 'primary.main' : 'divider',
+                          borderRadius: 1,
+                          bgcolor: dragSnapshot.isDragging ? 'action.hover' : 'transparent',
+                        }}
+                      >
+                        <Box
+                          {...dragProvided.dragHandleProps}
+                          aria-label={`Drag ${meta.label}`}
+                          sx={{ display: 'flex', color: 'text.disabled', cursor: 'grab' }}
+                        >
+                          <DragIndicatorIcon fontSize="small" />
+                        </Box>
+                        <Box sx={{ minWidth: 0 }}>
+                          <Typography variant="body2" fontWeight={800}>{meta.label}</Typography>
+                          <Typography variant="caption" color="text.secondary" noWrap>{meta.description}</Typography>
+                        </Box>
+                      </Box>
+                    )}
+                  </Draggable>
+                );
+              })}
+              {droppableProvided.placeholder}
+            </Stack>
+          )}
+        </Droppable>
+      </DragDropContext>
+    </Stack>
+  );
+};
 
 const HeaderMenuEditor = ({ value = {}, onChange }) => {
   return (

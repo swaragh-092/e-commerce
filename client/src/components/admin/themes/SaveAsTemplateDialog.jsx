@@ -30,8 +30,9 @@ const SaveAsTemplateDialog = ({ open, onClose, onSaved }) => {
   const [includeSectionPresets, setIncludeSectionPresets] = useState(true);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
+  const [conflict, setConflict] = useState(null);
 
-  const handleSave = async () => {
+  const handleSave = async (replaceExisting = false) => {
     if (!name.trim()) { setError('Name is required'); return; }
     setSaving(true);
     setError('');
@@ -53,10 +54,20 @@ const SaveAsTemplateDialog = ({ open, onClose, onSaved }) => {
         version: '1.0.0',
         tags: [category],
       };
+      let collision = null;
+      try {
+        collision = await themeService.checkThemeConflict(exported);
+      } catch (conflictError) {
+        console.warn('[SaveAsTemplate] Conflict check unavailable:', conflictError);
+      }
+      setConflict(collision?.conflict ? collision : null);
+      if (collision?.conflict && !replaceExisting) {
+        return;
+      }
       await themeService.importTheme(exported);
       onSaved?.();
       onClose();
-      setName(''); setDescription(''); setCategory('general'); setIncludeHomepage(true); setIncludeDemoContent(false); setIncludeComponentStyles(true); setIncludeSectionPresets(true);
+      setName(''); setDescription(''); setCategory('general'); setIncludeHomepage(true); setIncludeDemoContent(false); setIncludeComponentStyles(true); setIncludeSectionPresets(true); setConflict(null);
     } catch (e) {
       setError(e.response?.data?.message || 'Failed to save template');
     } finally {
@@ -69,7 +80,7 @@ const SaveAsTemplateDialog = ({ open, onClose, onSaved }) => {
       <DialogTitle>Save Current Store as Template</DialogTitle>
       <DialogContent>
         <Stack spacing={2.5} sx={{ mt: 1 }}>
-          <TextField label="Template Name" value={name} onChange={(e) => setName(e.target.value)} size="small" fullWidth required placeholder="My Custom Template" />
+          <TextField label="Template Name" value={name} onChange={(e) => { setName(e.target.value); setConflict(null); }} size="small" fullWidth required placeholder="My Custom Template" />
           <FormControl size="small" fullWidth>
             <InputLabel>Category</InputLabel>
             <Select value={category} label="Category" onChange={(e) => setCategory(e.target.value)}>
@@ -81,13 +92,19 @@ const SaveAsTemplateDialog = ({ open, onClose, onSaved }) => {
           <FormControlLabel control={<Checkbox checked={includeDemoContent} onChange={(e) => setIncludeDemoContent(e.target.checked)} />} label="Include current hero slides, banners, and value props" />
           <FormControlLabel control={<Checkbox checked={includeComponentStyles} onChange={(e) => setIncludeComponentStyles(e.target.checked)} />} label="Include card/component styles" />
           <FormControlLabel control={<Checkbox checked={includeSectionPresets} onChange={(e) => setIncludeSectionPresets(e.target.checked)} />} label="Include reusable section presets" />
+          {conflict && (
+            <Alert severity="warning">
+              A template with slug <strong>{conflict.slug}</strong> already exists
+              ({conflict.existing?.name || 'same template'}). Click the save button again to replace it.
+            </Alert>
+          )}
           {error && <Alert severity="error">{error}</Alert>}
         </Stack>
       </DialogContent>
       <DialogActions>
         <Button onClick={onClose}>Cancel</Button>
-        <Button variant="contained" startIcon={saving ? <CircularProgress size={16} /> : <SaveIcon />} onClick={handleSave} disabled={saving}>
-          {saving ? 'Saving...' : 'Save to Library'}
+        <Button variant="contained" startIcon={saving ? <CircularProgress size={16} /> : <SaveIcon />} onClick={() => handleSave(Boolean(conflict))} disabled={saving}>
+          {saving ? 'Saving...' : conflict ? 'Replace Template' : 'Save to Library'}
         </Button>
       </DialogActions>
     </Dialog>

@@ -29,6 +29,7 @@ router.get('/library', ...read, controller.getLibrary);
 router.get('/activations', ...read, controller.getActivations);
 router.get('/store-status', ...read, controller.getStoreStatus);
 router.post('/validate', ...read, controller.validate);
+router.post('/check-conflict', ...read, controller.checkConflict);
 router.post('/preview', ...read, controller.preview);
 router.post('/import', ...manage, enforceThemeImportSize, controller.importTheme);
 router.post('/export', ...read, controller.exportTheme);

@@ -95,9 +95,29 @@ const InsertSectionControl = ({ label = 'Add section here', onClick }) => (
   </Box>
 );
 
-const SectionRow = ({ section, index, total, isSelected, onSelect, onMove, onToggle, onDelete }) => (
+const SectionRow = ({
+  section,
+  index,
+  total,
+  isSelected,
+  isDragging,
+  isDragOver,
+  onSelect,
+  onMove,
+  onToggle,
+  onDelete,
+  onDragStart,
+  onDragOver,
+  onDrop,
+  onDragEnd,
+}) => (
   <Box
     onClick={() => onSelect(section)}
+    draggable
+    onDragStart={(event) => onDragStart?.(event)}
+    onDragOver={(event) => onDragOver?.(event)}
+    onDrop={(event) => onDrop?.(event)}
+    onDragEnd={() => onDragEnd?.()}
     sx={{
       display: 'flex',
       alignItems: 'center',
@@ -106,10 +126,12 @@ const SectionRow = ({ section, index, total, isSelected, onSelect, onMove, onTog
       py: 0.75,
       borderRadius: 1.5,
       cursor: 'pointer',
-      bgcolor: isSelected ? 'primary.50' : 'transparent',
       border: '1px solid',
-      borderColor: isSelected ? 'primary.main' : 'transparent',
+      borderColor: isDragOver || isSelected ? 'primary.main' : 'transparent',
       opacity: section.enabled === false ? 0.55 : 1,
+      boxShadow: isDragging ? 3 : 0,
+      transform: isDragging ? 'scale(1.01)' : 'none',
+      bgcolor: isDragOver ? 'action.selected' : isSelected ? 'primary.50' : 'transparent',
       transition: 'all 0.15s',
       '&:hover': {
         bgcolor: isSelected ? 'primary.50' : 'action.hover',
@@ -117,7 +139,13 @@ const SectionRow = ({ section, index, total, isSelected, onSelect, onMove, onTog
       },
     }}
   >
-    <DragIndicatorIcon sx={{ color: 'text.disabled', fontSize: 16, flexShrink: 0, cursor: 'grab' }} />
+    <Box
+      data-section-drag-handle="true"
+      aria-label={`Drag ${getSectionLabel(section)} to reorder`}
+      sx={{ display: 'flex', color: 'text.disabled', flexShrink: 0, cursor: 'grab' }}
+    >
+      <DragIndicatorIcon sx={{ fontSize: 16 }} />
+    </Box>
     <Box sx={{ flex: 1, minWidth: 0 }}>
       <Typography variant="body2" fontWeight={isSelected ? 800 : 600} noWrap sx={{ fontSize: '0.85rem' }}>
         {getSectionLabel(section)}
@@ -227,12 +255,14 @@ const DesignerTreePanel = ({
   onMoveSection,
   onToggleSection,
   onDeleteSection,
+  onReorderSection,
   onPageSettingChange,
   onHeaderClick,
   onHeaderPartClick,
   onFooterClick,
 }) => {
   const [pageSettingsOpen, setPageSettingsOpen] = useState(true);
+  const [dragState, setDragState] = useState(null);
 
   const pageEditorConfig = PAGE_EDITORS[activePage];
   const PageEditor = pageEditorConfig?.Editor;
@@ -247,6 +277,42 @@ const DesignerTreePanel = ({
     .filter(({ section }) => section.placement === 'footer');
   const templateInsertIndex = footerSectionRows.length > 0 ? footerSectionRows[0].originalIndex : sections.length;
   const footerStartIndex = footerSectionRows.length > 0 ? footerSectionRows[0].originalIndex : sections.length;
+
+  const getDropPosition = (event) => {
+    const rect = event.currentTarget.getBoundingClientRect();
+    return event.clientY > rect.top + rect.height / 2 ? 'after' : 'before';
+  };
+
+  const startSectionDrag = (event, originalIndex, area) => {
+    if (!event.target.closest('[data-section-drag-handle="true"]')) {
+      event.preventDefault();
+      return;
+    }
+    event.stopPropagation();
+    event.dataTransfer.effectAllowed = 'move';
+    event.dataTransfer.setData('text/plain', String(originalIndex));
+    setDragState({ fromIndex: originalIndex, overIndex: originalIndex, area, position: 'before' });
+  };
+
+  const overSection = (event, originalIndex, area) => {
+    if (!dragState || dragState.area !== area) return;
+    event.preventDefault();
+    event.stopPropagation();
+    const position = getDropPosition(event);
+    setDragState((current) => current
+      && (current.overIndex !== originalIndex || current.position !== position)
+      ? { ...current, overIndex: originalIndex, position }
+      : current);
+  };
+
+  const dropSection = (event, originalIndex, area) => {
+    if (!dragState || dragState.area !== area) return;
+    event.preventDefault();
+    event.stopPropagation();
+    const insertIndex = getDropPosition(event) === 'after' ? originalIndex + 1 : originalIndex;
+    onReorderSection?.(dragState.fromIndex, insertIndex, area);
+    setDragState(null);
+  };
 
   return (
     <Box sx={{ display: 'flex', flexDirection: 'column', height: '100%', overflow: 'hidden' }}>
@@ -354,6 +420,12 @@ const DesignerTreePanel = ({
                   onMove={(_, direction) => onMoveSection(originalIndex, direction, 'template')}
                   onToggle={() => onToggleSection(originalIndex)}
                   onDelete={() => onDeleteSection(originalIndex)}
+                  isDragging={dragState?.fromIndex === originalIndex}
+                  isDragOver={dragState?.area === 'template' && dragState?.overIndex === originalIndex && dragState?.fromIndex !== originalIndex}
+                  onDragStart={(event) => startSectionDrag(event, originalIndex, 'template')}
+                  onDragOver={(event) => overSection(event, originalIndex, 'template')}
+                  onDrop={(event) => dropSection(event, originalIndex, 'template')}
+                  onDragEnd={() => setDragState(null)}
                 />
                 <InsertSectionControl onClick={() => onAddSection(originalIndex + 1, 'template')} />
               </Box>
@@ -389,6 +461,12 @@ const DesignerTreePanel = ({
                 onMove={(_, direction) => onMoveSection(originalIndex, direction, 'footer')}
                 onToggle={() => onToggleSection(originalIndex)}
                 onDelete={() => onDeleteSection(originalIndex)}
+                isDragging={dragState?.fromIndex === originalIndex}
+                isDragOver={dragState?.area === 'footer' && dragState?.overIndex === originalIndex && dragState?.fromIndex !== originalIndex}
+                onDragStart={(event) => startSectionDrag(event, originalIndex, 'footer')}
+                onDragOver={(event) => overSection(event, originalIndex, 'footer')}
+                onDrop={(event) => dropSection(event, originalIndex, 'footer')}
+                onDragEnd={() => setDragState(null)}
               />
               <InsertSectionControl
                 label="Add footer section here"
