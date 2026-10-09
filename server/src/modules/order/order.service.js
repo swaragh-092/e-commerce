@@ -1790,6 +1790,8 @@ const placeOrder = async (userId, payload) => {
                         user,
                         {
                             orderNumber: order.orderNumber,
+                            orderDate: order.createdAt,
+                            paymentMethod: PAYMENT_METHOD_NAMES[paymentMethod] || paymentMethod,
                             total: order.total,
                             firstName: user.firstName || 'Customer',
                         },

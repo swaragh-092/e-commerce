@@ -34,6 +34,8 @@ const normalizeVariables = (variables = {}) => {
 
     if (normalized.orderNumber && !normalized.order_number) normalized.order_number = normalized.orderNumber;
     if (normalized.orderId && !normalized.order_id) normalized.order_id = normalized.orderId;
+    if (normalized.orderDate && !normalized.order_date) normalized.order_date = normalized.orderDate;
+    if (normalized.paymentMethod && !normalized.payment_method) normalized.payment_method = normalized.paymentMethod;
     if (normalized.total !== undefined && normalized.order_total === undefined) normalized.order_total = normalized.total;
     if (normalized.firstName && !normalized.customer_name) normalized.customer_name = normalized.firstName;
     if (normalized.storeName && !normalized.store_name) normalized.store_name = normalized.storeName;
@@ -416,4 +418,4 @@ const sendOnce = (templateName, recipient, variables = {}, userId = null, orderI
     if (!dedupeKey) return Promise.resolve(false);
     return send(templateName, recipient, variables, userId, orderId, channel, null, dedupeKey);
 };
-module.exports = { send, sendOnce, sendImmediate, sendToUser, sendToAdmins, sendDeliveryUpdate, processQueued };
+module.exports = { send, sendOnce, sendImmediate, sendToUser, sendToAdmins, sendDeliveryUpdate, processQueued, normalizeVariables };
