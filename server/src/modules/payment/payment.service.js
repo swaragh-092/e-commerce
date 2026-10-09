@@ -965,6 +965,8 @@ const markOrderPaid = async ({ orderId, provider, transactionId, metadata = {} }
             notificationPayload = {
                 orderId: lockedOrder.id,
                 orderNumber: lockedOrder.orderNumber,
+                orderDate: lockedOrder.createdAt,
+                paymentMethod: lockedOrder.paymentMethod,
                 total: lockedOrder.total,
                 userId: lockedOrder.userId,
             };
@@ -1005,6 +1007,8 @@ const markOrderPaid = async ({ orderId, provider, transactionId, metadata = {} }
                     user,
                     {
                         orderNumber: notificationPayload.orderNumber,
+                        orderDate: notificationPayload.orderDate,
+                        paymentMethod: notificationPayload.paymentMethod,
                         total: notificationPayload.total,
                         firstName: user.firstName || 'Customer',
                     },
