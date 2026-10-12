@@ -2956,7 +2956,7 @@ const refundOrder = async (id, actingUserId, isAdmin, auditContext = null) => {
     return getOrderById(id, actingUserId, true);
 };
 
-const cancelOrder = async (id, userId, cancellation = {}) => {
+const cancelOrder = async (id, userId, cancellation = {}, guestSessionId = null) => {
     const reasonCode = cancellation?.reason;
     const reasonLabel = CANCELLATION_REASONS[reasonCode];
     const reasonDetails = String(cancellation?.reasonDetails || '').trim();
@@ -2966,9 +2966,17 @@ const cancelOrder = async (id, userId, cancellation = {}) => {
     const cancellationReason = reasonDetails ? `${reasonLabel}: ${reasonDetails}` : reasonLabel;
     let orderRecord, prevStatus, eventsToEmit;
 
+    if (!userId && !isGuestSessionId(guestSessionId)) {
+        throw new AppError('UNAUTHORIZED', 401, 'A valid guest checkout session is required to cancel this order');
+    }
+
     await sequelize.transaction(async (t) => {
+        const ownerConditions = userId ? [{ id, userId }] : [];
+        if (isGuestSessionId(guestSessionId)) {
+            ownerConditions.push({ id, userId: null, guestSessionId });
+        }
         const order = await Order.findOne({
-            where: { id, userId },
+            where: { [Op.or]: ownerConditions },
             include: [{ model: OrderItem, as: 'items' }],
             transaction: t,
             // Lock only the order row. Locking the joined items applies FOR UPDATE
@@ -3073,21 +3081,27 @@ const cancelOrder = async (id, userId, cancellation = {}) => {
     });
 
     try {
-        const user = await User.findByPk(userId, {
+        const user = userId ? await User.findByPk(userId, {
             include: [{ model: UserProfile, as: 'profile', required: false }],
-        });
+        }) : null;
+        const guestAddress = orderRecord?.shippingAddressSnapshot || {};
+        const guestName = [guestAddress.firstName, guestAddress.lastName].filter(Boolean).join(' ').trim();
+        const variables = {
+            customer_name: user
+                ? `${user.firstName || ''} ${user.lastName || ''}`.trim() || user.email
+                : guestName || guestAddress.name || 'Guest customer',
+            customer_email: user?.email || guestAddress.email || '',
+            order_number: orderRecord.orderNumber,
+            order_id: orderRecord.id,
+            cancel_reason: cancellationReason,
+            order_total: orderRecord.total,
+        };
         if (user) {
-            const variables = {
-                customer_name: `${user.firstName || ''} ${user.lastName || ''}`.trim() || user.email,
-                customer_email: user.email,
-                order_number: orderRecord.orderNumber,
-                order_id: orderRecord.id,
-                cancel_reason: cancellationReason,
-                order_total: orderRecord.total,
-            };
             await NotificationService.sendToUser('order_cancelled', ['email', 'sms', 'whatsapp'], user, variables, orderRecord.id);
-            await NotificationService.sendToAdmins('admin_order_cancelled', ['email', 'sms', 'whatsapp'], variables, orderRecord.id);
+        } else if (guestAddress.email) {
+            await NotificationService.send('order_cancelled', guestAddress.email, variables, null, orderRecord.id);
         }
+        await NotificationService.sendToAdmins('admin_order_cancelled', ['email', 'sms', 'whatsapp'], variables, orderRecord.id);
     } catch (err) {
         logger.error('Failed to queue order cancellation notifications', { orderId: id, error: err.message });
     }
