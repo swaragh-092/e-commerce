@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useContext, useEffect, useMemo, useState } from 'react';
 import {
   Alert,
   Box,
@@ -25,6 +25,7 @@ import { useNavigate, useParams } from 'react-router-dom';
 import CreditCardOutlinedIcon from '@mui/icons-material/CreditCardOutlined';
 import PrintIcon from '@mui/icons-material/Print';
 import PageSEO from '../../components/common/PageSEO';
+import { AuthContext } from '../../context/AuthContext';
 import DeliverySummaryCard from '../../components/orders/order-detail/DeliverySummaryCard';
 import OrderMetaStrip from '../../components/orders/order-detail/OrderMetaStrip';
 import OrderNotesCard from '../../components/orders/order-detail/OrderNotesCard';
@@ -38,6 +39,7 @@ import { formatDateTime } from '../../utils/dates';
 
 import { useOrderStatusTransitions } from '../../hooks/useOrderStatusTransitions';
 import { userService } from '../../services/userService';
+import { PERMISSIONS } from '../../utils/permissions';
 
 import { orderService } from '../../services/orderService';
 import { getCustomerOrderDisplayStatus, getCustomerOrderStatusLabel } from '../../utils/orderHelpers';
@@ -54,6 +56,7 @@ const OrderDetailPage = () => {
   const navigate = useNavigate();
   const { formatPrice } = useCurrency();
   const { settings } = useSettings();
+  const { hasPermission } = useContext(AuthContext);
   const ordersEnabled = useFeature('orders');
 
   const [order, setOrder] = useState(null);
@@ -109,7 +112,7 @@ const OrderDetailPage = () => {
   const { isCancelable } = useOrderStatusTransitions(order?.status);
   const isPendingOnlinePayment = order?.status === 'pending_payment' && order?.paymentMethod !== 'cod';
   const canRetryPayment = isPendingOnlinePayment && RETRYABLE_PAYMENT_STATUSES.includes(payment?.status);
-  const canCancel = isCancelable && !isPendingOnlinePayment;
+  const canCancel = isCancelable && !isPendingOnlinePayment && !hasPermission(PERMISSIONS.ORDERS_READ);
   const pendingPaymentExpiresAt = isPendingOnlinePayment && order?.createdAt
     ? new Date(new Date(order.createdAt).getTime() + 15 * 60 * 1000)
     : null;
