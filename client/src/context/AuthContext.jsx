@@ -2,7 +2,7 @@ import React, { createContext, useState, useEffect } from 'react';
 import { Box, CircularProgress } from '@mui/material';
 import authService from '../services/authService';
 import { userService } from '../services/userService';
-import cartService, { clearSessionId } from '../services/cartService';
+import cartService from '../services/cartService';
 import { wishlistService } from '../services/wishlistService';
 import { getPermissionsForUser, getRolesForUser } from '../utils/permissions';
 
@@ -92,7 +92,8 @@ export const AuthProvider = ({ children }) => {
     localStorage.setItem('userProfile', JSON.stringify(fullUser));
     try { await cartService.mergeGuestCart(); } catch (_) {}
     try { await wishlistService.mergeGuestWishlist(); } catch (_) {}
-    clearSessionId();
+    // Keep the guest session ID: guest orders are owned by this capability and
+    // customers may sign in before cancelling or viewing their order.
     return fullUser;
   };
 
