@@ -35,4 +35,17 @@ describe('Account notification safety', () => {
     expect(rendered).not.toContain('<script>');
     expect(rendered).toContain('&lt;script&gt;');
   });
+
+  it('uses the branded wrapper and only relevant links in lifecycle email templates', () => {
+    const rendered = handlebars.compile(DEFAULTS.enquiry_assigned_staff.bodyHtml)({
+      store_name: 'ORBI', store_logo: null, copyright: '', name: 'Sam', customer_name: 'Jane',
+      customer_email: 'jane@example.test', website_url: 'https://example.test', support_email: 'help@example.test',
+      enquiry_id: 'enquiry-1', order_id: 'order-1', setup_url: 'https://example.test/setup',
+    });
+    expect(rendered).toContain('class="wrapper"');
+    expect(rendered).toContain('View Enquiries');
+    expect(rendered).not.toContain('Set Up Your Account');
+    expect(rendered).not.toContain('/admin/orders/');
+    expect(rendered).not.toContain('/account/orders/');
+  });
 });

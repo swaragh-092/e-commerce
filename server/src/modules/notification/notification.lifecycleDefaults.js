@@ -12,26 +12,62 @@ const definitions = {
   admin_return_requested: ['New {{request_type}} request — #{{order_number}}', '{{customer_name}} ({{customer_email}}) requested a {{request_type}} for order #{{order_number}}. Reason: {{reason}}. Review the request in the order details.'],
 };
 
-const variables = ['name', 'customer_name', 'customer_email', 'order_number', 'order_id', 'enquiry_id', 'request_type', 'reason', 'status_label', 'resolution_notes', 'new_email', 'setup_url', 'website_url', 'store_name', 'support_email'];
-const DEFAULTS = Object.fromEntries(Object.entries(definitions).map(([name, [subject, message]]) => [name, {
-  subject,
-  bodyHtml: `<!DOCTYPE html><html lang="en"><body style="font-family:Arial,sans-serif;color:#222;max-width:600px;margin:32px auto;line-height:1.6"><h2>{{store_name}}</h2><p>${message}</p>{{#if setup_url}}<p><a href="{{setup_url}}">Set up your account</a></p>{{/if}}{{#if enquiry_id}}<p><a href="{{website_url}}/admin/enquiries">View enquiry {{enquiry_id}}</a></p>{{/if}}{{#if order_id}}<p><a href="{{website_url}}/${name.startsWith('admin_') || name.endsWith('_staff') ? 'admin/orders' : 'account/orders'}/{{order_id}}">View order</a></p>{{/if}}<p>Need help? <a href="mailto:{{support_email}}">{{support_email}}</a></p></body></html>`,
-  bodyText: `${message}\n{{#if setup_url}}Set up your account: {{setup_url}}{{/if}}\n{{#if enquiry_id}}View enquiry {{enquiry_id}}: {{website_url}}/admin/enquiries{{/if}}\n{{#if order_id}}View order: {{website_url}}/${name.startsWith('admin_') || name.endsWith('_staff') ? 'admin/orders' : 'account/orders'}/{{order_id}}{{/if}}\n{{store_name}}`,
-}]));
-
-DEFAULTS.newsletter_confirmation = {
-  subject: 'You are subscribed to {{store_name}} updates',
-  bodyHtml: '<!DOCTYPE html><html lang="en"><body style="font-family:Arial,sans-serif;max-width:600px;margin:32px auto;line-height:1.6"><h2>{{store_name}}</h2><p>Thanks for subscribing. You will receive offers, new products, and store updates.</p><p>You can change your choice anytime.</p><p><a href="{{unsubscribe_url}}">Unsubscribe from store updates</a></p></body></html>',
-  bodyText: 'Thanks for subscribing to {{store_name}} updates. Unsubscribe anytime: {{unsubscribe_url}}',
-};
-DEFAULTS.newsletter_campaign = {
-  subject: '{{campaign_subject}}',
-  bodyHtml: '<!DOCTYPE html><html lang="en"><body style="font-family:Arial,sans-serif;max-width:600px;margin:32px auto;line-height:1.6"><h2>{{store_name}}</h2><div style="white-space:pre-wrap">{{campaign_message}}</div><hr><p>You receive this because you subscribed to store updates.</p>{{#if is_test}}<p>This is a test email. <a href="{{unsubscribe_url}}">Manage email preferences</a></p>{{else}}<p><a href="{{unsubscribe_url}}">Unsubscribe from store updates</a></p>{{/if}}</body></html>',
-  bodyText: '{{campaign_message}}\n\n{{#if is_test}}This is a test email. Manage preferences: {{unsubscribe_url}}{{else}}Unsubscribe: {{unsubscribe_url}}{{/if}}',
+const variables = {
+  password_changed: ['name'],
+  email_changed: ['name', 'new_email'],
+  staff_invitation: ['name', 'setup_url'],
+  order_assigned_staff: ['name', 'order_number', 'order_id'],
+  enquiry_assigned_staff: ['name', 'customer_name', 'customer_email', 'enquiry_id'],
+  delivery_exception: ['customer_name', 'order_number', 'order_id', 'status_label'],
+  return_requested: ['customer_name', 'order_number', 'order_id', 'request_type', 'reason'],
+  return_status_updated: ['customer_name', 'order_number', 'order_id', 'request_type', 'status_label', 'resolution_notes'],
+  admin_return_requested: ['customer_name', 'customer_email', 'order_number', 'order_id', 'request_type', 'reason'],
 };
 
-module.exports = { DEFAULTS, TEMPLATE_VARIABLES: {
-  ...Object.fromEntries(Object.keys(definitions).map((name) => [name, variables])),
-  newsletter_confirmation: ['store_name', 'unsubscribe_url'],
-  newsletter_campaign: ['campaign_subject', 'campaign_message', 'store_name', 'unsubscribe_url', 'is_test'],
-} };
+const buildDefaults = (emailWrapper) => {
+  const defaults = Object.fromEntries(Object.entries(definitions).map(([name, [subject, message]]) => {
+    const link = name === 'staff_invitation'
+      ? '{{#if setup_url}}<a href="{{setup_url}}" class="btn">Set Up Your Account</a>{{/if}}'
+      : name === 'enquiry_assigned_staff'
+        ? '<a href="{{website_url}}/admin/enquiries" class="btn">View Enquiries</a>'
+        : name.endsWith('_staff') || name === 'admin_return_requested'
+          ? '{{#if order_id}}<a href="{{website_url}}/admin/orders/{{order_id}}" class="btn">View Order</a>{{/if}}'
+          : ['password_changed', 'email_changed'].includes(name)
+            ? ''
+            : '{{#if order_id}}<a href="{{website_url}}/account/orders/{{order_id}}" class="btn">View Order</a>{{/if}}';
+    const body = `<h2>${name === 'staff_invitation' ? 'Welcome to the team' : name === 'order_assigned_staff' ? 'Order assigned to you' : name === 'enquiry_assigned_staff' ? 'Enquiry assigned to you' : name === 'admin_return_requested' ? 'New return or replacement request' : 'Account and order update'}</h2><p>${message}</p>${link}<hr class="divider"><p style="font-size:13px;color:#888">Need help? <a href="mailto:{{support_email}}">{{support_email}}</a></p>`;
+    const textLink = name === 'staff_invitation'
+      ? '\n{{#if setup_url}}Set up your account: {{setup_url}}{{/if}}'
+      : name === 'enquiry_assigned_staff'
+        ? '\nView enquiries: {{website_url}}/admin/enquiries'
+        : name.endsWith('_staff') || name === 'admin_return_requested'
+          ? '\n{{#if order_id}}View order: {{website_url}}/admin/orders/{{order_id}}{{/if}}'
+          : ['password_changed', 'email_changed'].includes(name)
+            ? ''
+            : '\n{{#if order_id}}View order: {{website_url}}/account/orders/{{order_id}}{{/if}}';
+    return [name, { subject, bodyHtml: emailWrapper(body), bodyText: `${message}${textLink}\n\nNeed help? {{support_email}}\n{{store_name}}` }];
+  }));
+
+  defaults.newsletter_confirmation = {
+    subject: 'You are subscribed to {{store_name}} updates',
+    bodyHtml: emailWrapper('<h2>Thanks for subscribing!</h2><p>You will receive offers, new products, and store updates from {{store_name}}.</p><p>You can change your choice anytime.</p><a href="{{unsubscribe_url}}" class="btn">Manage Email Preferences</a>'),
+    bodyText: 'Thanks for subscribing to {{store_name}} updates. Manage your email preferences anytime: {{unsubscribe_url}}',
+  };
+  defaults.newsletter_campaign = {
+    subject: '{{campaign_subject}}',
+    bodyHtml: emailWrapper('<h2>{{campaign_subject}}</h2><div style="white-space:pre-wrap">{{campaign_message}}</div><hr class="divider"><p>You receive this because you subscribed to store updates.</p>{{#if is_test}}<p>This is a test email. <a href="{{unsubscribe_url}}">Manage email preferences</a></p>{{else}}<p><a href="{{unsubscribe_url}}">Unsubscribe from store updates</a></p>{{/if}}'),
+    bodyText: '{{campaign_message}}\n\n{{#if is_test}}This is a test email. Manage preferences: {{unsubscribe_url}}{{else}}Unsubscribe: {{unsubscribe_url}}{{/if}}',
+  };
+  return defaults;
+};
+
+const commonVariables = ['website_url', 'store_name', 'support_email'];
+module.exports = {
+  buildDefaults,
+  DEFAULTS: {},
+  TEMPLATE_VARIABLES: {
+    ...Object.fromEntries(Object.entries(variables).map(([name, vars]) => [name, [...vars, ...commonVariables]])),
+    newsletter_confirmation: ['unsubscribe_url', 'store_name'],
+    newsletter_campaign: ['campaign_subject', 'campaign_message', 'unsubscribe_url', 'is_test', 'store_name'],
+  },
+};
