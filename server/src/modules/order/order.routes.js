@@ -15,12 +15,14 @@ const {
   processRefundSchema,
   addOrderNoteSchema,
   listOrdersQuerySchema,
+  claimGuestOrdersSchema,
 } = require('./order.validation');
 const { authenticate, optionalAuth } = require('../../middleware/auth.middleware');
 const { authorizePermissions } = require('../../middleware/role.middleware');
 const { auditLog } = require('../audit/audit.middleware');
 const { PERMISSIONS } = require('../../config/permissions');
 const { idParamSchema, idAndFulfillmentIdParamSchema } = require('../../utils/common.validation');
+const { guestOrderClaimLimiter } = require('../../middleware/rateLimiter.middleware');
 
 
 
@@ -36,6 +38,8 @@ router.post('/', optionalAuth, (req, res, next) => {
 }, validate(placeOrderSchema), orderController.placeOrder);
 
 router.get('/', authenticate, authorizePermissions(PERMISSIONS.ACCOUNT_SELF), validate(listOrdersQuerySchema, 'query'), orderController.getOrders);
+router.post('/guest-orders/claim/request', authenticate, authorizePermissions(PERMISSIONS.ACCOUNT_SELF), guestOrderClaimLimiter, orderController.requestGuestOrderClaim);
+router.post('/guest-orders/claim', authenticate, authorizePermissions(PERMISSIONS.ACCOUNT_SELF), validate(claimGuestOrdersSchema), orderController.claimGuestOrders);
 router.get('/:id/tracking', authenticate, authorizePermissions(PERMISSIONS.ACCOUNT_SELF), validate(idParamSchema, 'params'), orderController.getFulfillmentTracking);
 router.get('/:id', optionalAuth, (req, res, next) => {
   if (req.user) {
