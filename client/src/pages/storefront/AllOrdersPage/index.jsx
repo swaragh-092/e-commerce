@@ -59,6 +59,7 @@ const AllOrdersPage = () => {
     const [initialLoading, setInitialLoading] = useState(true);
     const [loadingMore, setLoadingMore] = useState(false);
     const [alert, setAlert] = useState(null);
+    const [claimEmailSending, setClaimEmailSending] = useState(false);
 
     const sentinelRef = useRef(null);
     const observerRef = useRef(null);
@@ -171,6 +172,18 @@ const AllOrdersPage = () => {
         setSearchInput('');
     };
 
+    const handleFindGuestOrders = async () => {
+        setClaimEmailSending(true);
+        try {
+            const response = await orderService.requestGuestOrderClaim();
+            setAlert({ type: 'success', message: response.message || response.data?.message || 'Check your account email for a secure order-linking link.' });
+        } catch (err) {
+            setAlert({ type: 'error', message: getApiErrorMessage(err, 'Could not send the verification email.') });
+        } finally {
+            setClaimEmailSending(false);
+        }
+    };
+
     const activeFilterCount = selectedStatuses.length + (selectedTimeFilter ? 1 : 0);
 
     const filterProps = {
@@ -245,6 +258,14 @@ const AllOrdersPage = () => {
                     {alert.message}
                 </Alert>
             )}
+
+            <Alert severity="info" sx={{ mb: 3, alignItems: 'center' }} action={(
+                <Button color="inherit" size="small" disabled={claimEmailSending} onClick={handleFindGuestOrders}>
+                    {claimEmailSending ? 'Sending…' : 'Find guest orders'}
+                </Button>
+            )}>
+                Placed an order as a guest? Verify your account email to link eligible past orders.
+            </Alert>
 
             <Box sx={{ display: 'flex', gap: { xs: 0, md: 4 }, alignItems: 'flex-start' }}>
 

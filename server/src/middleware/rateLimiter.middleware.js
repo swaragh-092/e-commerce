@@ -43,6 +43,7 @@ const publicApiLimiter = createLimiter(15, 500, 'Too many requests to public end
 
 
 const verifyEmailLimiter = createLimiter(15, 5, 'Too many verification attempts, please try again after 15 minutes');
+const guestOrderClaimLimiter = createLimiter(15, 3, 'Too many guest order link requests. Please try again after 15 minutes.');
 const resetPasswordLimiter = createLimiter(15, 5, 'Too many reset attempts, please try again after 15 minutes');
 const refreshLimiter = createLimiter(15, 30, 'Too many refresh requests, please try again after 15 minutes');
 
@@ -64,6 +65,7 @@ module.exports = {
   registerLimiter,
   forgotPasswordLimiter,
   verifyEmailLimiter,
+  guestOrderClaimLimiter,
   resetPasswordLimiter,
   refreshLimiter,
   otpSendLimiter,
@@ -82,4 +84,3 @@ module.exports = {
   webhookLimiter,
   shippingWebhookLimiter,
 };
-

@@ -133,6 +133,10 @@ const listOrdersQuerySchema = Joi.object({
     productId: Joi.string().uuid().optional(),
 });
 
+const claimGuestOrdersSchema = Joi.object({
+    token: Joi.string().hex().length(64).required(),
+});
+
 module.exports = {
     placeOrderSchema,
     updateOrderStatusSchema,
@@ -146,4 +150,5 @@ module.exports = {
     processRefundSchema,
     addOrderNoteSchema,
     listOrdersQuerySchema,
+    claimGuestOrdersSchema,
 };
