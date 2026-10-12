@@ -58,6 +58,24 @@ const getOrders = async (req, res, next) => {
   }
 };
 
+const requestGuestOrderClaim = async (req, res, next) => {
+  try {
+    const result = await OrderService.requestGuestOrderClaim(req.user.id);
+    return success(res, result, result.message);
+  } catch (err) {
+    next(err);
+  }
+};
+
+const claimGuestOrders = async (req, res, next) => {
+  try {
+    const result = await OrderService.claimGuestOrders(req.user.id, req.validated.token);
+    return success(res, result, `${result.linkedCount} guest order${result.linkedCount === 1 ? '' : 's'} linked to your account.`);
+  } catch (err) {
+    next(err);
+  }
+};
+
 const getOrderById = async (req, res, next) => {
   try {
     const isAdminSession = hasOrderAdminAccess(req.user);
@@ -256,6 +274,8 @@ const addNote = async (req, res, next) => {
 
 module.exports = {
   placeOrder,
+  requestGuestOrderClaim,
+  claimGuestOrders,
   getOrders,
   getOrderById,
   updateContactEmail,
