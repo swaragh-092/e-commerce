@@ -6,6 +6,9 @@
         "currencySymbol": "$",
         "locale": "en-US"
     },
+    "orders": {
+        "cancellationPolicy": "You can cancel an order before a shipment is created. If a shipment has already been created, use the return or replacement options after delivery. If your payment was captured, the store will review and process the refund separately; cancelling does not issue an automatic refund. Refund posting times depend on your payment provider."
+    },
     "theme": {
         "primaryColor": "#0F766E",
         "secondaryColor": "#F97316",

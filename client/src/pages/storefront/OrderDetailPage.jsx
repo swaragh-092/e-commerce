@@ -33,7 +33,7 @@ import ProductTrackingSection from '../../components/orders/order-detail/Product
 import ShippingAddressCard from '../../components/orders/order-detail/ShippingAddressCard';
 import TotalsNotesCard from '../../components/orders/order-detail/TotalsNotesCard';
 import { buildProductTrackingItems } from '../../components/orders/order-detail/orderDetailUtils';
-import { useCurrency, useFeature } from '../../hooks/useSettings';
+import { useCurrency, useFeature, useSettings } from '../../hooks/useSettings';
 import { formatDateTime } from '../../utils/dates';
 
 import { useOrderStatusTransitions } from '../../hooks/useOrderStatusTransitions';
@@ -53,6 +53,7 @@ const OrderDetailPage = () => {
   const { id } = useParams();
   const navigate = useNavigate();
   const { formatPrice } = useCurrency();
+  const { settings } = useSettings();
   const ordersEnabled = useFeature('orders');
 
   const [order, setOrder] = useState(null);
@@ -474,6 +475,12 @@ const OrderDetailPage = () => {
             <Typography variant="body2" color="text.secondary">
               Your feedback helps us improve. You can still cancel eligible orders before a shipment is created.
             </Typography>
+            <Alert severity="info">
+              <Typography variant="subtitle2" sx={{ mb: 0.5 }}>Cancellation policy</Typography>
+              <Typography variant="body2" sx={{ whiteSpace: 'pre-wrap' }}>
+                {settings?.orders?.cancellationPolicy || 'You can cancel an order before a shipment is created. If a shipment has already been created, use the return or replacement options after delivery. If your payment was captured, the store will review and process the refund separately; cancelling does not issue an automatic refund. Refund posting times depend on your payment provider.'}
+              </Typography>
+            </Alert>
             {paymentSettled && (
               <Alert severity="info">
                 This order is already paid. Cancelling does not issue an automatic refund; the store will need to process it.

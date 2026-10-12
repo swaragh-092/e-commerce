@@ -70,6 +70,15 @@ const resolveSettingGroup = (key, group) => {
   return 'general';
 };
 
+const validateOrderSettings = (settingsArray) => {
+  for (const { key, value, group } of settingsArray) {
+    if (resolveSettingGroup(key, group) !== 'orders' || key !== 'cancellationPolicy') continue;
+    if (typeof value !== 'string' || value.length > 2000) {
+      throw new AppError('VALIDATION_ERROR', 400, 'Cancellation policy must be text no longer than 2,000 characters.');
+    }
+  }
+};
+
 const ensurePaymentGatewaySettingsAreValid = async (settingsArray) => {
   const touchesPayments = settingsArray.some(({ key, group }) => {
     const resolvedGroup = resolveSettingGroup(key, group);
@@ -170,6 +179,7 @@ const getAll = async () => {
     sales: { ...defaultSettings.sales },
     seo: { ...defaultSettings.seo },
     general: { ...defaultSettings.general },
+    orders: { ...defaultSettings.orders },
     shipping: { ...defaultSettings.shipping },
     tax: { ...defaultSettings.tax },
     sku: { ...defaultSettings.sku },
@@ -233,7 +243,7 @@ const getAll = async () => {
 
 const getByGroup = async (groupName, options = {}) => {
   const { maskSensitive = true } = options;
-  const validGroups = ['theme', 'componentStyles', 'sectionPresets', 'features', 'payments', 'sales', 'seo', 'general', 'shipping', 'tax', 'sku', 'logo', 'hero', 'auth', 'footer', 'announcement', 'nav', 'catalog', 'homepage', 'productPage', 'categoryPage', 'blogPage', 'brandsPage', 'cartPage', 'accountPage', 'checkoutPage', 'wishlistPage', 'searchPage', 'notFoundPage', 'ordersPage', 'admin', 'invoice', 'gateway_credentials', 'messaging_credentials', 'messaging', 'ai', 'ai_credentials', 'advanced'];
+  const validGroups = ['theme', 'componentStyles', 'sectionPresets', 'features', 'payments', 'sales', 'seo', 'general', 'orders', 'shipping', 'tax', 'sku', 'logo', 'hero', 'auth', 'footer', 'announcement', 'nav', 'catalog', 'homepage', 'productPage', 'categoryPage', 'blogPage', 'brandsPage', 'cartPage', 'accountPage', 'checkoutPage', 'wishlistPage', 'searchPage', 'notFoundPage', 'ordersPage', 'admin', 'invoice', 'gateway_credentials', 'messaging_credentials', 'messaging', 'ai', 'ai_credentials', 'advanced'];
   if (!validGroups.includes(groupName)) {
     throw new AppError('VALIDATION_ERROR', 400, 'Invalid setting group');
   }
@@ -351,6 +361,7 @@ const resetDesignSetting = async ({ group, key }, actingUserId) => {
 
 const updateKey = async (key, value, group, actingUserId, actingUser = null) => {
   ensureNotificationRecipientsAllowed([{ key, group, value }], actingUser);
+  validateOrderSettings([{ key, value, group }]);
   const credentialGroups = ['gateway_credentials', 'messaging_credentials', 'ai_credentials'];
 
   // Tier 1 feature keys are mode-locked — reject any attempt to modify them via settings.
@@ -418,7 +429,7 @@ const updateKey = async (key, value, group, actingUserId, actingUser = null) => 
 
 const bulkUpdate = async (settingsInput, actingUserId, actingUser = null, options = {}) => {
   const { transaction: outerTransaction = null } = options;
-  const validGroups = ['theme', 'componentStyles', 'sectionPresets', 'features', 'payments', 'sales', 'seo', 'general', 'shipping', 'tax', 'sku', 'logo', 'hero', 'auth', 'footer', 'announcement', 'nav', 'catalog', 'homepage', 'productPage', 'categoryPage', 'blogPage', 'brandsPage', 'cartPage', 'accountPage', 'checkoutPage', 'wishlistPage', 'searchPage', 'notFoundPage', 'ordersPage', 'admin', 'invoice', 'gateway_credentials', 'messaging_credentials', 'messaging', 'ai', 'ai_credentials', 'advanced'];
+  const validGroups = ['theme', 'componentStyles', 'sectionPresets', 'features', 'payments', 'sales', 'seo', 'general', 'orders', 'shipping', 'tax', 'sku', 'logo', 'hero', 'auth', 'footer', 'announcement', 'nav', 'catalog', 'homepage', 'productPage', 'categoryPage', 'blogPage', 'brandsPage', 'cartPage', 'accountPage', 'checkoutPage', 'wishlistPage', 'searchPage', 'notFoundPage', 'ordersPage', 'admin', 'invoice', 'gateway_credentials', 'messaging_credentials', 'messaging', 'ai', 'ai_credentials', 'advanced'];
   const credentialGroups = ['gateway_credentials', 'messaging_credentials', 'ai_credentials'];
 
     // Normalize input to an array of { key, value, group }
@@ -428,6 +439,7 @@ const bulkUpdate = async (settingsInput, actingUserId, actingUser = null, option
 
     ensureAdvancedSettingsAllowed(settingsArray, actingUser);
     ensureNotificationRecipientsAllowed(settingsArray, actingUser);
+    validateOrderSettings(settingsArray);
     for (const setting of settingsArray) {
         if (setting.group === 'shipping') validateShippingSetting(setting.key, setting.value);
         if (setting.group === 'shipping' && setting.key === 'defaultPackage') validateDefaultPackage(setting.value);
