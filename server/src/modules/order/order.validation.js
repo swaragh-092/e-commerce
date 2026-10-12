@@ -1,5 +1,6 @@
 'use strict';
 const Joi = require('joi');
+const CANCELLATION_REASONS = require('../../../../shared/cancellation-reasons.json');
 const { isGuestSessionId } = require('../../utils/guestSession');
 const {
     ORDER_STATUS_VALUES,
@@ -33,6 +34,14 @@ const updateOrderStatusSchema = Joi.object({
 });
 const updateOrderContactEmailSchema = Joi.object({
     email: Joi.string().trim().email().max(255).required(),
+});
+const cancelOrderSchema = Joi.object({
+    reason: Joi.string().valid(...Object.keys(CANCELLATION_REASONS)).required(),
+    reasonDetails: Joi.string().trim().max(500).allow('').when('reason', {
+        is: 'other',
+        then: Joi.string().trim().min(3).max(500).required(),
+        otherwise: Joi.optional(),
+    }),
 });
 
 const FULFILLMENT_STATUS_VALUES = ['pending', ...SHIPMENT_STATUS_VALUES.filter((status) => status !== 'cancelled')];
@@ -128,6 +137,7 @@ module.exports = {
     placeOrderSchema,
     updateOrderStatusSchema,
     updateOrderContactEmailSchema,
+    cancelOrderSchema,
     createFulfillmentSchema,
     updateFulfillmentStatusSchema,
     updateShipmentStatusSchema,

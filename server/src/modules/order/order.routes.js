@@ -6,6 +6,7 @@ const {
   placeOrderSchema, 
   updateOrderStatusSchema,
   updateOrderContactEmailSchema,
+  cancelOrderSchema,
   createFulfillmentSchema,
   updateFulfillmentStatusSchema,
   updateShipmentStatusSchema,
@@ -42,7 +43,7 @@ router.get('/:id', optionalAuth, (req, res, next) => {
   }
   next();
 }, validate(idParamSchema, 'params'), orderController.getOrderById);
-router.post('/:id/cancel', authenticate, authorizePermissions(PERMISSIONS.ACCOUNT_SELF), validate(idParamSchema, 'params'), orderController.cancelOrder);
+router.post('/:id/cancel', authenticate, authorizePermissions(PERMISSIONS.ACCOUNT_SELF), validate(idParamSchema, 'params'), validate(cancelOrderSchema), orderController.cancelOrder);
 router.post('/:id/returns', authenticate, authorizePermissions(PERMISSIONS.ACCOUNT_SELF), validate(createPutBackSchema), orderController.createReturnRequest);
 router.post('/:id/replacements', authenticate, authorizePermissions(PERMISSIONS.ACCOUNT_SELF), validate(createPutBackSchema), orderController.createReplacementRequest);
 

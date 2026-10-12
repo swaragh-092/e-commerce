@@ -1,0 +1,9 @@
+{
+  "changed_mind": "I changed my mind",
+  "wrong_item_or_quantity": "I ordered the wrong item or quantity",
+  "duplicate_order": "This is a duplicate order",
+  "delivery_timing": "The delivery timing does not work for me",
+  "shipping_details": "I need to change my shipping details",
+  "found_better_price": "I found a better price",
+  "other": "Other reason"
+}

@@ -73,6 +73,7 @@ const { normalizeDateOnly, isDateOnOrAfter } = require('./orderDate.utils');
 
 const { getPagination } = require('../../utils/pagination');
 const { ACTIONS, ENTITIES } = require('../../config/constants');
+const CANCELLATION_REASONS = require('../../../../shared/cancellation-reasons.json');
 const { getVariantUnitPrice, resolveSaleLabel } = require('../product/product.pricing');
 const { getSaleLabels } = require('../settings/saleLabel.service');
 const productComboService = require('../product/productCombo.service');
@@ -2955,7 +2956,14 @@ const refundOrder = async (id, actingUserId, isAdmin, auditContext = null) => {
     return getOrderById(id, actingUserId, true);
 };
 
-const cancelOrder = async (id, userId) => {
+const cancelOrder = async (id, userId, cancellation = {}) => {
+    const reasonCode = cancellation?.reason;
+    const reasonLabel = CANCELLATION_REASONS[reasonCode];
+    const reasonDetails = String(cancellation?.reasonDetails || '').trim();
+    if (!reasonLabel || (reasonCode === 'other' && reasonDetails.length < 3) || reasonDetails.length > 500) {
+        throw new AppError('VALIDATION_ERROR', 400, 'Select a cancellation reason and add details for “Other”.');
+    }
+    const cancellationReason = reasonDetails ? `${reasonLabel}: ${reasonDetails}` : reasonLabel;
     let orderRecord, prevStatus, eventsToEmit;
 
     await sequelize.transaction(async (t) => {
@@ -2993,6 +3001,17 @@ const cancelOrder = async (id, userId) => {
             fromStatus: prevStatus,
             toStatus: 'cancelled',
             changedBy: userId,
+            metadata: { cancellationReason, cancellationReasonCode: reasonCode, cancellationReasonDetails: reasonDetails || null },
+            transaction: t,
+        });
+
+        await addOrderHistoryEvent({
+            orderId: order.id,
+            eventType: 'customer_order_cancelled',
+            description: `Customer cancelled the order. Reason: ${cancellationReason}`,
+            actorId: userId,
+            actorType: 'customer',
+            metadata: { reason: cancellationReason, reasonCode, reasonDetails: reasonDetails || null },
             transaction: t,
         });
 
@@ -3061,7 +3080,7 @@ const cancelOrder = async (id, userId) => {
                 customer_email: user.email,
                 order_number: orderRecord.orderNumber,
                 order_id: orderRecord.id,
-                cancel_reason: 'Customer requested cancellation',
+                cancel_reason: cancellationReason,
                 order_total: orderRecord.total,
             };
             await NotificationService.sendToUser('order_cancelled', ['email', 'sms', 'whatsapp'], user, variables, orderRecord.id);

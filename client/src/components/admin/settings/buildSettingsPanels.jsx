@@ -356,9 +356,22 @@ function buildCheckoutPanel({ form, set, section, field, toggle, currSymbol, ena
     ),
     section(
       'Checkout Experience',
-      'Decide how easy checkout is and which customer conveniences are available.',
-      <></>,
-      ['checkout', 'guest checkout', 'coupons']
+      'Decide how easy checkout is and configure the cancellation guidance customers see.',
+      <>
+        <Typography variant="subtitle2" fontWeight={600} sx={{ mb: 1 }}>Customer Order Cancellation</Typography>
+        <TextField
+          fullWidth
+          multiline
+          minRows={4}
+          label="Cancellation and refund policy"
+          value={form['orders.cancellationPolicy'] ?? ''}
+          onChange={(event) => set('orders.cancellationPolicy', event.target.value.slice(0, 2000))}
+          inputProps={{ maxLength: 2000 }}
+          helperText="Shown before customers confirm cancellation. The system still enforces the shipment cutoff and the store's refund workflow."
+          sx={{ mb: 2 }}
+        />
+      </>,
+      ['checkout', 'guest checkout', 'coupons', 'cancellation', 'refund policy', 'orders']
     ),
     section(
       'Cart Page Experience',
