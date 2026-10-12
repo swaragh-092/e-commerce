@@ -108,7 +108,11 @@ const updateStatus = async (req, res, next) => {
 
 const cancelOrder = async (req, res, next) => {
   try {
-    const order = await OrderService.cancelOrder(req.params.id, req.user.id, req.validated);
+    const guestSessionId = req.headers['x-session-id'] || req.cookies?.sessionId || null;
+    if (!req.user && !isGuestSessionId(guestSessionId)) {
+      throw new AppError('UNAUTHORIZED', 401, 'A valid guest checkout session is required to cancel this order');
+    }
+    const order = await OrderService.cancelOrder(req.params.id, req.user?.id || null, req.validated, guestSessionId);
     return success(res, order, 'Order cancelled');
   } catch (err) {
     next(err);
