@@ -80,6 +80,7 @@ const emptyUserForm = {
   lastName: '',
   email: '',
   password: '',
+  sendInvitation: true,
   roleId: '',
 };
 
@@ -347,7 +348,7 @@ const AccessControlPage = () => {
   };
 
   const handleCreateUser = async () => {
-    const { firstName, lastName, email, password, roleId } = createUserForm;
+    const { firstName, lastName, email, password, roleId, sendInvitation } = createUserForm;
     if (!firstName.trim() || !lastName.trim()) {
       notify('First and last name are required.', 'error');
       return;
@@ -356,7 +357,7 @@ const AccessControlPage = () => {
       notify('Email is required.', 'error');
       return;
     }
-    if (password.length < 8) {
+    if (!sendInvitation && password.length < 8) {
       notify('Password must be at least 8 characters.', 'error');
       return;
     }
@@ -367,8 +368,8 @@ const AccessControlPage = () => {
 
     setSavingUser(true);
     try {
-      await createAccessUser({ firstName: firstName.trim(), lastName: lastName.trim(), email: email.trim(), password, roleId });
-      notify('Staff user created successfully.', 'success');
+      await createAccessUser({ firstName: firstName.trim(), lastName: lastName.trim(), email: email.trim(), ...(sendInvitation ? {} : { password }), roleId, sendInvitation });
+      notify(sendInvitation ? 'Staff account created and invitation queued.' : 'Staff user created successfully.', 'success');
       closeCreateUserDialog();
       fetchAccessControl();
     } catch (error) {
@@ -924,7 +925,8 @@ const AccessControlPage = () => {
               fullWidth
               size="small"
             />
-            <TextField
+            <FormControlLabel control={<Checkbox checked={createUserForm.sendInvitation} onChange={(event) => setCreateUserForm((previous) => ({ ...previous, sendInvitation: event.target.checked }))} />} label="Email an invitation to set their own password" />
+            {!createUserForm.sendInvitation && <TextField
               label="Password"
               type={showPassword ? 'text' : 'password'}
               value={createUserForm.password}
@@ -945,7 +947,7 @@ const AccessControlPage = () => {
                   </InputAdornment>
                 ),
               }}
-            />
+            />}
             <FormControl size="small" fullWidth>
               <InputLabel>Assign Role</InputLabel>
               <Select

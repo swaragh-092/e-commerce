@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react';
+import StaffAssignment from '../../components/admin/StaffAssignment';
 import {
   Box,
   Typography,
@@ -303,6 +304,7 @@ const EnquiriesPage = () => {
         >
           <DialogTitle>Enquiry Details</DialogTitle>
           <DialogContent dividers>
+            <StaffAssignment kind="enquiries" recordId={selectedEnquiry.id} />
             <Box sx={{ mb: 2 }}>
               <Typography variant="subtitle2" color="text.secondary">Customer Info</Typography>
               <Typography variant="body2"><strong>Name:</strong> {selectedEnquiry.name}</Typography>

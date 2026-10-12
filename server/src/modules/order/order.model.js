@@ -10,6 +10,7 @@ const {
 
 module.exports = (sequelize, DataTypes) => {
     const Order = sequelize.define('Order', {
+        assignedUserId: { type: DataTypes.UUID, allowNull: true },
         id: {
             type: DataTypes.UUID,
             defaultValue: DataTypes.UUIDV4,

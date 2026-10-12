@@ -1048,7 +1048,16 @@ const handleCashfreeWebhook = async (rawBody, headers = {}) => {
         // reservation-timeout job still owns inventory/coupon release.
         const failed = await Payment.findOne({ where: { provider: 'cashfree', transactionId: cashfreeOrderId } });
         if (failed && !['paid_online', 'refunded'].includes(failed.status)) {
-            await failed.update({ status: 'payment_failed', metadata: { ...(failed.metadata || {}), orderStatus, paymentStatus, failedAt: new Date().toISOString() } });
+            const failedOrder = await Order.findByPk(failed.orderId);
+            if (failedOrder?.status === 'pending_payment') {
+                await markPaymentFailed({
+                    orderId: failed.orderId,
+                    provider: 'cashfree',
+                    reason: orderStatus === 'FAILED' ? 'Cashfree payment failed' : 'Cashfree payment was declined',
+                });
+            } else {
+                await failed.update({ status: 'payment_failed', metadata: { ...(failed.metadata || {}), orderStatus, paymentStatus, failedAt: new Date().toISOString() } });
+            }
         }
     }
 
@@ -1154,7 +1163,7 @@ const handleWebhook = async (rawOrParsedBody, signature) => {
 };
 
 const markPaymentFailed = async ({ orderId, provider, reason }) => {
-    return sequelize.transaction(async (t) => {
+    const result = await sequelize.transaction(async (t) => {
         const order = await Order.findByPk(orderId, { transaction: t, lock: t.LOCK.UPDATE });
         if (!order) throw new AppError('NOT_FOUND', 404, 'Order not found');
         if (order.status !== 'pending_payment') {
@@ -1177,6 +1186,28 @@ const markPaymentFailed = async ({ orderId, provider, reason }) => {
         }, { transaction: t });
         return { success: true, orderId, status: 'payment_failed' };
     });
+    try {
+        const order = await Order.findByPk(orderId);
+        const payment = await Payment.findOne({ where: { orderId, provider } });
+        const user = order?.userId ? await User.findByPk(order.userId) : null;
+        const variables = {
+            customer_name: `${user?.firstName || ''} ${user?.lastName || ''}`.trim() || user?.email || 'Customer',
+            customer_email: user?.email || '',
+            order_number: order?.orderNumber || orderId,
+            order_date: order?.createdAt,
+            order_id: orderId,
+            order_total: order?.total,
+            payment_method: order?.paymentMethod || provider,
+            failure_reason: reason || payment?.metadata?.failureReason || 'Payment was declined',
+        };
+        if (user?.email) {
+            await NotificationService.send('payment_failed_customer', user.email, variables, user.id, orderId);
+        }
+        await NotificationService.sendToAdmins('admin_order_failed', ['email'], variables, orderId);
+    } catch (error) {
+        logger.error('Failed to queue payment failure notifications', { orderId, errorMessage: error.message });
+    }
+    return result;
 };
 
 const money = (value) => Number(Number(value || 0).toFixed(2));

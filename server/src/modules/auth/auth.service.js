@@ -524,6 +524,7 @@ const forgotPassword = async (email) => {
     await PasswordResetToken.create({
       userId: user.id,
       token: hashToken(resetToken),
+      purpose: user.role !== 'customer' && !user.emailVerified ? 'staff_invitation' : 'password_reset',
       expiresAt: new Date(Date.now() + AUTH_TIME.PASSWORD_RESET_TTL_MS)
     }, { transaction: t });
 
@@ -581,7 +582,8 @@ const resetPassword = async (token, newPassword) => {
       throw new AppError('VALIDATION_ERROR', 400, 'New password must be different from the current password');
     }
 
-    await user.update({ password: newPassword }, { transaction: t });
+    await user.update({ password: newPassword, ...(resetRecord.purpose === 'staff_invitation' ? { emailVerified: true } : {}) }, { transaction: t });
+    await NotificationService.send('password_changed', user.email, { name: user.firstName || user.email }, user.id, null, 'email', t);
     await resetRecord.destroy({ transaction: t }); // Delete token after use
 
     // Revoke (not hard-delete) all sessions so reuse detection/audit stay intact.

@@ -778,7 +778,23 @@ const updateUserRole = async (userId, roleId, actingUser) => {
  * The User model's beforeSave hook hashes the password automatically.
  * Only super admins can create super_admin-based accounts.
  */
-const createStaffUser = async ({ firstName, lastName, email, password, roleId }, actingUser) => {
+const queueStaffInvitation = async (user, transaction) => {
+  const crypto = require('crypto');
+  const token = crypto.randomBytes(32).toString('hex');
+  await db.PasswordResetToken.destroy({ where: { userId: user.id }, transaction });
+  const invitation = await db.PasswordResetToken.create({
+    userId: user.id, token: crypto.createHash('sha256').update(token).digest('hex'),
+    purpose: 'staff_invitation', expiresAt: new Date(Date.now() + 24 * 60 * 60 * 1000),
+  }, { transaction });
+  const clientUrl = (process.env.CLIENT_URL || 'http://localhost:5173').split(',')[0].trim().replace(/\/+$/, '');
+  const queued = await require('../notification/notification.service').send('staff_invitation', user.email, {
+    name: user.firstName, setup_url: `${clientUrl}/reset-password?token=${token}`, invitation_token_id: invitation.id,
+  }, user.id, null, 'email', transaction);
+  if (!queued) throw new AppError('NOTIFICATION_UNAVAILABLE', 503, 'Enable the staff invitation template before inviting staff');
+};
+
+const createStaffUser = async ({ firstName, lastName, email, password, roleId, sendInvitation = false }, actingUser) => {
+  const initialPassword = sendInvitation ? `${require('crypto').randomBytes(32).toString('hex')}Aa1!` : password;
   return db.sequelize.transaction(async (transaction) => {
     const role = await Role.findByPk(roleId, { include: roleInclude, transaction });
     if (!role || !role.isActive) {
@@ -824,10 +840,10 @@ const createStaffUser = async ({ firstName, lastName, email, password, roleId },
       // Update credentials and reset security tokens
       existing.firstName = firstName.trim();
       existing.lastName = lastName.trim();
-      existing.password = password; // triggers User model beforeUpdate hook to re-hash
+      existing.password = initialPassword; // triggers User model beforeUpdate hook to re-hash
       existing.role = role.baseRole;
       existing.status = 'active';
-      existing.emailVerified = true;
+      existing.emailVerified = !sendInvitation;
       existing.scheduledDeletionAt = null;
       existing.twoFactorEnabled = false;
       existing.twoFactorSecret = null;
@@ -835,6 +851,7 @@ const createStaffUser = async ({ firstName, lastName, email, password, roleId },
       await existing.save({ transaction });
 
       await existing.setRoles([role], { transaction });
+      if (sendInvitation) await queueStaffInvitation(existing, transaction);
 
       // Invalidate any old refresh tokens
       const { RefreshToken } = db;
@@ -879,13 +896,14 @@ const createStaffUser = async ({ firstName, lastName, email, password, roleId },
       firstName: firstName.trim(),
       lastName: lastName.trim(),
       email: normalizedEmail,
-      password, // auto-hashed by User model's beforeSave hook
+      password: initialPassword, // auto-hashed by User model's beforeSave hook
       role: role.baseRole,
       status: 'active',
-      emailVerified: true, // admin-created accounts are pre-verified
+      emailVerified: !sendInvitation,
     }, { transaction });
 
     await newUser.setRoles([role], { transaction });
+    if (sendInvitation) await queueStaffInvitation(newUser, transaction);
 
     const createdUser = await User.findByPk(newUser.id, { include: userRoleInclude, transaction });
 

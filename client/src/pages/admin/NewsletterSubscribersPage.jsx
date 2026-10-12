@@ -8,6 +8,7 @@ import FileDownloadIcon from '@mui/icons-material/FileDownload';
 import RefreshIcon from '@mui/icons-material/Refresh';
 import api from '../../services/api';
 import { useNotification } from '../../context/NotificationContext';
+import NewsletterCampaigns from '../../components/admin/NewsletterCampaigns';
 
 const normalizeSubscriber = (sub = {}) => ({
   ...sub,
@@ -71,6 +72,8 @@ const NewsletterSubscribersPage = () => {
           </Button>
         </Stack>
       </Stack>
+
+      <NewsletterCampaigns />
 
       <TableContainer component={Paper} variant="outlined">
         <Table size="small">

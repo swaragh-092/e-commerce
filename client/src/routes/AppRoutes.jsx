@@ -131,6 +131,8 @@ const AdminIndex = () => {
   return <Navigate to="/" replace />;
 };
 
+const NewsletterUnsubscribePage = lazy(() => import('../pages/storefront/NewsletterUnsubscribePage'));
+
 const AppRoutes = () => (
   <Suspense fallback={<LoadingFallback />}>
     <Routes>
@@ -154,6 +156,7 @@ const AppRoutes = () => (
         {/* Auth */}
         <Route path="login" element={<LoginPage />} />
         <Route path="register" element={<RegisterPage />} />
+        <Route path="newsletter/unsubscribe" element={<NewsletterUnsubscribePage />} />
         <Route path="forgot-password" element={<ForgotPasswordPage />} />
         <Route path="reset-password" element={<ResetPasswordPage />} />
         <Route path="verify-email" element={<VerifyEmailPage />} />

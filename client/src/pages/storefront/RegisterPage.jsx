@@ -1,11 +1,12 @@
 import { useState } from 'react';
-import { Box, Typography, TextField, Button, Alert, useTheme, IconButton, InputAdornment, Divider, CircularProgress } from '@mui/material';
+import { Box, Typography, TextField, Button, Alert, useTheme, IconButton, InputAdornment, Divider, CircularProgress, Checkbox, FormControlLabel } from '@mui/material';
 import { useNavigate, Link as RouterLink } from 'react-router-dom';
 import { useAuth } from '../../hooks/useAuth';
 import { validateEmail, validatePassword, validateRequired, getPasswordChecks } from '../../utils/authValidation';
 import { getApiErrorMessage } from '../../utils/apiErrors';
 import { EmailOutlined, LockOutlined, PersonOutline, Visibility, VisibilityOff } from '@mui/icons-material';
 import AuthPageShell from '../../components/storefront/AuthPageShell';
+import newsletterService from '../../services/newsletterService';
 
 const RegisterPage = () => {
   const theme = useTheme();
@@ -19,6 +20,7 @@ const RegisterPage = () => {
   const [touched, setTouched] = useState({});
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
+  const [newsletterOptIn, setNewsletterOptIn] = useState(false);
 
   const validateForm = (values) => ({
     firstName: validateRequired(values.firstName, 'First name'),
@@ -111,9 +113,19 @@ const RegisterPage = () => {
           password: formData.password,
           confirmPassword: formData.confirmPassword
       });
+      let newsletterSaveFailed = false;
+      if (newsletterOptIn) {
+        try {
+          await newsletterService.subscribe(formData.email, 'register');
+        } catch {
+          newsletterSaveFailed = true;
+        }
+      }
       if (result?.requiresVerification) {
         // Server issued no session — verification is mandatory for this account.
-        navigate('/login', { state: { message: 'Account created! Please check your email to verify your account, then log in.' } });
+        navigate('/login', { state: { message: newsletterSaveFailed
+          ? 'Account created, but we could not save your newsletter preference. You can update it in My Account after signing in.'
+          : 'Account created! Please check your email to verify your account, then log in.' } });
         return;
       }
       // register() auto-logs-in, redirect to home
@@ -299,6 +311,12 @@ const RegisterPage = () => {
               </InputAdornment>
             )
           }}
+        />
+
+        <FormControlLabel
+          control={<Checkbox checked={newsletterOptIn} onChange={(event) => setNewsletterOptIn(event.target.checked)} />}
+          label="Email me offers, new products, and store updates."
+          sx={{ alignItems: 'flex-start', mt: 0.5, '& .MuiFormControlLabel-label': { fontSize: 14, lineHeight: 1.5 } }}
         />
 
         <Button

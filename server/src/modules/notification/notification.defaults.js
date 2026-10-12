@@ -158,6 +158,19 @@ const DEFAULTS = {
     bodyText: 'Hi {{customer_name}},\n\nRefund of {{refund_amount}} for order #{{order_number}} has been processed.\n\n{{store_name}}',
   },
 
+  payment_failed_customer: {
+    subject: 'Payment failed for Order #{{order_number}}',
+    bodyHtml: EMAIL_WRAPPER(`
+    <h2>We couldn't process your payment</h2>
+    <p>Hi {{customer_name}}, payment for order <strong>#{{order_number}}</strong> could not be completed.</p>
+    {{#if failure_reason}}<div class="info-box"><p><strong>Reason:</strong> {{failure_reason}}</p></div>{{/if}}
+    <p>You can return to checkout and try another payment method.</p>
+    <a href="{{website_url}}/payment/failure?orderId={{order_id}}" class="btn">Review Payment</a>
+    <p style="font-size:13px;color:#888">Need help? <a href="mailto:{{support_email}}">{{support_email}}</a></p>
+`, ''),
+    bodyText: 'Hi {{customer_name}}, payment for order #{{order_number}} could not be completed. {{#if failure_reason}}Reason: {{failure_reason}}. {{/if}}Review payment: {{website_url}}/payment/failure?orderId={{order_id}}\n\n{{store_name}}',
+  },
+
   welcome: {
     subject: 'Welcome to {{store_name}}!',
     bodyHtml: EMAIL_WRAPPER(`
@@ -379,6 +392,7 @@ const TEMPLATE_VARIABLES = {
   order_out_for_delivery: ['customer_name','order_number','order_id','items','order_total','website_url','store_name','support_email'],
   order_cancelled:   ['customer_name','order_number','cancel_reason','refund_amount','items','order_total','website_url','store_name','support_email'],
   order_refunded:    ['customer_name','order_number','order_id','refund_amount','items','order_total','website_url','store_name','support_email'],
+  payment_failed_customer: ['customer_name','order_number','order_id','failure_reason','website_url','store_name','support_email'],
   welcome:           ['name','website_url','store_name','support_email'],
   email_verification:['name','verify_url','store_name','support_email'],
   password_reset:    ['name','reset_url','store_name','support_email'],
@@ -444,4 +458,8 @@ const SAMPLE_VARIABLES = {
   ],
 };
 
+const lifecycleDefaults = require('./notification.lifecycleDefaults');
+Object.assign(DEFAULTS, lifecycleDefaults.DEFAULTS);
+Object.assign(TEMPLATE_VARIABLES, lifecycleDefaults.TEMPLATE_VARIABLES);
+Object.assign(SAMPLE_VARIABLES, { request_type: 'return', reason: 'Item did not fit', status_label: 'approved', resolution_notes: 'Follow the pickup instructions in your order.', new_email: 'new@example.com', setup_url: '#setup', enquiry_id: 'preview-enquiry', unsubscribe_url: '#unsubscribe', campaign_subject: 'Latest store updates', campaign_message: 'Explore our newest products and offers.' });
 module.exports = { DEFAULTS, TEMPLATE_VARIABLES, SAMPLE_VARIABLES };

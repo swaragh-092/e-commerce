@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
+import StaffAssignment from '../../components/admin/StaffAssignment';
 import {
   Alert,
   Badge,
@@ -1234,6 +1235,7 @@ const OrderDetailPage = () => {
           <Typography variant="body2" color="text.secondary" sx={{ mt: 1 }}>
             Placed on {formatDateTime(order.createdAt)} • Last updated {formatDateTime(order.updatedAt)}
           </Typography>
+          <StaffAssignment kind="orders" recordId={order.id} />
         </Box>
 
         <Stack direction="row" spacing={1}>

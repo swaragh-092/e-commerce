@@ -14,6 +14,7 @@ import {
 import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
 import { sendTestNotification, updateSettings } from '../../../services/adminService';
 import { useNotification } from '../../../context/NotificationContext';
+import EmailRecipientsPanel from './EmailRecipientsPanel';
 
 const MessagingSettingsPanel = ({ form, set }) => {
   const { notify } = useNotification();
@@ -87,6 +88,8 @@ const MessagingSettingsPanel = ({ form, set }) => {
         Configure the messaging channels used by the notification system.
         Saved values here are used directly for email, SMS, and WhatsApp delivery.
       </Typography>
+
+      <EmailRecipientsPanel />
 
       {/* Email Section */}
       <Accordion defaultExpanded variant="outlined" sx={{ mb: 2, borderRadius: 2, '&:before': { display: 'none' } }}>
