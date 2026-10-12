@@ -238,7 +238,7 @@ describe('Audit Hardening & Verification Suite (11 Findings)', () => {
                 })
             ).rejects.toMatchObject({
                 code: 'VALIDATION_ERROR',
-                message: expect.stringContaining('Session ID is required for guest checkout'),
+                message: expect.stringMatching(/guest session ID is required/i),
             });
         });
 
@@ -261,7 +261,7 @@ describe('Audit Hardening & Verification Suite (11 Findings)', () => {
 
             await expect(
                 OrderService.placeOrder(null, {
-                    sessionId: 'guest-session-123',
+                    sessionId: '11111111-1111-4111-8111-111111111111',
                     shippingAddressId: 'addr-uuid-456',
                     paymentMethod: 'cod',
                 })
@@ -272,7 +272,7 @@ describe('Audit Hardening & Verification Suite (11 Findings)', () => {
 
             expect(addressFindSpy).toHaveBeenCalledWith(
                 expect.objectContaining({
-                    where: { id: 'addr-uuid-456', userId: null, sessionId: 'guest-session-123' },
+                    where: { id: 'addr-uuid-456', userId: null, sessionId: '11111111-1111-4111-8111-111111111111' },
                 })
             );
         });
@@ -756,24 +756,23 @@ describe('Audit Hardening & Verification Suite (11 Findings)', () => {
                 workflow: 'manual_split',
             });
 
-            // Multi-parcel with carrier supporting MPS -> fail-closed blocked until true group-booking exists
+            // Multi-parcel with carrier -> unblocked and eligible via multi_parcel_carrier workflow
             expect(ShippingService.resolveWorkflow({
                 parcelCount: 2,
                 provider: { code: 'shiprocket', settings: { supportsMps: true } },
             })).toEqual({
-                status: 'blocked',
-                code: 'MULTI_PARCEL_BOOKING_UNAVAILABLE',
-                message: expect.stringContaining('multi-package carrier delivery is not configured'),
+                status: 'eligible',
+                workflow: 'multi_parcel_carrier',
+                message: expect.stringContaining('This order will be fulfilled in 2 packages.'),
             });
 
-            // Multi-parcel carrier without MPS -> blocked with MULTI_PARCEL_BOOKING_UNAVAILABLE
             expect(ShippingService.resolveWorkflow({
                 parcelCount: 2,
                 provider: { code: 'shiprocket', settings: { supportsMps: false } },
             })).toEqual({
-                status: 'blocked',
-                code: 'MULTI_PARCEL_BOOKING_UNAVAILABLE',
-                message: expect.stringContaining('multi-package carrier delivery is not configured'),
+                status: 'eligible',
+                workflow: 'multi_parcel_carrier',
+                message: expect.stringContaining('This order will be fulfilled in 2 packages.'),
             });
         });
     });
@@ -891,15 +890,15 @@ describe('Audit Hardening & Verification Suite (11 Findings)', () => {
         });
     });
 
-    describe('22. Merchant taxSettings integration & fail-closed MPS policy', () => {
-        it('keeps carrier multi-parcel orders fail-closed until group-booking is implemented', () => {
+    describe('22. Merchant taxSettings integration & multi-parcel carrier policy', () => {
+        it('marks carrier multi-parcel orders eligible with multi_parcel_carrier workflow', () => {
             expect(ShippingService.resolveWorkflow({
                 parcelCount: 2,
                 provider: { code: 'shiprocket', settings: { supports_mps: true } },
             })).toEqual({
-                status: 'blocked',
-                code: 'MULTI_PARCEL_BOOKING_UNAVAILABLE',
-                message: expect.stringContaining('multi-package carrier delivery is not configured'),
+                status: 'eligible',
+                workflow: 'multi_parcel_carrier',
+                message: expect.stringContaining('This order will be fulfilled in 2 packages.'),
             });
 
             expect(ShippingService.resolveWorkflow({

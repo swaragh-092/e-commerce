@@ -36,6 +36,11 @@ const initializeGoogleStrategy = () => {
 const findOrCreateOAuthUser = async (profile, clientIp) => {
   const rawEmail = profile.emails?.[0]?.value;
   if (!rawEmail) throw new Error('No email returned from Google');
+  const emailExplicitlyUnverified = profile.emails?.[0]?.verified === false
+    || profile._json?.email_verified === false;
+  if (emailExplicitlyUnverified) {
+    throw new Error('Google did not return a verified email address');
+  }
   const email = String(rawEmail).trim().toLowerCase();
 
   return sequelize.transaction(async (t) => {

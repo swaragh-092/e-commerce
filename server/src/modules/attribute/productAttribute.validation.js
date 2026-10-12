@@ -62,6 +62,10 @@ const addVariantSchema = Joi.object({
     sortOrder: Joi.number().integer().min(0).default(0),
     mediaId: Joi.string().uuid().allow(null).optional(),
     images: Joi.array().items(variantImageSchema).default([]),
+    weightGrams: Joi.number().min(0).allow(null).optional(),
+    lengthCm: Joi.number().min(0).allow(null).optional(),
+    breadthCm: Joi.number().min(0).allow(null).optional(),
+    heightCm: Joi.number().min(0).allow(null).optional(),
     options: Joi.array().items(
         Joi.object({
             attributeId: Joi.string().uuid().required(),
@@ -78,6 +82,10 @@ const updateVariantSchema = Joi.object({
     isActive: Joi.boolean(),
     sortOrder: Joi.number().integer().min(0),
     mediaId: Joi.string().uuid().allow(null),
+    weightGrams: Joi.number().min(0).allow(null),
+    lengthCm: Joi.number().min(0).allow(null),
+    breadthCm: Joi.number().min(0).allow(null),
+    heightCm: Joi.number().min(0).allow(null),
     images: Joi.array().items(variantImageSchema),
 }).min(1).messages({ 'object.min': 'At least one field is required to update' });
 

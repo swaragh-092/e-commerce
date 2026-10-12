@@ -12,6 +12,7 @@ const {
     CartItem,
     ProductVariant,
     Order,
+    User,
 } = require('../index');
 const AppError = require('../../utils/AppError');
 const AuditService = require('../audit/audit.service');
@@ -19,6 +20,7 @@ const { getPagination } = require('../../utils/pagination');
 const { ACTIONS, ENTITIES } = require('../../config/constants');
 const { getEffectivePrice, getVariantUnitPrice, isSaleActive, resolveSaleLabel } = require('../product/product.pricing');
 const { getSaleLabels } = require('../settings/saleLabel.service');
+const { isGuestSessionId } = require('../../utils/guestSession');
 
 const ensureArray = (value) => (Array.isArray(value) ? [...new Set(value.filter(Boolean))] : []);
 
@@ -539,12 +541,12 @@ const mapCartLine = (item, labelPresets = []) => {
     };
 };
 
-const loadActiveCartLines = async (userId) => {
-    if (!userId) return [];
+const loadActiveCartLines = async (userId, guestSessionId = null) => {
+    if (!userId && !isGuestSessionId(guestSessionId)) return [];
 
     const labelPresets = await getSaleLabels().catch(() => []);
     const cart = await Cart.findOne({
-        where: { userId, status: 'active' },
+        where: userId ? { userId, status: 'active' } : { userId: null, sessionId: guestSessionId, status: 'active' },
         include: [{
             model: CartItem,
             as: 'items',
@@ -574,7 +576,7 @@ const buildValidationContext = async (userId, rawContext = {}) => {
         : [];
 
     if (!cartItems.length) {
-        cartItems = await loadActiveCartLines(userId);
+        cartItems = await loadActiveCartLines(userId, legacyContext.guestSessionId);
     }
 
     const cartSubtotal = Number.isFinite(Number(legacyContext.cartSubtotal))
@@ -586,6 +588,7 @@ const buildValidationContext = async (userId, rawContext = {}) => {
         cartSubtotal: Number(cartSubtotal.toFixed(2)),
         shippingCost: Number(toNumber(legacyContext.shippingCost).toFixed(2)),
         transaction: rawContext.transaction,
+        guestSessionId: isGuestSessionId(legacyContext.guestSessionId) ? legacyContext.guestSessionId : null,
     };
 };
 
@@ -613,7 +616,7 @@ const matchesCouponTarget = (coupon, line) => {
     return true;
 };
 
-const assertCouponIsUsable = async (couponInput, userId, cartSubtotal, transaction) => {
+const assertCouponIsUsable = async (couponInput, userId, cartSubtotal, transaction, guestSessionId = null) => {
     let coupon = couponInput;
     if (transaction) {
         const lockedRecord = await Coupon.findByPk(couponInput.id, { transaction, lock: Transaction.LOCK.UPDATE });
@@ -642,21 +645,33 @@ const assertCouponIsUsable = async (couponInput, userId, cartSubtotal, transacti
             throw new AppError('VALIDATION_ERROR', 400, 'This coupon is only available for first-time customers');
         }
 
-        // Only count orders that actually completed — pending/failed/processing orders
-        // should not disqualify a new customer from their first-order discount.
-        const completedOrderCount = await Order.count({
+        // Serialize first-order coupon checks per customer. Without this lock,
+        // concurrent checkouts using different first-order coupons could both pass.
+        if (transaction) {
+            const user = await User.findByPk(userId, { transaction, lock: Transaction.LOCK.UPDATE });
+            if (!user) throw new AppError('NOT_FOUND', 404, 'Customer account not found');
+        }
+
+        // An active order reserves first-order eligibility while payment is in
+        // progress. Reservation timeout/cancellation restores eligibility; a
+        // completed, closed, or otherwise non-cancelled order consumes it.
+        const priorOrderCount = await Order.count({
             where: {
                 userId,
-                status: { [Op.in]: ['delivered', 'completed'] },
+                status: { [Op.ne]: 'cancelled' },
             },
+            transaction,
         });
 
-        if (completedOrderCount > 0) {
+        if (priorOrderCount > 0) {
             throw new AppError('VALIDATION_ERROR', 400, 'This coupon is only available on your first order');
         }
     }
 
-    const userCount = await CouponUsage.count({ where: { couponId: coupon.id, userId }, transaction });
+    const usageWhere = userId
+        ? { couponId: coupon.id, userId }
+        : { couponId: coupon.id, userId: null, guestSessionId };
+    const userCount = await CouponUsage.count({ where: usageWhere, transaction });
     if (userCount >= coupon.perUserLimit) {
         throw new AppError('VALIDATION_ERROR', 400, 'You have exceeded the usage limit for this coupon');
     }
@@ -667,7 +682,7 @@ const assertCouponIsUsable = async (couponInput, userId, cartSubtotal, transacti
 };
 
 const evaluateCouponAgainstContext = async (coupon, userId, context) => {
-    await assertCouponIsUsable(coupon, userId, context.cartSubtotal, context.transaction);
+    await assertCouponIsUsable(coupon, userId, context.cartSubtotal, context.transaction, context.guestSessionId);
 
     const eligibleItems = context.cartItems.filter((line) => matchesCouponTarget(coupon, line));
     const eligibleSubtotal = context.cartItems.length

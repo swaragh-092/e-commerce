@@ -172,15 +172,15 @@ The automated suites cover the following scenarios. Passing these checks does no
 - Build the client with `cd client && npm run build`.
 
 
-## One measured default package
+## Measured package catalog (one box catalog)
 
-Configure **Admin → Shipping → Packaging** to use one measured box or envelope for the store. No dimensions or capacities are prefilled. Enter the exterior dimensions in centimetres, empty package weight in grams, maximum item count confirmed to fit, and maximum contents weight in grams. Dimensions must exceed 0.5 cm. The merchant must check fit across the products and item combinations sold; item count is a declared capacity, not an automatic packing algorithm.
+Configure **Admin → Shipping → Packaging** with one or more measured presets. Each preset records exterior dimensions in centimetres, optional usable interior dimensions, empty tare weight in grams, maximum item count, maximum contents weight in grams, active state, and which preset is the default (used only to break exact ties). No dimensions or capacities are prefilled. Dimensions must exceed 0.5 cm.
 
-With this option enabled, each physical product requires its actual weight without the shipping box or envelope. Product dimensions are optional. Checkout uses the saved package dimensions and adds its empty weight once to the sum of product weights. Known oversized products and orders above the configured count or weight capacity are blocked with a support message. Digital items do not consume capacity. Flat/free shipping rules still determine customer charges; carrier shipment measurements remain required.
+There is no per-product fit matrix: legacy `fits` rules are dropped on save and ignored by planning. Checkout plans parcels purely from measured product dimensions/weights against preset volume, weight, and item-count limits (`planParcels`). A unit without valid measured dimensions fits no preset box and blocks the quote loudly instead of guessing. Items with incompatible explicit mix groups, or marked “Ship each unit separately” (`packingMode: separate`), are isolated into their own parcels; all other goods share parcels up to physical capacity.
 
-The package configuration is included in the quote cache key and saved in the order shipping snapshot. Fulfillment uses that saved configuration, including for partial fulfillment, so changing the default package does not change existing orders. Confirm actual packed measurements before dispatch. This feature does not split orders into multiple parcels.
+Physical orders cannot check out when no active package preset exists (`SHIPPING_PACKAGE_CATALOG_MISSING`); digital-only orders are unaffected. Flat/free shipping rules still determine customer charges; carrier shipment measurements remain required.
 
-Disabling the default package restores product-based dimension calculation. New products no longer receive invented weight or dimension defaults; existing measurements are preserved. Missing measurements are shown to customers as an item shipping issue, with no suggestion to change their address.
+The parcel plan is included in the quote cache key and copied to the order shipping snapshot. Fulfillment links a checkout recommendation only when staff explicitly select it; custom packing without a selection is governed by remaining quantities and never consumes a recommendation. Staff must type the packed scale weight (checkout estimates are never pre-filled as measurements) and tick the scale-weight confirmation before carrier booking; the backend rejects unconfirmed carrier bookings (`SCALE_WEIGHT_CONFIRMATION_REQUIRED`). For COD, each parcel persists its actual collectable (`shipments.cod_collectable_amount`) and later parcels reuse the persisted sum, so split fulfilment can never collect more than the order total. Changing the catalog does not change existing orders or snapshots.
 
 ## Pincode coverage and rate zones
 

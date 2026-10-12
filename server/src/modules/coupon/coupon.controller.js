@@ -1,6 +1,8 @@
 'use strict';
 const CouponService = require('./coupon.service');
 const { success, paginated } = require('../../utils/response');
+const AppError = require('../../utils/AppError');
+const { isGuestSessionId } = require('../../utils/guestSession');
 
 const list = async (req, res, next) => {
   try {
@@ -53,8 +55,12 @@ const remove = async (req, res, next) => {
 const validateCoupon = async (req, res, next) => {
   try {
     const { code, subtotal, shippingCost } = req.validated;
-    const userId = req.user.id;
-    const result = await CouponService.validateCoupon(code, userId, { cartSubtotal: subtotal, shippingCost });
+    const userId = req.user?.id || null;
+    const guestSessionId = req.headers['x-session-id'] || req.cookies?.sessionId || null;
+    if (!userId && !isGuestSessionId(guestSessionId)) {
+      throw new AppError('VALIDATION_ERROR', 400, 'A valid guest checkout session is required to validate coupons');
+    }
+    const result = await CouponService.validateCoupon(code, userId, { cartSubtotal: subtotal, shippingCost, guestSessionId });
     return success(res, result);
   } catch (err) {
     next(err);
