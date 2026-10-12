@@ -12,6 +12,16 @@ export const orderService = {
     return response.data;
   },
 
+  requestGuestOrderClaim: async () => {
+    const response = await api.post('/orders/guest-orders/claim/request');
+    return response.data;
+  },
+
+  claimGuestOrders: async (token) => {
+    const response = await api.post('/orders/guest-orders/claim', { token });
+    return response.data;
+  },
+
   /**
    * Fetch details for a specific order.
    */
