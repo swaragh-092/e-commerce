@@ -2971,7 +2971,9 @@ const cancelOrder = async (id, userId, cancellation = {}) => {
             where: { id, userId },
             include: [{ model: OrderItem, as: 'items' }],
             transaction: t,
-            lock: Transaction.LOCK.UPDATE,
+            // Lock only the order row. Locking the joined items applies FOR UPDATE
+            // to the nullable side of Sequelize's outer join, which PostgreSQL rejects.
+            lock: { level: Transaction.LOCK.UPDATE, of: Order },
         });
         if (!order) throw new AppError('NOT_FOUND', 404, 'Order not found');
 
