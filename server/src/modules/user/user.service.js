@@ -7,6 +7,7 @@ const AuditService = require('../audit/audit.service');
 const { getPagination } = require('../../utils/pagination');
 const { ACTIONS, ENTITIES } = require('../../config/constants');
 const logger = require('../../utils/logger');
+const NotificationService = require('../notification/notification.service');
 
 const getClientBaseUrl = () => {
   const url = process.env.CLIENT_URL || 'http://localhost:5173';
@@ -129,6 +130,7 @@ const changePassword = async (userId, currentPassword, newPassword, keepSessionI
     }
 
     await user.update({ password: newPassword }, { transaction: t });
+    await NotificationService.send('password_changed', user.email, { name: user.firstName || user.email }, user.id, null, 'email', t);
 
     // Revoke all other sessions — a password change must kill stolen sessions.
     if (keepSessionId) {
@@ -875,7 +877,9 @@ const confirmEmailChange = async (token) => {
       throw new AppError('CONFLICT', 409, 'This email address is already registered to another account');
     }
 
+    const previousEmail = user.email;
     await user.update({ email: newEmail, pendingEmail: null, emailVerified: true }, { transaction: t });
+    await NotificationService.send('email_changed', previousEmail, { name: user.firstName || previousEmail, new_email: newEmail }, user.id, null, 'email', t);
     await record.destroy({ transaction: t });
     return { email: newEmail };
   });

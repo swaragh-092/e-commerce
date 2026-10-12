@@ -217,7 +217,7 @@ const processWebhook = async (providerCode, payload, headers = {}) => {
                     }, { transaction: t });
                 }
             }
-            if (statusChanged && ['out_for_delivery', 'delivered'].includes(normalizedEvent.status) && order.userId) {
+            if (statusChanged && ['out_for_delivery', 'delivered', 'delivery_failed', 'rto_initiated', 'rto_in_transit', 'rto'].includes(normalizedEvent.status) && order.userId) {
                 notification = { userId: order.userId, orderId: order.id, status: normalizedEvent.status };
             }
         }
@@ -336,7 +336,7 @@ const reconcileTracking = async ({ limit = 20 } = {}) => {
                                 if (['delivered', 'rto'].includes(orderShippingStatus)) {
                                     await OrderService.syncOrderClosureIfComplete(targetOrder, t);
                                 }
-                                if (targetOrder.userId && ['out_for_delivery', 'delivered'].includes(tracking.status)) {
+                                if (targetOrder.userId && ['out_for_delivery', 'delivered', 'delivery_failed', 'rto_initiated', 'rto_in_transit', 'rto'].includes(tracking.status)) {
                                     notification = { userId: targetOrder.userId, orderId: targetOrder.id, status: tracking.status };
                                 }
                             }

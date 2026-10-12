@@ -21,6 +21,7 @@ const startJobs = () => {
   lowStockAlertJob.run();
   shippingQuoteCleanupJob.run();
   notificationQueueJob.run();
+  require('./newsletterCampaign.job').run();
   shippingOperationJob.run();
   trackingReconciliationJob.run();
   authCleanupJob.run();

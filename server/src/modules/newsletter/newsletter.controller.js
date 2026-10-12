@@ -13,6 +13,22 @@ const subscribe = async (req, res, next) => {
   } catch (err) { next(err); }
 };
 
+const getMyStatus = async (req, res, next) => {
+  try {
+    return success(res, await NewsletterService.getStatus(req.user.email));
+  } catch (err) { next(err); }
+};
+
+const updateMyStatus = async (req, res, next) => {
+  try {
+    const { subscribed } = req.body;
+    if (typeof subscribed !== 'boolean') return res.status(400).json({ success: false, message: 'Subscribed must be true or false' });
+    if (subscribed) await NewsletterService.subscribe(req.user.email, 'account');
+    else await NewsletterService.unsubscribe(req.user.email);
+    return success(res, { subscribed }, subscribed ? 'Newsletter preference saved' : 'Newsletter subscription removed');
+  } catch (err) { next(err); }
+};
+
 const unsubscribe = async (req, res, next) => {
   try {
     const { email, token } = req.body;
@@ -41,4 +57,4 @@ const list = async (req, res, next) => {
   } catch (err) { next(err); }
 };
 
-module.exports = { subscribe, unsubscribe, unsubscribeByToken, list };
+module.exports = { subscribe, getMyStatus, updateMyStatus, unsubscribe, unsubscribeByToken, list };

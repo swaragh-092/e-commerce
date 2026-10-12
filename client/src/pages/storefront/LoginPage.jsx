@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { Box, Typography, TextField, Button, Alert, useTheme, IconButton, InputAdornment, CircularProgress, Divider, Checkbox } from '@mui/material';
+import { Box, Typography, TextField, Button, Alert, useTheme, IconButton, InputAdornment, CircularProgress, Divider, Checkbox, FormControlLabel } from '@mui/material';
 import { useNavigate, Link as RouterLink, useLocation, useSearchParams } from 'react-router-dom';
 import { useAuth } from '../../hooks/useAuth';
 import { validateEmail, validateRequired } from '../../utils/authValidation';
@@ -7,12 +7,15 @@ import { getApiErrorMessage } from '../../utils/apiErrors';
 import authService from '../../services/authService';
 import { EmailOutlined, LockOutlined, Visibility, VisibilityOff, PhoneOutlined } from '@mui/icons-material';
 import AuthPageShell from '../../components/storefront/AuthPageShell';
+import newsletterService from '../../services/newsletterService';
+import { useNotification } from '../../context/NotificationContext';
 
 const LoginPage = () => {
   const theme = useTheme();
   const navigate = useNavigate();
   const location = useLocation();
   const { login, verifyTwoFactor, finalizeAuthenticatedSession } = useAuth();
+  const { notify } = useNotification();
   const [searchParams] = useSearchParams();
   
   const [formData, setFormData] = useState({ email: localStorage.getItem('rememberedEmail') || '', password: '' });
@@ -25,6 +28,16 @@ const LoginPage = () => {
   const [showPassword, setShowPassword] = useState(false);
   const [touched, setTouched] = useState({});
   const [rememberMe, setRememberMe] = useState(false);
+  const [newsletterOptIn, setNewsletterOptIn] = useState(false);
+
+  const saveNewsletterChoice = async (user) => {
+    if (!newsletterOptIn || user?.role !== 'customer') return;
+    try {
+      await newsletterService.updateMyStatus(true);
+    } catch {
+      notify('You are signed in, but your newsletter preference could not be saved. Try again in My Account.', 'error');
+    }
+  };
 
   // 2FA state
   const [twoFactorStep, setTwoFactorStep] = useState(false);
@@ -121,6 +134,7 @@ const LoginPage = () => {
         setError('');
         return;
       }
+      await saveNewsletterChoice(result.user);
       const redirectTo = location.state?.from?.pathname || '/';
       navigate(redirectTo, { replace: true });
     } catch (err) {
@@ -160,7 +174,8 @@ const LoginPage = () => {
     setError('');
     setLoading(true);
     try {
-      await verifyTwoFactor(tempToken, totpCode, trustDevice);
+      const result = await verifyTwoFactor(tempToken, totpCode, trustDevice);
+      await saveNewsletterChoice(result.user);
       const redirectTo = location.state?.from?.pathname || '/';
       navigate(redirectTo, { replace: true });
     } catch (err) {
@@ -204,7 +219,8 @@ const LoginPage = () => {
         setLoginMode('email'); // switch to show 2FA input
         return;
       }
-      await finalizeAuthenticatedSession();
+      const user = await finalizeAuthenticatedSession();
+      await saveNewsletterChoice(user);
       const redirectTo = location.state?.from?.pathname || '/';
       navigate(redirectTo, { replace: true });
     } catch (err) {
@@ -409,6 +425,12 @@ const LoginPage = () => {
             Forgot password?
           </Typography>
         </Box>
+
+        <FormControlLabel
+          control={<Checkbox checked={newsletterOptIn} disabled={loading} onChange={(event) => setNewsletterOptIn(event.target.checked)} />}
+          label="Email me offers, new products, and store updates."
+          sx={{ mb: 2, '& .MuiFormControlLabel-label': { fontSize: 14 } }}
+        />
 
         <Button
           fullWidth

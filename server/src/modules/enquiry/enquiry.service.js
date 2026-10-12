@@ -74,6 +74,8 @@ class EnquiryService {
   }
 
   async getAdminNotificationEmails(settings) {
+    const configured = await require('../notification/notificationRecipients.service').getConfiguredRecipients('new_enquiry_admin');
+    if (configured !== null) return uniqueEmails(configured.map((user) => user.email));
     const adminUsers = await User.findAll({
       where: {
         role: { [Op.in]: ['admin', 'super_admin'] },

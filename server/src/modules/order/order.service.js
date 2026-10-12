@@ -101,12 +101,12 @@ const ADMIN_ORDER_LIST_USER_ATTRIBUTES = ['id', 'firstName', 'lastName', 'email'
 const ADMIN_ORDER_PAYMENT_ATTRIBUTES = ['id', 'provider', 'status', 'amount', 'currency', 'transactionId', 'metadata', 'createdAt', 'updatedAt'];
 
 const queueShipmentNotification = async (orderId, shipmentStatus, shipment = {}) => {
-    if (!['shipped', 'out_for_delivery', 'delivered'].includes(shipmentStatus)) return;
+    if (!['shipped', 'out_for_delivery', 'delivered', 'delivery_failed', 'rto_initiated', 'rto_in_transit', 'rto'].includes(shipmentStatus)) return;
     try {
         const order = await Order.findByPk(orderId);
         if (!order) return;
 
-        if (['out_for_delivery', 'delivered'].includes(shipmentStatus)) {
+        if (shipmentStatus !== 'shipped') {
             await NotificationService.sendDeliveryUpdate(order.userId, order.id, shipmentStatus);
             return;
         }
@@ -3447,6 +3447,24 @@ const getActivePutBackQuantityByOrderItem = async (orderId, type, transaction, e
         }, {});
 };
 
+const queuePutBackNotification = async (order, record, isNew, transaction) => {
+    const customer = await User.findByPk(order.userId, { transaction });
+    const variables = {
+        customer_name: `${customer?.firstName || ''} ${customer?.lastName || ''}`.trim() || customer?.email || 'Customer',
+        customer_email: customer?.email || '',
+        order_id: order.id,
+        order_number: order.orderNumber,
+        request_type: record.type,
+        reason: record.reason || 'Not specified',
+        status_label: record.status.replace(/_/g, ' '),
+        resolution_notes: record.resolutionNotes || '',
+    };
+    if (customer?.email) {
+        await NotificationService.send(isNew ? 'return_requested' : 'return_status_updated', customer.email, variables, customer.id, order.id, 'email', transaction);
+    }
+    if (isNew) await NotificationService.sendToAdmins('admin_return_requested', ['email'], variables, order.id, transaction);
+};
+
 const createPutBackRequest = async (orderId, payload, actingUserId, isAdmin, type, auditContext = null) => {
     const defaultStatus = type === 'replacement' ? REPLACEMENT_DEFAULT_STATUS : RETURN_DEFAULT_STATUS;
     return sequelize.transaction(async (t) => {
@@ -3509,6 +3527,8 @@ const createPutBackRequest = async (orderId, payload, actingUserId, isAdmin, typ
             transaction: t,
         });
         await syncPutBackCache(order, t, actingUserId);
+
+        await queuePutBackNotification(order, record, true, t);
 
         try {
             if (AuditService && AuditService.log) {
@@ -3582,6 +3602,7 @@ const updatePutBackStatus = async (orderId, returnId, status, actingUserId, isAd
             }
         }
         await record.update(updates, { transaction: t });
+        if (before !== nextStatus) await queuePutBackNotification(order, record, false, t);
         await logOrderHistory({
             orderId,
             entityType: record.type === 'replacement' ? 'Replacement' : 'Return',
@@ -3743,6 +3764,22 @@ const processRefund = async (orderId, payload, actingUserId, isAdmin, auditConte
         try {
             if (AuditService?.log) await AuditService.log({ userId: actingUserId, action: 'CREATE', entity: 'OrderRefund', entityId: refund.id, changes: { orderId, amount: refund.amount, providerRefundId: refund.providerRefundId, method: auditContext?.method, path: auditContext?.path }, ipAddress: auditContext?.ip, userAgent: auditContext?.userAgent });
         } catch (err) {}
+        try {
+            if (refund && ['refunded', 'partially_refunded'].includes(refund.status)) {
+                const refundedOrder = await Order.findByPk(orderId);
+                const customer = refundedOrder?.userId ? await User.findByPk(refundedOrder.userId) : null;
+                if (customer?.email && NotificationService?.send) {
+                    await NotificationService.send('order_refunded', customer.email, {
+                        customer_name: `${customer.firstName || ''} ${customer.lastName || ''}`.trim() || customer.email,
+                        order_number: refundedOrder.orderNumber,
+                        order_id: refundedOrder.id,
+                        refund_amount: refund.amount,
+                    }, customer.id, refundedOrder.id);
+                }
+            }
+        } catch (error) {
+            logger.error('Failed to queue customer refund notification', { orderId, error: error.message });
+        }
         return refund;
     });
 };

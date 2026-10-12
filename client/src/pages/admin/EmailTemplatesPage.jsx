@@ -29,6 +29,18 @@ import { PERMISSIONS } from '../../utils/permissions';
 
 // ── Human-readable template names ─────────────────────────────────────────────
 const TEMPLATE_LABELS = {
+  newsletter_confirmation: { label: 'Newsletter Confirmation', desc: 'Confirmation after a customer opts into store updates' },
+  newsletter_campaign: { label: 'Newsletter Campaign', desc: 'Wrapper for composed campaigns, including an unsubscribe link' },
+  delivery_exception: { label: 'Delivery Exception', desc: 'Customer alert for delivery failure or a return to sender' },
+  staff_invitation: { label: 'Staff Invitation', desc: 'Expiring password setup link for a new staff account' },
+  order_assigned_staff: { label: 'Order Assigned', desc: 'Sent to the staff member assigned an order' },
+  enquiry_assigned_staff: { label: 'Enquiry Assigned', desc: 'Sent to the staff member assigned a customer enquiry' },
+  password_changed: { label: 'Password Changed', desc: 'Security notice after a password change or reset' },
+  email_changed: { label: 'Email Changed', desc: 'Security notice sent to the previous account email' },
+  return_requested: { label: 'Return or Replacement Requested', desc: 'Acknowledgement sent to the customer' },
+  return_status_updated: { label: 'Return or Replacement Update', desc: 'Customer update when the request status changes' },
+  admin_return_requested: { label: 'New Return or Replacement', desc: 'Review alert sent to configured admin and staff recipients' },
+  payment_failed_customer: { label: 'Payment Failed', desc: 'Customer notice when payment fails' },
   order_placed:       { label: 'Order Placed',       desc: 'Sent when a customer completes checkout',         icon: '🛍️' },
   order_shipped:      { label: 'Order Shipped',      desc: 'Sent when a shipment is created',                 icon: '📦' },
   order_delivered:    { label: 'Order Delivered',    desc: 'Sent when the order is marked delivered',         icon: '✅' },

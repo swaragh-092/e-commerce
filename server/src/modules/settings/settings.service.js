@@ -19,6 +19,13 @@ const { encrypt, decrypt } = require('../../utils/crypto');
 const isMaskedSecretPlaceholder = (value) =>
   typeof value === 'string' && value.trim() === '********';
 
+const ensureNotificationRecipientsAllowed = (settingsArray, actingUser) => {
+  if (settingsArray.some(({ key }) => key === 'eventRecipientUserIds')
+      && !getPermissionsForUser(actingUser).includes(PERMISSIONS.NOTIFICATIONS_MANAGE)) {
+    throw new AppError('FORBIDDEN', 403, 'Notification management permission is required to change email recipients');
+  }
+};
+
 const isSensitiveSettingKey = (key) => {
   const normalizedKey = String(key || '').toLowerCase();
   const isSecret = /pass|token|secret|api[_-]?key|privatekey/i.test(normalizedKey);
@@ -196,6 +203,7 @@ const getAll = async () => {
   };
 
   settings.forEach(s => {
+    if (s.group === 'messaging' && s.key === 'eventRecipientUserIds') return;
     if (grouped[s.group]) {
       let parsedValue = s.value;
 
@@ -234,6 +242,7 @@ const getByGroup = async (groupName, options = {}) => {
   
   const result = { ...(defaultSettings[groupName] || {}) };
   settings.forEach(s => {
+    if (maskSensitive && groupName === 'messaging' && s.key === 'eventRecipientUserIds') return;
     let parsedValue = s.value;
 
     // Auto-decrypt if it's an encrypted object
@@ -341,6 +350,7 @@ const resetDesignSetting = async ({ group, key }, actingUserId) => {
 };
 
 const updateKey = async (key, value, group, actingUserId, actingUser = null) => {
+  ensureNotificationRecipientsAllowed([{ key, group, value }], actingUser);
   const credentialGroups = ['gateway_credentials', 'messaging_credentials', 'ai_credentials'];
 
   // Tier 1 feature keys are mode-locked — reject any attempt to modify them via settings.
@@ -417,6 +427,7 @@ const bulkUpdate = async (settingsInput, actingUserId, actingUser = null, option
         : Object.entries(settingsInput).map(([key, value]) => ({ key, value }));
 
     ensureAdvancedSettingsAllowed(settingsArray, actingUser);
+    ensureNotificationRecipientsAllowed(settingsArray, actingUser);
     for (const setting of settingsArray) {
         if (setting.group === 'shipping') validateShippingSetting(setting.key, setting.value);
         if (setting.group === 'shipping' && setting.key === 'defaultPackage') validateDefaultPackage(setting.value);

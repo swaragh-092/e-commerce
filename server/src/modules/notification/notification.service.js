@@ -280,11 +280,46 @@ const processQueued = async ({ limit = 25 } = {}) => {
         limit,
     });
 
+    let processedCount = 0;
     for (const job of jobs) {
-        await job.update({ status: 'processing', lockedAt: new Date(), attempts: Number(job.attempts || 0) + 1, error: null });
+        const claim = { status: 'processing', lockedAt: new Date(), attempts: Number(job.attempts || 0) + 1, error: null };
+        const [claimed] = await NotificationQueue.update(claim, { where: { id: job.id, status: 'queued' } });
+        if (!claimed) continue;
+        Object.assign(job, claim);
+        processedCount++;
 
         let subject = null;
         try {
+            if (['order_assigned_staff', 'enquiry_assigned_staff'].includes(job.templateName)) {
+                const kind = job.templateName === 'order_assigned_staff' ? 'orders' : 'enquiries';
+                const id = kind === 'orders' ? job.variables?.order_id : job.variables?.enquiry_id;
+                const eligible = await require('./notificationAssignment.service').canReceive(kind, id, job.userId, job.recipientEmail);
+                if (!eligible) {
+                    await job.update({ status: 'skipped', error: 'Staff assignment changed or recipient is no longer eligible' });
+                    await createLog({ job, status: 'skipped', error: 'Staff assignment changed or recipient is no longer eligible' });
+                    continue;
+                }
+            }
+            if (job.templateName === 'staff_invitation') {
+                const { PasswordResetToken, User } = require('../index');
+                const invitation = job.variables?.invitation_token_id ? await PasswordResetToken.findOne({ where: { id: job.variables.invitation_token_id, userId: job.userId, purpose: 'staff_invitation' } }) : null;
+                const user = invitation ? await User.findOne({ where: { id: job.userId, email: job.recipientEmail, status: 'active' } }) : null;
+                if (!user || invitation.expiresAt <= new Date()) {
+                    await job.update({ status: 'skipped', error: 'Staff invitation expired or was replaced' });
+                    await createLog({ job, status: 'skipped', error: 'Staff invitation expired or was replaced' });
+                    continue;
+                }
+            }
+            if (['newsletter_campaign', 'newsletter_confirmation'].includes(job.templateName)) {
+                const { NewsletterSubscriber } = require('../index');
+                const subscriber = job.variables?.subscriber_id && job.variables?.subscribed_at
+                    ? await NewsletterSubscriber.findOne({ where: { id: job.variables.subscriber_id, email: job.recipientEmail, status: 'active' } }) : null;
+                if (!subscriber || new Date(subscriber.subscribedAt).toISOString() !== job.variables?.subscribed_at) {
+                    await job.update({ status: 'skipped', error: 'Newsletter consent is no longer active for this subscription' });
+                    await createLog({ job, status: 'skipped', error: 'Newsletter consent is no longer active for this subscription' });
+                    continue;
+                }
+            }
             const template = await NotificationTemplate.findOne({ where: { name: job.templateName, channel: job.channel } });
             if (!template || !template.isActive) {
                 await job.update({ status: 'skipped', error: template ? 'Template inactive' : 'Template missing' });
@@ -318,7 +353,7 @@ const processQueued = async ({ limit = 25 } = {}) => {
         }
     }
 
-    return jobs.length;
+    return processedCount;
 };
 
 /**
@@ -354,26 +389,32 @@ const sendToUser = async (templateName, channels, user, variables = {}, orderId 
 
 const sendToAdmins = async (templateName, channels = ['email'], variables = {}, orderId = null, t = null) => {
     const { User, UserProfile } = require('../index');
-    const admins = await User.findAll({
-        where: { role: ['admin', 'super_admin'] },
+    const configuredRecipients = await require('./notificationRecipients.service').getConfiguredRecipients(templateName, t);
+    const needsDefaults = configuredRecipients === null || channels.some((channel) => channel !== 'email');
+    const admins = needsDefaults ? await User.findAll({
+        where: { role: ['admin', 'super_admin'], status: 'active' },
         include: [{ model: UserProfile, as: 'profile', required: false }],
         transaction: t || undefined,
-    });
+    }) : [];
 
     const manualRecipients = [
         ...parseRecipientList(process.env.ADMIN_NOTIFICATION_EMAIL).map((email) => ({ email })),
         ...parseRecipientList(process.env.ADMIN_NOTIFICATION_PHONE).map((phone) => ({ phone })),
     ];
-    const recipients = [...admins, ...manualRecipients];
+    const defaultRecipients = [...admins, ...manualRecipients];
 
     const results = [];
-    for (const recipientRecord of recipients) {
-        const email = recipientRecord.email || null;
-        const phone = recipientRecord.phone || recipientRecord.profile?.phone || null;
-
-        for (const channel of channels) {
+    for (const channel of channels) {
+        const recipients = channel === 'email' && configuredRecipients !== null ? configuredRecipients : defaultRecipients;
+        const seen = new Set();
+        for (const recipientRecord of recipients) {
+            const email = recipientRecord.email || null;
+            const phone = recipientRecord.phone || recipientRecord.profile?.phone || null;
             const recipient = channel === 'email' ? email : phone;
             if (!recipient) continue;
+            const recipientKey = channel === 'email' ? recipient.toLowerCase() : recipient;
+            if (seen.has(recipientKey)) continue;
+            seen.add(recipientKey);
             results.push(await send(templateName, recipient, variables, recipientRecord.id || null, orderId, channel, t));
         }
     }
@@ -397,10 +438,11 @@ const sendDeliveryUpdate = async (userId, orderId, status) => {
 
         if (!user || !order) return false;
 
-        const templateName = status === 'delivered' ? 'order_delivered' : 'order_out_for_delivery';
+        const isException = ['delivery_failed', 'rto_initiated', 'rto_in_transit', 'rto'].includes(status);
+        const templateName = isException ? 'delivery_exception' : status === 'delivered' ? 'order_delivered' : 'order_out_for_delivery';
         
         // Settings/Channels: usually we want Email + SMS for delivery updates
-        const channels = ['email', 'sms'];
+        const channels = isException ? ['email'] : ['email', 'sms'];
 
         return await sendToUser(templateName, channels, user, {
             order_number: order.orderNumber,
