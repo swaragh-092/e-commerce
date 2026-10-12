@@ -108,7 +108,7 @@ const updateStatus = async (req, res, next) => {
 
 const cancelOrder = async (req, res, next) => {
   try {
-    const order = await OrderService.cancelOrder(req.params.id, req.user.id);
+    const order = await OrderService.cancelOrder(req.params.id, req.user.id, req.validated);
     return success(res, order, 'Order cancelled');
   } catch (err) {
     next(err);
