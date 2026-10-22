@@ -687,8 +687,26 @@ const ProductsManagePage = () => {
       width: 160,
       sortable: true,
       renderCell: ({ row }) => (
-        <Box sx={{ py: 1 }}>
+        <Box
+          component={Link}
+          to={`/admin/products/${row.id}/edit`}
+          aria-label={`Edit pricing and tax for ${row.name}`}
+          title={`Edit ${row.name}`}
+          onClick={(event) => event.stopPropagation()}
+          sx={{
+            py: 1,
+            display: 'flex',
+            flexDirection: 'column',
+            justifyContent: 'center',
+            color: 'inherit',
+            textDecoration: 'none',
+            borderRadius: 0.5,
+            '&:hover .product-price-primary': { textDecoration: 'underline', color: 'primary.main' },
+            '&:focus-visible': { outline: '2px solid', outlineColor: 'primary.main', outlineOffset: 2 },
+          }}
+        >
           <Typography
+            className="product-price-primary"
             variant="body2"
             fontWeight={700}
             color={pricingEnabled && row.isSaleActive ? 'error.main' : 'text.primary'}

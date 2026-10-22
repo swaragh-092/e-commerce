@@ -95,6 +95,13 @@ describe('ProductsManagePage storefront state controls', () => {
     vi.restoreAllMocks();
   });
 
+  it('opens the product editor when the MRP is clicked', async () => {
+    renderProductsPage();
+
+    const pricingLink = await screen.findByRole('link', { name: 'Edit pricing and tax for Test product' });
+    expect(pricingLink).toHaveAttribute('href', '/admin/products/product-1/edit');
+  });
+
   it('uses one row control and persists Paused as published plus disabled', async () => {
     renderProductsPage();
 
