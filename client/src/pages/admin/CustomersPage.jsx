@@ -71,7 +71,22 @@ const CustomersPage = () => {
   };
 
   const columns = [
-    { field: 'firstName', headerName: 'First', width: 120 },
+    {
+      field: 'firstName',
+      headerName: 'First',
+      width: 120,
+      renderCell: ({ row }) => (
+        <Typography
+          component="button"
+          type="button"
+          onClick={() => navigate(`/admin/customers/${row.id}`)}
+          aria-label={`View customer ${[row.firstName, row.lastName].filter(Boolean).join(' ') || row.email}`}
+          sx={{ p: 0, border: 0, background: 'none', color: 'primary.main', font: 'inherit', textAlign: 'left', cursor: 'pointer', '&:hover': { textDecoration: 'underline' }, '&:focus-visible': { outline: '2px solid', outlineColor: 'primary.main', outlineOffset: 2 } }}
+        >
+          {row.firstName || row.email}
+        </Typography>
+      ),
+    },
     { field: 'lastName', headerName: 'Last', width: 120 },
     { field: 'email', headerName: 'Email', flex: 1 },
     {
