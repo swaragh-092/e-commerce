@@ -258,7 +258,7 @@ const ProductEditPage = () => {
       igst: 0.18,
     },
     // Shipping dimensions
-    requiresShipping: true,
+    requiresShipping: false,
     packingMode: 'standard',
     weightGrams: '',
     lengthCm: '',
@@ -339,7 +339,7 @@ const ProductEditPage = () => {
                 igst: 0.18,
               },
               // Shipping dimensions
-              requiresShipping: p.requiresShipping ?? true,
+              requiresShipping: p.requiresShipping ?? false,
               packingMode: p.packingMode || 'standard',
               weightGrams: p.weightGrams ?? '',
               lengthCm:    p.lengthCm    ?? '',
@@ -1128,7 +1128,7 @@ const ProductEditPage = () => {
 
             <Paper sx={{ p: 3, mb: 3 }}>
               <Typography variant="h6" gutterBottom>
-                Organization
+                Categories &amp; Brand
               </Typography>
               <Autocomplete
                 multiple
@@ -1280,23 +1280,24 @@ const ProductEditPage = () => {
                 />
               </Paper>
             )}
+          </Grid>
+        </Grid>
 
+        {settings?.features?.seo !== false && (
+          <Paper sx={{ p: 3, mt: 3 }}>
+            <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 2 }}>
+              <Typography variant="h6">
+                SEO Configuration
+              </Typography>
+              <Chip label="SEO v2" size="small" color="primary" variant="outlined" />
+            </Box>
+            <Alert severity="info" sx={{ mb: 3 }}>
+              Fine-tune how this product appears in search engines and social media.
+              If left blank, the system will auto-generate metadata.
+            </Alert>
 
-            
-
-            {settings?.features?.seo !== false && (
-              <Paper sx={{ p: 3, mb: 3 }}>
-                <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 2 }}>
-                  <Typography variant="h6">
-                    SEO Configuration
-                  </Typography>
-                  <Chip label="SEO v2" size="small" color="primary" variant="outlined" />
-                </Box>
-                <Alert severity="info" sx={{ mb: 3 }}>
-                  Fine-tune how this product appears in search engines and social media. 
-                  If left blank, the system will auto-generate metadata.
-                </Alert>
-                
+            <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', md: 'minmax(0, 5fr) minmax(0, 3fr) minmax(0, 4fr)' }, gap: 3, alignItems: 'start' }}>
+              <Box>
                 <TextField
                   fullWidth
                   label="Meta Title"
@@ -1328,77 +1329,77 @@ const ProductEditPage = () => {
                   onChange={(e) => setField('metaKeywords', e.target.value)}
                   helperText="Used for internal search optimization. Separate with commas."
                 />
-                
-                <Box sx={{ mt: 2 }}>
-                  <Typography variant="subtitle2" gutterBottom>Social Sharing Image (OG Image)</Typography>
-                  {canUploadMedia && (
-                    <>
-                      <Button
-                        variant="outlined"
-                        size="small"
-                        onClick={() => setOgPickerOpen(true)}
-                        startIcon={<ImageIcon />}
-                      >
-                        Select from Media Library
-                      </Button>
-                      <MediaPicker
-                        open={ogPickerOpen}
-                        onClose={() => setOgPickerOpen(false)}
-                        onSelect={(selected) => {
-                          const media = Array.isArray(selected) ? selected[0] : selected;
-                          if (media?.url) setField('ogImage', media.url);
-                          setOgPickerOpen(false);
-                        }}
-                        multiple={false}
-                        title="Select OG Image"
-                      />
-                    </>
-                  )}
-                  {formData.ogImage && (
-                    <Box sx={{ mt: 2, position: 'relative', width: 'fit-content' }}>
-                      <img 
-                        src={getMediaUrl(formData.ogImage)} 
-                        alt="SEO Preview" 
-                        style={{ maxWidth: '100%', maxHeight: 200, borderRadius: 8, border: '1px solid #ddd' }} 
-                      />
-                      {canSaveProduct && (
-                        <IconButton 
-                          size="small" 
-                          color="error" 
-                          sx={{ position: 'absolute', top: -10, right: -10, bgcolor: 'background.paper', boxShadow: 1 }}
-                          onClick={() => setField('ogImage', '')}
-                        >
-                          <DeleteIcon fontSize="small" />
-                        </IconButton>
-                      )}
-                    </Box>
-                  )}
-                  {!canUploadMedia && !formData.ogImage && (
-                    <Typography variant="caption" color="text.secondary">
-                      You do not have permission to upload media.
-                    </Typography>
-                  )}
-                  <FormHelperText>Recommended size: 1200x630px</FormHelperText>
-                </Box>
 
-                <Box sx={{ mt: 3, p: 2, bgcolor: '#f8f9fa', borderRadius: 2, border: '1px solid #e0e0e0' }}>
-                  <Typography variant="caption" color="text.secondary" sx={{ fontWeight: 700, mb: 1, display: 'block' }}>
-                    GOOGLE SEARCH PREVIEW
+              </Box>
+              <Box sx={{ mt: { xs: 0, md: 2 } }}>
+                <Typography variant="subtitle2" gutterBottom>Social Sharing Image (OG Image)</Typography>
+                {canUploadMedia && (
+                  <>
+                    <Button
+                      variant="outlined"
+                      size="small"
+                      onClick={() => setOgPickerOpen(true)}
+                      startIcon={<ImageIcon />}
+                    >
+                      Select from Media Library
+                    </Button>
+                    <MediaPicker
+                      open={ogPickerOpen}
+                      onClose={() => setOgPickerOpen(false)}
+                      onSelect={(selected) => {
+                        const media = Array.isArray(selected) ? selected[0] : selected;
+                        if (media?.url) setField('ogImage', media.url);
+                        setOgPickerOpen(false);
+                      }}
+                      multiple={false}
+                      title="Select OG Image"
+                    />
+                  </>
+                )}
+                {formData.ogImage && (
+                  <Box sx={{ mt: 2, position: 'relative', width: 'fit-content' }}>
+                    <img
+                      src={getMediaUrl(formData.ogImage)}
+                      alt="SEO Preview"
+                      style={{ maxWidth: '100%', maxHeight: 200, borderRadius: 8, border: '1px solid #ddd' }}
+                    />
+                    {canSaveProduct && (
+                      <IconButton
+                        size="small"
+                        color="error"
+                        sx={{ position: 'absolute', top: -10, right: -10, bgcolor: 'background.paper', boxShadow: 1 }}
+                        onClick={() => setField('ogImage', '')}
+                      >
+                        <DeleteIcon fontSize="small" />
+                      </IconButton>
+                    )}
+                  </Box>
+                )}
+                {!canUploadMedia && !formData.ogImage && (
+                  <Typography variant="caption" color="text.secondary">
+                    You do not have permission to upload media.
                   </Typography>
-                  <Typography variant="body1" sx={{ color: '#1a0dab', fontSize: '18px', '&:hover': { textDecoration: 'underline' }, cursor: 'pointer', mb: 0.5 }}>
-                    {formData.metaTitle || formData.name || 'Product Name'} {settings?.seo?.titleSuffix || ' | My Store'}
-                  </Typography>
-                  <Typography variant="body2" sx={{ color: '#006621', fontSize: '14px', mb: 0.5 }}>
-                    {window.location.origin}/product/{formData.slug || 'slug'}
-                  </Typography>
-                  <Typography variant="body2" sx={{ color: '#545454', fontSize: '13px', lineHeight: 1.4 }}>
-                    {formData.metaDescription || formData.shortDescription || 'Your product description will appear here...'}
-                  </Typography>
-                </Box>
-              </Paper>
-            )}
-          </Grid>
-        </Grid>
+                )}
+                <FormHelperText>Recommended size: 1200x630px</FormHelperText>
+              </Box>
+
+              <Box sx={{ mt: { xs: 0, md: 2 }, p: 2, bgcolor: '#f8f9fa', borderRadius: 2, border: '1px solid #e0e0e0', overflowWrap: 'anywhere' }}>
+                <Typography variant="caption" color="text.secondary" sx={{ fontWeight: 700, mb: 1, display: 'block' }}>
+                  GOOGLE SEARCH PREVIEW
+                </Typography>
+                <Typography variant="body1" sx={{ color: '#1a0dab', fontSize: '18px', '&:hover': { textDecoration: 'underline' }, cursor: 'pointer', mb: 0.5 }}>
+                  {formData.metaTitle || formData.name || 'Product Name'} {settings?.seo?.titleSuffix || ' | My Store'}
+                </Typography>
+                <Typography variant="body2" sx={{ color: '#006621', fontSize: '14px', mb: 0.5 }}>
+                  {window.location.origin}/product/{formData.slug || 'slug'}
+                </Typography>
+                <Typography variant="body2" sx={{ color: '#545454', fontSize: '13px', lineHeight: 1.4 }}>
+                  {formData.metaDescription || formData.shortDescription || 'Your product description will appear here...'}
+                </Typography>
+              </Box>
+            </Box>
+          </Paper>
+        )}
 
         <Box sx={{ mt: 4, display: 'flex', justifyContent: 'flex-end', gap: 2 }}>
           <Button onClick={() => navigate('/admin/products')} disabled={saving}>
