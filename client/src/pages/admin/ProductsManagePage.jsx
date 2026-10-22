@@ -670,11 +670,30 @@ const ProductsManagePage = () => {
       minWidth: 200,
       sortable: true,
       renderCell: ({ row }) => (
-        <Box sx={{ py: 1, overflow: 'hidden' }}>
-          <Typography variant="body2" fontWeight={600} noWrap lineHeight={1.4}>
+        <Box
+          component={canUpdateProducts ? Link : 'div'}
+          to={canUpdateProducts ? `/admin/products/${row.id}/edit` : undefined}
+          aria-label={canUpdateProducts ? `Edit ${row.name}` : undefined}
+          title={canUpdateProducts ? `Edit ${row.name}` : undefined}
+          onClick={canUpdateProducts ? (event) => event.stopPropagation() : undefined}
+          sx={{
+            py: 1,
+            width: '100%',
+            height: '100%',
+            display: 'flex',
+            flexDirection: 'column',
+            justifyContent: 'center',
+            overflow: 'hidden',
+            color: 'inherit',
+            textDecoration: 'none',
+            '&:hover .product-name-primary': { color: 'primary.main', textDecoration: 'underline' },
+            '&:focus-visible': { outline: '2px solid', outlineColor: 'primary.main', outlineOffset: -2 },
+          }}
+        >
+          <Typography className="product-name-primary" variant="body2" fontWeight={600} noWrap lineHeight={1.4}>
             {row.name}
           </Typography>
-          <Typography variant="caption" color="text.secondary">
+          <Typography variant="caption" color="text.secondary" noWrap>
             {row.sku ? `SKU: ${row.sku}` : <em style={{ opacity: 0.4 }}>No SKU</em>}
           </Typography>
         </Box>
@@ -688,16 +707,19 @@ const ProductsManagePage = () => {
       sortable: true,
       renderCell: ({ row }) => (
         <Box
-          component={Link}
-          to={`/admin/products/${row.id}/edit`}
-          aria-label={`Edit pricing and tax for ${row.name}`}
-          title={`Edit ${row.name}`}
-          onClick={(event) => event.stopPropagation()}
+          component={canUpdateProducts ? Link : 'div'}
+          to={canUpdateProducts ? `/admin/products/${row.id}/edit` : undefined}
+          aria-label={canUpdateProducts ? `Edit pricing and tax for ${row.name}` : undefined}
+          title={canUpdateProducts ? `Edit ${row.name}` : undefined}
+          onClick={canUpdateProducts ? (event) => event.stopPropagation() : undefined}
           sx={{
             py: 1,
             display: 'flex',
             flexDirection: 'column',
             justifyContent: 'center',
+            width: '100%',
+            height: '100%',
+            pointerEvents: canUpdateProducts ? 'auto' : 'none',
             color: 'inherit',
             textDecoration: 'none',
             borderRadius: 0.5,
