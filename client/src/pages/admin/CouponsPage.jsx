@@ -5,6 +5,7 @@ import {
   Box,
   Button,
   Chip,
+  CircularProgress,
   Dialog,
   DialogActions,
   DialogContent,
@@ -99,6 +100,7 @@ const CouponsPage = () => {
   const [formErrors, setFormErrors] = useState({});
   const [saving, setSaving] = useState(false);
   const [loadingOptions, setLoadingOptions] = useState(false);
+  const [duplicatingCouponId, setDuplicatingCouponId] = useState(null);
   const [products, setProducts] = useState([]);
   const [categories, setCategories] = useState([]);
   const [brands, setBrands] = useState([]);
@@ -273,53 +275,73 @@ const CouponsPage = () => {
     setOpen(true);
   };
 
-  const duplicateCoupon = (row) => {
+  const duplicateCoupon = async (row) => {
     if (!canManageCoupons) {
       notify('You do not have permission to manage coupons.', 'error');
       return;
     }
 
-    const existingNames = new Set(rows.map((coupon) => coupon.name?.trim().toLowerCase()).filter(Boolean));
-    const baseName = `${row.name} Copy`;
-    let name = baseName;
-    let copyNumber = 2;
-    while (existingNames.has(name.trim().toLowerCase())) {
-      name = `${baseName} ${copyNumber}`;
-      copyNumber += 1;
-    }
+    setDuplicatingCouponId(row.id);
+    try {
+      const pageSize = 1000;
+      const firstPage = await getCoupons({ page: 1, limit: pageSize });
+      const getCouponRows = (response) => {
+        const data = response?.data?.data;
+        return Array.isArray(data) ? data : Array.isArray(data?.rows) ? data.rows : [];
+      };
+      const totalPages = Math.max(1, Number(firstPage?.data?.meta?.totalPages) || 1);
+      const allCoupons = getCouponRows(firstPage);
+      for (let page = 2; page <= totalPages; page += 1) {
+        const response = await getCoupons({ page, limit: pageSize });
+        allCoupons.push(...getCouponRows(response));
+      }
 
-    const existingCodes = new Set(rows.map((coupon) => coupon.code?.trim().toUpperCase()).filter(Boolean));
-    const baseCode = `${row.code}_COPY`.toUpperCase();
-    let code = baseCode;
-    let codeNumber = 2;
-    while (existingCodes.has(code)) {
-      code = `${baseCode}_${codeNumber}`;
-      codeNumber += 1;
-    }
+      const existingNames = new Set(allCoupons.map((coupon) => coupon.name?.trim().toLowerCase()).filter(Boolean));
+      const baseName = `${row.name} Copy`;
+      let name = baseName;
+      let copyNumber = 2;
+      while (existingNames.has(name.trim().toLowerCase())) {
+        name = `${baseName} ${copyNumber}`;
+        copyNumber += 1;
+      }
 
-    setEditing(null);
-    setForm({
-      ...empty,
-      ...row,
-      name,
-      code,
-      startDate: formatLocalDateTime(row.startDate),
-      endDate: formatLocalDateTime(row.endDate),
-      applicableIds: row.applicableIds || [],
-      excludedProductIds: row.excludedProductIds || [],
-      excludedCategoryIds: row.excludedCategoryIds || [],
-      excludedBrandIds: row.excludedBrandIds || [],
-      value: row.type === 'free_shipping' ? '' : row.value,
-      campaignStatus: row.campaignStatus || 'active',
-      applicationMode: row.applicationMode || 'manual',
-      stackingRules: {
-        allowOrderDiscounts: Boolean(row.stackingRules?.allowOrderDiscounts),
-        allowShippingDiscounts: row.stackingRules?.allowShippingDiscounts !== false,
-        allowMultipleCoupons: Boolean(row.stackingRules?.allowMultipleCoupons),
-      },
-    });
-    setFormErrors({});
-    setOpen(true);
+      const existingCodes = new Set(allCoupons.map((coupon) => coupon.code?.trim().toUpperCase()).filter(Boolean));
+      const baseCode = `${row.code}_COPY`.toUpperCase();
+      let code = baseCode;
+      let codeNumber = 2;
+      while (existingCodes.has(code)) {
+        code = `${baseCode}_${codeNumber}`;
+        codeNumber += 1;
+      }
+
+      setEditing(null);
+      setForm({
+        ...empty,
+        ...row,
+        name,
+        code,
+        startDate: formatLocalDateTime(row.startDate),
+        endDate: formatLocalDateTime(row.endDate),
+        applicableIds: row.applicableIds || [],
+        excludedProductIds: row.excludedProductIds || [],
+        excludedCategoryIds: row.excludedCategoryIds || [],
+        excludedBrandIds: row.excludedBrandIds || [],
+        value: row.type === 'free_shipping' ? '' : row.value,
+        campaignStatus: row.campaignStatus || 'active',
+        applicationMode: row.applicationMode || 'manual',
+        stackingRules: {
+          allowOrderDiscounts: Boolean(row.stackingRules?.allowOrderDiscounts),
+          allowShippingDiscounts: row.stackingRules?.allowShippingDiscounts !== false,
+          allowMultipleCoupons: Boolean(row.stackingRules?.allowMultipleCoupons),
+        },
+      });
+      setFormErrors({});
+      setOpen(true);
+    } catch (error) {
+      notify('Could not check all coupon codes. Please try again before duplicating.', 'error');
+    } finally {
+      setDuplicatingCouponId(null);
+    }
   };
 
   const set = (key, value) => {
@@ -554,8 +576,8 @@ const CouponsPage = () => {
         canManageCoupons ? (
           <>
             <Tooltip title="Duplicate">
-              <IconButton size="small" onClick={() => duplicateCoupon(row)}>
-                <FileCopyIcon fontSize="small" />
+              <IconButton size="small" onClick={() => duplicateCoupon(row)} disabled={duplicatingCouponId === row.id}>
+                {duplicatingCouponId === row.id ? <CircularProgress size={18} /> : <FileCopyIcon fontSize="small" />}
               </IconButton>
             </Tooltip>
             <Tooltip title="Edit">
