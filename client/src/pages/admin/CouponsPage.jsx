@@ -279,12 +279,30 @@ const CouponsPage = () => {
       return;
     }
 
+    const existingNames = new Set(rows.map((coupon) => coupon.name?.trim().toLowerCase()).filter(Boolean));
+    const baseName = `${row.name} Copy`;
+    let name = baseName;
+    let copyNumber = 2;
+    while (existingNames.has(name.trim().toLowerCase())) {
+      name = `${baseName} ${copyNumber}`;
+      copyNumber += 1;
+    }
+
+    const existingCodes = new Set(rows.map((coupon) => coupon.code?.trim().toUpperCase()).filter(Boolean));
+    const baseCode = `${row.code}_COPY`.toUpperCase();
+    let code = baseCode;
+    let codeNumber = 2;
+    while (existingCodes.has(code)) {
+      code = `${baseCode}_${codeNumber}`;
+      codeNumber += 1;
+    }
+
     setEditing(null);
     setForm({
       ...empty,
       ...row,
-      name: `${row.name} Copy`,
-      code: `${row.code}_COPY`,
+      name,
+      code,
       startDate: formatLocalDateTime(row.startDate),
       endDate: formatLocalDateTime(row.endDate),
       applicableIds: row.applicableIds || [],
@@ -460,7 +478,9 @@ const CouponsPage = () => {
           >
             {row.name}
           </Typography>
-          <Typography variant="caption" color="text.secondary">{row.code}</Typography>
+          <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mt: 0.25 }}>
+            Code: {row.code}
+          </Typography>
         </Box>
       ),
     },
