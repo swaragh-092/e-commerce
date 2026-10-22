@@ -19,6 +19,8 @@ const {
 } = require('./saleLabel.validation');
 const settingsController = require('./settings.controller');
 const saleLabelController = require('./saleLabel.controller');
+const { getUnitUsage } = require('./unitCatalog');
+const { success } = require('../../utils/response');
 const { PERMISSIONS } = require('../../config/permissions');
 const { idParamSchema, stringIdParamSchema } = require('../../utils/common.validation');
 
@@ -60,7 +62,14 @@ router.delete('/sale-labels/:id',
 
 
 // ─── Generic settings routes ─────────────────────────────────────────────────
-// Public endpoints
+// Unit usage is admin-only; keep it before the /:group wildcard.
+router.get('/unit-usage', authenticate, authorizePermissions(PERMISSIONS.SETTINGS_MANAGE), async (req, res, next) => {
+  try {
+    return success(res, await getUnitUsage());
+  } catch (error) {
+    next(error);
+  }
+});
 
 // GET /api/features — fully resolved feature map (mode core + DB overrides).
 // Must be declared BEFORE /:group so Express doesn't treat "features" as a group param.

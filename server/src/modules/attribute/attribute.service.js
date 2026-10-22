@@ -10,8 +10,10 @@ const { generateSlug } = require('../../utils/slugify');
 const AppError = require('../../utils/AppError');
 const logger = require('../../utils/logger');
 const inventoryService = require('../inventory/inventory.service');
+const { readUnitSettings, lockUnitSettings } = require('../settings/unitCatalog');
+const { validateAttributeCategory, validateValueUnit, validateCategoryChange } = require('./attributeUnits');
 
-const ATTRIBUTE_TEMPLATE_FIELDS = ['id', 'name', 'slug', 'sortOrder', 'displayType', 'valueType', 'unit', 'createdAt'];
+const ATTRIBUTE_TEMPLATE_FIELDS = ['id', 'name', 'slug', 'sortOrder', 'displayType', 'valueType', 'unit', 'unitCategory', 'createdAt'];
 const ATTRIBUTE_VALUE_FIELDS = ['id', 'value', 'slug', 'sortOrder', 'displayLabel', 'swatchColor', 'imageUrl', 'unitLabel', 'metadata'];
 
 const syncProductVariantStock = async (productId, transaction = null) => {
@@ -110,6 +112,14 @@ const replaceVariantImageRows = async ({ productId, variantId, images = [], tran
  */
 const createAttribute = async (data) => {
     const slug = await generateSlug(data.name, AttributeTemplate);
+    if (data.unitCategory !== undefined) {
+        return sequelize.transaction(async (transaction) => {
+            await lockUnitSettings(transaction);
+            const settings = await readUnitSettings(transaction);
+            const unitCategory = validateAttributeCategory(data.unitCategory, settings);
+            return AttributeTemplate.create({ ...data, unitCategory, slug }, { transaction });
+        });
+    }
     return AttributeTemplate.create({ ...data, slug });
 };
 
@@ -212,8 +222,9 @@ const getAllAttributes = async (optionsOrPage = 1, limitArg = 20) => {
     });
 };
 
-const getAttributeById = async (id) => {
+const getAttributeById = async (id, transaction) => {
     const attr = await AttributeTemplate.findByPk(id, {
+        ...(transaction ? { transaction } : {}),
         attributes: ATTRIBUTE_TEMPLATE_FIELDS,
         include: [{ model: AttributeValue, as: 'values', attributes: ATTRIBUTE_VALUE_FIELDS }],
     });
@@ -222,6 +233,20 @@ const getAttributeById = async (id) => {
 };
 
 const updateAttribute = async (id, data) => {
+    if (data.unitCategory !== undefined) {
+        return sequelize.transaction(async (transaction) => {
+            await lockUnitSettings(transaction);
+            const attr = await getAttributeById(id, transaction);
+            const settings = await readUnitSettings(transaction);
+            const unitCategory = validateAttributeCategory(data.unitCategory, settings);
+            validateCategoryChange(attr, unitCategory, settings);
+            const updates = { ...data, unitCategory };
+            if (unitCategory !== (attr.unitCategory || null)) updates.unit = null;
+            if (data.name && data.name !== attr.name) updates.slug = await generateSlug(data.name, AttributeTemplate);
+            await attr.update(updates, { transaction });
+            return attr;
+        });
+    }
     const attr = await getAttributeById(id);
     if (data.name && data.name !== attr.name) {
         data.slug = await generateSlug(data.name, AttributeTemplate);
@@ -253,22 +278,35 @@ const deleteAttribute = async (id) => {
  * Attribute Value CRUD
  */
 const addValue = async (attributeId, data) => {
-    await getAttributeById(attributeId);
-    const slug = await generateSlug(data.value, AttributeValue, 'slug', { where: { attributeId } });
-    return AttributeValue.create({ ...data, attributeId, slug });
+    return sequelize.transaction(async (transaction) => {
+        await lockUnitSettings(transaction);
+        const attr = await getAttributeById(attributeId, transaction);
+        const settings = await readUnitSettings(transaction);
+        const unitLabel = validateValueUnit(attr, data.unitLabel || attr.unit, settings);
+        const slug = await generateSlug(data.value, AttributeValue, 'slug', { where: { attributeId }, transaction });
+        return AttributeValue.create({ ...data, unitLabel, attributeId, slug }, { transaction });
+    });
 };
 
 const updateValue = async (attributeId, valueId, data) => {
-    const val = await AttributeValue.findOne({ where: { id: valueId, attributeId } });
-    if (!val) throw new AppError('NOT_FOUND', 404, 'Attribute value not found');
+    return sequelize.transaction(async (transaction) => {
+        await lockUnitSettings(transaction);
+        const val = await AttributeValue.findOne({ where: { id: valueId, attributeId }, transaction });
+        if (!val) throw new AppError('NOT_FOUND', 404, 'Attribute value not found');
 
-    const updates = { ...data };
-    if (updates.value && updates.value !== val.value) {
-        updates.slug = await generateSlug(updates.value, AttributeValue, 'slug', { where: { attributeId } });
-    }
+        const updates = { ...data };
+        if (data.unitLabel !== undefined) {
+            const attr = await getAttributeById(attributeId, transaction);
+            const settings = await readUnitSettings(transaction);
+            updates.unitLabel = validateValueUnit(attr, data.unitLabel, settings, val.unitLabel || attr.unit || null);
+        }
+        if (updates.value && updates.value !== val.value) {
+            updates.slug = await generateSlug(updates.value, AttributeValue, 'slug', { where: { attributeId }, transaction });
+        }
 
-    await val.update(updates);
-    return val;
+        await val.update(updates, { transaction });
+        return val;
+    });
 };
 
 const removeValue = async (attributeId, valueId) => {
