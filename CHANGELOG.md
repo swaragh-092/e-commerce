@@ -2,6 +2,11 @@
 
 All notable changes to this project are documented here.
 
+## [1.1.2.0] - 2026-10-22
+
+### Changed
+- Combine product price and tax controls, clarify store and product-specific rates, and preview tax using the active sale price with the correct same-state or interstate GST rate.
+
 ## [1.1.1.0] - 2026-10-22
 
 ### Changed
