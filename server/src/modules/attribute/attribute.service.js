@@ -8,7 +8,7 @@ const {
 } = require('../index');
 const { generateSlug } = require('../../utils/slugify');
 const AppError = require('../../utils/AppError');
-const logger = require('../../utils/logger');
+const { buildVariantGenerationPlan } = require('./variantGenerationPlan');
 const inventoryService = require('../inventory/inventory.service');
 const { readUnitSettings, lockUnitSettings } = require('../settings/unitCatalog');
 const { validateAttributeCategory, validateValueUnit, validateCategoryChange } = require('./attributeUnits');
@@ -429,185 +429,64 @@ const getCategoryAttributes = async (categoryIdOrIds, inherit = false) => {
     });
 };
 
-/**
- * Bulk Variant Generator — NEW implementation using variant_options.
- *
- * Reads all product_attributes with is_variant_attr=true, builds the Cartesian
- * product of their values, then creates one product_variants row per combination
- * and the appropriate variant_options rows linking them.
- *
- * Accepts optional overrides:
- *   defaultPrice    — applied to all generated variants (defaults to product.price)
- *   defaultStockQty — applied to all generated variants (defaults to 0)
- */
-const bulkGenerateVariants = async (productId, { defaultPrice, defaultStockQty = 0 } = {}) => {
-    const product = await Product.findByPk(productId);
+// Lock variants before the parent, matching the inventory service's lock order.
+const loadVariantGenerationPlan = async (productId, transaction) => {
+    const variants = await ProductVariant.findAll({
+        where: { productId }, include: [variantInclude[0]], transaction,
+        order: [['id', 'ASC']],
+        ...(transaction ? { lock: { level: transaction.LOCK.UPDATE, of: ProductVariant } } : {}),
+    });
+    const product = await Product.findByPk(productId, {
+        transaction, ...(transaction ? { lock: transaction.LOCK.UPDATE } : {}),
+    });
     if (!product) throw new AppError('NOT_FOUND', 404, 'Product not found');
+    const rows = await ProductAttribute.findAll({
+        where: { productId, isVariantAttr: true, attributeId: { [Op.ne]: null } },
+        include: [
+            { model: AttributeTemplate, as: 'attribute', attributes: ATTRIBUTE_TEMPLATE_FIELDS },
+            { model: AttributeValue, as: 'value', attributes: ATTRIBUTE_VALUE_FIELDS },
+        ],
+        order: [['sortOrder', 'ASC']], transaction,
+    });
+    return { product, ...buildVariantGenerationPlan(rows, variants) };
+};
 
-    logger.debug(`[bulkGenerateVariants] Starting for product: ${productId}`);
+const previewVariantGeneration = async (productId) => {
+    const { review } = await loadVariantGenerationPlan(productId);
+    return review;
+};
 
-    const t = await sequelize.transaction();
-    try {
-        // -- Pre-processing: Auto-promote custom attributes marked for variations --
-        const customVariantAttrs = await ProductAttribute.findAll({
-            where: { productId, isVariantAttr: true, attributeId: null },
-            transaction: t,
+const bulkGenerateVariants = async (productId, { defaultPrice, defaultStockQty = 0, planToken, confirmRemovals = false } = {}) => {
+    await sequelize.transaction(async (transaction) => {
+        // Also serialize concurrent creation when the product has no variants to lock.
+        await sequelize.query('SELECT pg_advisory_xact_lock(hashtext(:scope), hashtext(:productId))', {
+            replacements: { scope: 'product-variant-generation', productId }, transaction,
         });
-
-        if (customVariantAttrs.length > 0) {
-            logger.debug(`[bulkGenerateVariants] Promoting ${customVariantAttrs.length} custom attributes to global templates.`);
-            for (const customAttr of customVariantAttrs) {
-                if (!customAttr.customName || !customAttr.customValue) continue;
-
-                let template = await AttributeTemplate.findOne({ 
-                    where: { name: customAttr.customName },
-                    transaction: t,
-                });
-                if (!template) {
-                    const slug = await generateSlug(customAttr.customName, AttributeTemplate, 'slug', { transaction: t });
-                    template = await AttributeTemplate.create({ name: customAttr.customName, slug }, { transaction: t });
-                }
-
-                let val = await AttributeValue.findOne({ 
-                    where: { attributeId: template.id, value: customAttr.customValue },
-                    transaction: t,
-                });
-                if (!val) {
-                    const slug = await generateSlug(customAttr.customValue, AttributeValue, 'slug', { transaction: t });
-                    val = await AttributeValue.create({ attributeId: template.id, value: customAttr.customValue, slug }, { transaction: t });
-                }
-
-                await customAttr.update({
-                    attributeId: template.id,
-                    valueId: val.id,
-                    customName: null,
-                    customValue: null,
-                }, { transaction: t });
-            }
+        const { product, review, added, removed, keptStock } = await loadVariantGenerationPlan(productId, transaction);
+        if (planToken && planToken !== review.token) {
+            throw new AppError('CONFLICT', 409, 'Product options or variants changed. Close this review and preview the latest changes.');
         }
-
-        // Load all is_variant_attr=true rows for this product (including newly promoted globals)
-        const variantAttrs = await ProductAttribute.findAll({
-            where: { productId, isVariantAttr: true },
-            include: [
-                { model: AttributeTemplate, as: 'attribute', attributes: ['id', 'name'] },
-                { model: AttributeValue,    as: 'value',     attributes: ['id', 'value', 'displayLabel'] },
-            ],
-            order: [['sortOrder', 'ASC']],
-            transaction: t,
-        });
-
-        logger.debug(`[bulkGenerateVariants] Found ${variantAttrs.length} variant-forming attribute rows.`);
-
-        if (variantAttrs.length === 0) {
-            throw new AppError(
-                'VALIDATION_ERROR', 400,
-                'No variant-forming attributes found. Mark at least one product attribute with isVariantAttr=true first.'
-            );
+        if (removed.length && (!planToken || !confirmRemovals)) {
+            throw new AppError('CONFLICT', 409, 'Review and confirm the variants to remove before updating options.');
         }
-
-        // Group by attributeId → collect all valueIds per attribute
-        const attrMap = new Map(); // attributeId → { attribute, values: [{valueId, label}] }
-        for (const row of variantAttrs) {
-            if (!row.attributeId || !row.valueId) {
-                logger.warn(`[bulkGenerateVariants] Skipping row ${row.id}: attributeId or valueId is missing even after promotion.`);
-                continue;
-            }
-            if (!attrMap.has(row.attributeId)) {
-                attrMap.set(row.attributeId, { attribute: row.attribute, values: [] });
-            }
-            attrMap.get(row.attributeId).values.push({ valueId: row.valueId, label: row.value?.value || row.customValue || 'Unknown' });
+        if (review.blockedRemovalCount) {
+            throw new AppError('CONFLICT', 409, 'Some variants have units reserved for active orders. Finish or cancel those orders before removing the variants.');
         }
-
-        const attrGroups = Array.from(attrMap.values());
-        logger.debug(`[bulkGenerateVariants] Matrix dimensions: ${attrGroups.length}`);
-        attrGroups.forEach(g => logger.debug(`  - ${g.attribute?.name}: ${g.values.length} values`));
-
-        if (attrGroups.length === 0) {
-            throw new AppError(
-                'VALIDATION_ERROR', 400,
-                'Variant-forming attributes must reference global attribute templates (not custom attributes).'
-            );
+        if (keptStock + added.length * defaultStockQty > 2147483647) {
+            throw new AppError('VALIDATION_ERROR', 400, 'The combined variant stock is too large. Choose a lower starting stock quantity.');
         }
-
-        // Cartesian product → array of [{attributeId, valueId, label}] combos
-        const combos = cartesian(attrGroups);
-        logger.debug(`[bulkGenerateVariants] Total generated combinations: ${combos.length}`);
-
-        const basePrice = defaultPrice ?? Number(product.price);
-
-        // Fetch existing variants to compare (avoid wiping out custom prices/stock/sku)
-        const existingVariants = await ProductVariant.findAll({
-            where: { productId },
-            include: [{ model: VariantOption, as: 'options', attributes: ['valueId'] }],
-            transaction: t,
-        });
-
-        // Compute signatures (sorted valueIds joined by comma) for the new matrix combinations
-        const newComboSignatures = new Set();
-        for (const combo of combos) {
-             const sig = combo.map(o => o.valueId).sort().join(',');
-             newComboSignatures.add(sig);
-        }
-
-        // Delete existing variants that NO LONGER match the new matrix
-        let deletedCount = 0;
-        for (const variant of existingVariants) {
-            const signature = variant.options.map(o => o.valueId).sort().join(',');
-            if (!newComboSignatures.has(signature)) {
-                await variant.destroy({ transaction: t });
-                deletedCount++;
-            }
-        }
-        logger.debug(`[bulkGenerateVariants] Pruned ${deletedCount} obsolete variants.`);
-
-        // Track combinations that already exist so we don't recreate them
-        const existingSignatures = new Set(
-            existingVariants.map(v => v.options.map(o => o.valueId).sort().join(','))
-        );
-
-        let createdCount = 0;
-        let sortCounter = existingVariants.length - deletedCount; 
-
-        for (const combo of combos) {
-            const signature = combo.map(o => o.valueId).sort().join(',');
-            
-            // If this combination already exists, leave the existing variant alone (preserving its custom data)
-            if (existingSignatures.has(signature)) {
-                continue; 
-            }
-
-            // Otherwise, create the new variant
+        for (const variant of removed) await variant.destroy({ transaction });
+        let sortOrder = review.keptCount;
+        for (const combo of added) {
             const variant = await ProductVariant.create({
-                productId,
-                price: basePrice,
-                stockQty: defaultStockQty,
-                isActive: true,
-                sortOrder: sortCounter++,
-            }, { transaction: t });
-
-            // Insert one variant_option row per attribute dimension
-            for (const { attributeId, valueId } of combo) {
-                await VariantOption.create({ variantId: variant.id, attributeId, valueId }, { transaction: t });
-            }
-            createdCount++;
+                productId, price: defaultPrice ?? Number(product.price), stockQty: defaultStockQty,
+                isActive: true, sortOrder: sortOrder++,
+            }, { transaction });
+            await VariantOption.bulkCreate(combo.map(({ attributeId, valueId }) => ({ variantId: variant.id, attributeId, valueId })), { transaction });
         }
-        logger.debug(`[bulkGenerateVariants] Created ${createdCount} new variant combinations.`);
-        await syncProductVariantStock(productId, t);
-
-        await t.commit();
-        logger.debug(`[bulkGenerateVariants] Transaction committed successfully.`);
-
-        // Return full detail with options
-        return ProductVariant.findAll({
-            where: { productId },
-            include: variantInclude,
-            order: [['sortOrder', 'ASC']],
-        });
-    } catch (err) {
-        await t.rollback();
-        throw err;
-    }
+        await syncProductVariantStock(productId, transaction);
+    });
+    return ProductVariant.findAll({ where: { productId }, include: variantInclude, order: [['sortOrder', 'ASC'], ['createdAt', 'ASC']] });
 };
 
 /**
@@ -678,24 +557,6 @@ const cloneVariants = async (targetProductId, sourceProductId) => {
         await t.rollback();
         throw err;
     }
-};
-
-/**
- * Helper: Cartesian product of attribute groups.
- * Input:  [{ attribute:{id,name}, values:[{valueId,label}] }, ...]
- * Output: [[{attributeId, valueId, label}, ...], ...]
- */
-const cartesian = (groups) => {
-    if (groups.length === 0) return [[]];
-    const [first, ...rest] = groups;
-    const restCombos = cartesian(rest);
-    const result = [];
-    for (const val of first.values) {
-        for (const combo of restCombos) {
-            result.push([{ attributeId: first.attribute.id, valueId: val.valueId, label: val.label }, ...combo]);
-        }
-    }
-    return result;
 };
 
 /**
@@ -836,9 +697,12 @@ const updateProductVariant = async (productId, variantId, data, auditContext = n
 };
 
 const deleteProductVariant = async (productId, variantId) => {
-    const variant = await ProductVariant.findOne({ where: { id: variantId, productId } });
-    if (!variant) throw new AppError('NOT_FOUND', 404, 'Variant not found');
     await sequelize.transaction(async (t) => {
+        const variant = await ProductVariant.findOne({ where: { id: variantId, productId }, transaction: t, lock: t.LOCK.UPDATE });
+        if (!variant) throw new AppError('NOT_FOUND', 404, 'Variant not found');
+        if (Number(variant.reservedQty || 0) > 0) {
+            throw new AppError('CONFLICT', 409, `This variant has ${variant.reservedQty} units reserved for active orders. Turn off Available to hide it, or finish/cancel those orders before deleting it.`);
+        }
         await variant.destroy({ transaction: t });
         await syncProductVariantStock(productId, t);
     });
@@ -892,6 +756,7 @@ module.exports = {
     unlinkAttributeFromCategory,
     getCategoryAttributes,
     bulkGenerateVariants,
+    previewVariantGeneration,
     cloneVariants,
     getProductVariants,
     addProductVariant,
