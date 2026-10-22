@@ -450,7 +450,16 @@ const CouponsPage = () => {
       minWidth: 180,
       renderCell: ({ row }) => (
         <Box sx={{ py: 1 }}>
-          <Typography variant="body2" fontWeight={700}>{row.name}</Typography>
+          <Typography
+            component="button"
+            type="button"
+            onClick={() => openEdit(row)}
+            disabled={!canManageCoupons}
+            aria-label={`Edit coupon ${row.name}`}
+            sx={{ p: 0, border: 0, background: 'none', color: canManageCoupons ? 'primary.main' : 'text.primary', font: 'inherit', fontWeight: 700, textAlign: 'left', cursor: canManageCoupons ? 'pointer' : 'default', '&:hover': canManageCoupons ? { textDecoration: 'underline' } : {}, '&:focus-visible': { outline: '2px solid', outlineColor: 'primary.main', outlineOffset: 2 } }}
+          >
+            {row.name}
+          </Typography>
           <Typography variant="caption" color="text.secondary">{row.code}</Typography>
         </Box>
       ),

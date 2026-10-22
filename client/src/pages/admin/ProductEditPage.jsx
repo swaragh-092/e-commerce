@@ -579,6 +579,8 @@ const ProductEditPage = () => {
     depth,
     path,
   }));
+  const previewPrice = getProductBasePrice(formData, new Date());
+  const previewPriceLabel = previewPrice < Number(formData.price) ? 'Active sale price' : 'MRP';
 
   return (
     <Box sx={{ p: 3, mx: 'auto' }}>
@@ -670,11 +672,16 @@ const ProductEditPage = () => {
 
             {(pricingEnabled || showPrice) && (
               <Paper sx={{ p: 3, mb: 3 }}>
-                <Typography variant="h6" sx={{ mb: 2 }}>
-                  Pricing
+                <Typography variant="h6" sx={{ mb: 0.5 }}>
+                  {pricingEnabled ? 'Pricing & Tax' : 'Pricing'}
+                </Typography>
+                <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
+                  {pricingEnabled
+                    ? 'Set the item price and tax together. The estimate below uses the active sale price when a sale is live.'
+                    : 'Set the item price displayed in the catalog.'}
                 </Typography>
                 <Grid container spacing={2}>
-                  <Grid item xs={6}>
+                  <Grid item xs={12} sm={6}>
                     <TextField
                       fullWidth
                       label="MRP *"
@@ -687,7 +694,7 @@ const ProductEditPage = () => {
                       helperText={errors.price}
                     />
                   </Grid>
-                  <Grid item xs={6}>
+                  <Grid item xs={12} sm={6}>
                     <TextField
                       fullWidth
                       label="Sale Price"
@@ -807,6 +814,18 @@ const ProductEditPage = () => {
                     </Box>
                   </Grid>
                 </Grid>
+                {pricingEnabled && (
+                  <TaxConfigSection
+                    taxConfig={formData.taxConfig}
+                    basePrice={previewPrice}
+                    priceLabel={previewPriceLabel}
+                    setTaxConfig={(val) => setField('taxConfig', val)}
+                    globalSettings={settings?.tax || {}}
+                    formatPrice={formatPrice}
+                    disabled={!canSaveProduct}
+                    error={errors.taxConfig}
+                  />
+                )}
               </Paper>
             )}
 
@@ -1115,17 +1134,6 @@ const ProductEditPage = () => {
 
             </Paper>
             
-            {pricingEnabled && (
-              <TaxConfigSection 
-                taxConfig={formData.taxConfig} 
-                basePrice={formData.price}
-                setTaxConfig={(val) => setField('taxConfig', val)}
-                globalSettings={settings?.checkout || {}}
-                formatPrice={formatPrice}
-                disabled={!canSaveProduct}
-              />
-            )}
-
             <Paper sx={{ p: 3, mb: 3 }}>
               <Typography variant="h6" gutterBottom>
                 Categories &amp; Brand

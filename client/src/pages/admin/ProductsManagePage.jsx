@@ -687,8 +687,26 @@ const ProductsManagePage = () => {
       width: 160,
       sortable: true,
       renderCell: ({ row }) => (
-        <Box sx={{ py: 1 }}>
+        <Box
+          component={Link}
+          to={`/admin/products/${row.id}/edit`}
+          aria-label={`Edit pricing and tax for ${row.name}`}
+          title={`Edit ${row.name}`}
+          onClick={(event) => event.stopPropagation()}
+          sx={{
+            py: 1,
+            display: 'flex',
+            flexDirection: 'column',
+            justifyContent: 'center',
+            color: 'inherit',
+            textDecoration: 'none',
+            borderRadius: 0.5,
+            '&:hover .product-price-primary': { textDecoration: 'underline', color: 'primary.main' },
+            '&:focus-visible': { outline: '2px solid', outlineColor: 'primary.main', outlineOffset: 2 },
+          }}
+        >
           <Typography
+            className="product-price-primary"
             variant="body2"
             fontWeight={700}
             color={pricingEnabled && row.isSaleActive ? 'error.main' : 'text.primary'}
@@ -1500,6 +1518,22 @@ const ProductsManagePage = () => {
               value={editDialog.price}
               onChange={(e) => setEditDialog((s) => ({ ...s, price: e.target.value }))}
             />
+            {pricingEnabled && editDialog.row?.id && (
+              <Box sx={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', justifyContent: 'space-between', gap: 1, mt: -1.25 }}>
+                <Typography variant="caption" color="text.secondary">
+                  Tax rates are managed with pricing in the full editor.
+                </Typography>
+                <Button
+                  component={Link}
+                  to={`/admin/products/${editDialog.row.id}/edit`}
+                  target="_blank"
+                  rel="noreferrer"
+                  size="small"
+                >
+                  Open Pricing &amp; Tax
+                </Button>
+              </Box>
+            )}
             {pricingEnabled && (
               <>
                 <Stack direction="row" justifyContent="space-between" alignItems="center" sx={{ pt: 0.5 }}>
