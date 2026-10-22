@@ -1500,6 +1500,22 @@ const ProductsManagePage = () => {
               value={editDialog.price}
               onChange={(e) => setEditDialog((s) => ({ ...s, price: e.target.value }))}
             />
+            {pricingEnabled && editDialog.row?.id && (
+              <Box sx={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', justifyContent: 'space-between', gap: 1, mt: -1.25 }}>
+                <Typography variant="caption" color="text.secondary">
+                  Tax rates are managed with pricing in the full editor.
+                </Typography>
+                <Button
+                  component={Link}
+                  to={`/admin/products/${editDialog.row.id}/edit`}
+                  target="_blank"
+                  rel="noreferrer"
+                  size="small"
+                >
+                  Open Pricing &amp; Tax
+                </Button>
+              </Box>
+            )}
             {pricingEnabled && (
               <>
                 <Stack direction="row" justifyContent="space-between" alignItems="center" sx={{ pt: 0.5 }}>
