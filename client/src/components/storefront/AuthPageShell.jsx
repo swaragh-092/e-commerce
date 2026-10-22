@@ -6,6 +6,7 @@ import { useSettings } from '../../hooks/useSettings';
 import { getMediaUrl } from '../../utils/media';
 
 const DEFAULT_AUTH_IMAGE = 'https://images.unsplash.com/photo-1603252109303-2751441dd157?auto=format&fit=crop&w=1400&q=80';
+const DEFAULT_ADMIN_IMAGE = '/assets/admin-login-plants.webp';
 
 const defaults = {
   login: {
@@ -23,7 +24,7 @@ const defaults = {
   admin: {
     title: 'Manage Your Store With Confidence',
     description: 'Sign in to review orders, update products and keep daily operations moving.',
-    formTitle: 'Staff Portal',
+    formTitle: 'Admin Portal',
     formSubtitle: 'Sign in to access the administrative dashboard.',
   },
 };
@@ -33,7 +34,9 @@ const AuthPageShell = ({ type = 'login', fullHeight = false, children }) => {
   const { settings } = useSettings();
   const authSettings = settings?.auth || {};
   const copy = defaults[type] || defaults.login;
-  const image = authSettings.image || DEFAULT_AUTH_IMAGE;
+  const image = type === 'admin'
+    ? authSettings.adminImage || DEFAULT_ADMIN_IMAGE
+    : authSettings.image || DEFAULT_AUTH_IMAGE;
   const accent = theme.palette.primary.main;
   const headingColor = authSettings[`${type}HeadingColor`] || authSettings.headingColor || theme.palette.primary.main;
   const descriptionColor = authSettings[`${type}DescriptionColor`] || authSettings.descriptionColor || theme.palette.primary.main;
@@ -57,7 +60,9 @@ const AuthPageShell = ({ type = 'login', fullHeight = false, children }) => {
         bgcolor: '#fffaf2',
         backgroundImage: `linear-gradient(90deg, rgba(255,250,242,0.68) 0%, rgba(255,250,242,0.56) 36%, rgba(255,250,242,0.38) 58%, rgba(255,250,242,0.7) 100%), url(${getMediaUrl(image)})`,
         backgroundSize: 'cover',
-        backgroundPosition: authSettings.imagePosition || 'center',
+        backgroundPosition: type === 'admin'
+          ? authSettings.adminImagePosition || 'center'
+          : authSettings.imagePosition || 'center',
         backgroundRepeat: 'no-repeat',
         overflow: 'hidden',
         px: { xs: 2.5, sm: 4, lg: 7 },
