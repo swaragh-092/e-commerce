@@ -38,11 +38,15 @@ const getProductAttributes = (productId) =>
 const addProductAttribute = (productId, data) =>
   api.post(`/products/${productId}/attributes`, data);
 
+const assignProductAttribute = (productId, data) => api.post(`/products/${productId}/attributes/assign`, data);
+
 const updateProductAttribute = (productId, attributeRowId, data) =>
   api.put(`/products/${productId}/attributes/${attributeRowId}`, data);
 
 const deleteProductAttribute = (productId, attributeRowId) =>
   api.delete(`/products/${productId}/attributes/${attributeRowId}`);
+
+const previewVariantGeneration = (productId) => api.get(`/products/${productId}/variants/preview`);
 
 const bulkGenerateVariants = (productId, data) =>
   api.post(`/products/${productId}/variants/generate`, data);
@@ -80,9 +84,11 @@ const attributeService = {
   unlinkAttributeFromCategory,
   getProductAttributes,
   addProductAttribute,
+  assignProductAttribute,
   updateProductAttribute,
   deleteProductAttribute,
   bulkGenerateVariants,
+  previewVariantGeneration,
   cloneVariants,
   getProductVariants,
   addProductVariant,

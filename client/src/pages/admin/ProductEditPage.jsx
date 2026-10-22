@@ -1411,7 +1411,10 @@ const ProductEditPage = () => {
         </Box>
       </form>
 
-      {/* Variants panel — only visible once the product has been saved and has a real ID */}
+      {isNew && formData.type !== 'combo' && <Paper variant="outlined" sx={{ p: 3, mt: 3 }}>
+        <Typography variant="h6" fontWeight={700}>Attributes and variants</Typography>
+        <Typography variant="body2" color="text.secondary">Save the product first. You can then choose or create attributes, add their values, and generate variants.</Typography>
+      </Paper>}
       {/* Variants panel — only visible once the product has been saved and has a real ID and is NOT a combo */}
       {!isNew && formData.type !== 'combo' && (
         <VariantsPanel 

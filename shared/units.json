@@ -1,0 +1,182 @@
+[
+  {
+    "value": "pc",
+    "label": "Piece (pc)",
+    "category": "Count / Packaging"
+  },
+  {
+    "value": "pack",
+    "label": "Pack (pk)",
+    "category": "Count / Packaging"
+  },
+  {
+    "value": "box",
+    "label": "Box",
+    "category": "Count / Packaging"
+  },
+  {
+    "value": "set",
+    "label": "Set",
+    "category": "Count / Packaging"
+  },
+  {
+    "value": "pair",
+    "label": "Pair",
+    "category": "Count / Packaging"
+  },
+  {
+    "value": "dozen",
+    "label": "Dozen (dz)",
+    "category": "Count / Packaging"
+  },
+  {
+    "value": "bottle",
+    "label": "Bottle",
+    "category": "Count / Packaging"
+  },
+  {
+    "value": "can",
+    "label": "Can",
+    "category": "Count / Packaging"
+  },
+  {
+    "value": "bundle",
+    "label": "Bundle",
+    "category": "Count / Packaging"
+  },
+  {
+    "value": "roll",
+    "label": "Roll",
+    "category": "Count / Packaging"
+  },
+  {
+    "value": "bag",
+    "label": "Bag",
+    "category": "Count / Packaging"
+  },
+  {
+    "value": "carton",
+    "label": "Carton",
+    "category": "Count / Packaging"
+  },
+  {
+    "value": "kg",
+    "label": "Kilogram (kg)",
+    "category": "Weight"
+  },
+  {
+    "value": "g",
+    "label": "Gram (g)",
+    "category": "Weight"
+  },
+  {
+    "value": "mg",
+    "label": "Milligram (mg)",
+    "category": "Weight"
+  },
+  {
+    "value": "lb",
+    "label": "Pound (lb)",
+    "category": "Weight"
+  },
+  {
+    "value": "oz",
+    "label": "Ounce (oz)",
+    "category": "Weight"
+  },
+  {
+    "value": "L",
+    "label": "Litre (L)",
+    "category": "Volume"
+  },
+  {
+    "value": "ml",
+    "label": "Millilitre (ml)",
+    "category": "Volume"
+  },
+  {
+    "value": "gal",
+    "label": "Gallon (gal)",
+    "category": "Volume"
+  },
+  {
+    "value": "fl oz",
+    "label": "Fluid Ounce (fl oz)",
+    "category": "Volume"
+  },
+  {
+    "value": "m",
+    "label": "Metre (m)",
+    "category": "Length"
+  },
+  {
+    "value": "cm",
+    "label": "Centimetre (cm)",
+    "category": "Length"
+  },
+  {
+    "value": "mm",
+    "label": "Millimetre (mm)",
+    "category": "Length"
+  },
+  {
+    "value": "ft",
+    "label": "Foot (ft)",
+    "category": "Length"
+  },
+  {
+    "value": "in",
+    "label": "Inch (in)",
+    "category": "Length"
+  },
+  {
+    "value": "sq ft",
+    "label": "Square Foot (sq ft)",
+    "category": "Area"
+  },
+  {
+    "value": "sq m",
+    "label": "Square Metre (sq m)",
+    "category": "Area"
+  },
+  {
+    "value": "acre",
+    "label": "Acre",
+    "category": "Area"
+  },
+  {
+    "value": "ha",
+    "label": "Hectare (ha)",
+    "category": "Area"
+  },
+  {
+    "value": "days",
+    "label": "Days",
+    "category": "Time"
+  },
+  {
+    "value": "weeks",
+    "label": "Weeks",
+    "category": "Time"
+  },
+  {
+    "value": "months",
+    "label": "Months",
+    "category": "Time"
+  },
+  {
+    "value": "GB",
+    "label": "Gigabyte (GB)",
+    "category": "Storage"
+  },
+  {
+    "value": "TB",
+    "label": "Terabyte (TB)",
+    "category": "Storage"
+  },
+  {
+    "value": "MB",
+    "label": "Megabyte (MB)",
+    "category": "Storage"
+  }
+]

@@ -63,6 +63,7 @@ import OpenInNewIcon from '@mui/icons-material/OpenInNew';
 import { useAuth } from '../hooks/useAuth';
 import { useSettings, useMode } from '../hooks/useSettings';
 import { PERMISSIONS } from '../utils/permissions';
+import { UnitCatalogProvider } from '../context/UnitCatalogContext';
 
 const drawerWidth = 240;
 const slimDrawerWidth = 72;
@@ -720,7 +721,7 @@ const AdminLayout = () => {
         }}
       >
         <Toolbar />
-        <Outlet />
+        <UnitCatalogProvider><Outlet /></UnitCatalogProvider>
       </Box>
     </Box>
   );
