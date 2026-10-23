@@ -217,7 +217,7 @@ const MediaPage = () => {
 
   // Infinite scroll observer
   useEffect(() => {
-    if (!hasMore || loading || loadingMore) return;
+    if (activeLibrary !== 'files' || !hasMore || loading || loadingMore) return;
 
     const observer = new IntersectionObserver(
       (entries) => {
@@ -239,7 +239,7 @@ const MediaPage = () => {
       }
       observer.disconnect();
     };
-  }, [hasMore, loading, loadingMore]);
+  }, [activeLibrary, hasMore, loading, loadingMore]);
 
   const handleLoadMore = () => {
     if (!loading && !loadingMore && hasMore) {
