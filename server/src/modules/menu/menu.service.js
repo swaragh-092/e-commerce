@@ -65,8 +65,10 @@ const buildTree = (items = []) => {
 // A category tree item follows Categories Management without storing copies
 // of category links in the menu.
 const expandCategoryTrees = async (items) => {
-    const hasTree = (list) => list.some((item) => item.targetType === 'category_tree' || hasTree(item.children || []));
-    if (!hasTree(items)) return items;
+    const hasSyncedCategories = (list) => list.some((item) =>
+        item.targetType === 'category_tree' || (item.targetType === 'category' && item.syncChildren) ||
+        hasSyncedCategories(item.children || []));
+    if (!hasSyncedCategories(items)) return items;
 
     const categories = await Category.findAll({
         attributes: ['id', 'name', 'slug', 'icon', 'parentId', 'sortOrder'],
@@ -74,16 +76,15 @@ const expandCategoryTrees = async (items) => {
         raw: true,
     });
     const byParent = new Map();
+    const byId = new Map(categories.map((category) => [category.id, category]));
     categories.forEach((category) => {
         const key = category.parentId || null;
         if (!byParent.has(key)) byParent.set(key, []);
         byParent.get(key).push(category);
     });
 
-    const expand = (list) => list.map((item) => {
-        if (item.targetType !== 'category_tree') return { ...item, children: expand(item.children || []) };
-        const makeChildren = (parentId, parentKey) => (byParent.get(parentId) || []).map((category, index) => {
-            const id = `category-sync:${item.id}:${category.id}`;
+    const makeChildren = (categoryParentId, parentKey, syncRootId, item) => (byParent.get(categoryParentId) || []).map((category, index) => {
+            const id = `category-sync:${syncRootId}:${category.id}`;
             return {
                 id,
                 menuId: item.menuId,
@@ -97,11 +98,26 @@ const expandCategoryTrees = async (items) => {
                 sortOrder: index,
                 isVisible: item.isVisible,
                 openInNewTab: false,
+                syncChildren: true,
                 generatedFromCategory: true,
-                children: makeChildren(category.id, id),
+                children: makeChildren(category.id, id, syncRootId, item),
             };
         });
-        return { ...item, children: makeChildren(null, item.id) };
+    const expand = (list) => list.map((item) => {
+        if (item.targetType === 'category_tree') {
+            return { ...item, children: makeChildren(null, item.id, item.id, item) };
+        }
+        if (item.targetType === 'category' && item.syncChildren) {
+            const category = byId.get(item.targetId);
+            return {
+                ...item,
+                label: category?.name || item.label,
+                icon: category?.icon || item.icon || null,
+                url: category ? `/products?category=${encodeURIComponent(category.slug)}` : item.url,
+                children: makeChildren(item.targetId, item.id, item.id, item),
+            };
+        }
+        return { ...item, children: expand(item.children || []) };
     });
     return expand(items);
 };
@@ -191,7 +207,7 @@ const validateParent = async ({ menuId, itemId = null, parentId }, options = {})
     if (!parent) {
         throw new AppError('INVALID_PARENT', 400, 'Parent item must belong to the same menu');
     }
-    if (parent.targetType === 'category_tree') {
+    if (parent.targetType === 'category_tree' || parent.syncChildren) {
         throw new AppError('INVALID_PARENT', 400, 'Synced category items cannot have manual children');
     }
 
@@ -232,6 +248,10 @@ const sanitizeItemData = (data) => {
         next.openInNewTab = false;
     }
 
+    if (next.targetType !== 'category') {
+        next.syncChildren = false;
+    }
+
     if (next.targetType === 'custom_url' || next.targetType === 'system_route') {
         next.targetId = null;
     }
@@ -269,7 +289,10 @@ const processPublicMenu = async (menu, cacheKey) => {
     const tree = await expandCategoryTrees(buildTree(plain.items || []));
     const result = { ...plain, items: await resolveTreeUrls(tree) };
     
-    if (!plain.items?.some((item) => item.targetType === 'category_tree')) setCache(cacheKey, result);
+    const hasSyncedCategories = (items = []) => items.some((item) =>
+        item.targetType === 'category_tree' || (item.targetType === 'category' && item.syncChildren) ||
+        hasSyncedCategories(item.children || []));
+    if (!hasSyncedCategories(plain.items || [])) setCache(cacheKey, result);
     return result;
 };
 
@@ -391,6 +414,7 @@ exports.updateMenuItem = async (menuId, itemId, data) => {
     const itemData = sanitizeItemData({
         targetType: item.targetType,
         targetId: item.targetId,
+        syncChildren: item.syncChildren,
         url: item.url,
         parentId: item.parentId,
         openInNewTab: item.openInNewTab,
@@ -530,7 +554,7 @@ exports.moveItems = async (itemIds, targetMenuId) => {
 
     const existingItems = await MenuItem.findAll({
         where: { id: itemIds },
-        attributes: ['id', 'parentId']
+        attributes: ['id', 'parentId', 'menuId']
     });
 
     if (existingItems.length !== itemIds.length) {
@@ -541,16 +565,33 @@ exports.moveItems = async (itemIds, targetMenuId) => {
 
     const transaction = await MenuItem.sequelize.transaction();
     try {
+        const idsToMove = new Set(itemIds);
         for (const item of existingItems) {
-            // Keep parent only if it's also being moved to the new menu
-            const isParentMoving = item.parentId && itemIds.includes(item.parentId);
+            const descendantIds = await getDescendantIds(item.id, item.menuId, new Set(), {
+                paranoid: false,
+                transaction,
+            });
+            descendantIds.forEach((id) => idsToMove.add(id));
+        }
+
+        const itemsToMove = await MenuItem.findAll({
+            where: { id: Array.from(idsToMove) },
+            attributes: ['id', 'parentId'],
+            paranoid: false,
+            transaction,
+        });
+        const movingIds = new Set(itemsToMove.map((item) => item.id));
+
+        for (const item of itemsToMove) {
+            // Keep parent links within the moved branch; detach only its external root.
+            const isParentMoving = item.parentId && movingIds.has(item.parentId);
             
             await MenuItem.update(
                 { 
                     menuId: targetMenuId,
                     parentId: isParentMoving ? item.parentId : null
                 },
-                { where: { id: item.id }, transaction }
+                { where: { id: item.id }, paranoid: false, transaction }
             );
         }
 

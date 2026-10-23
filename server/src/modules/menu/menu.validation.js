@@ -99,6 +99,7 @@ const createMenuItemSchema = Joi.object({
         then: Joi.required(),
         otherwise: Joi.allow(null, '')
     }),
+    syncChildren: Joi.boolean().default(false),
     url: safeUrlSchema.when('targetType', {
         is: Joi.valid('custom_url', 'system_route'),
         then: Joi.required(),
@@ -120,6 +121,7 @@ const updateMenuItemSchema = Joi.object({
         then: Joi.required(),
         otherwise: Joi.allow(null, '')
     }),
+    syncChildren: Joi.boolean(),
     url: safeUrlSchema.when('targetType', {
         is: Joi.valid('custom_url', 'system_route'),
         then: Joi.required(),
