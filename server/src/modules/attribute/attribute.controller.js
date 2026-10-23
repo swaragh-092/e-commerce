@@ -139,7 +139,7 @@ exports.bulkGenerateVariants = async (req, res, next) => {
 exports.cloneVariants = async (req, res, next) => {
     try {
         const result = await attributeService.cloneVariants(req.params.id, req.body.sourceProductId);
-        return success(res, result, 'Variants cloned', 201);
+        return success(res, result.variants, 'Variants copied', 201, result.summary);
     } catch (err) {
         next(err);
     }

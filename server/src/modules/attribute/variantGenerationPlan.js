@@ -55,7 +55,7 @@ const buildVariantGenerationPlan = (rows, variants) => {
         review: {
             token, groups, total, addedCount: added.length, keptCount, removedCount: removed.length,
             blockedRemovalCount: removalRows.filter((variant) => variant.reservedQty > 0).length,
-            combinations: combinations.slice(0, 12).map((combo) => ({ label: combo.map((value) => value.label).join(' / '), isNew: !existingSignatures.has(signature(combo)) })),
+            combinations: combinations.map((combo) => ({ valueIds: combo.map((value) => value.valueId), label: combo.map((value) => value.label).join(' / '), isNew: !existingSignatures.has(signature(combo)) })),
             removals: removalRows,
         },
     };

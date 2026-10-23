@@ -9,6 +9,8 @@ const {
 const { generateSlug } = require('../../utils/slugify');
 const AppError = require('../../utils/AppError');
 const { buildVariantGenerationPlan } = require('./variantGenerationPlan');
+const { assertVariableProduct } = require('../product/productType');
+const { orderProductPresentation } = require('./productAttributeOrder');
 const inventoryService = require('../inventory/inventory.service');
 const { readUnitSettings, lockUnitSettings } = require('../settings/unitCatalog');
 const { validateAttributeCategory, validateValueUnit, validateCategoryChange } = require('./attributeUnits');
@@ -440,6 +442,7 @@ const loadVariantGenerationPlan = async (productId, transaction) => {
         transaction, ...(transaction ? { lock: transaction.LOCK.UPDATE } : {}),
     });
     if (!product) throw new AppError('NOT_FOUND', 404, 'Product not found');
+    assertVariableProduct(product);
     const rows = await ProductAttribute.findAll({
         where: { productId, isVariantAttr: true, attributeId: { [Op.ne]: null } },
         include: [
@@ -456,7 +459,7 @@ const previewVariantGeneration = async (productId) => {
     return review;
 };
 
-const bulkGenerateVariants = async (productId, { defaultPrice, defaultStockQty = 0, planToken, confirmRemovals = false } = {}) => {
+const bulkGenerateVariants = async (productId, { defaultPrice, defaultStockQty = 0, planToken, confirmRemovals = false, newVariants } = {}) => {
     await sequelize.transaction(async (transaction) => {
         // Also serialize concurrent creation when the product has no variants to lock.
         await sequelize.query('SELECT pg_advisory_xact_lock(hashtext(:scope), hashtext(:productId))', {
@@ -472,14 +475,34 @@ const bulkGenerateVariants = async (productId, { defaultPrice, defaultStockQty =
         if (review.blockedRemovalCount) {
             throw new AppError('CONFLICT', 409, 'Some variants have units reserved for active orders. Finish or cancel those orders before removing the variants.');
         }
-        if (keptStock + added.length * defaultStockQty > 2147483647) {
+        let creations = added.map((combo) => ({ combo, price: defaultPrice ?? Number(product.price), stockQty: defaultStockQty }));
+        if (newVariants !== undefined) {
+            if (!planToken || !Array.isArray(newVariants) || newVariants.length > 500) {
+                throw new AppError('VALIDATION_ERROR', 400, 'Preview the combinations before customizing variants.');
+            }
+            const bySignature = new Map(added.map((combo) => [combo.map((value) => value.valueId).sort().join(','), combo]));
+            const seen = new Set();
+            creations = newVariants.map((entry) => {
+                const key = Array.isArray(entry.valueIds) ? [...entry.valueIds].sort().join(',') : '';
+                const combo = bySignature.get(key);
+                if (!combo || seen.has(key)) throw new AppError('VALIDATION_ERROR', 400, 'Choose each new combination at most once from the current preview.');
+                seen.add(key);
+                if (typeof entry.price !== 'number' || !Number.isFinite(entry.price) || entry.price < 0 || entry.price > 99999999.99 || !/^\d+(\.\d{1,2})?$/.test(String(entry.price))
+                    || !Number.isInteger(entry.stockQty) || entry.stockQty < 0 || entry.stockQty > 2147483647) {
+                    throw new AppError('VALIDATION_ERROR', 400, 'Each variant needs a valid price and a whole stock quantity of 0 or more.');
+                }
+                return { combo, price: entry.price, stockQty: entry.stockQty };
+            });
+            if (!review.keptCount && !creations.length) throw new AppError('VALIDATION_ERROR', 400, 'Select at least one combination to keep or create.');
+        }
+        if (keptStock + creations.reduce((sum, variant) => sum + variant.stockQty, 0) > 2147483647) {
             throw new AppError('VALIDATION_ERROR', 400, 'The combined variant stock is too large. Choose a lower starting stock quantity.');
         }
         for (const variant of removed) await variant.destroy({ transaction });
         let sortOrder = review.keptCount;
-        for (const combo of added) {
+        for (const { combo, price, stockQty } of creations) {
             const variant = await ProductVariant.create({
-                productId, price: defaultPrice ?? Number(product.price), stockQty: defaultStockQty,
+                productId, price, stockQty,
                 isActive: true, sortOrder: sortOrder++,
             }, { transaction });
             await VariantOption.bulkCreate(combo.map(({ attributeId, valueId }) => ({ variantId: variant.id, attributeId, valueId })), { transaction });
@@ -489,74 +512,11 @@ const bulkGenerateVariants = async (productId, { defaultPrice, defaultStockQty =
     return ProductVariant.findAll({ where: { productId }, include: variantInclude, order: [['sortOrder', 'ASC'], ['createdAt', 'ASC']] });
 };
 
-/**
- * Clone variants from one product to another (new architecture).
- * Copies variant rows + variant_options, resets stock, leaves SKU null.
- */
+// Clone missing combinations together with their product attribute assignments.
 const cloneVariants = async (targetProductId, sourceProductId) => {
-    const sourceProduct = await Product.findByPk(sourceProductId);
-    if (!sourceProduct) throw new AppError('NOT_FOUND', 404, 'Source product not found');
-
-    const targetProduct = await Product.findByPk(targetProductId);
-    if (!targetProduct) throw new AppError('NOT_FOUND', 404, 'Target product not found');
-
-    const sourceVariants = await ProductVariant.findAll({
-        where: { productId: sourceProductId },
-        include: [{ model: VariantOption, as: 'options' }],
-    });
-    if (sourceVariants.length === 0) {
-        throw new AppError('VALIDATION_ERROR', 400, 'Source product has no variants to clone');
-    }
-
-    // Task 17: Source-attribute compatibility check
-    // Ensure target product has all SKU-defining attributes used by source variants
-    const sourceAttrIds = [...new Set(sourceVariants.flatMap(v => v.options.map(o => o.attributeId)))];
-    const targetAttrs = await ProductAttribute.findAll({
-        where: { productId: targetProductId, isVariantAttr: true },
-        attributes: ['attributeId']
-    });
-    const targetAttrIds = targetAttrs.map(a => a.attributeId);
-    
-    const missingAttrIds = sourceAttrIds.filter(id => !targetAttrIds.includes(id));
-    if (missingAttrIds.length > 0) {
-        throw new AppError('VALIDATION_ERROR', 400, 'Target product is missing SKU-defining attributes present in source variants. Please link the required attributes first.');
-    }
-
-    const t = await sequelize.transaction();
-    try {
-        const cloned = [];
-        for (const sv of sourceVariants) {
-            const variant = await ProductVariant.create({
-                productId: targetProductId,
-                price: sv.price,
-                stockQty: 0,     // quantities don't carry over
-                isActive: sv.isActive,
-                sortOrder: sv.sortOrder,
-                sku: null,       // SKU must be unique — admin sets per product
-            }, { transaction: t });
-
-            for (const opt of sv.options) {
-                await VariantOption.create({
-                    variantId: variant.id,
-                    attributeId: opt.attributeId,
-                    valueId: opt.valueId,
-                }, { transaction: t });
-            }
-
-            cloned.push(variant);
-        }
-
-        await syncProductVariantStock(targetProductId, t);
-        await t.commit();
-        return ProductVariant.findAll({
-            where: { productId: targetProductId },
-            include: variantInclude,
-            order: [['sortOrder', 'ASC']],
-        });
-    } catch (err) {
-        await t.rollback();
-        throw err;
-    }
+    const { cloneProductVariants } = require('./productVariantClone.service');
+    const summary = await cloneProductVariants(targetProductId, sourceProductId);
+    return { variants: await getProductVariants(targetProductId), summary };
 };
 
 /**
@@ -565,16 +525,20 @@ const cloneVariants = async (targetProductId, sourceProductId) => {
 const getProductVariants = async (productId) => {
     const product = await Product.findByPk(productId, { attributes: ['id'] });
     if (!product) throw new AppError('NOT_FOUND', 404, 'Product not found');
-    return ProductVariant.findAll({
+    const variants = await ProductVariant.findAll({
         where: { productId },
         include: variantInclude,
         order: [['sortOrder', 'ASC'], ['createdAt', 'ASC']],
     });
+    const attributes = await ProductAttribute.findAll({ where: { productId } });
+    const plain = (row) => typeof row.toJSON === 'function' ? row.toJSON() : row;
+    return orderProductPresentation({ attributes: attributes.map(plain), variants: variants.map(plain) }).variants;
 };
 
 const addProductVariant = async (productId, data) => {
-    const product = await Product.findByPk(productId, { attributes: ['id'] });
+    const product = await Product.findByPk(productId, { attributes: ['id', 'type'] });
     if (!product) throw new AppError('NOT_FOUND', 404, 'Product not found');
+    assertVariableProduct(product);
 
     // Validate each option's attributeId+valueId pair exists and are linked
     for (const opt of data.options) {
@@ -595,6 +559,10 @@ const addProductVariant = async (productId, data) => {
 
     const t = await sequelize.transaction();
     try {
+        await sequelize.query('SELECT pg_advisory_xact_lock(hashtext(:scope), hashtext(:productId))', { replacements: { scope: 'product-variant-generation', productId }, transaction: t });
+        const currentProduct = await Product.findByPk(productId, { transaction: t, lock: t.LOCK.UPDATE });
+        if (!currentProduct) throw new AppError('NOT_FOUND', 404, 'Product not found');
+        assertVariableProduct(currentProduct);
         const variant = await ProductVariant.create({
             productId,
             sku: data.sku ?? null,
