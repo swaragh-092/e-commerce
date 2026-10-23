@@ -911,8 +911,14 @@ const validateSellingReadiness = (data, existingProduct = null, pricingEnabled =
 exports.createProduct = async (data, auditContext = null) => {
   const transaction = await Product.sequelize.transaction();
   const labelPresets = await getLabelPresets();
+  const { features: createFeatures } = await SettingsService.getFeatures();
   try {
-    data = normalizeSalePayload(data, null, { labelPresets });
+    // Catalog mode has no selling price. Accept legacy clients that send zero
+    // as an empty-price placeholder, then store the canonical NULL value.
+    if (!createFeatures.pricing && data.price != null && Number(data.price) === 0) {
+      data.price = null;
+    }
+    data = normalizeSalePayload(data, null, { labelPresets, pricingEnabled: createFeatures.pricing });
     if (data.type !== 'simple') {
       if (data.quantity !== undefined) throw new AppError('VALIDATION_ERROR', 400, 'Stock is managed by variants or bundle items for this product type.');
       if (data.type !== 'variable' && data.variants?.length) throw new AppError('VALIDATION_ERROR', 400, 'Only Variable Products can have variants.');
@@ -930,12 +936,6 @@ exports.createProduct = async (data, auditContext = null) => {
     }
 
     validateProductStock(data);
-    const { features: createFeatures } = await SettingsService.getFeatures();
-    // Catalog mode has no selling price. Accept legacy clients that send zero
-    // as an empty-price placeholder, then store the canonical NULL value.
-    if (!createFeatures.pricing && data.price != null && Number(data.price) === 0) {
-      data.price = null;
-    }
     validateSellingReadiness(data, null, createFeatures.pricing);
     validateShippingReadiness(data, null, createFeatures.shipping);
     if (data.images) await validateProductImages(data.images);
@@ -995,6 +995,7 @@ exports.updateProduct = async (id, data, auditContext = null) => {
 
   const transaction = await Product.sequelize.transaction();
   const labelPresets = await getLabelPresets();
+  const { features: updateFeatures } = await SettingsService.getFeatures();
   try {
     // Match generation/inventory lock order and serialize type changes with generation.
     await sequelize.query('SELECT pg_advisory_xact_lock(hashtext(:scope), hashtext(:productId))', {
@@ -1003,7 +1004,14 @@ exports.updateProduct = async (id, data, auditContext = null) => {
     await ProductVariant.findAll({ where: { productId: id }, order: [['id', 'ASC']], transaction, lock: transaction.LOCK.UPDATE });
     product = await Product.findByPk(id, { transaction, lock: transaction.LOCK.UPDATE });
     if (!product) throw new AppError('NOT_FOUND', 404, 'Product not found');
-    data = normalizeSalePayload(data, product, { labelPresets });
+
+    // Preserve omitted prices during edits. Only normalize an explicitly
+    // supplied zero while pricing is disabled; the products constraint allows
+    // NULL but rejects zero.
+    if (!updateFeatures.pricing && data.price != null && Number(data.price) === 0) {
+      data.price = null;
+    }
+    data = normalizeSalePayload(data, product, { labelPresets, pricingEnabled: updateFeatures.pricing });
     
     if (data.slug && data.slug !== product.slug) {
       data.slug = await generateSlug(data.slug, Product, 'slug', { transaction });
@@ -1032,13 +1040,6 @@ exports.updateProduct = async (id, data, auditContext = null) => {
       await inventoryService.adjust({ productId: id, newQuantity: 0, reason: `Change inventory type from simple to ${nextType}`, createdBy: auditContext?.userId || null, transaction });
     }
     validateProductStock(data, product);
-    const { features: updateFeatures } = await SettingsService.getFeatures();
-    // Preserve omitted prices during edits. Only normalize an explicitly
-    // supplied zero while pricing is disabled; the products constraint allows
-    // NULL but rejects zero.
-    if (!updateFeatures.pricing && data.price != null && Number(data.price) === 0) {
-      data.price = null;
-    }
     validateSellingReadiness(data, product, updateFeatures.pricing);
     validateShippingReadiness(data, product, updateFeatures.shipping);
     if (data.images) await validateProductImages(data.images);
@@ -1198,9 +1199,14 @@ exports.bulkUpdateProducts = async (ids, data, actingUserId = null, auditContext
       throw new AppError('NOT_FOUND', 404, 'No products found to update');
     }
 
+    const { features: bulkFeatures } = await SettingsService.getFeatures();
+    if (!bulkFeatures.pricing && data.price != null && Number(data.price) === 0) {
+      data.price = null;
+    }
+
     if (touchesPricingOrSale) {
       for (const product of products) {
-        const normalized = normalizeSalePayload(data, product, { labelPresets });
+        const normalized = normalizeSalePayload(data, product, { labelPresets, pricingEnabled: bulkFeatures.pricing });
         for (const key of ['saleLabel', 'salePrice', 'saleStartAt', 'saleEndAt', 'price']) {
           if (key in data) {
             updatePayload[key] = normalized[key];
@@ -1215,7 +1221,6 @@ exports.bulkUpdateProducts = async (ids, data, actingUserId = null, auditContext
     }
 
     if (updatePayload.status === 'published') {
-      const { features: bulkFeatures } = await SettingsService.getFeatures();
       for (const product of products) {
         validateSellingReadiness(updatePayload, product, bulkFeatures.pricing);
         validateShippingReadiness(updatePayload, product, bulkFeatures.shipping);
