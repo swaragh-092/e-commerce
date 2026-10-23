@@ -9,6 +9,15 @@ document.addEventListener("DOMContentLoaded", function () {
         updateCategoryUi(formatCategorySlug(categorySlug));
         updateCategoryBreadcrumbs(categorySlug, formatCategorySlug(categorySlug));
         fetchProducts(categorySlug, productSlug);
+    } else if (productSlug) {
+        OrbiCatalog.fetchProduct(productSlug).then(function (product) {
+            renderProducts([product], document.querySelector(".products-content"), document.querySelector(".products-list"), productSlug, false);
+            const category = product.categories && product.categories[0];
+            if (category) {
+                updateCategoryUi(category.name);
+                updateCategoryBreadcrumbs(category.slug, category.name);
+            }
+        }).catch(showProductError);
     }
 });
 
@@ -79,11 +88,13 @@ function fetchProducts(categorySlug, requestedProductSlug, page) {
         toggleInfiniteLoader(productsContent, true);
     }
 
-    fetch(API_URL + "products?category=" + categorySlug + "&include=attributes&page=" + page)
-        .then(function (response) {
-            return response.json();
-        })
-        .then(function (result) {
+    fetch(API_URL + "products?category=" + encodeURIComponent(categorySlug) + "&include=attributes,variants&page=" + page)
+        .then(OrbiCatalog.readResponse)
+        .then(async function (result) {
+            if (isFirstPage && requestedProductSlug && Array.isArray(result.data) && !result.data.some(function (p) { return p.slug === requestedProductSlug; })) {
+                const linkedProduct = await OrbiCatalog.fetchProduct(requestedProductSlug);
+                result.data.unshift(linkedProduct);
+            }
             if (result.success && result.data && result.data.length > 0) {
                 renderProducts(result.data, productsContent, productsList, isFirstPage ? requestedProductSlug : null, !isFirstPage);
 
@@ -106,13 +117,26 @@ function fetchProducts(categorySlug, requestedProductSlug, page) {
             }
         })
         .catch(function (error) {
-            console.error("Error fetching products:", error);
+            showProductError(error, function () { fetchProducts(categorySlug, requestedProductSlug, page); });
         })
         .finally(function () {
             productsState.isLoading = false;
             toggleInfiniteLoader(productsContent, false);
             setupInfiniteScroll(productsContent);
         });
+}
+
+function showProductError(error, retry) {
+    const content = document.querySelector('.products-content');
+    if (!content) return;
+    let message = content.querySelector('.products-load-error');
+    if (!message) { message = document.createElement('div'); message.className = 'products-load-error'; content.appendChild(message); }
+    message.setAttribute('role', 'alert');
+    message.textContent = 'Unable to load products. Please try again. ';
+    const button = document.createElement('button');
+    button.type = 'button'; button.className = 'view-product-btn'; button.textContent = 'Try again';
+    button.onclick = function () { message.remove(); if (retry) retry(); else window.location.reload(); };
+    message.appendChild(button);
 }
 
 function formatCategorySlug(slug) {
@@ -192,10 +216,10 @@ function renderBreadcrumbWithHierarchy(path, defaultName) {
 
     if (path && path.length > 0) {
         for (let i = 0; i < path.length - 1; i++) {
-            html += '<li>/</li><li><a href="product.html?cat=' + encodeURIComponent(path[i].slug) + '">' + path[i].name + '</a></li>';
+            html += '<li>/</li><li><a href="product.html?cat=' + encodeURIComponent(path[i].slug) + '">' + OrbiCatalog.escape(path[i].name) + '</a></li>';
         }
         const currentCategory = path[path.length - 1];
-        html += '<li>/</li><li><span>' + currentCategory.name + '</span></li>';
+        html += '<li>/</li><li><span>' + OrbiCatalog.escape(currentCategory.name) + '</span></li>';
 
         const categoryTitle = document.querySelector(".ip-products-list p");
         if (categoryTitle) categoryTitle.textContent = currentCategory.name;
@@ -255,6 +279,7 @@ function updateCategoryBreadcrumbs(categorySlug, fallbackName) {
 }
 
 function getProductUnit(product) {
+    if (product && product.unit) return product.unit;
     if (!product || !product.attributes || !product.attributes.length) return '';
     var matchedAttribute = product.attributes.find(function(attr) {
         var name = (attr.customName || (attr.attribute ? attr.attribute.name : '') || '').trim().toLowerCase();
@@ -328,6 +353,7 @@ function renderProducts(products, contentContainer, listContainer, requestedProd
     const startIndex = append ? listContainer.children.length : 0;
 
     products.forEach(function (product, i) {
+        if (Array.from(contentContainer.querySelectorAll(".product-sec")).some(function (section) { return section.orbiProduct && section.orbiProduct.id === product.id; })) return;
         const index = startIndex + i;
         const productSlug = product.slug || ("section" + (index + 1));
         const sectionId = "product-" + productSlug;
@@ -351,30 +377,30 @@ function renderProducts(products, contentContainer, listContainer, requestedProd
         productDiv.id = sectionId;
         productDiv.setAttribute('data-product-slug', productSlug);
 
-        const rawImageUrl = (product.images && product.images.length > 0 && product.images[0].url)
-            ? product.images[0].url
-            : "images/default-image.png";
-
-        // If image URL is relative to server, prepend API_URL or handle it
-        const finalImageUrl = rawImageUrl.startsWith("/") ? APP_URL + rawImageUrl : rawImageUrl;
+        const finalImageUrl = OrbiCatalog.line(product).image;
 
         const attributesHtml = renderProductAttributes(product.attributes);
 
+        const esc = OrbiCatalog.escape;
+        const metadata = ' data-id="' + esc(product.id) + '" data-name="' + esc(product.name) + '" data-image="' + esc(finalImageUrl) + '" data-slug="' + esc(productSlug) + '" data-category="' + esc(categorySlug) + '" data-unit="' + esc(productUnit) + '"';
         productDiv.innerHTML =
             '<div class="products">' +
-                '<div class="products-left">' +
-                    '<img src="' + finalImageUrl + '" alt="' + product.name + '" onerror="this.onerror=null;this.src=\'images/default-image.png\';">' +
-                '</div>' +
+                '<div class="products-left"><img src="' + esc(finalImageUrl) + '" alt="' + esc(product.name) + '" loading="lazy"></div>' +
                 '<div class="products-right">' +
-                    '<button type="button" class="wishlist-heart-btn" data-id="'+product.id+'" data-name="'+product.name+'" data-image="'+finalImageUrl+'" data-slug="'+productSlug+'" data-category="'+categorySlug+'" data-unit="'+productUnit+'" aria-label="Add to wishlist" title="Add to wishlist">&#9825;</button>' +
-                    '<h3>' + product.name + '</h3>' +
-                    attributesHtml +
-                    (product.description ? '<div class="product-description">' + product.description + '</div>' : '') +
-                    `${product.shortDescription ? '<h4>Remarks</h4>' + '<p>' + product.shortDescription + '</p>' : ''}` +
-                    '<a href="javascript:;" class="view-product-btn open-enquiry-popup" data-id="'+product.id+'" data-name="'+product.name+'">Enquiry Now</a>' +
-                    '<a href="javascript:;" class="view-product-btn add-enquiry-list" data-id="'+product.id+'" data-name="'+product.name+'" data-image="'+finalImageUrl+'" data-slug="'+productSlug+'" data-category="'+categorySlug+'" data-unit="'+productUnit+'">Add to Enquiry List</a>' +
+                    '<button type="button" class="wishlist-heart-btn"' + metadata + ' aria-label="Add to wishlist" aria-pressed="false" title="Add to wishlist">&#9825;</button>' +
+                    '<h3>' + esc(product.name) + '</h3>' + attributesHtml +
+                    (product.description ? '<div class="product-description">' + OrbiCatalog.description(product.description) + '</div>' : '') +
+                    (product.shortDescription ? '<h4>Remarks</h4><p>' + esc(product.shortDescription) + '</p>' : '') +
+                    '<div class="product-options"></div><p class="product-selection-status" role="status"></p><p class="product-selected-price"></p>' +
+                    '<div class="product-enquiry-actions"><button type="button" class="view-product-btn open-enquiry-popup"' + metadata + '>Enquiry Now</button>' +
+                    '<button type="button" class="view-product-btn add-enquiry-list"' + metadata + '>Add to Enquiry List</button></div>' +
                 '</div>' +
             '</div>';
+        productDiv.querySelector('img').addEventListener('error', function () {
+            if (this.getAttribute('src') !== 'images/default-image.png') this.src = 'images/default-image.png';
+        });
+        const params = new URLSearchParams(window.location.search);
+        OrbiCatalog.mountOptions(productDiv, product, params.get('slug') === product.slug ? params.get('variant') : null);
 
         contentContainer.appendChild(productDiv);
     });

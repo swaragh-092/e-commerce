@@ -355,8 +355,8 @@
    .chillie-right h4{font-size: 20px;}
    .chillie-right-heading h3{font-size: 28px;}
    .chillie-right-heading span{font-size: 50px;}
-   #gallery-pagination button{padding: 0px 6px 2px; font-size: 15px;}
-   #gallery-pagination{gap: 0px;}
+   .gallery-pagination button{padding: 0px 6px 2px; font-size: 15px;}
+   .gallery-pagination{gap: 0px;}
 }
 @media(max-width:536px){
    .research-faq .acc__title h3{font-size: 20px;}

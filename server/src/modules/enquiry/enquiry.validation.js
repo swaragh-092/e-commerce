@@ -37,8 +37,15 @@ const createEnquirySchema = Joi.object({
         }).optional().allow(null),
         variantId: uuidSchema.optional().allow(null),
         quantity: Joi.number().integer().min(1).required()
-      }).unknown(true)
+      }).unknown(true).custom((item, helpers) => {
+        const nestedProductId = typeof item.product === 'string' ? item.product : item.product?.id;
+        if (!item.productId && !nestedProductId) return helpers.error('any.custom', { message: 'Each enquiry item requires a product' });
+        if (item.productId && nestedProductId && item.productId !== nestedProductId) return helpers.error('any.custom', { message: 'Product identifiers must match' });
+        if (item.variantId && item.variant?.id && item.variantId !== item.variant.id) return helpers.error('any.custom', { message: 'Variant identifiers must match' });
+        return item;
+      })
     )
+    .min(1)
     .max(100)
     .optional()
     .allow(null)
@@ -49,6 +56,7 @@ const createEnquirySchema = Joi.object({
   if (value.productId && value.cartItems) {
     return helpers.error('any.custom', { message: 'Provide either productId or cartItems, not both' });
   }
+  if (value.cartItems && value.variantId) return helpers.error('any.custom', { message: 'Place each variantId inside its cart item' });
   return value;
 }, 'enquiry payload rules').messages({
   'any.custom': '{{#message}}'

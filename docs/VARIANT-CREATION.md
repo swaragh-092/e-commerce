@@ -66,3 +66,40 @@ npm test -- --run tests/unit/variantGenerationPlan.test.js tests/unit/productAtt
 The focused automated tests passed: 32 client tests and 48 backend tests.
 Verification covers component interactions and service logic with database mocks;
 it does not include a live browser or a write to the store's database.
+
+## Shared prices across non-pricing attributes
+
+Use **Set prices by attribute** in Variant SKUs or inside the new-variant preview.
+Select only the options that affect MRP. For example, select Flowering Days and
+leave Flower Colour unchecked, then enter one MRP for each day range. Every colour
+in a day range receives that MRP. Select more attributes (such as Package Size)
+when their combinations need separate prices, or select none to use one MRP for
+all variants.
+
+Unchecked attributes remain variant options: their stock, SKUs, availability, and
+images are not merged. Only attributes used by the current combinations appear;
+turn on Use for variants and create the combinations before pricing a new option.
+
+The dialog shows how many prices will change. Mixed-price groups are left alone
+unless a shared MRP is entered. Regrouping or cancelling discards unapplied inputs.
+Applying stages prices locally. Review and click **Save variant changes** to save
+existing variants, or finish the creation preview for selected new combinations.
+Unselected new combinations and existing kept variants are unaffected by the
+creation dialog. Manual price edits remain available afterward. These are bulk
+editing choices, not saved rules that automatically price future variants.
+
+Files changed:
+- `client/src/components/admin/VariantPriceGroups.jsx`
+- `client/src/utils/variantPriceGroups.js`
+- `client/src/components/admin/ProductVariantsPanel.jsx`
+- `client/src/components/admin/VariantSetup.jsx`
+- `client/src/test/components/VariantPriceGroups.test.jsx`
+- `client/src/test/components/ProductVariantsPanel.test.jsx`
+- `client/src/test/components/VariantSetup.test.jsx`
+- `docs/VARIANT-CREATION.md`
+
+Checks:
+```bash
+npm --prefix client test -- src/test/components/VariantPriceGroups.test.jsx src/test/components/VariantSetup.test.jsx src/test/components/ProductVariantsPanel.test.jsx
+npm --prefix client run build
+```
