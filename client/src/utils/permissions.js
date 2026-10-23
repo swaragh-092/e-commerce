@@ -41,6 +41,12 @@ export const ADMIN_ROUTE_PERMISSION_MAP = Object.freeze([
   { path: '/admin/audit-log', permissions: [PERMISSIONS.AUDIT_READ] },
 ]);
 
+export const isSuperAdminOnlySettingsKey = (group, key) => (
+  group === 'features'
+  || group === 'visibility'
+  || (group === 'general' && key === 'mode')
+);
+
 export const ADMIN_ACCESS_PERMISSIONS = Object.freeze(
   [...new Set(ADMIN_ROUTE_PERMISSION_MAP.flatMap((item) => item.permissions))]
 );

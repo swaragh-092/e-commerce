@@ -32,7 +32,7 @@ module.exports = (sequelize, DataTypes) => {
         },
         price: {
             type: DataTypes.DECIMAL(10, 2),
-            allowNull: false,
+            allowNull: true,
         },
         salePrice: {
             type: DataTypes.DECIMAL(10, 2),

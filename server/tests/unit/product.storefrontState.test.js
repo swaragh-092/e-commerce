@@ -3,7 +3,8 @@ import Joi from 'joi';
 import { describe, expect, it } from 'vitest';
 
 const require = createRequire(import.meta.url);
-const { createProductSchema, updateProductSchema, bulkUpdateSchema } = require('../../src/modules/product/product.validation');
+const { createProductSchema, catalogCreateProductSchema, updateProductSchema, bulkUpdateSchema } = require('../../src/modules/product/product.validation');
+const { addVariantSchema, catalogAddVariantSchema } = require('../../src/modules/attribute/productAttribute.validation');
 const {
   applyProductStorefrontFilters,
   buildProductStorefrontCountsWhere,
@@ -12,6 +13,32 @@ const {
 const { Product } = require('../../src/modules');
 
 describe('product storefront state validation', () => {
+  it('allows unpriced catalog products but requires a positive ecommerce price', () => {
+    const product = { name: 'Catalog item', type: 'simple', status: 'published', quantity: 0 };
+    expect(catalogCreateProductSchema.validate(product).error).toBeUndefined();
+    expect(catalogCreateProductSchema.validate({ ...product, price: null }).error).toBeUndefined();
+    expect(createProductSchema.validate(product).error?.details[0].path).toEqual(['price']);
+    expect(createProductSchema.validate({ ...product, price: 25 }).error).toBeUndefined();
+  });
+
+  it('lets catalog variants omit prices and keeps ecommerce variants priced', () => {
+    const product = {
+      name: 'Variable item', type: 'variable', status: 'draft',
+      variants: [{ options: [{ attributeId: '2e111b5b-6940-4d1b-a68e-303b40679d77', valueId: '1eb27ecb-34e7-41e3-a0e2-ff47508543c3' }] }],
+    };
+    const catalog = catalogCreateProductSchema.validate(product);
+    expect(catalog.error).toBeUndefined();
+    expect(catalog.value.variants[0].price).toBe(0);
+    expect(createProductSchema.validate({ ...product, price: 25 }).error?.details[0].path).toEqual(['variants', 0, 'price']);
+  });
+
+  it('applies the same price rule to the standalone variant API', () => {
+    const variant = { options: [{ attributeId: '2e111b5b-6940-4d1b-a68e-303b40679d77', valueId: '1eb27ecb-34e7-41e3-a0e2-ff47508543c3' }] };
+    expect(catalogAddVariantSchema.validate(variant).value.price).toBe(0);
+    expect(catalogAddVariantSchema.validate(variant).error).toBeUndefined();
+    expect(addVariantSchema.validate(variant).error?.details[0].path).toEqual(['price']);
+  });
+
   it('rejects Archived on create while accepting it for update and bulk update', () => {
     const createResult = createProductSchema.validate({
       name: 'Legacy item',

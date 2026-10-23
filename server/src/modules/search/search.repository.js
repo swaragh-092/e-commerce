@@ -30,29 +30,37 @@ const { buildSearchPattern } = require('./search.utils');
 
 const { Op } = Sequelize;
 
-const SHARED_INCLUDES = [
-  {
-    model: ProductImage,
-    as: 'images',
-    attributes: ['id', 'url', 'alt', 'isPrimary', 'sortOrder', 'mediaId'],
-  },
-  {
-    model: Brand,
-    as: 'brand',
-    attributes: ['id', 'name', 'slug'],
-  },
-  {
-    model: Category,
-    as: 'categories',
-    attributes: ['id', 'name', 'slug'],
-    through: { attributes: [] },
-  },
-  {
-    model: Tag,
-    as: 'tags',
-    attributes: ['id', 'name', 'slug'],
-    through: { attributes: [] },
-  },
+const PRODUCT_IMAGE_INCLUDE = {
+  model: ProductImage,
+  as: 'images',
+  attributes: ['id', 'url', 'alt', 'isPrimary', 'sortOrder', 'mediaId'],
+};
+
+const BRAND_INCLUDE = {
+  model: Brand,
+  as: 'brand',
+  attributes: ['id', 'name', 'slug'],
+};
+
+const CATEGORY_INCLUDE = {
+  model: Category,
+  as: 'categories',
+  attributes: ['id', 'name', 'slug'],
+  through: { attributes: [] },
+};
+
+const TAG_INCLUDE = {
+  model: Tag,
+  as: 'tags',
+  attributes: ['id', 'name', 'slug'],
+  through: { attributes: [] },
+};
+
+const buildIncludes = (includeBrands) => [
+  PRODUCT_IMAGE_INCLUDE,
+  ...(includeBrands ? [BRAND_INCLUDE] : []),
+  CATEGORY_INCLUDE,
+  TAG_INCLUDE,
 ];
 
 const PUBLISHED_WHERE = {
@@ -134,65 +142,67 @@ const productPartialMatchSql = () => `(
   OR LOWER(COALESCE("Product"."description", '')) LIKE LOWER($queryPattern)
 )`;
 
-const buildRelevanceSql = (baseRelevanceSql) => `(
+const buildRelevanceSql = (baseRelevanceSql, { includeBrands = true } = {}) => `(
   CASE WHEN ${categoryMatchSql()} THEN 100000 ELSE 0 END
-  + CASE WHEN ${exactBrandMatchSql()} THEN 90000 ELSE 0 END
+  ${includeBrands ? `+ CASE WHEN ${exactBrandMatchSql()} THEN 90000 ELSE 0 END` : ''}
   + CASE WHEN LOWER("Product"."name") = LOWER($queryText) THEN 10000 ELSE 0 END
   + CASE WHEN LOWER(COALESCE("Product"."sku", '')) = LOWER($queryText) THEN 9000 ELSE 0 END
   + CASE WHEN ${categoryPartialMatchSql()} THEN 500 ELSE 0 END
-  + CASE WHEN ${brandMatchSql()} THEN 400 ELSE 0 END
+  ${includeBrands ? `+ CASE WHEN ${brandMatchSql()} THEN 400 ELSE 0 END` : ''}
   + CASE WHEN ${tagMatchSql()} THEN 200 ELSE 0 END
   + CASE WHEN LOWER("Product"."name") LIKE LOWER($queryText) || '%' THEN 1000 ELSE 0 END
   + CASE WHEN LOWER("Product"."name") LIKE LOWER($queryPattern) THEN 100 ELSE 0 END
   + (${baseRelevanceSql})
 )`;
 
-const ftsWhere = (queryText) => ({
+const ftsWhere = (queryText, { includeBrands = true } = {}) => ({
   ...PUBLISHED_WHERE,
   [Op.and]: [
     Sequelize.literal(`(
       "Product"."search_vector" @@ plainto_tsquery('simple', $queryText)
       OR ${productPartialMatchSql()}
       OR ${categoryPartialMatchSql()}
-      OR ${brandMatchSql()}
+      ${includeBrands ? `OR ${brandMatchSql()}` : ''}
       OR ${tagMatchSql()}
     )`),
   ],
 });
 
-const ftsRelevance = (queryText) => [
+const ftsRelevance = (queryText, options = {}) => [
   Sequelize.literal(buildRelevanceSql(
-    `ts_rank("Product"."search_vector", plainto_tsquery('simple', $queryText))`
+    `ts_rank("Product"."search_vector", plainto_tsquery('simple', $queryText))`,
+    options
   )),
   'relevance',
 ];
 
-const trigramWhere = (queryText) => ({
+const trigramWhere = (queryText, { includeBrands = true } = {}) => ({
   ...PUBLISHED_WHERE,
   [Op.or]: [
     Sequelize.literal(productPartialMatchSql()),
     Sequelize.literal(categoryPartialMatchSql()),
-    Sequelize.literal(brandMatchSql()),
+    ...(includeBrands ? [Sequelize.literal(brandMatchSql())] : []),
     Sequelize.literal(tagMatchSql()),
     Sequelize.literal(`similarity("Product"."name", $queryText) > ${TRIGRAM_MIN_SIMILARITY}`),
     Sequelize.literal(`similarity("Product"."sku", $queryText) > 0.3`),
   ],
 });
 
-const trigramRelevance = (queryText) => [
+const trigramRelevance = (queryText, options = {}) => [
   Sequelize.literal(buildRelevanceSql(
-    `GREATEST(similarity("Product"."name", $queryText), similarity("Product"."sku", $queryText))`
+    `GREATEST(similarity("Product"."name", $queryText), similarity("Product"."sku", $queryText))`,
+    options
   )),
   'relevance',
 ];
 
-const baseQueryOptions = (queryText, limit, offset, relevanceAttr, whereClause) => ({
+const baseQueryOptions = (queryText, limit, offset, relevanceAttr, whereClause, { includeBrands = true } = {}) => ({
   where: whereClause,
   attributes: {
     exclude: ['search_vector'],
     include: [relevanceAttr],
   },
-  include: SHARED_INCLUDES,
+  include: buildIncludes(includeBrands),
   bind: { queryText, queryPattern: buildSearchPattern(queryText) },
   order: [
     [Sequelize.literal('"relevance"'), 'DESC'],
@@ -218,9 +228,16 @@ const baseQueryOptions = (queryText, limit, offset, relevanceAttr, whereClause) 
  * @param {number} offset - Pagination offset
  * @returns {{ rows: Product[], count: number }}
  */
-const searchProducts = async (queryText, limit, offset) => {
+const searchProducts = async (queryText, limit, offset, { includeBrands = true } = {}) => {
   const ftsResults = await Product.unscoped().findAndCountAll(
-    baseQueryOptions(queryText, limit, offset, ftsRelevance(queryText), ftsWhere(queryText))
+    baseQueryOptions(
+      queryText,
+      limit,
+      offset,
+      ftsRelevance(queryText, { includeBrands }),
+      ftsWhere(queryText, { includeBrands }),
+      { includeBrands }
+    )
   );
 
   // Fast path: FTS returned enough results — no fallback needed
@@ -231,7 +248,14 @@ const searchProducts = async (queryText, limit, offset) => {
   // Trigram fallback: FTS returned few results — try fuzzy matching
   try {
     const trigramResults = await Product.unscoped().findAndCountAll(
-      baseQueryOptions(queryText, limit, offset, trigramRelevance(queryText), trigramWhere(queryText))
+      baseQueryOptions(
+        queryText,
+        limit,
+        offset,
+        trigramRelevance(queryText, { includeBrands }),
+        trigramWhere(queryText, { includeBrands }),
+        { includeBrands }
+      )
     );
 
     if (trigramResults.rows.length === 0) {

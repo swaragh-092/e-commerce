@@ -80,7 +80,7 @@ const MENU_STRUCTURE = [
     items: [
       { text: 'Products', path: '/admin/products', icon: <InventoryIcon />, permission: PERMISSIONS.PRODUCTS_READ },
       { text: 'Categories', path: '/admin/categories', icon: <CategoryIcon />, permission: PERMISSIONS.CATEGORIES_READ },
-      { text: 'Brands', path: '/admin/brands', icon: <LocalOfferIcon />, feature: 'brands', permission: PERMISSIONS.PRODUCTS_READ },
+      { text: 'Brands', path: '/admin/brands', icon: <LocalOfferIcon />, permissions: [PERMISSIONS.BRANDS_READ, PERMISSIONS.BRANDS_MANAGE, PERMISSIONS.PRODUCTS_READ] },
       { text: 'Attributes', path: '/admin/attributes', icon: <TuneIcon />, permission: PERMISSIONS.ATTRIBUTES_READ },
     ]
   },
@@ -89,11 +89,11 @@ const MENU_STRUCTURE = [
     icon: <ShoppingCartIcon />,
     items: [
       { text: 'Orders', path: '/admin/orders', icon: <ShoppingCartIcon />, feature: 'orders', permission: PERMISSIONS.ORDERS_READ },
-      { text: 'Enquiries', path: '/admin/enquiries', icon: <HelpOutlineIcon />, feature: 'enquiry', permission: PERMISSIONS.ENQUIRIES_READ },
+      { text: 'Enquiries', path: '/admin/enquiries', icon: <HelpOutlineIcon />, permission: PERMISSIONS.ENQUIRIES_READ },
       { text: 'Customers', path: '/admin/customers', icon: <PeopleIcon />, permission: PERMISSIONS.CUSTOMERS_READ },
-      { text: 'Coupons', path: '/admin/coupons', icon: <LocalOfferIcon />, feature: 'coupons', permission: PERMISSIONS.COUPONS_READ },
+      { text: 'Coupons', path: '/admin/coupons', icon: <LocalOfferIcon />, permission: PERMISSIONS.COUPONS_READ, mode: 'ecommerce' },
       { text: 'Sale Labels', path: '/admin/sale-labels', icon: <LocalOfferIcon />, permission: PERMISSIONS.SETTINGS_READ, mode: 'ecommerce' },
-      { text: 'Reviews', path: '/admin/reviews', icon: <StarIcon />, feature: 'reviews', permission: PERMISSIONS.REVIEWS_READ },
+      { text: 'Reviews', path: '/admin/reviews', icon: <StarIcon />, permission: PERMISSIONS.REVIEWS_READ },
     ]
   },
   {

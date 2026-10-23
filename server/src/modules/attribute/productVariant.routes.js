@@ -12,10 +12,12 @@ const { cloneVariantsSchema } = require('./attribute.validation');
 const {
     generateVariantsSchema,
     addVariantSchema,
+    catalogAddVariantSchema,
     updateVariantSchema,
 } = require('./productAttribute.validation');
 const { PERMISSIONS } = require('../../config/permissions');
 const { idParamSchema, idAndVariantIdParamSchema } = require('../../utils/common.validation');
+const SettingsService = require('../settings/settings.service');
 
 
 const variantRead = [authenticate, authorizeAnyPermission(PERMISSIONS.ATTRIBUTES_READ, PERMISSIONS.PRODUCTS_READ)];
@@ -32,7 +34,12 @@ router.post('/:id/variants/clone', ...variantManage, validate(idParamSchema, 'pa
 
 // --- Per-product variant CRUD ---
 router.get('/:id/variants', ...variantRead, validate(idParamSchema, 'params'), controller.getProductVariants);
-router.post('/:id/variants', ...variantManage, validate(idParamSchema, 'params'), validate(addVariantSchema), controller.addProductVariant);
+router.post('/:id/variants', ...variantManage, validate(idParamSchema, 'params'), async (req, res, next) => {
+    try {
+        const { features } = await SettingsService.getFeatures();
+        return validate(features.pricing ? addVariantSchema : catalogAddVariantSchema)(req, res, next);
+    } catch (error) { next(error); }
+}, controller.addProductVariant);
 router.put('/:id/variants/:variantId', ...variantManage, validate(idAndVariantIdParamSchema, 'params'), validate(updateVariantSchema), controller.updateProductVariant);
 router.delete('/:id/variants/:variantId', ...variantManage, validate(idAndVariantIdParamSchema, 'params'), controller.deleteProductVariant);
 

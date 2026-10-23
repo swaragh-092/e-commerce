@@ -140,18 +140,12 @@ const featureGateUnlessPermission = (featureKey, ...permissions) => {
 };
 
 /**
- * Invalidates a single feature key from the cache.
- * Call this after a feature setting is updated in the DB so the next request
- * immediately re-reads the fresh value instead of waiting for TTL expiry.
- *
- * @param {string} featureKey
+ * Invalidates the feature cache after a settings change.
+ * All keys are cleared because feature updates and mode changes can cascade
+ * into dependent features (e.g. cart -> coupons, reviews -> requirePurchaseForReview).
  */
-const invalidateFeature = (featureKey) => {
-  if (featureKey === 'mode') {
-    featureCache.clear();
-  } else {
-    featureCache.delete(featureKey);
-  }
+const invalidateFeature = () => {
+  featureCache.clear();
 };
 
 /**

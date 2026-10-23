@@ -44,6 +44,7 @@ const VariantsPanel = ({
   categoryIds = EMPTY_LIST,
   flatCatFiles = EMPTY_LIST,
   canManageVariants = false,
+  pricingEnabled = true,
   onStockTotalChange,
   globalPrimaryVersion = 0,
   onVariantPrimarySelected,
@@ -221,7 +222,7 @@ const VariantsPanel = ({
   const hasVariantChanges = variants.some((variant) => variant._dirty);
   const skuCounts = variants.reduce((counts, variant) => { const sku = variant.sku?.trim(); if (sku) counts.set(sku, (counts.get(sku) || 0) + 1); return counts; }, new Map());
   const duplicateSku = (variant) => (skuCounts.get(variant.sku?.trim()) || 0) > 1;
-  const hasInvalidChanges = variants.some((variant) => variant._dirty && (!validPrice(variant.price) || !validStock(variant) || duplicateSku(variant)));
+  const hasInvalidChanges = variants.some((variant) => variant._dirty && ((pricingEnabled && !validPrice(variant.price)) || !validStock(variant) || duplicateSku(variant)));
   const variantBusy = saving || generating || cloning || deleting;
   const canEditVariants = canManageVariants && !variantBusy && !loading && !loadError;
 
@@ -243,7 +244,7 @@ const VariantsPanel = ({
       for (const variant of dirtyVariants) {
         await attributeService.updateProductVariant(productId, variant.id, {
           sku: variant.sku?.trim() || null,
-          price: Number(variant.price || 0),
+          ...(pricingEnabled ? { price: Number(variant.price || 0) } : {}),
           stockQty: Number(variant.stockQty || 0),
           weightGrams: variant.weightGrams !== '' && variant.weightGrams != null ? Number(variant.weightGrams) : null,
           lengthCm: variant.lengthCm !== '' && variant.lengthCm != null ? Number(variant.lengthCm) : null,
@@ -382,7 +383,7 @@ const VariantsPanel = ({
         Attributes and Variants
       </Typography>
       <Typography variant="body2" color="text.secondary" sx={{ mb: 3 }}>
-        Add product details and choose the options customers can buy. Create variants, then set their prices and stock.
+        Add product details and choose the available options. Create variants, then set their stock{pricingEnabled ? ' and prices' : ''}.
         Manage reusable templates in <Link to="/admin/attributes" style={{ color: 'inherit', fontWeight: 600 }}>Attributes {'->'}</Link>
       </Typography>
 
@@ -401,7 +402,7 @@ const VariantsPanel = ({
                 Copy from product
               </Button>
             </Box>
-            <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>Manage a price, stock quantity, and SKU for each option combination.</Typography>
+            <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>Manage stock quantity and SKU{pricingEnabled ? ', plus a price,' : ''} for each option combination.</Typography>
             {!loading && !loadError && <VariantSetup productId={productId} rows={productAttributes} variants={variants} basePrice={productBasePrice}
               disabled={saving || cloning || deleting || attributesBusy} canManage={canManageVariants} hasUnsavedChanges={hasVariantChanges}
               onBusyChange={setGenerating} onCreated={loadAll} />}
@@ -448,7 +449,7 @@ const VariantsPanel = ({
                     >
                       <Box sx={{ minWidth: 0, flex: 1, py: 0.5 }}>
                         <Typography variant="body2" fontWeight={600} sx={{ overflowWrap: 'anywhere' }}>{getVariantOptionLabel(variant) || 'Variant SKU'}</Typography>
-                        <Typography variant="caption" color="text.secondary">MRP: {Number(variant.price || 0).toLocaleString()} · Stock: {variant.stockQty || 0} · {variant.isActive === false ? 'Hidden' : 'Available'}{variant._dirty ? ' · Unsaved' : ''}</Typography>
+                        <Typography variant="caption" color="text.secondary">{pricingEnabled ? `MRP: ${Number(variant.price || 0).toLocaleString()} · ` : ''}Stock: {variant.stockQty || 0} · {variant.isActive === false ? 'Hidden' : 'Available'}{variant._dirty ? ' · Unsaved' : ''}</Typography>
                       </Box>
                       <IconButton
                         size="small"
@@ -552,7 +553,7 @@ const VariantsPanel = ({
                             </Button>
                           </Box>
                         </Grid>
-                        <Grid item xs={12} sm={6}>
+                        {pricingEnabled && <Grid item xs={12} sm={6}>
                           <TextField
                             fullWidth
                             size="small"
@@ -565,7 +566,7 @@ const VariantsPanel = ({
                             error={variant._dirty && !validPrice(variant.price)}
                             helperText={variant._dirty && !validPrice(variant.price) ? 'Enter a price with up to 2 decimals.' : undefined}
                           />
-                        </Grid>
+                        </Grid>}
                         <Grid item xs={12} sm={6}>
                           <TextField
                             fullWidth
@@ -719,7 +720,7 @@ const VariantsPanel = ({
         <DialogTitle>Clone Variants from Another Product</DialogTitle>
         <DialogContent sx={{ pt: 1 }}>
           <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
-            Required attributes, values, combinations, MRP and shipping measurements are copied automatically. New variants start with zero stock and fresh unique SKUs. Variant photos are not copied. Existing combinations keep their prices, stock and SKUs.
+            Required attributes, values and combinations are copied automatically. New variants start with zero stock and fresh unique SKUs. Variant photos are not copied. Existing combinations keep their prices, stock and SKUs.
           </Typography>
           <Tabs value={cloneTab} onChange={(_, value) => { clearTimeout(cloneSearchTimer.current); cloneRequests.current.search++; cloneRequests.current.category++; setCloneSearchLoading(false); setCloneCatProductsLoading(false); setCloneTab(value); setCloneSelectedProduct(null); setCloneCatSelectedProduct(null); setCloneSearchInput(''); setCloneSearchResults([]); setCloneCatId(''); setCloneCatProducts([]); }} sx={{ mb: 2 }}>
             <Tab label="Search by name or SKU" disabled={cloning} />

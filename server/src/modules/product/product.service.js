@@ -857,7 +857,8 @@ exports.getProductById = async (id) => {
   return serializeProductPricing(product, { adminView: true, features }, labelPresets);
 };
 
-const validateShippingReadiness = (data, existingProduct = null) => {
+const validateShippingReadiness = (data, existingProduct = null, shippingEnabled = true) => {
+  if (!shippingEnabled) return;
   const status = data.status !== undefined ? data.status : existingProduct?.status;
   if (status !== 'published') return;
 
@@ -895,6 +896,16 @@ const validateShippingReadiness = (data, existingProduct = null) => {
   }
 };
 
+const validateSellingReadiness = (data, existingProduct = null, pricingEnabled = true) => {
+  if (!pricingEnabled) return;
+  const status = data.status !== undefined ? data.status : existingProduct?.status;
+  if (status !== 'published') return;
+  const price = data.price !== undefined ? data.price : existingProduct?.price;
+  if (price === null || price === undefined || !Number.isFinite(Number(price)) || Number(price) <= 0) {
+    throw new AppError('PRODUCT_NOT_READY', 400, 'Set a positive selling price before publishing this product.');
+  }
+};
+
 exports.createProduct = async (data, auditContext = null) => {
   const transaction = await Product.sequelize.transaction();
   const labelPresets = await getLabelPresets();
@@ -910,7 +921,9 @@ exports.createProduct = async (data, auditContext = null) => {
     }
 
     validateProductStock(data);
-    validateShippingReadiness(data);
+    const { features: createFeatures } = await SettingsService.getFeatures();
+    validateSellingReadiness(data, null, createFeatures.pricing);
+    validateShippingReadiness(data, null, createFeatures.shipping);
     if (data.images) await validateProductImages(data.images);
 
     const product = await Product.create({ ...data, slug }, { transaction });
@@ -997,7 +1010,9 @@ exports.updateProduct = async (id, data, auditContext = null) => {
     }
 
     validateProductStock(data, product);
-    validateShippingReadiness(data, product);
+    const { features: updateFeatures } = await SettingsService.getFeatures();
+    validateSellingReadiness(data, product, updateFeatures.pricing);
+    validateShippingReadiness(data, product, updateFeatures.shipping);
     if (data.images) await validateProductImages(data.images);
 
     // Log inventory ADJUSTMENT if quantity is being manually changed
@@ -1172,8 +1187,10 @@ exports.bulkUpdateProducts = async (ids, data, actingUserId = null, auditContext
     }
 
     if (updatePayload.status === 'published') {
+      const { features: bulkFeatures } = await SettingsService.getFeatures();
       for (const product of products) {
-        validateShippingReadiness(updatePayload, product);
+        validateSellingReadiness(updatePayload, product, bulkFeatures.pricing);
+        validateShippingReadiness(updatePayload, product, bulkFeatures.shipping);
       }
     }
 

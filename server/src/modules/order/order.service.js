@@ -1343,6 +1343,13 @@ const placeOrder = async (userId, payload) => {
                 }
             }
 
+            // Catalog products can be saved without selling prices. A later mode
+            // switch must never turn an unpriced item into a free order.
+            const configuredPrice = item.variantId ? item.variant?.price : plainCurrentProduct.price;
+            if (configuredPrice === null || configuredPrice === undefined || !Number.isFinite(Number(configuredPrice)) || Number(configuredPrice) <= 0) {
+                throw new AppError('PRODUCT_NOT_READY', 400, `Set a price for "${product.name}" before checkout.`);
+            }
+
             subtotal += currentPrice * item.quantity;
             item.currentPrice = currentPrice;
             item.currentProduct = {

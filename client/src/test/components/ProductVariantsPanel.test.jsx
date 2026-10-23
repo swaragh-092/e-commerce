@@ -185,6 +185,16 @@ describe('product attributes and variant drafts', () => {
     fireEvent.change(screen.getByLabelText('Stock Qty'), { target: { value: '3' } });
     expect(screen.getByRole('button', { name: 'Save variant changes' })).toBeEnabled();
   });
+  it('preserves variant prices when editing stock in catalog mode', async () => {
+    attributeService.updateProductVariant.mockResolvedValue({ data: { data: {} } });
+    render(tree({ pricingEnabled: false }));
+    fireEvent.click(await screen.findByRole('button', { name: 'Variant SKU' }));
+    expect(screen.queryByLabelText('MRP')).not.toBeInTheDocument();
+    fireEvent.change(screen.getByLabelText('Stock Qty'), { target: { value: '3' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Save variant changes' }));
+    await waitFor(() => expect(attributeService.updateProductVariant).toHaveBeenCalled());
+    expect(attributeService.updateProductVariant.mock.calls[0][2]).not.toHaveProperty('price');
+  });
   it('deletes ordinary stock after confirmation and preserves edits on other variants', async () => {
     attributeService.getProductVariants.mockResolvedValue({ data: { data: [
       { id: 'first', optionLabel: 'First', price: 100, stockQty: 26, reservedQty: 0, images: [] },

@@ -96,6 +96,10 @@ const addVariantSchema = Joi.object({
         .messages({ 'any.required': 'options are required - each variant needs at least one attribute+value' }),
 });
 
+const catalogAddVariantSchema = addVariantSchema.keys({
+    price: Joi.number().precision(2).min(0).default(0),
+});
+
 const updateVariantSchema = Joi.object({
     sku: Joi.string().max(100).allow('', null),
     price: Joi.number().precision(2).min(0),
@@ -116,5 +120,6 @@ module.exports = {
     updateProductAttributeSchema,
     generateVariantsSchema,
     addVariantSchema,
+    catalogAddVariantSchema,
     updateVariantSchema,
 };

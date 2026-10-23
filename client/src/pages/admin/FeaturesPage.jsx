@@ -120,7 +120,9 @@ const FeaturesPage = () => {
       if (refreshSettings) await refreshSettings();
     } catch (e) {
       notify(
-        e?.response?.data?.message || 'Failed to save features. Superadmin access required.',
+        e?.response?.data?.error?.message
+          || e?.response?.data?.message
+          || 'Failed to save platform features. Check your connection and try again.',
         'error'
       );
     } finally {

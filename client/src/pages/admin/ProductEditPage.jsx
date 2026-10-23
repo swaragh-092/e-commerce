@@ -62,7 +62,7 @@ import attributeService from '../../services/attributeService';
 import { getSaleLabels } from '../../services/adminService';
 import MediaPicker from '../../components/common/MediaPicker';
 import { useNotification } from '../../context/NotificationContext';
-import { useCurrency, useSettings, useFeature, useFeatureVisible } from '../../hooks/useSettings';
+import { useCurrency, useSettings, useFeature, useFeatureVisible, useFeaturesResolved } from '../../hooks/useSettings';
 import { getProductBasePrice } from '../../utils/variantPricing';
 import { getVariantOptionLabel } from '../../utils/variantOptions';
 import { formatAttributeValue, getSwatchColor } from '../../utils/attributePresentation';
@@ -120,10 +120,10 @@ const validate = (formData) => {
     errs.name = 'Product name must be 255 characters or less.';
 
   // Only validate price/tax if their respective features are enabled
-  const pricingEnabled = window.__APP_FEATURES__?.pricing ?? true; // Fallback to true if unknown
-  const showPrice = window.__APP_FEATURES__?.showPrice ?? true;
+  const pricingEnabled = formData._features?.pricing === true;
+  const shippingEnabled = formData._features?.shipping === true;
 
-  if (pricingEnabled || showPrice) {
+  if (pricingEnabled) {
     const rPrice = Number(formData.price);
     if (formData.price === '' || formData.price === null || formData.price === undefined) {
       errs.price = 'MRP is required.';
@@ -187,7 +187,7 @@ const validate = (formData) => {
   }
 
   // Shipping Readiness Validation for purchasable (published) products
-  if (formData.requiresShipping && formData.status === 'published') {
+  if (shippingEnabled && formData.requiresShipping && formData.status === 'published') {
     if (!formData.weightGrams || Number(formData.weightGrams) <= 0) {
       errs.weightGrams = 'Weight (> 0 g) is required before publishing.';
     }
@@ -232,11 +232,13 @@ const ProductEditPage = () => {
   const canUpdateProducts = hasPermission(PERMISSIONS.PRODUCTS_UPDATE);
   const canUploadMedia = hasPermission(PERMISSIONS.MEDIA_UPLOAD);
   const pricingEnabled = useFeatureVisible('pricing', 'admin');
+  const featuresResolved = useFeaturesResolved();
+  const pricingCapability = useFeature('pricing');
+  const shippingCapability = useFeature('shipping');
   const brandsEnabled = useFeature('brands');
   const seoEnabled = useFeature('seo');
-  const showPrice = useFeature('showPrice');
   const productAssistantEnabled = useFeature('productAssistant');
-  const canSaveProduct = isNew ? canCreateProducts : canUpdateProducts;
+  const canSaveProduct = featuresResolved && (isNew ? canCreateProducts : canUpdateProducts);
 
   const [formData, setFormData] = useState({
     name: '',
@@ -505,7 +507,7 @@ const ProductEditPage = () => {
     }
 
     const effectiveQuantity = formData.type === 'variable' || hasVariants ? variantStockTotal : formData.quantity;
-    const errs = validate({ ...formData, quantity: effectiveQuantity, _features: { pricing: pricingEnabled, showPrice } });
+    const errs = validate({ ...formData, quantity: effectiveQuantity, _features: { pricing: pricingCapability, shipping: shippingCapability } });
 
     // Block type change if invariants are violated
     if (!isNew && dbProduct && formData.type !== dbProduct.type) {
@@ -535,7 +537,7 @@ const ProductEditPage = () => {
     try {
       const payload = {
         ...formData,
-        price: parseFloat(formData.price),
+        price: formData.price === '' ? null : Number(formData.price),
         salePrice:
           formData.salePrice !== '' && formData.salePrice !== null && !isNaN(parseFloat(formData.salePrice))
             ? parseFloat(formData.salePrice)
@@ -560,6 +562,17 @@ const ProductEditPage = () => {
         metaKeywords: formData.metaKeywords || null,
         ogImage: formData.ogImage || null,
       };
+
+      if (!pricingCapability) {
+        if (isNew) payload.price = null;
+        else delete payload.price;
+        for (const key of ['salePrice', 'saleStartAt', 'saleEndAt', 'saleLabel', 'taxConfig']) delete payload[key];
+      }
+      if (!shippingCapability) {
+        for (const key of ['requiresShipping', 'packingMode', 'weightGrams', 'lengthCm', 'breadthCm', 'heightCm']) delete payload[key];
+      }
+      if (!brandsEnabled) delete payload.brandId;
+      if (!seoEnabled) for (const key of ['metaTitle', 'metaDescription', 'metaKeywords', 'ogImage']) delete payload[key];
 
       if (payload.type === 'simple') {
         payload.quantity = parseInt(formData.quantity) || 0;
@@ -856,15 +869,15 @@ const ProductEditPage = () => {
               </Typography>
             </Paper>
 
-            {(pricingEnabled || showPrice) && (
+            {pricingCapability && (
               <Paper sx={{ p: 3, mb: 3 }}>
                 <Typography variant="h6" sx={{ mb: 0.5 }}>
-                  {pricingEnabled ? 'Pricing & Tax' : 'Pricing'}
+                  {pricingEnabled ? 'Pricing & Tax' : 'Selling Price'}
                 </Typography>
                 <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
                   {pricingEnabled
                     ? 'Set the item price and tax together. The estimate below uses the active sale price when a sale is live.'
-                    : 'Set the item price displayed in the catalog.'}
+                    : 'A selling price is required while ecommerce is enabled, even when price presentation is hidden.'}
                 </Typography>
                 <Grid container spacing={2}>
                   <Grid item xs={12} sm={6}>
@@ -1361,7 +1374,7 @@ const ProductEditPage = () => {
               </Paper>
             )}
 
-            {pricingEnabled && (
+            {shippingCapability && (
               <Paper sx={{ p: 3, mb: 3 }}>
                 <Typography variant="h6" gutterBottom>
                   Shipping &amp; Dimensions
@@ -1483,6 +1496,7 @@ const ProductEditPage = () => {
         {!isNew && formData.type === 'variable' && dbProduct?.type === 'variable' && (
           <Box onKeyDown={(e) => { if (e.key === 'Enter' && e.target.tagName !== 'TEXTAREA') { e.preventDefault(); e.stopPropagation(); } }}>
             <VariantsPanel 
+              pricingEnabled={pricingCapability}
               productId={id} 
               productName={formData.name}
               productSku={formData.sku}

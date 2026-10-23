@@ -2,13 +2,14 @@
 const express = require('express');
 const router = express.Router();
 const productController = require('./product.controller');
-const { productListQuerySchema, createProductSchema, updateProductSchema, bulkSaleSchema, bulkDeleteSchema, bulkUpdateSchema } = require('./product.validation');
+const { productListQuerySchema, createProductSchema, catalogCreateProductSchema, updateProductSchema, bulkSaleSchema, bulkDeleteSchema, bulkUpdateSchema } = require('./product.validation');
 const { authenticate, optionalAuth } = require('../../middleware/auth.middleware');
 const { authorizePermissions } = require('../../middleware/role.middleware');
 const { validate } = require('../../middleware/validate.middleware');
 const { auditLog } = require('../audit/audit.middleware');
 const { PERMISSIONS } = require('../../config/permissions');
 const { idParamSchema } = require('../../utils/common.validation');
+const SettingsService = require('../settings/settings.service');
 
 
 
@@ -28,7 +29,12 @@ router.post(
   '/',
   authenticate,
   authorizePermissions(PERMISSIONS.PRODUCTS_CREATE),
-  validate(createProductSchema),
+  async (req, res, next) => {
+    try {
+      const { features } = await SettingsService.getFeatures();
+      return validate(features.pricing ? createProductSchema : catalogCreateProductSchema)(req, res, next);
+    } catch (error) { next(error); }
+  },
   auditLog('Product'),
   productController.create
 );
