@@ -94,6 +94,29 @@ describe('theme and button color system', () => {
       expect(buttonOverrides.containedInfo.backgroundColor).toBe('#0284c7');
     });
 
+    it('keeps destructive buttons on fixed Safety Red even when errorColor token is customized', () => {
+      const theme = buildStorefrontTheme({
+        errorColor: '#8b5cf6', // custom error token
+      });
+
+      // Palette error main reflects the custom token for state text / alerts
+      expect(theme.palette.error.main).toBe('#8b5cf6');
+
+      const buttonOverrides = theme.components.MuiButton.styleOverrides;
+      // Destructive button overrides remain strictly locked to fixed Safety Red (#dc3545)
+      expect(buttonOverrides.containedError.backgroundColor).toBe('#dc3545');
+      expect(buttonOverrides.containedError['&:hover'].backgroundColor).toBe('#b91c1c');
+      expect(buttonOverrides.outlinedError.borderColor).toBe('#dc3545');
+      expect(buttonOverrides.outlinedError.color).toBe('#dc3545');
+      expect(buttonOverrides.textError.color).toBe('#dc3545');
+
+      const vars = buildStorefrontCssVariables({
+        errorColor: '#8b5cf6',
+      });
+      expect(vars['--store-btn-danger-bg']).toBe('#dc3545');
+      expect(vars['--store-btn-danger-hover']).toBe('#b91c1c');
+    });
+
     it('configures outline and soft buttonStyle for Primary and Secondary buttons', () => {
       const themeOutline = buildStorefrontTheme({
         primaryColor: '#4f46e5',

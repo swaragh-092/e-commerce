@@ -25,6 +25,11 @@ const TYPOGRAPHY_SCALE_PRESETS = {
   },
 };
 
+// Fixed immutable Safety Red constants for delete, danger, and destructive actions.
+// Kept strictly separate from the configurable theme errorColor token.
+export const SAFETY_RED = '#dc3545';
+export const SAFETY_RED_HOVER = '#b91c1c';
+
 const cssValue = (value, fallback) => (value === undefined || value === null || value === '' ? fallback : value);
 const numeric = (value, fallback) => {
   const next = Number.parseFloat(value);
@@ -445,7 +450,8 @@ export const buildStorefrontCssVariables = (settingsOrTheme = {}, customerDarkMo
     '--store-btn-primary-text':   '#ffffff',
     '--store-btn-secondary-bg':   secondaryMain,
     '--store-btn-secondary-text': onSecondary,
-    '--store-btn-danger-bg':      errorColor || '#dc3545',
+    '--store-btn-danger-bg':      SAFETY_RED,
+    '--store-btn-danger-hover':   SAFETY_RED_HOVER,
     '--store-btn-danger-text':    '#ffffff',
     '--store-btn-success-bg':     successColor || '#059669',
     '--store-btn-success-text':   '#ffffff',
@@ -658,12 +664,12 @@ export const buildStorefrontTheme = (themeSettings = {}, customerDarkMode = null
             },
           },
           containedError: {
-            // Strictly safety RED for delete, danger, and destructive actions
-            backgroundColor: errorColor || '#dc3545',
+            // Strictly locked to Safety Red (#dc3545) for all delete, danger, and destructive actions
+            backgroundColor: SAFETY_RED,
             color: '#ffffff',
             border: '1px solid transparent',
             '&:hover': {
-              backgroundColor: '#b91c1c',
+              backgroundColor: SAFETY_RED_HOVER,
               boxShadow: 'none',
             },
           },
@@ -694,11 +700,11 @@ export const buildStorefrontTheme = (themeSettings = {}, customerDarkMode = null
             },
           },
           outlinedError: {
-            borderColor: errorColor || '#dc3545',
-            color: errorColor || '#dc3545',
+            borderColor: SAFETY_RED,
+            color: SAFETY_RED,
             '&:hover': {
-              borderColor: '#b91c1c',
-              backgroundColor: `${errorColor || '#dc3545'}14`,
+              borderColor: SAFETY_RED_HOVER,
+              backgroundColor: `${SAFETY_RED}14`,
             },
           },
           outlinedWarning: {
@@ -718,9 +724,9 @@ export const buildStorefrontTheme = (themeSettings = {}, customerDarkMode = null
             },
           },
           textError: {
-            color: errorColor || '#dc3545',
+            color: SAFETY_RED,
             '&:hover': {
-              backgroundColor: `${errorColor || '#dc3545'}14`,
+              backgroundColor: `${SAFETY_RED}14`,
             },
           },
           textSuccess: {

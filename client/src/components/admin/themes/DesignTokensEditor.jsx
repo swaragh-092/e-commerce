@@ -205,7 +205,7 @@ export const ButtonPaletteShowcase = ({ value = {} }) => {
     { label: 'Primary', sx: getPrimarySx() },
     { label: 'Secondary', sx: getSecondarySx() },
     { label: 'Success', sx: { bgcolor: successColor, color: '#ffffff', border: '1px solid transparent' } },
-    { label: 'Danger', sx: { bgcolor: errorColor, color: '#ffffff', border: '1px solid transparent' } },
+    { label: 'Danger', sx: { bgcolor: '#dc3545', color: '#ffffff', border: '1px solid transparent' } },
     { label: 'Warning', sx: { bgcolor: warningColor, color: '#ffffff', border: '1px solid transparent' } },
     { label: 'Info', sx: { bgcolor: infoColor, color: '#ffffff', border: '1px solid transparent' } },
     { label: 'Light', sx: { bgcolor: isDark ? '#334155' : '#f8fafc', color: isDark ? '#f8fafc' : '#1e293b', border: `1px solid ${isDark ? '#475569' : '#e2e8f0'}` } },
