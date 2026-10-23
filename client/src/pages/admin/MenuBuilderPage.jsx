@@ -46,7 +46,7 @@ const MenuBuilderPage = () => {
   const canManage = hasPermission(PERMISSIONS.MENUS_MANAGE);
 
   const rows = useMemo(() => flattenItems(selectedMenu?.items || []), [selectedMenu]);
-  const parentOptions = rows.filter((row) => !row.generatedFromCategory && row.targetType !== 'category_tree' && row.id !== editingItem?.id);
+  const parentOptions = rows.filter((row) => !row.generatedFromCategory && row.targetType !== 'category_tree' && !row.syncChildren && row.id !== editingItem?.id);
   const categoryOptions = useMemo(() => flattenCategories(categories), [categories]);
 
   const fetchMenus = async (preferredId = selectedMenuId) => {
@@ -179,6 +179,7 @@ const MenuBuilderPage = () => {
       // category list and storefront URL, so expose one choice in the editor.
       targetType: item.targetType === 'collection' ? 'category' : item.targetType || 'none',
       targetId: item.targetId || '',
+      syncChildren: Boolean(item.syncChildren),
       url: item.url || '',
       placement: item.placement || 'center',
       sortOrder: item.sortOrder || 0,
@@ -196,6 +197,7 @@ const MenuBuilderPage = () => {
       label,
       targetType,
       targetId: needsTarget(targetType) ? itemForm.targetId || null : null,
+      syncChildren: targetType === 'category' && Boolean(itemForm.syncChildren),
       url: needsUrl(targetType) ? itemForm.url.trim() : null,
       placement: itemForm.placement,
       sortOrder: Number(itemForm.sortOrder) || 0,

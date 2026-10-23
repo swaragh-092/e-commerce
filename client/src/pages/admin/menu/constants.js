@@ -13,6 +13,7 @@ export const emptyItemForm = {
   label: '',
   targetType: 'none',
   targetId: '',
+  syncChildren: false,
   url: '',
   placement: 'center',
   sortOrder: 0,

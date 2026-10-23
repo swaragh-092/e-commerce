@@ -1,4 +1,4 @@
-# 0007 - Category Icons for Catalog Navigation
+# 0007 - Category Icons and Branch Sync for Catalog Navigation
 
 **Status:** proposed
 **Date:** 2026-10-23
@@ -11,7 +11,9 @@ Categories can already store an icon value, but the admin flow only supported ch
 
 ## Decision
 
-Support both built-in icon identifiers and existing media URLs in the category icon field. Built-in identifiers use the `mui:<id>` format and resolve through a fixed client-side icon catalog. Synced category menu entries include the category icon, and storefront navigation renders either built-in icons or media images. No database migration is required. Custom SVG uploads are out of scope for this version.
+Support both built-in icon identifiers and existing media URLs in the category icon field. Built-in identifiers use the `mui:<id>` format and resolve through a fixed client-side icon catalog. Synced category menu entries include the category icon, and storefront navigation renders either built-in icons or media images. Icon support requires no database migration. Custom SVG uploads are out of scope for this version.
+
+Menu Builder also supports syncing children for an individual category menu item. The menu item points to the selected category, while its children are projected from that category's current descendants at read time. Category names, hierarchy, order, URLs, and icons remain sourced from Categories Management. Generated children are not stored as menu rows; any manually configured children stay stored and reappear if syncing is turned off.
 
 ## Consequences
 

@@ -32,6 +32,12 @@ module.exports = (sequelize, DataTypes) => {
             allowNull: true,
             field: 'target_id',
         },
+        syncChildren: {
+            type: DataTypes.BOOLEAN,
+            allowNull: false,
+            defaultValue: false,
+            field: 'sync_children',
+        },
         url: {
             type: DataTypes.STRING(1000),
             allowNull: true,

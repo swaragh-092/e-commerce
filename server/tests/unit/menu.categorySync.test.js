@@ -9,6 +9,42 @@ const CategoryService = require('../../src/modules/category/category.service');
 afterEach(() => vi.restoreAllMocks());
 
 describe('synced category menu', () => {
+  it('syncs only the selected category branch and follows its current child order', async () => {
+    const menu = {
+      id: 'menu-2',
+      items: [
+        { id: 'fruits-menu-item', menuId: 'menu-2', label: 'Fruits', targetType: 'category', targetId: 'fruits', syncChildren: true, placement: 'center', sortOrder: 10 },
+        { id: 'home-menu-item', menuId: 'menu-2', label: 'Home', targetType: 'system_route', url: '/', placement: 'center', sortOrder: 0 },
+      ],
+    };
+    vi.spyOn(Menu, 'findByPk').mockResolvedValue({ toJSON: () => menu });
+    const categories = [
+      { id: 'vegetables', name: 'Vegetables', slug: 'vegetables', parentId: null, sortOrder: 0 },
+      { id: 'fruits', name: 'Fruits', slug: 'fruits', parentId: null, sortOrder: 10 },
+      { id: 'watermelon', name: 'Watermelon', slug: 'watermelon', parentId: 'fruits', sortOrder: 20 },
+      { id: 'muskmelon', name: 'Muskmelon', slug: 'muskmelon', parentId: 'fruits', sortOrder: 10 },
+      { id: 'cantaloupe', name: 'Cantaloupe', slug: 'cantaloupe', parentId: 'muskmelon', sortOrder: 0 },
+      { id: 'broccoli', name: 'Broccoli', slug: 'broccoli', parentId: 'vegetables', sortOrder: 0 },
+    ];
+    vi.spyOn(Category, 'findAll').mockImplementation(async () => [...categories].sort((a, b) =>
+      a.sortOrder - b.sortOrder || a.name.localeCompare(b.name)));
+
+    const first = await MenuService.getMenuById('menu-2');
+    expect(first.items[1].label).toBe('Fruits');
+    expect(first.items[1].children.map((item) => item.label)).toEqual(['Muskmelon', 'Watermelon']);
+    expect(first.items[1].children[0].children[0]).toMatchObject({
+      label: 'Cantaloupe', targetId: 'cantaloupe', generatedFromCategory: true,
+    });
+    expect(first.items[1].children.flatMap((item) => [item.label, ...item.children.map((child) => child.label)]))
+      .not.toContain('Broccoli');
+
+    categories.find((category) => category.id === 'watermelon').sortOrder = 5;
+    categories.find((category) => category.id === 'fruits').name = 'Fresh Fruit';
+    const second = await MenuService.getMenuById('menu-2');
+    expect(second.items[1]).toMatchObject({ label: 'Fresh Fruit' });
+    expect(second.items[1].children.map((item) => item.label)).toEqual(['Watermelon', 'Muskmelon']);
+  });
+
   it('uses the current category hierarchy and order without changing manual items', async () => {
     const menu = {
       id: 'menu-1',
