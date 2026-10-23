@@ -23,6 +23,7 @@ import PageService from '../services/pageService';
 import MenuService from '../services/menuService';
 import { ADMIN_ACCESS_PERMISSIONS, getFirstAccessibleAdminPath } from '../utils/permissions';
 import SEO from '../components/common/SEO';
+import CategoryIcon from '../components/common/CategoryIcon';
 import { isExternalUrl } from '../utils/urls';
 import { getStoreName } from '../utils/store';
 import { isFreeShippingPromotion, resolveShippingAnnouncement } from '../utils/shippingAnnouncement';
@@ -196,6 +197,7 @@ const StoreLayout = () => {
           onClick={navigable ? () => closeDynamicMenu(parentId) : undefined}
           sx={{ pl: 2 + depth * 2 }}
         >
+          {item.icon && <CategoryIcon value={item.icon} size={20} />}
           {item.label}
         </MenuItem>
         {hasChildren && renderDynamicMenuItems(item.children, parentId, depth + 1)}
@@ -231,6 +233,7 @@ const StoreLayout = () => {
           >
             {isNavigableItem(item) && (
               <MenuItem {...getLinkProps(item)} onClick={() => closeDynamicMenu(item.id)} sx={{ fontWeight: 700 }}>
+                {item.icon && <CategoryIcon value={item.icon} size={20} />}
                 All {item.label}
               </MenuItem>
             )}
@@ -258,6 +261,7 @@ const StoreLayout = () => {
           '&:hover': { bgcolor: 'rgba(255,255,255,0.12)', opacity: 1 },
         }}
       >
+        {item.icon && <CategoryIcon value={item.icon} size={20} />}
         {item.label}
       </Button>
     );
@@ -274,6 +278,7 @@ const StoreLayout = () => {
           onClick={navigable ? closeMobileMenu : undefined}
           sx={{ pl: 2 + depth * 2, fontWeight: depth === 0 ? 700 : 400 }}
         >
+          {item.icon && <CategoryIcon value={item.icon} size={20} />}
           {item.label}
         </MenuItem>
         {hasChildren && renderMobileMenuItems(item.children, depth + 1)}

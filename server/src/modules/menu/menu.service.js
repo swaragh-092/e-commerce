@@ -69,7 +69,7 @@ const expandCategoryTrees = async (items) => {
     if (!hasTree(items)) return items;
 
     const categories = await Category.findAll({
-        attributes: ['id', 'name', 'slug', 'parentId', 'sortOrder'],
+        attributes: ['id', 'name', 'slug', 'icon', 'parentId', 'sortOrder'],
         order: [['sortOrder', 'ASC'], ['name', 'ASC'], ['id', 'ASC']],
         raw: true,
     });
@@ -92,6 +92,7 @@ const expandCategoryTrees = async (items) => {
                 targetType: 'category',
                 targetId: category.id,
                 url: `/products?category=${encodeURIComponent(category.slug)}`,
+                icon: category.icon || null,
                 placement: item.placement,
                 sortOrder: index,
                 isVisible: item.isVisible,

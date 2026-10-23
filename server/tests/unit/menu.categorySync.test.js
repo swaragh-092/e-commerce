@@ -19,7 +19,7 @@ describe('synced category menu', () => {
     };
     vi.spyOn(Menu, 'findByPk').mockResolvedValue({ toJSON: () => menu });
     const categories = [
-      { id: 'fruit', name: 'Fruit', slug: 'fruit', parentId: null, sortOrder: 0 },
+      { id: 'fruit', name: 'Fruit', slug: 'fruit', icon: 'mui:eco', parentId: null, sortOrder: 0 },
       { id: 'flowers', name: 'Flowers', slug: 'flowers', parentId: null, sortOrder: 10 },
       { id: 'apple', name: 'Apple', slug: 'apple', parentId: 'fruit', sortOrder: 0 },
     ];
@@ -29,6 +29,7 @@ describe('synced category menu', () => {
     const first = await MenuService.getMenuById('menu-1');
     expect(first.items.map((item) => item.label)).toEqual(['Home', 'Categories']);
     expect(first.items[1].children.map((item) => item.label)).toEqual(['Fruit', 'Flowers']);
+    expect(first.items[1].children[0].icon).toBe('mui:eco');
     expect(first.items[1].children[0].children[0]).toMatchObject({
       label: 'Apple', targetId: 'apple', url: '/products?category=apple', generatedFromCategory: true,
     });
