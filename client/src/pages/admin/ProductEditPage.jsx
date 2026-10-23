@@ -35,6 +35,7 @@ import {
   AccordionDetails,
   Switch,
   LinearProgress,
+  Breadcrumbs,
 } from '@mui/material';
 
 import AddIcon from '@mui/icons-material/Add';
@@ -45,6 +46,10 @@ import StarIcon from '@mui/icons-material/Star';
 import StarBorderIcon from '@mui/icons-material/StarBorder';
 import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
 import ImageIcon from '@mui/icons-material/Image';
+import ArrowBackIcon from '@mui/icons-material/ArrowBack';
+import SaveIcon from '@mui/icons-material/Save';
+import CloseIcon from '@mui/icons-material/Close';
+import NavigateNextIcon from '@mui/icons-material/NavigateNext';
 import { getMediaUrl } from '../../utils/media';
 import useSKUGenerator from '../../hooks/useSKUGenerator';
 import {
@@ -284,6 +289,7 @@ const ProductEditPage = () => {
   const [variantCount, setVariantCount] = useState(0);
   const [variantStockTotal, setVariantStockTotal] = useState(0);
   const [globalPrimaryVersion, setGlobalPrimaryVersion] = useState(0);
+  const initialFormRef = useRef(null);
 
   useEffect(() => {
     const load = async () => {
@@ -320,7 +326,7 @@ const ProductEditPage = () => {
             setVariantCount(Array.isArray(p.variants) ? p.variants.length : 0);
             setVariantStockTotal(nextVariantStockTotal);
 
-            setFormData({
+            const loadedFormData = {
               name: p.name || '',
               slug: p.slug || '',
               description: p.description || '',
@@ -358,7 +364,9 @@ const ProductEditPage = () => {
               metaDescription: p.metaDescription || '',
               metaKeywords: p.metaKeywords || '',
               ogImage: p.ogImage || '',
-            });
+            };
+            setFormData(loadedFormData);
+            initialFormRef.current = JSON.stringify(loadedFormData);
           }
         }
       } catch (err) {
@@ -367,6 +375,51 @@ const ProductEditPage = () => {
     };
     load();
   }, [id, isNew, brandsEnabled]);
+
+  useEffect(() => {
+    if (isNew && !initialFormRef.current) {
+      initialFormRef.current = JSON.stringify(formData);
+    }
+  }, [isNew]);
+
+  const isDirty = () => {
+    if (!initialFormRef.current) return false;
+    return JSON.stringify(formData) !== initialFormRef.current;
+  };
+
+  const handleBack = async () => {
+    if (isDirty()) {
+      const confirmed = await confirm({
+        title: 'Discard unsaved changes?',
+        message: 'You have unsaved changes on this product. Are you sure you want to leave?',
+        confirmText: 'Discard & Leave',
+        cancelText: 'Keep Editing',
+        severity: 'warning',
+      });
+      if (confirmed) {
+        navigate('/admin/products');
+      }
+    } else {
+      navigate('/admin/products');
+    }
+  };
+
+  const handleCancel = async () => {
+    if (isDirty()) {
+      const confirmed = await confirm({
+        title: 'Discard unsaved changes?',
+        message: 'You have unsaved changes on this product. Are you sure you want to cancel?',
+        confirmText: 'Discard Changes',
+        cancelText: 'Keep Editing',
+        severity: 'warning',
+      });
+      if (confirmed) {
+        navigate('/admin/products');
+      }
+    } else {
+      navigate('/admin/products');
+    }
+  };
 
   const setField = (key, value) => {
     setFormData((prev) => ({ ...prev, [key]: value }));
@@ -523,6 +576,7 @@ const ProductEditPage = () => {
         }
 
         notify(payload.type === 'variable' ? 'Product saved. Add attributes and create variants below.' : 'Product created successfully.', 'success');
+        initialFormRef.current = JSON.stringify(formData);
         navigate(`/admin/products/${newId}/edit`, { replace: true });
       } else {
         const res = await updateProduct(id, payload);
@@ -534,6 +588,7 @@ const ProductEditPage = () => {
             setVariantCount((res.data.variants || []).length);
           }
         }
+        initialFormRef.current = JSON.stringify(formData);
         notify('Product updated successfully.', 'success');
       }
     } catch (err) {
@@ -604,13 +659,121 @@ const ProductEditPage = () => {
   }));
   const previewPrice = getProductBasePrice(formData, new Date());
   const previewPriceLabel = previewPrice < Number(formData.price) ? 'Active sale price' : 'MRP';
+  const productTypeLabel = formData.type === 'variable' ? 'Variable' : formData.type === 'combo' ? 'Combo' : 'Simple';
 
   return (
-    <Box sx={{ p: 3, mx: 'auto' }}>
-      <Typography variant="h5" component="h1" fontWeight={700} gutterBottom>
-        {isNew ? 'Create Product' : 'Edit Product'}
-      </Typography>
+    <Box sx={{ p: { xs: 1.5, sm: 3 }, mx: 'auto' }}>
       <form onSubmit={handleSave} noValidate>
+        {/* Sticky Action Bar */}
+        <Paper
+          elevation={0}
+          sx={{
+            position: 'sticky',
+            top: { xs: 56, sm: 64 },
+            zIndex: 10,
+            mt: { xs: -1, sm: -1.5 },
+            mb: 3,
+            p: { xs: 1.5, sm: 2 },
+            borderRadius: 2,
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            flexWrap: 'wrap',
+            gap: 2,
+            bgcolor: (theme) =>
+              theme.palette.mode === 'light'
+                ? 'rgba(255, 255, 255, 0.94)'
+                : 'rgba(30, 30, 30, 0.94)',
+            backdropFilter: 'blur(8px)',
+            border: '1px solid',
+            borderColor: 'divider',
+            boxShadow: (theme) =>
+              theme.palette.mode === 'light'
+                ? '0 4px 20px rgba(0, 0, 0, 0.05)'
+                : '0 4px 20px rgba(0, 0, 0, 0.4)',
+            transition: 'box-shadow 0.2s ease',
+          }}
+        >
+          {/* Left: Back button + Breadcrumbs + Title + Badges */}
+          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5 }}>
+            <Tooltip title="Back to Products">
+              <IconButton
+                onClick={handleBack}
+                size="medium"
+                aria-label="Back to Products"
+                sx={{
+                  border: '1px solid',
+                  borderColor: 'divider',
+                  borderRadius: 1.5,
+                  p: 1,
+                  '&:hover': { bgcolor: 'action.hover' },
+                }}
+              >
+                <ArrowBackIcon fontSize="small" />
+              </IconButton>
+            </Tooltip>
+
+            <Box>
+              <Breadcrumbs
+                separator={<NavigateNextIcon sx={{ fontSize: 14 }} />}
+                sx={{ fontSize: '0.75rem', mb: 0.25 }}
+              >
+                <Link
+                  to="/admin/products"
+                  style={{ textDecoration: 'none', color: 'inherit' }}
+                >
+                  Products
+                </Link>
+                <Typography color="text.secondary" sx={{ fontSize: '0.75rem' }}>
+                  {isNew ? 'New Product' : 'Edit'}
+                </Typography>
+              </Breadcrumbs>
+
+              <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, flexWrap: 'wrap' }}>
+                <Typography variant="h6" component="h1" fontWeight={700} sx={{ lineHeight: 1.2 }}>
+                  {isNew ? 'Create Product' : (formData.name || 'Untitled Product')}
+                </Typography>
+                <Chip
+                  size="small"
+                  label={(formData.status || 'draft').toUpperCase()}
+                  color={formData.status === 'published' ? 'success' : 'default'}
+                  sx={{ height: 20, fontSize: '0.7rem', fontWeight: 600 }}
+                />
+                <Chip
+                  size="small"
+                  variant="outlined"
+                  label={productTypeLabel}
+                  sx={{ height: 20, fontSize: '0.7rem' }}
+                />
+              </Box>
+            </Box>
+          </Box>
+
+          {/* Right: Cancel & Save Action Buttons */}
+          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5 }}>
+            <Button
+              variant="outlined"
+              color="error"
+              onClick={handleCancel}
+              disabled={saving}
+              startIcon={<CloseIcon />}
+              sx={{ textTransform: 'none', fontWeight: 600, px: 2 }}
+            >
+              Cancel
+            </Button>
+            <Button
+              variant="contained"
+              color="primary"
+              type="submit"
+              size="medium"
+              disabled={saving || !canSaveProduct}
+              startIcon={saving ? <CircularProgress size={16} color="inherit" /> : <SaveIcon />}
+              sx={{ px: 2.5, textTransform: 'none', fontWeight: 600 }}
+            >
+              {saving ? 'Saving…' : 'Save Product'}
+            </Button>
+          </Box>
+        </Paper>
         <Grid container spacing={4}>
           <Grid item xs={12} md={8}>
             {productAssistantEnabled && (
@@ -1464,15 +1627,6 @@ const ProductEditPage = () => {
             </Box>
           </Paper>
         )}
-
-        <Box sx={{ mt: 4, display: 'flex', justifyContent: 'flex-end', gap: 2 }}>
-          <Button variant="outlined" color="error" onClick={() => navigate('/admin/products')} disabled={saving}>
-            Cancel
-          </Button>
-          <Button variant="contained" type="submit" size="large" disabled={saving || !canSaveProduct}>
-            {saving ? 'Saving…' : 'Save Product'}
-          </Button>
-        </Box>
       </form>
     </Box>
   );

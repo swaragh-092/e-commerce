@@ -120,4 +120,18 @@ describe('product type and inventory editor', () => {
     await waitFor(() => expect(updateProduct).toHaveBeenCalled());
     expect(updateProduct.mock.calls[0][1]).not.toHaveProperty('quantity');
   });
+
+  it('renders the sticky top action bar with Back, Cancel, and Save buttons, and prompts on cancel when dirty', async () => {
+    mount(); await loaded();
+    expect(screen.getByRole('button', { name: 'Back to Products' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Cancel' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Save Product' })).toBeInTheDocument();
+
+    // Modify a field to make it dirty
+    fireEvent.change(screen.getByRole('textbox', { name: /Product Name/ }), { target: { value: 'Modified Name' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Cancel' }));
+
+    // Confirmation dialog should appear
+    expect(await screen.findByRole('dialog', { name: 'Discard unsaved changes?' })).toBeInTheDocument();
+  });
 });
