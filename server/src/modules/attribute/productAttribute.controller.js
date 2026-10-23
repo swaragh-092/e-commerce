@@ -1,7 +1,13 @@
 'use strict';
 
 const productAttributeService = require('./productAttribute.service');
+const { assignProductAttribute } = require('./productAttributeAssignment.service');
 const { success } = require('../../utils/response');
+
+exports.assignProductAttribute = async (req, res, next) => {
+    try { return success(res, await assignProductAttribute(req.params.id, req.body), 'Attribute values assigned'); }
+    catch (err) { next(err); }
+};
 
 exports.getProductAttributes = async (req, res, next) => {
     try {

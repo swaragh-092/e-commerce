@@ -89,7 +89,15 @@ export const PLACEHOLDER_DEFAULT  = '/product-placeholder.svg';
  *   <img src={url} onError={onImageError(PLACEHOLDER_PRODUCT)} />
  */
 export const onImageError = (placeholder = PLACEHOLDER_DEFAULT) => (e) => {
-  if (e.currentTarget.dataset.fallbackApplied) return; // prevent infinite loop
-  e.currentTarget.dataset.fallbackApplied = '1';
-  e.currentTarget.src = placeholder;
+  const img = e?.currentTarget;
+  if (!img) return;
+
+  // Prevent infinite loop if the placeholder itself fails or if this exact src already failed
+  if (img.dataset.lastFailedSrc === img.src || (img.src && img.src.endsWith(placeholder))) {
+    return;
+  }
+
+  img.dataset.lastFailedSrc = img.src;
+  img.dataset.fallbackApplied = '1';
+  img.src = placeholder;
 };

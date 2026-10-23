@@ -69,5 +69,21 @@ describe('media utils and placeholder defaults', () => {
       // Should not re-set src or trigger loops
       expect(img.src).toBe(PLACEHOLDER_CATEGORY);
     });
+
+    it('handles subsequent errors when the image element is reused with a new src', () => {
+      const handler = onImageError(PLACEHOLDER_PRODUCT);
+      const img = {
+        dataset: {},
+        src: 'https://broken1.example.com/item.jpg',
+      };
+
+      handler({ currentTarget: img });
+      expect(img.src).toBe(PLACEHOLDER_PRODUCT);
+
+      // Element reused with another broken image
+      img.src = 'https://broken2.example.com/item.jpg';
+      handler({ currentTarget: img });
+      expect(img.src).toBe(PLACEHOLDER_PRODUCT);
+    });
   });
 });

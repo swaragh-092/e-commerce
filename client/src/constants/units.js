@@ -1,40 +1,45 @@
-export const STANDARD_UNITS = [
-  // Count / Packaging
-  { value: 'pc', label: 'Piece (pc)', category: 'Count / Packaging' },
-  { value: 'pack', label: 'Pack (pk)', category: 'Count / Packaging' },
-  { value: 'box', label: 'Box', category: 'Count / Packaging' },
-  { value: 'set', label: 'Set', category: 'Count / Packaging' },
-  { value: 'pair', label: 'Pair', category: 'Count / Packaging' },
-  { value: 'dozen', label: 'Dozen (dz)', category: 'Count / Packaging' },
-  { value: 'bottle', label: 'Bottle', category: 'Count / Packaging' },
-  { value: 'can', label: 'Can', category: 'Count / Packaging' },
-  { value: 'bundle', label: 'Bundle', category: 'Count / Packaging' },
-  { value: 'roll', label: 'Roll', category: 'Count / Packaging' },
-  { value: 'bag', label: 'Bag', category: 'Count / Packaging' },
-  { value: 'carton', label: 'Carton', category: 'Count / Packaging' },
+import standardUnits from '../../../shared/units.json';
 
-  // Weight
-  { value: 'kg', label: 'Kilogram (kg)', category: 'Weight' },
-  { value: 'g', label: 'Gram (g)', category: 'Weight' },
-  { value: 'mg', label: 'Milligram (mg)', category: 'Weight' },
-  { value: 'lb', label: 'Pound (lb)', category: 'Weight' },
-  { value: 'oz', label: 'Ounce (oz)', category: 'Weight' },
+export const getAttributeUnitCategory = (attribute, units) => attribute.unitCategory || units.find((unit) =>
+  [unit.value, unit.label].some((value) => value.toLowerCase() === String(attribute.unit || '').trim().toLowerCase())
+)?.category || '';
 
-  // Volume / Liquid
-  { value: 'L', label: 'Litre (L)', category: 'Volume' },
-  { value: 'ml', label: 'Millilitre (ml)', category: 'Volume' },
-  { value: 'gal', label: 'Gallon (gal)', category: 'Volume' },
-  { value: 'fl oz', label: 'Fluid Ounce (fl oz)', category: 'Volume' },
+export const STANDARD_UNITS = standardUnits;
 
-  // Length / Area
-  { value: 'm', label: 'Metre (m)', category: 'Length & Area' },
-  { value: 'cm', label: 'Centimetre (cm)', category: 'Length & Area' },
-  { value: 'mm', label: 'Millimetre (mm)', category: 'Length & Area' },
-  { value: 'ft', label: 'Foot (ft)', category: 'Length & Area' },
-  { value: 'in', label: 'Inch (in)', category: 'Length & Area' },
-  { value: 'sq ft', label: 'Square Foot (sq ft)', category: 'Length & Area' },
-  { value: 'sq m', label: 'Square Metre (sq m)', category: 'Length & Area' },
-];
+export const normalizeUnitCategoryName = (name) => String(name || '').trim().replace(/\s+/g, ' ');
+
+export const getUnitCategories = (units, registered) => {
+  const names = new Map();
+  [...(Array.isArray(registered) ? registered : []), ...units.filter((unit) => !unit.deleted).map((unit) => unit.category)].forEach((name) => {
+    if (typeof name !== 'string') return;
+    const normalized = normalizeUnitCategoryName(name);
+    if (normalized && !names.has(normalized.toLowerCase())) names.set(normalized.toLowerCase(), normalized);
+  });
+  return [...names.values()].sort((a, b) => a.localeCompare(b));
+};
+
+// Settings contain overrides and custom units. Missing definitions retain their
+// built-in defaults. Deletion markers keep removed built-ins from reappearing;
+// neither hiding nor deleting a definition changes saved attribute values.
+export const mergeUnitCatalog = (definitions, { includeDeleted = false } = {}) => {
+  const catalog = new Map(STANDARD_UNITS.map((unit) => [unit.value.toLowerCase(), { ...unit, enabled: true }]));
+  if (Array.isArray(definitions)) {
+    definitions.forEach((unit) => {
+      if (!unit || typeof unit.value !== 'string' || !unit.value.trim() ||
+          typeof unit.label !== 'string' || !unit.label.trim() ||
+          typeof unit.category !== 'string' || !unit.category.trim()) return;
+      const key = unit.value.trim().toLowerCase();
+      catalog.set(key, {
+        value: catalog.get(key)?.value || unit.value.trim(),
+        label: unit.label.trim(),
+        category: normalizeUnitCategoryName(unit.category),
+        enabled: unit.deleted ? false : unit.enabled !== false,
+        ...(unit.deleted ? { deleted: true } : {}),
+      });
+    });
+  }
+  return [...catalog.values()].filter((unit) => includeDeleted || !unit.deleted);
+};
 
 /**
  * Returns formatted label for unit or custom string fallback.

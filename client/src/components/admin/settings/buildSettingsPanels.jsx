@@ -84,6 +84,25 @@ export default function buildSettingsPanels(ctx) {
         </>,
         ['logo', 'favicon', 'brand assets']
       ),
+      section(
+        'Newsletter signup on account forms',
+        'Choose whether customers see an optional newsletter checkbox when registering or signing in.',
+        <>
+          <FormControlLabel
+            control={<Switch checked={form['auth.registerNewsletterEnabled'] !== false} onChange={(event) => set('auth.registerNewsletterEnabled', event.target.checked)} />}
+            label="Show on registration"
+            sx={{ display: 'block', mb: 1 }}
+          />
+          {field('auth.registerNewsletterLabel', 'Registration checkbox text', 'text', { inputProps: { maxLength: 200 } })}
+          <FormControlLabel
+            control={<Switch checked={form['auth.loginNewsletterEnabled'] !== false} onChange={(event) => set('auth.loginNewsletterEnabled', event.target.checked)} />}
+            label="Show on sign in"
+            sx={{ display: 'block', mb: 1 }}
+          />
+          {field('auth.loginNewsletterLabel', 'Sign in checkbox text', 'text', { inputProps: { maxLength: 200 } })}
+        </>,
+        ['newsletter', 'register', 'sign in', 'checkbox', 'subscribe']
+      ),
     ],
     // ─── 1: SEO ─────────────────────────────────────────────────────────
     [

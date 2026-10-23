@@ -1,6 +1,6 @@
 import { renderHook } from '@testing-library/react';
 import { describe, expect, it } from 'vitest';
-import { SettingsContext } from '../../context/ThemeContext';
+import { SettingsContext, DEFAULT_FALLBACK_FEATURES } from '../../context/ThemeContext';
 import {
   useFeature,
   useFeatureMetadata,
@@ -85,5 +85,16 @@ describe('useFeature', () => {
     });
 
     expect(result.current).toBe('ecommerce');
+  });
+
+  it('supplies known defaults including brands and showPrice in fallback features', () => {
+    const { result: brandsResult } = renderHook(() => useFeature('brands'), {
+      wrapper: wrapperWith({ features: DEFAULT_FALLBACK_FEATURES }),
+    });
+    const { result: priceResult } = renderHook(() => useFeature('showPrice'), {
+      wrapper: wrapperWith({ features: DEFAULT_FALLBACK_FEATURES }),
+    });
+    expect(brandsResult.current).toBe(true);
+    expect(priceResult.current).toBe(true);
   });
 });

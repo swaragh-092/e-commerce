@@ -20,12 +20,15 @@ export const getVariantOptionEntries = (variant) => {
         attributeId,
         attributeName,
         attribute: option?.attribute || null,
+        attributeOrder: option.attributeOrder,
+        valueOrder: option.valueOrder,
         valueId,
         valueLabel,
         value: option?.value || null,
       };
     })
-    .filter(Boolean);
+    .filter(Boolean)
+    .sort((a, b) => (a.attributeOrder ?? Number.MAX_SAFE_INTEGER) - (b.attributeOrder ?? Number.MAX_SAFE_INTEGER));
 };
 
 export const getVariantOptionLabel = (variant) => {
@@ -48,6 +51,7 @@ export const getVariantAttributeGroups = (variants = []) => {
           attributeId: entry.attributeId,
           attributeName: entry.attributeName,
           attribute: entry.attribute,
+          sortOrder: entry.attributeOrder ?? Number.MAX_SAFE_INTEGER,
           values: [],
         });
       }
@@ -58,12 +62,13 @@ export const getVariantAttributeGroups = (variants = []) => {
           valueId: entry.valueId,
           valueLabel: entry.valueLabel,
           ...(entry.value || {}),
+          sortOrder: entry.valueOrder ?? entry.value?.sortOrder ?? 0,
         });
       }
     });
   });
 
-  return Array.from(groups.values());
+  return Array.from(groups.values()).sort((a, b) => a.sortOrder - b.sortOrder).map((group) => ({ ...group, values: group.values.sort((a, b) => a.sortOrder - b.sortOrder) }));
 };
 
 export const findMatchingVariant = (variants = [], selectedValues = {}) => {

@@ -2,15 +2,12 @@ import React, { useState, useEffect, useCallback, useRef } from 'react';
 import {
   Box, Typography, TextField, Button, Grid, Paper,
   FormControl, InputLabel, Select, MenuItem, Chip,
-  Table, TableHead, TableRow, TableBody, TableCell,
-  CircularProgress, Tooltip, IconButton, Divider, Alert,
-  InputAdornment, Autocomplete, Tabs, Tab, Checkbox,
+  CircularProgress, Tooltip, IconButton, Alert,
+  InputAdornment, Autocomplete, Tabs, Tab,
   FormControlLabel, Accordion, AccordionSummary, AccordionDetails,
   Switch, LinearProgress, Dialog, DialogTitle, DialogContent, DialogActions,
-  OutlinedInput,
 } from '@mui/material';
 import {
-  Add as AddIcon,
   Delete as DeleteIcon,
   ContentCopy as ContentCopyIcon,
   ElectricBolt as ElectricBoltIcon,
@@ -27,48 +24,46 @@ import MediaPicker from '../common/MediaPicker';
 import { useNotification } from '../../context/NotificationContext';
 import { getProductBasePrice } from '../../utils/variantPricing';
 import { getVariantOptionLabel } from '../../utils/variantOptions';
-import { formatAttributeValue, getSwatchColor } from '../../utils/attributePresentation';
+import ProductAttributesSection from './ProductAttributesSection';
+import VariantSetup from './VariantSetup';
+import { useAuth } from '../../hooks/useAuth';
+import { PERMISSIONS } from '../../utils/permissions';
 import { Link } from 'react-router-dom';
 import { getApiErrorMessage } from '../../utils/apiErrors';
 
-/* ─── helpers ─────────────────────────────────────────────────────────────── */
-const getAttributeRowName = (row) =>
-  row.attribute?.name || row.customName || 'Unknown';
-
-const getAttributeRowValue = (row) =>
-  row?.value?.displayLabel || row?.value?.value || row?.customValue || 'Default';
+const EMPTY_LIST = [];
+const validPrice = (value) => value !== '' && value != null && /^\d+(\.\d{0,2})?$/.test(String(value)) && Number(value) <= 99999999.99;
+const validStock = (variant) => variant.stockQty !== '' && variant.stockQty != null && Number.isInteger(Number(variant.stockQty))
+  && Number(variant.stockQty) >= Number(variant.reservedQty || 0) && Number(variant.stockQty) <= 2147483647;
 
 /* ─── Variants Panel ──────────────────────────────────────────────────────── */
 const VariantsPanel = ({
   productId,
   productName,
   productSku,
-  categoryIds = [],
-  flatCatFiles = [],
+  categoryIds = EMPTY_LIST,
+  flatCatFiles = EMPTY_LIST,
   canManageVariants = false,
   onStockTotalChange,
   globalPrimaryVersion = 0,
   onVariantPrimarySelected,
 }) => {
   const { notify, confirm } = useNotification();
+  const { hasPermission } = useAuth();
+  const canManageAttributes = canManageVariants && hasPermission(PERMISSIONS.ATTRIBUTES_MANAGE);
+  const [loadError, setLoadError] = useState(false);
   const { generateProductSKU, generateVariantSKU } = useSKUGenerator();
   const [productAttributes, setProductAttributes] = useState([]);
   const [variants, setVariants] = useState([]);
   const [productBasePrice, setProductBasePrice] = useState(0);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+  const [generating, setGenerating] = useState(false);
+  const [attributesBusy, setAttributesBusy] = useState(false);
+  const [deleting, setDeleting] = useState(false);
   const [variantMediaPickerOpen, setVariantMediaPickerOpen] = useState(null);
   const [attributes, setAttributes] = useState([]);
   const [saveProgress, setSaveProgress] = useState({ current: 0, total: 0 });
-  const [selectedTemplate, setSelectedTemplate] = useState('');
-
-  const [selectedValueIds, setSelectedValueIds] = useState([]);
-  const [colorDraft, setColorDraft] = useState({ label: '', hex: '#38bdf8' });
-  const [customName, setCustomName] = useState('');
-  const [customValue, setCustomValue] = useState('');
-  const [customIsVariant, setCustomIsVariant] = useState(false);
-  const [globalIsVariant, setGlobalIsVariant] = useState(false);
-  const [attributeTab, setAttributeTab] = useState(0);
   const [cloneOpen, setCloneOpen] = useState(false);
   const [cloning, setCloning] = useState(false);
   const [cloneTab, setCloneTab] = useState(0);
@@ -81,11 +76,14 @@ const VariantsPanel = ({
   const [cloneCatProductsLoading, setCloneCatProductsLoading] = useState(false);
   const [cloneCatSelectedProduct, setCloneCatSelectedProduct] = useState(null);
   const [suggestedAttributes, setSuggestedAttributes] = useState([]);
-  const [suggestedLoading, setSuggestedLoading] = useState(false);
   const cloneSearchTimer = useRef(null);
+  const cloneRequests = useRef({ search: 0, category: 0 });
+  useEffect(() => () => { clearTimeout(cloneSearchTimer.current); cloneRequests.current.search++; cloneRequests.current.category++; }, []);
 
   const loadAll = useCallback(async () => {
+    if (!productId) { setLoading(false); return; }
     setLoading(true);
+    setLoadError(false);
     try {
       const [attrRowsRes, varRes, attrRes, productRes] = await Promise.all([
         attributeService.getProductAttributes(productId),
@@ -96,6 +94,7 @@ const VariantsPanel = ({
       const attrRows = attrRowsRes?.data?.data || [];
       const varData = varRes?.data?.data || [];
       const attrData = attrRes?.data?.data?.rows || attrRes?.data?.data || [];
+      if (!Array.isArray(attrRows) || !Array.isArray(varData) || !Array.isArray(attrData)) throw new Error('Invalid product option data.');
       const product = productRes?.data || null;
       const activeVariantRows = varData.filter((variant) => variant?.isActive !== false);
       const stockTotal = activeVariantRows.reduce((sum, variant) => sum + Number(variant.stockQty || 0), 0);
@@ -114,34 +113,33 @@ const VariantsPanel = ({
       })));
       setAttributes(attrData);
       setProductBasePrice(getProductBasePrice(product));
-      onStockTotalChange?.(stockTotal, activeVariantRows.length, Number(product?.quantity || 0));
+      onStockTotalChange?.(stockTotal, activeVariantRows.length, Number(product?.quantity || 0), varData.length);
 
-      // Load suggested attributes from categories
-      if (categoryIds.length > 0) {
-        setSuggestedLoading(true);
-        attributeService.getCategoryAttributes(categoryIds, true)
-          .then(res => {
-            const catAttrs = res?.data?.data || [];
-            // Filter out attributes already assigned to the product
-            const existingIds = new Set(attrRows.map(r => r.attributeId));
-            setSuggestedAttributes(catAttrs.filter(a => !existingIds.has(a.id)));
-          })
-          .catch(err => console.error('Failed to load suggested attributes', err))
-          .finally(() => setSuggestedLoading(false));
-      }
     } catch (error) {
+      setLoadError(true);
       notify('Failed to load product options.', 'error');
     } finally {
       setLoading(false);
     }
-  }, [productId, categoryIds, notify, onStockTotalChange]);
+  }, [productId, notify, onStockTotalChange]);
 
   useEffect(() => { loadAll(); }, [loadAll]);
+
+  const categoryKey = categoryIds.join(',');
+  useEffect(() => {
+    if (!categoryKey) { setSuggestedAttributes([]); return; }
+    let active = true;
+    attributeService.getCategoryAttributes(categoryKey.split(','), true)
+      .then((response) => { if (active) setSuggestedAttributes(response?.data?.data || []); })
+      .catch(() => { if (active) setSuggestedAttributes([]); });
+    return () => { active = false; };
+  }, [categoryKey]);
+
 
   useEffect(() => {
     const activeVariantRows = variants.filter((variant) => variant?.isActive !== false);
     const stockTotal = activeVariantRows.reduce((sum, variant) => sum + Number(variant.stockQty || 0), 0);
-    onStockTotalChange?.(stockTotal, activeVariantRows.length);
+    onStockTotalChange?.(stockTotal, activeVariantRows.length, undefined, variants.length);
   }, [variants, onStockTotalChange]);
 
   useEffect(() => {
@@ -188,7 +186,7 @@ const VariantsPanel = ({
   };
 
   const handleRemoveVariantImage = (variantIndex, imageIndex) => {
-    if (!canManageVariants) return;
+    if (!canEditVariants) return;
     setVariants((current) => current.map((variant, i) => {
       if (i !== variantIndex) return variant;
       const nextImages = (variant.images || []).filter((_, idx) => idx !== imageIndex)
@@ -204,7 +202,7 @@ const VariantsPanel = ({
   };
 
   const handleSetVariantPrimaryImage = (variantIndex, imageIndex) => {
-    if (!canManageVariants) return;
+    if (!canEditVariants) return;
     setVariants((current) => current.map((variant, i) => {
       if (i !== variantIndex) return variant;
       return {
@@ -220,173 +218,22 @@ const VariantsPanel = ({
     onVariantPrimarySelected?.();
   };
 
-  const selectedTemplateRecord = attributes.find((attribute) => attribute.id === selectedTemplate);
-  const selectedTemplateText = `${selectedTemplateRecord?.name || ''} ${selectedTemplateRecord?.slug || ''}`.toLowerCase();
-  const isColorAttribute = selectedTemplateRecord?.valueType === 'color' || /colou?r|shade/.test(selectedTemplateText);
-  const isValidHexColor = /^#([0-9a-f]{3}|[0-9a-f]{6}|[0-9a-f]{8})$/i.test(colorDraft.hex);
-  const variantAttributeRows = productAttributes.filter((row) => row.isVariantAttr);
-  const canGenerateMatrix = variantAttributeRows.some((row) => row.attributeId) && variantAttributeRows.length > 0;
   const hasVariantChanges = variants.some((variant) => variant._dirty);
-
-  const renderValueSwatch = (valueRecord, size = 18) => {
-    if (!valueRecord) return null;
-    const color = getSwatchColor(valueRecord);
-    if (valueRecord?.imageUrl) {
-      return (
-        <Box
-          component="img"
-          src={valueRecord.imageUrl}
-          alt=""
-          sx={{ width: size, height: size, borderRadius: 0.75, objectFit: 'cover', flexShrink: 0 }}
-        />
-      );
-    }
-    if (!color) return null;
-    return (
-      <Box
-        sx={{
-          width: size,
-          height: size,
-          borderRadius: '50%',
-          bgcolor: color,
-          border: '1px solid',
-          borderColor: color === '#ffffff' ? 'divider' : 'transparent',
-          boxShadow: 'inset 0 0 0 1px rgba(0,0,0,0.08)',
-          flexShrink: 0,
-        }}
-      />
-    );
-  };
-
-  const renderValueLabel = (valueRecord, attributeRecord = selectedTemplateRecord) => (
-    formatAttributeValue(valueRecord || {}, attributeRecord || {}) || valueRecord?.value || ''
-  );
-
-  const handleCreateColorValue = async () => {
-    if (!canManageVariants || !selectedTemplate || !colorDraft.label.trim() || !isValidHexColor) return;
-
-    try {
-      const response = await attributeService.addAttributeValue(selectedTemplate, {
-        value: colorDraft.label.trim(),
-        displayLabel: colorDraft.label.trim(),
-        swatchColor: colorDraft.hex,
-      });
-      const createdValue = response?.data?.data || response?.data;
-      if (createdValue?.id) {
-        setAttributes((current) => current.map((attribute) => (
-          attribute.id === selectedTemplate
-            ? { ...attribute, values: [...(attribute.values || []), createdValue] }
-            : attribute
-        )));
-        setSelectedValueIds((current) => [...new Set([...current, createdValue.id])]);
-        setColorDraft({ label: '', hex: '#38bdf8' });
-        notify('Color value created and selected.', 'success');
-      }
-    } catch (error) {
-      notify(getApiErrorMessage(error, 'Failed to create color value.'), 'error');
-    }
-  };
-
-  const handleAddGlobalAttributes = async () => {
-    if (!canManageVariants || !selectedTemplate || selectedValueIds.length === 0) {
-      return;
-    }
-
-    try {
-      await Promise.all(selectedValueIds.map((valueId) => (
-        attributeService.addProductAttribute(productId, {
-          attributeId: selectedTemplate,
-          valueId,
-          isVariantAttr: globalIsVariant,
-        })
-      )));
-      setSelectedTemplate('');
-      setSelectedValueIds([]);
-      setGlobalIsVariant(false);
-      notify('Product attributes added.', 'success');
-      loadAll();
-    } catch (error) {
-      notify(error?.response?.data?.error?.message || 'Failed to add product attributes.', 'error');
-    }
-  };
-
-  const handleAddCustomAttribute = async () => {
-    if (!canManageVariants || !customName?.trim() || !customValue?.trim()) {
-      return;
-    }
-
-    try {
-      const values = customValue.split('|').map(v => v.trim()).filter(Boolean);
-      await Promise.all(values.map(val => 
-        attributeService.addProductAttribute(productId, {
-          customName: customName.trim(),
-          customValue: val,
-          isVariantAttr: customIsVariant,
-        })
-      ));
-      setCustomName('');
-      setCustomValue('');
-      setCustomIsVariant(false);
-      notify('Custom attribute(s) added.', 'success');
-      loadAll();
-    } catch (error) {
-      notify(error?.response?.data?.error?.message || 'Failed to add custom attribute.', 'error');
-    }
-  };
-
-  const handleToggleVariantAttribute = async (row) => {
-    if (!canManageVariants) return;
-
-    try {
-      await attributeService.updateProductAttribute(productId, row.id, {
-        isVariantAttr: !row.isVariantAttr,
-      });
-      loadAll();
-    } catch (error) {
-      notify(error?.response?.data?.error?.message || 'Failed to update attribute.', 'error');
-    }
-  };
-
-  const handleDeleteAttribute = async (rowId) => {
-    if (!canManageVariants) return;
-    const confirmed = await confirm(
-      'Remove Attribute Assignment',
-      'Remove this attribute assignment? This will prune any variants that rely on this attribute during the next Matrix generation.',
-      'warning'
-    );
-    if (!confirmed) return;
-    try {
-      await attributeService.deleteProductAttribute(productId, rowId);
-      notify('Attribute removed.', 'success');
-      loadAll();
-    } catch (error) {
-      notify(error?.response?.data?.error?.message || 'Failed to remove attribute.', 'error');
-    }
-  };
-
-  const handleGenerateVariants = async () => {
-    if (!canManageVariants) return;
-    try {
-      await attributeService.bulkGenerateVariants(productId, {
-        defaultPrice: productBasePrice,
-        defaultStockQty: 0,
-      });
-      notify('Variant matrix generated from selected variant attributes.', 'success');
-      loadAll();
-    } catch (error) {
-      notify(error?.response?.data?.error?.message || 'Failed to generate variants.', 'error');
-    }
-  };
+  const skuCounts = variants.reduce((counts, variant) => { const sku = variant.sku?.trim(); if (sku) counts.set(sku, (counts.get(sku) || 0) + 1); return counts; }, new Map());
+  const duplicateSku = (variant) => (skuCounts.get(variant.sku?.trim()) || 0) > 1;
+  const hasInvalidChanges = variants.some((variant) => variant._dirty && (!validPrice(variant.price) || !validStock(variant) || duplicateSku(variant)));
+  const variantBusy = saving || generating || cloning || deleting;
+  const canEditVariants = canManageVariants && !variantBusy && !loading && !loadError;
 
   const handleVariantChange = (index, field, value) => {
-    if (!canManageVariants) return;
+    if (!canEditVariants) return;
     setVariants((current) => current.map((variant, currentIndex) => (
       currentIndex === index ? { ...variant, [field]: value, _dirty: true } : variant
     )));
   };
 
   const handleSaveVariants = async () => {
-    if (!canManageVariants || !hasVariantChanges) return;
+    if (!canEditVariants || !hasVariantChanges || hasInvalidChanges || attributesBusy) return;
     const dirtyVariants = variants.filter((variant) => variant._dirty);
     setSaving(true);
     setSaveProgress({ current: 0, total: dirtyVariants.length });
@@ -419,7 +266,7 @@ const VariantsPanel = ({
       notify('Variants updated.', 'success');
       loadAll();
     } catch (err) {
-      notify(err?.response?.data?.message || 'Failed to save variants.', 'error');
+      notify(getApiErrorMessage(err, 'Failed to save variants.'), 'error');
     } finally {
       setSaving(false);
       setSaveProgress({ current: 0, total: 0 });
@@ -428,30 +275,39 @@ const VariantsPanel = ({
 
 
   const handleDeleteVariant = async (variantId) => {
-    if (!canManageVariants) return;
-    const confirmed = await confirm(
-      'Delete Variant',
-      'Delete this variant SKU?',
-      'error'
-    );
+    if (!canEditVariants || attributesBusy) return;
+    const target = variants.find((variant) => variant.id === variantId);
+    if (!target) return;
+    if (Number(target.reservedQty || 0) > 0) {
+      notify(`This variant has ${target.reservedQty} units reserved for active orders. Turn off Available to hide it, or finish/cancel those orders before deleting it.`, 'warning'); return;
+    }
+    const confirmed = await confirm({
+      title: 'Delete variant?',
+      message: `Delete ${getVariantOptionLabel(target) || target.sku || 'this variant'}? Its stock will no longer count toward this product.${Number(target.stockQty || 0) > 0 ? ` This removes ${target.stockQty} units from the product’s available stock.` : ''}${target._dirty ? ' Unsaved edits to this variant will be discarded.' : ''} Other variants and attribute values stay unchanged.`,
+      confirmText: 'Delete variant', severity: 'error',
+    });
     if (!confirmed) return;
+    setDeleting(true);
     try {
       await attributeService.deleteProductVariant(productId, variantId);
+      setVariants((current) => current.filter((variant) => variant.id !== variantId));
+      const remaining = variants.filter((variant) => variant.id !== variantId && variant.isActive !== false);
+      onStockTotalChange?.(remaining.reduce((sum, variant) => sum + Number(variant.stockQty || 0), 0), remaining.length, 0);
       notify('Variant deleted.', 'success');
-      loadAll();
     } catch (error) {
-      notify(error?.response?.data?.error?.message || 'Failed to delete variant.', 'error');
-    }
+      notify(getApiErrorMessage(error, 'Failed to delete variant.'), 'error');
+    } finally { setDeleting(false); }
   };
 
   const handleClone = async () => {
-    if (!canManageVariants) return;
+    if (!canEditVariants || hasVariantChanges || attributesBusy) return;
     const activeProduct = cloneTab === 0 ? cloneSelectedProduct : cloneCatSelectedProduct;
     if (!activeProduct) return;
     setCloning(true);
     try {
-      await attributeService.cloneVariants(productId, { sourceProductId: activeProduct.id });
-      notify(`Variants cloned from "${activeProduct.name}" successfully.`, 'success');
+      const response = await attributeService.cloneVariants(productId, { sourceProductId: activeProduct.id });
+      const summary = response?.data?.meta;
+      notify(summary ? `${summary.createdCount} ${summary.createdCount === 1 ? 'variant' : 'variants'} copied; ${summary.skippedCount} already present. New variants have fresh SKUs and zero stock.` : 'Variants copied. Review SKUs, prices and stock below.', summary?.createdCount === 0 ? 'info' : 'success');
       setCloneOpen(false);
       setCloneSelectedProduct(null);
       setCloneSearchInput('');
@@ -459,7 +315,10 @@ const VariantsPanel = ({
       setCloneCatSelectedProduct(null);
       setCloneCatId('');
       setCloneCatProducts([]);
-      loadAll();
+      clearTimeout(cloneSearchTimer.current);
+      cloneRequests.current.search++; cloneRequests.current.category++;
+      setCloneSearchLoading(false); setCloneCatProductsLoading(false);
+      await loadAll();
     } catch (err) {
       notify(getApiErrorMessage(err, 'Clone failed.'), 'error');
     } finally {
@@ -467,41 +326,55 @@ const VariantsPanel = ({
     }
   };
 
+  const closeClone = () => {
+    if (cloning) return;
+    clearTimeout(cloneSearchTimer.current);
+    cloneRequests.current.search++; cloneRequests.current.category++;
+    setCloneOpen(false); setCloneSelectedProduct(null); setCloneSearchInput(''); setCloneSearchResults([]);
+    setCloneCatSelectedProduct(null); setCloneCatId(''); setCloneCatProducts([]);
+    setCloneSearchLoading(false); setCloneCatProductsLoading(false);
+  };
+  const copySources = (rows) => rows.filter((product) => product.id !== productId && product.type !== 'combo' && Array.isArray(product.variants) && product.variants.length > 0);
   const handleCloneSearchChange = (inputValue) => {
     setCloneSearchInput(inputValue);
     setCloneSelectedProduct(null);
     clearTimeout(cloneSearchTimer.current);
-    if (!inputValue?.trim()) { setCloneSearchResults([]); return; }
+    const request = ++cloneRequests.current.search;
+    setCloneSearchResults([]); setCloneSearchLoading(false);
+    if (inputValue.trim().length < 2) return;
     cloneSearchTimer.current = setTimeout(async () => {
       setCloneSearchLoading(true);
       try {
-        const res = await getProducts({ search: inputValue.trim(), limit: 20 });
+        const res = await getProducts({ search: inputValue.trim(), limit: 20, include: 'variants', hasVariants: true });
         const rows = res?.data || [];
-        setCloneSearchResults(rows.filter((product) => product.id !== productId));
+        if (request === cloneRequests.current.search) setCloneSearchResults(copySources(rows));
       } catch {
-        setCloneSearchResults([]);
+        if (request === cloneRequests.current.search) { setCloneSearchResults([]); notify('Could not search products. Try again.', 'error'); }
       } finally {
-        setCloneSearchLoading(false);
+        if (request === cloneRequests.current.search) setCloneSearchLoading(false);
       }
     }, 350);
   };
 
   const handleCloneCatChange = async (catId) => {
+    const request = ++cloneRequests.current.category;
     setCloneCatId(catId);
     setCloneCatSelectedProduct(null);
     setCloneCatProducts([]);
-    if (!catId) return;
+    if (!catId) { setCloneCatProductsLoading(false); return; }
     setCloneCatProductsLoading(true);
     try {
-      const res = await getProducts({ categoryId: catId, limit: 100 });
+      const res = await getProducts({ categoryId: catId, limit: 100, include: 'variants', hasVariants: true });
       const rows = res?.data || [];
-      setCloneCatProducts(rows.filter((product) => product.id !== productId));
+      if (request === cloneRequests.current.category) setCloneCatProducts(copySources(rows));
     } catch {
-      setCloneCatProducts([]);
+      if (request === cloneRequests.current.category) { setCloneCatProducts([]); notify('Could not load category products. Try again.', 'error'); }
     } finally {
-      setCloneCatProductsLoading(false);
+      if (request === cloneRequests.current.category) setCloneCatProductsLoading(false);
     }
   };
+
+  if (!productId) return <Paper sx={{ p: 3, mt: 3 }}><Typography fontWeight={700}>Attributes and variants</Typography><Typography color="text.secondary">Save the product before adding attributes or variants.</Typography></Paper>;
 
   return (
     <Paper sx={{ p: 3, mt: 3 }}>
@@ -509,351 +382,29 @@ const VariantsPanel = ({
         Attributes and Variants
       </Typography>
       <Typography variant="body2" color="text.secondary" sx={{ mb: 3 }}>
-        Assign product specifications first, then mark which global attributes should generate purchasable SKUs.
+        Add product details and choose the options customers can buy. Create variants, then set their prices and stock.
         Manage reusable templates in <Link to="/admin/attributes" style={{ color: 'inherit', fontWeight: 600 }}>Attributes {'->'}</Link>
       </Typography>
 
       <Grid container spacing={3}>
-        <Grid item xs={12} lg={5}>
-          <Paper variant="outlined" sx={{ p: 2.5, height: '100%' }}>
-            <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 1 }}>
-              <Typography variant="subtitle1" fontWeight={700}>
-                Product Attributes
-              </Typography>
-            </Box>
-
-            {suggestedAttributes.length > 0 && (
-              <Box sx={{ mb: 3, p: 2, bgcolor: 'primary.50', borderRadius: 2, border: '1px solid', borderColor: 'primary.100' }}>
-                <Typography variant="subtitle2" color="primary.700" fontWeight={700} gutterBottom sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
-                  <ElectricBoltIcon fontSize="small" /> Suggested from Categories
-                </Typography>
-                <Typography variant="caption" color="text.secondary" sx={{ mb: 1.5, display: 'block' }}>
-                  These attributes are linked to your selected categories. Click to add them.
-                </Typography>
-                <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 1 }}>
-                  {suggestedAttributes.map((attr) => (
-                    <Chip
-                      key={attr.id}
-                      label={attr.name}
-                      size="small"
-                      icon={<AddIcon />}
-                      onClick={() => {
-                        setSelectedTemplate(attr.id);
-                        setAttributeTab(1);
-                        setSelectedValueIds([]);
-                      }}
-                      sx={{ bgcolor: 'background.paper', '&:hover': { bgcolor: 'primary.100' } }}
-                    />
-                  ))}
-                </Box>
-              </Box>
-            )}
-
-            <Tabs value={attributeTab} onChange={(e, val) => setAttributeTab(val)} sx={{ mb: 2 }}>
-              <Tab label="Add new" />
-              <Tab label="Add existing" />
-            </Tabs>
-
-            {attributeTab === 1 && (
-              <Box sx={{ display: 'grid', gap: 1.5, mb: 2.5 }}>
-                <FormControl size="small" fullWidth>
-                  <InputLabel>Global Attribute</InputLabel>
-                  <Select
-                    label="Global Attribute"
-                    value={selectedTemplate}
-                    onChange={(e) => {
-                      setSelectedTemplate(e.target.value);
-                      setSelectedValueIds([]);
-                      setColorDraft({ label: '', hex: '#38bdf8' });
-                    }}
-                  >
-                    <MenuItem value=""><em>Select attribute</em></MenuItem>
-                    {attributes.map((attribute) => (
-                      <MenuItem key={attribute.id} value={attribute.id}>{attribute.name}</MenuItem>
-                    ))}
-                  </Select>
-                </FormControl>
-
-                <FormControl size="small" fullWidth disabled={!selectedTemplateRecord}>
-                  <InputLabel>Attribute Values</InputLabel>
-                  <Select
-                    multiple
-                    value={selectedValueIds}
-                    label="Attribute Values"
-                    input={<OutlinedInput label="Attribute Values" />}
-                    onChange={(e) => setSelectedValueIds(e.target.value)}
-                    renderValue={(selected) => (
-                      <Box sx={{ display: 'flex', gap: 0.5, flexWrap: 'wrap' }}>
-                        {selected.map((valueId) => {
-                          const valueRecord = selectedTemplateRecord?.values?.find((value) => value.id === valueId);
-                          return (
-                            <Chip
-                              key={valueId}
-                              size="small"
-                              label={
-                                <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.6 }}>
-                                  {renderValueSwatch(valueRecord, 14)}
-                                  <span>{valueRecord ? renderValueLabel(valueRecord) : valueId}</span>
-                                </Box>
-                              }
-                              sx={{ '& .MuiChip-label': { px: 0.75 } }}
-                            />
-                          );
-                        })}
-                      </Box>
-                    )}
-                  >
-                    {(selectedTemplateRecord?.values || []).map((value) => (
-                      <MenuItem key={value.id} value={value.id}>
-                        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                          {renderValueSwatch(value)}
-                          <Box>
-                            <Typography variant="body2" fontWeight={600}>{renderValueLabel(value)}</Typography>
-                            {value.swatchColor && (
-                              <Typography variant="caption" color="text.secondary" sx={{ fontFamily: 'monospace' }}>
-                                {value.swatchColor}
-                              </Typography>
-                            )}
-                          </Box>
-                        </Box>
-                      </MenuItem>
-                    ))}
-                  </Select>
-                </FormControl>
-
-                {isColorAttribute && (
-                  <Paper
-                    variant="outlined"
-                    sx={{
-                      p: 1.5,
-                      borderRadius: 2,
-                      bgcolor: 'action.hover',
-                      borderColor: 'primary.main',
-                    }}
-                  >
-                    <Typography variant="subtitle2" fontWeight={800} sx={{ mb: 0.5 }}>
-                      Create exact color
-                    </Typography>
-                    <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mb: 1.5 }}>
-                      Pick the exact hex color and label it the way customers should see it, like Sky Blue or Apple Red.
-                    </Typography>
-                    <Box
-                      sx={{
-                        display: 'grid',
-                        gridTemplateColumns: { xs: '1fr', sm: '44px 1fr 120px' },
-                        gap: 1,
-                        alignItems: 'center',
-                      }}
-                    >
-                      <TextField
-                        type="color"
-                        size="small"
-                        value={isValidHexColor ? colorDraft.hex : '#000000'}
-                        onChange={(e) => setColorDraft((current) => ({ ...current, hex: e.target.value }))}
-                        disabled={!canManageVariants}
-                        inputProps={{ 'aria-label': 'Pick exact color' }}
-                        sx={{
-                          '& input': {
-                            p: 0.5,
-                            height: 34,
-                            cursor: 'pointer',
-                          },
-                        }}
-                      />
-                      <TextField
-                        size="small"
-                        label="Customer label"
-                        placeholder="Sky Blue, Apple Red..."
-                        value={colorDraft.label}
-                        onChange={(e) => setColorDraft((current) => ({ ...current, label: e.target.value }))}
-                        disabled={!canManageVariants}
-                      />
-                      <TextField
-                        size="small"
-                        label="Hex"
-                        value={colorDraft.hex}
-                        onChange={(e) => setColorDraft((current) => ({ ...current, hex: e.target.value }))}
-                        error={Boolean(colorDraft.hex) && !isValidHexColor}
-                        disabled={!canManageVariants}
-                        inputProps={{ style: { fontFamily: 'monospace' } }}
-                      />
-                    </Box>
-                    <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 1, mt: 1.5 }}>
-                      <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, minWidth: 0 }}>
-                        <Box
-                          sx={{
-                            width: 28,
-                            height: 28,
-                            borderRadius: '50%',
-                            bgcolor: isValidHexColor ? colorDraft.hex : 'transparent',
-                            border: '1px solid',
-                            borderColor: 'divider',
-                            flexShrink: 0,
-                          }}
-                        />
-                        <Typography variant="caption" color="text.secondary" noWrap>
-                          Preview: {colorDraft.label || 'Color label'} {isValidHexColor ? colorDraft.hex : ''}
-                        </Typography>
-                      </Box>
-                      <Button
-                        variant="contained"
-                        size="small"
-                        onClick={handleCreateColorValue}
-                        disabled={!canManageVariants || !selectedTemplate || !colorDraft.label.trim() || !isValidHexColor}
-                      >
-                        Create & Select
-                      </Button>
-                    </Box>
-                  </Paper>
-                )}
-
-                <FormControlLabel
-                  control={
-                    <Checkbox
-                      checked={globalIsVariant}
-                      onChange={(e) => setGlobalIsVariant(e.target.checked)}
-                      disabled={!canManageVariants}
-                    />
-                  }
-                  label={<Typography variant="body2">Used for variations</Typography>}
-                />
-
-                <Button variant="outlined" onClick={handleAddGlobalAttributes} disabled={!canManageVariants || !selectedTemplate || selectedValueIds.length === 0}>
-                  Add Global Attribute Values
-                </Button>
-              </Box>
-            )}
-
-            {attributeTab === 0 && (
-              <Box sx={{ display: 'grid', gap: 1.5, mb: 2.5 }}>
-                <TextField
-                  size="small"
-                  label="Name: e.g. length or weight"
-                  value={customName}
-                  onChange={(e) => setCustomName(e.target.value)}
-                  disabled={!canManageVariants}
-                />
-                <TextField
-                  size="small"
-                  label="Value(s)"
-                  placeholder='Enter descriptive text. Use "|" to separate different values.'
-                  value={customValue}
-                  onChange={(e) => setCustomValue(e.target.value)}
-                  disabled={!canManageVariants}
-                  multiline
-                  rows={2}
-                />
-
-                <Box sx={{ display: 'flex', flexDirection: 'column', mt: -1 }}>
-                  <FormControlLabel
-                    control={
-                      <Checkbox
-                        checked={customIsVariant}
-                        onChange={(e) => setCustomIsVariant(e.target.checked)}
-                        disabled={!canManageVariants}
-                      />
-                    }
-                    label={<Typography variant="body2">Used for variations</Typography>}
-                  />
-                </Box>
-
-                <Button variant="outlined" startIcon={<AddIcon />} onClick={handleAddCustomAttribute} disabled={!canManageVariants || !customName?.trim() || !customValue?.trim()}>
-                  Add Custom Attribute
-                </Button>
-              </Box>
-            )}
-
-            {loading ? (
-              <Box sx={{ display: 'flex', justifyContent: 'center', py: 3 }}><CircularProgress size={24} /></Box>
-            ) : productAttributes.length === 0 ? (
-              <Alert severity="info">No product attributes yet. Add specifications above before generating variants.</Alert>
-            ) : (
-              <Box sx={{ display: 'grid', gap: 1 }}>
-                {Object.entries(
-                  productAttributes.reduce((acc, row) => {
-                    const label = getAttributeRowName(row);
-                    if (!acc[label]) acc[label] = [];
-                    acc[label].push(row);
-                    return acc;
-                  }, {})
-                ).map(([label, rows]) => (
-                  <Accordion key={label} defaultExpanded={false} variant="outlined" sx={{ m: '0 !important' }}>
-                    <AccordionSummary expandIcon={<ExpandMoreIcon />}>
-                      <Typography fontWeight={700}>{label} ({rows.length})</Typography>
-                    </AccordionSummary>
-                    <AccordionDetails sx={{ display: 'grid', gap: 1, p: 2, pt: 0 }}>
-                      {rows.map((row) => {
-                        const value = row.value ? renderValueLabel(row.value, row.attribute) : row.customValue;
-                        return (
-                          <Paper key={row.id} variant="outlined" sx={{ p: 1.5 }}>
-                            <Box sx={{ display: 'flex', justifyContent: 'space-between', gap: 1, alignItems: 'flex-start' }}>
-                              <Box>
-                                <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                                  {renderValueSwatch(row.value)}
-                                  <Typography variant="body2" color="text.secondary" fontWeight={700}>{value}</Typography>
-                                </Box>
-                                <Box sx={{ display: 'flex', gap: 0.75, flexWrap: 'wrap', mt: 1 }}>
-                                  <Chip size="small" label={row.attributeId ? 'Global' : 'Custom'} variant="outlined" />
-                                  <Chip size="small" label={row.isVariantAttr ? 'Variant SKU attribute' : 'Display only'} color={row.isVariantAttr ? 'primary' : 'default'} />
-                                </Box>
-                              </Box>
-                              <Box sx={{ display: 'flex', gap: 0.5 }}>
-                                <Button size="small" variant={row.isVariantAttr ? 'contained' : 'outlined'} onClick={() => handleToggleVariantAttribute(row)} disabled={!canManageVariants}>
-                                  {row.isVariantAttr ? 'Used for Variants' : 'Mark for Variants'}
-                                </Button>
-                                <IconButton size="small" color="error" onClick={() => handleDeleteAttribute(row.id)} disabled={!canManageVariants}>
-                                  <DeleteIcon fontSize="small" />
-                                </IconButton>
-                              </Box>
-                            </Box>
-                          </Paper>
-                        );
-                      })}
-                    </AccordionDetails>
-                  </Accordion>
-                ))}
-              </Box>
-            )}
-          </Paper>
+        <Grid item xs={12} lg={5} sx={{ minWidth: 0 }}>
+          <ProductAttributesSection productId={productId} rows={productAttributes} templates={attributes}
+            suggestions={suggestedAttributes} loading={loading} error={loadError} canManage={canManageAttributes && !variantBusy}
+            onRowsChange={setProductAttributes} onRetry={loadAll} onBusyChange={setAttributesBusy} />
         </Grid>
 
-        <Grid item xs={12} lg={7}>
-          <Paper variant="outlined" sx={{ p: 2.5, height: '100%' }}>
+        <Grid item xs={12} lg={7} sx={{ minWidth: 0 }}>
+          <Paper variant="outlined" sx={{ p: { xs: 2, sm: 2.5 }, height: '100%', borderRadius: 2 }}>
             <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 1, mb: 1, flexWrap: 'wrap' }}>
-              <Typography variant="subtitle1" fontWeight={700}>
-                Variant SKUs
-              </Typography>
-              <Box sx={{ display: 'flex', gap: 1, flexWrap: 'wrap' }}>
-                <Chip
-                  size="small"
-                  variant="outlined"
-                  color="success"
-                  label={`Total stock: ${variants.filter((variant) => variant?.isActive !== false).reduce((sum, variant) => sum + Number(variant.stockQty || 0), 0)}`}
-                />
-                <Button variant="outlined" size="small" startIcon={<ContentCopyIcon fontSize="small" />} onClick={() => setCloneOpen(true)} disabled={!canManageVariants}>
-                  Clone from Product
-                </Button>
-                <Button variant="outlined" size="small" onClick={handleGenerateVariants} disabled={!canManageVariants || !canGenerateMatrix}>
-                  Generate Matrix
-                </Button>
-                <Button variant="contained" size="small" onClick={handleSaveVariants} disabled={!canManageVariants || !hasVariantChanges || saving}>
-                  {saving ? `Saving (${saveProgress.current}/${saveProgress.total})...` : 'Save Variant Changes'}
-                </Button>
-
-              </Box>
+              <Typography variant="h6" fontWeight={700}>Variant SKUs</Typography>
+              <Button variant="text" size="small" startIcon={<ContentCopyIcon fontSize="small" />} onClick={() => setCloneOpen(true)} disabled={!canEditVariants || hasVariantChanges || attributesBusy} sx={{ minHeight: 44 }}>
+                Copy from product
+              </Button>
             </Box>
-
-            <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
-              Mark attributes like Color or Size as variant-forming, then generate one SKU row per combination. MRP and stock are stored on the SKU row itself.
-            </Typography>
-
-            <Box sx={{ display: 'flex', gap: 0.75, flexWrap: 'wrap', mb: 2 }}>
-              {variantAttributeRows.length === 0 ? (
-                <Chip size="small" label="No variant-forming attributes selected yet" variant="outlined" />
-              ) : variantAttributeRows.map((row) => (
-                <Chip key={row.id} size="small" color="primary" label={`${getAttributeRowName(row)}: ${getAttributeRowValue(row)}`} />
-              ))}
-            </Box>
+            <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>Manage a price, stock quantity, and SKU for each option combination.</Typography>
+            {!loading && !loadError && <VariantSetup productId={productId} rows={productAttributes} variants={variants} basePrice={productBasePrice}
+              disabled={saving || cloning || deleting || attributesBusy} canManage={canManageVariants} hasUnsavedChanges={hasVariantChanges}
+              onBusyChange={setGenerating} onCreated={loadAll} />}
 
             {saving && (
               <Box sx={{ mb: 2 }}>
@@ -872,16 +423,21 @@ const VariantsPanel = ({
               <Box sx={{ display: 'flex', justifyContent: 'center', py: 4 }}><CircularProgress size={24} /></Box>
             ) : variants.length === 0 ? (
 
-              <Alert severity="info">
-                No variants yet. Add product attributes and mark the SKU-defining ones first, then click <strong>Generate Matrix</strong>.
-              </Alert>
+              <Box sx={{ py: 3, px: 2, textAlign: 'center', border: '1px dashed', borderColor: 'divider', borderRadius: 2 }}>
+                <Typography fontWeight={600}>{loadError ? 'Variants could not be loaded' : 'No variants yet'}</Typography>
+                <Typography variant="body2" color="text.secondary">{loadError ? 'Retry loading product options before making changes.' : 'Your variants will appear here after you create them.'}</Typography>
+              </Box>
             ) : (
               <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
                 {variants.map((variant, index) => (
                   <Accordion key={variant.id} variant="outlined" sx={{ m: '0 !important' }}>
                     <AccordionSummary
-                      expandIcon={<ExpandMoreIcon />}
+                      aria-label={getVariantOptionLabel(variant) || 'Variant SKU'}
+                      expandIcon={<Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}><Typography variant="caption">Edit</Typography><ExpandMoreIcon className="variant-expand-arrow" /></Box>}
                       sx={{
+                        '& .MuiAccordionSummary-expandIconWrapper.Mui-expanded': { transform: 'none' },
+                        '& .variant-expand-arrow': { transition: 'transform 150ms ease' },
+                        '& .Mui-expanded .variant-expand-arrow': { transform: 'rotate(180deg)' },
                         '& .MuiAccordionSummary-content': {
                           display: 'flex',
                           justifyContent: 'space-between',
@@ -890,17 +446,19 @@ const VariantsPanel = ({
                         }
                       }}
                     >
-                      <Typography variant="body2" fontWeight={600}>
-                        {getVariantOptionLabel(variant) || 'Variant SKU'}
-                      </Typography>
+                      <Box sx={{ minWidth: 0, flex: 1, py: 0.5 }}>
+                        <Typography variant="body2" fontWeight={600} sx={{ overflowWrap: 'anywhere' }}>{getVariantOptionLabel(variant) || 'Variant SKU'}</Typography>
+                        <Typography variant="caption" color="text.secondary">MRP: {Number(variant.price || 0).toLocaleString()} · Stock: {variant.stockQty || 0} · {variant.isActive === false ? 'Hidden' : 'Available'}{variant._dirty ? ' · Unsaved' : ''}</Typography>
+                      </Box>
                       <IconButton
                         size="small"
                         color="error"
+                        aria-label={`Delete ${getVariantOptionLabel(variant) || 'variant'}`}
                         onClick={(e) => {
                           e.stopPropagation();
                           handleDeleteVariant(variant.id);
                         }}
-                        disabled={!canManageVariants}
+                        disabled={!canEditVariants}
                       >
                         <DeleteIcon fontSize="small" />
                       </IconButton>
@@ -948,7 +506,7 @@ const VariantsPanel = ({
                                       sx={{ bgcolor: 'background.paper' }}
                                       color={img.isPrimary ? 'warning' : 'default'}
                                       onClick={() => handleSetVariantPrimaryImage(index, imageIndex)}
-                                      disabled={!canManageVariants}
+                                      disabled={!canEditVariants}
                                     >
                                       {img.isPrimary ? <StarIcon sx={{ fontSize: 16 }} /> : <StarBorderIcon sx={{ fontSize: 16 }} />}
                                     </IconButton>
@@ -959,7 +517,7 @@ const VariantsPanel = ({
                                       sx={{ bgcolor: 'background.paper' }}
                                       color="error"
                                       onClick={() => handleRemoveVariantImage(index, imageIndex)}
-                                      disabled={!canManageVariants}
+                                      disabled={!canEditVariants}
                                     >
                                       <DeleteIcon sx={{ fontSize: 16 }} />
                                     </IconButton>
@@ -987,14 +545,14 @@ const VariantsPanel = ({
                               size="small"
                               startIcon={<ImageIcon />}
                               onClick={() => setVariantMediaPickerOpen(index)}
-                              disabled={!canManageVariants}
+                              disabled={!canEditVariants}
                               sx={{ height: 64, borderStyle: 'dashed' }}
                             >
                               Add Images
                             </Button>
                           </Box>
                         </Grid>
-                        <Grid item xs={12} sm={2}>
+                        <Grid item xs={12} sm={6}>
                           <TextField
                             fullWidth
                             size="small"
@@ -1002,11 +560,13 @@ const VariantsPanel = ({
                             type="number"
                             value={variant.price}
                             onChange={(e) => handleVariantChange(index, 'price', e.target.value)}
-                            disabled={!canManageVariants}
+                            disabled={!canEditVariants}
                             inputProps={{ min: 0, step: '0.01' }}
+                            error={variant._dirty && !validPrice(variant.price)}
+                            helperText={variant._dirty && !validPrice(variant.price) ? 'Enter a price with up to 2 decimals.' : undefined}
                           />
                         </Grid>
-                        <Grid item xs={12} sm={2}>
+                        <Grid item xs={12} sm={6}>
                           <TextField
                             fullWidth
                             size="small"
@@ -1014,19 +574,24 @@ const VariantsPanel = ({
                             type="number"
                             value={variant.stockQty}
                             onChange={(e) => handleVariantChange(index, 'stockQty', e.target.value)}
-                            disabled={!canManageVariants}
+                            disabled={!canEditVariants}
                             inputProps={{ min: 0 }}
+                            error={variant._dirty && !validStock(variant)}
+                            helperText={variant._dirty && !validStock(variant) ? `Enter a whole number, at least ${variant.reservedQty || 0}.` : Number(variant.reservedQty || 0) > 0 ? `${variant.reservedQty} reserved` : undefined}
                           />
                         </Grid>
-                        <Grid item xs={12} sm={4.5}>
+                        <Grid item xs={12} sm={8}>
                           <TextField
                             fullWidth
                             size="small"
                             label="SKU"
                             value={variant.sku || ''}
                             onChange={(e) => handleVariantChange(index, 'sku', e.target.value)}
-                            disabled={!canManageVariants}
+                            disabled={!canEditVariants}
                             placeholder="Optional SKU"
+                            inputProps={{ maxLength: 100 }}
+                            error={variant._dirty && duplicateSku(variant)}
+                            helperText={variant._dirty && duplicateSku(variant) ? 'Each variant must have a different SKU.' : undefined}
                             InputProps={{
                               endAdornment: (
                                 <InputAdornment position="end">
@@ -1046,14 +611,14 @@ const VariantsPanel = ({
                             }}
                           />
                         </Grid>
-                        <Grid item xs={12} sm={2} sx={{ display: 'flex', alignItems: 'center' }}>
+                        <Grid item xs={12} sm={4} sx={{ display: 'flex', alignItems: 'center' }}>
                           <FormControlLabel
                             control={
                               <Switch
                                 size="small"
                                 checked={variant.isActive !== false}
                                 onChange={(e) => handleVariantChange(index, 'isActive', e.target.checked)}
-                                disabled={!canManageVariants}
+                                disabled={!canEditVariants}
                                 color="success"
                               />
                             }
@@ -1069,7 +634,7 @@ const VariantsPanel = ({
                             Shipping measurements (optional — leave blank to inherit from product):
                           </Typography>
                           <Grid container spacing={1}>
-                            <Grid item xs={6} sm={3}>
+                            <Grid item xs={6}>
                               <TextField
                                 fullWidth
                                 size="small"
@@ -1078,11 +643,11 @@ const VariantsPanel = ({
                                 value={variant.weightGrams ?? ''}
                                 placeholder="Inherited"
                                 onChange={(e) => handleVariantChange(index, 'weightGrams', e.target.value)}
-                                disabled={!canManageVariants}
+                                disabled={!canEditVariants}
                                 inputProps={{ min: 0, step: 1 }}
                               />
                             </Grid>
-                            <Grid item xs={6} sm={3}>
+                            <Grid item xs={6}>
                               <TextField
                                 fullWidth
                                 size="small"
@@ -1091,11 +656,11 @@ const VariantsPanel = ({
                                 value={variant.lengthCm ?? ''}
                                 placeholder="Inherited"
                                 onChange={(e) => handleVariantChange(index, 'lengthCm', e.target.value)}
-                                disabled={!canManageVariants}
+                                disabled={!canEditVariants}
                                 inputProps={{ min: 0.5, step: 0.5 }}
                               />
                             </Grid>
-                            <Grid item xs={6} sm={3}>
+                            <Grid item xs={6}>
                               <TextField
                                 fullWidth
                                 size="small"
@@ -1104,11 +669,11 @@ const VariantsPanel = ({
                                 value={variant.breadthCm ?? ''}
                                 placeholder="Inherited"
                                 onChange={(e) => handleVariantChange(index, 'breadthCm', e.target.value)}
-                                disabled={!canManageVariants}
+                                disabled={!canEditVariants}
                                 inputProps={{ min: 0.5, step: 0.5 }}
                               />
                             </Grid>
-                            <Grid item xs={6} sm={3}>
+                            <Grid item xs={6}>
                               <TextField
                                 fullWidth
                                 size="small"
@@ -1117,7 +682,7 @@ const VariantsPanel = ({
                                 value={variant.heightCm ?? ''}
                                 placeholder="Inherited"
                                 onChange={(e) => handleVariantChange(index, 'heightCm', e.target.value)}
-                                disabled={!canManageVariants}
+                                disabled={!canEditVariants}
                                 inputProps={{ min: 0.5, step: 0.5 }}
                               />
                             </Grid>
@@ -1129,6 +694,15 @@ const VariantsPanel = ({
                 ))}
               </Box>
             )}
+            {variants.length > 0 && <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 2, borderTop: 1, borderColor: 'divider', pt: 2, mt: 2 }}>
+              <Box>
+                <Typography variant="body2" fontWeight={600}>{variants.length} {variants.length === 1 ? 'variant' : 'variants'} · Total stock: {variants.filter((variant) => variant.isActive !== false).reduce((sum, variant) => sum + Number(variant.stockQty || 0), 0)}</Typography>
+                <Typography variant="caption" color={hasInvalidChanges ? 'error' : 'text.secondary'}>{hasInvalidChanges ? 'Fix the highlighted prices, stock quantities, or duplicate SKUs before saving.' : hasVariantChanges ? 'You have unsaved variant changes.' : 'All variant changes saved.'}</Typography>
+              </Box>
+              <Button variant="contained" onClick={handleSaveVariants} disabled={!canEditVariants || !hasVariantChanges || hasInvalidChanges || attributesBusy} sx={{ minHeight: 44 }}>
+                {saving ? `Saving (${saveProgress.current}/${saveProgress.total})…` : 'Save variant changes'}
+              </Button>
+            </Box>}
           </Paper>
         </Grid>
       </Grid>
@@ -1141,25 +715,28 @@ const VariantsPanel = ({
         title="Select Variant Images"
       />
 
-      <Dialog open={cloneOpen} onClose={() => setCloneOpen(false)} maxWidth="sm" fullWidth>
+      <Dialog open={cloneOpen} onClose={closeClone} maxWidth="sm" fullWidth>
         <DialogTitle>Clone Variants from Another Product</DialogTitle>
         <DialogContent sx={{ pt: 1 }}>
           <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
-            Option combinations and prices will be copied. Stock stays reset so you can review the new product inventory safely.
+            Required attributes, values, combinations, MRP and shipping measurements are copied automatically. New variants start with zero stock and fresh unique SKUs. Variant photos are not copied. Existing combinations keep their prices, stock and SKUs.
           </Typography>
-          <Tabs value={cloneTab} onChange={(_, value) => { setCloneTab(value); setCloneSelectedProduct(null); setCloneCatSelectedProduct(null); }} sx={{ mb: 2 }}>
-            <Tab label="Search by Product Name" />
-            <Tab label="Browse by Category" />
+          <Tabs value={cloneTab} onChange={(_, value) => { clearTimeout(cloneSearchTimer.current); cloneRequests.current.search++; cloneRequests.current.category++; setCloneSearchLoading(false); setCloneCatProductsLoading(false); setCloneTab(value); setCloneSelectedProduct(null); setCloneCatSelectedProduct(null); setCloneSearchInput(''); setCloneSearchResults([]); setCloneCatId(''); setCloneCatProducts([]); }} sx={{ mb: 2 }}>
+            <Tab label="Search by name or SKU" disabled={cloning} />
+            <Tab label="Browse by Category" disabled={cloning} />
           </Tabs>
 
           {cloneTab === 0 && (
             <Autocomplete
               options={cloneSearchResults}
+              disabled={cloning}
               getOptionLabel={(option) => option.name || ''}
+              isOptionEqualToValue={(option, value) => option.id === value.id}
+              renderOption={(props, option) => <li {...props} key={option.id}><Box><Typography variant="body2">{option.name}</Typography><Typography variant="caption" color="text.secondary">{option.sku || 'No product SKU'} · {option.variants.length} variants</Typography></Box></li>}
               filterOptions={(x) => x}
               loading={cloneSearchLoading}
               value={cloneSelectedProduct}
-              onChange={(_, value) => setCloneSelectedProduct(value)}
+              onChange={(_, value) => { setCloneSelectedProduct(value); setCloneSearchInput(value?.name || ''); }}
               inputValue={cloneSearchInput}
               onInputChange={(_, value, reason) => { if (reason !== 'reset') handleCloneSearchChange(value); }}
               renderInput={(params) => (
@@ -1168,6 +745,7 @@ const VariantsPanel = ({
                   label="Search products"
                   placeholder="Type product name..."
                   size="small"
+                  helperText="Search by product name or product SKU (at least 2 characters). Only products with variants are shown."
                   InputProps={{
                     ...params.InputProps,
                     endAdornment: (
@@ -1179,15 +757,15 @@ const VariantsPanel = ({
                   }}
                 />
               )}
-              noOptionsText={cloneSearchInput.length > 0 ? 'No products found' : 'Start typing to search'}
+              noOptionsText={cloneSearchInput.trim().length >= 2 ? 'No matching products with variants' : 'Type at least 2 characters'}
             />
           )}
 
           {cloneTab === 1 && (
             <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
-              <FormControl fullWidth size="small">
-                <InputLabel>Select Category</InputLabel>
-                <Select label="Select Category" value={cloneCatId} onChange={(e) => handleCloneCatChange(e.target.value)}>
+              <FormControl fullWidth size="small" disabled={cloning}>
+                <InputLabel id="clone-category-label">Select Category</InputLabel>
+                <Select labelId="clone-category-label" label="Select Category" value={cloneCatId} onChange={(e) => handleCloneCatChange(e.target.value)}>
                   <MenuItem value=""><em>Select category</em></MenuItem>
                   {flatCatFiles.map((category) => (
                     <MenuItem key={category.id} value={category.id} sx={{ pl: 2 + category.depth * 2 }}>
@@ -1204,14 +782,14 @@ const VariantsPanel = ({
                     <Typography variant="body2" color="text.secondary">Loading products...</Typography>
                   </Box>
                 ) : cloneCatProducts.length === 0 ? (
-                  <Typography variant="body2" color="text.secondary">No other products in this category.</Typography>
+                  <Typography variant="body2" color="text.secondary">No other products with variants in this category.</Typography>
                 ) : (
-                  <FormControl fullWidth size="small">
-                    <InputLabel>Select Product</InputLabel>
-                    <Select label="Select Product" value={cloneCatSelectedProduct?.id || ''} onChange={(e) => setCloneCatSelectedProduct(cloneCatProducts.find((product) => product.id === e.target.value) || null)}>
+                  <FormControl fullWidth size="small" disabled={cloning}>
+                    <InputLabel id="clone-product-label">Select Product</InputLabel>
+                    <Select labelId="clone-product-label" label="Select Product" value={cloneCatSelectedProduct?.id || ''} onChange={(e) => setCloneCatSelectedProduct(cloneCatProducts.find((product) => product.id === e.target.value) || null)}>
                       <MenuItem value=""><em>Select product</em></MenuItem>
                       {cloneCatProducts.map((product) => (
-                        <MenuItem key={product.id} value={product.id}>{product.name}</MenuItem>
+                        <MenuItem key={product.id} value={product.id}>{product.name} · {product.sku || 'No product SKU'} · {product.variants.length} variants</MenuItem>
                       ))}
                     </Select>
                   </FormControl>
@@ -1227,15 +805,7 @@ const VariantsPanel = ({
           )}
         </DialogContent>
         <DialogActions>
-          <Button onClick={() => {
-            setCloneOpen(false);
-            setCloneSelectedProduct(null);
-            setCloneSearchInput('');
-            setCloneSearchResults([]);
-            setCloneCatSelectedProduct(null);
-            setCloneCatId('');
-            setCloneCatProducts([]);
-          }}>Cancel</Button>
+          <Button onClick={closeClone} disabled={cloning}>Cancel</Button>
           <Button variant="contained" onClick={handleClone} disabled={cloning || !(cloneTab === 0 ? cloneSelectedProduct : cloneCatSelectedProduct)}>
             {cloning ? 'Cloning...' : 'Clone Variants'}
           </Button>

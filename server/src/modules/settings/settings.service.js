@@ -5,6 +5,7 @@ const AuditService = require('../audit/audit.service');
 const AppError = require('../../utils/AppError');
 const { validateDefaultPackage } = require('../shipping/shipping.package');
 const { validateShippingSetting } = require('../shipping/shipping.settings');
+const { validateUnitCatalogSetting, ensureUnitCatalogChangesAllowed, ensureUnitCategoriesAllowed } = require('./unitCatalog');
 const { ACTIONS, ENTITIES } = require('../../config/constants');
 const { buildFeatures, isTier1Feature, TIER1_KEYS } = require('../../config/modes');
 const { getPermissionsForUser, PERMISSIONS } = require('../../config/permissions');
@@ -384,6 +385,7 @@ const resetDesignSetting = async ({ group, key }, actingUserId) => {
 
 const updateKey = async (key, value, group, actingUserId, actingUser = null) => {
   const resolvedGroup = resolveSettingGroup(key, group);
+  validateUnitCatalogSetting(key, value, resolvedGroup);
   ensureNotificationRecipientsAllowed([{ key, group: resolvedGroup, value }], actingUser);
   validateOrderSettings([{ key, value, group: resolvedGroup }]);
   const credentialGroups = ['gateway_credentials', 'messaging_credentials', 'ai_credentials'];
@@ -407,8 +409,10 @@ const updateKey = async (key, value, group, actingUserId, actingUser = null) => 
   // Capture the transaction result so we can invalidate the feature cache
   // AFTER it commits — ensuring we never bust the cache on a rollback.
   const result = await sequelize.transaction(async (t) => {
+    await ensureUnitCategoriesAllowed([{ key, value, group }], t);
     // Look up by (key, group) to avoid cross-group collisions for shared key names.
-    let setting = await Setting.findOne({ where: { key, group }, transaction: t });
+    let setting = await Setting.findOne({ where: { key, group }, transaction: t, ...(key === 'unitCatalog' ? { lock: true } : {}) });
+    await ensureUnitCatalogChangesAllowed(key, value, setting?.value, t);
     let before = setting ? setting.toJSON() : null;
 
     if (isMaskedSecretPlaceholder(value)) return null;
@@ -471,6 +475,7 @@ const bulkUpdate = async (settingsInput, actingUserId, actingUser = null, option
     ensureNotificationRecipientsAllowed(settingsArray, actingUser);
     validateOrderSettings(settingsArray);
     for (const setting of settingsArray) {
+        validateUnitCatalogSetting(setting.key, setting.value, setting.group);
         if (setting.group === 'shipping') validateShippingSetting(setting.key, setting.value);
         if (setting.group === 'shipping' && setting.key === 'defaultPackage') validateDefaultPackage(setting.value);
     }
@@ -481,6 +486,7 @@ const bulkUpdate = async (settingsInput, actingUserId, actingUser = null, option
     ensureSuperAdminIfProtectedSetting(settingsArray, actingUser);
 
     const writeSettings = async (t) => {
+        await ensureUnitCategoriesAllowed(settingsArray, t);
         let updatedCount = 0;
         for (let { key, value, group } of settingsArray) {
             // Resolve the group for this key upfront so lookups are always scoped
@@ -514,7 +520,8 @@ const bulkUpdate = async (settingsInput, actingUserId, actingUser = null, option
             }
 
             // Look up by (key, group) — not key alone — to avoid cross-group collisions
-            let setting = await Setting.findOne({ where: { key, group: resolvedGroup }, transaction: t });
+            let setting = await Setting.findOne({ where: { key, group: resolvedGroup }, transaction: t, ...(key === 'unitCatalog' ? { lock: true } : {}) });
+            await ensureUnitCatalogChangesAllowed(key, finalValue, setting?.value, t);
             
             if (setting) {
                 await setting.update({ value: finalValue, updatedBy: actingUserId }, { transaction: t });

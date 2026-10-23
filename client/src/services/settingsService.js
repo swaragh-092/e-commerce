@@ -10,6 +10,11 @@ export const getSettingsGroup = async (groupName) => {
   return response.data.data;
 };
 
+export const getUnitUsage = async () => {
+  const response = await api.get('/settings/unit-usage');
+  return response.data.data;
+};
+
 export const getDesignState = async () => {
   const response = await api.get('/settings/design-state');
   return response.data.data;
@@ -76,6 +81,7 @@ export const updateSingleSetting = async (key, value, group) => {
 const settingsService = {
   getAllSettings,
   getSettingsGroup,
+  getUnitUsage,
   getDesignState,
   resetDesignSetting,
   getDesignDraft,

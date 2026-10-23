@@ -3,7 +3,7 @@
 const { ProductAttribute, AttributeTemplate, AttributeValue, Product, sequelize } = require('../index');
 const AppError = require('../../utils/AppError');
 
-const ATTRIBUTE_TEMPLATE_FIELDS = ['id', 'name', 'slug', 'sortOrder', 'displayType', 'valueType', 'unit'];
+const ATTRIBUTE_TEMPLATE_FIELDS = ['id', 'name', 'slug', 'sortOrder', 'displayType', 'valueType', 'unit', 'unitCategory'];
 const ATTRIBUTE_VALUE_FIELDS = ['id', 'value', 'slug', 'sortOrder', 'displayLabel', 'swatchColor', 'imageUrl', 'unitLabel', 'metadata'];
 
 // ── Shared include for full attribute+value detail ──────────────────────────

@@ -8,6 +8,7 @@ import authService from '../../services/authService';
 import { EmailOutlined, LockOutlined, Visibility, VisibilityOff, PhoneOutlined } from '@mui/icons-material';
 import AuthPageShell from '../../components/storefront/AuthPageShell';
 import newsletterService from '../../services/newsletterService';
+import { useSettings } from '../../hooks/useSettings';
 import { useNotification } from '../../context/NotificationContext';
 
 const LoginPage = () => {
@@ -16,6 +17,8 @@ const LoginPage = () => {
   const location = useLocation();
   const { login, verifyTwoFactor, finalizeAuthenticatedSession } = useAuth();
   const { notify } = useNotification();
+  const { settings } = useSettings();
+  const newsletterEnabled = settings?.auth?.loginNewsletterEnabled !== false;
   const [searchParams] = useSearchParams();
   
   const [formData, setFormData] = useState({ email: localStorage.getItem('rememberedEmail') || '', password: '' });
@@ -31,7 +34,7 @@ const LoginPage = () => {
   const [newsletterOptIn, setNewsletterOptIn] = useState(false);
 
   const saveNewsletterChoice = async (user) => {
-    if (!newsletterOptIn || user?.role !== 'customer') return;
+    if (!newsletterEnabled || !newsletterOptIn || user?.role !== 'customer') return;
     try {
       await newsletterService.updateMyStatus(true);
     } catch {
@@ -426,11 +429,11 @@ const LoginPage = () => {
           </Typography>
         </Box>
 
-        <FormControlLabel
+        {newsletterEnabled && <FormControlLabel
           control={<Checkbox checked={newsletterOptIn} disabled={loading} onChange={(event) => setNewsletterOptIn(event.target.checked)} />}
-          label="Email me offers, new products, and store updates."
+          label={settings?.auth?.loginNewsletterLabel || 'Email me offers, new products, and store updates.'}
           sx={{ mb: 2, '& .MuiFormControlLabel-label': { fontSize: 14 } }}
-        />
+        />}
 
         <Button
           fullWidth

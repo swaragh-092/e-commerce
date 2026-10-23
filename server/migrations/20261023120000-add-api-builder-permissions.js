@@ -109,5 +109,35 @@ module.exports = {
       await queryInterface.bulkDelete('role_permissions', { permission_id: ids });
       await queryInterface.bulkDelete('permissions', { id: ids });
     }
+
+    // Restore pre-existing menus permissions to standard admin role on rollback
+    const adminRole = await queryInterface.sequelize.query(
+      'SELECT id FROM roles WHERE slug = :slug LIMIT 1',
+      { type: QueryTypes.SELECT, replacements: { slug: ROLES.ADMIN } }
+    );
+    const adminRoleId = adminRole[0]?.id;
+
+    if (adminRoleId) {
+      const menuPerms = await queryInterface.sequelize.query(
+        'SELECT id FROM permissions WHERE key IN (:keys)',
+        { type: QueryTypes.SELECT, replacements: { keys: [PERMISSIONS.MENUS_READ, PERMISSIONS.MENUS_MANAGE] } }
+      );
+      const now = new Date();
+      for (const perm of menuPerms) {
+        const existing = await queryInterface.sequelize.query(
+          'SELECT id FROM role_permissions WHERE role_id = :roleId AND permission_id = :permissionId LIMIT 1',
+          { type: QueryTypes.SELECT, replacements: { roleId: adminRoleId, permissionId: perm.id } }
+        );
+        if (!existing[0]?.id) {
+          await queryInterface.bulkInsert('role_permissions', [{
+            id: crypto.randomUUID(),
+            role_id: adminRoleId,
+            permission_id: perm.id,
+            created_at: now,
+            updated_at: now,
+          }]);
+        }
+      }
+    }
   },
 };
