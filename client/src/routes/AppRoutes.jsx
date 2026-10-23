@@ -92,6 +92,7 @@ const CustomerDetailPage = lazy(() => import('../pages/admin/CustomerDetailPage'
 const CouponsPage = lazy(() => import('../pages/admin/CouponsPage'));
 const ReviewsPage = lazy(() => import('../pages/admin/ReviewsPage'));
 const MediaPage = lazy(() => import('../pages/admin/MediaPage'));
+const GalleryPage = lazy(() => import('../pages/admin/GalleryPage'));
 const SettingsPage = lazy(() => import('../pages/admin/SettingsPage'));
 const FeaturesPage = lazy(() => import('../pages/admin/FeaturesPage'));
 const PaymentGatewaysPage = lazy(() => import('../pages/admin/PaymentGatewaysPage'));
@@ -252,6 +253,7 @@ const AppRoutes = () => (
           </Route>
           <Route element={<ProtectedRoute permission={PERMISSIONS.MEDIA_READ} />}>
             <Route path="media" element={<MediaPage />} />
+            <Route path="gallery" element={<GalleryPage />} />
           </Route>
           <Route element={<ProtectedRoute permission={PERMISSIONS.SETTINGS_READ} />}>
             <Route path="settings" element={<SettingsPage />} />

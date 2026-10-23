@@ -14,7 +14,7 @@ beforeEach(() => {
   vi.spyOn(db.sequelize, 'transaction').mockImplementation(async (callback) => callback(tx));
   vi.spyOn(db.sequelize, 'query').mockResolvedValue([]);
   vi.spyOn(db.Setting, 'findAll').mockResolvedValue([]);
-  vi.spyOn(db.Product, 'findByPk').mockResolvedValue({ id: 'product' });
+  vi.spyOn(db.Product, 'findByPk').mockResolvedValue({ id: 'product', type: 'variable' });
   vi.spyOn(db.AttributeTemplate, 'findByPk').mockImplementation(async () => template);
   vi.spyOn(db.AttributeTemplate, 'findOne').mockResolvedValue(null);
   vi.spyOn(db.AttributeTemplate, 'create').mockImplementation(async (data) => ({ ...data, id: attributeId }));
@@ -27,6 +27,18 @@ beforeEach(() => {
 afterEach(() => vi.restoreAllMocks());
 
 describe('unified product attribute assignment', () => {
+  it('appends newly assigned values without resetting the saved product order', async () => {
+    assigned.push({ id: 'old', attributeId: 'other', valueId: 'other-value', sortOrder: 9 });
+    await assignProductAttribute('product', { attributeId, values: [{ valueId }] });
+    expect(db.ProductAttribute.create).toHaveBeenCalledWith(expect.objectContaining({ sortOrder: 10 }), { transaction: tx });
+    expect(assigned[0].sortOrder).toBe(9);
+  });
+  it('rejects variant dimensions on Simple products before creating templates or values', async () => {
+    db.Product.findByPk.mockResolvedValue({ id: 'product', type: 'simple' });
+    await expect(assignProductAttribute('product', { attributeId, values: [{ valueId }], isVariantAttr: true })).rejects.toThrow('Save the product as Variable');
+    expect(db.AttributeValue.create).not.toHaveBeenCalled();
+    expect(db.ProductAttribute.create).not.toHaveBeenCalled();
+  });
   it('validates one attribute source and at least one value', () => {
     expect(assignProductAttributeSchema.validate({ attributeId, values: [{ valueId }] }).error).toBeUndefined();
     expect(assignProductAttributeSchema.validate({ attribute: { name: 'Height', unitCategory: 'Length' }, values: [{ value: '10', unitLabel: 'cm' }] }).error).toBeUndefined();

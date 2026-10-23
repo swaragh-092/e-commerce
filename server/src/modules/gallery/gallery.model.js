@@ -7,6 +7,7 @@ module.exports = (sequelize, DataTypes) => {
     slug: { type: DataTypes.STRING(255), allowNull: false, unique: true },
     description: { type: DataTypes.TEXT, allowNull: true },
     isActive: { type: DataTypes.BOOLEAN, allowNull: false, defaultValue: true, field: 'is_active' },
+    isShowcase: { type: DataTypes.BOOLEAN, allowNull: false, defaultValue: false, field: 'is_showcase' },
   }, {
     tableName: 'galleries',
     timestamps: true,

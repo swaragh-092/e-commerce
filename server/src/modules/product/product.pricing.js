@@ -256,7 +256,7 @@ const serializeVariantPricing = (product, variant, referenceDate = new Date()) =
 const serializeProductPricing = (product, { adminView = false, features = {} } = {}, labelPresets = []) => {
   if (!product) return product;
 
-  const plain = typeof product.toJSON === 'function' ? product.toJSON() : { ...product };
+  const plain = require('../attribute/productAttributeOrder').orderProductPresentation(typeof product.toJSON === 'function' ? product.toJSON() : { ...product });
 
   // Strip internal fields that should never appear in API responses
   delete plain.searchVector;

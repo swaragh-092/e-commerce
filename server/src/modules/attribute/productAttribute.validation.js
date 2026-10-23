@@ -4,7 +4,7 @@ const Joi = require('joi');
 
 const sharedProductAttributeFields = {
     isVariantAttr: Joi.boolean().default(false),
-    sortOrder: Joi.number().integer().min(0).default(0),
+    sortOrder: Joi.number().integer().min(0),
 };
 
 const addProductAttributeSchema = Joi.alternatives().try(
@@ -64,7 +64,12 @@ const generateVariantsSchema = Joi.object({
     confirmRemovals: Joi.boolean().default(false),
     defaultPrice: Joi.number().precision(2).min(0).max(99999999.99),
     defaultStockQty: Joi.number().integer().min(0).max(2147483647).default(0),
-});
+    newVariants: Joi.array().max(500).items(Joi.object({
+        valueIds: Joi.array().items(Joi.string().uuid().required()).min(1).unique().required(),
+        price: Joi.number().precision(2).min(0).max(99999999.99).strict().required(),
+        stockQty: Joi.number().integer().min(0).max(2147483647).strict().required(),
+    })),
+}).with('newVariants', 'planToken');
 
 const variantImageSchema = Joi.object({
     url: Joi.string().allow('', null),
@@ -115,6 +120,7 @@ const updateVariantSchema = Joi.object({
 }).min(1).messages({ 'object.min': 'At least one field is required to update' });
 
 module.exports = {
+    reorderProductAttributesSchema: Joi.object({ rowIds: Joi.array().items(Joi.string().uuid()).unique().max(5000).required() }),
     assignProductAttributeSchema,
     addProductAttributeSchema,
     updateProductAttributeSchema,

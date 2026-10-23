@@ -82,6 +82,7 @@ const MENU_STRUCTURE = [
       { text: 'Categories', path: '/admin/categories', icon: <CategoryIcon />, permission: PERMISSIONS.CATEGORIES_READ },
       { text: 'Brands', path: '/admin/brands', icon: <LocalOfferIcon />, permissions: [PERMISSIONS.BRANDS_READ, PERMISSIONS.BRANDS_MANAGE, PERMISSIONS.PRODUCTS_READ] },
       { text: 'Attributes', path: '/admin/attributes', icon: <TuneIcon />, permission: PERMISSIONS.ATTRIBUTES_READ },
+      { text: 'Gallery', path: '/admin/gallery', icon: <PhotoLibraryIcon />, permission: PERMISSIONS.MEDIA_READ },
     ]
   },
   {
