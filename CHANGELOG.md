@@ -2,6 +2,12 @@
 
 All notable changes to this project are documented here.
 
+## [1.1.2.1] - 2026-10-23
+
+### Added
+- Let administrators turn customer enquiry acknowledgement emails on or off while choosing staff recipients through the existing notification settings.
+- Make the enquiry notification templates easier to find and edit in the admin settings.
+
 ## [1.1.2.0] - 2026-10-22
 
 ### Changed

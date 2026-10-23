@@ -131,6 +131,15 @@ const validateOrderSettings = (settingsArray) => {
   }
 };
 
+const validateEnquiryEmailSettings = (settingsArray) => {
+  for (const { key, value, group } of settingsArray) {
+    if (resolveSettingGroup(key, group) !== 'messaging' || key !== 'enquiryCustomerAcknowledgementEnabled') continue;
+    if (typeof value !== 'boolean') {
+      throw new AppError('VALIDATION_ERROR', 400, 'Customer enquiry acknowledgement must be enabled or disabled.');
+    }
+  }
+};
+
 const ensurePaymentGatewaySettingsAreValid = async (settingsArray) => {
   const touchesPayments = settingsArray.some(({ key, group }) => {
     const resolvedGroup = resolveSettingGroup(key, group);
@@ -417,6 +426,7 @@ const updateKey = async (key, value, group, actingUserId, actingUser = null) => 
   validateUnitCatalogSetting(key, value, resolvedGroup);
   ensureNotificationRecipientsAllowed([{ key, group: resolvedGroup, value }], actingUser);
   validateOrderSettings([{ key, value, group: resolvedGroup }]);
+  validateEnquiryEmailSettings([{ key, value, group: resolvedGroup }]);
   const credentialGroups = ['gateway_credentials', 'messaging_credentials', 'ai_credentials'];
 
   // Tier 1 feature keys are mode-locked — reject any attempt to modify them via settings.
@@ -503,6 +513,7 @@ const bulkUpdate = async (settingsInput, actingUserId, actingUser = null, option
     ensureAdvancedSettingsAllowed(settingsArray, actingUser);
     ensureNotificationRecipientsAllowed(settingsArray, actingUser);
     validateOrderSettings(settingsArray);
+    validateEnquiryEmailSettings(settingsArray);
     for (const setting of settingsArray) {
         validateUnitCatalogSetting(setting.key, setting.value, setting.group);
         if (setting.group === 'shipping') validateShippingSetting(setting.key, setting.value);
