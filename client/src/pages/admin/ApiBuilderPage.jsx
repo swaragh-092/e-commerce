@@ -246,7 +246,7 @@ const ApiBuilderPage = () => {
   const [saving, setSaving] = useState(false);
   const { notify } = useNotification();
   const { hasPermission } = useAuth();
-  const canManage = hasPermission(PERMISSIONS.SETTINGS_MANAGE);
+  const canManage = hasPermission(PERMISSIONS.API_BUILDER_MANAGE);
 
   const selectedDefinition = useMemo(
     () => definitions.find((item) => item.id === selectedId),
@@ -836,7 +836,7 @@ const ApiBuilderPage = () => {
       <Grid container spacing={2.5}>
         <Grid item xs={12} lg={3}>
           <Paper variant="outlined" sx={{ p: 2, borderRadius: 2, mb: 2 }}>
-            <Button fullWidth variant="outlined" startIcon={<AddIcon />} onClick={() => handleSelectDefinition(null)} sx={{ mb: 1.5 }}>
+            <Button fullWidth variant="outlined" startIcon={<AddIcon />} onClick={() => handleSelectDefinition(null)} disabled={!canManage} sx={{ mb: 1.5 }}>
               New API
             </Button>
             <Stack spacing={1}>

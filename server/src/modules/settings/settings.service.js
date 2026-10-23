@@ -47,6 +47,29 @@ const isTruthySetting = (value) => value === true || value === 'true';
 const hasAdvancedSettingsPermission = (user) =>
   getPermissionsForUser(user || {}).includes(PERMISSIONS.SETTINGS_ADVANCED);
 
+const isSuperAdminUser = (user) => {
+  const actingRoles = user?.roles || (user?.role ? [user.role] : []);
+  return actingRoles.includes('super_admin');
+};
+
+const isProtectedFeatureOrModeSetting = (key, group) => {
+  const resolvedGroup = resolveSettingGroup(key, group);
+  return resolvedGroup === 'features' || key === 'mode' || (resolvedGroup === 'general' && key === 'mode');
+};
+
+const ensureSuperAdminIfProtectedSetting = (settingsArray, actingUser) => {
+  const touchesProtected = settingsArray.some(({ key, group }) =>
+    isProtectedFeatureOrModeSetting(key, group)
+  );
+  if (touchesProtected && !isSuperAdminUser(actingUser)) {
+    throw new AppError(
+      'SUPERADMIN_REQUIRED',
+      403,
+      'Only Super Admins can modify platform feature toggles or store mode.'
+    );
+  }
+};
+
 const isAdvancedSettingsGroup = (group) =>
   ['advanced', 'ai', 'ai_credentials'].includes(group);
 
@@ -361,14 +384,15 @@ const resetDesignSetting = async ({ group, key }, actingUserId) => {
 };
 
 const updateKey = async (key, value, group, actingUserId, actingUser = null) => {
-  validateUnitCatalogSetting(key, value, group);
-  ensureNotificationRecipientsAllowed([{ key, group, value }], actingUser);
-  validateOrderSettings([{ key, value, group }]);
+  const resolvedGroup = resolveSettingGroup(key, group);
+  validateUnitCatalogSetting(key, value, resolvedGroup);
+  ensureNotificationRecipientsAllowed([{ key, group: resolvedGroup, value }], actingUser);
+  validateOrderSettings([{ key, value, group: resolvedGroup }]);
   const credentialGroups = ['gateway_credentials', 'messaging_credentials', 'ai_credentials'];
 
   // Tier 1 feature keys are mode-locked — reject any attempt to modify them via settings.
   // This is the server-side enforcement regardless of who calls the API.
-  if (group === 'features' && isTier1Feature(key)) {
+  if (resolvedGroup === 'features' && isTier1Feature(key)) {
     throw new AppError(
       'FEATURE_LOCKED',
       403,
@@ -376,10 +400,11 @@ const updateKey = async (key, value, group, actingUserId, actingUser = null) => 
     );
   }
 
-  ensureAdvancedSettingsAllowed([{ key, value, group }], actingUser);
-  await ensurePaymentGatewaySettingsAreValid([{ key, value, group }]);
-  if (group === 'shipping') validateShippingSetting(key, value);
-  if (group === 'shipping' && key === 'defaultPackage') validateDefaultPackage(value);
+  ensureSuperAdminIfProtectedSetting([{ key, group: resolvedGroup, value }], actingUser);
+  ensureAdvancedSettingsAllowed([{ key, value, group: resolvedGroup }], actingUser);
+  await ensurePaymentGatewaySettingsAreValid([{ key, value, group: resolvedGroup }]);
+  if (resolvedGroup === 'shipping') validateShippingSetting(key, value);
+  if (resolvedGroup === 'shipping' && key === 'defaultPackage') validateDefaultPackage(value);
 
   // Capture the transaction result so we can invalidate the feature cache
   // AFTER it commits — ensuring we never bust the cache on a rollback.
@@ -426,7 +451,12 @@ const updateKey = async (key, value, group, actingUserId, actingUser = null) => 
 
   // Bust the feature cache after the transaction commits so the next gated
   // request immediately picks up the new value without waiting for TTL expiry.
-  if (group === 'features' || key === 'mode') invalidateFeature(key);
+  if (resolvedGroup === 'features' || key === 'mode') {
+    invalidateFeature(key);
+    try {
+      require('../search/search.service').invalidateSearchCache();
+    } catch (_) {}
+  }
 
   return result;
 };
@@ -452,22 +482,8 @@ const bulkUpdate = async (settingsInput, actingUserId, actingUser = null, option
     await ensurePaymentGatewaySettingsAreValid(settingsArray);
 
     // ── Superadmin guard ─────────────────────────────────────────────────────
-    // Tier 2 feature toggles (group === 'features', non-Tier-1 keys) may only
-    // be written by a super_admin. Regular admins can save everything else.
-    const hasFeatureKeys = settingsArray.some(
-      ({ key, group }) => (group || 'general') === 'features' && !isTier1Feature(key)
-    );
-    if (hasFeatureKeys) {
-      const actingRoles = actingUser?.roles || (actingUser?.role ? [actingUser.role] : []);
-      const isSuperAdmin = actingRoles.includes('super_admin');
-      if (!isSuperAdmin) {
-        throw new AppError(
-          'SUPERADMIN_REQUIRED',
-          403,
-          'Only Super Admins can modify platform feature toggles.'
-        );
-      }
-    }
+    // Feature toggles and store mode may only be written by a super_admin.
+    ensureSuperAdminIfProtectedSetting(settingsArray, actingUser);
 
     const writeSettings = async (t) => {
         await ensureUnitCategoriesAllowed(settingsArray, t);
@@ -536,10 +552,18 @@ const bulkUpdate = async (settingsInput, actingUserId, actingUser = null, option
     }
 
     // Bust feature cache for any feature-group key that was updated
+    let featureOrModeUpdated = false;
     for (const { key, group } of settingsArray) {
-        if (!group || group === 'features' || key === 'mode') {
+        const resolvedGroup = resolveSettingGroup(key, group);
+        if (resolvedGroup === 'features' || key === 'mode') {
             invalidateFeature(key);
+            featureOrModeUpdated = true;
         }
+    }
+    if (featureOrModeUpdated) {
+        try {
+            require('../search/search.service').invalidateSearchCache();
+        } catch (_) {}
     }
 
     return true;

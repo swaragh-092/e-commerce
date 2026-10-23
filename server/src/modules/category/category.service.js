@@ -243,11 +243,13 @@ exports.getCategoryWithProducts = async (slug, pageOrOptions = 1, limitArg = 20,
     const categoryData = category.toJSON ? category.toJSON() : { ...category };
     categoryData.breadcrumbs = breadcrumbs;
 
+    const shouldHidePrice = features.pricing === false || features.showPrice === false;
+
     return {
         category: categoryData,
         subcategories,
         products: serializedProducts,
-        priceRange,
+        priceRange: shouldHidePrice ? null : priceRange,
         breadcrumbs,
         pagination: {
             totalItems: count,

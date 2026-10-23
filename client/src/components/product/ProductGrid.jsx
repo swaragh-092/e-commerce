@@ -3,7 +3,7 @@ import { Button, Grid, Skeleton, Typography, Box, Card, CardMedia, CardContent, 
 import SearchOffOutlinedIcon from '@mui/icons-material/SearchOffOutlined';
 import { Link } from 'react-router-dom';
 import ProductCard from './ProductCard';
-import { getMediaUrl } from '../../utils/media';
+import { getMediaUrl, onImageError, PLACEHOLDER_PRODUCT } from '../../utils/media';
 import { useCurrency, useFeature } from '../../hooks/useSettings';
 
 // Maps the setting value (number of desktop columns) -> MUI Grid breakpoints
@@ -20,6 +20,7 @@ const ProductGrid = ({ products, loading, gridCols = 4, fromCategory, hasActiveF
     const isCompactList = variant === 'compact-list';
     const { formatPrice } = useCurrency();
     const showPrice = useFeature('showPrice');
+    const brandsEnabled = useFeature('brands');
 
     if (loading) {
         return (
@@ -60,7 +61,7 @@ const ProductGrid = ({ products, loading, gridCols = 4, fromCategory, hasActiveF
         return (
             <Grid container spacing={1.5}>
                 {products.map((product) => {
-                    const primaryImage = getMediaUrl(product.images?.find((i) => i.isPrimary)?.url || product.images?.[0]?.url || '') || '/placeholder.png';
+                    const primaryImage = getMediaUrl(product.images?.find((i) => i.isPrimary)?.url || product.images?.[0]?.url || '') || PLACEHOLDER_PRODUCT;
                     const displayPrice = product.effectivePrice ?? product.salePrice ?? product.price;
                     const hasSale = product.salePrice && parseFloat(product.salePrice) < parseFloat(product.price);
                     return (
@@ -87,10 +88,11 @@ const ProductGrid = ({ products, loading, gridCols = 4, fromCategory, hasActiveF
                                     component="img"
                                     image={primaryImage}
                                     alt={product.name}
+                                    onError={onImageError(PLACEHOLDER_PRODUCT)}
                                     sx={{ width: '100%', aspectRatio: '1 / 1', borderRadius: 1.5, objectFit: 'cover', bgcolor: 'action.hover' }}
                                 />
                                 <CardContent sx={{ p: '0 !important', minWidth: 0 }}>
-                                    {product.brand?.name && (
+                                    {brandsEnabled && product.brand?.name && (
                                         <Typography variant="caption" color="primary" fontWeight={800} noWrap>{product.brand.name}</Typography>
                                     )}
                                     <Typography variant="subtitle1" fontWeight={900} noWrap>{product.name}</Typography>

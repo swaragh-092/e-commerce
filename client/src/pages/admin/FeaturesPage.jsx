@@ -47,16 +47,16 @@ const FeaturesPage = () => {
           });
         }
       });
+      // Store raw merchant preferences from DB settings.
+      // Do NOT overwrite stored preferences with effective values that were forced off by catalog mode!
       setForm((f) => ({
         ...flat,
-        ...Object.fromEntries(
-          Object.entries(resolvedFeatures || {}).map(([k, v]) => [`features.${k}`, v])
-        ),
       }));
     });
-  }, [resolvedFeatures]);
+  }, []);
 
-  // Reactive Mode Preview: Update Tier 1 dots when mode changes in dropdown
+  // Reactive Mode Preview: Update Tier 1 dots when mode changes in dropdown.
+  // Note: Tier 2 stored preferences in `form` are kept intact so switching modes doesn't erase them.
   useEffect(() => {
     if (!form['general.mode']) return;
 
@@ -80,21 +80,24 @@ const FeaturesPage = () => {
   const set = (key, value) => setForm((f) => ({ ...f, [key]: value }));
 
   const handleSaveFeatures = async () => {
-    if (!canManageSettings) {
-      notify('You do not have permission to manage features.', 'error');
+    if (!isSuperAdmin) {
+      notify('Only superadmins can manage platform features and store mode.', 'error');
       return;
     }
 
     setFeatureConfirmOpen(false);
     setSaving(true);
     try {
+      const tier1Keys = ['pricing', 'cart', 'checkout', 'orders', 'payments', 'shipping'];
+      // Only save Tier 2 features to DB; Tier 1 keys are mode-locked on server
       const featureKeys = Object.entries(form)
         .filter(([k]) => k.startsWith('features.'))
         .map(([flatKey, value]) => ({
           group: 'features',
           key: flatKey.slice('features.'.length),
           value,
-        }));
+        }))
+        .filter(({ key }) => !tier1Keys.includes(key));
 
       if (form['general.mode']) {
         featureKeys.push({
@@ -163,7 +166,9 @@ const FeaturesPage = () => {
           Platform Features
         </Typography>
         <Typography variant="body1" color="text.secondary">
-          Configure the core operational mode and optional features of your platform.
+          Configure the core operational mode and every optional feature of your platform.
+          This page is the single control point for feature switches; related settings panels
+          link back here.
         </Typography>
       </Box>
 
@@ -238,18 +243,53 @@ const FeaturesPage = () => {
               { key: 'features.requirePurchaseForReview', label: 'Verified Purchase Reviews', desc: 'Only allow reviews from customers who bought the product.', defaultE: false, defaultC: false },
               { key: 'features.enquiry', label: 'Enquire Now Button', desc: 'Show an enquiry button on the product detail page.', defaultE: false, defaultC: true },
               { key: 'features.coupons', label: 'Coupons & Discounts', desc: 'Enable coupon codes at checkout.', defaultE: true, defaultC: false },
+              { key: 'features.guestCheckout', label: 'Guest Checkout', desc: 'Allow customers to checkout without creating an account.', defaultE: true, defaultC: false },
               { key: 'features.emailVerification', label: 'Email Verification', desc: 'Require email confirmation after registration.', defaultE: false, defaultC: false },
               { key: 'features.showAvailableCoupons', label: 'Show Available Coupons', desc: 'Display applicable coupon codes on the cart page.', defaultE: true, defaultC: false },
               { key: 'features.showPrice', label: 'Show Product Prices', desc: 'Control whether prices are displayed on the storefront.', defaultE: true, defaultC: false },
               { key: 'features.productAssistant', label: 'AI Product Assistant', desc: 'Show the AI product creation assistant on product forms.', defaultE: true, defaultC: true },
-            ].filter(item => {
-              if (item.key === 'features.requirePurchaseForReview' && appMode === 'catalog') return false;
-              return true;
-            }).map(({ key, label, desc, defaultE, defaultC }) => {
+              { key: 'features.brands', label: 'Brands', desc: 'Show brand pages, brand navigation, brand filters, and brand details on products.', defaultE: true, defaultC: true },
+              { key: 'features.themes', label: 'Store Themes', desc: 'Enable the theme gallery and store designer tools.', defaultE: true, defaultC: true },
+              { key: 'features.seo', label: 'SEO Features', desc: 'Enable storefront SEO metadata, sitemap, robots, and URL overrides.', defaultE: true, defaultC: true },
+              { key: 'features.apiBuilder', label: 'API Builder', desc: 'Allow admins to publish custom public API endpoints.', defaultE: true, defaultC: true },
+            ].map(({ key, label, desc, defaultE, defaultC }) => {
               const modeDefault = selectedMode === 'catalog' ? defaultC : defaultE;
-              const isDependent = key === 'features.requirePurchaseForReview';
-              const parentDisabled = isDependent && !Boolean(form['features.reviews']);
-              
+              const isCatalog = selectedMode === 'catalog';
+
+              let isEffectiveLockedOff = false;
+              let lockReason = null;
+
+              if (key === 'features.showPrice' && isCatalog) {
+                isEffectiveLockedOff = true;
+                lockReason = 'Locked OFF in Catalog mode (Pricing is disabled)';
+              } else if (key === 'features.coupons' && isCatalog) {
+                isEffectiveLockedOff = true;
+                lockReason = 'Locked OFF in Catalog mode (Cart & Checkout disabled)';
+              } else if (key === 'features.guestCheckout' && isCatalog) {
+                isEffectiveLockedOff = true;
+                lockReason = 'Locked OFF in Catalog mode (Checkout disabled)';
+              } else if (key === 'features.requirePurchaseForReview') {
+                if (isCatalog) {
+                  isEffectiveLockedOff = true;
+                  lockReason = 'Locked OFF in Catalog mode (Orders disabled)';
+                } else if (!Boolean(form['features.reviews'])) {
+                  isEffectiveLockedOff = true;
+                  lockReason = 'Requires Reviews ON';
+                }
+              } else if (key === 'features.showAvailableCoupons') {
+                if (isCatalog) {
+                  isEffectiveLockedOff = true;
+                  lockReason = 'Locked OFF in Catalog mode (Cart disabled)';
+                } else if (!Boolean(form['features.coupons'])) {
+                  isEffectiveLockedOff = true;
+                  lockReason = 'Requires Coupons ON';
+                }
+              }
+
+              const isDisabled = isEffectiveLockedOff || !isSuperAdmin;
+              const isChecked = isEffectiveLockedOff ? false : (form[key] !== undefined ? Boolean(form[key]) : Boolean(modeDefault));
+              const isIndented = key === 'features.requirePurchaseForReview' || key === 'features.showAvailableCoupons';
+
               return (
                 <Box 
                   key={key} 
@@ -261,13 +301,13 @@ const FeaturesPage = () => {
                     border: '1px solid', 
                     borderColor: 'divider', 
                     borderRadius: 2, 
-                    opacity: parentDisabled ? 0.45 : 1,
-                    ml: isDependent ? 4 : 0,
-                    bgcolor: isDependent ? 'action.hover' : 'transparent'
+                    opacity: isEffectiveLockedOff ? 0.65 : 1,
+                    ml: isIndented ? 4 : 0,
+                    bgcolor: isEffectiveLockedOff ? 'action.hover' : 'transparent'
                   }}
                 >
                   <Box sx={{ flexGrow: 1 }}>
-                    <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 0.25 }}>
+                    <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 0.25, flexWrap: 'wrap' }}>
                       <Typography variant="body2" fontWeight={700}>{label}</Typography>
                       {modeDefault !== null && (
                         <Chip
@@ -277,19 +317,55 @@ const FeaturesPage = () => {
                           sx={{ height: 18, fontSize: 9, fontWeight: 700, color: 'text.secondary' }}
                         />
                       )}
-                      {isDependent && parentDisabled && <Chip label="Requires Reviews ON" size="small" sx={{ height: 18, fontSize: 9, bgcolor: 'action.selected' }} />}
+                      {lockReason && (
+                        <Chip
+                          label={lockReason}
+                          size="small"
+                          color="warning"
+                          variant="outlined"
+                          sx={{ height: 18, fontSize: 9, fontWeight: 700 }}
+                        />
+                      )}
                     </Box>
                     <Typography variant="caption" color="text.secondary">{desc}</Typography>
                   </Box>
                   <Switch
-                    checked={Boolean(form[key])}
+                    checked={isChecked}
                     onChange={(e) => set(key, e.target.checked)}
-                    disabled={parentDisabled || !isSuperAdmin}
+                    disabled={isDisabled}
                     size="small"
                   />
                 </Box>
               );
             })}
+          </Box>
+        </Paper>
+
+        {/* ── Declared but not implemented ── */}
+        <Paper variant="outlined" sx={{ p: 2.5, borderRadius: 2, mb: 3 }}>
+          <Typography variant="subtitle2" fontWeight={700} gutterBottom>
+            Not Implemented — No Switch
+          </Typography>
+          <Typography variant="body2" color="text.secondary" sx={{ mb: 1.5 }}>
+            These keys exist in the feature configuration but have no underlying behaviour yet.
+            They are intentionally omitted from the toggles so they are never presented as working features.
+          </Typography>
+          <Box sx={{ display: 'grid', gap: 1 }}>
+            {[
+              { key: 'multiCurrency', desc: 'Needs multi-currency pricing, per-currency formatting, and exchange-rate handling.' },
+              { key: 'socialLogin', desc: 'Needs OAuth providers, account linking, and callback routes.' },
+            ].map(({ key, desc }) => (
+              <Box
+                key={key}
+                sx={{ display: 'flex', gap: 1.5, alignItems: 'flex-start', p: 1.25, border: '1px dashed', borderColor: 'divider', borderRadius: 1.5 }}
+              >
+                <Chip label="UNIMPLEMENTED" size="small" sx={{ height: 18, fontSize: 9, fontWeight: 700 }} />
+                <Box>
+                  <Typography variant="body2" fontWeight={700} component="span" sx={{ mr: 1 }}>{key}</Typography>
+                  <Typography variant="caption" color="text.secondary">{desc}</Typography>
+                </Box>
+              </Box>
+            ))}
           </Box>
         </Paper>
 

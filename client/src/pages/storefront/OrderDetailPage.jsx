@@ -34,7 +34,7 @@ import ProductTrackingSection from '../../components/orders/order-detail/Product
 import ShippingAddressCard from '../../components/orders/order-detail/ShippingAddressCard';
 import TotalsNotesCard from '../../components/orders/order-detail/TotalsNotesCard';
 import { buildProductTrackingItems } from '../../components/orders/order-detail/orderDetailUtils';
-import { useCurrency, useFeature, useSettings } from '../../hooks/useSettings';
+import { useCurrency, useFeature, useFeaturesResolved, useSettings } from '../../hooks/useSettings';
 import { formatDateTime } from '../../utils/dates';
 
 import { useOrderStatusTransitions } from '../../hooks/useOrderStatusTransitions';
@@ -58,6 +58,7 @@ const OrderDetailPage = () => {
   const { settings } = useSettings();
   const { hasPermission } = useContext(AuthContext);
   const ordersEnabled = useFeature('orders');
+  const featuresResolved = useFeaturesResolved();
 
   const [order, setOrder] = useState(null);
   const [tracking, setTracking] = useState(null);
@@ -73,10 +74,10 @@ const OrderDetailPage = () => {
   const [cancelError, setCancelError] = useState(null);
 
   useEffect(() => {
-    if (!ordersEnabled) {
+    if (featuresResolved && !ordersEnabled) {
       navigate('/');
     }
-  }, [ordersEnabled, navigate]);
+  }, [featuresResolved, ordersEnabled, navigate]);
 
   useEffect(() => {
     const fetchOrder = async () => {

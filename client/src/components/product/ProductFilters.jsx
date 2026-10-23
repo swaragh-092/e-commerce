@@ -153,6 +153,8 @@ const ProductFilters = ({ filters, onFilterChange, priceRange: externalPriceRang
     const { formatPrice, symbol } = useCurrency();
     const { settings } = useSettings();
     const pricingEnabled = useFeature('pricing');
+    const showPrice = useFeature('showPrice');
+    const brandsEnabled = useFeature('brands');
     const categoryDepth = parseInt(settings?.catalog?.categoryDepth) || 3;
 
     const priceRangeMin = externalPriceRange?.min ?? 0;
@@ -162,16 +164,23 @@ const ProductFilters = ({ filters, onFilterChange, priceRange: externalPriceRang
     const [brands, setBrands] = useState([]);
 
     useEffect(() => {
+        if (!brandsEnabled) {
+            setBrands([]);
+            return;
+        }
         const fetchBrands = async () => {
             try {
                 const res = await brandService.getBrands({ isActive: 'true', limit: 100 });
                 setBrands(res?.data?.data || []);
             } catch (err) {
-                console.error('Failed to fetch brands:', err);
+                if (err?.response?.status !== 403) {
+                    console.error('Failed to fetch brands:', err);
+                }
+                setBrands([]);
             }
         };
         fetchBrands();
-    }, []);
+    }, [brandsEnabled]);
 
     const [sliderValue, setSliderValue] = useState([
         parseInt(filters.minPrice) || priceRangeMin,
@@ -198,11 +207,11 @@ const ProductFilters = ({ filters, onFilterChange, priceRange: externalPriceRang
         const cat = findCat(categories);
         if (cat) activeFilters.push({ key: 'category', label: cat.name, remove: () => onFilterChange({ ...filters, category: '', page: 1 }) });
     }
-    if (filters.brand) {
+    if (brandsEnabled && filters.brand) {
         const brand = brands.find(b => b.slug === filters.brand);
         if (brand) activeFilters.push({ key: 'brand', label: brand.name, remove: () => onFilterChange({ ...filters, brand: '', page: 1 }) });
     }
-    if (filters.minPrice || filters.maxPrice) {
+    if (pricingEnabled && showPrice && (filters.minPrice || filters.maxPrice)) {
         const min = filters.minPrice || priceRangeMin;
         const max = filters.maxPrice || priceRangeMax;
         if (min != priceRangeMin || max != priceRangeMax) {
@@ -298,7 +307,7 @@ const ProductFilters = ({ filters, onFilterChange, priceRange: externalPriceRang
             </FilterSection>
 
             {/* Brands */}
-            {brands.length > 0 && (
+            {brandsEnabled && brands.length > 0 && (
                 <FilterSection
                     title="Brands"
                     defaultOpen={!filters.brand}
@@ -331,7 +340,7 @@ const ProductFilters = ({ filters, onFilterChange, priceRange: externalPriceRang
             )}
 
             {/* Price Range */}
-            {pricingEnabled && (
+            {pricingEnabled && showPrice && (
                 <FilterSection
                     title="Price Range"
                     defaultOpen={!!(filters.minPrice || filters.maxPrice)}

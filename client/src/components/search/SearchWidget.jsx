@@ -31,6 +31,7 @@ import { useLocation, useNavigate } from 'react-router-dom';
 import { useDebounce } from '../../hooks/useDebounce';
 import { searchProducts } from '../../services/searchService';
 import normalizeSearchQuery, { getSearchQueryLength } from '../../utils/searchQuery';
+import { getMediaUrl, PLACEHOLDER_PRODUCT, PLACEHOLDER_CATEGORY, PLACEHOLDER_BRAND } from '../../utils/media';
 
 const PRODUCT_LIMIT = 5;
 const DEBOUNCE_MS = 300;
@@ -651,7 +652,7 @@ const ResultsList = ({
                   <ListItemAvatar sx={{ minWidth: 58 }}>
                     <Avatar
                       variant="rounded"
-                      src={primaryImage?.url}
+                      src={getMediaUrl(primaryImage?.url) || PLACEHOLDER_PRODUCT}
                       sx={{ width: 46, height: 46, bgcolor: alpha(theme.palette.primary.main, 0.05), borderRadius: 1.25 }}
                     >
                       <SearchIcon fontSize="small" color="disabled" />
@@ -697,7 +698,7 @@ const ResultsList = ({
                   <ListItemAvatar sx={{ minWidth: 52 }}>
                     <Avatar
                       variant="rounded"
-                      src={brand.image}
+                      src={getMediaUrl(brand.image) || PLACEHOLDER_BRAND}
                       sx={{ width: 40, height: 40, bgcolor: 'background.default', borderRadius: 1.5 }}
                     >
                       {brand.name.charAt(0)}
@@ -740,7 +741,7 @@ const ResultsList = ({
                   <ListItemAvatar sx={{ minWidth: 52 }}>
                     <Avatar
                       variant="rounded"
-                      src={cat.image}
+                      src={getMediaUrl(cat.image) || PLACEHOLDER_CATEGORY}
                       sx={{ width: 40, height: 40, bgcolor: 'background.default', borderRadius: 1.5 }}
                     >
                       {cat.name.charAt(0)}

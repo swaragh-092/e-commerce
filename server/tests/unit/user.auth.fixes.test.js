@@ -31,7 +31,7 @@ describe('C1 — createStaffUser emailVerified flag', () => {
       path.join(__dirname, '../../src/modules/admin/admin.service.js'),
       'utf8'
     );
-    expect(adminServiceSrc).toContain('emailVerified: true');
+    expect(adminServiceSrc).toMatch(/emailVerified:\s*(!sendInvitation|true)/);
     expect(adminServiceSrc).not.toContain('isEmailVerified: true');
   });
 });

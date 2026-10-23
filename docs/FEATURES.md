@@ -370,7 +370,9 @@ pending_payment → confirmed → processing → shipped → delivered
 | Media | `media.read`, `media.manage` |
 | Settings | `settings.read`, `settings.manage` |
 | Pages | `pages.read`, `pages.manage` |
-| Roles | `roles.read`, `roles.manage` |
+| Roles | `roles.read`, `roles.manage`, `users.assign_roles` |
+| Menus | `menus.read`, `menus.manage` |
+| API Builder | `api_builder.read`, `api_builder.manage` |
 | Audit | `audit.read` |
 | Notifications | `notifications.read`, `notifications.manage` |
 | Coupons | `coupons.read`, `coupons.manage` |
@@ -800,21 +802,41 @@ pending_payment → confirmed → processing → shipped → delivered
 | `orders` | ✅ | ❌ | Order management |
 | `payments` | ✅ | ❌ | Payment processing |
 | `shipping` | ✅ | ❌ | Shipping calculation and fulfillment |
-### Tier 2 — Admin-Controlled
-| Feature | E-Commerce Default | Catalog Default | Description |
-|---------|:---:|:---:|-------------|
-| `wishlist` | ✅ | ✅ | Product wishlist |
-| `reviews` | ✅ | ✅ | Product reviews and ratings |
-| `coupons` | ✅ | ✅ | Discount coupon system |
-| `guestCheckout` | ✅ | ❌ | Checkout without account |
-| `seo` | ✅ | ✅ | SEO meta tag management |
-| `emailVerification` | ✅ | ✅ | Require email verification |
-| `requirePurchaseForReview` | ❌ | ❌ | Only verified purchasers can review |
-| `showAvailableCoupons` | ❌ | ❌ | Show available coupons at checkout |
-| `multiCurrency` | ❌ | ❌ | Multiple currency support *(not yet implemented)* |
-| `socialLogin` | ❌ | ❌ | Social media login *(not yet implemented)* |
-| `enquiry` | ✅ | ✅ | Product enquiry system |
-| `showPrice` | ✅ | ❌ | Display product prices |
+### Tier 2 — Admin-Controlled (Superadmin Only)
+> [!IMPORTANT]
+> Modifying any feature flag or store mode requires **Superadmin** privileges. Regular admins with `settings.manage` cannot toggle platform features. Changes take effect immediately via server cache invalidation.
+
+| Feature | E-Commerce Default | Catalog Default | Description | Server Cascades & Dependencies |
+|---------|:---:|:---:|-------------|--------------------------------|
+| `wishlist` | ✅ | ✅ | Product wishlist | Independent |
+| `reviews` | ✅ | ✅ | Product reviews and ratings | If OFF, disables ratings on cards and review submissions; admin moderation preserved |
+| `coupons` | ✅ | ❌ | Discount coupon system | Disabled automatically if `cart` is OFF |
+| `guestCheckout` | ✅ | ❌ | Checkout without account | Disabled automatically if `checkout` is OFF |
+| `seo` | ✅ | ✅ | SEO meta tag management | Gated at `/api/seo`; SEO Overrides nav and route hidden when OFF |
+| `emailVerification` | ❌ | ❌ | Require email verification | Independent |
+| `requirePurchaseForReview` | ❌ | ❌ | Only verified purchasers can review | Forced `false` if `reviews` or `orders` is OFF, or store is in catalog mode |
+| `showAvailableCoupons` | ✅ | ❌ | Show available coupons at cart/checkout | Forced `false` if `coupons` or `cart` is OFF |
+| `enquiry` | ❌ | ✅ | Product enquiry system | If OFF, disables public inquiry submissions; admin inquiry inbox preserved |
+| `showPrice` | ✅ | ❌ | Display product prices | Forced `false` if `pricing` is OFF. When OFF, completely redacts prices from products, variants, and API responses |
+| `apiBuilder` | ✅ | ✅ | Custom public API endpoints | When OFF, public API URLs return `403 FEATURE_DISABLED`; nav, route, and admin builder hidden |
+| `productAssistant` | ✅ | ✅ | AI product creation assistant | When OFF, both AI endpoints return `403 FEATURE_DISABLED`; assistant UI hidden |
+| `brands` | ✅ | ✅ | Brand pages, navigation, filters, and product brand details | When OFF: public `/api/brands` returns `403 FEATURE_DISABLED`, `/brands` routes redirect, brand nav/footer links, filters, showcases, and product brand fields are removed. Staff with `brands.read`/`brands.manage` keep access to existing records. |
+| `themes` | ✅ | ✅ | Theme gallery and store designer | When OFF: all `/api/themes` routes return `403 FEATURE_DISABLED`; Store Templates, Store Designer nav and routes hidden |
+| `multiCurrency` | ❌ | ❌ | Multiple currency support — **unimplemented** | No behaviour, no switch. Needs per-currency prices, formatting, and exchange-rate handling before it can be exposed. |
+| `socialLogin` | ❌ | ❌ | Social media login — **unimplemented** | No behaviour, no switch. Needs OAuth providers, account linking, and callback routes before it can be exposed. |
+
+> [!NOTE]
+> All working Tier 2 switches live on **Admin → Platform Features** (`/admin/features`), which is Superadmin-only. Settings panels for SEO and API Builder link there instead of duplicating the toggle. `multiCurrency` and `socialLogin` are deliberately not rendered as switches until their underlying behaviour exists.
+
+### Existing Records Policy When Features Are Disabled
+| Area | Customer Impact | Staff / Admin Capability |
+|------|-----------------|--------------------------|
+| **Orders OFF** | Cannot place orders, request cancellations, or submit returns (`403 FEATURE_DISABLED`). Order URLs redirect. | Authorized staff (`orders.read`, `orders.manage`) can view existing orders, fulfill packages, issue refunds, update shipment tracking, and manage notes. |
+| **Reviews OFF** | Cannot submit reviews or view public review lists (`403 FEATURE_DISABLED`). Rating stars hidden on cards. | Authorized staff (`reviews.read`, `reviews.manage`) can moderate pending reviews or delete inappropriate submissions. |
+| **Enquiries OFF** | Cannot submit new product enquiries (`403 FEATURE_DISABLED`). | Authorized staff (`enquiries.read`, `enquiries.manage`) can view past inquiries and reply to existing customer inquiries. |
+| **Coupons OFF** | Cannot validate or apply coupon codes at checkout (`403 FEATURE_DISABLED`). | Authorized staff (`coupons.read`, `coupons.manage`) in ecommerce mode can view, edit, activate, or archive promotional codes. |
+| **Brands OFF** | Brand pages, navigation links, filters, showcases, and brand fields on public products/search/category/API responses are removed. Public brand endpoints return `403 FEATURE_DISABLED`. | Authorized staff (`brands.read`, `brands.manage`, `products.read`) can still list, create, edit, delete, and assign existing brand records from Admin → Brands. |
+| **Themes OFF** | No customer-facing change (themes are admin tooling). | Store Templates and Store Designer are hidden and their API returns `403 FEATURE_DISABLED`. Existing theme records remain in the database and return when the feature is re-enabled. |
 ---
 ## 5. Permissions Matrix
 ### System Roles
@@ -844,9 +866,16 @@ pending_payment → confirmed → processing → shipped → delivered
 | **Pages** | | | |
 | `pages.read` | ❌ | ✅ | ✅ |
 | `pages.manage` | ❌ | ✅ | ✅ |
-| **Roles** | | | |
+| **Roles & Staff** | | | |
 | `roles.read` | ❌ | ❌ | ✅ |
 | `roles.manage` | ❌ | ❌ | ✅ |
+| `users.assign_roles` | ❌ | ❌ | ✅ |
+| **Menu Builder** | | | |
+| `menus.read` | ❌ | ❌ | ✅ |
+| `menus.manage` | ❌ | ❌ | ✅ |
+| **API Builder** | | | |
+| `api_builder.read` | ❌ | ❌ | ✅ |
+| `api_builder.manage` | ❌ | ❌ | ✅ |
 | **Audit** | | | |
 | `audit.read` | ❌ | ❌ | ✅ |
 | **Notifications** | | | |

@@ -15,6 +15,7 @@ import {
   formatDateTime,
   PRODUCT_TRACKING_STEPS,
 } from './orderDetailUtils';
+import { onImageError, PLACEHOLDER_PRODUCT } from '../../../utils/media';
 
 const ProductTrackingStepper = ({ product }) => {
   const trackingSteps = product.isCod
@@ -126,16 +127,13 @@ const ProductTrackingCard = ({ product, formatPrice }) => {
             textDecoration: 'none',
           }}
         >
-          {product.imageUrl ? (
-            <Box
-              component="img"
-              src={product.imageUrl}
-              alt={item.snapshotName || 'Product'}
-              sx={{ width: '100%', height: '100%', objectFit: 'cover' }}
-            />
-          ) : (
-            <ReceiptLongIcon sx={{ fontSize: 26, color: 'text.disabled' }} />
-          )}
+          <Box
+            component="img"
+            src={product.imageUrl || PLACEHOLDER_PRODUCT}
+            alt={item.snapshotName || 'Product'}
+            onError={onImageError(PLACEHOLDER_PRODUCT)}
+            sx={{ width: '100%', height: '100%', objectFit: 'cover' }}
+          />
         </Box>
 
         <Box sx={{ minWidth: 0 }}>

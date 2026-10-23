@@ -7,11 +7,14 @@ import { getApiErrorMessage } from '../../utils/apiErrors';
 import { EmailOutlined, LockOutlined, PersonOutline, Visibility, VisibilityOff } from '@mui/icons-material';
 import AuthPageShell from '../../components/storefront/AuthPageShell';
 import newsletterService from '../../services/newsletterService';
+import { useSettings } from '../../hooks/useSettings';
 
 const RegisterPage = () => {
   const theme = useTheme();
   const navigate = useNavigate();
   const { register } = useAuth();
+  const { settings } = useSettings();
+  const newsletterEnabled = settings?.auth?.registerNewsletterEnabled !== false;
   
   const [formData, setFormData] = useState({ firstName: '', lastName: '', email: '', password: '', confirmPassword: '' });
   const [fieldErrors, setFieldErrors] = useState({});
@@ -114,7 +117,7 @@ const RegisterPage = () => {
           confirmPassword: formData.confirmPassword
       });
       let newsletterSaveFailed = false;
-      if (newsletterOptIn) {
+      if (newsletterEnabled && newsletterOptIn) {
         try {
           await newsletterService.subscribe(formData.email, 'register');
         } catch {
@@ -313,11 +316,11 @@ const RegisterPage = () => {
           }}
         />
 
-        <FormControlLabel
+        {newsletterEnabled && <FormControlLabel
           control={<Checkbox checked={newsletterOptIn} onChange={(event) => setNewsletterOptIn(event.target.checked)} />}
-          label="Email me offers, new products, and store updates."
+          label={settings?.auth?.registerNewsletterLabel || 'Email me offers, new products, and store updates.'}
           sx={{ alignItems: 'flex-start', mt: 0.5, '& .MuiFormControlLabel-label': { fontSize: 14, lineHeight: 1.5 } }}
-        />
+        />}
 
         <Button
           fullWidth

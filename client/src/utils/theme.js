@@ -25,6 +25,11 @@ const TYPOGRAPHY_SCALE_PRESETS = {
   },
 };
 
+// Fixed immutable Safety Red constants for delete, danger, and destructive actions.
+// Kept strictly separate from the configurable theme errorColor token.
+export const SAFETY_RED = '#dc3545';
+export const SAFETY_RED_HOVER = '#b91c1c';
+
 const cssValue = (value, fallback) => (value === undefined || value === null || value === '' ? fallback : value);
 const numeric = (value, fallback) => {
   const next = Number.parseFloat(value);
@@ -118,7 +123,7 @@ export const resolveStorefrontThemeState = (themeSettings = {}, customerDarkMode
     backgroundDefault: dp?.backgroundColor || t.backgroundColor || fallbackBackground,
     surfaceColor:   dp?.surfaceColor    || t.surfaceColor    || fallbackSurface,
     textColor:      dp?.textColor       || t.textColor       || fallbackText,
-    errorColor:     dp?.errorColor      || t.errorColor      || '#e11d48',
+    errorColor:     dp?.errorColor      || t.errorColor      || '#dc3545',
     warningColor:   dp?.warningColor    || t.warningColor    || '#d97706',
     successColor:   dp?.successColor    || t.successColor    || '#059669',
     infoColor:      dp?.infoColor       || t.infoColor       || '#0284c7',
@@ -438,6 +443,26 @@ export const buildStorefrontCssVariables = (settingsOrTheme = {}, customerDarkMo
     '--store-style-background': backgroundStyle,
     '--store-style-button':     buttonStyle,
     '--store-style-card':       cardStyle,
+
+    // ─── Button semantic tokens ───────────────────────────────────────────────
+    '--store-btn-radius':         buttonRadiusVal,
+    '--store-btn-primary-bg':     primaryMain,
+    '--store-btn-primary-text':   '#ffffff',
+    '--store-btn-secondary-bg':   secondaryMain,
+    '--store-btn-secondary-text': onSecondary,
+    '--store-btn-danger-bg':      SAFETY_RED,
+    '--store-btn-danger-hover':   SAFETY_RED_HOVER,
+    '--store-btn-danger-text':    '#ffffff',
+    '--store-btn-success-bg':     successColor || '#059669',
+    '--store-btn-success-text':   '#ffffff',
+    '--store-btn-warning-bg':     warningColor || '#d97706',
+    '--store-btn-warning-text':   '#ffffff',
+    '--store-btn-info-bg':        infoColor || '#0284c7',
+    '--store-btn-info-text':      '#ffffff',
+    '--store-btn-light-bg':       isDark ? '#334155' : '#f8fafc',
+    '--store-btn-light-text':     isDark ? '#f8fafc' : '#1e293b',
+    '--store-btn-dark-bg':        isDark ? '#0f172a' : '#212529',
+    '--store-btn-dark-text':      '#ffffff',
   };
 };
 
@@ -517,16 +542,40 @@ export const buildStorefrontTheme = (themeSettings = {}, customerDarkMode = null
         contrastText: isDark ? '#1f2933' : '#ffffff',
       },
       error: {
-        main: errorColor,
+        main: errorColor || '#dc3545',
+        dark: '#b91c1c',
+        light: '#f87171',
+        contrastText: '#ffffff',
       },
       warning: {
-        main: warningColor,
+        main: warningColor || '#d97706',
+        dark: '#b45309',
+        light: '#fde68a',
+        contrastText: '#ffffff',
       },
       success: {
-        main: successColor,
+        main: successColor || '#059669',
+        dark: '#047857',
+        light: '#a7f3d0',
+        contrastText: '#ffffff',
       },
       info: {
-        main: infoColor,
+        main: infoColor || '#0284c7',
+        dark: '#0369a1',
+        light: '#bae6fd',
+        contrastText: '#ffffff',
+      },
+      light: {
+        main: isDark ? '#334155' : '#f8fafc',
+        dark: isDark ? '#1e293b' : '#e2e8f0',
+        light: isDark ? '#475569' : '#ffffff',
+        contrastText: isDark ? '#f8fafc' : '#1e293b',
+      },
+      dark: {
+        main: isDark ? '#0f172a' : '#212529',
+        dark: '#020617',
+        light: '#334155',
+        contrastText: '#ffffff',
       },
       background: {
         default: backgroundDefault,
@@ -566,8 +615,11 @@ export const buildStorefrontTheme = (themeSettings = {}, customerDarkMode = null
       MuiButton: {
         styleOverrides: {
           root: {
-            borderRadius: radius,
+            borderRadius: buttonStyle === 'pill' ? 9999 : radius,
+            textTransform: 'none',
+            fontWeight: 600,
             boxShadow: 'none',
+            transition: 'all 0.15s ease-in-out',
             '&:hover': { boxShadow: 'none' },
           },
           containedPrimary: {
@@ -577,8 +629,206 @@ export const buildStorefrontTheme = (themeSettings = {}, customerDarkMode = null
             color: buttonStyle === 'soft' || buttonStyle === 'outline' ? primaryMain : '#ffffff',
             border: buttonStyle === 'outline' ? `1px solid ${primaryMain}` : '1px solid transparent',
             ...(buttonStyle === 'soft' && { backgroundColor: `${primaryMain}22` }),
+            '&:hover': {
+              boxShadow: 'none',
+              ...(buttonStyle === 'outline'
+                ? { backgroundColor: `${primaryMain}14`, borderColor: primaryMain }
+                : buttonStyle === 'soft'
+                  ? { backgroundColor: `${primaryMain}33` }
+                  : { opacity: 0.92 }),
+            },
+          },
+          containedSecondary: {
+            background: buttonStyle === 'soft' || buttonStyle === 'outline'
+              ? 'transparent'
+              : secondaryMain,
+            color: buttonStyle === 'soft' || buttonStyle === 'outline' ? secondaryMain : (isDark ? '#1f2933' : '#ffffff'),
+            border: buttonStyle === 'outline' ? `1px solid ${secondaryMain}` : '1px solid transparent',
+            ...(buttonStyle === 'soft' && { backgroundColor: `${secondaryMain}22` }),
+            '&:hover': {
+              boxShadow: 'none',
+              ...(buttonStyle === 'outline'
+                ? { backgroundColor: `${secondaryMain}14`, borderColor: secondaryMain }
+                : buttonStyle === 'soft'
+                  ? { backgroundColor: `${secondaryMain}33` }
+                  : { opacity: 0.92 }),
+            },
+          },
+          containedSuccess: {
+            backgroundColor: successColor || '#059669',
+            color: '#ffffff',
+            border: '1px solid transparent',
+            '&:hover': {
+              backgroundColor: '#047857',
+              boxShadow: 'none',
+            },
+          },
+          containedError: {
+            // Strictly locked to Safety Red (#dc3545) for all delete, danger, and destructive actions
+            backgroundColor: SAFETY_RED,
+            color: '#ffffff',
+            border: '1px solid transparent',
+            '&:hover': {
+              backgroundColor: SAFETY_RED_HOVER,
+              boxShadow: 'none',
+            },
+          },
+          containedWarning: {
+            backgroundColor: warningColor || '#d97706',
+            color: '#ffffff',
+            border: '1px solid transparent',
+            '&:hover': {
+              backgroundColor: '#b45309',
+              boxShadow: 'none',
+            },
+          },
+          containedInfo: {
+            backgroundColor: infoColor || '#0284c7',
+            color: '#ffffff',
+            border: '1px solid transparent',
+            '&:hover': {
+              backgroundColor: '#0369a1',
+              boxShadow: 'none',
+            },
+          },
+          outlinedSuccess: {
+            borderColor: successColor || '#059669',
+            color: successColor || '#059669',
+            '&:hover': {
+              borderColor: '#047857',
+              backgroundColor: `${successColor || '#059669'}14`,
+            },
+          },
+          outlinedError: {
+            borderColor: SAFETY_RED,
+            color: SAFETY_RED,
+            '&:hover': {
+              borderColor: SAFETY_RED_HOVER,
+              backgroundColor: `${SAFETY_RED}14`,
+            },
+          },
+          outlinedWarning: {
+            borderColor: warningColor || '#d97706',
+            color: warningColor || '#d97706',
+            '&:hover': {
+              borderColor: '#b45309',
+              backgroundColor: `${warningColor || '#d97706'}14`,
+            },
+          },
+          outlinedInfo: {
+            borderColor: infoColor || '#0284c7',
+            color: infoColor || '#0284c7',
+            '&:hover': {
+              borderColor: '#0369a1',
+              backgroundColor: `${infoColor || '#0284c7'}14`,
+            },
+          },
+          textError: {
+            color: SAFETY_RED,
+            '&:hover': {
+              backgroundColor: `${SAFETY_RED}14`,
+            },
+          },
+          textSuccess: {
+            color: successColor || '#059669',
+            '&:hover': {
+              backgroundColor: `${successColor || '#059669'}14`,
+            },
           },
         },
+        variants: [
+          {
+            props: { color: 'light' },
+            style: {
+              backgroundColor: isDark ? '#334155' : '#f8fafc',
+              color: isDark ? '#f8fafc' : '#1e293b',
+              border: `1px solid ${isDark ? '#475569' : '#e2e8f0'}`,
+              '&:hover': {
+                backgroundColor: isDark ? '#475569' : '#f1f5f9',
+                borderColor: isDark ? '#64748b' : '#cbd5e1',
+                boxShadow: 'none',
+              },
+            },
+          },
+          {
+            props: { variant: 'contained', color: 'light' },
+            style: {
+              backgroundColor: isDark ? '#334155' : '#f8fafc',
+              color: isDark ? '#f8fafc' : '#1e293b',
+              border: `1px solid ${isDark ? '#475569' : '#e2e8f0'}`,
+              '&:hover': {
+                backgroundColor: isDark ? '#475569' : '#f1f5f9',
+                boxShadow: 'none',
+              },
+            },
+          },
+          {
+            props: { variant: 'outlined', color: 'light' },
+            style: {
+              backgroundColor: 'transparent',
+              color: isDark ? '#f8fafc' : '#475569',
+              borderColor: isDark ? '#475569' : '#cbd5e1',
+              '&:hover': {
+                backgroundColor: isDark ? '#33415522' : '#f8fafc',
+                borderColor: isDark ? '#64748b' : '#94a3b8',
+              },
+            },
+          },
+          {
+            props: { color: 'dark' },
+            style: {
+              backgroundColor: isDark ? '#0f172a' : '#212529',
+              color: '#ffffff',
+              border: `1px solid ${isDark ? '#1e293b' : '#212529'}`,
+              '&:hover': {
+                backgroundColor: isDark ? '#1e293b' : '#1a1e21',
+                boxShadow: 'none',
+              },
+            },
+          },
+          {
+            props: { variant: 'contained', color: 'dark' },
+            style: {
+              backgroundColor: isDark ? '#0f172a' : '#212529',
+              color: '#ffffff',
+              border: `1px solid ${isDark ? '#1e293b' : '#212529'}`,
+              '&:hover': {
+                backgroundColor: isDark ? '#1e293b' : '#1a1e21',
+                boxShadow: 'none',
+              },
+            },
+          },
+          {
+            props: { variant: 'outlined', color: 'dark' },
+            style: {
+              backgroundColor: 'transparent',
+              color: isDark ? '#f8fafc' : '#212529',
+              borderColor: isDark ? '#64748b' : '#212529',
+              '&:hover': {
+                backgroundColor: isDark ? '#ffffff10' : '#21252914',
+                borderColor: isDark ? '#94a3b8' : '#000000',
+              },
+            },
+          },
+          {
+            props: { variant: 'link' },
+            style: {
+              background: 'transparent',
+              backgroundColor: 'transparent',
+              border: 'none',
+              minWidth: 'auto',
+              padding: '4px 8px',
+              color: primaryMain,
+              textDecoration: 'none',
+              fontWeight: 500,
+              '&:hover': {
+                background: 'transparent',
+                backgroundColor: 'transparent',
+                textDecoration: 'underline',
+              },
+            },
+          },
+        ],
       },
       MuiCard: {
         styleOverrides: {

@@ -1,6 +1,6 @@
 import React, { createContext, useState, useEffect, useCallback, useContext } from 'react';
 import { wishlistService } from '../services/wishlistService';
-import { useSettings } from '../hooks/useSettings';
+import { useFeature } from '../hooks/useSettings';
 import { useNotification } from './NotificationContext';
 
 export const getWishlistKey = (productId, variantId = null) => `${productId}::${variantId || 'base'}`;
@@ -15,9 +15,8 @@ const WishlistContext = createContext({
 
 export const WishlistProvider = ({ children }) => {
   const [wishlistKeys, setWishlistKeys] = useState(new Set());
-  const { settings } = useSettings();
   const { notify } = useNotification();
-  const wishlistEnabled = settings?.features?.wishlist !== false;
+  const wishlistEnabled = useFeature('wishlist');
 
   const refreshWishlist = useCallback(async () => {
     if (!wishlistEnabled) {

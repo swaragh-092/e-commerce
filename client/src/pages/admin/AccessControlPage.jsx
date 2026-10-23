@@ -49,7 +49,7 @@ import {
   updateAccessRole,
   updateAccessUserRole,
 } from '../../services/adminService';
-import { useAuth } from '../../hooks/useAuth';
+import { useAuth, useIsSuperAdmin } from '../../hooks/useAuth';
 import { PERMISSIONS, IMPLIES } from '../../utils/permissions';
 import authorizationSchema from '../../../../shared/authorization.json';
 import { useNotification } from '../../context/NotificationContext';
@@ -89,6 +89,7 @@ const AccessControlPage = () => {
   const isMobile = useMediaQuery(theme.breakpoints.down('sm'));
   const { notify } = useNotification();
   const { hasPermission, user: currentUser } = useAuth();
+  const isSuperAdmin = useIsSuperAdmin();
   const [roles, setRoles] = useState([]);
   const [permissions, setPermissions] = useState([]);
   const [rows, setRows] = useState([]);
@@ -118,7 +119,28 @@ const AccessControlPage = () => {
   const [showPassword, setShowPassword] = useState(false);
   const [savingUser, setSavingUser] = useState(false);
 
-  const roleOptions = useMemo(() => roles.map((role) => ({ id: role.id, name: role.name })), [roles]);
+  const roleOptions = useMemo(
+    () => roles.map((role) => ({
+      id: role.id,
+      name: role.name,
+      slug: role.slug,
+      baseRole: role.baseRole,
+      permissions: role.permissions || [],
+    })),
+    [roles]
+  );
+
+  const isRoleDelegable = useCallback((role) => {
+    if (isSuperAdmin) return true;
+    if (role.baseRole === 'super_admin' || role.slug === 'super_admin') return false;
+    const rolePerms = role.permissions || [];
+    return rolePerms.every((p) => hasPermission(typeof p === 'string' ? p : p.key));
+  }, [hasPermission, isSuperAdmin]);
+
+  const canGrantPermission = useCallback((permission) => {
+    if (isSuperAdmin) return true;
+    return hasPermission(permission?.key);
+  }, [hasPermission, isSuperAdmin]);
 
   const groupedPermissions = useMemo(() => {
     return permissions.reduce((acc, permission) => {
@@ -208,6 +230,11 @@ const AccessControlPage = () => {
   };
 
   const handleRolePermissionToggle = (permissionId) => {
+    const perm = permissions.find((p) => p.id === permissionId);
+    if (perm && !canGrantPermission(perm)) {
+      notify('You cannot grant permissions you do not possess.', 'error');
+      return;
+    }
     setRoleForm((current) => ({
       ...current,
       permissionIds: current.permissionIds.includes(permissionId)
@@ -218,7 +245,7 @@ const AccessControlPage = () => {
 
   const handleGroupSelectAll = (groupPermissions, checked) => {
     const toggleableIds = groupPermissions
-      .filter((p) => roleForm.isSystem || !p.reserved)
+      .filter((p) => (roleForm.isSystem || !p.reserved) && canGrantPermission(p))
       .map((p) => p.id);
     setRoleForm((current) => ({
       ...current,
@@ -231,11 +258,6 @@ const AccessControlPage = () => {
   const handleSaveRole = async () => {
     if (!roleForm.name.trim()) {
       notify('Role name is required.', 'error');
-      return;
-    }
-
-    if (roleForm.permissionIds.length === 0) {
-      notify('Select at least one permission.', 'error');
       return;
     }
 
@@ -404,11 +426,13 @@ const AccessControlPage = () => {
       sortable: false,
       renderCell: ({ row }) => {
         const currentRole = roleOptions.find((r) => String(r.id) === String(row.roleId));
+        const isSuperAdminAccount = row.role === 'super_admin' || row.assignedRole?.slug === 'super_admin';
+        const cannotModify = !isSuperAdmin && isSuperAdminAccount;
         return (
           <FormControl size="small" fullWidth>
             <Select
               value={row.roleId || ''}
-              disabled={updatingUserId === row.id}
+              disabled={updatingUserId === row.id || cannotModify}
               onChange={(event) => handleRoleAssignment(row.id, event.target.value)}
               displayEmpty
               sx={{
@@ -428,7 +452,14 @@ const AccessControlPage = () => {
                 <em>Select role…</em>
               </MenuItem>
               {roleOptions.map((role) => (
-                <MenuItem key={role.id} value={role.id}>{role.name}</MenuItem>
+                <MenuItem
+                  key={role.id}
+                  value={role.id}
+                  disabled={!isRoleDelegable(role)}
+                >
+                  {role.name}
+                  {!isRoleDelegable(role) ? ' (Unavailable)' : ''}
+                </MenuItem>
               ))}
             </Select>
           </FormControl>
@@ -446,11 +477,14 @@ const AccessControlPage = () => {
           row.assignedRole?.slug === 'customer' ||
           (row.role === 'customer' && (!row.assignedRole || row.assignedRole.slug === 'customer'));
         const isSelf = row.id === currentUser?.id;
+        const isSuperAdminAccount = row.role === 'super_admin' || row.assignedRole?.slug === 'super_admin';
         let tooltipTitle = 'Delete user';
         if (isCustomer) {
           tooltipTitle = 'Customer accounts cannot be deleted (manage from Customers page)';
         } else if (isSelf) {
           tooltipTitle = 'You cannot delete your own account';
+        } else if (!isSuperAdmin && isSuperAdminAccount) {
+          tooltipTitle = 'Only super admins can delete super admin accounts';
         }
         return (
           <Tooltip title={tooltipTitle}>
@@ -459,7 +493,7 @@ const AccessControlPage = () => {
                 size="small"
                 color="error"
                 onClick={() => openDeleteUserDialog(row)}
-                disabled={deletingUser || isSelf || isCustomer}
+                disabled={deletingUser || isSelf || isCustomer || (!isSuperAdmin && isSuperAdminAccount)}
               >
                 <DeleteIcon fontSize="small" />
               </IconButton>
@@ -840,8 +874,13 @@ const AccessControlPage = () => {
               >
                 <MenuItem value="">All elevated roles</MenuItem>
                 {roleOptions.map((role) => (
-                  <MenuItem key={role.id} value={role.id}>
+                  <MenuItem
+                    key={role.id}
+                    value={role.id}
+                    disabled={!isRoleDelegable(role)}
+                  >
                     {role.name}
+                    {!isRoleDelegable(role) ? ' (Unavailable)' : ''}
                   </MenuItem>
                 ))}
               </Select>
@@ -956,8 +995,13 @@ const AccessControlPage = () => {
                 onChange={setUserField('roleId')}
               >
                 {roleOptions.map((role) => (
-                  <MenuItem key={role.id} value={role.id}>
+                  <MenuItem
+                    key={role.id}
+                    value={role.id}
+                    disabled={!isRoleDelegable(role)}
+                  >
                     {role.name}
+                    {!isRoleDelegable(role) ? ' (Unavailable)' : ''}
                   </MenuItem>
                 ))}
               </Select>
@@ -1081,10 +1125,18 @@ const AccessControlPage = () => {
                         {groupPermissions.map((permission) => {
                           const selected = roleForm.permissionIds.includes(permission.id);
                           const isImplied = impliedPermissionKeys.has(permission.key);
+                          const isReserved = !roleForm.isSystem && permission.reserved;
+                          const unpossessed = !canGrantPermission(permission);
+                          const isDisabled = isImplied || isReserved || unpossessed;
                           const description = authorizationSchema.permissionDescriptions?.[permission.key];
-                          const tooltipText = isImplied
-                            ? 'Auto-granted by a higher permission'
-                            : description || '';
+                          let tooltipText = description || '';
+                          if (isImplied) {
+                            tooltipText = 'Auto-granted by a higher permission';
+                          } else if (isReserved) {
+                            tooltipText = 'Reserved super admin permission';
+                          } else if (unpossessed) {
+                            tooltipText = 'You cannot grant permissions you do not possess';
+                          }
                           return (
                             <Tooltip key={permission.id} title={tooltipText} arrow placement="top">
                               <Chip
@@ -1092,10 +1144,10 @@ const AccessControlPage = () => {
                                 size="small"
                                 variant={selected || isImplied ? 'filled' : 'outlined'}
                                 color={isImplied ? 'success' : selected ? 'primary' : 'default'}
-                                disabled={isImplied || (!roleForm.isSystem && permission.reserved)}
-                                onClick={() => !isImplied && handleRolePermissionToggle(permission.id)}
+                                disabled={isDisabled}
+                                onClick={() => !isDisabled && handleRolePermissionToggle(permission.id)}
                                 sx={{
-                                  cursor: isImplied ? 'default' : 'pointer',
+                                  cursor: isDisabled ? 'default' : 'pointer',
                                   fontWeight: selected || isImplied ? 600 : 400,
                                   opacity: isImplied ? 0.85 : 1,
                                 }}

@@ -84,6 +84,25 @@ export default function buildSettingsPanels(ctx) {
         </>,
         ['logo', 'favicon', 'brand assets']
       ),
+      section(
+        'Newsletter signup on account forms',
+        'Choose whether customers see an optional newsletter checkbox when registering or signing in.',
+        <>
+          <FormControlLabel
+            control={<Switch checked={form['auth.registerNewsletterEnabled'] !== false} onChange={(event) => set('auth.registerNewsletterEnabled', event.target.checked)} />}
+            label="Show on registration"
+            sx={{ display: 'block', mb: 1 }}
+          />
+          {field('auth.registerNewsletterLabel', 'Registration checkbox text', 'text', { inputProps: { maxLength: 200 } })}
+          <FormControlLabel
+            control={<Switch checked={form['auth.loginNewsletterEnabled'] !== false} onChange={(event) => set('auth.loginNewsletterEnabled', event.target.checked)} />}
+            label="Show on sign in"
+            sx={{ display: 'block', mb: 1 }}
+          />
+          {field('auth.loginNewsletterLabel', 'Sign in checkbox text', 'text', { inputProps: { maxLength: 200 } })}
+        </>,
+        ['newsletter', 'register', 'sign in', 'checkbox', 'subscribe']
+      ),
     ],
     // ─── 1: SEO ─────────────────────────────────────────────────────────
     [
@@ -91,7 +110,13 @@ export default function buildSettingsPanels(ctx) {
         'SEO & Search Engine Control',
         'Configure how your store appears in search results and social media shares globally.',
         <>
-          {toggle('features.seo', 'Enable Storefront SEO Features')}
+          <Alert severity="info" sx={{ mb: 2 }}>
+            The SEO feature switch now lives on the{' '}
+            <Button component={Link} to="/admin/features" size="small" sx={{ textTransform: 'none', fontWeight: 700, p: 0, minWidth: 0, verticalAlign: 'baseline' }}>
+              Platform Features
+            </Button>{' '}
+            page. The settings below only apply while SEO is enabled.
+          </Alert>
           <Divider sx={{ my: 2 }} />
           <Box sx={{ opacity: bool(form['features.seo']) ? 1 : 0.5, pointerEvents: bool(form['features.seo']) ? 'auto' : 'none' }}>
             <Alert severity="info" sx={{ mb: 2.5 }}>
@@ -515,10 +540,13 @@ function buildAdvancedPanel({ form, set, section, field, toggle, imageField, boo
       'API Builder',
       'Control whether admins can create public custom APIs from catalog, content, menu, and setting data.',
       <>
-        {toggle('features.apiBuilder', 'Enable API Builder')}
-        <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mt: 0.5 }}>
-          When disabled, saved custom API URLs stop responding and the admin builder is hidden from the sidebar.
-        </Typography>
+        <Alert severity="info">
+          The API Builder feature switch now lives on the{' '}
+          <Button component={Link} to="/admin/features" size="small" sx={{ textTransform: 'none', fontWeight: 700, p: 0, minWidth: 0, verticalAlign: 'baseline' }}>
+            Platform Features
+          </Button>{' '}
+          page. When disabled, saved custom API URLs stop responding and the admin builder is hidden from the sidebar.
+        </Alert>
       </>,
       ['api builder', 'custom api', 'dynamic api', 'public api']
     ),

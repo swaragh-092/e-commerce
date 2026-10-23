@@ -887,7 +887,7 @@ Object.assign(COMPONENT_CONTROL_SCHEMAS, {
         key: 'stateColors',
         label: 'State Colors',
         fields: [
-          { key: 'errorColor', label: 'Error Color', type: 'color', defaultValue: '#e11d48' },
+          { key: 'errorColor', label: 'Error / Alert State Color', type: 'color', defaultValue: '#dc3545', helperText: 'State alerts & validation text. Destructive buttons always use fixed Safety Red (#dc3545).' },
           { key: 'warningColor', label: 'Warning Color', type: 'color', defaultValue: '#d97706' },
           { key: 'successColor', label: 'Success Color', type: 'color', defaultValue: '#059669' },
           { key: 'infoColor', label: 'Info Color', type: 'color', defaultValue: '#0284c7' },

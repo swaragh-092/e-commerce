@@ -29,6 +29,31 @@ const isPreviewMode = () =>
   typeof window !== 'undefined' &&
   new URLSearchParams(window.location.search).get('previewMode') === '1';
 
+export const DEFAULT_FALLBACK_FEATURES = {
+  pricing: true,
+  cart: true,
+  checkout: true,
+  orders: true,
+  payments: true,
+  shipping: true,
+  wishlist: true,
+  reviews: true,
+  coupons: true,
+  guestCheckout: true,
+  seo: true,
+  emailVerification: false,
+  requirePurchaseForReview: false,
+  showAvailableCoupons: true,
+  multiCurrency: false,
+  socialLogin: false,
+  enquiry: false,
+  showPrice: true,
+  apiBuilder: true,
+  productAssistant: true,
+  brands: true,
+  themes: true,
+};
+
 export const SettingsProvider = ({ children }) => {
   const [settings, setSettings] = useState(null);
   const [mode, setMode] = useState('ecommerce');           // APP_MODE from server
@@ -87,7 +112,7 @@ export const SettingsProvider = ({ children }) => {
       setSettings({
         theme: { primaryColor: '#1976d2', mode: 'light', fontFamily: 'Roboto' },
         general: { storeName: DEFAULT_STORE_NAME },
-        features: { wishlist: true, reviews: true, coupons: true, guestCheckout: true, seo: true, productAssistant: true },
+        features: { ...DEFAULT_FALLBACK_FEATURES },
         payments: {
           razorpayEnabled: true,
           stripeEnabled: false,
@@ -118,7 +143,7 @@ export const SettingsProvider = ({ children }) => {
       });
       // On error, keep mode as ecommerce so the app doesn't silently hide features
       setMode('ecommerce');
-      setFeatures({ wishlist: true, reviews: true, pricing: true, cart: true, checkout: true, productAssistant: true });
+      setFeatures({ ...DEFAULT_FALLBACK_FEATURES });
       // Fallback: treat all known Tier 1 keys as locked so UI remains correct offline
       setLockedKeys(['pricing','cart','checkout','orders','payments','shipping','enquiry']);
     } finally {

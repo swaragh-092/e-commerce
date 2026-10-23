@@ -25,7 +25,7 @@ router.get(
   '/',
   authenticate,
   featureGate('apiBuilder'),
-  authorizeAnyPermission(PERMISSIONS.SETTINGS_READ, PERMISSIONS.SETTINGS_MANAGE),
+  authorizeAnyPermission(PERMISSIONS.API_BUILDER_READ, PERMISSIONS.API_BUILDER_MANAGE),
   validate(validation.querySchema, 'query'),
   controller.list
 );
@@ -34,7 +34,7 @@ router.post(
   '/preview',
   authenticate,
   featureGate('apiBuilder'),
-  authorizeAnyPermission(PERMISSIONS.SETTINGS_READ, PERMISSIONS.SETTINGS_MANAGE),
+  authorizeAnyPermission(PERMISSIONS.API_BUILDER_READ, PERMISSIONS.API_BUILDER_MANAGE),
   validate(validation.previewApiDefinitionSchema),
   controller.preview
 );
@@ -43,7 +43,7 @@ router.post(
   '/',
   authenticate,
   featureGate('apiBuilder'),
-  authorizePermissions(PERMISSIONS.SETTINGS_MANAGE),
+  authorizePermissions(PERMISSIONS.API_BUILDER_MANAGE),
   auditLog('ApiDefinition'),
   validate(validation.createApiDefinitionSchema),
   controller.create
@@ -53,7 +53,7 @@ router.get(
   '/:id',
   authenticate,
   featureGate('apiBuilder'),
-  authorizeAnyPermission(PERMISSIONS.SETTINGS_READ, PERMISSIONS.SETTINGS_MANAGE),
+  authorizeAnyPermission(PERMISSIONS.API_BUILDER_READ, PERMISSIONS.API_BUILDER_MANAGE),
   validate(validation.idParamSchema, 'params'),
   controller.getById
 );
@@ -62,7 +62,7 @@ router.put(
   '/:id',
   authenticate,
   featureGate('apiBuilder'),
-  authorizePermissions(PERMISSIONS.SETTINGS_MANAGE),
+  authorizePermissions(PERMISSIONS.API_BUILDER_MANAGE),
   auditLog('ApiDefinition'),
   validate(validation.idParamSchema, 'params'),
   validate(validation.updateApiDefinitionSchema),
@@ -73,7 +73,7 @@ router.delete(
   '/:id',
   authenticate,
   featureGate('apiBuilder'),
-  authorizePermissions(PERMISSIONS.SETTINGS_MANAGE),
+  authorizePermissions(PERMISSIONS.API_BUILDER_MANAGE),
   auditLog('ApiDefinition'),
   validate(validation.idParamSchema, 'params'),
   controller.delete

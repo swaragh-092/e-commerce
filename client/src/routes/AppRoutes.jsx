@@ -1,7 +1,7 @@
 import React, { Suspense, lazy } from 'react';
 import { Routes, Route, Navigate, useLocation } from 'react-router-dom';
 import { Box, CircularProgress } from '@mui/material';
-import { useFeature, useMode } from '../hooks/useSettings';
+import { useFeature, useFeaturesResolved, useMode } from '../hooks/useSettings';
 import { Outlet } from 'react-router-dom';
 
 // Layouts
@@ -11,12 +11,22 @@ import { ProtectedRoute } from './ProtectedRoute';
 import { ADMIN_ACCESS_PERMISSIONS, PERMISSIONS, getFirstAccessibleAdminPath } from '../utils/permissions';
 import { useAuth } from '../hooks/useAuth';
 
+const LoadingFallback = () => (
+  <Box sx={{ display: 'flex', justifyContent: 'center', alignItems: 'center', minHeight: '50vh' }}>
+    <CircularProgress />
+  </Box>
+);
+
 /**
  * Redirects to /products if a feature is disabled in the current mode.
  * Use this to guard storefront routes that don't apply in catalog mode.
+ * Waits for the resolved feature map before redirecting so a deep link is not
+ * bounced while server state is still loading.
  */
 const FeatureRoute = ({ feature, redirectTo = '/products' }) => {
+  const featuresResolved = useFeaturesResolved();
   const enabled = useFeature(feature);
+  if (!featuresResolved) return <LoadingFallback />;
   return enabled ? <Outlet /> : <Navigate to={redirectTo} replace />;
 };
 
@@ -108,13 +118,6 @@ const BlogCategoriesPage = lazy(() => import('../pages/admin/BlogCategoriesPage'
 const AdminProfilePage = lazy(() => import('../pages/admin/AdminProfilePage'));
 const AnalyticsPage = lazy(() => import('../pages/admin/AnalyticsPage'));
 
-const LoadingFallback = () => (
-  <Box sx={{ display: 'flex', justifyContent: 'center', alignItems: 'center', minHeight: '50vh' }}>
-    <CircularProgress />
-  </Box>
-);
-
-
 const Home = () => <HomePage />;
 
 const AdminIndex = () => {
@@ -146,8 +149,10 @@ const AppRoutes = () => (
         <Route path="category/:categorySlug" element={<CategoryPage />} />
         <Route path="p/:slug" element={<StaticPageView />} />
         <Route path="search" element={<SearchResultsPage />} />
-        <Route path="brands" element={<StoreBrandsPage />} />
-        <Route path="brands/:slug" element={<BrandDetailPage />} />
+        <Route element={<FeatureRoute feature="brands" />}>
+          <Route path="brands" element={<StoreBrandsPage />} />
+          <Route path="brands/:slug" element={<BrandDetailPage />} />
+        </Route>
         <Route path="blogs" element={<BlogsPage />} />
         <Route path="blogs/:slug" element={<BlogDetailPage />} />
         <Route element={<FeatureRoute feature="wishlist" />}>
@@ -177,12 +182,13 @@ const AppRoutes = () => (
         {/* Protected Storefront */}
         <Route element={<ProtectedRoute />}>
           <Route path="account" element={<AccountPage />} />
-          <Route path="account/orders/link-guest" element={<LinkGuestOrdersPage />} />
-          <Route path="account/orders/:id" element={<StoreOrderDetailPage />} />
-          <Route path="account/orders/:id/invoice" element={<StorefrontOrderInvoicePage />} />
-          <Route path="orders" element={<AllOrdersPage />} />
+          <Route element={<FeatureRoute feature="orders" />}>
+            <Route path="account/orders/link-guest" element={<LinkGuestOrdersPage />} />
+            <Route path="account/orders/:id" element={<StoreOrderDetailPage />} />
+            <Route path="account/orders/:id/invoice" element={<StorefrontOrderInvoicePage />} />
+            <Route path="orders" element={<AllOrdersPage />} />
+          </Route>
           <Route path="profile" element={<AccountPage />} />
-
         </Route>
 
         {/* 404 catch-all */}
@@ -223,22 +229,18 @@ const AppRoutes = () => (
           <Route element={<ProtectedRoute permission={PERMISSIONS.ATTRIBUTES_READ} />}>
             <Route path="attributes" element={<AttributesPage />} />
           </Route>
-          {/* Orders — ecommerce only */}
-          <Route element={<ModeRoute requiredMode="ecommerce" />}>
-            <Route element={<ProtectedRoute permission={PERMISSIONS.ORDERS_READ} />}>
-              <Route path="orders" element={<OrdersManagePage />} />
-              <Route path="orders/:id" element={<OrderDetailPage />} />
-            </Route>
+          {/* Orders — accessible to authorized staff in both modes for historical records */}
+          <Route element={<ProtectedRoute permission={PERMISSIONS.ORDERS_READ} />}>
+            <Route path="orders" element={<OrdersManagePage />} />
+            <Route path="orders/:id" element={<OrderDetailPage />} />
           </Route>
           <Route element={<ProtectedRoute permission={PERMISSIONS.CUSTOMERS_READ} />}>
             <Route path="customers" element={<CustomersPage />} />
             <Route path="customers/:id" element={<CustomerDetailPage />} />
           </Route>
-          {/* Coupons — ecommerce only */}
-          <Route element={<ModeRoute requiredMode="ecommerce" />}>
-            <Route element={<ProtectedRoute permission={PERMISSIONS.COUPONS_READ} />}>
-              <Route path="coupons" element={<CouponsPage />} />
-            </Route>
+          {/* Coupons — accessible to authorized staff in both modes for campaign management */}
+          <Route element={<ProtectedRoute permission={PERMISSIONS.COUPONS_READ} />}>
+            <Route path="coupons" element={<CouponsPage />} />
           </Route>
           <Route element={<ProtectedRoute permission={PERMISSIONS.ENQUIRIES_READ} />}>
             <Route path="enquiries" element={<EnquiriesPage />} />
@@ -251,13 +253,25 @@ const AppRoutes = () => (
           </Route>
           <Route element={<ProtectedRoute permission={PERMISSIONS.SETTINGS_READ} />}>
             <Route path="settings" element={<SettingsPage />} />
-            <Route path="features" element={<FeaturesPage />} />
-            <Route path="seo-overrides" element={<SeoOverridesPage />} />
             <Route path="email-templates" element={<EmailTemplatesPage />} />
-            <Route path="themes" element={<ThemeGalleryPage />} />
-            <Route path="store-designer" element={<SectionComposerPage />} />
             <Route path="sections" element={<LegacySectionsRedirect />} />
             <Route path="newsletter" element={<NewsletterSubscribersPage />} />
+          </Route>
+          <Route element={<FeatureRoute feature="seo" redirectTo="/admin" />}>
+            <Route element={<ProtectedRoute permission={PERMISSIONS.SETTINGS_READ} />}>
+              <Route path="seo-overrides" element={<SeoOverridesPage />} />
+            </Route>
+          </Route>
+          <Route element={<FeatureRoute feature="themes" redirectTo="/admin" />}>
+            <Route element={<ProtectedRoute permission={PERMISSIONS.SETTINGS_READ} />}>
+              <Route path="themes" element={<ThemeGalleryPage />} />
+            </Route>
+            <Route element={<ProtectedRoute permission={PERMISSIONS.SETTINGS_MANAGE} />}>
+              <Route path="store-designer" element={<SectionComposerPage />} />
+            </Route>
+          </Route>
+          <Route element={<ProtectedRoute role="super_admin" />}>
+            <Route path="features" element={<FeaturesPage />} />
           </Route>
           {/* Payment Gateways, Shipping, Sale Labels — ecommerce only */}
           <Route element={<ModeRoute requiredMode="ecommerce" />}>
@@ -280,8 +294,10 @@ const AppRoutes = () => (
           <Route element={<ProtectedRoute permission={PERMISSIONS.MENUS_READ} />}>
             <Route path="menus" element={<MenuBuilderPage />} />
           </Route>
-          <Route element={<ProtectedRoute permission={PERMISSIONS.SETTINGS_READ} />}>
-            <Route path="api-builder" element={<ApiBuilderPage />} />
+          <Route element={<FeatureRoute feature="apiBuilder" redirectTo="/admin" />}>
+            <Route element={<ProtectedRoute permission={PERMISSIONS.API_BUILDER_READ} />}>
+              <Route path="api-builder" element={<ApiBuilderPage />} />
+            </Route>
           </Route>
           <Route element={<ProtectedRoute permission={PERMISSIONS.PAGES_MANAGE} />}>
             <Route path="pages/new" element={<PageEditPage />} />
