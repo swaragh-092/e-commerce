@@ -1,5 +1,5 @@
 import React from 'react';
-import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
+import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import ProductVariantsPanel from '../../components/admin/ProductVariantsPanel';
@@ -7,7 +7,7 @@ import { NotificationProvider } from '../../context/NotificationContext';
 import { UnitCatalogProvider } from '../../context/UnitCatalogContext';
 import attributeService from '../../services/attributeService';
 import settingsService from '../../services/settingsService';
-import { getProductById } from '../../services/productService';
+import { getProductById, getProducts } from '../../services/productService';
 
 const permission = vi.hoisted(() => ({ allowed: true }));
 vi.mock('../../hooks/useAuth', () => ({ useAuth: () => ({ hasPermission: () => permission.allowed }) }));
@@ -15,7 +15,7 @@ vi.mock('../../hooks/useSKUGenerator', () => ({ default: () => ({ generateProduc
 vi.mock('../../components/common/MediaPicker', () => ({ default: () => null }));
 vi.mock('../../services/productService', () => ({ getProductById: vi.fn(), getProducts: vi.fn() }));
 vi.mock('../../services/settingsService', () => ({ default: { getSettingsGroup: vi.fn() } }));
-vi.mock('../../services/attributeService', () => ({ default: { getProductAttributes: vi.fn(), getProductVariants: vi.fn(), getAttributes: vi.fn(), getCategoryAttributes: vi.fn(), getAttributeById: vi.fn(), assignProductAttribute: vi.fn(), deleteProductVariant: vi.fn() } }));
+vi.mock('../../services/attributeService', () => ({ default: { getProductAttributes: vi.fn(), getProductVariants: vi.fn(), getAttributes: vi.fn(), getCategoryAttributes: vi.fn(), getAttributeById: vi.fn(), assignProductAttribute: vi.fn(), deleteProductVariant: vi.fn(), cloneVariants: vi.fn(), updateProductVariant: vi.fn() } }));
 const height = { id: 'height', name: 'Height', unitCategory: 'Length', values: [{ id: 'ten', value: '10', unitLabel: 'cm' }] };
 const row = { id: 'row', attributeId: 'height', valueId: 'ten', attribute: height, value: height.values[0], isVariantAttr: false };
 const tree = (props = {}) => <MemoryRouter><NotificationProvider><UnitCatalogProvider><ProductVariantsPanel productId="product" canManageVariants {...props} /></UnitCatalogProvider></NotificationProvider></MemoryRouter>;
@@ -31,9 +31,98 @@ beforeEach(() => {
   attributeService.getCategoryAttributes.mockResolvedValue({ data: { data: [] } });
   attributeService.getAttributeById.mockResolvedValue({ data: { data: height } });
   attributeService.assignProductAttribute.mockResolvedValue({ data: { data: [row] } });
+  getProducts.mockResolvedValue({ data: [{ id: 'source', name: 'Source product', sku: 'SOURCE-SKU', type: 'variable', variants: [{ id: 'source-variant' }] }] });
+  attributeService.cloneVariants.mockResolvedValue({ data: { data: [], meta: { createdCount: 1, skippedCount: 0, addedAssignments: 1 } } });
 });
 
 describe('product attributes and variant drafts', () => {
+  const pickCopySource = async () => {
+    fireEvent.click(await screen.findByRole('button', { name: 'Copy from product' }));
+    fireEvent.change(screen.getByRole('combobox', { name: 'Search products' }), { target: { value: 'SOURCE' } });
+    fireEvent.click(await screen.findByRole('option', { name: /Source product/ }));
+    return within(screen.getByRole('dialog', { name: 'Clone Variants from Another Product' }));
+  };
+  it('searches by product SKU and refreshes attributes and variants after copying', async () => {
+    render(tree());
+    const dialog = await pickCopySource();
+    expect(getProducts).toHaveBeenCalledWith({ search: 'SOURCE', limit: 20, include: 'variants', hasVariants: true });
+    expect(dialog.getByRole('combobox', { name: 'Search products' })).toHaveValue('Source product');
+    expect(dialog.getByText(/fresh unique SKUs/)).toBeInTheDocument();
+    fireEvent.click(dialog.getByRole('button', { name: 'Clone Variants' }));
+    await waitFor(() => expect(attributeService.cloneVariants).toHaveBeenCalledWith('product', { sourceProductId: 'source' }));
+    await waitFor(() => expect(attributeService.getProductAttributes).toHaveBeenCalledTimes(2));
+    expect(attributeService.getProductVariants).toHaveBeenCalledTimes(2);
+    expect(screen.getByRole('alert')).toHaveTextContent('1 variant copied');
+  });
+  it('keeps the selected source after a copy failure so the operation can be retried', async () => {
+    attributeService.cloneVariants.mockRejectedValueOnce({ response: { data: { error: { message: 'Source changed. Please retry.' } } } });
+    render(tree()); const dialog = await pickCopySource();
+    fireEvent.click(dialog.getByRole('button', { name: 'Clone Variants' }));
+    expect(await screen.findByText('Source changed. Please retry.')).toBeInTheDocument();
+    expect(dialog.getByRole('combobox', { name: 'Search products' })).toHaveValue('Source product');
+    fireEvent.click(dialog.getByRole('button', { name: 'Clone Variants' }));
+    await waitFor(() => expect(attributeService.cloneVariants).toHaveBeenCalledTimes(2));
+  });
+  it('does not allow cancelling or changing source while a copy is in progress', async () => {
+    let finish;
+    attributeService.cloneVariants.mockImplementationOnce(() => new Promise((resolve) => { finish = resolve; }));
+    render(tree()); const dialog = await pickCopySource();
+    fireEvent.click(dialog.getByRole('button', { name: 'Clone Variants' }));
+    expect(dialog.getByRole('button', { name: 'Cancel' })).toBeDisabled();
+    expect(dialog.getByRole('combobox', { name: 'Search products' })).toBeDisabled();
+    finish({ data: { meta: { createdCount: 0, skippedCount: 1 } } });
+    expect(await screen.findByText(/0 variants copied; 1 already present/)).toBeInTheDocument();
+  });
+  it('filters out the current product, bundles, and products without variants', async () => {
+    getProducts.mockResolvedValue({ data: [
+      { id: 'product', name: 'Current product', variants: [{}] },
+      { id: 'empty', name: 'Empty product', variants: [] },
+      { id: 'bundle', name: 'Bundle product', type: 'combo', variants: [{}] },
+      { id: 'source', name: 'Source product', sku: 'SOURCE', variants: [{}] },
+    ] });
+    render(tree());
+    fireEvent.click(await screen.findByRole('button', { name: 'Copy from product' }));
+    fireEvent.change(screen.getByRole('combobox', { name: 'Search products' }), { target: { value: 'SOURCE' } });
+    expect(await screen.findByRole('option', { name: /Source product/ })).toBeInTheDocument();
+    expect(screen.queryByRole('option', { name: /Current|Empty|Bundle/ })).not.toBeInTheDocument();
+  });
+  it('rejects duplicate SKUs within the product before sending variant edits', async () => {
+    attributeService.getProductVariants.mockResolvedValue({ data: { data: [
+      { id: 'one', optionLabel: 'First', sku: 'FIRST', price: 100, stockQty: 1 },
+      { id: 'two', optionLabel: 'Second', sku: 'SECOND', price: 100, stockQty: 1 },
+    ] } });
+    render(tree());
+    fireEvent.click(await screen.findByRole('button', { name: 'Second', exact: true }));
+    fireEvent.change(screen.getByRole('textbox', { name: 'SKU', exact: true }), { target: { value: 'FIRST' } });
+    expect(screen.getByText('Each variant must have a different SKU.')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Save variant changes' })).toBeDisabled();
+    expect(attributeService.updateProductVariant).not.toHaveBeenCalled();
+  });
+  it('copies from a source selected by category', async () => {
+    render(tree({ flatCatFiles: [{ id: 'clothes', name: 'Clothes', path: 'Clothes', depth: 0 }] }));
+    fireEvent.click(await screen.findByRole('button', { name: 'Copy from product' }));
+    fireEvent.click(screen.getByRole('tab', { name: 'Browse by Category' }));
+    fireEvent.mouseDown(screen.getByRole('combobox', { name: 'Select Category' }));
+    fireEvent.click(screen.getByRole('option', { name: 'Clothes', exact: true }));
+    fireEvent.mouseDown(await screen.findByRole('combobox', { name: 'Select Product' }));
+    fireEvent.click(screen.getByRole('option', { name: /Source product/ }));
+    fireEvent.click(screen.getByRole('button', { name: 'Clone Variants' }));
+    await waitFor(() => expect(attributeService.cloneVariants).toHaveBeenCalledWith('product', { sourceProductId: 'source' }));
+    expect(getProducts).toHaveBeenCalledWith({ categoryId: 'clothes', limit: 100, include: 'variants', hasVariants: true });
+  });
+  it('ignores an old search response after the search text has changed', async () => {
+    let finishOld;
+    getProducts.mockImplementation(({ search }) => search === 'OLD' ? new Promise((resolve) => { finishOld = resolve; }) : Promise.resolve({ data: [{ id: 'source', name: 'New source', sku: 'NEW', variants: [{}] }] }));
+    render(tree());
+    fireEvent.click(await screen.findByRole('button', { name: 'Copy from product' }));
+    fireEvent.change(screen.getByRole('combobox', { name: 'Search products' }), { target: { value: 'OLD' } });
+    await waitFor(() => expect(finishOld).toBeTypeOf('function'));
+    fireEvent.change(screen.getByRole('combobox', { name: 'Search products' }), { target: { value: 'NEW' } });
+    expect(await screen.findByRole('option', { name: /New source/ })).toBeInTheDocument();
+    await act(async () => finishOld({ data: [{ id: 'old', name: 'Old source', variants: [{}] }] }));
+    expect(screen.queryByRole('option', { name: /Old source/ })).not.toBeInTheDocument();
+    expect(screen.getByRole('option', { name: /New source/ })).toBeInTheDocument();
+  });
   it('keeps unsaved variant edits when assigning attributes through the unified picker', async () => {
     render(tree());
     fireEvent.click(await screen.findByRole('button', { name: 'Variant SKU' }));

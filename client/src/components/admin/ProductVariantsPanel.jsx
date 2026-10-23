@@ -77,6 +77,8 @@ const VariantsPanel = ({
   const [cloneCatSelectedProduct, setCloneCatSelectedProduct] = useState(null);
   const [suggestedAttributes, setSuggestedAttributes] = useState([]);
   const cloneSearchTimer = useRef(null);
+  const cloneRequests = useRef({ search: 0, category: 0 });
+  useEffect(() => () => { clearTimeout(cloneSearchTimer.current); cloneRequests.current.search++; cloneRequests.current.category++; }, []);
 
   const loadAll = useCallback(async () => {
     if (!productId) { setLoading(false); return; }
@@ -111,7 +113,7 @@ const VariantsPanel = ({
       })));
       setAttributes(attrData);
       setProductBasePrice(getProductBasePrice(product));
-      onStockTotalChange?.(stockTotal, activeVariantRows.length, Number(product?.quantity || 0));
+      onStockTotalChange?.(stockTotal, activeVariantRows.length, Number(product?.quantity || 0), varData.length);
 
     } catch (error) {
       setLoadError(true);
@@ -137,7 +139,7 @@ const VariantsPanel = ({
   useEffect(() => {
     const activeVariantRows = variants.filter((variant) => variant?.isActive !== false);
     const stockTotal = activeVariantRows.reduce((sum, variant) => sum + Number(variant.stockQty || 0), 0);
-    onStockTotalChange?.(stockTotal, activeVariantRows.length);
+    onStockTotalChange?.(stockTotal, activeVariantRows.length, undefined, variants.length);
   }, [variants, onStockTotalChange]);
 
   useEffect(() => {
@@ -217,7 +219,9 @@ const VariantsPanel = ({
   };
 
   const hasVariantChanges = variants.some((variant) => variant._dirty);
-  const hasInvalidChanges = variants.some((variant) => variant._dirty && (!validPrice(variant.price) || !validStock(variant)));
+  const skuCounts = variants.reduce((counts, variant) => { const sku = variant.sku?.trim(); if (sku) counts.set(sku, (counts.get(sku) || 0) + 1); return counts; }, new Map());
+  const duplicateSku = (variant) => (skuCounts.get(variant.sku?.trim()) || 0) > 1;
+  const hasInvalidChanges = variants.some((variant) => variant._dirty && (!validPrice(variant.price) || !validStock(variant) || duplicateSku(variant)));
   const variantBusy = saving || generating || cloning || deleting;
   const canEditVariants = canManageVariants && !variantBusy && !loading && !loadError;
 
@@ -262,7 +266,7 @@ const VariantsPanel = ({
       notify('Variants updated.', 'success');
       loadAll();
     } catch (err) {
-      notify(err?.response?.data?.message || 'Failed to save variants.', 'error');
+      notify(getApiErrorMessage(err, 'Failed to save variants.'), 'error');
     } finally {
       setSaving(false);
       setSaveProgress({ current: 0, total: 0 });
@@ -301,8 +305,9 @@ const VariantsPanel = ({
     if (!activeProduct) return;
     setCloning(true);
     try {
-      await attributeService.cloneVariants(productId, { sourceProductId: activeProduct.id });
-      notify(`Variants cloned from "${activeProduct.name}" successfully.`, 'success');
+      const response = await attributeService.cloneVariants(productId, { sourceProductId: activeProduct.id });
+      const summary = response?.data?.meta;
+      notify(summary ? `${summary.createdCount} ${summary.createdCount === 1 ? 'variant' : 'variants'} copied; ${summary.skippedCount} already present. New variants have fresh SKUs and zero stock.` : 'Variants copied. Review SKUs, prices and stock below.', summary?.createdCount === 0 ? 'info' : 'success');
       setCloneOpen(false);
       setCloneSelectedProduct(null);
       setCloneSearchInput('');
@@ -310,7 +315,10 @@ const VariantsPanel = ({
       setCloneCatSelectedProduct(null);
       setCloneCatId('');
       setCloneCatProducts([]);
-      loadAll();
+      clearTimeout(cloneSearchTimer.current);
+      cloneRequests.current.search++; cloneRequests.current.category++;
+      setCloneSearchLoading(false); setCloneCatProductsLoading(false);
+      await loadAll();
     } catch (err) {
       notify(getApiErrorMessage(err, 'Clone failed.'), 'error');
     } finally {
@@ -318,39 +326,51 @@ const VariantsPanel = ({
     }
   };
 
+  const closeClone = () => {
+    if (cloning) return;
+    clearTimeout(cloneSearchTimer.current);
+    cloneRequests.current.search++; cloneRequests.current.category++;
+    setCloneOpen(false); setCloneSelectedProduct(null); setCloneSearchInput(''); setCloneSearchResults([]);
+    setCloneCatSelectedProduct(null); setCloneCatId(''); setCloneCatProducts([]);
+    setCloneSearchLoading(false); setCloneCatProductsLoading(false);
+  };
+  const copySources = (rows) => rows.filter((product) => product.id !== productId && product.type !== 'combo' && Array.isArray(product.variants) && product.variants.length > 0);
   const handleCloneSearchChange = (inputValue) => {
     setCloneSearchInput(inputValue);
     setCloneSelectedProduct(null);
     clearTimeout(cloneSearchTimer.current);
-    if (!inputValue?.trim()) { setCloneSearchResults([]); return; }
+    const request = ++cloneRequests.current.search;
+    setCloneSearchResults([]); setCloneSearchLoading(false);
+    if (inputValue.trim().length < 2) return;
     cloneSearchTimer.current = setTimeout(async () => {
       setCloneSearchLoading(true);
       try {
-        const res = await getProducts({ search: inputValue.trim(), limit: 20 });
+        const res = await getProducts({ search: inputValue.trim(), limit: 20, include: 'variants', hasVariants: true });
         const rows = res?.data || [];
-        setCloneSearchResults(rows.filter((product) => product.id !== productId));
+        if (request === cloneRequests.current.search) setCloneSearchResults(copySources(rows));
       } catch {
-        setCloneSearchResults([]);
+        if (request === cloneRequests.current.search) { setCloneSearchResults([]); notify('Could not search products. Try again.', 'error'); }
       } finally {
-        setCloneSearchLoading(false);
+        if (request === cloneRequests.current.search) setCloneSearchLoading(false);
       }
     }, 350);
   };
 
   const handleCloneCatChange = async (catId) => {
+    const request = ++cloneRequests.current.category;
     setCloneCatId(catId);
     setCloneCatSelectedProduct(null);
     setCloneCatProducts([]);
-    if (!catId) return;
+    if (!catId) { setCloneCatProductsLoading(false); return; }
     setCloneCatProductsLoading(true);
     try {
-      const res = await getProducts({ categoryId: catId, limit: 100 });
+      const res = await getProducts({ categoryId: catId, limit: 100, include: 'variants', hasVariants: true });
       const rows = res?.data || [];
-      setCloneCatProducts(rows.filter((product) => product.id !== productId));
+      if (request === cloneRequests.current.category) setCloneCatProducts(copySources(rows));
     } catch {
-      setCloneCatProducts([]);
+      if (request === cloneRequests.current.category) { setCloneCatProducts([]); notify('Could not load category products. Try again.', 'error'); }
     } finally {
-      setCloneCatProductsLoading(false);
+      if (request === cloneRequests.current.category) setCloneCatProductsLoading(false);
     }
   };
 
@@ -413,8 +433,11 @@ const VariantsPanel = ({
                   <Accordion key={variant.id} variant="outlined" sx={{ m: '0 !important' }}>
                     <AccordionSummary
                       aria-label={getVariantOptionLabel(variant) || 'Variant SKU'}
-                      expandIcon={<Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}><Typography variant="caption">Edit</Typography><ExpandMoreIcon /></Box>}
+                      expandIcon={<Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}><Typography variant="caption">Edit</Typography><ExpandMoreIcon className="variant-expand-arrow" /></Box>}
                       sx={{
+                        '& .MuiAccordionSummary-expandIconWrapper.Mui-expanded': { transform: 'none' },
+                        '& .variant-expand-arrow': { transition: 'transform 150ms ease' },
+                        '& .Mui-expanded .variant-expand-arrow': { transform: 'rotate(180deg)' },
                         '& .MuiAccordionSummary-content': {
                           display: 'flex',
                           justifyContent: 'space-between',
@@ -566,6 +589,9 @@ const VariantsPanel = ({
                             onChange={(e) => handleVariantChange(index, 'sku', e.target.value)}
                             disabled={!canEditVariants}
                             placeholder="Optional SKU"
+                            inputProps={{ maxLength: 100 }}
+                            error={variant._dirty && duplicateSku(variant)}
+                            helperText={variant._dirty && duplicateSku(variant) ? 'Each variant must have a different SKU.' : undefined}
                             InputProps={{
                               endAdornment: (
                                 <InputAdornment position="end">
@@ -671,7 +697,7 @@ const VariantsPanel = ({
             {variants.length > 0 && <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 2, borderTop: 1, borderColor: 'divider', pt: 2, mt: 2 }}>
               <Box>
                 <Typography variant="body2" fontWeight={600}>{variants.length} {variants.length === 1 ? 'variant' : 'variants'} · Total stock: {variants.filter((variant) => variant.isActive !== false).reduce((sum, variant) => sum + Number(variant.stockQty || 0), 0)}</Typography>
-                <Typography variant="caption" color={hasInvalidChanges ? 'error' : 'text.secondary'}>{hasInvalidChanges ? 'Fix the highlighted prices or stock quantities before saving.' : hasVariantChanges ? 'You have unsaved variant changes.' : 'All variant changes saved.'}</Typography>
+                <Typography variant="caption" color={hasInvalidChanges ? 'error' : 'text.secondary'}>{hasInvalidChanges ? 'Fix the highlighted prices, stock quantities, or duplicate SKUs before saving.' : hasVariantChanges ? 'You have unsaved variant changes.' : 'All variant changes saved.'}</Typography>
               </Box>
               <Button variant="contained" onClick={handleSaveVariants} disabled={!canEditVariants || !hasVariantChanges || hasInvalidChanges || attributesBusy} sx={{ minHeight: 44 }}>
                 {saving ? `Saving (${saveProgress.current}/${saveProgress.total})…` : 'Save variant changes'}
@@ -689,25 +715,28 @@ const VariantsPanel = ({
         title="Select Variant Images"
       />
 
-      <Dialog open={cloneOpen} onClose={() => setCloneOpen(false)} maxWidth="sm" fullWidth>
+      <Dialog open={cloneOpen} onClose={closeClone} maxWidth="sm" fullWidth>
         <DialogTitle>Clone Variants from Another Product</DialogTitle>
         <DialogContent sx={{ pt: 1 }}>
           <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
-            Option combinations and prices will be copied. Stock stays reset so you can review the new product inventory safely.
+            Required attributes, values, combinations, MRP and shipping measurements are copied automatically. New variants start with zero stock and fresh unique SKUs. Variant photos are not copied. Existing combinations keep their prices, stock and SKUs.
           </Typography>
-          <Tabs value={cloneTab} onChange={(_, value) => { setCloneTab(value); setCloneSelectedProduct(null); setCloneCatSelectedProduct(null); }} sx={{ mb: 2 }}>
-            <Tab label="Search by Product Name" />
-            <Tab label="Browse by Category" />
+          <Tabs value={cloneTab} onChange={(_, value) => { clearTimeout(cloneSearchTimer.current); cloneRequests.current.search++; cloneRequests.current.category++; setCloneSearchLoading(false); setCloneCatProductsLoading(false); setCloneTab(value); setCloneSelectedProduct(null); setCloneCatSelectedProduct(null); setCloneSearchInput(''); setCloneSearchResults([]); setCloneCatId(''); setCloneCatProducts([]); }} sx={{ mb: 2 }}>
+            <Tab label="Search by name or SKU" disabled={cloning} />
+            <Tab label="Browse by Category" disabled={cloning} />
           </Tabs>
 
           {cloneTab === 0 && (
             <Autocomplete
               options={cloneSearchResults}
+              disabled={cloning}
               getOptionLabel={(option) => option.name || ''}
+              isOptionEqualToValue={(option, value) => option.id === value.id}
+              renderOption={(props, option) => <li {...props} key={option.id}><Box><Typography variant="body2">{option.name}</Typography><Typography variant="caption" color="text.secondary">{option.sku || 'No product SKU'} · {option.variants.length} variants</Typography></Box></li>}
               filterOptions={(x) => x}
               loading={cloneSearchLoading}
               value={cloneSelectedProduct}
-              onChange={(_, value) => setCloneSelectedProduct(value)}
+              onChange={(_, value) => { setCloneSelectedProduct(value); setCloneSearchInput(value?.name || ''); }}
               inputValue={cloneSearchInput}
               onInputChange={(_, value, reason) => { if (reason !== 'reset') handleCloneSearchChange(value); }}
               renderInput={(params) => (
@@ -716,6 +745,7 @@ const VariantsPanel = ({
                   label="Search products"
                   placeholder="Type product name..."
                   size="small"
+                  helperText="Search by product name or product SKU (at least 2 characters). Only products with variants are shown."
                   InputProps={{
                     ...params.InputProps,
                     endAdornment: (
@@ -727,15 +757,15 @@ const VariantsPanel = ({
                   }}
                 />
               )}
-              noOptionsText={cloneSearchInput.length > 0 ? 'No products found' : 'Start typing to search'}
+              noOptionsText={cloneSearchInput.trim().length >= 2 ? 'No matching products with variants' : 'Type at least 2 characters'}
             />
           )}
 
           {cloneTab === 1 && (
             <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
-              <FormControl fullWidth size="small">
-                <InputLabel>Select Category</InputLabel>
-                <Select label="Select Category" value={cloneCatId} onChange={(e) => handleCloneCatChange(e.target.value)}>
+              <FormControl fullWidth size="small" disabled={cloning}>
+                <InputLabel id="clone-category-label">Select Category</InputLabel>
+                <Select labelId="clone-category-label" label="Select Category" value={cloneCatId} onChange={(e) => handleCloneCatChange(e.target.value)}>
                   <MenuItem value=""><em>Select category</em></MenuItem>
                   {flatCatFiles.map((category) => (
                     <MenuItem key={category.id} value={category.id} sx={{ pl: 2 + category.depth * 2 }}>
@@ -752,14 +782,14 @@ const VariantsPanel = ({
                     <Typography variant="body2" color="text.secondary">Loading products...</Typography>
                   </Box>
                 ) : cloneCatProducts.length === 0 ? (
-                  <Typography variant="body2" color="text.secondary">No other products in this category.</Typography>
+                  <Typography variant="body2" color="text.secondary">No other products with variants in this category.</Typography>
                 ) : (
-                  <FormControl fullWidth size="small">
-                    <InputLabel>Select Product</InputLabel>
-                    <Select label="Select Product" value={cloneCatSelectedProduct?.id || ''} onChange={(e) => setCloneCatSelectedProduct(cloneCatProducts.find((product) => product.id === e.target.value) || null)}>
+                  <FormControl fullWidth size="small" disabled={cloning}>
+                    <InputLabel id="clone-product-label">Select Product</InputLabel>
+                    <Select labelId="clone-product-label" label="Select Product" value={cloneCatSelectedProduct?.id || ''} onChange={(e) => setCloneCatSelectedProduct(cloneCatProducts.find((product) => product.id === e.target.value) || null)}>
                       <MenuItem value=""><em>Select product</em></MenuItem>
                       {cloneCatProducts.map((product) => (
-                        <MenuItem key={product.id} value={product.id}>{product.name}</MenuItem>
+                        <MenuItem key={product.id} value={product.id}>{product.name} · {product.sku || 'No product SKU'} · {product.variants.length} variants</MenuItem>
                       ))}
                     </Select>
                   </FormControl>
@@ -775,15 +805,7 @@ const VariantsPanel = ({
           )}
         </DialogContent>
         <DialogActions>
-          <Button onClick={() => {
-            setCloneOpen(false);
-            setCloneSelectedProduct(null);
-            setCloneSearchInput('');
-            setCloneSearchResults([]);
-            setCloneCatSelectedProduct(null);
-            setCloneCatId('');
-            setCloneCatProducts([]);
-          }}>Cancel</Button>
+          <Button onClick={closeClone} disabled={cloning}>Cancel</Button>
           <Button variant="contained" onClick={handleClone} disabled={cloning || !(cloneTab === 0 ? cloneSelectedProduct : cloneCatSelectedProduct)}>
             {cloning ? 'Cloning...' : 'Clone Variants'}
           </Button>

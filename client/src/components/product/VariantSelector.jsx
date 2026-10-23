@@ -103,6 +103,8 @@ const VariantSelector = ({ variants, selectedVariantId, onSelect }) => {
         const commonA11y = getAttributeValueA11yLabel(group, value, isSelected, !isAvailable);
 
         if (displayType === 'swatch' || displayType === 'image') {
+            const imageUrl = displayType === 'image' ? value.imageUrl : null;
+            const hasVisual = Boolean(imageUrl || swatchColor);
             const content = (
                 <Button
                     key={value.valueId}
@@ -111,11 +113,11 @@ const VariantSelector = ({ variants, selectedVariantId, onSelect }) => {
                     aria-label={commonA11y}
                     aria-pressed={isSelected}
                     sx={{
-                        minWidth: 0,
-                        width: 54,
+                        width: hasVisual ? 54 : 'auto',
+                        minWidth: 54,
                         height: 54,
                         p: 0.5,
-                        borderRadius: '50%',
+                        borderRadius: hasVisual ? '50%' : 1.5,
                         border: '2px solid',
                         borderColor: isSelected ? 'primary.main' : 'divider',
                         bgcolor: 'background.paper',
@@ -127,19 +129,19 @@ const VariantSelector = ({ variants, selectedVariantId, onSelect }) => {
                         },
                     }}
                 >
-                    <Box
+                    {hasVisual ? <Box
                         sx={{
                             width: 40,
                             height: 40,
                             borderRadius: '50%',
                             border: '1px solid',
                             borderColor: swatchColor === '#ffffff' ? 'divider' : 'transparent',
-                            bgcolor: value.imageUrl ? 'transparent' : (swatchColor || 'action.hover'),
-                            backgroundImage: value.imageUrl ? `url(${value.imageUrl})` : undefined,
+                            bgcolor: imageUrl ? 'transparent' : swatchColor,
+                            backgroundImage: imageUrl ? `url(${imageUrl})` : undefined,
                             backgroundSize: 'cover',
                             backgroundPosition: 'center',
                         }}
-                    />
+                    /> : <Box component="span" sx={{ px: 1 }}>{label}</Box>}
                 </Button>
             );
 
@@ -155,11 +157,13 @@ const VariantSelector = ({ variants, selectedVariantId, onSelect }) => {
                 <Chip
                     key={value.valueId}
                     label={label}
-                    clickable={isAvailable}
+                    clickable
                     color={isSelected ? 'primary' : 'default'}
                     variant={isSelected ? 'filled' : 'outlined'}
                     onClick={isAvailable ? () => handleSelect(group.attributeId, value.valueId) : undefined}
+                    disabled={!isAvailable}
                     aria-label={commonA11y}
+                    aria-pressed={isSelected}
                     sx={{
                         height: 38,
                         px: 0.5,
@@ -174,7 +178,7 @@ const VariantSelector = ({ variants, selectedVariantId, onSelect }) => {
         return (
             <Button
                 key={value.valueId}
-                variant={isSelected ? 'contained' : 'outlined'}
+                variant={displayType === 'text' ? 'text' : (isSelected ? 'contained' : 'outlined')}
                 disabled={!isAvailable}
                 onClick={() => handleSelect(group.attributeId, value.valueId)}
                 aria-label={commonA11y}
@@ -185,6 +189,7 @@ const VariantSelector = ({ variants, selectedVariantId, onSelect }) => {
                     px: 1.75,
                     borderRadius: 1.5,
                     fontWeight: 800,
+                    textDecoration: displayType === 'text' && isSelected ? 'underline' : 'none',
                     textTransform: 'none',
                 }}
             >
@@ -211,8 +216,9 @@ const VariantSelector = ({ variants, selectedVariantId, onSelect }) => {
                     </Typography>
                     {displayType === 'dropdown' ? (
                         <FormControl size="small" sx={{ minWidth: { xs: '100%', sm: 260 } }}>
-                            <InputLabel>{group.attributeName}</InputLabel>
+                            <InputLabel id={`variant-${group.attributeId}-label`}>{group.attributeName}</InputLabel>
                             <Select
+                                labelId={`variant-${group.attributeId}-label`}
                                 label={group.attributeName}
                                 value={selections[group.attributeId] || ''}
                                 onChange={(event) => handleSelect(group.attributeId, event.target.value)}

@@ -25,6 +25,7 @@ import UnitCategorySelector from '../../components/admin/UnitCategorySelector';
 import { useUnitCatalog } from '../../context/UnitCatalogContext';
 import { getAttributeUnitCategory } from '../../constants/units';
 import AttributeValuesDialog from '../../components/admin/AttributeValuesDialog';
+import AttributePresentationPreview from '../../components/admin/AttributePresentationPreview';
 import UnitSettingsDialog from '../../components/admin/UnitSettingsDialog';
 import SettingsIcon from '@mui/icons-material/Settings';
 
@@ -537,8 +538,9 @@ const AttributesPage = () => {
           <Grid container spacing={2}>
             <Grid item xs={12} sm={6}>
               <FormControl fullWidth size="small" disabled={savingAttribute}>
-                <InputLabel>Display Style</InputLabel>
+                <InputLabel id="attribute-display-style-label">Display Style</InputLabel>
                 <Select
+                  labelId="attribute-display-style-label"
                   label="Display Style"
                   value={formData.displayType}
                   onChange={(event) => setFormData((current) => ({ ...current, displayType: event.target.value }))}
@@ -548,11 +550,13 @@ const AttributesPage = () => {
                   ))}
                 </Select>
               </FormControl>
+              <Typography variant="caption" color="text.secondary">How customers select an option on the product page. Auto chooses from the type, images, and number of choices.</Typography>
             </Grid>
             <Grid item xs={12} sm={6}>
               <FormControl fullWidth size="small" disabled={savingAttribute}>
-                <InputLabel>Value Type</InputLabel>
+                <InputLabel id="attribute-value-type-label">Value Type</InputLabel>
                 <Select
+                  labelId="attribute-value-type-label"
                   label="Value Type"
                   value={formData.valueType}
                   onChange={(event) => setFormData((current) => ({ ...current, valueType: event.target.value }))}
@@ -562,6 +566,7 @@ const AttributesPage = () => {
                   ))}
                 </Select>
               </FormControl>
+              <Typography variant="caption" color="text.secondary">What the values represent. Auto uses the name and slug. This guides the automatic style; it does not validate numbers or select units.</Typography>
             </Grid>
             <Grid item xs={12}>
               <UnitCategorySelector
@@ -571,6 +576,7 @@ const AttributesPage = () => {
               />
             </Grid>
           </Grid>
+          <AttributePresentationPreview attribute={{ ...formData, slug: editing?.slug || '' }} values={editing?.values || []} />
         </DialogContent>
         <DialogActions sx={{ px: 3, pb: 2 }}>
           <Button onClick={handleDialogClose} disabled={savingAttribute}>Cancel</Button>

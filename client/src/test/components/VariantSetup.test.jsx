@@ -8,7 +8,7 @@ import { NotificationProvider } from '../../context/NotificationContext';
 vi.mock('../../services/attributeService', () => ({ default: { previewVariantGeneration: vi.fn(), bulkGenerateVariants: vi.fn() } }));
 const row = (id, attributeId = 'height') => ({ attributeId, valueId: id, isVariantAttr: true, attribute: { id: attributeId, name: attributeId }, value: { value: id, unitLabel: 'cm' } });
 const rows = [row('10'), row('20')];
-const review = { token: 'a'.repeat(64), total: 2, addedCount: 2, keptCount: 0, removedCount: 0, blockedRemovalCount: 0, combinations: [{ label: '10 cm', isNew: true }, { label: '20 cm', isNew: true }], removals: [] };
+const review = { token: 'a'.repeat(64), total: 2, addedCount: 2, keptCount: 0, removedCount: 0, blockedRemovalCount: 0, combinations: [{ valueIds: ['10'], label: '10 cm', isNew: true }, { valueIds: ['20'], label: '20 cm', isNew: true }], removals: [] };
 const onCreated = vi.fn();
 const onBusyChange = vi.fn();
 const tree = (props = {}) => <NotificationProvider><VariantSetup productId="product" rows={rows} variants={[]} basePrice={100} canManage onCreated={onCreated} onBusyChange={onBusyChange} {...props} /></NotificationProvider>;
@@ -39,13 +39,81 @@ describe('guided variant setup', () => {
     fireEvent.change(within(dialog).getByLabelText('Starting stock'), { target: { value: '3' } });
     fireEvent.click(within(dialog).getByRole('button', { name: 'Create 2 variants' }));
     await waitFor(() => expect(onCreated).toHaveBeenCalledTimes(1));
-    expect(attributeService.bulkGenerateVariants).toHaveBeenCalledWith('product', { planToken: review.token, confirmRemovals: false, defaultPrice: 125.5, defaultStockQty: 3 });
+    expect(attributeService.bulkGenerateVariants).toHaveBeenCalledWith('product', { planToken: review.token, confirmRemovals: false, newVariants: [
+      { valueIds: ['10'], price: 125.5, stockQty: 3 }, { valueIds: ['20'], price: 125.5, stockQty: 3 },
+    ] });
     expect(onBusyChange).toHaveBeenLastCalledWith(false);
   });
   it('cancels without creating records', async () => {
     render(tree()); fireEvent.click(screen.getByRole('button', { name: 'Create 2 variants' }));
     fireEvent.click(within(await screen.findByRole('dialog')).getByRole('button', { name: 'Back' }));
     expect(attributeService.bulkGenerateVariants).not.toHaveBeenCalled();
+  });
+  it('saves distinct prices and stock only for the selected combinations', async () => {
+    render(tree()); fireEvent.click(screen.getByRole('button', { name: 'Create 2 variants' }));
+    const dialog = within(await screen.findByRole('dialog'));
+    const first = within(dialog.getByRole('group', { name: '10 cm' }));
+    fireEvent.change(first.getByLabelText('MRP'), { target: { value: '199.50' } });
+    fireEvent.change(first.getByLabelText('Stock'), { target: { value: '7' } });
+    const second = within(dialog.getByRole('group', { name: '20 cm' }));
+    fireEvent.change(second.getByLabelText('MRP'), { target: { value: '249' } });
+    fireEvent.change(second.getByLabelText('Stock'), { target: { value: '2' } });
+    fireEvent.click(dialog.getByRole('button', { name: 'Create 2 variants' }));
+    await waitFor(() => expect(attributeService.bulkGenerateVariants).toHaveBeenCalledWith('product', expect.objectContaining({ newVariants: [
+      { valueIds: ['10'], price: 199.5, stockQty: 7 }, { valueIds: ['20'], price: 249, stockQty: 2 },
+    ] })));
+  });
+  it('skips unchecked combinations and ignores their invalid fields', async () => {
+    render(tree()); fireEvent.click(screen.getByRole('button', { name: 'Create 2 variants' }));
+    const dialog = within(await screen.findByRole('dialog'));
+    const second = within(dialog.getByRole('group', { name: '20 cm' }));
+    fireEvent.change(second.getByLabelText('Stock'), { target: { value: '1.5' } });
+    expect(dialog.getByRole('button', { name: 'Create 2 variants' })).toBeDisabled();
+    fireEvent.click(second.getByRole('checkbox'));
+    expect(second.getByLabelText('Stock')).toBeDisabled();
+    fireEvent.click(dialog.getByRole('button', { name: 'Create 1 variant' }));
+    await waitFor(() => expect(attributeService.bulkGenerateVariants).toHaveBeenCalledWith('product', expect.objectContaining({ newVariants: [{ valueIds: ['10'], price: 100, stockQty: 0 }] })));
+  });
+  it('keeps individual overrides until defaults are explicitly applied to selected rows', async () => {
+    render(tree()); fireEvent.click(screen.getByRole('button', { name: 'Create 2 variants' }));
+    const dialog = within(await screen.findByRole('dialog'));
+    const first = within(dialog.getByRole('group', { name: '10 cm' }));
+    fireEvent.change(first.getByLabelText('MRP'), { target: { value: '199' } });
+    fireEvent.change(dialog.getByLabelText('Starting MRP'), { target: { value: '250' } });
+    expect(first.getByLabelText('MRP')).toHaveValue(199);
+    fireEvent.click(dialog.getByRole('button', { name: 'Apply defaults to selected' }));
+    expect(first.getByLabelText('MRP')).toHaveValue(250);
+    fireEvent.click(dialog.getByRole('button', { name: 'Deselect all new' }));
+    expect(dialog.getByRole('button', { name: 'Create 0 variants' })).toBeDisabled();
+    fireEvent.click(dialog.getByRole('button', { name: 'Select all new' }));
+    expect(dialog.getByRole('button', { name: 'Create 2 variants' })).toBeEnabled();
+  });
+  it('preserves edited combination values after a failed save', async () => {
+    attributeService.bulkGenerateVariants.mockRejectedValueOnce(new Error('Offline'));
+    render(tree()); fireEvent.click(screen.getByRole('button', { name: 'Create 2 variants' }));
+    const dialog = within(await screen.findByRole('dialog'));
+    const first = within(dialog.getByRole('group', { name: '10 cm' }));
+    fireEvent.change(first.getByLabelText('Stock'), { target: { value: '9' } });
+    fireEvent.click(dialog.getByRole('button', { name: 'Create 2 variants' }));
+    await screen.findByText('Offline');
+    expect(first.getByLabelText('Stock')).toHaveValue(9);
+    fireEvent.click(dialog.getByRole('button', { name: 'Create 2 variants' }));
+    await waitFor(() => expect(onCreated).toHaveBeenCalledTimes(1));
+    expect(attributeService.bulkGenerateVariants.mock.calls[0]).toEqual(attributeService.bulkGenerateVariants.mock.calls[1]);
+  });
+  it('searches and edits combinations beyond the original preview limit', async () => {
+    const combinations = Array.from({ length: 15 }, (_, index) => ({ valueIds: [`v${index}`], label: `Option ${index}`, isNew: true }));
+    attributeService.previewVariantGeneration.mockResolvedValue({ data: { data: { ...review, total: 15, addedCount: 15, combinations } } });
+    render(tree()); fireEvent.click(screen.getByRole('button', { name: 'Create 2 variants' }));
+    const dialog = within(await screen.findByRole('dialog'));
+    fireEvent.change(dialog.getByLabelText('Find a combination'), { target: { value: 'Option 14' } });
+    expect(dialog.queryByRole('group', { name: 'Option 0', exact: true })).not.toBeInTheDocument();
+    fireEvent.change(within(dialog.getByRole('group', { name: 'Option 14' })).getByLabelText('MRP'), { target: { value: '350' } });
+    fireEvent.click(dialog.getByRole('button', { name: 'Create 15 variants' }));
+    await waitFor(() => expect(onCreated).toHaveBeenCalled());
+    const payload = attributeService.bulkGenerateVariants.mock.calls[0][1];
+    expect(payload.newVariants).toHaveLength(15);
+    expect(payload.newVariants[14]).toEqual({ valueIds: ['v14'], price: 350, stockQty: 0 });
   });
   it('requires saving edits before updating options', () => {
     render(tree({ hasUnsavedChanges: true }));

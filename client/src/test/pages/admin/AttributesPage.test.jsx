@@ -53,6 +53,22 @@ beforeEach(() => {
 });
 
 describe('attribute category and value unit flow', () => {
+  it('previews value types and display styles without saving sample choices', async () => {
+    mount();
+    fireEvent.click(await screen.findByRole('button', { name: 'New Attribute' }));
+    fireEvent.change(screen.getByLabelText('Name'), { target: { value: 'Color' } });
+    expect(screen.getByText('Value type: color. Display style: swatch.')).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: 'Color, Red' }));
+    expect(screen.getByRole('button', { name: 'Color, Red, selected' })).toHaveAttribute('aria-pressed', 'true');
+    fireEvent.mouseDown(screen.getByRole('combobox', { name: 'Display Style' }));
+    fireEvent.click(screen.getByRole('option', { name: 'Dropdown', exact: true }));
+    expect(screen.getByText('Value type: color. Display style: dropdown.')).toBeInTheDocument();
+    fireEvent.mouseDown(screen.getByRole('combobox', { name: 'Color', exact: true }));
+    fireEvent.click(screen.getByRole('option', { name: 'Blue', exact: true }));
+    expect(attributeService.createAttribute).not.toHaveBeenCalled();
+    expect(attributeService.addAttributeValue).not.toHaveBeenCalled();
+    expect(screen.getByText(/Example values only; these will not be saved/)).toBeInTheDocument();
+  });
   it('creates a template with only a category, without choosing a default unit', async () => {
     mount();
     fireEvent.click(await screen.findByRole('button', { name: 'New Attribute' }));

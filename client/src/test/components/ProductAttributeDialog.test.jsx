@@ -79,6 +79,35 @@ describe('unified product attribute picker', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Add to product' }));
     await waitFor(() => expect(attributeService.assignProductAttribute).toHaveBeenCalledWith('product', expect.objectContaining({ values: [{ valueId: 'twenty' }] })));
   });
+  it('cancels an unfinished value while keeping selected and included values', async () => {
+    mount(); await choose('Height');
+    fireEvent.click(screen.getByRole('checkbox', { name: '10cm', exact: true }));
+    fireEvent.click(screen.getByRole('button', { name: 'Add a value', exact: true })); enterRange();
+    fireEvent.click(screen.getByRole('button', { name: 'Include value', exact: true }));
+    fireEvent.change(screen.getByLabelText('New value'), { target: { value: 'unfinished' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Add to product' }));
+    expect(screen.getByText('Choose a Length unit.')).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: 'Cancel new value', exact: true }));
+    expect(screen.queryByLabelText('New value')).not.toBeInTheDocument();
+    expect(onClose).not.toHaveBeenCalled();
+    expect(screen.getByRole('checkbox', { name: '10cm', exact: true })).toBeChecked();
+    fireEvent.click(screen.getByRole('button', { name: 'Add a value', exact: true }));
+    expect(screen.getByLabelText('New value')).toHaveValue('');
+    expect(screen.queryByText('Choose a Length unit.')).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: 'Add to product' }));
+    await waitFor(() => expect(attributeService.assignProductAttribute).toHaveBeenCalledWith('product', expect.objectContaining({ values: [{ valueId: 'ten' }, { value: '1 - 1.5', unitLabel: 'm', swatchColor: null }] })));
+  });
+  it('can hide and reopen the new-value form for an attribute without values', async () => {
+    mount(); await choose('Color');
+    expect(screen.getByLabelText('New value')).toBeInTheDocument();
+    fireEvent.change(screen.getByLabelText('Swatch color'), { target: { value: '#ff0000' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Cancel new value', exact: true }));
+    expect(screen.queryByLabelText('New value')).not.toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Add to product' })).toBeDisabled();
+    fireEvent.click(screen.getByRole('button', { name: 'Add a value', exact: true }));
+    expect(screen.getByLabelText('Swatch color')).toHaveValue('');
+    expect(attributeService.assignProductAttribute).not.toHaveBeenCalled();
+  });
   it('preserves the entire draft on failure and allows a safe retry', async () => {
     attributeService.assignProductAttribute.mockRejectedValueOnce(new Error('Assignment failed.'));
     mount(); await create(); await lengthCategory(); enterRange();

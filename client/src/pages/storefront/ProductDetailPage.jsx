@@ -177,7 +177,7 @@ const ProductDetailPage = () => {
         if (selectedVariant?.options) {
             selectedVariant.options.forEach((opt) => {
                 const optLabel = opt?.attribute?.name;
-                const optValue = opt?.value?.value;
+                const optValue = opt?.value ? formatAttributeValue(opt.value, opt.attribute) : '';
                 if (optLabel && optValue) {
                     selectedOptionsByLabel[optLabel] = optValue;
                 }
@@ -302,7 +302,9 @@ const ProductDetailPage = () => {
     const endingSoon = hasSale && sales.showCountdown !== false && isEndingSoon(product.saleEndAt, sales.endingSoonHours);
     const maxStock = selectedVariant
         ? getAvailableStock(selectedVariant, 'stockQty')
-        : getAvailableStock(product, 'quantity');
+        : product.type === 'variable'
+            ? activeVariants.reduce((total, variant) => total + getAvailableStock(variant, 'stockQty'), 0)
+            : getAvailableStock(product, 'quantity');
     const stockAvailable = maxStock > 0;
     const selectedVariantLabel = selectedVariant ? getVariantOptionLabel(selectedVariant) : '';
     const displaySku = selectedVariant?.sku || product.sku;
@@ -341,7 +343,7 @@ const ProductDetailPage = () => {
 
     const productStructuredData = [productJsonLd, breadcrumbStructuredData].filter(Boolean);
 
-    const hasVariants = Array.isArray(product?.variants) && product.variants.some((v) => v?.isActive !== false);
+    const hasVariants = product.type === 'variable' || (Array.isArray(product?.variants) && product.variants.some((v) => v?.isActive !== false));
 
     const handleVariantSelect = (variant) => {
         setSelectedVariant(variant);

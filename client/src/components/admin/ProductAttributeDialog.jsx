@@ -6,7 +6,7 @@ import attributeService from '../../services/attributeService';
 import { useNotification } from '../../context/NotificationContext';
 import { useUnitCatalog } from '../../context/UnitCatalogContext';
 import { getAttributeUnitCategory } from '../../constants/units';
-import { formatAttributeValue, getSwatchColor } from '../../utils/attributePresentation';
+import { formatAttributeValue, getSwatchColor, inferValueType } from '../../utils/attributePresentation';
 import { getApiErrorMessage } from '../../utils/apiErrors';
 import UnitCategorySelector from './UnitCategorySelector';
 import UnitSelector from './UnitSelector';
@@ -35,7 +35,7 @@ const ProductAttributeDialog = ({ productId, templates, rows, initialTemplate, o
   const [isVariant, setIsVariant] = useState(false);
   const [saving, setSaving] = useState(false);
   const category = selected ? getAttributeUnitCategory(selected, units) : '';
-  const isColor = selected?.valueType === 'color' || /colou?r|shade/.test(`${selected?.name || ''} ${selected?.slug || ''}`.toLowerCase());
+  const isColor = inferValueType(selected || {}) === 'color';
   const values = selected?.values || [];
   const assigned = new Set(rows.filter((row) => row.attributeId === selected?.id).map((row) => row.valueId));
   const options = [...new Map([...templates, ...results, ...(selected?.id ? [selected] : [])].map((item) => [item.id, item])).values()];
@@ -63,7 +63,7 @@ const ProductAttributeDialog = ({ productId, templates, rows, initialTemplate, o
     attributeService.getAttributeById(selected.id).then((response) => {
       const attribute = response?.data?.data;
       if (attribute?.id !== selected.id || !Array.isArray(attribute.values)) throw new Error('Could not load attribute values.');
-      if (active) { setSelected(attribute); setQuery((current) => current === selected.name ? attribute.name : current); }
+      if (active) { setSelected(attribute); setShowEntry(attribute.values.length === 0); setQuery((current) => current === selected.name ? attribute.name : current); }
     }).catch((err) => { if (active) { setValueLoadError(true); notify(getApiErrorMessage(err), 'error'); } })
       .finally(() => { if (active) setLoadingValues(false); });
     return () => { active = false; };
@@ -165,20 +165,25 @@ const ProductAttributeDialog = ({ productId, templates, rows, initialTemplate, o
                 : getSwatchColor(value) && <Box sx={{ width: 18, height: 18, borderRadius: '50%', bgcolor: getSwatchColor(value), border: 1, borderColor: 'divider' }} />}
               <Typography variant="body2">{formatAttributeValue(value, selected)}{assigned.has(value.id) && <Typography component="span" variant="caption" color="text.secondary"> · Already on product</Typography>}</Typography>
             </Stack>} />)}
-          {!values.length && <Typography variant="body2" color="text.secondary">No values yet. Enter the first value below.</Typography>}
+          {!values.length && <Typography variant="body2" color="text.secondary">No values yet. Add a value to get started.</Typography>}
         </Box>
         {drafts.length > 0 && <Stack direction="row" useFlexGap flexWrap="wrap" spacing={1} sx={{ my: 1.5 }}>{drafts.map((value, index) => <Chip key={index} label={formatAttributeValue(value, selected)} onDelete={saving ? undefined : () => setDrafts((current) => current.filter((_, i) => i !== index))} />)}</Stack>}
-        {!showEntry && values.length > 0 ? <Button startIcon={<AddIcon />} onClick={() => setShowEntry(true)} disabled={blocked}>Add a value</Button> : <Box sx={{ mt: 2, p: 2, border: 1, borderColor: 'divider', borderRadius: 2 }}>
+        {!showEntry ? <Box sx={{ mt: 1 }}><Button startIcon={<AddIcon />} onClick={() => setShowEntry(true)} disabled={blocked}>Add a value</Button></Box> : <Box sx={{ mt: 2, p: 2, border: 1, borderColor: 'divider', borderRadius: 2 }}>
           <Typography variant="subtitle2" sx={{ mb: 2 }}>New value</Typography>
           <Stack direction={{ xs: 'column', sm: 'row' }} spacing={1.5}>
             <TextField fullWidth label="New value" size="small" value={entry.value} disabled={blocked} error={Boolean(entryError)} helperText={entryError || 'For example: 600–900 or Large'} inputProps={{ maxLength: 100 }} onChange={(event) => { setEntry((current) => ({ ...current, value: event.target.value })); setEntryError(''); }} />
             {category && <Box sx={{ width: { xs: '100%', sm: 180 }, flexShrink: 0 }}><UnitSelector label="Unit" category={category} size="small" margin="none" value={entry.unitLabel} disabled={blocked} onChange={(unitLabel) => { setEntry((current) => ({ ...current, unitLabel })); setEntryError(''); }} /></Box>}
           </Stack>
           {isColor && <TextField label="Swatch color" placeholder="#1E88E5" size="small" value={entry.swatchColor} disabled={blocked} onChange={(event) => { setEntry((current) => ({ ...current, swatchColor: event.target.value })); setEntryError(''); }} sx={{ mt: 1.5 }} />}
-          <Button size="small" startIcon={<AddIcon />} onClick={includeEntry} disabled={blocked || !entry.value.trim()} sx={{ mt: 1 }}>Include value</Button>
+          <Stack direction="row" spacing={1} useFlexGap flexWrap="wrap" sx={{ mt: 1 }}>
+            <Button size="small" startIcon={<AddIcon />} onClick={includeEntry} disabled={blocked || !entry.value.trim()}>Include value</Button>
+            <Button size="small" disabled={saving} onClick={() => { setEntry(emptyValue); setEntryError(''); setShowEntry(false); }}>Cancel new value</Button>
+          </Stack>
         </Box>}
-        <FormControlLabel sx={{ mt: 2 }} control={<Checkbox checked={isVariant} disabled={blocked} onChange={(_, checked) => setIsVariant(checked)} />} label="Use these values to create variants" />
-        <Typography variant="caption" color="text.secondary" display="block">Generate the variant matrix after assigning all variant attributes.</Typography>
+        <Box sx={{ mt: 2 }}>
+          <FormControlLabel sx={{ m: 0, display: 'flex' }} control={<Checkbox checked={isVariant} disabled={blocked} onChange={(_, checked) => setIsVariant(checked)} />} label="Use these values to create variants" />
+          <Typography variant="caption" color="text.secondary" display="block">Generate the variant matrix after assigning all variant attributes.</Typography>
+        </Box>
       </>}
     </DialogContent>
     <DialogActions sx={{ px: 3, py: 2, borderTop: 1, borderColor: 'divider' }}><Button onClick={close} disabled={saving}>Cancel</Button><Button variant="contained" onClick={save} disabled={blocked || !productId || !selected || (selected._new && (unitsLoading || Boolean(unitsError))) || query.trim() !== selected.name || (!chosenIds.length && !drafts.length && !entry.value.trim())}>{saving ? 'Adding…' : 'Add to product'}</Button></DialogActions>

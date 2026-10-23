@@ -39,6 +39,7 @@ const addProductAttribute = (productId, data) =>
   api.post(`/products/${productId}/attributes`, data);
 
 const assignProductAttribute = (productId, data) => api.post(`/products/${productId}/attributes/assign`, data);
+const reorderProductAttributes = (productId, rowIds) => api.put(`/products/${productId}/attributes/reorder`, { rowIds });
 
 const updateProductAttribute = (productId, attributeRowId, data) =>
   api.put(`/products/${productId}/attributes/${attributeRowId}`, data);
@@ -85,6 +86,7 @@ const attributeService = {
   getProductAttributes,
   addProductAttribute,
   assignProductAttribute,
+  reorderProductAttributes,
   updateProductAttribute,
   deleteProductAttribute,
   bulkGenerateVariants,
