@@ -5,7 +5,7 @@ import { Link as RouterLink } from 'react-router-dom';
 import { reviewService } from '../../services/reviewService';
 import { useAuth } from '../../hooks/useAuth';
 import { orderService } from '../../services/orderService';
-import { useFeature } from '../../hooks/useSettings';
+import { useFeature, useFeatureVisible } from '../../hooks/useSettings';
 
 const ReviewSection = ({ slug, productId, onVisibleReviewsChange }) => {
     const reviewsEnabled = useFeature('reviews');

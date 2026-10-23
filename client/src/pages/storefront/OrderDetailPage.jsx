@@ -34,7 +34,7 @@ import ProductTrackingSection from '../../components/orders/order-detail/Product
 import ShippingAddressCard from '../../components/orders/order-detail/ShippingAddressCard';
 import TotalsNotesCard from '../../components/orders/order-detail/TotalsNotesCard';
 import { buildProductTrackingItems } from '../../components/orders/order-detail/orderDetailUtils';
-import { useCurrency, useFeature, useFeatureVisible, useFeaturesResolved, useSettings } from '../../hooks/useSettings';
+import { useCurrency, useFeatureVisible, useFeaturesResolved, useSettings } from '../../hooks/useSettings';
 import { formatDateTime } from '../../utils/dates';
 
 import { useOrderStatusTransitions } from '../../hooks/useOrderStatusTransitions';

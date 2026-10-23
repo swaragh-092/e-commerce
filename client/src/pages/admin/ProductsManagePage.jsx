@@ -21,7 +21,7 @@ import { getCategoryTree } from '../../services/categoryService';
 import { getSaleLabels } from '../../services/adminService';
 import { getMediaUrl } from '../../utils/media';
 import { getVariantOptionLabel } from '../../utils/variantOptions';
-import { useCurrency, useSettings, useFeature, useFeatureVisible } from '../../hooks/useSettings';
+import { useCurrency, useSettings, useFeatureVisible } from '../../hooks/useSettings';
 import { useNotification } from '../../context/NotificationContext';
 import { formatSaleDateTime, isEndingSoon } from '../../utils/pricing';
 import { useAuth } from '../../hooks/useAuth';

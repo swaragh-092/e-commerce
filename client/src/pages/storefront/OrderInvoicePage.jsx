@@ -4,7 +4,7 @@ import { Box, Typography, Button, Divider, CircularProgress, Alert } from '@mui/
 import PrintIcon from '@mui/icons-material/Print';
 import ArrowBackIcon from '@mui/icons-material/ArrowBack';
 import { orderService } from '../../services/orderService';
-import { useCurrency, useFeature, useFeatureVisible, useFeaturesResolved } from '../../hooks/useSettings';
+import { useCurrency, useFeatureVisible, useFeaturesResolved } from '../../hooks/useSettings';
 import { SettingsContext } from '../../context/ThemeContext';
 import { getTaxRows } from '../../components/orders/order-detail/orderDetailUtils';
 import { formatDateOnly } from '../../utils/dates';

@@ -474,3 +474,35 @@ describe('Tier 1 presentation visibility', () => {
     });
   });
 });
+
+
+describe('Review gate route isolation', () => {
+  it.each([
+    '/pages', '/pages/public', '/settings/features', '/products/item/variants',
+    '/blogs/posts', '/blogs/posts/example', '/blogs/categories',
+    '/blogs/admin/posts', '/blogs/admin/posts/example',
+  ])(
+    'lets unrelated API %s pass through when reviews are OFF', async (url) => {
+      mockFeatureState({ overrides: { reviews: false } });
+      const router = require('../../src/modules/review/review.routes');
+      const error = await new Promise((resolve) => {
+        router.handle({ method: 'GET', url, headers: {} }, {}, resolve);
+      });
+      expect(error).toBeUndefined();
+      expect(db.Setting.findAll).not.toHaveBeenCalled();
+    },
+  );
+
+  it.each([
+    ['GET', '/products/item/reviews'],
+    ['GET', '/products/item/reviews/mine'],
+    ['POST', '/products/item/reviews'],
+  ])('still blocks %s %s when reviews are OFF', async (method, url) => {
+    mockFeatureState({ overrides: { reviews: false } });
+    const router = require('../../src/modules/review/review.routes');
+    const error = await new Promise((resolve) => {
+      router.handle({ method, url, headers: {} }, {}, resolve);
+    });
+    expect(error).toMatchObject({ code: 'FEATURE_DISABLED', statusCode: 403 });
+  });
+});

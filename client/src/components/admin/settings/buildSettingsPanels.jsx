@@ -44,7 +44,6 @@ export default function buildSettingsPanels(ctx) {
     CURRENCIES, DASHBOARD_ORDER_WIDGETS, DASHBOARD_PROFILES,
     homepageSections,
     enableCGST, enableSGST, enableIGST,
-    adminVisibility = {},
   } = ctx;
 
   return [
