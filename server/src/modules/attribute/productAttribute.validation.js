@@ -40,9 +40,30 @@ const updateProductAttributeSchema = Joi.object({
     'object.oxor': 'Cannot provide both valueId and customValue in the same update',
 });
 
+const assignProductAttributeSchema = Joi.object({
+    attributeId: Joi.string().uuid(),
+    attribute: Joi.object({
+        name: Joi.string().trim().max(100).required(),
+        unitCategory: Joi.string().trim().max(50).allow('', null),
+        valueType: Joi.string().valid('auto', 'color', 'text', 'number').default('auto'),
+    }),
+    values: Joi.array().min(1).max(100).items(Joi.alternatives().try(
+        Joi.object({ valueId: Joi.string().uuid().required() }),
+        Joi.object({
+            value: Joi.string().trim().max(100).required(),
+            unitLabel: Joi.string().trim().max(20).allow('', null),
+            displayLabel: Joi.string().trim().max(100).allow('', null),
+            swatchColor: Joi.string().trim().max(32).allow('', null),
+        })
+    )).required(),
+    isVariantAttr: Joi.boolean().default(false),
+}).xor('attributeId', 'attribute');
+
 const generateVariantsSchema = Joi.object({
-    defaultPrice: Joi.number().precision(2).min(0),
-    defaultStockQty: Joi.number().integer().min(0).default(0),
+    planToken: Joi.string().hex().length(64),
+    confirmRemovals: Joi.boolean().default(false),
+    defaultPrice: Joi.number().precision(2).min(0).max(99999999.99),
+    defaultStockQty: Joi.number().integer().min(0).max(2147483647).default(0),
 });
 
 const variantImageSchema = Joi.object({
@@ -90,6 +111,7 @@ const updateVariantSchema = Joi.object({
 }).min(1).messages({ 'object.min': 'At least one field is required to update' });
 
 module.exports = {
+    assignProductAttributeSchema,
     addProductAttributeSchema,
     updateProductAttributeSchema,
     generateVariantsSchema,

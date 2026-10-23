@@ -146,9 +146,9 @@ const validate = (formData) => {
 
   if (
     formData.quantity !== '' &&
-    (isNaN(Number(formData.quantity)) || Number(formData.quantity) < 0)
+    (!Number.isInteger(Number(formData.quantity)) || Number(formData.quantity) < 0 || Number(formData.quantity) > 2147483647)
   ) {
-    errs.quantity = 'Stock quantity must be 0 or more.';
+    errs.quantity = 'Stock quantity must be a whole number from 0 to 2147483647.';
   }
 
   if (formData.shortDescription && formData.shortDescription.length > 500) {
@@ -279,6 +279,7 @@ const ProductEditPage = () => {
   const [ogPickerOpen, setOgPickerOpen] = useState(false);
   const [dbProduct, setDbProduct] = useState(null); 
   const [hasVariants, setHasVariants] = useState(false);
+  const [variantCount, setVariantCount] = useState(0);
   const [variantStockTotal, setVariantStockTotal] = useState(0);
   const [globalPrimaryVersion, setGlobalPrimaryVersion] = useState(0);
 
@@ -310,6 +311,7 @@ const ProductEditPage = () => {
             const nextHasVariants = activeVariants.length > 0;
             const nextVariantStockTotal = activeVariants.reduce((sum, variant) => sum + Number(variant.stockQty || 0), 0);
             setHasVariants(nextHasVariants);
+            setVariantCount(Array.isArray(p.variants) ? p.variants.length : 0);
             setVariantStockTotal(nextVariantStockTotal);
 
             setFormData({
@@ -380,8 +382,9 @@ const ProductEditPage = () => {
   const discountAmount = hasValidDiscount ? priceNum - salePriceNum : 0;
   const discountPercent = hasValidDiscount ? Math.round(((priceNum - salePriceNum) / priceNum) * 100) : 0;
 
-  const handleVariantStockChange = useCallback((total, count, fallbackQuantity) => {
+  const handleVariantStockChange = useCallback((total, count, fallbackQuantity, totalCount) => {
     setVariantStockTotal(total);
+    if (totalCount !== undefined) setVariantCount(totalCount);
     setHasVariants(count > 0);
     if (count > 0) {
       setFormData((prev) => ({ ...prev, quantity: total }));
@@ -442,19 +445,20 @@ const ProductEditPage = () => {
       return;
     }
 
-    const effectiveQuantity = hasVariants ? variantStockTotal : formData.quantity;
+    const effectiveQuantity = formData.type === 'variable' || hasVariants ? variantStockTotal : formData.quantity;
     const errs = validate({ ...formData, quantity: effectiveQuantity, _features: { pricing: pricingEnabled, showPrice } });
 
     // Block type change if invariants are violated
     if (!isNew && dbProduct && formData.type !== dbProduct.type) {
-        if (formData.type === 'combo' && dbProduct.variants?.length > 0) {
-            errs.type = 'Cannot change to Combo type: this product has existing variants. Delete them first.';
+        if (formData.type !== 'variable' && variantCount > 0) {
+            errs.type = 'Remove all variants, including inactive ones, before changing to Simple or Combo.';
         }
         if (formData.type !== 'combo' && dbProduct.comboItems?.length > 0) {
             errs.type = `Cannot change to ${formData.type} type: this product has combo items. Clear the bundle first.`;
         }
     }
 
+    if (formData.type === 'simple' && variantCount > 0) errs.type = 'This product already has variants. Select Variable Product and save.';
 
     if (Object.keys(errs).length > 0) {
       setErrors(errs);
@@ -463,6 +467,11 @@ const ProductEditPage = () => {
       return;
     }
 
+    let confirmInventoryReset = false;
+    if (!isNew && dbProduct?.type === 'simple' && formData.type !== 'simple' && !variantCount && Number(dbProduct.quantity || 0) > 0) {
+      confirmInventoryReset = await confirm({ title: 'Change how stock is managed?', message: `This product has ${dbProduct.quantity} units of standalone stock. Switching type clears that total. Set stock on each variant or bundle component afterward; units are not distributed automatically.`, confirmText: 'Change type and clear stock', cancelText: 'Keep editing', severity: 'warning' });
+      if (!confirmInventoryReset) return;
+    }
     setSaving(true);
     try {
       const payload = {
@@ -495,7 +504,8 @@ const ProductEditPage = () => {
 
       if (payload.type === 'simple') {
         payload.quantity = parseInt(formData.quantity) || 0;
-      }
+      } else delete payload.quantity;
+      if (confirmInventoryReset) payload.confirmInventoryReset = true;
       if (isNew) {
         const res = await createProduct(payload);
         const newId = res?.data?.id;
@@ -506,11 +516,18 @@ const ProductEditPage = () => {
           return;
         }
 
-        notify('Product created successfully. You can now add variants below.', 'success');
+        notify(payload.type === 'variable' ? 'Product saved. Add attributes and create variants below.' : 'Product created successfully.', 'success');
         navigate(`/admin/products/${newId}/edit`, { replace: true });
       } else {
         const res = await updateProduct(id, payload);
-        if (res?.data) setDbProduct(res.data);
+        if (res?.data) {
+          setDbProduct(res.data);
+          if (payload.type === 'variable') {
+            const active = (res.data.variants || []).filter((variant) => variant.isActive !== false);
+            setVariantStockTotal(active.reduce((sum, variant) => sum + Number(variant.stockQty || 0), 0));
+            setVariantCount((res.data.variants || []).length);
+          }
+        }
         notify('Product updated successfully.', 'success');
       }
     } catch (err) {
@@ -1105,24 +1122,17 @@ const ProductEditPage = () => {
               </FormControl>
 
               <FormControl fullWidth margin="normal" error={Boolean(errors.type)}>
-                <InputLabel>Product Type</InputLabel>
+                <InputLabel id="product-type-label">Product Type</InputLabel>
                 <Select
+                  labelId="product-type-label"
+                  disabled={saving || !canSaveProduct}
                   value={formData.type}
                   label="Product Type"
-                  onChange={async (e) => {
+                  onChange={(e) => {
                     const newType = e.target.value;
-                    if (newType === 'combo' && formData.type !== 'combo') {
-                        const ok = await confirm(
-                            'Switch to Combo Product?',
-                            'Changing to a Combo will clear the current stock quantity and SKU, as inventory will be managed via constituents. Existing variants will also be ignored. Continue?',
-                            'warning'
-                        );
-                        if (!ok) return;
-                        // Clear inventory fields for combo
-                        setFormData(prev => ({ ...prev, type: newType, quantity: 0, sku: '' }));
-                    } else {
-                        setField('type', newType);
-                    }
+                    if (newType !== 'variable' && variantCount > 0) { notify('Remove all variants, including inactive ones, before changing to Simple or Combo.', 'warning'); return; }
+                    if (newType !== 'combo' && dbProduct?.comboItems?.length > 0) { notify('Clear the bundle items before changing this product type.', 'warning'); return; }
+                    setField('type', newType);
                   }}
                 >
                   <MenuItem value="simple">Simple Product</MenuItem>
@@ -1130,7 +1140,9 @@ const ProductEditPage = () => {
                   <MenuItem value="combo">Combo / Bundle</MenuItem>
                 </Select>
                 {errors.type && <FormHelperText>{errors.type}</FormHelperText>}
+                <FormHelperText>{formData.type === 'variable' ? 'Customers choose a variant. Manage prices and stock per combination below.' : formData.type === 'combo' ? 'Bundle existing products. Stock depends on the included products.' : 'One version with its own price and stock quantity.'}</FormHelperText>
               </FormControl>
+              {formData.type === 'simple' && variantCount > 0 && <Alert severity="warning" action={<Button onClick={() => setField('type', 'variable')} disabled={!canSaveProduct}>Use Variable Product</Button>}>This product has existing variants. Select Variable Product and save to manage them.</Alert>}
 
             </Paper>
             
@@ -1260,14 +1272,15 @@ const ProductEditPage = () => {
 
                 <TextField
                   fullWidth
-                  label="Stock Quantity *"
+                  label={formData.type === 'variable' ? 'Total variant stock' : 'Stock Quantity *'}
                   type="number"
                   margin="normal"
                   inputProps={{ min: 0 }}
-                  value={formData.quantity}
+                  value={formData.type === 'variable' ? variantStockTotal : formData.quantity}
+                  InputProps={{ readOnly: formData.type === 'variable' || variantCount > 0 }}
                   onChange={(e) => setField('quantity', e.target.value)}
                   error={Boolean(errors.quantity)}
-                  helperText={errors.quantity}
+                  helperText={errors.quantity || (formData.type === 'variable' ? 'Calculated from active variants. Set each combination’s stock below; no variants means 0 stock.' : variantCount > 0 ? 'Existing variants manage stock. Save this product as Variable Product.' : 'Stock for this single product.')}
                 />
               </Paper>
             )}
@@ -1419,9 +1432,12 @@ const ProductEditPage = () => {
         </Box>
       </form>
 
-      {/* Variants panel — only visible once the product has been saved and has a real ID */}
-      {/* Variants panel — only visible once the product has been saved and has a real ID and is NOT a combo */}
-      {!isNew && formData.type !== 'combo' && (
+      {(isNew || dbProduct?.type !== 'variable') && formData.type === 'variable' && <Paper variant="outlined" sx={{ p: 3, mt: 3 }}>
+        <Typography variant="h6" fontWeight={700}>Attributes and variants</Typography>
+        <Typography variant="body2" color="text.secondary">Save the product first. You can then choose or create attributes, add their values, and generate variants.</Typography>
+      </Paper>}
+      {/* Variant operations require the Variable type to be saved first. */}
+      {!isNew && formData.type === 'variable' && dbProduct?.type === 'variable' && (
         <VariantsPanel 
           productId={id} 
           productName={formData.name}
