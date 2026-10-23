@@ -2,7 +2,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { createRequire } from 'node:module';
 
 const require = createRequire(import.meta.url);
-const { Menu, Category } = require('../../src/modules');
+const { Menu, MenuItem, Category } = require('../../src/modules');
 const MenuService = require('../../src/modules/menu/menu.service');
 const CategoryService = require('../../src/modules/category/category.service');
 
@@ -81,6 +81,41 @@ describe('synced category menu', () => {
     categories[1].name = 'Fresh Flowers';
     const publicSecond = await MenuService.getPublicMenuByLocation('category-sync-test');
     expect(publicSecond.items[1].children[0].label).toBe('Fresh Flowers');
+  });
+});
+
+describe('moving menu items', () => {
+  it('moves active and soft-deleted descendants with a selected synced category parent', async () => {
+    const storedItems = [
+      { id: 'fruit-root', menuId: 'source-menu', parentId: null, targetType: 'category', syncChildren: true },
+      { id: 'manual-child', menuId: 'source-menu', parentId: 'fruit-root', deletedAt: null },
+      { id: 'manual-grandchild', menuId: 'source-menu', parentId: 'manual-child', deletedAt: new Date() },
+    ];
+    vi.spyOn(Menu, 'findByPk').mockResolvedValue({ id: 'target-menu' });
+    vi.spyOn(MenuItem, 'findAll').mockImplementation(async ({ where, paranoid = true }) => {
+      const found = where.id
+        ? storedItems.filter((item) => where.id.includes(item.id))
+        : storedItems.filter((item) => item.menuId === where.menuId && item.parentId === where.parentId);
+      return paranoid ? found.filter((item) => !item.deletedAt) : found;
+    });
+    vi.spyOn(MenuItem, 'update').mockResolvedValue([1]);
+    vi.spyOn(MenuItem.sequelize, 'transaction').mockResolvedValue({
+      commit: vi.fn(),
+      rollback: vi.fn(),
+    });
+
+    await MenuService.moveItems(['fruit-root'], 'target-menu');
+
+    expect(MenuItem.update).toHaveBeenCalledTimes(3);
+    expect(MenuItem.update).toHaveBeenNthCalledWith(1,
+      { menuId: 'target-menu', parentId: null },
+      expect.objectContaining({ where: { id: 'fruit-root' }, paranoid: false, transaction: expect.any(Object) }));
+    expect(MenuItem.update).toHaveBeenNthCalledWith(2,
+      { menuId: 'target-menu', parentId: 'fruit-root' },
+      expect.objectContaining({ where: { id: 'manual-child' }, paranoid: false, transaction: expect.any(Object) }));
+    expect(MenuItem.update).toHaveBeenNthCalledWith(3,
+      { menuId: 'target-menu', parentId: 'manual-child' },
+      expect.objectContaining({ where: { id: 'manual-grandchild' }, paranoid: false, transaction: expect.any(Object) }));
   });
 });
 

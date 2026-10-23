@@ -554,7 +554,7 @@ exports.moveItems = async (itemIds, targetMenuId) => {
 
     const existingItems = await MenuItem.findAll({
         where: { id: itemIds },
-        attributes: ['id', 'parentId']
+        attributes: ['id', 'parentId', 'menuId']
     });
 
     if (existingItems.length !== itemIds.length) {
@@ -565,16 +565,33 @@ exports.moveItems = async (itemIds, targetMenuId) => {
 
     const transaction = await MenuItem.sequelize.transaction();
     try {
+        const idsToMove = new Set(itemIds);
         for (const item of existingItems) {
-            // Keep parent only if it's also being moved to the new menu
-            const isParentMoving = item.parentId && itemIds.includes(item.parentId);
+            const descendantIds = await getDescendantIds(item.id, item.menuId, new Set(), {
+                paranoid: false,
+                transaction,
+            });
+            descendantIds.forEach((id) => idsToMove.add(id));
+        }
+
+        const itemsToMove = await MenuItem.findAll({
+            where: { id: Array.from(idsToMove) },
+            attributes: ['id', 'parentId'],
+            paranoid: false,
+            transaction,
+        });
+        const movingIds = new Set(itemsToMove.map((item) => item.id));
+
+        for (const item of itemsToMove) {
+            // Keep parent links within the moved branch; detach only its external root.
+            const isParentMoving = item.parentId && movingIds.has(item.parentId);
             
             await MenuItem.update(
                 { 
                     menuId: targetMenuId,
                     parentId: isParentMoving ? item.parentId : null
                 },
-                { where: { id: item.id }, transaction }
+                { where: { id: item.id }, paranoid: false, transaction }
             );
         }
 
