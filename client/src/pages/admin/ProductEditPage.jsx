@@ -258,7 +258,7 @@ const ProductEditPage = () => {
       igst: 0.18,
     },
     // Shipping dimensions
-    requiresShipping: true,
+    requiresShipping: false,
     packingMode: 'standard',
     weightGrams: '',
     lengthCm: '',
@@ -339,7 +339,7 @@ const ProductEditPage = () => {
                 igst: 0.18,
               },
               // Shipping dimensions
-              requiresShipping: p.requiresShipping ?? true,
+              requiresShipping: p.requiresShipping ?? false,
               packingMode: p.packingMode || 'standard',
               weightGrams: p.weightGrams ?? '',
               lengthCm:    p.lengthCm    ?? '',
@@ -582,10 +582,20 @@ const ProductEditPage = () => {
 
   return (
     <Box sx={{ p: 3, mx: 'auto' }}>
-      <Typography variant="h5" component="h1" fontWeight={700} gutterBottom>
-        {isNew ? 'Create Product' : 'Edit Product'}
-      </Typography>
       <form onSubmit={handleSave} noValidate>
+        <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 3, flexWrap: 'wrap', gap: 2 }}>
+          <Typography variant="h5" component="h1" fontWeight={700}>
+            {isNew ? 'Create Product' : 'Edit Product'}
+          </Typography>
+          <Box sx={{ display: 'flex', gap: 2 }}>
+            <Button onClick={() => navigate('/admin/products')} disabled={saving}>
+              Cancel
+            </Button>
+            <Button variant="contained" type="submit" size="medium" disabled={saving || !canSaveProduct}>
+              {saving ? 'Saving…' : 'Save Product'}
+            </Button>
+          </Box>
+        </Box>
         <Grid container spacing={4}>
           <Grid item xs={12} md={8}>
             {productAssistantEnabled && (
@@ -946,118 +956,6 @@ const ProductEditPage = () => {
               )}
             </Paper>
 
-            {pricingEnabled && (
-              <Paper sx={{ p: 3, mb: 3, mt: 3 }}>
-                <Typography variant="h6" gutterBottom>
-                  Shipping &amp; Dimensions
-                </Typography>
-                <FormControlLabel
-                  control={
-                    <Switch
-                      checked={formData.requiresShipping}
-                      onChange={(e) => setField('requiresShipping', e.target.checked)}
-                    />
-                  }
-                  label="This product requires shipping"
-                  sx={{ mb: 2 }}
-                />
-
-                {formData.requiresShipping && (
-                  <>
-                    <FormControlLabel
-                      control={
-                        <Checkbox
-                          checked={formData.packingMode === 'separate'}
-                          onChange={(e) => setField('packingMode', e.target.checked ? 'separate' : 'standard')}
-                        />
-                      }
-                      label="Ship each unit separately (never combine in a single box)"
-                      sx={{ mb: 1, display: 'block' }}
-                    />
-                    <TextField
-                      fullWidth
-                      label="Weight (grams)"
-                      type="number"
-                      margin="normal"
-                      size="small"
-                      inputProps={{ min: 0, step: 1 }}
-                      InputProps={{
-                        endAdornment: <InputAdornment position="end">g</InputAdornment>,
-                      }}
-                      value={formData.weightGrams}
-                      onChange={(e) => setField('weightGrams', e.target.value)}
-                      error={Boolean(errors.weightGrams)}
-                      helperText={errors.weightGrams || "Actual product weight without the shipping box or envelope. Package tare weight is added separately."}
-                    />
-                    <Typography variant="subtitle2" sx={{ mt: 2, mb: 0.5 }}>Dimensions (cm)</Typography>
-                    <Typography variant="body2" color="text.secondary" sx={{ mb: 1 }}>Variants inherit absent measurements from the base product. Enter measured package-ready dimensions.</Typography>
-                    <Grid container spacing={1.5}>
-                      <Grid item xs={4}>
-                        <TextField
-                          fullWidth label="Length" type="number" size="small"
-                          inputProps={{ min: 0, step: 0.5 }}
-                          InputProps={{ endAdornment: <InputAdornment position="end">cm</InputAdornment> }}
-                          value={formData.lengthCm}
-                          onChange={(e) => setField('lengthCm', e.target.value)}
-                          error={Boolean(errors.lengthCm)}
-                          helperText={errors.lengthCm}
-                        />
-                      </Grid>
-                      <Grid item xs={4}>
-                        <TextField
-                          fullWidth label="Breadth" type="number" size="small"
-                          inputProps={{ min: 0, step: 0.5 }}
-                          InputProps={{ endAdornment: <InputAdornment position="end">cm</InputAdornment> }}
-                          value={formData.breadthCm}
-                          onChange={(e) => setField('breadthCm', e.target.value)}
-                          error={Boolean(errors.breadthCm)}
-                          helperText={errors.breadthCm}
-                        />
-                      </Grid>
-                      <Grid item xs={4}>
-                        <TextField
-                          fullWidth label="Height" type="number" size="small"
-                          inputProps={{ min: 0, step: 0.5 }}
-                          InputProps={{ endAdornment: <InputAdornment position="end">cm</InputAdornment> }}
-                          value={formData.heightCm}
-                          onChange={(e) => setField('heightCm', e.target.value)}
-                          error={Boolean(errors.heightCm)}
-                          helperText={errors.heightCm}
-                        />
-                      </Grid>
-                    </Grid>
-
-                    {/* Live volumetric weight preview */}
-                    {Boolean(formData.lengthCm && formData.breadthCm && formData.heightCm) && (
-                      (() => {
-                        const volWeight = Math.ceil(
-                          (Number(formData.lengthCm) * Number(formData.breadthCm) * Number(formData.heightCm)) / (Number(settings?.shipping?.volumetricDivisor) || 5000) * 1000
-                        );
-                        const actual = Number(formData.weightGrams) || 0;
-                        const chargeable = Math.ceil(Math.max(actual, volWeight) / 500) * 500;
-                        return (
-                          <Box sx={{
-                            mt: 2, p: 1.5, borderRadius: 1,
-                            bgcolor: 'action.hover',
-                            border: '1px dashed', borderColor: 'divider'
-                          }}>
-                            <Typography variant="caption" color="text.secondary" display="block">
-                              Volumetric weight: <strong>{volWeight} g</strong>
-                            </Typography>
-                            <Typography variant="caption" color="text.secondary" display="block">
-                              Actual weight: <strong>{actual} g</strong>
-                            </Typography>
-                            <Typography variant="caption" color="primary.main" fontWeight={700} display="block">
-                              Estimated chargeable weight before packaging: {chargeable} g
-                            </Typography>
-                          </Box>
-                        );
-                      })()
-                    )}
-                  </>
-                )}
-              </Paper>
-            )}
           </Grid>
 
           <Grid item xs={12} md={4}>
@@ -1128,7 +1026,7 @@ const ProductEditPage = () => {
 
             <Paper sx={{ p: 3, mb: 3 }}>
               <Typography variant="h6" gutterBottom>
-                Organization
+                Categories &amp; Brand
               </Typography>
               <Autocomplete
                 multiple
@@ -1281,22 +1179,163 @@ const ProductEditPage = () => {
               </Paper>
             )}
 
-
-            
-
-            {settings?.features?.seo !== false && (
+            {pricingEnabled && (
               <Paper sx={{ p: 3, mb: 3 }}>
-                <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 2 }}>
-                  <Typography variant="h6">
-                    SEO Configuration
-                  </Typography>
-                  <Chip label="SEO v2" size="small" color="primary" variant="outlined" />
-                </Box>
-                <Alert severity="info" sx={{ mb: 3 }}>
-                  Fine-tune how this product appears in search engines and social media. 
-                  If left blank, the system will auto-generate metadata.
-                </Alert>
-                
+                <Typography variant="h6" gutterBottom>
+                  Shipping &amp; Dimensions
+                </Typography>
+                <FormControlLabel
+                  control={
+                    <Switch
+                      checked={formData.requiresShipping}
+                      onChange={(e) => setField('requiresShipping', e.target.checked)}
+                    />
+                  }
+                  label="This product requires shipping"
+                  sx={{ mb: 2 }}
+                />
+
+                {formData.requiresShipping && (
+                  <>
+                    <FormControlLabel
+                      control={
+                        <Checkbox
+                          checked={formData.packingMode === 'separate'}
+                          onChange={(e) => setField('packingMode', e.target.checked ? 'separate' : 'standard')}
+                        />
+                      }
+                      label="Ship each unit separately (never combine in a single box)"
+                      sx={{ mb: 1, display: 'block' }}
+                    />
+                    <TextField
+                      fullWidth
+                      label="Weight (grams)"
+                      type="number"
+                      margin="normal"
+                      size="small"
+                      inputProps={{ min: 0, step: 1 }}
+                      InputProps={{
+                        endAdornment: <InputAdornment position="end">g</InputAdornment>,
+                      }}
+                      value={formData.weightGrams}
+                      onChange={(e) => setField('weightGrams', e.target.value)}
+                      error={Boolean(errors.weightGrams)}
+                      helperText={errors.weightGrams || "Actual product weight without packaging."}
+                    />
+                    <Typography variant="subtitle2" sx={{ mt: 2, mb: 0.5 }}>Dimensions (cm)</Typography>
+                    <Typography variant="caption" color="text.secondary" sx={{ mb: 1, display: 'block' }}>
+                      Variants inherit absent measurements from base product.
+                    </Typography>
+                    <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1.5, mt: 1 }}>
+                      <TextField
+                        fullWidth label="Length" type="number" size="small"
+                        inputProps={{ min: 0, step: 0.5 }}
+                        InputProps={{ endAdornment: <InputAdornment position="end">cm</InputAdornment> }}
+                        value={formData.lengthCm}
+                        onChange={(e) => setField('lengthCm', e.target.value)}
+                        error={Boolean(errors.lengthCm)}
+                        helperText={errors.lengthCm}
+                      />
+                      <TextField
+                        fullWidth label="Breadth" type="number" size="small"
+                        inputProps={{ min: 0, step: 0.5 }}
+                        InputProps={{ endAdornment: <InputAdornment position="end">cm</InputAdornment> }}
+                        value={formData.breadthCm}
+                        onChange={(e) => setField('breadthCm', e.target.value)}
+                        error={Boolean(errors.breadthCm)}
+                        helperText={errors.breadthCm}
+                      />
+                      <TextField
+                        fullWidth label="Height" type="number" size="small"
+                        inputProps={{ min: 0, step: 0.5 }}
+                        InputProps={{ endAdornment: <InputAdornment position="end">cm</InputAdornment> }}
+                        value={formData.heightCm}
+                        onChange={(e) => setField('heightCm', e.target.value)}
+                        error={Boolean(errors.heightCm)}
+                        helperText={errors.heightCm}
+                      />
+                    </Box>
+
+                    {/* Live volumetric weight preview */}
+                    {Boolean(formData.lengthCm && formData.breadthCm && formData.heightCm) && (
+                      (() => {
+                        const volWeight = Math.ceil(
+                          (Number(formData.lengthCm) * Number(formData.breadthCm) * Number(formData.heightCm)) / (Number(settings?.shipping?.volumetricDivisor) || 5000) * 1000
+                        );
+                        const actual = Number(formData.weightGrams) || 0;
+                        const chargeable = Math.ceil(Math.max(actual, volWeight) / 500) * 500;
+                        return (
+                          <Box sx={{
+                            mt: 2, p: 1.5, borderRadius: 1,
+                            bgcolor: 'action.hover',
+                            border: '1px dashed', borderColor: 'divider'
+                          }}>
+                            <Typography variant="caption" color="text.secondary" display="block">
+                              Volumetric weight: <strong>{volWeight} g</strong>
+                            </Typography>
+                            <Typography variant="caption" color="text.secondary" display="block">
+                              Actual weight: <strong>{actual} g</strong>
+                            </Typography>
+                            <Typography variant="caption" color="primary.main" fontWeight={700} display="block">
+                              Estimated chargeable weight: {chargeable} g
+                            </Typography>
+                          </Box>
+                        );
+                      })()
+                    )}
+                  </>
+                )}
+              </Paper>
+            )}
+          </Grid>
+        </Grid>
+
+        {/* Variants panel — only visible once the product has been saved and has a real ID and is NOT a combo */}
+        {!isNew && formData.type !== 'combo' && (
+          <Box onKeyDown={(e) => { if (e.key === 'Enter' && e.target.tagName !== 'TEXTAREA') e.stopPropagation(); }}>
+            <VariantsPanel 
+              productId={id} 
+              productName={formData.name}
+              productSku={formData.sku}
+              categoryIds={formData.categoryIds} 
+              flatCatFiles={flatCatFiles} 
+              canManageVariants={canUpdateProducts} 
+              onStockTotalChange={handleVariantStockChange}
+              globalPrimaryVersion={globalPrimaryVersion}
+              onVariantPrimarySelected={() => setFormData((prev) => ({
+                ...prev,
+                images: prev.images.map((img) => ({ ...img, isPrimary: false })),
+              }))}
+            />
+          </Box>
+        )}
+
+        {/* Custom Tabs panel — only after product is saved */}
+        {!isNew && (
+          <Box onKeyDown={(e) => { if (e.key === 'Enter' && e.target.tagName !== 'TEXTAREA') e.stopPropagation(); }}>
+            <ProductCustomTabs
+              productId={id}
+              canEdit={canUpdateProducts}
+            />
+          </Box>
+        )}
+
+        {/* SEO Configuration — always last, even after Attributes and Variants */}
+        {settings?.features?.seo !== false && (
+          <Paper sx={{ p: 3, mt: 3 }}>
+            <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 2 }}>
+              <Typography variant="h6">
+                SEO Configuration
+              </Typography>
+              <Chip label="SEO v2" size="small" color="primary" variant="outlined" />
+            </Box>
+            <Alert severity="info" sx={{ mb: 3 }}>
+              Fine-tune how this product appears in search engines and social media.
+              If left blank, the system will auto-generate metadata.
+            </Alert>
+
+            <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', md: 'minmax(0, 5fr) minmax(0, 3fr) minmax(0, 4fr)' }, gap: 3, alignItems: 'start' }}>
+              <Box>
                 <TextField
                   fullWidth
                   label="Meta Title"
@@ -1328,77 +1367,77 @@ const ProductEditPage = () => {
                   onChange={(e) => setField('metaKeywords', e.target.value)}
                   helperText="Used for internal search optimization. Separate with commas."
                 />
-                
-                <Box sx={{ mt: 2 }}>
-                  <Typography variant="subtitle2" gutterBottom>Social Sharing Image (OG Image)</Typography>
-                  {canUploadMedia && (
-                    <>
-                      <Button
-                        variant="outlined"
-                        size="small"
-                        onClick={() => setOgPickerOpen(true)}
-                        startIcon={<ImageIcon />}
-                      >
-                        Select from Media Library
-                      </Button>
-                      <MediaPicker
-                        open={ogPickerOpen}
-                        onClose={() => setOgPickerOpen(false)}
-                        onSelect={(selected) => {
-                          const media = Array.isArray(selected) ? selected[0] : selected;
-                          if (media?.url) setField('ogImage', media.url);
-                          setOgPickerOpen(false);
-                        }}
-                        multiple={false}
-                        title="Select OG Image"
-                      />
-                    </>
-                  )}
-                  {formData.ogImage && (
-                    <Box sx={{ mt: 2, position: 'relative', width: 'fit-content' }}>
-                      <img 
-                        src={getMediaUrl(formData.ogImage)} 
-                        alt="SEO Preview" 
-                        style={{ maxWidth: '100%', maxHeight: 200, borderRadius: 8, border: '1px solid #ddd' }} 
-                      />
-                      {canSaveProduct && (
-                        <IconButton 
-                          size="small" 
-                          color="error" 
-                          sx={{ position: 'absolute', top: -10, right: -10, bgcolor: 'background.paper', boxShadow: 1 }}
-                          onClick={() => setField('ogImage', '')}
-                        >
-                          <DeleteIcon fontSize="small" />
-                        </IconButton>
-                      )}
-                    </Box>
-                  )}
-                  {!canUploadMedia && !formData.ogImage && (
-                    <Typography variant="caption" color="text.secondary">
-                      You do not have permission to upload media.
-                    </Typography>
-                  )}
-                  <FormHelperText>Recommended size: 1200x630px</FormHelperText>
-                </Box>
 
-                <Box sx={{ mt: 3, p: 2, bgcolor: '#f8f9fa', borderRadius: 2, border: '1px solid #e0e0e0' }}>
-                  <Typography variant="caption" color="text.secondary" sx={{ fontWeight: 700, mb: 1, display: 'block' }}>
-                    GOOGLE SEARCH PREVIEW
+              </Box>
+              <Box sx={{ mt: { xs: 0, md: 2 } }}>
+                <Typography variant="subtitle2" gutterBottom>Social Sharing Image (OG Image)</Typography>
+                {canUploadMedia && (
+                  <>
+                    <Button
+                      variant="outlined"
+                      size="small"
+                      onClick={() => setOgPickerOpen(true)}
+                      startIcon={<ImageIcon />}
+                    >
+                      Select from Media Library
+                    </Button>
+                    <MediaPicker
+                      open={ogPickerOpen}
+                      onClose={() => setOgPickerOpen(false)}
+                      onSelect={(selected) => {
+                        const media = Array.isArray(selected) ? selected[0] : selected;
+                        if (media?.url) setField('ogImage', media.url);
+                        setOgPickerOpen(false);
+                      }}
+                      multiple={false}
+                      title="Select OG Image"
+                    />
+                  </>
+                )}
+                {formData.ogImage && (
+                  <Box sx={{ mt: 2, position: 'relative', width: 'fit-content' }}>
+                    <img
+                      src={getMediaUrl(formData.ogImage)}
+                      alt="SEO Preview"
+                      style={{ maxWidth: '100%', maxHeight: 200, borderRadius: 8, border: '1px solid #ddd' }}
+                    />
+                    {canSaveProduct && (
+                      <IconButton
+                        size="small"
+                        color="error"
+                        sx={{ position: 'absolute', top: -10, right: -10, bgcolor: 'background.paper', boxShadow: 1 }}
+                        onClick={() => setField('ogImage', '')}
+                      >
+                        <DeleteIcon fontSize="small" />
+                      </IconButton>
+                    )}
+                  </Box>
+                )}
+                {!canUploadMedia && !formData.ogImage && (
+                  <Typography variant="caption" color="text.secondary">
+                    You do not have permission to upload media.
                   </Typography>
-                  <Typography variant="body1" sx={{ color: '#1a0dab', fontSize: '18px', '&:hover': { textDecoration: 'underline' }, cursor: 'pointer', mb: 0.5 }}>
-                    {formData.metaTitle || formData.name || 'Product Name'} {settings?.seo?.titleSuffix || ' | My Store'}
-                  </Typography>
-                  <Typography variant="body2" sx={{ color: '#006621', fontSize: '14px', mb: 0.5 }}>
-                    {window.location.origin}/product/{formData.slug || 'slug'}
-                  </Typography>
-                  <Typography variant="body2" sx={{ color: '#545454', fontSize: '13px', lineHeight: 1.4 }}>
-                    {formData.metaDescription || formData.shortDescription || 'Your product description will appear here...'}
-                  </Typography>
-                </Box>
-              </Paper>
-            )}
-          </Grid>
-        </Grid>
+                )}
+                <FormHelperText>Recommended size: 1200x630px</FormHelperText>
+              </Box>
+
+              <Box sx={{ mt: { xs: 0, md: 2 }, p: 2, bgcolor: '#f8f9fa', borderRadius: 2, border: '1px solid #e0e0e0', overflowWrap: 'anywhere' }}>
+                <Typography variant="caption" color="text.secondary" sx={{ fontWeight: 700, mb: 1, display: 'block' }}>
+                  GOOGLE SEARCH PREVIEW
+                </Typography>
+                <Typography variant="body1" sx={{ color: '#1a0dab', fontSize: '18px', '&:hover': { textDecoration: 'underline' }, cursor: 'pointer', mb: 0.5 }}>
+                  {formData.metaTitle || formData.name || 'Product Name'} {settings?.seo?.titleSuffix || ' | My Store'}
+                </Typography>
+                <Typography variant="body2" sx={{ color: '#006621', fontSize: '14px', mb: 0.5 }}>
+                  {window.location.origin}/product/{formData.slug || 'slug'}
+                </Typography>
+                <Typography variant="body2" sx={{ color: '#545454', fontSize: '13px', lineHeight: 1.4 }}>
+                  {formData.metaDescription || formData.shortDescription || 'Your product description will appear here...'}
+                </Typography>
+              </Box>
+            </Box>
+          </Paper>
+        )}
 
         <Box sx={{ mt: 4, display: 'flex', justifyContent: 'flex-end', gap: 2 }}>
           <Button onClick={() => navigate('/admin/products')} disabled={saving}>
@@ -1409,33 +1448,6 @@ const ProductEditPage = () => {
           </Button>
         </Box>
       </form>
-
-      {/* Variants panel — only visible once the product has been saved and has a real ID */}
-      {/* Variants panel — only visible once the product has been saved and has a real ID and is NOT a combo */}
-      {!isNew && formData.type !== 'combo' && (
-        <VariantsPanel 
-          productId={id} 
-          productName={formData.name}
-          productSku={formData.sku}
-          categoryIds={formData.categoryIds} 
-          flatCatFiles={flatCatFiles} 
-          canManageVariants={canUpdateProducts} 
-          onStockTotalChange={handleVariantStockChange}
-          globalPrimaryVersion={globalPrimaryVersion}
-          onVariantPrimarySelected={() => setFormData((prev) => ({
-            ...prev,
-            images: prev.images.map((img) => ({ ...img, isPrimary: false })),
-          }))}
-        />
-      )}
-
-      {/* Custom Tabs panel — only after product is saved */}
-      {!isNew && (
-        <ProductCustomTabs
-          productId={id}
-          canEdit={canUpdateProducts}
-        />
-      )}
     </Box>
   );
 };
