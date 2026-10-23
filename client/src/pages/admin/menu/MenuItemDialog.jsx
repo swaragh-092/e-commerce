@@ -2,12 +2,14 @@ import React from 'react';
 import {
   Box,
   Button,
+  Checkbox,
   Dialog,
   DialogActions,
   DialogContent,
   DialogTitle,
   Divider,
   FormControl,
+  FormControlLabel,
   Grid,
   InputLabel,
   MenuItem,
@@ -97,6 +99,7 @@ const MenuItemDialog = ({
                         ...itemForm,
                         targetType: newType,
                         targetId: '',
+                        syncChildren: newType === 'category' ? Boolean(itemForm.syncChildren) : false,
                         url: '',
                         openInNewTab: false,
                       };
@@ -123,6 +126,22 @@ const MenuItemDialog = ({
                 <Grid item xs={12}>
                   <Typography variant="body2" color="text.secondary">
                     All categories appear below this item in the same hierarchy and order as Categories Management. Existing manual children are preserved but hidden while sync is active.
+                  </Typography>
+                </Grid>
+              )}
+              {itemForm.targetType === 'category' && (
+                <Grid item xs={12}>
+                  <FormControlLabel
+                    control={(
+                      <Checkbox
+                        checked={Boolean(itemForm.syncChildren)}
+                        onChange={(e) => setItemForm({ ...itemForm, syncChildren: e.target.checked })}
+                      />
+                    )}
+                    label="Sync child categories automatically"
+                  />
+                  <Typography variant="body2" color="text.secondary" sx={{ ml: 4 }}>
+                    Keep this menu branch in sync with the selected category’s child categories and their order.
                   </Typography>
                 </Grid>
               )}

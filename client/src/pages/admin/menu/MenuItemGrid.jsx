@@ -66,7 +66,7 @@ const MenuItemGrid = ({
 
     // 2. Prepare the destination parent items
     const destParentId = destination.droppableId === 'root' ? null : destination.droppableId;
-    if (rows.some((row) => row.id === destParentId && row.targetType === 'category_tree')) return;
+    if (rows.some((row) => row.id === destParentId && (row.targetType === 'category_tree' || row.syncChildren))) return;
     const destItems = rows
       .filter(r => !r.generatedFromCategory && (r.parentId || 'root') === destination.droppableId)
       .filter(r => String(r.id) !== result.draggableId) // Remove from current position if it was already there
@@ -109,7 +109,7 @@ const MenuItemGrid = ({
     // Always render a Droppable for potential children, even if empty,
     // to allow dragging items into it to create submenus.
     // Except we limit depth for sanity.
-    if (depth > 3 || rows.some((row) => row.id === parentId && row.targetType === 'category_tree')) return null;
+    if (depth > 3 || rows.some((row) => row.id === parentId && (row.targetType === 'category_tree' || row.syncChildren))) return null;
 
     return (
       <Droppable droppableId={parentId} type="items">
@@ -199,7 +199,7 @@ const MenuItemGrid = ({
       width: 160,
       valueGetter: (value, row) => row?.generatedFromCategory
         ? 'Synced category'
-        : ({ none: 'Label only', custom_url: 'Custom URL', system_route: 'Store page', category_tree: 'Synced categories', collection: 'Category' }[value] || value),
+        : (row?.syncChildren ? 'Category + synced children' : ({ none: 'Label only', custom_url: 'Custom URL', system_route: 'Store page', category_tree: 'Synced categories', collection: 'Category' }[value] || value)),
     },
     { field: 'url', headerName: 'URL', flex: 1 },
     { field: 'sortOrder', headerName: 'Order', width: 90 },
