@@ -61,7 +61,8 @@ const getComboItems = async (productId) => {
  */
 const syncComboItems = async (productId, items = []) => {
     return sequelize.transaction(async (t) => {
-        const product = await Product.findByPk(productId, { transaction: t, attributes: ['id', 'type', 'name'] });
+        await sequelize.query('SELECT pg_advisory_xact_lock(hashtext(:scope), hashtext(:productId))', { replacements: { scope: 'product-variant-generation', productId }, transaction: t });
+        const product = await Product.findByPk(productId, { transaction: t, lock: t.LOCK.UPDATE, attributes: ['id', 'type', 'name'] });
         if (!product) throw new AppError('NOT_FOUND', 404, 'Product not found');
         if (product.type !== 'combo') {
             throw new AppError('VALIDATION_ERROR', 400, 'Product type must be "combo" to manage combo items');
@@ -92,6 +93,9 @@ const syncComboItems = async (productId, items = []) => {
                 if (constituent.type === 'combo') {
                     throw new AppError('VALIDATION_ERROR', 400, 'Nested combos are not allowed');
                 }
+                if (constituent.type === 'variable' && !ci.variantId) {
+                    throw new AppError('VALIDATION_ERROR', 400, 'Choose a specific variant for each Variable Product in the bundle.');
+                }
 
                 // Ensure quantity > 0
                 if (!ci.quantity || ci.quantity <= 0) {
@@ -101,7 +105,7 @@ const syncComboItems = async (productId, items = []) => {
                 // Ensure variant belongs to item product
                 if (ci.variantId) {
                     const variantExists = await ProductVariant.findOne({
-                        where: { id: ci.variantId, productId: ci.itemProductId },
+                        where: { id: ci.variantId, productId: ci.itemProductId, isActive: true },
                         transaction: t,
                         attributes: ['id']
                     });

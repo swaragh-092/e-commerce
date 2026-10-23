@@ -32,10 +32,11 @@ describe('variant generation plan', () => {
     const rows = Array.from({ length: 23 }, (_, index) => [row(String(index)), row(String(index), 'size')]).flat();
     expect(() => buildVariantGenerationPlan(rows, [])).toThrow('within 500 variants');
   });
-  it('bounds previews while counting the entire selection', () => {
+  it('returns every combination with identifiers for editing, beyond the former 12-row preview', () => {
     const rows = Array.from({ length: 20 }, (_, index) => row(String(index)));
     expect(buildVariantGenerationPlan(rows, []).review).toMatchObject({ total: 20, combinations: expect.any(Array) });
-    expect(buildVariantGenerationPlan(rows, []).review.combinations).toHaveLength(12);
+    expect(buildVariantGenerationPlan(rows, []).review.combinations).toHaveLength(20);
+    expect(buildVariantGenerationPlan(rows, []).review.combinations[19].valueIds).toEqual(['19']);
   });
   it('detects changed prices, stock and selected values without depending on row order', () => {
     const rows = [row('10'), row('20')];
@@ -56,7 +57,7 @@ describe('reviewed variant writes', () => {
     rows = [row('10'), row('20')]; variants = [variant('keep', [['height', '10']], { stockQty: 4, sku: 'KEEP' })];
     vi.spyOn(db.sequelize, 'transaction').mockImplementation(async (callback) => callback(tx));
     vi.spyOn(db.sequelize, 'query').mockResolvedValue([]);
-    vi.spyOn(db.Product, 'findByPk').mockResolvedValue({ id: 'product', price: 100 });
+    vi.spyOn(db.Product, 'findByPk').mockResolvedValue({ id: 'product', type: 'variable', price: 100 });
     vi.spyOn(db.ProductAttribute, 'findAll').mockImplementation(async () => rows);
     vi.spyOn(db.ProductVariant, 'findAll').mockImplementation(async () => variants);
     vi.spyOn(db.ProductVariant, 'findOne').mockImplementation(async () => variants[0]);
@@ -71,6 +72,48 @@ describe('reviewed variant writes', () => {
     await service.bulkGenerateVariants('product', { planToken: review.token, defaultPrice: 200, defaultStockQty: 1 });
     expect(db.ProductVariant.create).toHaveBeenCalledExactlyOnceWith(expect.objectContaining({ price: 200, stockQty: 1 }), { transaction: tx });
     expect(variants[0]).toMatchObject({ price: 150, stockQty: 4, sku: 'KEEP' });
+    expect(variants[0].destroy).not.toHaveBeenCalled();
+  });
+  it('creates only chosen new combinations with their own prices and stock', async () => {
+    rows.push(row('30'), row('40'));
+    const review = await service.previewVariantGeneration('product');
+    await service.bulkGenerateVariants('product', { planToken: review.token, newVariants: [
+      { valueIds: ['20'], price: 199.5, stockQty: 7 }, { valueIds: ['40'], price: 249, stockQty: 2 },
+    ] });
+    expect(db.ProductVariant.create).toHaveBeenCalledTimes(2);
+    expect(db.ProductVariant.create).toHaveBeenNthCalledWith(1, expect.objectContaining({ price: 199.5, stockQty: 7 }), { transaction: tx });
+    expect(db.ProductVariant.create).toHaveBeenNthCalledWith(2, expect.objectContaining({ price: 249, stockQty: 2 }), { transaction: tx });
+    expect(db.VariantOption.bulkCreate).toHaveBeenNthCalledWith(2, [{ variantId: 'new', attributeId: 'height', valueId: '40' }], { transaction: tx });
+    expect(variants[0]).toMatchObject({ price: 150, stockQty: 4, sku: 'KEEP' });
+    expect(variants[0].destroy).not.toHaveBeenCalled();
+  });
+  it.each([
+    [{ valueIds: ['foreign'], price: 1, stockQty: 0 }],
+    [{ valueIds: ['10'], price: 1, stockQty: 0 }],
+    [{ valueIds: ['20'], price: 1, stockQty: 0 }, { valueIds: ['20'], price: 2, stockQty: 1 }],
+    [{ valueIds: ['20'], price: -1, stockQty: 0 }],
+    [{ valueIds: ['20'], price: 1.234, stockQty: 0 }],
+    [{ valueIds: ['20'], price: 1, stockQty: 1.5 }],
+    [{ valueIds: ['20'], price: 1, stockQty: -1 }],
+  ])('rejects invalid customization before writes: %j', async (...newVariants) => {
+    const review = await service.previewVariantGeneration('product');
+    await expect(service.bulkGenerateVariants('product', { planToken: review.token, newVariants })).rejects.toThrow();
+    expect(db.ProductVariant.create).not.toHaveBeenCalled();
+    expect(variants[0].destroy).not.toHaveBeenCalled();
+  });
+  it('requires a review token for custom creation', async () => {
+    await expect(service.bulkGenerateVariants('product', { newVariants: [{ valueIds: ['20'], price: 1, stockQty: 0 }] })).rejects.toThrow('Preview');
+    expect(db.ProductVariant.create).not.toHaveBeenCalled();
+  });
+  it('rejects aggregate stock overflow from custom values', async () => {
+    const review = await service.previewVariantGeneration('product');
+    await expect(service.bulkGenerateVariants('product', { planToken: review.token, newVariants: [{ valueIds: ['20'], price: 1, stockQty: 2147483647 }] })).rejects.toThrow('combined variant stock');
+    expect(db.ProductVariant.create).not.toHaveBeenCalled();
+  });
+  it('does not remove every variant when nothing is chosen to replace them', async () => {
+    rows = [row('30')];
+    const review = await service.previewVariantGeneration('product');
+    await expect(service.bulkGenerateVariants('product', { planToken: review.token, confirmRemovals: true, newVariants: [] })).rejects.toThrow('at least one combination');
     expect(variants[0].destroy).not.toHaveBeenCalled();
   });
   it('rejects a stale review before changing anything', async () => {
@@ -106,6 +149,17 @@ describe('reviewed variant writes', () => {
     expect(generateVariantsSchema.validate({ planToken: 'invalid' }).error).toBeDefined();
     expect(generateVariantsSchema.validate({ defaultStockQty: 1.5 }).error).toBeDefined();
     expect(generateVariantsSchema.validate({ defaultPrice: -1 }).error).toBeDefined();
+  });
+  it('validates customized combinations at the API boundary', () => {
+    const entry = { valueIds: ['11111111-1111-4111-8111-111111111111'], price: 199.5, stockQty: 7 };
+    const data = { planToken: 'a'.repeat(64), newVariants: [entry] };
+    expect(generateVariantsSchema.validate(data).error).toBeUndefined();
+    expect(generateVariantsSchema.validate({ newVariants: [entry] }).error).toBeDefined();
+    expect(generateVariantsSchema.validate({ ...data, newVariants: [{ ...entry, price: 1.234 }] }).error).toBeDefined();
+    expect(generateVariantsSchema.validate({ ...data, newVariants: [{ ...entry, stockQty: -1 }] }).error).toBeDefined();
+    expect(generateVariantsSchema.validate({ ...data, newVariants: [{ ...entry, stockQty: 1.5 }] }).error).toBeDefined();
+    expect(generateVariantsSchema.validate({ ...data, newVariants: [{ ...entry, valueIds: ['invalid'] }] }).error).toBeDefined();
+    expect(generateVariantsSchema.validate({ ...data, newVariants: [{ ...entry, valueIds: [...entry.valueIds, ...entry.valueIds] }] }).error).toBeDefined();
   });
   it('rejects aggregate stock overflow before writing variants', async () => {
     const review = await service.previewVariantGeneration('product');

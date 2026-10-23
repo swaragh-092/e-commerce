@@ -3,6 +3,10 @@
 const productAttributeService = require('./productAttribute.service');
 const { assignProductAttribute } = require('./productAttributeAssignment.service');
 const { success } = require('../../utils/response');
+exports.reorderProductAttributes = async (req, res, next) => {
+    try { return success(res, await productAttributeService.reorderProductAttributes(req.params.id, req.body.rowIds), 'Product attribute order saved'); }
+    catch (err) { next(err); }
+};
 
 exports.assignProductAttribute = async (req, res, next) => {
     try { return success(res, await assignProductAttribute(req.params.id, req.body), 'Attribute values assigned'); }

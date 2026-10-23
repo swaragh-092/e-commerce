@@ -135,7 +135,7 @@ const addItem = async (userId, sessionId, payload) => {
                 where: { productId, isActive: true },
                 transaction: t,
             });
-            if (activeVariantCount > 0) {
+            if (product.type === 'variable' || activeVariantCount > 0) {
                 throw new AppError('VALIDATION_ERROR', 400, 'Please select a variant option before adding to cart');
             }
             availableStock = Number(product.quantity || 0) - Number(product.reservedQty || 0);
@@ -212,7 +212,7 @@ const updateItem = async (userId, sessionId, itemId, quantity) => {
                 where: { productId: item.productId, isActive: true },
                 transaction: t,
             });
-            if (activeVariantCount > 0) {
+            if (product.type === 'variable' || activeVariantCount > 0) {
                 await item.destroy({ transaction: t });
                 throw new AppError('CONFLICT', 409, 'Product now requires option selection and was removed from cart');
             }

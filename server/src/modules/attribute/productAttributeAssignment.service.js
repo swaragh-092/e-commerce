@@ -6,6 +6,7 @@ const { lockUnitSettings, readUnitSettings } = require('../settings/unitCatalog'
 const { validateAttributeCategory, validateValueUnit } = require('./attributeUnits');
 const { generateSlug } = require('../../utils/slugify');
 const AppError = require('../../utils/AppError');
+const { assertVariableProduct } = require('../product/productType');
 
 const normalize = (value) => String(value || '').trim().replace(/\s+/g, ' ').toLowerCase();
 
@@ -14,8 +15,9 @@ const normalize = (value) => String(value || '').trim().replace(/\s+/g, ' ').toL
 const assignProductAttribute = async (productId, data) => sequelize.transaction(async (transaction) => {
     const isVariantAttr = data.isVariantAttr ?? false;
     await lockUnitSettings(transaction);
-    const product = await Product.findByPk(productId, { attributes: ['id'], transaction, lock: transaction.LOCK.UPDATE });
+    const product = await Product.findByPk(productId, { attributes: ['id', 'type'], transaction, lock: transaction.LOCK.UPDATE });
     if (!product) throw new AppError('NOT_FOUND', 404, 'Save the product before assigning attributes.');
+    if (isVariantAttr) assertVariableProduct(product);
     const settings = await readUnitSettings(transaction);
     let template;
     if (data.attributeId) {
@@ -35,6 +37,8 @@ const assignProductAttribute = async (productId, data) => sequelize.transaction(
         }
     }
     const available = await AttributeValue.findAll({ where: { attributeId: template.id }, transaction });
+    const allRows = await ProductAttribute.findAll({ where: { productId }, transaction });
+    let nextSortOrder = Math.max(-1, ...allRows.map((row) => Number(row.sortOrder || 0))) + 1;
     const selected = new Map();
     for (const item of data.values) {
         let value;
@@ -64,10 +68,10 @@ const assignProductAttribute = async (productId, data) => sequelize.transaction(
         if (existing) {
             if (existing.isVariantAttr !== isVariantAttr) await existing.update({ isVariantAttr }, { transaction });
         } else {
-            await ProductAttribute.create({ productId, attributeId: template.id, valueId: value.id, isVariantAttr }, { transaction });
+            await ProductAttribute.create({ productId, attributeId: template.id, valueId: value.id, isVariantAttr, sortOrder: nextSortOrder++ }, { transaction });
         }
     }
-    return ProductAttribute.findAll({ where: { productId }, include: [{ model: AttributeTemplate, as: 'attribute' }, { model: AttributeValue, as: 'value' }], order: [['sortOrder', 'ASC'], ['createdAt', 'ASC']], transaction });
+    return ProductAttribute.findAll({ where: { productId }, include: [{ model: AttributeTemplate, as: 'attribute' }, { model: AttributeValue, as: 'value' }], order: [['sortOrder', 'ASC'], ['createdAt', 'ASC'], ['id', 'ASC']], transaction });
 });
 
 module.exports = { assignProductAttribute };

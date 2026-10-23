@@ -14,6 +14,7 @@ const {
   OrderItem,
   Media,
   ProductTab,
+  ProductComboItem,
   Sequelize,
   sequelize,
 } = require('../index');
@@ -40,6 +41,7 @@ const { events, PRODUCT_EVENTS } = require('../../utils/events');
 const { getSaleLabels } = require('../settings/saleLabel.service');
 const SettingsService = require('../settings/settings.service');
 const inventoryService = require('../inventory/inventory.service');
+const { validateProductTypeChange } = require('./productType');
 const { normalizeSearchQuery, buildSearchPattern } = require('../search/search.utils');
 
 
@@ -445,11 +447,7 @@ const replaceVariantsWithOptions = async (productId, variants, transaction) => {
     transaction,
   });
 
-  const variantIds = existingVariants.map((variant) => variant.id);
-  if (variantIds.length) {
-    await VariantOption.destroy({ where: { variantId: variantIds }, transaction });
-    await ProductVariant.destroy({ where: { id: variantIds }, force: true, transaction });
-  }
+  if (existingVariants.length) throw new AppError('VALIDATION_ERROR', 400, 'Use the variant editor to update existing combinations. Product updates cannot replace variant history.');
 
   await createVariantsWithOptions(productId, variants, transaction);
 };
@@ -468,6 +466,10 @@ exports.getProducts = async (filters, page, limit, isAdmin = false) => {
 
   // Always restrict storefront results to published + enabled products. Admins can filter by state.
   applyProductStorefrontFilters(where, filters, isAdmin);
+  if (typeof filters.hasVariants === 'boolean' || filters.hasVariants === 'true' || filters.hasVariants === 'false') {
+    const hasVariants = filters.hasVariants === true || filters.hasVariants === 'true';
+    where[Op.and] = [...(where[Op.and] || []), Sequelize.literal(`${hasVariants ? '' : 'NOT '}EXISTS (SELECT 1 FROM "product_variants" AS copy_variant WHERE copy_variant.product_id = "Product".id AND copy_variant.deleted_at IS NULL)`)];
+  }
 
   // Filter Logic
   if (typeof filters.search === 'string' && filters.search.length > 0) {
@@ -884,6 +886,13 @@ exports.createProduct = async (data, auditContext = null) => {
   const labelPresets = await getLabelPresets();
   try {
     data = normalizeSalePayload(data, null, { labelPresets });
+    if (data.type !== 'simple') {
+      if (data.quantity !== undefined) throw new AppError('VALIDATION_ERROR', 400, 'Stock is managed by variants or bundle items for this product type.');
+      if (data.type !== 'variable' && data.variants?.length) throw new AppError('VALIDATION_ERROR', 400, 'Only Variable Products can have variants.');
+      data.quantity = 0;
+    } else if (data.variants?.length) {
+      throw new AppError('VALIDATION_ERROR', 400, 'Only Variable Products can have variants.');
+    }
     const slug = data.slug ? await generateSlug(data.slug, Product, 'slug', { transaction }) : await generateSlug(data.name, Product, 'slug', { transaction });
 
     if (data.description) data.description = sanitizeRichText(data.description);
@@ -947,12 +956,19 @@ exports.createProduct = async (data, auditContext = null) => {
 };
 
 exports.updateProduct = async (id, data, auditContext = null) => {
-  const product = await Product.findByPk(id);
+  let product = await Product.findByPk(id);
   if (!product) throw new AppError('NOT_FOUND', 404, 'Product not found');
 
   const transaction = await Product.sequelize.transaction();
   const labelPresets = await getLabelPresets();
   try {
+    // Match generation/inventory lock order and serialize type changes with generation.
+    await sequelize.query('SELECT pg_advisory_xact_lock(hashtext(:scope), hashtext(:productId))', {
+      replacements: { scope: 'product-variant-generation', productId: id }, transaction,
+    });
+    await ProductVariant.findAll({ where: { productId: id }, order: [['id', 'ASC']], transaction, lock: transaction.LOCK.UPDATE });
+    product = await Product.findByPk(id, { transaction, lock: transaction.LOCK.UPDATE });
+    if (!product) throw new AppError('NOT_FOUND', 404, 'Product not found');
     data = normalizeSalePayload(data, product, { labelPresets });
     
     if (data.slug && data.slug !== product.slug) {
@@ -971,15 +987,16 @@ exports.updateProduct = async (id, data, auditContext = null) => {
     }
 
     const variantsExist = await productHasVariants(id, transaction);
-    const willHaveVariants = Array.isArray(data.variants)
-      ? data.variants.length > 0
-      : variantsExist;
-
-    if (willHaveVariants && data.quantity !== undefined) {
-      logger.warn(`Attempted to set quantity directly on variant product ${id}. Ignoring — stock is managed by variants.`);
-      delete data.quantity;
+    const hasComboItems = await ProductComboItem.count({ where: { comboProductId: id }, transaction }) > 0;
+    const { nextType, resetInventory } = validateProductTypeChange(product, data, { hasVariants: variantsExist, hasComboItems });
+    if (variantsExist && data.variants !== undefined) throw new AppError('VALIDATION_ERROR', 400, 'Use the variant editor to update existing combinations. Product updates cannot replace variant history.');
+    delete data.confirmInventoryReset;
+    if (nextType !== 'simple' && data.quantity !== undefined) {
+      throw new AppError('VALIDATION_ERROR', 400, 'Stock is managed by variants or bundle items. Edit their stock instead.');
     }
-
+    if (resetInventory) {
+      await inventoryService.adjust({ productId: id, newQuantity: 0, reason: `Change inventory type from simple to ${nextType}`, createdBy: auditContext?.userId || null, transaction });
+    }
     validateProductStock(data, product);
     validateShippingReadiness(data, product);
     if (data.images) await validateProductImages(data.images);
@@ -1011,7 +1028,7 @@ exports.updateProduct = async (id, data, auditContext = null) => {
     if (data.variants) {
       await replaceVariantsWithOptions(id, data.variants, transaction);
       await syncProductVariantStock(id, transaction);
-    } else if (variantsExist) {
+    } else if (variantsExist || nextType === 'variable') {
       await syncProductVariantStock(id, transaction);
     }
 

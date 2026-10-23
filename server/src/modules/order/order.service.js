@@ -1169,7 +1169,7 @@ const placeOrder = async (userId, payload) => {
             const activeVariantCount = await ProductVariant.count({
                 where: { productId: buyNowItem.productId, isActive: true },
             });
-            if (activeVariantCount > 0) {
+            if (product.type === 'variable' || activeVariantCount > 0) {
                 throw new AppError('VALIDATION_ERROR', 400, `Please select an option for "${product.name}" before checkout.`);
             }
         }
@@ -1338,7 +1338,7 @@ const placeOrder = async (userId, payload) => {
                     where: { productId: product.id, isActive: true },
                     transaction: t,
                 });
-                if (activeVariantCount > 0) {
+                if (currentProduct.type === 'variable' || activeVariantCount > 0) {
                     throw new AppError('VALIDATION_ERROR', 400, `Please select a product option for "${product.name}" before checkout.`);
                 }
             }
