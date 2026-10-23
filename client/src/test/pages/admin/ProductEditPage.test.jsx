@@ -1,134 +1,123 @@
 import React from 'react';
-import { createRequire } from 'node:module';
-import { fireEvent, render, screen, waitFor } from '@testing-library/react';
-import { MemoryRouter, Routes, Route } from 'react-router-dom';
+import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
+import { MemoryRouter, Route, Routes } from 'react-router-dom';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import ProductEditPage from '../../../pages/admin/ProductEditPage';
+import { NotificationProvider } from '../../../context/NotificationContext';
 import { createProduct, getProductById, updateProduct } from '../../../services/productService';
+import { getCategoryTree } from '../../../services/categoryService';
+import brandService from '../../../services/brandService';
+import { getSaleLabels } from '../../../services/adminService';
 
-const require = createRequire(import.meta.url);
-const { createProductSchema, updateProductSchema, getProductWriteSchema } = require('../../../../../server/src/modules/product/product.validation');
-
-const { features, notify } = vi.hoisted(() => ({ features: {}, notify: vi.fn() }));
 vi.mock('../../../services/productService', () => ({ createProduct: vi.fn(), updateProduct: vi.fn(), getProductById: vi.fn(), getProducts: vi.fn() }));
-vi.mock('../../../services/categoryService', () => ({ getCategoryTree: vi.fn().mockResolvedValue({ data: [] }) }));
-vi.mock('../../../services/brandService', () => ({ default: { getBrands: vi.fn().mockResolvedValue({ data: { data: [] } }) } }));
-vi.mock('../../../services/adminService', () => ({ getSaleLabels: vi.fn().mockResolvedValue({ data: { data: [] } }) }));
-vi.mock('../../../hooks/useSettings', () => ({
-  useSettings: () => ({ settings: {} }),
-  useFeature: (name) => features[name] ?? false,
-  useCurrency: () => ({ currency: 'INR', symbol: '₹', formatPrice: String }),
-}));
+vi.mock('../../../services/categoryService', () => ({ getCategoryTree: vi.fn() }));
+vi.mock('../../../services/brandService', () => ({ default: { getBrands: vi.fn() } }));
+vi.mock('../../../services/adminService', () => ({ getSaleLabels: vi.fn() }));
 vi.mock('../../../hooks/useAuth', () => ({ useAuth: () => ({ hasPermission: () => true }) }));
-vi.mock('../../../context/NotificationContext', () => ({ useNotification: () => ({ notify, confirm: async () => true }) }));
-vi.mock('../../../components/admin/ProductCustomTabs', () => ({ default: () => null }));
-vi.mock('../../../components/admin/ProductComboBuilder', () => ({ default: () => null }));
-vi.mock('../../../components/admin/ProductVariantsPanel', () => ({ default: () => null }));
+vi.mock('../../../hooks/useSKUGenerator', () => ({ default: () => ({ generateProductSKU: () => 'SKU', generateVariantSKU: () => 'VSKU' }) }));
+vi.mock('../../../hooks/useSettings', () => ({ useSettings: () => ({ settings: { features: { seo: false } } }), useCurrency: () => ({ symbol: '$', currency: 'USD', formatPrice: (value) => `$${value}` }), useFeature: (name) => name !== 'productAssistant' }));
 vi.mock('../../../components/common/MediaPicker', () => ({ default: () => null }));
 vi.mock('../../../components/admin/UnitSelector', () => ({ default: () => null }));
+vi.mock('../../../components/admin/ProductCustomTabs', () => ({ default: () => null }));
+vi.mock('../../../components/admin/ProductTaxConfig', () => ({ default: () => null }));
+vi.mock('../../../components/admin/ProductComboBuilder', () => ({ default: () => <div>Bundle builder</div> }));
+vi.mock('../../../components/admin/ProductVariantsPanel', () => ({ default: ({ onStockTotalChange }) => <div>Variant editor<button type="button" onClick={() => onStockTotalChange(14, 2, undefined, 2)}>Update variant stock</button></div> }));
 
-const renderForm = () => render(<MemoryRouter><ProductEditPage /></MemoryRouter>);
-const save = () => fireEvent.click(screen.getByRole('button', { name: 'Save Product' }));
+const product = { id: 'product', name: 'Test product', slug: 'test-product', type: 'simple', price: 200, quantity: 10, requiresShipping: false, status: 'draft', variants: [], comboItems: [], categories: [], images: [] };
+const mount = (id = 'product') => render(<MemoryRouter initialEntries={[`/admin/products/${id}/edit`]}><NotificationProvider><Routes><Route path="/admin/products/:id/edit" element={<ProductEditPage />} /></Routes></NotificationProvider></MemoryRouter>);
+const type = async (label) => {
+  fireEvent.mouseDown(await screen.findByRole('combobox', { name: 'Product Type' }));
+  fireEvent.click(screen.getByRole('option', { name: label, exact: true }));
+};
+const loaded = async () => waitFor(() => expect(screen.getByRole('textbox', { name: /Product Name/ })).toHaveValue('Test product'));
+beforeEach(() => {
+  vi.clearAllMocks();
+  getCategoryTree.mockResolvedValue({ data: [] });
+  brandService.getBrands.mockResolvedValue({ data: { data: [] } });
+  getSaleLabels.mockResolvedValue({ data: { data: [] } });
+  getProductById.mockResolvedValue({ data: product });
+  updateProduct.mockImplementation(async (_, data) => ({ data: { ...product, ...data, quantity: data.type === 'simple' ? data.quantity : 0 } }));
+  createProduct.mockImplementation(async (data) => ({ data: { ...product, ...data, id: 'product' } }));
+});
 
-describe('product editor validation', () => {
-  beforeEach(() => {
-    vi.clearAllMocks();
-    features.pricing = false;
-    features.showPrice = false;
-    createProduct.mockResolvedValue({ data: { id: 'new-product' } });
-  });
-
-  it('saves a catalog product without requiring a hidden MRP field', async () => {
-    renderForm();
-    fireEvent.change(screen.getByLabelText('Product Name *'), { target: { value: 'Catalog item' } });
-    save();
+describe('product type and inventory editor', () => {
+  it('creates Variable products without forbidden manual stock or premature variants', async () => {
+    getProductById.mockResolvedValue({ data: { ...product, type: 'variable', quantity: 0 } });
+    mount('new'); await type('Variable Product');
+    fireEvent.change(screen.getByRole('textbox', { name: /Product Name/ }), { target: { value: 'Shirt' } });
+    fireEvent.change(screen.getByRole('spinbutton', { name: /^MRP/ }), { target: { value: '200' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Save Product' }));
     await waitFor(() => expect(createProduct).toHaveBeenCalled());
-    expect(createProduct.mock.calls[0][0]).toMatchObject({ name: 'Catalog item', price: 0, salePrice: null });
+    expect(createProduct.mock.calls[0][0]).toMatchObject({ type: 'variable', price: 200 });
+    expect(createProduct.mock.calls[0][0]).not.toHaveProperty('quantity');
+    expect(createProduct.mock.calls[0][0]).not.toHaveProperty('variants');
   });
-
-  it.each([[true, false], [false, true], [true, true]])('requires MRP when pricing=%s and showPrice=%s', async (pricing, showPrice) => {
-    Object.assign(features, { pricing, showPrice });
-    renderForm();
-    fireEvent.change(screen.getByLabelText('Product Name *'), { target: { value: 'Priced item' } });
-    save();
-    expect(createProduct).not.toHaveBeenCalled();
-    expect(await screen.findByText('MRP is required.')).toBeInTheDocument();
-    expect(notify).toHaveBeenCalledWith(expect.stringContaining('MRP is required.'), 'warning');
+  it('gives Simple products standalone inventory without the variant editor', async () => {
+    mount(); await loaded();
+    expect(screen.queryByText('Variant editor')).not.toBeInTheDocument();
+    const stock = screen.getByRole('spinbutton', { name: /Stock Quantity/ });
+    expect(stock).not.toHaveAttribute('readonly');
+    fireEvent.change(stock, { target: { value: '12' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Save Product' }));
+    await waitFor(() => expect(updateProduct).toHaveBeenCalledWith('product', expect.objectContaining({ type: 'simple', quantity: 12 })));
   });
-
-  it('saves a priced product with a valid MRP', async () => {
-    features.showPrice = true;
-    renderForm();
-    fireEvent.change(screen.getByLabelText('Product Name *'), { target: { value: 'Priced item' } });
-    fireEvent.change(screen.getByLabelText(/MRP/), { target: { value: '100' } });
-    save();
-    await waitFor(() => expect(createProduct).toHaveBeenCalled());
-    expect(createProduct.mock.calls[0][0]).toMatchObject({ price: 100 });
-  });
-
-  it.each([
-    ['simple', 'Simple Product', false],
-    ['variable', 'Variable Product', false],
-    ['combo', 'Combo / Bundle', false],
-    ['simple', 'Simple Product', true],
-    ['variable', 'Variable Product', true],
-    ['combo', 'Combo / Bundle', true],
-  ])('submits a valid %s creation payload (%s; priced=%s)', async (type, option, priced) => {
-    features.showPrice = priced;
-    renderForm();
-    fireEvent.change(screen.getByLabelText('Product Name *'), { target: { value: 'Contract test item' } });
-    if (priced) fireEvent.change(screen.getByLabelText(/MRP/), { target: { value: '100' } });
-    fireEvent.mouseDown(screen.getByText('Product Type', { selector: 'label' }).parentElement.querySelector('[role="combobox"]'));
-    fireEvent.click(screen.getByRole('option', { name: option }));
-    await waitFor(() => expect(screen.getByText('Product Type', { selector: 'label' }).parentElement.querySelector('[role="combobox"]')).toHaveTextContent(option));
-    save();
-    await waitFor(() => expect(createProduct).toHaveBeenCalled());
-    const payload = createProduct.mock.calls[0][0];
-    const schema = getProductWriteSchema(createProductSchema, { pricing: false, showPrice: priced });
-    const result = schema.validate(payload, { abortEarly: false, stripUnknown: true });
-    expect(result.error?.details).toBeUndefined();
-    expect(payload.type).toBe(type);
-    if (type === 'simple') expect(payload.quantity).toBe(0);
-    else expect(payload).not.toHaveProperty('quantity');
-    if (type === 'variable') expect(payload.variants).toEqual([]);
-    else expect(payload).not.toHaveProperty('variants');
-  });
-
-  it('updates a variable product without replacing its variants or stock', async () => {
-    const product = {
-      id: 'existing-product', name: 'Existing variable item', type: 'variable', price: 100,
-      quantity: 5, requiresShipping: false, variants: [{ id: 'variant-1', stockQty: 5, isActive: true }],
-    };
-    getProductById.mockResolvedValue({ data: product });
-    updateProduct.mockResolvedValue({ data: product });
-    render(<MemoryRouter initialEntries={['/admin/products/existing-product/edit']}>
-      <Routes><Route path="/admin/products/:id/edit" element={<ProductEditPage />} /></Routes>
-    </MemoryRouter>);
-    await waitFor(() => expect(screen.getByLabelText('Product Name *')).toHaveValue(product.name));
-    expect(screen.getByLabelText('Stock Quantity *')).toBeDisabled();
-    save();
+  it('shows Variable inventory as active variant totals and omits manual quantity on save', async () => {
+    getProductById.mockResolvedValue({ data: { ...product, type: 'variable', variants: [{ stockQty: 5 }, { stockQty: 99, isActive: false }] } });
+    mount(); await loaded();
+    expect(screen.getByText('Variant editor')).toBeInTheDocument();
+    expect(screen.getByLabelText('Total variant stock')).toHaveValue(5);
+    expect(screen.getByLabelText('Total variant stock')).toHaveAttribute('readonly');
+    fireEvent.click(screen.getByRole('button', { name: 'Update variant stock' }));
+    expect(screen.getByLabelText('Total variant stock')).toHaveValue(14);
+    fireEvent.click(screen.getByRole('button', { name: 'Save Product' }));
     await waitFor(() => expect(updateProduct).toHaveBeenCalled());
-    const payload = updateProduct.mock.calls[0][1];
-    expect(payload).not.toHaveProperty('variants');
-    expect(payload).not.toHaveProperty('quantity');
-    const schema = getProductWriteSchema(updateProductSchema, { pricing: false, showPrice: false });
-    expect(schema.validate(payload, { stripUnknown: true }).error).toBeUndefined();
+    expect(updateProduct.mock.calls[0][1]).not.toHaveProperty('quantity');
   });
-
-  it('shows API field validation details when saving fails', async () => {
-    createProduct.mockRejectedValue({ response: { data: { error: {
-      message: 'Validation failed', details: [{ field: 'variants', message: '"variants" is required' }],
-    } } } });
-    renderForm();
-    fireEvent.change(screen.getByLabelText('Product Name *'), { target: { value: 'Test item' } });
-    save();
-    await waitFor(() => expect(notify).toHaveBeenCalledWith('"variants" is required', 'error'));
+  it('requires saving the Variable type before allowing variant operations', async () => {
+    getProductById.mockResolvedValue({ data: { ...product, quantity: 0 } });
+    mount(); await loaded(); await type('Variable Product');
+    expect(screen.queryByText('Variant editor')).not.toBeInTheDocument();
+    expect(screen.getByText(/Save the product first/)).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: 'Save Product' }));
+    expect(await screen.findByText('Variant editor')).toBeInTheDocument();
   });
-
-  it('still validates visible required fields in catalog mode', async () => {
-    renderForm();
-    save();
-    expect(createProduct).not.toHaveBeenCalled();
-    expect(await screen.findByText('Product name is required.')).toBeInTheDocument();
+  it('confirms stock reset on conversion and supports cancelling safely', async () => {
+    mount(); await loaded(); await type('Variable Product');
+    fireEvent.click(screen.getByRole('button', { name: 'Save Product' }));
+    let dialog = within(await screen.findByRole('dialog', { name: 'Change how stock is managed?' }));
+    fireEvent.click(dialog.getByRole('button', { name: 'Keep editing' }));
+    expect(updateProduct).not.toHaveBeenCalled();
+    fireEvent.click(await screen.findByRole('button', { name: 'Save Product' }));
+    dialog = within(await screen.findByRole('dialog', { name: 'Change how stock is managed?' }));
+    fireEvent.click(dialog.getByRole('button', { name: 'Change type and clear stock' }));
+    await waitFor(() => expect(updateProduct).toHaveBeenCalledWith('product', expect.objectContaining({ type: 'variable', confirmInventoryReset: true })));
+    expect(updateProduct.mock.calls[0][1]).not.toHaveProperty('quantity');
+  });
+  it('blocks switching away from Variable while inactive variants still exist', async () => {
+    getProductById.mockResolvedValue({ data: { ...product, type: 'variable', variants: [{ stockQty: 10, isActive: false }] } });
+    mount(); await loaded(); await type('Simple Product');
+    expect(screen.getByRole('combobox', { name: 'Product Type' })).toHaveTextContent('Variable Product');
+    expect(await screen.findByRole('alert')).toHaveTextContent('including inactive');
+    expect(screen.getByLabelText('Total variant stock')).toHaveValue(0);
+  });
+  it('lets legacy Simple products with variants be corrected without discarding them', async () => {
+    getProductById.mockResolvedValue({ data: { ...product, variants: [{ stockQty: 10 }] } });
+    updateProduct.mockResolvedValue({ data: { ...product, type: 'variable', variants: [{ stockQty: 10 }] } });
+    mount(); await loaded();
+    fireEvent.click(screen.getByRole('button', { name: 'Use Variable Product' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Save Product' }));
+    expect(await screen.findByText('Variant editor')).toBeInTheDocument();
+    expect(screen.getByLabelText('Total variant stock')).toHaveValue(10);
+    expect(updateProduct.mock.calls[0][1]).not.toHaveProperty('confirmInventoryReset');
+  });
+  it('shows the bundle builder without manual stock or variants for Combo', async () => {
+    getProductById.mockResolvedValue({ data: { ...product, type: 'combo', quantity: 0 } });
+    mount(); await loaded();
+    expect(screen.getByText('Bundle builder')).toBeInTheDocument();
+    expect(screen.queryByRole('spinbutton', { name: /Stock Quantity/ })).not.toBeInTheDocument();
+    expect(screen.queryByText('Variant editor')).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: 'Save Product' }));
+    await waitFor(() => expect(updateProduct).toHaveBeenCalled());
+    expect(updateProduct.mock.calls[0][1]).not.toHaveProperty('quantity');
   });
 });

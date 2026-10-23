@@ -2,8 +2,10 @@
 
 const { ProductAttribute, AttributeTemplate, AttributeValue, Product, sequelize } = require('../index');
 const AppError = require('../../utils/AppError');
+const { assertVariableProduct } = require('../product/productType');
+const { groupKey } = require('./productAttributeOrder');
 
-const ATTRIBUTE_TEMPLATE_FIELDS = ['id', 'name', 'slug', 'sortOrder', 'displayType', 'valueType', 'unit'];
+const ATTRIBUTE_TEMPLATE_FIELDS = ['id', 'name', 'slug', 'sortOrder', 'displayType', 'valueType', 'unit', 'unitCategory'];
 const ATTRIBUTE_VALUE_FIELDS = ['id', 'value', 'slug', 'sortOrder', 'displayLabel', 'swatchColor', 'imageUrl', 'unitLabel', 'metadata'];
 
 // ── Shared include for full attribute+value detail ──────────────────────────
@@ -30,7 +32,7 @@ const getProductAttributes = async (productId) => {
     return ProductAttribute.findAll({
         where: { productId },
         include: fullInclude,
-        order: [['sortOrder', 'ASC'], ['createdAt', 'ASC']],
+        order: [['sortOrder', 'ASC'], ['createdAt', 'ASC'], ['id', 'ASC']],
     });
 };
 
@@ -40,9 +42,12 @@ const getProductAttributes = async (productId) => {
  *   Global: { attributeId, valueId, isVariantAttr?, sortOrder? }
  *   Custom: { customName, customValue, isVariantAttr?, sortOrder? }
  */
-const addProductAttribute = async (productId, data) => {
-    const product = await Product.findByPk(productId, { attributes: ['id'] });
+const addProductAttribute = async (productId, data) => sequelize.transaction(async (transaction) => {
+    const product = await Product.findByPk(productId, { attributes: ['id', 'type'], transaction, lock: transaction.LOCK.UPDATE });
     if (!product) throw new AppError('NOT_FOUND', 404, 'Product not found');
+    if (data.isVariantAttr) assertVariableProduct(product);
+    const lastOrder = await ProductAttribute.max('sortOrder', { where: { productId }, transaction });
+    const sortOrder = data.sortOrder ?? (lastOrder == null ? 0 : Number(lastOrder) + 1);
 
     const isGlobal = Boolean(data.attributeId);
 
@@ -62,8 +67,8 @@ const addProductAttribute = async (productId, data) => {
             attributeId: data.attributeId,
             valueId: data.valueId,
             isVariantAttr: data.isVariantAttr ?? false,
-            sortOrder: data.sortOrder ?? 0,
-        });
+            sortOrder,
+        }, { transaction });
     }
 
     // Custom attribute
@@ -72,9 +77,9 @@ const addProductAttribute = async (productId, data) => {
         customName: data.customName,
         customValue: data.customValue,
         isVariantAttr: data.isVariantAttr ?? false,
-        sortOrder: data.sortOrder ?? 0,
-    });
-};
+        sortOrder,
+    }, { transaction });
+});
 
 /**
  * Update a single product attribute row (value swap, sort order, isVariantAttr toggle).
@@ -82,6 +87,11 @@ const addProductAttribute = async (productId, data) => {
 const updateProductAttribute = async (productId, attrId, data) => {
     const row = await ProductAttribute.findOne({ where: { id: attrId, productId } });
     if (!row) throw new AppError('NOT_FOUND', 404, 'Product attribute not found');
+    if (data.isVariantAttr) {
+        const product = await Product.findByPk(productId, { attributes: ['id', 'type'] });
+        if (!product) throw new AppError('NOT_FOUND', 404, 'Product not found');
+        assertVariableProduct(product);
+    }
 
     // Reject mode crossing: custom attributes cannot receive valueId, and template attributes cannot receive customValue
     if (data.valueId && !row.attributeId) {
@@ -125,4 +135,22 @@ module.exports = {
     addProductAttribute,
     updateProductAttribute,
     deleteProductAttribute,
+    reorderProductAttributes: async (productId, rowIds) => sequelize.transaction(async (transaction) => {
+        const product = await Product.findByPk(productId, { transaction, lock: transaction.LOCK.UPDATE });
+        if (!product) throw new AppError('NOT_FOUND', 404, 'Product not found');
+        const rows = await ProductAttribute.findAll({ where: { productId }, transaction, lock: transaction.LOCK.UPDATE });
+        const byId = new Map(rows.map((row) => [row.id, row]));
+        if (!Array.isArray(rowIds) || rowIds.length !== rows.length || new Set(rowIds).size !== rows.length || rowIds.some((id) => !byId.has(id))) {
+            throw new AppError('CONFLICT', 409, 'Product attributes changed. Refresh the attributes and try ordering them again.');
+        }
+        const seenGroups = new Set();
+        let previous;
+        for (const id of rowIds) {
+            const key = groupKey(byId.get(id));
+            if (key !== previous && seenGroups.has(key)) throw new AppError('VALIDATION_ERROR', 400, 'Keep values of each attribute together.');
+            seenGroups.add(key); previous = key;
+        }
+        for (const [sortOrder, id] of rowIds.entries()) await ProductAttribute.update({ sortOrder }, { where: { id, productId }, transaction });
+        return ProductAttribute.findAll({ where: { productId }, include: fullInclude, order: [['sortOrder', 'ASC'], ['id', 'ASC']], transaction });
+    }),
 };

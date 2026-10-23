@@ -626,6 +626,12 @@ const adjust = async ({
     throw new AppError('VALIDATION_ERROR', 400, `Stock quantity (${newQty}) cannot be less than reserved quantity (${beforeReserved})`);
   }
 
+  if (product.type === 'variable' || product.type === 'combo') {
+    throw new AppError('VALIDATION_ERROR', 400, 'Adjust variant or bundle component stock instead of the product total.');
+  }
+  if (product.type === 'simple' && await ProductVariant.count({ where: { productId }, transaction }) > 0) {
+    throw new AppError('VALIDATION_ERROR', 400, 'This product has variants. Change its type to Variable Product and adjust individual variant stock.');
+  }
   if (beforeStock === newQty) return { productId, variantId: null, changed: false };
   await product.update({ quantity: newQty }, { transaction });
 

@@ -13,6 +13,7 @@ const createAttributeSchema = Joi.object({
     displayType: Joi.string().valid(...displayTypes).default('auto'),
     valueType: Joi.string().valid(...valueTypes).default('auto'),
     unit: Joi.string().max(20).allow('', null),
+    unitCategory: Joi.string().trim().max(50).pattern(/^[^\u0000-\u001f\u007f]+$/).allow('', null),
 });
 
 const updateAttributeSchema = Joi.object({
@@ -21,6 +22,7 @@ const updateAttributeSchema = Joi.object({
     displayType: Joi.string().valid(...displayTypes),
     valueType: Joi.string().valid(...valueTypes),
     unit: Joi.string().max(20).allow('', null),
+    unitCategory: Joi.string().trim().max(50).pattern(/^[^\u0000-\u001f\u007f]+$/).allow('', null),
 }).min(1).messages({ 'object.min': 'At least one field is required to update' });
 
 // --- Attribute Value schemas ---

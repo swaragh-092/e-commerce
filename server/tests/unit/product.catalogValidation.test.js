@@ -17,6 +17,15 @@ describe('product pricing validation by resolved features', () => {
     expect(schema.validate({ ...product, price: 0 }).error).toBeDefined();
     expect(schema.validate({ ...product, price: 100 }).error).toBeUndefined();
   });
+  it.each(['simple', 'variable', 'combo'])('accepts a %s creation payload with pricing hidden or shown', (type) => {
+    for (const showPrice of [false, true]) {
+      const schema = getProductWriteSchema(createProductSchema, { pricing: false, showPrice });
+      const payload = { name: 'Test item', type, price: showPrice ? 100 : 0, requiresShipping: false };
+      if (type === 'simple') payload.quantity = 0;
+      expect(schema.validate(payload).error).toBeUndefined();
+      if (type !== 'simple') expect(schema.validate({ ...payload, quantity: 0 }).error).toBeDefined();
+    }
+  });
   it('preserves existing prices on catalog updates when omitted', () => {
     const schema = getProductWriteSchema(updateProductSchema, { pricing: false, showPrice: false });
     expect(schema.validate({ name: 'Renamed' }).value).not.toHaveProperty('price');

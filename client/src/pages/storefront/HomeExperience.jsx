@@ -206,8 +206,20 @@ const HomeExperience = () => {
   const { settings } = useSettings();
   const { brands: contextBrands, loading: brandsLoading } = useBrands();
   const pricingEnabled = useFeature('pricing');
+  const brandsEnabled = useFeature('brands');
   const config = useMemo(() => resolveHomepage(settings), [settings]);
-  const visibleSections = useMemo(() => arr(config.sections).filter((section) => bool(section.enabled, true)), [config.sections]);
+  const visibleSections = useMemo(
+    () => arr(config.sections).filter(
+      (section) => bool(section.enabled, true) && (brandsEnabled || section.type !== 'brand-showcase')
+    ),
+    [brandsEnabled, config.sections],
+  );
+  const visiblePromoBanners = useMemo(
+    () => arr(config.promoBanners).filter(
+      (promo) => brandsEnabled || !String(promo?.link || '').startsWith('/brands')
+    ),
+    [brandsEnabled, config.promoBanners],
+  );
   const productSections = useMemo(
     () => visibleSections.filter((section) => needsProductData(section, { pricingEnabled })),
     [pricingEnabled, visibleSections],
@@ -240,7 +252,7 @@ const HomeExperience = () => {
 
   const buildSectionData = (section) => buildSectionRendererData({
     section,
-    homepage: config,
+    homepage: { ...config, promoBanners: visiblePromoBanners },
     resolvedData: data,
     brands: contextBrands,
     loading,

@@ -9,6 +9,8 @@ const { authorizePermissions } = require('../../middleware/role.middleware');
 const {
     addProductAttributeSchema,
     updateProductAttributeSchema,
+    assignProductAttributeSchema,
+    reorderProductAttributesSchema,
 } = require('./productAttribute.validation');
 const { PERMISSIONS } = require('../../config/permissions');
 const { idParamSchema, idAndAttrIdParamSchema } = require('../../utils/common.validation');
@@ -16,6 +18,9 @@ const { idParamSchema, idAndAttrIdParamSchema } = require('../../utils/common.va
 
 const attrRead   = [authenticate, authorizePermissions(PERMISSIONS.ATTRIBUTES_READ)];
 const attrManage = [authenticate, authorizePermissions(PERMISSIONS.ATTRIBUTES_MANAGE)];
+
+router.post('/:id/attributes/assign', ...attrManage, validate(idParamSchema, 'params'), validate(assignProductAttributeSchema), controller.assignProductAttribute);
+router.put('/:id/attributes/reorder', ...attrManage, validate(idParamSchema, 'params'), validate(reorderProductAttributesSchema), controller.reorderProductAttributes);
 
 // GET    /api/products/:id/attributes
 router.get('/:id/attributes', ...attrRead, validate(idParamSchema, 'params'), controller.getProductAttributes);

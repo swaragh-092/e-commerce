@@ -18,9 +18,9 @@ import CachedIcon from '@mui/icons-material/Cached';
 import { Link, useNavigate } from 'react-router-dom';
 
 import { useCart } from '../../hooks/useCart';
-import { useSettings, useCurrency, useFeature, useComponentStyles } from '../../hooks/useSettings';
+import { useSettings, useCurrency, useFeature, useFeaturesResolved, useComponentStyles } from '../../hooks/useSettings';
 import { useNotification } from '../../context/NotificationContext';
-import { getMediaUrl } from '../../utils/media';
+import { getMediaUrl, onImageError, PLACEHOLDER_PRODUCT } from '../../utils/media';
 
 
 import PageSEO from '../../components/common/PageSEO';
@@ -146,7 +146,7 @@ const CartItem = React.memo(({ item, getQty, handleUpdate, handleRemove, removin
     const discountPct = getVariantDiscountPercent(product, variant);
     const isOnSale = discountPct > 0;
     const displayUnit = product?.unit ? String(product.unit).trim() : '';
-    const imageUrl = getMediaUrl(product?.images?.[0]?.url || '') || '/placeholder.png';
+    const imageUrl = getMediaUrl(product?.images?.[0]?.url || '') || PLACEHOLDER_PRODUCT;
     const qty = getQty(item);
     const maxQty = variant ? getAvailableStock(variant, 'stockQty') : getAvailableStock(product, 'quantity');
     const isRemoving = removingIds.has(item.id);
@@ -168,6 +168,7 @@ const CartItem = React.memo(({ item, getQty, handleUpdate, handleRemove, removin
                 <Box component={Link} to={`/products/${product?.slug}`}
                     sx={{ display: 'block', flexShrink: 0, width: { xs: 100, sm: 120 }, bgcolor: 'action.hover', borderRight: '1px solid', borderColor: 'divider', overflow: 'hidden' }}>
                     <Box component="img" src={imageUrl} alt={product?.name}
+                        onError={onImageError(PLACEHOLDER_PRODUCT)}
                         sx={{ width: '100%', height: '100%', minHeight: 120, objectFit: 'cover', display: 'block', transition: 'transform 0.4s ease', '&:hover': { transform: 'scale(1.06)' } }} />
                 </Box>
                 {/* Body */}
@@ -406,6 +407,7 @@ const CartPage = () => {
     const [clearing, setClearing] = useState(false);
     const [enquiryOpen, setEnquiryOpen] = useState(false);
     const cartEnabled = useFeature('cart');
+    const featuresResolved = useFeaturesResolved();
     const checkoutEnabled = useFeature('checkout');
     const enquiryEnabled = useFeature('enquiry');
     const cartPage = settings?.cartPage || {};
@@ -417,10 +419,10 @@ const CartPage = () => {
     const emptyStateText = cartPage.emptyStateText || "Haven't added anything yet. Let's fix that.";
 
     useEffect(() => {
-        if (!cartEnabled) {
+        if (featuresResolved && !cartEnabled) {
             navigate('/');
         }
-    }, [cartEnabled, navigate]);
+    }, [featuresResolved, cartEnabled, navigate]);
 
     const items = useMemo(() => sortCartItems(cart?.items || []), [cart?.items]);
     const { getQty, handleUpdate, handleRemove, removingIds, updatingIds } = useOptimisticCart(items, updateItem, removeItem);

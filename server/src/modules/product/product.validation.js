@@ -4,6 +4,7 @@ const { MIN_SEARCH_QUERY_LENGTH, MAX_SEARCH_QUERY_LENGTH, normalizeSearchQuery }
 
 
 const productListQuerySchema = Joi.object({
+  hasVariants: Joi.boolean(),
   page: Joi.number().integer().min(1).default(1),
   limit: Joi.number().integer().min(1).max(1000).default(20),
   search: Joi.string().allow('').custom((value, helpers) => {
@@ -89,7 +90,7 @@ const createProductSchema = Joi.object({
     })
   ).when('type', {
     is: 'variable',
-    then: Joi.required(),
+    then: Joi.optional(),
     otherwise: Joi.forbidden()
   }),
   images: Joi.array().items(
@@ -140,6 +141,7 @@ const updateProductSchema = Joi.object({
     igst: Joi.number().min(0).max(1),
   }).allow(null),
   type: Joi.string().valid('simple', 'variable', 'combo'),
+  confirmInventoryReset: Joi.boolean(),
   status: Joi.string().valid('draft', 'published', 'archived'),
   isFeatured: Joi.boolean(),
   categoryIds: Joi.array().items(Joi.string().uuid()),

@@ -1,6 +1,7 @@
 import React, { createContext, useContext, useState, useCallback } from 'react';
 import {
   Snackbar, 
+  Portal,
   Alert, 
   Slide, 
   Dialog, 
@@ -92,46 +93,48 @@ export const NotificationProvider = ({ children }) => {
     <NotificationContext.Provider value={{ notify, confirm }}>
       {children}
       
-      {/* Toast Notification */}
-      <Snackbar
-        key={notification?.key}
-        open={Boolean(notification)}
-        autoHideDuration={notification?.action ? 6000 : 4000}
-        onClose={handleNotifyClose}
-        TransitionComponent={SlideTransition}
-        anchorOrigin={{ vertical: 'bottom', horizontal: 'center' }}
-      >
-        <Alert
+      {/* Open modals hide the app root from screen readers; keep toasts outside it. */}
+      <Portal>
+        <Snackbar
+          key={notification?.key}
+          open={Boolean(notification)}
+          autoHideDuration={notification?.action ? 6000 : 4000}
           onClose={handleNotifyClose}
-          severity={notification?.severity || 'info'}
-          variant="filled"
-          elevation={6}
-          sx={{ width: '100%', minWidth: 300, borderRadius: '12px' }}
-          action={notification?.action ? (
-            <Button 
-              color="inherit" 
-              size="small" 
-              onClick={async () => {
-                try {
-                  if (notification?.action?.callback) {
-                    await notification.action.callback();
-                  }
-                } catch (err) {
-                  console.error('Notification action callback failed:', err);
-                } finally {
-                  handleNotifyClose(null, 'action');
-                }
-              }}
-
-              sx={{ fontWeight: 700 }}
-            >
-              {notification.action.label}
-            </Button>
-          ) : null}
+          TransitionComponent={SlideTransition}
+          anchorOrigin={{ vertical: 'bottom', horizontal: 'center' }}
         >
-          {notification?.message}
-        </Alert>
-      </Snackbar>
+          <Alert
+            onClose={handleNotifyClose}
+            severity={notification?.severity || 'info'}
+            variant="filled"
+            elevation={6}
+            sx={{ width: '100%', minWidth: 300, borderRadius: '12px' }}
+            action={notification?.action ? (
+              <Button
+                color="inherit"
+                size="small"
+                onClick={async () => {
+                  try {
+                    if (notification?.action?.callback) {
+                      await notification.action.callback();
+                    }
+                  } catch (err) {
+                    console.error('Notification action callback failed:', err);
+                  } finally {
+                    handleNotifyClose(null, 'action');
+                  }
+                }}
+
+                sx={{ fontWeight: 700 }}
+              >
+                {notification.action.label}
+              </Button>
+            ) : null}
+          >
+            {notification?.message}
+          </Alert>
+        </Snackbar>
+      </Portal>
 
       {/* Confirmation Dialog */}
       <Dialog

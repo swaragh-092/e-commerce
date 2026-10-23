@@ -51,7 +51,6 @@ describe('customer order cancellation row locking', () => {
             lock: { level: db.Sequelize.Transaction.LOCK.UPDATE, of: db.Order },
         }));
     });
-
     it('allows a guest cancellation lookup only through its validated checkout session', async () => {
         const guestSessionId = '123e4567-e89b-42d3-a456-426614174000';
         const transaction = {};

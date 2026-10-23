@@ -1,7 +1,7 @@
 import React from 'react';
 import { Card, CardMedia, CardContent, Typography, Box, Rating, Chip, CardActions, Button } from '@mui/material';
 import { Link, useNavigate } from 'react-router-dom';
-import { getMediaUrl } from '../../utils/media';
+import { getMediaUrl, onImageError, PLACEHOLDER_PRODUCT } from '../../utils/media';
 import { useCurrency, useSettings, useFeature, useComponentStyles } from '../../hooks/useSettings';
 import { getDiscountPercent, getSaleTimingMessage, isEndingSoon } from '../../utils/pricing';
 import { resolveRadius, resolveShadow } from '../../utils/styleMaps';
@@ -44,10 +44,12 @@ const ProductCard = React.memo(({ product, fromCategory, compact = false }) => {
   const productCardStyle = useComponentStyles('productCard');
   const pricingEnabled = useFeature('pricing');
   const showPrice = useFeature('showPrice');
+  const brandsEnabled = useFeature('brands');
+  const reviewsEnabled = useFeature('reviews');
   const sales = settings?.sales || {};
   const cardVariant = productCardStyle.variant || 'classic';
   const effectiveCompact = compact || productCardStyle.density === 'compact' || cardVariant === 'compact';
-  const showBrand = productCardStyle.showBrand !== false && !effectiveCompact;
+  const showBrand = brandsEnabled && productCardStyle.showBrand !== false && !effectiveCompact;
   const showCategory = productCardStyle.showCategory !== false;
   const showRating = productCardStyle.showRating !== false && !effectiveCompact;
   const showWishlist = productCardStyle.showWishlist !== false && !effectiveCompact;
@@ -62,7 +64,7 @@ const ProductCard = React.memo(({ product, fromCategory, compact = false }) => {
   const isMinimal = cardVariant === 'minimal';
   const isEditorial = cardVariant === 'editorial';
   const primaryImage =
-    getMediaUrl(product.images?.find((i) => i.isPrimary)?.url || product.images?.[0]?.url || '') || '/placeholder.png';
+    getMediaUrl(product.images?.find((i) => i.isPrimary)?.url || product.images?.[0]?.url || '') || PLACEHOLDER_PRODUCT;
   const displayPrice = product.effectivePrice ?? product.salePrice ?? product.price;
   // Quick-add always adds the base product with no variant, so gate it on the
   // product-level stock the same way ProductDetailPage gates its no-variant path.
@@ -198,7 +200,7 @@ const ProductCard = React.memo(({ product, fromCategory, compact = false }) => {
             }}
           />
         )}
-        {pricingEnabled && (hasSale || isScheduledSale) && sales.showDiscountPercent !== false && productCardStyle.badgeStyle !== 'minimal' && discountPercent > 0 && (
+        {pricingEnabled && showPrice && (hasSale || isScheduledSale) && sales.showDiscountPercent !== false && productCardStyle.badgeStyle !== 'minimal' && discountPercent > 0 && (
           <Chip
             label={hasSale ? `${discountPercent}% OFF` : 'Starts Soon'}
             color={hasSale ? 'error' : 'warning'}
@@ -206,7 +208,7 @@ const ProductCard = React.memo(({ product, fromCategory, compact = false }) => {
             sx={{ ...badgePositionSx(productCardStyle.badgePosition), borderRadius: productCardStyle.badgeStyle === 'corner' ? 1 : undefined }}
           />
         )}
-        {pricingEnabled && showSaleCountdown && endingSoon && (
+        {pricingEnabled && showPrice && showSaleCountdown && endingSoon && (
           <Chip
             label="Ending Soon"
             color="warning"
@@ -214,7 +216,7 @@ const ProductCard = React.memo(({ product, fromCategory, compact = false }) => {
             sx={{ position: 'absolute', top: 8, left: 8, zIndex: 1, fontWeight: 700 }}
           />
         )}
-        {pricingEnabled && saleLabelText && (
+        {pricingEnabled && showPrice && saleLabelText && (
           <Chip
             label={saleLabelText}
             size="small"
@@ -236,6 +238,7 @@ const ProductCard = React.memo(({ product, fromCategory, compact = false }) => {
           alt={product.name}
           loading="lazy"
           decoding="async"
+          onError={onImageError(PLACEHOLDER_PRODUCT)}
           sx={{
             position: 'absolute',
             top: imageInset ? (theme) => theme.spacing(imageInset) : 0,
@@ -300,7 +303,7 @@ const ProductCard = React.memo(({ product, fromCategory, compact = false }) => {
             {product.name}
           </Typography>
         </Box>
-        {showRating && hasRating && (
+        {showRating && hasRating && reviewsEnabled && (
           <Box sx={{ display: 'flex', alignItems: 'center', mb: 0.75 }}>
             <Rating
               value={parseFloat(product.avgRating)}
@@ -315,7 +318,7 @@ const ProductCard = React.memo(({ product, fromCategory, compact = false }) => {
             )}
           </Box>
         )}
-        {pricingEnabled && cardVariant === 'deal' && hasSale && (() => {
+        {pricingEnabled && showPrice && cardVariant === 'deal' && hasSale && (() => {
           // Resolve a real "claimed" percentage from inventory/sales data when
           // available. Falls back to a generic "Hot Deal" label when no real
           // numbers exist — never fabricate percentages from a hash of the
@@ -356,7 +359,7 @@ const ProductCard = React.memo(({ product, fromCategory, compact = false }) => {
           );
         })()}
         <Box sx={{ flexGrow: 1 }} />
-        {showPrice && (
+        {pricingEnabled && showPrice && (
           <Box sx={{ display: 'flex', alignItems: 'baseline', justifyContent: contentAlign === 'center' ? 'center' : contentAlign === 'right' ? 'flex-end' : 'flex-start', gap: 0.75, mt: 'auto', flexWrap: 'wrap', width: '100%' }}>
             {hasSale ? (
               <>

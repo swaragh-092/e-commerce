@@ -181,7 +181,11 @@
         "registerHeading": "Start Your Shopping Story",
         "registerDescription": "Create an account to save favorites, track orders and checkout faster.",
         "registerFormTitle": "Create Account",
-        "registerFormSubtitle": "Join us today. Please enter your details."
+        "registerFormSubtitle": "Join us today. Please enter your details.",
+        "registerNewsletterEnabled": true,
+        "registerNewsletterLabel": "Email me offers, new products, and store updates.",
+        "loginNewsletterEnabled": true,
+        "loginNewsletterLabel": "Email me offers, new products, and store updates."
     },
     "sku": {
         "prefix": "",

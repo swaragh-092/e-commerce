@@ -13,7 +13,7 @@ import {
 } from '@mui/material';
 import { Link as RouterLink } from 'react-router-dom';
 import brandService from '../../services/brandService';
-import { getMediaUrl } from '../../utils/media';
+import { getMediaUrl, onImageError, PLACEHOLDER_BRAND } from '../../utils/media';
 import PageSEO from '../../components/common/PageSEO';
 import { useSettings } from '../../hooks/useSettings';
 
@@ -142,6 +142,7 @@ const BrandsPage = () => {
               component="img"
               src={imageUrl}
               alt={brand.name}
+              onError={onImageError(PLACEHOLDER_BRAND)}
               sx={{
                 width: '100%',
                 height: aspectHeight,
@@ -232,6 +233,7 @@ const BrandsPage = () => {
               src={imageUrl}
               alt={brand.name}
               className="brand-overlay-img"
+              onError={onImageError(PLACEHOLDER_BRAND)}
               sx={{
                 position: 'absolute',
                 inset: 0,
@@ -351,6 +353,7 @@ const BrandsPage = () => {
               component="img"
               src={imageUrl}
               alt={brand.name}
+              onError={onImageError(PLACEHOLDER_BRAND)}
               sx={{
                 width: '100%',
                 height: '100%',
@@ -452,6 +455,7 @@ const BrandsPage = () => {
                           component="img"
                           src={imageUrl}
                           alt={brand.name}
+                          onError={onImageError(PLACEHOLDER_BRAND)}
                           sx={{
                             position: 'absolute',
                             inset: 0,
@@ -551,7 +555,7 @@ const BrandsPage = () => {
                       }}
                     >
                       {imageUrl ? (
-                        <Box component="img" src={imageUrl} alt={brand.name} sx={{ position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: 'cover' }} />
+                        <Box component="img" src={imageUrl} alt={brand.name} onError={onImageError(PLACEHOLDER_BRAND)} sx={{ position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: 'cover' }} />
                       ) : (
                         <Box sx={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', bgcolor: 'action.hover' }}>
                           <Typography variant="h2" fontWeight={800} color="text.secondary">{brand.name?.[0]?.toUpperCase() || 'B'}</Typography>

@@ -35,13 +35,15 @@ const ProductListPage = () => {
     const showTopbarFilters = showFilters && !isMobile && filterLayout === 'topbar';
     const showCatalogBreadcrumbs = catalog.showBreadcrumbs !== false;
     const pricingEnabled = useFeature('pricing');
+    const showPrice = useFeature('showPrice');
+    const brandsEnabled = useFeature('brands');
 
 
 
     const filters = {
         search: searchParams.get('search') || '',
         category: searchParams.get('category') || '',
-        brand: searchParams.get('brand') || '',
+        brand: brandsEnabled ? (searchParams.get('brand') || '') : '',
         page: parseInt(searchParams.get('page')) || 1,
         sort: searchParams.get('sort') || defaultSort,
         minPrice: searchParams.get('minPrice') || '',
@@ -74,7 +76,7 @@ const ProductListPage = () => {
         fetchProducts();
         return () => { cancelled = true; };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [searchParams.toString()]);
+    }, [searchParams.toString(), brandsEnabled]);
 
     // Resolve the category slug → full breadcrumb path for the contextual breadcrumb on PDP
     // e.g. "vegetable" slug → "Vegetable > Roots > Beetroot" when filtering by beetroot
@@ -174,8 +176,8 @@ const ProductListPage = () => {
                             sx={{ borderRadius: 1.5, bgcolor: 'background.paper' }}
                         >
                             <MenuItem value="newest">Newest Arrivals</MenuItem>
-                            {pricingEnabled && <MenuItem value="price_asc">Price: Low to High</MenuItem>}
-                            {pricingEnabled && <MenuItem value="price_desc">Price: High to Low</MenuItem>}
+                            {pricingEnabled && showPrice && <MenuItem value="price_asc">Price: Low to High</MenuItem>}
+                            {pricingEnabled && showPrice && <MenuItem value="price_desc">Price: High to Low</MenuItem>}
                             <MenuItem value="name_asc">Name: A to Z</MenuItem>
                         </Select>
                     </FormControl>

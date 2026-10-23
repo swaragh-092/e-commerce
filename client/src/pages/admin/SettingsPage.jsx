@@ -435,11 +435,12 @@ const SettingsPage = () => {
     : headerStyle === 'glass'
       ? `${surfaceColor}dd`
       : brandPrimary;
+  const previewButtonRadius = buttonStyle === 'pill' ? '9999px' : `${Math.max(borderRadius - 2, 4)}px`;
   const previewButtonSx = {
-    bgcolor: buttonStyle === 'soft' ? `${brandPrimary}22` : brandPrimary,
-    color: buttonStyle === 'soft' ? brandPrimary : '#fff',
+    bgcolor: buttonStyle === 'soft' ? `${brandPrimary}22` : buttonStyle === 'outline' ? 'transparent' : brandPrimary,
+    color: buttonStyle === 'soft' || buttonStyle === 'outline' ? brandPrimary : '#fff',
     border: buttonStyle === 'outline' ? `1px solid ${brandPrimary}` : '1px solid transparent',
-    borderRadius: `${Math.max(borderRadius - 2, 4)}px`,
+    borderRadius: previewButtonRadius,
   };
   const previewCardSx = {
     bgcolor: surfaceColor,

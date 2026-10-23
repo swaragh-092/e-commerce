@@ -157,14 +157,28 @@ const getWishlist = async (userId, sessionId) => {
       await WishlistItem.destroy({ where: { id: invalidItems.map((item) => item.id) }, transaction: t });
     }
 
+    const SettingsService = require('../settings/settings.service');
+    const { features = {} } = await SettingsService.getFeatures();
+    const shouldHidePrice = features.pricing === false || features.showPrice === false;
+
     const activeItems = items
       .filter((item) => !invalidItems.some((invalidItem) => invalidItem.id === item.id))
       .map((item) => {
         const plainItem = item.toJSON();
-        const serializedProduct = serializeProductPricing(plainItem.Product);
-        const serializedVariant = plainItem.variant
+        const serializedProduct = serializeProductPricing(plainItem.Product, { features });
+        let serializedVariant = plainItem.variant
           ? serializeVariantPricing(serializedProduct, plainItem.variant)
           : null;
+        if (serializedVariant && shouldHidePrice) {
+          delete serializedVariant.price;
+          delete serializedVariant.salePrice;
+          delete serializedVariant.costPrice;
+          delete serializedVariant.unitPrice;
+          delete serializedVariant.regularPrice;
+          delete serializedVariant.effectivePrice;
+          delete serializedVariant.savingsAmount;
+          serializedVariant.discountPercent = 0;
+        }
         const availableStock = serializedVariant
           ? Math.max(
             0,

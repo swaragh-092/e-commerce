@@ -138,11 +138,39 @@ const buildFeatures = (dbFeatures, appMode) => {
   const mode = getMode(appMode);
   const safeDb = dbFeatures || {};
 
-  return {
+  const resolved = {
     ...TIER2_DEFAULTS[mode],      // Layer 1: optional defaults for this mode
     ...safeDb,                    // Layer 2: admin overrides (DB)
     ...TIER1_FEATURES[mode],      // Layer 3: mode-locked — always wins
   };
+
+  // Constraint cascades:
+  // 1. If reviews or orders are disabled, or store is in catalog mode, verified-purchase reviews cannot function:
+  if (!resolved.reviews || !resolved.orders || mode === 'catalog') {
+    resolved.requirePurchaseForReview = false;
+  }
+
+  // 2. If coupons or cart are disabled, showAvailableCoupons cannot function:
+  if (!resolved.coupons || !resolved.cart) {
+    resolved.showAvailableCoupons = false;
+  }
+
+  // 3. If cart is disabled (e.g. in catalog mode), coupons cannot function:
+  if (!resolved.cart) {
+    resolved.coupons = false;
+  }
+
+  // 4. If checkout is disabled (e.g. in catalog mode), guestCheckout cannot function:
+  if (!resolved.checkout) {
+    resolved.guestCheckout = false;
+  }
+
+  // 5. If pricing is disabled (e.g. in catalog mode), showPrice cannot function:
+  if (!resolved.pricing) {
+    resolved.showPrice = false;
+  }
+
+  return resolved;
 };
 
 module.exports = {

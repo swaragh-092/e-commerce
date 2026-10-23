@@ -39,7 +39,7 @@ const expandImplied = (permissions) => {
 const getRolesForUser = (user) => {
   const safeUser = user || {};
 
-  if (Array.isArray(safeUser.roles) && safeUser.roles.length) {
+  if (Array.isArray(safeUser.roles)) {
     return unique(
       safeUser.roles
         .map((role) => (typeof role === 'string' ? role : role?.slug || role?.name || role?.role))
@@ -57,7 +57,9 @@ const getPermissionKeysFromRoleObject = (role) => {
     return [];
   }
 
-  if (Array.isArray(role.permissions) && role.permissions.length) {
+  // A persisted custom role with no permissions must stay empty. Falling back
+  // to its base role would silently grant every default admin permission.
+  if (Array.isArray(role.permissions)) {
     return unique(
       role.permissions
         .map((permission) => (typeof permission === 'string' ? permission : permission?.key))
@@ -72,11 +74,11 @@ const getPermissionKeysFromRoleObject = (role) => {
 const getPermissionsForUser = (user) => {
   const safeUser = user || {};
 
-  if (Array.isArray(safeUser.permissions) && safeUser.permissions.length) {
+  if (Array.isArray(safeUser.permissions)) {
     return expandImplied(unique(safeUser.permissions));
   }
 
-  if (Array.isArray(safeUser.roles) && safeUser.roles.length) {
+  if (Array.isArray(safeUser.roles)) {
     return expandImplied(unique(
       safeUser.roles.flatMap((role) =>
         typeof role === 'string' ? getPermissionsForRole(role) : getPermissionKeysFromRoleObject(role)

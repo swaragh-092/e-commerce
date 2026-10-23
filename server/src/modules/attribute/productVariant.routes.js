@@ -21,7 +21,8 @@ const { idParamSchema, idAndVariantIdParamSchema } = require('../../utils/common
 const variantRead = [authenticate, authorizeAnyPermission(PERMISSIONS.ATTRIBUTES_READ, PERMISSIONS.PRODUCTS_READ)];
 const variantManage = [authenticate, authorizeAnyPermission(PERMISSIONS.ATTRIBUTES_MANAGE, PERMISSIONS.PRODUCTS_UPDATE)];
 
-// --- Bulk Variant Generator ---
+// --- Reviewed variant creation ---
+router.get('/:id/variants/preview', ...variantManage, validate(idParamSchema, 'params'), controller.previewVariantGeneration);
 router.post('/:id/variants/generate', ...variantManage, bulkOperationLimiter, validate(idParamSchema, 'params'), validate(generateVariantsSchema), controller.bulkGenerateVariants);
 router.post('/:id/variants/bulk-generate', ...variantManage, bulkOperationLimiter, validate(idParamSchema, 'params'), validate(generateVariantsSchema), controller.bulkGenerateVariants);
 

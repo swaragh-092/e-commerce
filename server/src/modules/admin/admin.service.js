@@ -13,6 +13,8 @@ const {
   enrichUserAuthorization,
   RESERVED_SUPER_ADMIN_PERMISSIONS,
   getPermissionsForUser,
+  getRolesForUser,
+  getPermissionKeysFromRoleObject,
 } = require('../../config/permissions');
 const { getPagination } = require('../../utils/pagination');
 const { buildInventorySummary, normalizeInventoryThreshold } = require('../inventory/inventoryHealth.service');
@@ -70,6 +72,23 @@ const serializeAccessUser = (user, systemRoleMap = {}) => {
 
 const canManageCustomRoles = (user) => getPermissionsForUser(user).includes(PERMISSIONS.ROLES_MANAGE);
 const canManageSystemRoles = (user) => getPermissionsForUser(user).includes(PERMISSIONS.SYSTEM_ROLES_MANAGE);
+const isSuperAdminUser = (user) => {
+  if (!user) return false;
+  if (user.role === ROLES.SUPER_ADMIN) return true;
+  const roles = getRolesForUser(user);
+  return roles.includes(ROLES.SUPER_ADMIN);
+};
+const assertDelegableRole = (role, actingUser) => {
+  if (isSuperAdminUser(actingUser)) return;
+  if (role.baseRole === ROLES.SUPER_ADMIN || role.slug === ROLES.SUPER_ADMIN) {
+    throw new AppError('FORBIDDEN', 403, 'Only super admins can assign super admin roles');
+  }
+  const actorPermissions = getPermissionsForUser(actingUser);
+  const rolePermissionKeys = getPermissionKeysFromRoleObject(role);
+  if (rolePermissionKeys.some((permKey) => !actorPermissions.includes(permKey))) {
+    throw new AppError('FORBIDDEN', 403, 'You cannot assign a role with permissions you do not possess');
+  }
+};
 
 
 const loadInventoryProducts = async () => Product.findAll({
@@ -388,13 +407,16 @@ const buildRoleSlug = async (name, roleId = null, transaction = null) => {
   }
 };
 
-const createAccessRole = async ({ name, description, baseRole, permissionIds }, actingUser) => {
+const createAccessRole = async ({ name, description, baseRole, permissionIds = [] }, actingUser) => {
   return db.sequelize.transaction(async (transaction) => {
     const actingUserId = typeof actingUser === 'object' && actingUser ? actingUser.id : actingUser;
-    const isSuperAdmin = actingUser?.role === ROLES.SUPER_ADMIN;
+    const isSuperAdmin = isSuperAdminUser(actingUser);
 
-    const permissions = await Permission.findAll({ where: { id: permissionIds }, transaction });
-    if (permissions.length !== permissionIds.length) {
+    const safePermissionIds = Array.isArray(permissionIds) ? permissionIds : [];
+    const permissions = safePermissionIds.length
+      ? await Permission.findAll({ where: { id: safePermissionIds }, transaction })
+      : [];
+    if (permissions.length !== safePermissionIds.length) {
       throw new AppError('VALIDATION_ERROR', 400, 'One or more permissions are invalid');
     }
 
@@ -435,7 +457,7 @@ const createAccessRole = async ({ name, description, baseRole, permissionIds }, 
       throw err;
     }
 
-    await role.setPermissions(permissionIds, { transaction });
+    await role.setPermissions(safePermissionIds, { transaction });
     const createdRole = await Role.findByPk(role.id, { include: roleInclude, transaction });
 
     try {
@@ -447,7 +469,7 @@ const createAccessRole = async ({ name, description, baseRole, permissionIds }, 
         changes: {
           name: role.name,
           baseRole,
-          permissionIds,
+          permissionIds: safePermissionIds,
         },
       }, transaction);
     } catch (error) {}
@@ -459,25 +481,28 @@ const createAccessRole = async ({ name, description, baseRole, permissionIds }, 
 const updateAccessRole = async (roleId, payload, actingUser) => {
   return db.sequelize.transaction(async (transaction) => {
     const actingUserId = typeof actingUser === 'object' && actingUser ? actingUser.id : actingUser;
-    const isSuperAdmin = actingUser?.role === ROLES.SUPER_ADMIN;
+    const isSuperAdmin = isSuperAdminUser(actingUser);
 
     const role = await Role.findByPk(roleId, { include: roleInclude, transaction });
     if (!role) {
       throw new AppError('NOT_FOUND', 404, 'Role not found');
     }
 
-    if (role.isSystem && !canManageSystemRoles(actingUser)) {
+    if (role.isSystem && !isSuperAdmin && !canManageSystemRoles(actingUser)) {
       throw new AppError('FORBIDDEN', 403, 'Only super admins can edit system roles');
     }
 
-    if (!role.isSystem && !canManageCustomRoles(actingUser)) {
+    if (!role.isSystem && !isSuperAdmin && !canManageCustomRoles(actingUser)) {
       throw new AppError('FORBIDDEN', 403, 'You do not have permission to edit custom roles');
     }
 
     let permissions = [];
-    if (payload.permissionIds) {
-      permissions = await Permission.findAll({ where: { id: payload.permissionIds }, transaction });
-      if (permissions.length !== payload.permissionIds.length) {
+    if (payload.permissionIds !== undefined) {
+      const safePermissionIds = Array.isArray(payload.permissionIds) ? payload.permissionIds : [];
+      permissions = safePermissionIds.length
+        ? await Permission.findAll({ where: { id: safePermissionIds }, transaction })
+        : [];
+      if (permissions.length !== safePermissionIds.length) {
         throw new AppError('VALIDATION_ERROR', 400, 'One or more permissions are invalid');
       }
       if (!role.isSystem && permissions.some((permission) => RESERVED_SUPER_ADMIN_PERMISSIONS.includes(permission.key))) {
@@ -489,7 +514,7 @@ const updateAccessRole = async (roleId, payload, actingUser) => {
       if (payload.baseRole === ROLES.SUPER_ADMIN) {
         throw new AppError('FORBIDDEN', 403, 'Only super admins can set super admin base role');
       }
-      if (payload.permissionIds) {
+      if (payload.permissionIds !== undefined) {
         const userPerms = getPermissionsForUser(actingUser);
         const unpossessed = permissions.filter((p) => !userPerms.includes(p.key));
         if (unpossessed.length > 0) {
@@ -498,7 +523,7 @@ const updateAccessRole = async (roleId, payload, actingUser) => {
       }
     }
 
-    if (payload.permissionIds) {
+    if (payload.permissionIds !== undefined) {
       await role.setPermissions(payload.permissionIds, { transaction });
     }
 
@@ -702,7 +727,7 @@ const listAccessUsers = async ({ page, limit, search, roleId, includeCustomers =
 const updateUserRole = async (userId, roleId, actingUser) => {
   return db.sequelize.transaction(async (transaction) => {
     const actingUserId = typeof actingUser === 'object' && actingUser ? actingUser.id : actingUser;
-    const isSuperAdmin = actingUser?.role === ROLES.SUPER_ADMIN;
+    const isSuperAdmin = isSuperAdminUser(actingUser);
 
     const user = await User.findByPk(userId, { include: userRoleInclude, transaction });
     if (!user) {
@@ -719,14 +744,9 @@ const updateUserRole = async (userId, roleId, actingUser) => {
     }
 
     if (!isSuperAdmin && actingUser) {
-      if (role.baseRole === ROLES.SUPER_ADMIN) {
-        throw new AppError('FORBIDDEN', 403, 'Only super admins can assign super admin roles');
-      }
-      const userPerms = getPermissionsForUser(actingUser);
-      const rolePermissions = Array.isArray(role.permissions) ? role.permissions : [];
-      const unpossessed = rolePermissions.filter((p) => !userPerms.includes(p.key));
-      if (unpossessed.length > 0) {
-        throw new AppError('FORBIDDEN', 403, 'You cannot assign a role with permissions you do not possess');
+      assertDelegableRole(role, actingUser);
+      if (user.role === ROLES.SUPER_ADMIN || (user.roles || []).some((assigned) => assigned.slug === ROLES.SUPER_ADMIN || assigned.baseRole === ROLES.SUPER_ADMIN)) {
+        throw new AppError('FORBIDDEN', 403, 'Only super admins can change super admin accounts');
       }
     }
 
@@ -801,8 +821,10 @@ const createStaffUser = async ({ firstName, lastName, email, password, roleId, s
       throw new AppError('NOT_FOUND', 404, 'Role not found or inactive');
     }
 
+    assertDelegableRole(role, actingUser);
+
     // Only super admins may create super_admin-level accounts
-    if (role.baseRole === ROLES.SUPER_ADMIN && actingUser.role !== ROLES.SUPER_ADMIN) {
+    if (role.baseRole === ROLES.SUPER_ADMIN && !isSuperAdminUser(actingUser)) {
       throw new AppError('FORBIDDEN', 403, 'Only super admins can create super admin accounts');
     }
 
@@ -830,7 +852,7 @@ const createStaffUser = async ({ firstName, lastName, email, password, roleId, s
 
       // User was previously soft-deleted — handle account recreation & restoration
       // Guard: only super admins can recreate / restore a former super admin account
-      if (existing.role === ROLES.SUPER_ADMIN && actingUser.role !== ROLES.SUPER_ADMIN) {
+      if ((existing.role === ROLES.SUPER_ADMIN || (existing.roles || []).some(r => r.slug === ROLES.SUPER_ADMIN || r.baseRole === ROLES.SUPER_ADMIN)) && !isSuperAdminUser(actingUser)) {
         throw new AppError('FORBIDDEN', 403, 'Only super admins can recreate super admin accounts');
       }
 
@@ -939,7 +961,7 @@ const createStaffUser = async ({ firstName, lastName, email, password, roleId, s
 const deleteStaffUser = async (userId, actingUser) => {
   return db.sequelize.transaction(async (transaction) => {
     const actingUserId = typeof actingUser === 'object' && actingUser ? actingUser.id : actingUser;
-    const isSuperAdmin = actingUser?.role === ROLES.SUPER_ADMIN;
+    const isSuperAdmin = isSuperAdminUser(actingUser);
 
     if (userId === actingUserId) {
       throw new AppError('VALIDATION_ERROR', 400, 'You cannot delete your own account');
@@ -961,7 +983,7 @@ const deleteStaffUser = async (userId, actingUser) => {
       );
     }
 
-    if (user.role === ROLES.SUPER_ADMIN || assignedRoles.some((r) => r.slug === ROLES.SUPER_ADMIN)) {
+    if (user.role === ROLES.SUPER_ADMIN || assignedRoles.some((r) => r.slug === ROLES.SUPER_ADMIN || r.baseRole === ROLES.SUPER_ADMIN)) {
       if (!isSuperAdmin) {
         throw new AppError('FORBIDDEN', 403, 'Only super admins can delete super admin accounts');
       }

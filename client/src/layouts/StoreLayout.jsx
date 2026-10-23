@@ -41,6 +41,7 @@ const StoreLayout = () => {
   const cartEnabled     = useFeature('cart');
   const wishlistEnabled = useFeature('wishlist');
   const ordersEnabled   = useFeature('orders');
+  const brandsEnabled   = useFeature('brands');
   const [announcementDismissed, setAnnouncementDismissed] = useState(false);
   const [topLinks, setTopLinks] = useState([]);
   const [headerMenu, setHeaderMenu] = useState(null);
@@ -115,8 +116,14 @@ const StoreLayout = () => {
   const showAnnouncement = announcement.enabled && Boolean(announcementText) && !announcementDismissed;
   const navPosition  = nav.sticky !== false ? 'sticky' : 'static';
   const headerStyle = themeSettings.headerStyle || 'gradient';
+  const isBrandLink = (url) => /^\/brands(\/|$|\?)/.test(String(url || ''));
+  const filterBrandLinks = (items = []) => (brandsEnabled ? items : items
+    .filter((item) => !isBrandLink(item.url))
+    .map((item) => (Array.isArray(item.children) && item.children.length
+      ? { ...item, children: filterBrandLinks(item.children) }
+      : item)));
   const hasDynamicHeaderItems = Array.isArray(headerMenu?.items) && headerMenu.items.length > 0;
-  const headerItems = hasDynamicHeaderItems
+  const headerItems = filterBrandLinks(hasDynamicHeaderItems
     ? headerMenu.items
     : topLinks.map((link, index) => ({
         id: link.id,
@@ -126,7 +133,7 @@ const StoreLayout = () => {
         placement: 'center',
         sortOrder: index,
         children: [],
-      }));
+      })));
 
   const groupedHeaderItems = {
     left: headerItems.filter((item) => item.placement === 'left'),
@@ -142,7 +149,7 @@ const StoreLayout = () => {
   const headerAlignment = headerMenu?.alignment || 'left';
 
   const hasDedicatedMobileItems = Array.isArray(mobileMenu?.items) && mobileMenu.items.length > 0;
-  const mobileHeaderItems = hasDedicatedMobileItems ? mobileMenu.items : desktopHeaderItems;
+  const mobileHeaderItems = filterBrandLinks(hasDedicatedMobileItems ? mobileMenu.items : desktopHeaderItems);
 
   const getLinkProps = (item) => {
     const url = item.url || '/';

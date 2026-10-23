@@ -178,10 +178,12 @@ const StoreDesignSummary = ({ scope = 'global', page, form = {}, homepageSection
         {scope === 'global' && (
           <>
             <SummaryChip label="Mode" value={summary.theme.mode} />
+            <SummaryChip label="Button" value={summary.theme.buttonStyle || 'solid'} />
             <SummaryChip label="Body" value={summary.theme.font} />
             <SummaryChip label="Heading" value={summary.theme.headingFont} />
             <SummaryChip label="Primary" value={summary.theme.primaryColor} color={summary.theme.primaryColor} />
             <SummaryChip label="Secondary" value={summary.theme.secondaryColor} color={summary.theme.secondaryColor} />
+            <SummaryChip label="Danger" value="#dc3545 (Locked Red)" color="#dc3545" />
           </>
         )}
         {scope === 'cards' && (
