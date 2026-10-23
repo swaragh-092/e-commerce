@@ -802,6 +802,20 @@ pending_payment → confirmed → processing → shipped → delivered
 | `orders` | ✅ | ❌ | Order management |
 | `payments` | ✅ | ❌ | Payment processing |
 | `shipping` | ✅ | ❌ | Shipping calculation and fulfillment |
+### Tier 1 presentation visibility (Superadmin Only)
+
+Each Tier 1 capability has two independent presentation switches on **Admin → Platform Features**:
+
+| Switch | What it hides | What still runs |
+|--------|---------------|-----------------|
+| **Show in Admin UI** | Admin sidebar entries, routes, dashboard widgets, pricing/brand/SEO form fields, and related settings panels | Backend APIs and existing records |
+| **Show in Storefront** | Storefront pricing, cart/checkout entry points, order pages, price rows, payment-method UI, and shipping/payment display blocks | Backend pricing, cart, checkout, order, payment, and shipping processing |
+
+- Stored as flat settings in the `visibility` group: `adminPricing`, `storefrontPricing`, `adminCart`, `storefrontCart`, `adminCheckout`, `storefrontCheckout`, `adminOrders`, `storefrontOrders`, `adminPayments`, `storefrontPayments`, `adminShipping`, `storefrontShipping`.
+- Defaults are `true`; changing the store mode does **not** reset stored preferences.
+- `GET /api/features` returns the effective `visibility` map already AND-ed with the mode-resolved `features`. Visibility can hide a capability but can never enable one disabled by the store mode.
+- The `visibility` group is protected exactly like `features` and `mode`: only Superadmins can write it.
+
 ### Tier 2 — Admin-Controlled (Superadmin Only)
 > [!IMPORTANT]
 > Modifying any feature flag or store mode requires **Superadmin** privileges. Regular admins with `settings.manage` cannot toggle platform features. Changes take effect immediately via server cache invalidation.

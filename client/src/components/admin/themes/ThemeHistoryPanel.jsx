@@ -43,7 +43,7 @@ const ThemeHistoryPanel = ({ activations, onRollback, loading }) => {
           </Typography>
         </DialogContent>
         <DialogActions>
-          <Button onClick={() => setPendingRollback(null)} disabled={loading}>Cancel</Button>
+          <Button color="error" onClick={() => setPendingRollback(null)} disabled={loading}>Cancel</Button>
           <Button
             variant="contained"
             color="warning"

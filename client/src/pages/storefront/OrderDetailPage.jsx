@@ -34,7 +34,7 @@ import ProductTrackingSection from '../../components/orders/order-detail/Product
 import ShippingAddressCard from '../../components/orders/order-detail/ShippingAddressCard';
 import TotalsNotesCard from '../../components/orders/order-detail/TotalsNotesCard';
 import { buildProductTrackingItems } from '../../components/orders/order-detail/orderDetailUtils';
-import { useCurrency, useFeature, useFeaturesResolved, useSettings } from '../../hooks/useSettings';
+import { useCurrency, useFeatureVisible, useFeaturesResolved, useSettings } from '../../hooks/useSettings';
 import { formatDateTime } from '../../utils/dates';
 
 import { useOrderStatusTransitions } from '../../hooks/useOrderStatusTransitions';
@@ -57,7 +57,7 @@ const OrderDetailPage = () => {
   const { formatPrice } = useCurrency();
   const { settings } = useSettings();
   const { hasPermission } = useContext(AuthContext);
-  const ordersEnabled = useFeature('orders');
+  const ordersEnabled = useFeatureVisible('orders', 'storefront');
   const featuresResolved = useFeaturesResolved();
 
   const [order, setOrder] = useState(null);

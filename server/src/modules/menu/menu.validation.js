@@ -3,7 +3,7 @@
 const Joi = require('joi');
 
 const menuLocations = ['header', 'footer', 'mobile', 'sidebar'];
-const targetTypes = ['none', 'custom_url', 'page', 'category', 'product', 'collection', 'system_route'];
+const targetTypes = ['none', 'custom_url', 'page', 'category', 'category_tree', 'product', 'collection', 'system_route'];
 const placements = ['left', 'center', 'right', 'quick_links', 'footer_column', 'mobile', 'sidebar'];
 
 const net = require('net');

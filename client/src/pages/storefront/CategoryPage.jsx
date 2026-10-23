@@ -13,7 +13,7 @@ import ProductFilters from '../../components/product/ProductFilters';
 import StorefrontSidebarMenu from '../../components/layout/StorefrontSidebarMenu';
 import CategorySection from '../../components/storefront/sections/CategorySection';
 import PageSEO from '../../components/common/PageSEO';
-import { useSettings, useFeature } from '../../hooks/useSettings';
+import { useSettings, useFeature, useFeatureVisible } from '../../hooks/useSettings';
 import { getCategoryWithProducts } from '../../services/categoryService';
 import { getMediaUrl, onImageError, PLACEHOLDER_CATEGORY } from '../../utils/media';
 import { buildBreadcrumbJsonLd } from '../../utils/seo/buildStructuredData';
@@ -173,7 +173,7 @@ const CategoryPage = () => {
     const showSubcategories = categoryPage.showSubcategories !== false;
     const showSidebarFilters = showFilters && !isMobile && filterLayout !== 'topbar';
     const showTopbarFilters  = showFilters && !isMobile && filterLayout === 'topbar';
-    const pricingEnabled     = useFeature('pricing');
+    const pricingEnabled     = useFeatureVisible('pricing', 'storefront');
     const showPrice          = useFeature('showPrice');
 
     // ── URL-driven filter state ───────────────────────────────────────────────

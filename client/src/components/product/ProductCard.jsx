@@ -2,7 +2,7 @@ import React from 'react';
 import { Card, CardMedia, CardContent, Typography, Box, Rating, Chip, CardActions, Button } from '@mui/material';
 import { Link, useNavigate } from 'react-router-dom';
 import { getMediaUrl, onImageError, PLACEHOLDER_PRODUCT } from '../../utils/media';
-import { useCurrency, useSettings, useFeature, useComponentStyles } from '../../hooks/useSettings';
+import { useCurrency, useSettings, useFeature, useFeatureVisible, useComponentStyles } from '../../hooks/useSettings';
 import { getDiscountPercent, getSaleTimingMessage, isEndingSoon } from '../../utils/pricing';
 import { resolveRadius, resolveShadow } from '../../utils/styleMaps';
 import WishlistButton from '../common/WishlistButton';
@@ -42,7 +42,7 @@ const ProductCard = React.memo(({ product, fromCategory, compact = false }) => {
   const { formatPrice } = useCurrency();
   const { settings } = useSettings();
   const productCardStyle = useComponentStyles('productCard');
-  const pricingEnabled = useFeature('pricing');
+  const pricingEnabled = useFeatureVisible('pricing', 'storefront');
   const showPrice = useFeature('showPrice');
   const brandsEnabled = useFeature('brands');
   const reviewsEnabled = useFeature('reviews');
@@ -92,7 +92,7 @@ const ProductCard = React.memo(({ product, fromCategory, compact = false }) => {
     }
   }
 
-  const cartEnabled = useFeature('cart');
+  const cartEnabled = useFeatureVisible('cart', 'storefront');
   const { addItem } = useCart();
   const { notify } = useNotification();
 

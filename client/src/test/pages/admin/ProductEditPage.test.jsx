@@ -15,7 +15,7 @@ vi.mock('../../../services/brandService', () => ({ default: { getBrands: vi.fn()
 vi.mock('../../../services/adminService', () => ({ getSaleLabels: vi.fn() }));
 vi.mock('../../../hooks/useAuth', () => ({ useAuth: () => ({ hasPermission: () => true }) }));
 vi.mock('../../../hooks/useSKUGenerator', () => ({ default: () => ({ generateProductSKU: () => 'SKU', generateVariantSKU: () => 'VSKU' }) }));
-vi.mock('../../../hooks/useSettings', () => ({ useSettings: () => ({ settings: { features: { seo: false } } }), useCurrency: () => ({ symbol: '$', currency: 'USD', formatPrice: (value) => `$${value}` }), useFeature: (name) => name !== 'productAssistant' }));
+vi.mock('../../../hooks/useSettings', () => ({ useSettings: () => ({ settings: { features: { seo: false } } }), useCurrency: () => ({ symbol: '$', currency: 'USD', formatPrice: (value) => `$${value}` }), useFeature: (name) => !['productAssistant', 'seo'].includes(name), useFeatureVisible: () => true }));
 vi.mock('../../../components/common/MediaPicker', () => ({ default: () => null }));
 vi.mock('../../../components/admin/UnitSelector', () => ({ default: () => null }));
 vi.mock('../../../components/admin/ProductCustomTabs', () => ({ default: () => null }));
@@ -119,5 +119,19 @@ describe('product type and inventory editor', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Save Product' }));
     await waitFor(() => expect(updateProduct).toHaveBeenCalled());
     expect(updateProduct.mock.calls[0][1]).not.toHaveProperty('quantity');
+  });
+
+  it('renders the sticky top action bar with Back, Cancel, and Save buttons, and prompts on cancel when dirty', async () => {
+    mount(); await loaded();
+    expect(screen.getByRole('button', { name: 'Back to Products' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Cancel' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Save Product' })).toBeInTheDocument();
+
+    // Modify a field to make it dirty
+    fireEvent.change(screen.getByRole('textbox', { name: /Product Name/ }), { target: { value: 'Modified Name' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Cancel' }));
+
+    // Confirmation dialog should appear
+    expect(await screen.findByRole('dialog', { name: 'Discard unsaved changes?' })).toBeInTheDocument();
   });
 });

@@ -579,7 +579,7 @@ const AttributesPage = () => {
           <AttributePresentationPreview attribute={{ ...formData, slug: editing?.slug || '' }} values={editing?.values || []} />
         </DialogContent>
         <DialogActions sx={{ px: 3, pb: 2 }}>
-          <Button onClick={handleDialogClose} disabled={savingAttribute}>Cancel</Button>
+          <Button color="error" onClick={handleDialogClose} disabled={savingAttribute}>Cancel</Button>
           <Button variant="contained" onClick={handleSave} disabled={savingAttribute || !canManageAttributes || !formData.name.trim() || unitsLoading || Boolean(unitsError)}>
             {savingAttribute ? 'Saving…' : editing ? 'Save Changes' : 'Create'}
           </Button>

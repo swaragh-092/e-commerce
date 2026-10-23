@@ -111,14 +111,21 @@ const MenuItemDialog = ({
                   >
                     <MenuItem value="none">Label Only (Category Header)</MenuItem>
                     <MenuItem value="custom_url">Custom URL</MenuItem>
-                    <MenuItem value="system_route">System Route</MenuItem>
+                    <MenuItem value="system_route">Store Page</MenuItem>
                     <MenuItem value="page">Static Page</MenuItem>
                     <MenuItem value="category">Category</MenuItem>
+                    <MenuItem value="category_tree">Synced category tree</MenuItem>
                     <MenuItem value="product">Product</MenuItem>
-                    <MenuItem value="collection">Collection</MenuItem>
                   </Select>
                 </FormControl>
               </Grid>
+              {itemForm.targetType === 'category_tree' && (
+                <Grid item xs={12}>
+                  <Typography variant="body2" color="text.secondary">
+                    All categories appear below this item in the same hierarchy and order as Categories Management. Existing manual children are preserved but hidden while sync is active.
+                  </Typography>
+                </Grid>
+              )}
               {needsTarget(itemForm.targetType) && (
                 <Grid item xs={12} md={8}>
                   <FormControl fullWidth>
@@ -158,7 +165,7 @@ const MenuItemDialog = ({
                 <Grid item xs={12} md={8}>
                   <TextField
                     fullWidth
-                    label={itemForm.targetType === 'system_route' ? 'Route Path' : 'URL'}
+                    label={itemForm.targetType === 'system_route' ? 'Store Page Path' : 'URL'}
                     placeholder={
                       itemForm.targetType === 'system_route'
                         ? '/products'
@@ -166,6 +173,7 @@ const MenuItemDialog = ({
                     }
                     value={itemForm.url || ''}
                     onChange={(e) => setItemForm({ ...itemForm, url: e.target.value })}
+                    helperText={itemForm.targetType === 'system_route' ? 'Enter a path on your store, for example /products or /contact.' : undefined}
                   />
                 </Grid>
               )}
@@ -245,7 +253,7 @@ const MenuItemDialog = ({
         </Stack>
       </DialogContent>
       <DialogActions sx={{ px: 3, pb: 3 }}>
-        <Button onClick={onClose}>Cancel</Button>
+        <Button color="error" onClick={onClose}>Cancel</Button>
         <Button variant="contained" onClick={onSave} size="large" sx={{ px: 4 }}>
           {editingItem ? 'Save Changes' : 'Add Item'}
         </Button>

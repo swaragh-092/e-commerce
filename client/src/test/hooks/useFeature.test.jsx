@@ -4,6 +4,7 @@ import { SettingsContext, DEFAULT_FALLBACK_FEATURES } from '../../context/ThemeC
 import {
   useFeature,
   useFeatureMetadata,
+  useFeatureVisible,
   useFeaturesResolved,
   useIsFeatureLocked,
   useMode,
@@ -96,5 +97,50 @@ describe('useFeature', () => {
     });
     expect(brandsResult.current).toBe(true);
     expect(priceResult.current).toBe(true);
+  });
+});
+
+describe('useFeatureVisible', () => {
+  it('stays false while either map is unresolved', () => {
+    const pendingFeatures = renderHook(() => useFeatureVisible('cart', 'storefront'), {
+      wrapper: wrapperWith({ features: null, visibility: { storefront: { cart: true } } }),
+    });
+    expect(pendingFeatures.result.current).toBe(false);
+
+    const pendingVisibility = renderHook(() => useFeatureVisible('cart', 'storefront'), {
+      wrapper: wrapperWith({ features: { cart: true }, visibility: null }),
+    });
+    expect(pendingVisibility.result.current).toBe(false);
+  });
+
+  it('requires the surface switch for tier-1 features', () => {
+    const hidden = renderHook(() => useFeatureVisible('cart', 'storefront'), {
+      wrapper: wrapperWith({ features: { cart: true }, visibility: { storefront: { cart: false }, admin: { cart: true } } }),
+    });
+    expect(hidden.result.current).toBe(false);
+
+    const shown = renderHook(() => useFeatureVisible('cart', 'admin'), {
+      wrapper: wrapperWith({ features: { cart: true }, visibility: { storefront: { cart: false }, admin: { cart: true } } }),
+    });
+    expect(shown.result.current).toBe(true);
+  });
+
+  it('never enables a tier-1 feature that the mode disabled', () => {
+    const { result } = renderHook(() => useFeatureVisible('checkout', 'storefront'), {
+      wrapper: wrapperWith({ features: { checkout: false }, visibility: { storefront: { checkout: true } } }),
+    });
+    expect(result.current).toBe(false);
+  });
+
+  it('delegates optional features to capability only', () => {
+    const { result: enabled } = renderHook(() => useFeatureVisible('brands', 'storefront'), {
+      wrapper: wrapperWith({ features: { brands: true }, visibility: {} }),
+    });
+    expect(enabled.current).toBe(true);
+
+    const { result: disabled } = renderHook(() => useFeatureVisible('brands', 'admin'), {
+      wrapper: wrapperWith({ features: { brands: false }, visibility: {} }),
+    });
+    expect(disabled.current).toBe(false);
   });
 });

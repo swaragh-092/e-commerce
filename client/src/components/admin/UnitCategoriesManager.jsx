@@ -121,7 +121,7 @@ const UnitCategoriesManager = ({ onBack, backLabel, onCategoryChanged, onDirtyCh
     </DialogContent>
     <DialogActions sx={{ px: { xs: 2, sm: 3 }, py: 2, borderTop: 1, borderColor: 'divider' }}>
       {deleting ? <>
-        <Button disabled={blocked} onClick={() => { setDeleting(''); }}>Cancel</Button>
+        <Button color="error" disabled={blocked} onClick={() => { setDeleting(''); }}>Cancel</Button>
         <Button variant="contained" color="error" disabled={blocked || deletingCount > 0} onClick={deleteCategory}>{saving ? 'Deleting…' : 'Delete category'}</Button>
       </> : <Button variant="outlined" disabled={blocked} onClick={onBack}>{backLabel}</Button>}
     </DialogActions>

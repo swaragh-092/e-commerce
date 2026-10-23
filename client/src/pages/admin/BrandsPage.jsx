@@ -604,7 +604,7 @@ const BrandsPage = () => {
           </Stack>
         </DialogContent>
         <DialogActions sx={{ px: 3, py: 2 }}>
-          <Button onClick={handleCloseDialog}>Cancel</Button>
+          <Button color="error" onClick={handleCloseDialog}>Cancel</Button>
           <Button variant="contained" onClick={handleSave} disabled={saving}>
             {saving ? 'Saving...' : 'Save Brand'}
           </Button>
@@ -619,7 +619,7 @@ const BrandsPage = () => {
           Products assigned to this brand will have their brand association removed.
         </DialogContent>
         <DialogActions sx={{ px: 3, py: 2 }}>
-          <Button onClick={() => setDeleteConfirm({ open: false, id: null, name: '' })}>Cancel</Button>
+          <Button color="error" onClick={() => setDeleteConfirm({ open: false, id: null, name: '' })}>Cancel</Button>
           <Button variant="contained" color="error" onClick={handleDelete}>
             Delete
           </Button>

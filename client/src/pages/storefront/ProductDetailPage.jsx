@@ -17,7 +17,7 @@ import ShareButton from '../../components/common/ShareButton';
 import ReviewSection from '../../components/product/ReviewSection';
 import DOMPurify from 'dompurify';
 import { useCart } from '../../hooks/useCart';
-import { useCurrency, useSettings, useFeature, useComponentStyles } from '../../hooks/useSettings';
+import { useCurrency, useSettings, useFeature, useFeatureVisible, useComponentStyles } from '../../hooks/useSettings';
 import { formatSaleDateTime, getCountdownText, getDiscountPercent, getSaleTimingMessage, getSavingsAmount, isEndingSoon } from '../../utils/pricing';
 import {
     getVariantDiscountPercent,
@@ -60,8 +60,8 @@ const ProductDetailPage = () => {
     const { formatPrice, currency } = useCurrency();
     const { settings } = useSettings();
     const storeName = getStoreName(settings);
-    const cartEnabled    = useFeature('cart');
-    const pricingEnabled = useFeature('pricing');
+    const cartEnabled    = useFeatureVisible('cart', 'storefront');
+    const pricingEnabled = useFeatureVisible('pricing', 'storefront');
     const showPrice = useFeature('showPrice');
     const wishlistEnabled = useFeature('wishlist');
     const enquiryEnabled = useFeature('enquiry');

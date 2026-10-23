@@ -27,7 +27,8 @@
         "headerStyle": "glass",
         "buttonStyle": "solid",
         "cardStyle": "elevated",
-        "backgroundStyle": "softGradient"
+        "backgroundStyle": "softGradient",
+        "cancelButtonColor": "#DC3545"
     },
     "sectionPresets": {
         "hero": {},
@@ -116,6 +117,20 @@
         "showAvailableCoupons": true,
         "apiBuilder": true,
         "productAssistant": true
+    },
+    "visibility": {
+        "adminPricing": true,
+        "adminCart": true,
+        "adminCheckout": true,
+        "adminOrders": true,
+        "adminPayments": true,
+        "adminShipping": true,
+        "storefrontPricing": true,
+        "storefrontCart": true,
+        "storefrontCheckout": true,
+        "storefrontOrders": true,
+        "storefrontPayments": true,
+        "storefrontShipping": true
     },
     "payments": {
         "razorpayEnabled": true,

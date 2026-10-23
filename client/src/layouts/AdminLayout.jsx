@@ -62,6 +62,7 @@ import AnalyticsIcon from '@mui/icons-material/Analytics';
 import OpenInNewIcon from '@mui/icons-material/OpenInNew';
 import { useAuth } from '../hooks/useAuth';
 import { useSettings, useMode } from '../hooks/useSettings';
+import { isAdminMenuItemVisible } from '../utils/adminMenuVisibility';
 import { PERMISSIONS } from '../utils/permissions';
 import { UnitCatalogProvider } from '../context/UnitCatalogContext';
 
@@ -79,7 +80,7 @@ const MENU_STRUCTURE = [
     items: [
       { text: 'Products', path: '/admin/products', icon: <InventoryIcon />, permission: PERMISSIONS.PRODUCTS_READ },
       { text: 'Categories', path: '/admin/categories', icon: <CategoryIcon />, permission: PERMISSIONS.CATEGORIES_READ },
-      { text: 'Brands', path: '/admin/brands', icon: <LocalOfferIcon />, permission: PERMISSIONS.PRODUCTS_READ },
+      { text: 'Brands', path: '/admin/brands', icon: <LocalOfferIcon />, feature: 'brands', permission: PERMISSIONS.PRODUCTS_READ },
       { text: 'Attributes', path: '/admin/attributes', icon: <TuneIcon />, permission: PERMISSIONS.ATTRIBUTES_READ },
     ]
   },
@@ -87,12 +88,12 @@ const MENU_STRUCTURE = [
     title: 'Sales',
     icon: <ShoppingCartIcon />,
     items: [
-      { text: 'Orders', path: '/admin/orders', icon: <ShoppingCartIcon />, permission: PERMISSIONS.ORDERS_READ },
-      { text: 'Enquiries', path: '/admin/enquiries', icon: <HelpOutlineIcon />, permission: PERMISSIONS.ENQUIRIES_READ },
+      { text: 'Orders', path: '/admin/orders', icon: <ShoppingCartIcon />, feature: 'orders', permission: PERMISSIONS.ORDERS_READ },
+      { text: 'Enquiries', path: '/admin/enquiries', icon: <HelpOutlineIcon />, feature: 'enquiry', permission: PERMISSIONS.ENQUIRIES_READ },
       { text: 'Customers', path: '/admin/customers', icon: <PeopleIcon />, permission: PERMISSIONS.CUSTOMERS_READ },
-      { text: 'Coupons', path: '/admin/coupons', icon: <LocalOfferIcon />, permission: PERMISSIONS.COUPONS_READ },
+      { text: 'Coupons', path: '/admin/coupons', icon: <LocalOfferIcon />, feature: 'coupons', permission: PERMISSIONS.COUPONS_READ },
       { text: 'Sale Labels', path: '/admin/sale-labels', icon: <LocalOfferIcon />, permission: PERMISSIONS.SETTINGS_READ, mode: 'ecommerce' },
-      { text: 'Reviews', path: '/admin/reviews', icon: <StarIcon />, permission: PERMISSIONS.REVIEWS_READ },
+      { text: 'Reviews', path: '/admin/reviews', icon: <StarIcon />, feature: 'reviews', permission: PERMISSIONS.REVIEWS_READ },
     ]
   },
   {
@@ -124,8 +125,8 @@ const MENU_STRUCTURE = [
       { text: 'Store Designer', path: '/admin/store-designer', icon: <PhotoLibraryIcon />, feature: 'themes', permission: PERMISSIONS.SETTINGS_MANAGE, newTab: true },
       { text: 'Newsletter', path: '/admin/newsletter', icon: <MailOutlineIcon />, permission: PERMISSIONS.SETTINGS_READ },
       { text: 'Templates', path: '/admin/email-templates', icon: <MailOutlineIcon />, permission: PERMISSIONS.SETTINGS_READ },
-      { text: 'Payment Gateways', path: '/admin/payment-gateways', icon: <PaymentIcon />, permission: PERMISSIONS.SETTINGS_READ, mode: 'ecommerce' },
-      { text: 'Shipping', path: '/admin/shipping', icon: <LocalShippingIcon />, permission: PERMISSIONS.SETTINGS_READ, mode: 'ecommerce' },
+      { text: 'Payment Gateways', path: '/admin/payment-gateways', icon: <PaymentIcon />, feature: 'payments', permission: PERMISSIONS.SETTINGS_READ, mode: 'ecommerce' },
+      { text: 'Shipping', path: '/admin/shipping', icon: <LocalShippingIcon />, feature: 'shipping', permission: PERMISSIONS.SETTINGS_READ, mode: 'ecommerce' },
     ]
   },
   {
@@ -170,7 +171,7 @@ const AdminLayout = () => {
   const { logout, user, hasAnyPermission, hasPermission, hasRole } = useAuth();
   const location = useLocation();
   const navigate = useNavigate();
-  const { settings, features } = useSettings();
+  const { settings, features, visibility } = useSettings();
   const appMode = useMode(); // 'ecommerce' | 'catalog'
   const isDesignerCanvasRoute = location.pathname.startsWith('/admin/store-designer');
   const navCollapsed = sidebarCollapsed;
@@ -237,13 +238,15 @@ const AdminLayout = () => {
 
   // Filter and check if group should be visible
   const isItemVisible = (item) => {
-    // Mode and Feature flags
-    if (item.mode && item.mode !== appMode) return false;
-    if (item.feature && features?.[item.feature] === false) return false;
-    if (item.permission && !hasPermission(item.permission)) return false;
-    if (item.permissions && !hasAnyPermission(item.permissions)) return false;
-    if (item.role && !hasRole(item.role)) return false;
-    
+    if (!isAdminMenuItemVisible(item, {
+      mode: appMode,
+      features,
+      visibility,
+      hasPermission,
+      hasAnyPermission,
+      hasRole,
+    })) return false;
+
     // Search query filter
     if (searchQuery) {
       const query = searchQuery.toLowerCase();
@@ -327,20 +330,27 @@ const AdminLayout = () => {
             selected={active}
             onClick={() => isMobile && setMobileOpen(false)}
             sx={{
-              borderRadius: '12px',
+              borderRadius: isNested ? '9px' : '12px',
               mb: 0.5,
-              py: 1,
-              pl: isNested ? (navCollapsed ? 1.5 : 4.5) : 2.5,
+              py: isNested ? 0.75 : 1,
+              pl: isNested ? (navCollapsed ? 1.5 : 2) : 2.5,
               pr: navCollapsed ? 0 : 4,
               justifyContent: navCollapsed ? 'center' : 'initial',
+              bgcolor: isNested ? 'background.paper' : 'transparent',
               transition: 'all 0.25s cubic-bezier(0.4, 0, 0.2, 1)',
               '&:hover': {
-                bgcolor: (theme) => alpha(theme.palette.primary.main, 0.04),
+                bgcolor: (theme) => alpha(theme.palette.primary.main, isNested ? 0.07 : 0.04),
                 '& .MuiListItemIcon-root': {
                   transform: 'translateX(3px)',
                   color: 'primary.main',
                 },
               },
+              ...(isNested ? {
+                '& .MuiListItemIcon-root': {
+                  minWidth: 30,
+                  color: active ? 'primary.main' : 'text.disabled',
+                },
+              } : {}),
               '&.Mui-selected': {
                 bgcolor: (theme) => alpha(theme.palette.primary.main, 0.08),
                 color: 'primary.main',
@@ -468,7 +478,20 @@ const AdminLayout = () => {
             </Tooltip>
           </ListItem>
           <Collapse in={(isOpen || !!searchQuery) && !navCollapsed} timeout="auto" unmountOnExit>
-            <List component="div" disablePadding>
+            <List
+              component="div"
+              disablePadding
+              sx={{
+                ml: 3.5,
+                mr: 1.5,
+                mb: 1,
+                pl: 0.75,
+                borderLeft: '2px solid',
+                borderColor: 'divider',
+                bgcolor: (theme) => alpha(theme.palette.text.primary, 0.025),
+                borderRadius: '0 10px 10px 0',
+              }}
+            >
               {section.items.map(item => renderMenuItem(item, true))}
             </List>
           </Collapse>

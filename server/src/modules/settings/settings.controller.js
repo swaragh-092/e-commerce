@@ -128,8 +128,8 @@ const updateBulk = async (req, res, next) => {
  */
 const getFeatures = async (req, res, next) => {
   try {
-    const { features, lockedKeys, mode } = await SettingsService.getFeatures();
-    return success(res, { mode, features, lockedKeys });
+    const { features, lockedKeys, mode, visibility } = await SettingsService.getFeatures();
+    return success(res, { mode, features, lockedKeys, visibility });
   } catch (err) {
     next(err);
   }

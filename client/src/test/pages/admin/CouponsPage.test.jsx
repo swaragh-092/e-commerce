@@ -29,7 +29,7 @@ vi.mock('../../../services/adminService', () => ({
 vi.mock('../../../services/productService', () => ({ getProducts: vi.fn().mockResolvedValue({ data: [] }) }));
 vi.mock('../../../services/categoryService', () => ({ getCategoryTree: vi.fn().mockResolvedValue({ data: [] }) }));
 vi.mock('../../../services/brandService', () => ({ default: { getBrands: vi.fn().mockResolvedValue({ data: { data: { brands: [] } } }) } }));
-vi.mock('../../../hooks/useSettings', () => ({ useCurrency: () => ({ formatPrice: (value) => `₹${value}` }) }));
+vi.mock('../../../hooks/useSettings', () => ({ useCurrency: () => ({ formatPrice: (value) => `₹${value}` }), useFeature: () => true }));
 vi.mock('../../../hooks/useAuth', () => ({ useAuth: () => ({ hasPermission: () => true }) }));
 vi.mock('../../../context/NotificationContext', () => ({ useNotification: () => ({ notify: vi.fn() }) }));
 

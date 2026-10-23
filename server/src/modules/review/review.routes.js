@@ -12,17 +12,18 @@ const { createReviewSchema } = require('./review.validation');
 const { PERMISSIONS } = require('../../config/permissions');
 const { paginationQuerySchema, slugParamSchema } = require('../../utils/common.validation');
 
-// Apply reviews feature gate to all routes in this module
-router.use(featureGate('reviews'));
+// This router is mounted at /api: gate matched review routes only, so
+// disabling reviews does not block unrelated APIs registered after it.
+const reviewsFeature = featureGate('reviews');
 
 // Get current user's review for a product (must be before /:slug/reviews to avoid param conflict)
 // validate slugParamSchema here for consistency — malformed slugs are rejected before hitting the controller
-router.get('/products/:slug/reviews/mine', authenticate, validate(slugParamSchema, 'params'), reviewController.getMyReview);
+router.get('/products/:slug/reviews/mine', reviewsFeature, authenticate, validate(slugParamSchema, 'params'), reviewController.getMyReview);
 
 // Public read access for approved reviews
-router.get('/products/:slug/reviews', validate(paginationQuerySchema, 'query'), validate(slugParamSchema, 'params'), reviewController.list);
+router.get('/products/:slug/reviews', reviewsFeature, validate(paginationQuerySchema, 'query'), validate(slugParamSchema, 'params'), reviewController.list);
 
 // Customer post reviews
-router.post('/products/:slug/reviews', authenticate, authorizePermissions(PERMISSIONS.REVIEWS_CREATE), reviewLimiter, validate(createReviewSchema), reviewController.create);
+router.post('/products/:slug/reviews', reviewsFeature, authenticate, authorizePermissions(PERMISSIONS.REVIEWS_CREATE), reviewLimiter, validate(createReviewSchema), reviewController.create);
 
 module.exports = router;

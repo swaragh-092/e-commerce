@@ -68,6 +68,19 @@ describe('Platform Features Control Suite', () => {
       });
     });
 
+    it('rejects non-superadmin attempting to update tier-1 visibility', async () => {
+      await expect(
+        SettingsService.bulkUpdate(
+          [{ group: 'visibility', key: 'storefrontCart', value: false }],
+          regularAdminUser.id,
+          regularAdminUser
+        )
+      ).rejects.toMatchObject({
+        code: 'SUPERADMIN_REQUIRED',
+        statusCode: 403,
+      });
+    });
+
     it('rejects non-superadmin attempting to update feature flags via bulkUpdate', async () => {
       await expect(
         SettingsService.bulkUpdate(

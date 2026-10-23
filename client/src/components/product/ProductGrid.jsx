@@ -4,7 +4,7 @@ import SearchOffOutlinedIcon from '@mui/icons-material/SearchOffOutlined';
 import { Link } from 'react-router-dom';
 import ProductCard from './ProductCard';
 import { getMediaUrl, onImageError, PLACEHOLDER_PRODUCT } from '../../utils/media';
-import { useCurrency, useFeature } from '../../hooks/useSettings';
+import { useCurrency, useFeature, useFeatureVisible } from '../../hooks/useSettings';
 
 // Maps the setting value (number of desktop columns) -> MUI Grid breakpoints
 const COLS_MAP = {
@@ -19,7 +19,8 @@ const ProductGrid = ({ products, loading, gridCols = 4, fromCategory, hasActiveF
     const cols = COLS_MAP[parseInt(gridCols)] || COLS_MAP[4];
     const isCompactList = variant === 'compact-list';
     const { formatPrice } = useCurrency();
-    const showPrice = useFeature('showPrice');
+    const pricingVisible = useFeatureVisible('pricing', 'storefront');
+    const showPrice = pricingVisible && useFeature('showPrice');
     const brandsEnabled = useFeature('brands');
 
     if (loading) {

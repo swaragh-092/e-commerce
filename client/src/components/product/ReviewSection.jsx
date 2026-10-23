@@ -5,12 +5,12 @@ import { Link as RouterLink } from 'react-router-dom';
 import { reviewService } from '../../services/reviewService';
 import { useAuth } from '../../hooks/useAuth';
 import { orderService } from '../../services/orderService';
-import { useFeature } from '../../hooks/useSettings';
+import { useFeature, useFeatureVisible } from '../../hooks/useSettings';
 
 const ReviewSection = ({ slug, productId, onVisibleReviewsChange }) => {
     const reviewsEnabled = useFeature('reviews');
     const requirePurchase = useFeature('requirePurchaseForReview');
-    const ordersEnabled = useFeature('orders');
+    const ordersEnabled = useFeatureVisible('orders', 'storefront');
 
     const [reviews, setReviews] = useState([]);
     const [showForm, setShowForm] = useState(false);

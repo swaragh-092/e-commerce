@@ -135,7 +135,7 @@ const ThemeImportDialog = ({ open, onClose, onImport, onPreview, loading }) => {
         )}
       </DialogContent>
       <DialogActions>
-        <Button onClick={handleClose}>Cancel</Button>
+        <Button color="error" onClick={handleClose}>Cancel</Button>
         {step === STEPS.SUMMARY && (
           <>
             {onPreview && (

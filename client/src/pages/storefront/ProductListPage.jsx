@@ -8,7 +8,7 @@ import StorefrontSidebarMenu from '../../components/layout/StorefrontSidebarMenu
 import { getProducts } from '../../services/productService';
 import { getCategoryTree } from '../../services/categoryService';
 import PageSEO from '../../components/common/PageSEO';
-import { useSettings, useFeature } from '../../hooks/useSettings';
+import { useSettings, useFeature, useFeatureVisible } from '../../hooks/useSettings';
 
 const ProductListPage = () => {
     const [searchParams, setSearchParams] = useSearchParams();
@@ -34,7 +34,7 @@ const ProductListPage = () => {
     const showSidebarFilters = showFilters && !isMobile && filterLayout !== 'topbar';
     const showTopbarFilters = showFilters && !isMobile && filterLayout === 'topbar';
     const showCatalogBreadcrumbs = catalog.showBreadcrumbs !== false;
-    const pricingEnabled = useFeature('pricing');
+    const pricingEnabled = useFeatureVisible('pricing', 'storefront');
     const showPrice = useFeature('showPrice');
     const brandsEnabled = useFeature('brands');
 

@@ -20,7 +20,7 @@ import CreditCardIcon from '@mui/icons-material/CreditCard';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { AuthContext } from '../../context/AuthContext';
 import { useNotification } from '../../context/NotificationContext';
-import { useSettings, useCurrency, useFeature, useFeaturesResolved, useComponentStyles } from '../../hooks/useSettings';
+import { useSettings, useCurrency, useFeature, useFeatureVisible, useFeaturesResolved, useComponentStyles } from '../../hooks/useSettings';
 import { useCart } from '../../hooks/useCart';
 import { getSessionId } from '../../services/cartService';
 import { userService } from '../../services/userService';
@@ -262,8 +262,13 @@ const CheckoutPage = () => {
     }, [location.state?.fromBuyNow, location.state?.buyNowItem]);
     const hasInvalidBuyNowState = Boolean(location.state?.fromBuyNow) && !buyNowItem;
 
-    const checkoutEnabled = useFeature('checkout');
-    const cartEnabled = useFeature('cart');
+    const checkoutEnabled = useFeatureVisible('checkout', 'storefront');
+    const cartEnabled = useFeatureVisible('cart', 'storefront');
+    const paymentsVisible = useFeatureVisible('payments', 'storefront');
+    const shippingVisible = useFeatureVisible('shipping', 'storefront');
+    const pricingVisible = useFeatureVisible('pricing', 'storefront');
+    const showPrice = useFeature('showPrice');
+    const showPrices = pricingVisible && showPrice !== false;
     const guestCheckoutEnabled = useFeature('guestCheckout');
     const featuresResolved = useFeaturesResolved();
 
@@ -302,7 +307,7 @@ const CheckoutPage = () => {
             return req !== false;
         });
     }, [items, isBuyNowFlow, buyNowProductRequiresShipping]);
-    const couponsEnabled = settings?.features?.coupons !== false;
+    const couponsEnabled = useFeature('coupons');
     const paymentSettings = settings?.payments || {};
     const enabledPaymentMethods = PAYMENT_METHOD_OPTIONS.filter((method) => {
         if (!hasPhysicalItems && method.id === 'cod') return false;
@@ -1128,7 +1133,7 @@ const CheckoutPage = () => {
                                     Add a new address
                                 </Button>
 
-                                {selectedAddressId && (
+                                {selectedAddressId && shippingVisible && (
                                     <Box sx={{ mb: 2 }}>
                                         {shippingLoading ? (
                                             <Alert severity="info" icon={<CircularProgress size={16} />}>
@@ -1137,7 +1142,7 @@ const CheckoutPage = () => {
                                         ) : shippingQuote?.serviceable ? (
                                             <Alert severity="success">
                                                 Delivery available{shippingQuote.estimatedDeliveryDays ? ` in ${shippingQuote.estimatedDeliveryDays} days` : ''}.
-                                                {effectiveShippingCost === 0 ? ' Free shipping applied.' : ` Delivery fee: ${formatPrice(effectiveShippingCost)}.`}
+                                                {effectiveShippingCost === 0 ? ' Free shipping applied.' : showPrices ? ` Delivery fee: ${formatPrice(effectiveShippingCost)}.` : ''}
                                             </Alert>
                                         ) : null}
                                     </Box>
@@ -1173,7 +1178,9 @@ const CheckoutPage = () => {
                                     <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
                                         <LocalOfferIcon sx={{ fontSize: 16, color: 'success.main' }} />
                                         <Typography variant="body2" color="success.main" fontWeight={600}>
-                                            Saving {formatPrice(couponResult.totalDiscount || couponResult.orderDiscount || 0)} with {appliedCoupons.length > 1 ? `${appliedCoupons.length} offers` : (couponCode || 'coupon')}
+                                            {showPrices
+                                                ? `Saving ${formatPrice(couponResult.totalDiscount || couponResult.orderDiscount || 0)} with ${appliedCoupons.length > 1 ? `${appliedCoupons.length} offers` : (couponCode || 'coupon')}`
+                                                : `Offer applied: ${appliedCoupons.length > 1 ? `${appliedCoupons.length} offers` : (couponCode || 'coupon')}`}
                                         </Typography>
                                     </Box>
                                 ) : (
@@ -1196,7 +1203,7 @@ const CheckoutPage = () => {
                                                 const label = c.type === 'percentage'
                                                     ? `${Number(c.value)}% off`
                                                     : c.type === 'free_shipping' ? 'Free shipping'
-                                                        : `${formatPrice(Number(c.value))} off`;
+                                                        : showPrices ? `${formatPrice(Number(c.value))} off` : 'Discount coupon';
                                                 const applied = couponCode === c.code && couponResult && !couponResult.error;
                                                 return (
                                                     <Chip
@@ -1217,7 +1224,7 @@ const CheckoutPage = () => {
                                     ) : (
                                         <Typography variant="caption" color="text.secondary">No offers available right now.</Typography>
                                     )}
-                                    {eligibleCouponSummary?.bestCoupon && !couponResult?.error && (
+                                    {showPrices && eligibleCouponSummary?.bestCoupon && !couponResult?.error && (
                                         <Alert severity="info" sx={{ mt: 1.5, py: 0.5 }}>
                                             Best offer saves {formatPrice(eligibleCouponSummary.bestCoupon.totalDiscount || 0)}
                                         </Alert>
@@ -1252,7 +1259,7 @@ const CheckoutPage = () => {
                                     onClose={couponResult.error ? () => setCouponResult(null) : undefined}
                                 >
                                     {couponResult.message}
-                                    {!couponResult.error && ` — You save ${formatPrice(couponResult.totalDiscount || couponResult.orderDiscount || 0)}`}
+                                    {!couponResult.error && showPrices && ` — You save ${formatPrice(couponResult.totalDiscount || couponResult.orderDiscount || 0)}`}
                                 </Alert>
                             )}
 
@@ -1264,7 +1271,7 @@ const CheckoutPage = () => {
                                             {...themedChipProps({
                                                 color: coupon.applicationMode === 'auto' ? 'info' : 'success',
                                                 variant: 'outlined',
-                                                label: `${coupon.code} · ${formatPrice(coupon.totalDiscount || 0)}`,
+                                                label: showPrices ? `${coupon.code} · ${formatPrice(coupon.totalDiscount || 0)}` : coupon.code,
                                             })}
                                         />
                                     ))}
@@ -1298,7 +1305,11 @@ const CheckoutPage = () => {
                         onEdit={() => editSection(3)}
                         summary={
                             <Typography variant="body2" color="text.secondary" sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
-                                {paymentMethod === 'cod' ? (
+                                {!paymentsVisible ? (
+                                    <>
+                                        <PaymentsIcon sx={{ fontSize: 16 }} /> Secure payment
+                                    </>
+                                ) : paymentMethod === 'cod' ? (
                                     <>
                                         <PaymentsIcon sx={{ fontSize: 16 }} /> Cash on Delivery
                                     </>
@@ -1310,6 +1321,12 @@ const CheckoutPage = () => {
                             </Typography>
                         }
                     >
+                        {!paymentsVisible && (
+                            <Alert severity="info" sx={{ mb: 2 }}>
+                                Payment options are hidden on the storefront. Your order will use the store's configured payment method.
+                            </Alert>
+                        )}
+                        {paymentsVisible && (
                         <RadioGroup
                             aria-label="Payment method"
                             value={paymentMethod}
@@ -1361,6 +1378,7 @@ const CheckoutPage = () => {
                                 </Paper>
                             ))}
                         </RadioGroup>
+                        )}
 
                         {/* Order notes */}
                         <TextField
@@ -1401,7 +1419,9 @@ const CheckoutPage = () => {
                                         </Typography>
 
                                     </Box>
-                                    <Typography variant="body2" fontWeight={600}>{formatPrice(itemPrice * quantity)}</Typography>
+                                    {showPrices && (
+                                        <Typography variant="body2" fontWeight={600}>{formatPrice(itemPrice * quantity)}</Typography>
+                                    )}
                                 </Box>
                             );
                         })}
@@ -1420,108 +1440,120 @@ const CheckoutPage = () => {
                             </Typography>
                         </Box>
                         <Box sx={{ px: 2.5, py: 2 }}>
-                            <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 1 }}>
-                                <Typography variant="body2" color="text.secondary">
-                                    Price ({items.reduce((s, i) => s + normalizeBuyNowQuantity(i?.quantity), 0)} items)
-                                </Typography>
-                                <Typography variant="body2">{formatPrice(subtotal)}</Typography>
-                            </Box>
-
-                            {/* Shipping */}
-                            <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 1 }}>
-                                <Typography variant="body2" color="text.secondary">Delivery Charges</Typography>
-                                {!hasPhysicalItems ? (
-                                    <Typography variant="body2" color="success.main" fontWeight={600}>FREE (Digital)</Typography>
-                                ) : shippingLoading ? (
-                                    <CircularProgress size={16} />
-                                ) : shippingError || shippingQuote?.serviceable === false ? (
-                                    <Typography variant="body2" color="warning.main" fontWeight={600}>Unavailable</Typography>
-                                ) : !shippingQuote?.quoteId ? (
-                                    <Typography variant="body2" color="text.secondary">Select a delivery address</Typography>
-                                ) : shippingCost === 0 ? (
-                                    <Typography variant="body2" color="success.main" fontWeight={600}>FREE</Typography>
-                                ) : shippingDiscount > 0 ? (
-                                    <Box sx={{ textAlign: 'right' }}>
-                                        <Typography variant="body2" sx={{ textDecoration: 'line-through', color: 'text.secondary' }}>
-                                            {formatPrice(shippingCost)}
+                            {showPrices ? (
+                                <>
+                                    <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 1 }}>
+                                        <Typography variant="body2" color="text.secondary">
+                                            Price ({items.reduce((s, i) => s + normalizeBuyNowQuantity(i?.quantity), 0)} items)
                                         </Typography>
-                                        <Typography variant="body2" color="success.main" fontWeight={600}>FREE</Typography>
+                                        <Typography variant="body2">{formatPrice(subtotal)}</Typography>
                                     </Box>
-                                ) : (
-                                    <Typography variant="body2">{formatPrice(shippingCost)}</Typography>
-                                )}
-                            </Box>
-                            {hasPhysicalItems && shippingQuote?.pricingSource === 'standard' && shippingMethod === 'free_above_threshold' && shippingCost > 0 && (
-                                <Typography variant="caption" color="success.main" display="block" mb={1}>
-                                    Add {formatPrice(freeThreshold - subtotal)} more for free delivery
-                                </Typography>
-                            )}
+
+                                    {/* Shipping */}
+                                    {shippingVisible && (
+                                    <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 1 }}>
+                                        <Typography variant="body2" color="text.secondary">Delivery Charges</Typography>
+                                        {!hasPhysicalItems ? (
+                                            <Typography variant="body2" color="success.main" fontWeight={600}>FREE (Digital)</Typography>
+                                        ) : shippingLoading ? (
+                                            <CircularProgress size={16} />
+                                        ) : shippingError || shippingQuote?.serviceable === false ? (
+                                            <Typography variant="body2" color="warning.main" fontWeight={600}>Unavailable</Typography>
+                                        ) : !shippingQuote?.quoteId ? (
+                                            <Typography variant="body2" color="text.secondary">Select a delivery address</Typography>
+                                        ) : shippingCost === 0 ? (
+                                            <Typography variant="body2" color="success.main" fontWeight={600}>FREE</Typography>
+                                        ) : shippingDiscount > 0 ? (
+                                            <Box sx={{ textAlign: 'right' }}>
+                                                <Typography variant="body2" sx={{ textDecoration: 'line-through', color: 'text.secondary' }}>
+                                                    {formatPrice(shippingCost)}
+                                                </Typography>
+                                                <Typography variant="body2" color="success.main" fontWeight={600}>FREE</Typography>
+                                            </Box>
+                                        ) : (
+                                            <Typography variant="body2">{formatPrice(shippingCost)}</Typography>
+                                        )}
+                                    </Box>
+                                    )}
+                                    {shippingVisible && hasPhysicalItems && shippingQuote?.pricingSource === 'standard' && shippingMethod === 'free_above_threshold' && shippingCost > 0 && (
+                                        <Typography variant="caption" color="success.main" display="block" mb={1}>
+                                            Add {formatPrice(freeThreshold - subtotal)} more for free delivery
+                                        </Typography>
+                                    )}
 
 
-                            {/* GST breakdown */}
-                            {taxSummary.taxRows.map((row) => (
-                                <Box key={row.key} sx={{ display: 'flex', justifyContent: 'space-between', mb: 0.5 }}>
-                                    <Typography variant="body2" color="text.secondary">{row.label}</Typography>
-                                    <Typography variant="body2">{formatPrice(row.amount)}</Typography>
-                                </Box>
-                            ))}
-                            {hasPhysicalItems && effectiveDeliveryTax > 0 && (
-                                <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 0.5 }}>
+                                    {/* GST breakdown */}
+                                    {taxSummary.taxRows.map((row) => (
+                                        <Box key={row.key} sx={{ display: 'flex', justifyContent: 'space-between', mb: 0.5 }}>
+                                            <Typography variant="body2" color="text.secondary">{row.label}</Typography>
+                                            <Typography variant="body2">{formatPrice(row.amount)}</Typography>
+                                        </Box>
+                                    ))}
+                                    {shippingVisible && hasPhysicalItems && effectiveDeliveryTax > 0 && (
+                                        <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 0.5 }}>
+                                            <Typography variant="body2" color="text.secondary">
+                                                Tax on delivery
+                                            </Typography>
+                                            <Typography variant="body2">{formatPrice(effectiveDeliveryTax)}</Typography>
+                                        </Box>
+                                    )}
+                                    {hasPhysicalItems && shippingTaxIncluded && effectiveShippingCost > 0 && (
+                                        <Typography variant="caption" color="text.secondary" display="block" mb={0.5} textAlign="right">
+                                            Delivery charges include tax
+                                        </Typography>
+                                    )}
+                                    {taxSummary.isInclusive && (
+                                        <Typography variant="caption" color="text.secondary" display="block" mb={1} textAlign="right">
+                                            Product prices inclusive of all taxes
+                                        </Typography>
+                                    )}
+
+                                    {/* Discount */}
+                                    {orderDiscount > 0 && (
+                                        <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 0.5 }}>
+                                            <Typography variant="body2" color="text.secondary">Coupon Discount</Typography>
+                                            <Typography variant="body2" color="success.main" fontWeight={600}>−{formatPrice(orderDiscount)}</Typography>
+                                        </Box>
+                                    )}
+                                    {appliedCoupons.length > 0 && appliedCoupons.map((coupon) => (
+                                        <Box key={coupon.code} sx={{ display: 'flex', justifyContent: 'space-between', mb: 0.5 }}>
+                                            <Typography variant="caption" color="text.secondary">
+                                                {coupon.code}{coupon.applicationMode === 'auto' ? ' (auto)' : ''}
+                                            </Typography>
+                                            <Typography variant="caption" color="success.main">
+                                                −{formatPrice(coupon.totalDiscount || 0)}
+                                            </Typography>
+                                        </Box>
+                                    ))}
+
+                                    <Divider sx={{ my: 1.5 }} />
+
+                                    {/* Total */}
+                                    <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 0.5 }}>
+                                        <Typography variant="subtitle1" fontWeight={700}>Total Amount</Typography>
+                                        {shippingLoading ? (
+                                            <Typography variant="body2" color="text.secondary">Calculating...</Typography>
+                                        ) : !selectedAddressId ? (
+                                            <Typography variant="body2" color="text.secondary">Select address</Typography>
+                                        ) : !shippingQuote?.quoteId || shippingQuote?.serviceable === false ? (
+                                            <Typography variant="body2" color="warning.main" fontWeight={600}>Calculated after delivery check</Typography>
+                                        ) : (
+                                            <Typography variant="subtitle1" fontWeight={700}>{formatPrice(total)}</Typography>
+                                        )}
+                                    </Box>
+
+                                    {totalSavings > 0 && (
+                                        <Typography variant="body2" color="success.main" fontWeight={600} sx={{ textAlign: 'right', mt: 0.5 }}>
+                                            You save {formatPrice(totalSavings)} on this order
+                                        </Typography>
+                                    )}
+                                </>
+                            ) : (
+                                <Box sx={{ py: 1 }}>
                                     <Typography variant="body2" color="text.secondary">
-                                        Tax on delivery
-                                    </Typography>
-                                    <Typography variant="body2">{formatPrice(effectiveDeliveryTax)}</Typography>
-                                </Box>
-                            )}
-                            {hasPhysicalItems && shippingTaxIncluded && effectiveShippingCost > 0 && (
-                                <Typography variant="caption" color="text.secondary" display="block" mb={0.5} textAlign="right">
-                                    Delivery charges include tax
-                                </Typography>
-                            )}
-                            {taxSummary.isInclusive && (
-                                <Typography variant="caption" color="text.secondary" display="block" mb={1} textAlign="right">
-                                    Product prices inclusive of all taxes
-                                </Typography>
-                            )}
-
-                            {/* Discount */}
-                            {orderDiscount > 0 && (
-                                <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 0.5 }}>
-                                    <Typography variant="body2" color="text.secondary">Coupon Discount</Typography>
-                                    <Typography variant="body2" color="success.main" fontWeight={600}>−{formatPrice(orderDiscount)}</Typography>
-                                </Box>
-                            )}
-                            {appliedCoupons.length > 0 && appliedCoupons.map((coupon) => (
-                                <Box key={coupon.code} sx={{ display: 'flex', justifyContent: 'space-between', mb: 0.5 }}>
-                                    <Typography variant="caption" color="text.secondary">
-                                        {coupon.code}{coupon.applicationMode === 'auto' ? ' (auto)' : ''}
-                                    </Typography>
-                                    <Typography variant="caption" color="success.main">
-                                        −{formatPrice(coupon.totalDiscount || 0)}
+                                        Pricing details are not displayed for this storefront.
                                     </Typography>
                                 </Box>
-                            ))}
-
-                            <Divider sx={{ my: 1.5 }} />
-
-                            {/* Total */}
-                            <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 0.5 }}>
-                                <Typography variant="subtitle1" fontWeight={700}>Total Amount</Typography>
-                                {shippingLoading ? (
-                                    <Typography variant="body2" color="text.secondary">Calculating...</Typography>
-                                ) : !selectedAddressId ? (
-                                    <Typography variant="body2" color="text.secondary">Select address</Typography>
-                                ) : !shippingQuote?.quoteId || shippingQuote?.serviceable === false ? (
-                                    <Typography variant="body2" color="warning.main" fontWeight={600}>Calculated after delivery check</Typography>
-                                ) : (
-                                    <Typography variant="subtitle1" fontWeight={700}>{formatPrice(total)}</Typography>
-                                )}
-                            </Box>
-
-                            {totalSavings > 0 && (
-                                <Typography variant="body2" color="success.main" fontWeight={600} sx={{ textAlign: 'right', mt: 0.5 }}>
-                                    You save {formatPrice(totalSavings)} on this order
-                                </Typography>
                             )}
 
                             <Divider sx={{ my: 1.5 }} />

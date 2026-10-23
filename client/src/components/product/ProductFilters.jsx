@@ -21,7 +21,7 @@ import {
     FilterList,
 } from '@mui/icons-material';
 import { useCategories } from '../../context/CategoryContext';
-import { useCurrency, useSettings, useFeature } from '../../hooks/useSettings';
+import { useCurrency, useSettings, useFeature, useFeatureVisible } from '../../hooks/useSettings';
 import brandService from '../../services/brandService';
 
 const FilterSection = ({ title, children, defaultOpen = true, action }) => {
@@ -152,7 +152,7 @@ const ProductFilters = ({ filters, onFilterChange, priceRange: externalPriceRang
     const { categories } = useCategories();
     const { formatPrice, symbol } = useCurrency();
     const { settings } = useSettings();
-    const pricingEnabled = useFeature('pricing');
+    const pricingEnabled = useFeatureVisible('pricing', 'storefront');
     const showPrice = useFeature('showPrice');
     const brandsEnabled = useFeature('brands');
     const categoryDepth = parseInt(settings?.catalog?.categoryDepth) || 3;

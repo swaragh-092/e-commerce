@@ -320,7 +320,7 @@ const SeoOverridesPage = () => {
             </Stack>
           </DialogContent>
           <DialogActions sx={{ px: 3, pb: 3 }}>
-            <Button onClick={handleCloseDialog} disabled={submitting}>Cancel</Button>
+            <Button color="error" onClick={handleCloseDialog} disabled={submitting}>Cancel</Button>
             <Button type="submit" variant="contained" sx={{ borderRadius: 2 }} disabled={submitting}>
               {submitting ? 'Processing...' : (editingId ? 'Save Changes' : 'Create Override')}
             </Button>

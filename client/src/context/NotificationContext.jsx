@@ -163,7 +163,8 @@ export const NotificationProvider = ({ children }) => {
         <DialogActions sx={{ px: 3, pb: 2 }}>
           <Button 
             onClick={() => handleConfirmClose(false)} 
-            sx={{ color: 'text.secondary', fontWeight: 600 }}
+            color="error"
+            sx={{ fontWeight: 600 }}
           >
             {confirmDialog.cancelText}
           </Button>

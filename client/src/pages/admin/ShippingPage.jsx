@@ -769,7 +769,7 @@ const ShippingPage = () => {
                 <FormControlLabel control={<Switch checked={packageDraft.enabled !== false} onChange={(event) => setPackageDraft((current) => ({ ...current, enabled: event.target.checked }))} />} label="Use this package for new checkout plans" />
               </Stack>}
             </DialogContent>
-            <DialogActions sx={{ p: 2 }}><Button onClick={() => setPackageDialogOpen(false)}>Cancel</Button><Button variant="contained" disabled={savingPackage} onClick={savePackageDraft}>{savingPackage ? 'Saving…' : 'Save package type'}</Button></DialogActions>
+            <DialogActions sx={{ p: 2 }}><Button color="error" onClick={() => setPackageDialogOpen(false)}>Cancel</Button><Button variant="contained" disabled={savingPackage} onClick={savePackageDraft}>{savingPackage ? 'Saving…' : 'Save package type'}</Button></DialogActions>
           </Dialog>
           {/* PROVIDERS TAB */}
             <TabPanel value={tabIndex} index={1} idPrefix="shipping" sx={{ pt: 3 }}>
@@ -1195,7 +1195,7 @@ const ShippingPage = () => {
           </Stack>
         </DialogContent>
         <DialogActions sx={{ p: 2 }}>
-          <Button onClick={() => setProviderDialogOpen(false)}>Cancel</Button>
+          <Button color="error" onClick={() => setProviderDialogOpen(false)}>Cancel</Button>
           <Button variant="contained" onClick={handleSaveProvider}>Save Provider</Button>
         </DialogActions>
       </Dialog>
@@ -1229,7 +1229,7 @@ const ShippingPage = () => {
           </Stack>
         </DialogContent>
         <DialogActions sx={{ p: 2 }}>
-          <Button onClick={() => setZoneDialogOpen(false)}>Cancel</Button>
+          <Button color="error" onClick={() => setZoneDialogOpen(false)}>Cancel</Button>
           <Button variant="contained" onClick={handleSaveZone}>Save Zone</Button>
         </DialogActions>
       </Dialog>
@@ -1474,7 +1474,7 @@ const ShippingPage = () => {
           </Stack>
         </DialogContent>
         <DialogActions sx={{ p: 2 }}>
-          <Button onClick={() => setRuleDialogOpen(false)}>Cancel</Button>
+          <Button color="error" onClick={() => setRuleDialogOpen(false)}>Cancel</Button>
           <Button variant="contained" onClick={handleSaveRule}>Save Rule</Button>
         </DialogActions>
       </Dialog>

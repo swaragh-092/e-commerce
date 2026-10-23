@@ -117,6 +117,24 @@ describe('theme and button color system', () => {
       expect(vars['--store-btn-danger-hover']).toBe('#b91c1c');
     });
 
+    it('honors admin-configured cancelButtonColor for outlined and text cancel buttons while keeping containedError red', () => {
+      const theme = buildStorefrontTheme({
+        cancelButtonColor: '#e11d48',
+      });
+
+      const buttonOverrides = theme.components.MuiButton.styleOverrides;
+      expect(buttonOverrides.containedError.backgroundColor).toBe('#dc3545'); // Destructive remains Safety Red
+      expect(buttonOverrides.outlinedError.borderColor).toBe('#e11d48');
+      expect(buttonOverrides.outlinedError.color).toBe('#e11d48');
+      expect(buttonOverrides.textError.color).toBe('#e11d48');
+
+      const vars = buildStorefrontCssVariables({
+        cancelButtonColor: '#e11d48',
+      });
+      expect(vars['--store-btn-cancel-border']).toBe('#e11d48');
+      expect(vars['--store-btn-cancel-text']).toBe('#e11d48');
+    });
+
     it('configures outline and soft buttonStyle for Primary and Secondary buttons', () => {
       const themeOutline = buildStorefrontTheme({
         primaryColor: '#4f46e5',

@@ -7,6 +7,7 @@ const db = require('../../src/modules');
 const {
   buildFeatures,
   TIER1_FEATURES,
+  TIER1_KEYS,
   TIER2_DEFAULTS,
   isTier1Feature,
 } = require('../../src/config/modes');
@@ -414,5 +415,94 @@ describe('Unimplemented optional keys are not treated as working features', () =
       expect(TIER2_DEFAULTS[mode].multiCurrency).toBe(false);
       expect(TIER2_DEFAULTS[mode].socialLogin).toBe(false);
     });
+  });
+});
+
+
+describe('Tier 1 presentation visibility', () => {
+  const readVisibility = async ({ mode = 'ecommerce', featureRows = {}, visibilityRows = {} } = {}) => {
+    clearFeatureCache();
+    vi.restoreAllMocks();
+    const toRows = (source) => Object.entries(source).map(([key, value]) => ({
+      key,
+      value: typeof value === 'string' ? value : value ? 'true' : 'false',
+    }));
+    vi.spyOn(db.Setting, 'findAll')
+      .mockResolvedValueOnce(toRows(featureRows))
+      .mockResolvedValueOnce(toRows(visibilityRows));
+    vi.spyOn(db.Setting, 'findOne').mockResolvedValue({ value: mode });
+    return SettingsService.getFeatures();
+  };
+
+  it('defaults every tier-1 surface switch to visible when no preference is stored', async () => {
+    const resolved = await readVisibility();
+    TIER1_KEYS.forEach((key) => {
+      expect(resolved.features[key]).toBe(true);
+      expect(resolved.visibility.admin[key]).toBe(true);
+      expect(resolved.visibility.storefront[key]).toBe(true);
+    });
+  });
+
+  it('hides only the requested surface and feature', async () => {
+    const resolved = await readVisibility({ visibilityRows: { storefrontCart: false } });
+    expect(resolved.visibility.storefront.cart).toBe(false);
+    expect(resolved.visibility.admin.cart).toBe(true);
+    expect(resolved.visibility.storefront.checkout).toBe(true);
+  });
+
+  it('accepts string false values from storage', async () => {
+    const resolved = await readVisibility({ visibilityRows: { adminPayments: 'false' } });
+    expect(resolved.visibility.admin.payments).toBe(false);
+    expect(resolved.visibility.storefront.payments).toBe(true);
+  });
+
+  it('never re-enables a mode-disabled capability through visibility', async () => {
+    const resolved = await readVisibility({
+      mode: 'catalog',
+      visibilityRows: Object.fromEntries(
+        [...TIER1_KEYS].flatMap((key) => {
+          const suffix = `${key.charAt(0).toUpperCase()}${key.slice(1)}`;
+          return [[`admin${suffix}`, true], [`storefront${suffix}`, true]];
+        }),
+      ),
+    });
+    const disabled = [...TIER1_KEYS].filter((key) => buildFeatures({}, 'catalog')[key] === false);
+    expect(disabled.length).toBeGreaterThan(0);
+    disabled.forEach((key) => {
+      expect(resolved.visibility.admin[key]).toBe(false);
+      expect(resolved.visibility.storefront[key]).toBe(false);
+    });
+  });
+});
+
+
+describe('Review gate route isolation', () => {
+  it.each([
+    '/pages', '/pages/public', '/settings/features', '/products/item/variants',
+    '/blogs/posts', '/blogs/posts/example', '/blogs/categories',
+    '/blogs/admin/posts', '/blogs/admin/posts/example',
+  ])(
+    'lets unrelated API %s pass through when reviews are OFF', async (url) => {
+      mockFeatureState({ overrides: { reviews: false } });
+      const router = require('../../src/modules/review/review.routes');
+      const error = await new Promise((resolve) => {
+        router.handle({ method: 'GET', url, headers: {} }, {}, resolve);
+      });
+      expect(error).toBeUndefined();
+      expect(db.Setting.findAll).not.toHaveBeenCalled();
+    },
+  );
+
+  it.each([
+    ['GET', '/products/item/reviews'],
+    ['GET', '/products/item/reviews/mine'],
+    ['POST', '/products/item/reviews'],
+  ])('still blocks %s %s when reviews are OFF', async (method, url) => {
+    mockFeatureState({ overrides: { reviews: false } });
+    const router = require('../../src/modules/review/review.routes');
+    const error = await new Promise((resolve) => {
+      router.handle({ method, url, headers: {} }, {}, resolve);
+    });
+    expect(error).toMatchObject({ code: 'FEATURE_DISABLED', statusCode: 403 });
   });
 });

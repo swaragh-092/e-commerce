@@ -26,7 +26,7 @@ import { useNotification } from '../../context/NotificationContext';
 import { SettingsContext } from '../../context/ThemeContext';
 import { useAuth } from '../../hooks/useAuth';
 import { useIsSuperAdmin } from '../../hooks/useAuth';
-import { useMode } from '../../hooks/useSettings';
+import { useMode, useFeature, useFeatureVisible } from '../../hooks/useSettings';
 import useHomepageSettings from '../../hooks/useHomepageSettings';
 import { PERMISSIONS } from '../../utils/permissions';
 import { DASHBOARD_PROFILES } from '../../components/admin/dashboard/dashboardWidgets';
@@ -131,6 +131,22 @@ const SettingsPage = () => {
   const { refreshSettings, features: resolvedFeatures } = useContext(SettingsContext) || {};
   const { hasPermission } = useAuth();
   const appMode = useMode();
+  const adminCart = useFeatureVisible('cart', 'admin');
+  const adminCheckout = useFeatureVisible('checkout', 'admin');
+  const adminOrders = useFeatureVisible('orders', 'admin');
+  const adminPayments = useFeatureVisible('payments', 'admin');
+  const adminPricing = useFeatureVisible('pricing', 'admin');
+  const adminShipping = useFeatureVisible('shipping', 'admin');
+  const seoEnabled = useFeature('seo');
+  const adminVisibility = {
+    cart: adminCart,
+    checkout: adminCheckout,
+    orders: adminOrders,
+    payments: adminPayments,
+    pricing: adminPricing,
+    shipping: adminShipping,
+    seo: seoEnabled,
+  };
   const isSuperAdmin = useIsSuperAdmin();
   const canManageSettings = hasPermission(PERMISSIONS.SETTINGS_MANAGE);
   const canManageAdvancedSettings = hasPermission(PERMISSIONS.SETTINGS_ADVANCED);
@@ -259,6 +275,9 @@ const SettingsPage = () => {
   const visibleTabs = [
     ...allTabs.filter((t) => {
       if (appMode !== 'ecommerce' && ['Checkout', 'Promotions', 'Invoice'].includes(t)) return false;
+      if (t === 'SEO' && !seoEnabled) return false;
+      if (t === 'Checkout' && !adminCart && !adminCheckout && !adminPayments && !adminShipping) return false;
+      if (t === 'Promotions' && !adminPricing) return false;
       if (t === 'Advanced' && !canManageAdvancedSettings) return false;
       return true;
     })
@@ -500,6 +519,7 @@ const SettingsPage = () => {
     updateHomepagePromo, removeHomepagePromo, addHomepagePromo,
     updateValueProp, removeValueProp, addValueProp,
     enableCGST, enableSGST, enableIGST,
+    adminVisibility,
   });
 
   return (

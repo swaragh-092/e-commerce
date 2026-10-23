@@ -176,6 +176,7 @@ export const ButtonPaletteShowcase = ({ value = {} }) => {
   const warningColor = value.warningColor || '#d97706';
   const successColor = value.successColor || '#059669';
   const infoColor = value.infoColor || '#0284c7';
+  const cancelButtonColor = value.cancelButtonColor || '#dc3545';
   const buttonStyle = value.buttonStyle || 'solid';
   const borderRadius = parseInt(value.borderRadius, 10) || 8;
   const radius = buttonStyle === 'pill' ? 9999 : borderRadius;
@@ -205,6 +206,7 @@ export const ButtonPaletteShowcase = ({ value = {} }) => {
     { label: 'Secondary', sx: getSecondarySx() },
     { label: 'Success', sx: { bgcolor: successColor, color: '#ffffff', border: '1px solid transparent' } },
     { label: 'Danger', sx: { bgcolor: '#dc3545', color: '#ffffff', border: '1px solid transparent' } },
+    { label: 'Cancel', sx: { bgcolor: 'transparent', color: cancelButtonColor, border: `1px solid ${cancelButtonColor}` } },
     { label: 'Warning', sx: { bgcolor: warningColor, color: '#ffffff', border: '1px solid transparent' } },
     { label: 'Info', sx: { bgcolor: infoColor, color: '#ffffff', border: '1px solid transparent' } },
     { label: 'Light', sx: { bgcolor: isDark ? '#334155' : '#f8fafc', color: isDark ? '#f8fafc' : '#1e293b', border: `1px solid ${isDark ? '#475569' : '#e2e8f0'}` } },
