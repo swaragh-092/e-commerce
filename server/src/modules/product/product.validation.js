@@ -19,6 +19,29 @@ const productListQuerySchema = Joi.object({
   }),
 }).unknown();
 
+const productVariantCreateSchema = Joi.object({
+  sku: Joi.string().max(100).allow('', null),
+  price: Joi.number().precision(2).min(0).required(),
+  stockQty: Joi.number().integer().min(0).default(0),
+  isActive: Joi.boolean().default(true),
+  sortOrder: Joi.number().integer().min(0).default(0),
+  weightGrams: Joi.number().min(0).allow(null),
+  lengthCm: Joi.number().min(0).allow(null),
+  breadthCm: Joi.number().min(0).allow(null),
+  heightCm: Joi.number().min(0).allow(null),
+  images: Joi.array().items(Joi.object({
+    url: Joi.string().allow('', null),
+    alt: Joi.string().max(255).allow('', null),
+    mediaId: Joi.string().uuid().allow(null),
+    sortOrder: Joi.number().integer().default(0),
+    isPrimary: Joi.boolean().default(false),
+  })),
+  options: Joi.array().items(Joi.object({
+    attributeId: Joi.string().uuid().required(),
+    valueId: Joi.string().uuid().required(),
+  })).min(1).required(),
+});
+
 const createProductSchema = Joi.object({
   name: Joi.string().max(255).required(),
   slug: Joi.string().max(255).allow('', null),
@@ -61,34 +84,7 @@ const createProductSchema = Joi.object({
   categoryIds: Joi.array().items(Joi.string().uuid()),
   brandId: Joi.string().uuid().allow(null),
   tags: Joi.array().items(Joi.string()),
-  variants: Joi.array().items(
-    Joi.object({
-      sku: Joi.string().max(100).allow('', null),
-      price: Joi.number().precision(2).min(0).required(),
-      stockQty: Joi.number().integer().min(0).default(0),
-      isActive: Joi.boolean().default(true),
-      sortOrder: Joi.number().integer().min(0).default(0),
-      weightGrams: Joi.number().min(0).allow(null),
-      lengthCm: Joi.number().min(0).allow(null),
-      breadthCm: Joi.number().min(0).allow(null),
-      heightCm: Joi.number().min(0).allow(null),
-      images: Joi.array().items(
-        Joi.object({
-          url: Joi.string().allow('', null),
-          alt: Joi.string().max(255).allow('', null),
-          mediaId: Joi.string().uuid().allow(null),
-          sortOrder: Joi.number().integer().default(0),
-          isPrimary: Joi.boolean().default(false),
-        })
-      ),
-      options: Joi.array().items(
-        Joi.object({
-          attributeId: Joi.string().uuid().required(),
-          valueId: Joi.string().uuid().required(),
-        })
-      ).min(1).required(),
-    })
-  ).when('type', {
+  variants: Joi.array().items(productVariantCreateSchema).when('type', {
     is: 'variable',
     then: Joi.optional(),
     otherwise: Joi.forbidden()
@@ -102,6 +98,14 @@ const createProductSchema = Joi.object({
       isPrimary: Joi.boolean().default(false),
     })
   ),
+});
+
+const catalogCreateProductSchema = createProductSchema.fork(
+  ['price'], (schema) => schema.optional().allow(null)
+).keys({
+  variants: Joi.array().items(productVariantCreateSchema.keys({ price: Joi.number().precision(2).min(0).default(0) })).when('type', {
+    is: 'variable', then: Joi.required(), otherwise: Joi.forbidden(),
+  }),
 });
 
 const updateProductSchema = Joi.object({
@@ -243,4 +247,14 @@ const getProductWriteSchema = (schema, features = {}) => {
   ));
 };
 
-module.exports = { getProductWriteSchema, productListQuerySchema, createProductSchema, updateProductSchema, bulkSaleSchema, bulkDeleteSchema, bulkUpdateSchema };
+module.exports = {
+  getProductWriteSchema,
+  productListQuerySchema,
+  createProductSchema,
+  catalogCreateProductSchema,
+  updateProductSchema,
+  bulkSaleSchema,
+  bulkDeleteSchema,
+  bulkUpdateSchema,
+};
+

@@ -28,7 +28,7 @@ import { useAuth } from '../../hooks/useAuth';
 import { useIsSuperAdmin } from '../../hooks/useAuth';
 import { useMode, useFeature, useFeatureVisible } from '../../hooks/useSettings';
 import useHomepageSettings from '../../hooks/useHomepageSettings';
-import { PERMISSIONS } from '../../utils/permissions';
+import { PERMISSIONS, isSuperAdminOnlySettingsKey } from '../../utils/permissions';
 import { DASHBOARD_PROFILES } from '../../components/admin/dashboard/dashboardWidgets';
 import MessagingSettingsPanel from '../../components/admin/settings/MessagingSettingsPanel';
 import SettingsPreviewPanel from '../../components/admin/settings/SettingsPreviewPanel';
@@ -252,6 +252,7 @@ const SettingsPage = () => {
         return { group, key: keyParts.join('.'), value };
       }).filter(({ group, key, value }) => (
         group !== 'shipping'
+        && (isSuperAdmin || !isSuperAdminOnlySettingsKey(group, key))
         && !isDesignerOwnedSetting(group, key)
         && !isMaskedSecret(value)
         && (canManageAdvancedSettings || !['advanced', 'ai', 'ai_credentials'].includes(group))

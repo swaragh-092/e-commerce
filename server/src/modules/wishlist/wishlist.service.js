@@ -15,6 +15,7 @@ const {
 } = require('../index');
 const AppError = require('../../utils/AppError');
 const { getVariantUnitPrice, serializeProductPricing, serializeVariantPricing } = require('../product/product.pricing');
+const { isBrandVisible, stripBrandFields } = require('../../utils/brandVisibility');
 
 const ATTRIBUTE_TEMPLATE_FIELDS = ['id', 'name', 'slug', 'sortOrder', 'displayType', 'valueType', 'unit'];
 const ATTRIBUTE_VALUE_FIELDS = ['id', 'value', 'slug', 'sortOrder', 'displayLabel', 'swatchColor', 'imageUrl', 'unitLabel', 'metadata'];
@@ -197,8 +198,9 @@ const getWishlist = async (userId, sessionId) => {
         };
       });
 
+    const brandVisible = isBrandVisible(features);
     return {
-      items: activeItems,
+      items: brandVisible ? activeItems : activeItems.map(stripBrandFields),
       unavailableRemovedCount: invalidItems.length,
     };
   });

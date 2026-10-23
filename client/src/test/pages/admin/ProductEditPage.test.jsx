@@ -15,7 +15,8 @@ vi.mock('../../../services/brandService', () => ({ default: { getBrands: vi.fn()
 vi.mock('../../../services/adminService', () => ({ getSaleLabels: vi.fn() }));
 vi.mock('../../../hooks/useAuth', () => ({ useAuth: () => ({ hasPermission: () => true }) }));
 vi.mock('../../../hooks/useSKUGenerator', () => ({ default: () => ({ generateProductSKU: () => 'SKU', generateVariantSKU: () => 'VSKU' }) }));
-vi.mock('../../../hooks/useSettings', () => ({ useSettings: () => ({ settings: { features: { seo: false } } }), useCurrency: () => ({ symbol: '$', currency: 'USD', formatPrice: (value) => `$${value}` }), useFeature: (name) => !['productAssistant', 'seo'].includes(name), useFeatureVisible: () => true }));
+const disabledFeatures = vi.hoisted(() => new Set());
+vi.mock('../../../hooks/useSettings', () => ({ useSettings: () => ({ settings: { features: { seo: false } } }), useCurrency: () => ({ symbol: '$', currency: 'USD', formatPrice: (value) => `$${value}` }), useFeature: (name) => !['productAssistant', 'seo'].includes(name) && !disabledFeatures.has(name), useFeatureVisible: (name) => !disabledFeatures.has(name), useFeaturesResolved: () => true }));
 vi.mock('../../../components/common/MediaPicker', () => ({ default: () => null }));
 vi.mock('../../../components/admin/UnitSelector', () => ({ default: () => null }));
 vi.mock('../../../components/admin/ProductCustomTabs', () => ({ default: () => null }));
@@ -32,6 +33,7 @@ const type = async (label) => {
 const loaded = async () => waitFor(() => expect(screen.getByRole('textbox', { name: /Product Name/ })).toHaveValue('Test product'));
 beforeEach(() => {
   vi.clearAllMocks();
+  disabledFeatures.clear();
   getCategoryTree.mockResolvedValue({ data: [] });
   brandService.getBrands.mockResolvedValue({ data: { data: [] } });
   getSaleLabels.mockResolvedValue({ data: { data: [] } });
@@ -41,6 +43,32 @@ beforeEach(() => {
 });
 
 describe('product type and inventory editor', () => {
+  it('creates a catalog product without price or shipping measurements', async () => {
+    disabledFeatures.add('pricing');
+    disabledFeatures.add('shipping');
+    mount('new');
+    fireEvent.change(screen.getByRole('textbox', { name: /Product Name/ }), { target: { value: 'Catalog sample' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Save Product' }));
+    await waitFor(() => expect(createProduct).toHaveBeenCalled());
+    const payload = createProduct.mock.calls[0][0];
+    expect(payload.price).toBeNull();
+    expect(payload).not.toHaveProperty('requiresShipping');
+    expect(payload).not.toHaveProperty('weightGrams');
+  });
+
+  it('preserves existing hidden price and shipping fields when editing in catalog mode', async () => {
+    disabledFeatures.add('pricing');
+    disabledFeatures.add('shipping');
+    mount(); await loaded();
+    fireEvent.change(screen.getByRole('textbox', { name: /Product Name/ }), { target: { value: 'Renamed product' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Save Product' }));
+    await waitFor(() => expect(updateProduct).toHaveBeenCalled());
+    const payload = updateProduct.mock.calls[0][1];
+    expect(payload).not.toHaveProperty('price');
+    expect(payload).not.toHaveProperty('requiresShipping');
+    expect(payload).not.toHaveProperty('weightGrams');
+  });
+
   it('creates Variable products without forbidden manual stock or premature variants', async () => {
     getProductById.mockResolvedValue({ data: { ...product, type: 'variable', quantity: 0 } });
     mount('new'); await type('Variable Product');

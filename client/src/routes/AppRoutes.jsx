@@ -202,10 +202,8 @@ const AppRoutes = () => (
       {/* Admin Routes — permission-gated foundation */}
       <Route path="/admin" element={<ProtectedRoute permissions={ADMIN_ACCESS_PERMISSIONS} />}>
         {/* Standalone pages without AdminLayout */}
-        <Route element={<FeatureRoute feature="orders" surface="admin" redirectTo="/admin" />}>
-          <Route element={<ProtectedRoute permission={PERMISSIONS.ORDERS_READ} />}>
-            <Route path="orders/:id/invoice" element={<OrderInvoicePage />} />
-          </Route>
+        <Route element={<ProtectedRoute permission={PERMISSIONS.ORDERS_READ} />}>
+          <Route path="orders/:id/invoice" element={<OrderInvoicePage />} />
         </Route>
 
         <Route element={<AdminLayout />}>
@@ -219,10 +217,8 @@ const AppRoutes = () => (
           <Route element={<ProtectedRoute permission={PERMISSIONS.PRODUCTS_READ} />}>
             <Route path="products" element={<ProductsManagePage />} />
           </Route>
-          <Route element={<FeatureRoute feature="brands" surface="admin" redirectTo="/admin" />}>
-            <Route element={<ProtectedRoute permission={PERMISSIONS.PRODUCTS_READ} />}>
-              <Route path="brands" element={<BrandsPage />} />
-            </Route>
+          <Route element={<ProtectedRoute permissions={[PERMISSIONS.BRANDS_READ, PERMISSIONS.BRANDS_MANAGE, PERMISSIONS.PRODUCTS_READ]} />}>
+            <Route path="brands" element={<BrandsPage />} />
           </Route>
           <Route element={<ProtectedRoute permission={PERMISSIONS.PRODUCTS_CREATE} />}>
             <Route path="products/new" element={<ProductEditPage />} />
@@ -236,32 +232,24 @@ const AppRoutes = () => (
           <Route element={<ProtectedRoute permission={PERMISSIONS.ATTRIBUTES_READ} />}>
             <Route path="attributes" element={<AttributesPage />} />
           </Route>
-          {/* Orders UI is hideable; backend records remain available to authorized staff APIs */}
-          <Route element={<FeatureRoute feature="orders" surface="admin" redirectTo="/admin" />}>
-            <Route element={<ProtectedRoute permission={PERMISSIONS.ORDERS_READ} />}>
-              <Route path="orders" element={<OrdersManagePage />} />
-              <Route path="orders/:id" element={<OrderDetailPage />} />
-            </Route>
+          {/* Staff retain access to existing orders after new purchases are disabled. */}
+          <Route element={<ProtectedRoute permission={PERMISSIONS.ORDERS_READ} />}>
+            <Route path="orders" element={<OrdersManagePage />} />
+            <Route path="orders/:id" element={<OrderDetailPage />} />
           </Route>
           <Route element={<ProtectedRoute permission={PERMISSIONS.CUSTOMERS_READ} />}>
             <Route path="customers" element={<CustomersPage />} />
             <Route path="customers/:id" element={<CustomerDetailPage />} />
           </Route>
-          {/* Coupons UI is hideable; backend campaign APIs remain for authorized staff */}
-          <Route element={<FeatureRoute feature="coupons" surface="admin" redirectTo="/admin" />}>
-            <Route element={<ProtectedRoute permission={PERMISSIONS.COUPONS_READ} />}>
-              <Route path="coupons" element={<CouponsPage />} />
-            </Route>
+          {/* Staff can manage existing campaigns after customer coupon use is disabled. */}
+          <Route element={<ProtectedRoute permission={PERMISSIONS.COUPONS_READ} />}>
+            <Route path="coupons" element={<CouponsPage />} />
           </Route>
-          <Route element={<FeatureRoute feature="enquiry" surface="admin" redirectTo="/admin" />}>
-            <Route element={<ProtectedRoute permission={PERMISSIONS.ENQUIRIES_READ} />}>
-              <Route path="enquiries" element={<EnquiriesPage />} />
-            </Route>
+          <Route element={<ProtectedRoute permission={PERMISSIONS.ENQUIRIES_READ} />}>
+            <Route path="enquiries" element={<EnquiriesPage />} />
           </Route>
-          <Route element={<FeatureRoute feature="reviews" surface="admin" redirectTo="/admin" />}>
-            <Route element={<ProtectedRoute permission={PERMISSIONS.REVIEWS_READ} />}>
-              <Route path="reviews" element={<ReviewsPage />} />
-            </Route>
+          <Route element={<ProtectedRoute permission={PERMISSIONS.REVIEWS_READ} />}>
+            <Route path="reviews" element={<ReviewsPage />} />
           </Route>
           <Route element={<ProtectedRoute permission={PERMISSIONS.MEDIA_READ} />}>
             <Route path="media" element={<MediaPage />} />

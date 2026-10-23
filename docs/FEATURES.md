@@ -808,13 +808,14 @@ Each Tier 1 capability has two independent presentation switches on **Admin → 
 
 | Switch | What it hides | What still runs |
 |--------|---------------|-----------------|
-| **Show in Admin UI** | Admin sidebar entries, routes, dashboard widgets, pricing/brand/SEO form fields, and related settings panels | Backend APIs and existing records |
+| **Show in Admin UI** | Admin sidebar entries, dashboard widgets, and related settings panels | Backend APIs and existing records; authorized staff can still open existing order pages. Required selling-price and shipping fields remain editable while ecommerce is enabled. |
 | **Show in Storefront** | Storefront pricing, cart/checkout entry points, order pages, price rows, payment-method UI, and shipping/payment display blocks | Backend pricing, cart, checkout, order, payment, and shipping processing |
 
 - Stored as flat settings in the `visibility` group: `adminPricing`, `storefrontPricing`, `adminCart`, `storefrontCart`, `adminCheckout`, `storefrontCheckout`, `adminOrders`, `storefrontOrders`, `adminPayments`, `storefrontPayments`, `adminShipping`, `storefrontShipping`.
 - Defaults are `true`; changing the store mode does **not** reset stored preferences.
 - `GET /api/features` returns the effective `visibility` map already AND-ed with the mode-resolved `features`. Visibility can hide a capability but can never enable one disabled by the store mode.
 - The `visibility` group is protected exactly like `features` and `mode`: only Superadmins can write it.
+- Catalog products can be created without a selling price or shipping measurements. The database permits a null base price; catalog variants without a price receive `0` and cannot be purchased until priced. Switching to ecommerce does not silently make these products sellable: publishing and checkout check for a positive price, and published shippable products need valid measurements on their next edit. Existing hidden values are omitted from edit requests and preserved.
 
 ### Tier 2 — Admin-Controlled (Superadmin Only)
 > [!IMPORTANT]

@@ -116,8 +116,8 @@ const search = async (query, page = 1, limit = 20) => {
   // Run product, brand, and category searches in parallel
   const [productResults, brands, categories, labelPresets] =
     await Promise.all([
-      SearchRepository.searchProducts(normalizedQuery, queryLimit, offset),
-      SearchRepository.searchBrands(normalizedQuery, 5),
+      SearchRepository.searchProducts(normalizedQuery, queryLimit, offset, { includeBrands: brandsVisible }),
+      brandsVisible ? SearchRepository.searchBrands(normalizedQuery, 5) : [],
       SearchRepository.searchCategories(normalizedQuery, 5),
       getSaleLabels().catch(() => []),
     ]);

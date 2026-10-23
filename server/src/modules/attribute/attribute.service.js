@@ -13,6 +13,7 @@ const { assertVariableProduct } = require('../product/productType');
 const { orderProductPresentation } = require('./productAttributeOrder');
 const inventoryService = require('../inventory/inventory.service');
 const { readUnitSettings, lockUnitSettings } = require('../settings/unitCatalog');
+const SettingsService = require('../settings/settings.service');
 const { validateAttributeCategory, validateValueUnit, validateCategoryChange } = require('./attributeUnits');
 
 const ATTRIBUTE_TEMPLATE_FIELDS = ['id', 'name', 'slug', 'sortOrder', 'displayType', 'valueType', 'unit', 'unitCategory', 'createdAt'];
@@ -460,6 +461,7 @@ const previewVariantGeneration = async (productId) => {
 };
 
 const bulkGenerateVariants = async (productId, { defaultPrice, defaultStockQty = 0, planToken, confirmRemovals = false, newVariants } = {}) => {
+    const { features } = await SettingsService.getFeatures();
     await sequelize.transaction(async (transaction) => {
         // Also serialize concurrent creation when the product has no variants to lock.
         await sequelize.query('SELECT pg_advisory_xact_lock(hashtext(:scope), hashtext(:productId))', {
@@ -494,6 +496,9 @@ const bulkGenerateVariants = async (productId, { defaultPrice, defaultStockQty =
                 return { combo, price: entry.price, stockQty: entry.stockQty };
             });
             if (!review.keptCount && !creations.length) throw new AppError('VALIDATION_ERROR', 400, 'Select at least one combination to keep or create.');
+        }
+        if (features.pricing && creations.some(({ price }) => !Number.isFinite(Number(price)) || Number(price) <= 0)) {
+            throw new AppError('PRODUCT_NOT_READY', 400, 'Set a positive product and variant price before creating purchasable variants.');
         }
         if (keptStock + creations.reduce((sum, variant) => sum + variant.stockQty, 0) > 2147483647) {
             throw new AppError('VALIDATION_ERROR', 400, 'The combined variant stock is too large. Choose a lower starting stock quantity.');
@@ -539,6 +544,10 @@ const addProductVariant = async (productId, data) => {
     const product = await Product.findByPk(productId, { attributes: ['id', 'type'] });
     if (!product) throw new AppError('NOT_FOUND', 404, 'Product not found');
     assertVariableProduct(product);
+    const { features } = await SettingsService.getFeatures();
+    if (features.pricing && (!Number.isFinite(Number(data.price)) || Number(data.price) <= 0)) {
+        throw new AppError('PRODUCT_NOT_READY', 400, 'Set a positive variant price before adding a purchasable variant.');
+    }
 
     // Validate each option's attributeId+valueId pair exists and are linked
     for (const opt of data.options) {
@@ -618,6 +627,17 @@ const updateProductVariant = async (productId, variantId, data, auditContext = n
             } else {
                 updates[field] = data[field];
             }
+        }
+    }
+
+    // Stock-only edits do not need feature resolution; price/activation changes
+    // must not make a zero-priced variant purchasable in ecommerce mode.
+    if (data.price !== undefined || data.isActive !== undefined) {
+        const { features } = await SettingsService.getFeatures();
+        const nextActive = data.isActive !== undefined ? data.isActive : variant.isActive;
+        const nextPrice = data.price !== undefined ? data.price : variant.price;
+        if (features.pricing && nextActive && (!Number.isFinite(Number(nextPrice)) || Number(nextPrice) <= 0)) {
+            throw new AppError('PRODUCT_NOT_READY', 400, 'Set a positive variant price before making it purchasable.');
         }
     }
 

@@ -7,6 +7,7 @@ const AppError = require('../../utils/AppError');
 const SettingsService = require('../settings/settings.service');
 const { getSaleLabels } = require('../settings/saleLabel.service');
 const { serializeProductPricing } = require('../product/product.pricing');
+const { isBrandVisible, stripBrandFields } = require('../../utils/brandVisibility');
 
 // ProductVariant has no salePrice column. Product-level sale rules are
 // applied by serializeProductPricing after the query returns.
@@ -236,9 +237,11 @@ exports.getCategoryWithProducts = async (slug, pageOrOptions = 1, limitArg = 20,
         order: [...productOrder, ['id', 'ASC']],
     });
 
-    const serializedProducts = products.map((p) =>
-        serializeProductPricing(p, { adminView: false, features }, labelPresets)
-    );
+    const brandVisible = isBrandVisible(features);
+    const serializedProducts = products.map((p) => {
+        const product = serializeProductPricing(p, { adminView: false, features }, labelPresets);
+        return brandVisible ? product : stripBrandFields(product);
+    });
 
     const categoryData = category.toJSON ? category.toJSON() : { ...category };
     categoryData.breadcrumbs = breadcrumbs;

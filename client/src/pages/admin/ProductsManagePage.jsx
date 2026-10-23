@@ -21,7 +21,7 @@ import { getCategoryTree } from '../../services/categoryService';
 import { getSaleLabels } from '../../services/adminService';
 import { getMediaUrl } from '../../utils/media';
 import { getVariantOptionLabel } from '../../utils/variantOptions';
-import { useCurrency, useSettings, useFeatureVisible } from '../../hooks/useSettings';
+import { useCurrency, useSettings, useFeature, useFeatureVisible } from '../../hooks/useSettings';
 import { useNotification } from '../../context/NotificationContext';
 import { formatSaleDateTime, isEndingSoon } from '../../utils/pricing';
 import { useAuth } from '../../hooks/useAuth';
@@ -112,6 +112,7 @@ const ProductsManagePage = () => {
   const { notify } = useNotification();
   const { hasPermission } = useAuth();
   const pricingEnabled = useFeatureVisible('pricing', 'admin');
+  const pricingCapability = useFeature('pricing');
   // Stock tracking is only meaningful in ecommerce mode (cart Tier-1 feature).
   // In catalog mode cart=false, so we hide stock column + stepper entirely.
   const cartEnabled = useFeatureVisible('cart', 'admin');
@@ -343,16 +344,16 @@ const ProductsManagePage = () => {
         name: editDialog.name.trim(),
         slug: editDialog.slug.trim(),
         ...(cartEnabled && !hasVariants && { quantity: parseInt(editDialog.quantity, 10) || 0 }),
-        price: parseFloat(editDialog.price),
+        ...(pricingCapability && { price: parseFloat(editDialog.price) }),
         ...getProductStorefrontFields(editDialog.storefrontState),
-        ...(editDialog.saleEnabled && editDialog.salePrice !== ''
+        ...(pricingEnabled ? (editDialog.saleEnabled && editDialog.salePrice !== ''
           ? {
               salePrice: parseFloat(editDialog.salePrice),
               saleStartAt: toIsoOrNull(editDialog.saleStartAt),
               saleEndAt: toIsoOrNull(editDialog.saleEndAt),
               saleLabel: editDialog.saleLabel || null,
             }
-          : { salePrice: null, saleStartAt: null, saleEndAt: null, saleLabel: null }),
+          : { salePrice: null, saleStartAt: null, saleEndAt: null, saleLabel: null }) : {}),
       };
 
       await updateProduct(editDialog.row.id, payload);
@@ -362,8 +363,8 @@ const ProductsManagePage = () => {
         ...payload,
         quantity: newTotalQuantity,
         variants: updatedVariants,
-        effectivePrice: payload.salePrice ?? payload.price,
-        isSaleActive: !!payload.salePrice && (!payload.saleStartAt || new Date(payload.saleStartAt) <= new Date()) && (!payload.saleEndAt || new Date(payload.saleEndAt) >= new Date()),
+        effectivePrice: pricingEnabled ? (payload.salePrice ?? payload.price) : r.effectivePrice,
+        isSaleActive: pricingEnabled ? (!!payload.salePrice && (!payload.saleStartAt || new Date(payload.saleStartAt) <= new Date()) && (!payload.saleEndAt || new Date(payload.saleEndAt) >= new Date())) : r.isSaleActive,
       } : r));
 
       notify('Product and stock updated successfully.', 'success');
@@ -576,8 +577,8 @@ const ProductsManagePage = () => {
 
   const editPriceValue = Number(editDialog.price);
   const editSalePriceValue = editDialog.salePrice === '' ? null : Number(editDialog.salePrice);
-  const hasInvalidPrice = editDialog.open && (!Number.isFinite(editPriceValue) || editPriceValue < 0);
-  const hasInvalidSalePrice = editDialog.open && editDialog.saleEnabled && (
+  const hasInvalidPrice = pricingCapability && editDialog.open && (editDialog.price === '' || !Number.isFinite(editPriceValue) || editPriceValue <= 0);
+  const hasInvalidSalePrice = pricingEnabled && editDialog.open && editDialog.saleEnabled && (
     editDialog.salePrice === '' ||
     !Number.isFinite(editSalePriceValue) ||
     editSalePriceValue < 0 ||
@@ -629,7 +630,7 @@ const ProductsManagePage = () => {
     allVariants.reduce((sum, v) => sum + (Number(v.reservedQty) || 0), 0)
   );
   const liveVariantAvailableStock = Math.max(0, liveVariantTotalStock - liveVariantReservedStock);
-  const hasInvalidSaleDates = Boolean(editDialog.open && editDialog.saleEnabled && editDialog.saleStartAt && editDialog.saleEndAt && new Date(editDialog.saleEndAt) <= new Date(editDialog.saleStartAt));
+  const hasInvalidSaleDates = Boolean(pricingEnabled && editDialog.open && editDialog.saleEnabled && editDialog.saleStartAt && editDialog.saleEndAt && new Date(editDialog.saleEndAt) <= new Date(editDialog.saleStartAt));
   const bulkSaleValue = Number(bulkSaleDialog.value);
   const hasInvalidBulkSale = bulkSaleDialog.mode === 'apply' && (
     !Number.isFinite(bulkSaleValue) ||
@@ -893,6 +894,7 @@ const ProductsManagePage = () => {
       ),
     },
   ].filter(col => {
+    if (col.field === 'price' && !pricingEnabled) return false;
     if (col.field === 'saleMeta' && !pricingEnabled) return false;
     // Hide the Stock column in catalog mode — inventory is irrelevant without a cart
     if (col.field === 'quantity' && !cartEnabled) return false;
@@ -1526,7 +1528,7 @@ const ProductsManagePage = () => {
               </Button>
             </Box>
             )}
-            <TextField
+            {pricingCapability && <TextField
               label="MRP"
               type="number"
               size="small"
@@ -1539,7 +1541,7 @@ const ProductsManagePage = () => {
               inputProps={{ step: '0.01', min: 0 }}
               value={editDialog.price}
               onChange={(e) => setEditDialog((s) => ({ ...s, price: e.target.value }))}
-            />
+            />}
             {pricingEnabled && editDialog.row?.id && (
               <Box sx={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', justifyContent: 'space-between', gap: 1, mt: -1.25 }}>
                 <Typography variant="caption" color="text.secondary">
