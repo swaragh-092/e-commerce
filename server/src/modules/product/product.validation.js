@@ -231,4 +231,14 @@ const bulkUpdateSchema = Joi.object({
   }).min(1).required(),
 });
 
-module.exports = { productListQuerySchema, createProductSchema, updateProductSchema, bulkSaleSchema, bulkDeleteSchema, bulkUpdateSchema };
+// Only the server-resolved feature map may relax MRP requirements.
+const getProductWriteSchema = (schema, features = {}) => {
+  if (features.pricing !== false || features.showPrice !== false) return schema;
+  return schema.fork('price', () => (
+    schema === createProductSchema
+      ? Joi.number().precision(2).min(0).default(0)
+      : Joi.number().precision(2).min(0)
+  ));
+};
+
+module.exports = { getProductWriteSchema, productListQuerySchema, createProductSchema, updateProductSchema, bulkSaleSchema, bulkDeleteSchema, bulkUpdateSchema };

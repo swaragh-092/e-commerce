@@ -2,13 +2,23 @@
 const express = require('express');
 const router = express.Router();
 const productController = require('./product.controller');
-const { productListQuerySchema, createProductSchema, updateProductSchema, bulkSaleSchema, bulkDeleteSchema, bulkUpdateSchema } = require('./product.validation');
+const { getProductWriteSchema, productListQuerySchema, createProductSchema, updateProductSchema, bulkSaleSchema, bulkDeleteSchema, bulkUpdateSchema } = require('./product.validation');
 const { authenticate, optionalAuth } = require('../../middleware/auth.middleware');
 const { authorizePermissions } = require('../../middleware/role.middleware');
 const { validate } = require('../../middleware/validate.middleware');
 const { auditLog } = require('../audit/audit.middleware');
 const { PERMISSIONS } = require('../../config/permissions');
 const { idParamSchema } = require('../../utils/common.validation');
+const settingsService = require('../settings/settings.service');
+
+const validateProductWrite = (schema) => async (req, res, next) => {
+  try {
+    const { features } = await settingsService.getFeatures();
+    return validate(getProductWriteSchema(schema, features))(req, res, next);
+  } catch (err) {
+    return next(err);
+  }
+};
 
 
 
@@ -28,7 +38,7 @@ router.post(
   '/',
   authenticate,
   authorizePermissions(PERMISSIONS.PRODUCTS_CREATE),
-  validate(createProductSchema),
+  validateProductWrite(createProductSchema),
   auditLog('Product'),
   productController.create
 );
@@ -38,7 +48,7 @@ router.put(
   authenticate,
   authorizePermissions(PERMISSIONS.PRODUCTS_UPDATE),
   validate(idParamSchema, 'params'),
-  validate(updateProductSchema),
+  validateProductWrite(updateProductSchema),
   auditLog('Product'),
   productController.update
 );

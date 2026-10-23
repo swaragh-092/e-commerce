@@ -10,6 +10,7 @@ const v = require('./gallery.validation');
 
 const router = express.Router();
 
+router.get('/public', c.publicIndex);
 router.get('/public/:slug', validate(v.publicGalleryQuerySchema, 'query'), c.publicView);
 router.get('/', authenticate, authorizePermissions(PERMISSIONS.MEDIA_READ), validate(v.listQuerySchema, 'query'), c.listAdmin);
 router.post('/', authenticate, authorizePermissions(PERMISSIONS.MEDIA_UPDATE), validate(v.createGallerySchema), c.create);
