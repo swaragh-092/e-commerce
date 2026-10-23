@@ -1,0 +1,600 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <title>Cucumber</title>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta http-equiv="X-UA-Compatible" content="ie=edge">
+    <meta name="author" content="Swaragh Technologies">
+    <link rel="shortcut icon" type="image/x-icon" href="./images/orbi-seeds-logo.png">
+
+    <!-- css -->
+    <link rel="stylesheet" href="css/orbi-seeds.css">
+    <link rel="stylesheet" href="css/responsive.css">
+    <!-- css -->
+
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Zen+Maru+Gothic:wght@300;400;500;700;900&display=swap"
+        rel="stylesheet">
+    <!-- owlCarousel -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/OwlCarousel2/2.3.4/assets/owl.carousel.min.css"
+        integrity="sha512-tS3S5qG0BlhnQROyJXvNjeEM4UpMXHrQfTGmbQ1gKmelCxlSEBUaxhRBj/EFTzpbP4RVSrpEikbmdJobCvhE3g=="
+        crossorigin="anonymous" referrerpolicy="no-referrer">
+    <link rel="stylesheet"
+        href="https://cdnjs.cloudflare.com/ajax/libs/OwlCarousel2/2.3.4/assets/owl.theme.default.min.css"
+        integrity="sha512-sMXtMNL1zRzolHYKEujM2AqCLUR9F2C4/05cdbxjjLSRvMQIciEPCQZo++nk7go3BtSuK9kfa/s+a4f4i5pLkw=="
+        crossorigin="anonymous" referrerpolicy="no-referrer">
+    <!-- owlCarousel -->
+    <script src="js/constant.js"></script>
+    <style>
+        .wrapper {
+            overflow: unset;
+        }
+
+        .product-enquiry-form-wrapper {
+            margin-top: 30px;
+            padding: 20px;
+            background: #f9f9f9;
+            border-radius: 8px;
+            border: 1px solid #eee;
+        }
+
+        .product-enquiry-form-wrapper h4 {
+            margin-bottom: 20px;
+            color: #333;
+            font-size: 1.2rem;
+        }
+
+        .enquiry-form-inline .form-row {
+            display: flex;
+            gap: 15px;
+            margin-bottom: 15px;
+        }
+
+        .enquiry-form-inline .form-group {
+            flex: 1;
+            margin-bottom: 15px;
+        }
+
+        .enquiry-form-inline .form-group.full-width {
+            width: 100%;
+        }
+
+        .enquiry-form-inline input,
+        .enquiry-form-inline textarea {
+            width: 100%;
+            padding: 10px 15px;
+            border: 1px solid #ddd;
+            border-radius: 5px;
+            font-family: inherit;
+        }
+
+        .enquiry-form-inline textarea {
+            height: 80px;
+            resize: vertical;
+        }
+
+        .enquiry-form-inline .view-product-btn {
+            border: none;
+            cursor: pointer;
+            width: 100%;
+            text-align: center;
+        }
+
+        @media (max-width: 768px) {
+            .enquiry-form-inline .form-row {
+                flex-direction: column;
+                gap: 0;
+            }
+        }
+
+        .products-infinite-loader {
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            padding: 30px 0;
+        }
+
+        .products-loading-spinner {
+            width: 32px;
+            height: 32px;
+            border: 3px solid #e6f3e9;
+            border-top-color: #58AE68;
+            border-radius: 50%;
+            display: inline-block;
+            animation: products-spin 0.8s linear infinite;
+        }
+
+        @keyframes products-spin {
+            to {
+                transform: rotate(360deg);
+            }
+        }
+
+        #products-infinite-sentinel {
+            height: 1px;
+        }
+
+        .no-products-message {
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 200px;
+            width: 100%;
+            text-align: center;
+            background: #f9f9f9;
+            border-radius: 8px;
+            border: 1px solid #eee;
+        }
+
+        .no-products-message p {
+            margin: 0;
+            padding: 30px;
+            color: #666;
+            font-size: 1.1rem;
+        }
+    </style>
+</head>
+
+<body>
+    <div class="wrapper">
+        <div class="inner-page-banner-wrapper" id="bg"
+            style="background: url('images/inr-bnr.avif') no-repeat center center/cover;">
+            <header>
+                <div class="header-banner-wrapper">
+                    <div class="fluid-container">
+                        <div class="header-inner-wrapper">
+                            <ul class="social-media-links">
+                                <li><a href="javascript:;" target="_blank"><span><img
+                                                src="images/instagram.png"></span></a></li>
+                                <li><a href="https://www.linkedin.com/company/orbi-seeds-international-pvt-ltd/"
+                                        target="_blank"><span><img src="images/linkedin.png"></span></a></li>
+                                <li><a href="https://www.facebook.com/OrbiSeeds/" target="_blank"><span><img
+                                                src="images/facebook.png"></span></a></li>
+                                <li><a href="javascript:;"><span><img src="images/twitter.png"
+                                                target="_blank"></span></a></li>
+                            </ul>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="logo-header-wrapper">
+                    <div class="fluid-container">
+                        <div class="bottom-inner-wrapper">
+                            <div class="bottom-header-top">
+                                <a href="index.html">
+                                    <div class="orbi-logo">
+                                        <img src="./images/orbi-seeds-logo.png" alt="Orbi-Seeds">
+                                    </div>
+                                    <span>ORBI SEEDS INTERNATIONAL PVT LTD</span>
+                                </a>
+                            </div>
+
+                            <!-- desktop menu -->
+                            <div class="right-desktop-menu-container">
+                                <ul class="nav-links">
+                                    <li class="dropdown-wrapper-li"><a href="about-orbis.html">About</a>
+                                    </li>
+                                    <li class="dropdown-wrapper-li"><a href="product.html">Our Products</a>
+                                        <div class="dropdown-wrapper last">
+                                            <ul>
+                                                <li><a href="bitter-guard.html">Bitter Gourd</a></li>
+                                                <li><a href="bottle-guard.html">Bottle Gourd</a></li>
+                                                <li><a href="brinjal.html">Brinjal</a></li>
+                                                <li><a href="cabage-caulifower.html">Cabage Cauliflower</a></li>
+                                                <li><a href="ladies-finger.html">Ladies Finger</a></li>
+                                                <li><a href="cucumber.html">Cucumber</a></li>
+                                                <li><a href="muskmelon.html">Muskmelon</a></li>
+                                                <li><a href="okra.html">Okra</a></li>
+                                                <li><a href="ridge-gourd.html">Ridge Gourd</a></li>
+                                                <li><a href="watermelon.html">Watermelon</a></li>
+                                                <li><a href="zucchini-and-pumpkin.html">Pumpkin</a></li>
+                                            </ul>
+                                        </div>
+                                    </li>
+                                    <li class="dropdown-wrapper-li"><a href="research-and-development.html">R & D</a>
+                                    </li>
+                                    <li class="dropdown-wrapper-li"><a href="partners.html">Partners</a></li>
+
+                                    <li class="dropdown-wrapper-li"><a href="javascript:;">Media</a>
+                                    </li>
+                                    <li class="dropdown-wrapper-li"><a href="javascript:;">Gallery</a></li>
+                                    <li class="dropdown-wrapper-li"><a href="contact-us.html">Contact Us</a></li>
+
+
+                                </ul>
+                                <ul>
+                                    <li class="wishlist">
+                                        <a href="wishlist.html">
+                                            <img src="images/icons/heart.png" alt=""><span
+                                                id="header-wishlist-count">0</span>
+                                        </a>
+                                    </li>
+                                    <li class="enquiry-list-header">
+                                        <a href="enquiry-list.html">
+                                            <img src="./images/icons/list.png" alt=""><span
+                                                id="header-enquiry-count">0</span>
+                                        </a>
+                                    </li>
+
+                                </ul>
+
+                            </div>
+                            <!-- desktop menu -->
+
+                            <!-- responsive menu -->
+                            <nav class="resp-menu">
+                                <a href="javascript:;" aria-label="resp-menu"
+                                    class="toggle hc-nav-trigger hc-nav-1"><span></span></a>
+                                <nav id="main-nav">
+
+                                    <ul class="first-nav logo-img">
+                                        <li><a href="index.html" title="HOME"><img src="./images/orbi-seeds-logo.png"
+                                                    alt="logo"></a></li>
+                                    </ul>
+
+                                    <ul class="first-nav">
+                                        <li><a class="resp-home" href="index.html" title="HOME">Home</a></li>
+                                    </ul>
+
+                                    <ul class="first-nav">
+                                        <li><a href="about-orbis.html">About</a></li>
+                                    </ul>
+
+                                    <ul class="first-nav">
+                                        <li><span title="product">Our Products</span>
+                                            <ul>
+                                                <li><a href="bitter-guard.html">Bitter Gourd</a></li>
+                                                <li><a href="bottle-guard.html">Bottle Gourd</a></li>
+                                                <li><a href="brinjal.html">Brinjal</a></li>
+                                                <li><a href="cabage-caulifower.html">Cabage Cauliflower</a></li>
+                                                <li><a href="ladies-finger.html">Ladies Finger</a></li>
+                                                <li><a href="cucumber.html">Cucumber</a></li>
+                                                <li><a href="muskmelon.html">Muskmelon</a></li>
+                                                <li><a href="okra.html">Okra</a></li>
+                                                <li><a href="ridge-gourd.html">Ridge Gourd</a></li>
+                                                <li><a href="watermelon.html">Watermelon</a></li>
+                                                <li><a href="zucchini-and-pumpkin.html">Pumpkin</a></li>
+                                            </ul>
+                                        </li>
+                                    </ul>
+                                    <ul class="first-nav">
+                                        <li><a href="research-and-development.html">R & D</a></li>
+                                    </ul>
+                                    <ul class="first-nav">
+                                        <li><a href="partners.html">Partners</a></li>
+                                    </ul>
+                                    <ul class="first-nav">
+                                        <li><a href="javascript:;">Media</a></li>
+                                    </ul>
+                                    <ul class="first-nav">
+                                        <li><a href="javascript:;">Gallery</a></li>
+                                    </ul>
+                                    <ul class="first-nav">
+                                        <li><a href="contact-us.html">Contact Us</a></li>
+                                    </ul>
+                                </nav>
+                            </nav>
+                            <!-- responsive menu -->
+                        </div>
+                    </div>
+                </div>
+                <!-- logo header -->
+            </header>
+
+            <div class="fluid-container">
+                <div class="inner-banner">
+                    <h2 class="product-heading">Our Products</h2>
+                    <nav aria-label="breadcrumb" class="breadcrumb-wrapper">
+                        <ol class="breadcrumb">
+                            <li><a href="index.html">Home</a></li>
+                            <li>/</li>
+                            <li><a href="product.html">Our Products</a></li>
+                            <li>/</li>
+                            <li><span>Products</span></li>
+                        </ol>
+                    </nav>
+                </div>
+            </div>
+        </div>
+        <!-- inner-banner -->
+
+        <div class="wrapper">
+
+            <div class="ip-product-wrapper-main">
+                <div class="fluid-container">
+                    <div id="back-btn-wrapper"></div>
+                    <div class="ip-product-inner-wrapper">
+                        <div class="ip-products-list">
+                            <p><!-- Category Title --></p>
+                            <ul class="products-list tap-section">
+                                <!-- Product links loaded dynamically -->
+                            </ul>
+                        </div>
+                        <div class="products-content">
+                            <!-- Product details loaded dynamically -->
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="enquiry-popup-wrapper">
+                <div class="enquiry-overlay"></div>
+                <div class="enquiry-popup">
+                    <button class="close-enquiry-popup">&times;</button>
+                    <form action="enquiry.php" method="POST" class="enquiry-form" name="valid">
+                        <div class="form-group">
+                            <label for="name">Your Name</label>
+                            <input type="hidden" id="txt-page-name" name="txtPageName" value="index">
+                            <input type="text" name="txtName" placeholder="Enter Your Name" required>
+                        </div>
+                        <div class="form-group">
+                            <label for="pnumber">Phone Number</label>
+                            <input type="tel" name="txtPhone" placeholder="Enter Phone Number" required>
+                        </div>
+                        <div class="form-group">
+                            <label for="email">Email Address</label>
+                            <input type="email" name="txtEmail" placeholder="Enter Email Address" required>
+                        </div>
+                        <div class="form-group">
+                            <label for="product">Select Product</label>
+                            <input type="text" name="txtProduct" placeholder="Selected Product" readonly required>
+                        </div>
+
+                        <div class="form-group full-width">
+                            <label for="quantity">Quantity</label>
+                            <input type="number" name="txtQuantity" placeholder="Enter Quantity" required>
+                        </div>
+
+                        <div class="form-group full-width">
+                            <label for="message">Message</label>
+                            <textarea name="txtMessage" placeholder="Write Your Message"></textarea>
+                        </div>
+                        <div class="form-group full-width checkbox-group" id="newsletter-checkbox-group">
+                            <label class="checkbox-label" for="chkNewsletter">
+                                <input type="checkbox" name="chkNewsletter" id="chkNewsletter" value="1">
+                                <span>Check here for future products</span>
+                            </label>
+                        </div>
+
+                        <input type="text" id="orbis" name="orbis" style="display:none">
+
+                        <!-- <button class="view-product-btn">
+                Submit
+            </button> -->
+                        <button type="submit" class="button view-product-btn">Submit</button>
+
+                    </form>
+
+                </div>
+
+            </div>
+
+            <footer>
+                <div class="footer-wrapper">
+                    <div class="fluid-container">
+                        <div class="footer-inner">
+                            <div class="footer-left">
+                                <a href="index.html" class="footer-left-heading">
+                                    <div class="logo">
+                                        <img src="./images/orbi-seeds-logo.png" alt="">
+                                    </div>
+                                    <h4>ORBI SEEDS INTERNATIONAL PVT LTD</h4>
+                                </a>
+                                <p>Orbi Seeds International Pvt Ltd was formed by Dr. Sanjay Dwivedi in October 2016 as
+                                    proprietor company and later in October 2018 it became a private limited company.
+                                </p>
+                            </div>
+                            <!-- <div class="footer-middle">
+                    <ul>
+                        <li><a href="">About</a></li>
+                        <li><a href="">Our products</a></li>
+                        <li><a href="">R & d</a></li>
+                        <li><a href="">Partners</a></li>
+                        <li><a href="">Media</a></li>
+                        <li><a href="">Gallery</a></li>
+                        <li><a href="">Conatact Us</a></li>
+                    </ul>
+                </div> -->
+                            <div class="footer-right">
+                                <div class="footer-right-up">
+                                    <h5>India Office:</h5>
+                                    <ul>
+                                        <li>
+                                            <a href="">
+                                                <span><img src="images/icons/mail.png" alt=""></span>
+                                                <p>sanjay@orbiseeds.com</p>
+                                            </a>
+                                        </li>
+                                        <li>
+                                            <a href="">
+                                                <span><img src="images/icons/telephone.png" alt=""></span>
+                                                <p>+918316372149</p>
+                                            </a>
+                                        </li>
+                                        <li>
+                                            <a href="">
+                                                <span><img src="images/icons/location.png" alt=""></span>
+                                                <p>#1241, HIG-KHB, 7th B Cross, B Sector, Yelahanka New Town, Bengaluru
+                                                    560 064. </p>
+                                            </a>
+                                        </li>
+                                    </ul>
+                                </div>
+                                <div class="footer-right-up">
+                                    <h5>US Office:</h5>
+                                    <ul>
+                                        <li>
+                                            <a href="">
+                                                <span><img src="images/icons/mail.png" alt=""></span>
+                                                <p>remo@orbiseeds.com</p>
+                                            </a>
+                                        </li>
+                                        <li>
+                                            <a href="">
+                                                <span><img src="images/icons/telephone.png" alt=""></span>
+                                                <p>(+1) 8316372149</p>
+                                            </a>
+                                        </li>
+                                        <li>
+                                            <a href="">
+                                                <span><img src="images/icons/location.png" alt=""></span>
+                                                <p>#7600 Fairview Road Hollister, CA-95023</p>
+                                            </a>
+                                        </li>
+                                    </ul>
+                                </div>
+
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                <div class="copyrights-wrapper">
+                    <div class="fluid-container">
+                        <div class="copyright-inner">
+                            <ul>
+                                <li>
+                                    <p>Copyrights@<span id="current-year"></span>, All Rights Reserved, Orbiseeds</p>
+                                </li>
+                                <li>
+                                    <p><a class="" href="https://swaragh.com" target="_blank"
+                                            title="Website design Company in Bangalore">Website Design Company:
+                                            Swaragh</a></p>
+                                </li>
+                            </ul>
+                        </div>
+                    </div>
+                </div>
+            </footer>
+
+            <a id="to-top" href="javascript:;" title="Back to top"><img src="images/go-to-top.png" alt="to-top"></a>
+
+            <script src="//cdnjs.cloudflare.com/ajax/libs/jquery/3.2.1/jquery.min.js"></script>
+
+            <script src="js/common.js"></script>
+            <script src="js/enquiry.js"></script>
+            <script src="js/wishlist.js"></script>
+
+            <script>
+                // Go to top 
+                $("#to-top").hide();
+                $(window).scroll(function () {
+                    if ($(this).scrollTop() > 100) {
+                        $('#to-top').fadeIn();
+                    } else {
+                        $('#to-top').fadeOut();
+                    }
+                });
+                $('#to-top').click(function () {
+                    $('body,html').animate({
+                        scrollTop: 0
+                    }, 500);
+                    return false;
+                });
+                // Go to top
+            </script>
+
+            <script>
+                // Scrolled Header
+                $(function () {
+                    var header = $("header");
+                    $(window).scroll(function () {
+                        var scroll = $(window).scrollTop();
+                        if (scroll >= 100) {
+                            header.addClass("scrolled-header");
+                        } else {
+                            header.removeClass("scrolled-header");
+                        }
+                    });
+                });
+                // Scrolled Header
+            </script>
+
+            <!-- OwlCarousel -->
+            <script src="https://cdnjs.cloudflare.com/ajax/libs/OwlCarousel2/2.3.4/owl.carousel.js"
+                integrity="sha512-gY25nC63ddE0LcLPhxUJGFxa2GoIyA5FLym4UJqHDEMHjp8RET6Zn/SHo1sltt3WuVtqfyxECP38/daUc/WVEA=="
+                crossorigin="anonymous" referrerpolicy="no-referrer"></script>
+            <!-- OwlCarousel -->
+
+            <!-- Start - menu -->
+
+            <script>
+                //Responsive nav Start
+                var didScroll;
+                var lastScrollTop = 0;
+                var delta = 5;
+                var navbarHeight = $('header').outerHeight();
+
+                $(window).scroll(function (event) {
+                    didScroll = true;
+                });
+
+                setInterval(function () {
+                    if (didScroll) {
+                        hasScrolled();
+                        didScroll = false;
+                    }
+                }, 250);
+
+                function hasScrolled() {
+                    var st = $(this).scrollTop();
+
+                    // Make sure they scroll more than delta
+                    if (Math.abs(lastScrollTop - st) <= delta)
+                        return;
+
+                    // If they scrolled down and are past the navbar, add class .nav-up.
+                    // This is necessary so you never see what is "behind" the navbar.
+                    if (st > lastScrollTop && st > navbarHeight) {
+                        // Scroll Down
+                        $('#header').removeClass('nav-down').addClass('nav-up');
+
+                    } else {
+                        // Scroll Up
+                        if (st + $(window).height() <= $(document).height()) {
+                            $('#header').removeClass('nav-up').addClass('nav-down');
+                        }
+                    }
+                    lastScrollTop = st;
+                }
+                (function ($) {
+                    window.initMobileMenu = function () {
+                        // Custom mobile menu initialization logic if needed.
+                        // The building and event binding is now handled in common.js
+                        console.log("Mobile menu initialized");
+                    };
+                })(jQuery)
+            </script>
+            <!-- //Responsive nav end -->
+
+            <!-- End - menu -->
+
+
+            <!-- canvas menu initialisation -->
+            <!-- Duplicate initialization removed -->
+            <!-- popup script moved to js/enquiry.js -->
+
+
+
+
+        </div>
+
+
+        <!-- <script src="//cdnjs.cloudflare.com/ajax/libs/jquery/3.2.1/jquery.min.js"></script> -->
+        <script src="js/constant.js"></script>
+        <script src="js/products.js"></script>
+        <!-- 
+        <script src="https://unpkg.com/aos@2.3.1/dist/aos.js"></script>
+        <script>
+            window.onload = function () {
+                AOS.init();
+            };
+        </script> -->
+    </div>
+
+</body>
+
+
+</html>

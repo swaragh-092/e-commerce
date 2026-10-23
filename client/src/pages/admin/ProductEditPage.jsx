@@ -120,8 +120,8 @@ const validate = (formData) => {
     errs.name = 'Product name must be 255 characters or less.';
 
   // Only validate price/tax if their respective features are enabled
-  const pricingEnabled = window.__APP_FEATURES__?.pricing ?? true; // Fallback to true if unknown
-  const showPrice = window.__APP_FEATURES__?.showPrice ?? true;
+  const pricingEnabled = formData._features?.pricing ?? true;
+  const showPrice = formData._features?.showPrice ?? true;
 
   if (pricingEnabled || showPrice) {
     const rPrice = Number(formData.price);
@@ -150,7 +150,7 @@ const validate = (formData) => {
   }
 
   if (
-    formData.quantity !== '' &&
+    formData.type === 'simple' && formData.quantity !== '' &&
     (!Number.isInteger(Number(formData.quantity)) || Number(formData.quantity) < 0 || Number(formData.quantity) > 2147483647)
   ) {
     errs.quantity = 'Stock quantity must be a whole number from 0 to 2147483647.';
@@ -284,7 +284,7 @@ const ProductEditPage = () => {
   const [saving, setSaving] = useState(false);
   const [mediaPickerOpen, setMediaPickerOpen] = useState(false);
   const [ogPickerOpen, setOgPickerOpen] = useState(false);
-  const [dbProduct, setDbProduct] = useState(null); 
+  const [dbProduct, setDbProduct] = useState(null);
   const [hasVariants, setHasVariants] = useState(false);
   const [variantCount, setVariantCount] = useState(0);
   const [variantStockTotal, setVariantStockTotal] = useState(0);
@@ -522,7 +522,7 @@ const ProductEditPage = () => {
     if (Object.keys(errs).length > 0) {
       setErrors(errs);
       if (errs.type) notify(errs.type, 'error');
-      else notify('Please fix the validation errors before saving.', 'warning');
+      else notify(`Please fix the following before saving: ${Object.values(errs).join(' ')}`, 'warning');
       return;
     }
 
@@ -535,7 +535,7 @@ const ProductEditPage = () => {
     try {
       const payload = {
         ...formData,
-        price: parseFloat(formData.price),
+        price: !pricingEnabled && !showPrice && formData.price === '' ? 0 : parseFloat(formData.price),
         salePrice:
           formData.salePrice !== '' && formData.salePrice !== null && !isNaN(parseFloat(formData.salePrice))
             ? parseFloat(formData.salePrice)
@@ -545,7 +545,6 @@ const ProductEditPage = () => {
         saleLabel: (formData.salePrice !== '' && formData.salePrice !== null) ? (formData.saleLabel || null) : null,
         brandId: formData.brandId || null,
         unit: formData.unit?.trim() || null,
-        quantity: formData.type === 'combo' ? 0 : (parseInt(formData.quantity) || 0),
         type: formData.type || 'simple',
         // Shipping dimensions — null when blank so DB stores NULL cleanly
         requiresShipping: formData.requiresShipping,
@@ -561,9 +560,11 @@ const ProductEditPage = () => {
         ogImage: formData.ogImage || null,
       };
 
+      // Variant and bundle stock is managed by their own editors.
+      delete payload.quantity;
       if (payload.type === 'simple') {
         payload.quantity = parseInt(formData.quantity) || 0;
-      } else delete payload.quantity;
+      }
       if (confirmInventoryReset) payload.confirmInventoryReset = true;
       if (isNew) {
         const res = await createProduct(payload);
@@ -592,7 +593,11 @@ const ProductEditPage = () => {
         notify('Product updated successfully.', 'success');
       }
     } catch (err) {
-      notify(getApiErrorMessage(err), 'error');
+      const details = err?.response?.data?.error?.details;
+      const validationMessage = Array.isArray(details)
+        ? details.map((detail) => detail.message).filter(Boolean).join(' ')
+        : '';
+      notify(validationMessage || getApiErrorMessage(err), 'error');
     } finally {
       setSaving(false);
     }
@@ -602,11 +607,11 @@ const ProductEditPage = () => {
   const handleMediaSelect = (selectedMedia) => {
     if (!selectedMedia) return;
     const mediaArray = Array.isArray(selectedMedia) ? selectedMedia : [selectedMedia];
-    
+
     setFormData((prev) => {
       const existingIds = new Set(prev.images.map(img => img.mediaId));
       const filteredNew = mediaArray.filter(m => !existingIds.has(m.id));
-      
+
       return {
         ...prev,
         images: [
@@ -1202,7 +1207,7 @@ const ProductEditPage = () => {
               {formData.type === 'simple' && variantCount > 0 && <Alert severity="warning" action={<Button onClick={() => setField('type', 'variable')} disabled={!canSaveProduct}>Use Variable Product</Button>}>This product has existing variants. Select Variable Product and save to manage them.</Alert>}
 
             </Paper>
-            
+
             <Paper sx={{ p: 3, mb: 3 }}>
               <Typography variant="h6" gutterBottom>
                 Categories &amp; Brand
@@ -1353,8 +1358,8 @@ const ProductEditPage = () => {
 
             {!isNew && formData.type === 'combo' && dbProduct?.type === 'combo' && (
               <Paper sx={{ p: 3, mb: 3 }}>
-                <ProductComboBuilder 
-                  productId={id} 
+                <ProductComboBuilder
+                  productId={id}
                   canEdit={canUpdateProducts}
                   onSuggestedPrice={(price) => setField('price', price)}
                 />
@@ -1482,13 +1487,13 @@ const ProductEditPage = () => {
         {/* Variant operations require the Variable type to be saved first. */}
         {!isNew && formData.type === 'variable' && dbProduct?.type === 'variable' && (
           <Box onKeyDown={(e) => { if (e.key === 'Enter' && e.target.tagName !== 'TEXTAREA') { e.preventDefault(); e.stopPropagation(); } }}>
-            <VariantsPanel 
-              productId={id} 
+            <VariantsPanel
+              productId={id}
               productName={formData.name}
               productSku={formData.sku}
-              categoryIds={formData.categoryIds} 
-              flatCatFiles={flatCatFiles} 
-              canManageVariants={canUpdateProducts} 
+              categoryIds={formData.categoryIds}
+              flatCatFiles={flatCatFiles}
+              canManageVariants={canUpdateProducts}
               onStockTotalChange={handleVariantStockChange}
               globalPrimaryVersion={globalPrimaryVersion}
               onVariantPrimarySelected={() => setFormData((prev) => ({
@@ -1634,4 +1639,3 @@ const ProductEditPage = () => {
 
 
 export default ProductEditPage;
-

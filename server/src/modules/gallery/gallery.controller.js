@@ -2,6 +2,7 @@
 const { success } = require('../../utils/response');
 const galleryService = require('./gallery.service');
 
+exports.publicIndex = async (req, res, next) => { try { return success(res, await galleryService.listPublic(), 'Galleries fetched'); } catch (e) { next(e); } };
 exports.listAdmin = async (req, res, next) => { try { const { page, limit } = req.query; const result = await galleryService.listAdmin(page, limit); return success(res, result.data, 'Galleries fetched', 200, { total: result.totalItems, page: result.currentPage, totalPages: result.totalPages, limit: result.limit }); } catch (e) { next(e); } };
 exports.create = async (req, res, next) => { try { const gallery = await galleryService.createGallery(req.validated); return success(res, gallery, 'Gallery created', 201); } catch (e) { next(e); } };
 exports.update = async (req, res, next) => { try { const gallery = await galleryService.updateGallery(req.params.id, req.validated); return success(res, gallery, 'Gallery updated'); } catch (e) { next(e); } };
