@@ -24,6 +24,9 @@ import {
   Divider,
   Chip,
   TextField,
+  Tabs,
+  Tab,
+  InputAdornment,
 } from '@mui/material';
 import DeleteIcon from '@mui/icons-material/Delete';
 import EditIcon from '@mui/icons-material/Edit';
@@ -35,12 +38,14 @@ import CalendarTodayIcon from '@mui/icons-material/CalendarToday';
 import StorageIcon from '@mui/icons-material/Storage';
 import LayersClearIcon from '@mui/icons-material/LayersClear';
 import CategoryIcon from '@mui/icons-material/Category';
+import SearchIcon from '@mui/icons-material/Search';
 import { mediaService } from '../../services/mediaService';
 import { useNotification } from '../../context/NotificationContext';
 import { useAuth } from '../../hooks/useAuth';
 import { PERMISSIONS } from '../../utils/permissions';
 import MediaUploader from '../../components/common/MediaUploader';
 import { getMediaUrl } from '../../utils/media';
+import CategoryIconRenderer, { CATEGORY_ICONS } from '../../components/common/CategoryIcon';
 
 // ─── Helpers ────────────────────────────────────────────────────────────────
 
@@ -168,6 +173,8 @@ const MediaPage = () => {
   const [editFormData, setEditFormData] = useState({ alt: '', description: '', caption: '', originalName: '' });
   const [savingEdit, setSavingEdit] = useState(false);
   const [manualCopyUrl, setManualCopyUrl] = useState('');
+  const [activeLibrary, setActiveLibrary] = useState('files');
+  const [iconSearch, setIconSearch] = useState('');
   const observerRef = useRef(null);
 
   const fetchMedia = async (pageNum = 1, isLoadMore = false) => {
@@ -210,7 +217,7 @@ const MediaPage = () => {
 
   // Infinite scroll observer
   useEffect(() => {
-    if (!hasMore || loading || loadingMore) return;
+    if (activeLibrary !== 'files' || !hasMore || loading || loadingMore) return;
 
     const observer = new IntersectionObserver(
       (entries) => {
@@ -232,7 +239,7 @@ const MediaPage = () => {
       }
       observer.disconnect();
     };
-  }, [hasMore, loading, loadingMore]);
+  }, [activeLibrary, hasMore, loading, loadingMore]);
 
   const handleLoadMore = () => {
     if (!loading && !loadingMore && hasMore) {
@@ -314,6 +321,21 @@ const MediaPage = () => {
   }, [sortedFiles, groupBy]);
 
   const groupKeys = Object.keys(groupedFiles);
+  const filteredIcons = useMemo(() => {
+    const query = iconSearch.trim().toLowerCase();
+    if (!query) return CATEGORY_ICONS;
+    return CATEGORY_ICONS.filter(({ id, label, keywords }) =>
+      `${id} mui:${id} ${label} ${keywords}`.toLowerCase().includes(query));
+  }, [iconSearch]);
+
+  const copyIconId = async (id) => {
+    try {
+      await navigator.clipboard.writeText(`mui:${id}`);
+      notify('Icon ID copied.', 'success');
+    } catch {
+      notify('Could not copy the icon ID in this browser.', 'warning');
+    }
+  };
 
   // ─── Render ────────────────────────────────────────────────────────────────
 
@@ -339,7 +361,7 @@ const MediaPage = () => {
       {/* Header */}
       <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 3 }}>
         <Typography variant="h5" component="h1" fontWeight={700}>Media Library</Typography>
-        {canUploadMedia && (
+        {activeLibrary === 'files' && canUploadMedia && (
           <Button
             variant="contained"
             startIcon={<CloudUploadIcon />}
@@ -351,7 +373,23 @@ const MediaPage = () => {
         )}
       </Box>
 
+      <Tabs
+        value={activeLibrary}
+        onChange={(_, value) => setActiveLibrary(value)}
+        aria-label="Media library sections"
+        sx={{ mb: 3, borderBottom: 1, borderColor: 'divider' }}
+      >
+        <Tab id="media-files-tab" aria-controls="media-files-panel" value="files" label="Media files" />
+        <Tab id="media-icons-tab" aria-controls="media-icons-panel" value="icons" label="Icon library" />
+      </Tabs>
+
       {/* Controls toolbar */}
+      <Box
+        role="tabpanel"
+        id="media-files-panel"
+        aria-labelledby="media-files-tab"
+        hidden={activeLibrary !== 'files'}
+      >
       <Box
         sx={{
           display: 'flex',
@@ -480,6 +518,68 @@ const MediaPage = () => {
             </Box>
           )}
         </>
+      )}
+
+      </Box>
+
+      {activeLibrary === 'icons' && (
+        <Box role="tabpanel" id="media-icons-panel" aria-labelledby="media-icons-tab">
+          <Box
+            sx={{
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'space-between',
+              gap: 2,
+              flexWrap: 'wrap',
+              mb: 2,
+              p: 2,
+              borderRadius: 2,
+              bgcolor: 'background.paper',
+              border: '1px solid',
+              borderColor: 'divider',
+            }}
+          >
+            <TextField
+              size="small"
+              value={iconSearch}
+              onChange={(event) => setIconSearch(event.target.value)}
+              placeholder="Search icons"
+              inputProps={{ 'aria-label': 'Search icon library' }}
+              InputProps={{ startAdornment: <InputAdornment position="start"><SearchIcon fontSize="small" /></InputAdornment> }}
+              sx={{ width: { xs: '100%', sm: 320 } }}
+            />
+            <Typography variant="body2" color="text.secondary">
+              {filteredIcons.length} icon{filteredIcons.length !== 1 ? 's' : ''}
+            </Typography>
+          </Box>
+          <Alert severity="info" sx={{ mb: 3 }}>
+            These icons are available when editing a category. To use one, open Catalog → Categories, edit a category, and choose its icon.
+          </Alert>
+          {filteredIcons.length ? (
+            <Grid container spacing={2}>
+              {filteredIcons.map(({ id, label }) => (
+                <Grid item key={id} xs={6} sm={4} md={3} lg={2}>
+                  <Card variant="outlined" sx={{ height: '100%', borderRadius: 2, textAlign: 'center', p: 1.5 }}>
+                    <Box sx={{ height: 88, display: 'grid', placeItems: 'center', bgcolor: 'action.hover', borderRadius: 1.5, mb: 1 }}>
+                      <CategoryIconRenderer value={`mui:${id}`} size={40} color="primary.main" />
+                    </Box>
+                    <Typography variant="body2" fontWeight={600}>{label}</Typography>
+                    <Typography variant="caption" color="text.secondary" sx={{ display: 'block', overflowWrap: 'anywhere' }}>mui:{id}</Typography>
+                    <CardActions sx={{ justifyContent: 'center', p: 0, mt: 0.5 }}>
+                      <Tooltip title="Copy icon ID">
+                        <IconButton size="small" aria-label={`Copy ${label} icon ID`} onClick={() => copyIconId(id)}>
+                          <ContentCopyIcon fontSize="small" />
+                        </IconButton>
+                      </Tooltip>
+                    </CardActions>
+                  </Card>
+                </Grid>
+              ))}
+            </Grid>
+          ) : (
+            <Alert severity="info">No icons match “{iconSearch}”.</Alert>
+          )}
+        </Box>
       )}
 
       {/* Upload Dialog */}
