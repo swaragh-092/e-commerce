@@ -193,7 +193,14 @@ const MenuItemGrid = ({
       ),
     },
     { field: 'placement', headerName: 'Placement', width: 130 },
-    { field: 'targetType', headerName: 'Type', width: 160, valueGetter: (value, row) => row?.generatedFromCategory ? 'Synced category' : value },
+    {
+      field: 'targetType',
+      headerName: 'Type',
+      width: 160,
+      valueGetter: (value, row) => row?.generatedFromCategory
+        ? 'Synced category'
+        : ({ none: 'Label only', custom_url: 'Custom URL', system_route: 'Store page', category_tree: 'Synced categories', collection: 'Category' }[value] || value),
+    },
     { field: 'url', headerName: 'URL', flex: 1 },
     { field: 'sortOrder', headerName: 'Order', width: 90 },
     {

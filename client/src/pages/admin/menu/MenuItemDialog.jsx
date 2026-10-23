@@ -111,12 +111,11 @@ const MenuItemDialog = ({
                   >
                     <MenuItem value="none">Label Only (Category Header)</MenuItem>
                     <MenuItem value="custom_url">Custom URL</MenuItem>
-                    <MenuItem value="system_route">System Route</MenuItem>
+                    <MenuItem value="system_route">Store Page</MenuItem>
                     <MenuItem value="page">Static Page</MenuItem>
                     <MenuItem value="category">Category</MenuItem>
                     <MenuItem value="category_tree">Synced category tree</MenuItem>
                     <MenuItem value="product">Product</MenuItem>
-                    <MenuItem value="collection">Collection</MenuItem>
                   </Select>
                 </FormControl>
               </Grid>
@@ -166,7 +165,7 @@ const MenuItemDialog = ({
                 <Grid item xs={12} md={8}>
                   <TextField
                     fullWidth
-                    label={itemForm.targetType === 'system_route' ? 'Route Path' : 'URL'}
+                    label={itemForm.targetType === 'system_route' ? 'Store Page Path' : 'URL'}
                     placeholder={
                       itemForm.targetType === 'system_route'
                         ? '/products'
@@ -174,6 +173,7 @@ const MenuItemDialog = ({
                     }
                     value={itemForm.url || ''}
                     onChange={(e) => setItemForm({ ...itemForm, url: e.target.value })}
+                    helperText={itemForm.targetType === 'system_route' ? 'Enter a path on your store, for example /products or /contact.' : undefined}
                   />
                 </Grid>
               )}

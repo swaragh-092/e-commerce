@@ -175,7 +175,9 @@ const MenuBuilderPage = () => {
     setItemForm(item ? {
       parentId: item.parentId || '',
       label: item.label || '',
-      targetType: item.targetType || 'none',
+      // Collection is a legacy alias for category; both resolve to the same
+      // category list and storefront URL, so expose one choice in the editor.
+      targetType: item.targetType === 'collection' ? 'category' : item.targetType || 'none',
       targetId: item.targetId || '',
       url: item.url || '',
       placement: item.placement || 'center',
