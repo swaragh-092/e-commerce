@@ -12,12 +12,12 @@ const empty = { success: true, data: { items: [] }, meta: { totalPages: 0 } };
 const api = () => vi.fn(async (url) => response(url.endsWith('/public')
   ? { success: true, data: albums } : items(url.includes('/flower?') ? '/uploads/flower.png' : '/uploads/gallery.png')));
 let dom;
-const mount = (fetchMock, search = '', origin = 'http://localhost:3000') => {
+const mount = (fetchMock, search = '', origin = 'http://localhost:3000', config = {}) => {
   dom = new JSDOM('<p id="gallery-message" role="status"></p><button id="gallery-retry" hidden>Try again</button><div id="gallery-sections"></div>', {
     url: `${origin}/demo-orbis-seeds-v1-html/gallery.html${search}`, runScripts: 'outside-only',
   });
-  dom.window.API_URL = 'https://api.example.com/api/';
-  dom.window.APP_URL = 'https://api.example.com/';
+  dom.window.API_URL = config.api || 'https://api.example.com/api/';
+  dom.window.APP_URL = config.media || 'https://api.example.com/';
   dom.window.fetch = fetchMock;
   dom.window.console.error = vi.fn();
   dom.window.eval(script);
@@ -33,8 +33,8 @@ describe('Orbi gallery album sections', () => {
     const doc = mount(fetchMock);
     await loaded(doc);
     expect(Array.from(doc.querySelectorAll('section h3'), (heading) => heading.textContent)).toEqual(['Flower', 'Gallery']);
-    expect(section(doc, 0).querySelector('img').src).toBe('http://localhost:3000/uploads/flower.png');
-    expect(section(doc, 1).querySelector('img').src).toBe('http://localhost:3000/uploads/gallery.png');
+    expect(section(doc, 0).querySelector('img').src).toBe('https://api.example.com/uploads/flower.png');
+    expect(section(doc, 1).querySelector('img').src).toBe('https://api.example.com/uploads/gallery.png');
     expect(section(doc, 0).querySelector('.gallery-album-description').textContent).toBe('Field photographs');
     expect(doc.querySelector('.gallery-album-button')).toBeNull();
     expect(fetchMock).toHaveBeenCalledTimes(3);
@@ -70,6 +70,31 @@ describe('Orbi gallery album sections', () => {
     await loaded(doc);
     expect(fetchMock.mock.calls[0][0]).toBe('https://api.example.com/api/galleries/public');
     expect(section(doc, 0).querySelector('img').src).toBe('https://api.example.com/uploads/flower.png');
+  });
+
+  it.each(['http://localhost:3000', 'http://127.0.0.1:3000', 'http://[::1]:3000'])('honors the configured backend when the page is served from %s without an API proxy', async (origin) => {
+    const fetchMock = api();
+    const doc = mount(fetchMock, '', origin);
+    await loaded(doc);
+    expect(fetchMock.mock.calls.every(([url]) => url.startsWith('https://api.example.com/api/'))).toBe(true);
+    expect(section(doc, 0).querySelector('img').src).toBe('https://api.example.com/uploads/flower.png');
+  });
+
+  it('allows an explicitly configured local backend on another port', async () => {
+    const fetchMock = api();
+    const doc = mount(fetchMock, '', 'http://localhost:3000', {
+      api: 'http://localhost:5000/api/', media: 'http://localhost:5000/',
+    });
+    await loaded(doc);
+    expect(fetchMock.mock.calls[0][0]).toBe('http://localhost:5000/api/galleries/public');
+    expect(section(doc, 0).querySelector('img').src).toBe('http://localhost:5000/uploads/flower.png');
+  });
+
+  it('normalizes a configured API URL without a trailing slash', async () => {
+    const fetchMock = api();
+    const doc = mount(fetchMock, '', 'https://orbiseeds.example', { api: 'https://api.example.com/api' });
+    await loaded(doc);
+    expect(fetchMock.mock.calls[0][0]).toBe('https://api.example.com/api/galleries/public');
   });
 
   it('groups lightbox images separately for each album and preserves alt text', async () => {

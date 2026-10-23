@@ -25,11 +25,16 @@ as a fallback if the external library is unavailable.
 initial section layouts load. Other albums remain visible on their first pages.
 Changing a section's page changes only that section and updates the deep link.
 
-On localhost, the API and uploaded images use the same origin as the client,
-through Vite's existing `/api` and `/uploads` proxies. When the static site is
-hosted separately, `js/constant.js` supplies `API_URL` and `APP_URL`. Configure
-those values for the deployment. Absolute HTTP/HTTPS media URLs are preserved.
-Other URL protocols are ignored.
+The page always uses `API_URL` and `APP_URL` from `js/constant.js`, just like the
+rest of the static site. Hosting HTML on localhost does not imply that the local
+web server has an API proxy. The default configuration loads the hosted backend's
+albums and images even during a local static preview.
+
+For a local backend, explicitly configure `API_URL` as
+`http://localhost:5000/api/` and `APP_URL` as `http://localhost:5000/`, or use your
+client origin if it provides the existing `/api` and `/uploads` proxies. The API
+must allow the page origin through CORS when hosted separately. Absolute
+HTTP/HTTPS media URLs are preserved; other URL protocols are ignored.
 
 Loading, empty, and failed requests have separate states. Failed requests offer
 Try again. Section requests ignore outdated pagination responses; out-of-range

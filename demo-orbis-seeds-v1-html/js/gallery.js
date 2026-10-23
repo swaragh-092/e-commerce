@@ -1,8 +1,8 @@
 (function () {
     var limit = 20;
-    var isLocal = /^(localhost|127\.0\.0\.1|\[::1\])$/.test(window.location.hostname);
-    var galleryApiUrl = isLocal ? window.location.origin + '/api/' : API_URL;
-    var mediaBaseUrl = isLocal ? window.location.origin + '/' : APP_URL;
+    // Use the site's configured backend, including when previewed on a static localhost server.
+    var galleryApiUrl = API_URL.replace(/\/+$/, '') + '/';
+    var mediaBaseUrl = APP_URL;
     var sectionsEl = document.getElementById('gallery-sections');
     var messageEl = document.getElementById('gallery-message');
     var retryEl = document.getElementById('gallery-retry');
