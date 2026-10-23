@@ -4,11 +4,14 @@ const { Gallery, GalleryItem, Media, sequelize } = require('../index');
 const { getPagination, getPagingData } = require('../../utils/pagination');
 const AppError = require('../../utils/AppError');
 
-const includeItems = [{
+const imageAttributes = ['id', 'url', 'alt', 'caption', 'mimeType'];
+const coverInclude = { model: Media, as: 'coverImage', attributes: imageAttributes, required: false, where: { mimeType: { [Op.like]: 'image/%' } } };
+
+const includeItems = [coverInclude, {
   model: GalleryItem,
   as: 'items',
   separate: true,
-  order: [['priority', 'ASC'], ['createdAt', 'ASC']],
+  order: [['priority', 'ASC'], ['createdAt', 'ASC'], ['id', 'ASC']],
   include: [{ model: Media, as: 'media' }],
 }];
 
@@ -18,15 +21,37 @@ exports.listAdmin = async (page, limit) => {
   return getPagingData(rows, count, page, queryLimit);
 };
 
-exports.listPublic = async () => Gallery.findAll({
-  where: { isActive: true, isShowcase: true },
-  attributes: ['id', 'title', 'slug', 'description'],
-  order: [['createdAt', 'ASC'], ['id', 'ASC']],
-});
+exports.listPublic = async () => {
+  const galleries = await Gallery.findAll({
+    where: { isActive: true, isShowcase: true },
+    attributes: ['id', 'title', 'slug', 'description'],
+    order: [['createdAt', 'ASC'], ['id', 'ASC']],
+    include: [coverInclude, {
+      model: GalleryItem, as: 'items', separate: true, limit: 1,
+      attributes: ['id', 'galleryId', 'mediaId', 'priority', 'createdAt'],
+      order: [['priority', 'ASC'], ['createdAt', 'ASC'], ['id', 'ASC']],
+      include: [{ model: Media, as: 'media', attributes: imageAttributes, required: true,
+        where: { mimeType: { [Op.like]: 'image/%' } } }],
+    }],
+  });
+  return galleries.map((row) => {
+    const { items, coverImage, ...gallery } = row.toJSON();
+    return { ...gallery, coverImage: coverImage || items?.[0]?.media || null };
+  });
+};
+
+const validateCoverImage = async (mediaId) => {
+  if (!mediaId) return;
+  const media = await Media.findByPk(mediaId);
+  if (!media?.mimeType?.startsWith('image/')) {
+    throw new AppError('VALIDATION_ERROR', 400, 'Cover photo must be an existing image');
+  }
+};
 
 exports.createGallery = async (data) => {
   const existing = await Gallery.findOne({ where: { slug: data.slug } });
   if (existing) throw new AppError('CONFLICT', 409, 'Gallery slug already exists');
+  await validateCoverImage(data.coverMediaId);
   return Gallery.create({ ...data, isShowcase: true });
 };
 
@@ -37,8 +62,9 @@ exports.updateGallery = async (id, data) => {
     const conflict = await Gallery.findOne({ where: { slug: data.slug, id: { [Op.ne]: id } } });
     if (conflict) throw new AppError('CONFLICT', 409, 'Gallery slug already exists');
   }
+  await validateCoverImage(data.coverMediaId);
   await gallery.update(data);
-  return gallery;
+  return Gallery.findByPk(id, { include: includeItems });
 };
 
 exports.deleteGallery = async (id) => {
@@ -100,7 +126,7 @@ exports.getPublicGallery = async (slug, page, limit) => {
   const { rows, count } = await GalleryItem.findAndCountAll({
     where: { galleryId: gallery.id },
     include: [{ model: Media, as: 'media', required: true, where: { mimeType: { [Op.like]: 'image/%' } } }],
-    order: [['priority', 'ASC'], ['createdAt', 'ASC']],
+    order: [['priority', 'ASC'], ['createdAt', 'ASC'], ['id', 'ASC']],
     limit: queryLimit,
     offset,
   });

@@ -1,14 +1,43 @@
 (function () {
     var limit = 20;
-    // Use the site's configured backend, including when previewed on a static localhost server.
     var galleryApiUrl = API_URL.replace(/\/+$/, '') + '/';
     var mediaBaseUrl = APP_URL;
-    var sectionsEl = document.getElementById('gallery-sections');
+    var content = document.getElementById('gallery-content');
     var messageEl = document.getElementById('gallery-message');
     var retryEl = document.getElementById('gallery-retry');
+    if (!content || !messageEl || !retryEl) return;
 
-    if (!sectionsEl || !messageEl || !retryEl) return;
-    retryEl.addEventListener('click', fetchAlbums);
+    var params = new URLSearchParams(window.location.search);
+    var slug = params.get('album');
+    // Keep previously shared gallery.html?album= links working as album views.
+    var isDetail = content.dataset.galleryView === 'detail' || Boolean(slug);
+    var currentPage = Math.max(1, parseInt(params.get('page'), 10) || 1);
+    var totalPages = 1;
+    var requestId = 0;
+    var grid;
+    var pagination;
+    if (isDetail) {
+        content.className = 'gallery-detail-content';
+        var back = document.getElementById('gallery-back');
+        if (!back) {
+            back = document.createElement('a');
+            back.href = 'gallery.html';
+            back.textContent = 'Back to galleries';
+            back.className = 'gallery-back';
+            content.before(back);
+        }
+        grid = document.createElement('div');
+        grid.className = 'gallery-inner-wrapper';
+        pagination = document.createElement('nav');
+        pagination.className = 'gallery-pagination';
+        pagination.setAttribute('aria-label', 'Album image pages');
+        content.appendChild(grid);
+        content.appendChild(pagination);
+    }
+    retryEl.addEventListener('click', function () {
+        if (isDetail) fetchDetail(currentPage);
+        else fetchAlbums();
+    });
 
     function safeText(value, fallback) {
         return (typeof value === 'string' && value.trim()) ? value.trim() : fallback;
@@ -70,79 +99,111 @@
         return '';
     }
 
-    function setMessage(message, text, retry, canRetry) {
-        message.textContent = text;
-        message.hidden = !text;
-        retry.hidden = !canRetry;
+    function setMessage(text, canRetry) {
+        messageEl.textContent = text;
+        messageEl.hidden = !text;
+        retryEl.hidden = !canRetry;
     }
 
-    function createSection(album, index) {
-        var element = document.createElement('section');
-        element.className = 'gallery-album-section';
-        element.id = 'gallery-album-' + index;
+    function fetchJson(url) {
+        return fetch(url).then(function (response) {
+            if (!response.ok) {
+                var error = new Error('Request failed with status ' + response.status);
+                error.status = response.status;
+                throw error;
+            }
+            return response.json();
+        });
+    }
+
+    function renderCover(slot, imageUrl, title) {
+        slot.innerHTML = '';
+        if (!imageUrl) {
+            slot.className = 'gallery-album-cover gallery-cover-empty';
+            slot.textContent = 'No cover photo available';
+            return;
+        }
+        slot.className = 'gallery-album-cover';
+        var img = document.createElement('img');
+        img.src = imageUrl;
+        img.alt = title;
+        img.loading = 'lazy';
+        img.addEventListener('error', function () { renderCover(slot, '', title); }, { once: true });
+        slot.appendChild(img);
+    }
+
+    function renderAlbum(album) {
+        var card = document.createElement('a');
+        card.className = 'gallery-album-card';
+        card.href = 'gallery-detail.html?album=' + encodeURIComponent(album.slug);
+        var title = safeText(album.title, 'Gallery');
+        card.setAttribute('aria-label', 'View ' + title + ' gallery');
+        var cover = document.createElement('div');
+        renderCover(cover, readImage(album.coverImage), title);
+        card.appendChild(cover);
         var heading = document.createElement('h3');
-        heading.id = element.id + '-title';
-        heading.textContent = safeText(album.title, 'Gallery');
-        element.setAttribute('aria-labelledby', heading.id);
-        element.appendChild(heading);
+        heading.textContent = title;
+        card.appendChild(heading);
         if (album.description) {
             var description = document.createElement('p');
-            description.className = 'gallery-album-description';
             description.textContent = album.description;
-            element.appendChild(description);
+            card.appendChild(description);
         }
-        var message = document.createElement('p');
-        message.className = 'gallery-album-message';
-        message.setAttribute('role', 'status');
-        var retry = document.createElement('button');
-        retry.className = 'gallery-retry';
-        retry.type = 'button';
-        retry.textContent = 'Try again';
-        retry.setAttribute('aria-label', 'Retry ' + heading.textContent + ' gallery');
-        retry.hidden = true;
-        var grid = document.createElement('div');
-        grid.className = 'gallery-inner-wrapper';
-        var pagination = document.createElement('nav');
-        pagination.className = 'gallery-pagination';
-        pagination.setAttribute('aria-label', heading.textContent + ' gallery pages');
-        element.appendChild(message);
-        element.appendChild(retry);
-        element.appendChild(grid);
-        element.appendChild(pagination);
-        sectionsEl.appendChild(element);
-        var section = { album: album, element: element, grid: grid, message: message,
-            retry: retry, pagination: pagination, page: 1, totalPages: 1, requestId: 0 };
-        retry.addEventListener('click', function () { fetchGallery(section, section.page, true); });
-        return section;
+        content.appendChild(card);
+
+        // Older API deployments omit coverImage; obtain just their first image.
+        if (!Object.prototype.hasOwnProperty.call(album, 'coverImage')) {
+            return fetchJson(galleryApiUrl + 'galleries/public/' + encodeURIComponent(album.slug) + '?page=1&limit=1')
+                .then(function (result) { renderCover(cover, readImage(readItems(result)[0]), title); })
+                .catch(function () { renderCover(cover, '', title); });
+        }
+        return Promise.resolve();
     }
 
-    function renderItems(section, items) {
-        section.grid.innerHTML = '';
+    function fetchAlbums() {
+        content.innerHTML = '';
+        content.setAttribute('aria-busy', 'true');
+        setMessage('Loading galleries...', false);
+        return fetchJson(galleryApiUrl + 'galleries/public')
+            .then(function (result) {
+                var albums = Array.isArray(result.data) ? result.data : [];
+                setMessage(albums.length ? '' : 'No galleries are available yet.', false);
+                return Promise.all(albums.map(renderAlbum));
+            })
+            .catch(function (error) {
+                console.error('Error fetching galleries:', error);
+                setMessage('Unable to load galleries. Please try again.', true);
+            })
+            .finally(function () { content.setAttribute('aria-busy', 'false'); });
+    }
+
+    function renderImages(items) {
+        grid.innerHTML = '';
         items.forEach(function (item) {
             var imageUrl = readImage(item);
             if (!imageUrl) return;
-            var title = safeText(item.title || item.name || item.caption || item.alt || (item.media && (item.media.alt || item.media.caption)), 'Gallery Image');
-            var anchor = document.createElement('a');
-            anchor.href = imageUrl;
-            anchor.setAttribute('data-fancybox', section.element.id);
-            anchor.setAttribute('aria-label', 'View image: ' + title);
+            var title = safeText(item.title || item.alt || (item.media && (item.media.alt || item.media.caption)), 'Gallery image');
+            var link = document.createElement('a');
+            link.href = imageUrl;
+            link.setAttribute('data-fancybox', 'album-images');
+            link.setAttribute('aria-label', 'View image: ' + title);
             var img = document.createElement('img');
             img.src = imageUrl;
             img.alt = title;
             img.loading = 'lazy';
-            anchor.appendChild(img);
-            section.grid.appendChild(anchor);
+            link.appendChild(img);
+            grid.appendChild(link);
         });
-        setMessage(section.message, section.grid.childElementCount ? '' : 'No gallery items found.', section.retry, false);
+        setMessage(grid.childElementCount ? '' : 'This gallery has no images yet.', false);
         if (window.jQuery && window.jQuery.fn.fancybox) {
-            window.jQuery(section.grid).find('[data-fancybox]').fancybox({
+            window.jQuery(grid).find('[data-fancybox]').fancybox({
                 wheel: false, transitionEffect: 'slide', loop: true,
                 toolbar: true, clickContent: false, thumbs: false, zoom: true, close: true
             });
         }
     }
 
-    function pageButton(section, label, page, disabled, active) {
+    function pageButton(label, page, disabled, active) {
         var button = document.createElement('button');
         button.type = 'button';
         button.textContent = label;
@@ -151,106 +212,72 @@
         button.setAttribute('aria-label', /^\d+$/.test(label) ? 'Page ' + label : label === 'Prev' ? 'Previous page' : 'Next page');
         if (active) button.setAttribute('aria-current', 'page');
         button.addEventListener('click', function () {
-            if (page !== section.page) fetchGallery(section, page, true);
+            if (page !== currentPage) fetchDetail(page, true);
         });
         return button;
     }
 
-    function renderPagination(section) {
-        var nav = section.pagination;
-        nav.innerHTML = '';
-        if (section.totalPages <= 1) return;
-        nav.appendChild(pageButton(section, 'Prev', section.page - 1, section.page <= 1, false));
-        for (var page = Math.max(1, section.page - 2); page <= Math.min(section.totalPages, section.page + 2); page++) {
-            nav.appendChild(pageButton(section, String(page), page, false, page === section.page));
+    function renderPagination() {
+        pagination.innerHTML = '';
+        if (totalPages <= 1) return;
+        pagination.appendChild(pageButton('Prev', currentPage - 1, currentPage <= 1, false));
+        for (var page = Math.max(1, currentPage - 2); page <= Math.min(totalPages, currentPage + 2); page++) {
+            pagination.appendChild(pageButton(String(page), page, false, page === currentPage));
         }
-        nav.appendChild(pageButton(section, 'Next', section.page + 1, section.page >= section.totalPages, false));
+        pagination.appendChild(pageButton('Next', currentPage + 1, currentPage >= totalPages, false));
     }
 
-    function updateQuery(section) {
-        var url = new URL(window.location.href);
-        url.searchParams.set('album', section.album.slug);
-        if (section.page > 1) url.searchParams.set('page', String(section.page));
-        else url.searchParams.delete('page');
-        window.history.replaceState({}, '', url.toString());
-    }
-
-    function scrollToSection(section) {
-        if (section.element.scrollIntoView) section.element.scrollIntoView({ block: 'start' });
-    }
-
-    function fetchGallery(section, page, updateLocation, scrollWhenReady) {
-        var activeRequest = ++section.requestId;
-        section.page = page;
-        section.grid.innerHTML = '';
-        section.pagination.innerHTML = '';
-        section.grid.setAttribute('aria-busy', 'true');
-        setMessage(section.message, 'Loading gallery...', section.retry, false);
-        return fetch(galleryApiUrl + 'galleries/public/' + encodeURIComponent(section.album.slug) + '?page=' + page + '&limit=' + limit)
-            .then(function (response) {
-                if (!response.ok) throw new Error('Request failed with status ' + response.status);
-                return response.json();
-            })
+    function fetchDetail(page, updateLocation) {
+        if (!slug) {
+            setMessage('Choose a gallery to view its images.', false);
+            content.setAttribute('aria-busy', 'false');
+            return;
+        }
+        var activeRequest = ++requestId;
+        currentPage = page;
+        grid.innerHTML = '';
+        pagination.innerHTML = '';
+        content.setAttribute('aria-busy', 'true');
+        setMessage('Loading gallery images...', false);
+        return fetchJson(galleryApiUrl + 'galleries/public/' + encodeURIComponent(slug) + '?page=' + page + '&limit=' + limit)
             .then(function (result) {
-                if (activeRequest !== section.requestId) return;
+                if (activeRequest !== requestId) return;
+                var gallery = result.data && result.data.gallery;
+                var title = safeText(gallery && gallery.title, 'Gallery');
+                var heading = document.getElementById('gallery-title');
+                if (heading) heading.textContent = title;
+                document.title = title + ' | Orbi Seeds';
+                var breadcrumb = document.getElementById('gallery-breadcrumb-title');
+                if (breadcrumb) breadcrumb.textContent = title;
+                var description = document.getElementById('gallery-description');
+                if (description) {
+                    description.textContent = safeText(gallery && gallery.description, '');
+                    description.hidden = !description.textContent;
+                }
                 var items = readItems(result);
                 var total = Number(result.meta && result.meta.totalPages);
-                section.totalPages = Number.isInteger(total) && total >= 0
-                    ? Math.max(1, total) : page + (items.length === limit ? 1 : 0);
-                if (page > section.totalPages) {
-                    return fetchGallery(section, section.totalPages, updateLocation || scrollWhenReady, scrollWhenReady);
+                totalPages = Number.isInteger(total) && total >= 0 ? Math.max(1, total) : page + (items.length === limit ? 1 : 0);
+                if (page > totalPages) return fetchDetail(totalPages, true);
+                renderImages(items);
+                renderPagination();
+                if (updateLocation) {
+                    var url = new URL(window.location.href);
+                    if (page > 1) url.searchParams.set('page', String(page));
+                    else url.searchParams.delete('page');
+                    window.history.replaceState({}, '', url.toString());
+                    if (content.scrollIntoView) content.scrollIntoView({ block: 'start' });
                 }
-                renderItems(section, items);
-                renderPagination(section);
-                if (updateLocation) updateQuery(section);
-                if (updateLocation) scrollToSection(section);
             })
             .catch(function (error) {
-                if (activeRequest !== section.requestId) return;
+                if (activeRequest !== requestId) return;
                 console.error('Error fetching gallery:', error);
-                setMessage(section.message, 'Unable to load this gallery. Please try again.', section.retry, true);
+                setMessage(error.status === 404 ? 'This gallery is unavailable or no longer public.' : 'Unable to load gallery images. Please try again.', error.status !== 404);
             })
             .finally(function () {
-                if (activeRequest === section.requestId) section.grid.setAttribute('aria-busy', 'false');
+                if (activeRequest === requestId) content.setAttribute('aria-busy', 'false');
             });
     }
 
-    function fetchAlbums() {
-        sectionsEl.innerHTML = '';
-        sectionsEl.setAttribute('aria-busy', 'true');
-        setMessage(messageEl, 'Loading gallery albums...', retryEl, false);
-        return fetch(galleryApiUrl + 'galleries/public')
-            .then(function (response) {
-                if (!response.ok) throw new Error('Request failed with status ' + response.status);
-                return response.json();
-            })
-            .then(function (result) {
-                var albums = Array.isArray(result.data) ? result.data : [];
-                if (!albums.length) {
-                    setMessage(messageEl, 'No gallery albums are available yet.', retryEl, false);
-                    return;
-                }
-                setMessage(messageEl, '', retryEl, false);
-                var params = new URLSearchParams(window.location.search);
-                var slug = params.get('album');
-                var requestedPage = parseInt(params.get('page'), 10);
-                if (!Number.isSafeInteger(requestedPage) || requestedPage < 1) requestedPage = 1;
-                var sections = albums.map(createSection);
-                var linkedSection = null;
-                return Promise.all(sections.map(function (section, index) {
-                    var targeted = slug ? section.album.slug === slug : index === 0;
-                    if (slug && targeted) linkedSection = section;
-                    return fetchGallery(section, targeted ? requestedPage : 1, false, targeted);
-                })).then(function () {
-                    if (linkedSection) scrollToSection(linkedSection);
-                });
-            })
-            .catch(function (error) {
-                console.error('Error fetching gallery albums:', error);
-                setMessage(messageEl, 'Unable to load gallery albums. Please try again.', retryEl, true);
-            })
-            .finally(function () { sectionsEl.setAttribute('aria-busy', 'false'); });
-    }
-
-    fetchAlbums();
+    if (isDetail) fetchDetail(currentPage);
+    else fetchAlbums();
 })();

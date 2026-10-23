@@ -14,12 +14,13 @@ import MediaPicker from '../../components/common/MediaPicker';
 import { useAuth } from '../../hooks/useAuth';
 import { useNotification } from '../../context/NotificationContext';
 import { PERMISSIONS } from '../../utils/permissions';
+import { getApiErrorMessage } from '../../utils/apiErrors';
 import { getMediaUrl } from '../../utils/media';
 import { galleryService } from '../../services/galleryService';
 
 const emptyForm = { title: '', slug: '', description: '', isActive: true };
 const slugify = (value) => String(value || '').toLowerCase().trim().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
-const messageFor = (error) => error.response?.data?.message || error.message || 'Something went wrong. Please try again.';
+const messageFor = (error) => getApiErrorMessage(error, 'Something went wrong. Please try again.');
 
 const GalleryPage = () => {
   const { hasPermission } = useAuth();
@@ -37,9 +38,12 @@ const GalleryPage = () => {
   const [editingId, setEditingId] = useState(null);
   const [form, setForm] = useState(emptyForm);
   const [pickerOpen, setPickerOpen] = useState(false);
+  const [coverPickerOpen, setCoverPickerOpen] = useState(false);
 
   const selected = galleries.find((gallery) => gallery.id === selectedId) || null;
-  const items = [...(selected?.items || [])].sort((a, b) => a.priority - b.priority || String(a.id).localeCompare(String(b.id)));
+  const items = [...(selected?.items || [])].sort((a, b) => a.priority - b.priority || String(a.createdAt || '').localeCompare(String(b.createdAt || '')) || String(a.id).localeCompare(String(b.id)));
+
+  const cover = selected?.coverImage || items[0]?.media;
 
   const load = async (pageNumber = page, preferredId = selectedId) => {
     setLoading(true);
@@ -136,6 +140,20 @@ const GalleryPage = () => {
     finally { setBusy(false); }
   };
 
+  const saveCover = async (media = null) => {
+    if (media && !media.mimeType?.startsWith('image/')) {
+      notify('Select an image for the cover photo.', 'warning');
+      return;
+    }
+    setBusy(true);
+    try {
+      const result = await galleryService.update(selected.id, { coverMediaId: media?.id || null });
+      updateSelected({ ...selected, ...result.data });
+      notify(media ? 'Gallery cover photo updated.' : 'The first gallery image will be used as the cover.', 'success');
+    } catch (err) { notify(messageFor(err), 'error'); }
+    finally { setBusy(false); }
+  };
+
   const removeImage = async (item) => {
     if (!await confirm({ title: 'Remove image?', message: 'Remove this image from the gallery? The media file will remain in the library.', severity: 'error' })) return;
     setBusy(true);
@@ -188,7 +206,18 @@ const GalleryPage = () => {
                 {canDelete && <IconButton aria-label="Delete gallery" color="error" disabled={busy} onClick={deleteGallery}><DeleteOutlineIcon /></IconButton>}
               </Stack>
             </Stack>
-            <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>Public URL: /demo-orbis-seeds-v1-html/gallery.html?album={selected.slug}</Typography>
+            <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>Public URL: /demo-orbis-seeds-v1-html/gallery-detail.html?album={selected.slug}</Typography>
+            <Box sx={{ mb: 3 }}>
+              <Typography fontWeight={700} sx={{ mb: 1 }}>Gallery cover photo</Typography>
+              {cover?.url && <Box component="img" src={getMediaUrl(cover.url)} alt="Gallery cover preview" sx={{ width: 180, height: 120, objectFit: 'cover', borderRadius: 1, mb: 1 }} />}
+              <Typography variant="body2" color="text.secondary" sx={{ mb: 1 }}>
+                {selected.coverMediaId ? 'Using a selected cover photo.' : 'The first image in this gallery is used automatically when no cover photo is selected.'}
+              </Typography>
+              {canManage && <Stack direction="row" spacing={1}>
+                <Button variant="outlined" disabled={busy} onClick={() => setCoverPickerOpen(true)}>Choose cover photo</Button>
+                {selected.coverMediaId && <Button disabled={busy} onClick={() => saveCover()}>Use first image</Button>}
+              </Stack>}
+            </Box>
             {canManage && <Stack direction={{ xs: 'column', sm: 'row' }} alignItems={{ sm: 'center' }} spacing={2} sx={{ mb: 3 }}>
               <Button variant="contained" startIcon={<AddPhotoAlternateIcon />} disabled={busy} onClick={() => setPickerOpen(true)}>Add images</Button>
               <FormControlLabel control={<Switch checked={Boolean(selected.isActive)} disabled={busy} onChange={toggleActive} />} label="Visible on public gallery" />
@@ -222,6 +251,7 @@ const GalleryPage = () => {
         </Stack></DialogContent>
         <DialogActions><Button onClick={() => setDialogOpen(false)} disabled={busy}>Cancel</Button><Button variant="contained" onClick={saveGallery} disabled={busy || !form.title.trim() || !slugify(form.slug)}>{editingId ? 'Save changes' : 'Create gallery'}</Button></DialogActions>
       </Dialog>
+      <MediaPicker open={coverPickerOpen} onClose={() => setCoverPickerOpen(false)} onSelect={(media) => media?.[0] && saveCover(media[0])} title="Choose gallery cover photo" />
       <MediaPicker open={pickerOpen} onClose={() => setPickerOpen(false)} onSelect={addImages} multiple title="Add gallery images" />
     </Box>
   );
