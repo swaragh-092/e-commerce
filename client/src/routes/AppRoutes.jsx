@@ -1,7 +1,7 @@
 import React, { Suspense, lazy } from 'react';
 import { Routes, Route, Navigate, useLocation } from 'react-router-dom';
 import { Box, CircularProgress } from '@mui/material';
-import { useFeature, useFeaturesResolved, useMode } from '../hooks/useSettings';
+import { useFeatureVisible, useFeaturesResolved, useMode } from '../hooks/useSettings';
 import { Outlet } from 'react-router-dom';
 
 // Layouts
@@ -23,9 +23,9 @@ const LoadingFallback = () => (
  * Waits for the resolved feature map before redirecting so a deep link is not
  * bounced while server state is still loading.
  */
-const FeatureRoute = ({ feature, redirectTo = '/products' }) => {
+const FeatureRoute = ({ feature, surface = 'storefront', redirectTo = '/products' }) => {
   const featuresResolved = useFeaturesResolved();
-  const enabled = useFeature(feature);
+  const enabled = useFeatureVisible(feature, surface);
   if (!featuresResolved) return <LoadingFallback />;
   return enabled ? <Outlet /> : <Navigate to={redirectTo} replace />;
 };
@@ -201,8 +201,10 @@ const AppRoutes = () => (
       {/* Admin Routes — permission-gated foundation */}
       <Route path="/admin" element={<ProtectedRoute permissions={ADMIN_ACCESS_PERMISSIONS} />}>
         {/* Standalone pages without AdminLayout */}
-        <Route element={<ProtectedRoute permission={PERMISSIONS.ORDERS_READ} />}>
-          <Route path="orders/:id/invoice" element={<OrderInvoicePage />} />
+        <Route element={<FeatureRoute feature="orders" surface="admin" redirectTo="/admin" />}>
+          <Route element={<ProtectedRoute permission={PERMISSIONS.ORDERS_READ} />}>
+            <Route path="orders/:id/invoice" element={<OrderInvoicePage />} />
+          </Route>
         </Route>
 
         <Route element={<AdminLayout />}>
@@ -215,7 +217,11 @@ const AppRoutes = () => (
           </Route>
           <Route element={<ProtectedRoute permission={PERMISSIONS.PRODUCTS_READ} />}>
             <Route path="products" element={<ProductsManagePage />} />
-            <Route path="brands" element={<BrandsPage />} />
+          </Route>
+          <Route element={<FeatureRoute feature="brands" surface="admin" redirectTo="/admin" />}>
+            <Route element={<ProtectedRoute permission={PERMISSIONS.PRODUCTS_READ} />}>
+              <Route path="brands" element={<BrandsPage />} />
+            </Route>
           </Route>
           <Route element={<ProtectedRoute permission={PERMISSIONS.PRODUCTS_CREATE} />}>
             <Route path="products/new" element={<ProductEditPage />} />
@@ -229,24 +235,32 @@ const AppRoutes = () => (
           <Route element={<ProtectedRoute permission={PERMISSIONS.ATTRIBUTES_READ} />}>
             <Route path="attributes" element={<AttributesPage />} />
           </Route>
-          {/* Orders — accessible to authorized staff in both modes for historical records */}
-          <Route element={<ProtectedRoute permission={PERMISSIONS.ORDERS_READ} />}>
-            <Route path="orders" element={<OrdersManagePage />} />
-            <Route path="orders/:id" element={<OrderDetailPage />} />
+          {/* Orders UI is hideable; backend records remain available to authorized staff APIs */}
+          <Route element={<FeatureRoute feature="orders" surface="admin" redirectTo="/admin" />}>
+            <Route element={<ProtectedRoute permission={PERMISSIONS.ORDERS_READ} />}>
+              <Route path="orders" element={<OrdersManagePage />} />
+              <Route path="orders/:id" element={<OrderDetailPage />} />
+            </Route>
           </Route>
           <Route element={<ProtectedRoute permission={PERMISSIONS.CUSTOMERS_READ} />}>
             <Route path="customers" element={<CustomersPage />} />
             <Route path="customers/:id" element={<CustomerDetailPage />} />
           </Route>
-          {/* Coupons — accessible to authorized staff in both modes for campaign management */}
-          <Route element={<ProtectedRoute permission={PERMISSIONS.COUPONS_READ} />}>
-            <Route path="coupons" element={<CouponsPage />} />
+          {/* Coupons UI is hideable; backend campaign APIs remain for authorized staff */}
+          <Route element={<FeatureRoute feature="coupons" surface="admin" redirectTo="/admin" />}>
+            <Route element={<ProtectedRoute permission={PERMISSIONS.COUPONS_READ} />}>
+              <Route path="coupons" element={<CouponsPage />} />
+            </Route>
           </Route>
-          <Route element={<ProtectedRoute permission={PERMISSIONS.ENQUIRIES_READ} />}>
-            <Route path="enquiries" element={<EnquiriesPage />} />
+          <Route element={<FeatureRoute feature="enquiry" surface="admin" redirectTo="/admin" />}>
+            <Route element={<ProtectedRoute permission={PERMISSIONS.ENQUIRIES_READ} />}>
+              <Route path="enquiries" element={<EnquiriesPage />} />
+            </Route>
           </Route>
-          <Route element={<ProtectedRoute permission={PERMISSIONS.REVIEWS_READ} />}>
-            <Route path="reviews" element={<ReviewsPage />} />
+          <Route element={<FeatureRoute feature="reviews" surface="admin" redirectTo="/admin" />}>
+            <Route element={<ProtectedRoute permission={PERMISSIONS.REVIEWS_READ} />}>
+              <Route path="reviews" element={<ReviewsPage />} />
+            </Route>
           </Route>
           <Route element={<ProtectedRoute permission={PERMISSIONS.MEDIA_READ} />}>
             <Route path="media" element={<MediaPage />} />
@@ -257,12 +271,12 @@ const AppRoutes = () => (
             <Route path="sections" element={<LegacySectionsRedirect />} />
             <Route path="newsletter" element={<NewsletterSubscribersPage />} />
           </Route>
-          <Route element={<FeatureRoute feature="seo" redirectTo="/admin" />}>
+          <Route element={<FeatureRoute feature="seo" surface="admin" redirectTo="/admin" />}>
             <Route element={<ProtectedRoute permission={PERMISSIONS.SETTINGS_READ} />}>
               <Route path="seo-overrides" element={<SeoOverridesPage />} />
             </Route>
           </Route>
-          <Route element={<FeatureRoute feature="themes" redirectTo="/admin" />}>
+          <Route element={<FeatureRoute feature="themes" surface="admin" redirectTo="/admin" />}>
             <Route element={<ProtectedRoute permission={PERMISSIONS.SETTINGS_READ} />}>
               <Route path="themes" element={<ThemeGalleryPage />} />
             </Route>
@@ -275,9 +289,17 @@ const AppRoutes = () => (
           </Route>
           {/* Payment Gateways, Shipping, Sale Labels — ecommerce only */}
           <Route element={<ModeRoute requiredMode="ecommerce" />}>
+            <Route element={<FeatureRoute feature="payments" surface="admin" redirectTo="/admin" />}>
+              <Route element={<ProtectedRoute permission={PERMISSIONS.SETTINGS_READ} />}>
+                <Route path="payment-gateways" element={<PaymentGatewaysPage />} />
+              </Route>
+            </Route>
+            <Route element={<FeatureRoute feature="shipping" surface="admin" redirectTo="/admin" />}>
+              <Route element={<ProtectedRoute permission={PERMISSIONS.SETTINGS_READ} />}>
+                <Route path="shipping" element={<ShippingPage />} />
+              </Route>
+            </Route>
             <Route element={<ProtectedRoute permission={PERMISSIONS.SETTINGS_READ} />}>
-              <Route path="payment-gateways" element={<PaymentGatewaysPage />} />
-              <Route path="shipping" element={<ShippingPage />} />
               <Route path="sale-labels" element={<SaleLabelsPage />} />
             </Route>
           </Route>
@@ -294,7 +316,7 @@ const AppRoutes = () => (
           <Route element={<ProtectedRoute permission={PERMISSIONS.MENUS_READ} />}>
             <Route path="menus" element={<MenuBuilderPage />} />
           </Route>
-          <Route element={<FeatureRoute feature="apiBuilder" redirectTo="/admin" />}>
+          <Route element={<FeatureRoute feature="apiBuilder" surface="admin" redirectTo="/admin" />}>
             <Route element={<ProtectedRoute permission={PERMISSIONS.API_BUILDER_READ} />}>
               <Route path="api-builder" element={<ApiBuilderPage />} />
             </Route>

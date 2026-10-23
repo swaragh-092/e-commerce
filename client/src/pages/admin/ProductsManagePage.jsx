@@ -21,7 +21,7 @@ import { getCategoryTree } from '../../services/categoryService';
 import { getSaleLabels } from '../../services/adminService';
 import { getMediaUrl } from '../../utils/media';
 import { getVariantOptionLabel } from '../../utils/variantOptions';
-import { useCurrency, useSettings, useFeature } from '../../hooks/useSettings';
+import { useCurrency, useSettings, useFeature, useFeatureVisible } from '../../hooks/useSettings';
 import { useNotification } from '../../context/NotificationContext';
 import { formatSaleDateTime, isEndingSoon } from '../../utils/pricing';
 import { useAuth } from '../../hooks/useAuth';
@@ -111,10 +111,10 @@ const ProductsManagePage = () => {
   const { settings } = useSettings();
   const { notify } = useNotification();
   const { hasPermission } = useAuth();
-  const pricingEnabled = useFeature('pricing');
+  const pricingEnabled = useFeatureVisible('pricing', 'admin');
   // Stock tracking is only meaningful in ecommerce mode (cart Tier-1 feature).
   // In catalog mode cart=false, so we hide stock column + stepper entirely.
-  const cartEnabled = useFeature('cart');
+  const cartEnabled = useFeatureVisible('cart', 'admin');
   const sales = settings?.sales || {};
   const lowStockThreshold = normalizeInventoryThreshold(settings?.catalog?.lowStockThreshold);
   const canCreateProducts = hasPermission(PERMISSIONS.PRODUCTS_CREATE);

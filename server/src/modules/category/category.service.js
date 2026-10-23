@@ -376,21 +376,19 @@ exports.reorderCategory = async (id, direction) => {
     const currentIndex = siblings.findIndex(c => c.id === id);
     if (currentIndex === -1) throw new AppError('NOT_FOUND', 404, 'Category not found');
 
+    if (direction !== 'up' && direction !== 'down') {
+        throw new AppError('VALIDATION_ERROR', 400, 'Invalid direction. Use "up" or "down".');
+    }
+    const nextIndex = currentIndex + (direction === 'up' ? -1 : 1);
+    if (nextIndex < 0 || nextIndex >= siblings.length) {
+        throw new AppError('VALIDATION_ERROR', 400, direction === 'up' ? 'Already at the top' : 'Already at the bottom');
+    }
+    // Adjacent categories may have the same sortOrder. Give every sibling a
+    // distinct position so this move is visible in both category and menu trees.
+    [siblings[currentIndex], siblings[nextIndex]] = [siblings[nextIndex], siblings[currentIndex]];
     await Category.sequelize.transaction(async (transaction) => {
-        if (direction === 'up') {
-            if (currentIndex === 0) throw new AppError('VALIDATION_ERROR', 400, 'Already at the top');
-            const swapWith = siblings[currentIndex - 1];
-            const tempSort = category.sortOrder;
-            await category.update({ sortOrder: swapWith.sortOrder }, { transaction });
-            await swapWith.update({ sortOrder: tempSort }, { transaction });
-        } else if (direction === 'down') {
-            if (currentIndex === siblings.length - 1) throw new AppError('VALIDATION_ERROR', 400, 'Already at the bottom');
-            const swapWith = siblings[currentIndex + 1];
-            const tempSort = category.sortOrder;
-            await category.update({ sortOrder: swapWith.sortOrder }, { transaction });
-            await swapWith.update({ sortOrder: tempSort }, { transaction });
-        } else {
-            throw new AppError('VALIDATION_ERROR', 400, 'Invalid direction. Use "up" or "down".');
+        for (let index = 0; index < siblings.length; index += 1) {
+            await siblings[index].update({ sortOrder: index * 10 }, { transaction });
         }
     });
 

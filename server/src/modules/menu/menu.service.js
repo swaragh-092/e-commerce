@@ -62,6 +62,49 @@ const buildTree = (items = []) => {
     return roots;
 };
 
+// A category tree item follows Categories Management without storing copies
+// of category links in the menu.
+const expandCategoryTrees = async (items) => {
+    const hasTree = (list) => list.some((item) => item.targetType === 'category_tree' || hasTree(item.children || []));
+    if (!hasTree(items)) return items;
+
+    const categories = await Category.findAll({
+        attributes: ['id', 'name', 'slug', 'parentId', 'sortOrder'],
+        order: [['sortOrder', 'ASC'], ['name', 'ASC'], ['id', 'ASC']],
+        raw: true,
+    });
+    const byParent = new Map();
+    categories.forEach((category) => {
+        const key = category.parentId || null;
+        if (!byParent.has(key)) byParent.set(key, []);
+        byParent.get(key).push(category);
+    });
+
+    const expand = (list) => list.map((item) => {
+        if (item.targetType !== 'category_tree') return { ...item, children: expand(item.children || []) };
+        const makeChildren = (parentId, parentKey) => (byParent.get(parentId) || []).map((category, index) => {
+            const id = `category-sync:${item.id}:${category.id}`;
+            return {
+                id,
+                menuId: item.menuId,
+                parentId: parentKey,
+                label: category.name,
+                targetType: 'category',
+                targetId: category.id,
+                url: `/products?category=${encodeURIComponent(category.slug)}`,
+                placement: item.placement,
+                sortOrder: index,
+                isVisible: item.isVisible,
+                openInNewTab: false,
+                generatedFromCategory: true,
+                children: makeChildren(category.id, id),
+            };
+        });
+        return { ...item, children: makeChildren(null, item.id) };
+    });
+    return expand(items);
+};
+
 const resolveTreeUrls = async (items) => {
     if (!items.length) return [];
 
@@ -147,6 +190,9 @@ const validateParent = async ({ menuId, itemId = null, parentId }, options = {})
     if (!parent) {
         throw new AppError('INVALID_PARENT', 400, 'Parent item must belong to the same menu');
     }
+    if (parent.targetType === 'category_tree') {
+        throw new AppError('INVALID_PARENT', 400, 'Synced category items cannot have manual children');
+    }
 
     if (itemId) {
         const descendants = await getDescendantIds(itemId, menuId, new Set(), options);
@@ -212,17 +258,17 @@ exports.getMenuById = async (id) => {
     if (!menu) throw new AppError('NOT_FOUND', 404, 'Menu not found');
 
     const plain = toPlain(menu);
-    return { ...plain, items: buildTree(plain.items || []) };
+    return { ...plain, items: await expandCategoryTrees(buildTree(plain.items || [])) };
 };
 
 const processPublicMenu = async (menu, cacheKey) => {
     if (!menu) return null;
 
     const plain = toPlain(menu);
-    const tree = buildTree(plain.items || []);
+    const tree = await expandCategoryTrees(buildTree(plain.items || []));
     const result = { ...plain, items: await resolveTreeUrls(tree) };
     
-    setCache(cacheKey, result);
+    if (!plain.items?.some((item) => item.targetType === 'category_tree')) setCache(cacheKey, result);
     return result;
 };
 

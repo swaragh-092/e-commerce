@@ -124,6 +124,7 @@ export const resolveStorefrontThemeState = (themeSettings = {}, customerDarkMode
     surfaceColor:   dp?.surfaceColor    || t.surfaceColor    || fallbackSurface,
     textColor:      dp?.textColor       || t.textColor       || fallbackText,
     errorColor:     dp?.errorColor      || t.errorColor      || '#dc3545',
+    cancelButtonColor: dp?.cancelButtonColor || t.cancelButtonColor || '#dc3545',
     warningColor:   dp?.warningColor    || t.warningColor    || '#d97706',
     successColor:   dp?.successColor    || t.successColor    || '#059669',
     infoColor:      dp?.infoColor       || t.infoColor       || '#0284c7',
@@ -191,6 +192,7 @@ export const buildStorefrontCssVariables = (settingsOrTheme = {}, customerDarkMo
     surfaceColor,
     textColor,
     errorColor,
+    cancelButtonColor,
     warningColor,
     successColor,
     infoColor,
@@ -453,6 +455,8 @@ export const buildStorefrontCssVariables = (settingsOrTheme = {}, customerDarkMo
     '--store-btn-danger-bg':      SAFETY_RED,
     '--store-btn-danger-hover':   SAFETY_RED_HOVER,
     '--store-btn-danger-text':    '#ffffff',
+    '--store-btn-cancel-border':  cancelButtonColor || SAFETY_RED,
+    '--store-btn-cancel-text':    cancelButtonColor || SAFETY_RED,
     '--store-btn-success-bg':     successColor || '#059669',
     '--store-btn-success-text':   '#ffffff',
     '--store-btn-warning-bg':     warningColor || '#d97706',
@@ -504,6 +508,7 @@ export const buildStorefrontTheme = (themeSettings = {}, customerDarkMode = null
     surfaceColor,
     textColor,
     errorColor,
+    cancelButtonColor,
     warningColor,
     successColor,
     infoColor,
@@ -700,11 +705,11 @@ export const buildStorefrontTheme = (themeSettings = {}, customerDarkMode = null
             },
           },
           outlinedError: {
-            borderColor: SAFETY_RED,
-            color: SAFETY_RED,
+            borderColor: cancelButtonColor || SAFETY_RED,
+            color: cancelButtonColor || SAFETY_RED,
             '&:hover': {
-              borderColor: SAFETY_RED_HOVER,
-              backgroundColor: `${SAFETY_RED}14`,
+              borderColor: cancelButtonColor || SAFETY_RED_HOVER,
+              backgroundColor: `${cancelButtonColor || SAFETY_RED}14`,
             },
           },
           outlinedWarning: {
@@ -724,9 +729,9 @@ export const buildStorefrontTheme = (themeSettings = {}, customerDarkMode = null
             },
           },
           textError: {
-            color: SAFETY_RED,
+            color: cancelButtonColor || SAFETY_RED,
             '&:hover': {
-              backgroundColor: `${SAFETY_RED}14`,
+              backgroundColor: `${cancelButtonColor || SAFETY_RED}14`,
             },
           },
           textSuccess: {

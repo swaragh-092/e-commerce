@@ -805,7 +805,7 @@ const VariantsPanel = ({
           )}
         </DialogContent>
         <DialogActions>
-          <Button onClick={closeClone} disabled={cloning}>Cancel</Button>
+          <Button color="error" onClick={closeClone} disabled={cloning}>Cancel</Button>
           <Button variant="contained" onClick={handleClone} disabled={cloning || !(cloneTab === 0 ? cloneSelectedProduct : cloneCatSelectedProduct)}>
             {cloning ? 'Cloning...' : 'Clone Variants'}
           </Button>

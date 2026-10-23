@@ -99,6 +99,14 @@ const FeaturesPage = () => {
         }))
         .filter(({ key }) => !tier1Keys.includes(key));
 
+      const visibilityKeys = Object.entries(form)
+        .filter(([k]) => k.startsWith('visibility.'))
+        .map(([flatKey, value]) => ({
+          group: 'visibility',
+          key: flatKey.slice('visibility.'.length),
+          value,
+        }));
+
       if (form['general.mode']) {
         featureKeys.push({
           group: 'general',
@@ -107,7 +115,7 @@ const FeaturesPage = () => {
         });
       }
 
-      await updateSettings(featureKeys);
+      await updateSettings([...featureKeys, ...visibilityKeys]);
       notify('Platform features saved successfully.', 'success');
       if (refreshSettings) await refreshSettings();
     } catch (e) {
@@ -204,28 +212,79 @@ const FeaturesPage = () => {
             )}
           </Box>
           <Typography variant="body2">
-            The store mode is set in the database and controls Tier 1 core features (pricing, cart, checkout, orders, payments, shipping).
-            These are locked to the mode and cannot be toggled here.
-            Only the optional Tier 2 features below are controllable independently.
+            The store mode controls Tier 1 backend capability (pricing, cart, checkout, orders, payments, shipping)
+            and cannot be changed on this page except through the mode selector. The visibility switches below are
+            presentation-only: <strong>hides the interface; backend processing continues.</strong> Visibility can
+            never turn on a capability that the mode disables.
           </Typography>
         </Alert>
 
-        {/* ── Tier 1 Read-Only Reference ── */}
+        {/* ── Tier 1 Capability + Visibility ── */}
         <Paper variant="outlined" sx={{ p: 2.5, borderRadius: 2, mb: 3 }}>
           <Typography variant="subtitle2" fontWeight={700} gutterBottom>
-            Tier 1 — Mode-Locked Features
+            Tier 1 — Mode-Locked Capability + Visibility
           </Typography>
           <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
-            These features are determined by the active <code>APP_MODE</code> and cannot be changed from the UI.
+            The mode controls whether the backend capability is available. The two switches control whether its
+            interface is shown in the admin and on the storefront. <strong>Hides the interface; backend processing
+            continues.</strong> Stored visibility preferences are preserved when the mode changes.
           </Typography>
-          <Box sx={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(160px, 1fr))', gap: 1 }}>
-            {[['pricing', 'Pricing'], ['cart', 'Cart'], ['checkout', 'Checkout'], ['orders', 'Orders'], ['payments', 'Payments'], ['shipping', 'Shipping']].map(([key, label]) => (
-              <Box key={key} sx={{ display: 'flex', alignItems: 'center', gap: 1, p: 1.25, border: '1px solid', borderColor: 'divider', borderRadius: 1.5, opacity: 0.75 }}>
-                <Box sx={{ width: 10, height: 10, borderRadius: '50%', bgcolor: form[`features.${key}`] ? 'success.main' : 'error.light', flexShrink: 0 }} />
-                <Typography variant="body2" fontWeight={600}>{label}</Typography>
-                <Chip label="Locked" size="small" sx={{ ml: 'auto', height: 16, fontSize: 9, fontWeight: 700 }} />
-              </Box>
-            ))}
+          <Box sx={{ display: 'grid', gap: 1.5 }}>
+            {[['pricing', 'Pricing'], ['cart', 'Cart'], ['checkout', 'Checkout'], ['orders', 'Orders'], ['payments', 'Payments'], ['shipping', 'Shipping']].map(([key, label]) => {
+              const capabilityOn = Boolean(form[`features.${key}`]);
+              const adminKey = `visibility.admin${key.charAt(0).toUpperCase()}${key.slice(1)}`;
+              const storefrontKey = `visibility.storefront${key.charAt(0).toUpperCase()}${key.slice(1)}`;
+              const adminVisible = form[adminKey] !== false;
+              const storefrontVisible = form[storefrontKey] !== false;
+              const effectiveAdmin = capabilityOn && adminVisible;
+              const effectiveStorefront = capabilityOn && storefrontVisible;
+
+              return (
+                <Box
+                  key={key}
+                  sx={{ p: 1.75, border: '1px solid', borderColor: 'divider', borderRadius: 2 }}
+                >
+                  <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 1, flexWrap: 'wrap' }}>
+                    <Box sx={{ width: 10, height: 10, borderRadius: '50%', bgcolor: capabilityOn ? 'success.main' : 'error.light', flexShrink: 0 }} />
+                    <Typography variant="body2" fontWeight={700}>{label}</Typography>
+                    <Chip
+                      label={capabilityOn ? 'Mode: ON' : 'Mode: OFF'}
+                      size="small"
+                      color={capabilityOn ? 'success' : 'default'}
+                      variant="outlined"
+                      sx={{ height: 18, fontSize: 9, fontWeight: 700 }}
+                    />
+                    {!capabilityOn && (
+                      <Chip
+                        label="Hidden regardless of visibility"
+                        size="small"
+                        color="warning"
+                        variant="outlined"
+                        sx={{ height: 18, fontSize: 9, fontWeight: 700 }}
+                      />
+                    )}
+                  </Box>
+                  <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 2 }}>
+                    <FormControlLabel
+                      control={<Switch size="small" checked={adminVisible} onChange={(e) => set(adminKey, e.target.checked)} disabled={!isSuperAdmin} />}
+                      label={
+                        <Typography variant="caption" color="text.secondary">
+                          Show in Admin UI {effectiveAdmin ? '' : '(hidden)'}
+                        </Typography>
+                      }
+                    />
+                    <FormControlLabel
+                      control={<Switch size="small" checked={storefrontVisible} onChange={(e) => set(storefrontKey, e.target.checked)} disabled={!isSuperAdmin} />}
+                      label={
+                        <Typography variant="caption" color="text.secondary">
+                          Show in Storefront {effectiveStorefront ? '' : '(hidden)'}
+                        </Typography>
+                      }
+                    />
+                  </Box>
+                </Box>
+              );
+            })}
           </Box>
         </Paper>
 
@@ -235,6 +294,8 @@ const FeaturesPage = () => {
           <Typography variant="body2" color="text.secondary" sx={{ mb: 2.5 }}>
             These features can be enabled or disabled regardless of the store mode.
             Default values differ per mode — the badge shows the mode&apos;s default.
+            When OFF, related admin navigation, form controls, and storefront UI are hidden.
+            Authorized staff API access to historical records is preserved.
           </Typography>
           <Box sx={{ display: 'grid', gap: 2 }}>
             {[
@@ -387,16 +448,16 @@ const FeaturesPage = () => {
         <DialogTitle sx={{ fontWeight: 700 }}>Confirm Feature Changes</DialogTitle>
         <DialogContent>
           <Typography variant="body2">
-            These changes will affect <strong>all storefront visitors immediately</strong>.
-            Enabling or disabling features like reviews, wishlist, or enquiry will change
-            what customers see without any cache delay.
+            These changes will affect <strong>all storefront visitors and admin users immediately</strong>.
+            Optional features hide their UI when OFF. Tier 1 visibility switches only hide the interface;
+            backend processing continues and stored preferences are preserved across mode changes.
           </Typography>
           <Alert severity="warning" sx={{ mt: 2 }}>
             This action requires Superadmin privileges. Any unauthorized request will be rejected by the server.
           </Alert>
         </DialogContent>
         <DialogActions sx={{ px: 3, pb: 2 }}>
-          <Button onClick={() => setFeatureConfirmOpen(false)}>Cancel</Button>
+          <Button color="error" onClick={() => setFeatureConfirmOpen(false)}>Cancel</Button>
           <Button variant="contained" color="warning" onClick={handleSaveFeatures} sx={{ fontWeight: 700 }}>
             Yes, Save Features
           </Button>

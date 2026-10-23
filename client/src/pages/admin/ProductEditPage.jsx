@@ -57,7 +57,7 @@ import attributeService from '../../services/attributeService';
 import { getSaleLabels } from '../../services/adminService';
 import MediaPicker from '../../components/common/MediaPicker';
 import { useNotification } from '../../context/NotificationContext';
-import { useCurrency, useSettings, useFeature } from '../../hooks/useSettings';
+import { useCurrency, useSettings, useFeature, useFeatureVisible } from '../../hooks/useSettings';
 import { getProductBasePrice } from '../../utils/variantPricing';
 import { getVariantOptionLabel } from '../../utils/variantOptions';
 import { formatAttributeValue, getSwatchColor } from '../../utils/attributePresentation';
@@ -226,7 +226,9 @@ const ProductEditPage = () => {
   const canCreateProducts = hasPermission(PERMISSIONS.PRODUCTS_CREATE);
   const canUpdateProducts = hasPermission(PERMISSIONS.PRODUCTS_UPDATE);
   const canUploadMedia = hasPermission(PERMISSIONS.MEDIA_UPLOAD);
-  const pricingEnabled = useFeature('pricing');
+  const pricingEnabled = useFeatureVisible('pricing', 'admin');
+  const brandsEnabled = useFeature('brands');
+  const seoEnabled = useFeature('seo');
   const showPrice = useFeature('showPrice');
   const productAssistantEnabled = useFeature('productAssistant');
   const canSaveProduct = isNew ? canCreateProducts : canUpdateProducts;
@@ -289,8 +291,12 @@ const ProductEditPage = () => {
         const catRes = await getCategoryTree();
         setCategories(catRes?.data || []);
 
-        const brandRes = await brandService.getBrands({ limit: 100, isActive: 'true' });
-        setBrands(brandRes?.data?.data || []);
+        if (brandsEnabled) {
+          const brandRes = await brandService.getBrands({ limit: 100, isActive: 'true' });
+          setBrands(brandRes?.data?.data || []);
+        } else {
+          setBrands([]);
+        }
 
         try {
           const labelsRes = await getSaleLabels();
@@ -360,7 +366,7 @@ const ProductEditPage = () => {
       }
     };
     load();
-  }, [id, isNew]);
+  }, [id, isNew, brandsEnabled]);
 
   const setField = (key, value) => {
     setFormData((prev) => ({ ...prev, [key]: value }));
@@ -397,7 +403,7 @@ const ProductEditPage = () => {
   const applyAssistantResult = useCallback((result) => {
     const draft = result?.draft || {};
     const attributes = result?.attributes || {};
-    const matchedBrand = attributes.brand
+    const matchedBrand = brandsEnabled && attributes.brand
       ? brands.find((brand) => brand.name?.trim().toLowerCase() === attributes.brand.trim().toLowerCase())
       : null;
 
@@ -431,12 +437,12 @@ const ProductEditPage = () => {
       unit: undefined,
     }));
 
-    if (attributes.brand && !matchedBrand) {
+    if (brandsEnabled && attributes.brand && !matchedBrand) {
       notify(`AI detected brand "${attributes.brand}", but it does not match an existing brand record.`, 'warning');
     } else {
       notify('AI content applied to the product form.', 'success');
     }
-  }, [brands, notify]);
+  }, [brands, brandsEnabled, notify]);
 
   const handleSave = async (e) => {
     e.preventDefault();
@@ -1100,6 +1106,7 @@ const ProductEditPage = () => {
                 sx={{ mt: 1 }}
               />
 
+              {brandsEnabled && (
               <FormControl fullWidth margin="normal">
                 <InputLabel id="brand-select-label">Brand</InputLabel>
                 <Select
@@ -1117,6 +1124,7 @@ const ProductEditPage = () => {
                 </Select>
                 {/* <FormHelperText>Select a product brand</FormHelperText> */}
               </FormControl>
+              )}
             </Paper>
 
 
@@ -1339,7 +1347,7 @@ const ProductEditPage = () => {
         )}
 
         {/* SEO Configuration — always last, even after Attributes and Variants */}
-        {settings?.features?.seo !== false && (
+        {seoEnabled && (
           <Paper sx={{ p: 3, mt: 3 }}>
             <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 2 }}>
               <Typography variant="h6">
@@ -1458,7 +1466,7 @@ const ProductEditPage = () => {
         )}
 
         <Box sx={{ mt: 4, display: 'flex', justifyContent: 'flex-end', gap: 2 }}>
-          <Button onClick={() => navigate('/admin/products')} disabled={saving}>
+          <Button variant="outlined" color="error" onClick={() => navigate('/admin/products')} disabled={saving}>
             Cancel
           </Button>
           <Button variant="contained" type="submit" size="large" disabled={saving || !canSaveProduct}>

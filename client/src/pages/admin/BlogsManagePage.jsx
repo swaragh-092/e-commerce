@@ -174,7 +174,7 @@ const BlogsManagePage = () => {
           <Typography>Are you sure you want to delete "{selected?.title}"?</Typography>
         </DialogContent>
         <DialogActions>
-          <Button onClick={() => setDeleteOpen(false)}>Cancel</Button>
+          <Button color="error" onClick={() => setDeleteOpen(false)}>Cancel</Button>
           <Button color="error" variant="contained" onClick={confirmDelete}>Delete</Button>
         </DialogActions>
       </Dialog>

@@ -44,6 +44,7 @@ export default function buildSettingsPanels(ctx) {
     CURRENCIES, DASHBOARD_ORDER_WIDGETS, DASHBOARD_PROFILES,
     homepageSections,
     enableCGST, enableSGST, enableIGST,
+    adminVisibility = {},
   } = ctx;
 
   return [
@@ -342,15 +343,18 @@ function buildCatalogPanel({ form, set, section, field, toggle, imageField }) {
   ];
 }
 
-function buildCheckoutPanel({ form, set, section, field, toggle, currSymbol, enableCGST, enableSGST, enableIGST }) {
-  return [
-    section(
+function buildCheckoutPanel({ form, set, section, field, toggle, currSymbol, enableCGST, enableSGST, enableIGST, adminVisibility = {} }) {
+  const sections = [];
+  if (adminVisibility.shipping !== false) {
+    sections.push(section(
       'Shipping',
       'Manage customer delivery fees, delivery coverage, couriers and packaging in one place.',
       <Button component={Link} to="/admin/shipping" variant="outlined">Manage shipping</Button>,
       ['shipping', 'free shipping', 'delivery', 'pincode', 'serviceable']
-    ),
-    section(
+    ));
+  }
+  if (adminVisibility.checkout !== false || adminVisibility.cart !== false) {
+    sections.push(section(
       'Taxes',
       'Configure your store-wide tax strategy, including inclusive pricing and GST breakdowns.',
       <>
@@ -378,8 +382,10 @@ function buildCheckoutPanel({ form, set, section, field, toggle, currSymbol, ena
         {enableIGST && field('tax.igstRate', 'IGST Rate (e.g. 0.18 for 18%)', 'number')}
       </>,
       ['tax', 'gst', 'cgst', 'sgst', 'igst']
-    ),
-    section(
+    ));
+  }
+  if (adminVisibility.checkout !== false) {
+    sections.push(section(
       'Checkout Experience',
       'Decide how easy checkout is and configure the cancellation guidance customers see.',
       <>
@@ -397,24 +403,28 @@ function buildCheckoutPanel({ form, set, section, field, toggle, currSymbol, ena
         />
       </>,
       ['checkout', 'guest checkout', 'coupons', 'cancellation', 'refund policy', 'orders']
-    ),
-    section(
+    ));
+  }
+  if (adminVisibility.cart !== false) {
+    sections.push(section(
       'Cart Page Experience',
       'Edit cart layout and customer-facing cart content in Store Designer.',
       <>
         <StoreDesignSummary scope="page" page="cart" form={form} />
       </>,
       ['cart', 'layout', 'cross sells', 'empty state']
-    ),
-    section(
+    ));
+  }
+  sections.push(section(
       'Customer Account Experience',
       'Edit the customer account layout and support presentation in Store Designer.',
       <>
         <StoreDesignSummary scope="page" page="account" form={form} />
       </>,
       ['account', 'customer', 'dashboard', 'orders']
-    ),
-    section(
+    ));
+  if (adminVisibility.payments !== false) {
+    sections.push(section(
       'Payment Gateways',
       'Enable, disable and configure payment providers from the dedicated gateway manager.',
       <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', p: 2, border: '1px solid', borderColor: 'primary.main', borderRadius: 2, bgcolor: 'primary.main', color: '#fff' }}>
@@ -429,11 +439,13 @@ function buildCheckoutPanel({ form, set, section, field, toggle, currSymbol, ena
         </Button>
       </Box>,
       ['payment', 'gateway', 'razorpay', 'stripe', 'payu', 'cashfree', 'cod']
-    ),
-  ];
+    ));
+  }
+  return sections;
 }
 
-function buildPromotionsPanel({ section, field, toggle }) {
+function buildPromotionsPanel({ section, field, toggle, adminVisibility = {} }) {
+  if (adminVisibility.pricing === false) return [];
   return [
     section(
       'Sale Display & Behavior',

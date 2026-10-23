@@ -31,7 +31,7 @@ import EditIcon from '@mui/icons-material/Edit';
 import FileCopyIcon from '@mui/icons-material/FileCopy';
 import { getCoupons, createCoupon, updateCoupon, deleteCoupon } from '../../services/adminService';
 import { useNotification } from '../../context/NotificationContext';
-import { useCurrency } from '../../hooks/useSettings';
+import { useCurrency, useFeature } from '../../hooks/useSettings';
 import { getProducts } from '../../services/productService';
 import { getCategoryTree } from '../../services/categoryService';
 import brandService from '../../services/brandService';
@@ -107,6 +107,7 @@ const CouponsPage = () => {
   const { notify } = useNotification();
   const { formatPrice } = useCurrency();
   const { hasPermission } = useAuth();
+  const brandsEnabled = useFeature('brands');
   const canManageCoupons = hasPermission(PERMISSIONS.COUPONS_MANAGE);
 
   const productOptions = useMemo(
@@ -199,10 +200,13 @@ const CouponsPage = () => {
   const fetchOptions = async () => {
     setLoadingOptions(true);
     try {
+      const brandPromise = brandsEnabled
+        ? brandService.getBrands({ page: 1, limit: 100 })
+        : Promise.resolve({ data: { data: { brands: [] } } });
       const [productResponse, categoryResponse, brandResponse] = await Promise.all([
         getProducts({ page: 1, limit: 100 }),
         getCategoryTree(),
-        brandService.getBrands({ page: 1, limit: 100 }),
+        brandPromise,
       ]);
 
       setProducts(productResponse?.data || []);
@@ -693,7 +697,7 @@ const CouponsPage = () => {
                       <MenuItem value="all">Entire order</MenuItem>
                       <MenuItem value="product">Selected products</MenuItem>
                       <MenuItem value="category">Selected categories</MenuItem>
-                      <MenuItem value="brand">Selected brands</MenuItem>
+                      {brandsEnabled && <MenuItem value="brand">Selected brands</MenuItem>}
                     </Select>
                   </FormControl>
                   {form.applicableTo !== 'all' && renderSelection(
@@ -707,7 +711,7 @@ const CouponsPage = () => {
                     renderSelection('Excluded products', 'excludedProductIds', productOptions)}
                   {(form.applicableTo === 'all' || (form.applicableTo === 'category' && form.applicableIds.length === 0)) &&
                     renderSelection('Excluded categories', 'excludedCategoryIds', categories)}
-                  {(form.applicableTo === 'all' || (form.applicableTo === 'brand' && form.applicableIds.length === 0)) &&
+                  {brandsEnabled && (form.applicableTo === 'all' || (form.applicableTo === 'brand' && form.applicableIds.length === 0)) &&
                     renderSelection('Excluded brands', 'excludedBrandIds', brandOptions)}
                   <FormControlLabel control={<Switch checked={Boolean(form.excludeSaleItems)} onChange={(e) => set('excludeSaleItems', e.target.checked)} />} label="Exclude products already on sale" />
                 </Stack>
@@ -786,7 +790,7 @@ const CouponsPage = () => {
           </Box>
         </DialogContent>
         <DialogActions>
-          <Button onClick={closeDialog}>Cancel</Button>
+          <Button color="error" onClick={closeDialog}>Cancel</Button>
           <Button variant="contained" onClick={handleSave} disabled={saving || !canManageCoupons}>{saving ? 'Saving…' : 'Save Promotion'}</Button>
         </DialogActions>
       </Dialog>

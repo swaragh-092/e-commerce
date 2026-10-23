@@ -632,7 +632,7 @@ const EmailTemplatesPage = () => {
           )}
         </DialogContent>
         <DialogActions sx={{ px: 3, pb: 2 }}>
-          <Button onClick={() => setResetDialog({ open: false, name: null, defaultData: null })}>Cancel</Button>
+          <Button color="error" onClick={() => setResetDialog({ open: false, name: null, defaultData: null })}>Cancel</Button>
           <Button variant="contained" color="warning" onClick={confirmReset}>Reset to Default</Button>
         </DialogActions>
       </Dialog>

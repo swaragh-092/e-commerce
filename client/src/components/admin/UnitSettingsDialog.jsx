@@ -309,7 +309,7 @@ const UnitSettingsDialog = ({ onClose }) => {
       <DialogActions sx={{ px: { xs: 2, sm: 3 }, py: 2, borderTop: 1, borderColor: 'divider', gap: 1 }}>
         {!isEditing && <Typography variant="body2" color="text.secondary" sx={{ mr: 'auto' }}>Changes are saved as you go.</Typography>}
         {isEditing ? <>
-          <Button disabled={saving} onClick={browse}>Cancel</Button>
+          <Button color="error" disabled={saving} onClick={browse}>Cancel</Button>
           {deleting ? <Button color="error" variant="contained" disabled={saving || usageLoading || Boolean(usageError) || Boolean(loadError) || (usage?.[deleting.value.toLowerCase()]?.total || 0) > 0} onClick={deleteUnit}>{saving ? 'Deleting…' : 'Delete unit'}</Button>
             : <Button variant="contained" type="submit" form="unit-editor" disabled={saving || loading || Boolean(loadError) || !dirty}>{saving ? 'Saving…' : editor.originalValue ? 'Save unit' : 'Create unit'}</Button>}
         </> : <Button variant="outlined" onClick={onClose}>Done</Button>}

@@ -4,7 +4,7 @@ import { Box, Typography, Button, Divider, CircularProgress, Alert } from '@mui/
 import PrintIcon from '@mui/icons-material/Print';
 import ArrowBackIcon from '@mui/icons-material/ArrowBack';
 import { orderService } from '../../services/orderService';
-import { useCurrency, useFeature, useFeaturesResolved } from '../../hooks/useSettings';
+import { useCurrency, useFeature, useFeatureVisible, useFeaturesResolved } from '../../hooks/useSettings';
 import { SettingsContext } from '../../context/ThemeContext';
 import { getTaxRows } from '../../components/orders/order-detail/orderDetailUtils';
 import { formatDateOnly } from '../../utils/dates';
@@ -18,7 +18,7 @@ const StorefrontOrderInvoicePage = () => {
   const [order, setOrder] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
-  const ordersEnabled = useFeature('orders');
+  const ordersEnabled = useFeatureVisible('orders', 'storefront');
   const featuresResolved = useFeaturesResolved();
 
   useEffect(() => {

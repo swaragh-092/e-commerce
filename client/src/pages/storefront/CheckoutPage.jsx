@@ -20,7 +20,7 @@ import CreditCardIcon from '@mui/icons-material/CreditCard';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { AuthContext } from '../../context/AuthContext';
 import { useNotification } from '../../context/NotificationContext';
-import { useSettings, useCurrency, useFeature, useFeaturesResolved, useComponentStyles } from '../../hooks/useSettings';
+import { useSettings, useCurrency, useFeature, useFeatureVisible, useFeaturesResolved, useComponentStyles } from '../../hooks/useSettings';
 import { useCart } from '../../hooks/useCart';
 import { getSessionId } from '../../services/cartService';
 import { userService } from '../../services/userService';
@@ -262,8 +262,10 @@ const CheckoutPage = () => {
     }, [location.state?.fromBuyNow, location.state?.buyNowItem]);
     const hasInvalidBuyNowState = Boolean(location.state?.fromBuyNow) && !buyNowItem;
 
-    const checkoutEnabled = useFeature('checkout');
-    const cartEnabled = useFeature('cart');
+    const checkoutEnabled = useFeatureVisible('checkout', 'storefront');
+    const cartEnabled = useFeatureVisible('cart', 'storefront');
+    const paymentsVisible = useFeatureVisible('payments', 'storefront');
+    const shippingVisible = useFeatureVisible('shipping', 'storefront');
     const guestCheckoutEnabled = useFeature('guestCheckout');
     const featuresResolved = useFeaturesResolved();
 
@@ -302,7 +304,7 @@ const CheckoutPage = () => {
             return req !== false;
         });
     }, [items, isBuyNowFlow, buyNowProductRequiresShipping]);
-    const couponsEnabled = settings?.features?.coupons !== false;
+    const couponsEnabled = useFeature('coupons');
     const paymentSettings = settings?.payments || {};
     const enabledPaymentMethods = PAYMENT_METHOD_OPTIONS.filter((method) => {
         if (!hasPhysicalItems && method.id === 'cod') return false;
@@ -1128,7 +1130,7 @@ const CheckoutPage = () => {
                                     Add a new address
                                 </Button>
 
-                                {selectedAddressId && (
+                                {selectedAddressId && shippingVisible && (
                                     <Box sx={{ mb: 2 }}>
                                         {shippingLoading ? (
                                             <Alert severity="info" icon={<CircularProgress size={16} />}>
@@ -1298,7 +1300,11 @@ const CheckoutPage = () => {
                         onEdit={() => editSection(3)}
                         summary={
                             <Typography variant="body2" color="text.secondary" sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
-                                {paymentMethod === 'cod' ? (
+                                {!paymentsVisible ? (
+                                    <>
+                                        <PaymentsIcon sx={{ fontSize: 16 }} /> Secure payment
+                                    </>
+                                ) : paymentMethod === 'cod' ? (
                                     <>
                                         <PaymentsIcon sx={{ fontSize: 16 }} /> Cash on Delivery
                                     </>
@@ -1310,6 +1316,12 @@ const CheckoutPage = () => {
                             </Typography>
                         }
                     >
+                        {!paymentsVisible && (
+                            <Alert severity="info" sx={{ mb: 2 }}>
+                                Payment options are hidden on the storefront. Your order will use the store's configured payment method.
+                            </Alert>
+                        )}
+                        {paymentsVisible && (
                         <RadioGroup
                             aria-label="Payment method"
                             value={paymentMethod}
@@ -1361,6 +1373,7 @@ const CheckoutPage = () => {
                                 </Paper>
                             ))}
                         </RadioGroup>
+                        )}
 
                         {/* Order notes */}
                         <TextField
@@ -1428,6 +1441,7 @@ const CheckoutPage = () => {
                             </Box>
 
                             {/* Shipping */}
+                            {shippingVisible && (
                             <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 1 }}>
                                 <Typography variant="body2" color="text.secondary">Delivery Charges</Typography>
                                 {!hasPhysicalItems ? (
@@ -1451,7 +1465,8 @@ const CheckoutPage = () => {
                                     <Typography variant="body2">{formatPrice(shippingCost)}</Typography>
                                 )}
                             </Box>
-                            {hasPhysicalItems && shippingQuote?.pricingSource === 'standard' && shippingMethod === 'free_above_threshold' && shippingCost > 0 && (
+                            )}
+                            {shippingVisible && hasPhysicalItems && shippingQuote?.pricingSource === 'standard' && shippingMethod === 'free_above_threshold' && shippingCost > 0 && (
                                 <Typography variant="caption" color="success.main" display="block" mb={1}>
                                     Add {formatPrice(freeThreshold - subtotal)} more for free delivery
                                 </Typography>
@@ -1465,7 +1480,7 @@ const CheckoutPage = () => {
                                     <Typography variant="body2">{formatPrice(row.amount)}</Typography>
                                 </Box>
                             ))}
-                            {hasPhysicalItems && effectiveDeliveryTax > 0 && (
+                            {shippingVisible && hasPhysicalItems && effectiveDeliveryTax > 0 && (
                                 <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 0.5 }}>
                                     <Typography variant="body2" color="text.secondary">
                                         Tax on delivery

@@ -153,7 +153,7 @@ describe('store design ownership', () => {
     expect(getDesignComponentControlSchema('designTokens').groups.flatMap((group) => group.fields.map((field) => field.key))).toEqual([
       'buttonStyle', 'cardStyle', 'backgroundStyle', 'headerStyle', 'borderRadius', 'lineHeight', 'letterSpacing', 'headingLetterSpacing',
       'primaryColor', 'secondaryColor', 'backgroundColor', 'surfaceColor', 'textColor', 'mode',
-      'errorColor', 'warningColor', 'successColor', 'infoColor',
+      'errorColor', 'cancelButtonColor', 'warningColor', 'successColor', 'infoColor',
       'fontFamily', 'headingFont', 'bodyWeight', 'headingWeight',
     ]);
     expect(isDesignControlVisible(

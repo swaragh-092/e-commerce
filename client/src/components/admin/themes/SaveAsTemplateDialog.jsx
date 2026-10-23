@@ -85,7 +85,7 @@ const SaveAsTemplateDialog = ({ open, onClose, onSaved }) => {
         </Stack>
       </DialogContent>
       <DialogActions>
-        <Button onClick={onClose}>Cancel</Button>
+        <Button color="error" onClick={onClose}>Cancel</Button>
         <Button variant="contained" startIcon={saving ? <CircularProgress size={16} /> : <SaveIcon />} onClick={handleSave} disabled={saving}>
           {saving ? 'Saving...' : 'Save to Library'}
         </Button>

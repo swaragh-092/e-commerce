@@ -199,7 +199,7 @@ const ThemeApplyDialog = ({ open, onClose, packageData, onConfirm, loading }) =>
           Start Fresh
         </Button>
         <Box sx={{ display: 'flex', gap: 1 }}>
-          <Button onClick={onClose}>Cancel</Button>
+          <Button color="error" onClick={onClose}>Cancel</Button>
           <Button variant="contained" onClick={handleConfirm} disabled={loading || (scopes.length === 0 && !replaceDemoContent) || Boolean(previewError)}>
             {loading ? 'Installing...' : 'Install Template'}
           </Button>

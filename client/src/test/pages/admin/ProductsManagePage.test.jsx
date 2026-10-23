@@ -47,6 +47,7 @@ vi.mock('../../../hooks/useSettings', () => ({
   useCurrency: () => ({ symbol: '₹', formatPrice: (amount) => `₹${amount}` }),
   useSettings: () => ({ settings: settingsMock }),
   useFeature: () => true,
+  useFeatureVisible: () => true,
 }));
 vi.mock('../../../hooks/useAuth', () => ({ useAuth: () => ({ hasPermission: () => true }) }));
 vi.mock('../../../context/NotificationContext', () => ({ useNotification: () => ({ notify: notifyMock }) }));

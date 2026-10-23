@@ -10,7 +10,7 @@ import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
 import MenuIcon from '@mui/icons-material/Menu';
 import { Outlet, Link as RouterLink, useLocation } from 'react-router-dom';
 import { useAuth } from '../hooks/useAuth';
-import { useSettings, useFeature, useCurrency } from '../hooks/useSettings';
+import { useSettings, useFeature, useFeatureVisible, useCurrency } from '../hooks/useSettings';
 import { useCart } from '../hooks/useCart';
 import FavoriteBorderIcon from '@mui/icons-material/FavoriteBorder';
 import CategoryNav from '../components/layout/CategoryNav';
@@ -25,7 +25,7 @@ import { ADMIN_ACCESS_PERMISSIONS, getFirstAccessibleAdminPath } from '../utils/
 import SEO from '../components/common/SEO';
 import { isExternalUrl } from '../utils/urls';
 import { getStoreName } from '../utils/store';
-import { resolveShippingAnnouncement } from '../utils/shippingAnnouncement';
+import { isFreeShippingPromotion, resolveShippingAnnouncement } from '../utils/shippingAnnouncement';
 
 const DEFAULT_ACTIONS_ORDER = ['search', 'cart', 'wishlist', 'account'];
 
@@ -38,10 +38,11 @@ const StoreLayout = () => {
   const { cartCount } = useCart();
   const { wishlistCount } = useWishlist();
   const { error: categoryError } = useCategories();
-  const cartEnabled     = useFeature('cart');
+  const cartEnabled     = useFeatureVisible('cart', 'storefront');
   const wishlistEnabled = useFeature('wishlist');
-  const ordersEnabled   = useFeature('orders');
+  const ordersEnabled   = useFeatureVisible('orders', 'storefront');
   const brandsEnabled   = useFeature('brands');
+  const shippingVisible = useFeatureVisible('shipping', 'storefront');
   const [announcementDismissed, setAnnouncementDismissed] = useState(false);
   const [topLinks, setTopLinks] = useState([]);
   const [headerMenu, setHeaderMenu] = useState(null);
@@ -108,11 +109,12 @@ const StoreLayout = () => {
 
   const themeSettings = settings?.theme || {};
   const announcement = settings?.announcement || {};
-  const announcementText = resolveShippingAnnouncement({
+  const resolvedAnnouncementText = resolveShippingAnnouncement({
     announcement,
     shipping: settings?.shipping,
     formatPrice,
   });
+  const announcementText = shippingVisible || !isFreeShippingPromotion(resolvedAnnouncementText) ? resolvedAnnouncementText : '';
   const showAnnouncement = announcement.enabled && Boolean(announcementText) && !announcementDismissed;
   const navPosition  = nav.sticky !== false ? 'sticky' : 'static';
   const headerStyle = themeSettings.headerStyle || 'gradient';

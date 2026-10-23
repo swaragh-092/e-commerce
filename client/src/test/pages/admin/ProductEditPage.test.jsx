@@ -15,7 +15,7 @@ vi.mock('../../../services/brandService', () => ({ default: { getBrands: vi.fn()
 vi.mock('../../../services/adminService', () => ({ getSaleLabels: vi.fn() }));
 vi.mock('../../../hooks/useAuth', () => ({ useAuth: () => ({ hasPermission: () => true }) }));
 vi.mock('../../../hooks/useSKUGenerator', () => ({ default: () => ({ generateProductSKU: () => 'SKU', generateVariantSKU: () => 'VSKU' }) }));
-vi.mock('../../../hooks/useSettings', () => ({ useSettings: () => ({ settings: { features: { seo: false } } }), useCurrency: () => ({ symbol: '$', currency: 'USD', formatPrice: (value) => `$${value}` }), useFeature: (name) => name !== 'productAssistant' }));
+vi.mock('../../../hooks/useSettings', () => ({ useSettings: () => ({ settings: { features: { seo: false } } }), useCurrency: () => ({ symbol: '$', currency: 'USD', formatPrice: (value) => `$${value}` }), useFeature: (name) => !['productAssistant', 'seo'].includes(name), useFeatureVisible: () => true }));
 vi.mock('../../../components/common/MediaPicker', () => ({ default: () => null }));
 vi.mock('../../../components/admin/UnitSelector', () => ({ default: () => null }));
 vi.mock('../../../components/admin/ProductCustomTabs', () => ({ default: () => null }));

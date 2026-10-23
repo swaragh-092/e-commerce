@@ -18,7 +18,7 @@ import CachedIcon from '@mui/icons-material/Cached';
 import { Link, useNavigate } from 'react-router-dom';
 
 import { useCart } from '../../hooks/useCart';
-import { useSettings, useCurrency, useFeature, useFeaturesResolved, useComponentStyles } from '../../hooks/useSettings';
+import { useSettings, useCurrency, useFeature, useFeatureVisible, useFeaturesResolved, useComponentStyles } from '../../hooks/useSettings';
 import { useNotification } from '../../context/NotificationContext';
 import { getMediaUrl, onImageError, PLACEHOLDER_PRODUCT } from '../../utils/media';
 
@@ -265,7 +265,7 @@ const TrustBadge = ({ icon, title, sub }) => (
 );
 
 // ── Order Summary ─────────────────────────────────────────────────────────────
-const OrderSummary = ({ visibleCount, subtotal, shippingCost, shippingPending, shippingMethod, freeThreshold, taxRows, taxInclusive, estimatedTotal, offerSummary, formatPrice, onCheckout, setEnquiryOpen, checkoutEnabled, enquiryEnabled, showTrustBadges = true, checkoutBlockStyle = {} }) => {
+const OrderSummary = ({ visibleCount, subtotal, shippingCost, shippingPending, shippingMethod, freeThreshold, taxRows, taxInclusive, estimatedTotal, offerSummary, formatPrice, onCheckout, setEnquiryOpen, checkoutEnabled, enquiryEnabled, showTrustBadges = true, checkoutBlockStyle = {}, showShipping = true, showPayments = true }) => {
     const shippingFree = shippingMethod === 'free' || shippingCost === 0;
     const progressPct = freeThreshold > 0 ? Math.min((subtotal / freeThreshold) * 100, 100) : 0;
     const blockRadius = checkoutBlockStyle.radius === 'none' ? 0 : checkoutBlockStyle.radius === 'small' ? 1 : checkoutBlockStyle.radius === 'large' ? 3 : 2;
@@ -291,13 +291,15 @@ const OrderSummary = ({ visibleCount, subtotal, shippingCost, shippingPending, s
 
                 <Box sx={blockPadding}>
                     <PriceRow label="Subtotal" value={formatPrice(subtotal)} />
-                    <PriceRow label="Shipping" icon={<LocalShippingOutlinedIcon />}
-                        value={shippingPending ? 'Calculated at checkout' : shippingFree ? 'Free' : formatPrice(shippingCost)} green={!shippingPending && shippingFree} />
+                    {showShipping && (
+                        <PriceRow label="Shipping" icon={<LocalShippingOutlinedIcon />}
+                            value={shippingPending ? 'Calculated at checkout' : shippingFree ? 'Free' : formatPrice(shippingCost)} green={!shippingPending && shippingFree} />
+                    )}
                     {taxRows.map(r => <PriceRow key={r.label} label={r.label} value={r.value} />)}
                     {taxInclusive && <Typography sx={{ fontSize: '0.7rem', color: 'text.disabled', mt: 0.25, mb: 0.5 }}>Taxes included in price</Typography>}
 
                     {/* Free shipping bar */}
-                    {!shippingPending && shippingMethod === 'free_above_threshold' && shippingCost > 0 && freeThreshold > 0 && (
+                    {showShipping && !shippingPending && shippingMethod === 'free_above_threshold' && shippingCost > 0 && freeThreshold > 0 && (
                         <Fade in>
                             <Box sx={{ mt: 1.5, p: 1.5, borderRadius: 1.5, border: '1px solid', borderColor: 'divider', bgcolor: 'action.hover' }}>
                                 <Box sx={{ ...row('center', 'space-between'), mb: 0.9 }}>
@@ -381,6 +383,7 @@ const OrderSummary = ({ visibleCount, subtotal, shippingCost, shippingPending, s
             )}
 
             {/* Payment methods */}
+            {showPayments && (
             <Paper elevation={0} sx={{ border: '1px solid', borderColor: 'divider', borderRadius: 1.75, px: 2, py: 1.25, ...row('center', 'space-between') }}>
                 <Typography sx={{ fontSize: '0.63rem', color: 'text.disabled', fontWeight: 800, letterSpacing: 2 }}>WE ACCEPT</Typography>
                 <Box sx={{ display: 'flex', gap: 0.75 }}>
@@ -391,6 +394,7 @@ const OrderSummary = ({ visibleCount, subtotal, shippingCost, shippingPending, s
                     ))}
                 </Box>
             </Paper>
+            )}
         </Box>
     );
 };
@@ -406,10 +410,12 @@ const CartPage = () => {
     const [offerSummary, setOfferSummary] = useState(null);
     const [clearing, setClearing] = useState(false);
     const [enquiryOpen, setEnquiryOpen] = useState(false);
-    const cartEnabled = useFeature('cart');
+    const cartEnabled = useFeatureVisible('cart', 'storefront');
     const featuresResolved = useFeaturesResolved();
-    const checkoutEnabled = useFeature('checkout');
+    const checkoutEnabled = useFeatureVisible('checkout', 'storefront');
     const enquiryEnabled = useFeature('enquiry');
+    const showShipping = useFeatureVisible('shipping', 'storefront');
+    const showPayments = useFeatureVisible('payments', 'storefront');
     const cartPage = settings?.cartPage || {};
     const cartItemStyle = useComponentStyles('cartItem');
     const checkoutBlockStyle = useComponentStyles('checkoutBlock');
@@ -561,6 +567,8 @@ const CartPage = () => {
                     enquiryEnabled={enquiryEnabled}
                     showTrustBadges={showCartTrustBadges}
                     checkoutBlockStyle={checkoutBlockStyle}
+                    showShipping={showShipping}
+                    showPayments={showPayments}
                 />
             </Box>
 

@@ -54,7 +54,35 @@ const isSuperAdminUser = (user) => {
 
 const isProtectedFeatureOrModeSetting = (key, group) => {
   const resolvedGroup = resolveSettingGroup(key, group);
-  return resolvedGroup === 'features' || key === 'mode' || (resolvedGroup === 'general' && key === 'mode');
+  return resolvedGroup === 'features' || resolvedGroup === 'visibility'
+    || key === 'mode' || (resolvedGroup === 'general' && key === 'mode');
+};
+
+const VISIBILITY_SURFACES = ['admin', 'storefront'];
+const visibilitySettingKey = (surface, feature) =>
+  `${surface}${feature.charAt(0).toUpperCase()}${feature.slice(1)}`;
+
+const isTruthyVisibilityValue = (value) => value === true || value === 'true';
+
+/**
+ * Tier 1 visibility is presentation-only. It can hide UI for a capability that
+ * the mode enables, but it can never turn a mode-disabled capability back on.
+ */
+const resolveTier1Visibility = (rows, features) => {
+  const stored = {};
+  rows.forEach((row) => {
+    stored[row.key] = isTruthyVisibilityValue(row.value);
+  });
+
+  const resolved = {};
+  for (const surface of VISIBILITY_SURFACES) {
+    resolved[surface] = {};
+    for (const feature of TIER1_KEYS) {
+      const preference = stored[visibilitySettingKey(surface, feature)] !== false;
+      resolved[surface][feature] = Boolean(features[feature]) && preference;
+    }
+  }
+  return resolved;
 };
 
 const ensureSuperAdminIfProtectedSetting = (settingsArray, actingUser) => {
@@ -199,6 +227,7 @@ const getAll = async () => {
     componentStyles: { ...defaultSettings.componentStyles },
     sectionPresets: { ...defaultSettings.sectionPresets },
     features: { ...defaultSettings.features },
+    visibility: { ...defaultSettings.visibility },
     payments: { ...defaultSettings.payments },
     sales: { ...defaultSettings.sales },
     seo: { ...defaultSettings.seo },
@@ -267,7 +296,7 @@ const getAll = async () => {
 
 const getByGroup = async (groupName, options = {}) => {
   const { maskSensitive = true } = options;
-  const validGroups = ['theme', 'componentStyles', 'sectionPresets', 'features', 'payments', 'sales', 'seo', 'general', 'orders', 'shipping', 'tax', 'sku', 'logo', 'hero', 'auth', 'footer', 'announcement', 'nav', 'catalog', 'homepage', 'productPage', 'categoryPage', 'blogPage', 'brandsPage', 'cartPage', 'accountPage', 'checkoutPage', 'wishlistPage', 'searchPage', 'notFoundPage', 'ordersPage', 'admin', 'invoice', 'gateway_credentials', 'messaging_credentials', 'messaging', 'ai', 'ai_credentials', 'advanced'];
+  const validGroups = ['theme', 'componentStyles', 'sectionPresets', 'features', 'visibility', 'payments', 'sales', 'seo', 'general', 'orders', 'shipping', 'tax', 'sku', 'logo', 'hero', 'auth', 'footer', 'announcement', 'nav', 'catalog', 'homepage', 'productPage', 'categoryPage', 'blogPage', 'brandsPage', 'cartPage', 'accountPage', 'checkoutPage', 'wishlistPage', 'searchPage', 'notFoundPage', 'ordersPage', 'admin', 'invoice', 'gateway_credentials', 'messaging_credentials', 'messaging', 'ai', 'ai_credentials', 'advanced'];
   if (!validGroups.includes(groupName)) {
     throw new AppError('VALIDATION_ERROR', 400, 'Invalid setting group');
   }
@@ -463,7 +492,7 @@ const updateKey = async (key, value, group, actingUserId, actingUser = null) => 
 
 const bulkUpdate = async (settingsInput, actingUserId, actingUser = null, options = {}) => {
   const { transaction: outerTransaction = null } = options;
-  const validGroups = ['theme', 'componentStyles', 'sectionPresets', 'features', 'payments', 'sales', 'seo', 'general', 'orders', 'shipping', 'tax', 'sku', 'logo', 'hero', 'auth', 'footer', 'announcement', 'nav', 'catalog', 'homepage', 'productPage', 'categoryPage', 'blogPage', 'brandsPage', 'cartPage', 'accountPage', 'checkoutPage', 'wishlistPage', 'searchPage', 'notFoundPage', 'ordersPage', 'admin', 'invoice', 'gateway_credentials', 'messaging_credentials', 'messaging', 'ai', 'ai_credentials', 'advanced'];
+  const validGroups = ['theme', 'componentStyles', 'sectionPresets', 'features', 'visibility', 'payments', 'sales', 'seo', 'general', 'orders', 'shipping', 'tax', 'sku', 'logo', 'hero', 'auth', 'footer', 'announcement', 'nav', 'catalog', 'homepage', 'productPage', 'categoryPage', 'blogPage', 'brandsPage', 'cartPage', 'accountPage', 'checkoutPage', 'wishlistPage', 'searchPage', 'notFoundPage', 'ordersPage', 'admin', 'invoice', 'gateway_credentials', 'messaging_credentials', 'messaging', 'ai', 'ai_credentials', 'advanced'];
   const credentialGroups = ['gateway_credentials', 'messaging_credentials', 'ai_credentials'];
 
     // Normalize input to an array of { key, value, group }
@@ -596,10 +625,15 @@ const getFeatures = async () => {
         dbFeatures[row.key] = row.value === true || row.value === 'true';
     }
 
+    const features = buildFeatures(dbFeatures, appMode);
+    const visibilityRows = await Setting.findAll({ where: { group: 'visibility' } });
+
     return {
-        features:   buildFeatures(dbFeatures, appMode),
+        features,
         lockedKeys: [...TIER1_KEYS],   // frontend uses this to grey out Tier 1 toggles
-        mode:       appMode            // Make sure the mode is exposed to the frontend
+        mode:       appMode,           // Make sure the mode is exposed to the frontend
+        // Presentation-only Tier 1 switches, already AND-ed with mode capability.
+        visibility: resolveTier1Visibility(visibilityRows, features),
     };
 };
 

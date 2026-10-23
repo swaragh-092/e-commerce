@@ -197,7 +197,7 @@ const BlogCategoriesPage = () => {
           />
         </DialogContent>
         <DialogActions>
-          <Button onClick={() => setOpen(false)}>Cancel</Button>
+          <Button color="error" onClick={() => setOpen(false)}>Cancel</Button>
           <Button variant="contained" onClick={handleSave}>Save</Button>
         </DialogActions>
       </Dialog>
@@ -208,7 +208,7 @@ const BlogCategoriesPage = () => {
           <Typography>Are you sure you want to delete "{editing?.name}"?</Typography>
         </DialogContent>
         <DialogActions>
-          <Button onClick={() => setDeleteOpen(false)}>Cancel</Button>
+          <Button color="error" onClick={() => setDeleteOpen(false)}>Cancel</Button>
           <Button variant="contained" color="error" onClick={handleDelete}>Delete</Button>
         </DialogActions>
       </Dialog>

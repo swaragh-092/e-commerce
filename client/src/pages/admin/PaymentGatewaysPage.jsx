@@ -222,7 +222,7 @@ const SetupModal = ({ gateway, open, onClose, onSaved }) => {
       </DialogContent>
 
       <DialogActions sx={{ px: 3, py: 2 }}>
-        <Button onClick={onClose} disabled={saving}>Cancel</Button>
+        <Button color="error" onClick={onClose} disabled={saving}>Cancel</Button>
         <Button
           variant="contained"
           onClick={handleSave}

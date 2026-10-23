@@ -3,7 +3,7 @@ import { Box } from '@mui/material';
 import api from '../../services/api';
 import { getProducts } from '../../services/productService';
 import { getCategories } from '../../services/categoryService';
-import { useSettings, useFeature } from '../../hooks/useSettings';
+import { useSettings, useFeature, useFeatureVisible } from '../../hooks/useSettings';
 import { useBrands } from '../../context/BrandContext';
 import PageSEO from '../../components/common/PageSEO';
 import {
@@ -205,7 +205,7 @@ const fetchSectionData = async (section) => {
 const HomeExperience = () => {
   const { settings } = useSettings();
   const { brands: contextBrands, loading: brandsLoading } = useBrands();
-  const pricingEnabled = useFeature('pricing');
+  const pricingEnabled = useFeatureVisible('pricing', 'storefront');
   const brandsEnabled = useFeature('brands');
   const config = useMemo(() => resolveHomepage(settings), [settings]);
   const visibleSections = useMemo(

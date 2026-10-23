@@ -31,7 +31,7 @@ import { PERMISSIONS } from '../../utils/permissions';
 import { getApiErrorMessage } from '../../utils/apiErrors';
 import MediaPicker from '../../components/common/MediaPicker';
 import { getMediaUrl, onImageError, PLACEHOLDER_CATEGORY } from '../../utils/media';
-import { useSettings } from '../../hooks/useSettings';
+import { useSettings, useFeature } from '../../hooks/useSettings';
 import CategoryAttributesDialog from '../../components/admin/CategoryAttributesDialog';
 
 // --- Helpers ---
@@ -455,6 +455,7 @@ const CategoriesPage = () => {
     const { notify, confirm } = useNotification();
     const { hasPermission } = useAuth();
     const { settings } = useSettings();
+    const seoEnabled = useFeature('seo');
     const canManageCategories = hasPermission(PERMISSIONS.CATEGORIES_MANAGE);
     const canManageAttributes = hasPermission(PERMISSIONS.ATTRIBUTES_MANAGE);
     const canManageCategoryAttributes = canManageCategories && canManageAttributes;
@@ -1027,7 +1028,7 @@ const CategoriesPage = () => {
                         </Stack>
                     </Box>
 
-                    {settings?.features?.seo !== false && (
+                    {seoEnabled && (
                         <>
                             <Divider sx={{ my: 1 }} />
                             <Box>
@@ -1115,7 +1116,7 @@ const CategoriesPage = () => {
                 </DialogContent>
                 <Divider />
                 <DialogActions sx={{ px: 3, py: 2 }}>
-                    <Button onClick={handleCloseDialog} disabled={saving} color="inherit">
+                    <Button onClick={handleCloseDialog} disabled={saving} color="error">
                         Cancel
                     </Button>
                     <Button variant="contained" onClick={handleSaveDialog} disabled={saving || !canManageCategories}>

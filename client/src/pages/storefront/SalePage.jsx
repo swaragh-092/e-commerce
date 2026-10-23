@@ -3,7 +3,7 @@ import { Box, Container, Typography, Pagination, FormControl, Select, MenuItem }
 import ProductGrid from '../../components/product/ProductGrid';
 import { getProducts } from '../../services/productService';
 import PageSEO from '../../components/common/PageSEO';
-import { useSettings, useFeature, useFeaturesResolved } from '../../hooks/useSettings';
+import { useSettings, useFeature, useFeatureVisible, useFeaturesResolved } from '../../hooks/useSettings';
 import { Navigate } from 'react-router-dom';
 
 const SalePage = () => {
@@ -13,7 +13,7 @@ const SalePage = () => {
     const [page, setPage] = useState(1);
     const [sort, setSort] = useState('discount_desc');
 
-    const pricingEnabled = useFeature('pricing');
+    const pricingEnabled = useFeatureVisible('pricing', 'storefront');
     const showPrice = useFeature('showPrice');
     const featuresResolved = useFeaturesResolved();
 

@@ -186,7 +186,7 @@ const ProductAttributeDialog = ({ productId, templates, rows, initialTemplate, o
         </Box>
       </>}
     </DialogContent>
-    <DialogActions sx={{ px: 3, py: 2, borderTop: 1, borderColor: 'divider' }}><Button onClick={close} disabled={saving}>Cancel</Button><Button variant="contained" onClick={save} disabled={blocked || !productId || !selected || (selected._new && (unitsLoading || Boolean(unitsError))) || query.trim() !== selected.name || (!chosenIds.length && !drafts.length && !entry.value.trim())}>{saving ? 'Adding…' : 'Add to product'}</Button></DialogActions>
+    <DialogActions sx={{ px: 3, py: 2, borderTop: 1, borderColor: 'divider' }}><Button color="error" onClick={close} disabled={saving}>Cancel</Button><Button variant="contained" onClick={save} disabled={blocked || !productId || !selected || (selected._new && (unitsLoading || Boolean(unitsError))) || query.trim() !== selected.name || (!chosenIds.length && !drafts.length && !entry.value.trim())}>{saving ? 'Adding…' : 'Add to product'}</Button></DialogActions>
   </Dialog>;
 };
 
