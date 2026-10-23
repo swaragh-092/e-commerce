@@ -2,7 +2,7 @@
 <html lang="en">
 
 <head>
-    <title>Categories</title>
+    <title>Gallery | Orbi Seeds</title>
     <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <meta http-equiv="X-UA-Compatible" content="ie=edge">
@@ -193,10 +193,11 @@
             <div class="fluid-container">
                 <h2 style="text-align: center; margin-bottom: 30px;"><span class="first-letter">Gallery</span></h2>
                 <div id="gallery-albums" class="gallery-albums" aria-label="Gallery albums"></div>
-                <p id="gallery-message" style="text-align:center;">Loading gallery...</p>
-                <div class="gallery-inner-wrapper">
+                <p id="gallery-message" role="status" aria-live="polite" style="text-align:center;">Loading gallery...</p>
+                <div class="gallery-retry-wrapper"><button id="gallery-retry" type="button" hidden>Try again</button></div>
+                <div class="gallery-inner-wrapper" aria-busy="true">
                 </div>
-                <div id="gallery-pagination" style="text-align:center;margin-top:28px;"></div>
+                <div id="gallery-pagination" role="navigation" aria-label="Gallery pages" style="text-align:center;margin-top:28px;"></div>
             </div>
         </div>
 
@@ -408,19 +409,7 @@
     </div>
     <script src="https://cdn.jsdelivr.net/npm/@fancyapps/fancybox@3.5.7/dist/jquery.fancybox.min.js"></script>
     <script src="js/gallery.js"></script>
-    <script>
 
-        $('[data-fancybox]').fancybox({
-            wheel: false,
-            transitionEffect: "slide",
-            loop: true,
-            toolbar: true,
-            clickContent: false,
-            thumbs: false,
-            zoom: true,
-            close: true
-        });
-    </script>
 
 </body>
 
