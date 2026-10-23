@@ -26,6 +26,7 @@ import { getProductBasePrice } from '../../utils/variantPricing';
 import { getVariantOptionLabel } from '../../utils/variantOptions';
 import ProductAttributesSection from './ProductAttributesSection';
 import VariantSetup from './VariantSetup';
+import VariantPriceGroups from './VariantPriceGroups';
 import { useAuth } from '../../hooks/useAuth';
 import { PERMISSIONS } from '../../utils/permissions';
 import { Link } from 'react-router-dom';
@@ -405,6 +406,13 @@ const VariantsPanel = ({
             {!loading && !loadError && <VariantSetup productId={productId} rows={productAttributes} variants={variants} basePrice={productBasePrice}
               disabled={saving || cloning || deleting || attributesBusy} canManage={canManageVariants} hasUnsavedChanges={hasVariantChanges}
               onBusyChange={setGenerating} onCreated={loadAll} />}
+
+            {!loading && !loadError && variants.length > 0 && <VariantPriceGroups rows={productAttributes} entries={variants}
+              disabled={!canEditVariants || attributesBusy} saveHint="Includes available and unavailable variants. Apply, review the variants, then click Save variant changes."
+              onApply={(prices) => {
+                setVariants((current) => current.map((variant) => prices.has(variant.id) ? { ...variant, price: prices.get(variant.id), _dirty: true } : variant));
+                notify('Grouped prices applied to draft. Review and save variant changes.', 'info');
+              }} />}
 
             {saving && (
               <Box sx={{ mb: 2 }}>
