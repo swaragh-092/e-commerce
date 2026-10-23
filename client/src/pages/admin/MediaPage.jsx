@@ -324,7 +324,8 @@ const MediaPage = () => {
   const filteredIcons = useMemo(() => {
     const query = iconSearch.trim().toLowerCase();
     if (!query) return CATEGORY_ICONS;
-    return CATEGORY_ICONS.filter(({ id, label, keywords }) => `${id} ${label} ${keywords}`.toLowerCase().includes(query));
+    return CATEGORY_ICONS.filter(({ id, label, keywords }) =>
+      `${id} mui:${id} ${label} ${keywords}`.toLowerCase().includes(query));
   }, [iconSearch]);
 
   const copyIconId = async (id) => {
@@ -383,7 +384,12 @@ const MediaPage = () => {
       </Tabs>
 
       {/* Controls toolbar */}
-      {activeLibrary === 'files' && <Box role="tabpanel" id="media-files-panel" aria-labelledby="media-files-tab">
+      <Box
+        role="tabpanel"
+        id="media-files-panel"
+        aria-labelledby="media-files-tab"
+        hidden={activeLibrary !== 'files'}
+      >
       <Box
         sx={{
           display: 'flex',
@@ -514,7 +520,7 @@ const MediaPage = () => {
         </>
       )}
 
-      </Box>}
+      </Box>
 
       {activeLibrary === 'icons' && (
         <Box role="tabpanel" id="media-icons-panel" aria-labelledby="media-icons-tab">

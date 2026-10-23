@@ -1,5 +1,5 @@
 import React from 'react';
-import { fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import MediaPage from '../../../pages/admin/MediaPage';
 import { mediaService } from '../../../services/mediaService';
@@ -25,10 +25,10 @@ describe('Media Library tabs', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     observers = [];
-    mediaService.list.mockResolvedValue({
-      data: [{ id: 'media-1', url: '/media-1.png', originalName: 'media-1.png', size: 1024 }],
-      meta: { totalItems: 2, page: 1, totalPages: 2 },
-    });
+    mediaService.list.mockImplementation(({ page }) => Promise.resolve({
+      data: [{ id: `media-${page}`, url: `/media-${page}.png`, originalName: `media-${page}.png`, size: 1024 }],
+      meta: { totalItems: 2, page, totalPages: 2 },
+    }));
 
     class MockIntersectionObserver {
       constructor(callback) {
@@ -60,7 +60,23 @@ describe('Media Library tabs', () => {
     const restoredSentinel = (await screen.findByRole('button', { name: 'Scroll for more' })).parentElement;
 
     await waitFor(() => expect(observers).toHaveLength(2));
-    expect(restoredSentinel).not.toBe(firstSentinel);
+    expect(restoredSentinel).toBe(firstSentinel);
     expect(observers[1].observe).toHaveBeenCalledWith(restoredSentinel);
+
+    await act(async () => observers[1].callback([{ isIntersecting: true }]));
+    await waitFor(() => expect(mediaService.list).toHaveBeenCalledTimes(2));
+    expect(mediaService.list).toHaveBeenLastCalledWith(expect.objectContaining({ page: 2 }));
+  });
+
+  it('finds icons by the prefixed IDs shown on their cards', async () => {
+    render(<MediaPage />);
+
+    fireEvent.click(screen.getByRole('tab', { name: 'Icon library' }));
+    fireEvent.change(screen.getByRole('textbox', { name: 'Search icon library' }), {
+      target: { value: 'mui:eco' },
+    });
+
+    expect(await screen.findByText('mui:eco')).toBeInTheDocument();
+    expect(screen.getByText('1 icon')).toBeInTheDocument();
   });
 });
