@@ -666,6 +666,8 @@ const SettingsPage = () => {
                       { icon: '✉️', label: 'Email Verification' },
                       { icon: '🔑', label: 'Password Reset' },
                       { icon: '⚠️', label: 'Low Stock Alert' },
+                      { icon: '📬', label: 'New Enquiry — Staff' },
+                      { icon: '✉️', label: 'Enquiry Received — Customer' },
                     ].map(({ icon, label }) => (
                       <Box key={label} sx={{ display: 'flex', alignItems: 'center', gap: 1.5, p: 1.5, border: '1px solid', borderColor: 'divider', borderRadius: 2 }}>
                         <Typography fontSize={20}>{icon}</Typography>

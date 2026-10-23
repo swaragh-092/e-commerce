@@ -89,3 +89,9 @@ coverage/
 *.seed
 *.pid.lock
 .eslintcache
+
+# ── Brag / Video Generation Output ──
+brag-output/
+brag-output*/
+.hyperframes/
+
