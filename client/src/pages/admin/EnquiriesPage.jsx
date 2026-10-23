@@ -28,6 +28,7 @@ import api from '../../services/api';
 import PageSEO from '../../components/common/PageSEO';
 import { useNotification } from '../../context/NotificationContext';
 import { getApiErrorMessage } from '../../utils/apiErrors';
+import { getVariantOptionLabel } from '../../utils/variantOptions';
 
 const ADMIN_PREFIX = import.meta.env.VITE_ADMIN_ROUTE_PREFIX || 'admin';
 
@@ -315,7 +316,13 @@ const EnquiriesPage = () => {
             <Box sx={{ mb: 2 }}>
               <Typography variant="subtitle2" color="text.secondary">Subject</Typography>
               {selectedEnquiry.product ? (
-                <Typography variant="body2">Product: {selectedEnquiry.product.name} (Qty: {selectedEnquiry.quantity})</Typography>
+                <Box>
+                  <Typography variant="body2">Product: {selectedEnquiry.product.name} (Qty: {selectedEnquiry.quantity})</Typography>
+                  {selectedEnquiry.variant && <Typography variant="body2" color="text.secondary">
+                    {getVariantOptionLabel(selectedEnquiry.variant) || selectedEnquiry.variant.sku || 'Selected variant'}
+                    {selectedEnquiry.variant.sku ? ` · SKU: ${selectedEnquiry.variant.sku}` : ''}
+                  </Typography>}
+                </Box>
               ) : selectedEnquiry.cartItems ? (
                 <Box>
                   <Typography variant="body2" gutterBottom>Cart Items ({selectedEnquiry.cartItems.length} products):</Typography>
@@ -323,7 +330,7 @@ const EnquiriesPage = () => {
                     {selectedEnquiry.cartItems.map((item, index) => (
                       <Typography component="li" key={item.id || index} variant="body2" sx={{ py: 0.5 }}>
                         <strong>{item.product?.name || 'Unknown Product'}</strong>
-                        {item.variant ? ` (${item.variant.sku || 'Variant'})` : ''}
+                        {item.variant ? ` (${item.variant.optionLabel || item.variant.sku || 'Variant'})` : ''}
                         {' - '}Qty: {item.quantity}
                       </Typography>
                     ))}

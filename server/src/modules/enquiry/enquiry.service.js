@@ -1,7 +1,7 @@
 'use strict';
 
 const { Op } = require('sequelize');
-const { Enquiry, Product, ProductVariant, User, sequelize } = require('../index');
+const { Enquiry, Product, ProductVariant, VariantOption, AttributeTemplate, AttributeValue, User, sequelize } = require('../index');
 const notificationService = require('../notification/notification.service');
 const settingsService = require('../settings/settings.service');
 const AppError = require('../../utils/AppError');
@@ -33,38 +33,56 @@ const uniqueEmails = (values) => {
 };
 
 class EnquiryService {
+  async resolveProductSelection(productId, variantId = null) {
+    const product = productId ? await Product.findByPk(productId) : null;
+    if (!product || product.status !== 'published' || product.isEnabled === false) {
+      throw new AppError('NOT_FOUND', 404, 'Product not found or unavailable. Please update your enquiry list.');
+    }
+    let variant = null;
+    if (variantId) {
+      variant = await ProductVariant.findOne({
+        where: { id: variantId, productId, isActive: true },
+        include: [{ model: VariantOption, as: 'options', include: [
+          { model: AttributeTemplate, as: 'attribute' },
+          { model: AttributeValue, as: 'value' },
+        ] }],
+      });
+      if (!variant) throw new AppError('VALIDATION_ERROR', 400, 'Selected variant is unavailable or does not belong to this product.');
+    } else if (product.type === 'variable' || await ProductVariant.count({ where: { productId, isActive: true } }) > 0) {
+      throw new AppError('VALIDATION_ERROR', 400, `Please choose an option for ${product.name}.`);
+    }
+    const optionLabel = (variant?.options || [])
+      .slice().sort((a, b) => (a.attribute?.sortOrder || 0) - (b.attribute?.sortOrder || 0))
+      .map((option) => {
+        let value = String(option.value?.displayLabel || option.value?.value || '');
+        const unit = String(option.value?.unitLabel || option.attribute?.unit || '').trim();
+        if (unit && !value.toLowerCase().endsWith(unit.toLowerCase())) value += (/^(g|kg|mg|mm|cm|m|in|ft|ml|l)$/i.test(unit) ? '' : ' ') + unit;
+        return option.attribute?.name && value ? `${option.attribute.name}: ${value}` : '';
+      }).filter(Boolean).join(', ');
+    return { product, variant, optionLabel };
+  }
+
   async normalizeCartItems(cartItems = []) {
     if (!Array.isArray(cartItems) || cartItems.length === 0) return null;
 
     const normalized = [];
     for (const item of cartItems) {
-      const quantity = Number(item?.quantity) > 0 ? Number(item.quantity) : 1;
-      const productId = item?.product?.id || null;
-      const variantId = item?.variant?.id || null;
-
-      let product = null;
-      if (productId) {
-        product = await Product.findByPk(productId, {
-          attributes: ['id', 'name', 'sku'],
-        });
-      }
-
-      let variant = null;
-      if (variantId) {
-        variant = await ProductVariant.findByPk(variantId, {
-          attributes: ['id', 'sku'],
-        });
-      }
+      const quantity = Number(item?.quantity);
+      if (!Number.isSafeInteger(quantity) || quantity < 1) throw new AppError('VALIDATION_ERROR', 400, 'Quantity must be a positive whole number.');
+      const productId = item?.productId || (typeof item?.product === 'string' ? item.product : item?.product?.id) || null;
+      const variantId = item?.variantId || item?.variant?.id || null;
+      const { product, variant, optionLabel } = await this.resolveProductSelection(productId, variantId);
 
       normalized.push({
         product: {
           id: productId,
-          name: item?.product?.name || product?.name || 'Unknown Product',
-          sku: item?.product?.sku || product?.sku || null,
+          name: product.name,
+          sku: product.sku || null,
         },
         variant: variantId ? {
           id: variantId,
-          sku: item?.variant?.sku || variant?.sku || null,
+          sku: variant.sku || null,
+          optionLabel,
         } : null,
         quantity,
       });
@@ -114,7 +132,9 @@ class EnquiryService {
       parsedQuantity = 1;
     }
 
+    const selection = data.productId ? await this.resolveProductSelection(data.productId, data.variantId) : null;
     const normalizedCartItems = await this.normalizeCartItems(data.cartItems);
+    if (!selection && !normalizedCartItems) throw new AppError('VALIDATION_ERROR', 400, 'Choose a product or add items to your enquiry list.');
 
     const payload = {
       name,
@@ -130,41 +150,36 @@ class EnquiryService {
 
     const enquiry = await Enquiry.create(payload);
 
-    // Fetch store settings for admin email
-    const settings = await settingsService.getAll();
-    const adminEmails = await this.getAdminNotificationEmails(settings);
-    const storeName = settings?.general?.storeName || 'Our Store';
-
-    // Fetch product details for email context if it's a product enquiry
-    let productDetails = null;
-    if (enquiry.productId) {
-      const p = await Product.findByPk(enquiry.productId, {
-        include: enquiry.variantId ? [{ model: ProductVariant, as: 'variants', where: { id: enquiry.variantId } }] : [],
-      });
-      if (p) {
-        productDetails = {
-          name: p.name,
-          sku: enquiry.variantId && p.variants.length > 0 ? p.variants[0].sku : p.sku,
-        };
-      }
-    }
-
-    // Prepare variables for email
-    const templateVars = {
-      enquiryId: enquiry.id,
-      customerName: enquiry.name,
-      customerEmail: enquiry.email,
-      customerPhone: enquiry.phone || 'N/A',
-      message: enquiry.message,
-      quantity: enquiry.quantity,
-      storeName,
-      productName: productDetails ? productDetails.name : (enquiry.cartItems ? 'Cart Items' : 'General Enquiry'),
-      productSku: productDetails ? productDetails.sku : '',
-      cartItems: enquiry.cartItems,
-    };
-
-    // Dispatch async notifications
+    // Notification failures must not turn a saved enquiry into a failed submission.
     try {
+      // Fetch store settings for admin email
+      const settings = await settingsService.getAll();
+      const adminEmails = await this.getAdminNotificationEmails(settings);
+      const storeName = settings?.general?.storeName || 'Our Store';
+
+      // Fetch product details for email context if it's a product enquiry
+      const productDetails = selection ? {
+        name: selection.product.name + (selection.optionLabel ? ` (${selection.optionLabel})` : ''),
+        sku: selection.variant?.sku || selection.product.sku,
+      } : null;
+
+      // Prepare variables for email
+      const templateVars = {
+        enquiryId: enquiry.id,
+        customerName: enquiry.name,
+        customerEmail: enquiry.email,
+        customerPhone: enquiry.phone || 'N/A',
+        message: enquiry.message,
+        quantity: enquiry.quantity,
+        storeName,
+        productName: productDetails ? productDetails.name : (enquiry.cartItems ? 'Cart Items' : 'General Enquiry'),
+        productSku: productDetails ? productDetails.sku : '',
+        cartItems: enquiry.cartItems?.map((item) => ({
+          ...item,
+          product: { ...item.product, name: item.product.name + (item.variant?.optionLabel ? ` (${item.variant.optionLabel})` : '') },
+        })),
+      };
+
       // 1. Alert Admin
       const adminResults = [];
       for (const adminEmail of adminEmails) {
@@ -232,7 +247,12 @@ class EnquiryService {
 
     const include = [
       { model: Product, as: 'product', attributes: ['id', 'name', 'slug'], required: false },
-      { model: ProductVariant, as: 'variant', attributes: ['id', 'sku'], required: false },
+      { model: ProductVariant, as: 'variant', attributes: ['id', 'sku'], required: false, include: [
+        { model: VariantOption, as: 'options', separate: true, include: [
+          { model: AttributeTemplate, as: 'attribute' },
+          { model: AttributeValue, as: 'value' },
+        ] },
+      ] },
     ];
 
     if (filters.search) {
