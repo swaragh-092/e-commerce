@@ -179,14 +179,16 @@ class EnquiryService {
       }
 
       // 2. Auto-reply Customer
-      const customerQueued = await notificationService.send(
-        'new_enquiry_customer',
-        enquiry.email,
-        templateVars,
-        userId,
-        null,
-        'email'
-      );
+      const customerQueued = settings?.messaging?.enquiryCustomerAcknowledgementEnabled !== false
+        && settings?.messaging?.enquiryCustomerAcknowledgementEnabled !== 'false'
+        ? await notificationService.send(
+          'new_enquiry_customer',
+          enquiry.email,
+          templateVars,
+          userId,
+          null,
+          'email'
+        ) : false;
 
       if (!adminResults.some(Boolean) && !customerQueued) {
         logger.warn('[EnquiryService] Enquiry saved but no email notifications were queued', {
