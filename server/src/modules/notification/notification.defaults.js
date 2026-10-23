@@ -54,6 +54,17 @@ const EMAIL_WRAPPER = (content, footer = '') => `<!DOCTYPE html>
 </html>`;
 
 const DEFAULTS = {
+  guest_order_claim: {
+    subject: 'Link your guest orders to your account',
+    bodyHtml: EMAIL_WRAPPER(`
+      <h2>Confirm your guest orders</h2>
+      <p>Use this secure link to attach eligible guest checkouts made with your verified account email.</p>
+      <p>This link expires in {{expiry_minutes}} minutes and can be used once.</p>
+      <a href="{{claim_url}}" class="btn">Link guest orders</a>
+      <p>If you did not request this, you can ignore this email. Your orders will not change.</p>
+    `),
+    bodyText: 'Use this secure link to attach eligible guest checkouts to your account: {{claim_url}}\n\nIt expires in {{expiry_minutes}} minutes and can be used once. If you did not request this, ignore this email.',
+  },
   order_placed: {
     subject: 'Order Confirmed — #{{order_number}}',
     bodyHtml: EMAIL_WRAPPER(`
@@ -386,6 +397,7 @@ const DEFAULTS = {
 };
 
 const TEMPLATE_VARIABLES = {
+  guest_order_claim: ['customer_name','claim_url','expiry_minutes','website_url','store_name','support_email'],
   order_placed:      ['customer_name','order_number','order_date','order_id','order_total','order_subtotal','shipping_total','tax_total','discount_total','payment_method','items','website_url','store_name','support_email'],
   order_shipped:     ['customer_name','order_number','order_id','tracking_number','tracking_url','courier','items','order_total','website_url','store_name','support_email'],
   order_delivered:   ['customer_name','order_number','order_id','items','order_total','website_url','store_name','support_email'],
@@ -408,6 +420,8 @@ const TEMPLATE_VARIABLES = {
 };
 
 const SAMPLE_VARIABLES = {
+  claim_url: 'https://store.example.com/account/orders/link-guest?token=sample-token',
+  expiry_minutes: 30,
   customer_name: 'Jane Doe',
   customer_email: 'jane@example.com',
   name: 'Jane Doe',

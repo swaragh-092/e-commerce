@@ -1,7 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import {
   getMediaUrl,
-  getOptimizedMediaUrl,
   PLACEHOLDER_PRODUCT,
   PLACEHOLDER_CATEGORY,
   PLACEHOLDER_BRAND,

@@ -87,7 +87,28 @@ const BlogCategoriesPage = () => {
   };
 
   const columns = [
-    { field: 'name', headerName: 'Name', flex: 1, minWidth: 180 },
+    {
+      field: 'name',
+      headerName: 'Name',
+      flex: 1,
+      minWidth: 180,
+      renderCell: (params) => (
+        <Typography
+          component="button"
+          type="button"
+          onClick={() => {
+            setEditing(params.row);
+            setForm({ name: params.row.name || '', description: params.row.description || '' });
+            setOpen(true);
+          }}
+          disabled={!canManageBlogs}
+          aria-label={`Edit blog category ${params.row.name}`}
+          sx={{ p: 0, border: 0, background: 'none', color: canManageBlogs ? 'primary.main' : 'text.primary', font: 'inherit', textAlign: 'left', cursor: canManageBlogs ? 'pointer' : 'default', '&:hover': canManageBlogs ? { textDecoration: 'underline' } : {}, '&:focus-visible': { outline: '2px solid', outlineColor: 'primary.main', outlineOffset: 2 } }}
+        >
+          {params.value}
+        </Typography>
+      ),
+    },
     { field: 'slug', headerName: 'Slug', flex: 1, minWidth: 180 },
     { field: 'description', headerName: 'Description', flex: 1.6, minWidth: 260 },
     {

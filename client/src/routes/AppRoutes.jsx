@@ -60,6 +60,7 @@ const AccountPage = lazy(() => import('../pages/storefront/AccountPage'));
 const AllOrdersPage = lazy(() => import('../pages/storefront/AllOrdersPage/index'));
 const StoreOrderDetailPage = lazy(() => import('../pages/storefront/OrderDetailPage'));
 const StorefrontOrderInvoicePage = lazy(() => import('../pages/storefront/OrderInvoicePage'));
+const LinkGuestOrdersPage = lazy(() => import('../pages/storefront/LinkGuestOrdersPage'));
 const WishlistPage = lazy(() => import('../pages/storefront/WishlistPage'));
 const ProductDetailPage = lazy(() => import('../pages/storefront/ProductDetailPage'));
 const ProductListPage = lazy(() => import('../pages/storefront/ProductListPage'));
@@ -182,6 +183,7 @@ const AppRoutes = () => (
         <Route element={<ProtectedRoute />}>
           <Route path="account" element={<AccountPage />} />
           <Route element={<FeatureRoute feature="orders" />}>
+            <Route path="account/orders/link-guest" element={<LinkGuestOrdersPage />} />
             <Route path="account/orders/:id" element={<StoreOrderDetailPage />} />
             <Route path="account/orders/:id/invoice" element={<StorefrontOrderInvoicePage />} />
             <Route path="orders" element={<AllOrdersPage />} />

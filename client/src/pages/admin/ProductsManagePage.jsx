@@ -670,11 +670,30 @@ const ProductsManagePage = () => {
       minWidth: 200,
       sortable: true,
       renderCell: ({ row }) => (
-        <Box sx={{ py: 1, overflow: 'hidden' }}>
-          <Typography variant="body2" fontWeight={600} noWrap lineHeight={1.4}>
+        <Box
+          component={canUpdateProducts ? Link : 'div'}
+          to={canUpdateProducts ? `/admin/products/${row.id}/edit` : undefined}
+          aria-label={canUpdateProducts ? `Edit ${row.name}` : undefined}
+          title={canUpdateProducts ? `Edit ${row.name}` : undefined}
+          onClick={canUpdateProducts ? (event) => event.stopPropagation() : undefined}
+          sx={{
+            py: 1,
+            width: '100%',
+            height: '100%',
+            display: 'flex',
+            flexDirection: 'column',
+            justifyContent: 'center',
+            overflow: 'hidden',
+            color: 'inherit',
+            textDecoration: 'none',
+            '&:hover .product-name-primary': { color: 'primary.main', textDecoration: 'underline' },
+            '&:focus-visible': { outline: '2px solid', outlineColor: 'primary.main', outlineOffset: -2 },
+          }}
+        >
+          <Typography className="product-name-primary" variant="body2" fontWeight={600} noWrap lineHeight={1.4}>
             {row.name}
           </Typography>
-          <Typography variant="caption" color="text.secondary">
+          <Typography variant="caption" color="text.secondary" noWrap>
             {row.sku ? `SKU: ${row.sku}` : <em style={{ opacity: 0.4 }}>No SKU</em>}
           </Typography>
         </Box>
@@ -687,8 +706,29 @@ const ProductsManagePage = () => {
       width: 160,
       sortable: true,
       renderCell: ({ row }) => (
-        <Box sx={{ py: 1 }}>
+        <Box
+          component={canUpdateProducts ? Link : 'div'}
+          to={canUpdateProducts ? `/admin/products/${row.id}/edit` : undefined}
+          aria-label={canUpdateProducts ? `Edit pricing and tax for ${row.name}` : undefined}
+          title={canUpdateProducts ? `Edit ${row.name}` : undefined}
+          onClick={canUpdateProducts ? (event) => event.stopPropagation() : undefined}
+          sx={{
+            py: 1,
+            display: 'flex',
+            flexDirection: 'column',
+            justifyContent: 'center',
+            width: '100%',
+            height: '100%',
+            pointerEvents: canUpdateProducts ? 'auto' : 'none',
+            color: 'inherit',
+            textDecoration: 'none',
+            borderRadius: 0.5,
+            '&:hover .product-price-primary': { textDecoration: 'underline', color: 'primary.main' },
+            '&:focus-visible': { outline: '2px solid', outlineColor: 'primary.main', outlineOffset: 2 },
+          }}
+        >
           <Typography
+            className="product-price-primary"
             variant="body2"
             fontWeight={700}
             color={pricingEnabled && row.isSaleActive ? 'error.main' : 'text.primary'}
@@ -1500,6 +1540,22 @@ const ProductsManagePage = () => {
               value={editDialog.price}
               onChange={(e) => setEditDialog((s) => ({ ...s, price: e.target.value }))}
             />
+            {pricingEnabled && editDialog.row?.id && (
+              <Box sx={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', justifyContent: 'space-between', gap: 1, mt: -1.25 }}>
+                <Typography variant="caption" color="text.secondary">
+                  Tax rates are managed with pricing in the full editor.
+                </Typography>
+                <Button
+                  component={Link}
+                  to={`/admin/products/${editDialog.row.id}/edit`}
+                  target="_blank"
+                  rel="noreferrer"
+                  size="small"
+                >
+                  Open Pricing &amp; Tax
+                </Button>
+              </Box>
+            )}
             {pricingEnabled && (
               <>
                 <Stack direction="row" justifyContent="space-between" alignItems="center" sx={{ pt: 0.5 }}>

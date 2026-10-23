@@ -715,7 +715,7 @@ const sanitizeApiBuilderPrices = (resource, items) => {
     if (!item || typeof item !== 'object') return item;
     const sanitized = { ...item };
 
-    if (resource === 'products' || resource === 'variants') {
+    if (resource === 'products' || resource === 'variants' || resource === 'productVariants' || resource === 'products.variants') {
       PRICE_FIELD_NAMES.forEach((field) => {
         delete sanitized[field];
       });
@@ -734,6 +734,10 @@ const sanitizeApiBuilderPrices = (resource, items) => {
         if (vCopy.effectivePrice !== undefined) vCopy.effectivePrice = null;
         return vCopy;
       });
+    }
+
+    if (Array.isArray(sanitized.productVariants)) {
+      sanitized.productVariants = sanitizeApiBuilderPrices('productVariants', sanitized.productVariants);
     }
 
     if (Array.isArray(sanitized.products)) {

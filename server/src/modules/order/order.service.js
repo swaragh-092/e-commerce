@@ -25,6 +25,7 @@ const {
     OrderRefund,
     OrderStatusHistory,
     OrderHistory,
+    GuestOrderClaimToken,
     Shipment,
     ShipmentItem,
     ShipmentEvent,
@@ -1256,7 +1257,7 @@ const placeOrder = async (userId, payload) => {
         if (!payload.guestEmail) {
             throw new AppError('VALIDATION_ERROR', 400, 'Enter your email address for delivery updates.');
         }
-        shippingAddressSnapshot.email = payload.guestEmail.trim();
+        shippingAddressSnapshot.email = payload.guestEmail.trim().toLowerCase();
     }
 
     const settingsMap = await buildSettingsSnapshot(['tax', 'shipping']);
@@ -1526,6 +1527,7 @@ const placeOrder = async (userId, payload) => {
             orderNumber,
             userId,
             guestSessionId,
+            guestEmail: !userId && payload.guestEmail ? payload.guestEmail.trim().toLowerCase() : null,
             status: initialOrderStatus,
             orderShippingStatus: hasPhysicalItems ? 'not_shipped' : 'delivered',
             putBackStatus: null,
@@ -1808,6 +1810,71 @@ const placeOrder = async (userId, payload) => {
     return {
         order,
     };
+};
+
+const requestGuestOrderClaim = async (userId) => {
+    const user = await User.findByPk(userId);
+    if (!user || user.status !== 'active') throw new AppError('NOT_FOUND', 404, 'Account not found');
+    if (!user.emailVerified) throw new AppError('EMAIL_NOT_VERIFIED', 403, 'Verify your account email before looking for guest orders.');
+
+    const rawToken = crypto.randomBytes(32).toString('hex');
+    const tokenHash = crypto.createHash('sha256').update(rawToken).digest('hex');
+    const expiresAt = new Date(Date.now() + 30 * 60 * 1000);
+    await sequelize.transaction(async (transaction) => {
+        await GuestOrderClaimToken.destroy({ where: { userId, usedAt: null }, transaction });
+        await GuestOrderClaimToken.create({ userId, tokenHash, expiresAt }, { transaction });
+    });
+
+    const websiteUrl = (process.env.CLIENT_URL || 'http://localhost:3000').split(',')[0].trim().replace(/\/+$/, '');
+    const sent = await NotificationService.send('guest_order_claim', user.email, {
+        customer_name: `${user.firstName || ''} ${user.lastName || ''}`.trim() || user.email,
+        claim_url: `${websiteUrl}/account/orders/link-guest?token=${rawToken}`,
+        expiry_minutes: 30,
+    }, user.id);
+    if (!sent) {
+        await GuestOrderClaimToken.destroy({ where: { tokenHash } });
+        throw new AppError('EMAIL_UNAVAILABLE', 503, 'We could not send the verification email. Please try again later.');
+    }
+    return { message: 'If your account email is verified, a secure link has been sent to your email address.' };
+};
+
+const claimGuestOrders = async (userId, rawToken) => {
+    const tokenHash = crypto.createHash('sha256').update(rawToken).digest('hex');
+    return sequelize.transaction(async (transaction) => {
+        const token = await GuestOrderClaimToken.findOne({
+            where: { userId, tokenHash, usedAt: null, expiresAt: { [Op.gt]: new Date() } },
+            transaction,
+            lock: transaction.LOCK.UPDATE,
+        });
+        if (!token) throw new AppError('INVALID_OR_EXPIRED_TOKEN', 400, 'This order-linking link is invalid or has expired. Request a new one.');
+
+        const user = await User.findByPk(userId, { transaction, lock: transaction.LOCK.UPDATE });
+        if (!user || user.status !== 'active' || !user.emailVerified) {
+            throw new AppError('EMAIL_NOT_VERIFIED', 403, 'Verify your account email before linking guest orders.');
+        }
+        const normalizedEmail = user.email.trim().toLowerCase();
+        const orders = await Order.findAll({
+            where: { userId: null, guestEmail: normalizedEmail },
+            attributes: ['id', 'orderNumber'],
+            transaction,
+            lock: transaction.LOCK.UPDATE,
+        });
+
+        for (const order of orders) {
+            await order.update({ userId, guestSessionId: null }, { transaction });
+            await addOrderHistoryEvent({
+                orderId: order.id,
+                eventType: 'guest_order_linked',
+                description: 'Guest order linked to the verified customer account.',
+                actorId: userId,
+                actorType: 'customer',
+                metadata: { orderNumber: order.orderNumber, email: normalizedEmail },
+                transaction,
+            });
+        }
+        await token.update({ usedAt: new Date() }, { transaction });
+        return { linkedCount: orders.length };
+    });
 };
 
 const getOrders = async (userId, isAdmin, page = 1, limit = 20, filters = {}) => {
@@ -3098,6 +3165,8 @@ const cancelOrder = async (id, userId, cancellation = {}, guestSessionId = null)
         };
         if (user) {
             await NotificationService.sendToUser('order_cancelled', ['email', 'sms', 'whatsapp'], user, variables, orderRecord.id);
+        } else if (guestAddress.email) {
+            await NotificationService.send('order_cancelled', guestAddress.email, variables, null, orderRecord.id);
         }
         await NotificationService.sendToAdmins('admin_order_cancelled', ['email', 'sms', 'whatsapp'], variables, orderRecord.id);
     } catch (err) {
@@ -3916,6 +3985,8 @@ const addNote = async (orderId, note, actorId, auditContext = null) => {
 
 module.exports = {
     placeOrder,
+    requestGuestOrderClaim,
+    claimGuestOrders,
     getOrders,
     getOrderById,
     updateContactEmail,

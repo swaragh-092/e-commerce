@@ -9,8 +9,6 @@ const AuditService = require('../../src/modules/audit/audit.service');
 const {
   PERMISSIONS,
   ADMIN_PERMISSIONS,
-  RESERVED_SUPER_ADMIN_PERMISSIONS,
-  getRolesForUser,
   getPermissionsForUser,
   getPermissionKeysFromRoleObject,
   enrichUserAuthorization,

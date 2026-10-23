@@ -173,7 +173,6 @@ export const ButtonPaletteShowcase = ({ value = {} }) => {
   const isDark = value.mode === 'dark';
   const primaryColor = value.primaryColor || '#0f766e';
   const secondaryColor = value.secondaryColor || '#f97316';
-  const errorColor = value.errorColor || '#dc3545';
   const warningColor = value.warningColor || '#d97706';
   const successColor = value.successColor || '#059669';
   const infoColor = value.infoColor || '#0284c7';

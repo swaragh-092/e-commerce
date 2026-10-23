@@ -5,11 +5,9 @@ const require = createRequire(import.meta.url);
 const db = require('../../src/modules');
 const {
   buildFeatures,
-  isTier1Feature,
 } = require('../../src/config/modes');
 const {
   serializeProductPricing,
-  serializeVariantPricing,
 } = require('../../src/modules/product/product.pricing');
 const SettingsService = require('../../src/modules/settings/settings.service');
 const AuditService = require('../../src/modules/audit/audit.service');
@@ -352,12 +350,7 @@ describe('Platform Features Control Suite', () => {
       expect(features.requirePurchaseForReview).toBe(false);
     });
 
-    it('forces requirePurchaseForReview to false when orders is false or reviews is false', () => {
-      const featuresWithoutOrders = buildFeatures(
-        { requirePurchaseForReview: true, orders: false },
-        'ecommerce'
-      );
-      // in ecommerce, orders is Tier 1 (true), so test with reviews false
+    it('forces requirePurchaseForReview to false when reviews is false', () => {
       const featuresWithoutReviews = buildFeatures(
         { requirePurchaseForReview: true, reviews: false },
         'ecommerce'

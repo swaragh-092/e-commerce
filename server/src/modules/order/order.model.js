@@ -28,6 +28,10 @@ module.exports = (sequelize, DataTypes) => {
             type: DataTypes.STRING(255),
             allowNull: true,
         },
+        guestEmail: {
+            type: DataTypes.STRING(255),
+            allowNull: true,
+        },
         status: {
             type: DataTypes.STRING(30),
             defaultValue: ORDER_DEFAULT_STATUS,

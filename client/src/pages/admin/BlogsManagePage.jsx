@@ -67,7 +67,24 @@ const BlogsManagePage = () => {
   };
 
   const columns = useMemo(() => ([
-    { field: 'title', headerName: 'Title', flex: 1.2, minWidth: 220 },
+    {
+      field: 'title',
+      headerName: 'Title',
+      flex: 1.2,
+      minWidth: 220,
+      renderCell: (params) => (
+        <Typography
+          component="button"
+          type="button"
+          onClick={() => navigate(`/admin/blogs/${params.row.id}/edit`)}
+          disabled={!canManageBlogs}
+          aria-label={`Edit blog ${params.row.title}`}
+          sx={{ p: 0, border: 0, background: 'none', color: canManageBlogs ? 'primary.main' : 'text.primary', font: 'inherit', textAlign: 'left', cursor: canManageBlogs ? 'pointer' : 'default', '&:hover': canManageBlogs ? { textDecoration: 'underline' } : {}, '&:focus-visible': { outline: '2px solid', outlineColor: 'primary.main', outlineOffset: 2 } }}
+        >
+          {params.value}
+        </Typography>
+      ),
+    },
     { field: 'slug', headerName: 'Slug', flex: 1, minWidth: 180 },
     {
       field: 'status',
