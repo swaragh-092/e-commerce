@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { Box, CardMedia, Grid, Typography } from '@mui/material';
-import { getMediaUrl } from '../../utils/media';
+import { getMediaUrl, onImageError, PLACEHOLDER_PRODUCT } from '../../utils/media';
 
 const ProductImages = ({ images, variantImages = [], selectedVariantId, thumbnailAlignment = 'horizontal', productName }) => {
   const clamp = (value) => Math.min(100, Math.max(0, value));
@@ -13,7 +13,7 @@ const ProductImages = ({ images, variantImages = [], selectedVariantId, thumbnai
   const globalImages = productImages
     .filter((img) => !img.variantId)
     .sort((a, b) => (a.sortOrder || 0) - (b.sortOrder || 0))
-    .map((img) => ({ ...img, scope: 'global', url: getMediaUrl(img.url || img.media?.url) || '/placeholder.png' }));
+    .map((img) => ({ ...img, scope: 'global', url: getMediaUrl(img.url || img.media?.url) || PLACEHOLDER_PRODUCT }));
 
   const productLevelVariantImages = selectedVariantId
     ? productImages.filter((img) => img.variantId === selectedVariantId)
@@ -21,14 +21,14 @@ const ProductImages = ({ images, variantImages = [], selectedVariantId, thumbnai
   const rawVariantImages = variantImages?.length ? variantImages : productLevelVariantImages;
   const selectedVariantImages = [...rawVariantImages]
     .sort((a, b) => (a.sortOrder || 0) - (b.sortOrder || 0))
-    .map((img) => ({ ...img, scope: 'variant', url: getMediaUrl(img.url || img.media?.url) || '/placeholder.png' }));
+    .map((img) => ({ ...img, scope: 'variant', url: getMediaUrl(img.url || img.media?.url) || PLACEHOLDER_PRODUCT }));
   const sortedImages = [...globalImages, ...selectedVariantImages]
     .filter((img, index, allImages) => allImages.findIndex((candidate) => imageKey(candidate) === imageKey(img)) === index);
   
   const variantDisplayImage = selectedVariantImages.find((i) => i.isPrimary) || selectedVariantImages[0];
   const globalDisplayImage = globalImages.find((i) => i.isPrimary) || globalImages[0];
   const primaryImage = variantDisplayImage || globalDisplayImage || sortedImages[0];
-  const defaultImage = primaryImage?.url || '/placeholder.png';
+  const defaultImage = primaryImage?.url || PLACEHOLDER_PRODUCT;
 
   const [selectedImage, setSelectedImage] = useState(defaultImage);
   const [zoom, setZoom] = useState({ active: false, x: 50, y: 50 });
@@ -105,6 +105,7 @@ const ProductImages = ({ images, variantImages = [], selectedVariantId, thumbnai
                 alt={`${productName || 'Product'} thumbnail${img.scope === 'variant' ? ' (variant)' : ''}`}
                 loading="lazy"
                 decoding="async"
+                onError={onImageError(PLACEHOLDER_PRODUCT)}
                 sx={{
                   width: '100%',
                   height: '100%',
@@ -141,6 +142,7 @@ const ProductImages = ({ images, variantImages = [], selectedVariantId, thumbnai
           alt={productName || 'Product image'}
           loading="eager"
           fetchpriority="high"
+          onError={onImageError(PLACEHOLDER_PRODUCT)}
           sx={{
             position: 'absolute',
             top: 0,

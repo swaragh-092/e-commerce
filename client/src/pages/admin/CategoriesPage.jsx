@@ -30,7 +30,7 @@ import { useAuth } from '../../hooks/useAuth';
 import { PERMISSIONS } from '../../utils/permissions';
 import { getApiErrorMessage } from '../../utils/apiErrors';
 import MediaPicker from '../../components/common/MediaPicker';
-import { getMediaUrl } from '../../utils/media';
+import { getMediaUrl, onImageError, PLACEHOLDER_CATEGORY } from '../../utils/media';
 import { useSettings } from '../../hooks/useSettings';
 import CategoryAttributesDialog from '../../components/admin/CategoryAttributesDialog';
 
@@ -232,15 +232,14 @@ const CategoryDetailsPanel = ({ categoryId, categories, onEdit, onDelete, onAddC
 
             <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', mb: 4, flexWrap: 'wrap', gap: 2 }}>
                 <Box sx={{ display: 'flex', gap: 3, alignItems: 'center' }}>
-                    {selectedCatNode.image ? (
-                        <Box sx={{ width: 80, height: 80, borderRadius: 2, overflow: 'hidden', flexShrink: 0, border: '1px solid', borderColor: 'divider' }}>
-                            <img src={getMediaUrl(selectedCatNode.image)} alt={selectedCatNode.name} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
-                        </Box>
-                    ) : (
-                        <Box sx={{ width: 80, height: 80, borderRadius: 2, overflow: 'hidden', flexShrink: 0, border: '1px solid', borderColor: 'divider', display: 'flex', alignItems: 'center', justifyContent: 'center', bgcolor: 'background.default' }}>
-                            <FolderIcon sx={{ fontSize: 36, color: 'text.secondary', opacity: 0.5 }} />
-                        </Box>
-                    )}
+                    <Box sx={{ width: 80, height: 80, borderRadius: 2, overflow: 'hidden', flexShrink: 0, border: '1px solid', borderColor: 'divider' }}>
+                        <img
+                            src={selectedCatNode.image ? getMediaUrl(selectedCatNode.image) : PLACEHOLDER_CATEGORY}
+                            onError={onImageError(PLACEHOLDER_CATEGORY)}
+                            alt={selectedCatNode.name}
+                            style={{ width: '100%', height: '100%', objectFit: 'cover' }}
+                        />
+                    </Box>
                     {selectedCatNode.icon && (
                         <Box sx={{ width: 40, height: 40, borderRadius: 1.5, overflow: 'hidden', flexShrink: 0, border: '1px solid', borderColor: 'divider', ml: -1.5, mt: 4, zIndex: 1, bgcolor: 'background.paper' }}>
                             <img src={getMediaUrl(selectedCatNode.icon)} alt={`${selectedCatNode.name} icon`} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
@@ -296,15 +295,14 @@ const CategoryDetailsPanel = ({ categoryId, categories, onEdit, onDelete, onAddC
                                     <TableRow key={child.id} hover>
                                         <TableCell>
                                             <Box sx={{ display: 'flex', alignItems: 'center', gap: 2, cursor: 'pointer' }} onClick={() => onNavigateNode(child.id)}>
-                                                {child.image ? (
-                                                    <Box sx={{ width: 40, height: 40, borderRadius: 1.5, overflow: 'hidden' }}>
-                                                        <img src={getMediaUrl(child.image)} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
-                                                    </Box>
-                                                ) : (
-                                                    <Box sx={{ width: 40, height: 40, borderRadius: 1.5, display: 'flex', alignItems: 'center', justifyContent: 'center', bgcolor: 'action.hover' }}>
-                                                        <FolderIcon color="action" />
-                                                    </Box>
-                                                )}
+                                                <Box sx={{ width: 40, height: 40, borderRadius: 1.5, overflow: 'hidden', flexShrink: 0, border: '1px solid', borderColor: 'divider' }}>
+                                                    <img
+                                                        src={child.image ? getMediaUrl(child.image) : PLACEHOLDER_CATEGORY}
+                                                        onError={onImageError(PLACEHOLDER_CATEGORY)}
+                                                        alt=""
+                                                        style={{ width: '100%', height: '100%', objectFit: 'cover' }}
+                                                    />
+                                                </Box>
                                                 <Typography variant="body1" fontWeight={500} color="primary.main" sx={{ '&:hover': { textDecoration: 'underline' } }}>{child.name}</Typography>
                                             </Box>
                                         </TableCell>
@@ -368,15 +366,14 @@ const CategoryFlatView = ({ flatCategories, onEdit, onDelete, onAddChild, canMan
                             <TableRow key={cat.id} hover>
                                 <TableCell>
                                     <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
-                                        {cat.image ? (
-                                            <Box sx={{ width: 40, height: 40, borderRadius: 1.5, overflow: 'hidden' }}>
-                                                <img src={getMediaUrl(cat.image)} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
-                                            </Box>
-                                        ) : (
-                                            <Box sx={{ width: 40, height: 40, borderRadius: 1.5, display: 'flex', alignItems: 'center', justifyContent: 'center', bgcolor: 'action.hover' }}>
-                                                <FolderIcon color="action" />
-                                            </Box>
-                                        )}
+                                        <Box sx={{ width: 40, height: 40, borderRadius: 1.5, overflow: 'hidden', flexShrink: 0, border: '1px solid', borderColor: 'divider' }}>
+                                            <img
+                                                src={cat.image ? getMediaUrl(cat.image) : PLACEHOLDER_CATEGORY}
+                                                onError={onImageError(PLACEHOLDER_CATEGORY)}
+                                                alt=""
+                                                style={{ width: '100%', height: '100%', objectFit: 'cover' }}
+                                            />
+                                        </Box>
                                         <Box>
                                             <Typography variant="body2" fontWeight={600}>{cat.name}</Typography>
                                             {cat.children && cat.children.length > 0 && (

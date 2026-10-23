@@ -41,6 +41,7 @@
 | [STORE-TEMPLATES.md](STORE-TEMPLATES.md) | Store Templates system, theme marketplace, template composer, section registry, preview system, import/export, activation history |
 | [THEME-SYSTEM-COMPETITOR-GAP-ROADMAP.md](THEME-SYSTEM-COMPETITOR-GAP-ROADMAP.md) | Roadmap for editable cards, component styles, page templates beyond homepage, and competitor-level theme editing |
 | [AUTH-GUIDE.md](AUTH-GUIDE.md) | Authentication flows, JWT, sessions, RBAC, role management, brute-force protection, email verification |
+| [ACCESS-CONTROL.md](ACCESS-CONTROL.md) | Role-Based Access Control (RBAC), delegation boundaries, custom roles, Menu & API Builder permissions |
 | [COUPONS.md](COUPONS.md) | Coupon/discount engine — types, usage limits, stacking rules, targeting, auto-deactivation |
 | [SHIPPING-SYSTEM.md](SHIPPING-SYSTEM.md) | Shipping rate engine, zones, carriers, volumetric weight, COD, fulfillment, webhook tracking |
 | [SEO.md](SEO.md) | SEO meta tag management, URL overrides, canonical URLs, social OG tags, Google snippet preview |

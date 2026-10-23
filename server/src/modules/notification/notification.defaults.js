@@ -459,7 +459,7 @@ const SAMPLE_VARIABLES = {
 };
 
 const lifecycleDefaults = require('./notification.lifecycleDefaults');
-Object.assign(DEFAULTS, lifecycleDefaults.DEFAULTS);
+Object.assign(DEFAULTS, lifecycleDefaults.buildDefaults(EMAIL_WRAPPER));
 Object.assign(TEMPLATE_VARIABLES, lifecycleDefaults.TEMPLATE_VARIABLES);
 Object.assign(SAMPLE_VARIABLES, { request_type: 'return', reason: 'Item did not fit', status_label: 'approved', resolution_notes: 'Follow the pickup instructions in your order.', new_email: 'new@example.com', setup_url: '#setup', enquiry_id: 'preview-enquiry', unsubscribe_url: '#unsubscribe', campaign_subject: 'Latest store updates', campaign_message: 'Explore our newest products and offers.' });
 module.exports = { DEFAULTS, TEMPLATE_VARIABLES, SAMPLE_VARIABLES };

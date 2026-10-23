@@ -38,6 +38,8 @@ export const getStoreDesignSummary = (form = {}, homepageSections = []) => {
       headingFont: form['theme.headingFont'] || form['theme.fontFamily'] || 'Default font',
       primaryColor: form['theme.primaryColor'] || '#0f766e',
       secondaryColor: form['theme.secondaryColor'] || '#f97316',
+      buttonStyle: form['theme.buttonStyle'] || 'solid',
+      errorColor: form['theme.errorColor'] || '#dc3545',
     },
     cards: {
       product: productCard.variant || 'Classic',

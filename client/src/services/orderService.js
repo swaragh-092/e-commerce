@@ -33,9 +33,9 @@ export const orderService = {
   /**
    * Cancel an order.
    */
-  cancelOrder: async (id) => {
+  cancelOrder: async (id, data) => {
     if (!id) throw new TypeError('orderService.cancelOrder: Invalid id');
-    const response = await api.post(`/orders/${id}/cancel`);
+    const response = await api.post(`/orders/${id}/cancel`, data);
     return response.data;
   },
 

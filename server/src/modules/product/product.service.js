@@ -41,6 +41,11 @@ const { getSaleLabels } = require('../settings/saleLabel.service');
 const SettingsService = require('../settings/settings.service');
 const inventoryService = require('../inventory/inventory.service');
 const { normalizeSearchQuery, buildSearchPattern } = require('../search/search.utils');
+const {
+  isBrandVisible,
+  stripBrandFields,
+  assertBrandFilterAllowed,
+} = require('../../utils/brandVisibility');
 
 
 // Fetch the active label catalog once per request (the service caches for 60 s)
@@ -458,13 +463,19 @@ exports.getProducts = async (filters, page, limit, isAdmin = false) => {
   const { limit: queryLimit, offset } = getPagination(page, limit);
   const where = {};
   const order = [];
+  const now = new Date();
+  const labelPresets = await getLabelPresets();
+  const { features } = await SettingsService.getFeatures();
+  const brandsVisible = isBrandVisible(features, { adminView: isAdmin });
   const include = [
     getGlobalImageInclude(),
     { model: Tag, as: 'tags' },
-    { model: Brand, as: 'brand' },
+    ...(brandsVisible ? [{ model: Brand, as: 'brand' }] : []),
   ];
-  const now = new Date();
-  const labelPresets = await getLabelPresets();
+
+  if (filters.brand && !brandsVisible) {
+    assertBrandFilterAllowed(features, { adminView: isAdmin });
+  }
 
   // Always restrict storefront results to published + enabled products. Admins can filter by state.
   applyProductStorefrontFilters(where, filters, isAdmin);
@@ -493,7 +504,7 @@ exports.getProducts = async (filters, page, limit, isAdmin = false) => {
               OR LOWER("search_categories"."slug") LIKE LOWER(${escapedSearchPattern})
             )
         )`),
-        Sequelize.literal(`EXISTS (
+        ...(brandsVisible ? [Sequelize.literal(`EXISTS (
           SELECT 1
           FROM "brands" AS "search_brands"
           WHERE "search_brands"."id" = "Product"."brand_id"
@@ -501,7 +512,7 @@ exports.getProducts = async (filters, page, limit, isAdmin = false) => {
               LOWER("search_brands"."name") LIKE LOWER(${escapedSearchPattern})
               OR LOWER("search_brands"."slug") LIKE LOWER(${escapedSearchPattern})
             )
-        )`),
+        )`)] : []),
         Sequelize.literal(`EXISTS (
           SELECT 1
           FROM "product_tags" AS "search_product_tags"
@@ -541,7 +552,7 @@ exports.getProducts = async (filters, page, limit, isAdmin = false) => {
       Sequelize.literal(`("Product"."quantity" - "Product"."reserved_qty") <= ${maxQty}`),
     ];
   }
-  if (filters.brand) {
+  if (brandsVisible && filters.brand) {
     const isUUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(filters.brand);
     if (isUUID) {
       where.brandId = filters.brand;
@@ -771,11 +782,14 @@ exports.getProducts = async (filters, page, limit, isAdmin = false) => {
     });
   }
 
-  const { features } = await SettingsService.getFeatures();
-  const serializedRows = rows.map((row) => serializeProductPricing(row, { adminView: isAdmin, features }, labelPresets));
+  const serializedRows = rows.map((row) => {
+    const serialized = serializeProductPricing(row, { adminView: isAdmin, features }, labelPresets);
+    return brandsVisible ? serialized : stripBrandFields(serialized);
+  });
   
   const pagingData = getPagingData(serializedRows, count, page, queryLimit);
-  pagingData.priceRange = priceRange;
+  const shouldHidePrice = !isAdmin && (features.pricing === false || features.showPrice === false);
+  pagingData.priceRange = shouldHidePrice ? null : priceRange;
   if (isAdmin) {
     pagingData.counts = counts;
   }
@@ -783,6 +797,8 @@ exports.getProducts = async (filters, page, limit, isAdmin = false) => {
 };
 
 exports.getProductBySlug = async (slug, { adminView = false } = {}) => {
+  const { features } = await SettingsService.getFeatures();
+  const brandsVisible = isBrandVisible(features, { adminView });
   const where = { slug };
   if (!adminView) {
     where.status = 'published';
@@ -796,7 +812,7 @@ exports.getProductBySlug = async (slug, { adminView = false } = {}) => {
       getAttributeInclude(),
       { model: Category, as: 'categories' },
       { model: Tag, as: 'tags' },
-      { model: Brand, as: 'brand' },
+      ...(brandsVisible ? [{ model: Brand, as: 'brand' }] : []),
       // Only active tabs, sorted for storefront display
       {
         model: ProductTab,
@@ -811,8 +827,8 @@ exports.getProductBySlug = async (slug, { adminView = false } = {}) => {
   });
   if (!product) throw new AppError('NOT_FOUND', 404, 'Product not found');
   const labelPresets = await getLabelPresets();
-  const { features } = await SettingsService.getFeatures();
-  return serializeProductPricing(product, { adminView, features }, labelPresets);
+  const serialized = serializeProductPricing(product, { adminView, features }, labelPresets);
+  return brandsVisible ? serialized : stripBrandFields(serialized);
 };
 
 exports.getProductById = async (id) => {
@@ -1263,6 +1279,8 @@ exports.bulkUpdateSale = async (payload, actingUserId = null, auditContext = nul
 };
 
 exports.getRelatedProducts = async (productId, limit = 6) => {
+  const { features } = await SettingsService.getFeatures();
+  const brandsVisible = isBrandVisible(features);
   const baseQuery = (extraWhere = {}, categoryInclude = null) => ({
     where: {
       id: { [Op.ne]: productId },
@@ -1272,7 +1290,7 @@ exports.getRelatedProducts = async (productId, limit = 6) => {
     },
     include: [
       { model: ProductImage, as: 'images' },
-      { model: Brand, as: 'brand' },
+      ...(brandsVisible ? [{ model: Brand, as: 'brand' }] : []),
       ...(categoryInclude ? [categoryInclude] : [{ model: Category, as: 'categories' }]),
       { model: Tag, as: 'tags' },
     ],
@@ -1307,8 +1325,10 @@ exports.getRelatedProducts = async (productId, limit = 6) => {
   }
 
   const labelPresets = await getLabelPresets();
-  const { features } = await SettingsService.getFeatures();
-  return rows.map((p) => serializeProductPricing(p, { adminView: false, features }, labelPresets));
+  return rows.map((p) => {
+    const serialized = serializeProductPricing(p, { adminView: false, features }, labelPresets);
+    return brandsVisible ? serialized : stripBrandFields(serialized);
+  });
 };
 
 exports.buildSqlSaleCondition = buildSqlSaleCondition;

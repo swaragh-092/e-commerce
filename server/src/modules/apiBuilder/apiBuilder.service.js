@@ -23,6 +23,7 @@ const { Op } = Sequelize;
 const AppError = require('../../utils/AppError');
 const { generateSlug } = require('../../utils/slugify');
 const SettingsService = require('../settings/settings.service');
+const { isBrandVisible, stripBrandFields } = require('../../utils/brandVisibility');
 
 const MAX_LIMIT = 200;
 
@@ -706,10 +707,67 @@ const attachRelations = async (resource, items, node, rawItems = items, context 
   }));
 };
 
+const PRICE_FIELD_NAMES = ['price', 'salePrice', 'costPrice', 'unitPrice', 'regularPrice', 'effectivePrice', 'savingsAmount'];
+
+const sanitizeApiBuilderPrices = (resource, items) => {
+  if (!Array.isArray(items)) return items;
+  return items.map((item) => {
+    if (!item || typeof item !== 'object') return item;
+    const sanitized = { ...item };
+
+    if (resource === 'products' || resource === 'variants') {
+      PRICE_FIELD_NAMES.forEach((field) => {
+        delete sanitized[field];
+      });
+      if (sanitized.discountPercent !== undefined) sanitized.discountPercent = 0;
+      if (sanitized.effectivePrice !== undefined) sanitized.effectivePrice = null;
+    }
+
+    if (Array.isArray(sanitized.variants)) {
+      sanitized.variants = sanitized.variants.map((v) => {
+        if (!v || typeof v !== 'object') return v;
+        const vCopy = { ...v };
+        PRICE_FIELD_NAMES.forEach((field) => {
+          delete vCopy[field];
+        });
+        if (vCopy.discountPercent !== undefined) vCopy.discountPercent = 0;
+        if (vCopy.effectivePrice !== undefined) vCopy.effectivePrice = null;
+        return vCopy;
+      });
+    }
+
+    if (Array.isArray(sanitized.products)) {
+      sanitized.products = sanitizeApiBuilderPrices('products', sanitized.products);
+    }
+
+    return sanitized;
+  });
+};
+
 const shapeRows = async (resource, rows, node = {}, context = {}) => {
+  const brandsVisible = isBrandVisible(context.features, {
+    adminView: Boolean(context.preview || context.isAdmin),
+  });
+  if (resource === 'brands' && !brandsVisible) {
+    throw new AppError('FEATURE_DISABLED', 403, 'Brands are disabled for this storefront.');
+  }
+
   const rawRows = rows.map(toPlain);
   const shaped = applyFields(rawRows, resource, node.fields || []);
-  return attachRelations(resource, shaped, node, rawRows, context);
+  let withRelations = await attachRelations(resource, shaped, node, rawRows, context);
+
+  if (!context.preview && !context.isAdmin) {
+    let { features } = context;
+    if (!features) {
+      const SettingsService = require('../settings/settings.service');
+      ({ features } = await SettingsService.getFeatures());
+    }
+    if (features.pricing === false || features.showPrice === false) {
+      withRelations = sanitizeApiBuilderPrices(resource, withRelations);
+    }
+  }
+
+  return brandsVisible ? withRelations : stripBrandFields(withRelations);
 };
 
 const executeSettingsNode = async (node, context = {}) => executeSettings(node, context);
@@ -830,12 +888,15 @@ exports.remove = async (id) => {
 exports.executeConfig = async (config, { api = null, preview = false, query = {} } = {}) => {
   const normalized = normalizeConfig(config);
   const enabledBlocks = normalized.blocks.filter((block) => block.enabled !== false && block.resource);
+  const SettingsService = require('../settings/settings.service');
+  const { features } = await SettingsService.getFeatures();
+  const context = { query, preview, features };
 
   const output = {};
   const arrayOutput = [];
 
   for (const block of enabledBlocks) {
-    const data = await executeResourceNode(block, { query });
+    const data = await executeResourceNode(block, context);
     const key = block.key || block.id || block.resource;
     if (normalized.responseMode === 'array') {
       arrayOutput.push({ key, resource: block.resource, data });

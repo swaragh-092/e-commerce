@@ -20,7 +20,7 @@ import CreditCardIcon from '@mui/icons-material/CreditCard';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { AuthContext } from '../../context/AuthContext';
 import { useNotification } from '../../context/NotificationContext';
-import { useSettings, useCurrency, useFeature, useComponentStyles } from '../../hooks/useSettings';
+import { useSettings, useCurrency, useFeature, useFeaturesResolved, useComponentStyles } from '../../hooks/useSettings';
 import { useCart } from '../../hooks/useCart';
 import { getSessionId } from '../../services/cartService';
 import { userService } from '../../services/userService';
@@ -265,12 +265,13 @@ const CheckoutPage = () => {
     const checkoutEnabled = useFeature('checkout');
     const cartEnabled = useFeature('cart');
     const guestCheckoutEnabled = useFeature('guestCheckout');
+    const featuresResolved = useFeaturesResolved();
 
     useEffect(() => {
-        if (!checkoutEnabled || !cartEnabled) {
+        if (featuresResolved && (!checkoutEnabled || !cartEnabled)) {
             navigate('/');
         }
-    }, [checkoutEnabled, cartEnabled, navigate]);
+    }, [featuresResolved, checkoutEnabled, cartEnabled, navigate]);
 
     const isBuyNowFlow = useMemo(() => Boolean(buyNowItem), [buyNowItem]);
     const [buyNowProductRequiresShipping, setBuyNowProductRequiresShipping] = useState(undefined);

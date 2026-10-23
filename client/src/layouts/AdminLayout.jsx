@@ -86,12 +86,12 @@ const MENU_STRUCTURE = [
     title: 'Sales',
     icon: <ShoppingCartIcon />,
     items: [
-      { text: 'Orders', path: '/admin/orders', icon: <ShoppingCartIcon />, permission: PERMISSIONS.ORDERS_READ, mode: 'ecommerce' },
-      { text: 'Enquiries', path: '/admin/enquiries', icon: <HelpOutlineIcon />, permission: PERMISSIONS.SETTINGS_READ },
+      { text: 'Orders', path: '/admin/orders', icon: <ShoppingCartIcon />, permission: PERMISSIONS.ORDERS_READ },
+      { text: 'Enquiries', path: '/admin/enquiries', icon: <HelpOutlineIcon />, permission: PERMISSIONS.ENQUIRIES_READ },
       { text: 'Customers', path: '/admin/customers', icon: <PeopleIcon />, permission: PERMISSIONS.CUSTOMERS_READ },
-      { text: 'Coupons', path: '/admin/coupons', icon: <LocalOfferIcon />, feature: 'coupons', permission: PERMISSIONS.COUPONS_READ, mode: 'ecommerce' },
+      { text: 'Coupons', path: '/admin/coupons', icon: <LocalOfferIcon />, permission: PERMISSIONS.COUPONS_READ },
       { text: 'Sale Labels', path: '/admin/sale-labels', icon: <LocalOfferIcon />, permission: PERMISSIONS.SETTINGS_READ, mode: 'ecommerce' },
-      { text: 'Reviews', path: '/admin/reviews', icon: <StarIcon />, feature: 'reviews', permission: PERMISSIONS.REVIEWS_READ },
+      { text: 'Reviews', path: '/admin/reviews', icon: <StarIcon />, permission: PERMISSIONS.REVIEWS_READ },
     ]
   },
   {
@@ -101,7 +101,7 @@ const MENU_STRUCTURE = [
       { text: 'Media', path: '/admin/media', icon: <PhotoLibraryIcon />, permission: PERMISSIONS.MEDIA_READ },
       { text: 'Pages', path: '/admin/pages', icon: <DescriptionIcon />, permission: PERMISSIONS.PAGES_READ },
       { text: 'Menu Builder', path: '/admin/menus', icon: <AccountTreeIcon />, permission: PERMISSIONS.MENUS_READ },
-      { text: 'API Builder', path: '/admin/api-builder', icon: <ApiIcon />, feature: 'apiBuilder', permission: PERMISSIONS.SETTINGS_READ },
+      { text: 'API Builder', path: '/admin/api-builder', icon: <ApiIcon />, feature: 'apiBuilder', permission: PERMISSIONS.API_BUILDER_READ },
       { text: 'SEO Overrides', path: '/admin/seo-overrides', icon: <PublicIcon />, feature: 'seo', permission: PERMISSIONS.SETTINGS_READ },
     ]
   },
@@ -117,10 +117,10 @@ const MENU_STRUCTURE = [
     title: 'Settings',
     icon: <SettingsIcon />,
     items: [
-      { text: 'Platform Features', path: '/admin/features', icon: <AdminPanelSettingsIcon />, permission: PERMISSIONS.SETTINGS_READ },
+      { text: 'Platform Features', path: '/admin/features', icon: <AdminPanelSettingsIcon />, role: 'super_admin' },
       { text: 'General', path: '/admin/settings', icon: <SettingsIcon />, permission: PERMISSIONS.SETTINGS_READ },
-      { text: 'Store Templates', path: '/admin/themes', icon: <PhotoLibraryIcon />, permission: PERMISSIONS.SETTINGS_READ },
-      { text: 'Store Designer', path: '/admin/store-designer', icon: <PhotoLibraryIcon />, permission: PERMISSIONS.SETTINGS_MANAGE, newTab: true },
+      { text: 'Store Templates', path: '/admin/themes', icon: <PhotoLibraryIcon />, feature: 'themes', permission: PERMISSIONS.SETTINGS_READ },
+      { text: 'Store Designer', path: '/admin/store-designer', icon: <PhotoLibraryIcon />, feature: 'themes', permission: PERMISSIONS.SETTINGS_MANAGE, newTab: true },
       { text: 'Newsletter', path: '/admin/newsletter', icon: <MailOutlineIcon />, permission: PERMISSIONS.SETTINGS_READ },
       { text: 'Templates', path: '/admin/email-templates', icon: <MailOutlineIcon />, permission: PERMISSIONS.SETTINGS_READ },
       { text: 'Payment Gateways', path: '/admin/payment-gateways', icon: <PaymentIcon />, permission: PERMISSIONS.SETTINGS_READ, mode: 'ecommerce' },
@@ -166,7 +166,7 @@ const AdminLayout = () => {
 
   const searchInputRef = React.useRef(null);
 
-  const { logout, user, hasAnyPermission, hasPermission } = useAuth();
+  const { logout, user, hasAnyPermission, hasPermission, hasRole } = useAuth();
   const location = useLocation();
   const navigate = useNavigate();
   const { settings, features } = useSettings();
@@ -241,6 +241,7 @@ const AdminLayout = () => {
     if (item.feature && features?.[item.feature] === false) return false;
     if (item.permission && !hasPermission(item.permission)) return false;
     if (item.permissions && !hasAnyPermission(item.permissions)) return false;
+    if (item.role && !hasRole(item.role)) return false;
     
     // Search query filter
     if (searchQuery) {

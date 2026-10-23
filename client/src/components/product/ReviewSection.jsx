@@ -10,6 +10,7 @@ import { useFeature } from '../../hooks/useSettings';
 const ReviewSection = ({ slug, productId, onVisibleReviewsChange }) => {
     const reviewsEnabled = useFeature('reviews');
     const requirePurchase = useFeature('requirePurchaseForReview');
+    const ordersEnabled = useFeature('orders');
 
     const [reviews, setReviews] = useState([]);
     const [showForm, setShowForm] = useState(false);
@@ -106,6 +107,11 @@ const ReviewSection = ({ slug, productId, onVisibleReviewsChange }) => {
     // state after productId has changed (e.g. navigating between products quickly).
     useEffect(() => {
         if (!reviewsEnabled || !isAuthenticated || !productId) return;
+        if (!ordersEnabled) {
+            setHasPurchased(false);
+            setPurchaseLoading(false);
+            return;
+        }
         const controller = new AbortController();
         setPurchaseCheckError(false);
         setPurchaseLoading(true);
@@ -130,14 +136,14 @@ const ReviewSection = ({ slug, productId, onVisibleReviewsChange }) => {
                 // Ignore errors caused by our own abort on productId change
                 if (err?.name === 'AbortError' || err?.name === 'CanceledError') return;
                 setPurchaseCheckError(true);
-                setHasPurchased(true); // allow review on error, just won't be verified
+                setHasPurchased(false);
             })
             .finally(() => {
                 if (!controller.signal.aborted) setPurchaseLoading(false);
             });
 
         return () => controller.abort();
-    }, [isAuthenticated, productId]);
+    }, [isAuthenticated, productId, reviewsEnabled, ordersEnabled]);
 
     // Auto-dismiss success message
     useEffect(() => {
@@ -210,8 +216,8 @@ const ReviewSection = ({ slug, productId, onVisibleReviewsChange }) => {
     }, [reviews, myReview, onVisibleReviewsChange]);
 
     // All hooks above must run on every render regardless of this flag —
-    // bailing out earlier breaks the Rules of Hooks since `reviewsEnabled`
-    // starts optimistically `true` while settings load, then can flip to `false`.
+    // bailing out earlier breaks the Rules of Hooks because `reviewsEnabled`
+    // is false while settings load, then flips to its resolved value.
     if (!reviewsEnabled) return null;
 
     return (

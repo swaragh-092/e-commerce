@@ -887,7 +887,7 @@ Object.assign(COMPONENT_CONTROL_SCHEMAS, {
         key: 'stateColors',
         label: 'State Colors',
         fields: [
-          { key: 'errorColor', label: 'Error Color', type: 'color', defaultValue: '#e11d48' },
+          { key: 'errorColor', label: 'Error / Danger Color', type: 'color', defaultValue: '#dc3545', helperText: 'Locked to standard safety red for all destructive and delete actions' },
           { key: 'warningColor', label: 'Warning Color', type: 'color', defaultValue: '#d97706' },
           { key: 'successColor', label: 'Success Color', type: 'color', defaultValue: '#059669' },
           { key: 'infoColor', label: 'Info Color', type: 'color', defaultValue: '#0284c7' },

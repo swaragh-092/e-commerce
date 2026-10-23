@@ -169,6 +169,95 @@ const TypographyScalePreview = ({ typeScale, fontStacks, themeSettings }) => {
   );
 };
 
+export const ButtonPaletteShowcase = ({ value = {} }) => {
+  const isDark = value.mode === 'dark';
+  const primaryColor = value.primaryColor || '#0f766e';
+  const secondaryColor = value.secondaryColor || '#f97316';
+  const errorColor = value.errorColor || '#dc3545';
+  const warningColor = value.warningColor || '#d97706';
+  const successColor = value.successColor || '#059669';
+  const infoColor = value.infoColor || '#0284c7';
+  const buttonStyle = value.buttonStyle || 'solid';
+  const borderRadius = parseInt(value.borderRadius, 10) || 8;
+  const radius = buttonStyle === 'pill' ? 9999 : borderRadius;
+
+  const getPrimarySx = () => {
+    if (buttonStyle === 'outline') {
+      return { bgcolor: 'transparent', color: primaryColor, border: `1px solid ${primaryColor}` };
+    }
+    if (buttonStyle === 'soft') {
+      return { bgcolor: `${primaryColor}22`, color: primaryColor, border: '1px solid transparent' };
+    }
+    return { bgcolor: primaryColor, color: '#ffffff', border: '1px solid transparent' };
+  };
+
+  const getSecondarySx = () => {
+    if (buttonStyle === 'outline') {
+      return { bgcolor: 'transparent', color: secondaryColor, border: `1px solid ${secondaryColor}` };
+    }
+    if (buttonStyle === 'soft') {
+      return { bgcolor: `${secondaryColor}22`, color: secondaryColor, border: '1px solid transparent' };
+    }
+    return { bgcolor: secondaryColor, color: isDark ? '#1f2933' : '#ffffff', border: '1px solid transparent' };
+  };
+
+  const buttons = [
+    { label: 'Primary', sx: getPrimarySx() },
+    { label: 'Secondary', sx: getSecondarySx() },
+    { label: 'Success', sx: { bgcolor: successColor, color: '#ffffff', border: '1px solid transparent' } },
+    { label: 'Danger', sx: { bgcolor: errorColor, color: '#ffffff', border: '1px solid transparent' } },
+    { label: 'Warning', sx: { bgcolor: warningColor, color: '#ffffff', border: '1px solid transparent' } },
+    { label: 'Info', sx: { bgcolor: infoColor, color: '#ffffff', border: '1px solid transparent' } },
+    { label: 'Light', sx: { bgcolor: isDark ? '#334155' : '#f8fafc', color: isDark ? '#f8fafc' : '#1e293b', border: `1px solid ${isDark ? '#475569' : '#e2e8f0'}` } },
+    { label: 'Dark', sx: { bgcolor: isDark ? '#0f172a' : '#212529', color: '#ffffff', border: `1px solid ${isDark ? '#1e293b' : '#212529'}` } },
+    { label: 'Link', sx: { bgcolor: 'transparent', color: primaryColor, border: 'none', textDecoration: 'underline', '&:hover': { bgcolor: 'transparent', textDecoration: 'underline' } } },
+  ];
+
+  return (
+    <Paper variant="outlined" sx={{ p: 2, my: 2, bgcolor: isDark ? 'background.default' : '#fcfdfe' }}>
+      <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 1, flexWrap: 'wrap', gap: 1 }}>
+        <Typography variant="subtitle2" fontWeight={800}>
+          Button Palette Showcase
+        </Typography>
+        <Chip
+          label="Delete & Danger Locked to Safety Red"
+          size="small"
+          color="error"
+          variant="outlined"
+          sx={{ fontWeight: 700, fontSize: '0.72rem' }}
+        />
+      </Box>
+      <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mb: 1.5 }}>
+        Preview of standard semantic button variants under current theme (Style: <strong>{buttonStyle}</strong>, Radius: <strong>{radius}px</strong>).
+      </Typography>
+      <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 1.25, alignItems: 'center' }}>
+        {buttons.map((b) => (
+          <Button
+            key={b.label}
+            size="small"
+            sx={{
+              ...b.sx,
+              borderRadius: `${radius}px`,
+              textTransform: 'none',
+              fontWeight: 600,
+              px: 2,
+              py: 0.75,
+              boxShadow: 'none',
+              '&:hover': {
+                boxShadow: 'none',
+                opacity: 0.9,
+                ...b.sx?.['&:hover'],
+              },
+            }}
+          >
+            {b.label}
+          </Button>
+        ))}
+      </Box>
+    </Paper>
+  );
+};
+
 /**
  * Global Design Tokens editor — shared between DesignerThemePanel and legacy SectionComposerPage.
  * Controls the whole-storefront visual baseline: button style, card style, border radius, typography, etc.
@@ -275,6 +364,7 @@ export const DesignTokensEditor = ({ value = {}, onChange }) => {
         value={value}
         onChange={onChange}
       />
+      <ButtonPaletteShowcase value={value} />
 
       <Divider sx={{ my: 2 }} />
       <Grid container spacing={2}>

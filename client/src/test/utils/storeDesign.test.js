@@ -46,6 +46,8 @@ describe('store design ownership', () => {
     }, [{ id: 'hero' }, { id: 'products' }]);
 
     expect(summary.theme.font).toBe('Source Sans Pro');
+    expect(summary.theme.buttonStyle).toBe('solid');
+    expect(summary.theme.errorColor).toBe('#dc3545');
     expect(summary.cards.product).toBe('editorial');
     expect(summary.structure.header).toBe('Static header');
     expect(summary.structure.announcement).toBe('Hidden');

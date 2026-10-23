@@ -58,6 +58,7 @@ import {
 import AppliedDiscountsSummary from '../../components/orders/AppliedDiscountsSummary';
 import { useAuth } from '../../hooks/useAuth';
 import { PERMISSIONS } from '../../utils/permissions';
+import { getMediaUrl, onImageError, PLACEHOLDER_PRODUCT } from '../../utils/media';
 import { getApiErrorMessage } from '../../utils/apiErrors';
 import {
   getOrderProgressSteps,
@@ -1580,14 +1581,13 @@ const OrderDetailPage = () => {
                   borderColor: 'divider',
                 }}
               >
-                {item.snapshotImage && (
                   <Box
                     component="img"
-                    src={item.snapshotImage}
+                    src={item.snapshotImage ? getMediaUrl(item.snapshotImage) : PLACEHOLDER_PRODUCT}
                     alt={item.snapshotName}
+                    onError={onImageError(PLACEHOLDER_PRODUCT)}
                     sx={{ width: 60, height: 60, objectFit: 'cover', borderRadius: 1 }}
                   />
-                )}
                 <Box sx={{ flexGrow: 1 }}>
                   <Typography variant="body2" fontWeight={600}>
                     {item.snapshotName}

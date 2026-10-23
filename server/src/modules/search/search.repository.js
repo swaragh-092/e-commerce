@@ -340,7 +340,7 @@ const searchCategories = async (queryText, limit = 5) => {
  * @param {string} queryText
  * @returns {string|null} suggested correction, or null
  */
-const suggestCorrection = async (queryText) => {
+const suggestCorrection = async (queryText, { includeBrands = true } = {}) => {
   const MIN_CORRECTION_SIMILARITY = 0.2; // Catch common typos even on short words
   const normalizedQuery = queryText.toLowerCase();
 
@@ -363,17 +363,19 @@ const suggestCorrection = async (queryText) => {
       raw: true,
     });
 
-    const [brandMatch] = await Brand.findAll({
-      where: { isActive: true },
-      attributes: [
-        'name',
-        [Sequelize.literal(`word_similarity(LOWER(name), $normalizedQuery)`), 'score'],
-      ],
-      order: [[Sequelize.literal('score'), 'DESC']],
-      limit: 1,
-      bind: { normalizedQuery },
-      raw: true,
-    });
+    const brandMatch = includeBrands
+      ? (await Brand.findAll({
+          where: { isActive: true },
+          attributes: [
+            'name',
+            [Sequelize.literal(`word_similarity(LOWER(name), $normalizedQuery)`), 'score'],
+          ],
+          order: [[Sequelize.literal('score'), 'DESC']],
+          limit: 1,
+          bind: { normalizedQuery },
+          raw: true,
+        }))[0]
+      : null;
 
     const [categoryMatch] = await Category.findAll({
       // Note: Category currently lacks visibility filters (isActive/status) in the schema.

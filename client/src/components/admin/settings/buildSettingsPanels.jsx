@@ -91,7 +91,13 @@ export default function buildSettingsPanels(ctx) {
         'SEO & Search Engine Control',
         'Configure how your store appears in search results and social media shares globally.',
         <>
-          {toggle('features.seo', 'Enable Storefront SEO Features')}
+          <Alert severity="info" sx={{ mb: 2 }}>
+            The SEO feature switch now lives on the{' '}
+            <Button component={Link} to="/admin/features" size="small" sx={{ textTransform: 'none', fontWeight: 700, p: 0, minWidth: 0, verticalAlign: 'baseline' }}>
+              Platform Features
+            </Button>{' '}
+            page. The settings below only apply while SEO is enabled.
+          </Alert>
           <Divider sx={{ my: 2 }} />
           <Box sx={{ opacity: bool(form['features.seo']) ? 1 : 0.5, pointerEvents: bool(form['features.seo']) ? 'auto' : 'none' }}>
             <Alert severity="info" sx={{ mb: 2.5 }}>
@@ -356,9 +362,22 @@ function buildCheckoutPanel({ form, set, section, field, toggle, currSymbol, ena
     ),
     section(
       'Checkout Experience',
-      'Decide how easy checkout is and which customer conveniences are available.',
-      <></>,
-      ['checkout', 'guest checkout', 'coupons']
+      'Decide how easy checkout is and configure the cancellation guidance customers see.',
+      <>
+        <Typography variant="subtitle2" fontWeight={600} sx={{ mb: 1 }}>Customer Order Cancellation</Typography>
+        <TextField
+          fullWidth
+          multiline
+          minRows={4}
+          label="Cancellation and refund policy"
+          value={form['orders.cancellationPolicy'] ?? ''}
+          onChange={(event) => set('orders.cancellationPolicy', event.target.value.slice(0, 2000))}
+          inputProps={{ maxLength: 2000 }}
+          helperText="Shown before customers confirm cancellation. The system still enforces the shipment cutoff and the store's refund workflow."
+          sx={{ mb: 2 }}
+        />
+      </>,
+      ['checkout', 'guest checkout', 'coupons', 'cancellation', 'refund policy', 'orders']
     ),
     section(
       'Cart Page Experience',
@@ -502,10 +521,13 @@ function buildAdvancedPanel({ form, set, section, field, toggle, imageField, boo
       'API Builder',
       'Control whether admins can create public custom APIs from catalog, content, menu, and setting data.',
       <>
-        {toggle('features.apiBuilder', 'Enable API Builder')}
-        <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mt: 0.5 }}>
-          When disabled, saved custom API URLs stop responding and the admin builder is hidden from the sidebar.
-        </Typography>
+        <Alert severity="info">
+          The API Builder feature switch now lives on the{' '}
+          <Button component={Link} to="/admin/features" size="small" sx={{ textTransform: 'none', fontWeight: 700, p: 0, minWidth: 0, verticalAlign: 'baseline' }}>
+            Platform Features
+          </Button>{' '}
+          page. When disabled, saved custom API URLs stop responding and the admin builder is hidden from the sidebar.
+        </Alert>
       </>,
       ['api builder', 'custom api', 'dynamic api', 'public api']
     ),

@@ -4,8 +4,8 @@ import DeleteIcon from '@mui/icons-material/Delete';
 import ShoppingCartIcon from '@mui/icons-material/ShoppingCart';
 import { wishlistService } from '../../services/wishlistService';
 import { Link } from 'react-router-dom';
-import { getMediaUrl } from '../../utils/media';
-import { useFeature, useCurrency } from '../../hooks/useSettings';
+import { getMediaUrl, onImageError, PLACEHOLDER_PRODUCT } from '../../utils/media';
+import { useFeature, useFeaturesResolved, useCurrency } from '../../hooks/useSettings';
 import { useWishlist } from '../../context/WishlistContext';
 import { useCart } from '../../hooks/useCart';
 import { useNotification } from '../../context/NotificationContext';
@@ -16,8 +16,10 @@ import { getVariantOptionLabel } from '../../utils/variantOptions';
 
 const WishlistPage = () => {
     const wishlistEnabled = useFeature('wishlist');
+    const featuresResolved = useFeaturesResolved();
     const cartEnabled    = useFeature('cart');
     const pricingEnabled = useFeature('pricing');
+    const showPrice      = useFeature('showPrice');
     const { formatPrice } = useCurrency();
     const { refreshWishlist } = useWishlist();
     const { fetchCart } = useCart();
@@ -28,16 +30,6 @@ const WishlistPage = () => {
     const displayItems = items.filter((item) => item?.Product?.id);
     const filteredCount = displayItems.length;
     const unavailableCount = Math.max(items.length - filteredCount, 0);
-
-    if (!wishlistEnabled) {
-        return (
-            <Container maxWidth="sm" sx={{ py: 10, textAlign: 'center' }}>
-                <Typography variant="h5" gutterBottom>Wishlist Unavailable</Typography>
-                <Typography color="text.secondary">The wishlist feature is currently disabled.</Typography>
-                <Button variant="contained" href="/products" sx={{ mt: 3 }}>Browse Products</Button>
-            </Container>
-        );
-    }
 
     const fetchWishlist = async () => {
         try {
@@ -111,6 +103,18 @@ const WishlistPage = () => {
         }
     };
 
+    if (!featuresResolved) return null;
+
+    if (!wishlistEnabled) {
+        return (
+            <Container maxWidth="sm" sx={{ py: 10, textAlign: 'center' }}>
+                <Typography variant="h5" gutterBottom>Wishlist Unavailable</Typography>
+                <Typography color="text.secondary">The wishlist feature is currently disabled.</Typography>
+                <Button variant="contained" href="/products" sx={{ mt: 3 }}>Browse Products</Button>
+            </Container>
+        );
+    }
+
     if (loading) return <CenteredLoader message="Loading your wishlist..." minHeight="45vh" />;
 
     return (
@@ -149,7 +153,7 @@ const WishlistPage = () => {
                         const product = item.Product;
                         const variant = item.variant;
                         const image = product?.images?.[0]?.url || '';
-                        const imageUrl = getMediaUrl(image) || '/placeholder.png';
+                        const imageUrl = getMediaUrl(image) || PLACEHOLDER_PRODUCT;
                         const itemPrice = variant?.unitPrice ?? getVariantUnitPrice(product, variant);
                         const regularPrice = getVariantRegularPrice(product, variant);
                         const discountPercent = getVariantDiscountPercent(product, variant);
@@ -163,6 +167,7 @@ const WishlistPage = () => {
                                         height="200"
                                         image={imageUrl}
                                         alt={product.name}
+                                        onError={onImageError(PLACEHOLDER_PRODUCT)}
                                         sx={{ objectFit: 'cover' }}
                                     />
                                     <CardContent>
@@ -171,10 +176,10 @@ const WishlistPage = () => {
                                         </Typography>
                                         <Stack direction="row" spacing={1} flexWrap="wrap" sx={{ mb: 1 }}>
                                             <Chip size="small" label={inStock ? 'In Stock' : 'Out of Stock'} color={inStock ? 'success' : 'default'} />
-                                            {product?.isSaleActive && discountPercent > 0 && <Chip size="small" label={`${discountPercent}% OFF`} color="error" variant="outlined" />}
+                                            {pricingEnabled && showPrice && product?.isSaleActive && discountPercent > 0 && <Chip size="small" label={`${discountPercent}% OFF`} color="error" variant="outlined" />}
                                             {variant && <Chip size="small" label={getVariantOptionLabel(variant)} variant="outlined" />}
                                         </Stack>
-                                        {pricingEnabled && (
+                                        {pricingEnabled && showPrice && (
                                             <Typography color="text.secondary">
                                                 {formatPrice(itemPrice)}
                                                 {product?.unit && (

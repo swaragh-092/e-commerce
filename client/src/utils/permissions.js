@@ -36,7 +36,7 @@ export const ADMIN_ROUTE_PERMISSION_MAP = Object.freeze([
   { path: '/admin/pages', permissions: [PERMISSIONS.PAGES_READ, PERMISSIONS.PAGES_MANAGE] },
   { path: '/admin/blogs', permissions: [PERMISSIONS.BLOGS_READ, PERMISSIONS.BLOGS_MANAGE] },
   { path: '/admin/menus', permissions: [PERMISSIONS.MENUS_READ, PERMISSIONS.MENUS_MANAGE] },
-  { path: '/admin/api-builder', permissions: [PERMISSIONS.SETTINGS_READ, PERMISSIONS.SETTINGS_MANAGE] },
+  { path: '/admin/api-builder', permissions: [PERMISSIONS.API_BUILDER_READ, PERMISSIONS.API_BUILDER_MANAGE] },
   { path: '/admin/access-control', permissions: [PERMISSIONS.ROLES_READ, PERMISSIONS.ROLES_MANAGE, PERMISSIONS.SYSTEM_ROLES_MANAGE, PERMISSIONS.USERS_ASSIGN_ROLES] },
   { path: '/admin/audit-log', permissions: [PERMISSIONS.AUDIT_READ] },
 ]);
@@ -61,7 +61,7 @@ const expandImplied = (permissions) => {
 export const getRolesForUser = (user) => {
   const safeUser = user || {};
 
-  if (Array.isArray(safeUser.roles) && safeUser.roles.length) {
+  if (Array.isArray(safeUser.roles)) {
     return unique(
       safeUser.roles
         .map((role) => (typeof role === 'string' ? role : role?.slug || role?.name || role?.role))
@@ -75,8 +75,21 @@ export const getRolesForUser = (user) => {
 export const getPermissionsForUser = (user) => {
   const safeUser = user || {};
 
-  if (Array.isArray(safeUser.permissions) && safeUser.permissions.length) {
+  if (Array.isArray(safeUser.permissions)) {
     return expandImplied(unique(safeUser.permissions));
+  }
+
+  if (Array.isArray(safeUser.roles)) {
+    return expandImplied(unique(
+      safeUser.roles.flatMap((role) => {
+        if (!role || typeof role !== 'object') return ROLE_PERMISSIONS[role] || [];
+        if (Array.isArray(role.permissions)) {
+          return role.permissions.map((p) => (typeof p === 'string' ? p : p?.key)).filter(Boolean);
+        }
+        const roleKey = role.slug || role.key || role.name || role.role;
+        return ROLE_PERMISSIONS[roleKey] || [];
+      })
+    ));
   }
 
   return expandImplied(unique(getRolesForUser(safeUser).flatMap((role) => ROLE_PERMISSIONS[role] || [])));

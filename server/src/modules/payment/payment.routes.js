@@ -22,13 +22,12 @@ router.post('/webhook', webhookLimiter, paymentController.handleWebhook);
 // PayU front-channel return (browser redirect, urlencoded form)
 router.post('/payu/return', paymentController.handlePayUReturn);
 
-router.use(featureGate('payments'));
+// Customer payment actions: gated by payments feature
+router.post('/create-order', featureGate('payments'), authenticate, authorizePermissions(PERMISSIONS.CHECKOUT_SELF), validate(createOrderSchema), paymentController.createOrder);
+router.post('/verify/:orderId', featureGate('payments'), authenticate, authorizePermissions(PERMISSIONS.CHECKOUT_SELF), validate(orderIdParamSchema, 'params'), validate(verifyPaymentSchema), paymentController.verifyPayment);
+router.post('/fail/:orderId', featureGate('payments'), authenticate, authorizePermissions(PERMISSIONS.CHECKOUT_SELF), validate(orderIdParamSchema, 'params'), validate(markFailedSchema), paymentController.markFailed);
 
-router.post('/create-order', authenticate, authorizePermissions(PERMISSIONS.CHECKOUT_SELF), validate(createOrderSchema), paymentController.createOrder);
-router.post('/verify/:orderId', authenticate, authorizePermissions(PERMISSIONS.CHECKOUT_SELF), validate(orderIdParamSchema, 'params'), validate(verifyPaymentSchema), paymentController.verifyPayment);
-router.post('/fail/:orderId', authenticate, authorizePermissions(PERMISSIONS.CHECKOUT_SELF), validate(orderIdParamSchema, 'params'), validate(markFailedSchema), paymentController.markFailed);
-
-// Admin: confirm cash was collected for a COD order
+// Admin: confirm cash was collected for a COD order (accessible in catalog mode / when payments is disabled to process past orders)
 router.post('/cod/confirm/:orderId', authenticate, authorizePermissions(PERMISSIONS.ORDERS_UPDATE_STATUS), validate(orderIdParamSchema, 'params'), validate(codConfirmSchema), paymentController.confirmCodPayment);
 
 
