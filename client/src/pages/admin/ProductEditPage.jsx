@@ -119,9 +119,8 @@ const validate = (formData) => {
   else if (formData.name?.trim().length > 255)
     errs.name = 'Product name must be 255 characters or less.';
 
-  const pricingEnabled = formData._features?.pricing ?? true;
-  const shippingEnabled = formData._features?.shipping ?? true;
-  const showPrice = formData._features?.showPrice ?? true;
+  const pricingEnabled = formData._features?.pricing === true;
+  const shippingEnabled = formData._features?.shipping === true;
 
 
   if (pricingEnabled) {
@@ -538,7 +537,7 @@ const ProductEditPage = () => {
     try {
       const payload = {
         ...formData,
-        price: !pricingEnabled && !showPrice && formData.price === '' ? 0 : (formData.price === '' ? null : parseFloat(formData.price)),
+        price: formData.price === '' ? null : Number(formData.price),
         salePrice:
           formData.salePrice !== '' && formData.salePrice !== null && !isNaN(parseFloat(formData.salePrice))
             ? parseFloat(formData.salePrice)

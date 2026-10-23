@@ -931,6 +931,11 @@ exports.createProduct = async (data, auditContext = null) => {
 
     validateProductStock(data);
     const { features: createFeatures } = await SettingsService.getFeatures();
+    // Catalog mode has no selling price. Accept legacy clients that send zero
+    // as an empty-price placeholder, then store the canonical NULL value.
+    if (!createFeatures.pricing && data.price != null && Number(data.price) === 0) {
+      data.price = null;
+    }
     validateSellingReadiness(data, null, createFeatures.pricing);
     validateShippingReadiness(data, null, createFeatures.shipping);
     if (data.images) await validateProductImages(data.images);
@@ -1028,6 +1033,12 @@ exports.updateProduct = async (id, data, auditContext = null) => {
     }
     validateProductStock(data, product);
     const { features: updateFeatures } = await SettingsService.getFeatures();
+    // Preserve omitted prices during edits. Only normalize an explicitly
+    // supplied zero while pricing is disabled; the products constraint allows
+    // NULL but rejects zero.
+    if (!updateFeatures.pricing && data.price != null && Number(data.price) === 0) {
+      data.price = null;
+    }
     validateSellingReadiness(data, product, updateFeatures.pricing);
     validateShippingReadiness(data, product, updateFeatures.shipping);
     if (data.images) await validateProductImages(data.images);

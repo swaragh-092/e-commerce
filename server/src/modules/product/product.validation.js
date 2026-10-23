@@ -101,7 +101,7 @@ const createProductSchema = Joi.object({
 });
 
 const catalogCreateProductSchema = createProductSchema.fork(
-  ['price'], (schema) => schema.optional().allow(null)
+  ['price'], () => Joi.number().precision(2).min(0).optional().allow(null).default(null)
 ).keys({
   variants: Joi.array().items(productVariantCreateSchema.keys({ price: Joi.number().precision(2).min(0).default(0) })).when('type', {
     is: 'variable', then: Joi.required(), otherwise: Joi.forbidden(),
@@ -239,11 +239,13 @@ const bulkUpdateSchema = Joi.object({
 
 // Only the server-resolved feature map may relax MRP requirements.
 const getProductWriteSchema = (schema, features = {}) => {
-  if (features.pricing !== false || features.showPrice !== false) return schema;
+  // Price presentation can be hidden while ecommerce still requires a valid
+  // selling price. Only the resolved pricing capability relaxes this field.
+  if (features.pricing !== false) return schema;
   return schema.fork('price', () => (
     schema === createProductSchema
-      ? Joi.number().precision(2).min(0).default(0)
-      : Joi.number().precision(2).min(0)
+      ? Joi.number().precision(2).min(0).optional().allow(null).default(null)
+      : Joi.number().precision(2).min(0).allow(null)
   ));
 };
 
