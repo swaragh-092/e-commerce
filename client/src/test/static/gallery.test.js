@@ -5,18 +5,15 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { waitFor } from '@testing-library/react';
 
 const script = readFileSync(resolve(import.meta.dirname, '../../../../demo-orbis-seeds-v1-html/js/gallery.js'), 'utf8');
-const albums = [{ title: 'Africa', slug: 'africa' }, { title: 'India', slug: 'india' }];
-const albumResponse = { success: true, data: albums };
-const itemResponse = (url = '/uploads/africa.png', pages = 1) => ({
-  success: true, data: { gallery: albums[0], items: [{ media: { url, alt: 'Field trial in Africa' } }] },
-  meta: { totalPages: pages },
-});
+const albums = [{ title: 'Flower', slug: 'flower', description: 'Field photographs' }, { title: 'Gallery', slug: 'gallery' }];
 const response = (data, ok = true) => ({ ok, status: ok ? 200 : 500, json: async () => data });
+const items = (url, totalPages = 1) => ({ success: true, data: { items: [{ media: { url, alt: 'Field trial' } }] }, meta: { totalPages } });
+const empty = { success: true, data: { items: [] }, meta: { totalPages: 0 } };
+const api = () => vi.fn(async (url) => response(url.endsWith('/public')
+  ? { success: true, data: albums } : items(url.includes('/flower?') ? '/uploads/flower.png' : '/uploads/gallery.png')));
 let dom;
 const mount = (fetchMock, search = '', origin = 'http://localhost:3000') => {
-  dom = new JSDOM(`<div id="gallery-albums"></div><p id="gallery-message"></p>
-    <button id="gallery-retry" hidden>Try again</button><div class="gallery-inner-wrapper"></div>
-    <nav id="gallery-pagination"></nav>`, {
+  dom = new JSDOM('<p id="gallery-message" role="status"></p><button id="gallery-retry" hidden>Try again</button><div id="gallery-sections"></div>', {
     url: `${origin}/demo-orbis-seeds-v1-html/gallery.html${search}`, runScripts: 'outside-only',
   });
   dom.window.API_URL = 'https://api.example.com/api/';
@@ -26,125 +23,167 @@ const mount = (fetchMock, search = '', origin = 'http://localhost:3000') => {
   dom.window.eval(script);
   return dom.window.document;
 };
+const section = (doc, index) => doc.querySelectorAll('.gallery-album-section')[index];
+const loaded = (doc) => waitFor(() => expect(doc.querySelectorAll('.gallery-inner-wrapper img')).toHaveLength(2));
 afterEach(() => dom?.window.close());
 
-describe('Orbi public gallery integration', () => {
-  it('loads backend albums and images from the same local server', async () => {
-    const fetchMock = vi.fn().mockResolvedValueOnce(response(albumResponse)).mockResolvedValueOnce(response(itemResponse()));
+describe('Orbi gallery album sections', () => {
+  it('renders every public album as a titled section with its own images', async () => {
+    const fetchMock = api();
     const doc = mount(fetchMock);
-    await waitFor(() => expect(doc.querySelector('img')).not.toBeNull());
-    expect(fetchMock.mock.calls[0][0]).toBe('http://localhost:3000/api/galleries/public');
-    expect(fetchMock.mock.calls[1][0]).toContain('/galleries/public/africa?page=1');
-    expect(doc.querySelector('img').src).toBe('http://localhost:3000/uploads/africa.png');
-    expect(doc.querySelector('img').alt).toBe('Field trial in Africa');
-    expect(doc.querySelectorAll('.gallery-album-button')).toHaveLength(2);
+    await loaded(doc);
+    expect(Array.from(doc.querySelectorAll('section h3'), (heading) => heading.textContent)).toEqual(['Flower', 'Gallery']);
+    expect(section(doc, 0).querySelector('img').src).toBe('http://localhost:3000/uploads/flower.png');
+    expect(section(doc, 1).querySelector('img').src).toBe('http://localhost:3000/uploads/gallery.png');
+    expect(section(doc, 0).querySelector('.gallery-album-description').textContent).toBe('Field photographs');
+    expect(doc.querySelector('.gallery-album-button')).toBeNull();
+    expect(fetchMock).toHaveBeenCalledTimes(3);
+    expect(dom.window.location.search).toBe('');
   });
 
-  it('uses the configured API and media host on the published static site', async () => {
-    const fetchMock = vi.fn().mockResolvedValueOnce(response(albumResponse)).mockResolvedValueOnce(response(itemResponse()));
+  it('keeps backend album ordering even when image requests finish in reverse order', async () => {
+    let resolveFlower;
+    const flower = new Promise((resolve) => { resolveFlower = resolve; });
+    const fetchMock = api().mockImplementation(async (url) => {
+      if (url.endsWith('/public')) return response({ data: albums });
+      return url.includes('/flower?') ? flower : response(items('/uploads/gallery.png'));
+    });
+    const doc = mount(fetchMock);
+    await waitFor(() => expect(section(doc, 1)?.querySelector('img')).toBeTruthy());
+    expect(section(doc, 0).querySelector('h3').textContent).toBe('Flower');
+    resolveFlower(response(items('/uploads/flower.png')));
+    await loaded(doc);
+  });
+
+  it('preserves the image order returned for each album', async () => {
+    const ordered = { data: { items: [{ media: { url: '/uploads/second.png' } }, { media: { url: '/uploads/first.png' } }] }, meta: { totalPages: 1 } };
+    const fetchMock = api().mockImplementation(async (url) => response(url.endsWith('/public') ? { data: albums } : ordered));
+    const doc = mount(fetchMock);
+    await waitFor(() => expect(doc.querySelectorAll('.gallery-inner-wrapper img')).toHaveLength(4));
+    expect(Array.from(section(doc, 0).querySelectorAll('img'), (img) => new URL(img.src).pathname))
+      .toEqual(['/uploads/second.png', '/uploads/first.png']);
+  });
+
+  it('uses the configured production API and media host', async () => {
+    const fetchMock = api();
     const doc = mount(fetchMock, '', 'https://orbiseeds.example');
-    await waitFor(() => expect(doc.querySelector('img')).not.toBeNull());
+    await loaded(doc);
     expect(fetchMock.mock.calls[0][0]).toBe('https://api.example.com/api/galleries/public');
-    expect(doc.querySelector('img').src).toBe('https://api.example.com/uploads/africa.png');
+    expect(section(doc, 0).querySelector('img').src).toBe('https://api.example.com/uploads/flower.png');
   });
 
-  it('honors album and page deep links and recovers from out-of-range pages', async () => {
-    const fetchMock = vi.fn().mockResolvedValueOnce(response(albumResponse))
-      .mockResolvedValueOnce(response({ data: { items: [] }, meta: { totalPages: 2 } }))
-      .mockResolvedValueOnce(response(itemResponse('/uploads/india.png', 2)));
-    const doc = mount(fetchMock, '?album=india&page=99');
-    await waitFor(() => expect(doc.querySelector('img')?.src).toContain('/uploads/india.png'));
-    expect(fetchMock.mock.calls[1][0]).toContain('/india?page=99');
-    expect(fetchMock.mock.calls[2][0]).toContain('/india?page=2');
-    expect(dom.window.location.search).toBe('?album=india&page=2');
+  it('groups lightbox images separately for each album and preserves alt text', async () => {
+    const doc = mount(api());
+    await loaded(doc);
+    const links = doc.querySelectorAll('.gallery-inner-wrapper a');
+    expect(links[0].getAttribute('data-fancybox')).not.toBe(links[1].getAttribute('data-fancybox'));
+    expect(links[0].querySelector('img').alt).toBe('Field trial');
+    expect(links[0].getAttribute('aria-label')).toBe('View image: Field trial');
   });
 
-  it('ignores a slow previous album response after switching albums', async () => {
-    let resolveFirst;
-    const first = new Promise((resolve) => { resolveFirst = resolve; });
-    const fetchMock = vi.fn().mockResolvedValueOnce(response(albumResponse))
-      .mockReturnValueOnce(first).mockResolvedValueOnce(response(itemResponse('/uploads/india.png')));
+  it('paginates one section without replacing the other section', async () => {
+    const fetchMock = api().mockImplementation(async (url) => {
+      if (url.endsWith('/public')) return response({ data: albums });
+      if (url.includes('/gallery?')) return response(items('/uploads/gallery.png'));
+      return response(items(url.includes('page=2') ? '/uploads/flower-2.png' : '/uploads/flower.png', 2));
+    });
     const doc = mount(fetchMock);
-    await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(2));
-    doc.querySelectorAll('.gallery-album-button')[1].click();
-    await waitFor(() => expect(doc.querySelector('img')?.src).toContain('india.png'));
-    resolveFirst(response(itemResponse('/uploads/africa.png')));
+    await loaded(doc);
+    section(doc, 0).querySelector('[aria-label="Next page"]').click();
+    await waitFor(() => expect(section(doc, 0).querySelector('img')?.src).toContain('flower-2.png'));
+    expect(section(doc, 1).querySelector('img').src).toContain('/uploads/gallery.png');
+    expect(section(doc, 0).querySelector('[aria-current="page"]').textContent).toBe('2');
+    expect(section(doc, 0).querySelector('[aria-label="Next page"]').disabled).toBe(true);
+    expect(dom.window.location.search).toBe('?album=flower&page=2');
+    expect(fetchMock.mock.calls.filter(([url]) => url.includes('/gallery?'))).toHaveLength(1);
+  });
+
+  it('opens deep-linked album pages while still displaying all other sections', async () => {
+    const fetchMock = api().mockImplementation(async (url) => {
+      if (url.endsWith('/public')) return response({ data: albums });
+      if (url.includes('page=99')) return response({ data: { items: [] }, meta: { totalPages: 2 } });
+      return response(items(url.includes('/gallery?') ? '/uploads/gallery.png' : '/uploads/flower.png', 2));
+    });
+    const doc = mount(fetchMock, '?album=gallery&page=99');
+    await loaded(doc);
+    expect(fetchMock.mock.calls.some(([url]) => url.includes('/flower?page=1'))).toBe(true);
+    expect(fetchMock.mock.calls.some(([url]) => url.includes('/gallery?page=2'))).toBe(true);
+    expect(dom.window.location.search).toBe('?album=gallery&page=2');
+  });
+
+  it('ignores outdated responses for the same section', async () => {
+    let resolveSecond;
+    const second = new Promise((resolve) => { resolveSecond = resolve; });
+    const fetchMock = api().mockImplementation(async (url) => {
+      if (url.endsWith('/public')) return response({ data: albums });
+      if (url.includes('/gallery?')) return response(items('/uploads/gallery.png'));
+      if (url.includes('page=2')) return second;
+      return response(items(url.includes('page=3') ? '/uploads/third.png' : '/uploads/flower.png', 3));
+    });
+    const doc = mount(fetchMock);
+    await loaded(doc);
+    const page2 = section(doc, 0).querySelector('[aria-label="Page 2"]');
+    const page3 = section(doc, 0).querySelector('[aria-label="Page 3"]');
+    page2.click();
+    page3.click();
+    await waitFor(() => expect(section(doc, 0).querySelector('img')?.src).toContain('third.png'));
+    resolveSecond(response(items('/uploads/second.png', 3)));
     await new Promise((resolve) => setTimeout(resolve, 0));
-    expect(doc.querySelector('img').src).toContain('india.png');
+    expect(section(doc, 0).querySelector('img').src).toContain('third.png');
   });
 
-  it('offers a working retry when the album list fails', async () => {
-    const fetchMock = vi.fn().mockResolvedValueOnce(response({}, false))
-      .mockResolvedValueOnce(response(albumResponse)).mockResolvedValueOnce(response(itemResponse()));
+  it('retries only a failed section and leaves successful albums visible', async () => {
+    let flowerCalls = 0;
+    const fetchMock = api().mockImplementation(async (url) => {
+      if (url.endsWith('/public')) return response({ data: albums });
+      if (url.includes('/flower?') && ++flowerCalls === 1) return response({}, false);
+      return response(items('/uploads/recovered.png'));
+    });
+    const doc = mount(fetchMock);
+    await waitFor(() => expect(section(doc, 0)?.querySelector('.gallery-retry').hidden).toBe(false));
+    await waitFor(() => expect(section(doc, 1).querySelector('img')).not.toBeNull());
+    section(doc, 0).querySelector('.gallery-retry').click();
+    await loaded(doc);
+    expect(fetchMock.mock.calls.filter(([url]) => url.includes('/gallery?'))).toHaveLength(1);
+    expect(section(doc, 0).querySelector('.gallery-retry').hidden).toBe(true);
+  });
+
+  it('retries album discovery when the album list request fails', async () => {
+    const fetchMock = api().mockResolvedValueOnce(response({}, false));
     const doc = mount(fetchMock);
     await waitFor(() => expect(doc.getElementById('gallery-retry').hidden).toBe(false));
     doc.getElementById('gallery-retry').click();
-    await waitFor(() => expect(doc.querySelector('img')).not.toBeNull());
+    await loaded(doc);
     expect(doc.getElementById('gallery-retry').hidden).toBe(true);
   });
 
-  it('retries the selected album without restarting album discovery', async () => {
-    const fetchMock = vi.fn().mockResolvedValueOnce(response(albumResponse))
-      .mockResolvedValueOnce(response({}, false)).mockResolvedValueOnce(response(itemResponse()));
-    const doc = mount(fetchMock);
-    await waitFor(() => expect(doc.getElementById('gallery-retry').hidden).toBe(false));
-    doc.getElementById('gallery-retry').click();
-    await waitFor(() => expect(doc.querySelector('img')).not.toBeNull());
-    expect(fetchMock.mock.calls[2][0]).toContain('/galleries/public/africa?page=1');
+  it('keeps an empty album heading and shows its empty state', async () => {
+    const fetchMock = api().mockImplementation(async (url) => response(url.endsWith('/public')
+      ? { data: albums } : url.includes('/flower?') ? empty : items('/uploads/gallery.png')));
+    const doc = mount(fetchMock, '?album=flower&page=9');
+    await waitFor(() => expect(section(doc, 0)?.querySelector('.gallery-inner-wrapper').getAttribute('aria-busy')).toBe('false'));
+    expect(section(doc, 0).querySelector('h3').textContent).toBe('Flower');
+    expect(section(doc, 0).querySelector('.gallery-album-message').textContent).toBe('No gallery items found.');
+    expect(section(doc, 1).querySelector('img')).not.toBeNull();
+    expect(dom.window.location.search).toBe('?album=flower');
   });
 
-  it('keeps page-only deep links and provides accessible pagination', async () => {
-    const fetchMock = vi.fn().mockResolvedValueOnce(response(albumResponse))
-      .mockResolvedValueOnce(response(itemResponse('/uploads/africa.png', 3)))
-      .mockResolvedValueOnce(response(itemResponse('/uploads/next.png', 3)));
-    const doc = mount(fetchMock, '?page=2');
-    await waitFor(() => expect(doc.querySelector('[aria-current="page"]')?.textContent).toBe('2'));
-    expect(fetchMock.mock.calls[1][0]).toContain('page=2');
-    doc.querySelector('[aria-label="Next page"]').click();
-    await waitFor(() => expect(doc.querySelector('img')?.src).toContain('/uploads/next.png'));
-    expect(dom.window.location.search).toBe('?album=africa&page=3');
-    expect(doc.querySelector('[aria-label="Next page"]').disabled).toBe(true);
-  });
-
-  it('shows an empty image state and clears loading status', async () => {
-    const fetchMock = vi.fn().mockResolvedValueOnce(response(albumResponse))
-      .mockResolvedValueOnce(response({ data: { items: [] }, meta: { totalPages: 0 } }));
-    const doc = mount(fetchMock);
-    await waitFor(() => expect(doc.querySelector('.gallery-inner-wrapper').getAttribute('aria-busy')).toBe('false'));
-    expect(doc.getElementById('gallery-message').textContent).toBe('No gallery items found.');
-    expect(doc.getElementById('gallery-retry').hidden).toBe(true);
-  });
-
-  it('resets a page deep link to page one for an empty album', async () => {
-    const emptyAlbum = response({ data: { items: [] }, meta: { totalPages: 0, total: 0 } });
-    const fetchMock = vi.fn().mockResolvedValueOnce(response(albumResponse))
-      .mockResolvedValueOnce(emptyAlbum).mockResolvedValueOnce(emptyAlbum);
-    const doc = mount(fetchMock, '?album=africa&page=9');
-    await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(3));
-    await waitFor(() => expect(doc.querySelector('.gallery-inner-wrapper').getAttribute('aria-busy')).toBe('false'));
-    expect(fetchMock.mock.calls[2][0]).toContain('page=1');
-    expect(dom.window.location.search).toBe('?album=africa');
-  });
-
-  it('preserves absolute media URLs without adding the API host', async () => {
-    const fetchMock = vi.fn().mockResolvedValueOnce(response(albumResponse))
-      .mockResolvedValueOnce(response(itemResponse('https://cdn.example.com/image.png')));
-    const doc = mount(fetchMock);
-    await waitFor(() => expect(doc.querySelector('img')?.src).toBe('https://cdn.example.com/image.png'));
-  });
-
-  it('shows an empty state when no albums have been published', async () => {
-    const fetchMock = vi.fn().mockResolvedValue(response({ success: true, data: [] }));
+  it('shows an empty page when there are no public albums', async () => {
+    const fetchMock = vi.fn().mockResolvedValue(response({ data: [] }));
     const doc = mount(fetchMock);
     await waitFor(() => expect(doc.getElementById('gallery-message').textContent).toContain('No gallery albums'));
+    expect(doc.querySelector('section')).toBeNull();
     expect(fetchMock).toHaveBeenCalledTimes(1);
   });
 
-  it('rejects non-web image URLs returned by the API', async () => {
-    const fetchMock = vi.fn().mockResolvedValueOnce(response(albumResponse))
-      .mockResolvedValueOnce(response(itemResponse('javascript:alert(1)')));
+  it('renders titles as text and ignores unsafe media URL protocols', async () => {
+    const title = '<img src=x onerror=alert(1)>';
+    const fetchMock = vi.fn().mockImplementation(async (url) => response(url.endsWith('/public')
+      ? { data: [{ title, slug: 'unsafe' }] } : items('javascript:alert(1)')));
     const doc = mount(fetchMock);
-    await waitFor(() => expect(doc.getElementById('gallery-message').textContent).toContain('No gallery items'));
-    expect(doc.querySelector('a')).toBeNull();
+    await waitFor(() => expect(section(doc, 0)?.querySelector('.gallery-inner-wrapper').getAttribute('aria-busy')).toBe('false'));
+    expect(section(doc, 0).querySelector('h3').textContent).toBe(title);
+    expect(section(doc, 0).querySelector('img')).toBeNull();
+    expect(section(doc, 0).querySelector('a')).toBeNull();
   });
 });

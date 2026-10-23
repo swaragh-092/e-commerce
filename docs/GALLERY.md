@@ -13,10 +13,17 @@ folder, allowing Vite to serve it during development and copy the static files
 into production output. The source is maintained in one place.
 
 The page loads albums through `GET /api/galleries/public` and loads their images
-through `GET /api/galleries/public/:slug?page=1&limit=20`. Album buttons preserve
-backend ordering; `?album=india&page=2` links directly to an album page. Images
-open using the existing Fancybox integration, with ordinary image links as a
-fallback if the external library is unavailable.
+through `GET /api/galleries/public/:slug?page=1&limit=20`. Every public album
+appears as a separate section with its admin title, description, and image grid.
+Sections preserve backend ordering and each album's image order. All sections
+remain visible; there is no album switcher. Each section has independent
+pagination, loading, empty, and retry states. Images open using the existing
+Fancybox integration, grouped separately per album, with ordinary image links
+as a fallback if the external library is unavailable.
+
+`?album=india&page=2` opens page two of that section and scrolls to it after the
+initial section layouts load. Other albums remain visible on their first pages.
+Changing a section's page changes only that section and updates the deep link.
 
 On localhost, the API and uploaded images use the same origin as the client,
 through Vite's existing `/api` and `/uploads` proxies. When the static site is
@@ -25,9 +32,10 @@ those values for the deployment. Absolute HTTP/HTTPS media URLs are preserved.
 Other URL protocols are ignored.
 
 Loading, empty, and failed requests have separate states. Failed requests offer
-Try again. Switching albums ignores late responses from the previous album;
-out-of-range pages reload the last available page. Total album visibility and
-image ordering remain controlled by the existing backend.
+Try again. Section requests ignore outdated pagination responses; out-of-range
+pages reload the last available page. A failed or empty album does not hide
+other sections. Album visibility and image ordering remain controlled by the
+existing backend.
 
 ## Verification
 
