@@ -6,6 +6,7 @@ const AppError = require('../../utils/AppError');
 const AuditService = require('../audit/audit.service');
 const { getPagination } = require('../../utils/pagination');
 const { ACTIONS, ENTITIES } = require('../../config/constants');
+const { getPermissionsForUser, PERMISSIONS } = require('../../config/permissions');
 const logger = require('../../utils/logger');
 const NotificationService = require('../notification/notification.service');
 
@@ -22,6 +23,25 @@ const authzInclude = [
     include: [{ model: Permission, as: 'permissions', through: { attributes: [] } }],
   },
 ];
+
+const hasElevatedAccess = (user) => {
+  if (!user) return false;
+  if (user.role && user.role !== 'customer') return true;
+  return (user.roles || []).some((role) => {
+    const slug = typeof role === 'string' ? role : role?.slug || role?.name || role?.role;
+    return slug && slug !== 'customer';
+  });
+};
+
+const assertCustomerManagementTarget = (user) => {
+  if (hasElevatedAccess(user)) {
+    throw new AppError(
+      'FORBIDDEN',
+      403,
+      'Staff and privileged accounts can only be managed through Access Control'
+    );
+  }
+};
 
 const getMe = async (userId) => {
   const user = await User.findByPk(userId, {
@@ -310,20 +330,26 @@ const listAll = async ({ page, limit, status, role, search }) => {
   });
 };
 
-const getById = async (id) => {
+const getById = async (id, actingUser = null) => {
+  const include = [
+    { model: UserProfile, as: 'profile' },
+    ...authzInclude,
+    { model: Address, separate: true, order: [['isDefault', 'DESC'], ['createdAt', 'DESC']] },
+  ];
+
+  // Customer profile access alone must not reveal purchase history.
+  if (actingUser && getPermissionsForUser(actingUser).includes(PERMISSIONS.ORDERS_READ)) {
+    include.push({
+      model: Order,
+      separate: true,
+      limit: 10,
+      order: [['createdAt', 'DESC']],
+      attributes: ['id', 'orderNumber', 'status', 'orderShippingStatus', 'total', 'paymentMethod', 'createdAt', 'updatedAt'],
+    });
+  }
+
   const user = await User.findByPk(id, {
-    include: [
-      { model: UserProfile, as: 'profile' },
-      ...authzInclude,
-      { model: Address, separate: true, order: [['isDefault', 'DESC'], ['createdAt', 'DESC']] },
-      {
-        model: Order,
-        separate: true,
-        limit: 10,
-        order: [['createdAt', 'DESC']],
-        attributes: ['id', 'orderNumber', 'status', 'orderShippingStatus', 'total', 'paymentMethod', 'createdAt', 'updatedAt'],
-      },
-    ],
+    include,
     attributes: { exclude: ['password', 'twoFactorSecret', 'twoFactorBackupCodes'] }
   });
 
@@ -362,6 +388,9 @@ const updateStatus = async (id, status, actingUserId) => {
         throw new AppError('VALIDATION_ERROR', 400, 'Cannot deactivate or ban the last active super admin');
       }
     }
+
+    // Customer management permissions must not become a staff-management backdoor.
+    assertCustomerManagementTarget(user);
 
     const before = user.toJSON();
     await user.update({ status }, { transaction: t });
@@ -887,8 +916,9 @@ const confirmEmailChange = async (token) => {
 
 const forceLogoutUser = async (userId) => {
   const { RefreshToken } = require('../index');
-  const user = await User.findByPk(userId);
+  const user = await User.findByPk(userId, { include: authzInclude });
   if (!user) throw new AppError('NOT_FOUND', 404, 'User not found');
+  assertCustomerManagementTarget(user);
 
   const active = await RefreshToken.findAll({
     where: { userId, revokedAt: null },

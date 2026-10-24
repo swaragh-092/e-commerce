@@ -69,7 +69,7 @@ const list = async (req, res, next) => {
 
 const getOne = async (req, res, next) => {
   try {
-    const user = await UserService.getById(req.params.id);
+    const user = await UserService.getById(req.params.id, req.user);
     return success(res, enrichUserAuthorization(user));
   } catch (err) {
     next(err);
@@ -169,7 +169,7 @@ const revokeAllOtherSessions = async (req, res, next) => {
 
 const forceLogout = async (req, res, next) => {
   try {
-    const result = await UserService.forceLogoutUser(req.params.id);
+    const result = await UserService.forceLogoutUser(req.params.id, req.user);
     return success(res, result, 'User sessions revoked');
   } catch (err) { next(err); }
 };

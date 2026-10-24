@@ -73,7 +73,7 @@ const slimDrawerWidth = 72;
 // Items with a `mode: 'ecommerce'` key are hidden entirely in catalog mode.
 const MENU_STRUCTURE = [
   { text: 'Dashboard', path: '/admin', icon: <DashboardIcon />, permission: PERMISSIONS.DASHBOARD_VIEW },
-  { text: 'Analytics', path: '/admin/analytics', icon: <AnalyticsIcon />, permission: PERMISSIONS.DASHBOARD_VIEW, mode: 'ecommerce' },
+  { text: 'Analytics', path: '/admin/analytics', icon: <AnalyticsIcon />, permissions: [PERMISSIONS.DASHBOARD_VIEW, PERMISSIONS.ORDERS_READ], requireAllPermissions: true, mode: 'ecommerce' },
   {
     title: 'Catalog',
     icon: <InventoryIcon />,
@@ -82,7 +82,7 @@ const MENU_STRUCTURE = [
       { text: 'Categories', path: '/admin/categories', icon: <CategoryIcon />, permission: PERMISSIONS.CATEGORIES_READ },
       { text: 'Brands', path: '/admin/brands', icon: <LocalOfferIcon />, permissions: [PERMISSIONS.BRANDS_READ, PERMISSIONS.BRANDS_MANAGE, PERMISSIONS.PRODUCTS_READ] },
       { text: 'Attributes', path: '/admin/attributes', icon: <TuneIcon />, permission: PERMISSIONS.ATTRIBUTES_READ },
-      { text: 'Gallery', path: '/admin/gallery', icon: <PhotoLibraryIcon />, permission: PERMISSIONS.MEDIA_READ },
+      { text: 'Gallery', path: '/admin/gallery', feature: 'gallery', icon: <PhotoLibraryIcon />, permission: PERMISSIONS.GALLERY_READ },
     ]
   },
   {
@@ -112,8 +112,8 @@ const MENU_STRUCTURE = [
     title: 'Blogs',
     icon: <DescriptionIcon />,
     items: [
-      { text: 'Posts', path: '/admin/blogs', icon: <DescriptionIcon />, permission: PERMISSIONS.BLOGS_READ },
-      { text: 'Categories', path: '/admin/blogs/categories', icon: <CategoryIcon />, permission: PERMISSIONS.BLOGS_READ },
+      { text: 'Posts', path: '/admin/blogs', feature: 'blogs', icon: <DescriptionIcon />, permission: PERMISSIONS.BLOGS_READ },
+      { text: 'Categories', path: '/admin/blogs/categories', feature: 'blogs', icon: <CategoryIcon />, permission: PERMISSIONS.BLOGS_READ },
     ]
   },
   {
@@ -124,10 +124,10 @@ const MENU_STRUCTURE = [
       { text: 'General', path: '/admin/settings', icon: <SettingsIcon />, permission: PERMISSIONS.SETTINGS_READ },
       { text: 'Store Templates', path: '/admin/themes', icon: <PhotoLibraryIcon />, feature: 'themes', permission: PERMISSIONS.SETTINGS_READ },
       { text: 'Store Designer', path: '/admin/store-designer', icon: <PhotoLibraryIcon />, feature: 'themes', permission: PERMISSIONS.SETTINGS_MANAGE, newTab: true },
-      { text: 'Newsletter', path: '/admin/newsletter', icon: <MailOutlineIcon />, permission: PERMISSIONS.SETTINGS_READ },
-      { text: 'Templates', path: '/admin/email-templates', icon: <MailOutlineIcon />, permission: PERMISSIONS.SETTINGS_READ },
+      { text: 'Newsletter', path: '/admin/newsletter', feature: 'newsletter', icon: <MailOutlineIcon />, permissions: [PERMISSIONS.NEWSLETTER_READ, PERMISSIONS.NEWSLETTER_SUBSCRIBERS_READ] },
+      { text: 'Templates', path: '/admin/email-templates', icon: <MailOutlineIcon />, permissions: [PERMISSIONS.SETTINGS_READ, PERMISSIONS.NOTIFICATIONS_MANAGE] },
       { text: 'Payment Gateways', path: '/admin/payment-gateways', icon: <PaymentIcon />, feature: 'payments', permission: PERMISSIONS.SETTINGS_READ, mode: 'ecommerce' },
-      { text: 'Shipping', path: '/admin/shipping', icon: <LocalShippingIcon />, feature: 'shipping', permission: PERMISSIONS.SETTINGS_READ, mode: 'ecommerce' },
+      { text: 'Shipping', path: '/admin/shipping', icon: <LocalShippingIcon />, feature: 'shipping', permission: PERMISSIONS.SETTINGS_MANAGE, mode: 'ecommerce' },
     ]
   },
   {

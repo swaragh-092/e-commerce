@@ -1,12 +1,13 @@
 import React, { useState } from 'react';
 import { Box, Button, Stack, TextField, Typography, Alert } from '@mui/material';
 import api from '../../../services/api';
-import { useComponentStyles } from '../../../hooks/useSettings';
+import { useComponentStyles, useFeature } from '../../../hooks/useSettings';
 import { getFormControlSize, getFormControlSx } from '../../../utils/componentStyles';
 import { CanvasEditableText } from './SectionFallback';
 
 const NewsletterSection = ({ section = {}, mode = 'live', onSelectComponent, onInlineFieldChange, onInlineFieldCommit, onInlineBlockFocus }) => {
   const preview = mode === 'preview';
+  const newsletterEnabled = useFeature('newsletter');
   const variant = section.variant || 'banner';
   const inline = variant === 'inline-form';
   const [email, setEmail] = useState('');
@@ -19,7 +20,7 @@ const NewsletterSection = ({ section = {}, mode = 'live', onSelectComponent, onI
 
   const handleSubmit = async (e) => {
     e.preventDefault();
-    if (!email.trim() || preview) return;
+    if (!email.trim() || preview || !newsletterEnabled) return;
     setLoading(true);
     setStatus(null);
     try {
@@ -73,6 +74,8 @@ const NewsletterSection = ({ section = {}, mode = 'live', onSelectComponent, onI
       {status === 'error' && <Alert severity="error" sx={{ mt: 2, maxWidth: 400, mx: inline ? 0 : 'auto' }}>Something went wrong. Try again.</Alert>}
     </>
   );
+
+  if (!preview && !newsletterEnabled) return null;
 
   if (inline) {
     return (

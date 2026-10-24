@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useState, useRef } from 'react';
 import { Alert, Box, Button, Chip, Dialog, DialogActions, DialogContent, DialogTitle, Paper, Stack, Table, TableBody, TableCell, TableContainer, TableHead, TableRow, TextField, Typography } from '@mui/material';
 import api from '../../services/api';
 import { useAuth } from '../../hooks/useAuth';
@@ -9,7 +9,9 @@ import { getApiErrorMessage } from '../../utils/apiErrors';
 export default function NewsletterCampaigns() {
   const { hasPermission } = useAuth();
   const { confirm, notify } = useNotification();
-  const canEdit = hasPermission(PERMISSIONS.NOTIFICATIONS_MANAGE);
+  const canEdit = hasPermission(PERMISSIONS.NEWSLETTER_MANAGE);
+  const editAccess = useRef(canEdit);
+  editAccess.current = canEdit;
   const [campaigns, setCampaigns] = useState([]);
   const [subject, setSubject] = useState('');
   const [message, setMessage] = useState('');
@@ -25,7 +27,12 @@ export default function NewsletterCampaigns() {
   }, []);
   useEffect(() => { load(); }, [load]);
 
+  useEffect(() => {
+    if (!canEdit) { setScheduleId(null); setEditId(null); setSubject(''); setMessage(''); }
+  }, [canEdit]);
+
   const action = async (callback, successMessage) => {
+    if (!editAccess.current) return;
     setBusy(true);
     setError('');
     try {
@@ -91,7 +98,7 @@ export default function NewsletterCampaigns() {
           </TableBody>
         </Table>
       </TableContainer>
-      <Dialog open={Boolean(scheduleId)} onClose={() => { if (!busy) setScheduleId(null); }} maxWidth="xs" fullWidth>
+      <Dialog open={canEdit && Boolean(scheduleId)} onClose={() => { if (!busy) setScheduleId(null); }} maxWidth="xs" fullWidth>
         <DialogTitle>Schedule newsletter</DialogTitle>
         <DialogContent>
           <TextField fullWidth type="datetime-local" label="Send time" InputLabelProps={{ shrink: true }} value={scheduledAt} onChange={(event) => setScheduledAt(event.target.value)} helperText="Shown in your local time. Sending begins within a minute of this time." sx={{ mt: 1 }} />

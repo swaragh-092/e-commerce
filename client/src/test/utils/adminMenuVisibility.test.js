@@ -82,3 +82,11 @@ describe('isAdminMenuItemVisible', () => {
     })).toBe(false);
   });
 });
+
+describe('Combined permission navigation', () => {
+  it('requires both Dashboard and Orders for Analytics', () => {
+    const item = { permissions: ['dashboard.view', 'orders.read'], requireAllPermissions: true };
+    expect(isAdminMenuItemVisible(item, { hasPermission: (p) => p === 'dashboard.view' })).toBe(false);
+    expect(isAdminMenuItemVisible(item, { hasPermission: () => true })).toBe(true);
+  });
+});

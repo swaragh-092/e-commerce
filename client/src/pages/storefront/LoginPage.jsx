@@ -17,8 +17,8 @@ const LoginPage = () => {
   const location = useLocation();
   const { login, verifyTwoFactor, finalizeAuthenticatedSession } = useAuth();
   const { notify } = useNotification();
-  const { settings } = useSettings();
-  const newsletterEnabled = settings?.auth?.loginNewsletterEnabled !== false;
+  const { settings, features } = useSettings();
+  const newsletterEnabled = features?.newsletter === true && settings?.auth?.loginNewsletterEnabled !== false;
   const [searchParams] = useSearchParams();
   
   const [formData, setFormData] = useState({ email: localStorage.getItem('rememberedEmail') || '', password: '' });

@@ -23,6 +23,7 @@ import { useNotification } from '../../context/NotificationContext';
 import { SettingsContext } from '../../context/ThemeContext';
 import { useAuth, useIsSuperAdmin } from '../../hooks/useAuth';
 import { useMode } from '../../hooks/useSettings';
+import platformFeatures from '../../../../shared/platform-features.json';
 import { PERMISSIONS } from '../../utils/permissions';
 
 const FeaturesPage = () => {
@@ -192,7 +193,7 @@ const FeaturesPage = () => {
         {/* ── Mode Context Banner ── */}
         <Alert severity="info" sx={{ mb: 3 }}>
           <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 1 }}>
-            <Typography variant="body2" fontWeight={700}>
+            <Typography component="div" variant="body2" fontWeight={700}>
               Current Mode: <Box component="span" sx={{ textTransform: 'uppercase', fontWeight: 900 }}>{selectedMode}</Box>
               {selectedMode === appMode ? (
                  <Chip label="DB" size="small" sx={{ height: 18, ml: 1, fontSize: 10, fontWeight: 700 }} />
@@ -300,22 +301,10 @@ const FeaturesPage = () => {
             Authorized staff API access to historical records is preserved.
           </Typography>
           <Box sx={{ display: 'grid', gap: 2 }}>
-            {[
-              { key: 'features.wishlist', label: 'Wishlist', desc: 'Allow users to save products to a wishlist.', defaultE: true, defaultC: true },
-              { key: 'features.reviews', label: 'Product Reviews', desc: 'Enable customer reviews on product pages.', defaultE: true, defaultC: true },
-              { key: 'features.requirePurchaseForReview', label: 'Verified Purchase Reviews', desc: 'Only allow reviews from customers who bought the product.', defaultE: false, defaultC: false },
-              { key: 'features.enquiry', label: 'Enquire Now Button', desc: 'Show an enquiry button on the product detail page.', defaultE: false, defaultC: true },
-              { key: 'features.coupons', label: 'Coupons & Discounts', desc: 'Enable coupon codes at checkout.', defaultE: true, defaultC: false },
-              { key: 'features.guestCheckout', label: 'Guest Checkout', desc: 'Allow customers to checkout without creating an account.', defaultE: true, defaultC: false },
-              { key: 'features.emailVerification', label: 'Email Verification', desc: 'Require email confirmation after registration.', defaultE: false, defaultC: false },
-              { key: 'features.showAvailableCoupons', label: 'Show Available Coupons', desc: 'Display applicable coupon codes on the cart page.', defaultE: true, defaultC: false },
-              { key: 'features.showPrice', label: 'Show Product Prices', desc: 'Control whether prices are displayed on the storefront.', defaultE: true, defaultC: false },
-              { key: 'features.productAssistant', label: 'AI Product Assistant', desc: 'Show the AI product creation assistant on product forms.', defaultE: true, defaultC: true },
-              { key: 'features.brands', label: 'Brands', desc: 'Show brand pages, brand navigation, brand filters, and brand details on products.', defaultE: true, defaultC: true },
-              { key: 'features.themes', label: 'Store Themes', desc: 'Enable the theme gallery and store designer tools.', defaultE: true, defaultC: true },
-              { key: 'features.seo', label: 'SEO Features', desc: 'Enable storefront SEO metadata, sitemap, robots, and URL overrides.', defaultE: true, defaultC: true },
-              { key: 'features.apiBuilder', label: 'API Builder', desc: 'Allow admins to publish custom public API endpoints.', defaultE: true, defaultC: true },
-            ].map(({ key, label, desc, defaultE, defaultC }) => {
+            {platformFeatures.optional.map(({ key: featureKey, label, description: desc, defaults }) => ({
+              key: `features.${featureKey}`, label, desc,
+              defaultE: defaults.ecommerce, defaultC: defaults.catalog,
+            })).map(({ key, label, desc, defaultE, defaultC }) => {
               const modeDefault = selectedMode === 'catalog' ? defaultC : defaultE;
               const isCatalog = selectedMode === 'catalog';
 
@@ -397,6 +386,7 @@ const FeaturesPage = () => {
                     onChange={(e) => set(key, e.target.checked)}
                     disabled={isDisabled}
                     size="small"
+                    inputProps={{ 'aria-label': label }}
                   />
                 </Box>
               );

@@ -15,6 +15,8 @@ import ArrowBackIcon from '@mui/icons-material/ArrowBack';
 import OpenInNewIcon from '@mui/icons-material/OpenInNew';
 import { useNavigate, useParams } from 'react-router-dom';
 import { getUserById } from '../../services/adminService';
+import { useAuth } from '../../hooks/useAuth';
+import { PERMISSIONS } from '../../utils/permissions';
 import { useCurrency } from '../../hooks/useSettings';
 import { getApiErrorMessage } from '../../utils/apiErrors';
 import { getOrderStatusColor, getOrderStatusLabel } from '../../utils/orderWorkflow';
@@ -46,6 +48,8 @@ const CustomerDetailPage = () => {
   const { id } = useParams();
   const navigate = useNavigate();
   const { formatPrice } = useCurrency();
+  const { hasPermission } = useAuth();
+  const canReadOrders = hasPermission(PERMISSIONS.ORDERS_READ);
   const [customer, setCustomer] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
@@ -169,18 +173,22 @@ const CustomerDetailPage = () => {
         <Grid item xs={12} md={8}>
           <Stack spacing={3}>
             <Grid container spacing={2}>
-              <Grid item xs={12} sm={4}>
-                <Paper elevation={0} sx={{ p: 2, border: '1px solid', borderColor: 'divider', borderRadius: 2 }}>
-                  <Typography variant="caption" color="text.secondary">Recent orders</Typography>
-                  <Typography variant="h6" fontWeight={800}>{orders.length}</Typography>
-                </Paper>
-              </Grid>
-              <Grid item xs={12} sm={4}>
-                <Paper elevation={0} sx={{ p: 2, border: '1px solid', borderColor: 'divider', borderRadius: 2 }}>
-                  <Typography variant="caption" color="text.secondary">Recent spend</Typography>
-                  <Typography variant="h6" fontWeight={800}>{formatPrice(totalSpend)}</Typography>
-                </Paper>
-              </Grid>
+              {canReadOrders && (
+                <Grid item xs={12} sm={4}>
+                  <Paper elevation={0} sx={{ p: 2, border: '1px solid', borderColor: 'divider', borderRadius: 2 }}>
+                    <Typography variant="caption" color="text.secondary">Recent orders</Typography>
+                    <Typography variant="h6" fontWeight={800}>{orders.length}</Typography>
+                  </Paper>
+                </Grid>
+              )}
+              {canReadOrders && (
+                <Grid item xs={12} sm={4}>
+                  <Paper elevation={0} sx={{ p: 2, border: '1px solid', borderColor: 'divider', borderRadius: 2 }}>
+                    <Typography variant="caption" color="text.secondary">Recent spend</Typography>
+                    <Typography variant="h6" fontWeight={800}>{formatPrice(totalSpend)}</Typography>
+                  </Paper>
+                </Grid>
+              )}
               <Grid item xs={12} sm={4}>
                 <Paper elevation={0} sx={{ p: 2, border: '1px solid', borderColor: 'divider', borderRadius: 2 }}>
                   <Typography variant="caption" color="text.secondary">Addresses</Typography>
@@ -189,34 +197,36 @@ const CustomerDetailPage = () => {
               </Grid>
             </Grid>
 
-            <DetailCard title="Recent Orders">
-              {orders.length === 0 ? (
-                <Typography variant="body2" color="text.secondary">No recent orders found.</Typography>
-              ) : (
-                <Stack divider={<Divider flexItem />} spacing={0}>
-                  {orders.map((order) => (
-                    <Box key={order.id} sx={{ py: 1.5, display: 'flex', justifyContent: 'space-between', gap: 2, alignItems: 'center' }}>
-                      <Box sx={{ minWidth: 0 }}>
-                        <Typography variant="body2" fontWeight={700}>{order.orderNumber}</Typography>
-                        <Typography variant="caption" color="text.secondary">{formatCustomerDateTime(order.createdAt)}</Typography>
+            {canReadOrders && (
+              <DetailCard title="Recent Orders">
+                {orders.length === 0 ? (
+                  <Typography variant="body2" color="text.secondary">No recent orders found.</Typography>
+                ) : (
+                  <Stack divider={<Divider flexItem />} spacing={0}>
+                    {orders.map((order) => (
+                      <Box key={order.id} sx={{ py: 1.5, display: 'flex', justifyContent: 'space-between', gap: 2, alignItems: 'center' }}>
+                        <Box sx={{ minWidth: 0 }}>
+                          <Typography variant="body2" fontWeight={700}>{order.orderNumber}</Typography>
+                          <Typography variant="caption" color="text.secondary">{formatCustomerDateTime(order.createdAt)}</Typography>
+                        </Box>
+                        <Stack direction="row" spacing={1} alignItems="center">
+                          <Chip size="small" label={getOrderStatusLabel(order.status)} color={getOrderStatusColor(order.status)} />
+                          <Typography variant="body2" fontWeight={700}>{formatPrice(order.total || 0)}</Typography>
+                          <Button
+                            size="small"
+                            variant="outlined"
+                            endIcon={<OpenInNewIcon fontSize="small" />}
+                            onClick={() => window.open(`/admin/orders/${order.id}`, '_blank', 'noopener,noreferrer')}
+                          >
+                            Order
+                          </Button>
+                        </Stack>
                       </Box>
-                      <Stack direction="row" spacing={1} alignItems="center">
-                        <Chip size="small" label={getOrderStatusLabel(order.status)} color={getOrderStatusColor(order.status)} />
-                        <Typography variant="body2" fontWeight={700}>{formatPrice(order.total || 0)}</Typography>
-                        <Button
-                          size="small"
-                          variant="outlined"
-                          endIcon={<OpenInNewIcon fontSize="small" />}
-                          onClick={() => window.open(`/admin/orders/${order.id}`, '_blank', 'noopener,noreferrer')}
-                        >
-                          Order
-                        </Button>
-                      </Stack>
-                    </Box>
-                  ))}
-                </Stack>
-              )}
-            </DetailCard>
+                    ))}
+                  </Stack>
+                )}
+              </DetailCard>
+            )}
 
             <DetailCard title="Addresses">
               {addresses.length === 0 ? (

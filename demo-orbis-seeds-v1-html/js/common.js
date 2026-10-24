@@ -519,3 +519,32 @@ return true;
 }
 
 // Form
+
+// Optional storefront capabilities are public configuration, independent of staff roles.
+(function () {
+    var apiBase = /^(localhost|127\.0\.0\.1)$/.test(window.location.hostname)
+        ? window.location.origin + '/api/' : API_URL.replace(/\/?$/, '/');
+    var featureStyle = document.createElement('style');
+    featureStyle.textContent = '[data-platform-feature-hidden] { display: none !important; }';
+    document.head.appendChild(featureStyle);
+    function applyFeatures(features) {
+        window.storePlatformFeatures = features;
+        document.querySelectorAll('a[href]').forEach(function (link) {
+            var path;
+            try { var target = new URL(link.href, window.location.href); if (target.origin !== window.location.origin) return; path = target.pathname.toLowerCase(); }
+            catch (error) { return; }
+            var feature = /\/gallery\.html$|^\/gallery(?:\/|$)/.test(path) ? 'gallery'
+                : /\/blog(?:-details)?\.html$|^\/blogs(?:\/|$)/.test(path) ? 'blogs' : null;
+            if (feature) { if (features[feature] !== true) link.setAttribute('data-platform-feature-hidden', ''); else link.removeAttribute('data-platform-feature-hidden'); }
+        });
+        document.querySelectorAll('#newsletter-form, .newsletter-form, [data-newsletter-form], #newsletter-checkbox-group').forEach(function (form) {
+            if (features.newsletter !== true) form.setAttribute('data-platform-feature-hidden', ''); else form.removeAttribute('data-platform-feature-hidden');
+            form.querySelectorAll('input, button').forEach(function (input) { input.disabled = features.newsletter !== true; });
+        });
+    }
+    applyFeatures({});
+    window.storePlatformFeaturesReady = fetch(apiBase + 'settings/features')
+        .then(function (response) { if (!response.ok) throw new Error('Feature settings unavailable'); return response.json(); })
+        .then(function (result) { var features = result.data && result.data.features || {}; applyFeatures(features); return features; })
+        .catch(function () { return {}; });
+})();

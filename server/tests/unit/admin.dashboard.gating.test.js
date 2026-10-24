@@ -45,19 +45,19 @@ describe('Admin route feature gating', () => {
     expect(couponPerformanceRoute).toBeDefined();
     expect(exportRoute).toBeDefined();
 
-    // sales-chart has adminOnly (2), ordersFeature (1), validate (1), controller (1) = 5
-    expect(salesChartRoute.middlewareCount).toBe(5);
-    // recent-orders has adminOnly (2), ordersFeature (1), controller (1) = 4
+    // sales-chart has adminOnly (2), orders.read (1), ordersFeature (1), validate (1), controller (1) = 6
+    expect(salesChartRoute.middlewareCount).toBe(6);
+    // recent-orders has authentication + dashboard/orders authorization (2), ordersFeature (1), controller (1) = 4
     expect(recentOrdersRoute.middlewareCount).toBe(4);
     // stats has adminOnly (2), controller (1) = 3 (feature-aware payload in service)
     expect(statsRoute.middlewareCount).toBe(3);
-    // top-products has adminOnly (2), validate (1), controller (1) = 4 (ungated for catalog)
+    // top-products has authentication + dashboard/orders authorization (2), validate (1), controller (1) = 4
     expect(topProductsRoute.middlewareCount).toBe(4);
-    // aov-trend has adminOnly (2), ordersFeature (1), validate (1), controller (1) = 5
+    // aov-trend has dashboard+orders checks (2), ordersFeature (1), validate (1), controller (1) = 5
     expect(aovTrendRoute.middlewareCount).toBe(5);
-    // coupon-performance has adminOnly (2), ordersFeature (1), couponsFeature (1), validate (1), controller (1) = 6
+    // coupon-performance has dashboard+orders checks (2), ordersFeature (1), couponsFeature (1), validate (1), controller (1) = 6
     expect(couponPerformanceRoute.middlewareCount).toBe(6);
-    // export route has adminOnly (2), ordersFeature (1), exportMetricFeatureGate (1), controller (1) = 5
+    // export route has authentication + dashboard/orders/customers authorization (2), ordersFeature (1), exportMetricFeatureGate (1), controller (1) = 5
     expect(exportRoute.middlewareCount).toBe(5);
   });
 

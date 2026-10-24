@@ -38,9 +38,14 @@ const sanitizeRichText = (html) => {
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
-const assertProductExists = async (productId) => {
-    const product = await Product.findByPk(productId, { attributes: ['id'] });
+const assertProductExists = async (productId, { publicView = false } = {}) => {
+    const product = await Product.findByPk(productId, {
+        attributes: ['id', 'status', 'isEnabled'],
+    });
     if (!product) throw new AppError('NOT_FOUND', 404, 'Product not found');
+    if (publicView && (product.status !== 'published' || product.isEnabled !== true)) {
+        throw new AppError('NOT_FOUND', 404, 'Product not found');
+    }
 };
 
 // ─── Service Exports ─────────────────────────────────────────────────────────
@@ -48,11 +53,14 @@ const assertProductExists = async (productId) => {
 /**
  * Return all tabs for a product, ordered by sort_order ASC.
  */
-exports.getTabsForProduct = async (productId) => {
-    await assertProductExists(productId);
+exports.getTabsForProduct = async (productId, { publicView = false } = {}) => {
+    await assertProductExists(productId, { publicView });
 
     return ProductTab.findAll({
-        where: { productId },
+        where: {
+            productId,
+            ...(publicView ? { isActive: true } : {}),
+        },
         order: [['sortOrder', 'ASC'], ['createdAt', 'ASC']],
     });
 };

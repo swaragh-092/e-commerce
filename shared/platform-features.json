@@ -1,0 +1,161 @@
+{
+  "optional": [
+    {
+      "key": "wishlist",
+      "label": "Wishlist",
+      "description": "Allow users to save products to a wishlist.",
+      "defaults": {
+        "ecommerce": true,
+        "catalog": true
+      }
+    },
+    {
+      "key": "reviews",
+      "label": "Product Reviews",
+      "description": "Enable customer reviews on product pages.",
+      "defaults": {
+        "ecommerce": true,
+        "catalog": true
+      }
+    },
+    {
+      "key": "requirePurchaseForReview",
+      "label": "Verified Purchase Reviews",
+      "description": "Only allow reviews from customers who bought the product.",
+      "defaults": {
+        "ecommerce": false,
+        "catalog": false
+      }
+    },
+    {
+      "key": "enquiry",
+      "label": "Enquire Now Button",
+      "description": "Show an enquiry button on the product detail page.",
+      "defaults": {
+        "ecommerce": false,
+        "catalog": true
+      }
+    },
+    {
+      "key": "coupons",
+      "label": "Coupons & Discounts",
+      "description": "Enable coupon codes at checkout.",
+      "defaults": {
+        "ecommerce": true,
+        "catalog": false
+      }
+    },
+    {
+      "key": "guestCheckout",
+      "label": "Guest Checkout",
+      "description": "Allow customers to checkout without creating an account.",
+      "defaults": {
+        "ecommerce": true,
+        "catalog": false
+      }
+    },
+    {
+      "key": "emailVerification",
+      "label": "Email Verification",
+      "description": "Require email confirmation after registration.",
+      "defaults": {
+        "ecommerce": false,
+        "catalog": false
+      }
+    },
+    {
+      "key": "showAvailableCoupons",
+      "label": "Show Available Coupons",
+      "description": "Display applicable coupon codes on the cart page.",
+      "defaults": {
+        "ecommerce": true,
+        "catalog": false
+      }
+    },
+    {
+      "key": "showPrice",
+      "label": "Show Product Prices",
+      "description": "Control whether prices are displayed on the storefront.",
+      "defaults": {
+        "ecommerce": true,
+        "catalog": false
+      }
+    },
+    {
+      "key": "productAssistant",
+      "label": "AI Product Assistant",
+      "description": "Show the AI product creation assistant on product forms.",
+      "defaults": {
+        "ecommerce": true,
+        "catalog": true
+      }
+    },
+    {
+      "key": "brands",
+      "label": "Brands",
+      "description": "Show brand pages, brand navigation, brand filters, and brand details on products.",
+      "defaults": {
+        "ecommerce": true,
+        "catalog": true
+      }
+    },
+    {
+      "key": "themes",
+      "label": "Store Themes",
+      "description": "Enable the theme gallery and store designer tools.",
+      "defaults": {
+        "ecommerce": true,
+        "catalog": true
+      }
+    },
+    {
+      "key": "seo",
+      "label": "SEO Features",
+      "description": "Enable storefront SEO metadata, sitemap, robots, and URL overrides.",
+      "defaults": {
+        "ecommerce": true,
+        "catalog": true
+      }
+    },
+    {
+      "key": "apiBuilder",
+      "label": "API Builder",
+      "description": "Allow admins to publish custom public API endpoints.",
+      "defaults": {
+        "ecommerce": true,
+        "catalog": true
+      }
+    },
+    {
+      "key": "newsletter",
+      "label": "Newsletter",
+      "description": "Show signup forms and allow new subscriptions and campaign delivery. Unsubscribe links remain available when disabled.",
+      "defaults": {
+        "ecommerce": true,
+        "catalog": true
+      }
+    },
+    {
+      "key": "gallery",
+      "label": "Gallery",
+      "description": "Publish showcase albums and image galleries through the public API.",
+      "defaults": {
+        "ecommerce": true,
+        "catalog": true
+      }
+    },
+    {
+      "key": "blogs",
+      "label": "Blogs",
+      "description": "Show published blog posts, categories, and blog navigation.",
+      "defaults": {
+        "ecommerce": true,
+        "catalog": true
+      }
+    }
+  ],
+  "reservedDefaults": {
+    "multiCurrency": false,
+    "socialLogin": false
+  }
+}

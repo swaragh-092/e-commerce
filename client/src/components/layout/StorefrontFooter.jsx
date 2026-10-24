@@ -12,10 +12,11 @@ import LinkedInIcon from '@mui/icons-material/LinkedIn';
 import EmailIcon from '@mui/icons-material/Email';
 import PhoneIcon from '@mui/icons-material/Phone';
 import LocationOnIcon from '@mui/icons-material/LocationOn';
-import { useSettings, useFeature } from '../../hooks/useSettings';
+import { useSettings } from '../../hooks/useSettings';
 import { useTheme } from '@mui/material/styles';
 import PageService from '../../services/pageService';
 import MenuService from '../../services/menuService';
+import { filterFeatureLinks } from '../../utils/featureNavigation';
 import { isExternalUrl } from '../../utils/urls';
 
 const SOCIAL = [
@@ -27,8 +28,7 @@ const SOCIAL = [
 ];
 
 const StorefrontFooter = () => {
-  const { settings } = useSettings();
-  const brandsEnabled = useFeature('brands');
+  const { settings, features } = useSettings();
   const theme = useTheme();
   const [dynamicLinks, setDynamicLinks] = React.useState([]);
   const [footerMenu, setFooterMenu] = React.useState(null);
@@ -109,9 +109,7 @@ const StorefrontFooter = () => {
     ...(Array.isArray(f.links) ? f.links : []).map(toFooterLink),
     ...dynamicLinks.map(toFooterLink),
   ].filter(Boolean);
-  const isBrandLink = (url) => /^\/brands(\/|$|\?)/.test(String(url || ''));
-  const allLinks = dedupeLinks(menuLinks.length ? menuLinks : legacyLinks)
-    .filter((link) => brandsEnabled || !isBrandLink(link.url));
+  const allLinks = filterFeatureLinks(dedupeLinks(menuLinks.length ? menuLinks : legacyLinks), features || {});
 
   const hasSocial  = f.showSocial  && SOCIAL.some(({ key }) => f[key]);
   const hasLinks   = f.showLinks !== false && allLinks.length > 0;

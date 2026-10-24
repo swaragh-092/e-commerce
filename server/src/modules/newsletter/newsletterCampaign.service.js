@@ -60,6 +60,7 @@ const list = async () => {
 };
 
 const queueDue = async () => {
+  if (!await require('../../middleware/featureGate.middleware').getResolvedFeature('newsletter')) return;
   const due = await NewsletterCampaign.findAll({ where: { status: 'scheduled', scheduledAt: { [Op.lte]: new Date() } }, attributes: ['id'], limit: 5 });
   for (const { id } of due) {
     await sequelize.transaction(async (transaction) => {

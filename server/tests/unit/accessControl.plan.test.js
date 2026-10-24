@@ -12,6 +12,7 @@ const {
   getPermissionsForUser,
   getPermissionKeysFromRoleObject,
   enrichUserAuthorization,
+  RESERVED_SUPER_ADMIN_PERMISSIONS,
 } = require('../../src/config/permissions');
 const { ROLES } = require('../../src/config/constants');
 const { authorizePermissions, authorizeAnyPermission } = require('../../src/middleware/role.middleware');
@@ -170,6 +171,59 @@ describe('Access Control & RBAC Enforcement Suite', () => {
         statusCode: 403,
         message: 'Only super admins can edit system roles',
       });
+    });
+
+    it('keeps the Super Admin role immutable, including reserved permissions', async () => {
+      const mockRole = {
+        id: 'system-super-admin-role-id',
+        name: 'Super Admin',
+        slug: ROLES.SUPER_ADMIN,
+        baseRole: ROLES.SUPER_ADMIN,
+        isSystem: true,
+        permissions: [],
+        setPermissions: vi.fn(),
+        update: vi.fn(),
+      };
+      vi.spyOn(db.Role, 'findByPk').mockResolvedValue(mockRole);
+
+      await expect(
+        AdminService.updateAccessRole(
+          mockRole.id,
+          { permissionIds: ['perm-products-read'] },
+          superAdminUser
+        )
+      ).rejects.toMatchObject({
+        statusCode: 403,
+        message: 'The Super Admin role is protected and cannot be modified',
+      });
+      expect(mockRole.setPermissions).not.toHaveBeenCalled();
+      expect(RESERVED_SUPER_ADMIN_PERMISSIONS.length).toBeGreaterThan(0);
+    });
+
+    it('rejects assigning reserved permissions to a non-super-admin system role', async () => {
+      const mockRole = {
+        id: 'system-admin-role-id',
+        name: 'Admin',
+        slug: ROLES.ADMIN,
+        baseRole: ROLES.ADMIN,
+        isSystem: true,
+        permissions: [],
+        setPermissions: vi.fn(),
+        update: vi.fn(),
+      };
+      vi.spyOn(db.Role, 'findByPk').mockResolvedValue(mockRole);
+
+      await expect(
+        AdminService.updateAccessRole(
+          mockRole.id,
+          { permissionIds: ['perm-system-roles'] },
+          superAdminUser
+        )
+      ).rejects.toMatchObject({
+        statusCode: 403,
+        message: 'Reserved super admin permissions cannot be assigned to this role',
+      });
+      expect(mockRole.setPermissions).not.toHaveBeenCalled();
     });
 
     it('rejects non-superadmin modifying a superadmin user account', async () => {

@@ -41,7 +41,7 @@ const ThemePreviewModal = ({ open, onClose, packageData, onApply }) => {
       </DialogContent>
       <DialogActions>
         <Button onClick={onClose}>Close</Button>
-        <Button variant="contained" onClick={() => onApply(packageData)}>Install Template</Button>
+        {onApply && <Button variant="contained" onClick={() => onApply(packageData)}>Install Template</Button>}
       </DialogActions>
     </Dialog>
   );

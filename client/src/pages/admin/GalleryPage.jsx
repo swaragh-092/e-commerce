@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useRef } from 'react';
 import {
   Alert, Box, Button, Card, CardMedia, Chip, CircularProgress, Dialog, DialogActions,
   DialogContent, DialogTitle, FormControlLabel, IconButton, Stack, Switch, TextField,
@@ -25,8 +25,11 @@ const messageFor = (error) => getApiErrorMessage(error, 'Something went wrong. P
 const GalleryPage = () => {
   const { hasPermission } = useAuth();
   const { notify, confirm } = useNotification();
-  const canManage = hasPermission(PERMISSIONS.MEDIA_UPDATE);
-  const canDelete = hasPermission(PERMISSIONS.MEDIA_DELETE);
+  const canManage = hasPermission(PERMISSIONS.GALLERY_MANAGE);
+  const canDelete = hasPermission(PERMISSIONS.GALLERY_DELETE);
+  const canSelectMedia = canManage && hasPermission(PERMISSIONS.MEDIA_READ);
+  const access = useRef({ canManage, canDelete });
+  access.current = { canManage, canDelete };
   const [galleries, setGalleries] = useState([]);
   const [selectedId, setSelectedId] = useState(null);
   const [page, setPage] = useState(1);
@@ -39,6 +42,11 @@ const GalleryPage = () => {
   const [form, setForm] = useState(emptyForm);
   const [pickerOpen, setPickerOpen] = useState(false);
   const [coverPickerOpen, setCoverPickerOpen] = useState(false);
+
+  useEffect(() => {
+    if (!canManage) { setDialogOpen(false); setEditingId(null); setForm(emptyForm); }
+    if (!canSelectMedia) setPickerOpen(false);
+  }, [canManage, canSelectMedia]);
 
   const selected = galleries.find((gallery) => gallery.id === selectedId) || null;
   const items = [...(selected?.items || [])].sort((a, b) => a.priority - b.priority || String(a.createdAt || '').localeCompare(String(b.createdAt || '')) || String(a.id).localeCompare(String(b.id)));
@@ -82,6 +90,7 @@ const GalleryPage = () => {
   };
 
   const saveGallery = async () => {
+    if (!access.current.canManage) return;
     const payload = { ...form, title: form.title.trim(), slug: slugify(form.slug), description: form.description.trim() };
     if (!payload.title || !payload.slug) return;
     setBusy(true);
@@ -105,6 +114,7 @@ const GalleryPage = () => {
   };
 
   const toggleActive = async () => {
+    if (!access.current.canManage) return;
     if (!selected) return;
     setBusy(true);
     try {
@@ -117,6 +127,7 @@ const GalleryPage = () => {
 
   const deleteGallery = async () => {
     if (!selected || !await confirm({ title: 'Delete gallery?', message: `Delete “${selected.title}” and remove its images from this gallery? The media files will remain in the library.`, severity: 'error' })) return;
+    if (!access.current.canDelete) return;
     setBusy(true);
     try {
       await galleryService.remove(selected.id);
@@ -128,6 +139,7 @@ const GalleryPage = () => {
   };
 
   const addImages = async (media) => {
+    if (!access.current.canManage || !hasPermission(PERMISSIONS.MEDIA_READ) || !selected) return;
     const existingIds = new Set(items.map((item) => item.mediaId));
     const ids = [...new Set((media || []).filter((item) => item.mimeType?.startsWith('image/') && !existingIds.has(item.id)).map((item) => item.id))];
     if (!ids.length) { notify('Select images that are not already in this gallery.', 'info'); return; }
@@ -156,6 +168,7 @@ const GalleryPage = () => {
 
   const removeImage = async (item) => {
     if (!await confirm({ title: 'Remove image?', message: 'Remove this image from the gallery? The media file will remain in the library.', severity: 'error' })) return;
+    if (!access.current.canDelete) return;
     setBusy(true);
     try {
       await galleryService.removeImage(selected.id, item.id);
@@ -166,6 +179,7 @@ const GalleryPage = () => {
   };
 
   const moveImage = async (index, direction) => {
+    if (!access.current.canManage) return;
     const next = [...items];
     [next[index], next[index + direction]] = [next[index + direction], next[index]];
     setBusy(true);
@@ -219,9 +233,10 @@ const GalleryPage = () => {
               </Stack>}
             </Box>
             {canManage && <Stack direction={{ xs: 'column', sm: 'row' }} alignItems={{ sm: 'center' }} spacing={2} sx={{ mb: 3 }}>
-              <Button variant="contained" startIcon={<AddPhotoAlternateIcon />} disabled={busy} onClick={() => setPickerOpen(true)}>Add images</Button>
+              <Button variant="contained" startIcon={<AddPhotoAlternateIcon />} disabled={busy || !canSelectMedia} onClick={() => setPickerOpen(true)}>Add images</Button>
               <FormControlLabel control={<Switch checked={Boolean(selected.isActive)} disabled={busy} onChange={toggleActive} />} label="Visible on public gallery" />
             </Stack>}
+            {canManage && !canSelectMedia && <Alert severity="info" sx={{ mb: 2 }}>Media Read permission is required to select images from the library.</Alert>}
             {!items.length ? <Alert severity="info">This gallery has no images yet. Add some from the Media Library.</Alert> : (
               <Box sx={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(170px, 1fr))', gap: 2 }}>
                 {items.map((item, index) => <Card variant="outlined" key={item.id}>
@@ -241,7 +256,7 @@ const GalleryPage = () => {
           </Card>}
         </Box>
       )}
-      <Dialog open={dialogOpen} onClose={busy ? undefined : () => setDialogOpen(false)} fullWidth maxWidth="sm">
+      <Dialog open={canManage && dialogOpen} onClose={busy ? undefined : () => setDialogOpen(false)} fullWidth maxWidth="sm">
         <DialogTitle>{editingId ? 'Edit gallery' : 'New gallery'}</DialogTitle>
         <DialogContent><Stack spacing={2} sx={{ pt: 1 }}>
           <TextField autoFocus label="Gallery name" value={form.title} onChange={(event) => setForm((current) => ({ ...current, title: event.target.value, slug: editingId ? current.slug : slugify(event.target.value) }))} required fullWidth />
@@ -251,8 +266,7 @@ const GalleryPage = () => {
         </Stack></DialogContent>
         <DialogActions><Button onClick={() => setDialogOpen(false)} disabled={busy}>Cancel</Button><Button variant="contained" onClick={saveGallery} disabled={busy || !form.title.trim() || !slugify(form.slug)}>{editingId ? 'Save changes' : 'Create gallery'}</Button></DialogActions>
       </Dialog>
-      <MediaPicker open={coverPickerOpen} onClose={() => setCoverPickerOpen(false)} onSelect={(media) => media?.[0] && saveCover(media[0])} title="Choose gallery cover photo" />
-      <MediaPicker open={pickerOpen} onClose={() => setPickerOpen(false)} onSelect={addImages} multiple title="Add gallery images" />
+      <MediaPicker open={canSelectMedia && pickerOpen} onClose={() => setPickerOpen(false)} onSelect={addImages} multiple title="Add gallery images" />
     </Box>
   );
 };

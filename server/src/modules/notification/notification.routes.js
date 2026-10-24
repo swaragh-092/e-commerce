@@ -2,7 +2,7 @@
 
 const router = require('express').Router();
 const { authenticate } = require('../../middleware/auth.middleware');
-const { authorizePermissions } = require('../../middleware/role.middleware');
+const { authorizePermissions, authorizeAnyPermission } = require('../../middleware/role.middleware');
 const { PERMISSIONS } = require('../../config/permissions');
 const {
   listTemplates,
@@ -28,7 +28,7 @@ router.put('/assignments/:kind/:id', validate(assignmentParams, 'params'), async
   catch (error) { next(error); }
 });
 
-router.get('/recipients', authorizePermissions(PERMISSIONS.SETTINGS_READ), async (req, res, next) => {
+router.get('/recipients', authorizePermissions(PERMISSIONS.NOTIFICATIONS_MANAGE), async (req, res, next) => {
   try {
     const result = await require('./notificationRecipients.service').read();
     return require('../../utils/response').success(res, result);
@@ -44,17 +44,17 @@ router.put('/recipients', authorizePermissions(PERMISSIONS.NOTIFICATIONS_MANAGE)
 // Template READ — settings.read is enough (admins can view)
 router.get(
   '/templates',
-  authorizePermissions(PERMISSIONS.SETTINGS_READ),
+  authorizeAnyPermission(PERMISSIONS.SETTINGS_READ, PERMISSIONS.NOTIFICATIONS_MANAGE),
   listTemplates
 );
 router.get(
   '/templates/:name',
-  authorizePermissions(PERMISSIONS.SETTINGS_READ),
+  authorizeAnyPermission(PERMISSIONS.SETTINGS_READ, PERMISSIONS.NOTIFICATIONS_MANAGE),
   getTemplate
 );
 router.get(
   '/templates/:name/default',
-  authorizePermissions(PERMISSIONS.SETTINGS_READ),
+  authorizeAnyPermission(PERMISSIONS.SETTINGS_READ, PERMISSIONS.NOTIFICATIONS_MANAGE),
   getDefaultTemplate
 );
 
@@ -66,7 +66,7 @@ router.put(
 );
 router.post(
   '/templates/:name/preview',
-  authorizePermissions(PERMISSIONS.SETTINGS_READ),
+  authorizeAnyPermission(PERMISSIONS.SETTINGS_READ, PERMISSIONS.NOTIFICATIONS_MANAGE),
   previewTemplate
 );
 router.post(

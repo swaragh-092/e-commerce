@@ -54,7 +54,13 @@
     "BRANDS_READ": "brands.read",
     "BRANDS_MANAGE": "brands.manage",
     "BLOGS_READ": "blogs.read",
-    "BLOGS_MANAGE": "blogs.manage"
+    "BLOGS_MANAGE": "blogs.manage",
+    "GALLERY_READ": "gallery.read",
+    "GALLERY_MANAGE": "gallery.manage",
+    "GALLERY_DELETE": "gallery.delete",
+    "NEWSLETTER_READ": "newsletter.read",
+    "NEWSLETTER_MANAGE": "newsletter.manage",
+    "NEWSLETTER_SUBSCRIBERS_READ": "newsletter.subscribers_read"
   },
   "systemRoleDefinitions": {
     "customer": {
@@ -75,6 +81,7 @@
   },
   "adminPermissionKeys": [
     "dashboard.view",
+    "account.self",
     "products.read",
     "products.create",
     "products.update",
@@ -109,7 +116,13 @@
     "brands.read",
     "brands.manage",
     "blogs.read",
-    "blogs.manage"
+    "blogs.manage",
+    "gallery.read",
+    "gallery.manage",
+    "gallery.delete",
+    "newsletter.read",
+    "newsletter.manage",
+    "newsletter.subscribers_read"
   ],
   "customerPermissionKeys": [
     "account.self",
@@ -147,8 +160,8 @@
     "media.upload": "Upload new media files",
     "media.update": "Edit media file metadata",
     "media.delete": "Delete media files",
-    "settings.read": "View store settings",
-    "settings.manage": "Edit store settings (general, shipping, payment)",
+    "settings.read": "View general settings, store templates, SEO overrides, payment gateway statuses, sale labels, and email templates",
+    "settings.manage": "Edit store settings, shipping, payment gateways, store templates/designer, SEO overrides, and sale labels",
     "settings.advanced": "Access advanced settings (danger zone)",
     "audit.read": "View the audit log of admin actions",
     "pages.read": "View static/content pages",
@@ -171,31 +184,93 @@
     "account.self": "Manage own account profile",
     "cart.self": "Manage own shopping cart",
     "wishlist.self": "Manage own wishlist",
-    "checkout.self": "Place orders through checkout"
+    "checkout.self": "Place orders through checkout",
+    "gallery.read": "View gallery albums and their images",
+    "gallery.manage": "Create and edit gallery albums, visibility, and image order; selecting images also requires Media Read",
+    "gallery.delete": "Delete gallery albums or remove images from albums; does not delete media files",
+    "newsletter.read": "View newsletter campaign drafts and delivery results",
+    "newsletter.manage": "Create, edit, test, schedule, send, and cancel newsletter campaigns",
+    "newsletter.subscribers_read": "View subscriber email addresses and export the displayed subscriber list"
   },
   "implies": {
-    "categories.manage": ["categories.read"],
-    "attributes.manage": ["attributes.read"],
-    "customers.manage": ["customers.read"],
-    "coupons.manage": ["coupons.read"],
-    "pages.manage": ["pages.read"],
-    "menus.manage": ["menus.read"],
-    "api_builder.manage": ["api_builder.read"],
-    "enquiries.manage": ["enquiries.read"],
-    "brands.manage": ["brands.read"],
-    "roles.manage": ["roles.read"],
-    "settings.manage": ["settings.read"],
-    "settings.advanced": ["settings.read", "settings.manage"],
-    "orders.update_status": ["orders.read"],
-    "orders.refund": ["orders.read"],
-    "reviews.moderate": ["reviews.read"],
-    "reviews.delete": ["reviews.read"],
-    "products.create": ["products.read"],
-    "products.update": ["products.read"],
-    "products.delete": ["products.read"],
-    "media.upload": ["media.read"],
-    "media.update": ["media.read"],
-    "media.delete": ["media.read"],
-    "blogs.manage": ["blogs.read"]
+    "categories.manage": [
+      "categories.read"
+    ],
+    "attributes.manage": [
+      "attributes.read"
+    ],
+    "customers.manage": [
+      "customers.read"
+    ],
+    "coupons.manage": [
+      "coupons.read"
+    ],
+    "pages.manage": [
+      "pages.read"
+    ],
+    "menus.manage": [
+      "menus.read"
+    ],
+    "api_builder.manage": [
+      "api_builder.read"
+    ],
+    "enquiries.manage": [
+      "enquiries.read"
+    ],
+    "brands.manage": [
+      "brands.read"
+    ],
+    "roles.manage": [
+      "roles.read"
+    ],
+    "settings.manage": [
+      "settings.read"
+    ],
+    "settings.advanced": [
+      "settings.read",
+      "settings.manage"
+    ],
+    "orders.update_status": [
+      "orders.read"
+    ],
+    "orders.refund": [
+      "orders.read"
+    ],
+    "reviews.moderate": [
+      "reviews.read"
+    ],
+    "reviews.delete": [
+      "reviews.read"
+    ],
+    "products.create": [
+      "products.read"
+    ],
+    "products.update": [
+      "products.read"
+    ],
+    "products.delete": [
+      "products.read"
+    ],
+    "media.upload": [
+      "media.read"
+    ],
+    "media.update": [
+      "media.read"
+    ],
+    "media.delete": [
+      "media.read"
+    ],
+    "blogs.manage": [
+      "blogs.read"
+    ],
+    "gallery.manage": [
+      "gallery.read"
+    ],
+    "gallery.delete": [
+      "gallery.read"
+    ],
+    "newsletter.manage": [
+      "newsletter.read"
+    ]
   }
 }

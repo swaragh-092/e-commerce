@@ -13,8 +13,8 @@ const RegisterPage = () => {
   const theme = useTheme();
   const navigate = useNavigate();
   const { register } = useAuth();
-  const { settings } = useSettings();
-  const newsletterEnabled = settings?.auth?.registerNewsletterEnabled !== false;
+  const { settings, features } = useSettings();
+  const newsletterEnabled = features?.newsletter === true && settings?.auth?.registerNewsletterEnabled !== false;
   
   const [formData, setFormData] = useState({ firstName: '', lastName: '', email: '', password: '', confirmPassword: '' });
   const [fieldErrors, setFieldErrors] = useState({});

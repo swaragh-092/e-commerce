@@ -1,9 +1,15 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Box, Typography, Button, Chip, Paper, Stack, Dialog, DialogTitle, DialogContent, DialogActions } from '@mui/material';
 import RestoreIcon from '@mui/icons-material/Restore';
 
 const ThemeHistoryPanel = ({ activations, onRollback, loading }) => {
   const [pendingRollback, setPendingRollback] = useState(null);
+
+  // Close the pending confirmation the moment rollback permission is lost so a
+  // revoked admin never keeps an enabled confirm action with no handler.
+  useEffect(() => {
+    if (!onRollback && pendingRollback) setPendingRollback(null);
+  }, [onRollback, pendingRollback]);
 
   if (!activations?.length) {
     return <Typography color="text.secondary">No theme installations yet.</Typography>;
@@ -26,11 +32,11 @@ const ThemeHistoryPanel = ({ activations, onRollback, loading }) => {
             <Box>
               {a.rolledBackAt ? (
                 <Chip label="Rolled back" size="small" color="warning" />
-              ) : (
+              ) : onRollback ? (
                 <Button size="small" startIcon={<RestoreIcon />} onClick={() => setPendingRollback(a)} disabled={loading}>
                   Rollback
                 </Button>
-              )}
+              ) : null}
             </Box>
           </Box>
         </Paper>
@@ -51,7 +57,7 @@ const ThemeHistoryPanel = ({ activations, onRollback, loading }) => {
             onClick={() => {
               const activationId = pendingRollback?.id;
               setPendingRollback(null);
-              if (activationId) onRollback(activationId);
+              if (activationId && onRollback) onRollback(activationId);
             }}
             disabled={loading}
           >

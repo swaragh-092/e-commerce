@@ -20,6 +20,8 @@ import ThemeDetailModal from '../../components/admin/themes/ThemeDetailModal';
 import SaveAsTemplateDialog from '../../components/admin/themes/SaveAsTemplateDialog';
 import SortIcon from '@mui/icons-material/Sort';
 import { updateSettings } from '../../services/adminService';
+import { useAuth } from '../../hooks/useAuth';
+import { PERMISSIONS } from '../../utils/permissions';
 
 // ─── localStorage helpers for favorites & recently viewed ────────────────────
 
@@ -113,6 +115,21 @@ const ThemeGalleryPage = () => {
   const [sortBy, setSortBy] = useState('featured');
   const { notify } = useNotification();
   const { settings, refreshSettings } = useContext(SettingsContext) || {};
+  const { hasPermission } = useAuth();
+  // Write actions (import/apply/rollback/save-template) require settings.manage
+  // on the server; hide them from read-only viewers instead of 403-ing.
+  const canManageTemplates = hasPermission(PERMISSIONS.SETTINGS_MANAGE);
+  const onApplyTemplate = canManageTemplates ? setApplyPkg : undefined;
+
+  // Close write dialogs the moment settings.manage is lost so a revoked admin
+  // never keeps an open write surface. Export/preview/detail are read-only and
+  // stay available.
+  useEffect(() => {
+    if (canManageTemplates) return;
+    if (importOpen) setImportOpen(false);
+    if (applyPkg) setApplyPkg(null);
+    if (saveTemplateOpen) setSaveTemplateOpen(false);
+  }, [canManageTemplates, importOpen, applyPkg, saveTemplateOpen]);
   const [differences, setDifferences] = useState([]);
   const [favorites, setFavorites] = useState(loadFavorites);
   const [recentSlugs, setRecentSlugs] = useState(loadRecent);
@@ -366,10 +383,16 @@ const ThemeGalleryPage = () => {
           </Typography>
         </Box>
         <Box sx={{ display: 'flex', gap: 1, flexShrink: 0, flexWrap: 'wrap', justifyContent: 'flex-end' }}>
-          <Button component={RouterLink} to="/admin/store-designer" variant="contained">Customize Store</Button>
-          <Button startIcon={<FileUploadIcon />} variant="outlined" onClick={() => setImportOpen(true)}>Import Template</Button>
+          {canManageTemplates && (
+            <Button component={RouterLink} to="/admin/store-designer" variant="contained">Customize Store</Button>
+          )}
+          {canManageTemplates && (
+            <Button startIcon={<FileUploadIcon />} variant="outlined" onClick={() => setImportOpen(true)}>Import Template</Button>
+          )}
           <Button startIcon={<FileDownloadIcon />} variant="outlined" onClick={() => setExportOpen(true)}>Export Current</Button>
-          <Button variant="outlined" onClick={() => setSaveTemplateOpen(true)}>Save as Template</Button>
+          {canManageTemplates && (
+            <Button variant="outlined" onClick={() => setSaveTemplateOpen(true)}>Save as Template</Button>
+          )}
         </Box>
       </Box>
 
@@ -425,7 +448,7 @@ const ThemeGalleryPage = () => {
                   <ThemeCard
                     theme={template}
                     onPreview={handlePreview}
-                    onApply={setApplyPkg}
+                    onApply={onApplyTemplate}
                     onDetail={setDetailPkg}
                     isActive={activeTemplateSlug === (getMeta(template).name)}
                     isFavorite={favorites.includes(template.meta?.slug)}
@@ -449,7 +472,7 @@ const ThemeGalleryPage = () => {
                 <ThemeCard
                   theme={template}
                   onPreview={handlePreview}
-                  onApply={setApplyPkg}
+                  onApply={onApplyTemplate}
                   onDetail={setDetailPkg}
                   isActive={activeTemplateSlug === (getMeta(template).name)}
                   isFavorite={favorites.includes(template.meta?.slug)}
@@ -496,7 +519,7 @@ const ThemeGalleryPage = () => {
         <Grid container spacing={2.5}>
           {sortedBuiltin.map((template) => (
             <Grid item xs={12} sm={6} md={4} key={template.meta?.slug}>
-              <ThemeCard theme={template} onPreview={setPreviewPkg} onApply={setApplyPkg} onDetail={setDetailPkg} isActive={activeTemplateSlug === (getMeta(template).name)} />
+              <ThemeCard theme={template} onPreview={setPreviewPkg} onApply={onApplyTemplate} onDetail={setDetailPkg} isActive={activeTemplateSlug === (getMeta(template).name)} />
             </Grid>
           ))}
           {visibleBuiltin.length === 0 && (
@@ -511,7 +534,7 @@ const ThemeGalleryPage = () => {
         <Grid container spacing={2.5}>
           {sortedLibrary.map((template) => (
             <Grid item xs={12} sm={6} md={4} key={template.id}>
-              <ThemeCard theme={template} onPreview={(pkg) => setPreviewPkg(pkg || template.packageData)} onApply={(pkg) => setApplyPkg(pkg || template.packageData)} onDetail={(pkg) => setDetailPkg(pkg || template.packageData)} isActive={activeTemplateSlug === (getMeta(template).name)} />
+              <ThemeCard theme={template} onPreview={(pkg) => setPreviewPkg(pkg || template.packageData)} onApply={canManageTemplates ? (pkg) => setApplyPkg(pkg || template.packageData) : undefined} onDetail={(pkg) => setDetailPkg(pkg || template.packageData)} isActive={activeTemplateSlug === (getMeta(template).name)} />
             </Grid>
           ))}
           {libraryThemes.length === 0 && (
@@ -528,7 +551,7 @@ const ThemeGalleryPage = () => {
       )}
 
       {tab === 2 && (
-        <ThemeHistoryPanel activations={activations} onRollback={handleRollback} loading={actionLoading} />
+        <ThemeHistoryPanel activations={activations} onRollback={canManageTemplates ? handleRollback : undefined} loading={actionLoading} />
       )}
 
       {tab === 3 && (
@@ -561,21 +584,25 @@ const ThemeGalleryPage = () => {
                     >
                       Export Custom Package
                     </Button>
-                    <Button
-                      variant="outlined"
-                      onClick={() => setSaveTemplateOpen(true)}
-                      disabled={differences.length === 0}
-                    >
-                      Save as Custom Theme
-                    </Button>
-                    <Button
-                      variant="contained"
-                      color="warning"
-                      onClick={handleResetAllSettings}
-                      disabled={differences.length === 0 || actionLoading}
-                    >
-                      Reset All Drafts
-                    </Button>
+                    {canManageTemplates && (
+                      <Button
+                        variant="outlined"
+                        onClick={() => setSaveTemplateOpen(true)}
+                        disabled={differences.length === 0}
+                      >
+                        Save as Custom Theme
+                      </Button>
+                    )}
+                    {canManageTemplates && (
+                      <Button
+                        variant="contained"
+                        color="warning"
+                        onClick={handleResetAllSettings}
+                        disabled={differences.length === 0 || actionLoading}
+                      >
+                        Reset All Drafts
+                      </Button>
+                    )}
                   </Stack>
                 </Box>
               </Paper>
@@ -603,25 +630,27 @@ const ThemeGalleryPage = () => {
                               <Typography variant="subtitle2" fontWeight={800} color="text.primary">
                                 {group.toUpperCase()} SETTINGS ({diffList.length})
                               </Typography>
-                              <Button
-                                size="small"
-                                color="warning"
-                                onClick={() => {
-                                  const payload = diffList.map(d => ({ group: d.group, key: d.key, value: d.originalValue }));
-                                  setActionLoading(true);
-                                  updateSettings(payload)
-                                    .then(() => {
-                                      notify(`Reset all ${group} settings to original theme values.`, 'success');
-                                      if (refreshSettings) refreshSettings();
-                                      fetchData();
-                                    })
-                                    .catch(() => notify('Failed to reset group settings', 'error'))
-                                    .finally(() => setActionLoading(false));
-                                }}
-                                disabled={actionLoading}
-                              >
-                                Reset Group
-                              </Button>
+                              {canManageTemplates && (
+                                <Button
+                                  size="small"
+                                  color="warning"
+                                  onClick={() => {
+                                    const payload = diffList.map(d => ({ group: d.group, key: d.key, value: d.originalValue }));
+                                    setActionLoading(true);
+                                    updateSettings(payload)
+                                      .then(() => {
+                                        notify(`Reset all ${group} settings to original theme values.`, 'success');
+                                        if (refreshSettings) refreshSettings();
+                                        fetchData();
+                                      })
+                                      .catch(() => notify('Failed to reset group settings', 'error'))
+                                      .finally(() => setActionLoading(false));
+                                  }}
+                                  disabled={actionLoading}
+                                >
+                                  Reset Group
+                                </Button>
+                              )}
                             </Box>
                             <Box>
                               {diffList.map((diff, index) => (
@@ -654,15 +683,17 @@ const ThemeGalleryPage = () => {
                                     {renderValue(diff.currentValue)}
                                   </Box>
                                   <Box sx={{ textAlign: 'right' }}>
-                                    <Button
-                                      size="small"
-                                      variant="outlined"
-                                      color="warning"
-                                      onClick={() => handleResetSetting(diff.group, diff.key, diff.originalValue)}
-                                      disabled={actionLoading}
-                                    >
-                                      Reset
-                                    </Button>
+                                    {canManageTemplates && (
+                                      <Button
+                                        size="small"
+                                        variant="outlined"
+                                        color="warning"
+                                        onClick={() => handleResetSetting(diff.group, diff.key, diff.originalValue)}
+                                        disabled={actionLoading}
+                                      >
+                                        Reset
+                                      </Button>
+                                    )}
                                   </Box>
                                 </Box>
                               ))}
@@ -679,10 +710,10 @@ const ThemeGalleryPage = () => {
         </Box>
       )}
 
-      <ThemePreviewModal open={!!previewPkg} onClose={() => setPreviewPkg(null)} packageData={previewPkg} onApply={setApplyPkg} />
+      <ThemePreviewModal open={!!previewPkg} onClose={() => setPreviewPkg(null)} packageData={previewPkg} onApply={onApplyTemplate} />
       <ThemeApplyDialog open={!!applyPkg} onClose={() => setApplyPkg(null)} packageData={applyPkg} onConfirm={handleApply} loading={actionLoading} />
       <ThemeImportDialog open={importOpen} onClose={() => setImportOpen(false)} onImport={handleImport} onPreview={(pkg) => { setImportOpen(false); setPreviewPkg(pkg); }} loading={actionLoading} />
-      <ThemeDetailModal open={!!detailPkg} onClose={() => setDetailPkg(null)} packageData={detailPkg} onPreview={setPreviewPkg} onApply={setApplyPkg} />
+      <ThemeDetailModal open={!!detailPkg} onClose={() => setDetailPkg(null)} packageData={detailPkg} onPreview={setPreviewPkg} onApply={onApplyTemplate} />
       <SaveAsTemplateDialog open={saveTemplateOpen} onClose={() => setSaveTemplateOpen(false)} onSaved={() => { notify('Template saved to library', 'success'); fetchData(); }} />
 
       <Dialog open={exportOpen} onClose={() => setExportOpen(false)} maxWidth="xs" fullWidth>

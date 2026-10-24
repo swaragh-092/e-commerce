@@ -5,9 +5,11 @@ const { Op } = require('sequelize');
 const { NotificationTemplate, NotificationLog, NotificationQueue, InventoryAlert } = require('../index');
 const { dispatch } = require('./notification.dispatcher');
 const logger = require('../../utils/logger');
+const AppError = require('../../utils/AppError');
 
 const INVENTORY_ALERT_TEMPLATE = 'inventory_alert_digest';
 const INVENTORY_ALERT_RETRY_DELAY_MS = 15 * 60 * 1000;
+const NEWSLETTER_TEMPLATES = new Set(['newsletter_campaign', 'newsletter_confirmation']);
 
 /**
  * Build the channel-specific payload from a compiled template.
@@ -227,6 +229,13 @@ const sendImmediate = async (
     orderId = null,
     channel = 'email'
 ) => {
+    if (NEWSLETTER_TEMPLATES.has(templateName)) {
+        let enabled = false;
+        try { enabled = await require('../../middleware/featureGate.middleware').getResolvedFeature('newsletter'); }
+        catch (_) { /* Fail closed when the platform feature state cannot be read. */ }
+        if (!enabled) throw new AppError('FEATURE_DISABLED', 403, 'Newsletter delivery is disabled');
+    }
+
     const template = await NotificationTemplate.findOne({
         where: { name: templateName, channel },
     });
@@ -268,9 +277,15 @@ const sendImmediate = async (
 };
 
 const processQueued = async ({ limit = 25 } = {}) => {
+    // Pause marketing deliveries while the feature is off, retaining consent
+    // records and queued work. Transactional mail continues independently.
+    let newsletterEnabled = false;
+    try { newsletterEnabled = await require('../../middleware/featureGate.middleware').getResolvedFeature('newsletter'); }
+    catch (error) { logger.warn('Could not resolve newsletter capability; marketing delivery paused'); }
     const jobs = await NotificationQueue.findAll({
         where: {
             status: 'queued',
+            ...(!newsletterEnabled ? { templateName: { [Op.notIn]: ['newsletter_campaign', 'newsletter_confirmation'] } } : {}),
             [Op.or]: [
                 { nextAttemptAt: null },
                 { nextAttemptAt: { [Op.lte]: new Date() } },
@@ -388,20 +403,20 @@ const sendToUser = async (templateName, channels, user, variables = {}, orderId 
 };
 
 const sendToAdmins = async (templateName, channels = ['email'], variables = {}, orderId = null, t = null) => {
-    const { User, UserProfile } = require('../index');
-    const configuredRecipients = await require('./notificationRecipients.service').getConfiguredRecipients(templateName, t);
+    const recipientsService = require('./notificationRecipients.service');
+    const configuredRecipients = await recipientsService.getConfiguredRecipients(templateName, t);
     const needsDefaults = configuredRecipients === null || channels.some((channel) => channel !== 'email');
-    const admins = needsDefaults ? await User.findAll({
-        where: { role: ['admin', 'super_admin'], status: 'active' },
-        include: [{ model: UserProfile, as: 'profile', required: false }],
-        transaction: t || undefined,
-    }) : [];
+    // Never fall back to a raw role query: custom roles can carry baseRole=admin
+    // without possessing the operational permission required for this template.
+    const eligibleRecipients = needsDefaults
+        ? await recipientsService.getEligibleRecipientsForTemplate(templateName, t)
+        : [];
 
     const manualRecipients = [
         ...parseRecipientList(process.env.ADMIN_NOTIFICATION_EMAIL).map((email) => ({ email })),
         ...parseRecipientList(process.env.ADMIN_NOTIFICATION_PHONE).map((phone) => ({ phone })),
     ];
-    const defaultRecipients = [...admins, ...manualRecipients];
+    const defaultRecipients = [...eligibleRecipients, ...manualRecipients];
 
     const results = [];
     for (const channel of channels) {

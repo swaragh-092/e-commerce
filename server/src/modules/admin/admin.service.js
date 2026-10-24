@@ -15,6 +15,7 @@ const {
   getPermissionsForUser,
   getRolesForUser,
   getPermissionKeysFromRoleObject,
+  isSuperAdminUser,
 } = require('../../config/permissions');
 const { getPagination } = require('../../utils/pagination');
 const { buildInventorySummary, normalizeInventoryThreshold } = require('../inventory/inventoryHealth.service');
@@ -36,7 +37,7 @@ const userRoleInclude = [
   },
 ];
 
-const serializeRole = (role) => ({
+const serializeRole = (role, visiblePermissionKeys = null) => ({
   id: role.id,
   key: role.slug,
   slug: role.slug,
@@ -45,25 +46,35 @@ const serializeRole = (role) => ({
   baseRole: role.baseRole,
   isSystem: Boolean(role.isSystem),
   isActive: Boolean(role.isActive),
-  permissions: (role.permissions || []).map((permission) => ({
-    id: permission.id,
-    key: permission.key,
-    name: permission.name,
-    group: permission.group,
-    description: permission.description,
-  })),
+  permissions: (role.permissions || [])
+    .filter((permission) => !visiblePermissionKeys || visiblePermissionKeys.has(permission.key))
+    .map((permission) => ({
+      id: permission.id,
+      key: permission.key,
+      name: permission.name,
+      group: permission.group,
+      description: permission.description,
+    })),
 });
 
-const serializeAccessUser = (user, systemRoleMap = {}) => {
+const serializeAccessUser = (user, systemRoleMap = {}, actingUser = null) => {
   const enriched = enrichUserAuthorization(user);
-  let assignedRole = Array.isArray(user.roles) && user.roles.length ? serializeRole(user.roles[0]) : null;
+  const visiblePermissionKeys = isSuperAdminUser(actingUser)
+    ? null
+    : new Set(getPermissionsForUser(actingUser));
+  let assignedRole = Array.isArray(user.roles) && user.roles.length
+    ? serializeRole(user.roles[0], visiblePermissionKeys)
+    : null;
 
   if (!assignedRole && user.role && systemRoleMap[user.role]) {
-    assignedRole = serializeRole(systemRoleMap[user.role]);
+    assignedRole = serializeRole(systemRoleMap[user.role], visiblePermissionKeys);
   }
 
   return {
     ...enriched,
+    permissions: visiblePermissionKeys
+      ? enriched.permissions.filter((permission) => visiblePermissionKeys.has(permission))
+      : enriched.permissions,
     assignedRole,
     roleId: assignedRole?.id || null,
     roleName: assignedRole?.name || user.role,
@@ -71,13 +82,6 @@ const serializeAccessUser = (user, systemRoleMap = {}) => {
 };
 
 const canManageCustomRoles = (user) => getPermissionsForUser(user).includes(PERMISSIONS.ROLES_MANAGE);
-const canManageSystemRoles = (user) => getPermissionsForUser(user).includes(PERMISSIONS.SYSTEM_ROLES_MANAGE);
-const isSuperAdminUser = (user) => {
-  if (!user) return false;
-  if (user.role === ROLES.SUPER_ADMIN) return true;
-  const roles = getRolesForUser(user);
-  return roles.includes(ROLES.SUPER_ADMIN);
-};
 const assertDelegableRole = (role, actingUser) => {
   if (isSuperAdminUser(actingUser)) return;
   if (role.baseRole === ROLES.SUPER_ADMIN || role.slug === ROLES.SUPER_ADMIN) {
@@ -112,11 +116,16 @@ const getInventorySummary = async (threshold) => {
  *  totalRevenue, orderCount, customerCount, productCount,
  *  pendingOrders, lowStockCount
  */
-const getStats = async () => {
+const getStats = async (actingUser = null) => {
   const SettingsService = require('../settings/settings.service');
   const { getResolvedFeature } = require('../../middleware/featureGate.middleware');
   const catalog = await SettingsService.getByGroup('catalog', { maskSensitive: false });
   const threshold = normalizeInventoryThreshold(catalog.lowStockThreshold);
+  const actorPermissions = getPermissionsForUser(actingUser || {});
+  const canReadOrders = actorPermissions.includes(PERMISSIONS.ORDERS_READ);
+  const canReadCustomers = actorPermissions.includes(PERMISSIONS.CUSTOMERS_READ);
+  const canReadProducts = actorPermissions.includes(PERMISSIONS.PRODUCTS_READ);
+  const canReadReviews = actorPermissions.includes(PERMISSIONS.REVIEWS_READ);
 
   let ordersEnabled = false;
   try {
@@ -126,7 +135,8 @@ const getStats = async () => {
     ordersEnabled = false;
   }
 
-  const revenuePromise = ordersEnabled
+  const canReadOrderStats = ordersEnabled && canReadOrders;
+  const revenuePromise = canReadOrderStats
     ? Order.findOne({
         attributes: [[fn('COALESCE', fn('SUM', col('"Order".total')), 0), 'totalRevenue']],
         where: { status: { [Op.in]: ['confirmed', 'processing', 'ready_for_shipment', 'closed', 'on_hold'] } },
@@ -134,10 +144,43 @@ const getStats = async () => {
       })
     : Promise.resolve({ totalRevenue: 0 });
 
-  const orderCountPromise = ordersEnabled ? Order.count() : Promise.resolve(0);
-  const pendingOrdersPromise = ordersEnabled
+  const orderCountPromise = canReadOrderStats ? Order.count() : Promise.resolve(0);
+  const pendingOrdersPromise = canReadOrderStats
     ? Order.count({ where: { status: 'pending_payment' } })
     : Promise.resolve(0);
+  const customerCountPromise = canReadCustomers
+    ? User.count({
+        where: {
+          [Op.and]: [
+            literal(`NOT EXISTS (
+              SELECT 1 FROM user_roles ur
+              JOIN roles r ON r.id = ur.role_id
+              WHERE ur.user_id = "User"."id"
+              AND r.slug != 'customer'
+            )`),
+            {
+              [Op.or]: [
+                { role: 'customer' },
+                literal(`EXISTS (
+                  SELECT 1 FROM user_roles ur
+                  JOIN roles r ON r.id = ur.role_id
+                  WHERE ur.user_id = "User"."id"
+                  AND (r.slug = 'customer' OR r.name ILIKE 'customer')
+                )`),
+              ],
+            },
+          ],
+        },
+      })
+    : Promise.resolve(0);
+  const productCountPromise = canReadProducts
+    ? Product.count({ where: { status: 'published', isEnabled: true } })
+    : Promise.resolve(0);
+  const inventoryPromise = canReadProducts
+    ? getInventorySummary(threshold)
+    : Promise.resolve({ totalAtRisk: 0, lowStockCount: 0, outOfStockCount: 0, threshold, health: null });
+  const pendingReviewsPromise = canReadReviews ? Review.count({ where: { status: 'pending' } }) : Promise.resolve(0);
+  const totalReviewsPromise = canReadReviews ? Review.count() : Promise.resolve(0);
 
   const [
     revenueResult,
@@ -151,38 +194,16 @@ const getStats = async () => {
   ] = await Promise.all([
     revenuePromise,
     orderCountPromise,
-    User.count({
-      where: {
-        [Op.and]: [
-          literal(`NOT EXISTS (
-            SELECT 1 FROM user_roles ur
-            JOIN roles r ON r.id = ur.role_id
-            WHERE ur.user_id = "User"."id"
-            AND r.slug != 'customer'
-          )`),
-          {
-            [Op.or]: [
-              { role: 'customer' },
-              literal(`EXISTS (
-                SELECT 1 FROM user_roles ur
-                JOIN roles r ON r.id = ur.role_id
-                WHERE ur.user_id = "User"."id"
-                AND (r.slug = 'customer' OR r.name ILIKE 'customer')
-              )`),
-            ],
-          },
-        ],
-      },
-    }),
-    Product.count({ where: { status: 'published', isEnabled: true } }),
+    customerCountPromise,
+    productCountPromise,
     pendingOrdersPromise,
-    getInventorySummary(threshold),
-    Review.count({ where: { status: 'pending' } }),
-    Review.count(),
+    inventoryPromise,
+    pendingReviewsPromise,
+    totalReviewsPromise,
   ]);
 
   return {
-    totalRevenue: parseFloat(revenueResult?.totalRevenue || 0),
+    totalRevenue: canReadOrders ? parseFloat(revenueResult?.totalRevenue || 0) : null,
     orderCount,
     customerCount,
     productCount,
@@ -355,28 +376,51 @@ const getRecentOrders = async () => {
   }));
 };
 
-const getAccessRoles = async () => {
+const getAccessRoles = async (actingUser = null) => {
   const roles = await Role.findAll({
     include: roleInclude,
     order: [['isSystem', 'DESC'], ['name', 'ASC']],
   });
 
-  return roles.map(serializeRole);
+  const visibleRoles = isSuperAdminUser(actingUser)
+    ? roles
+    : roles.filter((role) => role.slug !== ROLES.SUPER_ADMIN && role.baseRole !== ROLES.SUPER_ADMIN);
+
+  const isSuperAdmin = isSuperAdminUser(actingUser);
+  const actorPermissionKeys = new Set(getPermissionsForUser(actingUser));
+
+  return visibleRoles.map((role) => ({
+    ...serializeRole(role, isSuperAdmin ? null : actorPermissionKeys),
+    // Keep assignment choices accurate after permission details are redacted.
+    // The server still enforces this independently in updateUserRole.
+    isDelegable: isSuperAdmin || (
+      role.slug !== ROLES.SUPER_ADMIN
+      && role.baseRole !== ROLES.SUPER_ADMIN
+      && getPermissionKeysFromRoleObject(role).every((key) => actorPermissionKeys.has(key))
+    ),
+  }));
 };
 
-const getAccessPermissions = async () => {
+const getAccessPermissions = async (actingUser = null) => {
   const permissions = await Permission.findAll({
     order: [['group', 'ASC'], ['name', 'ASC']],
   });
+  const isSuperAdmin = isSuperAdminUser(actingUser);
+  const actorPermissionKeys = new Set(getPermissionsForUser(actingUser));
 
-  return permissions.map((permission) => ({
-    id: permission.id,
-    key: permission.key,
-    name: permission.name,
-    group: permission.group,
-    description: permission.description,
-    reserved: RESERVED_SUPER_ADMIN_PERMISSIONS.includes(permission.key),
-  }));
+  return permissions
+    .filter((permission) => isSuperAdmin || (
+      actorPermissionKeys.has(permission.key)
+      && !RESERVED_SUPER_ADMIN_PERMISSIONS.includes(permission.key)
+    ))
+    .map((permission) => ({
+      id: permission.id,
+      key: permission.key,
+      name: permission.name,
+      group: permission.group,
+      description: permission.description,
+      reserved: RESERVED_SUPER_ADMIN_PERMISSIONS.includes(permission.key),
+    }));
 };
 
 /**
@@ -488,7 +532,16 @@ const updateAccessRole = async (roleId, payload, actingUser) => {
       throw new AppError('NOT_FOUND', 404, 'Role not found');
     }
 
-    if (role.isSystem && !isSuperAdmin && !canManageSystemRoles(actingUser)) {
+    // The Super Admin role is the recovery authority for the entire access
+    // control system. Keep it immutable so an administrator cannot change
+    // their own effective permissions by editing this shared role.
+    if (role.slug === ROLES.SUPER_ADMIN || role.baseRole === ROLES.SUPER_ADMIN) {
+      throw new AppError('FORBIDDEN', 403, 'The Super Admin role is protected and cannot be modified');
+    }
+
+    // System-role identity is a Super Admin boundary. A delegated manager
+    // must never be able to edit the Admin/Customer/Super Admin definitions.
+    if (role.isSystem && !isSuperAdmin) {
       throw new AppError('FORBIDDEN', 403, 'Only super admins can edit system roles');
     }
 
@@ -497,16 +550,32 @@ const updateAccessRole = async (roleId, payload, actingUser) => {
     }
 
     let permissions = [];
+    let permissionIdsToSave;
     if (payload.permissionIds !== undefined) {
       const safePermissionIds = Array.isArray(payload.permissionIds) ? payload.permissionIds : [];
+      permissionIdsToSave = safePermissionIds;
       permissions = safePermissionIds.length
         ? await Permission.findAll({ where: { id: safePermissionIds }, transaction })
         : [];
       if (permissions.length !== safePermissionIds.length) {
         throw new AppError('VALIDATION_ERROR', 400, 'One or more permissions are invalid');
       }
-      if (!role.isSystem && permissions.some((permission) => RESERVED_SUPER_ADMIN_PERMISSIONS.includes(permission.key))) {
-        throw new AppError('FORBIDDEN', 403, 'Reserved super admin permissions cannot be assigned to custom roles');
+      const reservedKeys = permissions
+        .map((permission) => permission.key)
+        .filter((key) => RESERVED_SUPER_ADMIN_PERMISSIONS.includes(key));
+
+      if (reservedKeys.length > 0 && role.slug !== ROLES.SUPER_ADMIN) {
+        const message = role.isSystem
+          ? 'Reserved super admin permissions cannot be assigned to this role'
+          : 'Reserved super admin permissions cannot be assigned to custom roles';
+        throw new AppError('FORBIDDEN', 403, message);
+      }
+
+      if (role.slug === ROLES.SUPER_ADMIN) {
+        const missingReserved = RESERVED_SUPER_ADMIN_PERMISSIONS.filter((key) => !permissions.some((permission) => permission.key === key));
+        if (missingReserved.length > 0) {
+          throw new AppError('VALIDATION_ERROR', 400, 'Reserved super admin permissions cannot be removed from the Super Admin role');
+        }
       }
     }
 
@@ -520,11 +589,18 @@ const updateAccessRole = async (roleId, payload, actingUser) => {
         if (unpossessed.length > 0) {
           throw new AppError('FORBIDDEN', 403, 'You cannot grant permissions you do not possess');
         }
+        // Permission details outside the actor's grants are redacted from the
+        // UI. Preserve those existing grants when a delegated manager edits a
+        // role, so saving visible changes does not silently remove them.
+        const hiddenExistingPermissionIds = (role.permissions || [])
+          .filter((permission) => !userPerms.includes(permission.key))
+          .map((permission) => permission.id);
+        permissionIdsToSave = [...new Set([...permissionIdsToSave, ...hiddenExistingPermissionIds])];
       }
     }
 
     if (payload.permissionIds !== undefined) {
-      await role.setPermissions(payload.permissionIds, { transaction });
+      await role.setPermissions(permissionIdsToSave, { transaction });
     }
 
     const updates = {};
@@ -627,7 +703,7 @@ const deleteAccessRole = async (roleId, actingUser) => {
   });
 };
 
-const listAccessUsers = async ({ page, limit, search, roleId, includeCustomers = false }) => {
+const listAccessUsers = async ({ page, limit, search, roleId, includeCustomers = false }, actingUser = null) => {
   const { limit: pageSize, offset } = getPagination(page, limit);
   const where = {};
   const andClauses = [];
@@ -720,7 +796,7 @@ const listAccessUsers = async ({ page, limit, search, roleId, includeCustomers =
 
   return {
     count: result.count,
-    rows: result.rows.map((user) => serializeAccessUser(user, systemRoleMap)),
+    rows: result.rows.map((user) => serializeAccessUser(user, systemRoleMap, actingUser)),
   };
 };
 
@@ -789,7 +865,7 @@ const updateUserRole = async (userId, roleId, actingUser) => {
       }, transaction);
     } catch (error) {}
 
-    return serializeAccessUser(updatedUser);
+    return serializeAccessUser(updatedUser, {}, actingUser);
   });
 };
 
@@ -911,7 +987,7 @@ const createStaffUser = async ({ firstName, lastName, email, password, roleId, s
         }, transaction);
       } catch (_) {}
 
-      return serializeAccessUser(restoredUser);
+      return serializeAccessUser(restoredUser, {}, actingUser);
     }
 
     const newUser = await User.create({
@@ -944,7 +1020,7 @@ const createStaffUser = async ({ firstName, lastName, email, password, roleId, s
       }, transaction);
     } catch (_) {}
 
-    return serializeAccessUser(createdUser);
+    return serializeAccessUser(createdUser, {}, actingUser);
   });
 };
 

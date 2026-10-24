@@ -19,7 +19,7 @@ Both backend (`server/src/config/permissions.js`) and frontend (`client/src/util
 ### System Roles vs. Custom Roles
 | Role | Category | Scope & Behavior |
 |:-----|:---------|:-----------------|
-| `super_admin` | System | Full, unrestricted platform access. Bypasses permission checks. Immutable; cannot be modified, deleted, or assigned by non-superadmins. |
+| `super_admin` | System | Receives the full catalog initially. Permission middleware still checks its current grants. Its reserved `system_roles.manage` grant cannot be removed, and the role cannot be edited or assigned through Access Control. |
 | `admin` | System | Default administrative role with baseline day-to-day operations permissions. Excludes sensitive tooling (`menus.*`, `api_builder.*`, `roles.*`, `users.assign_roles`). |
 | `user` | System | Default customer storefront role. No administrative or staff capabilities. |
 | Custom Roles | Tenant | Created and customized by authorized staff. Scoped strictly to explicitly granted permissions. |
@@ -67,18 +67,21 @@ Both backend (`server/src/config/permissions.js`) and frontend (`client/src/util
 | `system_roles.manage` | `PERMISSIONS.SYSTEM_ROLES_MANAGE` | Reserved superadmin permission for system roles | — |
 
 ### Platform Operations & Content
-| Permission Key | Constant | Description |
-|:---------------|:---------|:------------|
-| `products.read` / `products.manage` | `PRODUCTS_READ` / `PRODUCTS_MANAGE` | Catalog & product management |
-| `categories.read` / `categories.manage` | `CATEGORIES_READ` / `CATEGORIES_MANAGE` | Category taxonomy |
-| `orders.read` / `orders.manage` | `ORDERS_READ` / `ORDERS_MANAGE` | Order fulfillment and processing |
-| `customers.read` / `customers.manage` | `CUSTOMERS_READ` / `CUSTOMERS_MANAGE` | Customer profile management |
-| `coupons.read` / `coupons.manage` | `COUPONS_READ` / `COUPONS_MANAGE` | Discount codes & promotions |
-| `reviews.read` / `reviews.manage` | `REVIEWS_READ` / `REVIEWS_MANAGE` | Product reviews moderation |
-| `pages.read` / `pages.manage` | `PAGES_READ` / `PAGES_MANAGE` | CMS static pages |
-| `settings.read` / `settings.manage` | `SETTINGS_READ` / `SETTINGS_MANAGE` | Store settings & configuration |
-| `audit.read` | `AUDIT_READ` | Audit logs inspection |
-
+| Permission keys | Admin surface / actions |
+|:---|:---|
+| `products.read/create/update/delete/bulk_sale` | Products; detail pages; bulk sale operations |
+| `categories.read/manage`, `attributes.read/manage`, `brands.read/manage` | Catalog taxonomy and product metadata |
+| `orders.read/update_status/refund` | Order list/detail, status changes, refunds |
+| `customers.read/manage`, `coupons.read/manage`, `reviews.read/moderate/delete` | Customer, coupon, and moderation tools |
+| `media.read/upload/update/delete` | Media Library and file operations |
+| `gallery.read/manage/delete` | Gallery albums; add image actions also require `media.read` |
+| `newsletter.read/manage/subscribers_read` | Campaigns, campaign writes/sending, subscriber email list/export (separate grants) |
+| `pages.read/manage`, `menus.read/manage`, `blogs.read/manage` | CMS, navigation, and blog pages; manage implies read where declared |
+| `settings.read/manage/advanced` | General settings plus Store Templates, Store Designer, SEO Overrides, Payment Gateway status/configuration, Shipping, Sale Labels, and Email Templates (individual sections still share these settings grants) |
+| `notifications.manage` | Email template writes/testing, notification recipients, and notification settings |
+| `dashboard.view`, `audit.read` | Dashboard and audit log; Analytics additionally requires `orders.read` |
+| `api_builder.read/manage` | API Builder definitions and mutations |
+| `roles.read/manage`, `system_roles.manage`, `users.assign_roles` | Access Control role viewing, custom role editing, protected system role editing, staff creation/assignment |
 ---
 
 ## 5. Enforcement Layers
@@ -103,3 +106,12 @@ In `client/src/routes/AppRoutes.jsx` and `client/src/layouts/AdminLayout.jsx`:
 ## 6. Public vs. Admin Endpoints
 - Public storefront routes (e.g. `/api/api-builder/public/:slug`, `/api/products`, `/api/categories`) remain publicly accessible without administrative permissions.
 - In Catalog Mode or when `showPrice` is disabled, prices are automatically scrubbed from public responses, while authenticated admin routes continue to provide operational access to authorized staff.
+
+
+## 7. Feature Permission Coverage
+
+Newsletter and Gallery have dedicated permission switches. Existing installations use migration `20261024160000-split-gallery-newsletter-permissions.js`; it copies the former effective access into the new feature grants (Media grants map to Gallery, Settings Read maps to campaign reading, Notifications Manage maps to campaign management and subscriber access). It does not grant access to empty custom roles or give Settings-only readers subscriber emails. The migration is idempotent and does not re-add grants when its new permission row already exists.
+
+`settings.read` and `settings.manage` still cover multiple admin sections listed above. These are shared permissions by current policy, so revoking one hides/blocks all the listed sections together. Feature flags and store mode are separate from staff permissions and remain Super Admin controlled. Public storefront/newsletter subscribe and unsubscribe endpoints are intentionally public; a signed-in customer can read and change only their own newsletter preference.
+
+Permission coverage tests exercise direct API gates for Gallery, Newsletter, Blogs, and Email Templates; client tests cover menu/route selection, read versus manage views, and active-session revocation. They do not establish a formal audit of every controller or every production deployment.
