@@ -12,7 +12,7 @@ const { inventoryAlertConfigSchema, updateInventoryAlertSchema } = require('../i
 
 
 
-const { inventoryAlertLimiter, inventoryAlertTestLimiter } = require('../../middleware/rateLimiter.middleware');
+const { inventoryAlertLimiter, inventoryAlertTestLimiter, adminDashboardLimiter } = require('../../middleware/rateLimiter.middleware');
 const { featureGate } = require('../../middleware/featureGate.middleware');
 
 const adminOnly = [authenticate, authorizePermissions(PERMISSIONS.DASHBOARD_VIEW)];
@@ -79,8 +79,8 @@ router.post(
 	authorizePermissions(PERMISSIONS.NOTIFICATIONS_MANAGE),
 	adminController.testInventoryAlertEmail
 );
-router.get('/dashboard/low-stock', authenticate, authorizePermissions(PERMISSIONS.DASHBOARD_VIEW, PERMISSIONS.PRODUCTS_READ), validate(lowStockQuerySchema, 'query'), adminController.getLowStock);
-router.get('/dashboard/recent-orders', authenticate, authorizePermissions(PERMISSIONS.DASHBOARD_VIEW, PERMISSIONS.ORDERS_READ), ordersFeature, adminController.getRecentOrders);
+router.get('/dashboard/low-stock', adminDashboardLimiter, authenticate, authorizePermissions(PERMISSIONS.DASHBOARD_VIEW, PERMISSIONS.PRODUCTS_READ), validate(lowStockQuerySchema, 'query'), adminController.getLowStock);
+router.get('/dashboard/recent-orders', adminDashboardLimiter, authenticate, authorizePermissions(PERMISSIONS.DASHBOARD_VIEW, PERMISSIONS.ORDERS_READ), ordersFeature, adminController.getRecentOrders);
 router.get('/access-control/roles', ...accessReadOnly, adminController.getAccessRoles);
 router.get('/access-control/permissions', ...accessReadOnly, adminController.getAccessPermissions);
 router.post('/access-control/roles', ...roleManageOnly, validate(createRoleSchema), adminController.createAccessRole);

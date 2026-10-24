@@ -12,7 +12,6 @@ const { getPermissionsForUser, PERMISSIONS } = require('../../config/permissions
 const { invalidateFeature } = require('../../middleware/featureGate.middleware');
 const { DESIGN_SETTINGS_GROUPS, isDesignSettingTarget } = require('./designSettings');
 const {
-  PUBLIC_SETTING_GROUPS,
   PUBLIC_SETTING_GROUP_NAMES,
   pickPublicSettings,
   pickPublicGroup,

@@ -80,14 +80,14 @@ describe('Catalog Gallery page', () => {
   it('keeps media-only users from seeing gallery mutation controls', async () => {
     grants.clear(); grants.add('media.update'); grants.add('media.delete');
     render(<GalleryPage />);
-    await screen.findByText('Public URL: /demo-orbis-seeds-v1-html/gallery.html?album=flowers');
+    await screen.findByText('Public URL: /demo-orbis-seeds-v1-html/gallery-detail.html?album=flowers');
     expect(screen.queryByRole('button', { name: 'New gallery' })).not.toBeInTheDocument();
     expect(screen.queryByRole('button', { name: 'Delete gallery' })).not.toBeInTheDocument();
   });
 
   it('closes an open editor when gallery manage is revoked', async () => {
     const { rerender } = render(<GalleryPage />);
-    await screen.findByText('Public URL: /demo-orbis-seeds-v1-html/gallery.html?album=flowers');
+    await screen.findByText('Public URL: /demo-orbis-seeds-v1-html/gallery-detail.html?album=flowers');
     fireEvent.click(screen.getByRole('button', { name: 'Edit gallery' }));
     expect(screen.getByRole('dialog')).toBeInTheDocument();
     grants.delete('gallery.manage'); rerender(<GalleryPage />);
@@ -98,7 +98,7 @@ describe('Catalog Gallery page', () => {
   it('requires Media Read to select library images, without blocking album edits', async () => {
     grants.delete('media.read');
     render(<GalleryPage />);
-    await screen.findByText('Public URL: /demo-orbis-seeds-v1-html/gallery.html?album=flowers');
+    await screen.findByText('Public URL: /demo-orbis-seeds-v1-html/gallery-detail.html?album=flowers');
     expect(screen.getByRole('button', { name: 'Add images' })).toBeDisabled();
     expect(screen.getByRole('button', { name: 'Edit gallery' })).toBeEnabled();
   });

@@ -21,7 +21,7 @@ import SearchWidget from '../components/search/SearchWidget';
 import DarkModeToggle from '../components/layout/DarkModeToggle';
 import PageService from '../services/pageService';
 import MenuService from '../services/menuService';
-import { ADMIN_ACCESS_PERMISSIONS, getFirstAccessibleAdminPath } from '../utils/permissions';
+import { ADMIN_ACCESS_PERMISSIONS } from '../utils/permissions';
 import { filterFeatureLinks } from '../utils/featureNavigation';
 import SEO from '../components/common/SEO';
 import CategoryIcon from '../components/common/CategoryIcon';
@@ -53,7 +53,6 @@ const StoreLayout = () => {
   const [isMobileSearchExpanded, setIsMobileSearchExpanded] = useState(false);
   const [logoLoadFailed, setLogoLoadFailed] = useState(false);
   const [accountMenuAnchor, setAccountMenuAnchor] = useState(null);
-  const adminEntryPath = getFirstAccessibleAdminPath(user, features || {});
   const canAccessAdmin = hasAnyPermission(ADMIN_ACCESS_PERMISSIONS);
   const isAuthPage = ['/login', '/register'].includes(location.pathname);
 

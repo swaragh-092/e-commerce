@@ -28,8 +28,8 @@ const GalleryPage = () => {
   const canManage = hasPermission(PERMISSIONS.GALLERY_MANAGE);
   const canDelete = hasPermission(PERMISSIONS.GALLERY_DELETE);
   const canSelectMedia = canManage && hasPermission(PERMISSIONS.MEDIA_READ);
-  const access = useRef({ canManage, canDelete });
-  access.current = { canManage, canDelete };
+  const access = useRef({ canManage, canDelete, canSelectMedia });
+  access.current = { canManage, canDelete, canSelectMedia };
   const [galleries, setGalleries] = useState([]);
   const [selectedId, setSelectedId] = useState(null);
   const [page, setPage] = useState(1);
@@ -46,6 +46,7 @@ const GalleryPage = () => {
   useEffect(() => {
     if (!canManage) { setDialogOpen(false); setEditingId(null); setForm(emptyForm); }
     if (!canSelectMedia) setPickerOpen(false);
+    if (!canSelectMedia) setCoverPickerOpen(false);
   }, [canManage, canSelectMedia]);
 
   const selected = galleries.find((gallery) => gallery.id === selectedId) || null;
@@ -153,6 +154,7 @@ const GalleryPage = () => {
   };
 
   const saveCover = async (media = null) => {
+    if (!access.current.canManage || (media && !access.current.canSelectMedia) || !selected) return;
     if (media && !media.mimeType?.startsWith('image/')) {
       notify('Select an image for the cover photo.', 'warning');
       return;
@@ -267,6 +269,12 @@ const GalleryPage = () => {
         <DialogActions><Button onClick={() => setDialogOpen(false)} disabled={busy}>Cancel</Button><Button variant="contained" onClick={saveGallery} disabled={busy || !form.title.trim() || !slugify(form.slug)}>{editingId ? 'Save changes' : 'Create gallery'}</Button></DialogActions>
       </Dialog>
       <MediaPicker open={canSelectMedia && pickerOpen} onClose={() => setPickerOpen(false)} onSelect={addImages} multiple title="Add gallery images" />
+      <MediaPicker
+        open={canSelectMedia && coverPickerOpen}
+        onClose={() => setCoverPickerOpen(false)}
+        onSelect={(media) => { setCoverPickerOpen(false); saveCover(media?.[0] || null); }}
+        title="Choose gallery cover photo"
+      />
     </Box>
   );
 };
