@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo, useRef } from 'react';
+import { useState, useEffect, useMemo, useRef, useCallback } from 'react';
 import {
   Box,
   Typography,
@@ -175,7 +175,32 @@ const MediaPage = () => {
   const [manualCopyUrl, setManualCopyUrl] = useState('');
   const [activeLibrary, setActiveLibrary] = useState('files');
   const [iconSearch, setIconSearch] = useState('');
+  const [customIcons, setCustomIcons] = useState([]);
+  const [customIconsLoading, setCustomIconsLoading] = useState(false);
+  const [uploadIconDialogOpen, setUploadIconDialogOpen] = useState(false);
+  const [iconSectionTab, setIconSectionTab] = useState('all');
   const observerRef = useRef(null);
+
+  const fetchCustomIcons = useCallback(async () => {
+    if (!mediaService.listIcons && !mediaService.list) return;
+    try {
+      setCustomIconsLoading(true);
+      const res = mediaService.listIcons
+        ? await mediaService.listIcons({ limit: 100 })
+        : await mediaService.list({ type: 'icon', limit: 100 });
+      setCustomIcons(res?.data || []);
+    } catch (err) {
+      console.error(err);
+    } finally {
+      setCustomIconsLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    if (activeLibrary === 'icons') {
+      fetchCustomIcons();
+    }
+  }, [activeLibrary, fetchCustomIcons]);
 
   const fetchMedia = async (pageNum = 1, isLoadMore = false) => {
     if (isLoadMore) setLoadingMore(true);
@@ -321,6 +346,14 @@ const MediaPage = () => {
   }, [sortedFiles, groupBy]);
 
   const groupKeys = Object.keys(groupedFiles);
+  const filteredCustomIcons = useMemo(() => {
+    const query = iconSearch.trim().toLowerCase();
+    if (!query) return customIcons;
+    return customIcons.filter((icon) =>
+      `${icon.originalName || ''} ${icon.filename || ''} ${icon.url || ''}`.toLowerCase().includes(query)
+    );
+  }, [customIcons, iconSearch]);
+
   const filteredIcons = useMemo(() => {
     const query = iconSearch.trim().toLowerCase();
     if (!query) return CATEGORY_ICONS;
@@ -328,12 +361,39 @@ const MediaPage = () => {
       `${id} mui:${id} ${label} ${keywords}`.toLowerCase().includes(query));
   }, [iconSearch]);
 
+  const totalMatchingIcons = filteredIcons.length + filteredCustomIcons.length;
+
   const copyIconId = async (id) => {
     try {
       await navigator.clipboard.writeText(`mui:${id}`);
       notify('Icon ID copied.', 'success');
     } catch {
       notify('Could not copy the icon ID in this browser.', 'warning');
+    }
+  };
+
+  const copyCustomIconUrl = async (url) => {
+    try {
+      await navigator.clipboard.writeText(url);
+      notify('Icon URL copied.', 'success');
+    } catch {
+      notify('Could not copy icon URL.', 'warning');
+    }
+  };
+
+  const handleDeleteCustomIcon = async (icon) => {
+    if (!canDeleteMedia) {
+      notify('You do not have permission to delete media.', 'error');
+      return;
+    }
+    const name = icon.originalName || icon.filename || 'this icon';
+    if (!(await confirm('Delete Icon', `Delete "${name}"?`, 'danger'))) return;
+    try {
+      await mediaService.delete(icon.id);
+      notify('Custom icon deleted.', 'success');
+      fetchCustomIcons();
+    } catch {
+      notify('Failed to delete icon.', 'error');
     }
   };
 
@@ -369,6 +429,16 @@ const MediaPage = () => {
             sx={{ borderRadius: 2 }}
           >
             Upload Media
+          </Button>
+        )}
+        {activeLibrary === 'icons' && canUploadMedia && (
+          <Button
+            variant="contained"
+            startIcon={<CloudUploadIcon />}
+            onClick={() => setUploadIconDialogOpen(true)}
+            sx={{ borderRadius: 2 }}
+          >
+            Upload Custom Icon
           </Button>
         )}
       </Box>
@@ -539,43 +609,122 @@ const MediaPage = () => {
               borderColor: 'divider',
             }}
           >
-            <TextField
-              size="small"
-              value={iconSearch}
-              onChange={(event) => setIconSearch(event.target.value)}
-              placeholder="Search icons"
-              inputProps={{ 'aria-label': 'Search icon library' }}
-              InputProps={{ startAdornment: <InputAdornment position="start"><SearchIcon fontSize="small" /></InputAdornment> }}
-              sx={{ width: { xs: '100%', sm: 320 } }}
-            />
+            <Box sx={{ display: 'flex', alignItems: 'center', gap: 2, flexWrap: 'wrap', flex: 1 }}>
+              <TextField
+                size="small"
+                value={iconSearch}
+                onChange={(event) => setIconSearch(event.target.value)}
+                placeholder="Search icons"
+                inputProps={{ 'aria-label': 'Search icon library' }}
+                InputProps={{ startAdornment: <InputAdornment position="start"><SearchIcon fontSize="small" /></InputAdornment> }}
+                sx={{ width: { xs: '100%', sm: 300 } }}
+              />
+              <ToggleButtonGroup
+                size="small"
+                value={iconSectionTab}
+                exclusive
+                onChange={(_, val) => val && setIconSectionTab(val)}
+              >
+                <ToggleButton value="all">All ({totalMatchingIcons})</ToggleButton>
+                <ToggleButton value="custom">Custom ({filteredCustomIcons.length})</ToggleButton>
+                <ToggleButton value="builtin">Built-in ({filteredIcons.length})</ToggleButton>
+              </ToggleButtonGroup>
+            </Box>
             <Typography variant="body2" color="text.secondary">
-              {filteredIcons.length} icon{filteredIcons.length !== 1 ? 's' : ''}
+              {totalMatchingIcons} icon{totalMatchingIcons !== 1 ? 's' : ''}
             </Typography>
           </Box>
           <Alert severity="info" sx={{ mb: 3 }}>
-            These icons are available when editing a category. To use one, open Catalog → Categories, edit a category, and choose its icon.
+            These icons are available when editing a category. You can also upload your own custom icons here (PNG or WebP with transparent background).
           </Alert>
-          {filteredIcons.length ? (
-            <Grid container spacing={2}>
-              {filteredIcons.map(({ id, label }) => (
-                <Grid item key={id} xs={6} sm={4} md={3} lg={2}>
-                  <Card variant="outlined" sx={{ height: '100%', borderRadius: 2, textAlign: 'center', p: 1.5 }}>
-                    <Box sx={{ height: 88, display: 'grid', placeItems: 'center', bgcolor: 'action.hover', borderRadius: 1.5, mb: 1 }}>
-                      <CategoryIconRenderer value={`mui:${id}`} size={40} color="primary.main" />
+
+          {customIconsLoading && (
+            <Box sx={{ display: 'flex', justifyContent: 'center', py: 3 }}>
+              <CircularProgress size={32} />
+            </Box>
+          )}
+
+          {totalMatchingIcons > 0 ? (
+            <Box sx={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+              {/* Custom Icons Section */}
+              {(iconSectionTab === 'all' || iconSectionTab === 'custom') && filteredCustomIcons.length > 0 && (
+                <Box>
+                  <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 2 }}>
+                    <Typography variant="subtitle1" fontWeight={700}>
+                      Custom Icons
+                    </Typography>
+                    <Chip label={filteredCustomIcons.length} size="small" color="primary" sx={{ height: 20, fontSize: '0.75rem' }} />
+                    <Divider sx={{ flex: 1, ml: 1 }} />
+                  </Box>
+                  <Grid container spacing={2}>
+                    {filteredCustomIcons.map((icon) => (
+                      <Grid item key={icon.id} xs={6} sm={4} md={3} lg={2}>
+                        <Card variant="outlined" sx={{ height: '100%', borderRadius: 2, textAlign: 'center', p: 1.5 }}>
+                          <Box sx={{ height: 88, display: 'grid', placeItems: 'center', bgcolor: 'action.hover', borderRadius: 1.5, mb: 1, p: 1 }}>
+                            <CategoryIconRenderer value={icon.url} size={40} />
+                          </Box>
+                          <Typography variant="body2" fontWeight={600} noWrap title={icon.originalName || icon.filename}>
+                            {icon.originalName || icon.filename}
+                          </Typography>
+                          <Typography variant="caption" color="text.secondary" sx={{ display: 'block', overflowWrap: 'anywhere' }} noWrap>
+                            custom
+                          </Typography>
+                          <CardActions sx={{ justifyContent: 'center', p: 0, mt: 0.5, gap: 0.5 }}>
+                            <Tooltip title="Copy icon URL">
+                              <IconButton size="small" aria-label={`Copy ${icon.originalName || 'custom'} icon URL`} onClick={() => copyCustomIconUrl(icon.url)}>
+                                <ContentCopyIcon fontSize="small" />
+                              </IconButton>
+                            </Tooltip>
+                            {canDeleteMedia && (
+                              <Tooltip title="Delete custom icon">
+                                <IconButton size="small" color="error" aria-label={`Delete ${icon.originalName || 'custom'} icon`} onClick={() => handleDeleteCustomIcon(icon)}>
+                                  <DeleteIcon fontSize="small" />
+                                </IconButton>
+                              </Tooltip>
+                            )}
+                          </CardActions>
+                        </Card>
+                      </Grid>
+                    ))}
+                  </Grid>
+                </Box>
+              )}
+
+              {/* Built-in Icons Section */}
+              {(iconSectionTab === 'all' || iconSectionTab === 'builtin') && filteredIcons.length > 0 && (
+                <Box>
+                  {iconSectionTab === 'all' && (
+                    <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 2 }}>
+                      <Typography variant="subtitle1" fontWeight={700}>
+                        Built-in Icons
+                      </Typography>
+                      <Chip label={filteredIcons.length} size="small" sx={{ height: 20, fontSize: '0.75rem' }} />
+                      <Divider sx={{ flex: 1, ml: 1 }} />
                     </Box>
-                    <Typography variant="body2" fontWeight={600}>{label}</Typography>
-                    <Typography variant="caption" color="text.secondary" sx={{ display: 'block', overflowWrap: 'anywhere' }}>mui:{id}</Typography>
-                    <CardActions sx={{ justifyContent: 'center', p: 0, mt: 0.5 }}>
-                      <Tooltip title="Copy icon ID">
-                        <IconButton size="small" aria-label={`Copy ${label} icon ID`} onClick={() => copyIconId(id)}>
-                          <ContentCopyIcon fontSize="small" />
-                        </IconButton>
-                      </Tooltip>
-                    </CardActions>
-                  </Card>
-                </Grid>
-              ))}
-            </Grid>
+                  )}
+                  <Grid container spacing={2}>
+                    {filteredIcons.map(({ id, label }) => (
+                      <Grid item key={id} xs={6} sm={4} md={3} lg={2}>
+                        <Card variant="outlined" sx={{ height: '100%', borderRadius: 2, textAlign: 'center', p: 1.5 }}>
+                          <Box sx={{ height: 88, display: 'grid', placeItems: 'center', bgcolor: 'action.hover', borderRadius: 1.5, mb: 1 }}>
+                            <CategoryIconRenderer value={`mui:${id}`} size={40} color="primary.main" />
+                          </Box>
+                          <Typography variant="body2" fontWeight={600}>{label}</Typography>
+                          <Typography variant="caption" color="text.secondary" sx={{ display: 'block', overflowWrap: 'anywhere' }}>mui:{id}</Typography>
+                          <CardActions sx={{ justifyContent: 'center', p: 0, mt: 0.5 }}>
+                            <Tooltip title="Copy icon ID">
+                              <IconButton size="small" aria-label={`Copy ${label} icon ID`} onClick={() => copyIconId(id)}>
+                                <ContentCopyIcon fontSize="small" />
+                              </IconButton>
+                            </Tooltip>
+                          </CardActions>
+                        </Card>
+                      </Grid>
+                    ))}
+                  </Grid>
+                </Box>
+              )}
+            </Box>
           ) : (
             <Alert severity="info">No icons match “{iconSearch}”.</Alert>
           )}
@@ -611,6 +760,33 @@ const MediaPage = () => {
           >
             Close
           </Button>
+        </DialogActions>
+      </Dialog>
+
+      {/* Upload Custom Icon Dialog */}
+      <Dialog
+        open={uploadIconDialogOpen}
+        onClose={() => setUploadIconDialogOpen(false)}
+        maxWidth="sm"
+        fullWidth
+        PaperProps={{ sx: { borderRadius: 3 } }}
+      >
+        <DialogTitle sx={{ fontWeight: 700 }}>Upload Custom Icon</DialogTitle>
+        <DialogContent dividers>
+          <Alert severity="info" sx={{ mb: 2 }}>
+            Upload square icons (PNG or WebP recommended, 64×64 or 128×128 px with transparent background). These will appear under Custom Icons and in the Category Icon Picker.
+          </Alert>
+          <Box sx={{ py: 1 }}>
+            <MediaUploader
+              onUploadSuccess={() => { fetchCustomIcons(); setUploadIconDialogOpen(false); notify('Custom icon uploaded successfully!', 'success'); }}
+              multiple={true}
+              autoUpload={true}
+              uploadType="icon"
+            />
+          </Box>
+        </DialogContent>
+        <DialogActions sx={{ p: 2 }}>
+          <Button onClick={() => setUploadIconDialogOpen(false)}>Close</Button>
         </DialogActions>
       </Dialog>
 
