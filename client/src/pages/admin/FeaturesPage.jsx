@@ -404,34 +404,6 @@ const FeaturesPage = () => {
           </Box>
         </Paper>
 
-        {/* ── Declared but not implemented ── */}
-        <Paper variant="outlined" sx={{ p: 2.5, borderRadius: 2, mb: 3 }}>
-          <Typography variant="subtitle2" fontWeight={700} gutterBottom>
-            Not Implemented — No Switch
-          </Typography>
-          <Typography variant="body2" color="text.secondary" sx={{ mb: 1.5 }}>
-            These keys exist in the feature configuration but have no underlying behaviour yet.
-            They are intentionally omitted from the toggles so they are never presented as working features.
-          </Typography>
-          <Box sx={{ display: 'grid', gap: 1 }}>
-            {[
-              { key: 'multiCurrency', desc: 'Needs multi-currency pricing, per-currency formatting, and exchange-rate handling.' },
-              { key: 'socialLogin', desc: 'Needs OAuth providers, account linking, and callback routes.' },
-            ].map(({ key, desc }) => (
-              <Box
-                key={key}
-                sx={{ display: 'flex', gap: 1.5, alignItems: 'flex-start', p: 1.25, border: '1px dashed', borderColor: 'divider', borderRadius: 1.5 }}
-              >
-                <Chip label="UNIMPLEMENTED" size="small" sx={{ height: 18, fontSize: 9, fontWeight: 700 }} />
-                <Box>
-                  <Typography variant="body2" fontWeight={700} component="span" sx={{ mr: 1 }}>{key}</Typography>
-                  <Typography variant="caption" color="text.secondary">{desc}</Typography>
-                </Box>
-              </Box>
-            ))}
-          </Box>
-        </Paper>
-
         <Box sx={{ display: 'flex', justifyContent: 'flex-end', mt: 4 }}>
           <Button
             variant="contained"
