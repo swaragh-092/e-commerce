@@ -14,8 +14,11 @@ vi.mock('../../../context/NotificationContext', () => ({ useNotification: () => 
 vi.mock('../../../services/mediaService', () => ({
   mediaService: {
     list: vi.fn(),
+    listIcons: vi.fn(),
     delete: vi.fn(),
     update: vi.fn(),
+    uploadMedia: vi.fn(),
+    uploadIcon: vi.fn(),
   },
 }));
 
@@ -25,6 +28,7 @@ describe('Media Library tabs', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     observers = [];
+    mediaService.listIcons.mockResolvedValue({ data: [] });
     mediaService.list.mockImplementation(({ page }) => Promise.resolve({
       data: [{ id: `media-${page}`, url: `/media-${page}.png`, originalName: `media-${page}.png`, size: 1024 }],
       meta: { totalItems: 2, page, totalPages: 2 },
@@ -78,5 +82,17 @@ describe('Media Library tabs', () => {
 
     expect(await screen.findByText('mui:eco')).toBeInTheDocument();
     expect(screen.getByText('1 icon')).toBeInTheDocument();
+  });
+
+  it('renders custom icons and displays upload button in icon library', async () => {
+    mediaService.listIcons.mockResolvedValue({
+      data: [{ id: 'custom-icon-1', url: '/uploads/custom-brand.png', originalName: 'custom-brand.png' }],
+    });
+
+    render(<MediaPage />);
+    fireEvent.click(screen.getByRole('tab', { name: 'Icon library' }));
+
+    expect(await screen.findByText('Upload Custom Icon')).toBeInTheDocument();
+    expect(await screen.findByText('custom-brand.png')).toBeInTheDocument();
   });
 });

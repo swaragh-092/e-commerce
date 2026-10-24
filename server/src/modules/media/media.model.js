@@ -43,6 +43,11 @@ module.exports = (sequelize, DataTypes) => {
             type: DataTypes.STRING(50),
             defaultValue: 'local',
         },
+        type: {
+            type: DataTypes.STRING(50),
+            allowNull: false,
+            defaultValue: 'image',
+        },
     }, {
         tableName: 'media',
         timestamps: true,

@@ -21,6 +21,19 @@ router.post('/upload',
     mediaController.upload
 );
 
+router.post('/upload-icon',
+    authenticate,
+    authorizePermissions(PERMISSIONS.MEDIA_UPLOAD),
+    mediaUploadLimiter,
+    memoryUpload.single('file'),
+    auditLog('Media'),
+    (req, res, next) => {
+        req.body = req.body || {};
+        req.body.type = 'icon';
+        return mediaController.upload(req, res, next);
+    }
+);
+
 router.post('/upload-font',
     authenticate,
     authorizePermissions(PERMISSIONS.MEDIA_UPLOAD),

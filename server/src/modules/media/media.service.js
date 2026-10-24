@@ -13,8 +13,13 @@ const { getStorageProvider } = require('../../utils/storage');
 
 const storage = getStorageProvider();
 
-exports.uploadMedia = async (file) => {
+const { Op } = require('sequelize');
+
+exports.uploadMedia = async (file, type = 'image') => {
   if (!file) throw new AppError('VALIDATION_ERROR', 400, 'No file provided');
+
+  const validTypes = ['image', 'icon', 'font', 'document'];
+  const mediaType = validTypes.includes(type) ? type : 'image';
 
   const { fileTypeFromBuffer } = await import('file-type');
   const typeInfo = await fileTypeFromBuffer(file.buffer);
@@ -56,6 +61,7 @@ exports.uploadMedia = async (file) => {
     originalName: file.originalname,
     mimeType: typeInfo.mime,
     size: file.size,
+    type: mediaType,
     provider: process.env.STORAGE_PROVIDER || 'local',
   });
 
@@ -88,13 +94,14 @@ exports.uploadFont = async (file) => {
     originalName: file.originalname,
     mimeType: typeInfo.mime,
     size: file.size,
+    type: 'font',
     provider: process.env.STORAGE_PROVIDER || 'local',
   });
 
   return media;
 };
 
-exports.listMedia = async (page, limit, sortBy = 'createdAt', sortDir = 'DESC') => {
+exports.listMedia = async (page, limit, sortBy = 'createdAt', sortDir = 'DESC', type = 'all') => {
   const { limit: queryLimit, offset } = getPagination(page, limit);
   
   // Map frontend sort names to database columns
@@ -109,7 +116,17 @@ exports.listMedia = async (page, limit, sortBy = 'createdAt', sortDir = 'DESC') 
   const orderCol = sortMap[sortBy] || 'created_at';
   const orderDir = sortDir.toUpperCase() === 'ASC' ? 'ASC' : 'DESC';
 
+  const where = {};
+  if (type && type !== 'all') {
+    if (type === 'image') {
+      where.type = { [Op.or]: ['image', null] };
+    } else {
+      where.type = type;
+    }
+  }
+
   const { rows, count } = await Media.findAndCountAll({
+    where,
     limit: queryLimit,
     offset,
     order: [[orderCol, orderDir]],

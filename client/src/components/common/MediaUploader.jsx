@@ -17,7 +17,7 @@ import { useNotification } from '../../context/NotificationContext';
 const ALLOWED_MIMES = ['image/jpeg', 'image/png', 'image/webp', 'image/gif'];
 const MAX_FILE_SIZE = 5 * 1024 * 1024; // 5MB
 
-const MediaUploader = ({ onUploadSuccess, onAllUploadsComplete, multiple = true, autoUpload = true }) => {
+const MediaUploader = ({ onUploadSuccess, onAllUploadsComplete, multiple = true, autoUpload = true, uploadType = 'image' }) => {
   const [uploading, setUploading] = useState(false);
   const [selectedFiles, setSelectedFiles] = useState([]);
   const abortControllerRef = useRef(null);
@@ -34,7 +34,7 @@ const MediaUploader = ({ onUploadSuccess, onAllUploadsComplete, multiple = true,
     }
 
     try {
-      const res = await mediaService.uploadMedia(file, signal);
+      const res = await mediaService.uploadMedia(file, uploadType, signal);
       if (res?.success && res?.data?.media) {
         onUploadSuccess(res.data.media);
         return res.data.media;
