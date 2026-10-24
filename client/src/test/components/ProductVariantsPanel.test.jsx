@@ -42,6 +42,35 @@ describe('product attributes and variant drafts', () => {
     fireEvent.click(await screen.findByRole('option', { name: /Source product/ }));
     return within(screen.getByRole('dialog', { name: 'Clone Variants from Another Product' }));
   };
+  it('stages grouped prices and saves them without changing stock or SKUs', async () => {
+    const rows = [
+      ['days', 'early', 'Flowering Days', 'Early'], ['days', 'late', 'Flowering Days', 'Late'],
+      ['colour', 'red', 'Flower Colour', 'Red'], ['colour', 'yellow', 'Flower Colour', 'Yellow'],
+    ].map(([attributeId, valueId, name, value]) => ({ id: valueId, attributeId, valueId, attribute: { name }, value: { value }, isVariantAttr: true }));
+    const variants = ['early', 'late'].flatMap((days) => ['red', 'yellow'].map((colour, index) => ({
+      id: `${days}-${colour}`, optionLabel: `${days}-${colour}`, sku: `${days}-${colour}`, price: index ? 110 : 100,
+      stockQty: 5, reservedQty: 1, isActive: index === 0, options: [{ attributeId: 'days', valueId: days }, { attributeId: 'colour', valueId: colour }], images: [],
+    })));
+    attributeService.getProductAttributes.mockResolvedValue({ data: { data: rows } });
+    attributeService.getProductVariants.mockResolvedValue({ data: { data: variants } });
+    render(tree());
+    const earlyButton = await screen.findByRole('button', { name: 'early-red', exact: true });
+    const earlyEditor = within(earlyButton.closest('.MuiAccordion-root'));
+    fireEvent.click(earlyButton);
+    fireEvent.change(earlyEditor.getByLabelText('Stock Qty'), { target: { value: '9' } });
+    fireEvent.change(earlyEditor.getByLabelText('SKU'), { target: { value: 'EDITED-SKU' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Set prices by attribute' }));
+    const dialog = within(await screen.findByRole('dialog', { name: 'Set prices by attribute' }));
+    fireEvent.click(dialog.getByRole('checkbox', { name: 'Flowering Days' }));
+    fireEvent.change(dialog.getByLabelText('MRP for Flowering Days: Early'), { target: { value: '45' } });
+    fireEvent.click(dialog.getByRole('button', { name: 'Apply prices to draft' }));
+    expect(attributeService.updateProductVariant).not.toHaveBeenCalled();
+    fireEvent.click(await screen.findByRole('button', { name: 'Save variant changes' }));
+    await waitFor(() => expect(attributeService.updateProductVariant).toHaveBeenCalledTimes(2));
+    expect(attributeService.updateProductVariant).toHaveBeenCalledWith('product', 'early-red', expect.objectContaining({ price: 45, stockQty: 9, sku: 'EDITED-SKU', isActive: true }));
+    expect(attributeService.updateProductVariant).toHaveBeenCalledWith('product', 'early-yellow', expect.objectContaining({ price: 45, stockQty: 5, sku: 'early-yellow', isActive: false }));
+  });
+
   it('searches by product SKU and refreshes attributes and variants after copying', async () => {
     render(tree());
     const dialog = await pickCopySource();

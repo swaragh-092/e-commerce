@@ -31,7 +31,7 @@ describe('Catalog Gallery page', () => {
 
   it('shows albums separately and adds selected media images', async () => {
     render(<GalleryPage />);
-    expect(await screen.findByText('Public URL: /demo-orbis-seeds-v1-html/gallery.html?album=flowers')).toBeInTheDocument();
+    expect(await screen.findByText('Public URL: /demo-orbis-seeds-v1-html/gallery-detail.html?album=flowers')).toBeInTheDocument();
     fireEvent.click(screen.getByRole('button', { name: 'Add images' }));
     fireEvent.click(screen.getByRole('button', { name: 'Pick image' }));
     await waitFor(() => expect(galleryService.addImages).toHaveBeenCalledWith('gallery-1', ['media-2']));
@@ -40,11 +40,32 @@ describe('Catalog Gallery page', () => {
 
   it('creates an album with a URL slug from its name', async () => {
     render(<GalleryPage />);
-    await screen.findByText('Public URL: /demo-orbis-seeds-v1-html/gallery.html?album=flowers');
+    await screen.findByText('Public URL: /demo-orbis-seeds-v1-html/gallery-detail.html?album=flowers');
     fireEvent.click(screen.getByRole('button', { name: 'New gallery' }));
     fireEvent.change(screen.getByRole('textbox', { name: /Gallery name/ }), { target: { value: 'Seed Trials' } });
     fireEvent.click(screen.getByRole('button', { name: 'Create gallery' }));
     await waitFor(() => expect(galleryService.create).toHaveBeenCalledWith(expect.objectContaining({ title: 'Seed Trials', slug: 'seed-trials', isActive: true })));
+  });
+
+  it('selects a cover photo from the media library', async () => {
+    galleryService.update.mockResolvedValue({ data: { ...album, coverMediaId: 'media-2', coverImage: second.media } });
+    render(<GalleryPage />);
+    await screen.findByRole('button', { name: 'Choose cover photo' });
+    expect(screen.getByAltText('Gallery cover preview').getAttribute('src')).toContain('/one.png');
+    fireEvent.click(screen.getByRole('button', { name: 'Choose cover photo' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Pick image' }));
+    await waitFor(() => expect(galleryService.update).toHaveBeenCalledWith('gallery-1', { coverMediaId: 'media-2' }));
+    expect(await screen.findByText('Using a selected cover photo.')).toBeInTheDocument();
+    expect(screen.getByAltText('Gallery cover preview').getAttribute('src')).toContain('/two.png');
+  });
+
+  it('clears the selected cover and previews the first album image', async () => {
+    galleryService.list.mockResolvedValue({ data: [{ ...album, coverMediaId: 'media-2', coverImage: second.media }], meta: { totalPages: 1 } });
+    galleryService.update.mockResolvedValue({ data: { ...album, coverMediaId: null, coverImage: null } });
+    render(<GalleryPage />);
+    fireEvent.click(await screen.findByRole('button', { name: 'Use first image' }));
+    await waitFor(() => expect(galleryService.update).toHaveBeenCalledWith('gallery-1', { coverMediaId: null }));
+    await waitFor(() => expect(screen.getByAltText('Gallery cover preview').getAttribute('src')).toContain('/one.png'));
   });
 
   it('saves a changed image order', async () => {

@@ -1,5 +1,11 @@
 $(document).ready(function() {
+    var C = window.OrbiCatalog;
     var ENQUIRY_API_URL = API_URL + "enquiries";
+    var enquiryEnabled = true;
+    C.getFeatures().then(function (features) {
+        enquiryEnabled = features.enquiry !== false;
+        if (!enquiryEnabled) $('<style>').text('.add-enquiry-list, .open-enquiry-popup, .move-to-cart-btn, #move-all-to-cart-btn, #cart-enquiry-btn, a[href*="enquiry-list.html"] { display: none !important; }').appendTo('head');
+    }).catch(function () { /* Keep the page usable when feature settings cannot be refreshed. */ });
 
     /* ========================================================
        NEWSLETTER / FUTURE PRODUCTS API CONFIGURATION
@@ -25,15 +31,7 @@ $(document).ready(function() {
                 'Accept': 'application/json'
             },
             body: JSON.stringify(payload)
-        }).then(function(res) {
-            return res.json().catch(function() { return {}; });
-        }).then(function(result) {
-            console.log("Newsletter subscription response:", result);
-            return result;
-        }).catch(function(err) {
-            console.error("Newsletter API error:", err);
-            return { error: err };
-        });
+        }).then(C.readResponse);
     }
 
     window.subscribeNewsletter = subscribeNewsletter;
@@ -42,11 +40,11 @@ $(document).ready(function() {
         var icon = type === 'success' ? 'OK' : (type === 'error' ? '!' : 'i');
         var color = type === 'success' ? '#58AE68' : (type === 'error' ? '#dc3545' : '#71C5DD');
         var toastKey = [type || '', title || '', text || ''].join('|');
-        var safeToastKey = toastKey.replace(/"/g, '&quot;');
+        var safeToastKey = C.escape(toastKey);
         var html = `
         <div class="custom-toast" data-toast-key="${safeToastKey}" style="border-left: 4px solid ${color};">
             <div class="custom-toast-icon" style="background:${color};">${icon}</div>
-            <div class="custom-toast-content"><strong>${title}</strong> ${text}</div>
+            <div class="custom-toast-content"><strong>${C.escape(title)}</strong> ${C.escape(text)}</div>
             ${!timer ? `<button class="custom-toast-btn" style="color:${color};">OK</button>` : ''}
         </div>`;
 
@@ -58,7 +56,7 @@ $(document).ready(function() {
 
         if (type === 'error') {
             $container.find('.custom-toast').remove();
-        } else if ($container.find('.custom-toast[data-toast-key="' + safeToastKey + '"]').length > 0) {
+        } else if ($container.find('.custom-toast').filter(function () { return this.getAttribute('data-toast-key') === toastKey; }).length > 0) {
             return { then: function(callback) { if (typeof callback === 'function') callback(); } };
         }
 
@@ -88,11 +86,11 @@ $(document).ready(function() {
         var html = `
         <div class="custom-confirm-overlay">
             <div class="custom-confirm-box">
-                <h3>${title}</h3>
-                <p>${text}</p>
+                <h3>${C.escape(title)}</h3>
+                <p>${C.escape(text)}</p>
                 <div class="custom-confirm-actions">
                     <button class="custom-confirm-cancel">Cancel</button>
-                    <button class="custom-confirm-ok">${confirmText}</button>
+                    <button class="custom-confirm-ok">${C.escape(confirmText)}</button>
                 </div>
             </div>
         </div>`;
@@ -109,127 +107,50 @@ $(document).ready(function() {
         $overlay.find('.custom-confirm-ok').on('click', function() { close(); if (callback) callback(); });
     }
 
-    function getCart() { return JSON.parse(localStorage.getItem('enquiryCart')) || []; }
-    function saveCart(cart) { localStorage.setItem('enquiryCart', JSON.stringify(cart)); updateHeaderCounter(); }
-    function toAbsoluteImage(url) {
-        if (!url) return 'images/default-image.png';
-        if (/^https?:\/\//i.test(url)) return url;
-        if (url.charAt(0) === '/') return APP_URL + url;
-        return url;
-    }
-    function getProductUnit(product) {
-        if (!product || !product.attributes || !product.attributes.length) return '';
-        var matchedAttribute = product.attributes.find(function(attr) {
-            var name = (attr.customName || (attr.attribute ? attr.attribute.name : '') || '').trim().toLowerCase();
-            return name === 'unit' || name === 'uom';
-        });
-        if (!matchedAttribute) return '';
-        return matchedAttribute.customValue || (matchedAttribute.value ? matchedAttribute.value.value : '') || '';
-    }
-    function getCategorySlug(product) {
-        if (!product) return '';
-        if (product.category && product.category.slug) return product.category.slug;
-        if (product.categories && product.categories[0] && product.categories[0].slug) return product.categories[0].slug;
-        return '';
-    }
-    function getProductPageUrl(item) {
-        if (!item || !item.categorySlug || !item.slug) return 'javascript:;';
-        return 'products.html?category=' + encodeURIComponent(item.categorySlug) + '&slug=' + encodeURIComponent(item.slug);
-    }
-    function fetchProductMetaBySlug(productSlug) {
-        if (!productSlug) return Promise.resolve(null);
-        return fetch(API_URL + 'products/' + encodeURIComponent(productSlug) + '?include=categories,attributes')
-            .then(function(response) { return response.json(); })
-            .then(function(result) {
-                var product = result && result.data ? result.data : null;
-                if (!product) return null;
-                return {
-                    slug: product.slug || '',
-                    categorySlug: getCategorySlug(product),
-                    unit: getProductUnit(product)
-                };
-            })
-            .catch(function() { return null; });
-    }
-
-    function updateHeaderCounter() {
-        var cart = getCart();
-        $('#header-enquiry-count').text(cart.length || 0);
-    }
+    function getCart() { return C.getCart(); }
+    function saveCart(cart) { C.saveCart(cart); }
+    function updateHeaderCounter() { $('#header-enquiry-count').text(getCart().length); }
+    window.addEventListener('orbi:cart-change', updateHeaderCounter);
+    window.addEventListener('storage', function (event) {
+        if (event.key === 'enquiryCart') { updateHeaderCounter(); renderCart(); }
+    });
 
     $(document).on('click', '.add-enquiry-list', function(e) {
         e.preventDefault();
-        var id = $(this).attr('data-id');
-        var name = $(this).attr('data-name');
-        var image = $(this).attr('data-image');
-        var slug = $(this).attr('data-slug') || '';
-        var categorySlug = $(this).attr('data-category') || '';
-        var unit = $(this).attr('data-unit') || '';
-        if (!id || !name) return;
-
-        var cart = getCart();
-        var existingItem = cart.find(function(item) { return item.id === id; });
-        if (existingItem) existingItem.quantity += 1;
-        else cart.push({ id: id, name: name, image: toAbsoluteImage(image), quantity: 1, slug: slug, categorySlug: categorySlug, unit: unit });
-
-        saveCart(cart);
-        customAlert('Added!', name + ' has been added to your enquiry list.', 'success', 2000);
+        if (!enquiryEnabled) return;
+        try {
+            var line = C.actionLine(this);
+            if (!line.id) return;
+            C.addToCart(line);
+            customAlert('Added!', line.name + (line.variantLabel ? ' (' + line.variantLabel + ')' : '') + ' has been added to your enquiry list.', 'success', 2000);
+        } catch (error) { customAlert('Enquiry list', error.message, 'error', 2500); }
     });
 
     function renderCart() {
         var $container = $('#dynamic-cart-container');
-        if ($container.length === 0) return;
+        if (!$container.length) return;
         $('.cart-wrapper h1').show();
         var cart = getCart();
         $container.empty();
-
+        $container.siblings('.cart-buttons').toggle(!!cart.length);
         if (!cart.length) {
             $container.html('<p style="text-align:center; padding: 20px;">Your enquiry list is currently empty.</p>');
-            $container.siblings('.cart-buttons').hide();
             return;
         }
-
-        $container.siblings('.cart-buttons').show();
-        var needsMeta = cart.some(function(item) { return !item.slug || !item.categorySlug || !item.unit; });
-        var renderItems = function(items) {
-            $container.empty();
-            items.forEach(function(item) {
-            var productUrl = getProductPageUrl(item);
-            var image = toAbsoluteImage(item.image);
-            var unitHtml = item.unit ? '<p class="cart-unit">Unit: ' + item.unit + '</p>' : '';
-            $container.append(`
-            <div class="cart-inner" data-id="${item.id}">
-                <button class="close-btn remove-item">&times;</button>
-                <div class="cart-image"><a href="${productUrl}"><img src="${image}" alt="${item.name}" onerror="this.onerror=null;this.src='images/default-image.png';"></a></div>
-                <div class="cart-content">
-                    <h2><a href="${productUrl}">${item.name}</a></h2>
-                    ${unitHtml}
-                    <div class="cart-bottom">
-                        <div class="quantity">
-                            <button type="button" class="qty-btn minus" title="Decrease quantity">-</button>
-                            <input type="number" class="qty-input" min="1" max="99999" value="${item.quantity}" title="Click to edit quantity">
-                            <button type="button" class="qty-btn plus" title="Increase quantity">+</button>
-                        </div>
-                    </div>
-                </div>
-            </div>`);
-            });
-        };
-        if (!needsMeta) {
-            renderItems(cart);
-            return;
-        }
-        Promise.all(cart.map(function(item) {
-            if (item.slug && item.categorySlug && item.unit) return Promise.resolve(item);
-            if (!item.slug) return Promise.resolve(item);
-            return fetchProductMetaBySlug(item.slug).then(function(meta) {
-                return meta ? Object.assign({}, item, meta) : item;
-            });
-        })).then(function(items) {
-            saveCart(items);
-            renderItems(items);
-        }).catch(function() {
-            renderItems(cart);
+        cart.forEach(function(item) {
+            var esc = C.escape, url = esc(C.productUrl(item));
+            var $row = $('<div class="cart-inner">').attr('data-key', C.key(item));
+            $row.html('<button type="button" class="close-btn remove-item" aria-label="Remove from enquiry list">&times;</button>' +
+                '<div class="cart-image"><a href="' + url + '"><img src="' + esc(C.imageUrl(item.image)) + '" alt="' + esc(item.name) + '"></a></div>' +
+                '<div class="cart-content"><h2><a href="' + url + '">' + esc(item.name) + '</a></h2>' +
+                (item.variantLabel ? '<p class="cart-variant">' + esc(item.variantLabel) + '</p>' : '') +
+                (item.sku ? '<p class="cart-variant">SKU: ' + esc(item.sku) + '</p>' : '') +
+                (item.unit ? '<p class="cart-unit">Unit: ' + esc(item.unit) + '</p>' : '') +
+                '<div class="cart-bottom"><div class="quantity"><button type="button" class="qty-btn minus" aria-label="Decrease quantity">-</button>' +
+                '<input type="number" class="qty-input" min="1" max="99999" step="1" value="' + item.quantity + '" aria-label="Quantity for ' + esc(item.name + ' ' + (item.variantLabel || '')) + '">' +
+                '<button type="button" class="qty-btn plus" aria-label="Increase quantity">+</button></div></div></div>');
+            $row.find('img').on('error', function () { if (this.getAttribute('src') !== 'images/default-image.png') this.src = 'images/default-image.png'; });
+            $container.append($row);
         });
     }
 
@@ -243,7 +164,7 @@ $(document).ready(function() {
             <div class="cart-thankyou-message" style="text-align:center; padding: 45px 20px; background: #fff; border-radius: 12px; border: 1px solid #e2ebe4; box-shadow: 0 4px 15px rgba(0,0,0,0.05); margin: 10px auto 30px; max-width: 600px;">
                 <div style="width: 60px; height: 60px; line-height: 60px; border-radius: 50%; background: #e8f5e9; color: #58AE68; font-size: 32px; font-weight: bold; margin: 0 auto 15px;">&#10003;</div>
                 <h2 style="font-size: 24px; color: #1f2933; margin-bottom: 10px; font-weight: 700;">Thank You!</h2>
-                <p style="font-size: 15px; color: #555; line-height: 1.6; margin-bottom: 25px; text-align: center;">${msg}<br>Our team will contact you shortly.</p>
+                <p style="font-size: 15px; color: #555; line-height: 1.6; margin-bottom: 25px; text-align: center;">${C.escape(msg)}<br>Our team will contact you shortly.</p>
                 <a href="product.html" class="view-product-btn" style="display: inline-block; padding: 12px 28px; text-decoration: none;">Explore More Products</a>
             </div>
         `;
@@ -258,13 +179,13 @@ $(document).ready(function() {
         var $btn = $(this);
         var $parent = $btn.closest('.quantity');
         var $input = $parent.find('.qty-input');
-        var id = $btn.closest('.cart-inner').attr('data-id');
+        var id = $btn.closest('.cart-inner').attr('data-key');
         var cart = getCart();
-        var item = cart.find(function(i) { return i.id === id; });
+        var item = cart.find(function(i) { return C.key(i) === id; });
         if (!item) return;
 
-        var currentVal = parseInt($input.val(), 10) || item.quantity || 1;
-        if ($btn.hasClass('plus')) currentVal += 1;
+        var currentVal = C.quantity($input.val()) || item.quantity || 1;
+        if ($btn.hasClass('plus')) currentVal = Math.min(99999, currentVal + 1);
         else if ($btn.hasClass('minus') && currentVal > 1) currentVal -= 1;
 
         item.quantity = currentVal;
@@ -275,13 +196,13 @@ $(document).ready(function() {
 
     $(document).on('input', '.qty-input', function() {
         var $input = $(this);
-        var id = $input.closest('.cart-inner').attr('data-id');
-        var val = parseInt($input.val(), 10);
+        var id = $input.closest('.cart-inner').attr('data-key');
+        var val = C.quantity($input.val());
         var cart = getCart();
-        var item = cart.find(function(i) { return i.id === id; });
+        var item = cart.find(function(i) { return C.key(i) === id; });
         if (!item) return;
 
-        if (!isNaN(val) && val >= 1) {
+        if (val !== null) {
             item.quantity = val;
             saveCart(cart);
             updateHeaderCounter();
@@ -290,15 +211,15 @@ $(document).ready(function() {
 
     $(document).on('change blur', '.qty-input', function() {
         var $input = $(this);
-        var id = $input.closest('.cart-inner').attr('data-id');
-        var val = parseInt($input.val(), 10);
+        var id = $input.closest('.cart-inner').attr('data-key');
+        var val = C.quantity($input.val());
         var cart = getCart();
-        var item = cart.find(function(i) { return i.id === id; });
+        var item = cart.find(function(i) { return C.key(i) === id; });
         if (!item) return;
 
-        if (isNaN(val) || val < 1) {
-            val = 1;
-            $input.val(1);
+        if (val === null) {
+            val = item.quantity;
+            $input.val(val);
         }
         item.quantity = val;
         saveCart(cart);
@@ -314,8 +235,8 @@ $(document).ready(function() {
 
     $(document).on('click', '.remove-item', function(e) {
         e.preventDefault();
-        var id = $(this).closest('.cart-inner').attr('data-id');
-        var cart = getCart().filter(function(i) { return i.id !== id; });
+        var id = $(this).closest('.cart-inner').attr('data-key');
+        var cart = getCart().filter(function(i) { return C.key(i) !== id; });
         saveCart(cart);
         renderCart();
     });
@@ -336,18 +257,28 @@ $(document).ready(function() {
 
     $(document).on('click', '.open-enquiry-popup, #cart-enquiry-btn', function(e) {
         e.preventDefault();
+        if (!enquiryEnabled) return;
         var isCartBtn = $(this).attr('id') === 'cart-enquiry-btn';
-        var productName = $(this).attr('data-name');
-        var productId = $(this).attr('data-id') || '';
+        var line = null;
+        if (!isCartBtn) {
+            try { line = C.actionLine(this); }
+            catch (error) { customAlert('Choose options', error.message, 'info', 2500); return; }
+        }
+        var productName = line ? line.name + (line.variantLabel ? ' — ' + line.variantLabel : '') : '';
+        var productId = line && line.id || '';
 
         var $popup = $('.enquiry-popup-wrapper');
         var $form = $popup.find('form');
+        if (!$form.length) return;
         $form[0].reset();
+        $form.data('line', line).data('cart-mode', isCartBtn);
         $form.removeAttr('data-product-id');
         $form.find('.form-group').show();
         $form.find('input[name="txtProduct"], input[name="txtQuantity"]').prop('required', true);
         var $productInput = $form.find('input[name="txtProduct"]');
         $productInput.val('');
+        $form.find('input[name="txtQuantity"]').attr({ min: 1, max: 99999, step: 1 }).val(1);
+        $form.find('textarea[name="txtMessage"]').attr('maxlength', 2000);
 
         if (isCartBtn) {
             var cart = getCart();
@@ -373,6 +304,8 @@ $(document).ready(function() {
         $('body').css('overflow', 'hidden');
     });
 
+    $(document).on('keydown', function (event) { if (event.key === 'Escape') closePopup(); });
+
     $(document).on('click', '.close-enquiry-popup, .enquiry-overlay', function(e) {
         e.preventDefault();
         closePopup();
@@ -383,17 +316,7 @@ $(document).ready(function() {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify(payload)
-        }).then(function(response) {
-            return response.text().then(function(text) {
-                var data;
-                try { data = text ? JSON.parse(text) : {}; } catch (err) { data = {}; }
-                if (!response.ok) {
-                    var errorMessage = (data && data.error && data.error.message) ? data.error.message : 'Request failed';
-                    throw new Error(errorMessage);
-                }
-                return data;
-            });
-        });
+        }).then(C.readResponse);
     }
 
     $(document).on('submit', '.enquiry-form', function(e) {
@@ -406,56 +329,66 @@ $(document).ready(function() {
         var phone = $form.find('input[name="txtPhone"]').val().trim();
         var email = $form.find('input[name="txtEmail"]').val().trim();
         var message = $form.find('textarea[name="txtMessage"]').val().trim();
-        var isCartEnquiry = !$form.find('input[name="txtProduct"]').prop('required');
-        if (!message && isCartEnquiry) {
-            message = 'Please share the final quote and delivery timeline.';
-        }
+        var isCartEnquiry = $form.data('cart-mode') === true;
+        if (!message) message = 'Please share product details, the final quote and delivery timeline.';
         var quantity = $form.find('input[name="txtQuantity"]').val();
         var orbis = $form.find('input[name="orbis"]').val().trim();
         var selectedProductId = $form.attr('data-product-id') || '';
         var isNewsletterChecked = $form.find('input[name="chkNewsletter"]').is(':checked');
 
-        var nameReg = /^[a-zA-Z\s]+$/;
         var emailReg = /^[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}$/;
-        var phoneReg = /^\d{10,15}$/;
+        var phoneReg = /^\d{10,12}$/;
         function showError(msg) { customAlert('Validation', msg, 'error', 2200); }
 
         if (!name) return showError('Please enter your name.'), false;
-        if (!nameReg.test(name)) return showError('Invalid name. Please enter alphabets only.'), false;
+        if (name.length < 2 || name.length > 255) return showError('Name must be between 2 and 255 characters.'), false;
+        if (message.length > 2000) return showError('Message must be 2000 characters or fewer.'), false;
         if (!phone) return showError('Please enter your phone number.'), false;
-        if (!phoneReg.test(phone)) return showError('Invalid contact number. Please enter 10 to 15 digits.'), false;
+        if (!phoneReg.test(phone)) return showError('Invalid contact number. Please enter 10 to 12 digits.'), false;
         if (!email) return showError('Please enter your email address.'), false;
         if (!emailReg.test(email)) return showError('Invalid email address format.'), false;
         if (orbis) return showError('Bot detected. Please try again.'), false;
 
         if (!isCartEnquiry) {
             if (!selectedProductId) return showError('Please open enquiry from a product so productId can be sent.'), false;
-            if (!quantity || parseInt(quantity, 10) < 1) return showError('Please enter a valid quantity.'), false;
+            if (!C.quantity(quantity)) return showError('Please enter a valid quantity.'), false;
         }
 
         var payload = { name: name, email: email, phone: phone, message: message };
         if (isCartEnquiry) {
             var cart = getCart();
             if (!cart.length) return showError('Your enquiry list is empty. Add products first.'), false;
-            payload.cartItems = cart.map(function(item) { return { product: { id: item.id }, variant: null, quantity: parseInt(item.quantity, 10) || 1 }; });
+            if (cart.length > 100) return showError('Please submit up to 100 items per enquiry.'), false;
         } else {
             payload.productId = selectedProductId;
-            payload.quantity = parseInt(quantity, 10);
+            payload.quantity = C.quantity(quantity);
+            payload.variantId = ($form.data('line') || {}).variantId || null;
         }
 
         var originalBtnText = $submitBtn.text();
         $submitBtn.prop('disabled', true).attr('aria-busy', 'true').text('Submitting...');
 
-        sendEnquiry(payload).then(function(apiResponse) {
+        var submittedLines = isCartEnquiry ? getCart() : [Object.assign({}, $form.data('line'), { quantity: C.quantity(quantity) })];
+        C.resolveLines(submittedLines).then(function (resolved) {
+            if (isCartEnquiry) payload.cartItems = resolved.map(function (item) {
+                return { product: { id: item.id }, variant: item.variantId ? { id: item.variantId } : null, quantity: item.quantity };
+            });
+            return sendEnquiry(payload);
+        }).then(function(apiResponse) {
             // If user checked "Check here for future products", subscribe them to newsletter
             if (isNewsletterChecked) {
-                subscribeNewsletter({ email: email, source: "orbi-enquiry" });
+                subscribeNewsletter({ email: email, source: "orbi-enquiry" }).catch(function () { customAlert("Newsletter", "Enquiry submitted. Newsletter subscription could not be completed.", "info", 3000); });
             }
 
             var successMessage = (apiResponse && apiResponse.message) ? apiResponse.message : 'Your enquiry has been submitted successfully.';
             if (isCartEnquiry) {
-                saveCart([]);
-                renderThankYouState(successMessage);
+                var remaining = getCart().map(function (item) {
+                    var sent = submittedLines.find(function (line) { return C.key(line) === C.key(item); });
+                    return Object.assign({}, item, { quantity: item.quantity - (sent ? sent.quantity : 0) });
+                }).filter(function (item) { return item.quantity > 0; });
+                try { saveCart(remaining); }
+                catch (error) { customAlert('Enquiry submitted', 'Could not update your saved list. Please clear the submitted items manually.', 'info', 4000); }
+                if (remaining.length) renderCart(); else renderThankYouState(successMessage);
             }
             $form[0].reset();
             $form.removeAttr('data-product-id');

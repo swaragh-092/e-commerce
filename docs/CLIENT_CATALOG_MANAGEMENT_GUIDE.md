@@ -413,7 +413,7 @@ Because Excel files cannot know the database UUIDs before import, temporary link
 - **`variant_key`**: Sub-identifier (such as `P001-V01`, `P001-RED-S`). Links variant images in `ProductImages` and attribute choices in `VariantOptions`.
 
 ## 4.4 Exporting Catalog Data to CSV
-You can export your current live products at any time:
+You can export the products shown on the current list page at any time. The CSV includes only the currently loaded page, up to the selected page size; it does not include matching products on other pages. Export each page separately if you need the full filtered result:
 1. Navigate to **Admin > Catalog > Products**.
 2. Filter or search for the items you want (e.g. filter by `Status: Published` or `Category: Footwear`).
 3. Click the **Export CSV** button in the top action bar.

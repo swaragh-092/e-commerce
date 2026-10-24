@@ -910,9 +910,9 @@ const validateSellingReadiness = (data, existingProduct = null, pricingEnabled =
 
 exports.createProduct = async (data, auditContext = null) => {
   const transaction = await Product.sequelize.transaction();
-  const labelPresets = await getLabelPresets();
-  const { features: createFeatures } = await SettingsService.getFeatures();
   try {
+    const labelPresets = await getLabelPresets();
+    const { features: createFeatures } = await SettingsService.getFeatures();
     // Catalog mode has no selling price. Accept legacy clients that send zero
     // as an empty-price placeholder, then store the canonical NULL value.
     if (!createFeatures.pricing && data.price != null && Number(data.price) === 0) {
@@ -994,9 +994,9 @@ exports.updateProduct = async (id, data, auditContext = null) => {
   if (!product) throw new AppError('NOT_FOUND', 404, 'Product not found');
 
   const transaction = await Product.sequelize.transaction();
-  const labelPresets = await getLabelPresets();
-  const { features: updateFeatures } = await SettingsService.getFeatures();
   try {
+    const labelPresets = await getLabelPresets();
+    const { features: updateFeatures } = await SettingsService.getFeatures();
     // Match generation/inventory lock order and serialize type changes with generation.
     await sequelize.query('SELECT pg_advisory_xact_lock(hashtext(:scope), hashtext(:productId))', {
       replacements: { scope: 'product-variant-generation', productId: id }, transaction,

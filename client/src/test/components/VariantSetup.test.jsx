@@ -19,6 +19,33 @@ beforeEach(() => {
 });
 
 describe('guided variant setup', () => {
+  it('sets new variant prices by one attribute while preserving selected combinations and stock', async () => {
+    const rows = [
+      ['days', 'early', 'Flowering Days', 'Early'], ['days', 'late', 'Flowering Days', 'Late'],
+      ['colour', 'red', 'Flower Colour', 'Red'], ['colour', 'yellow', 'Flower Colour', 'Yellow'],
+    ].map(([attributeId, valueId, name, value]) => ({ attributeId, valueId, attribute: { name }, value: { value }, isVariantAttr: true }));
+    const combinations = ['early', 'late'].flatMap((days) => ['red', 'yellow'].map((colour) => ({ valueIds: [days, colour], label: `${days}/${colour}`, isNew: true })));
+    attributeService.previewVariantGeneration.mockResolvedValue({ data: { data: { ...review, total: 4, addedCount: 4, combinations } } });
+    render(tree({ rows }));
+    fireEvent.click(screen.getByRole('button', { name: 'Create 4 variants' }));
+    const parent = within(await screen.findByRole('dialog', { name: 'Create variants' }));
+    fireEvent.change(within(parent.getByRole('group', { name: 'early/red' })).getByLabelText('Stock'), { target: { value: '7' } });
+    fireEvent.click(within(parent.getByRole('group', { name: 'late/yellow' })).getByRole('checkbox'));
+    fireEvent.click(parent.getByRole('button', { name: 'Set prices by attribute' }));
+    const pricing = within(await screen.findByRole('dialog', { name: 'Set prices by attribute' }));
+    fireEvent.click(pricing.getByRole('checkbox', { name: 'Flowering Days' }));
+    fireEvent.change(pricing.getByLabelText('MRP for Flowering Days: Early'), { target: { value: '45' } });
+    fireEvent.change(pricing.getByLabelText('MRP for Flowering Days: Late'), { target: { value: '60' } });
+    fireEvent.click(pricing.getByRole('button', { name: 'Apply prices to draft' }));
+    expect(attributeService.bulkGenerateVariants).not.toHaveBeenCalled();
+    fireEvent.click(await parent.findByRole('button', { name: 'Create 3 variants' }));
+    await waitFor(() => expect(attributeService.bulkGenerateVariants).toHaveBeenCalledWith('product', expect.objectContaining({ newVariants: [
+      { valueIds: ['early', 'red'], price: 45, stockQty: 7 },
+      { valueIds: ['early', 'yellow'], price: 45, stockQty: 0 },
+      { valueIds: ['late', 'red'], price: 60, stockQty: 0 },
+    ] })));
+  });
+
   it('guides users to select attributes before offering creation', () => {
     render(tree({ rows: [] }));
     expect(screen.getByText('Start with your product options')).toBeInTheDocument();

@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 const db = require('../../src/modules');
 const productService = require('../../src/modules/product/product.service');
+const settingsService = require('../../src/modules/settings/settings.service');
 const variantService = require('../../src/modules/attribute/attribute.service');
 const inventory = require('../../src/modules/inventory/inventory.service');
 const cartService = require('../../src/modules/cart/cart.service');
@@ -36,6 +37,14 @@ describe('product type inventory lifecycle', () => {
     expect(createProductSchema.validate({ name: 'Shirt', price: 100, type: 'variable', requiresShipping: false }).error).toBeUndefined();
     expect(createProductSchema.validate({ name: 'Shirt', price: 100, type: 'variable', quantity: 10 }).error).toBeDefined();
     expect(createProductSchema.validate({ name: 'Shirt', price: 100, type: 'simple', quantity: 10 }).error).toBeUndefined();
+  });
+  it.each(['create', 'update'])('rolls back the %s transaction when feature settings cannot be read', async (operation) => {
+    vi.spyOn(settingsService, 'getFeatures').mockRejectedValue(new Error('settings unavailable'));
+    const save = operation === 'create'
+      ? productService.createProduct({ name: 'Test', type: 'simple' })
+      : productService.updateProduct('product', { name: 'Changed' });
+    await expect(save).rejects.toThrow('settings unavailable');
+    expect(tx.rollback).toHaveBeenCalledOnce();
   });
   it('requires explicit confirmation to clear standalone stock', async () => {
     await expect(productService.updateProduct('product', { type: 'variable' })).rejects.toThrow('Confirm clearing');

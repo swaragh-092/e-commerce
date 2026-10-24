@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { Alert, Box, Button, Checkbox, Chip, CircularProgress, Dialog, DialogActions, DialogContent, DialogTitle, Divider, FormControlLabel, Stack, TextField, Typography } from '@mui/material';
+import VariantPriceGroups from './VariantPriceGroups';
 import AddIcon from '@mui/icons-material/Add';
 import attributeService from '../../services/attributeService';
 import { useNotification } from '../../context/NotificationContext';
@@ -121,6 +122,14 @@ export default function VariantSetup({ productId, rows, variants, basePrice, dis
             </Stack>
             <Button sx={{ mt: 1 }} disabled={busy || !priceValid || !stockValid || !chosen.length} onClick={() => setEntries((current) => current.map((entry) => entry.selected ? { ...entry, price: null, stockQty: null } : entry))}>Apply defaults to selected</Button>
           </Box>}
+          {chosen.length > 0 && <VariantPriceGroups rows={rows} disabled={busy || disabled || !canManage}
+            entries={chosen.map((entry) => ({ id: JSON.stringify([...entry.valueIds].sort()), price: entry.price ?? price,
+              options: rows.filter((row) => row.isVariantAttr && entry.valueIds.includes(row.valueId)).map((row) => ({ attributeId: row.attributeId, valueId: row.valueId })) }))}
+            saveHint="Applies only to selected new combinations. Existing variants and unchecked combinations stay unchanged. Review, then create the variants."
+            onApply={(prices) => setEntries((current) => current.map((entry) => {
+              const id = JSON.stringify([...entry.valueIds].sort());
+              return prices.has(id) ? { ...entry, price: prices.get(id) } : entry;
+            }))} />}
           <Stack direction={{ xs: 'column', sm: 'row' }} spacing={1} alignItems={{ sm: 'center' }} sx={{ mb: 1 }}>
             <Typography variant="subtitle2" sx={{ flex: 1 }}>Combinations ({review.total})</Typography>
             {entries.length > 0 && <><Button size="small" disabled={busy} onClick={() => setEntries((current) => current.map((entry) => ({ ...entry, selected: true })))}>Select all new</Button><Button size="small" disabled={busy} onClick={() => setEntries((current) => current.map((entry) => ({ ...entry, selected: false })))}>Deselect all new</Button></>}

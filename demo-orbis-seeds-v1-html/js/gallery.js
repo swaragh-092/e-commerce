@@ -1,63 +1,43 @@
-﻿(function () {
-    var DEFAULT_PAGE = 1;
+(function () {
     var limit = 20;
-    var isLoading = false;
-    var currentPage = DEFAULT_PAGE;
-    var totalPages = 1;
-    var currentAlbum = null;
-    var requestId = 0;
-    var galleryApiUrl = /^(localhost|127\.0\.0\.1)$/.test(window.location.hostname)
-        ? window.location.origin + '/api/' : API_URL;
-
-    var wrapper = document.querySelector('.gallery-inner-wrapper');
-    var albumsEl = document.getElementById('gallery-albums');
+    var galleryApiUrl = API_URL.replace(/\/+$/, '') + '/';
+    var mediaBaseUrl = APP_URL;
+    var content = document.getElementById('gallery-content');
     var messageEl = document.getElementById('gallery-message');
-    var paginationEl = document.getElementById('gallery-pagination');
+    var retryEl = document.getElementById('gallery-retry');
+    if (!content || !messageEl || !retryEl) return;
 
-    if (!wrapper || !paginationEl) return;
-
-    function getQueryPage() {
-        var params = new URLSearchParams(window.location.search);
-        var value = parseInt(params.get('page'), 10);
-        return !isNaN(value) && value > 0 ? value : DEFAULT_PAGE;
-    }
-
-    function setQueryPage(page) {
-        var url = new URL(window.location.href);
-        if (page <= 1) {
-            url.searchParams.delete('page');
-        } else {
-            url.searchParams.set('page', String(page));
+    var params = new URLSearchParams(window.location.search);
+    var slug = params.get('album');
+    // Keep previously shared gallery.html?album= links working as album views.
+    var isDetail = content.dataset.galleryView === 'detail' || Boolean(slug);
+    var currentPage = Math.max(1, parseInt(params.get('page'), 10) || 1);
+    var totalPages = 1;
+    var requestId = 0;
+    var grid;
+    var pagination;
+    if (isDetail) {
+        content.className = 'gallery-detail-content';
+        var back = document.getElementById('gallery-back');
+        if (!back) {
+            back = document.createElement('a');
+            back.href = 'gallery.html';
+            back.textContent = 'Back to galleries';
+            back.className = 'gallery-back';
+            content.before(back);
         }
-        window.history.replaceState({}, '', url.toString());
+        grid = document.createElement('div');
+        grid.className = 'gallery-inner-wrapper';
+        pagination = document.createElement('nav');
+        pagination.className = 'gallery-pagination';
+        pagination.setAttribute('aria-label', 'Album image pages');
+        content.appendChild(grid);
+        content.appendChild(pagination);
     }
-
-    function setQueryAlbum(slug) {
-        var url = new URL(window.location.href);
-        url.searchParams.set('album', slug);
-        url.searchParams.delete('page');
-        window.history.replaceState({}, '', url.toString());
-    }
-
-    function renderAlbums(albums) {
-        albumsEl.innerHTML = '';
-        albums.forEach(function (album) {
-            var button = document.createElement('button');
-            button.type = 'button';
-            button.className = 'gallery-album-button' + (currentAlbum.slug === album.slug ? ' active' : '');
-            button.textContent = album.title;
-            button.setAttribute('aria-pressed', currentAlbum.slug === album.slug ? 'true' : 'false');
-            button.addEventListener('click', function () {
-                if (currentAlbum.slug === album.slug) return;
-                currentAlbum = album;
-                totalPages = 1;
-                setQueryAlbum(album.slug);
-                renderAlbums(albums);
-                fetchGallery(1);
-            });
-            albumsEl.appendChild(button);
-        });
-    }
+    retryEl.addEventListener('click', function () {
+        if (isDetail) fetchDetail(currentPage);
+        else fetchAlbums();
+    });
 
     function safeText(value, fallback) {
         return (typeof value === 'string' && value.trim()) ? value.trim() : fallback;
@@ -66,9 +46,12 @@
     function normalizeImageUrl(url) {
         var imageUrl = safeText(url, '');
         if (!imageUrl) return '';
-        if (/^https?:\/\//i.test(imageUrl)) return imageUrl;
-        if (imageUrl.charAt(0) === '/') return APP_URL + imageUrl;
-        return imageUrl;
+        try {
+            var resolved = new URL(imageUrl, mediaBaseUrl);
+            return /^https?:$/.test(resolved.protocol) ? resolved.href : '';
+        } catch (error) {
+            return '';
+        }
     }
 
     function readItems(result) {
@@ -79,36 +62,6 @@
         if (Array.isArray(result.items)) return result.items;
         if (Array.isArray(result.rows)) return result.rows;
         return [];
-    }
-
-    function readTotalPages(result, itemsLength) {
-        if (!result || typeof result !== 'object') return null;
-        var data = result.data && typeof result.data === 'object' ? result.data : null;
-
-        var candidates = [
-            result.meta && result.meta.totalPages,
-            data && data.totalPages,
-            result.totalPages,
-            data && data.total_pages,
-            result.total_pages,
-            data && data.lastPage,
-            result.lastPage,
-            data && data.last_page,
-            result.last_page
-        ];
-
-        for (var i = 0; i < candidates.length; i++) {
-            var value = parseInt(candidates[i], 10);
-            if (!isNaN(value) && value > 0) return value;
-        }
-
-        var total = parseInt((result.meta && result.meta.total) || (data && data.total) || result.total, 10);
-        if (!isNaN(total) && total >= 0) {
-            return Math.max(1, Math.ceil(total / limit));
-        }
-
-        if (itemsLength < limit) return currentPage;
-        return null;
     }
 
     function readImage(galleryItem) {
@@ -146,167 +99,185 @@
         return '';
     }
 
-    function renderItems(items) {
-        wrapper.innerHTML = '';
+    function setMessage(text, canRetry) {
+        messageEl.textContent = text;
+        messageEl.hidden = !text;
+        retryEl.hidden = !canRetry;
+    }
 
-        if (!items.length) {
-            setMessage('No gallery items found.');
+    function fetchJson(url) {
+        return fetch(url).then(function (response) {
+            if (!response.ok) {
+                var error = new Error('Request failed with status ' + response.status);
+                error.status = response.status;
+                throw error;
+            }
+            return response.json();
+        });
+    }
+
+    function renderCover(slot, imageUrl, title) {
+        slot.innerHTML = '';
+        if (!imageUrl) {
+            slot.className = 'gallery-album-cover gallery-cover-empty';
+            slot.textContent = 'No cover photo available';
             return;
         }
+        slot.className = 'gallery-album-cover';
+        var img = document.createElement('img');
+        img.src = imageUrl;
+        img.alt = title;
+        img.loading = 'lazy';
+        img.addEventListener('error', function () { renderCover(slot, '', title); }, { once: true });
+        slot.appendChild(img);
+    }
 
-        var fragment = document.createDocumentFragment();
+    function renderAlbum(album) {
+        var card = document.createElement('a');
+        card.className = 'gallery-album-card';
+        card.href = 'gallery-detail.html?album=' + encodeURIComponent(album.slug);
+        var title = safeText(album.title, 'Gallery');
+        card.setAttribute('aria-label', 'View ' + title + ' gallery');
+        var cover = document.createElement('div');
+        renderCover(cover, readImage(album.coverImage), title);
+        card.appendChild(cover);
+        var heading = document.createElement('h3');
+        heading.textContent = title;
+        card.appendChild(heading);
+        if (album.description) {
+            var description = document.createElement('p');
+            description.textContent = album.description;
+            card.appendChild(description);
+        }
+        content.appendChild(card);
 
+        // Older API deployments omit coverImage; obtain just their first image.
+        if (!Object.prototype.hasOwnProperty.call(album, 'coverImage')) {
+            return fetchJson(galleryApiUrl + 'galleries/public/' + encodeURIComponent(album.slug) + '?page=1&limit=1')
+                .then(function (result) { renderCover(cover, readImage(readItems(result)[0]), title); })
+                .catch(function () { renderCover(cover, '', title); });
+        }
+        return Promise.resolve();
+    }
+
+    function fetchAlbums() {
+        content.innerHTML = '';
+        content.setAttribute('aria-busy', 'true');
+        setMessage('Loading galleries...', false);
+        return fetchJson(galleryApiUrl + 'galleries/public')
+            .then(function (result) {
+                var albums = Array.isArray(result.data) ? result.data : [];
+                setMessage(albums.length ? '' : 'No galleries are available yet.', false);
+                return Promise.all(albums.map(renderAlbum));
+            })
+            .catch(function (error) {
+                console.error('Error fetching galleries:', error);
+                setMessage('Unable to load galleries. Please try again.', true);
+            })
+            .finally(function () { content.setAttribute('aria-busy', 'false'); });
+    }
+
+    function renderImages(items) {
+        grid.innerHTML = '';
         items.forEach(function (item) {
             var imageUrl = readImage(item);
             if (!imageUrl) return;
-
-            var title = safeText(item.title || item.name || item.caption || item.alt, 'Gallery Image');
-
-            var anchor = document.createElement('a');
-            anchor.href = imageUrl;
-            anchor.setAttribute('data-fancybox', 'gallery');
-
+            var title = safeText(item.title || item.alt || (item.media && (item.media.alt || item.media.caption)), 'Gallery image');
+            var link = document.createElement('a');
+            link.href = imageUrl;
+            link.setAttribute('data-fancybox', 'album-images');
+            link.setAttribute('aria-label', 'View image: ' + title);
             var img = document.createElement('img');
             img.src = imageUrl;
             img.alt = title;
             img.loading = 'lazy';
-
-            anchor.appendChild(img);
-            fragment.appendChild(anchor);
+            link.appendChild(img);
+            grid.appendChild(link);
         });
-
-        if (fragment.childNodes.length === 0) {
-            setMessage('No gallery items found.');
-            return;
-        }
-
-        hideMessage();
-        wrapper.appendChild(fragment);
-    }
-
-    function refreshLightbox() {
-        if (!window.jQuery || !jQuery.fn.fancybox) return;
-        jQuery('[data-fancybox="gallery"]').fancybox({
-            wheel: false,
-            transitionEffect: 'slide',
-            loop: true,
-            toolbar: true,
-            clickContent: false,
-            thumbs: false,
-            zoom: true,
-            close: true
-        });
-    }
-
-    function setMessage(text) {
-        messageEl.textContent = text;
-        messageEl.style.display = 'block';
-    }
-
-    function hideMessage() {
-        messageEl.style.display = 'none';
-    }
-
-    function createPageButton(label, page, disabled, isActive) {
-        var btn = document.createElement('button');
-        btn.type = 'button';
-        btn.textContent = label;
-        btn.disabled = disabled;
-        btn.style.cursor = disabled ? 'default' : 'pointer';
-        btn.style.background = isActive ? '#71c5dd' : '#fff';
-        btn.style.color = isActive ? '#fff' : '#71c5dd';
-
-        if (!disabled) {
-            btn.addEventListener('click', function () {
-                if (page === currentPage) return;
-                fetchGallery(page);
+        setMessage(grid.childElementCount ? '' : 'This gallery has no images yet.', false);
+        if (window.jQuery && window.jQuery.fn.fancybox) {
+            window.jQuery(grid).find('[data-fancybox]').fancybox({
+                wheel: false, transitionEffect: 'slide', loop: true,
+                toolbar: true, clickContent: false, thumbs: false, zoom: true, close: true
             });
         }
+    }
 
-        return btn;
+    function pageButton(label, page, disabled, active) {
+        var button = document.createElement('button');
+        button.type = 'button';
+        button.textContent = label;
+        button.disabled = disabled;
+        button.className = 'gallery-page-button' + (active ? ' active' : '');
+        button.setAttribute('aria-label', /^\d+$/.test(label) ? 'Page ' + label : label === 'Prev' ? 'Previous page' : 'Next page');
+        if (active) button.setAttribute('aria-current', 'page');
+        button.addEventListener('click', function () {
+            if (page !== currentPage) fetchDetail(page, true);
+        });
+        return button;
     }
 
     function renderPagination() {
-        paginationEl.innerHTML = '';
-
+        pagination.innerHTML = '';
         if (totalPages <= 1) return;
-
-        paginationEl.appendChild(createPageButton('Prev', currentPage - 1, currentPage <= 1, false));
-
-        var start = Math.max(1, currentPage - 2);
-        var end = Math.min(totalPages, currentPage + 2);
-
-        for (var i = start; i <= end; i++) {
-            paginationEl.appendChild(createPageButton(String(i), i, false, i === currentPage));
+        pagination.appendChild(pageButton('Prev', currentPage - 1, currentPage <= 1, false));
+        for (var page = Math.max(1, currentPage - 2); page <= Math.min(totalPages, currentPage + 2); page++) {
+            pagination.appendChild(pageButton(String(page), page, false, page === currentPage));
         }
-
-        paginationEl.appendChild(createPageButton('Next', currentPage + 1, currentPage >= totalPages, false));
+        pagination.appendChild(pageButton('Next', currentPage + 1, currentPage >= totalPages, false));
     }
 
-    function fetchGallery(page) {
-        if (!currentAlbum) return;
+    function fetchDetail(page, updateLocation) {
+        if (!slug) {
+            setMessage('Choose a gallery to view its images.', false);
+            content.setAttribute('aria-busy', 'false');
+            return;
+        }
         var activeRequest = ++requestId;
-        isLoading = true;
         currentPage = page;
-        setMessage('Loading gallery...');
-        paginationEl.innerHTML = '';
-
-        fetch(galleryApiUrl + 'galleries/public/' + encodeURIComponent(currentAlbum.slug) + '?page=' + page + '&limit=' + limit)
-            .then(function (response) {
-                if (!response.ok) {
-                    throw new Error('Request failed with status ' + response.status);
-                }
-                return response.json();
-            })
+        grid.innerHTML = '';
+        pagination.innerHTML = '';
+        content.setAttribute('aria-busy', 'true');
+        setMessage('Loading gallery images...', false);
+        return fetchJson(galleryApiUrl + 'galleries/public/' + encodeURIComponent(slug) + '?page=' + page + '&limit=' + limit)
             .then(function (result) {
                 if (activeRequest !== requestId) return;
+                var gallery = result.data && result.data.gallery;
+                var title = safeText(gallery && gallery.title, 'Gallery');
+                var heading = document.getElementById('gallery-title');
+                if (heading) heading.textContent = title;
+                document.title = title + ' | Orbi Seeds';
+                var breadcrumb = document.getElementById('gallery-breadcrumb-title');
+                if (breadcrumb) breadcrumb.textContent = title;
+                var description = document.getElementById('gallery-description');
+                if (description) {
+                    description.textContent = safeText(gallery && gallery.description, '');
+                    description.hidden = !description.textContent;
+                }
                 var items = readItems(result);
-                renderItems(items);
-
-                var detectedTotalPages = readTotalPages(result, items.length);
-                if (detectedTotalPages !== null) {
-                    totalPages = detectedTotalPages;
-                } else {
-                    totalPages = Math.max(currentPage, currentPage + (items.length === limit ? 1 : 0));
-                }
-
-                if (currentPage > totalPages) {
-                    currentPage = totalPages;
-                }
-
-                setQueryPage(currentPage);
+                var total = Number(result.meta && result.meta.totalPages);
+                totalPages = Number.isInteger(total) && total >= 0 ? Math.max(1, total) : page + (items.length === limit ? 1 : 0);
+                if (page > totalPages) return fetchDetail(totalPages, true);
+                renderImages(items);
                 renderPagination();
-                refreshLightbox();
+                if (updateLocation) {
+                    var url = new URL(window.location.href);
+                    if (page > 1) url.searchParams.set('page', String(page));
+                    else url.searchParams.delete('page');
+                    window.history.replaceState({}, '', url.toString());
+                    if (content.scrollIntoView) content.scrollIntoView({ block: 'start' });
+                }
             })
             .catch(function (error) {
                 if (activeRequest !== requestId) return;
                 console.error('Error fetching gallery:', error);
-                wrapper.innerHTML = '';
-                setMessage('Unable to load gallery. Please try again later.');
-                paginationEl.innerHTML = '';
+                setMessage(error.status === 404 ? 'This gallery is unavailable or no longer public.' : 'Unable to load gallery images. Please try again.', error.status !== 404);
             })
             .finally(function () {
-                if (activeRequest === requestId) isLoading = false;
+                if (activeRequest === requestId) content.setAttribute('aria-busy', 'false');
             });
     }
 
-    fetch(galleryApiUrl + 'galleries/public')
-        .then(function (response) {
-            if (!response.ok) throw new Error('Request failed with status ' + response.status);
-            return response.json();
-        })
-        .then(function (result) {
-            var albums = Array.isArray(result.data) ? result.data : [];
-            if (!albums.length) { setMessage('No gallery albums are available yet.'); return; }
-            var requestedSlug = new URLSearchParams(window.location.search).get('album');
-            currentAlbum = albums.find(function (album) { return album.slug === requestedSlug; })
-                || albums.find(function (album) { return album.slug === 'gallery'; }) || albums[0];
-            if (requestedSlug !== currentAlbum.slug) setQueryAlbum(currentAlbum.slug);
-            renderAlbums(albums);
-            fetchGallery(requestedSlug === currentAlbum.slug ? getQueryPage() : 1);
-        })
-        .catch(function (error) {
-            console.error('Error fetching gallery albums:', error);
-            setMessage('Unable to load gallery albums. Please try again later.');
-        });
+    if (isDetail) fetchDetail(currentPage);
+    else fetchAlbums();
 })();

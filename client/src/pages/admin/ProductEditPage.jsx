@@ -563,7 +563,7 @@ const ProductEditPage = () => {
       };
 
       if (!pricingCapability) {
-        if (isNew) payload.price = null;
+        if (isNew) payload.price = 0;
         else delete payload.price;
         for (const key of ['salePrice', 'saleStartAt', 'saleEndAt', 'saleLabel', 'taxConfig']) delete payload[key];
       }

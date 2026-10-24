@@ -13,6 +13,8 @@ vi.mock('../../../services/adminService', () => ({ getSaleLabels: vi.fn().mockRe
 vi.mock('../../../hooks/useSettings', () => ({
   useSettings: () => ({ settings: {} }),
   useFeature: (name) => features[name] ?? false,
+  useFeatureVisible: (name) => features[name] ?? false,
+  useFeaturesResolved: () => true,
   useCurrency: () => ({ currency: 'INR', symbol: '₹', formatPrice: String }),
 }));
 vi.mock('../../../hooks/useAuth', () => ({ useAuth: () => ({ hasPermission: () => true }) }));
@@ -39,10 +41,11 @@ describe('product editor validation', () => {
     fireEvent.change(screen.getByLabelText('Product Name *'), { target: { value: 'Catalog item' } });
     save();
     await waitFor(() => expect(createProduct).toHaveBeenCalled());
-    expect(createProduct.mock.calls[0][0]).toMatchObject({ name: 'Catalog item', price: 0, salePrice: null });
+    expect(createProduct.mock.calls[0][0]).toMatchObject({ name: 'Catalog item', price: 0 });
+    expect(createProduct.mock.calls[0][0]).not.toHaveProperty('salePrice');
   });
 
-  it.each([[true, false], [false, true], [true, true]])('requires MRP when pricing=%s and showPrice=%s', async (pricing, showPrice) => {
+  it.each([[true, false], [true, true]])('requires MRP when pricing=%s and showPrice=%s', async (pricing, showPrice) => {
     Object.assign(features, { pricing, showPrice });
     renderForm();
     fireEvent.change(screen.getByLabelText('Product Name *'), { target: { value: 'Priced item' } });
@@ -53,6 +56,7 @@ describe('product editor validation', () => {
   });
 
   it('saves a priced product with a valid MRP', async () => {
+    features.pricing = true;
     features.showPrice = true;
     renderForm();
     fireEvent.change(screen.getByLabelText('Product Name *'), { target: { value: 'Priced item' } });
@@ -70,6 +74,7 @@ describe('product editor validation', () => {
     ['variable', 'Variable Product', true],
     ['combo', 'Combo / Bundle', true],
   ])('submits a valid %s creation payload (%s; priced=%s)', async (type, option, priced) => {
+    features.pricing = priced;
     features.showPrice = priced;
     renderForm();
     fireEvent.change(screen.getByLabelText('Product Name *'), { target: { value: 'Contract test item' } });
