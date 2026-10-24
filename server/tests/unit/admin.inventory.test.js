@@ -117,7 +117,7 @@ describe('Admin dashboard product count', () => {
     vi.spyOn(db.Product, 'findAll').mockResolvedValue([]);
     vi.spyOn(db.Review, 'count').mockResolvedValue(0);
 
-    const stats = await getStats();
+    const stats = await getStats({ roles: ['super_admin'] });
 
     expect(stats.productCount).toBe(3);
     expect(db.Product.count).toHaveBeenCalledWith({
@@ -136,7 +136,7 @@ describe('Admin dashboard product count', () => {
     vi.spyOn(db.Product, 'findAll').mockResolvedValue([]);
     vi.spyOn(db.Review, 'count').mockResolvedValue(0);
 
-    const stats = await getStats();
+    const stats = await getStats({ roles: ['super_admin'] });
 
     expect(stats.totalRevenue).toBe(0);
     expect(stats.orderCount).toBe(0);
@@ -158,7 +158,7 @@ describe('Admin dashboard product count', () => {
     vi.spyOn(db.Product, 'findAll').mockResolvedValue([]);
     vi.spyOn(db.Review, 'count').mockResolvedValue(0);
 
-    const stats = await getStats();
+    const stats = await getStats({ roles: ['super_admin'] });
 
     expect(stats.totalRevenue).toBe(0);
     expect(stats.orderCount).toBe(0);

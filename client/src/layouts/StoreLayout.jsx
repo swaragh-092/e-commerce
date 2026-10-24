@@ -21,7 +21,8 @@ import SearchWidget from '../components/search/SearchWidget';
 import DarkModeToggle from '../components/layout/DarkModeToggle';
 import PageService from '../services/pageService';
 import MenuService from '../services/menuService';
-import { ADMIN_ACCESS_PERMISSIONS, getFirstAccessibleAdminPath } from '../utils/permissions';
+import { ADMIN_ACCESS_PERMISSIONS } from '../utils/permissions';
+import { filterFeatureLinks } from '../utils/featureNavigation';
 import SEO from '../components/common/SEO';
 import CategoryIcon from '../components/common/CategoryIcon';
 import { isExternalUrl } from '../utils/urls';
@@ -32,7 +33,7 @@ const DEFAULT_ACTIONS_ORDER = ['search', 'cart', 'wishlist', 'account'];
 
 const StoreLayout = () => {
   const { isAuthenticated, logout, hasAnyPermission, user } = useAuth();
-  const { settings } = useSettings();
+  const { settings, features } = useSettings();
   const { formatPrice } = useCurrency();
   const location = useLocation();
   const storeName = getStoreName(settings);
@@ -42,7 +43,6 @@ const StoreLayout = () => {
   const cartEnabled     = useFeatureVisible('cart', 'storefront');
   const wishlistEnabled = useFeature('wishlist');
   const ordersEnabled   = useFeatureVisible('orders', 'storefront');
-  const brandsEnabled   = useFeature('brands');
   const shippingVisible = useFeatureVisible('shipping', 'storefront');
   const [announcementDismissed, setAnnouncementDismissed] = useState(false);
   const [topLinks, setTopLinks] = useState([]);
@@ -53,7 +53,6 @@ const StoreLayout = () => {
   const [isMobileSearchExpanded, setIsMobileSearchExpanded] = useState(false);
   const [logoLoadFailed, setLogoLoadFailed] = useState(false);
   const [accountMenuAnchor, setAccountMenuAnchor] = useState(null);
-  const adminEntryPath = getFirstAccessibleAdminPath(user);
   const canAccessAdmin = hasAnyPermission(ADMIN_ACCESS_PERMISSIONS);
   const isAuthPage = ['/login', '/register'].includes(location.pathname);
 
@@ -119,14 +118,8 @@ const StoreLayout = () => {
   const showAnnouncement = announcement.enabled && Boolean(announcementText) && !announcementDismissed;
   const navPosition  = nav.sticky !== false ? 'sticky' : 'static';
   const headerStyle = themeSettings.headerStyle || 'gradient';
-  const isBrandLink = (url) => /^\/brands(\/|$|\?)/.test(String(url || ''));
-  const filterBrandLinks = (items = []) => (brandsEnabled ? items : items
-    .filter((item) => !isBrandLink(item.url))
-    .map((item) => (Array.isArray(item.children) && item.children.length
-      ? { ...item, children: filterBrandLinks(item.children) }
-      : item)));
   const hasDynamicHeaderItems = Array.isArray(headerMenu?.items) && headerMenu.items.length > 0;
-  const headerItems = filterBrandLinks(hasDynamicHeaderItems
+  const headerItems = filterFeatureLinks(hasDynamicHeaderItems
     ? headerMenu.items
     : topLinks.map((link, index) => ({
         id: link.id,
@@ -136,7 +129,7 @@ const StoreLayout = () => {
         placement: 'center',
         sortOrder: index,
         children: [],
-      })));
+      })), features || {});
 
   const groupedHeaderItems = {
     left: headerItems.filter((item) => item.placement === 'left'),
@@ -152,7 +145,7 @@ const StoreLayout = () => {
   const headerAlignment = headerMenu?.alignment || 'left';
 
   const hasDedicatedMobileItems = Array.isArray(mobileMenu?.items) && mobileMenu.items.length > 0;
-  const mobileHeaderItems = filterBrandLinks(hasDedicatedMobileItems ? mobileMenu.items : desktopHeaderItems);
+  const mobileHeaderItems = filterFeatureLinks(hasDedicatedMobileItems ? mobileMenu.items : desktopHeaderItems, features || {});
 
   const getLinkProps = (item) => {
     const url = item.url || '/';

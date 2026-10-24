@@ -2,11 +2,15 @@
 
 const productTabService = require('./productTab.service');
 const { success, error } = require('../../utils/response');
+const { getPermissionsForUser, PERMISSIONS } = require('../../config/permissions');
 
 // GET /api/products/:id/tabs
 exports.list = async (req, res, next) => {
     try {
-        const tabs = await productTabService.getTabsForProduct(req.params.id);
+        const permissions = req.user ? getPermissionsForUser(req.user) : [];
+        const canManageTabs = permissions.includes(PERMISSIONS.PRODUCTS_READ)
+            || permissions.includes(PERMISSIONS.PRODUCTS_UPDATE);
+        const tabs = await productTabService.getTabsForProduct(req.params.id, { publicView: !canManageTabs });
         return success(res, tabs, 'Tabs retrieved');
     } catch (err) {
         if (err.code === 'NOT_FOUND' || err.statusCode === 404) {

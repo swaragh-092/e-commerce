@@ -55,19 +55,18 @@ describe('Notification recipient permissions and routing', () => {
     await expect(settings.updateKey('eventRecipientUserIds', {}, 'messaging', 'settings-editor', { permissions: ['settings.manage'] })).rejects.toMatchObject({ statusCode: 403 });
   });
 
-  it('applies the email selection while keeping SMS recipients on the existing defaults', async () => {
+  it('uses permission-eligible staff for SMS instead of falling back to raw role assignments', async () => {
     const staff = { ...makeUser('staff', ['orders.read']), profile: { phone: '+10000000001' } };
     vi.spyOn(Setting, 'findOne').mockResolvedValue({ value: { orders: ['staff'] } });
-    vi.spyOn(User, 'findAll').mockResolvedValueOnce([staff]).mockResolvedValueOnce([{ id: 'admin', email: 'admin@example.test', profile: { phone: '+10000000002' } }]);
+    vi.spyOn(User, 'findAll').mockResolvedValue([staff]);
     vi.spyOn(NotificationTemplate, 'findOne').mockResolvedValue({ isActive: true });
     const queue = vi.spyOn(NotificationQueue, 'create').mockResolvedValue({});
     await require('../../src/modules/notification/notification.service').sendToAdmins('admin_new_order', ['email', 'sms']);
     const queuedJobs = queue.mock.calls.map(([job]) => job);
     expect(queuedJobs).toEqual(expect.arrayContaining([
       expect.objectContaining({ channel: 'email', recipientEmail: 'staff@example.test' }),
-      expect.objectContaining({ channel: 'sms', recipientPhone: '+10000000002' }),
+      expect.objectContaining({ channel: 'sms', recipientPhone: '+10000000001' }),
     ]));
-    expect(queuedJobs.some((job) => job.recipientPhone === '+10000000001')).toBe(false);
     expect(queuedJobs.filter((job) => job.channel === 'email')).toHaveLength(1);
   });
 });

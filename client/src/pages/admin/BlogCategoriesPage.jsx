@@ -35,6 +35,10 @@ const BlogCategoriesPage = () => {
   const { hasPermission } = useAuth();
   const canManageBlogs = hasPermission(PERMISSIONS.BLOGS_MANAGE);
 
+  useEffect(() => {
+    if (!canManageBlogs) { setDeleteOpen(false); setOpen(false); setEditing(null); setForm(emptyForm); }
+  }, [canManageBlogs]);
+
   const fetchData = async () => {
     setLoading(true);
     try {
@@ -52,6 +56,7 @@ const BlogCategoriesPage = () => {
   }, []);
 
   const handleSave = async () => {
+    if (!canManageBlogs) return;
     if (!form.name.trim()) {
       notify('Category name is required.', 'error');
       return;
@@ -74,7 +79,7 @@ const BlogCategoriesPage = () => {
   };
 
   const handleDelete = async () => {
-    if (!editing?.id) return setDeleteOpen(false);
+    if (!canManageBlogs || !editing?.id) return setDeleteOpen(false);
     try {
       await BlogService.adminDeleteCategory(editing.id);
       notify('Category deleted.', 'success');
@@ -176,7 +181,7 @@ const BlogCategoriesPage = () => {
         <DataGrid rows={rows} columns={columns} loading={loading} disableRowSelectionOnClick />
       </Paper>
 
-      <Dialog open={open} onClose={() => setOpen(false)} fullWidth maxWidth="sm">
+      <Dialog open={canManageBlogs && open} onClose={() => setOpen(false)} fullWidth maxWidth="sm">
         <DialogTitle>{editing?.id ? 'Edit Category' : 'Create Category'}</DialogTitle>
         <DialogContent>
           <TextField
@@ -202,7 +207,7 @@ const BlogCategoriesPage = () => {
         </DialogActions>
       </Dialog>
 
-      <Dialog open={deleteOpen} onClose={() => setDeleteOpen(false)}>
+      <Dialog open={canManageBlogs && deleteOpen} onClose={() => setDeleteOpen(false)}>
         <DialogTitle>Delete Category</DialogTitle>
         <DialogContent>
           <Typography>Are you sure you want to delete "{editing?.name}"?</Typography>

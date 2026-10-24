@@ -162,7 +162,7 @@ const ThemeDetailModal = ({ open, onClose, packageData, onPreview, onApply }) =>
       <DialogActions sx={{ px: 3, py: 1.5 }}>
         <Button onClick={onClose}>Close</Button>
         <Button startIcon={<VisibilityIcon />} onClick={() => { onClose(); onPreview(pkg); }}>Full Preview</Button>
-        <Button variant="contained" startIcon={<DownloadDoneIcon />} onClick={() => { onClose(); onApply(pkg); }}>Install Template</Button>
+        {onApply && <Button variant="contained" startIcon={<DownloadDoneIcon />} onClick={() => { onClose(); onApply(pkg); }}>Install Template</Button>}
       </DialogActions>
     </Dialog>
   );

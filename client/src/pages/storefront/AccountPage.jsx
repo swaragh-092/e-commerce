@@ -94,6 +94,8 @@ const AccountPage = () => {
 };
 
 const EmailPreferencesTab = () => {
+    const { features } = useSettings();
+    const newsletterEnabled = features?.newsletter === true;
     const [subscribed, setSubscribed] = useState(false);
     const [loading, setLoading] = useState(true);
     const [saving, setSaving] = useState(false);
@@ -110,6 +112,7 @@ const EmailPreferencesTab = () => {
 
     const handleChange = async (event) => {
         const nextValue = event.target.checked;
+        if (nextValue && !newsletterEnabled) return;
         const previousValue = subscribed;
         setSubscribed(nextValue);
         setSaving(true);
@@ -131,9 +134,10 @@ const EmailPreferencesTab = () => {
             <Typography color="text.secondary" variant="body2" sx={{ mb: 2 }}>
                 Choose whether you receive promotional emails. Order and account security emails are always sent when needed.
             </Typography>
+            {!newsletterEnabled && <Alert severity="info" sx={{ mb: 2 }}>New newsletter subscriptions are paused. You can still unsubscribe.</Alert>}
             {status && <Alert severity={status.type} sx={{ mb: 2 }}>{status.message}</Alert>}
             <FormControlLabel
-                control={<Switch checked={subscribed} onChange={handleChange} disabled={loading || saving} />}
+                control={<Switch checked={subscribed} onChange={handleChange} disabled={loading || saving || (!newsletterEnabled && !subscribed)} />}
                 label="Offers, new products, and store updates"
             />
             {loading && <CircularProgress size={18} sx={{ ml: 1, verticalAlign: 'middle' }} />}

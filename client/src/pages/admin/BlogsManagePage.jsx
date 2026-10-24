@@ -34,6 +34,10 @@ const BlogsManagePage = () => {
   const { hasPermission } = useAuth();
   const canManageBlogs = hasPermission(PERMISSIONS.BLOGS_MANAGE);
 
+  useEffect(() => {
+    if (!canManageBlogs) { setDeleteOpen(false); setSelected(null); }
+  }, [canManageBlogs]);
+
   const fetchData = async () => {
     setLoading(true);
     try {
@@ -168,7 +172,7 @@ const BlogsManagePage = () => {
         />
       </Paper>
 
-      <Dialog open={deleteOpen} onClose={() => setDeleteOpen(false)}>
+      <Dialog open={canManageBlogs && deleteOpen} onClose={() => setDeleteOpen(false)}>
         <DialogTitle>Delete Blog Post</DialogTitle>
         <DialogContent>
           <Typography>Are you sure you want to delete "{selected?.title}"?</Typography>

@@ -121,8 +121,21 @@ router.delete('/design-draft',
   settingsController.discardDesignDraft
 );
 
-router.get('/', settingsController.getAll);
-router.get('/:group', settingsController.getByGroup);
+// Public storefront settings use an explicit allowlist. The authenticated
+// endpoints retain full admin data and require settings.read.
+router.get('/public', settingsController.getPublicAll);
+router.get('/public/:group', settingsController.getPublicByGroup);
+
+router.get('/',
+  authenticate,
+  authorizePermissions(PERMISSIONS.SETTINGS_READ),
+  settingsController.getAll
+);
+router.get('/:group',
+  authenticate,
+  authorizePermissions(PERMISSIONS.SETTINGS_READ),
+  settingsController.getByGroup
+);
 
 // Admin-only endpoints
 router.put('/bulk',

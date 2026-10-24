@@ -24,6 +24,14 @@ const getEligibleUsers = async (transaction = null) => {
   return users.filter((user) => Object.values(CATEGORIES).some((category) => getPermissionsForUser(user.toJSON()).includes(category.permission)));
 };
 
+const getEligibleRecipientsForTemplate = async (templateName, transaction = null) => {
+  const entry = Object.entries(CATEGORIES).find(([, category]) => category.templates.includes(templateName));
+  if (!entry) return [];
+  const [, category] = entry;
+  const users = await getEligibleUsers(transaction);
+  return users.filter((user) => getPermissionsForUser(user.toJSON()).includes(category.permission));
+};
+
 const getConfig = async (transaction = null) => {
   const setting = await Setting.findOne({ where: { group: 'messaging', key: 'eventRecipientUserIds' }, transaction: transaction || undefined });
   return setting?.value && typeof setting.value === 'object' ? setting.value : {};
@@ -72,4 +80,4 @@ const update = async (input, actor) => {
   return read();
 };
 
-module.exports = { read, update, getConfiguredRecipients };
+module.exports = { read, update, getConfiguredRecipients, getEligibleRecipientsForTemplate };

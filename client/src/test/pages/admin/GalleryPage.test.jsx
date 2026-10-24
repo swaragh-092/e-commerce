@@ -4,9 +4,9 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import GalleryPage from '../../../pages/admin/GalleryPage';
 import { galleryService } from '../../../services/galleryService';
 
-const { notify, confirm } = vi.hoisted(() => ({ notify: vi.fn(), confirm: vi.fn().mockResolvedValue(true) }));
+const { notify, confirm, grants } = vi.hoisted(() => ({ grants: new Set(), notify: vi.fn(), confirm: vi.fn().mockResolvedValue(true) }));
 
-vi.mock('../../../hooks/useAuth', () => ({ useAuth: () => ({ hasPermission: () => true }) }));
+vi.mock('../../../hooks/useAuth', () => ({ useAuth: () => ({ hasPermission: (permission) => grants.has(permission) }) }));
 vi.mock('../../../context/NotificationContext', () => ({ useNotification: () => ({ notify, confirm }) }));
 vi.mock('../../../components/common/MediaPicker', () => ({
   default: ({ open, onSelect }) => open ? <button onClick={() => onSelect([{ id: 'media-2', mimeType: 'image/png', url: '/two.png' }, { id: 'media-2', mimeType: 'image/png', url: '/two.png' }])}>Pick image</button> : null,
@@ -23,6 +23,8 @@ const album = { id: 'gallery-1', title: 'Flowers', slug: 'flowers', description:
 describe('Catalog Gallery page', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    grants.clear();
+    ['gallery.read', 'gallery.manage', 'gallery.delete', 'media.read'].forEach((key) => grants.add(key));
     galleryService.list.mockResolvedValue({ data: [album], meta: { totalPages: 1 } });
     galleryService.create.mockResolvedValue({ data: { ...album, id: 'gallery-2', title: 'Seed Trials', slug: 'seed-trials', items: [] } });
     galleryService.addImages.mockResolvedValue({ data: { ...album, items: [first, second] } });
@@ -75,4 +77,30 @@ describe('Catalog Gallery page', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Move image 1 down' }));
     await waitFor(() => expect(galleryService.reorder).toHaveBeenCalledWith('gallery-1', ['item-2', 'item-1']));
   });
+  it('keeps media-only users from seeing gallery mutation controls', async () => {
+    grants.clear(); grants.add('media.update'); grants.add('media.delete');
+    render(<GalleryPage />);
+    await screen.findByText('Public URL: /demo-orbis-seeds-v1-html/gallery-detail.html?album=flowers');
+    expect(screen.queryByRole('button', { name: 'New gallery' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Delete gallery' })).not.toBeInTheDocument();
+  });
+
+  it('closes an open editor when gallery manage is revoked', async () => {
+    const { rerender } = render(<GalleryPage />);
+    await screen.findByText('Public URL: /demo-orbis-seeds-v1-html/gallery-detail.html?album=flowers');
+    fireEvent.click(screen.getByRole('button', { name: 'Edit gallery' }));
+    expect(screen.getByRole('dialog')).toBeInTheDocument();
+    grants.delete('gallery.manage'); rerender(<GalleryPage />);
+    await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument());
+    expect(galleryService.update).not.toHaveBeenCalled();
+  });
+
+  it('requires Media Read to select library images, without blocking album edits', async () => {
+    grants.delete('media.read');
+    render(<GalleryPage />);
+    await screen.findByText('Public URL: /demo-orbis-seeds-v1-html/gallery-detail.html?album=flowers');
+    expect(screen.getByRole('button', { name: 'Add images' })).toBeDisabled();
+    expect(screen.getByRole('button', { name: 'Edit gallery' })).toBeEnabled();
+  });
+
 });

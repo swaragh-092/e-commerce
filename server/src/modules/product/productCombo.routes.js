@@ -3,7 +3,7 @@
 const express = require('express');
 const router = express.Router({ mergeParams: true }); // inherit :id from /api/products/:id/...
 const productComboController = require('./productCombo.controller');
-const { authenticate } = require('../../middleware/auth.middleware');
+const { authenticate, optionalAuth } = require('../../middleware/auth.middleware');
 const { authorizePermissions } = require('../../middleware/role.middleware');
 const { validate } = require('../../middleware/validate.middleware');
 const { PERMISSIONS } = require('../../config/permissions');
@@ -31,6 +31,7 @@ router.get(
 // GET  /api/products/:id/combo-items                — list combo items (public-safe for storefront)
 router.get(
     '/:id/combo-items',
+    optionalAuth,
     validate(idParamSchema, 'params'),
     productComboController.getComboItems
 );

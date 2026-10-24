@@ -271,7 +271,7 @@
             .catch(function (error) {
                 if (activeRequest !== requestId) return;
                 console.error('Error fetching gallery:', error);
-                setMessage(error.status === 404 ? 'This gallery is unavailable or no longer public.' : 'Unable to load gallery images. Please try again.', error.status !== 404);
+                setMessage(error.status === 403 ? 'Gallery is currently unavailable.' : error.status === 404 ? 'This gallery is unavailable or no longer public.' : 'Unable to load gallery images. Please try again.', error.status !== 404 && error.status !== 403);
             })
             .finally(function () {
                 if (activeRequest === requestId) content.setAttribute('aria-busy', 'false');

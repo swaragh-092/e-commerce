@@ -24,6 +24,12 @@ const AppError = require('../../utils/AppError');
 const { generateSlug } = require('../../utils/slugify');
 const SettingsService = require('../settings/settings.service');
 const { isBrandVisible, stripBrandFields } = require('../../utils/brandVisibility');
+const {
+  PUBLIC_SETTING_GROUPS,
+  PUBLIC_SETTING_GROUP_NAMES,
+  PUBLIC_SETTING_KEYS,
+  isPublicSetting,
+} = require('../../config/publicSettings');
 
 const MAX_LIMIT = 200;
 
@@ -78,8 +84,6 @@ const SORTABLE_FIELDS = {
   tags: ['name', 'slug', 'createdAt'],
   media: ['filename', 'mimeType', 'size', 'createdAt', 'updatedAt'],
 };
-
-const PRIVATE_SETTING_GROUPS = ['gateway_credentials', 'messaging_credentials'];
 
 const DEFAULT_ORDER = {
   categories: [['sortOrder', 'ASC'], ['name', 'ASC']],
@@ -324,11 +328,7 @@ const trimTreeFields = (nodes, fields, depth) => {
 
 const loadProductsForCategory = async (categoryId, relation = {}) => {
   const products = await Product.findAll({
-    where: {
-      status: 'published',
-      isEnabled: true,
-      ...buildWhere('products', relation.filters || []),
-    },
+    where: withPublicConstraints('products', buildWhere('products', relation.filters || [])),
     include: [
       {
         model: Category,
@@ -437,12 +437,10 @@ const productInclude = (block) => {
 
 const executeProducts = async (block) => {
   const rows = await Product.findAll({
-    where: {
-      status: 'published',
-      isEnabled: true,
+    where: withPublicConstraints('products', {
       ...buildWhere('products', block.filters || []),
       ...selectedWhere(block),
-    },
+    }),
     include: productInclude(block),
     limit: clampLimit(block.limit, 10),
     order: buildOrder('products', block, [['createdAt', 'DESC']]),
@@ -461,11 +459,10 @@ const executeProducts = async (block) => {
 
 const executeBrands = async (block) => {
   const rows = await Brand.findAll({
-    where: {
-      isActive: true,
+    where: withPublicConstraints('brands', {
       ...buildWhere('brands', block.filters || []),
       ...selectedWhere(block),
-    },
+    }),
     limit: clampLimit(block.limit, 10),
     order: buildOrder('brands', block, [['name', 'ASC']]),
   });
@@ -474,11 +471,10 @@ const executeBrands = async (block) => {
 
 const executePages = async (block) => {
   const rows = await Page.findAll({
-    where: {
-      status: 'published',
+    where: withPublicConstraints('pages', {
       ...buildWhere('pages', block.filters || []),
       ...selectedWhere(block),
-    },
+    }),
     limit: clampLimit(block.limit, 10),
     order: buildOrder('pages', block, [['sortOrder', 'ASC'], ['title', 'ASC']]),
   });
@@ -491,11 +487,10 @@ const menuItemsTree = (rows, parentId = null) => rows
 
 const executeMenus = async (block) => {
   const rows = await Menu.findAll({
-    where: {
-      isActive: true,
+    where: withPublicConstraints('menus', {
       ...buildWhere('menus', block.filters || []),
       ...selectedWhere(block),
-    },
+    }),
     include: block.include?.items?.enabled || block.includes?.includes('items')
       ? [{ model: MenuItem, as: 'items', where: { isVisible: true }, required: false }]
       : [],
@@ -519,18 +514,24 @@ const executeMenus = async (block) => {
 
 const executeSettings = async (block, context = {}) => {
   if (block.group) {
-    if (PRIVATE_SETTING_GROUPS.includes(block.group)) {
-      throw new AppError('VALIDATION_ERROR', 400, 'Credential settings cannot be exposed through API Builder');
+    if (!PUBLIC_SETTING_GROUP_NAMES.includes(block.group)) {
+      throw new AppError('VALIDATION_ERROR', 400, 'This settings group cannot be exposed through API Builder');
     }
-    const group = await SettingsService.getByGroup(block.group);
-    return group;
+    return SettingsService.getPublicGroup(block.group);
   }
+
+  const allowedGroups = PUBLIC_SETTING_GROUPS.filter((group) => group !== 'advanced');
+  const publicWhere = {
+    [Op.or]: [
+      { group: { [Op.in]: allowedGroups } },
+      { group: 'advanced', key: { [Op.in]: PUBLIC_SETTING_KEYS.advanced || [] } },
+    ],
+  };
 
   const pagination = getNodePagination(block, context);
   const query = {
     where: {
-      ...buildWhere('settings', block.filters || [], context),
-      [Op.and]: [{ group: { [Op.notIn]: PRIVATE_SETTING_GROUPS } }],
+      [Op.and]: [buildWhere('settings', block.filters || [], context), publicWhere],
     },
     limit: pagination ? pagination.pageSize : clampLimit(block.limit, 100),
     offset: pagination ? pagination.offset : undefined,
@@ -539,11 +540,15 @@ const executeSettings = async (block, context = {}) => {
 
   if (pagination) {
     const { rows, count } = await Setting.findAndCountAll(query);
-    return toPaginatedResult(rows.map((row) => pickFields(row, 'settings', block.fields)), count, pagination);
+    return toPaginatedResult(
+      rows.filter((row) => isPublicSetting(row.group, row.key)).map((row) => pickFields(row, 'settings', block.fields)),
+      count,
+      pagination
+    );
   }
 
   const rows = await Setting.findAll(query);
-  return rows.map((row) => pickFields(row, 'settings', block.fields));
+  return rows.filter((row) => isPublicSetting(row.group, row.key)).map((row) => pickFields(row, 'settings', block.fields));
 };
 
 const legacyRelations = (node) => {
@@ -566,11 +571,20 @@ const legacyRelations = (node) => {
   return relations.filter((relation) => relation.enabled !== false);
 };
 
-const buildNodeWhere = (resource, node = {}, context = {}) => ({
-  ...(PUBLIC_WHERE[resource] || {}),
-  ...buildWhere(resource, node.filters || [], context),
-  ...selectedWhere(node),
-});
+const withPublicConstraints = (resource, where = {}) => {
+  const publicWhere = PUBLIC_WHERE[resource];
+  if (!publicWhere) return where;
+  // AND-last: user filters must never be able to override publication state.
+  return { [Op.and]: [where, publicWhere] };
+};
+
+const buildNodeWhere = (resource, node = {}, context = {}) => withPublicConstraints(
+  resource,
+  {
+    ...buildWhere(resource, node.filters || [], context),
+    ...selectedWhere(node),
+  }
+);
 
 const loadManyToMany = async ({ source, targetResource, parent, node, throughAs, sourceWhere, context }) => {
   const Model = RESOURCE_MODELS[targetResource];

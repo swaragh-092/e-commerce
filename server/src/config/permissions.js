@@ -11,14 +11,16 @@ const ADMIN_PERMISSIONS = [...authorizationSchema.adminPermissionKeys];
 
 const CUSTOMER_PERMISSIONS = [...authorizationSchema.customerPermissionKeys];
 
+const SUPER_ADMIN_PERMISSIONS = [...new Set([
+  ...Object.values(PERMISSIONS),
+  ...ADMIN_PERMISSIONS,
+  ...CUSTOMER_PERMISSIONS,
+])];
+
 const ROLE_PERMISSIONS = Object.freeze({
   [ROLES.CUSTOMER]: CUSTOMER_PERMISSIONS,
   [ROLES.ADMIN]: ADMIN_PERMISSIONS,
-  [ROLES.SUPER_ADMIN]: [...new Set([
-    ...Object.values(PERMISSIONS),
-    ...ADMIN_PERMISSIONS,
-    ...CUSTOMER_PERMISSIONS,
-  ])],
+  [ROLES.SUPER_ADMIN]: SUPER_ADMIN_PERMISSIONS,
 });
 
 const RESERVED_SUPER_ADMIN_PERMISSIONS = Object.freeze([...authorizationSchema.reservedSuperAdminPermissions]);
@@ -71,9 +73,17 @@ const getPermissionKeysFromRoleObject = (role) => {
   return getPermissionsForRole(roleKey);
 };
 
+const isSuperAdminUser = (user) => {
+  const safeUser = user || {};
+  return safeUser.role === ROLES.SUPER_ADMIN || getRolesForUser(safeUser).includes(ROLES.SUPER_ADMIN);
+};
+
 const getPermissionsForUser = (user) => {
   const safeUser = user || {};
 
+  // Super Admin is resolved from its actual grants like every other role, so
+  // permission switches can restrict it. Its reserved `system_roles.manage`
+  // grant is unremovable, so it can always restore its own permissions.
   if (Array.isArray(safeUser.permissions)) {
     return expandImplied(unique(safeUser.permissions));
   }
@@ -113,8 +123,10 @@ module.exports = {
   ADMIN_PERMISSIONS,
   CUSTOMER_PERMISSIONS,
   ROLE_PERMISSIONS,
+  SUPER_ADMIN_PERMISSIONS,
   RESERVED_SUPER_ADMIN_PERMISSIONS,
   getRolesForUser,
+  isSuperAdminUser,
   getPermissionsForRole,
   getPermissionsForUser,
   getPermissionKeysFromRoleObject,
