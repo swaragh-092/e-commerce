@@ -210,6 +210,7 @@
 
 .contact-us-right .common-btn{max-width: 150px;}
 /* .footer-right-up:nth-child(1){padding-bottom: 30px;} */
+.reality-inner p{font-size:22px;}
 }
 
 @media(max-width:850px){
@@ -277,12 +278,13 @@
    .chillie-right h4{font-size: 22px;}
    .chillie-right-heading h3{font-size: 32px;}
    .chillie-right-heading span{font-size: 55px;}
-   .counter h3{font-size: 22px;}
+   .counter h3{font-size:22px;text-align:center;}
    .location-1 h3{font-size: 18px;}
    .contact-us-right h2{text-align: center;}
    .copyright-inner ul p a{font-size: 14px;}
    .ip-products-list{margin: auto; max-width: 400px;}
    .controls-line{margin-bottom: 40px;}
+   .reality .counter span{font-size:32px;}
 }
 
 @media(max-width:768px){
@@ -379,17 +381,15 @@
   h1{font-size: 32px;}
   #to-top{bottom: 50px;right: 10px;width: 63px;height: 64px;}
 .counter h3{font-size: 18px;}
-.core-value-1 h3 {
-	font-size: 20px;
-}
+.core-value-1 h3 {font-size:20px;}
+.reality .counter span{font-size:30px;}
 }
 
  @media(max-width:480px){
  .reality{flex-direction: column;justify-content: center;align-items: flex-start;}
- .reality .counter {padding: 5px 0;}
+ .reality .counter {padding:5px 0;width:100%;}
  .reality-inner .common-btn-parent {margin: 30px 0 0;}
- .reality-inner p{text-align: start;}
- .reality-inner h2{text-align: start;}
+ .reality-inner h2{text-align:center;}
  .earth {width: 320px;height: 320px;}
  .orbit-1 {width: 365px;height: 365px;}
  .orbit-2 {width: 347px;height: 347px;}
@@ -416,6 +416,7 @@
   .list-variety-chillies ul{justify-content: center;}
   .bottom-inner-wrapper {gap: 10px;}
   .bottom-header-top span{font-size: 15px;}
+  .reality-inner p{font-size:20px;text-align:center;}
 }
 @media(max-width:430px){
    .variety-of-seeds-1 {max-width: 126px;}
@@ -473,7 +474,7 @@
  }
 
  @media(max-width:380px){
-   .variety-of-seeds-1 {max-width: 100px;position: relative;height: 130px;}
+   .variety-of-seeds-1 {max-width:116px;position:relative;height:130px;}
    .variety-of-seeds-img-parent {padding: 10px 0 30px;}
    /* .variety-of-seeds-img img {max-width: 30px;} */
    .variety-of-seeds-1:hover .variety-of-seeds-img {transform: translate(-5%,25%);}

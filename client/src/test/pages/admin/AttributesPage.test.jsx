@@ -53,6 +53,41 @@ beforeEach(() => {
 });
 
 describe('attribute category and value unit flow', () => {
+  it('opens the values panel when an attribute row is clicked', async () => {
+    mount();
+    fireEvent.click(await screen.findByText('Height', { exact: true }));
+    const popup = within(await screen.findByRole('dialog', { name: 'Values for Height' }));
+    expect(popup.getByText('10cm')).toBeInTheDocument();
+    expect(popup.getByText('1 - 1.5m')).toBeInTheDocument();
+  });
+
+  it.each(['Enter', ' '])('opens row values with %j without management permission', async (key) => {
+    permissions.manage = false;
+    mount();
+    const row = await screen.findByRole('row', { name: 'View values for Height' });
+    row.focus();
+    fireEvent.keyDown(row, { key });
+    const popup = within(await screen.findByRole('dialog', { name: 'Values for Height' }));
+    expect(popup.getByText('10cm')).toBeInTheDocument();
+    expect(popup.queryByRole('form')).not.toBeInTheDocument();
+  });
+
+  it('keeps edit and delete actions separate from opening row values', async () => {
+    mount();
+    const row = within(await screen.findByRole('row', { name: 'View values for Height' }));
+    const editButton = row.getByRole('button', { name: 'Edit', exact: true });
+    fireEvent.keyDown(editButton, { key: 'Enter' });
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+    fireEvent.click(editButton);
+    expect(await screen.findByRole('dialog', { name: 'Edit Attribute' })).toBeInTheDocument();
+    expect(screen.queryByRole('dialog', { name: 'Values for Height' })).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: 'Cancel', exact: true }));
+    await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument());
+    fireEvent.click(row.getByRole('button', { name: 'Delete', exact: true }));
+    expect(await screen.findByRole('dialog', { name: 'Delete Attribute Template' })).toBeInTheDocument();
+    expect(screen.queryByRole('dialog', { name: 'Values for Height' })).not.toBeInTheDocument();
+  });
+
   it('previews value types and display styles without saving sample choices', async () => {
     mount();
     fireEvent.click(await screen.findByRole('button', { name: 'New Attribute' }));

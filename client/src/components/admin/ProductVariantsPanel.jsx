@@ -385,7 +385,7 @@ const VariantsPanel = ({
       </Typography>
       <Typography variant="body2" color="text.secondary" sx={{ mb: 3 }}>
         Add product details and choose the available options. Create variants, then set their stock{pricingEnabled ? ' and prices' : ''}.
-        Manage reusable templates in <Link to="/admin/attributes" style={{ color: 'inherit', fontWeight: 600 }}>Attributes {'->'}</Link>
+        Manage reusable templates in <Link to="/admin/attributes" target="_blank" rel="noopener noreferrer" style={{ color: 'inherit', fontWeight: 600 }}>Attributes {'->'}</Link>
       </Typography>
 
       <Grid container spacing={3}>
