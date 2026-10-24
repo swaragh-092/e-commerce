@@ -5,7 +5,7 @@ Welcome to the **Catalog Management Guide**. This guide is prepared specifically
 
 1. **Categories Management** — Organizing your storefront taxonomy, navigation menus, and category hierarchies.
 2. **Attributes & Variants** — Defining options (Size, Color, Material), visual presentation styles (swatches, buttons, chips), and unit measurements.
-3. **Products & Data Management** — Creating products, managing variant matrices, handling stock and pricing, and using **Bulk Data Upload & CSV Export**.
+3. **Products & Data Management** — Creating products, managing variant matrices, handling stock and pricing, and using **CSV Export & Bulk Product Actions**.
 
 ---
 
@@ -35,12 +35,9 @@ Welcome to the **Catalog Management Guide**. This guide is prepared specifically
   - [3.6 Creating Variable Products: Step-by-Step](#36-creating-variable-products-step-by-step)
   - [3.7 Shipping Dimensions & Package Setup](#37-shipping-dimensions--package-setup)
   - [3.8 Custom Product Tabs & SEO Metadata](#38-custom-product-tabs--seo-metadata)
-- [4. Bulk Product Data Upload & CSV Export](#4-bulk-product-data-upload--csv-export)
-  - [4.1 Overview of Bulk Data Import](#41-overview-of-bulk-data-import)
-  - [4.2 Excel Import Template Structure (8 Sheets)](#42-excel-import-template-structure-8-sheets)
-  - [4.3 How Key Linking Works (`product_key` & `variant_key`)](#43-how-key-linking-works-product_key--variant_key)
-  - [4.4 Exporting Catalog Data to CSV](#44-exporting-catalog-data-to-csv)
-  - [4.5 Pre-Import Checklist & Common Pitfalls](#45-pre-import-checklist--common-pitfalls)
+- [4. CSV Export & Bulk Product Actions](#4-csv-export--bulk-product-actions)
+  - [4.1 Exporting Catalog Data to CSV](#41-exporting-catalog-data-to-csv)
+  - [4.2 Bulk Actions for Existing Products](#42-bulk-actions-for-existing-products)
 - [5. Best Practices & Troubleshooting](#5-best-practices--troubleshooting)
 
 ---
@@ -287,155 +284,24 @@ Accurate dimensions prevent shipping charge surprises:
 
 ---
 
-# 4. Bulk Product Data Upload & CSV Export
+# 4. CSV Export & Bulk Product Actions
 
-Managing hundreds or thousands of products one-by-one in the web browser is time-consuming. Your platform includes a comprehensive **Bulk Data Management System** supporting multi-sheet Excel files and CSV exports.
+The product list supports a CSV export of the currently loaded page and bulk actions for selected products. It does not provide an Excel workbook import. Create products and variants in the admin editor.
 
-## 4.1 Overview of Bulk Data Import
-The bulk import system uses a relational Excel workbook (`.xlsx`) containing 8 linked sheets. This architecture allows you to import products, assign multiple categories, upload image galleries, define attributes, and build variant matrices in a single file upload!
+## 4.1 Exporting Catalog Data to CSV
 
-The template file is located in your project repository at:
-[`docs/product_bulk_import_template.xlsx`](file:///home/sr-user91/Documents/Projects/e-commerce/docs/product_bulk_import_template.xlsx)
+The CSV includes only the currently loaded page, up to the selected page size. It does not include matching products on other pages. Export each page separately if you need the full filtered result:
 
-## 4.2 Excel Import Template Structure (8 Sheets)
-
-### Sheet 1: `Products` (Core Product Catalog)
-Contains master product rows. Each row must have a unique `product_key` (e.g., `P001`, `P002`).
-
-| Column Header | Format / Allowed Values | Description |
-| :--- | :--- | :--- |
-| `product_key` | Alphanumeric (e.g. `P001`) | **Primary reference key** used to link data across all other sheets. |
-| `name` | Text (max 255 chars) | Commercial product title. |
-| `slug` | Text (lowercase, hyphenated) | URL slug (e.g. `cotton-t-shirt`). |
-| `sku` | Alphanumeric | Master product SKU (for Simple products). |
-| `type` | `simple`, `variable`, `combo` | The product type. |
-| `status` | `draft`, `published` | Storefront publication state. |
-| `is_enabled` | `true`, `false` | Master visibility toggle. |
-| `is_featured` | `true`, `false` | Highlights product in "Featured" storefront widgets. |
-| `brand_slug` | Text (e.g. `nike`) | Slug of existing brand. |
-| `price` | Decimal (e.g. `499.00`) | Base regular price / MRP. |
-| `sale_price` | Decimal (e.g. `399.00`) | Discounted price (optional). |
-| `sale_start_at` | ISO Date (`YYYY-MM-DDTHH:mm:ssZ`) | Scheduled sale start date. |
-| `sale_end_at` | ISO Date (`YYYY-MM-DDTHH:mm:ssZ`) | Scheduled sale end date. |
-| `sale_label` | Text | Promotional badge (e.g. `Summer Sale`). |
-| `quantity` | Integer &ge; 0 | Standalone stock quantity (for Simple products). |
-| `weight_grams` | Number | Weight in grams. |
-| `length_cm` | Number | Length in centimeters. |
-| `breadth_cm` | Number | Breadth / Width in centimeters. |
-| `height_cm` | Number | Height in centimeters. |
-| `short_description` | Text | Concise teaser shown beside the gallery. |
-| `description` | HTML / Text | Full rich-text product description. |
-| `meta_title` | Text | Search engine title tag. |
-| `meta_description`| Text | Search engine snippet. |
-| `meta_keywords` | Comma-separated text | SEO keywords. |
-| `og_image` | Full URL | Social media share card image. |
-| `tax_config_json`| JSON string | Tax configuration (e.g. `{"inclusive":true,"sgst":0.09,"cgst":0.09}`). |
-
----
-
-### Sheet 2: `ProductCategories` (Category Mapping)
-Maps products to one or more store categories.
-
-| Column Header | Example | Description |
-| :--- | :--- | :--- |
-| `product_key` | `P001` | Matches `product_key` in the `Products` sheet. |
-| `category_slug` | `mens-clothing` | Slug of the target category. |
-| `sort_order` | `0` | Order of precedence for multiple categories. |
-
----
-
-### Sheet 3: `ProductImages` (Gallery & Media)
-Associates product and variant images.
-
-| Column Header | Example | Description |
-| :--- | :--- | :--- |
-| `product_key` | `P001` | Links image to the parent product. |
-| `variant_key` | `P002-V001` | (Optional) Links image to a specific variant. Leave blank for general images. |
-| `image_url` | `https://site.com/img1.jpg` | Publicly accessible image URL or CDN link. |
-| `alt` | `Cotton T-Shirt Front View`| Accessibility and SEO alt text. |
-| `sort_order` | `0` | Sequence in gallery (`0` = first). |
-| `is_primary` | `true` or `false` | Sets this image as the main product thumbnail. |
-
----
-
-### Sheet 4: `ProductTags`
-Assigns tags for search keywords and promotional filters (e.g., `summer`, `bestseller`, `eco-friendly`).
-- Columns: `product_key`, `tag_name`.
-
----
-
-### Sheet 5: `ProductAttributes`
-Links global or custom attributes to the product.
-- Columns: `product_key`, `attribute_slug`, `value_slug`, `custom_name`, `custom_value`, `is_variant_attr`, `sort_order`.
-- Set `is_variant_attr = true` if this attribute generates variants (e.g. Color and Size).
-
----
-
-### Sheet 6: `ProductVariants`
-Defines variant rows for Variable Products.
-
-| Column Header | Example | Description |
-| :--- | :--- | :--- |
-| `product_key` | `P002` | Parent product reference. |
-| `variant_key` | `P002-V001` | **Unique variant identifier** used across other sheets. |
-| `sku` | `TSHIRT-RED-S` | Unique barcode / SKU for this specific variation. |
-| `price` | `499.00` | Specific price for this variant. |
-| `stock_qty` | `25` | Initial stock units available for this variant. |
-| `is_active` | `true` | Whether this variant is enabled for purchase. |
-| `sort_order` | `0` | Sorting position. |
-
----
-
-### Sheet 7: `VariantOptions`
-Connects each variant to its exact attribute options.
-
-| Column Header | Example | Description |
-| :--- | :--- | :--- |
-| `variant_key` | `P002-V001` | References the variant defined in `ProductVariants`. |
-| `attribute_slug` | `color` | Attribute slug (e.g. `color`). |
-| `value_slug` | `red` | Value slug (e.g. `red`). |
-
-*Example*: For a Red Small shirt (`P002-V001`), add two rows in this sheet:
-1. `P002-V001` &rarr; `color` &rarr; `red`
-2. `P002-V001` &rarr; `size` &rarr; `small`
-
----
-
-### Sheet 8: `ProductTabs`
-Adds rich content tabs (e.g., Specifications, Care, FAQs).
-- Columns: `product_key`, `title`, `content`, `type`, `sort_order`, `is_active`.
-
----
-
-## 4.3 How Key Linking Works (`product_key` & `variant_key`)
-Because Excel files cannot know the database UUIDs before import, temporary linking keys are used:
-- **`product_key`**: Any clean reference identifier (such as `P001`, `PROD-SHIRT`, `SKU-1001`). When the system imports the file, it replaces `P001` with the permanent database UUID and links all categories, images, and variants automatically.
-- **`variant_key`**: Sub-identifier (such as `P001-V01`, `P001-RED-S`). Links variant images in `ProductImages` and attribute choices in `VariantOptions`.
-
-## 4.4 Exporting Catalog Data to CSV
-You can export the products shown on the current list page at any time. The CSV includes only the currently loaded page, up to the selected page size; it does not include matching products on other pages. Export each page separately if you need the full filtered result:
 1. Navigate to **Admin > Catalog > Products**.
-2. Filter or search for the items you want (e.g. filter by `Status: Published` or `Category: Footwear`).
-3. Click the **Export CSV** button in the top action bar.
-4. The system immediately downloads a formatted `.csv` file: `products-YYYY-MM-DD.csv`.
-5. The exported file contains:
-   - `Name`
-   - `SKU`
-   - `MRP` (Regular Price)
-   - `Sale Price`
-   - `Stock` (Available Units)
-   - `Storefront state` (`Active`, `Out of Stock`, `Catalog Mode`)
-6. Open the file in Microsoft Excel, Google Sheets, or Apple Numbers to perform inventory audits or price updates.
+2. Apply any search or filters, then select the page you want to export.
+3. Click **Export CSV** in the top action bar.
+4. The browser downloads `products-YYYY-MM-DD.csv` with name, SKU, MRP, sale price, available stock, and storefront state.
 
-## 4.5 Pre-Import Checklist & Common Pitfalls
-Before running a bulk upload, review this verification checklist:
-- [ ] **SKU Uniqueness**: Every SKU in your file must be unique across the entire database. Duplicate SKUs will cause that row to fail.
-- [ ] **Sale Price vs MRP**: `sale_price` must always be strictly less than `price`. Setting a sale price greater than or equal to MRP will reject the product.
-- [ ] **Categories Pre-Created**: Ensure category slugs used in `ProductCategories` already exist in your store under **Catalog > Categories**.
-- [ ] **Image Accessibility**: If using external image URLs, ensure the images are publicly accessible and use valid formats (`JPG`, `PNG`, `WebP`).
-- [ ] **Stock on Simple vs Variable**:
-  - For **Simple products**, provide `quantity` in the `Products` sheet.
-  - For **Variable products**, leave `quantity` empty in `Products` and provide `stock_qty` on each row in `ProductVariants`.
+## 4.2 Bulk Actions for Existing Products
+
+Select product rows in **Admin > Catalog > Products** to reveal the available bulk actions. Depending on your permissions and the store's pricing mode, you can set storefront state, delete selected products, or apply and remove a sale. Bulk sale actions are available only when pricing and bulk sales are enabled.
+
+These actions update existing products; they do not create products from a spreadsheet. Use **Add Product** and the product editor to enter new products and configure variants.
 
 ---
 
@@ -451,8 +317,8 @@ Check the **Reserved Stock** count. If customers have active checkout sessions o
 
 ### How do I run a limited-time flash sale?
 1. Open the product editor (or select multiple products in **Manage Products**).
-2. Click **Bulk Actions > Sale / Discounts**.
-3. Choose percentage or flat discount (e.g., 25% OFF).
+2. Click **Apply Sale** in the bulk actions bar.
+3. Choose a percentage discount or a fixed sale price.
 4. Set the **Start Date & Time** and **End Date & Time**.
 5. Select a promotional badge like `FLASH SALE`.
 6. Save. The system will automatically apply discounted pricing when the clock strikes the start time, and revert to normal price as soon as the sale ends.
