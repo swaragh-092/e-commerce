@@ -54,6 +54,19 @@ describe('media type segregation', () => {
       })
     );
   });
+
+  it('defaults to type=image when no type argument is provided', async () => {
+    const findAndCountAll = vi.spyOn(db.Media, 'findAndCountAll').mockResolvedValue({
+      rows: [],
+      count: 0,
+    });
+
+    await service.listMedia(1, 20);
+
+    expect(findAndCountAll).toHaveBeenCalled();
+    const where = findAndCountAll.mock.calls[0][0].where;
+    expect(where.type).toBeDefined();
+  });
 });
 
 

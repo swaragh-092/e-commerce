@@ -23,7 +23,7 @@ exports.uploadFont = async (req, res, next) => {
 
 exports.list = async (req, res, next) => {
     try {
-        const { page, limit, sortBy, sortDir, type } = req.query;
+        const { page, limit, sortBy, sortDir, type = 'image' } = req.query;
         const result = await mediaService.listMedia(page, limit, sortBy, sortDir, type);
         return success(res, result.data, 'Media found', 200, {
             total: result.totalItems,

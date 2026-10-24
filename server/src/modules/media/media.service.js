@@ -101,7 +101,7 @@ exports.uploadFont = async (file) => {
   return media;
 };
 
-exports.listMedia = async (page, limit, sortBy = 'createdAt', sortDir = 'DESC', type = 'all') => {
+exports.listMedia = async (page, limit, sortBy = 'createdAt', sortDir = 'DESC', type = 'image') => {
   const { limit: queryLimit, offset } = getPagination(page, limit);
   
   // Map frontend sort names to database columns

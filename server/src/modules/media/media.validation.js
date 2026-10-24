@@ -13,5 +13,5 @@ exports.listMediaSchema = Joi.object({
     limit: Joi.number().integer().min(1).max(1000).optional().default(20),
     sortBy: Joi.string().valid('createdAt', 'size', 'originalName', 'filename', 'date', 'name').optional().default('createdAt'),
     sortDir: Joi.string().valid('asc', 'desc').optional().default('desc'),
-    type: Joi.string().valid('image', 'icon', 'font', 'all').optional().default('all'),
+    type: Joi.string().valid('image', 'icon', 'font', 'all').optional().default('image'),
 });

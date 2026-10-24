@@ -638,6 +638,12 @@ const MediaPage = () => {
             These icons are available when editing a category. You can also upload your own custom icons here (PNG or WebP with transparent background).
           </Alert>
 
+          {customIconsLoading && (
+            <Box sx={{ display: 'flex', justifyContent: 'center', py: 3 }}>
+              <CircularProgress size={32} />
+            </Box>
+          )}
+
           {totalMatchingIcons > 0 ? (
             <Box sx={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
               {/* Custom Icons Section */}
