@@ -538,7 +538,7 @@ const ProductEditPage = () => {
     try {
       const payload = {
         ...formData,
-        price: !pricingEnabled && !showPrice && formData.price === '' ? 0 : (formData.price === '' ? null : parseFloat(formData.price)),
+        price: formData.price === '' ? null : parseFloat(formData.price),
         salePrice:
           formData.salePrice !== '' && formData.salePrice !== null && !isNaN(parseFloat(formData.salePrice))
             ? parseFloat(formData.salePrice)
@@ -564,7 +564,7 @@ const ProductEditPage = () => {
       };
 
       if (!pricingCapability) {
-        if (isNew) payload.price = null;
+        if (isNew) payload.price = 0;
         else delete payload.price;
         for (const key of ['salePrice', 'saleStartAt', 'saleEndAt', 'saleLabel', 'taxConfig']) delete payload[key];
       }
