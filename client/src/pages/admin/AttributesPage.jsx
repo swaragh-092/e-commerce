@@ -452,7 +452,20 @@ const AttributesPage = () => {
               )}
               {attributes.map((attribute) => (
                 <React.Fragment key={attribute.id}>
-                  <TableRow hover>
+                  <TableRow
+                    hover
+                    tabIndex={0}
+                    aria-label={`View values for ${attribute.name}`}
+                    aria-haspopup="dialog"
+                    onClick={() => setValuesAttribute(attribute)}
+                    onKeyDown={(event) => {
+                      if (event.target === event.currentTarget && (event.key === 'Enter' || event.key === ' ')) {
+                        event.preventDefault();
+                        setValuesAttribute(attribute);
+                      }
+                    }}
+                    sx={{ cursor: 'pointer', '&:focus-visible': { outline: '2px solid', outlineColor: 'primary.main', outlineOffset: -2 } }}
+                  >
                     <TableCell sx={{ fontWeight: 600 }}>{attribute.name}</TableCell>
                     <TableCell>
                       <Typography variant="caption" sx={{ fontFamily: 'monospace', bgcolor: 'action.hover', px: 1, py: 0.5, borderRadius: 1 }}>
@@ -480,12 +493,12 @@ const AttributesPage = () => {
                         variant="text"
                         startIcon={<ValuesIcon />}
                         aria-haspopup="dialog"
-                        onClick={() => setValuesAttribute(attribute)}
+                        onClick={(event) => { event.stopPropagation(); setValuesAttribute(attribute); }}
                       >
                         {(attribute.values || []).length} value{(attribute.values || []).length !== 1 ? 's' : ''}
                       </Button>
                     </TableCell>
-                    <TableCell align="right">
+                    <TableCell align="right" onClick={(event) => event.stopPropagation()}>
                       <Tooltip title="Edit">
                         <IconButton size="small" onClick={() => openEdit(attribute)} disabled={!canManageAttributes}>
                           <EditIcon fontSize="small" />
