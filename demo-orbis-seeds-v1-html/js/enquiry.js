@@ -134,7 +134,17 @@ $(document).ready(function() {
         $container.empty();
         $container.siblings('.cart-buttons').toggle(!!cart.length);
         if (!cart.length) {
-            $container.html('<p style="text-align:center; padding: 20px;">Your enquiry list is currently empty.</p>');
+            $container.html(
+                '<section class="enquiry-empty-state" aria-labelledby="enquiry-empty-title">' +
+                    '<div class="enquiry-empty-icon" aria-hidden="true"><svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="5" y="3" width="14" height="18" rx="2"/><path d="M9 8h6M9 12h6M9 16h3"/></svg></div>' +
+                    '<h2 id="enquiry-empty-title">Your enquiry list is empty</h2>' +
+                    '<p>Explore our seed varieties and add the products you are interested in to your enquiry list. Then return here to send your enquiry to our team.</p>' +
+                    '<div class="enquiry-empty-actions">' +
+                        '<a class="enquiry-empty-primary" href="product.html">Browse Products</a>' +
+                        '<a class="enquiry-empty-secondary" href="index.html">Back to Home</a>' +
+                    '</div>' +
+                '</section>'
+            );
             return;
         }
         cart.forEach(function(item) {
@@ -152,23 +162,6 @@ $(document).ready(function() {
             $row.find('img').on('error', function () { if (this.getAttribute('src') !== 'images/default-image.png') this.src = 'images/default-image.png'; });
             $container.append($row);
         });
-    }
-
-    function renderThankYouState(message) {
-        var $container = $('#dynamic-cart-container');
-        if ($container.length === 0) return;
-        $container.closest('.cart-wrapper').find('h1').hide();
-        $container.siblings('.cart-buttons').hide();
-        var msg = message || 'Your enquiry has been submitted successfully.';
-        var html = `
-            <div class="cart-thankyou-message" style="text-align:center; padding: 45px 20px; background: #fff; border-radius: 12px; border: 1px solid #e2ebe4; box-shadow: 0 4px 15px rgba(0,0,0,0.05); margin: 10px auto 30px; max-width: 600px;">
-                <div style="width: 60px; height: 60px; line-height: 60px; border-radius: 50%; background: #e8f5e9; color: #58AE68; font-size: 32px; font-weight: bold; margin: 0 auto 15px;">&#10003;</div>
-                <h2 style="font-size: 24px; color: #1f2933; margin-bottom: 10px; font-weight: 700;">Thank You!</h2>
-                <p style="font-size: 15px; color: #555; line-height: 1.6; margin-bottom: 25px; text-align: center;">${C.escape(msg)}<br>Our team will contact you shortly.</p>
-                <a href="product.html" class="view-product-btn" style="display: inline-block; padding: 12px 28px; text-decoration: none;">Explore More Products</a>
-            </div>
-        `;
-        $container.html(html);
     }
 
     updateHeaderCounter();
@@ -369,31 +362,41 @@ $(document).ready(function() {
         $submitBtn.prop('disabled', true).attr('aria-busy', 'true').text('Submitting...');
 
         var submittedLines = isCartEnquiry ? getCart() : [Object.assign({}, $form.data('line'), { quantity: C.quantity(quantity) })];
+        var enquiryItems = [];
         C.resolveLines(submittedLines).then(function (resolved) {
+            enquiryItems = resolved.map(function (item) {
+                var summary = { name: item.name, quantity: item.quantity };
+                if (item.variantLabel) summary.variant = item.variantLabel;
+                if (item.sku) summary.sku = item.sku;
+                if (item.unit) summary.unit = item.unit;
+                return summary;
+            });
             if (isCartEnquiry) payload.cartItems = resolved.map(function (item) {
                 return { product: { id: item.id }, variant: item.variantId ? { id: item.variantId } : null, quantity: item.quantity };
             });
             return sendEnquiry(payload);
-        }).then(function(apiResponse) {
-            // If user checked "Check here for future products", subscribe them to newsletter
-            if (isNewsletterChecked) {
-                subscribeNewsletter({ email: email, source: "orbi-enquiry" }).catch(function () { customAlert("Newsletter", "Enquiry submitted. Newsletter subscription could not be completed.", "info", 3000); });
-            }
-
-            var successMessage = (apiResponse && apiResponse.message) ? apiResponse.message : 'Your enquiry has been submitted successfully.';
+        }).then(async function() {
+            var params = new URLSearchParams({ name: name, phone: phone, email: email, message: message });
+            params.set('items', JSON.stringify(enquiryItems));
             if (isCartEnquiry) {
                 var remaining = getCart().map(function (item) {
                     var sent = submittedLines.find(function (line) { return C.key(line) === C.key(item); });
                     return Object.assign({}, item, { quantity: item.quantity - (sent ? sent.quantity : 0) });
                 }).filter(function (item) { return item.quantity > 0; });
                 try { saveCart(remaining); }
-                catch (error) { customAlert('Enquiry submitted', 'Could not update your saved list. Please clear the submitted items manually.', 'info', 4000); }
-                if (remaining.length) renderCart(); else renderThankYouState(successMessage);
+                catch (error) { params.set('listUpdate', 'failed'); }
+            }
+            // Finish the optional request before navigation so it is not cancelled on unload.
+            if (isNewsletterChecked) {
+                try {
+                    await subscribeNewsletter({ email: email, source: 'orbi-enquiry' });
+                    params.set('newsletter', 'subscribed');
+                } catch (error) { params.set('newsletter', 'failed'); }
             }
             $form[0].reset();
             $form.removeAttr('data-product-id');
             closePopup();
-            customAlert('Thank you!', successMessage, 'success', 2200);
+            window.location.assign('thank-you.html?' + params.toString());
         }).catch(function(error) {
             customAlert('Submission Failed', (error && error.message) ? error.message : 'Failed to submit enquiry.', 'error');
         }).finally(function() {

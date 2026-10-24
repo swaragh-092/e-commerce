@@ -483,7 +483,8 @@ li.dropdown-wrapper-li:hover > .dropdown-wrapper{visibility: visible;opacity: 1;
 
 .copyrights-wrapper{background-color: #71C5DD;}
 .copyright-inner ul{display: flex;justify-content: space-between;align-items: center;}
-.copyright-inner ul p{text-align: center;}
+.copyright-inner ul li p{text-align: center; font-size: 14px; margin: 8px 0;}
+.copyright-inner ul li a{font-size: 14px;}
 /* .copyright-inner ul li p a:hover{color: #58AE68} */
 
 .banner{position: relative;}
@@ -1135,6 +1136,23 @@ li.dropdown-wrapper-li:hover > .dropdown-wrapper{visibility: visible;opacity: 1;
 .cart-buttons a:hover {transform: translateY(-2px);}
 .clear-cart-btn{color: #dc3545; font-weight: 800;padding: 10px 20px;}
 
+
+/* Empty enquiry list */
+.enquiry-empty-state {max-width: 640px; margin: 12px auto 0; padding: 36px 28px; border: 1px solid #dfe8df; border-radius: 12px; background: #f5f8f3; text-align: center; color: #052a35;}
+.enquiry-empty-icon {display: flex; align-items: center; justify-content: center; width: 64px; height: 64px; margin: 0 auto 20px; border-radius: 50%; background: #e5efdc; color: #386f02;}
+.enquiry-empty-state h2 {font-size: 26px; line-height: 1.35;}
+.enquiry-empty-state p {max-width: 500px; margin: 16px auto 24px; text-align: center; color: #52615a;}
+.enquiry-empty-actions {display: flex; justify-content: center; flex-wrap: wrap; gap: 12px;}
+.enquiry-empty-actions a {display: inline-flex; align-items: center; justify-content: center; min-height: 48px; padding: 12px 24px; border: 1px solid #ccd8cf; border-radius: 4px; font-weight: 700; color: #052a35; background: #fff;}
+.enquiry-empty-actions .enquiry-empty-primary {background: #386f02; border-color: #386f02; color: #fff;}
+.enquiry-empty-actions .enquiry-empty-primary:hover {background: #2b5601; border-color: #2b5601;}
+.enquiry-empty-actions .enquiry-empty-secondary:hover {background: #e5efdc;}
+.enquiry-empty-actions a:focus-visible {outline: 3px solid #386f02; outline-offset: 4px;}
+@media (max-width: 600px) {
+    .enquiry-empty-state {padding: 28px 20px;}
+    .enquiry-empty-state h2 {font-size: 24px;}
+    .enquiry-empty-actions {flex-direction: column;}
+}
 
 
 /* GALLERY SECTION */

@@ -1,0 +1,146 @@
+ <!-- Header  -->
+            <header>
+                <div class="header-banner-wrapper">
+                    <div class="fluid-container">
+                        <div class="header-inner-wrapper">
+                            <ul class="social-media-links">
+                                <!-- <li><a href="javascript:;" target="_blank"><span><img
+                                                src="images/instagram.png"></span></a></li> -->
+                                <li><a href="https://www.linkedin.com/company/orbi-seeds-international-pvt-ltd/"
+                                        target="_blank"><span><img src="images/linkedin.png"></span></a></li>
+                                <li><a href="https://www.facebook.com/OrbiSeeds/" target="_blank"><span><img
+                                                src="images/facebook.png"></span></a></li>
+                                <!-- <li><a href="javascript:;"><span><img src="images/twitter.png"
+                                                target="_blank"></span></a></li> -->
+                                <li><a href="https://www.youtube.com/@OrbiSeeds" target="_blank"><span><img
+                                            src="images/youtube.png"></span></a></li>
+                            </ul>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="logo-header-wrapper">
+                    <div class="fluid-container">
+                        <div class="bottom-inner-wrapper">
+                            <div class="bottom-header-top">
+                                <a href="index.html">
+                                    <div class="orbi-logo">
+                                        <img src="./images/orbi-seeds-logo.png" alt="Orbi-Seeds">
+                                    </div>
+                                    <span>ORBI SEEDS INTERNATIONAL PVT LTD</span>
+                                </a>
+                            </div>
+
+                            <!-- desktop menu -->
+                            <div class="right-desktop-menu-container">
+                                <ul class="nav-links">
+                                    <li class="dropdown-wrapper-li"><a href="about-orbis.html">About</a>
+                                    </li>
+                                    <li class="dropdown-wrapper-li"><a href="product.html">Our Products</a>
+                                        <div class="dropdown-wrapper last">
+                                            <ul>
+                                                <li><a href="bitter-guard.html">Bitter Gourd</a></li>
+                                                <li><a href="bottle-guard.html">Bottle Gourd</a></li>
+                                                <li><a href="brinjal.html">Brinjal</a></li>
+                                                <li><a href="cabage-caulifower.html">Cabage Cauliflower</a></li>
+                                                <li><a href="ladies-finger.html">Ladies Finger</a></li>
+                                                <li><a href="cucumber.html">Cucumber</a></li>
+                                                <li><a href="muskmelon.html">Muskmelon</a></li>
+                                                <li><a href="okra.html">Okra</a></li>
+                                                <li><a href="ridge-gourd.html">Ridge Gourd</a></li>
+                                                <li><a href="watermelon.html">Watermelon</a></li>
+                                                <li><a href="zucchini-and-pumpkin.html">Pumpkin</a></li>
+                                            </ul>
+                                        </div>
+                                    </li>
+                                    <li class="dropdown-wrapper-li"><a href="research-and-development.html">R & D</a>
+                                    </li>
+                                    <li class="dropdown-wrapper-li"><a href="partners.html">Partners</a></li>
+
+                                    <li class="dropdown-wrapper-li"><a href="javascript:;">Media</a>
+                                    </li>
+                                    <li class="dropdown-wrapper-li"><a href="javascript:;">Gallery</a></li>
+                                    <li class="dropdown-wrapper-li"><a href="contact-us.html">Contact Us</a></li>
+
+
+                                </ul>
+                                <ul>
+                                    <li class="wishlist">
+                                        <a href="wishlist.html">
+                                            <img src="images/icons/heart.png" alt=""><span
+                                                id="header-wishlist-count">0</span>
+                                        </a>
+                                    </li>
+                                    <li class="enquiry-list-header">
+                                        <a href="enquiry-list.html">
+                                            <img src="./images/icons/list.png" alt=""><span
+                                                id="header-enquiry-count">0</span>
+                                        </a>
+                                    </li>
+
+                                </ul>
+
+                            </div>
+                            <!-- desktop menu -->
+
+                            <!-- responsive menu -->
+                            <nav class="resp-menu">
+                                <a href="javascript:;" aria-label="resp-menu"
+                                    class="toggle hc-nav-trigger hc-nav-1"><span></span></a>
+                                <nav id="main-nav">
+
+                                    <ul class="first-nav logo-img">
+                                        <li><a href="index.html" title="HOME"><img src="./images/orbi-seeds-logo.png"
+                                                    alt="logo"></a></li>
+                                    </ul>
+
+                                    <ul class="first-nav">
+                                        <li><a class="resp-home" href="index.html" title="HOME">Home</a></li>
+                                    </ul>
+
+                                    <ul class="first-nav">
+                                        <li><a href="about-orbis.html">About</a></li>
+                                    </ul>
+
+                                    <ul class="first-nav">
+                                        <li><span title="product">Our Products</span>
+                                            <ul>
+                                                <li><a href="bitter-guard.html">Bitter Gourd</a></li>
+                                                <li><a href="bottle-guard.html">Bottle Gourd</a></li>
+                                                <li><a href="brinjal.html">Brinjal</a></li>
+                                                <li><a href="cabage-caulifower.html">Cabage Cauliflower</a></li>
+                                                <li><a href="ladies-finger.html">Ladies Finger</a></li>
+                                                <li><a href="cucumber.html">Cucumber</a></li>
+                                                <li><a href="muskmelon.html">Muskmelon</a></li>
+                                                <li><a href="okra.html">Okra</a></li>
+                                                <li><a href="ridge-gourd.html">Ridge Gourd</a></li>
+                                                <li><a href="watermelon.html">Watermelon</a></li>
+                                                <li><a href="zucchini-and-pumpkin.html">Pumpkin</a></li>
+                                            </ul>
+                                        </li>
+                                    </ul>
+                                    <ul class="first-nav">
+                                        <li><a href="research-and-development.html">R & D</a></li>
+                                    </ul>
+                                    <ul class="first-nav">
+                                        <li><a href="partners.html">Partners</a></li>
+                                    </ul>
+                                    <ul class="first-nav">
+                                        <li><a href="javascript:;">Media</a></li>
+                                    </ul>
+                                    <ul class="first-nav">
+                                        <li><a href="javascript:;">Gallery</a></li>
+                                    </ul>
+                                    <ul class="first-nav">
+                                        <li><a href="contact-us.html">Contact Us</a></li>
+                                    </ul>
+                                </nav>
+                            </nav>
+                            <!-- responsive menu -->
+                        </div>
+                    </div>
+                </div>
+                <!-- logo header -->
+            </header>
+
+            <!-- Header  -->
