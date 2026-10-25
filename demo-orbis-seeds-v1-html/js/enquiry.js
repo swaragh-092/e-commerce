@@ -14,7 +14,6 @@ $(document).ready(function() {
     var NEWSLETTER_API_URL = (typeof API_URL !== 'undefined' ? API_URL : "https://eshopadmin.swaragh.org.in/api/").replace(/\/+$/, '') + "/newsletter/subscribe";
 
     function subscribeNewsletter(subscriberData) {
-        if (!window.storePlatformFeatures || window.storePlatformFeatures.newsletter !== true) return Promise.reject(new Error('Newsletter subscriptions are disabled'));
         var email = typeof subscriberData === 'string' ? subscriberData.trim() : (subscriberData && subscriberData.email ? subscriberData.email.trim() : '');
         if (!email) {
             return Promise.resolve();
@@ -32,12 +31,7 @@ $(document).ready(function() {
                 'Accept': 'application/json'
             },
             body: JSON.stringify(payload)
-        }).then(function(res) {
-            return res.json().catch(function() { return {}; }).then(function(result) {
-                if (!res.ok || result.success === false) throw new Error(result.message || 'Subscription unavailable');
-                return result;
-            });
-        });
+        }).then(C.readResponse);
     }
 
     window.subscribeNewsletter = subscribeNewsletter;
@@ -288,15 +282,15 @@ $(document).ready(function() {
             $form.find('input[name="txtProduct"], input[name="txtQuantity"]').closest('.form-group').hide();
             $form.find('input[name="txtProduct"], input[name="txtQuantity"]').prop('required', false);
             $form.find('textarea[name="txtMessage"]').attr('placeholder', 'Please share the final quote and delivery timeline.').val('');
-            $form.find('#newsletter-checkbox-group').toggle(window.storePlatformFeatures && window.storePlatformFeatures.newsletter === true);
+            $form.find('#newsletter-checkbox-group').show();
         } else if (productName) {
             if (productId) $form.attr('data-product-id', productId);
             $productInput.val(productName);
             $form.find('textarea[name="txtMessage"]').attr('placeholder', 'Write Your Message').val('');
-            $form.find('#newsletter-checkbox-group').toggle(window.storePlatformFeatures && window.storePlatformFeatures.newsletter === true);
+            $form.find('#newsletter-checkbox-group').show();
         } else {
             $form.find('textarea[name="txtMessage"]').attr('placeholder', 'Write Your Message').val('');
-            $form.find('#newsletter-checkbox-group').toggle(window.storePlatformFeatures && window.storePlatformFeatures.newsletter === true);
+            $form.find('#newsletter-checkbox-group').show();
         }
 
         $popup.addClass('active');
@@ -393,7 +387,7 @@ $(document).ready(function() {
                 catch (error) { params.set('listUpdate', 'failed'); }
             }
             // Finish the optional request before navigation so it is not cancelled on unload.
-            if (isNewsletterChecked && window.storePlatformFeatures && window.storePlatformFeatures.newsletter === true) {
+            if (isNewsletterChecked) {
                 try {
                     await subscribeNewsletter({ email: email, source: 'orbi-enquiry' });
                     params.set('newsletter', 'subscribed');

@@ -91,5 +91,8 @@
 
     var currentPage = parseInt(getQueryParam("page"), 10) || 1;
     if (currentPage < 1) currentPage = 1;
+    if (window.OrbiSEO) {
+        window.OrbiSEO.setBlogListSEO();
+    }
     fetchPosts(currentPage);
 })();
