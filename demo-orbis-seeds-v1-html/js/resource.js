@@ -50,7 +50,11 @@
         var imageUrl = toAbsoluteMediaUrl(post.featuredImage && post.featuredImage.url);
         var galleryItems = post.gallery && post.gallery.items ? post.gallery.items : [];
 
-        document.title = title + " | Orbi Seeds";
+        if (window.OrbiSEO) {
+            window.OrbiSEO.setBlogSEO(post);
+        } else {
+            document.title = title + " | Orbi Seeds";
+        }
         $("#breadcrumb-blog-title").text(title);
         $("#single-blog-message").hide();
         $("#blog-date").text(dateText).show();
