@@ -1033,7 +1033,7 @@ exports.updateProduct = async (id, data, auditContext = null) => {
     const { nextType, resetInventory } = validateProductTypeChange(product, data, { hasVariants: variantsExist, hasComboItems });
     if (variantsExist && data.variants !== undefined) throw new AppError('VALIDATION_ERROR', 400, 'Use the variant editor to update existing combinations. Product updates cannot replace variant history.');
     delete data.confirmInventoryReset;
-    if (nextType !== 'simple' && data.quantity !== undefined) {
+    if ((nextType !== 'simple' || variantsExist) && data.quantity !== undefined) {
       throw new AppError('VALIDATION_ERROR', 400, 'Stock is managed by variants or bundle items. Edit their stock instead.');
     }
     if (resetInventory) {
@@ -1071,7 +1071,7 @@ exports.updateProduct = async (id, data, auditContext = null) => {
     if (data.variants) {
       await replaceVariantsWithOptions(id, data.variants, transaction);
       await syncProductVariantStock(id, transaction);
-    } else if (variantsExist || nextType === 'variable') {
+    } else if (nextType === 'variable') {
       await syncProductVariantStock(id, transaction);
     }
 
