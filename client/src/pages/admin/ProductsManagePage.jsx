@@ -775,13 +775,15 @@ const ProductsManagePage = () => {
 
         return (
           <Box sx={{ py: 1 }}>
-            <Stack direction="row" spacing={0.5} sx={{ mb: 0.25, flexWrap: 'wrap' }}>
-              <Chip
-                size="small"
-                label={row.saleStatus === 'active' ? 'Active' : row.saleStatus === 'scheduled' ? 'Scheduled' : 'Expired'}
-                color={row.saleStatus === 'active' ? 'error' : row.saleStatus === 'scheduled' ? 'warning' : 'default'}
-              />
-              {!!row.discountPercent && <Chip size="small" variant="outlined" label={`${row.discountPercent}% OFF`} />}
+            <Stack spacing={0.5} sx={{ mb: 0.25, alignItems: 'flex-start' }}>
+              <Stack direction="row" spacing={0.5}>
+                <Chip
+                  size="small"
+                  label={row.saleStatus === 'active' ? 'Active' : row.saleStatus === 'scheduled' ? 'Scheduled' : 'Expired'}
+                  color={row.saleStatus === 'active' ? 'error' : row.saleStatus === 'scheduled' ? 'warning' : 'default'}
+                />
+                {!!row.discountPercent && <Chip size="small" variant="outlined" label={`${row.discountPercent}% OFF`} />}
+              </Stack>
               {endingSoon && <Chip size="small" color="warning" label="Ending Soon" />}
             </Stack>
             {row.saleLabel && (
@@ -797,11 +799,6 @@ const ProductsManagePage = () => {
             {row.saleEndAt && (
               <Typography variant="caption" color="text.secondary" sx={{ display: 'block' }} noWrap>
                 Ends {formatSaleDateTime(row.saleEndAt)}
-              </Typography>
-            )}
-            {endingSoon && (
-              <Typography variant="caption" color="warning.main" sx={{ display: 'block', fontWeight: 700 }} noWrap>
-                Inside ending-soon window
               </Typography>
             )}
           </Box>
