@@ -66,6 +66,39 @@ describe('product type inventory lifecycle', () => {
     expect(inventory.adjust).not.toHaveBeenCalled();
     expect(db.Product.update).toHaveBeenCalledWith({ quantity: 17, reservedQty: 0 }, expect.anything());
   });
+  it.each([undefined, 'simple'])('saves images on a legacy Simple product without changing its type or inventory (type=%s)', async (type) => {
+    product.reservedQty = 2;
+    db.ProductVariant.count.mockResolvedValue(2);
+    vi.spyOn(db.Media, 'count').mockResolvedValue(1);
+    vi.spyOn(db.ProductImage, 'destroy').mockResolvedValue(0);
+    vi.spyOn(db.ProductImage, 'update').mockResolvedValue([1]);
+    vi.spyOn(db.ProductImage, 'bulkCreate').mockResolvedValue([]);
+    const images = [{ mediaId: 'media', url: '/uploads/product.jpg', isPrimary: true }];
+    const data = { images };
+    if (type) data.type = type;
+
+    await productService.updateProduct('product', data);
+
+    expect(product.update).toHaveBeenCalledWith(data, { transaction: tx });
+    expect(db.ProductImage.bulkCreate).toHaveBeenCalledWith([
+      expect.objectContaining({ productId: 'product', variantId: null, mediaId: 'media', url: '/uploads/product.jpg' }),
+    ], { transaction: tx });
+    expect(inventory.adjust).not.toHaveBeenCalled();
+    expect(db.Product.update).not.toHaveBeenCalled();
+    expect(db.ProductVariant.create).not.toHaveBeenCalled();
+    expect(tx.commit).toHaveBeenCalled();
+  });
+  it('still blocks changing a legacy Simple product to Combo while variants exist', async () => {
+    db.ProductVariant.count.mockResolvedValue(1);
+    await expect(productService.updateProduct('product', { type: 'combo' })).rejects.toThrow('remove all variants');
+    expect(product.update).not.toHaveBeenCalled();
+  });
+  it('blocks manual parent stock edits on a legacy Simple product with variants', async () => {
+    db.ProductVariant.count.mockResolvedValue(1);
+    await expect(productService.updateProduct('product', { type: 'simple', quantity: 12 })).rejects.toThrow('Edit their stock');
+    expect(product.update).not.toHaveBeenCalled();
+    expect(inventory.adjust).not.toHaveBeenCalled();
+  });
   it.each(['simple', 'combo'])('blocks converting existing variants to %s', async (type) => {
     product.type = 'variable'; db.ProductVariant.count.mockResolvedValue(1);
     await expect(productService.updateProduct('product', { type })).rejects.toThrow('remove all variants');

@@ -17,7 +17,10 @@ vi.mock('../../../hooks/useAuth', () => ({ useAuth: () => ({ hasPermission: () =
 vi.mock('../../../hooks/useSKUGenerator', () => ({ default: () => ({ generateProductSKU: () => 'SKU', generateVariantSKU: () => 'VSKU' }) }));
 const disabledFeatures = vi.hoisted(() => new Set());
 vi.mock('../../../hooks/useSettings', () => ({ useSettings: () => ({ settings: { features: { seo: false } } }), useCurrency: () => ({ symbol: '$', currency: 'USD', formatPrice: (value) => `$${value}` }), useFeature: (name) => !['productAssistant', 'seo'].includes(name) && !disabledFeatures.has(name), useFeatureVisible: (name) => !disabledFeatures.has(name), useFeaturesResolved: () => true }));
-vi.mock('../../../components/common/MediaPicker', () => ({ default: () => null }));
+vi.mock('../../../components/common/MediaPicker', () => ({ default: ({ open, onSelect, onClose }) => open ? <button type="button" onClick={() => {
+  onSelect([{ id: 'media-1', url: '/uploads/product.jpg', originalName: 'Product photo' }]);
+  onClose();
+}}>Choose product photo</button> : null }));
 vi.mock('../../../components/admin/UnitSelector', () => ({ default: () => null }));
 vi.mock('../../../components/admin/ProductCustomTabs', () => ({ default: () => null }));
 vi.mock('../../../components/admin/ProductTaxConfig', () => ({ default: () => null }));
@@ -51,7 +54,7 @@ describe('product type and inventory editor', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Save Product' }));
     await waitFor(() => expect(createProduct).toHaveBeenCalled());
     const payload = createProduct.mock.calls[0][0];
-    expect(payload.price).toBeNull();
+    expect(payload.price).toBe(0);
     expect(payload).not.toHaveProperty('requiresShipping');
     expect(payload).not.toHaveProperty('weightGrams');
   });
@@ -137,6 +140,25 @@ describe('product type and inventory editor', () => {
     expect(await screen.findByText('Variant editor')).toBeInTheDocument();
     expect(screen.getByLabelText('Total variant stock')).toHaveValue(10);
     expect(updateProduct.mock.calls[0][1]).not.toHaveProperty('confirmInventoryReset');
+  });
+  it.each([
+    ['no', []],
+    ['active legacy', [{ stockQty: 5, isActive: true }]],
+    ['inactive legacy', [{ stockQty: 5, isActive: false }]],
+  ])('saves a photo on a Simple product with %s variants without changing type or stock', async (_, variants) => {
+    getProductById.mockResolvedValue({ data: { ...product, variants } });
+    mount(); await loaded();
+    if (variants.length) expect(screen.getByLabelText('Stock Quantity *')).toHaveAttribute('readonly');
+    fireEvent.click(screen.getByRole('button', { name: 'Add Product Media' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Choose product photo' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Save Product' }));
+    await waitFor(() => expect(updateProduct).toHaveBeenCalled());
+    const payload = updateProduct.mock.calls[0][1];
+    expect(payload).toMatchObject({ type: 'simple', images: [expect.objectContaining({ mediaId: 'media-1', url: '/uploads/product.jpg' })] });
+    if (variants.length) expect(payload).not.toHaveProperty('quantity');
+    else expect(payload.quantity).toBe(product.quantity);
+    expect(payload).not.toHaveProperty('variants');
+    expect(screen.queryByText('Variant editor')).not.toBeInTheDocument();
   });
   it('shows the bundle builder without manual stock or variants for Combo', async () => {
     getProductById.mockResolvedValue({ data: { ...product, type: 'combo', quantity: 0 } });
