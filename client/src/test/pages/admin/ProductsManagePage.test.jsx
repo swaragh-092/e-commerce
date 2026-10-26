@@ -67,8 +67,8 @@ const product = {
   variants: [],
 };
 
-const renderProductsPage = () => render(
-  <MemoryRouter>
+const renderProductsPage = (initialEntries = ['/admin/products']) => render(
+  <MemoryRouter initialEntries={initialEntries}>
     <ProductsManagePage />
   </MemoryRouter>
 );
@@ -201,6 +201,25 @@ describe('ProductsManagePage storefront state controls', () => {
     fireEvent.click(screen.getByRole('button', { name: /Paused/ }));
 
     await waitFor(() => expect(getProducts).toHaveBeenLastCalledWith(expect.objectContaining({ status: 'paused' })));
+  });
+
+  it('applies the dashboard Published filter from the URL on page load', async () => {
+    renderProductsPage(['/admin/products?status=published']);
+
+    await screen.findByText('Test product');
+
+    await waitFor(() => expect(getProducts).toHaveBeenLastCalledWith(expect.objectContaining({ status: 'published' })));
+    expect(screen.getByRole('button', { name: /Published/ })).toHaveAttribute('aria-pressed', 'true');
+  });
+
+  it('applies the dashboard Low Stock filter from the URL on page load', async () => {
+    renderProductsPage(['/admin/products?stock=low']);
+
+    await screen.findByText('Test product');
+
+    await waitFor(() => expect(getProducts).toHaveBeenLastCalledWith(expect.objectContaining({ maxQty: 10 })));
+    expect(screen.getByText('Showing low-stock products (qty ≤ 10)')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /Low Stock/ })).toHaveAttribute('aria-pressed', 'true');
   });
 
   it('preserves an explicitly configured zero low-stock threshold in the product request', async () => {

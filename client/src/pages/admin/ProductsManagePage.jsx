@@ -140,6 +140,16 @@ const ProductsManagePage = () => {
   // ?stock=low from dashboard → show only items with qty ≤ lowStockThreshold
   const [lowStockOnly, setLowStockOnly] = useState(() => searchParams.get('stock') === 'low');
 
+  // Keep dashboard deep links in sync when the product route stays mounted
+  // while its query string changes (for example, switching dashboard filters).
+  useEffect(() => {
+    const nextStatus = searchParams.get('status') || '';
+    const nextLowStockOnly = searchParams.get('stock') === 'low';
+    setStatus((current) => current === nextStatus ? current : nextStatus);
+    setLowStockOnly((current) => current === nextLowStockOnly ? current : nextLowStockOnly);
+    setPaginationModel((current) => current.page === 0 ? current : { ...current, page: 0 });
+  }, [searchParams]);
+
   // Bulk selection
   const [selectedIds, setSelectedIds] = useState([]);
 
@@ -450,7 +460,7 @@ const ProductsManagePage = () => {
       })
       .catch(console.error)
       .finally(() => setLoading(false));
-  }, [paginationModel, search, status, saleFilter, categoryFilter, sortModel, lowStockOnly]);
+  }, [paginationModel, search, status, saleFilter, categoryFilter, sortModel, lowStockOnly, lowStockThreshold]);
 
   useEffect(() => {
     fetchProducts();
