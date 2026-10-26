@@ -21,6 +21,7 @@ import {
   InputAdornment,
 } from '@mui/material';
 import { DataGrid } from '@mui/x-data-grid';
+import { useSearchParams } from 'react-router-dom';
 import CheckCircleIcon from '@mui/icons-material/CheckCircle';
 import CancelIcon from '@mui/icons-material/Cancel';
 import DeleteIcon from '@mui/icons-material/Delete';
@@ -82,11 +83,12 @@ const useDebounceValue = (value, delay) => {
 };
 
 const ReviewsPage = () => {
+  const [searchParams] = useSearchParams();
   const [rows, setRows] = useState([]);
   const [total, setTotal] = useState(0);
   const [loading, setLoading] = useState(true);
   const [paginationModel, setPaginationModel] = useState({ page: 0, pageSize: 20 });
-  const [statusFilter, setStatusFilter] = useState('');
+  const [statusFilter, setStatusFilter] = useState(() => searchParams.get('status') || '');
   const [searchQuery, setSearchQuery] = useState('');
   const [counts, setCounts] = useState({ pending: 0, approved: 0, rejected: 0, total: 0 });
   const [viewReview, setViewReview] = useState(null);
@@ -96,6 +98,12 @@ const ReviewsPage = () => {
   const canDeleteReviews = hasPermission(PERMISSIONS.REVIEWS_DELETE);
 
   const debouncedSearchQuery = useDebounceValue(searchQuery, 300);
+
+  useEffect(() => {
+    const nextStatus = searchParams.get('status') || '';
+    setStatusFilter((current) => current === nextStatus ? current : nextStatus);
+    setPaginationModel((current) => current.page === 0 ? current : { ...current, page: 0 });
+  }, [searchParams]);
 
   const fetchReviews = useCallback(() => {
     setLoading(true);

@@ -22,6 +22,7 @@ import {
   Badge,
   Menu,
   MenuItem,
+  Popper,
 } from '@mui/material';
 import { alpha } from '@mui/material/styles';
 import SearchIcon from '@mui/icons-material/Search';
@@ -156,6 +157,7 @@ const AdminLayout = () => {
   const [mobileOpen, setMobileOpen] = useState(false);
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [anchorEl, setAnchorEl] = useState(null);
+  const [hoveredGroup, setHoveredGroup] = useState(null);
   const [openGroups, setOpenGroups] = useState({});
   const [searchQuery, setSearchQuery] = useState('');
   const [favorites, setFavorites] = useState(() => {
@@ -168,6 +170,7 @@ const AdminLayout = () => {
   });
 
   const searchInputRef = React.useRef(null);
+  const hoverCloseTimerRef = React.useRef(null);
 
   const { logout, user, hasAnyPermission, hasPermission, hasRole } = useAuth();
   const location = useLocation();
@@ -192,6 +195,28 @@ const AdminLayout = () => {
       return isOpen ? {} : { [title]: true };
     });
   };
+
+  const openCollapsedGroup = (title, anchor) => {
+    if (!navCollapsed || isMobile) return;
+    window.clearTimeout(hoverCloseTimerRef.current);
+    setHoveredGroup({ title, anchor });
+  };
+
+  const scheduleCollapsedGroupClose = () => {
+    window.clearTimeout(hoverCloseTimerRef.current);
+    hoverCloseTimerRef.current = window.setTimeout(() => setHoveredGroup(null), 180);
+  };
+
+  const keepCollapsedGroupOpen = () => {
+    window.clearTimeout(hoverCloseTimerRef.current);
+  };
+
+  const closeCollapsedGroup = () => {
+    window.clearTimeout(hoverCloseTimerRef.current);
+    setHoveredGroup(null);
+  };
+
+  React.useEffect(() => () => window.clearTimeout(hoverCloseTimerRef.current), []);
 
   const toggleFavorite = (e, path) => {
     e.preventDefault();
@@ -289,9 +314,10 @@ const AdminLayout = () => {
     }
   }, [location.pathname, searchQuery]);
 
-  const renderMenuItem = (item, isNested = false) => {
+  const renderMenuItem = (item, isNested = false, showLabelWhenCollapsed = false) => {
     if (!isItemVisible(item)) return null;
 
+    const itemCollapsed = navCollapsed && !showLabelWhenCollapsed;
     const active = isActive(item.path);
     const isFavorited = favorites.includes(item.path);
     const isNewTab = Boolean(item.newTab || item.path === '/admin/store-designer');
@@ -307,7 +333,7 @@ const AdminLayout = () => {
         }}
       >
         {/* Professional Active Indicator Bar */}
-        {active && !navCollapsed && (
+        {active && !itemCollapsed && (
           <Box
             sx={{
               position: 'absolute',
@@ -322,21 +348,24 @@ const AdminLayout = () => {
             }}
           />
         )}
-        <Tooltip title={navCollapsed ? (isNewTab ? `${item.text} (opens in new tab)` : item.text) : ""} placement="right">
+        <Tooltip title={itemCollapsed ? (isNewTab ? `${item.text} (opens in new tab)` : item.text) : ""} placement="right">
           <ListItemButton
             component={RouterLink}
             to={item.path}
             target={isNewTab ? '_blank' : undefined}
             rel={isNewTab ? 'noopener noreferrer' : undefined}
             selected={active}
-            onClick={() => isMobile && setMobileOpen(false)}
+            onClick={() => {
+              if (isMobile) setMobileOpen(false);
+              else if (navCollapsed) closeCollapsedGroup();
+            }}
             sx={{
               borderRadius: isNested ? '9px' : '12px',
               mb: 0.5,
               py: isNested ? 0.75 : 1,
-              pl: isNested ? (navCollapsed ? 1.5 : 2) : 2.5,
-              pr: navCollapsed ? 0 : 4,
-              justifyContent: navCollapsed ? 'center' : 'initial',
+              pl: isNested ? (itemCollapsed ? 1.5 : 2) : 2.5,
+              pr: itemCollapsed ? 0 : 4,
+              justifyContent: itemCollapsed ? 'center' : 'initial',
               bgcolor: isNested ? 'background.paper' : 'transparent',
               transition: 'all 0.25s cubic-bezier(0.4, 0, 0.2, 1)',
               '&:hover': {
@@ -361,7 +390,7 @@ const AdminLayout = () => {
             }}
           >
             <ListItemIcon sx={{ 
-              minWidth: navCollapsed ? 0 : 38, 
+              minWidth: itemCollapsed ? 0 : 38,
               transition: 'all 0.25s cubic-bezier(0.4, 0, 0.2, 1)',
               color: active ? 'primary.main' : 'text.secondary',
               display: 'flex',
@@ -369,7 +398,7 @@ const AdminLayout = () => {
             }}>
               {item.icon}
             </ListItemIcon>
-            {!navCollapsed && (
+            {!itemCollapsed && (
               <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5, flex: 1, minWidth: 0 }}>
                 <ListItemText 
                   primary={item.text} 
@@ -385,7 +414,7 @@ const AdminLayout = () => {
             )}
             
             {/* Pin Toggle */}
-            {!navCollapsed && (
+            {!itemCollapsed && (
               <IconButton
                 className="pin-action"
                 size="small"
@@ -418,9 +447,18 @@ const AdminLayout = () => {
       return (
         <React.Fragment key={section.title}>
           <ListItem disablePadding {...draggableProps} sx={{ mb: 0.5 }}>
-            <Tooltip title={navCollapsed ? section.title : ""} placement="right">
+            <Tooltip title={navCollapsed && !hoveredGroup ? section.title : ""} placement="right">
               <ListItemButton
-                onClick={() => handleGroupToggle(section.title)}
+                onClick={(event) => {
+                  if (navCollapsed && !isMobile) {
+                    openCollapsedGroup(section.title, event.currentTarget);
+                    return;
+                  }
+                  handleGroupToggle(section.title);
+                }}
+                onMouseEnter={(event) => openCollapsedGroup(section.title, event.currentTarget)}
+                onMouseLeave={scheduleCollapsedGroupClose}
+                onFocus={(event) => openCollapsedGroup(section.title, event.currentTarget)}
                 sx={{
                   mx: 1,
                   borderRadius: 2,
@@ -496,6 +534,40 @@ const AdminLayout = () => {
               {section.items.map(item => renderMenuItem(item, true))}
             </List>
           </Collapse>
+          {navCollapsed && !isMobile && hoveredGroup?.title === section.title && (
+            <Popper
+              open={Boolean(hoveredGroup.anchor)}
+              anchorEl={hoveredGroup.anchor}
+              placement="right-start"
+              modifiers={[{ name: 'offset', options: { offset: [0, 8] } }]}
+              sx={{ zIndex: (theme) => theme.zIndex.drawer + 2 }}
+              onMouseEnter={keepCollapsedGroupOpen}
+              onMouseLeave={scheduleCollapsedGroupClose}
+            >
+              <Box
+                sx={{
+                  width: 224,
+                  p: 1,
+                  border: '1px solid',
+                  borderColor: 'divider',
+                  borderRadius: 2,
+                  bgcolor: 'background.paper',
+                  boxShadow: 8,
+                }}
+              >
+                <Typography
+                  variant="overline"
+                  component="div"
+                  sx={{ px: 1.5, pt: 0.5, pb: 1, color: 'text.secondary', fontWeight: 700, letterSpacing: 1 }}
+                >
+                  {section.title}
+                </Typography>
+                <List dense disablePadding>
+                  {visibleItems.map((item) => renderMenuItem(item, true, true))}
+                </List>
+              </Box>
+            </Popper>
+          )}
         </React.Fragment>
       );
     }
