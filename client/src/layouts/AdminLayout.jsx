@@ -95,7 +95,7 @@ const MENU_STRUCTURE = [
       { text: 'Customers', path: '/admin/customers', icon: <PeopleIcon />, permission: PERMISSIONS.CUSTOMERS_READ },
       { text: 'Coupons', path: '/admin/coupons', icon: <LocalOfferIcon />, permission: PERMISSIONS.COUPONS_READ, mode: 'ecommerce' },
       { text: 'Sale Labels', path: '/admin/sale-labels', icon: <LocalOfferIcon />, permission: PERMISSIONS.SETTINGS_READ, mode: 'ecommerce' },
-      { text: 'Reviews', path: '/admin/reviews', icon: <StarIcon />, permission: PERMISSIONS.REVIEWS_READ },
+      { text: 'Reviews', path: '/admin/reviews', icon: <StarIcon />, feature: 'reviews', permission: PERMISSIONS.REVIEWS_READ },
     ]
   },
   {
