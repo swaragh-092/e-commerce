@@ -1000,7 +1000,7 @@ const markOrderPaid = async ({ orderId, provider, transactionId, metadata = {} }
             const user = await User.findByPk(notificationPayload.userId, {
                 include: [{ model: UserProfile, as: 'profile', required: false }],
             });
-            if (user && NotificationService?.sendToUser) {
+            if (NotificationService?.sendToUser) {
                 await NotificationService.sendToUser(
                     'order_placed',
                     ['email', 'sms', 'whatsapp'],
@@ -1010,7 +1010,7 @@ const markOrderPaid = async ({ orderId, provider, transactionId, metadata = {} }
                         orderDate: notificationPayload.orderDate,
                         paymentMethod: notificationPayload.paymentMethod,
                         total: notificationPayload.total,
-                        firstName: user.firstName || 'Customer',
+                        firstName: user?.firstName || 'Customer',
                     },
                     notificationPayload.orderId
                 );
@@ -1357,6 +1357,7 @@ const markPaymentFailed = async ({ orderId, provider, reason }) => {
             order_total: order?.total,
             payment_method: order?.paymentMethod || provider,
             failure_reason: reason || payment?.metadata?.failureReason || 'Payment was declined',
+            notification_event_id: payment ? `${payment.id}:${payment.metadata?.failedAt || ''}` : null,
         };
         if (user?.email) {
             await NotificationService.send('payment_failed_customer', user.email, variables, user.id, orderId);

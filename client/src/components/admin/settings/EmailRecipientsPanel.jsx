@@ -50,6 +50,7 @@ export default function EmailRecipientsPanel() {
       <Typography variant="h6" gutterBottom>Admin and staff email recipients</Typography>
       <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
         Choose recipients for each alert. Selected staff must have active accounts, verified emails, and the required permissions. Inventory alerts have their own recipient settings.
+        {' '}Events saved in Notifications use the recipients configured for that event instead.
       </Typography>
       {status && <Alert severity={status.type} sx={{ mb: 2 }}>{status.message}</Alert>}
       {!data && !status && <CircularProgress size={24} aria-label="Loading email recipients" />}

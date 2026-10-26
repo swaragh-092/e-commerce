@@ -1,11 +1,12 @@
 'use strict';
 
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 
 describe('Password Reset & Notification Service', () => {
   beforeEach(() => {
     vi.clearAllMocks();
   });
+  afterEach(() => vi.restoreAllMocks());
 
   it('NotificationService.send defensively handles a transaction passed as channel parameter', async () => {
     const NotificationService = require('../../src/modules/notification/notification.service');
@@ -87,10 +88,10 @@ describe('Password Reset & Notification Service', () => {
 
     try {
       const SettingsService = require('../../src/modules/settings/settings.service');
-      vi.spyOn(SettingsService, 'getByGroup').mockResolvedValue({});
+      vi.spyOn(SettingsService, 'getByGroup').mockResolvedValue({ smtp_user: 'your_email@gmail.com', smtp_pass: 'your_app_password_here' });
+      const transport = vi.spyOn(require('nodemailer'), 'createTransport').mockImplementation(() => { throw new Error('This test must not connect to SMTP'); });
 
       const emailChannel = require('../../src/modules/notification/channels/email.channel');
-      // The current .env has placeholder credentials (your_email@gmail.com / your_app_password_here)
       const result = await emailChannel.send({
         to: 'test@example.com',
         subject: 'Reset your password',
@@ -99,6 +100,7 @@ describe('Password Reset & Notification Service', () => {
       });
 
       expect(result).toBe(true);
+      expect(transport).not.toHaveBeenCalled();
     } finally {
       process.env.NODE_ENV = originalEnv;
     }

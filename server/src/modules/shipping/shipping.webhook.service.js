@@ -217,8 +217,9 @@ const processWebhook = async (providerCode, payload, headers = {}) => {
                     }, { transaction: t });
                 }
             }
-            if (statusChanged && ['out_for_delivery', 'delivered', 'delivery_failed', 'rto_initiated', 'rto_in_transit', 'rto'].includes(normalizedEvent.status) && order.userId) {
-                notification = { userId: order.userId, orderId: order.id, status: normalizedEvent.status };
+            if (statusChanged && ['out_for_delivery', 'delivered', 'delivery_failed', 'rto_initiated', 'rto_in_transit', 'rto'].includes(normalizedEvent.status)) {
+                notification = { userId: order.userId, orderId: order.id, status: normalizedEvent.status,
+                    eventId: `${shipment.id}:${shipment.statusHistory?.slice(-1)[0]?.at || ''}` };
             }
         }
 
@@ -233,6 +234,7 @@ const processWebhook = async (providerCode, payload, headers = {}) => {
                 result.notification.userId,
                 result.notification.orderId,
                 result.notification.status,
+                result.notification.eventId,
             );
         } catch (error) {
             console.error('[Webhook] Delivery notification failed:', error.message);
@@ -336,8 +338,9 @@ const reconcileTracking = async ({ limit = 20 } = {}) => {
                                 if (['delivered', 'rto'].includes(orderShippingStatus)) {
                                     await OrderService.syncOrderClosureIfComplete(targetOrder, t);
                                 }
-                                if (targetOrder.userId && ['out_for_delivery', 'delivered', 'delivery_failed', 'rto_initiated', 'rto_in_transit', 'rto'].includes(tracking.status)) {
-                                    notification = { userId: targetOrder.userId, orderId: targetOrder.id, status: tracking.status };
+                                if (['out_for_delivery', 'delivered', 'delivery_failed', 'rto_initiated', 'rto_in_transit', 'rto'].includes(tracking.status)) {
+                                    notification = { userId: targetOrder.userId, orderId: targetOrder.id, status: tracking.status,
+                                        eventId: `${freshShipment.id}:${freshShipment.statusHistory?.slice(-1)[0]?.at || ''}` };
                                 }
                             }
                         } catch (err) {
@@ -362,7 +365,7 @@ const reconcileTracking = async ({ limit = 20 } = {}) => {
 
             if (statusUpdated && notification) {
                 try {
-                    await NotificationService.sendDeliveryUpdate(notification.userId, notification.orderId, notification.status);
+                    await NotificationService.sendDeliveryUpdate(notification.userId, notification.orderId, notification.status, notification.eventId);
                 } catch (error) {
                     console.error('[reconcileTracking] Delivery notification failed:', error.message);
                 }

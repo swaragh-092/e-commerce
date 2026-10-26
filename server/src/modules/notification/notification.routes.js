@@ -2,7 +2,7 @@
 
 const router = require('express').Router();
 const { authenticate } = require('../../middleware/auth.middleware');
-const { authorizePermissions } = require('../../middleware/role.middleware');
+const { authorizePermissions, authorizeAnyPermission } = require('../../middleware/role.middleware');
 const { PERMISSIONS } = require('../../config/permissions');
 const {
   listTemplates,
@@ -17,6 +17,17 @@ const {
 // All notification endpoints require authentication
 router.use(authenticate);
 
+const rulesController = require('./notificationRules.controller');
+const readNotifications = authorizeAnyPermission(PERMISSIONS.SETTINGS_READ, PERMISSIONS.NOTIFICATIONS_MANAGE);
+const manageNotifications = authorizePermissions(PERMISSIONS.NOTIFICATIONS_MANAGE);
+router.get('/events', readNotifications, rulesController.list);
+router.get('/recipient-options', readNotifications, rulesController.options);
+router.get('/events/:event', readNotifications, rulesController.read);
+router.put('/events/:event', manageNotifications, rulesController.save);
+router.get('/events/:event/history', readNotifications, rulesController.history);
+router.post('/events/:event/preview', readNotifications, rulesController.preview);
+router.post('/events/:event/test', manageNotifications, rulesController.test);
+
 const { validate } = require('../../middleware/validate.middleware');
 const assignmentParams = require('joi').object({ kind: require('joi').string().valid('orders', 'enquiries').required(), id: require('joi').string().uuid().required() });
 router.get('/assignments/:kind/:id', validate(assignmentParams, 'params'), async (req, res, next) => {
@@ -28,7 +39,7 @@ router.put('/assignments/:kind/:id', validate(assignmentParams, 'params'), async
   catch (error) { next(error); }
 });
 
-router.get('/recipients', authorizePermissions(PERMISSIONS.SETTINGS_READ), async (req, res, next) => {
+router.get('/recipients', readNotifications, async (req, res, next) => {
   try {
     const result = await require('./notificationRecipients.service').read();
     return require('../../utils/response').success(res, result);
@@ -44,17 +55,17 @@ router.put('/recipients', authorizePermissions(PERMISSIONS.NOTIFICATIONS_MANAGE)
 // Template READ — settings.read is enough (admins can view)
 router.get(
   '/templates',
-  authorizePermissions(PERMISSIONS.SETTINGS_READ),
+  readNotifications,
   listTemplates
 );
 router.get(
   '/templates/:name',
-  authorizePermissions(PERMISSIONS.SETTINGS_READ),
+  readNotifications,
   getTemplate
 );
 router.get(
   '/templates/:name/default',
-  authorizePermissions(PERMISSIONS.SETTINGS_READ),
+  readNotifications,
   getDefaultTemplate
 );
 
@@ -66,7 +77,7 @@ router.put(
 );
 router.post(
   '/templates/:name/preview',
-  authorizePermissions(PERMISSIONS.SETTINGS_READ),
+  readNotifications,
   previewTemplate
 );
 router.post(

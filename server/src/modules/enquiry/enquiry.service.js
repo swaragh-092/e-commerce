@@ -154,7 +154,6 @@ class EnquiryService {
     try {
       // Fetch store settings for admin email
       const settings = await settingsService.getAll();
-      const adminEmails = await this.getAdminNotificationEmails(settings);
       const storeName = settings?.general?.storeName || 'Our Store';
 
       // Fetch product details for email context if it's a product enquiry
@@ -166,6 +165,7 @@ class EnquiryService {
       // Prepare variables for email
       const templateVars = {
         enquiryId: enquiry.id,
+        enquiry_id: enquiry.id,
         customerName: enquiry.name,
         customerEmail: enquiry.email,
         customerPhone: enquiry.phone || 'N/A',
@@ -180,7 +180,11 @@ class EnquiryService {
         })),
       };
 
+      const routed = await notificationService.sendEvent('enquiry_received', { variables: templateVars });
+      if (routed !== null) return enquiry;
+
       // 1. Alert Admin
+      const adminEmails = await this.getAdminNotificationEmails(settings);
       const adminResults = [];
       for (const adminEmail of adminEmails) {
         adminResults.push(await notificationService.send(
@@ -332,6 +336,8 @@ class EnquiryService {
     const storeName = settings?.general?.storeName || 'Our Store';
 
     const templateVars = {
+      enquiry_id: enquiry.id,
+      notification_event_id: require('crypto').randomUUID(),
       customerName: enquiry.name,
       message: enquiry.message,
       replyMessage: replyMessage.trim(),
@@ -347,7 +353,8 @@ class EnquiryService {
         await enquiry.save({ transaction });
       }
 
-      const queued = await notificationService.send(
+      const routed = await notificationService.sendEvent('enquiry_replied', { variables: templateVars, transaction });
+      const queued = routed === null ? await notificationService.send(
         'enquiry_reply_customer',
         enquiry.email,
         templateVars,
@@ -355,7 +362,7 @@ class EnquiryService {
         null,
         'email',
         transaction
-      );
+      ) : routed.length === 0 || routed.some(Boolean);
 
       if (!queued) {
         throw new Error('Reply email could not be queued');

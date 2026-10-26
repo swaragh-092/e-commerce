@@ -108,7 +108,7 @@ const PageEditPage = lazy(() => import('../pages/admin/PageEditPage'));
 const MenuBuilderPage = lazy(() => import('../pages/admin/MenuBuilderPage'));
 const ApiBuilderPage = lazy(() => import('../pages/admin/ApiBuilderPage'));
 const SeoOverridesPage = lazy(() => import('../pages/admin/SeoOverridesPage'));
-const EmailTemplatesPage = lazy(() => import('../pages/admin/EmailTemplatesPage'));
+const NotificationEventsPage = lazy(() => import('../pages/admin/NotificationEventsPage'));
 const ThemeGalleryPage = lazy(() => import('../pages/admin/ThemeGalleryPage'));
 const SectionComposerPage = lazy(() => import('../pages/admin/SectionComposerPage'));
 const NewsletterSubscribersPage = lazy(() => import('../pages/admin/NewsletterSubscribersPage'));
@@ -257,7 +257,7 @@ const AppRoutes = () => (
           </Route>
           <Route element={<ProtectedRoute permission={PERMISSIONS.SETTINGS_READ} />}>
             <Route path="settings" element={<SettingsPage />} />
-            <Route path="email-templates" element={<EmailTemplatesPage />} />
+            <Route path="email-templates" element={<NotificationEventsPage />} />
             <Route path="sections" element={<LegacySectionsRedirect />} />
             <Route path="newsletter" element={<NewsletterSubscribersPage />} />
           </Route>

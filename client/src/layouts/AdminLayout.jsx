@@ -125,7 +125,7 @@ const MENU_STRUCTURE = [
       { text: 'Store Templates', path: '/admin/themes', icon: <PhotoLibraryIcon />, feature: 'themes', permission: PERMISSIONS.SETTINGS_READ },
       { text: 'Store Designer', path: '/admin/store-designer', icon: <PhotoLibraryIcon />, feature: 'themes', permission: PERMISSIONS.SETTINGS_MANAGE, newTab: true },
       { text: 'Newsletter', path: '/admin/newsletter', icon: <MailOutlineIcon />, permission: PERMISSIONS.SETTINGS_READ },
-      { text: 'Templates', path: '/admin/email-templates', icon: <MailOutlineIcon />, permission: PERMISSIONS.SETTINGS_READ },
+      { text: 'Notifications', path: '/admin/email-templates', icon: <MailOutlineIcon />, permissions: [PERMISSIONS.SETTINGS_READ, PERMISSIONS.NOTIFICATIONS_MANAGE] },
       { text: 'Payment Gateways', path: '/admin/payment-gateways', icon: <PaymentIcon />, feature: 'payments', permission: PERMISSIONS.SETTINGS_READ, mode: 'ecommerce' },
       { text: 'Shipping', path: '/admin/shipping', icon: <LocalShippingIcon />, feature: 'shipping', permission: PERMISSIONS.SETTINGS_READ, mode: 'ecommerce' },
     ]
