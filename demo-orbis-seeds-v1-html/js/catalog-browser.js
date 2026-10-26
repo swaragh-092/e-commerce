@@ -58,7 +58,7 @@
             field(filter.name, filter.label, select);
             select.addEventListener('change', function () {
                 clearTimeout(timer);
-                var patch = { page: 1, q: search.value.trim() };
+                var patch = { page: 1, q: filter.resetSearch ? '' : search.value.trim() };
                 patch[filter.name] = select.value;
                 write(patch);
             });

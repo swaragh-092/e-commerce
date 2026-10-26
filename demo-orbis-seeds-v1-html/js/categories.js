@@ -9,10 +9,8 @@ var categoriesLoading = false;
 document.addEventListener("DOMContentLoaded", function () {
     categoryBrowser = window.OrbiBrowser && OrbiBrowser.create({
         label: 'Categories', placeholder: 'Search categories and sub-categories', sizes: [12, 24, 48],
-        filters: [{ name: 'browse', label: 'Show', options: [
-            { value: '', label: 'All categories' },
-            { value: 'branches', label: 'Category groups' },
-            { value: 'leaves', label: 'Product categories' }
+        filters: [{ name: 'cat', label: 'Category', resetSearch: true, options: [
+            { value: '', label: 'All categories' }
         ] }],
         sorts: [{ value: 'name_asc', label: 'Name: A–Z' }, { value: 'name_desc', label: 'Name: Z–A' }],
         onChange: function () {
@@ -48,6 +46,7 @@ function fetchCategories() {
             if (result.success && Array.isArray(result.data)) {
                 categoriesData = result.data;
                 categoriesLoaded = true;
+                updateCategoryFilterOptions();
                 handleUrlParams();
             } else {
                 throw new Error('Unable to load categories');
@@ -69,6 +68,19 @@ function fetchCategories() {
         });
 }
 
+function updateCategoryFilterOptions() {
+    if (!categoryBrowser) return;
+    var values = [{ value: '', label: 'All categories' }];
+    function collect(items, depth) {
+        items.forEach(function (category) {
+            values.push({ value: category.slug, label: '— '.repeat(depth) + category.name });
+            collect(category.children || [], depth + 1);
+        });
+    }
+    collect(categoriesData, 0);
+    categoryBrowser.setOptions('cat', values);
+}
+
 function handleUrlParams() {
     const urlParams = new URLSearchParams(window.location.search);
     const categorySlug = urlParams.get("cat");
@@ -78,6 +90,11 @@ function handleUrlParams() {
     if (categorySlug) {
         const path = findCategoryPath(categoriesData, categorySlug);
         if (path && path.length > 0) {
+            const targetCategory = path[path.length - 1];
+            if (!targetCategory.children || targetCategory.children.length === 0) {
+                window.location.replace('products.html?category=' + encodeURIComponent(targetCategory.slug));
+                return;
+            }
             // Reconstruct navigationHistory
             // The history should contain the states lead up to the current level
             // Root level
@@ -96,9 +113,12 @@ function handleUrlParams() {
                 });
             }
             
-            const targetCategory = path[path.length - 1];
             displayCategories(targetCategory.children, targetCategory.name, targetCategory, path);
         } else {
+            const corrected = new URL(window.location.href);
+            corrected.searchParams.delete('cat');
+            window.history.replaceState({}, '', corrected);
+            updateCategoryFilterOptions();
             resetToRoot(false);
         }
     } else {
@@ -201,7 +221,7 @@ function displayCategories(list, parentName, targetCategory, path) {
     }
 
     // The category tree is returned in full, so filter before slicing the page.
-    var state = categoryBrowser ? categoryBrowser.sync() : { q: '', browse: '', sort: 'name_asc', page: 1, limit: 12 };
+    var state = categoryBrowser ? categoryBrowser.sync() : { q: '', sort: 'name_asc', page: 1, limit: 12 };
     var candidates = [];
     function collect(items) {
         items.forEach(function (category) {
@@ -212,9 +232,7 @@ function displayCategories(list, parentName, targetCategory, path) {
     collect(currentList);
     var query = state.q.toLocaleLowerCase();
     var filtered = candidates.filter(function (category) {
-        var matches = !query || (String(category.name || '') + ' ' + String(category.slug || '')).toLocaleLowerCase().includes(query);
-        var hasChildren = category.children && category.children.length > 0;
-        return matches && (!state.browse || (state.browse === 'branches' ? hasChildren : !hasChildren));
+        return !query || (String(category.name || '') + ' ' + String(category.slug || '')).toLocaleLowerCase().includes(query);
     }).sort(function (a, b) {
         var order = String(a.name).localeCompare(String(b.name), undefined, { sensitivity: 'base' }) || String(a.slug).localeCompare(String(b.slug));
         return state.sort === 'name_desc' ? -order : order;
@@ -232,7 +250,7 @@ function displayCategories(list, parentName, targetCategory, path) {
         categoryBrowser.results({ total: filtered.length, page: page, totalPages: totalPages, limit: state.limit });
     }
     if (!filtered.length) {
-        container.innerHTML = '<div class="no-data" role="status">' + (state.q || state.browse ? 'No categories match your search or filters. Try another search or clear the filters.' : 'No sub-categories found.') + '</div>';
+        container.innerHTML = '<div class="no-data" role="status">' + (state.q ? 'No categories match your search or filters. Try another search or clear the filters.' : 'No sub-categories found.') + '</div>';
     }
     filtered.slice((page - 1) * state.limit, page * state.limit).forEach(function (category) {
         container.appendChild(createCategoryCard(category));

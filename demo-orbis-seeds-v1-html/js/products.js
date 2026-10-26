@@ -4,19 +4,17 @@ let productCategoriesRequest = null;
 document.addEventListener("DOMContentLoaded", function () {
     var params = new URLSearchParams(window.location.search);
     var category = params.get('category') || params.get('cat') || '';
-    if (params.has('cat')) {
+    if (params.has('cat') || params.has('type')) {
         var canonical = new URL(window.location.href);
         canonical.searchParams.delete('cat');
+        canonical.searchParams.delete('type');
         if (category) canonical.searchParams.set('category', category);
         window.history.replaceState({}, '', canonical);
     }
     productBrowser = window.OrbiBrowser && OrbiBrowser.create({
         label: 'Products', placeholder: 'Search products, names or SKUs', minSearch: 2, sizes: [6, 12, 24],
         filters: [
-            { name: 'category', label: 'Category', options: [{ value: '', label: 'All categories' }].concat(category ? [{ value: category, label: formatCategorySlug(category) }] : []) },
-            { name: 'type', label: 'Product options', options: [
-                { value: '', label: 'All products' }, { value: 'variants', label: 'With variants' }, { value: 'simple', label: 'Without variants' }
-            ] }
+            { name: 'category', label: 'Category', options: [{ value: '', label: 'All categories' }].concat(category ? [{ value: category, label: formatCategorySlug(category) }] : []) }
         ],
         sorts: [{ value: 'name_asc', label: 'Name: A–Z' }, { value: 'name_desc', label: 'Name: Z–A' }, { value: 'newest', label: 'Newest first' }],
         onChange: loadProductView
@@ -126,7 +124,7 @@ function fetchProducts(categorySlug, requestedProductSlug, page) {
     var content = document.querySelector('.products-content');
     var list = document.querySelector('.products-list');
     if (!content || !list) return;
-    var state = productBrowser ? productBrowser.read() : { q: '', sort: 'name_asc', type: '', limit: 6 };
+    var state = productBrowser ? productBrowser.read() : { q: '', sort: 'name_asc', limit: 6 };
     page = page || 1;
     var requestId = ++productsState.requestId;
     if (productsState.controller) productsState.controller.abort();
@@ -146,7 +144,6 @@ function fetchProducts(categorySlug, requestedProductSlug, page) {
     var params = new URLSearchParams({ page: String(page), limit: String(state.limit) });
     if (categorySlug) params.set('category', categorySlug);
     if (state.q) params.set('search', state.q);
-    if (state.type) params.set('hasVariants', state.type === 'variants' ? 'true' : 'false');
     if (state.sort === 'newest') params.set('sort', 'newest');
     else { params.set('sortBy', 'name'); params.set('sortOrder', state.sort === 'name_desc' ? 'DESC' : 'ASC'); }
     fetch(API_URL + 'products?include=attributes,variants&' + params.toString(), { signal: productsState.controller.signal })
