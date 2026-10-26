@@ -740,8 +740,8 @@ const AdminLayout = () => {
               <ListItemIcon><PersonIcon fontSize="small" /></ListItemIcon>
               My Profile
             </MenuItem>
-            <MenuItem onClick={() => { setAnchorEl(null); logout(); }}>
-              <ListItemIcon><ExitIcon fontSize="small" /></ListItemIcon>
+            <MenuItem onClick={() => { setAnchorEl(null); logout(); }} sx={{ color: 'error.main' }}>
+              <ListItemIcon sx={{ color: 'error.main' }}><ExitIcon fontSize="small" /></ListItemIcon>
               Logout
             </MenuItem>
           </Menu>
