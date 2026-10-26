@@ -823,6 +823,7 @@ Each Tier 1 capability has two independent presentation switches on **Admin → 
 
 | Feature | E-Commerce Default | Catalog Default | Description | Server Cascades & Dependencies |
 |---------|:---:|:---:|-------------|--------------------------------|
+| `customers` | ✅ | ❌ | Admin customer management | OFF hides Customers navigation, management routes, and dashboard shortcuts. Existing customer records and authorized staff APIs are preserved. The saved switch overrides either mode's default. |
 | `wishlist` | ✅ | ✅ | Product wishlist | Independent |
 | `reviews` | ✅ | ✅ | Product reviews and ratings | If OFF, disables ratings on cards and review submissions; admin moderation preserved |
 | `coupons` | ✅ | ❌ | Discount coupon system | Disabled automatically if `cart` is OFF |

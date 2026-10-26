@@ -33,15 +33,16 @@ const view = () => (
 
 beforeEach(() => {
   localStorage.clear();
-  localStorage.setItem('admin_sidebar_favorites', JSON.stringify(['/admin/reviews', '/admin/pages']));
+  localStorage.setItem('admin_sidebar_favorites', JSON.stringify(['/admin/reviews', '/admin/pages', '/admin/customers']));
   localStorage.setItem('admin_sidebar_group_order', JSON.stringify(['Sales', 'Content']));
-  state.features = { reviews: true, pages: true };
+  state.features = { reviews: true, pages: true, customers: true };
 });
 
 describe('Optional sidebar feature visibility', () => {
   it.each([
     ['catalog', 'reviews', 'Reviews'], ['ecommerce', 'reviews', 'Reviews'],
     ['catalog', 'pages', 'Pages'], ['ecommerce', 'pages', 'Pages'],
+    ['catalog', 'customers', 'Customers'], ['ecommerce', 'customers', 'Customers'],
   ])('updates pinned links in %s mode when %s changes', (mode, feature, label) => {
     state.mode = mode;
     const { rerender } = render(view());

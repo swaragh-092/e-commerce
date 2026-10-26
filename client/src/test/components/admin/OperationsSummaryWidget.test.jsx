@@ -2,6 +2,7 @@ import React from 'react';
 import { cleanup, fireEvent, render, screen } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import OperationsSummaryWidget from '../../../components/admin/dashboard/OperationsSummaryWidget';
+import KpiCardsWidget from '../../../components/admin/dashboard/KpiCardsWidget';
 
 const { navigateMock } = vi.hoisted(() => ({ navigateMock: vi.fn() }));
 
@@ -27,7 +28,7 @@ describe('OperationsSummaryWidget navigation', () => {
       <OperationsSummaryWidget
         stats={{ pendingOrders: 3, lowStockCount: 4, customerCount: 5, productCount: 6, pendingReviewsCount: 7 }}
         spacing={{ panel: 2 }}
-        features={{ orders: true }}
+        features={{ orders: true, customers: true }}
         mode="ecommerce"
       />
     );
@@ -37,5 +38,17 @@ describe('OperationsSummaryWidget navigation', () => {
     fireEvent.click(card);
 
     expect(navigateMock).toHaveBeenCalledWith(destination);
+  });
+
+  it.each([OperationsSummaryWidget, KpiCardsWidget])('hides customer dashboard shortcuts when disabled and restores them when enabled', (Widget) => {
+    const props = {
+      stats: { customerCount: 5 }, spacing: { panel: 2 },
+      settings: { 'dashboard.showStatCards': true, 'dashboard.showCustomersCard': true },
+      formatPrice: String, mode: 'catalog',
+    };
+    const { rerender } = render(<Widget {...props} features={{ customers: false }} />);
+    expect(screen.queryByText('Customers', { exact: true })).not.toBeInTheDocument();
+    rerender(<Widget {...props} features={{ customers: true }} />);
+    expect(screen.getByText('Customers', { exact: true })).toBeInTheDocument();
   });
 });
