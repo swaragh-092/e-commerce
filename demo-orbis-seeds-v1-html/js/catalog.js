@@ -189,17 +189,23 @@
         if (!preselected && !requestedVariant && variants.length === 1) preselected = variants[0];
         if (preselected) C.entries(preselected).forEach(function (o) { selected[o.id] = o.valueId; });
         if (variable && variants.length) {
-            var html = '<fieldset><legend>Choose your options</legend>';
+            var html = '<fieldset class="product-options-fieldset">' +
+                '<div class="product-options-header">' +
+                    '<span class="product-options-title">Choose your options</span>' +
+                    '<button type="button" class="reset-product-options">Clear selection</button>' +
+                '</div>' +
+                '<div class="product-options-body">';
             if (bySku) {
-                html += '<label>Variant<select class="variant-select" data-attribute="sku"><option value="">Select an option</option>';
+                html += '<label>Variant <span class="required-star">*</span><select class="variant-select" data-attribute="sku"><option value="">Select an option</option>';
                 variants.forEach(function (v) { html += '<option value="' + C.escape(v.id) + '">' + C.escape(C.variantLabel(v) || v.id) + '</option>'; });
                 html += '</select></label>';
             } else groups.forEach(function (g) {
-                html += '<label>' + C.escape(g.name) + '<select class="variant-select" data-attribute="' + C.escape(g.id) + '"><option value="">Select ' + C.escape(g.name) + '</option>';
+                html += '<label>' + C.escape(g.name) + ' <span class="required-star">*</span><select class="variant-select" data-attribute="' + C.escape(g.id) + '"><option value="">Select ' + C.escape(g.name) + '</option>';
                 g.values.forEach(function (v) { html += '<option value="' + C.escape(v.id) + '">' + C.escape(v.label) + '</option>'; });
                 html += '</select></label>';
             });
-            host.innerHTML = html + '</fieldset><button type="button" class="reset-product-options">Clear selection</button>';
+            html += '</div></fieldset>';
+            host.innerHTML = html;
         }
         function update(variant) {
             section.orbiVariant = variant;
@@ -208,7 +214,7 @@
             image.src = line.image;
             image.alt = product.name + (line.variantLabel ? ' — ' + line.variantLabel : '');
             if (variable && !variants.length) status.textContent = 'No options are currently available for this product.';
-            else if (!ready) status.textContent = requestedVariant && !preselected ? 'The saved option is no longer available. Choose another option.' : 'Choose all options to add this product or send an enquiry.';
+            else if (!ready) status.textContent = requestedVariant && !preselected ? 'The saved option is no longer available. Choose another option.' : '';
             else {
                 var stock = variant ? variant.stockQty : product.quantity;
                 var reserved = variant ? variant.reservedQty : product.reservedQty;

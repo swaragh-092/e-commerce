@@ -21,9 +21,10 @@
         var back = document.getElementById('gallery-back');
         if (!back) {
             back = document.createElement('a');
+            back.id = 'gallery-back';
             back.href = 'gallery.html';
-            back.textContent = 'Back to galleries';
-            back.className = 'gallery-back';
+            back.className = 'view-product-btn back-btn gallery-back';
+            back.innerHTML = '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#ffffff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 12H5M12 19l-7-7 7-7"/></svg><span>Back to galleries</span>';
             content.before(back);
         }
         grid = document.createElement('div');

@@ -1,25 +1,71 @@
+let productBrowser = null;
+let productCategoriesRequest = null;
+
 document.addEventListener("DOMContentLoaded", function () {
-    const urlParams = new URLSearchParams(window.location.search);
-    const categorySlug = urlParams.get("category") || urlParams.get("cat");
-    const productSlug = urlParams.get("slug");
-
-    initBackButton();
-
-    if (categorySlug) {
-        updateCategoryUi(formatCategorySlug(categorySlug));
-        updateCategoryBreadcrumbs(categorySlug, formatCategorySlug(categorySlug));
-        fetchProducts(categorySlug, productSlug);
-    } else if (productSlug) {
-        OrbiCatalog.fetchProduct(productSlug).then(function (product) {
-            renderProducts([product], document.querySelector(".products-content"), document.querySelector(".products-list"), productSlug, false);
-            const category = product.categories && product.categories[0];
-            if (category) {
-                updateCategoryUi(category.name);
-                updateCategoryBreadcrumbs(category.slug, category.name);
-            }
-        }).catch(showProductError);
+    var params = new URLSearchParams(window.location.search);
+    var category = params.get('category') || params.get('cat') || '';
+    if (params.has('cat')) {
+        var canonical = new URL(window.location.href);
+        canonical.searchParams.delete('cat');
+        if (category) canonical.searchParams.set('category', category);
+        window.history.replaceState({}, '', canonical);
     }
+    productBrowser = window.OrbiBrowser && OrbiBrowser.create({
+        label: 'Products', placeholder: 'Search products, names or SKUs', minSearch: 2, sizes: [6, 12, 24],
+        filters: [
+            { name: 'category', label: 'Category', options: [{ value: '', label: 'All categories' }].concat(category ? [{ value: category, label: formatCategorySlug(category) }] : []) },
+            { name: 'type', label: 'Product options', options: [
+                { value: '', label: 'All products' }, { value: 'variants', label: 'With variants' }, { value: 'simple', label: 'Without variants' }
+            ] }
+        ],
+        sorts: [{ value: 'name_asc', label: 'Name: A–Z' }, { value: 'name_desc', label: 'Name: Z–A' }, { value: 'newest', label: 'Newest first' }],
+        onChange: loadProductView
+    });
+    initBackButton();
+    loadProductView();
+    if (!productBrowser) window.addEventListener('popstate', loadProductView);
 });
+
+function loadProductView() {
+    var params = new URLSearchParams(window.location.search);
+    var category = params.get('category') || params.get('cat') || '';
+    var slug = params.get('slug');
+    var state = productBrowser ? productBrowser.sync() : { page: 1 };
+    productsState.detailCategory = null;
+    if (category || !slug) {
+        updateCategoryUi(category ? formatCategorySlug(category) : 'All Products');
+        updateCategoryBreadcrumbs(category, category ? formatCategorySlug(category) : 'All Products');
+        fetchProducts(category, slug, state.page);
+        return;
+    }
+    var requestId = ++productsState.requestId;
+    if (productsState.controller) productsState.controller.abort();
+    var content = document.querySelector('.products-content');
+    var list = document.querySelector('.products-list');
+    if (!content || !list) return;
+    content.innerHTML = '<p role="status">Loading product…</p>';
+    list.innerHTML = '';
+    if (productBrowser) productBrowser.setBusy(true);
+    setProductsBusy(true);
+    OrbiCatalog.fetchProduct(slug).then(function (product) {
+        if (requestId !== productsState.requestId) return;
+        productsState.categorySlug = null;
+        renderProducts([product], content, list, slug, false);
+        var category = product.categories && product.categories[0];
+        productsState.detailCategory = category && category.slug;
+        updateCategoryUi(category ? category.name : 'Products');
+        updateCategoryBreadcrumbs(category && category.slug, category ? category.name : 'Products');
+        if (productBrowser) productBrowser.setStatus('Showing the selected product. Use search or filters to browse products.');
+    }).catch(function (error) {
+        if (requestId !== productsState.requestId) return;
+        content.innerHTML = '';
+        showProductError(error, loadProductView);
+    }).finally(function () {
+        if (requestId !== productsState.requestId) return;
+        setProductsBusy(false);
+        if (productBrowser) productBrowser.setBusy(false);
+    });
+}
 
 let currentCategoryPath = null;
 
@@ -50,8 +96,6 @@ function initBackButton() {
     if (!backBtnWrapper) return;
 
     backBtnWrapper.style.display = 'block';
-    backBtnWrapper.style.marginBottom = '20px';
-    backBtnWrapper.style.textAlign = 'end';
     backBtnWrapper.innerHTML =
         '<a href="javascript:void(0)" class="view-product-btn back-btn">' +
         '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#ffffff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 12H5M12 19l-7-7 7-7"/></svg>' +
@@ -67,68 +111,107 @@ const productsState = {
     totalPages: 1,
     isLoading: false,
     sectionObserver: null,
-    scrollObserver: null,
+    requestId: 0,
+    controller: null,
+    detailCategory: null,
     eventsInitialized: false
 };
 
+function setProductsBusy(busy) {
+    var target = document.getElementById('catalog-results') || document.querySelector('.products-content');
+    if (target) target.setAttribute('aria-busy', String(busy));
+}
+
 function fetchProducts(categorySlug, requestedProductSlug, page) {
+    var content = document.querySelector('.products-content');
+    var list = document.querySelector('.products-list');
+    if (!content || !list) return;
+    var state = productBrowser ? productBrowser.read() : { q: '', sort: 'name_asc', type: '', limit: 6 };
     page = page || 1;
-
-    const productsContent = document.querySelector(".products-content");
-    const productsList = document.querySelector(".products-list");
-
-    if (!productsContent || !productsList) return;
-
-    const isFirstPage = page === 1;
-
+    var requestId = ++productsState.requestId;
+    if (productsState.controller) productsState.controller.abort();
+    productsState.controller = new AbortController();
     productsState.categorySlug = categorySlug;
-    productsState.isLoading = true;
-
-    if (!isFirstPage) {
-        toggleInfiniteLoader(productsContent, true);
+    if (productsState.sectionObserver) productsState.sectionObserver.disconnect();
+    content.innerHTML = '<p role="status">Loading products…</p>';
+    list.innerHTML = '';
+    setProductsBusy(true);
+    if (productBrowser) productBrowser.setBusy(true);
+    if (state.q && Array.from(state.q).length < 2) {
+        content.innerHTML = '<div class="no-products-message"><p>Enter at least 2 characters to search products.</p></div>';
+        setProductsBusy(false);
+        if (productBrowser) { productBrowser.setBusy(false); productBrowser.setStatus('Enter at least 2 characters to search products.'); }
+        return;
     }
-
-    fetch(API_URL + "products?category=" + encodeURIComponent(categorySlug) + "&include=attributes,variants&page=" + page)
+    var params = new URLSearchParams({ page: String(page), limit: String(state.limit) });
+    if (categorySlug) params.set('category', categorySlug);
+    if (state.q) params.set('search', state.q);
+    if (state.type) params.set('hasVariants', state.type === 'variants' ? 'true' : 'false');
+    if (state.sort === 'newest') params.set('sort', 'newest');
+    else { params.set('sortBy', 'name'); params.set('sortOrder', state.sort === 'name_desc' ? 'DESC' : 'ASC'); }
+    fetch(API_URL + 'products?include=attributes,variants&' + params.toString(), { signal: productsState.controller.signal })
         .then(OrbiCatalog.readResponse)
         .then(async function (result) {
-            if (isFirstPage && requestedProductSlug && Array.isArray(result.data) && !result.data.some(function (p) { return p.slug === requestedProductSlug; })) {
-                const linkedProduct = await OrbiCatalog.fetchProduct(requestedProductSlug);
-                result.data.unshift(linkedProduct);
+            if (requestId !== productsState.requestId) return;
+            if (!result.success || !Array.isArray(result.data)) throw new Error('Unable to load products');
+            var meta = result.meta || {};
+            var pages = Math.max(1, Number(meta.totalPages) || 1);
+            if (page > pages) {
+                var corrected = new URL(window.location.href);
+                if (pages === 1) corrected.searchParams.delete('page'); else corrected.searchParams.set('page', pages);
+                window.history.replaceState({}, '', corrected);
+                if (productBrowser) productBrowser.sync();
+                return fetchProducts(categorySlug, requestedProductSlug, pages);
             }
-            if (result.success && result.data && result.data.length > 0) {
-                renderProducts(result.data, productsContent, productsList, isFirstPage ? requestedProductSlug : null, !isFirstPage);
-
-                // Prefer the canonical API category name when it is available.
-                if (isFirstPage && result.data[0].categories) {
-                    const category = result.data[0].categories.find(c => c.slug === categorySlug);
-                    if (category) {
-                        updateCategoryUi(category.name);
-                        updateCategoryBreadcrumbs(categorySlug, category.name);
-                    }
+            var linkedProduct = null;
+            if (requestedProductSlug && !result.data.some(function (product) { return product.slug === requestedProductSlug; })) {
+                linkedProduct = await OrbiCatalog.fetchProduct(requestedProductSlug);
+                if (requestId !== productsState.requestId) return;
+            }
+            productsState.page = Number(meta.page) || page;
+            productsState.totalPages = pages;
+            var products = linkedProduct ? [linkedProduct].concat(result.data) : result.data;
+            if (products.length) {
+                renderProducts(products, content, list, requestedProductSlug, false);
+                if (linkedProduct) {
+                    var first = content.querySelector('.product-sec');
+                    first.classList.add('catalog-linked-product');
+                    var label = document.createElement('p');
+                    label.className = 'catalog-linked-label';
+                    label.textContent = 'Linked product';
+                    first.prepend(label);
                 }
-
-                const meta = result.meta || {};
-                productsState.page = meta.page || page;
-                productsState.totalPages = meta.totalPages || 1;
-            } else if (isFirstPage) {
-                renderEmptyState(productsContent, productsList);
-                productsState.page = 1;
-                productsState.totalPages = 1;
+                var category = products[0].categories && products[0].categories.find(function (item) { return item.slug === categorySlug; });
+                if (category) updateCategoryUi(category.name);
+            } else {
+                renderEmptyState(content, list);
+            }
+            if (productBrowser) {
+                productBrowser.setBusy(false);
+                productBrowser.results({
+                    total: meta.total == null ? result.data.length : meta.total, page: productsState.page,
+                    totalPages: pages, limit: Number(meta.limit) || state.limit,
+                    note: linkedProduct ? 'Your linked product is also shown above these results.' : ''
+                });
             }
         })
         .catch(function (error) {
+            if (requestId !== productsState.requestId || error.name === 'AbortError') return;
+            content.innerHTML = '';
             showProductError(error, function () { fetchProducts(categorySlug, requestedProductSlug, page); });
         })
         .finally(function () {
+            if (requestId !== productsState.requestId) return;
             productsState.isLoading = false;
-            toggleInfiniteLoader(productsContent, false);
-            setupInfiniteScroll(productsContent);
+            setProductsBusy(false);
+            if (productBrowser) productBrowser.setBusy(false);
         });
 }
 
 function showProductError(error, retry) {
     const content = document.querySelector('.products-content');
     if (!content) return;
+    if (productBrowser) productBrowser.setStatus('Products could not be loaded. Please try again.');
     let message = content.querySelector('.products-load-error');
     if (!message) { message = document.createElement('div'); message.className = 'products-load-error'; content.appendChild(message); }
     message.setAttribute('role', 'alert');
@@ -225,7 +308,7 @@ function renderBreadcrumbWithHierarchy(path, defaultName) {
         if (categoryTitle) categoryTitle.textContent = currentCategory.name;
         if (bannerHeading) bannerHeading.textContent = currentCategory.name;
     } else {
-        html += '<li>/</li><li><span>' + (defaultName || 'Products') + '</span></li>';
+        html += '<li>/</li><li><span>' + OrbiCatalog.escape(defaultName || 'Products') + '</span></li>';
         const categoryTitle = document.querySelector(".ip-products-list p");
         if (categoryTitle) categoryTitle.textContent = defaultName || 'Products';
         if (bannerHeading) bannerHeading.textContent = defaultName || 'Our Products';
@@ -235,47 +318,45 @@ function renderBreadcrumbWithHierarchy(path, defaultName) {
 }
 
 function updateCategoryBreadcrumbs(categorySlug, fallbackName) {
-    if (!categorySlug) {
+    function apply(categories) {
+        if (productBrowser) {
+            var values = [{ value: '', label: 'All categories' }];
+            function collect(items, depth) {
+                items.forEach(function (category) {
+                    values.push({ value: category.slug, label: '— '.repeat(depth) + category.name });
+                    collect(category.children || [], depth + 1);
+                });
+            }
+            collect(categories, 0);
+            productBrowser.setOptions('category', values);
+        }
+        var params = new URLSearchParams(window.location.search);
+        var activeCategory = params.get('category') || params.get('cat') || productsState.detailCategory || '';
+        if (activeCategory !== (categorySlug || '')) return;
+        var path = findCategoryPath(categories, categorySlug);
+        renderBreadcrumbWithHierarchy(path, fallbackName);
+        updateCategoryBanner(path);
+        updateBackButtonPath(path);
+        var currentCat = path && path[path.length - 1];
+        if (window.OrbiSEO && currentCat && !params.get('slug')) window.OrbiSEO.setCategorySEO(currentCat, path);
+    }
+    try {
+        var cached = JSON.parse(sessionStorage.getItem('orbis_categories_data') || 'null');
+        if (Array.isArray(cached)) apply(cached);
+    } catch (error) { /* Storage is optional. */ }
+    if (!productCategoriesRequest) {
+        productCategoriesRequest = fetch(API_URL + 'categories').then(OrbiCatalog.readResponse).then(function (result) {
+            if (!Array.isArray(result.data)) throw new Error('Unable to load categories');
+            try { sessionStorage.setItem('orbis_categories_data', JSON.stringify(result.data)); } catch (error) { /* Storage is optional. */ }
+            return result.data;
+        }).catch(function (error) { productCategoriesRequest = null; throw error; });
+    }
+    productCategoriesRequest.then(apply).catch(function () {
+        var params = new URLSearchParams(window.location.search);
+        if ((params.get('category') || productsState.detailCategory || '') !== (categorySlug || '')) return;
         renderBreadcrumbWithHierarchy(null, fallbackName);
         updateCategoryBanner(null);
-        return;
-    }
-
-    let cached = null;
-    try {
-        const raw = sessionStorage.getItem('orbis_categories_data');
-        if (raw) cached = JSON.parse(raw);
-    } catch (e) {}
-
-    if (cached && Array.isArray(cached)) {
-        const path = findCategoryPath(cached, categorySlug);
-        if (path) {
-            renderBreadcrumbWithHierarchy(path, fallbackName);
-            updateCategoryBanner(path);
-            updateBackButtonPath(path);
-        }
-    }
-
-    fetch(API_URL + "categories")
-        .then(function (r) { return r.json(); })
-        .then(function (res) {
-            if (res && res.success && res.data) {
-                try {
-                    sessionStorage.setItem('orbis_categories_data', JSON.stringify(res.data));
-                } catch (e) {}
-                const path = findCategoryPath(res.data, categorySlug);
-                renderBreadcrumbWithHierarchy(path, fallbackName);
-                updateCategoryBanner(path);
-                updateBackButtonPath(path);
-            }
-        })
-        .catch(function (err) {
-            console.error("Error fetching categories for breadcrumb:", err);
-            if (!cached) {
-                renderBreadcrumbWithHierarchy(null, fallbackName);
-                updateCategoryBanner(null);
-            }
-        });
+    });
 }
 
 function getProductUnit(product) {
@@ -341,7 +422,7 @@ function renderProductAttributes(attributes) {
 
 function renderEmptyState(contentContainer, listContainer) {
     listContainer.innerHTML = "";
-    contentContainer.innerHTML = '<div class="no-products-message"><p>No products available.</p></div>';
+    contentContainer.innerHTML = '<div class="no-products-message" role="status"><p>No products match your search or filters. Try another search or clear the filters.</p></div>';
 }
 
 function renderProducts(products, contentContainer, listContainer, requestedProductSlug, append) {
@@ -402,8 +483,22 @@ function renderProducts(products, contentContainer, listContainer, requestedProd
         const params = new URLSearchParams(window.location.search);
         OrbiCatalog.mountOptions(productDiv, product, params.get('slug') === product.slug ? params.get('variant') : null);
 
+        $(productDiv).data('product', product);
         contentContainer.appendChild(productDiv);
     });
+
+    if (!append && products && products.length > 0) {
+        var activeProd = null;
+        if (requestedProductSlug) {
+            activeProd = products.find(function(p) { return (p.slug || String(p.id)) === requestedProductSlug; });
+        }
+        if (!activeProd && !productsState.categorySlug) {
+            activeProd = products[0];
+        }
+        if (activeProd && window.OrbiSEO) {
+            window.OrbiSEO.setProductSEO(activeProd);
+        }
+    }
 
     // Re-initialize smooth scroll and observer after dynamic content is added
     initDynamicEvents();
@@ -426,59 +521,11 @@ function scrollToProductSlug(productSlug) {
     var elementPosition = target.getBoundingClientRect().top;
     var offsetPosition = elementPosition + window.pageYOffset - offset;
     window.scrollTo({ top: offsetPosition, behavior: 'smooth' });
-    var link = document.querySelector('.products-list a[href="#' + target.id + '"]');
+    var link = Array.from(document.querySelectorAll('.products-list a')).find(function (item) { return item.getAttribute('href') === '#' + target.id; });
     if (link) {
         document.querySelectorAll('.products-list .coe-top').forEach(function(item) { item.classList.remove('act'); });
         link.classList.add('act');
     }
-}
-
-function toggleInfiniteLoader(contentContainer, show) {
-    let loader = document.getElementById("products-infinite-loader");
-    if (show) {
-        if (!loader) {
-            loader = document.createElement("div");
-            loader.id = "products-infinite-loader";
-            loader.className = "products-infinite-loader";
-            loader.innerHTML = '<span class="products-loading-spinner"></span>';
-            contentContainer.appendChild(loader);
-        }
-    } else if (loader) {
-        loader.remove();
-    }
-}
-
-function setupInfiniteScroll(contentContainer) {
-    let sentinel = document.getElementById("products-infinite-sentinel");
-
-    // No more pages left to load - clean up and stop observing.
-    if (productsState.page >= productsState.totalPages) {
-        if (sentinel) sentinel.remove();
-        if (productsState.scrollObserver) {
-            productsState.scrollObserver.disconnect();
-        }
-        return;
-    }
-
-    if (!sentinel) {
-        sentinel = document.createElement("div");
-        sentinel.id = "products-infinite-sentinel";
-        contentContainer.appendChild(sentinel);
-    } else {
-        contentContainer.appendChild(sentinel); // keep it as the last element
-    }
-
-    if (!productsState.scrollObserver) {
-        productsState.scrollObserver = new IntersectionObserver(function (entries) {
-            entries.forEach(function (entry) {
-                if (entry.isIntersecting && !productsState.isLoading && productsState.page < productsState.totalPages) {
-                    fetchProducts(productsState.categorySlug, null, productsState.page + 1);
-                }
-            });
-        }, { rootMargin: "300px" });
-    }
-
-    productsState.scrollObserver.observe(sentinel);
 }
 
 function initDynamicEvents() {
@@ -490,7 +537,7 @@ function initDynamicEvents() {
         $(document).on('click', '.products-list a[href^="#"]', function (e) {
             e.preventDefault();
             const targetId = this.getAttribute('href');
-            const targetElement = document.querySelector(targetId);
+            const targetElement = document.getElementById(targetId.slice(1));
             if (targetElement) {
                 const offset = 85;
                 const elementPosition = targetElement.getBoundingClientRect().top;
@@ -517,18 +564,23 @@ function initDynamicEvents() {
     const sections = document.querySelectorAll('.ip-product-details');
     const links = document.querySelectorAll('.products-list .coe-top');
 
+    if (!window.IntersectionObserver) return;
     productsState.sectionObserver = new IntersectionObserver(entries => {
         entries.forEach(entry => {
             if (entry.isIntersecting) {
                 links.forEach(link => link.classList.remove('act'));
-                const link = document.querySelector(`a[href="#${entry.target.id}"]`);
+                const link = Array.from(links).find(function (item) { return item.getAttribute('href') === '#' + entry.target.id; });
                 if (link) {
                     link.classList.add('act');
+                }
+                const prod = $(entry.target).data('product');
+                if (prod && window.OrbiSEO) {
+                    window.OrbiSEO.setProductSEO(prod);
                 }
             }
         });
     }, {
-        threshold: 1
+        threshold: 0.6
     });
 
     sections.forEach(section => {

@@ -2,13 +2,29 @@ var categoriesData = [];
 var navigationHistory = [];
 var currentList = [];
 var currentParentName = "Categories";
+var categoryBrowser = null;
+var categoriesLoaded = false;
+var categoriesLoading = false;
 
 document.addEventListener("DOMContentLoaded", function () {
+    categoryBrowser = window.OrbiBrowser && OrbiBrowser.create({
+        label: 'Categories', placeholder: 'Search categories and sub-categories', sizes: [12, 24, 48],
+        filters: [{ name: 'browse', label: 'Show', options: [
+            { value: '', label: 'All categories' },
+            { value: 'branches', label: 'Category groups' },
+            { value: 'leaves', label: 'Product categories' }
+        ] }],
+        sorts: [{ value: 'name_asc', label: 'Name: A–Z' }, { value: 'name_desc', label: 'Name: Z–A' }],
+        onChange: function () {
+            if (categoriesLoaded) handleUrlParams();
+            else fetchCategories();
+        }
+    });
     fetchCategories();
     
     // Handle browser back/forward buttons
     window.addEventListener('popstate', function(event) {
-        if (categoriesData.length > 0) {
+        if (!categoryBrowser && categoriesData.length > 0) {
             handleUrlParams();
         }
     });
@@ -16,25 +32,40 @@ document.addEventListener("DOMContentLoaded", function () {
 
 function fetchCategories() {
     const container = document.querySelector(".products-inner-wrapper");
-    if (!container) return;
+    if (!container || categoriesLoading) return;
+    categoriesLoading = true;
 
     container.innerHTML = '<div class="loading">Loading categories...</div>';
+    container.setAttribute('aria-busy', 'true');
+    if (categoryBrowser) categoryBrowser.setBusy(true);
 
     fetch(API_URL + "categories")
         .then(function (response) {
+            if (!response.ok) throw new Error('Unable to load categories');
             return response.json();
         })
         .then(function (result) {
-            if (result.success && result.data && result.data.length > 0) {
+            if (result.success && Array.isArray(result.data)) {
                 categoriesData = result.data;
+                categoriesLoaded = true;
                 handleUrlParams();
             } else {
-                container.innerHTML = '<div class="no-data">No categories found.</div>';
+                throw new Error('Unable to load categories');
             }
         })
         .catch(function (error) {
             console.error("Error fetching categories:", error);
             container.innerHTML = '<div class="error">Error loading categories.</div>';
+            var retry = document.createElement('button');
+            retry.type = 'button'; retry.className = 'view-product-btn'; retry.textContent = 'Try again';
+            retry.onclick = fetchCategories;
+            container.querySelector('.error').setAttribute('role', 'alert');
+            container.querySelector('.error').appendChild(retry);
+            if (categoryBrowser) categoryBrowser.setStatus('Categories could not be loaded. Please try again.');
+        }).finally(function () {
+            categoriesLoading = false;
+            container.setAttribute('aria-busy', 'false');
+            if (categoryBrowser) categoryBrowser.setBusy(false);
         });
 }
 
@@ -127,7 +158,7 @@ function displayCategories(list, parentName, targetCategory, path) {
     if (!container) return;
 
     container.innerHTML = "";
-    currentList = list;
+    currentList = list || [];
     currentParentName = parentName;
 
     // Update Heading (located above breadcrumb inside inner-banner)
@@ -140,12 +171,24 @@ function displayCategories(list, parentName, targetCategory, path) {
     // Update Breadcrumbs
     updateBreadcrumbs(parentName);
 
+    // Update Dynamic SEO
+    if (window.OrbiSEO) {
+        if (targetCategory) {
+            window.OrbiSEO.setCategorySEO(targetCategory, path);
+        } else {
+            window.OrbiSEO.setMeta({
+                title: 'Categories',
+                description: 'Explore high-yield vegetable, fruit, and flower seed categories from Orbi Seeds International.',
+                keywords: 'seed categories, vegetable seeds, fruit seeds, flower seeds, hybrid seeds, Orbi Seeds'
+            });
+        }
+    }
+
     // Update Back Button
     const backBtnWrapper = document.getElementById('back-btn-wrapper');
     if (backBtnWrapper) {
         if (navigationHistory.length > 0) {
             backBtnWrapper.style.display = 'block';
-            backBtnWrapper.style.marginBottom = '20px';
             backBtnWrapper.innerHTML = 
                 '<a href="javascript:void(0)" class="view-product-btn back-btn">' +
                 '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#ffffff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 12H5M12 19l-7-7 7-7"/></svg>' +
@@ -157,23 +200,48 @@ function displayCategories(list, parentName, targetCategory, path) {
         }
     }
 
-    // Render Cards
-    if (list.length === 0) {
-        container.innerHTML = '<div class="no-data">No sub-categories found.</div>';
-        return;
+    // The category tree is returned in full, so filter before slicing the page.
+    var state = categoryBrowser ? categoryBrowser.sync() : { q: '', browse: '', sort: 'name_asc', page: 1, limit: 12 };
+    var candidates = [];
+    function collect(items) {
+        items.forEach(function (category) {
+            candidates.push(category);
+            if (state.q && category.children) collect(category.children);
+        });
     }
-
-    list.forEach(function (category) {
+    collect(currentList);
+    var query = state.q.toLocaleLowerCase();
+    var filtered = candidates.filter(function (category) {
+        var matches = !query || (String(category.name || '') + ' ' + String(category.slug || '')).toLocaleLowerCase().includes(query);
+        var hasChildren = category.children && category.children.length > 0;
+        return matches && (!state.browse || (state.browse === 'branches' ? hasChildren : !hasChildren));
+    }).sort(function (a, b) {
+        var order = String(a.name).localeCompare(String(b.name), undefined, { sensitivity: 'base' }) || String(a.slug).localeCompare(String(b.slug));
+        return state.sort === 'name_desc' ? -order : order;
+    });
+    var totalPages = Math.max(1, Math.ceil(filtered.length / state.limit));
+    var page = Math.min(state.page, totalPages);
+    if (page !== state.page) {
+        var corrected = new URL(window.location.href);
+        if (page === 1) corrected.searchParams.delete('page'); else corrected.searchParams.set('page', page);
+        window.history.replaceState({}, '', corrected);
+        if (categoryBrowser) categoryBrowser.sync();
+    }
+    if (categoryBrowser) {
+        categoryBrowser.setBusy(false);
+        categoryBrowser.results({ total: filtered.length, page: page, totalPages: totalPages, limit: state.limit });
+    }
+    if (!filtered.length) {
+        container.innerHTML = '<div class="no-data" role="status">' + (state.q || state.browse ? 'No categories match your search or filters. Try another search or clear the filters.' : 'No sub-categories found.') + '</div>';
+    }
+    filtered.slice((page - 1) * state.limit, page * state.limit).forEach(function (category) {
         container.appendChild(createCategoryCard(category));
     });
-
-    // Scroll to top
-    const section = document.querySelector(".products-main-wrapper");
-    if (section) section.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    container.setAttribute('aria-busy', 'false');
 }
 
 function createCategoryCard(category) {
-    var imageUrl = category.image ? APP_URL + category.image : "./images/products/default.jpg";
+    var imageUrl = OrbiCatalog.imageUrl(category.image);
     const hasChildren = category.children && category.children.length > 0;
     
     const card = document.createElement('div');
@@ -181,20 +249,21 @@ function createCategoryCard(category) {
     card.style.cursor = 'pointer';
     
     var buttonText = hasChildren ? "View Sub-categories" : "View Products";
-    var linkUrl = hasChildren ? "javascript:void(0)" : "products.html?category=" + category.slug;
+    var linkUrl = (hasChildren ? 'product.html?cat=' : 'products.html?category=') + encodeURIComponent(category.slug);
 
     card.innerHTML = 
-        '<div class="product-image"><img src="' + imageUrl + '" alt="' + category.name + '"></div>' +
-        '<h3>' + category.name + '</h3>' +
-        '<a href="' + linkUrl + '" class="view-product-btn">' + buttonText + '</a>';
+        '<div class="product-image"><img src="' + OrbiCatalog.escape(imageUrl) + '" alt="' + OrbiCatalog.escape(category.name) + '" loading="lazy"></div>' +
+        '<h3>' + OrbiCatalog.escape(category.name) + '</h3>' +
+        '<a href="' + OrbiCatalog.escape(linkUrl) + '" class="view-product-btn">' + buttonText + '</a>';
+    card.querySelector('img').addEventListener('error', function () {
+        if (this.getAttribute('src') !== 'images/default-image.png') this.src = 'images/default-image.png';
+    });
 
     card.onclick = function(e) {
+        if (e.ctrlKey || e.metaKey || e.shiftKey || e.altKey || e.button > 0) return;
         if (hasChildren) {
             e.preventDefault();
-            const url = new URL(window.location);
-            url.searchParams.set('cat', category.slug);
-            window.history.pushState({}, '', url);
-            handleUrlParams();
+            navigateToSlug(category.slug);
         } else if (e.target.tagName !== 'A') {
             window.location.href = linkUrl;
         }
@@ -217,12 +286,12 @@ function updateBreadcrumbs(currentName) {
         for (let i = 1; i < navigationHistory.length; i++) {
             const item = navigationHistory[i];
             html += '<li>/</li>';
-            html += '<li><a href="javascript:void(0)" onclick="navigateToSlug(\'' + item.slug + '\')">' + item.name + '</a></li>';
+            html += '<li><a href="product.html?cat=' + encodeURIComponent(item.slug) + '">' + OrbiCatalog.escape(item.name) + '</a></li>';
         }
 
         if (currentName !== "Categories") {
             html += '<li>/</li>';
-            html += '<li><span>' + currentName + '</span></li>';
+            html += '<li><span>' + OrbiCatalog.escape(currentName) + '</span></li>';
         }
     }
     breadcrumb.innerHTML = html;
@@ -232,6 +301,7 @@ function navigateToSlug(slug) {
     const url = new URL(window.location);
     if (slug) url.searchParams.set('cat', slug);
     else url.searchParams.delete('cat');
+    ['q', 'browse', 'page'].forEach(function (key) { url.searchParams.delete(key); });
     window.history.pushState({}, '', url);
     handleUrlParams();
 }
