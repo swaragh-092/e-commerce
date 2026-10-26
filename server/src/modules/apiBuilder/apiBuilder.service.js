@@ -763,6 +763,9 @@ const sanitizeApiBuilderPrices = (resource, items) => {
 };
 
 const shapeRows = async (resource, rows, node = {}, context = {}) => {
+  if (resource === 'pages' && !context.preview && !context.isAdmin && context.features?.pages !== true) {
+    throw new AppError('FEATURE_DISABLED', 403, 'Pages are disabled for this storefront.');
+  }
   const brandsVisible = isBrandVisible(context.features, {
     adminView: Boolean(context.preview || context.isAdmin),
   });

@@ -150,7 +150,9 @@ const AppRoutes = () => (
         <Route path="products/:slug" element={<ProductDetailPage />} />
         <Route path="product/:slug" element={<ProductDetailPage />} />
         <Route path="category/:categorySlug" element={<CategoryPage />} />
-        <Route path="p/:slug" element={<StaticPageView />} />
+        <Route element={<FeatureRoute feature="pages" />}>
+          <Route path="p/:slug" element={<StaticPageView />} />
+        </Route>
         <Route path="search" element={<SearchResultsPage />} />
         <Route element={<FeatureRoute feature="brands" />}>
           <Route path="brands" element={<StoreBrandsPage />} />
@@ -310,8 +312,10 @@ const AppRoutes = () => (
           <Route element={<ProtectedRoute permission={PERMISSIONS.AUDIT_READ} />}>
             <Route path="audit-log" element={<AuditLogPage />} />
           </Route>
-          <Route element={<ProtectedRoute permission={PERMISSIONS.PAGES_READ} />}>
-            <Route path="pages" element={<PagesManagePage />} />
+          <Route element={<FeatureRoute feature="pages" surface="admin" redirectTo="/admin" />}>
+            <Route element={<ProtectedRoute permission={PERMISSIONS.PAGES_READ} />}>
+              <Route path="pages" element={<PagesManagePage />} />
+            </Route>
           </Route>
           <Route element={<FeatureRoute feature="blogs" surface="admin" redirectTo="/admin" />}>
             <Route element={<ProtectedRoute permission={PERMISSIONS.BLOGS_READ} />}>
@@ -327,9 +331,11 @@ const AppRoutes = () => (
               <Route path="api-builder" element={<ApiBuilderPage />} />
             </Route>
           </Route>
-          <Route element={<ProtectedRoute permission={PERMISSIONS.PAGES_MANAGE} />}>
-            <Route path="pages/new" element={<PageEditPage />} />
-            <Route path="pages/:id/edit" element={<PageEditPage />} />
+          <Route element={<FeatureRoute feature="pages" surface="admin" redirectTo="/admin" />}>
+            <Route element={<ProtectedRoute permission={PERMISSIONS.PAGES_MANAGE} />}>
+              <Route path="pages/new" element={<PageEditPage />} />
+              <Route path="pages/:id/edit" element={<PageEditPage />} />
+            </Route>
           </Route>
           <Route element={<FeatureRoute feature="blogs" surface="admin" redirectTo="/admin" />}>
             <Route element={<ProtectedRoute permission={PERMISSIONS.BLOGS_MANAGE} />}>

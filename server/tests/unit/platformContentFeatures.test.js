@@ -7,6 +7,7 @@ const featureMiddleware = require('../../src/middleware/featureGate.middleware')
 const catalog = require('../../../shared/platform-features.json');
 const galleries = require('../../src/modules/gallery/gallery.routes');
 const blogs = require('../../src/modules/blog/blog.routes');
+const pages = require('../../src/modules/page/page.routes');
 const newsletter = require('../../src/modules/newsletter/newsletter.routes');
 
 const route = (router, path, method = 'get') => router.stack.find((l) => l.route?.path === path && l.route.methods[method]).route;
@@ -24,7 +25,7 @@ describe('Content platform switches', () => {
       expect(modes.TIER2_DEFAULTS[mode][key]).toBe(defaults[mode]);
       expect(typeof flags[key]).toBe('boolean');
     });
-    for (const key of ['gallery', 'newsletter', 'blogs']) {
+    for (const key of ['gallery', 'newsletter', 'blogs', 'pages']) {
       expect(flags[key]).toBe(true);
       expect(modes.isTier1Feature(key)).toBe(false);
       expect(modes.buildFeatures({ [key]: false }, mode)[key]).toBe(false);
@@ -34,6 +35,7 @@ describe('Content platform switches', () => {
     [galleries, '/public', 'gallery', 'get'], [galleries, '/public/:slug', 'gallery', 'get'],
     [blogs, '/posts', 'blogs', 'get'], [blogs, '/posts/:slug', 'blogs', 'get'],
     [blogs, '/categories', 'blogs', 'get'], [newsletter, '/subscribe', 'newsletter', 'post'],
+    [pages, '/public', 'pages', 'get'], [pages, '/public/:slug', 'pages', 'get'],
   ])('keeps public content anonymous when enabled and denies it when disabled', async (router, path, key, method) => {
     const gate = route(router, path, method).stack[0].handle;
     expect(gate.featureKey).toBe(key);
@@ -55,9 +57,17 @@ describe('Content platform switches', () => {
     [blogs, '/admin/posts', 'post', 'blogs'], [blogs, '/admin/posts/:id', 'put', 'blogs'],
     [blogs, '/admin/posts/:id', 'delete', 'blogs'], [blogs, '/categories', 'post', 'blogs'],
     [blogs, '/categories/:id', 'put', 'blogs'], [blogs, '/categories/:id', 'delete', 'blogs'],
+    [pages, '/', 'post', 'pages'], [pages, '/:id', 'put', 'pages'], [pages, '/:id', 'delete', 'pages'],
   ])('blocks authorized module writes when the %s feature is off', (router, path, method, key) => {
     const gates = route(router, path, method).stack.filter((layer) => layer.handle.featureGate);
     expect(gates.some((layer) => layer.handle.featureKey === key)).toBe(true);
+  });
+  it('keeps staff reads of saved pages available when Pages is off', () => {
+    for (const path of ['/', '/:id']) {
+      const stack = route(pages, path).stack;
+      expect(stack.some((layer) => layer.handle.featureGate)).toBe(false);
+      expect(stack.length).toBeGreaterThan(1);
+    }
   });
   it('rejects direct account resubscription and pauses the campaign scheduler when disabled', async () => {
     vi.spyOn(featureMiddleware, 'getResolvedFeature').mockResolvedValue(false);

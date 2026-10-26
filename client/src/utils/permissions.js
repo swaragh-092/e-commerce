@@ -28,7 +28,7 @@ export const ADMIN_ROUTE_PERMISSION_MAP = Object.freeze([
   { path: '/admin/orders', permissions: [PERMISSIONS.ORDERS_READ, PERMISSIONS.ORDERS_UPDATE_STATUS, PERMISSIONS.ORDERS_REFUND] },
   { path: '/admin/customers', permissions: [PERMISSIONS.CUSTOMERS_READ, PERMISSIONS.CUSTOMERS_MANAGE] },
   { path: '/admin/coupons', permissions: [PERMISSIONS.COUPONS_READ, PERMISSIONS.COUPONS_MANAGE] },
-  { path: '/admin/reviews', permissions: [PERMISSIONS.REVIEWS_READ, PERMISSIONS.REVIEWS_MODERATE, PERMISSIONS.REVIEWS_DELETE] },
+  { path: '/admin/reviews', feature: 'reviews', permissions: [PERMISSIONS.REVIEWS_READ, PERMISSIONS.REVIEWS_MODERATE, PERMISSIONS.REVIEWS_DELETE] },
   { path: '/admin/media', permissions: [PERMISSIONS.MEDIA_READ, PERMISSIONS.MEDIA_UPLOAD, PERMISSIONS.MEDIA_UPDATE, PERMISSIONS.MEDIA_DELETE] },
   { path: '/admin/gallery', feature: 'gallery', permissions: [PERMISSIONS.GALLERY_READ] },
   { path: '/admin/settings', permissions: [PERMISSIONS.SETTINGS_READ, PERMISSIONS.SETTINGS_MANAGE, PERMISSIONS.SETTINGS_ADVANCED] },
@@ -42,7 +42,7 @@ export const ADMIN_ROUTE_PERMISSION_MAP = Object.freeze([
   { path: '/admin/shipping', permissions: [PERMISSIONS.SETTINGS_MANAGE] },
   // Settings read permission allows view-only access, while notifications manage allows editing.
   { path: '/admin/email-templates', permissions: [PERMISSIONS.SETTINGS_READ, PERMISSIONS.NOTIFICATIONS_MANAGE] },
-  { path: '/admin/pages', permissions: [PERMISSIONS.PAGES_READ, PERMISSIONS.PAGES_MANAGE] },
+  { path: '/admin/pages', feature: 'pages', permissions: [PERMISSIONS.PAGES_READ, PERMISSIONS.PAGES_MANAGE] },
   { path: '/admin/blogs', feature: 'blogs', permissions: [PERMISSIONS.BLOGS_READ] },
   { path: '/admin/menus', permissions: [PERMISSIONS.MENUS_READ, PERMISSIONS.MENUS_MANAGE] },
   { path: '/admin/api-builder', feature: 'apiBuilder', permissions: [PERMISSIONS.API_BUILDER_READ, PERMISSIONS.API_BUILDER_MANAGE] },

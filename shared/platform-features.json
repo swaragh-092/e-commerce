@@ -145,6 +145,15 @@
       }
     },
     {
+      "key": "pages",
+      "label": "Pages",
+      "description": "Show custom content pages and their navigation links on the storefront, and page management in admin.",
+      "defaults": {
+        "ecommerce": true,
+        "catalog": true
+      }
+    },
+    {
       "key": "blogs",
       "label": "Blogs",
       "description": "Show published blog posts, categories, and blog navigation.",

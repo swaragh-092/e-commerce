@@ -95,7 +95,7 @@ const MENU_STRUCTURE = [
       { text: 'Customers', path: '/admin/customers', icon: <PeopleIcon />, permission: PERMISSIONS.CUSTOMERS_READ },
       { text: 'Coupons', path: '/admin/coupons', icon: <LocalOfferIcon />, permission: PERMISSIONS.COUPONS_READ, mode: 'ecommerce' },
       { text: 'Sale Labels', path: '/admin/sale-labels', icon: <LocalOfferIcon />, permission: PERMISSIONS.SETTINGS_READ, mode: 'ecommerce' },
-      { text: 'Reviews', path: '/admin/reviews', icon: <StarIcon />, permission: PERMISSIONS.REVIEWS_READ },
+      { text: 'Reviews', path: '/admin/reviews', icon: <StarIcon />, feature: 'reviews', permission: PERMISSIONS.REVIEWS_READ },
     ]
   },
   {
@@ -103,7 +103,7 @@ const MENU_STRUCTURE = [
     icon: <DescriptionIcon />,
     items: [
       { text: 'Media', path: '/admin/media', icon: <PhotoLibraryIcon />, permission: PERMISSIONS.MEDIA_READ },
-      { text: 'Pages', path: '/admin/pages', icon: <DescriptionIcon />, permission: PERMISSIONS.PAGES_READ },
+      { text: 'Pages', path: '/admin/pages', icon: <DescriptionIcon />, feature: 'pages', permission: PERMISSIONS.PAGES_READ },
       { text: 'Menu Builder', path: '/admin/menus', icon: <AccountTreeIcon />, permission: PERMISSIONS.MENUS_READ },
       { text: 'API Builder', path: '/admin/api-builder', icon: <ApiIcon />, feature: 'apiBuilder', permission: PERMISSIONS.API_BUILDER_READ },
       { text: 'SEO Overrides', path: '/admin/seo-overrides', icon: <PublicIcon />, feature: 'seo', permission: PERMISSIONS.SETTINGS_READ },

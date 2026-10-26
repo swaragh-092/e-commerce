@@ -8,6 +8,7 @@ const { authenticate } = require('../../middleware/auth.middleware');
 const { authorizeAnyPermission, authorizePermissions } = require('../../middleware/role.middleware');
 const { PERMISSIONS } = require('../../config/permissions');
 const { idParamSchema } = require('../../utils/common.validation');
+const { featureGate } = require('../../middleware/featureGate.middleware');
 
 const sanitizeHtml = require('sanitize-html');
 
@@ -37,8 +38,8 @@ const sanitizeBodyExceptContent = (req, res, next) => {
 /**
  * Public Routes
  */
-router.get('/public', pageController.getPublicPages);
-router.get('/public/:slug', pageController.getPageBySlug);
+router.get('/public', featureGate('pages'), pageController.getPublicPages);
+router.get('/public/:slug', featureGate('pages'), pageController.getPageBySlug);
 
 /**
  * Admin Routes
@@ -64,6 +65,7 @@ router.post(
     '/',
     authenticate,
     authorizePermissions(PERMISSIONS.PAGES_MANAGE),
+    featureGate('pages'),
     sanitizeBodyExceptContent,
     validate(pageValidation.createPageSchema),
     pageController.adminCreatePage
@@ -73,6 +75,7 @@ router.put(
     '/:id',
     authenticate,
     authorizePermissions(PERMISSIONS.PAGES_MANAGE),
+    featureGate('pages'),
     validate(idParamSchema, 'params'),
     sanitizeBodyExceptContent,
     validate(pageValidation.updatePageSchema),
@@ -84,6 +87,7 @@ router.delete(
     '/:id',
     authenticate,
     authorizePermissions(PERMISSIONS.PAGES_MANAGE),
+    featureGate('pages'),
     validate(idParamSchema, 'params'),
     pageController.adminDeletePage
 );

@@ -25,7 +25,9 @@ import {
 } from '../../services/adminService';
 import { useNotification } from '../../context/NotificationContext';
 import { useAuth } from '../../hooks/useAuth';
+import { useSettings } from '../../hooks/useSettings';
 import { PERMISSIONS } from '../../utils/permissions';
+import { isNotificationTemplateVisible } from '../../utils/notificationTemplateVisibility';
 
 // ── Human-readable template names ─────────────────────────────────────────────
 const TEMPLATE_LABELS = {
@@ -125,6 +127,7 @@ const EmailPreviewFrame = ({ html, loading }) => {
 const EmailTemplatesPage = () => {
   const { notify, confirm } = useNotification();
   const { hasPermission } = useAuth();
+  const { features } = useSettings();
   const canEdit = hasPermission(PERMISSIONS.NOTIFICATIONS_MANAGE);
 
   const [templates, setTemplates]           = useState([]);
@@ -161,8 +164,8 @@ const EmailTemplatesPage = () => {
   }, []);
 
   const channelTemplates = useMemo(
-    () => templates.filter(t => t.channel === activeChannel),
-    [templates, activeChannel]
+    () => templates.filter(t => t.channel === activeChannel && isNotificationTemplateVisible(t.name, features)),
+    [templates, activeChannel, features]
   );
 
   useEffect(() => {
@@ -178,7 +181,7 @@ const EmailTemplatesPage = () => {
   }, [activeChannel, channelTemplates, loading, selected]);
 
   // Sync draft when template changes (only if not yet dirty)
-  const currentTemplate = templates.find(t => t.name === selected && t.channel === activeChannel);
+  const currentTemplate = channelTemplates.find(t => t.name === selected);
   const draftKey = selected ? getDraftKey(activeChannel, selected) : null;
   useEffect(() => {
     if (!currentTemplate) return;
@@ -232,7 +235,7 @@ const EmailTemplatesPage = () => {
   // ── Live Preview ───────────────────────────────────────────────────────────
   useEffect(() => {
     const isPreviewTab = activeChannel === 'email' ? editorTab === 1 : editorTab === 0;
-    if (!isPreviewTab || !selected) return;
+    if (!isPreviewTab || !currentTemplate) return;
     const timer = setTimeout(() => {
       setPreviewLoading(true);
       previewEmailTemplate(selected, {
@@ -246,7 +249,7 @@ const EmailTemplatesPage = () => {
         .finally(() => setPreviewLoading(false));
     }, 500);
     return () => clearTimeout(timer);
-  }, [editorTab, cur.bodyHtml, cur.bodyText, cur.subject, selected, activeChannel]);
+  }, [editorTab, cur.bodyHtml, cur.bodyText, cur.subject, selected, activeChannel, currentTemplate]);
 
   // ── Save ───────────────────────────────────────────────────────────────────
   const handleSave = async () => {
@@ -348,7 +351,7 @@ const EmailTemplatesPage = () => {
         <Box>
           <Typography variant="h5" component="h1">Templates</Typography>
           <Typography variant="body2" color="text.secondary">
-            Customize transactional Email, SMS, and WhatsApp templates. Use <code style={{ background: 'rgba(0,0,0,0.06)', padding: '1px 5px', borderRadius: 4 }}>{'{{variable}}'}</code> for dynamic content.
+            Customize transactional Email, SMS, and WhatsApp templates for enabled store features. Use <code style={{ background: 'rgba(0,0,0,0.06)', padding: '1px 5px', borderRadius: 4 }}>{'{{variable}}'}</code> for dynamic content.
           </Typography>
         </Box>
         {!canEdit && (
@@ -366,7 +369,7 @@ const EmailTemplatesPage = () => {
                 value={activeChannel}
                 onChange={(_, value) => {
                   setActiveChannel(value);
-                  setEditorTab(value === 'email' ? 0 : 2);
+                  setEditorTab(value === 'email' ? 0 : 1);
                 }}
                 variant="fullWidth"
                 sx={{ minHeight: 36 }}
@@ -446,7 +449,7 @@ const EmailTemplatesPage = () => {
 
         {/* ── Right: Editor Panel ── */}
         <Grid item xs={12} md={9}>
-          {!selected ? (
+          {!currentTemplate ? (
             <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100%' }}>
               <Typography color="text.secondary">Select a template to edit</Typography>
             </Box>

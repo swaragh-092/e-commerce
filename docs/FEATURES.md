@@ -840,11 +840,14 @@ Each Tier 1 capability has two independent presentation switches on **Admin → 
 | `newsletter` | ✅ | ✅ | Newsletter signup and campaign delivery | OFF hides signup controls and the admin page, blocks new subscriptions, and pauses marketing jobs. Unsubscribe links, own preference reads, and authorized staff history/cancellation remain available. |
 | `gallery` | ✅ | ✅ | Showcase gallery albums | OFF hides gallery navigation/admin UI and denies public album APIs. Stored albums remain available to authorized staff APIs. |
 | `blogs` | ✅ | ✅ | Blog posts and categories | OFF hides blog navigation/admin UI, redirects public blog pages, and denies public blog APIs. Authorized staff retain API access to existing records. |
+| `pages` | ✅ | ✅ | Custom content pages | OFF hides Pages in admin and storefront navigation, redirects custom page routes, and blocks public page APIs and page writes. Stored pages and authorized staff API reads remain available. |
 | `multiCurrency` | ❌ | ❌ | Multiple currency support — **unimplemented** | No behaviour, no switch. Needs per-currency prices, formatting, and exchange-rate handling before it can be exposed. |
 | `socialLogin` | ❌ | ❌ | Social media login — **unimplemented** | No behaviour, no switch. Needs OAuth providers, account linking, and callback routes before it can be exposed. |
 
 > [!NOTE]
 > All working Tier 2 switches live on **Admin → Platform Features** (`/admin/features`), which is Superadmin-only. Settings panels for SEO and API Builder link there instead of duplicating the toggle. `multiCurrency` and `socialLogin` are deliberately not rendered as switches until their underlying behaviour exists.
+
+**Settings → Templates** lists templates for the enabled store capabilities in all three channels (Email, SMS, and WhatsApp). Catalog mode hides order, payment, delivery, and inventory templates; enquiry and newsletter templates follow their optional switches. Account/security templates remain available in both modes. Changing the mode replaces a hidden editor selection with an available template and preserves stored template content.
 
 ### Existing Records Policy When Features Are Disabled
 | Area | Customer Impact | Staff / Admin Capability |
