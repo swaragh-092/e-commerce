@@ -34,6 +34,8 @@ import PublicIcon from '@mui/icons-material/Public';
 import CssVarsPanel from './CssVarsPanel';
 import StoreDesignSummary from './StoreDesignSummary';
 import { INDIAN_STATES } from '../../../utils/indianStates';
+import { canUseSettingsDesigner, isSettingsSectionVisible } from '../../../utils/settingsVisibility';
+import { PERMISSIONS } from '../../../utils/permissions';
 
 export default function buildSettingsPanels(ctx) {
   const {
@@ -101,7 +103,8 @@ export default function buildSettingsPanels(ctx) {
           />
           {field('auth.loginNewsletterLabel', 'Sign in checkbox text', 'text', { inputProps: { maxLength: 200 } })}
         </>,
-        ['newsletter', 'register', 'sign in', 'checkbox', 'subscribe']
+        ['newsletter', 'register', 'sign in', 'checkbox', 'subscribe'],
+        { feature: 'newsletter' }
       ),
     ],
     // ─── 1: SEO ─────────────────────────────────────────────────────────
@@ -112,13 +115,13 @@ export default function buildSettingsPanels(ctx) {
         <>
           <Alert severity="info" sx={{ mb: 2 }}>
             The SEO feature switch now lives on the{' '}
-            <Button component={Link} to="/admin/features" size="small" sx={{ textTransform: 'none', fontWeight: 700, p: 0, minWidth: 0, verticalAlign: 'baseline' }}>
+            {ctx.isSuperAdmin ? <Button component={Link} to="/admin/features" size="small" sx={{ textTransform: 'none', fontWeight: 700, p: 0, minWidth: 0, verticalAlign: 'baseline' }}>
               Platform Features
-            </Button>{' '}
+            </Button> : 'Platform Features'}{' '}
             page. The settings below only apply while SEO is enabled.
           </Alert>
           <Divider sx={{ my: 2 }} />
-          <Box sx={{ opacity: bool(form['features.seo']) ? 1 : 0.5, pointerEvents: bool(form['features.seo']) ? 'auto' : 'none' }}>
+          <Box>
             <Alert severity="info" sx={{ mb: 2.5 }}>
               These settings act as the global fallback. Individual products and categories can have their own SEO overrides.
             </Alert>
@@ -151,7 +154,8 @@ export default function buildSettingsPanels(ctx) {
             </Box>
           </Box>
         </>,
-        ['seo', 'search', 'google', 'analytics', 'meta', 'canonical', 'toggle']
+        ['seo', 'search', 'google', 'analytics', 'meta', 'canonical', 'toggle'],
+        { feature: 'seo' }
       ),
     ],
     // ─── 2: Branding ────────────────────────────────────────────────────
@@ -162,7 +166,8 @@ export default function buildSettingsPanels(ctx) {
         <>
           <StoreDesignSummary scope="global" form={form} homepageSections={homepageSections} />
         </>,
-        ['theme', 'colors', 'dark mode', 'primary', 'secondary', 'preset', 'font', 'radius', 'typography', 'shape', 'header', 'button', 'card']
+        ['theme', 'colors', 'dark mode', 'primary', 'secondary', 'preset', 'font', 'radius', 'typography', 'shape', 'header', 'button', 'card'],
+        { designer: true }
       ),
       section(
         'Storefront Card Styles',
@@ -170,7 +175,8 @@ export default function buildSettingsPanels(ctx) {
         <>
           <StoreDesignSummary scope="cards" form={form} homepageSections={homepageSections} />
         </>,
-        ['product card', 'category card', 'promo card', 'brand card', 'trust card', 'component styles', 'template card', 'card editor', 'layout']
+        ['product card', 'category card', 'promo card', 'brand card', 'trust card', 'component styles', 'template card', 'card editor', 'layout'],
+        { designer: true }
       ),
       section(
         'Announcement Bar',
@@ -178,21 +184,23 @@ export default function buildSettingsPanels(ctx) {
         <>
           <StoreDesignSummary scope="announcement" form={form} homepageSections={homepageSections} />
         </>,
-        ['announcement', 'banner', 'top bar']
+        ['announcement', 'banner', 'top bar'],
+        { designer: true }
       ),
     ],
     // ─── 3: Layout ──────────────────────────────────────────────────────
     [
       section(
         'Header & Navigation',
-        'Edit the visual header layout in Store Designer and manage published links in Menu Builder.',
+        canUseSettingsDesigner(ctx) ? 'Edit the visual header layout in Store Designer and manage published links in Menu Builder.' : 'Manage published navigation links in Menu Builder.',
         <>
           <StoreDesignSummary scope="header" form={form} homepageSections={homepageSections} />
-          <Button component={Link} to="/admin/menus" variant="outlined" size="small" sx={{ mt: 2 }}>
+          {ctx.hasPermission?.(PERMISSIONS.MENUS_READ) && <Button component={Link} to="/admin/menus" variant="outlined" size="small" sx={{ mt: 2 }}>
             Manage published menu links
-          </Button>
+          </Button>}
         </>,
-        ['header', 'nav', 'navigation', 'sticky']
+        ['header', 'nav', 'navigation', 'sticky'],
+        { navigation: true }
       ),
       section(
         'Footer',
@@ -200,7 +208,8 @@ export default function buildSettingsPanels(ctx) {
         <>
           <StoreDesignSummary scope="footer" form={form} homepageSections={homepageSections} />
         </>,
-        ['footer', 'links', 'social', 'contact']
+        ['footer', 'links', 'social', 'contact'],
+        { designer: true }
       ),
     ],
     // ─── 4: Homepage ────────────────────────────────────────────────────
@@ -211,7 +220,8 @@ export default function buildSettingsPanels(ctx) {
         <>
           <StoreDesignSummary scope="homepage" form={form} homepageSections={homepageSections} />
         </>,
-        ['hero', 'homepage banner', 'headline', 'sections', 'promo', 'value props', 'store designer']
+        ['hero', 'homepage banner', 'headline', 'sections', 'promo', 'value props', 'store designer'],
+        { designer: true }
       ),
     ],
     // ─── 5: Catalog ─────────────────────────────────────────────────────
@@ -224,17 +234,19 @@ export default function buildSettingsPanels(ctx) {
     buildInvoicePanel(ctx),
     // ─── 9: Advanced ────────────────────────────────────────────────────
     buildAdvancedPanel(ctx),
-  ];
+  ].map((sections) => sections.filter((item) => isSettingsSectionVisible(item.requirements, ctx)));
 }
 
-function buildCatalogPanel({ form, set, section, field, toggle, imageField }) {
+function buildCatalogPanel(ctx) {
+  const { form, set, section, field, toggle, imageField, adminVisibility = {} } = ctx;
+  const canDesign = canUseSettingsDesigner(ctx);
   return [
     section(
       'Catalog Listing',
-      'Edit collection layout in Store Designer and keep catalog operations here.',
+      canDesign ? 'Edit collection layout in Store Designer and keep catalog operations here.' : 'Configure catalog sorting, page sizes, and stock thresholds.',
       <>
         <StoreDesignSummary scope="page" page="collection" form={form} />
-        <Divider sx={{ my: 2 }} />
+        {canDesign && <Divider sx={{ my: 2 }} />}
         <Typography variant="subtitle2" fontWeight={800} sx={{ mb: 1 }}>Catalog Operations</Typography>
         <FormControl fullWidth size="small" sx={{ mb: 2 }}>
           <InputLabel>Default Sort Order</InputLabel>
@@ -246,7 +258,7 @@ function buildCatalogPanel({ form, set, section, field, toggle, imageField }) {
           </Select>
         </FormControl>
         {field('catalog.defaultPageSize', 'Products per page (e.g. 12, 20, 40)', 'number')}
-        {field('catalog.priceRangeMax', 'Max price on filter slider (e.g. 2000)', 'number')}
+        {adminVisibility.pricing && field('catalog.priceRangeMax', 'Max price on filter slider (e.g. 2000)', 'number')}
         {field('catalog.lowStockThreshold', 'Low stock warning threshold (products with qty ≤ this are flagged)', 'number')}
       </>,
       ['catalog', 'sort', 'filters', 'grid', 'category depth', 'icon', 'low stock', 'threshold']
@@ -257,7 +269,8 @@ function buildCatalogPanel({ form, set, section, field, toggle, imageField }) {
       <>
         <StoreDesignSummary scope="page" page="product" form={form} />
       </>,
-      ['product page', 'wishlist', 'reviews', 'stock badge', 'sku', 'image alignment', 'gallery thumbnails']
+      ['product page', 'wishlist', 'reviews', 'stock badge', 'sku', 'image alignment', 'gallery thumbnails'],
+      { designer: true, page: 'product' }
     ),
     section(
       'Brands Page',
@@ -265,7 +278,8 @@ function buildCatalogPanel({ form, set, section, field, toggle, imageField }) {
       <>
         <StoreDesignSummary scope="page" page="brand" form={form} />
       </>,
-      ['brands', 'brands page', 'brand grid', 'card layout', 'hero', 'featured']
+      ['brands', 'brands page', 'brand grid', 'card layout', 'hero', 'featured'],
+      { designer: true, page: 'brand' }
     ),
     section(
       'Category Pages',
@@ -273,7 +287,8 @@ function buildCatalogPanel({ form, set, section, field, toggle, imageField }) {
       <>
         <StoreDesignSummary scope="page" page="category" form={form} />
       </>,
-      ['category page', 'categories', 'layout']
+      ['category page', 'categories', 'layout'],
+      { designer: true, page: 'category' }
     ),
     section(
       'Blog & Content Pages',
@@ -281,7 +296,8 @@ function buildCatalogPanel({ form, set, section, field, toggle, imageField }) {
       <>
         <StoreDesignSummary scope="page" page="blog" form={form} />
       </>,
-      ['blog', 'content', 'article', 'layout']
+      ['blog', 'content', 'article', 'layout'],
+      { designer: true, page: 'blog' }
     ),
     section(
       'SKU Automation',
@@ -349,7 +365,8 @@ function buildCheckoutPanel({ form, set, section, field, toggle, currSymbol, ena
       'Shipping',
       'Manage customer delivery fees, delivery coverage, couriers and packaging in one place.',
       <Button component={Link} to="/admin/shipping" variant="outlined">Manage shipping</Button>,
-      ['shipping', 'free shipping', 'delivery', 'pincode', 'serviceable']
+      ['shipping', 'free shipping', 'delivery', 'pincode', 'serviceable'],
+      { permission: PERMISSIONS.SETTINGS_MANAGE }
     ));
   }
   if (adminVisibility.checkout !== false || adminVisibility.cart !== false) {
@@ -411,7 +428,8 @@ function buildCheckoutPanel({ form, set, section, field, toggle, currSymbol, ena
       <>
         <StoreDesignSummary scope="page" page="cart" form={form} />
       </>,
-      ['cart', 'layout', 'cross sells', 'empty state']
+      ['cart', 'layout', 'cross sells', 'empty state'],
+      { designer: true, page: 'cart' }
     ));
   }
   sections.push(section(
@@ -420,7 +438,8 @@ function buildCheckoutPanel({ form, set, section, field, toggle, currSymbol, ena
       <>
         <StoreDesignSummary scope="page" page="account" form={form} />
       </>,
-      ['account', 'customer', 'dashboard', 'orders']
+      ['account', 'customer', 'dashboard', 'orders'],
+      { designer: true, page: 'account' }
     ));
   if (adminVisibility.payments !== false) {
     sections.push(section(
@@ -501,7 +520,8 @@ function buildInvoicePanel({ form, set, section, field, toggle, imageField }) {
   ];
 }
 
-function buildAdvancedPanel({ form, set, section, field, toggle, imageField, bool, dashboardOrder, handleDashboardOrderDragEnd, applyDashboardProfile, DASHBOARD_ORDER_WIDGETS, DASHBOARD_PROFILES }) {
+function buildAdvancedPanel(ctx) {
+  const { form, set, section, field, toggle, imageField, bool, dashboardOrder, handleDashboardOrderDragEnd, applyDashboardProfile, DASHBOARD_ORDER_WIDGETS, DASHBOARD_PROFILES } = ctx;
   return [
     section(
       'AI Product Assistant',
@@ -545,7 +565,8 @@ function buildAdvancedPanel({ form, set, section, field, toggle, imageField, boo
           </Grid>
         </Grid>
       </>,
-      ['ai', 'assistant', 'openai', 'openrouter', 'api key', 'provider', 'model']
+      ['ai', 'assistant', 'openai', 'openrouter', 'api key', 'provider', 'model'],
+      { feature: 'productAssistant' }
     ),
     section(
       'API Builder',
@@ -553,13 +574,14 @@ function buildAdvancedPanel({ form, set, section, field, toggle, imageField, boo
       <>
         <Alert severity="info">
           The API Builder feature switch now lives on the{' '}
-          <Button component={Link} to="/admin/features" size="small" sx={{ textTransform: 'none', fontWeight: 700, p: 0, minWidth: 0, verticalAlign: 'baseline' }}>
+          {ctx.isSuperAdmin ? <Button component={Link} to="/admin/features" size="small" sx={{ textTransform: 'none', fontWeight: 700, p: 0, minWidth: 0, verticalAlign: 'baseline' }}>
             Platform Features
-          </Button>{' '}
+          </Button> : 'Platform Features'}{' '}
           page. When disabled, saved custom API URLs stop responding and the admin builder is hidden from the sidebar.
         </Alert>
       </>,
-      ['api builder', 'custom api', 'dynamic api', 'public api']
+      ['api builder', 'custom api', 'dynamic api', 'public api'],
+      { feature: 'apiBuilder' }
     ),
     section(
       'Custom Code / Code Injection',
@@ -591,7 +613,7 @@ function buildAdvancedPanel({ form, set, section, field, toggle, imageField, boo
           InputProps={{ sx: { fontFamily: 'monospace', fontSize: '0.85rem' } }}
           helperText="HTML or JS snippets injected right before the closing </body> tag."
         />
-        <Alert
+        {canUseSettingsDesigner(ctx) && <Alert
           severity="info"
           sx={{ mb: 2.5 }}
           action={(
@@ -601,9 +623,9 @@ function buildAdvancedPanel({ form, set, section, field, toggle, imageField, boo
           )}
         >
           Custom CSS is part of the visual design system and is edited in Store Designer. Scripts and integrations remain here.
-        </Alert>
+        </Alert>}
         {/* Live reference of all --store-* CSS custom properties */}
-        <CssVarsPanel />
+        {canUseSettingsDesigner(ctx) && <CssVarsPanel />}
       </>,
       ['custom css', 'css injection', 'scripts', 'code injection', 'head scripts', 'body scripts']
     ),
@@ -616,7 +638,8 @@ function buildAdvancedPanel({ form, set, section, field, toggle, imageField, boo
         {imageField('seo.ogImage', 'Default OG / Social Share Image')}
         {field('seo.googleAnalyticsId', 'Google Analytics ID (e.g. G-XXXXXXXX)')}
       </>,
-      ['seo', 'analytics', 'meta description', 'og image']
+      ['seo', 'analytics', 'meta description', 'og image'],
+      { feature: 'seo' }
     ),
     section(
       'Dashboard',

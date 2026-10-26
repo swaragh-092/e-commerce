@@ -848,6 +848,8 @@ Each Tier 1 capability has two independent presentation switches on **Admin → 
 > [!NOTE]
 > All working Tier 2 switches live on **Admin → Platform Features** (`/admin/features`), which is Superadmin-only. Settings panels for SEO and API Builder link there instead of duplicating the toggle. `multiCurrency` and `socialLogin` are deliberately not rendered as switches until their underlying behaviour exists.
 
+General Settings hides panels and editor links when their platform feature or required permission is unavailable, including Store Designer, optional page editors, newsletter controls, AI configuration, and SEO. Tabs with no available panels are hidden. General Settings **Save All** preserves store mode, feature flags, and visibility switches; those are managed only through Platform Features.
+
 **Settings → Templates** lists templates for the enabled store capabilities in all three channels (Email, SMS, and WhatsApp). Catalog mode hides order, payment, delivery, and inventory templates; enquiry and newsletter templates follow their optional switches. Account/security templates remain available in both modes. Changing the mode replaces a hidden editor selection with an available template and preserves stored template content.
 
 ### Existing Records Policy When Features Are Disabled

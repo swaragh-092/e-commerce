@@ -2,6 +2,9 @@ import { Alert, Box, Button, Chip, Stack, Typography } from '@mui/material';
 import OpenInNewIcon from '@mui/icons-material/OpenInNew';
 import { Link } from 'react-router-dom';
 import { DESIGNER_TARGETS, getStoreDesignSummary } from '../../../utils/storeDesign';
+import { useSettings } from '../../../hooks/useSettings';
+import { useAuth } from '../../../hooks/useAuth';
+import { canUseSettingsDesigner } from '../../../utils/settingsVisibility';
 
 const SCOPE_CONFIG = {
   global: {
@@ -116,6 +119,9 @@ const SummaryChip = ({ label, value, color }) => (
 );
 
 const StoreDesignSummary = ({ scope = 'global', page, form = {}, homepageSections }) => {
+  const { features, visibility } = useSettings();
+  const { hasPermission } = useAuth();
+  if (!canUseSettingsDesigner({ features, hasPermission, adminVisibility: { cart: features?.cart === true && visibility?.admin?.cart === true } }, page)) return null;
   const config = SCOPE_CONFIG[scope] || SCOPE_CONFIG.global;
   const summary = getStoreDesignSummary(form, homepageSections);
   const pageConfig = PAGE_CONFIG[page];
