@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
-import { useParams, useNavigate, Link } from 'react-router-dom';
+import { useParams, useNavigate, useLocation, Link } from 'react-router-dom';
 import {
   Box,
   Typography,
@@ -221,6 +221,8 @@ const getAttributeRowValue = (row) => (
 const ProductEditPage = () => {
   const { id } = useParams();
   const navigate = useNavigate();
+  const location = useLocation();
+  const returnTo = location.state?.returnTo || '/admin/products';
   const { notify, confirm } = useNotification();
   const { settings } = useSettings();
   const { currency, symbol, formatPrice } = useCurrency();
@@ -399,10 +401,10 @@ const ProductEditPage = () => {
         severity: 'warning',
       });
       if (confirmed) {
-        navigate('/admin/products');
+        navigate(returnTo);
       }
     } else {
-      navigate('/admin/products');
+      navigate(returnTo);
     }
   };
 
@@ -416,10 +418,10 @@ const ProductEditPage = () => {
         severity: 'warning',
       });
       if (confirmed) {
-        navigate('/admin/products');
+        navigate(returnTo);
       }
     } else {
-      navigate('/admin/products');
+      navigate(returnTo);
     }
   };
 
