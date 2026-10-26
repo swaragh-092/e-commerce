@@ -4,7 +4,8 @@ import {
   FormControl, InputLabel, Select, MenuItem, Stack, Tooltip,
   Avatar, Dialog, DialogTitle, DialogContent, DialogActions,
   DialogContentText, InputAdornment, Paper, FormHelperText,
-  CircularProgress, useMediaQuery,
+  CircularProgress,
+  useMediaQuery,
 } from '@mui/material';
 import { DataGrid } from '@mui/x-data-grid';
 import {
@@ -21,7 +22,7 @@ import { getCategoryTree } from '../../services/categoryService';
 import { getSaleLabels } from '../../services/adminService';
 import { getMediaUrl } from '../../utils/media';
 import { getVariantOptionLabel } from '../../utils/variantOptions';
-import { useCurrency, useSettings, useFeature } from '../../hooks/useSettings';
+import { useCurrency, useSettings, useFeature, useFeatureVisible } from '../../hooks/useSettings';
 import { useNotification } from '../../context/NotificationContext';
 import { formatSaleDateTime, isEndingSoon } from '../../utils/pricing';
 import { useAuth } from '../../hooks/useAuth';
@@ -109,17 +110,18 @@ const ProductsManagePage = () => {
   const location = useLocation();
   const [searchParams, setSearchParams] = useSearchParams();
   const returnTo = `${location.pathname}${location.search}`;
-  const isCompactScreen = useMediaQuery('(max-width: 1440px)');
-  const isTabletScreen = useMediaQuery('(max-width: 1024px)');
-  const isSmallScreen = useMediaQuery((theme) => theme.breakpoints.down('sm'));
   const { symbol, formatPrice } = useCurrency();
   const { settings } = useSettings();
   const { notify } = useNotification();
   const { hasPermission } = useAuth();
-  const pricingEnabled = useFeature('pricing');
+  const isCompactScreen = useMediaQuery('(max-width: 1440px)');
+  const isTabletScreen = useMediaQuery('(max-width: 1024px)');
+  const isSmallScreen = useMediaQuery((theme) => theme.breakpoints.down('sm'));
+  const pricingEnabled = useFeatureVisible('pricing', 'admin');
+  const pricingCapability = useFeature('pricing');
   // Stock tracking is only meaningful in ecommerce mode (cart Tier-1 feature).
   // In catalog mode cart=false, so we hide stock column + stepper entirely.
-  const cartEnabled = useFeature('cart');
+  const cartEnabled = useFeatureVisible('cart', 'admin');
   const sales = settings?.sales || {};
   const lowStockThreshold = normalizeInventoryThreshold(settings?.catalog?.lowStockThreshold);
   const canCreateProducts = hasPermission(PERMISSIONS.PRODUCTS_CREATE);
@@ -143,6 +145,19 @@ const ProductsManagePage = () => {
   const [saleLabels, setSaleLabels] = useState([]);
   // ?stock=low from dashboard → show only items with qty ≤ lowStockThreshold
   const [lowStockOnly, setLowStockOnly] = useState(() => searchParams.get('stock') === 'low');
+
+  // Keep dashboard deep links in sync when the product route stays mounted
+  // while its query string changes (for example, switching dashboard filters).
+  useEffect(() => {
+    const nextStatus = searchParams.get('status') || '';
+    const nextLowStockOnly = searchParams.get('stock') === 'low';
+    const nextSearch = searchParams.get('search') || '';
+    setStatus((current) => current === nextStatus ? current : nextStatus);
+    setLowStockOnly((current) => current === nextLowStockOnly ? current : nextLowStockOnly);
+    setSearch((current) => current === nextSearch ? current : nextSearch);
+    setSearchInput((current) => current === nextSearch ? current : nextSearch);
+    setPaginationModel((current) => current.page === 0 ? current : { ...current, page: 0 });
+  }, [searchParams]);
 
   // Bulk selection
   const [selectedIds, setSelectedIds] = useState([]);
@@ -348,16 +363,16 @@ const ProductsManagePage = () => {
         name: editDialog.name.trim(),
         slug: editDialog.slug.trim(),
         ...(cartEnabled && !hasVariants && { quantity: parseInt(editDialog.quantity, 10) || 0 }),
-        price: parseFloat(editDialog.price),
+        ...(pricingCapability && { price: parseFloat(editDialog.price) }),
         ...getProductStorefrontFields(editDialog.storefrontState),
-        ...(editDialog.saleEnabled && editDialog.salePrice !== ''
+        ...(pricingEnabled ? (editDialog.saleEnabled && editDialog.salePrice !== ''
           ? {
               salePrice: parseFloat(editDialog.salePrice),
               saleStartAt: toIsoOrNull(editDialog.saleStartAt),
               saleEndAt: toIsoOrNull(editDialog.saleEndAt),
               saleLabel: editDialog.saleLabel || null,
             }
-          : { salePrice: null, saleStartAt: null, saleEndAt: null, saleLabel: null }),
+          : { salePrice: null, saleStartAt: null, saleEndAt: null, saleLabel: null }) : {}),
       };
 
       await updateProduct(editDialog.row.id, payload);
@@ -367,8 +382,8 @@ const ProductsManagePage = () => {
         ...payload,
         quantity: newTotalQuantity,
         variants: updatedVariants,
-        effectivePrice: payload.salePrice ?? payload.price,
-        isSaleActive: !!payload.salePrice && (!payload.saleStartAt || new Date(payload.saleStartAt) <= new Date()) && (!payload.saleEndAt || new Date(payload.saleEndAt) >= new Date()),
+        effectivePrice: pricingEnabled ? (payload.salePrice ?? payload.price) : r.effectivePrice,
+        isSaleActive: pricingEnabled ? (!!payload.salePrice && (!payload.saleStartAt || new Date(payload.saleStartAt) <= new Date()) && (!payload.saleEndAt || new Date(payload.saleEndAt) >= new Date())) : r.isSaleActive,
       } : r));
 
       notify('Product and stock updated successfully.', 'success');
@@ -454,7 +469,7 @@ const ProductsManagePage = () => {
       })
       .catch(console.error)
       .finally(() => setLoading(false));
-  }, [paginationModel, search, status, saleFilter, categoryFilter, sortModel, lowStockOnly]);
+  }, [paginationModel, search, status, saleFilter, categoryFilter, sortModel, lowStockOnly, lowStockThreshold]);
 
   useEffect(() => {
     fetchProducts();
@@ -588,8 +603,8 @@ const ProductsManagePage = () => {
 
   const editPriceValue = Number(editDialog.price);
   const editSalePriceValue = editDialog.salePrice === '' ? null : Number(editDialog.salePrice);
-  const hasInvalidPrice = editDialog.open && (!Number.isFinite(editPriceValue) || editPriceValue < 0);
-  const hasInvalidSalePrice = editDialog.open && editDialog.saleEnabled && (
+  const hasInvalidPrice = pricingCapability && editDialog.open && (editDialog.price === '' || !Number.isFinite(editPriceValue) || editPriceValue <= 0);
+  const hasInvalidSalePrice = pricingEnabled && editDialog.open && editDialog.saleEnabled && (
     editDialog.salePrice === '' ||
     !Number.isFinite(editSalePriceValue) ||
     editSalePriceValue < 0 ||
@@ -641,7 +656,7 @@ const ProductsManagePage = () => {
     allVariants.reduce((sum, v) => sum + (Number(v.reservedQty) || 0), 0)
   );
   const liveVariantAvailableStock = Math.max(0, liveVariantTotalStock - liveVariantReservedStock);
-  const hasInvalidSaleDates = Boolean(editDialog.open && editDialog.saleEnabled && editDialog.saleStartAt && editDialog.saleEndAt && new Date(editDialog.saleEndAt) <= new Date(editDialog.saleStartAt));
+  const hasInvalidSaleDates = Boolean(pricingEnabled && editDialog.open && editDialog.saleEnabled && editDialog.saleStartAt && editDialog.saleEndAt && new Date(editDialog.saleEndAt) <= new Date(editDialog.saleStartAt));
   const bulkSaleValue = Number(bulkSaleDialog.value);
   const hasInvalidBulkSale = bulkSaleDialog.mode === 'apply' && (
     !Number.isFinite(bulkSaleValue) ||
@@ -682,11 +697,31 @@ const ProductsManagePage = () => {
       minWidth: isSmallScreen ? 112 : isTabletScreen ? 180 : 200,
       sortable: true,
       renderCell: ({ row }) => (
-        <Box sx={{ py: 1, overflow: 'hidden' }}>
-          <Typography variant="body2" fontWeight={600} noWrap lineHeight={1.4}>
+        <Box
+          component={canUpdateProducts ? Link : 'div'}
+          to={canUpdateProducts ? `/admin/products/${row.id}/edit` : undefined}
+          state={canUpdateProducts ? { returnTo } : undefined}
+          aria-label={canUpdateProducts ? `Edit ${row.name}` : undefined}
+          title={canUpdateProducts ? `Edit ${row.name}` : undefined}
+          onClick={canUpdateProducts ? (event) => event.stopPropagation() : undefined}
+          sx={{
+            py: 1,
+            width: '100%',
+            height: '100%',
+            display: 'flex',
+            flexDirection: 'column',
+            justifyContent: 'center',
+            overflow: 'hidden',
+            color: 'inherit',
+            textDecoration: 'none',
+            '&:hover .product-name-primary': { color: 'primary.main', textDecoration: 'underline' },
+            '&:focus-visible': { outline: '2px solid', outlineColor: 'primary.main', outlineOffset: -2 },
+          }}
+        >
+          <Typography className="product-name-primary" variant="body2" fontWeight={600} noWrap lineHeight={1.4}>
             {row.name}
           </Typography>
-          <Typography variant="caption" color="text.secondary">
+          <Typography variant="caption" color="text.secondary" noWrap>
             {row.sku ? `SKU: ${row.sku}` : <em style={{ opacity: 0.4 }}>No SKU</em>}
           </Typography>
         </Box>
@@ -699,8 +734,30 @@ const ProductsManagePage = () => {
       width: 160,
       sortable: true,
       renderCell: ({ row }) => (
-        <Box sx={{ py: 1 }}>
+        <Box
+          component={canUpdateProducts ? Link : 'div'}
+          to={canUpdateProducts ? `/admin/products/${row.id}/edit` : undefined}
+          state={canUpdateProducts ? { returnTo } : undefined}
+          aria-label={canUpdateProducts ? `Edit pricing and tax for ${row.name}` : undefined}
+          title={canUpdateProducts ? `Edit ${row.name}` : undefined}
+          onClick={canUpdateProducts ? (event) => event.stopPropagation() : undefined}
+          sx={{
+            py: 1,
+            display: 'flex',
+            flexDirection: 'column',
+            justifyContent: 'center',
+            width: '100%',
+            height: '100%',
+            pointerEvents: canUpdateProducts ? 'auto' : 'none',
+            color: 'inherit',
+            textDecoration: 'none',
+            borderRadius: 0.5,
+            '&:hover .product-price-primary': { textDecoration: 'underline', color: 'primary.main' },
+            '&:focus-visible': { outline: '2px solid', outlineColor: 'primary.main', outlineOffset: 2 },
+          }}
+        >
           <Typography
+            className="product-price-primary"
             variant="body2"
             fontWeight={700}
             color={pricingEnabled && row.isSaleActive ? 'error.main' : 'text.primary'}
@@ -736,13 +793,15 @@ const ProductsManagePage = () => {
 
         return (
           <Box sx={{ py: 1 }}>
-            <Stack direction="row" spacing={0.5} sx={{ mb: 0.25, flexWrap: 'wrap' }}>
-              <Chip
-                size="small"
-                label={row.saleStatus === 'active' ? 'Active' : row.saleStatus === 'scheduled' ? 'Scheduled' : 'Expired'}
-                color={row.saleStatus === 'active' ? 'error' : row.saleStatus === 'scheduled' ? 'warning' : 'default'}
-              />
-              {!!row.discountPercent && <Chip size="small" variant="outlined" label={`${row.discountPercent}% OFF`} />}
+            <Stack spacing={0.5} sx={{ mb: 0.25, alignItems: 'flex-start' }}>
+              <Stack direction="row" spacing={0.5}>
+                <Chip
+                  size="small"
+                  label={row.saleStatus === 'active' ? 'Active' : row.saleStatus === 'scheduled' ? 'Scheduled' : 'Expired'}
+                  color={row.saleStatus === 'active' ? 'error' : row.saleStatus === 'scheduled' ? 'warning' : 'default'}
+                />
+                {!!row.discountPercent && <Chip size="small" variant="outlined" label={`${row.discountPercent}% OFF`} />}
+              </Stack>
               {endingSoon && <Chip size="small" color="warning" label="Ending Soon" />}
             </Stack>
             {row.saleLabel && (
@@ -758,11 +817,6 @@ const ProductsManagePage = () => {
             {row.saleEndAt && (
               <Typography variant="caption" color="text.secondary" sx={{ display: 'block' }} noWrap>
                 Ends {formatSaleDateTime(row.saleEndAt)}
-              </Typography>
-            )}
-            {endingSoon && (
-              <Typography variant="caption" color="warning.main" sx={{ display: 'block', fontWeight: 700 }} noWrap>
-                Inside ending-soon window
               </Typography>
             )}
           </Box>
@@ -865,6 +919,7 @@ const ProductsManagePage = () => {
       ),
     },
   ].filter(col => {
+    if (col.field === 'price' && !pricingEnabled) return false;
     if (col.field === 'saleMeta' && !pricingEnabled) return false;
     // Hide the Stock column in catalog mode — inventory is irrelevant without a cart
     if (col.field === 'quantity' && !cartEnabled) return false;
@@ -1146,22 +1201,22 @@ const ProductsManagePage = () => {
       )}
 
       {/* ── Data Grid ── */}
-      <Box sx={{
+      <Box sx={{ 
         bgcolor: 'background.paper', 
         borderRadius: 2, 
         border: '1px solid', 
         borderColor: 'divider',
-        width: '100%',
         minWidth: 0,
+        width: '100%',
       }}>
         <DataGrid
           rows={rows}
           columns={columns}
           columnVisibilityModel={{
             images: !isCompactScreen,
+            price: pricingEnabled && !isTabletScreen,
             saleMeta: pricingEnabled && !isCompactScreen,
             quantity: cartEnabled && !isCompactScreen,
-            price: pricingEnabled && !isTabletScreen,
             storefrontState: !isTabletScreen,
           }}
           rowCount={total}
@@ -1505,7 +1560,7 @@ const ProductsManagePage = () => {
               </Button>
             </Box>
             )}
-            <TextField
+            {pricingCapability && <TextField
               label="MRP"
               type="number"
               size="small"
@@ -1518,7 +1573,23 @@ const ProductsManagePage = () => {
               inputProps={{ step: '0.01', min: 0 }}
               value={editDialog.price}
               onChange={(e) => setEditDialog((s) => ({ ...s, price: e.target.value }))}
-            />
+            />}
+            {pricingEnabled && editDialog.row?.id && (
+              <Box sx={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', justifyContent: 'space-between', gap: 1, mt: -1.25 }}>
+                <Typography variant="caption" color="text.secondary">
+                  Tax rates are managed with pricing in the full editor.
+                </Typography>
+                <Button
+                  component={Link}
+                  to={`/admin/products/${editDialog.row.id}/edit`}
+                  target="_blank"
+                  rel="noreferrer"
+                  size="small"
+                >
+                  Open Pricing &amp; Tax
+                </Button>
+              </Box>
+            )}
             {pricingEnabled && (
               <>
                 <Stack direction="row" justifyContent="space-between" alignItems="center" sx={{ pt: 0.5 }}>

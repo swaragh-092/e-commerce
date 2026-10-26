@@ -6,6 +6,12 @@
         "currencySymbol": "$",
         "locale": "en-US"
     },
+    "messaging": {
+        "enquiryCustomerAcknowledgementEnabled": true
+    },
+    "orders": {
+        "cancellationPolicy": "You can cancel an order before a shipment is created. If a shipment has already been created, use the return or replacement options after delivery. If your payment was captured, the store will review and process the refund separately; cancelling does not issue an automatic refund. Refund posting times depend on your payment provider."
+    },
     "theme": {
         "primaryColor": "#0F766E",
         "secondaryColor": "#F97316",
@@ -24,7 +30,8 @@
         "headerStyle": "glass",
         "buttonStyle": "solid",
         "cardStyle": "elevated",
-        "backgroundStyle": "softGradient"
+        "backgroundStyle": "softGradient",
+        "cancelButtonColor": "#DC3545"
     },
     "sectionPresets": {
         "hero": {},
@@ -114,6 +121,20 @@
         "apiBuilder": true,
         "productAssistant": true
     },
+    "visibility": {
+        "adminPricing": true,
+        "adminCart": true,
+        "adminCheckout": true,
+        "adminOrders": true,
+        "adminPayments": true,
+        "adminShipping": true,
+        "storefrontPricing": true,
+        "storefrontCart": true,
+        "storefrontCheckout": true,
+        "storefrontOrders": true,
+        "storefrontPayments": true,
+        "storefrontShipping": true
+    },
     "payments": {
         "razorpayEnabled": true,
         "stripeEnabled": false,
@@ -178,7 +199,11 @@
         "registerHeading": "Start Your Shopping Story",
         "registerDescription": "Create an account to save favorites, track orders and checkout faster.",
         "registerFormTitle": "Create Account",
-        "registerFormSubtitle": "Join us today. Please enter your details."
+        "registerFormSubtitle": "Join us today. Please enter your details.",
+        "registerNewsletterEnabled": true,
+        "registerNewsletterLabel": "Email me offers, new products, and store updates.",
+        "loginNewsletterEnabled": true,
+        "loginNewsletterLabel": "Email me offers, new products, and store updates."
     },
     "sku": {
         "prefix": "",

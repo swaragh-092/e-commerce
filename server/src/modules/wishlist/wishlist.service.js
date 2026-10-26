@@ -12,9 +12,11 @@ const {
   VariantOption,
   AttributeTemplate,
   AttributeValue,
+  Media,
 } = require('../index');
 const AppError = require('../../utils/AppError');
 const { getVariantUnitPrice, serializeProductPricing, serializeVariantPricing } = require('../product/product.pricing');
+const { isBrandVisible, stripBrandFields } = require('../../utils/brandVisibility');
 
 const ATTRIBUTE_TEMPLATE_FIELDS = ['id', 'name', 'slug', 'sortOrder', 'displayType', 'valueType', 'unit'];
 const ATTRIBUTE_VALUE_FIELDS = ['id', 'value', 'slug', 'sortOrder', 'displayLabel', 'swatchColor', 'imageUrl', 'unitLabel', 'metadata'];
@@ -35,7 +37,10 @@ const variantInclude = {
   model: ProductVariant,
   as: 'variant',
   required: false,
-  include: [{
+  include: [{ model: Media, as: 'media', required: false }, {
+    model: ProductImage, as: 'images', required: false,
+    include: [{ model: Media, as: 'media', required: false }],
+  }, {
     model: VariantOption,
     as: 'options',
     include: [
@@ -84,7 +89,7 @@ const addWishlistItemToCart = async (userId, sessionId, item, transaction) => {
 
   if (item.variantId) {
     variant = await ProductVariant.findOne({ where: { id: item.variantId, productId: item.productId }, transaction });
-    if (!variant) {
+    if (!variant || variant.isActive === false) {
       throw new AppError('NOT_FOUND', 404, 'Selected variant not found');
     }
     availableStock = Math.max(0, Number(variant.stockQty || 0) - Number(variant.reservedQty || 0));
@@ -152,19 +157,33 @@ const getWishlist = async (userId, sessionId) => {
       transaction: t,
     });
 
-    const invalidItems = items.filter((item) => !item.Product || item.Product.status !== 'published' || item.Product.isEnabled === false || (item.variantId && !item.variant));
+    const invalidItems = items.filter((item) => !item.Product || item.Product.status !== 'published' || item.Product.isEnabled === false || (item.variantId && (!item.variant || item.variant.isActive === false)));
     if (invalidItems.length > 0) {
       await WishlistItem.destroy({ where: { id: invalidItems.map((item) => item.id) }, transaction: t });
     }
+
+    const SettingsService = require('../settings/settings.service');
+    const { features = {} } = await SettingsService.getFeatures();
+    const shouldHidePrice = features.pricing === false || features.showPrice === false;
 
     const activeItems = items
       .filter((item) => !invalidItems.some((invalidItem) => invalidItem.id === item.id))
       .map((item) => {
         const plainItem = item.toJSON();
-        const serializedProduct = serializeProductPricing(plainItem.Product);
-        const serializedVariant = plainItem.variant
+        const serializedProduct = serializeProductPricing(plainItem.Product, { features });
+        let serializedVariant = plainItem.variant
           ? serializeVariantPricing(serializedProduct, plainItem.variant)
           : null;
+        if (serializedVariant && shouldHidePrice) {
+          delete serializedVariant.price;
+          delete serializedVariant.salePrice;
+          delete serializedVariant.costPrice;
+          delete serializedVariant.unitPrice;
+          delete serializedVariant.regularPrice;
+          delete serializedVariant.effectivePrice;
+          delete serializedVariant.savingsAmount;
+          serializedVariant.discountPercent = 0;
+        }
         const availableStock = serializedVariant
           ? Math.max(
             0,
@@ -183,8 +202,9 @@ const getWishlist = async (userId, sessionId) => {
         };
       });
 
+    const brandVisible = isBrandVisible(features);
     return {
-      items: activeItems,
+      items: brandVisible ? activeItems : activeItems.map(stripBrandFields),
       unavailableRemovedCount: invalidItems.length,
     };
   });
@@ -202,7 +222,7 @@ const addItem = async (userId, sessionId, productId, variantId = null) => {
 
     if (variantId) {
       const variant = await ProductVariant.findOne({ where: { id: variantId, productId }, transaction: t });
-      if (!variant) throw new AppError('NOT_FOUND', 404, 'Selected variant not found');
+      if (!variant || variant.isActive === false) throw new AppError('NOT_FOUND', 404, 'Selected variant not found or unavailable');
     }
 
     const [item] = await WishlistItem.findOrCreate({

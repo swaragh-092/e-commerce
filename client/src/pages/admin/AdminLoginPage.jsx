@@ -98,7 +98,7 @@ const AdminLoginPage = () => {
       const adminEntryPath = getFirstAccessibleAdminPath(loggedUser);
       
       if (!adminEntryPath) {
-        setError('Unauthorized: You do not have staff permissions.');
+        setError('Unauthorized: You do not have admin access.');
         setLoading(false);
         return;
       }
@@ -123,7 +123,7 @@ const AdminLoginPage = () => {
       const loggedUser = data.user;
       const adminEntryPath = getFirstAccessibleAdminPath(loggedUser);
       if (!adminEntryPath) {
-        setError('Unauthorized: You do not have staff permissions.');
+        setError('Unauthorized: You do not have admin access.');
         setLoading(false);
         return;
       }

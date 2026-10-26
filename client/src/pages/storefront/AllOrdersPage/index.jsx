@@ -59,6 +59,7 @@ const AllOrdersPage = () => {
     const [initialLoading, setInitialLoading] = useState(true);
     const [loadingMore, setLoadingMore] = useState(false);
     const [alert, setAlert] = useState(null);
+    const [claimEmailSending, setClaimEmailSending] = useState(false);
 
     const sentinelRef = useRef(null);
     const observerRef = useRef(null);
@@ -69,12 +70,12 @@ const AllOrdersPage = () => {
         const now = new Date();
         if (timeFilter === '30')
             return { from: new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000) };
-        if (timeFilter === '2024')
-            return { from: new Date('2024-01-01'), to: new Date('2025-01-01') };
-        if (timeFilter === '2023')
-            return { from: new Date('2023-01-01'), to: new Date('2024-01-01') };
+        if (/^\d{4}$/.test(String(timeFilter))) {
+            const year = Number(timeFilter);
+            return { from: new Date(year, 0, 1), to: new Date(year + 1, 0, 1) };
+        }
         if (timeFilter === 'older')
-            return { olderThan: new Date('2023-01-01') };
+            return { olderThan: new Date(new Date().getFullYear() - 1, 0, 1) };
         return {};
     }, []);
 
@@ -171,6 +172,18 @@ const AllOrdersPage = () => {
         setSearchInput('');
     };
 
+    const handleFindGuestOrders = async () => {
+        setClaimEmailSending(true);
+        try {
+            const response = await orderService.requestGuestOrderClaim();
+            setAlert({ type: 'success', message: response.message || response.data?.message || 'Check your account email for a secure order-linking link.' });
+        } catch (err) {
+            setAlert({ type: 'error', message: getApiErrorMessage(err, 'Could not send the verification email.') });
+        } finally {
+            setClaimEmailSending(false);
+        }
+    };
+
     const activeFilterCount = selectedStatuses.length + (selectedTimeFilter ? 1 : 0);
 
     const filterProps = {
@@ -245,6 +258,14 @@ const AllOrdersPage = () => {
                     {alert.message}
                 </Alert>
             )}
+
+            <Alert severity="info" sx={{ mb: 3, alignItems: 'center' }} action={(
+                <Button color="inherit" size="small" disabled={claimEmailSending} onClick={handleFindGuestOrders}>
+                    {claimEmailSending ? 'Sending…' : 'Find guest orders'}
+                </Button>
+            )}>
+                Placed an order as a guest? Verify your account email to link eligible past orders.
+            </Alert>
 
             <Box sx={{ display: 'flex', gap: { xs: 0, md: 4 }, alignItems: 'flex-start' }}>
 

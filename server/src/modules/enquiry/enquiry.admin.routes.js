@@ -5,13 +5,11 @@ const enquiryController = require('./enquiry.controller');
 const { authenticate } = require('../../middleware/auth.middleware');
 const { authorizePermissions } = require('../../middleware/role.middleware');
 const { PERMISSIONS } = require('../../config/permissions');
-const { featureGate } = require('../../middleware/featureGate.middleware');
 const { validate } = require('../../middleware/validate.middleware');
 const { updateEnquiryStatusSchema, replyEnquirySchema, queryEnquiriesSchema } = require('./enquiry.validation');
 const { idParamSchema } = require('../../utils/common.validation');
 
-// Apply enquiry feature gate to all routes in this module
-router.use(featureGate('enquiry'));
+// Admin routes for managing enquiries - allows staff to view/reply to existing enquiries even when feature is disabled
 
 // Admin routes for managing enquiries
 router.get(

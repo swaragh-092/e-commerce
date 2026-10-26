@@ -13,8 +13,13 @@ const { getStorageProvider } = require('../../utils/storage');
 
 const storage = getStorageProvider();
 
-exports.uploadMedia = async (file) => {
+const { Op } = require('sequelize');
+
+exports.uploadMedia = async (file, type = 'image') => {
   if (!file) throw new AppError('VALIDATION_ERROR', 400, 'No file provided');
+
+  const validTypes = ['image', 'icon', 'font', 'document'];
+  const mediaType = validTypes.includes(type) ? type : 'image';
 
   const { fileTypeFromBuffer } = await import('file-type');
   const typeInfo = await fileTypeFromBuffer(file.buffer);
@@ -31,28 +36,24 @@ exports.uploadMedia = async (file) => {
   const filename = `${uniqueId}.${ext}`;
   const webpFilename = `${uniqueId}.webp`;
 
-  // Save original
-  const mediaUrl = await storage.save(file.buffer, filename);
-
-  // Create resized versions using sharp in parallel
-  // Convert JPEG/PNG to WebP for optimized storage/bandwidth
-  const shouldConvertToWebp = ['image/jpeg', 'image/png'].includes(typeInfo.mime);
-  const targetFilename = shouldConvertToWebp ? webpFilename : filename;
+  // Reject decompression bombs before doing any resize work. The upload middleware
+  // independently caps compressed bytes; this cap limits decoded pixel memory/CPU.
+  const imageOptions = { limitInputPixels: 40_000_000 };
 
   const resizeAndSave = async (width, folder) => {
-    let pipeline = sharp(file.buffer).resize({ width, withoutEnlargement: true });
-    if (shouldConvertToWebp) {
-      pipeline = pipeline.toFormat('webp', { quality: 80 });
-    }
+    const pipeline = sharp(file.buffer, imageOptions)
+      .resize({ width, withoutEnlargement: true })
+      .toFormat('webp', { quality: 80 });
     const buffer = await pipeline.toBuffer();
-    return storage.save(buffer, targetFilename, folder);
+    return storage.save(buffer, webpFilename, folder);
   };
 
-  await Promise.all([
-    resizeAndSave(150, 'thumbnails'),
-    resizeAndSave(600, 'medium'),
-    resizeAndSave(1200, 'large')
-  ]);
+  // Finish processing first so invalid/unsupported image data is not persisted.
+  await resizeAndSave(150, 'thumbnails');
+  await resizeAndSave(600, 'medium');
+  await resizeAndSave(1200, 'large');
+
+  const mediaUrl = await storage.save(file.buffer, filename);
 
   const media = await Media.create({
     url: mediaUrl,
@@ -60,6 +61,7 @@ exports.uploadMedia = async (file) => {
     originalName: file.originalname,
     mimeType: typeInfo.mime,
     size: file.size,
+    type: mediaType,
     provider: process.env.STORAGE_PROVIDER || 'local',
   });
 
@@ -76,6 +78,12 @@ exports.uploadFont = async (file) => {
     throw new AppError('VALIDATION_ERROR', 400, 'Invalid font file type. Only WOFF2, WOFF, TTF, and OTF are allowed.');
   }
 
+  const { fileTypeFromBuffer } = await import('file-type');
+  const typeInfo = await fileTypeFromBuffer(file.buffer);
+  if (!typeInfo || !allowedExtensions.includes(`.${typeInfo.ext}`) || `.${typeInfo.ext}` !== ext) {
+    throw new AppError('VALIDATION_ERROR', 400, 'Font contents do not match a supported WOFF2, WOFF, TTF, or OTF file.');
+  }
+
   const uniqueId = uuidv4();
   const filename = `${uniqueId}${ext}`;
   const fontUrl = await storage.save(file.buffer, filename, 'fonts');
@@ -84,15 +92,16 @@ exports.uploadFont = async (file) => {
     url: fontUrl,
     filename: filename,
     originalName: file.originalname,
-    mimeType: file.mimetype || 'font/woff2',
+    mimeType: typeInfo.mime,
     size: file.size,
+    type: 'font',
     provider: process.env.STORAGE_PROVIDER || 'local',
   });
 
   return media;
 };
 
-exports.listMedia = async (page, limit, sortBy = 'createdAt', sortDir = 'DESC') => {
+exports.listMedia = async (page, limit, sortBy = 'createdAt', sortDir = 'DESC', type = 'image') => {
   const { limit: queryLimit, offset } = getPagination(page, limit);
   
   // Map frontend sort names to database columns
@@ -107,7 +116,17 @@ exports.listMedia = async (page, limit, sortBy = 'createdAt', sortDir = 'DESC') 
   const orderCol = sortMap[sortBy] || 'created_at';
   const orderDir = sortDir.toUpperCase() === 'ASC' ? 'ASC' : 'DESC';
 
+  const where = {};
+  if (type && type !== 'all') {
+    if (type === 'image') {
+      where.type = { [Op.or]: ['image', null] };
+    } else {
+      where.type = type;
+    }
+  }
+
   const { rows, count } = await Media.findAndCountAll({
+    where,
     limit: queryLimit,
     offset,
     order: [[orderCol, orderDir]],

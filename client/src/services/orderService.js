@@ -12,6 +12,16 @@ export const orderService = {
     return response.data;
   },
 
+  requestGuestOrderClaim: async () => {
+    const response = await api.post('/orders/guest-orders/claim/request');
+    return response.data;
+  },
+
+  claimGuestOrders: async (token) => {
+    const response = await api.post('/orders/guest-orders/claim', { token });
+    return response.data;
+  },
+
   /**
    * Fetch details for a specific order.
    */
@@ -33,9 +43,9 @@ export const orderService = {
   /**
    * Cancel an order.
    */
-  cancelOrder: async (id) => {
+  cancelOrder: async (id, data) => {
     if (!id) throw new TypeError('orderService.cancelOrder: Invalid id');
-    const response = await api.post(`/orders/${id}/cancel`);
+    const response = await api.post(`/orders/${id}/cancel`, data);
     return response.data;
   },
 
@@ -56,7 +66,11 @@ export const orderService = {
    */
   placeOrder: async (data) => {
     if (!data) throw new Error('orderService.placeOrder: missing order data');
-    const response = await api.post('/orders', data);
+    const response = await api.post('/orders', data, {
+      headers: data.idempotencyKey || data.checkoutSessionId
+        ? { 'Idempotency-Key': data.idempotencyKey || data.checkoutSessionId }
+        : undefined,
+    });
     return response.data.data;
   }
 };

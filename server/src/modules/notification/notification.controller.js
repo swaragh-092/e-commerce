@@ -5,6 +5,7 @@ const { NotificationTemplate } = require('../index');
 const { success, error } = require('../../utils/response');
 const AppError = require('../../utils/AppError');
 const { DEFAULTS, TEMPLATE_VARIABLES, SAMPLE_VARIABLES } = require('./notification.defaults');
+const { TEMPLATE_VARIABLES: LIFECYCLE_TEMPLATE_VARIABLES } = require('./notification.lifecycleDefaults');
 
 const getDefaultForChannel = (name, channel = 'email') => {
   const base = DEFAULTS[name];
@@ -114,6 +115,13 @@ const previewTemplate = async (req, res, next) => {
 
     // Inject store settings into sample vars
     const vars = { ...SAMPLE_VARIABLES };
+    const allowedLifecycleVariables = LIFECYCLE_TEMPLATE_VARIABLES[req.params.name];
+    if (allowedLifecycleVariables) {
+      const allowed = new Set(allowedLifecycleVariables);
+      for (const key of Object.keys(vars)) {
+        if (!allowed.has(key)) vars[key] = null;
+      }
+    }
     try {
       const SettingsService = require('../settings/settings.service');
       const [general, logo, footer] = await Promise.all([

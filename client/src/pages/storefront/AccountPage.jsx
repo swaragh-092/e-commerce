@@ -3,7 +3,7 @@ import {
     Box, Typography, Tabs, Tab, Paper, Container, TextField, Button, Alert,
     List, ListItem, ListItemText, ListItemSecondaryAction, IconButton, Chip,
     Dialog, DialogTitle, DialogContent, DialogActions, Divider, CircularProgress,
-    Table, TableBody, TableCell, TableContainer, TableHead, TableRow, Tooltip, InputAdornment, Autocomplete
+    Table, TableBody, TableCell, TableContainer, TableHead, TableRow, Tooltip, InputAdornment, Autocomplete, Switch, FormControlLabel
 } from '@mui/material';
 import DeleteIcon from '@mui/icons-material/Delete';
 import EditIcon from '@mui/icons-material/Edit';
@@ -26,6 +26,7 @@ import TwoFactorSetup from '../../components/storefront/TwoFactorSetup';
 import DeleteAccount from '../../components/storefront/DeleteAccount';
 import ActiveSessions from '../../components/storefront/ActiveSessions';
 import { INDIAN_STATES } from '../../utils/indianStates';
+import newsletterService from '../../services/newsletterService';
 
 const AccountPage = () => {
     const { user, updateProfile, refreshUser } = useContext(AuthContext);
@@ -57,6 +58,7 @@ const AccountPage = () => {
                         <Tab label="Addresses" />
                         <Tab label="Password" />
                         <Tab label="Security" />
+                        <Tab label="Email Preferences" />
                     </Tabs>
                 </Box>
                 <Box sx={{ minWidth: 0 }}>
@@ -74,6 +76,9 @@ const AccountPage = () => {
                         <ActiveSessions />
                         <DeleteAccount user={user} onUpdate={refreshUser} />
                     </TabPanel>
+                    <TabPanel value={tab} index={4} sx={{ p: 3 }}>
+                        <EmailPreferencesTab />
+                    </TabPanel>
                 </Box>
             </Paper>
             {showSupportInfo && (
@@ -85,6 +90,58 @@ const AccountPage = () => {
                 </Paper>
             )}
         </Container>
+    );
+};
+
+const EmailPreferencesTab = () => {
+    const { features } = useSettings();
+    const newsletterEnabled = features?.newsletter === true;
+    const [subscribed, setSubscribed] = useState(false);
+    const [loading, setLoading] = useState(true);
+    const [saving, setSaving] = useState(false);
+    const [status, setStatus] = useState(null);
+
+    useEffect(() => {
+        let active = true;
+        newsletterService.getMyStatus()
+            .then((result) => { if (active) setSubscribed(result.subscribed); })
+            .catch((error) => { if (active) setStatus({ type: 'error', message: getApiErrorMessage(error, 'Could not load email preferences.') }); })
+            .finally(() => { if (active) setLoading(false); });
+        return () => { active = false; };
+    }, []);
+
+    const handleChange = async (event) => {
+        const nextValue = event.target.checked;
+        if (nextValue && !newsletterEnabled) return;
+        const previousValue = subscribed;
+        setSubscribed(nextValue);
+        setSaving(true);
+        setStatus(null);
+        try {
+            await newsletterService.updateMyStatus(nextValue);
+            setStatus({ type: 'success', message: nextValue ? 'You are subscribed to store updates.' : 'You have unsubscribed from store updates.' });
+        } catch (error) {
+            setSubscribed(previousValue);
+            setStatus({ type: 'error', message: getApiErrorMessage(error, 'Could not save your email preference.') });
+        } finally {
+            setSaving(false);
+        }
+    };
+
+    return (
+        <Box>
+            <Typography variant="h6" gutterBottom>Email preferences</Typography>
+            <Typography color="text.secondary" variant="body2" sx={{ mb: 2 }}>
+                Choose whether you receive promotional emails. Order and account security emails are always sent when needed.
+            </Typography>
+            {!newsletterEnabled && <Alert severity="info" sx={{ mb: 2 }}>New newsletter subscriptions are paused. You can still unsubscribe.</Alert>}
+            {status && <Alert severity={status.type} sx={{ mb: 2 }}>{status.message}</Alert>}
+            <FormControlLabel
+                control={<Switch checked={subscribed} onChange={handleChange} disabled={loading || saving || (!newsletterEnabled && !subscribed)} />}
+                label="Offers, new products, and store updates"
+            />
+            {loading && <CircularProgress size={18} sx={{ ml: 1, verticalAlign: 'middle' }} />}
+        </Box>
     );
 };
 

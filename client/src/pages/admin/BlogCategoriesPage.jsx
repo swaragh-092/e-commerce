@@ -35,6 +35,10 @@ const BlogCategoriesPage = () => {
   const { hasPermission } = useAuth();
   const canManageBlogs = hasPermission(PERMISSIONS.BLOGS_MANAGE);
 
+  useEffect(() => {
+    if (!canManageBlogs) { setDeleteOpen(false); setOpen(false); setEditing(null); setForm(emptyForm); }
+  }, [canManageBlogs]);
+
   const fetchData = async () => {
     setLoading(true);
     try {
@@ -52,6 +56,7 @@ const BlogCategoriesPage = () => {
   }, []);
 
   const handleSave = async () => {
+    if (!canManageBlogs) return;
     if (!form.name.trim()) {
       notify('Category name is required.', 'error');
       return;
@@ -74,7 +79,7 @@ const BlogCategoriesPage = () => {
   };
 
   const handleDelete = async () => {
-    if (!editing?.id) return setDeleteOpen(false);
+    if (!canManageBlogs || !editing?.id) return setDeleteOpen(false);
     try {
       await BlogService.adminDeleteCategory(editing.id);
       notify('Category deleted.', 'success');
@@ -87,7 +92,28 @@ const BlogCategoriesPage = () => {
   };
 
   const columns = [
-    { field: 'name', headerName: 'Name', flex: 1, minWidth: 180 },
+    {
+      field: 'name',
+      headerName: 'Name',
+      flex: 1,
+      minWidth: 180,
+      renderCell: (params) => (
+        <Typography
+          component="button"
+          type="button"
+          onClick={() => {
+            setEditing(params.row);
+            setForm({ name: params.row.name || '', description: params.row.description || '' });
+            setOpen(true);
+          }}
+          disabled={!canManageBlogs}
+          aria-label={`Edit blog category ${params.row.name}`}
+          sx={{ p: 0, border: 0, background: 'none', color: canManageBlogs ? 'primary.main' : 'text.primary', font: 'inherit', textAlign: 'left', cursor: canManageBlogs ? 'pointer' : 'default', '&:hover': canManageBlogs ? { textDecoration: 'underline' } : {}, '&:focus-visible': { outline: '2px solid', outlineColor: 'primary.main', outlineOffset: 2 } }}
+        >
+          {params.value}
+        </Typography>
+      ),
+    },
     { field: 'slug', headerName: 'Slug', flex: 1, minWidth: 180 },
     { field: 'description', headerName: 'Description', flex: 1.6, minWidth: 260 },
     {
@@ -155,7 +181,7 @@ const BlogCategoriesPage = () => {
         <DataGrid rows={rows} columns={columns} loading={loading} disableRowSelectionOnClick />
       </Paper>
 
-      <Dialog open={open} onClose={() => setOpen(false)} fullWidth maxWidth="sm">
+      <Dialog open={canManageBlogs && open} onClose={() => setOpen(false)} fullWidth maxWidth="sm">
         <DialogTitle>{editing?.id ? 'Edit Category' : 'Create Category'}</DialogTitle>
         <DialogContent>
           <TextField
@@ -176,18 +202,18 @@ const BlogCategoriesPage = () => {
           />
         </DialogContent>
         <DialogActions>
-          <Button onClick={() => setOpen(false)}>Cancel</Button>
+          <Button color="error" onClick={() => setOpen(false)}>Cancel</Button>
           <Button variant="contained" onClick={handleSave}>Save</Button>
         </DialogActions>
       </Dialog>
 
-      <Dialog open={deleteOpen} onClose={() => setDeleteOpen(false)}>
+      <Dialog open={canManageBlogs && deleteOpen} onClose={() => setDeleteOpen(false)}>
         <DialogTitle>Delete Category</DialogTitle>
         <DialogContent>
           <Typography>Are you sure you want to delete "{editing?.name}"?</Typography>
         </DialogContent>
         <DialogActions>
-          <Button onClick={() => setDeleteOpen(false)}>Cancel</Button>
+          <Button color="error" onClick={() => setDeleteOpen(false)}>Cancel</Button>
           <Button variant="contained" color="error" onClick={handleDelete}>Delete</Button>
         </DialogActions>
       </Dialog>

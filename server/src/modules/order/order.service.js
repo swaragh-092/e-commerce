@@ -1,4 +1,5 @@
 'use strict';
+const crypto = require('crypto');
 const { Op, Transaction } = require('sequelize');
 const {
     sequelize,
@@ -24,13 +25,16 @@ const {
     OrderRefund,
     OrderStatusHistory,
     OrderHistory,
+    GuestOrderClaimToken,
     Shipment,
     ShipmentItem,
+    ShipmentEvent,
     ShippingProvider,
     ShippingOperation,
     UserProfile,
 } = require('../index');
 const AppError = require('../../utils/AppError');
+const { isGuestSessionId } = require('../../utils/guestSession');
 const logger = require('../../utils/logger');
 const AuditService = require('../audit/audit.service');
 const CouponService = require('../coupon/coupon.service');
@@ -42,6 +46,26 @@ const { resolveProvider } = require('../shipping/providers');
 const ShippingOperationService = require('../shipping/shippingOperation.service');
 const { events, PRODUCT_EVENTS, ORDER_EVENTS } = require('../../utils/events');
 
+const stableSerialize = (value) => {
+    if (value === null || typeof value !== 'object') return JSON.stringify(value);
+    if (Array.isArray(value)) return `[${value.map(stableSerialize).join(',')}]`;
+    return `{${Object.keys(value).sort().map((key) => `${JSON.stringify(key)}:${stableSerialize(value[key])}`).join(',')}}`;
+};
+
+const hashOrderIntent = (payload) => crypto.createHash('sha256').update(stableSerialize(payload)).digest('hex');
+
+const getOrderIdempotencyWhere = ({ userId, guestSessionId, idempotencyKey }) => userId
+    ? { userId, idempotencyKey }
+    : { userId: null, guestSessionId, idempotencyKey };
+
+const assertMatchingOrderIntent = (order, payloadHash) => {
+    // Rows created before payload fingerprinting remain replayable for backward compatibility.
+    if (order?.idempotencyPayloadHash && order.idempotencyPayloadHash !== payloadHash) {
+        throw new AppError('IDEMPOTENCY_KEY_REUSED', 422, 'This idempotency key was already used for a different order request. Start a new checkout submission.');
+    }
+    return order;
+};
+
 const defaultSettings = require('../../../../config/default.json');
 
 const NotificationService = require('../notification/notification.service');
@@ -50,6 +74,7 @@ const { normalizeDateOnly, isDateOnOrAfter } = require('./orderDate.utils');
 
 const { getPagination } = require('../../utils/pagination');
 const { ACTIONS, ENTITIES } = require('../../config/constants');
+const CANCELLATION_REASONS = require('../../../../shared/cancellation-reasons.json');
 const { getVariantUnitPrice, resolveSaleLabel } = require('../product/product.pricing');
 const { getSaleLabels } = require('../settings/saleLabel.service');
 const productComboService = require('../product/productCombo.service');
@@ -78,12 +103,12 @@ const ADMIN_ORDER_LIST_USER_ATTRIBUTES = ['id', 'firstName', 'lastName', 'email'
 const ADMIN_ORDER_PAYMENT_ATTRIBUTES = ['id', 'provider', 'status', 'amount', 'currency', 'transactionId', 'metadata', 'createdAt', 'updatedAt'];
 
 const queueShipmentNotification = async (orderId, shipmentStatus, shipment = {}) => {
-    if (!['shipped', 'out_for_delivery', 'delivered'].includes(shipmentStatus)) return;
+    if (!['shipped', 'out_for_delivery', 'delivered', 'delivery_failed', 'rto_initiated', 'rto_in_transit', 'rto'].includes(shipmentStatus)) return;
     try {
         const order = await Order.findByPk(orderId);
         if (!order) return;
 
-        if (['out_for_delivery', 'delivered'].includes(shipmentStatus)) {
+        if (shipmentStatus !== 'shipped') {
             await NotificationService.sendDeliveryUpdate(order.userId, order.id, shipmentStatus);
             return;
         }
@@ -198,39 +223,66 @@ const assertExpectedDeliveryDateNotBeforeOrderDate = (expectedDeliveryDate, orde
 };
 
 const syncOrderShippingStatus = async (order, transaction, actingUserId = null) => {
+    const isRealTx = Boolean(transaction && (typeof transaction.commit === 'function' || transaction.id || transaction.finished));
+    const txOpts = isRealTx ? { transaction } : {};
+
     const shipments = await Shipment.findAll({
         where: { orderId: order.id },
         attributes: ['id', 'status'],
         include: [{ model: ShipmentItem, as: 'items' }],
-        transaction,
+        ...txOpts,
     });
-    const orderItems = await OrderItem.findAll({
-        where: { orderId: order.id },
-        attributes: ['id', 'quantity'],
-        transaction,
-    });
+
+    let orderItems = Array.isArray(order.items) ? order.items : [];
+    if (!orderItems.length && isRealTx) {
+        orderItems = await OrderItem.findAll({
+            where: { orderId: order.id },
+            attributes: ['id', 'quantity', 'productId'],
+            include: [{
+                model: Product,
+                as: 'product',
+                attributes: ['id', 'requiresShipping'],
+                required: false,
+            }],
+            transaction,
+        });
+    }
+
     const nextStatus = deriveQuantityAwareOrderShippingStatus(orderItems, shipments);
     if (order.orderShippingStatus !== nextStatus) {
         const previous = order.orderShippingStatus;
-        await order.update({ orderShippingStatus: nextStatus }, { transaction });
-        await logOrderHistory({
-            orderId: order.id,
-            entityType: 'Order',
-            entityId: order.id,
-            statusGroup: 'order_shipping',
-            fromStatus: previous,
-            toStatus: nextStatus,
-            changedBy: actingUserId,
-            metadata: { derived: true },
-            transaction,
-        });
+        await order.update({ orderShippingStatus: nextStatus, shipmentStatus: nextStatus }, txOpts);
+        if (isRealTx) {
+            try {
+                await logOrderHistory({
+                    orderId: order.id,
+                    entityType: 'Order',
+                    entityId: order.id,
+                    statusGroup: 'order_shipping',
+                    fromStatus: previous,
+                    toStatus: nextStatus,
+                    changedBy: actingUserId,
+                    metadata: { derived: true },
+                    transaction,
+                });
+            } catch (_) {}
+        }
     }
     return nextStatus;
 };
 
 const deriveQuantityAwareOrderShippingStatus = (orderItems = [], shipments = []) => {
     const fallbackStatus = deriveOrderShippingStatus(shipments);
-    const totalQuantity = orderItems.reduce((sum, item) => sum + Number(item.quantity || 0), 0);
+    const shippableItems = orderItems.filter((item) => {
+        if (item.requiresShipping === false) return false;
+        if (item.product && item.product.requiresShipping === false) return false;
+        return true;
+    });
+    // If order has items but none require shipping, the digital order is fulfilled
+    if (orderItems.length > 0 && shippableItems.length === 0) {
+        return 'delivered';
+    }
+    const totalQuantity = shippableItems.reduce((sum, item) => sum + Number(item.quantity || 0), 0);
     if (totalQuantity <= 0) return fallbackStatus;
 
     const deliveredQuantity = shipments
@@ -352,7 +404,13 @@ const repairInvalidClosedOrder = async (order, transaction = null) => {
     });
     const orderItems = await OrderItem.findAll({
         where: { orderId: order.id },
-        attributes: ['id', 'quantity'],
+        attributes: ['id', 'quantity', 'productId'],
+        include: [{
+            model: Product,
+            as: 'product',
+            attributes: ['id', 'requiresShipping'],
+            required: false,
+        }],
         transaction,
     });
     const derivedShippingStatus = deriveQuantityAwareOrderShippingStatus(orderItems, shipments);
@@ -397,7 +455,13 @@ const repairCompletableOrder = async (order, transaction = null) => {
     });
     const orderItems = await OrderItem.findAll({
         where: { orderId: order.id },
-        attributes: ['id', 'quantity'],
+        attributes: ['id', 'quantity', 'productId'],
+        include: [{
+            model: Product,
+            as: 'product',
+            attributes: ['id', 'requiresShipping'],
+            required: false,
+        }],
         transaction,
     });
     const derivedShippingStatus = deriveQuantityAwareOrderShippingStatus(orderItems, shipments);
@@ -451,8 +515,8 @@ const HEAVY_ORDER_INCLUDE = [
                 include: [{ model: ProductImage, as: 'images', attributes: ['id', 'url', 'alt', 'sortOrder', 'isPrimary'], required: false }],
             },
             { model: ProductVariant, as: 'variant', attributes: ['id', 'sku', 'price', 'stockQty', 'isActive'], required: false },
-            { model: FulfillmentItem, as: 'fulfillmentItems', attributes: ['quantity'], required: false },
-            { model: ShipmentItem, as: 'shipmentItems', attributes: ['quantity'], required: false },
+            { model: FulfillmentItem, as: 'fulfillmentItems', attributes: ['quantity'], required: false, include: [{ model: Fulfillment, as: 'fulfillment', attributes: ['status'] }] },
+            { model: ShipmentItem, as: 'shipmentItems', attributes: ['quantity'], required: false, include: [{ model: Shipment, as: 'shipment', attributes: ['status'] }] },
         ],
     },
     { model: User, attributes: ADMIN_ORDER_LIST_USER_ATTRIBUTES, required: false },
@@ -476,6 +540,7 @@ const HEAVY_ORDER_INCLUDE = [
                 include: [
                     { model: ShipmentItem, as: 'items', required: false },
                     { model: ShippingProvider, as: 'provider', attributes: ['id', 'code', 'name', 'type'], required: false },
+                    { model: ShipmentEvent, as: 'events', separate: true, limit: 50, attributes: ['id', 'eventStatus', 'eventTimestamp', 'createdAt'], order: [['createdAt', 'DESC']] },
                 ],
             },
         ],
@@ -492,6 +557,7 @@ const HEAVY_ORDER_INCLUDE = [
                 ],
             },
             { model: ShippingProvider, as: 'provider', attributes: ['id', 'code', 'name', 'type'], required: false },
+            { model: ShipmentEvent, as: 'events', separate: true, limit: 50, attributes: ['id', 'eventStatus', 'eventTimestamp', 'createdAt'], order: [['createdAt', 'DESC']] },
         ],
     },
     {
@@ -588,8 +654,10 @@ const calculateFulfillmentProgress = (order) => {
 
 const getDispatchedQuantityForOrderItem = (orderItem) => {
     const shipmentQuantity = (orderItem.shipmentItems || [])
+        .filter((item) => item.shipment?.status !== 'cancelled')
         .reduce((sum, shipmentItem) => sum + Number(shipmentItem.quantity || 0), 0);
     const fulfillmentQuantity = (orderItem.fulfillmentItems || [])
+        .filter((item) => item.fulfillment?.status !== 'cancelled')
         .reduce((sum, fulfillmentItem) => sum + Number(fulfillmentItem.quantity || 0), 0);
 
     // New shipments create both fulfillment_items and shipment_items. Taking the
@@ -689,6 +757,39 @@ const buildOrderTimeline = (order, progress) => {
     return steps;
 };
 
+const restockOrderItemInventory = async ({ item, quantity, orderId, reason, createdBy = null, transaction }) => {
+    const orderedQuantity = Number(quantity);
+    if (!item || orderedQuantity <= 0) return;
+    if (item.isCombo) {
+        for (const constituent of Array.isArray(item.comboSnapshot) ? item.comboSnapshot : []) {
+            const constituentQuantity = Number(constituent.quantity || 0) * orderedQuantity;
+            if (!constituent.productId || constituentQuantity <= 0) continue;
+            await InventoryService.restockReturn({
+                productId: constituent.productId,
+                variantId: constituent.variantId || null,
+                qty: constituentQuantity,
+                orderId,
+                orderItemId: item.id,
+                createdBy,
+                metadata: { reason, comboProductItemId: item.productId },
+                transaction,
+            });
+        }
+        return;
+    }
+    if (!item.productId) return;
+    await InventoryService.restockReturn({
+        productId: item.productId,
+        variantId: item.variantId || null,
+        qty: orderedQuantity,
+        orderId,
+        orderItemId: item.id,
+        createdBy,
+        metadata: { reason },
+        transaction,
+    });
+};
+
 const releaseOrderReservationsAndCoupons = async (order, transaction) => {
     if (order.inventoryReleasedAt) {
         return [];
@@ -703,6 +804,11 @@ const releaseOrderReservationsAndCoupons = async (order, transaction) => {
     const variantProductIdsToSync = new Set();
     for (const item of orderItems) {
         if (!item.productId || Number(item.quantity) <= 0) continue;
+        if (item.isCombo) {
+            await restockOrderItemInventory({ item, quantity: item.quantity, orderId: order.id, reason: 'order_cancelled_combo_constituents', transaction });
+            eventBuffer.push({ name: PRODUCT_EVENTS.STOCK_CHANGED, payload: { productId: item.productId, change: item.quantity, type: 'restock' } });
+            continue;
+        }
         await InventoryService.release({
             productId: item.productId,
             variantId: item.variantId || null,
@@ -716,7 +822,7 @@ const releaseOrderReservationsAndCoupons = async (order, transaction) => {
             syncParent: false,
         });
         if (item.variantId) variantProductIdsToSync.add(String(item.productId));
-        
+
         eventBuffer.push({
             name: PRODUCT_EVENTS.STOCK_CHANGED,
             payload: {
@@ -761,6 +867,7 @@ const releaseOrderReservationsAndCoupons = async (order, transaction) => {
 };
 
 const FINAL_REFUND_STATUSES = Object.freeze(['refunded', 'partially_refunded']);
+const OPEN_REFUND_STATUSES = Object.freeze(['refund_initiated', 'refund_processing']);
 const money = (value) => Number(Number(value || 0).toFixed(2));
 
 const getCapturedPaymentAmount = (payment, order = {}) => {
@@ -883,6 +990,7 @@ const createRefundRecord = async ({
     refundScopeAmount = null,
     metadata = {},
     transaction,
+    existingRefund = null,
 }) => {
     const capturedAmount = getCapturedPaymentAmount(payment, order);
     const refundedAmount = await getRefundedAmount(order.id, transaction);
@@ -905,13 +1013,14 @@ const createRefundRecord = async ({
     const nextPaymentStatus = isFullOrderRefund
         ? 'refunded'
         : getRestoredPaymentStatusAfterPartialRefund(payment, order);
-    const refund = await OrderRefund.create({
+    const refundAttributes = {
         orderId: order.id,
         returnId,
         paymentId: payment.id,
         amount: refundAmount,
         currency: payment.currency || 'INR',
         status: refundStatus,
+        providerRefundId: metadata.providerRefundId || existingRefund?.providerRefundId || null,
         reason,
         processedAt: new Date(),
         metadata: {
@@ -921,7 +1030,13 @@ const createRefundRecord = async ({
             refundScopeAmount: scopedRefundBasis,
             itemScoped: Boolean(returnId),
         },
-    }, { transaction });
+    };
+    let refund = existingRefund;
+    if (refund) {
+        await refund.update(refundAttributes, { transaction });
+    } else {
+        refund = await OrderRefund.create(refundAttributes, { transaction });
+    }
 
     await payment.update({
         status: nextPaymentStatus,
@@ -1001,6 +1116,23 @@ const ensurePaymentMethodEnabled = async (paymentMethod) => {
 
 const placeOrder = async (userId, payload) => {
     const { shippingAddressId, couponCode, couponCodes = [], notes, buyNowItem = null, paymentMethod = 'razorpay' } = payload;
+    const guestSessionId = userId ? null : (payload.sessionId || null);
+    if (!userId && !isGuestSessionId(guestSessionId)) {
+        throw new AppError('VALIDATION_ERROR', 400, 'A valid guest session ID is required for guest checkout');
+    }
+    const idempotencyKey = payload.idempotencyKey || payload.checkoutSessionId || null;
+    const intentPayload = { ...payload };
+    delete intentPayload.idempotencyKey;
+    delete intentPayload.checkoutSessionId;
+    delete intentPayload.sessionId;
+    const idempotencyPayloadHash = idempotencyKey ? hashOrderIntent(intentPayload) : null;
+    const idempotencyWhere = idempotencyKey
+        ? getOrderIdempotencyWhere({ userId, guestSessionId, idempotencyKey })
+        : null;
+    if (idempotencyKey) {
+        const priorOrder = await Order.findOne({ where: idempotencyWhere });
+        if (priorOrder) return { order: assertMatchingOrderIntent(priorOrder, idempotencyPayloadHash), idempotentReplay: true };
+    }
     let cart = null;
     let checkoutItems = [];
 
@@ -1009,7 +1141,6 @@ const placeOrder = async (userId, payload) => {
     if (!userId && !features.guestCheckout) {
         throw new AppError('FORBIDDEN', 403, 'Guest checkout is disabled. Please log in or register to place an order.');
     }
-
     await ensurePaymentMethodEnabled(paymentMethod);
 
     if (buyNowItem?.productId) {
@@ -1038,7 +1169,7 @@ const placeOrder = async (userId, payload) => {
             const activeVariantCount = await ProductVariant.count({
                 where: { productId: buyNowItem.productId, isActive: true },
             });
-            if (activeVariantCount > 0) {
+            if (product.type === 'variable' || activeVariantCount > 0) {
                 throw new AppError('VALIDATION_ERROR', 400, `Please select an option for "${product.name}" before checkout.`);
             }
         }
@@ -1056,8 +1187,19 @@ const placeOrder = async (userId, payload) => {
             variant,
         }];
     } else {
+        const cartWhere = { status: 'active' };
+        if (userId) {
+            cartWhere.userId = userId;
+        } else {
+            if (!guestSessionId) {
+                throw new AppError('VALIDATION_ERROR', 400, 'Session ID is required for guest checkout');
+            }
+            cartWhere.sessionId = guestSessionId;
+            cartWhere.userId = null;
+        }
+
         cart = await Cart.findOne({
-            where: { userId, status: 'active' },
+            where: cartWhere,
             include: [{
                 model: CartItem,
                 as: 'items',
@@ -1083,20 +1225,76 @@ const placeOrder = async (userId, payload) => {
         checkoutItems = cart.items;
     }
 
-    const addressWhere = { id: shippingAddressId };
-    if (userId) addressWhere.userId = userId;
-    const address = await Address.findOne({ where: addressWhere });
-
-    if (!address) {
-        throw new AppError('NOT_FOUND', 404, 'Shipping address not found');
+    const hasPhysicalItems = checkoutItems.some(i => i.product?.requiresShipping !== false);
+    if (!hasPhysicalItems && paymentMethod === 'cod') {
+        throw new AppError('COD_UNAVAILABLE', 400, 'Cash on delivery is not available for orders containing only digital products. Please select an online payment method.');
     }
-    const shippingAddressSnapshot = address.toJSON();
+
+    let address = null;
+    let shippingAddressSnapshot = { digital: true };
+    if (shippingAddressId) {
+        const addressWhere = { id: shippingAddressId };
+        if (userId) {
+            addressWhere.userId = userId;
+        } else {
+            addressWhere.userId = null;
+            if (guestSessionId) {
+                addressWhere.sessionId = guestSessionId;
+            }
+        }
+        address = await Address.findOne({ where: addressWhere });
+
+        if (!address && hasPhysicalItems) {
+            throw new AppError('NOT_FOUND', 404, 'Shipping address not found');
+        }
+        if (address) {
+            shippingAddressSnapshot = address.toJSON();
+        }
+    } else if (hasPhysicalItems) {
+        throw new AppError('VALIDATION_ERROR', 400, 'Shipping address is required for items requiring delivery');
+    }
+    if (!userId && hasPhysicalItems) {
+        if (!payload.guestEmail) {
+            throw new AppError('VALIDATION_ERROR', 400, 'Enter your email address for delivery updates.');
+        }
+        shippingAddressSnapshot.email = payload.guestEmail.trim().toLowerCase();
+    }
 
     const settingsMap = await buildSettingsSnapshot(['tax', 'shipping']);
     const getLocalSetting = (key, defaultVal) => settingsMap[key] !== undefined ? settingsMap[key] : defaultVal;
 
     const labelPresets = await getSaleLabels().catch(() => []);
-    const { order, eventBuffer } = await sequelize.transaction(async (t) => {
+        let transactionResult;
+        try {
+        transactionResult = await sequelize.transaction(async (t) => {
+        // A cart may have been read by two checkouts before either starts its
+        // order transaction. Lock and recheck it here so only one order can
+        // consume the same cart snapshot.
+        if (cart) {
+            const lockedCart = await Cart.findByPk(cart.id, { transaction: t, lock: Transaction.LOCK.UPDATE });
+            if (!lockedCart || lockedCart.status !== 'active') {
+                throw new AppError('CONFLICT', 409, 'This cart has already been submitted. Refresh your cart before placing another order.');
+            }
+            cart = lockedCart;
+            const currentCartItems = await CartItem.findAll({
+                where: { cartId: lockedCart.id },
+                transaction: t,
+                include: [
+                    { model: Product, as: 'product', include: [{ model: Category, as: 'categories' }, { model: Brand, as: 'brand' }, { model: ProductImage, as: 'images' }] },
+                    { model: ProductVariant, as: 'variant' },
+                ],
+            });
+            checkoutItems = currentCartItems.map((item) => ({
+                productId: item.productId,
+                variantId: item.variantId || null,
+                quantity: item.quantity,
+                product: item.product,
+                variant: item.variant || null,
+            }));
+            if (checkoutItems.length === 0) {
+                throw new AppError('VALIDATION_ERROR', 400, 'Your cart is empty. Add an item before placing an order.');
+            }
+        }
         let subtotal = 0;
 
         for (const item of checkoutItems) {
@@ -1140,9 +1338,16 @@ const placeOrder = async (userId, payload) => {
                     where: { productId: product.id, isActive: true },
                     transaction: t,
                 });
-                if (activeVariantCount > 0) {
+                if (currentProduct.type === 'variable' || activeVariantCount > 0) {
                     throw new AppError('VALIDATION_ERROR', 400, `Please select a product option for "${product.name}" before checkout.`);
                 }
+            }
+
+            // Catalog products can be saved without selling prices. A later mode
+            // switch must never turn an unpriced item into a free order.
+            const configuredPrice = item.variantId ? item.variant?.price : plainCurrentProduct.price;
+            if (configuredPrice === null || configuredPrice === undefined || !Number.isFinite(Number(configuredPrice)) || Number(configuredPrice) <= 0) {
+                throw new AppError('PRODUCT_NOT_READY', 400, `Set a price for "${product.name}" before checkout.`);
             }
 
             subtotal += currentPrice * item.quantity;
@@ -1154,17 +1359,98 @@ const placeOrder = async (userId, payload) => {
             };
         }
 
-        const originState = getLocalSetting('tax.originState', '');
+        const originState = getLocalSetting('tax.originState', '') || getLocalSetting('shipping.warehouseState', '') || getLocalSetting('general.state', '');
         const destinationState = shippingAddressSnapshot.state || '';
+
+        const requestedCouponCodes = [...new Set([
+            ...couponCodes,
+            couponCode,
+        ].filter(Boolean).map((code) => String(code).trim().toUpperCase()))];
+
+        let shippingQuote = null;
+        let shippingCost = 0;
+        let shippingTaxAmount = 0;
+
+        if (hasPhysicalItems) {
+            shippingQuote = await ShippingService.validateQuoteForOrder(userId, {
+                ...payload,
+                shippingAddressId,
+                paymentMethod,
+                couponCode,
+                couponCodes,
+                buyNowItem,
+            });
+            shippingCost = Number(shippingQuote.shippingCost || 0);
+            shippingTaxAmount = Number(shippingQuote.taxAmount || 0);
+        }
+
+        const quotedShippingCost = shippingCost;
+
+        let orderDiscountAmount = 0;
+        let appliedCoupon = null;
+        let couponBenefits = null;
+
+        // Harden: Check if coupons feature is enabled before resolving
+        const couponCodesToResolve = features.coupons ? requestedCouponCodes : [];
+
+        couponBenefits = await CouponService.resolveCoupons(couponCodesToResolve, userId, {
+            cartSubtotal: subtotal,
+            cartItems: checkoutItems,
+            shippingCost: quotedShippingCost,
+            transaction: t,
+            guestSessionId,
+        });
+
+        orderDiscountAmount = Number(couponBenefits?.orderDiscount || 0);
+        appliedCoupon = couponBenefits?.primaryCoupon || couponBenefits?.coupon || null;
+
+        let shippingDiscount = 0;
+        if (couponBenefits?.freeShipping && shippingCost > 0) {
+            shippingDiscount = Number(couponBenefits.shippingDiscount || shippingCost || 0);
+            if (shippingDiscount === 0) {
+                shippingDiscount = shippingCost;
+            }
+            shippingTaxAmount = 0;
+        }
 
         let totalTax = 0;
         const itemTaxBreakdowns = [];
         for (const item of checkoutItems) {
             const effectiveTax = TaxService.getEffectiveTax(item.currentProduct, settingsMap);
             const itemSubtotal = item.currentPrice * item.quantity;
+            const itemKey = item.variantId ? `${item.productId}:${item.variantId}` : item.productId;
+
+            // Allocate targeted discounts only to eligible tax lines
+            let itemDiscount = 0;
+            if (couponBenefits?.lineDiscounts && (couponBenefits.lineDiscounts[itemKey] !== undefined || couponBenefits.lineDiscounts[item.productId] !== undefined)) {
+                itemDiscount = Number(couponBenefits.lineDiscounts[itemKey] ?? couponBenefits.lineDiscounts[item.productId] ?? 0);
+            } else if (orderDiscountAmount > 0) {
+                const isEligible = appliedCoupon && typeof CouponService.matchesCouponTarget === 'function' ? CouponService.matchesCouponTarget(appliedCoupon, {
+                    productId: item.productId,
+                    brandId: item.currentProduct.brandId || item.currentProduct.brand?.id,
+                    categoryIds: Array.isArray(item.currentProduct.categories) ? item.currentProduct.categories.map((c) => c.id) : [],
+                    isSaleItem: Boolean(item.currentProduct.isSaleActive),
+                }) : true;
+                if (isEligible) {
+                    const eligibleSubtotal = checkoutItems.reduce((sum, ci) => {
+                        const match = appliedCoupon && typeof CouponService.matchesCouponTarget === 'function' ? CouponService.matchesCouponTarget(appliedCoupon, {
+                            productId: ci.productId,
+                            brandId: ci.currentProduct.brandId || ci.currentProduct.brand?.id,
+                            categoryIds: Array.isArray(ci.currentProduct.categories) ? ci.currentProduct.categories.map((c) => c.id) : [],
+                            isSaleItem: Boolean(ci.currentProduct.isSaleActive),
+                        }) : true;
+                        return match ? sum + (ci.currentPrice * ci.quantity) : sum;
+                    }, 0);
+                    itemDiscount = eligibleSubtotal > 0
+                        ? Math.round((itemSubtotal / eligibleSubtotal) * orderDiscountAmount * 100) / 100
+                        : 0;
+                }
+            }
+            const taxableItemSubtotal = Math.max(0, itemSubtotal - itemDiscount);
+
             const itemTaxBreakdown = TaxService.computeItemTax(
                 effectiveTax, 
-                itemSubtotal, 
+                taxableItemSubtotal,
                 destinationState, 
                 originState
             );
@@ -1177,7 +1463,7 @@ const placeOrder = async (userId, payload) => {
             itemTaxBreakdowns.push({
                 productId: item.productId,
                 variantId: item.variantId || null,
-                subtotal: Number(itemSubtotal.toFixed(2)),
+                subtotal: Number(taxableItemSubtotal.toFixed(2)),
                 ...itemTaxBreakdown,
             });
             totalTax += itemTaxBreakdown.totalTax;
@@ -1188,52 +1474,9 @@ const placeOrder = async (userId, payload) => {
             destinationState,
         });
 
-        const shippingQuote = await ShippingService.validateQuoteForOrder(userId, {
-            ...payload,
-            shippingAddressId,
-            paymentMethod,
-            couponCode,
-            couponCodes,
-            buyNowItem,
-        });
-        let shippingCost = Number(shippingQuote.shippingCost || 0);
-        const shippingTaxAmount = Number(shippingQuote.taxAmount || 0);
-
-        const requestedCouponCodes = [...new Set([
-            ...couponCodes,
-            couponCode,
-        ].filter(Boolean).map((code) => String(code).trim().toUpperCase()))];
-
-        let orderDiscountAmount = 0;
-        let appliedCoupon = null;
-        let couponBenefits = null;
-
-        // Harden: Check if coupons feature is enabled before resolving
-        const couponCodesToResolve = features.coupons ? requestedCouponCodes : [];
-        
-        couponBenefits = await CouponService.resolveCoupons(couponCodesToResolve, userId, {
-            cartSubtotal: subtotal,
-            cartItems: checkoutItems,
-            shippingCost,
-            transaction: t,
-        });
-
-        // If a code was provided but coupons are disabled, we might want to log it or just silently ignore
-        // For now, we silently ignore by resolving with empty array, which handles auto-coupons too (none will be returned if resolved with empty array and features.coupons is false)
-        // Wait, resolveCoupons itself should probably check the flag too for A-to-Z enforcement.
-
-        orderDiscountAmount = Number(couponBenefits?.orderDiscount || 0);
-        appliedCoupon = couponBenefits?.primaryCoupon || couponBenefits?.coupon || null;
-
-        let shippingDiscount = 0;
-        if (couponBenefits?.freeShipping) {
-            shippingDiscount = Number(couponBenefits.shippingDiscount || shippingCost || 0);
-            shippingCost = 0;
-        }
-
         const discountAmount = Number((orderDiscountAmount + shippingDiscount).toFixed(2));
 
-        const total = Number(Math.max(0, subtotal + totalTax + shippingCost - discountAmount).toFixed(2));
+        const total = Number(Math.max(0, subtotal + totalTax + quotedShippingCost + (shippingQuote?.taxIncluded ? 0 : shippingTaxAmount) - discountAmount).toFixed(2));
 
         const eventBuffer = [];
 
@@ -1282,14 +1525,18 @@ const placeOrder = async (userId, payload) => {
         const randStr = crypto.randomBytes(3).toString('hex').toUpperCase();
         const orderNumber = `ORD-${dateStr}-${randStr}`;
 
-        const initialOrderStatus = paymentMethod === 'cod' ? ORDER_DEFAULT_STATUS : 'pending_payment';
-        const initialPaymentStatus = paymentMethod === 'cod' ? 'pending_cod' : 'payment_pending';
+        // Free orders (100% coupon): settle immediately, no provider session.
+        const isFreeOnlineOrder = paymentMethod !== 'cod' && Number(total) <= 0.009;
+        const initialOrderStatus = paymentMethod === 'cod' ? ORDER_DEFAULT_STATUS : (isFreeOnlineOrder ? 'processing' : 'pending_payment');
+        const initialPaymentStatus = paymentMethod === 'cod' ? 'pending_cod' : (isFreeOnlineOrder ? 'paid_online' : 'payment_pending');
 
         const order = await Order.create({
             orderNumber,
             userId,
+            guestSessionId,
+            guestEmail: !userId && payload.guestEmail ? payload.guestEmail.trim().toLowerCase() : null,
             status: initialOrderStatus,
-            orderShippingStatus: 'not_shipped',
+            orderShippingStatus: hasPhysicalItems ? 'not_shipped' : 'delivered',
             putBackStatus: null,
             putBackProcessingStatus: false,
             paymentMethod,
@@ -1297,8 +1544,8 @@ const placeOrder = async (userId, payload) => {
             tax: totalTax,
             taxBreakdown: orderTaxBreakdown,
             shippingCost,
-            shippingQuoteId: shippingQuote.quoteId || null,
-            shippingSnapshot: {
+            shippingQuoteId: shippingQuote?.quoteId || null,
+            shippingSnapshot: shippingQuote ? {
                 quoteId: shippingQuote.quoteId || null,
                 provider: shippingQuote.providerCode || shippingQuote.provider || 'manual',
                 providerName: shippingQuote.providerName || 'Manual Shipping',
@@ -1311,13 +1558,28 @@ const placeOrder = async (userId, payload) => {
                 estimatedDeliveryDays: shippingQuote.estimatedDeliveryDays || null,
                 serviceable: shippingQuote.serviceable === true,
                 defaultPackage: shippingQuote.defaultPackage || null,
+                parcelPlan: Array.isArray(shippingQuote.parcelPlan) ? shippingQuote.parcelPlan : [],
+                pricingMode: shippingQuote.pricingMode || null,
+            } : {
+                quoteId: null,
+                provider: 'digital',
+                providerName: 'Digital Delivery',
+                shippingCost: 0,
+                currency: 'INR',
+                taxIncluded: false,
+                taxAmount: 0,
+                taxBreakdown: null,
+                codAvailable: false,
+                serviceable: true,
+                digital: true,
             },
-            orderShippingStatus: 'not_shipped',
-            checkoutSessionId: shippingQuote.checkoutSessionId || payload.checkoutSessionId || null,
-            shippingCurrency: shippingQuote.currency || 'INR',
-            shippingTaxIncluded: shippingQuote.taxIncluded === true,
+            checkoutSessionId: shippingQuote?.checkoutSessionId || payload.checkoutSessionId || payload.sessionId || null,
+            idempotencyKey,
+            idempotencyPayloadHash,
+            shippingCurrency: shippingQuote?.currency || 'INR',
+            shippingTaxIncluded: shippingQuote?.taxIncluded === true,
             shippingTaxAmount,
-            shippingTaxBreakdown: shippingQuote.taxBreakdown || null,
+            shippingTaxBreakdown: shippingQuote?.taxBreakdown || null,
             discountAmount,
             total,
             couponId: appliedCoupon ? appliedCoupon.id : null,
@@ -1338,7 +1600,8 @@ const placeOrder = async (userId, payload) => {
         // For COD orders, create the Payment record immediately inside the transaction.
         // This mirrors how Razorpay creates a pending Payment; it is updated to 'completed'
         // by the admin "Mark COD as Collected" endpoint later.
-        if (paymentMethod === 'cod') {
+    const isFreeSettledOrder = paymentMethod !== 'cod' && Number(order.total) <= 0.009;
+    if (paymentMethod === 'cod' || isFreeSettledOrder) {
             const currencySetting = await Setting.findOne({ where: { group: 'general', key: 'currency' }, transaction: t });
             const currency = (currencySetting?.value || 'INR').toUpperCase();
             await Payment.create({
@@ -1348,6 +1611,18 @@ const placeOrder = async (userId, payload) => {
                 amount: total,
                 currency,
                 status: initialPaymentStatus,
+            }, { transaction: t });
+        } else if (isFreeOnlineOrder) {
+            const currencySetting = await Setting.findOne({ where: { group: 'general', key: 'currency' }, transaction: t });
+            const currency = (currencySetting?.value || 'INR').toUpperCase();
+            await Payment.create({
+                orderId: order.id,
+                provider: paymentMethod,
+                transactionId: `free_${order.id}`,
+                amount: 0,
+                currency,
+                status: 'paid_online',
+                metadata: { freeOrder: true, settledAt: new Date().toISOString() },
             }, { transaction: t });
         }
 
@@ -1394,11 +1669,11 @@ const placeOrder = async (userId, payload) => {
             transaction: t,
         });
 
-        if (paymentMethod === 'cod') {
+        if (paymentMethod === 'cod' || isFreeOnlineOrder) {
             await addOrderHistoryEvent({
                 orderId: order.id,
                 eventType: 'order_placed',
-                description: 'Order was placed successfully.',
+                description: isFreeOnlineOrder ? 'Free order was placed successfully (no payment required).' : 'Order was placed successfully.',
                 actorId: userId,
                 actorType: 'customer',
                 transaction: t,
@@ -1419,6 +1694,7 @@ const placeOrder = async (userId, payload) => {
             await CouponUsage.create({
                 couponId: appliedItem.id,
                 userId,
+                guestSessionId: userId ? null : guestSessionId,
                 orderId: order.id
             }, { transaction: t });
         }
@@ -1429,13 +1705,22 @@ const placeOrder = async (userId, payload) => {
             );
         }
 
-        if (cart && paymentMethod === 'cod') {
+        if (cart) {
             await cart.update({ status: 'converted' }, { transaction: t });
         }
         
         // Finalize transaction
         return { order, eventBuffer };
-    });
+        });
+        } catch (error) {
+            const constraint = error.original?.constraint || error.parent?.constraint || '';
+            if (idempotencyKey && /idempotency/i.test(`${constraint} ${error.message || ''}`)) {
+                const priorOrder = await Order.findOne({ where: idempotencyWhere });
+                if (priorOrder) return { order: assertMatchingOrderIntent(priorOrder, idempotencyPayloadHash), idempotentReplay: true };
+            }
+            throw error;
+        }
+        const { order, eventBuffer } = transactionResult;
 
     // Emit all buffered events after commit
     eventBuffer.forEach(evt => events.emit(evt.name, evt.payload));
@@ -1449,18 +1734,9 @@ const placeOrder = async (userId, payload) => {
 
 
     // For COD orders skip the payment gateway entirely — order is already confirmed.
-    // For Razorpay orders, createIntent runs OUTSIDE the transaction so a gateway failure
-    // doesn't roll back the order — the order exists, payment can be retried.
-    let clientSecret = null;
-    if (paymentMethod !== 'cod') {
-        try {
-            const intent = await PaymentService.createIntent(order.userId, order.id);
-            clientSecret = intent.clientSecret;
-        } catch (err) {
-            // Log but don't fail — the order is saved; frontend can retry payment
-            clientSecret = null;
-        }
-    }
+    // For online orders the client starts the provider session via
+    // POST /payments/create-order (PaymentService.createOrder) after this
+    // returns, so there is intentionally no gateway call inside this transaction.
 
 
     try {
@@ -1524,6 +1800,8 @@ const placeOrder = async (userId, payload) => {
                         user,
                         {
                             orderNumber: order.orderNumber,
+                            orderDate: order.createdAt,
+                            paymentMethod: PAYMENT_METHOD_NAMES[paymentMethod] || paymentMethod,
                             total: order.total,
                             firstName: user.firstName || 'Customer',
                         },
@@ -1538,8 +1816,72 @@ const placeOrder = async (userId, payload) => {
 
     return {
         order,
-        ...(clientSecret ? { clientSecret } : {}),
     };
+};
+
+const requestGuestOrderClaim = async (userId) => {
+    const user = await User.findByPk(userId);
+    if (!user || user.status !== 'active') throw new AppError('NOT_FOUND', 404, 'Account not found');
+    if (!user.emailVerified) throw new AppError('EMAIL_NOT_VERIFIED', 403, 'Verify your account email before looking for guest orders.');
+
+    const rawToken = crypto.randomBytes(32).toString('hex');
+    const tokenHash = crypto.createHash('sha256').update(rawToken).digest('hex');
+    const expiresAt = new Date(Date.now() + 30 * 60 * 1000);
+    await sequelize.transaction(async (transaction) => {
+        await GuestOrderClaimToken.destroy({ where: { userId, usedAt: null }, transaction });
+        await GuestOrderClaimToken.create({ userId, tokenHash, expiresAt }, { transaction });
+    });
+
+    const websiteUrl = (process.env.CLIENT_URL || 'http://localhost:3000').split(',')[0].trim().replace(/\/+$/, '');
+    const sent = await NotificationService.send('guest_order_claim', user.email, {
+        customer_name: `${user.firstName || ''} ${user.lastName || ''}`.trim() || user.email,
+        claim_url: `${websiteUrl}/account/orders/link-guest?token=${rawToken}`,
+        expiry_minutes: 30,
+    }, user.id);
+    if (!sent) {
+        await GuestOrderClaimToken.destroy({ where: { tokenHash } });
+        throw new AppError('EMAIL_UNAVAILABLE', 503, 'We could not send the verification email. Please try again later.');
+    }
+    return { message: 'If your account email is verified, a secure link has been sent to your email address.' };
+};
+
+const claimGuestOrders = async (userId, rawToken) => {
+    const tokenHash = crypto.createHash('sha256').update(rawToken).digest('hex');
+    return sequelize.transaction(async (transaction) => {
+        const token = await GuestOrderClaimToken.findOne({
+            where: { userId, tokenHash, usedAt: null, expiresAt: { [Op.gt]: new Date() } },
+            transaction,
+            lock: transaction.LOCK.UPDATE,
+        });
+        if (!token) throw new AppError('INVALID_OR_EXPIRED_TOKEN', 400, 'This order-linking link is invalid or has expired. Request a new one.');
+
+        const user = await User.findByPk(userId, { transaction, lock: transaction.LOCK.UPDATE });
+        if (!user || user.status !== 'active' || !user.emailVerified) {
+            throw new AppError('EMAIL_NOT_VERIFIED', 403, 'Verify your account email before linking guest orders.');
+        }
+        const normalizedEmail = user.email.trim().toLowerCase();
+        const orders = await Order.findAll({
+            where: { userId: null, guestEmail: normalizedEmail },
+            attributes: ['id', 'orderNumber'],
+            transaction,
+            lock: transaction.LOCK.UPDATE,
+        });
+
+        for (const order of orders) {
+            await order.update({ userId, guestSessionId: null }, { transaction });
+            await addOrderHistoryEvent({
+                orderId: order.id,
+                eventType: 'guest_order_linked',
+                description: 'Guest order linked to the verified customer account.',
+                actorId: userId,
+                actorType: 'customer',
+                metadata: { orderNumber: order.orderNumber, email: normalizedEmail },
+                transaction,
+            });
+        }
+        await token.update({ usedAt: new Date() }, { transaction });
+        return { linkedCount: orders.length };
+    });
 };
 
 const getOrders = async (userId, isAdmin, page = 1, limit = 20, filters = {}) => {
@@ -1573,8 +1915,25 @@ const getOrders = async (userId, isAdmin, page = 1, limit = 20, filters = {}) =>
     // }
 
     if (normalizedStatus) {
-        const statuses = normalizedStatus.split(',').map(s => s.trim()).filter(Boolean);
-        where.status = statuses.length === 1 ? statuses[0] : { [Op.in]: statuses };
+        const requested = normalizedStatus.split(',').map(s => s.trim()).filter(Boolean);
+        const displayShippingStatus = {
+            shipped: ['shipped', 'partially_shipped', 'in_transit'],
+            out_for_delivery: ['out_for_delivery', 'partially_out_for_delivery'],
+            partially_delivered: ['partially_delivered'],
+            delivered: ['delivered'],
+        };
+        const displayStatuses = requested.filter((status) => Object.prototype.hasOwnProperty.call(displayShippingStatus, status));
+        const orderStatuses = requested.filter((status) => !Object.prototype.hasOwnProperty.call(displayShippingStatus, status) && status !== 'placed');
+        const statusClauses = [];
+        if (orderStatuses.length) statusClauses.push({ status: orderStatuses.length === 1 ? orderStatuses[0] : { [Op.in]: orderStatuses } });
+        for (const status of displayStatuses) {
+            statusClauses.push({ orderShippingStatus: { [Op.in]: displayShippingStatus[status] } });
+        }
+        if (requested.includes('placed')) {
+            statusClauses.push({ status: { [Op.in]: ['confirmed', 'on_hold'] }, orderShippingStatus: 'not_shipped' });
+        }
+        if (statusClauses.length === 1) Object.assign(where, statusClauses[0]);
+        else if (statusClauses.length > 1) andClauses.push({ [Op.or]: statusClauses });
     }
 
     if (normalizedShippingStatus) {
@@ -1756,8 +2115,15 @@ const getOrders = async (userId, isAdmin, page = 1, limit = 20, filters = {}) =>
     };
 };
 
-const getOrderById = async (id, userId, isAdmin) => {
-    const where = isAdmin ? { id } : { id, userId };
+const buildOrderLookupWhere = (id, userId, isAdmin, guestSessionId = null) => isAdmin
+        ? { id }
+        : userId
+            ? { id, userId }
+            : guestSessionId
+                ? { id, userId: null, guestSessionId }
+                : { id: null };
+const getOrderById = async (id, userId, isAdmin, guestSessionId = null) => {
+    const where = buildOrderLookupWhere(id, userId, isAdmin, guestSessionId);
     let order = await Order.findOne({
         where,
         include: HEAVY_ORDER_INCLUDE,
@@ -1794,13 +2160,124 @@ const getOrderById = async (id, userId, isAdmin) => {
         });
         order = await Order.findOne({ where, include: HEAVY_ORDER_INCLUDE });
     }
+    if (isAdmin) {
+        const shipments = (order.fulfillments || []).flatMap((fulfillment) => fulfillment.shipments || []);
+        if (shipments.length) {
+            const operations = await ShippingOperation.findAll({
+                where: { shipmentId: { [Op.in]: shipments.map((shipment) => shipment.id) }, operationType: 'create' },
+                order: [['createdAt', 'DESC']],
+            });
+            const latestByShipment = new Map();
+            for (const operation of operations) {
+                if (!latestByShipment.has(operation.shipmentId)) latestByShipment.set(operation.shipmentId, operation);
+            }
+            for (const shipment of shipments) {
+                const operation = latestByShipment.get(shipment.id);
+                if (!operation) continue;
+                shipment.setDataValue('operationId', operation.id);
+                shipment.setDataValue('operationStatus', operation.status);
+                shipment.setDataValue('operationError', operation.lastError || null);
+            }
+        }
+    }
     return order;
 };
 
+const updateContactEmail = async (orderId, email) => sequelize.transaction(async (transaction) => {
+    const order = await Order.findByPk(orderId, { transaction, lock: Transaction.LOCK.UPDATE });
+    if (!order) throw new AppError('NOT_FOUND', 404, 'Order not found');
+    if (order.userId) throw new AppError('VALIDATION_ERROR', 400, 'Only guest orders use an order contact email.');
+    const contactEmail = email.trim();
+    await order.update({ shippingAddressSnapshot: { ...(order.shippingAddressSnapshot || {}), email: contactEmail } }, { transaction });
+    const shipments = await Shipment.findAll({ where: { orderId }, attributes: ['id'], transaction });
+    if (shipments.length > 0) {
+        const operations = await ShippingOperation.findAll({
+            where: { shipmentId: { [Op.in]: shipments.map((shipment) => shipment.id) }, operationType: 'create', status: { [Op.in]: ['queued', 'processing', 'failed'] } },
+            transaction,
+            lock: Transaction.LOCK.UPDATE,
+        });
+        for (const operation of operations) {
+            const payload = operation.requestPayload || {};
+            await operation.update({ requestPayload: {
+                ...payload,
+                order: { ...(payload.order || {}), user: { ...(payload.order?.user || {}), email: contactEmail } },
+                address: { ...(payload.address || {}), email: contactEmail },
+            } }, { transaction });
+        }
+    }
+    return order;
+});
+
+const calculateShipmentAmounts = ({ order, parcelItems, allocateOrderShipping, priorAllocatedTotal = 0, isFinalShipment = false }) => {
+    const subtotal = Number(parcelItems.reduce((sum, item) => sum + Number(item.unitPrice || 0) * Number(item.quantity || 0), 0).toFixed(2));
+    const orderSubtotal = Number(order.subtotal || 0);
+    const share = orderSubtotal > 0 ? Math.min(1, subtotal / orderSubtotal) : 0;
+    const discountAmount = Number((Number(order.discountAmount || 0) * share).toFixed(2));
+    const productTax = Number((Number(order.tax || 0) * share).toFixed(2));
+    const shippingCost = allocateOrderShipping ? Number(order.shippingCost || 0) : 0;
+    const shippingTax = allocateOrderShipping && !order.shippingTaxIncluded ? Number(order.shippingTaxAmount || 0) : 0;
+    const tax = Number((productTax + shippingTax).toFixed(2));
+    let total = Number(Math.max(0, subtotal - discountAmount + tax + shippingCost).toFixed(2));
+
+    if (order.paymentMethod === 'cod') {
+        const orderTotal = Number(order.total || 0);
+        if (isFinalShipment) {
+            total = Number(Math.max(0, orderTotal - priorAllocatedTotal).toFixed(2));
+        } else {
+            total = Number(Math.min(total, Math.max(0, orderTotal - priorAllocatedTotal)).toFixed(2));
+        }
+    }
+
+    return { subtotal, shippingCost, discountAmount, tax, total };
+};
+
+// Sum of COD collectable already promised by earlier parcels of the same order.
+// Prefers each parcel's persisted actual allocation; legacy rows without one
+// are recomputed with the order shipping fee on the earliest parcel (matching
+// creation order). Recomputing every prior parcel without shipping understated
+// the first parcel and let split COD collect more than the order total.
+const getPriorCodAllocatedTotal = (priorShipments = [], order, orderItemMap = {}) => {
+    const ordered = [...(priorShipments || [])].sort(
+        (a, b) => new Date(a.createdAt || 0) - new Date(b.createdAt || 0)
+    );
+    let total = 0;
+    let shippingConsumed = false;
+    for (const prior of ordered) {
+        const rawPersisted = prior.codCollectableAmount;
+        const persisted = rawPersisted == null || rawPersisted === '' ? NaN : Number(rawPersisted);
+        if (Number.isFinite(persisted)) {
+            total += persisted;
+            continue;
+        }
+        const priorItems = ((prior.items || []).map((si) => {
+            const info = orderItemMap[si.orderItemId];
+            return {
+                quantity: Number(si.quantity),
+                unitPrice: Number(info?.snapshotPrice || 0),
+            };
+        })).filter((entry) => Number.isFinite(entry.quantity) && entry.quantity > 0);
+        if (!priorItems.length) continue;
+        const amounts = calculateShipmentAmounts({
+            order,
+            parcelItems: priorItems,
+            allocateOrderShipping: !shippingConsumed,
+        });
+        shippingConsumed = true;
+        total += amounts.total;
+    }
+    return Number(total.toFixed(2));
+};
+
 const createFulfillment = async (orderId, payload, actingUserId, auditContext = null) => {
-    // payload: { trackingNumber, courier, notes, status, items: [{ orderItemId, quantity }], providerId }
-    const { trackingNumber, courier, expectedDeliveryDate, notes, status, items, providerId } = payload;
+    // payload: { trackingNumber, trackingUrl, courier, notes, status, items: [{ orderItemId, quantity }], providerId }
+    const { trackingNumber, trackingUrl: payloadTrackingUrl, courier, expectedDeliveryDate, notes, status, items, providerId, plannedParcelId, manualPackage } = payload;
+    if (status === 'cancelled') {
+        throw new AppError('VALIDATION_ERROR', 400, 'Create the shipment first, then use the shipment cancellation action.');
+    }
     const normalizedExpectedDeliveryDate = normalizeDateOnly(expectedDeliveryDate);
+    const normalizedTrackingUrl = typeof payloadTrackingUrl === 'string' && payloadTrackingUrl.trim()
+        ? payloadTrackingUrl.trim()
+        : null;
 
     if (!items || items.length === 0) {
         throw new AppError('VALIDATION_ERROR', 400, 'At least one item is required for a shipment');
@@ -1821,8 +2298,8 @@ const createFulfillment = async (orderId, payload, actingUserId, auditContext = 
         const orderItems = await OrderItem.findAll({
             where: { orderId: order.id },
             include: [
-                { model: FulfillmentItem, as: 'fulfillmentItems', required: false },
-                { model: ShipmentItem, as: 'shipmentItems', required: false },
+                { model: FulfillmentItem, as: 'fulfillmentItems', required: false, include: [{ model: Fulfillment, as: 'fulfillment', attributes: ['status'] }] },
+                { model: ShipmentItem, as: 'shipmentItems', required: false, include: [{ model: Shipment, as: 'shipment', attributes: ['status'] }] },
             ],
             transaction: t,
         });
@@ -1844,8 +2321,7 @@ const createFulfillment = async (orderId, payload, actingUserId, auditContext = 
             transaction: t,
             lock: Transaction.LOCK.UPDATE,
         });
-        const normalizedPaymentStatus = normalizePaymentStatus(payment?.status, payment?.provider || order.paymentMethod);
-        if (order.paymentMethod !== 'cod' && !isPaymentSettled(normalizedPaymentStatus, payment?.provider)) {
+        if (order.paymentMethod !== 'cod' && !isPaymentSettled(payment?.status, payment?.provider || order.paymentMethod)) {
             throw new AppError('VALIDATION_ERROR', 400, 'Cannot ship an unpaid online order');
         }
         if (order.paymentMethod === 'cod' && !isCodPaymentShippable(payment, order)) {
@@ -1863,6 +2339,7 @@ const createFulfillment = async (orderId, payload, actingUserId, auditContext = 
                 productId:     oi.productId,
                 variantId:     oi.variantId,
                 isCombo:       Boolean(oi.isCombo),
+                taxBreakdown:  oi.taxBreakdown || null,
                 snapshotName:  oi.snapshotName,
                 snapshotSku:   oi.snapshotSku,
                 snapshotPrice: oi.snapshotPrice,
@@ -1934,10 +2411,15 @@ const createFulfillment = async (orderId, payload, actingUserId, auditContext = 
         // Determine Provider
         let provider = null;
         let adapter = null;
-        if (providerId) {
+        if (providerId === 'manual') {
+            provider = await ShippingProvider.findOne({ where: { code: 'manual' }, transaction: t });
+        } else if (providerId) {
             provider = await ShippingProvider.findByPk(providerId, { transaction: t });
+            if (!provider || !provider.enabled) {
+                throw new AppError('VALIDATION_ERROR', 400, 'The selected shipping provider is unavailable. Refresh providers and choose an enabled option.');
+            }
         }
-        if (!provider && order?.shippingSnapshot?.provider) {
+        if (!provider && providerId !== 'manual' && order?.shippingSnapshot?.provider) {
             provider = await ShippingProvider.findOne({
                 where: {
                     [Op.or]: [
@@ -1948,18 +2430,23 @@ const createFulfillment = async (orderId, payload, actingUserId, auditContext = 
                 transaction: t,
             });
         }
-        if (!provider) {
+        if (!provider && providerId !== 'manual') {
             provider = await ShippingProvider.findOne({
                 where: { isDefault: true, enabled: true },
                 transaction: t,
             });
         }
-        if (!provider) {
+        if (!provider && providerId !== 'manual') {
             provider = await ShippingProvider.findOne({ where: { code: 'manual' }, transaction: t });
         }
         if (provider) {
             adapter = resolveProvider(provider);
         }
+        const manualDeliverySelected = providerId === 'manual' || provider?.code === 'manual';
+        if (order.paymentMethod === 'cod' && provider && provider.supportsCod === false) {
+            throw new AppError('VALIDATION_ERROR', 400, `${provider.name} does not support cash on delivery. Choose another provider.`);
+        }
+        // Allow staff to record measured package dimensions for both manual and carrier delivery
 
         const productIds = items.map(reqItem => orderItemMap[reqItem.orderItemId]?.productId).filter(Boolean);
         const products = await Product.findAll({
@@ -1971,29 +2458,131 @@ const createFulfillment = async (orderId, payload, actingUserId, auditContext = 
             map[p.id] = p;
             return map;
         }, {});
+        const variantIds = [...new Set(items.map((item) => orderItemMap[item.orderItemId]?.variantId).filter(Boolean))];
+        const variants = variantIds.length ? await ProductVariant.findAll({ where: { id: variantIds }, transaction: t }) : [];
+        const variantMap = Object.fromEntries(variants.map((variant) => [variant.id, variant]));
         const fulfillmentItemsForDims = items.map(reqItem => ({
             product: productMap[orderItemMap[reqItem.orderItemId]?.productId],
+            variant: variantMap[orderItemMap[reqItem.orderItemId]?.variantId],
             quantity: reqItem.quantity
         })).filter(i => i.product);
+
+        const hasShippableProducts = products.some(p => p.requiresShipping !== false);
+
+        const orderParcelPlan = Array.isArray(order.shippingSnapshot?.parcelPlan) ? order.shippingSnapshot.parcelPlan : [];
+        if (orderParcelPlan.length > 1) {
+            const workflow = ShippingService.resolveWorkflow({
+                parcelCount: orderParcelPlan.length,
+                provider,
+                manualSelected: manualDeliverySelected,
+            });
+            if (workflow.status === 'blocked') {
+                throw new AppError('MULTI_PARCEL_BOOKING_UNAVAILABLE', 409, workflow.message);
+            }
+        }
+        if (hasShippableProducts && provider && provider.code !== 'manual') {
+            if (!manualPackage || !manualPackage.actualWeightGrams || !manualPackage.lengthCm || !manualPackage.breadthCm || !manualPackage.heightCm) {
+                throw new AppError('ACTUAL_PARCEL_MEASUREMENTS_REQUIRED', 400, 'Confirmed outside dimensions and packed scale weight are required before booking a carrier shipment.');
+            }
+            // A typed-in number alone does not prove a scale reading: staff must
+            // explicitly confirm the packed weight was weighed for this parcel.
+            if (manualPackage.weightConfirmed !== true) {
+                throw new AppError('SCALE_WEIGHT_CONFIRMATION_REQUIRED', 400, 'Confirm the packed scale weight reading before booking a carrier shipment.');
+            }
+        }
+
+        let selectedPlannedParcel = null;
+        // A checkout recommendation is linked only when staff explicitly select
+        // it (plannedParcelId). Custom packing without a selection is governed
+        // by remaining item quantities and confirmed measurements and must
+        // never consume a recommendation or trigger a conflict on it later.
+        if (orderParcelPlan.length > 0 && hasShippableProducts && plannedParcelId) {
+            selectedPlannedParcel = orderParcelPlan.find((parcel) => parcel.parcelId === plannedParcelId);
+            if (!selectedPlannedParcel) {
+                throw new AppError('INVALID_PLANNED_PARCEL', 400, 'The selected package is not part of this order’s saved checkout plan.');
+            }
+            if (selectedPlannedParcel) {
+                const bookedParcel = await Shipment.findOne({
+                    where: { orderId: order.id, plannedParcelId: selectedPlannedParcel.parcelId, status: { [Op.ne]: 'cancelled' } },
+                    transaction: t,
+                    lock: Transaction.LOCK.UPDATE,
+                });
+                if (bookedParcel) throw new AppError('CONFLICT', 409, 'This planned package already has a shipment. Select another package.');
+                const requestedContents = new Map();
+                for (const reqItem of items) {
+                    const info = orderItemMap[reqItem.orderItemId];
+                    const product = productMap[info?.productId];
+                    if (!product || product.requiresShipping === false) continue;
+                    const key = `${info.productId}:${info.variantId || ''}`;
+                    requestedContents.set(key, (requestedContents.get(key) || 0) + Number(reqItem.quantity));
+                }
+                const plannedContents = new Map();
+                for (const parcelItem of selectedPlannedParcel.items || []) {
+                    const key = `${parcelItem.productId}:${parcelItem.variantId || ''}`;
+                    plannedContents.set(key, (plannedContents.get(key) || 0) + Number(parcelItem.quantity));
+                }
+                const matches = requestedContents.size === plannedContents.size && [...requestedContents].every(([key, quantity]) => plannedContents.get(key) === quantity);
+                if (!matches && !manualPackage) {
+                    // Keep fulfillment strictness optional: log deviation vs blocking 409 (Warehouse reality > checkout plan)
+                    const strictMatching = order.shippingSnapshot?.strictParcelMatching === true || process.env.STRICT_PARCEL_MATCHING === 'true';
+                    if (strictMatching) {
+                        throw new AppError('FULFILLMENT_DOES_NOT_MATCH_PACKAGE_PLAN', 409, 'The shipment item quantities must exactly match the selected package from the checkout plan.');
+                    }
+                    logger.warn('Fulfillment package items deviate from checkout parcel plan; adapting dimensions to actual packed items', {
+                        orderId: order.id,
+                        plannedParcelId: selectedPlannedParcel.parcelId,
+                        requested: Object.fromEntries(requestedContents),
+                        planned: Object.fromEntries(plannedContents),
+                    });
+                    selectedPlannedParcel = null;
+                }
+            }
+        }
+
         const shippingSettings = await SettingsService.getByGroup('shipping', { maskSensitive: false });
-        const defaultPackage = Object.prototype.hasOwnProperty.call(order.shippingSnapshot || {}, 'defaultPackage')
-            ? order.shippingSnapshot.defaultPackage
-            : shippingSettings.defaultPackage || null;
-        const dims = ShippingService.computePackageDimensions(fulfillmentItemsForDims, Number(shippingSettings.packagingWeightGrams ?? 50), { defaultPackage });
+        const computedDims = selectedPlannedParcel || manualPackage ? null : ShippingService.computePackageDimensions(fulfillmentItemsForDims, Number(shippingSettings.packagingWeightGrams ?? 50));
+        const dims = manualPackage ? {
+            maxL: Number(manualPackage.lengthCm),
+            maxB: Number(manualPackage.breadthCm),
+            totalH: Number(manualPackage.heightCm),
+            totalWeightGrams: Math.ceil(Number(manualPackage.actualWeightGrams)),
+            volumeCm3: Number(manualPackage.lengthCm) * Number(manualPackage.breadthCm) * Number(manualPackage.heightCm),
+            hasMissingMeasurements: false,
+        } : selectedPlannedParcel ? {
+            maxL: Number(selectedPlannedParcel.lengthCm),
+            maxB: Number(selectedPlannedParcel.breadthCm),
+            totalH: Number(selectedPlannedParcel.heightCm),
+            totalWeightGrams: Number(selectedPlannedParcel.actualWeightGrams),
+            volumeCm3: Number(selectedPlannedParcel.lengthCm) * Number(selectedPlannedParcel.breadthCm) * Number(selectedPlannedParcel.heightCm),
+            hasMissingMeasurements: false,
+        } : computedDims;
         const totalWeightGrams = dims.totalWeightGrams;
+        if (provider?.maxWeightKg && totalWeightGrams > Number(provider.maxWeightKg) * 1000) {
+            throw new AppError('VALIDATION_ERROR', 400, `This package exceeds ${provider.name}'s ${provider.maxWeightKg} kg per-package weight limit.`);
+        }
 
         let providerOrderId = null;
         let providerShipmentId = null;
         let providerRequestId = null;
-        let awbCode = trackingNumber || null;
-        let trackingUrl = null;
+        // API-integrated couriers assign the AWB, tracking URL and courier during
+        // booking. Ignore any staff-entered tracking/courier/date/status for them so
+        // hidden form values (or direct API calls) can never fabricate them.
+        // Manual fulfillment keeps the optional staff-entered values.
+        const isApiBooking = Boolean(hasShippableProducts && provider && provider.code !== 'manual');
+        const effectiveExpectedDeliveryDate = isApiBooking ? null : normalizedExpectedDeliveryDate;
+        let awbCode = isApiBooking ? null : (typeof trackingNumber === 'string' && trackingNumber.trim() ? trackingNumber.trim() : (trackingNumber || null));
+        let trackingUrl = isApiBooking ? null : normalizedTrackingUrl;
         let labelUrl = null;
         let manifestUrl = null;
         let invoiceUrl = null;
-        let finalStatus = status === 'pending' ? SHIPMENT_DEFAULT_STATUS : (status || SHIPMENT_DEFAULT_STATUS);
-        let courierName = courier || (provider ? provider.name : 'Manual Shipping');
+        let finalStatus = isApiBooking
+            ? SHIPMENT_DEFAULT_STATUS
+            : (status === 'pending' ? SHIPMENT_DEFAULT_STATUS : (status || SHIPMENT_DEFAULT_STATUS));
+        let courierName = isApiBooking
+            ? (provider ? provider.name : 'Manual Shipping')
+            : (typeof courier === 'string' && courier.trim() ? courier.trim() : (!hasShippableProducts ? 'Digital Fulfillment' : (provider ? provider.name : 'Manual Shipping')));
         let rawResponse = null;
-        let providerState = provider && provider.code !== 'manual' ? 'pending' : 'not_required';
+        let providerState = hasShippableProducts && provider && provider.code !== 'manual' ? 'pending' : 'not_required';
         let providerRequestPayload = null;
 
         // Create the fulfillment record
@@ -2006,37 +2595,71 @@ const createFulfillment = async (orderId, payload, actingUserId, auditContext = 
             status:         finalStatus === SHIPMENT_DEFAULT_STATUS ? 'pending' : finalStatus,
         }, { transaction: t });
 
-        // External provider calls are queued after this transaction commits.
-        // Local order/inventory state must never be held open while waiting on
-        // Shiprocket, and retries must operate on a durable shipment record.
-        if (adapter && provider.code !== 'manual') {
-            const user = await User.findByPk(order.userId, { transaction: t });
-            order.user = user;
-
-            const address = order.shippingAddressSnapshot || {};
-            const deliveryPincode = String(address.postalCode || address.pincode || '').trim();
-
-            const providerItems = items.map(reqItem => {
+        // Parcel value allocation for every shippable parcel (carrier or manual).
+        // COD parcels persist their actual collectable so later parcels reuse
+        // real allocations instead of recomputed ones that dropped the first
+        // parcel's shipping fee and over-allocated the order total.
+        let priorShipments = [];
+        let allItemsFulfilled = false;
+        let parcelAmounts = null;
+        let amountItems = [];
+        if (hasShippableProducts) {
+            amountItems = items.map((reqItem) => {
                 const info = orderItemMap[reqItem.orderItemId];
                 return {
                     quantity: Number(reqItem.quantity),
                     snapshotName: info.snapshotName,
                     sku: info.snapshotSku || 'SKU',
-                    unitPrice: info.snapshotPrice || 0
+                    unitPrice: Number(info.snapshotPrice || 0),
+                    discountAmount: Number((Number(order.discountAmount || 0) * (Number(info.snapshotPrice || 0) * Number(reqItem.quantity)) / Math.max(Number(order.subtotal || 0), 1)).toFixed(2)),
+                    taxAmount: Number(((Number(info.taxBreakdown?.totalTax || 0) / Math.max(Number(info.totalQty || 0), 1)) * Number(reqItem.quantity)).toFixed(2)),
                 };
             });
+            priorShipments = await Shipment.findAll({
+                where: { orderId: order.id, status: { [Op.ne]: 'cancelled' } },
+                include: [{ model: ShipmentItem, as: 'items' }],
+                order: [['createdAt', 'ASC']],
+                transaction: t,
+            });
+
+            allItemsFulfilled = order.items.every((oi) => {
+                const alreadyShipped = getDispatchedQuantityForOrderItem(oi);
+                const reqItem = items.find((i) => i.orderItemId === oi.id);
+                const addingNow = reqItem ? Number(reqItem.quantity) : 0;
+                return (alreadyShipped + addingNow) >= Number(oi.quantity);
+            });
+
+            const priorAllocatedTotal = order.paymentMethod === 'cod'
+                ? getPriorCodAllocatedTotal(priorShipments, order, orderItemMap)
+                : 0;
+            parcelAmounts = calculateShipmentAmounts({
+                order,
+                parcelItems: amountItems,
+                allocateOrderShipping: priorShipments.length === 0,
+                priorAllocatedTotal,
+                isFinalShipment: allItemsFulfilled,
+            });
+        }
+
+        // External provider calls are queued after this transaction commits.
+        // Local order/inventory state must never be held open while waiting on
+        // Shiprocket, and retries must operate on a durable shipment record.
+        if (hasShippableProducts && adapter && provider.code !== 'manual') {
+            const user = order.userId ? await User.findByPk(order.userId, { transaction: t }) : null;
+            order.user = user;
+
+            const address = order.shippingAddressSnapshot || {};
+            const deliveryPincode = String(address.postalCode || address.pincode || '').trim();
+
+            const providerItems = amountItems;
             providerRequestId = `${order.orderNumber}-${fulfillment.id}`;
             providerRequestPayload = {
                 order: {
                     orderNumber: order.orderNumber,
                     createdAt: order.createdAt,
-                    subtotal: Number(order.subtotal || 0),
-                    shippingCost: Number(order.shippingCost || 0),
-                    discountAmount: Number(order.discountAmount || 0),
-                    tax: Number(order.tax || 0),
-                    total: Number(order.total || 0),
+                    ...parcelAmounts,
                     paymentMethod: order.paymentMethod,
-                    user: { email: user?.email || '' },
+                    user: { email: user?.email || address.email || '' },
                 },
                 shipment: {
                     providerRequestId,
@@ -2044,7 +2667,8 @@ const createFulfillment = async (orderId, payload, actingUserId, auditContext = 
                     lengthCm: dims.maxL,
                     breadthCm: dims.maxB,
                     heightCm: dims.totalH,
-                    volumetricWeightGrams: Math.ceil((dims.volumeCm3 / 5000) * 1000),
+                    volumetricWeightGrams: Math.ceil((dims.volumeCm3 / (Number(shippingSettings.volumetricDivisor) || 5000)) * 1000),
+                    courierCompanyId: selectedPlannedParcel?.courierCompanyId || null,
                     hasMissingMeasurements: Boolean(dims.hasMissingMeasurements),
                 },
                 address: {
@@ -2063,6 +2687,9 @@ const createFulfillment = async (orderId, payload, actingUserId, auditContext = 
             orderId,
             fulfillmentId: fulfillment.id,
             providerId: provider?.id || null,
+            plannedParcelId: selectedPlannedParcel?.parcelId || null,
+            packageProfileId: selectedPlannedParcel?.packageId || null,
+            packageName: selectedPlannedParcel?.packageName || manualPackage?.packageName?.trim() || (manualPackage ? 'Staff packed' : null),
             providerOrderId,
             providerShipmentId,
             providerRequestId,
@@ -2071,13 +2698,16 @@ const createFulfillment = async (orderId, payload, actingUserId, auditContext = 
             courierName: courierName,
             trackingNumber: awbCode,
             trackingUrl: trackingUrl,
-            expectedDeliveryDate: normalizedExpectedDeliveryDate,
-            expectedDeliveryHistory: normalizedExpectedDeliveryDate
-                ? appendExpectedDeliveryHistory([], normalizedExpectedDeliveryDate, actingUserId)
+            expectedDeliveryDate: effectiveExpectedDeliveryDate,
+            expectedDeliveryHistory: effectiveExpectedDeliveryDate
+                ? appendExpectedDeliveryHistory([], effectiveExpectedDeliveryDate, actingUserId)
                 : [],
             labelUrl: labelUrl,
             manifestUrl,
             invoiceUrl,
+            codCollectableAmount: order.paymentMethod === 'cod' && hasShippableProducts && parcelAmounts
+                ? parcelAmounts.total
+                : null,
             status: finalStatus,
             statusHistory: [{
                 status: finalStatus,
@@ -2085,7 +2715,7 @@ const createFulfillment = async (orderId, payload, actingUserId, auditContext = 
                 source: 'admin',
             }],
             actualWeightGrams: totalWeightGrams,
-            volumetricWeightGrams: Math.ceil((dims.volumeCm3 / 5000) * 1000),
+            volumetricWeightGrams: Math.ceil((dims.volumeCm3 / (Number(shippingSettings.volumetricDivisor) || 5000)) * 1000),
             lengthCm: dims.maxL,
             breadthCm: dims.maxB,
             heightCm: dims.totalH,
@@ -2107,7 +2737,7 @@ const createFulfillment = async (orderId, payload, actingUserId, auditContext = 
             }, { transaction: t });
         }
 
-        if (providerRequestPayload && provider) {
+        if (hasShippableProducts && providerRequestPayload && provider) {
             await ShippingOperationService.enqueueCreateOperation({
                 shipment,
                 provider,
@@ -2138,14 +2768,14 @@ const createFulfillment = async (orderId, payload, actingUserId, auditContext = 
             });
         }
         const newStatus = await syncOrderShippingStatus(order, t, actingUserId);
-        if (normalizedExpectedDeliveryDate) {
+        if (effectiveExpectedDeliveryDate) {
             await addOrderHistoryEvent({
                 orderId,
                 eventType: 'shipment_expected_delivery',
-                description: `Expected delivery date set to ${normalizedExpectedDeliveryDate}.`,
+                description: `Expected delivery date set to ${effectiveExpectedDeliveryDate}.`,
                 actorId: actingUserId,
                 actorType: 'admin',
-                metadata: { shipmentId: shipment.id, expectedDeliveryDate: normalizedExpectedDeliveryDate },
+                metadata: { shipmentId: shipment.id, expectedDeliveryDate: effectiveExpectedDeliveryDate },
                 transaction: t,
             });
         }
@@ -2159,10 +2789,11 @@ const createFulfillment = async (orderId, payload, actingUserId, auditContext = 
                     entityId: fulfillment.id,
                     changes:  {
                         orderId,
-                        trackingNumber,
-                        expectedDeliveryDate: normalizedExpectedDeliveryDate,
+                        trackingNumber: awbCode,
+                        trackingUrl,
+                        expectedDeliveryDate: effectiveExpectedDeliveryDate,
                         shipmentId: shipment.id,
-                        fulfillmentStatus: status || 'pending',
+                        fulfillmentStatus: finalStatus === SHIPMENT_DEFAULT_STATUS ? 'pending' : finalStatus,
                         newOrderShippingStatus: newStatus,
                         method: auditContext?.method,
                         path: auditContext?.path,
@@ -2189,8 +2820,20 @@ const createFulfillment = async (orderId, payload, actingUserId, auditContext = 
     const createdShipment = createdFulfillment.get('shipments')?.[0];
     if (fulfillment.operationId) {
         const operationResult = await ShippingOperationService.processOperation(fulfillment.operationId);
+        if (createdShipment) {
+            const shipmentOperationData = {
+                operationId: operationResult.operationId || fulfillment.operationId,
+                operationStatus: operationResult.success ? 'completed' : (operationResult.skipped ? 'queued' : (operationResult.terminal ? 'failed' : 'retrying')),
+                providerState: operationResult.success ? 'completed' : (operationResult.skipped ? 'pending' : (operationResult.terminal ? 'failed' : 'retrying')),
+                lastProviderError: operationResult.error || null,
+            };
+            for (const [key, value] of Object.entries(shipmentOperationData)) {
+                if (typeof createdShipment.setDataValue === 'function') createdShipment.setDataValue(key, value);
+                else createdShipment[key] = value;
+            }
+        }
         if (operationResult.success && operationResult.result && createdShipment) {
-            Object.assign(createdShipment, {
+            const providerData = {
                 providerOrderId: operationResult.result.providerOrderId || createdShipment.providerOrderId,
                 providerShipmentId: operationResult.result.providerShipmentId || createdShipment.providerShipmentId,
                 awb: operationResult.result.awbCode || createdShipment.awb,
@@ -2200,7 +2843,11 @@ const createFulfillment = async (orderId, payload, actingUserId, auditContext = 
                 manifestUrl: operationResult.result.manifest || createdShipment.manifestUrl,
                 invoiceUrl: operationResult.result.invoice || createdShipment.invoiceUrl,
                 providerState: 'completed',
-            });
+            };
+            for (const [key, value] of Object.entries(providerData)) {
+                if (typeof createdShipment.setDataValue === 'function') createdShipment.setDataValue(key, value);
+                else createdShipment[key] = value;
+            }
         }
     }
     await queueShipmentNotification(orderId, createdShipment?.status, createdShipment);
@@ -2240,7 +2887,7 @@ const updateStatus = async (id, status, actingUserId, auditContext = null) => {
         if (
             status === 'processing' &&
             order.paymentMethod !== 'cod' &&
-            (!payment || ['payment_pending', 'pending'].includes(payment.status))
+            (!payment || !isPaymentSettled(payment.status, payment.provider))
         ) {
             throw new AppError(
                 'VALIDATION_ERROR',
@@ -2250,7 +2897,7 @@ const updateStatus = async (id, status, actingUserId, auditContext = null) => {
         }
         if (status === 'cancelled') {
             const activeShipmentCount = await Shipment.count({
-                where: { orderId: order.id },
+                where: { orderId: order.id, status: { [Op.ne]: 'cancelled' } },
                 transaction: t,
             });
             if (activeShipmentCount > 0) {
@@ -2282,27 +2929,27 @@ const updateStatus = async (id, status, actingUserId, auditContext = null) => {
             transaction: t,
         });
         
-        // Sync payment status if order is marked as paid
+        // Normalize a legacy COD pending state only. Online payments must be
+        // settled by the provider callback, never by an admin status change.
         if (status === 'processing') {
-            if (payment && ['payment_pending', 'pending'].includes(payment.status)) {
-                const nextPaymentStatus = payment.provider === 'cod' ? 'pending_cod' : 'paid_online';
+            if (order.paymentMethod === 'cod' && payment?.provider === 'cod' && ['payment_pending', 'pending'].includes(payment.status)) {
                 await payment.update({ 
-                    status: nextPaymentStatus,
+                    status: 'pending_cod',
                     metadata: {
                         ...(payment.metadata || {}),
-                        manuallyMarkedPaidBy: actingUserId,
-                        manuallyMarkedPaidAt: new Date().toISOString()
+                        codPendingNormalizedBy: actingUserId,
+                        codPendingNormalizedAt: new Date().toISOString()
                     }
                 }, { transaction: t });
             }
         } else if (status === 'cancelled') {
             if (payment && isPaymentSettled(payment.status, payment.provider)) {
-                await createRefundRecord({
-                    order,
-                    payment,
-                    reason: 'Order cancelled before shipment',
-                    actingUserId,
-                    metadata: { cancellationRefund: true },
+                await addOrderHistoryEvent({
+                    orderId: order.id,
+                    eventType: 'refund_required',
+                    description: 'Payment was captured before cancellation. Initiate a gateway refund and verify its provider status.',
+                    actorId: actingUserId,
+                    actorType: 'admin',
                     transaction: t,
                 });
             } else if (payment && ['payment_pending', 'pending_cod', 'pending'].includes(payment.status)) {
@@ -2379,132 +3026,36 @@ const refundOrder = async (id, actingUserId, isAdmin, auditContext = null) => {
     if (!isAdmin) {
         throw new AppError('FORBIDDEN', 403, 'You do not have permission to refund orders');
     }
-    const refundedOrderId = await sequelize.transaction(async (t) => {
-        const order = await Order.findByPk(id, {
-            transaction: t,
-            lock: Transaction.LOCK.UPDATE,
-        });
-
-        if (!order) {
-            throw new AppError('NOT_FOUND', 404, 'Order not found');
-        }
-
-        if (!isRefundableOrderStatus(order.status)) {
-            throw new AppError('VALIDATION_ERROR', 400, 'Only paid, processing, shipped, or delivered orders can be refunded');
-        }
-
-        const payment = await Payment.findOne({
-            where: { orderId: order.id },
-            attributes: [...ADMIN_ORDER_PAYMENT_ATTRIBUTES, 'metadata'],
-            transaction: t,
-            lock: Transaction.LOCK.UPDATE,
-        });
-
-        if (!payment || !['paid_online', 'paid_cod', 'completed', 'cod_collected'].includes(payment.status)) {
-            throw new AppError('VALIDATION_ERROR', 400, 'Cannot refund an order before payment has been captured or COD has been collected');
-        }
-
-        if (payment && !['paid_online', 'paid_cod', 'completed', 'cod_collected'].includes(payment.status)) {
-            throw new AppError('VALIDATION_ERROR', 400, 'Only captured payments can be refunded');
-        }
-
-        const refund = await OrderRefund.create({
-            orderId: order.id,
-            paymentId: payment.id,
-            amount: payment.amount,
-            currency: payment.currency || 'INR',
-            status: 'refunded',
-            reason: 'Manual full-order refund',
-            processedAt: new Date(),
-            metadata: { legacyFullOrderRefund: true },
-        }, { transaction: t });
-
-        if (payment && !['refunded'].includes(payment.status)) {
-            const currentMetadata = payment.metadata && typeof payment.metadata === 'object'
-                ? payment.metadata
-                : {};
-
-            await payment.update({
-                status: 'refunded',
-                metadata: {
-                    ...currentMetadata,
-                    manualRefund: {
-                        refundedAt: new Date().toISOString(),
-                        refundedBy: actingUserId,
-                    },
-                },
-            }, { transaction: t });
-        }
-
-        await logOrderHistory({
-            orderId: order.id,
-            entityType: 'OrderRefund',
-            entityId: refund.id,
-            statusGroup: 'refund',
-            toStatus: 'refunded',
-            changedBy: actingUserId,
-            metadata: { amount: payment.amount },
-            transaction: t,
-        });
-
-        try {
-            if (AuditService && AuditService.log) {
-                await AuditService.log({
-                    userId: actingUserId,
-                    action: ACTIONS.STATUS_CHANGE,
-                    entity: ENTITIES.ORDER,
-                    entityId: id,
-                    changes: { 
-                        orderId: id, 
-                        status: 'refunded',
-                        method: auditContext?.method,
-                        path: auditContext?.path
-                    },
-                    ipAddress: auditContext?.ip,
-                    userAgent: auditContext?.userAgent,
-                });
-            }
-        } catch (err) {}
-
-        return order.id;
-    });
-
-    const refundedOrder = await getOrderById(refundedOrderId, actingUserId, true);
-    try {
-        const user = await User.findByPk(refundedOrder.userId, {
-            include: [{ model: UserProfile, as: 'profile', required: false }],
-        });
-        if (user) {
-            await NotificationService.sendToUser(
-                'order_refunded',
-                ['email', 'sms', 'whatsapp'],
-                user,
-                {
-                    customer_name: `${user.firstName || ''} ${user.lastName || ''}`.trim() || user.email,
-                    order_number: refundedOrder.orderNumber,
-                    order_id: refundedOrder.id,
-                    refund_amount: refundedOrder.total,
-                    order_total: refundedOrder.total,
-                },
-                refundedOrder.id
-            );
-        }
-    } catch (err) {
-        logger.error('Failed to queue refund notification', { orderId: refundedOrderId, error: err.message });
-    }
-
-    return refundedOrder;
+    await processRefund(id, { reason: 'Manual full-order refund' }, actingUserId, true, auditContext);
+    return getOrderById(id, actingUserId, true);
 };
 
-const cancelOrder = async (id, userId) => {
+const cancelOrder = async (id, userId, cancellation = {}, guestSessionId = null) => {
+    const reasonCode = cancellation?.reason;
+    const reasonLabel = CANCELLATION_REASONS[reasonCode];
+    const reasonDetails = String(cancellation?.reasonDetails || '').trim();
+    if (!reasonLabel || (reasonCode === 'other' && reasonDetails.length < 3) || reasonDetails.length > 500) {
+        throw new AppError('VALIDATION_ERROR', 400, 'Select a cancellation reason and add details for “Other”.');
+    }
+    const cancellationReason = reasonDetails ? `${reasonLabel}: ${reasonDetails}` : reasonLabel;
     let orderRecord, prevStatus, eventsToEmit;
 
+    if (!userId && !isGuestSessionId(guestSessionId)) {
+        throw new AppError('UNAUTHORIZED', 401, 'A valid guest checkout session is required to cancel this order');
+    }
+
     await sequelize.transaction(async (t) => {
+        const ownerConditions = userId ? [{ id, userId }] : [];
+        if (isGuestSessionId(guestSessionId)) {
+            ownerConditions.push({ id, userId: null, guestSessionId });
+        }
         const order = await Order.findOne({
-            where: { id, userId },
+            where: { [Op.or]: ownerConditions },
             include: [{ model: OrderItem, as: 'items' }],
             transaction: t,
-            lock: Transaction.LOCK.UPDATE,
+            // Lock only the order row. Locking the joined items applies FOR UPDATE
+            // to the nullable side of Sequelize's outer join, which PostgreSQL rejects.
+            lock: { level: Transaction.LOCK.UPDATE, of: Order },
         });
         if (!order) throw new AppError('NOT_FOUND', 404, 'Order not found');
 
@@ -2514,7 +3065,7 @@ const cancelOrder = async (id, userId) => {
             throw new AppError('VALIDATION_ERROR', 400, 'Only pending or processing orders can be cancelled');
         }
         const activeShipmentCount = await Shipment.count({
-            where: { orderId: order.id },
+            where: { orderId: order.id, status: { [Op.ne]: 'cancelled' } },
             transaction: t,
         });
         if (activeShipmentCount > 0) {
@@ -2534,6 +3085,17 @@ const cancelOrder = async (id, userId) => {
             fromStatus: prevStatus,
             toStatus: 'cancelled',
             changedBy: userId,
+            metadata: { cancellationReason, cancellationReasonCode: reasonCode, cancellationReasonDetails: reasonDetails || null },
+            transaction: t,
+        });
+
+        await addOrderHistoryEvent({
+            orderId: order.id,
+            eventType: 'customer_order_cancelled',
+            description: `Customer cancelled the order. Reason: ${cancellationReason}`,
+            actorId: userId,
+            actorType: 'customer',
+            metadata: { reason: cancellationReason, reasonCode, reasonDetails: reasonDetails || null },
             transaction: t,
         });
 
@@ -2553,12 +3115,12 @@ const cancelOrder = async (id, userId) => {
                 }
             }, { transaction: t });
         } else if (payment && isPaymentSettled(payment.status, payment.provider)) {
-            await createRefundRecord({
-                order,
-                payment,
-                reason: 'Order cancelled before shipment',
-                actingUserId: userId,
-                metadata: { cancellationRefund: true, cancelledBy: 'customer' },
+            await addOrderHistoryEvent({
+                orderId: order.id,
+                eventType: 'refund_required',
+                description: 'Payment was captured before cancellation. The store must initiate and verify a gateway refund.',
+                actorId: userId,
+                actorType: 'customer',
                 transaction: t,
             });
         }
@@ -2593,21 +3155,27 @@ const cancelOrder = async (id, userId) => {
     });
 
     try {
-        const user = await User.findByPk(userId, {
+        const user = userId ? await User.findByPk(userId, {
             include: [{ model: UserProfile, as: 'profile', required: false }],
-        });
+        }) : null;
+        const guestAddress = orderRecord?.shippingAddressSnapshot || {};
+        const guestName = [guestAddress.firstName, guestAddress.lastName].filter(Boolean).join(' ').trim();
+        const variables = {
+            customer_name: user
+                ? `${user.firstName || ''} ${user.lastName || ''}`.trim() || user.email
+                : guestName || guestAddress.name || 'Guest customer',
+            customer_email: user?.email || guestAddress.email || '',
+            order_number: orderRecord.orderNumber,
+            order_id: orderRecord.id,
+            cancel_reason: cancellationReason,
+            order_total: orderRecord.total,
+        };
         if (user) {
-            const variables = {
-                customer_name: `${user.firstName || ''} ${user.lastName || ''}`.trim() || user.email,
-                customer_email: user.email,
-                order_number: orderRecord.orderNumber,
-                order_id: orderRecord.id,
-                cancel_reason: 'Customer requested cancellation',
-                order_total: orderRecord.total,
-            };
             await NotificationService.sendToUser('order_cancelled', ['email', 'sms', 'whatsapp'], user, variables, orderRecord.id);
-            await NotificationService.sendToAdmins('admin_order_cancelled', ['email', 'sms', 'whatsapp'], variables, orderRecord.id);
+        } else if (guestAddress.email) {
+            await NotificationService.send('order_cancelled', guestAddress.email, variables, null, orderRecord.id);
         }
+        await NotificationService.sendToAdmins('admin_order_cancelled', ['email', 'sms', 'whatsapp'], variables, orderRecord.id);
     } catch (err) {
         logger.error('Failed to queue order cancellation notifications', { orderId: id, error: err.message });
     }
@@ -2616,6 +3184,9 @@ const cancelOrder = async (id, userId) => {
 };
 
 const updateFulfillmentStatus = async (orderId, fulfillmentId, status, actingUserId, auditContext = null) => {
+    if (status === 'cancelled') {
+        throw new AppError('VALIDATION_ERROR', 400, 'Cancel the linked shipment so the carrier and inventory are updated together.');
+    }
     await sequelize.transaction(async (t) => {
         const order = await Order.findByPk(orderId, {
             transaction: t,
@@ -2728,7 +3299,72 @@ const updateShipmentStatus = async (orderId, shipmentId, payload, actingUserId, 
     const { status, trackingNumber, trackingUrl, courierName, expectedDeliveryDate } = payload;
     let queuedStatus = null;
     let queuedShipment = null;
-
+    let cancellationConfirmed = false;
+    if (status === 'cancelled') {
+        const cancellation = await sequelize.transaction(async (t) => {
+            const order = await Order.findByPk(orderId, { transaction: t, lock: Transaction.LOCK.UPDATE });
+            if (!order) throw new AppError('NOT_FOUND', 404, 'Order not found');
+            const shipment = await Shipment.findOne({ where: { id: shipmentId, orderId }, transaction: t, lock: Transaction.LOCK.UPDATE });
+            if (!shipment) throw new AppError('NOT_FOUND', 404, 'Shipment not found');
+            const history = Array.isArray(shipment.statusHistory) ? shipment.statusHistory : [];
+            const before = history.length ? history[history.length - 1]?.status : shipment.status;
+            if (!['created', 'packed'].includes(before)) {
+                throw new AppError('VALIDATION_ERROR', 400, 'A shipment can only be cancelled before carrier dispatch. Contact the carrier for in-transit shipments.');
+            }
+            ensureValidShipmentTransition(before, 'cancelled');
+            const operation = await ShippingOperation.findOne({ where: { shipmentId, operationType: 'create' }, transaction: t, lock: Transaction.LOCK.UPDATE });
+            if (operation?.status === 'processing') {
+                throw new AppError('CONFLICT', 409, 'Carrier booking is currently running. Wait for it to finish before cancelling.');
+            }
+            const provider = shipment.providerId ? await ShippingProvider.findByPk(shipment.providerId, { transaction: t }) : null;
+            if (!provider && shipment.awb) {
+                throw new AppError('SHIPPING_CANCEL_FAILED', 409, 'The carrier configuration is missing. Restore it before cancelling this booked shipment.');
+            }
+            const callCarrier = Boolean(provider && provider.code !== 'manual' && shipment.awb);
+            const previousOperationStatus = operation?.status;
+            const operationId = operation && ['queued', 'failed'].includes(previousOperationStatus) ? operation.id : null;
+            if (callCarrier) {
+                // This short transaction reserves cancellation and blocks the
+                // booking retry worker; carrier I/O happens after commit.
+                await shipment.update({ providerState: 'cancelling' }, { transaction: t });
+                if (operation && ['queued', 'failed'].includes(operation.status)) {
+                    await operation.update({ status: 'cancelled', nextAttemptAt: null, lockedAt: null }, { transaction: t });
+                }
+            }
+            return {
+                callCarrier,
+                provider,
+                awbCode: shipment.awb,
+                providerOrderId: shipment.providerOrderId,
+                previousProviderState: shipment.providerState,
+                operationId: callCarrier ? operationId : null,
+                previousOperationStatus,
+            };
+        });
+        if (cancellation.callCarrier) {
+            try {
+                const response = await resolveProvider(cancellation.provider).cancelShipment({
+                    awbCode: cancellation.awbCode,
+                    providerOrderId: cancellation.providerOrderId,
+                });
+                if (!response?.success) throw new Error(response?.message || 'The carrier did not confirm shipment cancellation.');
+                cancellationConfirmed = true;
+            } catch (error) {
+                await sequelize.transaction(async (t) => {
+                    const shipment = await Shipment.findByPk(shipmentId, { transaction: t, lock: Transaction.LOCK.UPDATE });
+                    if (shipment?.providerState === 'cancelling') {
+                        await shipment.update({ providerState: cancellation.previousProviderState || 'completed', lastProviderError: error.message }, { transaction: t });
+                    }
+                    if (cancellation.operationId) {
+                        await ShippingOperation.update({ status: cancellation.previousOperationStatus, lastError: error.message }, { where: { id: cancellation.operationId, status: 'cancelled' }, transaction: t });
+                    }
+                });
+                throw new AppError('SHIPPING_CANCEL_FAILED', 502, error.message || 'The carrier did not confirm shipment cancellation.');
+            }
+        } else {
+            cancellationConfirmed = true;
+        }
+    }
     await sequelize.transaction(async (t) => {
         const order = await Order.findByPk(orderId, { transaction: t, lock: Transaction.LOCK.UPDATE });
         if (!order) throw new AppError('NOT_FOUND', 404, 'Order not found');
@@ -2744,6 +3380,22 @@ const updateShipmentStatus = async (orderId, shipmentId, payload, actingUserId, 
             ? shipment.statusHistory[shipment.statusHistory.length - 1]?.status
             : null;
         const before = latestShipmentStatus || shipment.status;
+        if (status === 'cancelled') {
+            if (!['created', 'packed'].includes(before)) {
+                throw new AppError('VALIDATION_ERROR', 400, 'A shipment can only be cancelled before carrier dispatch. Contact the carrier for in-transit shipments.');
+            }
+            const operation = await ShippingOperation.findOne({
+                where: { shipmentId, operationType: 'create' },
+                transaction: t,
+                lock: Transaction.LOCK.UPDATE,
+            });
+            if (operation?.status === 'processing') {
+                throw new AppError('CONFLICT', 409, 'Carrier booking is currently running. Wait for it to finish before cancelling.');
+            }
+            if (operation && ['queued', 'failed'].includes(operation.status)) {
+                await operation.update({ status: 'cancelled', nextAttemptAt: null, lockedAt: null }, { transaction: t });
+            }
+        }
         if (status) ensureValidShipmentTransition(before, status);
         const history = Array.isArray(shipment.statusHistory) ? shipment.statusHistory : [];
         const expectedDeliveryChanged = expectedDeliveryDate !== undefined;
@@ -2781,6 +3433,35 @@ const updateShipmentStatus = async (orderId, shipmentId, payload, actingUserId, 
             queuedStatus = status;
         }
         await shipment.update(updates, { transaction: t });
+        if (statusChanged && status === 'cancelled') {
+            await shipment.update({ providerState: 'cancelled', lastProviderError: null }, { transaction: t });
+        }
+        if (statusChanged && status === 'cancelled' && cancellationConfirmed) {
+            const shipmentItems = await ShipmentItem.findAll({ where: { shipmentId: shipment.id }, transaction: t });
+            for (const shipmentItem of shipmentItems) {
+                const orderItem = await OrderItem.findOne({ where: { id: shipmentItem.orderItemId, orderId }, transaction: t });
+                if (!orderItem) continue;
+                if (orderItem.isCombo) {
+                    // Combo stock is deducted at order placement, not shipment creation.
+                    // Keep that allocation until the order is cancelled or returned.
+                    continue;
+                }
+                if (!orderItem.productId) continue;
+                const product = await Product.findByPk(orderItem.productId, { attributes: ['id', 'requiresShipping'], transaction: t });
+                if (!product || product.requiresShipping === false) continue;
+                await restockOrderItemInventory({ item: orderItem, quantity: shipmentItem.quantity, orderId, reason: 'shipment_cancelled_before_dispatch', createdBy: actingUserId, transaction: t });
+                await InventoryService.reserve({
+                    productId: orderItem.productId,
+                    variantId: orderItem.variantId || null,
+                    qty: Number(shipmentItem.quantity),
+                    orderId,
+                    orderItemId: orderItem.id,
+                    createdBy: actingUserId,
+                    metadata: { reason: 'replacement_after_shipment_cancellation' },
+                    transaction: t,
+                });
+            }
+        }
         queuedShipment = shipment.get({ plain: true });
 
         if (shipment.fulfillmentId && statusChanged) {
@@ -2875,6 +3556,24 @@ const getActivePutBackQuantityByOrderItem = async (orderId, type, transaction, e
         }, {});
 };
 
+const queuePutBackNotification = async (order, record, isNew, transaction) => {
+    const customer = await User.findByPk(order.userId, { transaction });
+    const variables = {
+        customer_name: `${customer?.firstName || ''} ${customer?.lastName || ''}`.trim() || customer?.email || 'Customer',
+        customer_email: customer?.email || '',
+        order_id: order.id,
+        order_number: order.orderNumber,
+        request_type: record.type,
+        reason: record.reason || 'Not specified',
+        status_label: record.status.replace(/_/g, ' '),
+        resolution_notes: record.resolutionNotes || '',
+    };
+    if (customer?.email) {
+        await NotificationService.send(isNew ? 'return_requested' : 'return_status_updated', customer.email, variables, customer.id, order.id, 'email', transaction);
+    }
+    if (isNew) await NotificationService.sendToAdmins('admin_return_requested', ['email'], variables, order.id, transaction);
+};
+
 const createPutBackRequest = async (orderId, payload, actingUserId, isAdmin, type, auditContext = null) => {
     const defaultStatus = type === 'replacement' ? REPLACEMENT_DEFAULT_STATUS : RETURN_DEFAULT_STATUS;
     return sequelize.transaction(async (t) => {
@@ -2938,6 +3637,8 @@ const createPutBackRequest = async (orderId, payload, actingUserId, isAdmin, typ
         });
         await syncPutBackCache(order, t, actingUserId);
 
+        await queuePutBackNotification(order, record, true, t);
+
         try {
             if (AuditService && AuditService.log) {
                 await AuditService.log({
@@ -2991,7 +3692,26 @@ const updatePutBackStatus = async (orderId, returnId, status, actingUserId, isAd
         if (nextStatus.endsWith('_approved')) updates.approvedAt = new Date();
         if (nextStatus.endsWith('_rejected')) updates.rejectedAt = new Date();
         if (nextStatus.endsWith('_completed')) updates.completedAt = new Date();
+        if (record.type === 'return' && nextStatus === 'return_completed') {
+            const returnItems = await OrderReturnItem.findAll({ where: { returnId: record.id }, transaction: t });
+            for (const returnItem of returnItems) {
+                const orderItem = await OrderItem.findOne({
+                    where: { id: returnItem.orderItemId, orderId: order.id },
+                    transaction: t,
+                });
+                if (!orderItem) continue;
+                if (orderItem.isCombo) {
+                    await restockOrderItemInventory({ item: orderItem, quantity: returnItem.quantity, orderId: order.id, reason: 'customer_return_received', createdBy: actingUserId, transaction: t });
+                    continue;
+                }
+                if (!orderItem.productId) continue;
+                const product = await Product.findByPk(orderItem.productId, { attributes: ['id', 'requiresShipping'], transaction: t });
+                if (!product || product.requiresShipping === false) continue;
+                await restockOrderItemInventory({ item: orderItem, quantity: returnItem.quantity, orderId: order.id, reason: 'customer_return_received', createdBy: actingUserId, transaction: t });
+            }
+        }
         await record.update(updates, { transaction: t });
+        if (before !== nextStatus) await queuePutBackNotification(order, record, false, t);
         await logOrderHistory({
             orderId,
             entityType: record.type === 'replacement' ? 'Replacement' : 'Return',
@@ -3003,6 +3723,7 @@ const updatePutBackStatus = async (orderId, returnId, status, actingUserId, isAd
             transaction: t,
         });
         await syncPutBackCache(order, t, actingUserId);
+        await syncOrderClosureIfComplete(order, t, actingUserId);
 
         try {
             if (AuditService && AuditService.log) {
@@ -3032,13 +3753,19 @@ const updatePutBackStatus = async (orderId, returnId, status, actingUserId, isAd
 
 const processRefund = async (orderId, payload, actingUserId, isAdmin, auditContext = null) => {
     if (!isAdmin) throw new AppError('FORBIDDEN', 403, 'You do not have permission to refund orders');
-    return sequelize.transaction(async (t) => {
+    const request = await sequelize.transaction(async (t) => {
         const order = await Order.findByPk(orderId, { transaction: t, lock: Transaction.LOCK.UPDATE });
         if (!order) throw new AppError('NOT_FOUND', 404, 'Order not found');
         const payment = await Payment.findOne({ where: { orderId }, transaction: t, lock: Transaction.LOCK.UPDATE });
         if (!canRefundCapturedPayment(payment, order)) {
             throw new AppError('VALIDATION_ERROR', 400, 'Cannot refund before payment has been captured');
         }
+        const isOfflineRefund = payment.provider === 'cod';
+        if (isOfflineRefund && (payload.offlineRefundConfirmed !== true || !String(payload.offlineRefundReference || '').trim())) {
+            throw new AppError('VALIDATION_ERROR', 400, 'For COD, first send the refund outside the payment gateway, then confirm it and enter the bank/UPI/cash reference.');
+        }
+        const openRefund = await OrderRefund.findOne({ where: { orderId, status: { [Op.in]: OPEN_REFUND_STATUSES } }, transaction: t, lock: Transaction.LOCK.UPDATE });
+        if (openRefund) throw new AppError('CONFLICT', 409, 'A refund is already being processed for this order. Check its provider reference before retrying.');
         let returnRequest = null;
         let refundAmount = payload.amount;
         if (payload.returnId) {
@@ -3074,46 +3801,159 @@ const processRefund = async (orderId, payload, actingUserId, isAdmin, auditConte
                 throw new AppError('VALIDATION_ERROR', 400, `Refund amount cannot exceed returned product amount ${remainingReturnRefundable.toFixed(2)}`);
             }
         }
-        const refund = await createRefundRecord({
-            order,
-            payment,
-            amount: refundAmount,
-            reason: payload.reason || (returnRequest ? 'Return refund' : 'Manual refund'),
-            actingUserId,
-            returnId: returnRequest?.id || null,
-            refundScopeAmount: returnRequest ? getReturnRequestItemAmount(returnRequest) : null,
-            metadata: {
-                ...(payload.metadata || {}),
-                providerRefundId: payload.providerRefundId || null,
-                requestedStatus: payload.status || null,
-                returnItemAmount: returnRequest ? getReturnRequestItemAmount(returnRequest) : null,
-            },
-            transaction: t,
+        const capturedAmount = getCapturedPaymentAmount(payment, order);
+        const exposures = await OrderRefund.findAll({
+            where: { orderId, status: { [Op.in]: [...FINAL_REFUND_STATUSES, ...OPEN_REFUND_STATUSES] } },
+            attributes: ['amount'], transaction: t,
         });
-        await syncPutBackCache(order, t, actingUserId);
+        const exposed = money(exposures.reduce((sum, row) => sum + Number(row.amount || 0), 0));
+        const amount = money(refundAmount ?? Math.max(capturedAmount - exposed, 0));
+        if (amount <= 0 || amount > money(capturedAmount - exposed)) {
+            throw new AppError('VALIDATION_ERROR', 400, `Refund amount exceeds the remaining refundable amount ${money(capturedAmount - exposed).toFixed(2)}`);
+        }
+        const refund = await OrderRefund.create({
+            orderId,
+            returnId: returnRequest?.id || null,
+            paymentId: payment.id,
+            amount,
+            currency: payment.currency || 'INR',
+            status: 'refund_initiated',
+            reason: payload.reason || (returnRequest ? 'Return refund' : 'Manual refund'),
+            metadata: {
+                returnItemAmount: returnRequest ? getReturnRequestItemAmount(returnRequest) : null,
+                requestedBy: actingUserId,
+                ...(isOfflineRefund ? { refundMethod: 'offline', manualReference: String(payload.offlineRefundReference).trim() } : {}),
+            },
+        }, { transaction: t });
+        await logOrderHistory({ orderId, entityType: 'OrderRefund', entityId: refund.id, statusGroup: 'refund', toStatus: 'refund_initiated', changedBy: actingUserId, metadata: { amount, reason: refund.reason }, transaction: t });
+        return { order, payment, refund, returnRequest };
+    });
 
+    let providerResult;
+    if (request.payment.provider === 'cod') {
+        providerResult = { status: 'succeeded', providerRefundId: `offline:${String(payload.offlineRefundReference).trim()}` };
+    }
+    try {
+        if (!providerResult) providerResult = await PaymentService.initiateProviderRefund({
+            payment: request.payment,
+            order: request.order,
+            refundId: request.refund.id,
+            amount: request.refund.amount,
+            reason: request.refund.reason,
+        });
+    } catch (error) {
+        const definitelyNotSent = error.code === 'PAYMENT_UNAVAILABLE'
+            || (Number(error.statusCode) >= 400 && Number(error.statusCode) < 500);
+        if (definitelyNotSent) {
+            await sequelize.transaction(async (t) => {
+                await request.refund.update({ status: 'refund_failed', metadata: { ...(request.refund.metadata || {}), providerError: error.message, outcomeUnknown: false } }, { transaction: t });
+                await logOrderHistory({ orderId, entityType: 'OrderRefund', entityId: request.refund.id, statusGroup: 'refund', fromStatus: 'refund_initiated', toStatus: 'refund_processing', changedBy: actingUserId, transaction: t });
+                await logOrderHistory({ orderId, entityType: 'OrderRefund', entityId: request.refund.id, statusGroup: 'refund', fromStatus: 'refund_processing', toStatus: 'refund_failed', changedBy: actingUserId, metadata: { message: error.message }, transaction: t });
+            });
+            throw error;
+        }
+        // A timeout can happen after the provider accepted the request. Keep the
+        // reservation open so a second click cannot accidentally refund twice.
+        await sequelize.transaction(async (t) => {
+            await request.refund.update({ status: 'refund_processing', metadata: { ...(request.refund.metadata || {}), providerError: error.message, outcomeUnknown: true } }, { transaction: t });
+            await logOrderHistory({ orderId, entityType: 'OrderRefund', entityId: request.refund.id, statusGroup: 'refund', fromStatus: 'refund_initiated', toStatus: 'refund_processing', changedBy: actingUserId, metadata: { outcomeUnknown: true }, transaction: t });
+        });
+        throw new AppError('PAYMENT_ERROR', 503, 'The provider refund outcome is not confirmed. Do not retry yet; verify the provider dashboard using refund reference ' + request.refund.id);
+    }
+
+    if (providerResult.status !== 'succeeded') {
+        await sequelize.transaction(async (t) => {
+            await request.refund.update({ status: 'refund_processing', providerRefundId: providerResult.providerRefundId, metadata: { ...(request.refund.metadata || {}), providerStatus: 'pending' } }, { transaction: t });
+            await logOrderHistory({ orderId, entityType: 'OrderRefund', entityId: request.refund.id, statusGroup: 'refund', fromStatus: 'refund_initiated', toStatus: 'refund_processing', changedBy: actingUserId, metadata: { providerRefundId: providerResult.providerRefundId }, transaction: t });
+        });
+        return request.refund.reload();
+    }
+
+    return finalizeProviderRefund(request.refund.id, providerResult, actingUserId).then(async (refund) => {
         try {
-            if (AuditService && AuditService.log) {
-                await AuditService.log({
-                    userId: actingUserId,
-                    action: 'CREATE',
-                    entity: 'OrderRefund',
-                    entityId: refund.id,
-                    changes: { 
-                        orderId, 
-                        amount: refund.amount, 
-                        reason: payload.reason,
-                        method: auditContext?.method,
-                        path: auditContext?.path
-                    },
-                    ipAddress: auditContext?.ip,
-                    userAgent: auditContext?.userAgent,
-                });
-            }
+            if (AuditService?.log) await AuditService.log({ userId: actingUserId, action: 'CREATE', entity: 'OrderRefund', entityId: refund.id, changes: { orderId, amount: refund.amount, providerRefundId: refund.providerRefundId, method: auditContext?.method, path: auditContext?.path }, ipAddress: auditContext?.ip, userAgent: auditContext?.userAgent });
         } catch (err) {}
-
+        try {
+            if (refund && ['refunded', 'partially_refunded'].includes(refund.status)) {
+                const refundedOrder = await Order.findByPk(orderId);
+                const customer = refundedOrder?.userId ? await User.findByPk(refundedOrder.userId) : null;
+                if (customer?.email && NotificationService?.send) {
+                    await NotificationService.send('order_refunded', customer.email, {
+                        customer_name: `${customer.firstName || ''} ${customer.lastName || ''}`.trim() || customer.email,
+                        order_number: refundedOrder.orderNumber,
+                        order_id: refundedOrder.id,
+                        refund_amount: refund.amount,
+                    }, customer.id, refundedOrder.id);
+                }
+            }
+        } catch (error) {
+            logger.error('Failed to queue customer refund notification', { orderId, error: error.message });
+        }
         return refund;
     });
+};
+
+const finalizeProviderRefund = async (refundId, providerResult, actorId = null) => sequelize.transaction(async (t) => {
+    const refund = await OrderRefund.findByPk(refundId, { transaction: t, lock: Transaction.LOCK.UPDATE });
+    if (!refund || !OPEN_REFUND_STATUSES.includes(refund.status)) return refund;
+    const order = await Order.findByPk(refund.orderId, { transaction: t, lock: Transaction.LOCK.UPDATE });
+    const payment = await Payment.findByPk(refund.paymentId, { transaction: t, lock: Transaction.LOCK.UPDATE });
+    if (!order || !payment) throw new AppError('NOT_FOUND', 404, 'Order/payment for refund was not found');
+    if (refund.status === 'refund_initiated') {
+        await refund.update({ status: 'refund_processing' }, { transaction: t });
+        await logOrderHistory({ orderId: order.id, entityType: 'OrderRefund', entityId: refund.id, statusGroup: 'refund', fromStatus: 'refund_initiated', toStatus: 'refund_processing', changedBy: actorId, transaction: t });
+    }
+    if (providerResult.status === 'pending') {
+        await refund.update({ status: 'refund_processing', providerRefundId: providerResult.providerRefundId || refund.providerRefundId }, { transaction: t });
+        return refund;
+    }
+    if (providerResult.status === 'failed') {
+        await refund.update({ status: 'refund_failed', providerRefundId: providerResult.providerRefundId || refund.providerRefundId, metadata: { ...(refund.metadata || {}), providerStatus: 'failed' } }, { transaction: t });
+        await logOrderHistory({ orderId: order.id, entityType: 'OrderRefund', entityId: refund.id, statusGroup: 'refund', fromStatus: 'refund_processing', toStatus: 'refund_failed', changedBy: actorId, metadata: { providerRefundId: providerResult.providerRefundId || refund.providerRefundId }, transaction: t });
+        return refund;
+    }
+    const returnRequest = refund.returnId ? await OrderReturn.findOne({
+        where: { id: refund.returnId, orderId: order.id },
+        include: [{ model: OrderReturnItem, as: 'items', include: [{ model: OrderItem, as: 'orderItem', attributes: ['id', 'quantity', 'total', 'snapshotName'] }] }],
+        transaction: t,
+    }) : null;
+    const finalized = await createRefundRecord({
+        order,
+        payment,
+        amount: refund.amount,
+        reason: refund.reason,
+        actingUserId: actorId,
+        returnId: refund.returnId,
+        refundScopeAmount: returnRequest ? getReturnRequestItemAmount(returnRequest) : null,
+        metadata: { ...(refund.metadata || {}), providerRefundId: providerResult.providerRefundId || refund.providerRefundId, providerStatus: 'succeeded' },
+        transaction: t,
+        existingRefund: refund,
+    });
+    await syncPutBackCache(order, t, actorId);
+    await syncOrderClosureIfComplete(order, t, actorId);
+    return finalized;
+});
+
+const reconcileOpenRefunds = async ({ limit = 20 } = {}) => {
+    const pending = await OrderRefund.findAll({
+        where: { status: { [Op.in]: OPEN_REFUND_STATUSES } },
+        order: [['updatedAt', 'ASC']],
+        limit: Math.max(1, Math.min(Number(limit) || 20, 100)),
+    });
+    let reconciled = 0;
+    for (const refund of pending) {
+        try {
+            const payment = await Payment.findByPk(refund.paymentId);
+            if (!payment || payment.provider === 'cod') continue;
+            const result = await PaymentService.fetchProviderRefundStatus({ payment, refund });
+            if (result.status === 'pending' && !result.providerRefundId) continue;
+            await finalizeProviderRefund(refund.id, result);
+            reconciled += 1;
+        } catch (error) {
+            logger.warn('Refund status reconciliation failed; refund remains open for retry', { refundId: refund.id, provider: refund.metadata?.provider || null, message: error.message });
+        }
+    }
+    return reconciled;
 };
 
 const addNote = async (orderId, note, actorId, auditContext = null) => {
@@ -3152,9 +3992,16 @@ const addNote = async (orderId, note, actorId, auditContext = null) => {
 
 module.exports = {
     placeOrder,
+    requestGuestOrderClaim,
+    claimGuestOrders,
     getOrders,
     getOrderById,
+    updateContactEmail,
     getFulfillmentTracking,
+    buildOrderLookupWhere,
+    calculateShipmentAmounts,
+    getPriorCodAllocatedTotal,
+    getDispatchedQuantityForOrderItem,
     updateStatus,
     cancelOrder,
     refundOrder,
@@ -3166,7 +4013,15 @@ module.exports = {
     createReplacementRequest,
     updatePutBackStatus,
     processRefund,
+    reconcileOpenRefunds,
     getAllowedNextStatuses: (status) => getAllowedNextStatuses('order', normalizeOrderStatus(status)),
     addOrderHistoryEvent,
     addNote,
+    deriveQuantityAwareOrderShippingStatus,
+    syncOrderShippingStatus,
+    syncCodPaymentIfDelivered,
+    syncOrderClosureIfComplete,
+    hashOrderIntent,
+    assertMatchingOrderIntent,
+    getOrderIdempotencyWhere,
 };

@@ -174,7 +174,7 @@ class EkartProvider extends BaseShippingProvider {
             location:        payload.location || '',
             timestamp:       (() => {
                 const d = payload.timestamp ? new Date(payload.timestamp) : null;
-                return d && !isNaN(d.getTime()) ? d : new Date();
+                return d && !isNaN(d.getTime()) ? d : null;
             })(),
             rawPayload:      payload,
         };

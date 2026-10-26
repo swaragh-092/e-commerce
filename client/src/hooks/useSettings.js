@@ -13,15 +13,47 @@ export const useSettings = () => {
 /**
  * Returns the resolved boolean for a single feature flag.
  * Reads from the mode-resolved features map (mode core + DB overrides).
- * Optimistically returns true while features are still loading.
+ * Stays false until the server has resolved the feature map, and for keys the
+ * server did not return, so disabled UI never flashes on and unknown features
+ * are never rendered.
  *
  * Usage: const cartEnabled = useFeature('cart');
  */
 export const useFeature = (featureName) => {
   const { features } = useSettings();
-  // features is null while loading — optimistic true so UI doesn't flash
-  if (features === null) return true;
-  return features[featureName] !== false;
+  if (!features) return false;
+  return features[featureName] === true;
+};
+
+export const TIER1_UI_FEATURES = Object.freeze([
+  'pricing', 'cart', 'checkout', 'orders', 'payments', 'shipping',
+]);
+
+/**
+ * Returns whether a feature should be rendered on a given surface.
+ *
+ * Optional (Tier 2) features follow the resolved capability flag. Tier 1
+ * features additionally require the presentation switch for that surface.
+ * Visibility can never enable a capability the store mode disabled, and it
+ * stays false until the server has resolved both maps.
+ *
+ * Usage: const showPrices = useFeatureVisible('pricing', 'storefront');
+ */
+export const useFeatureVisible = (featureName, surface = 'storefront') => {
+  const { features, visibility } = useSettings();
+  if (!features || features[featureName] !== true) return false;
+  if (!TIER1_UI_FEATURES.includes(featureName)) return true;
+  return visibility?.[surface]?.[featureName] === true;
+};
+
+/**
+ * Returns true once the server has resolved the feature map. Use this to defer
+ * redirects and fetches that depend on a feature flag until state is known,
+ * instead of acting on the temporary "disabled" value while loading.
+ */
+export const useFeaturesResolved = () => {
+  const { features } = useSettings();
+  return features != null;
 };
 
 /**

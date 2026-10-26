@@ -5,9 +5,11 @@ const { Op } = require('sequelize');
 const { NotificationTemplate, NotificationLog, NotificationQueue, InventoryAlert } = require('../index');
 const { dispatch } = require('./notification.dispatcher');
 const logger = require('../../utils/logger');
+const AppError = require('../../utils/AppError');
 
 const INVENTORY_ALERT_TEMPLATE = 'inventory_alert_digest';
 const INVENTORY_ALERT_RETRY_DELAY_MS = 15 * 60 * 1000;
+const NEWSLETTER_TEMPLATES = new Set(['newsletter_campaign', 'newsletter_confirmation']);
 
 /**
  * Build the channel-specific payload from a compiled template.
@@ -34,6 +36,8 @@ const normalizeVariables = (variables = {}) => {
 
     if (normalized.orderNumber && !normalized.order_number) normalized.order_number = normalized.orderNumber;
     if (normalized.orderId && !normalized.order_id) normalized.order_id = normalized.orderId;
+    if (normalized.orderDate && !normalized.order_date) normalized.order_date = normalized.orderDate;
+    if (normalized.paymentMethod && !normalized.payment_method) normalized.payment_method = normalized.paymentMethod;
     if (normalized.total !== undefined && normalized.order_total === undefined) normalized.order_total = normalized.total;
     if (normalized.firstName && !normalized.customer_name) normalized.customer_name = normalized.firstName;
     if (normalized.storeName && !normalized.store_name) normalized.store_name = normalized.storeName;
@@ -225,6 +229,13 @@ const sendImmediate = async (
     orderId = null,
     channel = 'email'
 ) => {
+    if (NEWSLETTER_TEMPLATES.has(templateName)) {
+        let enabled = false;
+        try { enabled = await require('../../middleware/featureGate.middleware').getResolvedFeature('newsletter'); }
+        catch (_) { /* Fail closed when the platform feature state cannot be read. */ }
+        if (!enabled) throw new AppError('FEATURE_DISABLED', 403, 'Newsletter delivery is disabled');
+    }
+
     const template = await NotificationTemplate.findOne({
         where: { name: templateName, channel },
     });
@@ -266,9 +277,15 @@ const sendImmediate = async (
 };
 
 const processQueued = async ({ limit = 25 } = {}) => {
+    // Pause marketing deliveries while the feature is off, retaining consent
+    // records and queued work. Transactional mail continues independently.
+    let newsletterEnabled = false;
+    try { newsletterEnabled = await require('../../middleware/featureGate.middleware').getResolvedFeature('newsletter'); }
+    catch (error) { logger.warn('Could not resolve newsletter capability; marketing delivery paused'); }
     const jobs = await NotificationQueue.findAll({
         where: {
             status: 'queued',
+            ...(!newsletterEnabled ? { templateName: { [Op.notIn]: ['newsletter_campaign', 'newsletter_confirmation'] } } : {}),
             [Op.or]: [
                 { nextAttemptAt: null },
                 { nextAttemptAt: { [Op.lte]: new Date() } },
@@ -278,11 +295,46 @@ const processQueued = async ({ limit = 25 } = {}) => {
         limit,
     });
 
+    let processedCount = 0;
     for (const job of jobs) {
-        await job.update({ status: 'processing', lockedAt: new Date(), attempts: Number(job.attempts || 0) + 1, error: null });
+        const claim = { status: 'processing', lockedAt: new Date(), attempts: Number(job.attempts || 0) + 1, error: null };
+        const [claimed] = await NotificationQueue.update(claim, { where: { id: job.id, status: 'queued' } });
+        if (!claimed) continue;
+        Object.assign(job, claim);
+        processedCount++;
 
         let subject = null;
         try {
+            if (['order_assigned_staff', 'enquiry_assigned_staff'].includes(job.templateName)) {
+                const kind = job.templateName === 'order_assigned_staff' ? 'orders' : 'enquiries';
+                const id = kind === 'orders' ? job.variables?.order_id : job.variables?.enquiry_id;
+                const eligible = await require('./notificationAssignment.service').canReceive(kind, id, job.userId, job.recipientEmail);
+                if (!eligible) {
+                    await job.update({ status: 'skipped', error: 'Staff assignment changed or recipient is no longer eligible' });
+                    await createLog({ job, status: 'skipped', error: 'Staff assignment changed or recipient is no longer eligible' });
+                    continue;
+                }
+            }
+            if (job.templateName === 'staff_invitation') {
+                const { PasswordResetToken, User } = require('../index');
+                const invitation = job.variables?.invitation_token_id ? await PasswordResetToken.findOne({ where: { id: job.variables.invitation_token_id, userId: job.userId, purpose: 'staff_invitation' } }) : null;
+                const user = invitation ? await User.findOne({ where: { id: job.userId, email: job.recipientEmail, status: 'active' } }) : null;
+                if (!user || invitation.expiresAt <= new Date()) {
+                    await job.update({ status: 'skipped', error: 'Staff invitation expired or was replaced' });
+                    await createLog({ job, status: 'skipped', error: 'Staff invitation expired or was replaced' });
+                    continue;
+                }
+            }
+            if (['newsletter_campaign', 'newsletter_confirmation'].includes(job.templateName)) {
+                const { NewsletterSubscriber } = require('../index');
+                const subscriber = job.variables?.subscriber_id && job.variables?.subscribed_at
+                    ? await NewsletterSubscriber.findOne({ where: { id: job.variables.subscriber_id, email: job.recipientEmail, status: 'active' } }) : null;
+                if (!subscriber || new Date(subscriber.subscribedAt).toISOString() !== job.variables?.subscribed_at) {
+                    await job.update({ status: 'skipped', error: 'Newsletter consent is no longer active for this subscription' });
+                    await createLog({ job, status: 'skipped', error: 'Newsletter consent is no longer active for this subscription' });
+                    continue;
+                }
+            }
             const template = await NotificationTemplate.findOne({ where: { name: job.templateName, channel: job.channel } });
             if (!template || !template.isActive) {
                 await job.update({ status: 'skipped', error: template ? 'Template inactive' : 'Template missing' });
@@ -316,7 +368,7 @@ const processQueued = async ({ limit = 25 } = {}) => {
         }
     }
 
-    return jobs.length;
+    return processedCount;
 };
 
 /**
@@ -351,27 +403,33 @@ const sendToUser = async (templateName, channels, user, variables = {}, orderId 
 };
 
 const sendToAdmins = async (templateName, channels = ['email'], variables = {}, orderId = null, t = null) => {
-    const { User, UserProfile } = require('../index');
-    const admins = await User.findAll({
-        where: { role: ['admin', 'super_admin'] },
-        include: [{ model: UserProfile, as: 'profile', required: false }],
-        transaction: t || undefined,
-    });
+    const recipientsService = require('./notificationRecipients.service');
+    const configuredRecipients = await recipientsService.getConfiguredRecipients(templateName, t);
+    const needsDefaults = configuredRecipients === null || channels.some((channel) => channel !== 'email');
+    // Never fall back to a raw role query: custom roles can carry baseRole=admin
+    // without possessing the operational permission required for this template.
+    const eligibleRecipients = needsDefaults
+        ? await recipientsService.getEligibleRecipientsForTemplate(templateName, t)
+        : [];
 
     const manualRecipients = [
         ...parseRecipientList(process.env.ADMIN_NOTIFICATION_EMAIL).map((email) => ({ email })),
         ...parseRecipientList(process.env.ADMIN_NOTIFICATION_PHONE).map((phone) => ({ phone })),
     ];
-    const recipients = [...admins, ...manualRecipients];
+    const defaultRecipients = [...eligibleRecipients, ...manualRecipients];
 
     const results = [];
-    for (const recipientRecord of recipients) {
-        const email = recipientRecord.email || null;
-        const phone = recipientRecord.phone || recipientRecord.profile?.phone || null;
-
-        for (const channel of channels) {
+    for (const channel of channels) {
+        const recipients = channel === 'email' && configuredRecipients !== null ? configuredRecipients : defaultRecipients;
+        const seen = new Set();
+        for (const recipientRecord of recipients) {
+            const email = recipientRecord.email || null;
+            const phone = recipientRecord.phone || recipientRecord.profile?.phone || null;
             const recipient = channel === 'email' ? email : phone;
             if (!recipient) continue;
+            const recipientKey = channel === 'email' ? recipient.toLowerCase() : recipient;
+            if (seen.has(recipientKey)) continue;
+            seen.add(recipientKey);
             results.push(await send(templateName, recipient, variables, recipientRecord.id || null, orderId, channel, t));
         }
     }
@@ -395,10 +453,11 @@ const sendDeliveryUpdate = async (userId, orderId, status) => {
 
         if (!user || !order) return false;
 
-        const templateName = status === 'delivered' ? 'order_delivered' : 'order_out_for_delivery';
+        const isException = ['delivery_failed', 'rto_initiated', 'rto_in_transit', 'rto'].includes(status);
+        const templateName = isException ? 'delivery_exception' : status === 'delivered' ? 'order_delivered' : 'order_out_for_delivery';
         
         // Settings/Channels: usually we want Email + SMS for delivery updates
-        const channels = ['email', 'sms'];
+        const channels = isException ? ['email'] : ['email', 'sms'];
 
         return await sendToUser(templateName, channels, user, {
             order_number: order.orderNumber,
@@ -416,4 +475,4 @@ const sendOnce = (templateName, recipient, variables = {}, userId = null, orderI
     if (!dedupeKey) return Promise.resolve(false);
     return send(templateName, recipient, variables, userId, orderId, channel, null, dedupeKey);
 };
-module.exports = { send, sendOnce, sendImmediate, sendToUser, sendToAdmins, sendDeliveryUpdate, processQueued };
+module.exports = { send, sendOnce, sendImmediate, sendToUser, sendToAdmins, sendDeliveryUpdate, processQueued, normalizeVariables };

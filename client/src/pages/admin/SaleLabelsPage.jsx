@@ -474,7 +474,7 @@ const SaleLabelsPage = () => {
           </Grid>
         </DialogContent>
         <DialogActions>
-          <Button onClick={handleClose}>Cancel</Button>
+          <Button color="error" onClick={handleClose}>Cancel</Button>
           <Button onClick={handleSave} variant="contained" disabled={saving}>
             {saving ? 'Saving...' : 'Save Label'}
           </Button>
@@ -498,7 +498,7 @@ const SaleLabelsPage = () => {
           />
         </DialogContent>
         <DialogActions>
-          <Button onClick={() => setAssignDialog({ open: false, labelId: '', labelName: '' })}>Cancel</Button>
+          <Button color="error" onClick={() => setAssignDialog({ open: false, labelId: '', labelName: '' })}>Cancel</Button>
           <Button variant="contained" onClick={handleBulkAssign} disabled={assignSaving || selectedProducts.length === 0}>
             {assignSaving ? 'Assigning...' : `Assign to ${selectedProducts.length} products`}
           </Button>

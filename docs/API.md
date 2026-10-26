@@ -214,13 +214,18 @@
 
 | Method | Endpoint             | Auth | Role     | Description                               |
 | ------ | -------------------- | ---- | -------- | ----------------------------------------- |
-| POST   | `/orders`            | ✅    | Customer | Place order (with checkout validation)    |
+| POST   | `/orders`            | User/session | Customer/Guest | Place order (guest checkout must be enabled) |
 | GET    | `/orders`            | ✅    | Any      | My orders (customer) / All orders (admin) |
-| GET    | `/orders/:id`        | ✅    | Any      | Order detail                              |
+| GET    | `/orders/:id`        | User/session | Any | Order detail; guests require matching `X-Session-Id` |
+| PATCH  | `/orders/:id/contact-email` | ✅ | Admin | Save guest email and update pending carrier booking contact data |
 | PUT    | `/orders/:id/status` | ✅    | Admin    | Update status                             |
 | POST   | `/orders/:id/cancel` | ✅    | Customer | Cancel (if pending)                       |
 
 ### POST `/orders`
+Send `Idempotency-Key` as a UUID for one order submission (the same value is also accepted as `idempotencyKey` in the request body). The checkout client generates a separate key from its shipping/checkout session ID, keeps it for retries of the same unchanged submission, and generates a new key if the order details change or a new submission begins. A repeated key with the same order intent returns the original order without reserving stock or consuming coupons again. Reusing a key with a different payload returns `422 IDEMPOTENCY_KEY_REUSED`. Authenticated keys are scoped to the account; guest keys are scoped to the guest `X-Session-Id`. A request body key and header key must match. Legacy rows without a request fingerprint remain replayable during rollout.
+
+`POST /payments/create-order` returns `expiresAt` for the current payment attempt. Payment attempt deadlines are persisted on the payment record. An explicit payment failure starts a 15-minute retry window; starting another provider session resets that deadline. Reservation cleanup uses the persisted deadline.
+
 ```json
 // Request
 { "shippingAddressId": "uuid", "couponCode": "SAVE20", "notes": "Leave at door" }
@@ -384,6 +389,9 @@
 | POST   | `/admin/shipping/zones`      | ✅    | Admin | Create shipping zone                   |
 | GET    | `/admin/shipping/rules`      | ✅    | Admin | List shipping rules                    |
 | POST   | `/admin/shipping/rules`      | ✅    | Admin | Create shipping rule                   |
+| GET    | `/admin/shipping/operations` | ✅   | Admin | List failed operations by default; accepts `status=failed` (default), `active`, or `all`, plus `page` and `limit` |
+| GET    | `/admin/shipping/operations/failed` | ✅ | Admin | Backward-compatible alias for operations list with the same filters |
+| POST   | `/admin/shipping/operations/:id/retry` | ✅ | Admin | Queue a retry for a retryable shipping operation |
 | POST   | `/webhooks/shipping/:source` | —    | —     | Webhook for carrier status updates     |
 
 ---

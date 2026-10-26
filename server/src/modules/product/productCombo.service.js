@@ -12,11 +12,13 @@ const getPrimaryImageUrl = (product = {}) => {
     return img?.url || null;
 };
 
-const ITEM_INCLUDE = [
+const buildItemInclude = (publicView = false) => [
     {
         model: Product,
         as: 'item',
-        attributes: ['id', 'name', 'slug', 'sku', 'price', 'salePrice', 'quantity', 'type', 'status'],
+        attributes: ['id', 'name', 'slug', 'sku', 'price', 'salePrice', 'quantity', 'type', 'status', 'isEnabled'],
+        where: publicView ? { status: 'published', isEnabled: true } : undefined,
+        required: publicView,
         include: [
             { model: ProductImage, as: 'images', attributes: ['url', 'isPrimary'], required: false },
             { model: ProductVariant, as: 'variants', attributes: ['id', 'sku', 'price', 'stockQty', 'isActive'], required: false },
@@ -26,6 +28,7 @@ const ITEM_INCLUDE = [
         model: ProductVariant,
         as: 'variant',
         attributes: ['id', 'sku', 'price', 'stockQty', 'isActive'],
+        where: publicView ? { isActive: true } : undefined,
         required: false,
     },
 ];
@@ -35,20 +38,29 @@ const ITEM_INCLUDE = [
 /**
  * Return ordered combo items with constituent product/variant detail.
  */
-const getComboItems = async (productId) => {
-    const product = await Product.findByPk(productId, { attributes: ['id', 'type'] });
+const getComboItems = async (productId, { publicView = false } = {}) => {
+    const product = await Product.findByPk(productId, { attributes: ['id', 'type', 'status', 'isEnabled'] });
     if (!product) throw new AppError('NOT_FOUND', 404, 'Product not found');
+    if (publicView && (product.status !== 'published' || product.isEnabled !== true)) {
+        throw new AppError('NOT_FOUND', 404, 'Product not found');
+    }
     if (product.type !== 'combo') {
         throw new AppError('VALIDATION_ERROR', 400, 'Product type must be "combo" to fetch combo items');
     }
 
     const items = await ProductComboItem.findAll({
         where: { comboProductId: productId },
-        include: ITEM_INCLUDE,
+        include: buildItemInclude(publicView),
         order: [['sortOrder', 'ASC']],
     });
 
-    return items;
+    if (!publicView) return items;
+
+    return items.filter((item) => {
+        if (!item.item || item.item.status !== 'published' || item.item.isEnabled !== true) return false;
+        if (item.variantId && (!item.variant || item.variant.isActive !== true)) return false;
+        return true;
+    });
 };
 
 /**
@@ -61,7 +73,8 @@ const getComboItems = async (productId) => {
  */
 const syncComboItems = async (productId, items = []) => {
     return sequelize.transaction(async (t) => {
-        const product = await Product.findByPk(productId, { transaction: t, attributes: ['id', 'type', 'name'] });
+        await sequelize.query('SELECT pg_advisory_xact_lock(hashtext(:scope), hashtext(:productId))', { replacements: { scope: 'product-variant-generation', productId }, transaction: t });
+        const product = await Product.findByPk(productId, { transaction: t, lock: t.LOCK.UPDATE, attributes: ['id', 'type', 'name'] });
         if (!product) throw new AppError('NOT_FOUND', 404, 'Product not found');
         if (product.type !== 'combo') {
             throw new AppError('VALIDATION_ERROR', 400, 'Product type must be "combo" to manage combo items');
@@ -92,6 +105,9 @@ const syncComboItems = async (productId, items = []) => {
                 if (constituent.type === 'combo') {
                     throw new AppError('VALIDATION_ERROR', 400, 'Nested combos are not allowed');
                 }
+                if (constituent.type === 'variable' && !ci.variantId) {
+                    throw new AppError('VALIDATION_ERROR', 400, 'Choose a specific variant for each Variable Product in the bundle.');
+                }
 
                 // Ensure quantity > 0
                 if (!ci.quantity || ci.quantity <= 0) {
@@ -101,7 +117,7 @@ const syncComboItems = async (productId, items = []) => {
                 // Ensure variant belongs to item product
                 if (ci.variantId) {
                     const variantExists = await ProductVariant.findOne({
-                        where: { id: ci.variantId, productId: ci.itemProductId },
+                        where: { id: ci.variantId, productId: ci.itemProductId, isActive: true },
                         transaction: t,
                         attributes: ['id']
                     });
@@ -132,7 +148,7 @@ const syncComboItems = async (productId, items = []) => {
         const ids = created.map((c) => c.id);
         return ProductComboItem.findAll({
             where: { id: ids },
-            include: ITEM_INCLUDE,
+            include: buildItemInclude(false),
             order: [['sortOrder', 'ASC']],
             transaction: t,
         });

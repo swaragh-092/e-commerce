@@ -12,6 +12,7 @@ const {
     AttributeValue,
 } = require('../index');
 const AppError = require('../../utils/AppError');
+const { isGuestSessionId } = require('../../utils/guestSession');
 const { serializeProductPricing, serializeVariantPricing } = require('../product/product.pricing');
 const { getSaleLabels } = require('../settings/saleLabel.service');
 
@@ -134,7 +135,7 @@ const addItem = async (userId, sessionId, payload) => {
                 where: { productId, isActive: true },
                 transaction: t,
             });
-            if (activeVariantCount > 0) {
+            if (product.type === 'variable' || activeVariantCount > 0) {
                 throw new AppError('VALIDATION_ERROR', 400, 'Please select a variant option before adding to cart');
             }
             availableStock = Number(product.quantity || 0) - Number(product.reservedQty || 0);
@@ -211,7 +212,7 @@ const updateItem = async (userId, sessionId, itemId, quantity) => {
                 where: { productId: item.productId, isActive: true },
                 transaction: t,
             });
-            if (activeVariantCount > 0) {
+            if (product.type === 'variable' || activeVariantCount > 0) {
                 await item.destroy({ transaction: t });
                 throw new AppError('CONFLICT', 409, 'Product now requires option selection and was removed from cart');
             }
@@ -252,23 +253,31 @@ const clearCart = async (userId, sessionId) => {
 };
 
 const mergeGuestCart = async (guestSessionId, userId) => {
-    if (!guestSessionId || !userId) return;
+    if (!userId) throw new AppError('FORBIDDEN', 403, 'Sign in before merging a guest cart');
+    if (!isGuestSessionId(guestSessionId)) {
+        throw new AppError('VALIDATION_ERROR', 400, 'A valid guest session ID is required');
+    }
 
     return sequelize.transaction(async (t) => {
-        const guestCart = await Cart.findOne({ 
+        const guestCart = await Cart.findOne({
             where: { sessionId: guestSessionId, status: 'active' },
-            include: [{ model: CartItem, as: 'items' }],
-            transaction: t 
+            transaction: t,
+            lock: Transaction.LOCK.UPDATE,
         });
+        const guestItems = guestCart ? await CartItem.findAll({
+            where: { cartId: guestCart.id },
+            transaction: t,
+            lock: Transaction.LOCK.UPDATE,
+        }) : [];
 
-        if (!guestCart || !guestCart.items || guestCart.items.length === 0) {
+        if (!guestCart || guestItems.length === 0) {
             const userCart = await getActiveCartByOwner(userId, null, t);
             return fetchCartWithItems(userCart.id, t);
         }
 
         const userCart = await getActiveCartByOwner(userId, null, t);
 
-        for (const guestItem of guestCart.items) {
+        for (const guestItem of guestItems) {
             const existingItem = await CartItem.findOne({
                 where: { 
                     cartId: userCart.id, 

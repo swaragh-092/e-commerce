@@ -2,12 +2,14 @@ import React from 'react';
 import {
   Box,
   Button,
+  Checkbox,
   Dialog,
   DialogActions,
   DialogContent,
   DialogTitle,
   Divider,
   FormControl,
+  FormControlLabel,
   Grid,
   InputLabel,
   MenuItem,
@@ -97,6 +99,7 @@ const MenuItemDialog = ({
                         ...itemForm,
                         targetType: newType,
                         targetId: '',
+                        syncChildren: newType === 'category' ? Boolean(itemForm.syncChildren) : false,
                         url: '',
                         openInNewTab: false,
                       };
@@ -111,11 +114,11 @@ const MenuItemDialog = ({
                   >
                     <MenuItem value="none">Label Only (Category Header)</MenuItem>
                     <MenuItem value="custom_url">Custom URL</MenuItem>
-                    <MenuItem value="system_route">System Route</MenuItem>
+                    <MenuItem value="system_route">Store Page</MenuItem>
                     <MenuItem value="page">Static Page</MenuItem>
                     <MenuItem value="category">Category</MenuItem>
+                    <MenuItem value="category_tree">Synced category tree</MenuItem>
                     <MenuItem value="product">Product</MenuItem>
-                    <MenuItem value="collection">Collection</MenuItem>
                   </Select>
                 </FormControl>
               </Grid>
@@ -154,11 +157,34 @@ const MenuItemDialog = ({
                   </FormControl>
                 </Grid>
               )}
+              {itemForm.targetType === 'category_tree' && (
+                <Grid item xs={12}>
+                  <Typography variant="body2" color="text.secondary">
+                    All categories appear below this item in the same hierarchy and order as Categories Management. Existing manual children are preserved but hidden while sync is active.
+                  </Typography>
+                </Grid>
+              )}
+              {itemForm.targetType === 'category' && (
+                <Grid item xs={12}>
+                  <FormControlLabel
+                    control={(
+                      <Checkbox
+                        checked={Boolean(itemForm.syncChildren)}
+                        onChange={(e) => setItemForm({ ...itemForm, syncChildren: e.target.checked })}
+                      />
+                    )}
+                    label="Sync child categories automatically"
+                  />
+                  <Typography variant="body2" color="text.secondary" sx={{ ml: 4 }}>
+                    Keep this menu branch in sync with the selected category’s child categories and their order.
+                  </Typography>
+                </Grid>
+              )}
               {needsUrl(itemForm.targetType) && (
                 <Grid item xs={12} md={8}>
                   <TextField
                     fullWidth
-                    label={itemForm.targetType === 'system_route' ? 'Route Path' : 'URL'}
+                    label={itemForm.targetType === 'system_route' ? 'Store Page Path' : 'URL'}
                     placeholder={
                       itemForm.targetType === 'system_route'
                         ? '/products'
@@ -166,6 +192,7 @@ const MenuItemDialog = ({
                     }
                     value={itemForm.url || ''}
                     onChange={(e) => setItemForm({ ...itemForm, url: e.target.value })}
+                    helperText={itemForm.targetType === 'system_route' ? 'Enter a path on your store, for example /products or /contact.' : undefined}
                   />
                 </Grid>
               )}
@@ -245,7 +272,7 @@ const MenuItemDialog = ({
         </Stack>
       </DialogContent>
       <DialogActions sx={{ px: 3, pb: 3 }}>
-        <Button onClick={onClose}>Cancel</Button>
+        <Button color="error" onClick={onClose}>Cancel</Button>
         <Button variant="contained" onClick={onSave} size="large" sx={{ px: 4 }}>
           {editingItem ? 'Save Changes' : 'Add Item'}
         </Button>

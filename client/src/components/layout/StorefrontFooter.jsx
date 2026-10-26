@@ -16,6 +16,7 @@ import { useSettings } from '../../hooks/useSettings';
 import { useTheme } from '@mui/material/styles';
 import PageService from '../../services/pageService';
 import MenuService from '../../services/menuService';
+import { filterFeatureLinks } from '../../utils/featureNavigation';
 import { isExternalUrl } from '../../utils/urls';
 
 const SOCIAL = [
@@ -27,7 +28,7 @@ const SOCIAL = [
 ];
 
 const StorefrontFooter = () => {
-  const { settings } = useSettings();
+  const { settings, features } = useSettings();
   const theme = useTheme();
   const [dynamicLinks, setDynamicLinks] = React.useState([]);
   const [footerMenu, setFooterMenu] = React.useState(null);
@@ -108,7 +109,7 @@ const StorefrontFooter = () => {
     ...(Array.isArray(f.links) ? f.links : []).map(toFooterLink),
     ...dynamicLinks.map(toFooterLink),
   ].filter(Boolean);
-  const allLinks = dedupeLinks(menuLinks.length ? menuLinks : legacyLinks);
+  const allLinks = filterFeatureLinks(dedupeLinks(menuLinks.length ? menuLinks : legacyLinks), features || {});
 
   const hasSocial  = f.showSocial  && SOCIAL.some(({ key }) => f[key]);
   const hasLinks   = f.showLinks !== false && allLinks.length > 0;

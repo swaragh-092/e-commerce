@@ -65,7 +65,8 @@ describe('AdminService.deleteStaffUser edge cases & functionality', () => {
       role: 'super_admin',
       status: 'active',
     });
-    vi.spyOn(User, 'findAll').mockResolvedValue([{ id: 'last-super-admin-id' }]);
+    // Join-aware guard counts via raw query (legacy column OR roles join)
+    vi.spyOn(db.sequelize, 'query').mockResolvedValue([{ count: 1 }]);
 
     await expect(
       AdminService.deleteStaffUser('last-super-admin-id', superAdminCaller)
@@ -74,6 +75,50 @@ describe('AdminService.deleteStaffUser edge cases & functionality', () => {
       statusCode: 400,
       message: 'Cannot delete the last active super admin',
     });
+  });
+
+  it('rejects with 400 if deleting a join-assigned super admin who is the last one', async () => {
+    vi.spyOn(User, 'findByPk').mockResolvedValue({
+      id: 'join-super-admin-id',
+      email: 'join_sa@example.com',
+      role: 'admin',
+      roles: [{ slug: 'super_admin', baseRole: 'super_admin' }],
+      status: 'active',
+    });
+    vi.spyOn(db.sequelize, 'query').mockResolvedValue([{ count: 1 }]);
+
+    await expect(
+      AdminService.deleteStaffUser('join-super-admin-id', superAdminCaller)
+    ).rejects.toMatchObject({
+      code: 'VALIDATION_ERROR',
+      statusCode: 400,
+      message: 'Cannot delete the last active super admin',
+    });
+  });
+
+  it('executes query with FOR UPDATE OF u row lock when verifying active super admin count', async () => {
+    const mockSA = {
+      id: 'target-super-admin-id',
+      email: 'target_sa@example.com',
+      role: 'super_admin',
+      status: 'active',
+      setRoles: vi.fn().mockResolvedValue(true),
+      destroy: vi.fn().mockResolvedValue(true),
+    };
+    vi.spyOn(User, 'findByPk').mockResolvedValue(mockSA);
+    vi.spyOn(Order, 'count').mockResolvedValue(0);
+    vi.spyOn(RefreshToken, 'findAll').mockResolvedValue([]);
+    vi.spyOn(RefreshToken, 'update').mockResolvedValue([1]);
+    vi.spyOn(AuditService, 'log').mockResolvedValue(true);
+
+    let executedSql = '';
+    vi.spyOn(db.sequelize, 'query').mockImplementation(async (sql) => {
+      executedSql = sql;
+      return [{ id: 'target-super-admin-id' }, { id: 'other-super-admin-id' }];
+    });
+
+    await AdminService.deleteStaffUser('target-super-admin-id', superAdminCaller);
+    expect(executedSql).toContain('FOR UPDATE OF u');
   });
 
   it('allows deleting an inactive super admin even when only one active super admin exists', async () => {
@@ -87,6 +132,7 @@ describe('AdminService.deleteStaffUser edge cases & functionality', () => {
     };
     vi.spyOn(User, 'findByPk').mockResolvedValue(mockInactiveSA);
     vi.spyOn(Order, 'count').mockResolvedValue(0);
+    vi.spyOn(RefreshToken, 'findAll').mockResolvedValue([]);
     vi.spyOn(RefreshToken, 'update').mockResolvedValue([0]);
     vi.spyOn(AuditService, 'log').mockResolvedValue(true);
     // findAll should not be called because status !== 'active'
@@ -126,6 +172,7 @@ describe('AdminService.deleteStaffUser edge cases & functionality', () => {
 
     vi.spyOn(User, 'findByPk').mockResolvedValue(mockUser);
     vi.spyOn(Order, 'count').mockResolvedValue(0);
+    vi.spyOn(RefreshToken, 'findAll').mockResolvedValue([]);
     const tokenUpdateSpy = vi.spyOn(RefreshToken, 'update').mockResolvedValue([1]);
     const auditSpy = vi.spyOn(AuditService, 'log').mockResolvedValue(true);
 
@@ -153,6 +200,7 @@ describe('AdminService.deleteStaffUser edge cases & functionality', () => {
 
     vi.spyOn(User, 'findByPk').mockResolvedValue(mockCustomRoleUser);
     vi.spyOn(Order, 'count').mockResolvedValue(0);
+    vi.spyOn(RefreshToken, 'findAll').mockResolvedValue([]);
     vi.spyOn(RefreshToken, 'update').mockResolvedValue([1]);
     vi.spyOn(AuditService, 'log').mockResolvedValue(true);
 
@@ -305,6 +353,7 @@ describe('AdminService.createStaffUser recreation & edge cases', () => {
       roles: [mockRole],
     });
     const tokenUpdateSpy = vi.spyOn(RefreshToken, 'update').mockResolvedValue([1]);
+    vi.spyOn(RefreshToken, 'findAll').mockResolvedValue([]);
     const auditSpy = vi.spyOn(AuditService, 'log').mockResolvedValue(true);
 
     const result = await AdminService.createStaffUser(

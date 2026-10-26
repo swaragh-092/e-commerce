@@ -18,6 +18,11 @@ module.exports = (sequelize, DataTypes) => {
         transactionId: {
             type: DataTypes.STRING(255),
         },
+        expiresAt: {
+            type: DataTypes.DATE,
+            allowNull: true,
+            field: 'expires_at',
+        },
         amount: {
             type: DataTypes.DECIMAL(10, 2),
             allowNull: false,

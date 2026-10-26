@@ -26,18 +26,19 @@ const normalizeText = (value = '') => String(value).trim().toLowerCase();
 
 const getAttributeText = (attribute = {}) => normalizeText(`${attribute.name || ''} ${attribute.slug || ''}`);
 
-const inferValueType = (attribute = {}) => {
+export const inferValueType = (attribute = {}) => {
   if (attribute.valueType && attribute.valueType !== 'auto') return attribute.valueType;
 
   const text = getAttributeText(attribute);
-  if (/(colou?r|shade)/.test(text)) return 'color';
-  if (/(pattern|print)/.test(text)) return 'pattern';
-  if (/(size|shoe|waist)/.test(text)) return 'size';
-  if (/(weight|pack weight|net weight)/.test(text)) return 'weight';
-  if (/(length|width|height|dimension|diameter|thickness)/.test(text)) return 'length';
-  if (/(storage|memory|ram|rom|ssd|hdd|capacity)/.test(text)) return 'storage';
-  if (/(volume|quantity|bottle|liquid)/.test(text)) return 'volume';
-  if (/(material|fabric)/.test(text)) return 'material';
+  const words = text.replace(/[_-]+/g, ' ');
+  if (/\b(colou?r|shade)\b/.test(words)) return 'color';
+  if (/\b(pattern|print)\b/.test(words)) return 'pattern';
+  if (/\b(size|shoe|waist)\b/.test(words)) return 'size';
+  if (/\bweight\b/.test(words)) return 'weight';
+  if (/\b(length|width|height|dimension|diameter|thickness)\b/.test(words)) return 'length';
+  if (/\b(storage|memory|ram|rom|ssd|hdd|capacity)\b/.test(words)) return 'storage';
+  if (/\b(volume|quantity|bottle|liquid)\b/.test(words)) return 'volume';
+  if (/\b(material|fabric)\b/.test(words)) return 'material';
   return 'text';
 };
 

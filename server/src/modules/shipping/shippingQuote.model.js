@@ -9,7 +9,12 @@ module.exports = (sequelize, DataTypes) => {
         },
         userId: {
             type: DataTypes.UUID,
-            allowNull: false,
+            allowNull: true,
+        },
+        sessionId: {
+            type: DataTypes.STRING(255),
+            allowNull: true,
+            field: 'session_id',
         },
         addressId: {
             type: DataTypes.UUID,

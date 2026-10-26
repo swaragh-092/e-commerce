@@ -9,9 +9,9 @@ const passwordPolicy = Joi.string()
   .required();
 
 const registerSchema = Joi.object({
-  firstName: Joi.string().required().max(50),
-  lastName: Joi.string().required().max(50),
-  email: Joi.string().email().required().lowercase(),
+  firstName: Joi.string().trim().min(1).required().max(50),
+  lastName: Joi.string().trim().min(1).required().max(50),
+  email: Joi.string().email().required().lowercase().trim(),
   password: passwordPolicy,
   confirmPassword: Joi.string()
     .valid(Joi.ref('password'))

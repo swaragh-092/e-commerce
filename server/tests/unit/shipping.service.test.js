@@ -112,3 +112,152 @@ describe('Shipping service helpers', () => {
         settingSpy.mockRestore();
     });
 });
+
+describe('Unified shipping policy preview', () => {
+    const { ShippingRule, Setting } = require('../../src/modules');
+    const preview = async (settings, rules = [], pincode = '560002', country = 'India') => {
+        vi.spyOn(ShippingProvider, 'findOne').mockResolvedValue({ id: 'default', code: 'manual', name: 'Manual', enabled: true, supportsCod: true });
+        vi.spyOn(ShippingRule, 'findAll').mockResolvedValue(rules);
+        vi.spyOn(Setting, 'findAll').mockResolvedValue(Object.entries({ warehousePincode: '560001', method: 'flat_rate', flatRate: 5, ...settings }).map(([key, value]) => ({ group: 'shipping', key, value })));
+        try {
+            return await ShippingService.testCalculation({ pincode, subtotal: 25, weightGrams: 500, country });
+        } finally {
+            vi.restoreAllMocks();
+        }
+    };
+    const freeRule = { id: 'free', name: 'Free rule', rateType: 'free', rateConfig: {}, conditions: {}, provider: null, zone: null };
+
+    it('charges the selected fixed fee even when a free rule exists', async () => {
+        const result = await preview({ pricingMode: 'standard' }, [freeRule]);
+        expect(result.decision).toMatchObject({ serviceable: true, shippingCost: 5, pricingSource: 'standard', pricingReason: 'Fixed delivery fee' });
+    });
+
+    it('does not silently fall back to fixed pricing when advanced rules have no match', async () => {
+        const result = await preview({ pricingMode: 'rules' });
+        expect(result.decision).toMatchObject({ serviceable: false, shippingCost: 0, pricingReason: 'No matching shipping rule' });
+    });
+
+    it('preserves existing rules-first behavior until a merchant selects a policy', async () => {
+        const result = await preview({}, [freeRule]);
+        expect(result.decision).toMatchObject({ serviceable: true, shippingCost: 0, pricingMode: 'legacy', ruleId: 'free' });
+    });
+
+    it.each(['standard', 'rules'])('enforces storewide blocked pincodes in %s preview', async (pricingMode) => {
+        const result = await preview({ pricingMode, serviceablePincodes: '560002', blockedPincodes: '560002' }, [freeRule]);
+        expect(result.decision).toMatchObject({ serviceable: false, shippingCost: 0, codAvailable: false });
+    });
+
+    it('rejects invalid domestic pincodes even with a matching free rule', async () => {
+        const result = await preview({ pricingMode: 'rules' }, [freeRule], '123');
+        expect(result.decision.serviceable).toBe(false);
+    });
+});
+
+
+describe('Shipping quote policy freshness', () => {
+    it.each([undefined, 'previous-policy-hash'])('requires refreshing quotes without the current policy snapshot', async (shippingSettingsHash) => {
+        const { ShippingQuote, Setting } = require('../../src/modules');
+        vi.spyOn(ShippingQuote, 'findOne').mockResolvedValue({ serviceable: true, expiresAt: new Date(Date.now() + 60000), inputSnapshot: { shippingSettingsHash } });
+        vi.spyOn(Setting, 'findAll').mockResolvedValue([{ group: 'shipping', key: 'blockedPincodes', value: '560002' }]);
+        try {
+            await expect(ShippingService.validateQuoteForOrder('user', { shippingQuoteId: 'quote', paymentMethod: 'razorpay' })).rejects.toMatchObject({ code: 'SHIPPING_QUOTE_STALE' });
+        } finally {
+            vi.restoreAllMocks();
+        }
+    });
+});
+
+describe('Percent of order shipping rule multi-parcel handling', () => {
+    it('applies percent_of_order shipping rate once across multi-parcel orders instead of multiplying per parcel', async () => {
+        const { ShippingProvider, ShippingRule, Setting } = require('../../src/modules');
+        const percentRule = {
+            id: 'pct-rule',
+            name: '10 Percent Delivery',
+            rateType: 'percent_of_order',
+            rateConfig: { percent: 10 },
+            conditions: {},
+            codAllowed: true,
+            provider: null,
+            zone: null,
+        };
+
+        vi.spyOn(ShippingProvider, 'findOne').mockResolvedValue({ id: 'default', code: 'manual', name: 'Manual', enabled: true, supportsCod: true });
+        vi.spyOn(ShippingRule, 'findAll').mockResolvedValue([percentRule]);
+        vi.spyOn(Setting, 'findAll').mockResolvedValue([
+            { group: 'shipping', key: 'warehousePincode', value: '560001' },
+            { group: 'general', key: 'currency', value: 'INR' },
+        ]);
+
+        try {
+            const decision = await ShippingService.calculateDeliveryDecision({
+                subtotal: 1000,
+                chargeableWeightGrams: 1000,
+                parcelWeightsGrams: [500, 500],
+                packageCount: 2,
+                zone: 'national',
+                addressSnapshot: { postalCode: '560002', country: 'India' },
+                paymentMethod: 'razorpay',
+            }, {});
+
+            expect(decision.serviceable).toBe(true);
+            expect(decision.shippingCost).toBe(100);
+            expect(decision.rateBreakdown.freight).toBe(100);
+        } finally {
+            vi.restoreAllMocks();
+        }
+    });
+});
+
+describe('Advanced shipping rule order and parcel charging', () => {
+    const { ShippingRule, Setting } = require('../../src/modules');
+    const baseParams = {
+        subtotal: 1000,
+        chargeableWeightGrams: 1000,
+        parcelWeightsGrams: [500, 500],
+        packageCount: 2,
+        zone: 'national',
+        addressSnapshot: { postalCode: '560002', country: 'India' },
+        paymentMethod: 'cod',
+    };
+    const setMocks = (rule) => {
+        vi.spyOn(ShippingProvider, 'findOne').mockResolvedValue({ id: 'manual', code: 'manual', name: 'Manual', enabled: true, supportsCod: true });
+        vi.spyOn(ShippingRule, 'findAll').mockResolvedValue([rule]);
+        vi.spyOn(Setting, 'findAll').mockResolvedValue([{ group: 'general', key: 'currency', value: 'INR' }]);
+    };
+
+    it.each([
+        [{ rateType: 'percent_of_order', rateConfig: { percent: 10, codFeeType: 'flat', codFeeValue: 40 } }, 140],
+        [{ rateType: 'free_above_threshold', rateConfig: { threshold: 2000, amount: 50, codFeeType: 'flat', codFeeValue: 40 } }, 90],
+        [{ rateType: 'free_above_threshold', rateConfig: { threshold: 500, amount: 50, codFeeType: 'flat', codFeeValue: 40 } }, 40],
+        [{ rateType: 'flat', rateConfig: { flatRate: 50, codFeeType: 'flat', codFeeValue: 40 } }, 90],
+    ])('charges order-level freight and COD once for %s', async (config, expectedTotal) => {
+        setMocks({ id: 'rule', name: 'Rule', conditions: {}, codAllowed: true, provider: null, zone: null, ...config });
+        try {
+            const decision = await ShippingService.calculateRuleDecision(baseParams);
+            expect(decision.shippingCost).toBe(expectedTotal);
+        } finally {
+            vi.restoreAllMocks();
+        }
+    });
+
+    it('matches weight conditions against total parcel chargeable weight', async () => {
+        setMocks({ id: 'rule', name: 'Light order', rateType: 'flat', rateConfig: { flatRate: 50 }, conditions: { weightLte: 800 }, codAllowed: true, provider: null, zone: null });
+        try {
+            const decision = await ShippingService.calculateRuleDecision(baseParams);
+            expect(decision).toBeNull();
+        } finally {
+            vi.restoreAllMocks();
+        }
+    });
+
+    it('continues to rate per-kg freight per parcel while charging the COD fee once', async () => {
+        setMocks({ id: 'rule', name: 'Weight rate', rateType: 'per_kg_slab', rateConfig: { baseCharge: 20, additionalSlabRate: 10, codFeeType: 'flat', codFeeValue: 40 }, conditions: {}, codAllowed: true, provider: null, zone: null });
+        try {
+            const decision = await ShippingService.calculateRuleDecision(baseParams);
+            expect(decision.shippingCost).toBe(80);
+            expect(decision.rateBreakdown.codFee).toBe(40);
+        } finally {
+            vi.restoreAllMocks();
+        }
+    });
+});

@@ -13,14 +13,17 @@ import {
   DialogContentText,
   DialogTitle,
   FormControl,
-  Grid,
   IconButton,
   InputAdornment,
   InputLabel,
   MenuItem,
   Paper,
+  Radio,
+  RadioGroup,
   Select,
   Stack,
+  Tab,
+  Tabs,
   TextField,
   Typography,
   useTheme,
@@ -37,6 +40,11 @@ import PersonAddIcon from '@mui/icons-material/PersonAdd';
 import Visibility from '@mui/icons-material/Visibility';
 import VisibilityOff from '@mui/icons-material/VisibilityOff';
 import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
+import SearchIcon from '@mui/icons-material/Search';
+import ChevronRightIcon from '@mui/icons-material/ChevronRight';
+import LockOutlinedIcon from '@mui/icons-material/LockOutlined';
+import ArrowBackIcon from '@mui/icons-material/ArrowBack';
+import { createTheme, ThemeProvider } from '@mui/material/styles';
 import { DataGrid } from '@mui/x-data-grid';
 import {
   createAccessRole,
@@ -49,21 +57,50 @@ import {
   updateAccessRole,
   updateAccessUserRole,
 } from '../../services/adminService';
-import { useAuth } from '../../hooks/useAuth';
+import { useAuth, useIsSuperAdmin } from '../../hooks/useAuth';
 import { PERMISSIONS, IMPLIES } from '../../utils/permissions';
 import authorizationSchema from '../../../../shared/authorization.json';
 import { useNotification } from '../../context/NotificationContext';
 import { getApiErrorMessage } from '../../utils/apiErrors';
 
-const roleColors = {
-  customer: 'default',
-  admin: 'primary',
-  super_admin: 'secondary',
+const permissionGroupLabels = {
+  account: 'My account', api_builder: 'API Builder', attributes: 'Product attributes',
+  menus: 'Store navigation', roles: 'Role management', users: 'Staff accounts',
 };
+const formatPermissionGroup = (group) => permissionGroupLabels[group]
+  || group.replaceAll('_', ' ').replace(/\b\w/g, (letter) => letter.toUpperCase());
 
-const roleTypeChipProps = {
-  system: { label: 'System Role', color: 'warning' },
-  custom: { label: 'Custom Role', color: 'success' },
+const permissionLabels = {
+  'gallery.read': 'View gallery albums',
+  'gallery.manage': 'Create and edit galleries',
+  'gallery.delete': 'Delete galleries and remove images',
+  'newsletter.read': 'View newsletter campaigns',
+  'newsletter.manage': 'Manage and send newsletters',
+  'newsletter.subscribers_read': 'View and export subscribers',
+  'account.self': 'Manage own profile',
+  'cart.self': 'Manage own shopping cart',
+  'wishlist.self': 'Manage own wishlist',
+  'checkout.self': 'Place orders',
+  'reviews.create': 'Write reviews',
+  'orders.update_status': 'Update order status',
+  'orders.refund': 'Refund orders',
+  'products.bulk_sale': 'Apply bulk sale pricing',
+  'settings.advanced': 'Access advanced settings',
+  'roles.read': 'View roles',
+  'roles.manage': 'Create and edit custom roles',
+  'system_roles.manage': 'Manage built-in roles',
+  'audit.read': 'View audit log',
+  'notifications.manage': 'Manage notification settings',
+  'users.assign_roles': 'Manage staff and assign roles',
+  'api_builder.read': 'View API definitions',
+  'api_builder.manage': 'Manage API definitions',
+};
+const permissionActions = { read: 'View', view: 'View', manage: 'Manage', create: 'Create', update: 'Edit', delete: 'Delete', upload: 'Upload', moderate: 'Moderate' };
+const getPermissionLabel = (permission) => {
+  if (permissionLabels[permission.key]) return permissionLabels[permission.key];
+  const [resource, action] = (permission.key || '').split('.');
+  const resourceLabel = permissionGroupLabels[resource]?.toLowerCase() || resource;
+  return permissionActions[action] ? `${permissionActions[action]} ${resourceLabel}` : permission.name || permission.key;
 };
 
 const emptyRoleForm = {
@@ -71,8 +108,10 @@ const emptyRoleForm = {
   name: '',
   description: '',
   baseRole: 'admin',
+  slug: null,
   permissionIds: [],
   isSystem: false,
+  hasHiddenPermissions: false,
 };
 
 const emptyUserForm = {
@@ -80,14 +119,33 @@ const emptyUserForm = {
   lastName: '',
   email: '',
   password: '',
+  sendInvitation: true,
   roleId: '',
 };
 
 const AccessControlPage = () => {
   const theme = useTheme();
   const isMobile = useMediaQuery(theme.breakpoints.down('sm'));
+  const accessTheme = useMemo(() => createTheme(theme, {
+    shape: { borderRadius: 8 },
+    palette: {
+      background: { default: theme.palette.mode === 'dark' ? '#11151c' : '#f5f6f8', paper: theme.palette.mode === 'dark' ? '#1b2029' : '#ffffff' },
+      text: { primary: theme.palette.mode === 'dark' ? '#f1f3f7' : '#202632', secondary: theme.palette.mode === 'dark' ? '#aeb8c7' : '#5e6878' },
+      divider: theme.palette.mode === 'dark' ? '#343d4b' : '#e3e7ed',
+    },
+    components: {
+      MuiPaper: { styleOverrides: { root: { borderRadius: 10, backgroundImage: 'none' } } },
+      MuiButton: { styleOverrides: { root: { borderRadius: 6, textTransform: 'none', fontWeight: 600, minHeight: 38 } } },
+      MuiOutlinedInput: { styleOverrides: { root: { borderRadius: 6 } } },
+      MuiTextField: { styleOverrides: { root: { '& .MuiOutlinedInput-root': { borderRadius: 6 } } } },
+      MuiChip: { styleOverrides: { root: { borderRadius: 5 } } },
+      MuiAlert: { styleOverrides: { root: { borderRadius: 6 } } },
+      MuiDialog: { styleOverrides: { paper: { borderRadius: 12 } } },
+    },
+  }), [theme]);
   const { notify } = useNotification();
   const { hasPermission, user: currentUser } = useAuth();
+  const isSuperAdmin = useIsSuperAdmin();
   const [roles, setRoles] = useState([]);
   const [permissions, setPermissions] = useState([]);
   const [rows, setRows] = useState([]);
@@ -101,6 +159,17 @@ const AccessControlPage = () => {
   const [roleDialogOpen, setRoleDialogOpen] = useState(false);
   const [savingRole, setSavingRole] = useState(false);
   const [roleForm, setRoleForm] = useState(emptyRoleForm);
+  const [permissionSearch, setPermissionSearch] = useState('');
+  const [selectedPermissionsOnly, setSelectedPermissionsOnly] = useState(false);
+  const [selectedRoleId, setSelectedRoleId] = useState(null);
+  const [roleDetailSearch, setRoleDetailSearch] = useState('');
+  const [activeSection, setActiveSection] = useState('roles');
+  const [mobileRoleDetailsOpen, setMobileRoleDetailsOpen] = useState(false);
+  const [roleSearch, setRoleSearch] = useState('');
+  const [roleTypeFilter, setRoleTypeFilter] = useState('all');
+  const [ownPermissionsOpen, setOwnPermissionsOpen] = useState(false);
+  const [ownPermissionSearch, setOwnPermissionSearch] = useState('');
+  const [pendingRoleAssignment, setPendingRoleAssignment] = useState(null);
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   const [roleToDelete, setRoleToDelete] = useState(null);
   const [deletingRole, setDeletingRole] = useState(false);
@@ -109,6 +178,8 @@ const AccessControlPage = () => {
   const [deletingUser, setDeletingUser] = useState(false);
 
   const canManageCustomRoles = hasPermission(PERMISSIONS.ROLES_MANAGE);
+  // System roles are governed by the reserved system_roles.manage grant, which
+  // a super admin keeps even if roles.manage is switched off.
   const canManageSystemRoles = hasPermission(PERMISSIONS.SYSTEM_ROLES_MANAGE);
   const canAssignRoles = hasPermission(PERMISSIONS.USERS_ASSIGN_ROLES);
 
@@ -117,16 +188,67 @@ const AccessControlPage = () => {
   const [showPassword, setShowPassword] = useState(false);
   const [savingUser, setSavingUser] = useState(false);
 
-  const roleOptions = useMemo(() => roles.map((role) => ({ id: role.id, name: role.name })), [roles]);
+  const roleOptions = useMemo(
+    () => roles.map((role) => ({
+      id: role.id,
+      name: role.name,
+      slug: role.slug,
+      baseRole: role.baseRole,
+      permissions: role.permissions || [],
+      isDelegable: role.isDelegable,
+    })),
+    [roles]
+  );
+
+  const isRoleDelegable = useCallback((role) => {
+    if (role.isDelegable === false) return false;
+    if (isSuperAdmin) return true;
+    if (role.baseRole === 'super_admin' || role.slug === 'super_admin') return false;
+    const rolePerms = role.permissions || [];
+    return rolePerms.every((p) => hasPermission(typeof p === 'string' ? p : p.key));
+  }, [hasPermission, isSuperAdmin]);
+
+  const canGrantPermission = useCallback((permission) => {
+    if (isSuperAdmin) return true;
+    return hasPermission(permission?.key);
+  }, [hasPermission, isSuperAdmin]);
+
+  const ownPermissions = permissions.filter(canGrantPermission);
+  const ownPermissionGroups = ownPermissions.reduce((groups, permission) => {
+    const group = permission.group || 'general';
+    const description = authorizationSchema.permissionDescriptions?.[permission.key] || permission.description || '';
+    if (!`${formatPermissionGroup(group)} ${getPermissionLabel(permission)} ${description}`.toLowerCase().includes(ownPermissionSearch.trim().toLowerCase())) return groups;
+    (groups[group] ||= []).push(permission);
+    return groups;
+  }, {});
+  const displayedRoles = roles
+    .filter((role) => (isSuperAdmin || (role.slug !== 'super_admin' && role.baseRole !== 'super_admin'))
+      && (roleTypeFilter === 'all' || (roleTypeFilter === 'system' ? role.isSystem : !role.isSystem))
+      && `${role.name} ${role.description || ''}`.toLowerCase().includes(roleSearch.trim().toLowerCase()))
+    .map((role) => ({ ...role, permissions: role.permissions.filter(canGrantPermission) }));
+
+  const selectedRole = displayedRoles.find((role) => role.id === selectedRoleId) || displayedRoles[0] || null;
+  const roleDetailGroups = (selectedRole?.permissions || []).reduce((groups, permission) => {
+    const group = permission.group || 'general';
+    const description = authorizationSchema.permissionDescriptions?.[permission.key] || permission.description || '';
+    if (`${formatPermissionGroup(group)} ${getPermissionLabel(permission)} ${description}`.toLowerCase().includes(roleDetailSearch.trim().toLowerCase())) {
+      (groups[group] ||= []).push(permission);
+    }
+    return groups;
+  }, {});
+  const currentSection = canAssignRoles ? activeSection : 'roles';
 
   const groupedPermissions = useMemo(() => {
     return permissions.reduce((acc, permission) => {
+      const canGrant = canGrantPermission(permission);
+      const allowedForRole = roleForm.slug === 'super_admin' || !permission.reserved;
+      if (!canGrant || !allowedForRole) return acc;
       const group = permission.group || 'general';
       if (!acc[group]) acc[group] = [];
       acc[group].push(permission);
       return acc;
     }, {});
-  }, [permissions]);
+  }, [canGrantPermission, permissions, roleForm.slug]);
 
   const impliedPermissionKeys = useMemo(() => {
     const selectedKeys = permissions
@@ -141,6 +263,20 @@ const AccessControlPage = () => {
     for (const key of selectedKeys) implied.delete(key);
     return implied;
   }, [permissions, roleForm.permissionIds]);
+
+  const effectiveSelectedPermissionCount = Object.values(groupedPermissions).flat()
+    .filter((permission) => roleForm.permissionIds.includes(permission.id) || impliedPermissionKeys.has(permission.key)).length;
+
+  const filteredPermissionGroups = Object.entries(groupedPermissions).map(([group, groupPermissions]) => {
+    const query = permissionSearch.trim().toLowerCase();
+    const matchingPermissions = groupPermissions.filter((permission) => {
+      const selected = roleForm.permissionIds.includes(permission.id) || impliedPermissionKeys.has(permission.key);
+      const description = authorizationSchema.permissionDescriptions?.[permission.key] || permission.description || '';
+      const matchesQuery = `${formatPermissionGroup(group)} ${getPermissionLabel(permission)} ${permission.key} ${description}`.toLowerCase().includes(query);
+      return matchesQuery && (!selectedPermissionsOnly || selected);
+    });
+    return [group, matchingPermissions];
+  }).filter(([, groupPermissions]) => groupPermissions.length > 0);
 
   useEffect(() => {
     const timeoutId = window.setTimeout(() => {
@@ -169,8 +305,15 @@ const AccessControlPage = () => {
 
       const [rolesResponse, permissionsResponse, usersResponse] = await Promise.all(requests);
 
-      setRoles(rolesResponse.data.data || []);
-      setPermissions(permissionsResponse.data.data || []);
+      const fetchedRoles = rolesResponse.data.data || [];
+      const visibleRoles = isSuperAdmin
+        ? fetchedRoles
+        : fetchedRoles.filter((role) => role.slug !== 'super_admin' && role.baseRole !== 'super_admin');
+      setRoles(visibleRoles.map((role) => ({
+        ...role,
+        permissions: (role.permissions || []).filter((permission) => canGrantPermission(permission)),
+      })));
+      setPermissions((permissionsResponse.data.data || []).filter((permission) => canGrantPermission(permission)));
       setRows(usersResponse?.data?.data || []);
       setTotal(usersResponse?.data?.meta?.total || 0);
     } catch (error) {
@@ -178,25 +321,31 @@ const AccessControlPage = () => {
     } finally {
       setLoading(false);
     }
-  }, [canAssignRoles, debouncedSearch, notify, paginationModel.page, paginationModel.pageSize, roleFilter]);
+  }, [canAssignRoles, canGrantPermission, debouncedSearch, isSuperAdmin, notify, paginationModel.page, paginationModel.pageSize, roleFilter]);
 
   useEffect(() => {
     fetchAccessControl();
   }, [fetchAccessControl]);
 
   const openCreateDialog = () => {
+    setPermissionSearch('');
+    setSelectedPermissionsOnly(false);
     setRoleForm(emptyRoleForm);
     setRoleDialogOpen(true);
   };
 
   const openEditDialog = (role) => {
+    setPermissionSearch('');
+    setSelectedPermissionsOnly(false);
     setRoleForm({
       id: role.id,
       name: role.name,
       description: role.description || '',
       baseRole: role.baseRole,
+      slug: role.slug,
       permissionIds: role.permissions.map((permission) => permission.id),
       isSystem: role.isSystem,
+      hasHiddenPermissions: role.isDelegable === false,
     });
     setRoleDialogOpen(true);
   };
@@ -207,6 +356,11 @@ const AccessControlPage = () => {
   };
 
   const handleRolePermissionToggle = (permissionId) => {
+    const perm = permissions.find((p) => p.id === permissionId);
+    if (perm && !canGrantPermission(perm)) {
+      notify('You cannot grant permissions you do not possess.', 'error');
+      return;
+    }
     setRoleForm((current) => ({
       ...current,
       permissionIds: current.permissionIds.includes(permissionId)
@@ -217,7 +371,7 @@ const AccessControlPage = () => {
 
   const handleGroupSelectAll = (groupPermissions, checked) => {
     const toggleableIds = groupPermissions
-      .filter((p) => roleForm.isSystem || !p.reserved)
+      .filter((p) => (roleForm.slug === 'super_admin' || !p.reserved) && canGrantPermission(p))
       .map((p) => p.id);
     setRoleForm((current) => ({
       ...current,
@@ -233,19 +387,19 @@ const AccessControlPage = () => {
       return;
     }
 
-    if (roleForm.permissionIds.length === 0) {
-      notify('Select at least one permission.', 'error');
-      return;
-    }
-
     setSavingRole(true);
     try {
       const payload = {
         name: roleForm.name.trim(),
         description: roleForm.description.trim(),
-        baseRole: roleForm.baseRole,
         permissionIds: roleForm.permissionIds,
       };
+      // baseRole is only valid for custom roles (customer/admin). Sending a
+      // system-role value like `super_admin` fails Joi validation; the server
+      // also ignores baseRole for system roles, so omit it entirely.
+      if (!roleForm.isSystem) {
+        payload.baseRole = roleForm.baseRole;
+      }
 
       if (roleForm.id) {
         await updateAccessRole(roleForm.id, payload);
@@ -300,6 +454,7 @@ const AccessControlPage = () => {
     setUpdatingUserId(userId);
     try {
       await updateAccessUserRole(userId, nextRoleId);
+      setPendingRoleAssignment(null);
       notify('User access role updated successfully.', 'success');
       fetchAccessControl();
     } catch (error) {
@@ -346,8 +501,38 @@ const AccessControlPage = () => {
     setShowPassword(false);
   };
 
+  // Close restricted dialogs the moment the governing permission is lost so a
+  // revoked admin never keeps an open write surface. System-role editing is
+  // governed by system_roles.manage (reserved, super-admin only); custom roles
+  // and role deletion use roles.manage; staff-user ops use users.assign_roles.
+  useEffect(() => {
+    if (!roleDialogOpen) return;
+    const stillEditable = roleForm.isSystem ? canManageSystemRoles : canManageCustomRoles;
+    if (!stillEditable) closeRoleDialog();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [roleDialogOpen, roleForm.isSystem, canManageSystemRoles, canManageCustomRoles]);
+
+  useEffect(() => {
+    if (!canManageCustomRoles && deleteDialogOpen) closeDeleteDialog();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [canManageCustomRoles, deleteDialogOpen]);
+
+  useEffect(() => {
+    if (!canAssignRoles && createUserDialogOpen) closeCreateUserDialog();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [canAssignRoles, createUserDialogOpen]);
+
+  useEffect(() => {
+    if (!canAssignRoles && deleteUserDialogOpen) closeDeleteUserDialog();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [canAssignRoles, deleteUserDialogOpen]);
+
+  useEffect(() => {
+    if (!canAssignRoles) setPendingRoleAssignment(null);
+  }, [canAssignRoles]);
+
   const handleCreateUser = async () => {
-    const { firstName, lastName, email, password, roleId } = createUserForm;
+    const { firstName, lastName, email, password, roleId, sendInvitation } = createUserForm;
     if (!firstName.trim() || !lastName.trim()) {
       notify('First and last name are required.', 'error');
       return;
@@ -356,7 +541,7 @@ const AccessControlPage = () => {
       notify('Email is required.', 'error');
       return;
     }
-    if (password.length < 8) {
+    if (!sendInvitation && password.length < 8) {
       notify('Password must be at least 8 characters.', 'error');
       return;
     }
@@ -367,8 +552,8 @@ const AccessControlPage = () => {
 
     setSavingUser(true);
     try {
-      await createAccessUser({ firstName: firstName.trim(), lastName: lastName.trim(), email: email.trim(), password, roleId });
-      notify('Staff user created successfully.', 'success');
+      await createAccessUser({ firstName: firstName.trim(), lastName: lastName.trim(), email: email.trim(), ...(sendInvitation ? {} : { password }), roleId, sendInvitation });
+      notify(sendInvitation ? 'Staff account created and invitation queued.' : 'Staff user created successfully.', 'success');
       closeCreateUserDialog();
       fetchAccessControl();
     } catch (error) {
@@ -403,12 +588,19 @@ const AccessControlPage = () => {
       sortable: false,
       renderCell: ({ row }) => {
         const currentRole = roleOptions.find((r) => String(r.id) === String(row.roleId));
+        const isSuperAdminAccount = row.role === 'super_admin' || row.assignedRole?.slug === 'super_admin';
+        const cannotModify = row.id === currentUser?.id || (!isSuperAdmin && isSuperAdminAccount);
         return (
-          <FormControl size="small" fullWidth>
+          <FormControl size="small" fullWidth title={row.id === currentUser?.id ? 'You cannot change your own role' : undefined}>
             <Select
               value={row.roleId || ''}
-              disabled={updatingUserId === row.id}
-              onChange={(event) => handleRoleAssignment(row.id, event.target.value)}
+              disabled={updatingUserId === row.id || cannotModify}
+              onChange={(event) => {
+                if (String(row.roleId) !== String(event.target.value)) {
+                  setPendingRoleAssignment({ user: row, nextRoleId: event.target.value });
+                }
+              }}
+              inputProps={{ 'aria-label': `Assigned role for ${row.email}` }}
               displayEmpty
               sx={{
                 '& .MuiSelect-select': {
@@ -427,7 +619,14 @@ const AccessControlPage = () => {
                 <em>Select role…</em>
               </MenuItem>
               {roleOptions.map((role) => (
-                <MenuItem key={role.id} value={role.id}>{role.name}</MenuItem>
+                <MenuItem
+                  key={role.id}
+                  value={role.id}
+                  disabled={!isRoleDelegable(role)}
+                >
+                  {role.name}
+                  {!isRoleDelegable(role) ? ' (Unavailable)' : ''}
+                </MenuItem>
               ))}
             </Select>
           </FormControl>
@@ -445,11 +644,14 @@ const AccessControlPage = () => {
           row.assignedRole?.slug === 'customer' ||
           (row.role === 'customer' && (!row.assignedRole || row.assignedRole.slug === 'customer'));
         const isSelf = row.id === currentUser?.id;
+        const isSuperAdminAccount = row.role === 'super_admin' || row.assignedRole?.slug === 'super_admin';
         let tooltipTitle = 'Delete user';
         if (isCustomer) {
           tooltipTitle = 'Customer accounts cannot be deleted (manage from Customers page)';
         } else if (isSelf) {
           tooltipTitle = 'You cannot delete your own account';
+        } else if (!isSuperAdmin && isSuperAdminAccount) {
+          tooltipTitle = 'Only super admins can delete super admin accounts';
         }
         return (
           <Tooltip title={tooltipTitle}>
@@ -457,8 +659,9 @@ const AccessControlPage = () => {
               <IconButton
                 size="small"
                 color="error"
+                aria-label={`Delete user ${row.email}`}
                 onClick={() => openDeleteUserDialog(row)}
-                disabled={deletingUser || isSelf || isCustomer}
+                disabled={deletingUser || isSelf || isCustomer || (!isSuperAdmin && isSuperAdminAccount)}
               >
                 <DeleteIcon fontSize="small" />
               </IconButton>
@@ -479,326 +682,146 @@ const AccessControlPage = () => {
     return <VpnKeyIcon color="primary" sx={{ fontSize: 28 }} />;
   };
 
-  const getRoleStatusChip = (role) => {
-    if (role.isSystem) {
-      return (
-        <Chip
-          label="Editable by super admin"
-          size="small"
-          color="secondary"
-          variant="outlined"
-          sx={{ height: 22, fontSize: '0.7rem', borderRadius: 1 }}
-        />
-      );
-    }
-    return (
-      <Chip
-        label="Delegatable"
-        size="small"
-        color="info"
-        variant="outlined"
-        sx={{ height: 22, fontSize: '0.7rem', borderRadius: 1 }}
-      />
-    );
-  };
-
   const canEditRole = (role) =>
-    (role.isSystem && canManageSystemRoles) || (!role.isSystem && canManageCustomRoles);
+    role.slug !== 'super_admin'
+    && role.baseRole !== 'super_admin'
+    && ((role.isSystem && isSuperAdmin) || (!role.isSystem && canManageCustomRoles));
 
   const canDeleteRole = (role) =>
     Boolean(role && !role.isSystem && canManageCustomRoles);
 
   return (
-    <Box>
-      {/* Header Section */}
-      <Stack
-        direction={{ xs: 'column', sm: 'row' }}
-        justifyContent="space-between"
-        spacing={2}
-        sx={{ mb: 3 }}
-      >
-        <Box sx={{ flex: 1, minWidth: 0 }}>
-          <Typography variant="h4" component="h1" fontWeight={700} gutterBottom>
-            Access Control
-          </Typography>
-          <Typography variant="body1" color="text.secondary" sx={{ lineHeight: 1.5 }}>
-            Super admins can edit system roles and assign roles to users. Delegated managers can
-            create and edit custom roles when granted that permission.
-          </Typography>
+    <ThemeProvider theme={accessTheme}>
+    <Box sx={{ bgcolor: 'background.default', color: 'text.primary', m: { xs: -2, sm: -3 }, p: { xs: 2, sm: 3, lg: 4 }, minHeight: 'calc(100vh - 64px)' }}>
+      <Stack direction={{ xs: 'column', sm: 'row' }} justifyContent="space-between" spacing={2.5} sx={{ mb: 2.5 }}>
+        <Box>
+          <Typography variant="h4" component="h1" fontWeight={700} sx={{ letterSpacing: '-0.025em', mb: 0.75 }}>Access Control</Typography>
+          <Typography variant="body2" color="text.secondary">Choose what your team can see and do.</Typography>
         </Box>
-        <Stack
-          direction={{ xs: 'column', sm: 'row' }}
-          spacing={1.5}
-          alignItems={{ xs: 'stretch', sm: 'flex-start' }}
-          sx={{ minWidth: { xs: '100%', sm: 'auto' } }}
-        >
-          {canAssignRoles && (
-            <Button
-              variant="outlined"
-              startIcon={<PersonAddIcon />}
-              onClick={openCreateUserDialog}
-              sx={{ whiteSpace: 'nowrap' }}
-              fullWidth={isMobile}
-            >
-              Create User
-            </Button>
-          )}
-          {canManageCustomRoles && (
-            <Button
-              variant="contained"
-              startIcon={<AddIcon />}
-              onClick={openCreateDialog}
-              sx={{ whiteSpace: 'nowrap' }}
-              fullWidth={isMobile}
-            >
-              Create Role
-            </Button>
-          )}
+        <Stack direction="row" spacing={1} alignItems="flex-start" sx={{ flexWrap: 'wrap', gap: 1 }}>
+          {canAssignRoles && <Button variant="outlined" startIcon={<PersonAddIcon />} onClick={openCreateUserDialog}>Create User</Button>}
+          {canManageCustomRoles && <Button variant="contained" disableElevation startIcon={<AddIcon />} onClick={openCreateDialog}>Create Role</Button>}
         </Stack>
       </Stack>
 
-      {/* Info Alert */}
-      <Alert severity="info" sx={{ mb: 3, borderRadius: 2 }}>
-        Only super admins can edit system roles. Custom-role management can be delegated, while user
-        role assignment stays super-admin-only.
-      </Alert>
+      <Stack direction={{ xs: 'column', sm: 'row' }} justifyContent="space-between" alignItems={{ sm: 'center' }} spacing={1} sx={{ mb: 2 }}>
+        <Tabs value={currentSection} onChange={(_, value) => setActiveSection(value)} aria-label="Access control sections" sx={{ minHeight: 44, '& .MuiTab-root': { minHeight: 44, minWidth: 100, px: 2, textTransform: 'none', fontWeight: 600 } }}>
+          <Tab value="roles" label="Roles" aria-controls="access-roles-panel" />
+          {canAssignRoles && <Tab value="staff" label="Staff accounts" aria-controls="access-staff-panel" />}
+        </Tabs>
+        <Stack direction="row" spacing={1} alignItems="center" sx={{ color: 'text.secondary' }}>
+          <SecurityIcon sx={{ fontSize: 18 }} />
+          <Typography variant="body2" sx={{ whiteSpace: 'nowrap' }}><Box component="span" sx={{ display: { xs: 'none', sm: 'inline' } }}>Your access · </Box>{loading && permissions.length === 0 ? 'Loading…' : `${ownPermissions.length} permissions`}</Typography>
+          <Button size="small" sx={{ whiteSpace: 'nowrap', fontSize: 13 }} onClick={() => { setOwnPermissionSearch(''); setOwnPermissionsOpen(true); }} disabled={loading && permissions.length === 0}>View my permissions</Button>
+        </Stack>
+      </Stack>
 
-      {/* Legend Section */}
-      <Paper
-        variant="outlined"
-        sx={{
-          p: { xs: 2, sm: 2.5 },
-          borderRadius: 3,
-          mb: 3,
-        }}
-      >
-        <Typography variant="subtitle1" fontWeight={700} gutterBottom>
-          Access Legend
-        </Typography>
-        <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 1 }}>
-          <Chip
-            label="System Role = protected default role"
-            color="warning"
-            variant="outlined"
-            size="small"
-            sx={{ borderRadius: 1.5 }}
-          />
-          <Chip
-            label="Custom Role = merchant-defined role"
-            color="success"
-            variant="outlined"
-            size="small"
-            sx={{ borderRadius: 1.5 }}
-          />
-          <Chip
-            label="Custom role edit can be delegated"
-            color="info"
-            variant="outlined"
-            size="small"
-            sx={{ borderRadius: 1.5 }}
-          />
-          <Chip
-            label="System role edit is super-admin-only"
-            color="secondary"
-            variant="outlined"
-            size="small"
-            sx={{ borderRadius: 1.5 }}
-          />
-          <Chip
-            label="User assignment is super-admin-only"
-            color="secondary"
-            variant="outlined"
-            size="small"
-            sx={{ borderRadius: 1.5 }}
-          />
-        </Box>
-      </Paper>
-
-      {/* Role Cards Grid */}
-      <Grid container spacing={{ xs: 2, md: 3 }} sx={{ mb: 3 }}>
-        {roles.map((role) => (
-          <Grid item xs={12} sm={6} lg={4} key={role.id}>
-            <Paper
-              variant="outlined"
-              sx={{
-                p: { xs: 2, sm: 2.5, md: 3 },
-                borderRadius: 3,
-                height: '100%',
-                display: 'flex',
-                flexDirection: 'column',
-                transition: 'all 0.2s ease-in-out',
-                '&:hover': {
-                  boxShadow:
-                    theme.palette.mode === 'dark'
-                      ? '0 4px 12px rgba(0,0,0,0.3)'
-                      : '0 4px 12px rgba(0,0,0,0.08)',
-                  borderColor: 'primary.main',
-                },
-              }}
-            >
-              {/* Card Header */}
-              <Box
-                sx={{
-                  display: 'flex',
-                  alignItems: 'flex-start',
-                  justifyContent: 'space-between',
-                  gap: 1.5,
-                  mb: 2,
-                }}
-              >
-                <Box sx={{ display: 'flex', gap: { xs: 1, sm: 1.5 }, minWidth: 0 }}>
-                  <Box sx={{ mt: 0.25, flexShrink: 0 }}>{getRoleIcon(role)}</Box>
-                  <Box sx={{ minWidth: 0 }}>
-                    <Typography
-                      variant="h6"
-                      fontWeight={700}
-                      noWrap
-                      sx={{ fontSize: { xs: '1.15rem', sm: '1.25rem' }, lineHeight: 1.3 }}
-                    >
-                      {role.name}
-                    </Typography>
-                    <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 0.75, mt: 0.75 }}>
-                      <Chip
-                        label={
-                          role.isSystem
-                            ? roleTypeChipProps.system.label
-                            : roleTypeChipProps.custom.label
-                        }
-                        size="small"
-                        color={
-                          role.isSystem
-                            ? roleTypeChipProps.system.color
-                            : roleTypeChipProps.custom.color
-                        }
-                        variant="outlined"
-                        sx={{ height: 22, fontSize: '0.7rem', borderRadius: 1 }}
-                      />
-                      <Chip
-                        label={role.baseRole}
-                        size="small"
-                        color={roleColors[role.baseRole] || 'default'}
-                        sx={{ height: 22, fontSize: '0.7rem', borderRadius: 1 }}
-                      />
-                      {getRoleStatusChip(role)}
-                    </Box>
-                  </Box>
-                </Box>
-                <Stack direction="row" spacing={0.5} sx={{ mt: -0.5, mr: -0.5, flexShrink: 0 }}>
-                  {canEditRole(role) && (
-                    <Tooltip title="Edit Role">
-                      <IconButton
-                        size="small"
-                        onClick={() => openEditDialog(role)}
-                      >
-                        <EditIcon fontSize="small" />
-                      </IconButton>
-                    </Tooltip>
-                  )}
-                  {canDeleteRole(role) && (
-                    <Tooltip title="Delete Role">
-                      <IconButton
-                        size="small"
-                        color="error"
-                        onClick={() => openDeleteDialog(role)}
-                      >
-                        <DeleteIcon fontSize="small" />
-                      </IconButton>
-                    </Tooltip>
-                  )}
-                </Stack>
-              </Box>
-
-              {/* Description */}
-              <Typography
-                variant="body2"
-                color="text.secondary"
-                sx={{
-                  mb: 2,
-                  flex: 1,
-                  lineHeight: 1.6,
-                  minHeight: 20,
-                }}
-              >
-                {role.description || 'No description provided.'}
-              </Typography>
-
-              {/* Permissions Section */}
-              <Box
-                sx={{
-                  mb: 1.5,
-                  pt: 1.5,
-                  borderTop: '1px solid',
-                  borderColor: 'divider',
-                }}
-              >
-                <Typography
-                  variant="caption"
-                  color="text.secondary"
-                  fontWeight={600}
-                  sx={{
-                    display: 'block',
-                    mb: 0.75,
-                    textTransform: 'uppercase',
-                    letterSpacing: '0.5px',
-                    fontSize: '0.7rem',
-                  }}
+      {currentSection === 'roles' && <Paper role="tabpanel" id="access-roles-panel" aria-label="Roles" variant="outlined" sx={{ borderRadius: '10px', overflow: 'hidden' }}>
+        <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', md: '300px minmax(0, 1fr)' }, minHeight: { md: 620 } }}>
+          <Box component="section" aria-label="Role directory" sx={{ display: isMobile && mobileRoleDetailsOpen ? 'none' : 'block', borderRight: { md: '1px solid' }, borderBottom: { xs: '1px solid', md: 0 }, borderColor: { xs: 'divider', md: 'divider' } }}>
+            <Box sx={{ p: 2.5, borderBottom: '1px solid', borderColor: 'divider' }}>
+              <Stack direction="row" justifyContent="space-between" alignItems="center" sx={{ mb: 2 }}>
+                <Typography component="h2" variant="subtitle1" fontWeight={700}>Roles</Typography>
+                <Typography variant="body2" color="text.secondary">{displayedRoles.length}</Typography>
+              </Stack>
+              <TextField size="small" label="Search roles" fullWidth value={roleSearch} onChange={(event) => setRoleSearch(event.target.value)} InputProps={{ startAdornment: <InputAdornment position="start"><SearchIcon fontSize="small" /></InputAdornment> }} />
+              <FormControl size="small" fullWidth sx={{ mt: 1.5 }}>
+                <InputLabel id="role-type-filter-label">Role type</InputLabel>
+                <Select labelId="role-type-filter-label" label="Role type" value={roleTypeFilter} onChange={(event) => setRoleTypeFilter(event.target.value)}>
+                  <MenuItem value="all">All roles</MenuItem>
+                  <MenuItem value="system">Built-in roles</MenuItem>
+                  <MenuItem value="custom">Custom roles</MenuItem>
+                </Select>
+              </FormControl>
+            </Box>
+            <Box sx={{ py: 1, maxHeight: { xs: 360, md: 560 }, overflowY: 'auto' }}>
+              {displayedRoles.map((role) => (
+                <Box
+                  key={role.id}
+                  component="button"
+                  type="button"
+                  aria-label={`View role ${role.name}`}
+                  aria-controls="selected-role-details"
+                  aria-pressed={selectedRole?.id === role.id}
+                  onClick={() => { setSelectedRoleId(role.id); setRoleDetailSearch(''); if (isMobile) setMobileRoleDetailsOpen(true); }}
+                  sx={{ border: 0, borderRadius: 0, width: '100%', p: 2.5, display: 'flex', alignItems: 'center', gap: 1.5, cursor: 'pointer', textAlign: 'left', font: 'inherit', color: 'text.primary', bgcolor: selectedRole?.id === role.id ? 'action.selected' : 'transparent', '&:hover': { bgcolor: 'action.hover' }, '&:focus-visible': { outline: '2px solid', outlineColor: 'primary.main', outlineOffset: -2 } }}
                 >
-                  {role.permissions.length} permissions
-                </Typography>
-                <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 0.75 }}>
-                  {role.permissions.slice(0, 8).map((permission) => (
-                    <Chip
-                      key={permission.id}
-                      label={permission.key}
-                      size="small"
-                      variant="outlined"
-                      sx={{
-                        height: 24,
-                        fontSize: '0.75rem',
-                        borderRadius: 1,
-                        '& .MuiChip-label': {
-                          px: 1,
-                        },
-                        bgcolor:
-                          theme.palette.mode === 'dark'
-                            ? 'rgba(255,255,255,0.03)'
-                            : 'rgba(0,0,0,0.02)',
-                      }}
-                    />
-                  ))}
-                  {role.permissions.length > 8 && (
-                    <Chip
-                      label={`+${role.permissions.length - 8} more`}
-                      size="small"
-                      sx={{
-                        height: 24,
-                        fontSize: '0.75rem',
-                        borderRadius: 1,
-                        fontWeight: 500,
-                      }}
-                    />
-                  )}
+                  <Box sx={{ display: 'flex', '& svg': { fontSize: 23 } }}>{getRoleIcon(role)}</Box>
+                  <Box sx={{ flex: 1, minWidth: 0 }}>
+                    <Typography component="span" display="block" variant="body2" fontWeight={700}>{role.name}</Typography>
+                    <Typography component="span" display="block" variant="caption" color="text.secondary" sx={{ mt: 0.25 }}>{role.isSystem ? 'Built-in' : 'Custom'} · {role.permissions.length} permissions</Typography>
+                  </Box>
+                  {role.slug === 'super_admin' ? <LockOutlinedIcon sx={{ fontSize: 16, color: 'text.secondary' }} /> : <ChevronRightIcon sx={{ fontSize: 18, color: 'text.secondary' }} />}
+                </Box>
+              ))}
+              {loading && roles.length === 0 && <Box sx={{ p: 3, textAlign: 'center' }}><CircularProgress size={24} aria-label="Loading roles" /></Box>}
+              {!loading && displayedRoles.length === 0 && <Box sx={{ p: 2.5 }}>
+                <Typography variant="body2" fontWeight={600}>{roles.length ? 'No roles match your filters' : 'No roles available'}</Typography>
+                {(roleSearch || roleTypeFilter !== 'all') && <Button size="small" sx={{ mt: 1 }} onClick={() => { setRoleSearch(''); setRoleTypeFilter('all'); }}>Clear filters</Button>}
+              </Box>}
+            </Box>
+          </Box>
+          <Box component="section" id="selected-role-details" aria-label="Role details" sx={{ minWidth: 0, display: isMobile && !mobileRoleDetailsOpen ? 'none' : 'block' }}>
+            {isMobile && <Button startIcon={<ArrowBackIcon />} size="small" sx={{ ml: 2, mt: 1.5 }} onClick={() => setMobileRoleDetailsOpen(false)}>All roles</Button>}
+            {selectedRole ? <>
+              <Box sx={{ p: { xs: 2.5, sm: 3 }, borderBottom: '1px solid', borderColor: 'divider' }}>
+                <Stack direction="row" alignItems="flex-start" justifyContent="space-between" spacing={2}>
+                  <Box>
+                    <Typography component="h2" variant="h5" fontWeight={700}>{selectedRole.name}</Typography>
+                    <Typography variant="body2" color="text.secondary" sx={{ mt: 0.5 }}>{selectedRole.isSystem ? 'Built-in role' : 'Custom role'} · {selectedRole.baseRole === 'customer' ? 'Customer account' : 'Staff account'}</Typography>
+                  </Box>
+                  <Stack direction="row" spacing={1} alignItems="center" sx={{ flexShrink: 0 }}>
+                    {canEditRole(selectedRole) && <Button size="small" sx={{ whiteSpace: 'nowrap' }} variant="outlined" startIcon={<EditIcon />} aria-label={`Edit ${selectedRole.name}`} onClick={() => openEditDialog(selectedRole)}>Edit role</Button>}
+                    {canDeleteRole(selectedRole) && <IconButton size="small" color="error" aria-label={`Delete ${selectedRole.name}`} onClick={() => openDeleteDialog(selectedRole)}><DeleteIcon fontSize="small" /></IconButton>}
+                    {selectedRole.slug === 'super_admin' && <Chip icon={<LockOutlinedIcon />} label="Protected" size="small" variant="outlined" />}
+                  </Stack>
+                </Stack>
+                <Typography variant="body2" color="text.secondary" sx={{ mt: 2, maxWidth: '70ch', lineHeight: 1.65 }}>{selectedRole.description || 'No description provided.'}</Typography>
+                {(selectedRole.isSystem || selectedRole.isDelegable === false) && <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mt: 1.5 }}>
+                  {selectedRole.slug === 'super_admin' ? 'This role is protected and cannot be edited.' : selectedRole.isSystem ? 'Built-in roles can be edited only by Super Admins.' : 'Permissions outside your access are hidden and preserved when you save.'}
+                </Typography>}
+              </Box>
+              <Box sx={{ p: { xs: 2.5, sm: 3 } }}>
+                <Stack direction={{ xs: 'column', sm: 'row' }} justifyContent="space-between" alignItems={{ sm: 'center' }} spacing={2} sx={{ mb: 2.5 }}>
+                  <Box>
+                    <Typography component="h3" variant="subtitle1" fontWeight={700}>Permissions <Typography component="span" variant="body2" color="text.secondary">({selectedRole.permissions.length})</Typography></Typography>
+                    <Typography variant="caption" color="text.secondary">{isSuperAdmin ? 'Actions granted to this role.' : 'Only permissions within your access are shown.'}</Typography>
+                  </Box>
+                  <TextField size="small" label="Find role permissions" value={roleDetailSearch} onChange={(event) => setRoleDetailSearch(event.target.value)} InputProps={{ startAdornment: <InputAdornment position="start"><SearchIcon fontSize="small" /></InputAdornment> }} />
+                </Stack>
+                <Box sx={{ maxHeight: { md: 510 }, overflowY: 'auto', pr: { md: 1 } }}>
+                  {Object.entries(roleDetailGroups).sort(([left], [right]) => formatPermissionGroup(left).localeCompare(formatPermissionGroup(right))).map(([group, groupPermissions]) => <Box component="section" key={group} sx={{ mb: 3 }}>
+                    <Typography component="h4" variant="body2" fontWeight={700} sx={{ mb: 1, color: 'text.secondary' }}>{formatPermissionGroup(group)}</Typography>
+                    {groupPermissions.map((permission) => <Box key={permission.id} sx={{ py: 1.25, borderBottom: '1px solid', borderColor: 'divider' }}>
+                      <Typography variant="body2" fontWeight={600}>{getPermissionLabel(permission)}</Typography>
+                      <Typography variant="body2" color="text.secondary" sx={{ mt: 0.25 }}>{authorizationSchema.permissionDescriptions?.[permission.key] || permission.description}</Typography>
+                    </Box>)}
+                  </Box>)}
+                  {Object.keys(roleDetailGroups).length === 0 && <Typography variant="body2" color="text.secondary" sx={{ py: 4 }}>{roleDetailSearch ? 'No permissions match your search.' : 'No permissions within your access are assigned to this role.'}</Typography>}
                 </Box>
               </Box>
-            </Paper>
-          </Grid>
-        ))}
-      </Grid>
+            </> : <Box sx={{ p: 5, color: 'text.secondary' }}><Typography variant="body1">Select a role to view its permissions.</Typography></Box>}
+          </Box>
+        </Box>
+      </Paper>}
 
       {/* User Assignment Table */}
-      {canAssignRoles && (
+      {canAssignRoles && currentSection === 'staff' && (
         <Paper
+          role="tabpanel"
+          id="access-staff-panel"
+          aria-label="Staff accounts"
           variant="outlined"
           sx={{
             p: { xs: 2, sm: 3 },
-            borderRadius: 3,
+            borderRadius: '10px',
           }}
         >
-          <Typography variant="h6" fontWeight={700} gutterBottom>
-            Assign Roles to Users
+          <Typography component="h2" variant="h6" fontWeight={700} gutterBottom>
+            Staff access
           </Typography>
           <Typography variant="body2" color="text.secondary" sx={{ mb: 2, lineHeight: 1.6 }}>
-            By default this table shows elevated-access users. Use the role filter or search to view and assign roles to users.
+            Review each person’s role. Search by name or email to include customer accounts. Role changes require confirmation.
           </Typography>
 
           <Stack
@@ -839,8 +862,13 @@ const AccessControlPage = () => {
               >
                 <MenuItem value="">All elevated roles</MenuItem>
                 {roleOptions.map((role) => (
-                  <MenuItem key={role.id} value={role.id}>
+                  <MenuItem
+                    key={role.id}
+                    value={role.id}
+                    disabled={!isRoleDelegable(role)}
+                  >
                     {role.name}
+                    {!isRoleDelegable(role) ? ' (Unavailable)' : ''}
                   </MenuItem>
                 ))}
               </Select>
@@ -924,7 +952,8 @@ const AccessControlPage = () => {
               fullWidth
               size="small"
             />
-            <TextField
+            <FormControlLabel control={<Checkbox checked={createUserForm.sendInvitation} onChange={(event) => setCreateUserForm((previous) => ({ ...previous, sendInvitation: event.target.checked }))} />} label="Email an invitation to set their own password" />
+            {!createUserForm.sendInvitation && <TextField
               label="Password"
               type={showPassword ? 'text' : 'password'}
               value={createUserForm.password}
@@ -945,7 +974,7 @@ const AccessControlPage = () => {
                   </InputAdornment>
                 ),
               }}
-            />
+            />}
             <FormControl size="small" fullWidth>
               <InputLabel>Assign Role</InputLabel>
               <Select
@@ -954,8 +983,13 @@ const AccessControlPage = () => {
                 onChange={setUserField('roleId')}
               >
                 {roleOptions.map((role) => (
-                  <MenuItem key={role.id} value={role.id}>
+                  <MenuItem
+                    key={role.id}
+                    value={role.id}
+                    disabled={!isRoleDelegable(role)}
+                  >
                     {role.name}
+                    {!isRoleDelegable(role) ? ' (Unavailable)' : ''}
                   </MenuItem>
                 ))}
               </Select>
@@ -981,133 +1015,233 @@ const AccessControlPage = () => {
         </DialogActions>
       </Dialog>
 
-      {/* Create / Edit Role Dialog */}
-      <Dialog open={roleDialogOpen} onClose={closeRoleDialog} fullWidth maxWidth="md">
-        <DialogTitle>
-          {roleForm.id
-            ? roleForm.isSystem
-              ? 'Edit System Role'
-              : 'Edit Custom Role'
-            : 'Create Custom Role'}
-        </DialogTitle>
+      {/* Read-only view of the current account's effective permissions. */}
+      <Dialog open={ownPermissionsOpen} onClose={() => setOwnPermissionsOpen(false)} fullWidth maxWidth="md" fullScreen={isMobile} aria-labelledby="own-permissions-title">
+        <DialogTitle id="own-permissions-title">Your permissions</DialogTitle>
         <DialogContent dividers>
-          <Stack spacing={2} sx={{ mt: 1 }}>
-            <TextField
-              label="Role Name"
-              value={roleForm.name}
-              onChange={(event) =>
-                setRoleForm((current) => ({ ...current, name: event.target.value }))
-              }
-              fullWidth
-              size="small"
-              disabled={roleForm.isSystem}
-            />
-            <TextField
-              label="Description"
-              value={roleForm.description}
-              onChange={(event) =>
-                setRoleForm((current) => ({ ...current, description: event.target.value }))
-              }
-              fullWidth
-              size="small"
-              multiline
-              minRows={2}
-            />
-            <FormControl size="small" fullWidth>
-              <InputLabel>Base Role</InputLabel>
-              <Select
-                label="Base Role"
-                value={roleForm.baseRole}
-                onChange={(event) =>
-                  setRoleForm((current) => ({ ...current, baseRole: event.target.value }))
-                }
-                disabled={roleForm.isSystem}
-              >
-                <MenuItem value="customer">Customer</MenuItem>
-                <MenuItem value="admin">Admin</MenuItem>
-              </Select>
-            </FormControl>
+          <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
+            These {ownPermissions.length} permissions determine which actions your account can perform.
+          </Typography>
+          <TextField
+            label="Find my permissions"
+            value={ownPermissionSearch}
+            onChange={(event) => setOwnPermissionSearch(event.target.value)}
+            size="small"
+            fullWidth
+            InputProps={{ startAdornment: <InputAdornment position="start"><SearchIcon fontSize="small" /></InputAdornment> }}
+            sx={{ mb: 2 }}
+          />
+          <Stack spacing={2}>
+            {Object.entries(ownPermissionGroups).map(([group, groupPermissions]) => (
+              <Paper key={group} component="section" variant="outlined" sx={{ p: 2, borderRadius: 1.5 }}>
+                <Typography component="h3" variant="subtitle2" fontWeight={700} sx={{ mb: 1 }}>{formatPermissionGroup(group)}</Typography>
+                {groupPermissions.map((permission) => (
+                  <Box key={permission.id} sx={{ py: 1, '& + &': { borderTop: '1px solid', borderColor: 'divider' } }}>
+                    <Typography variant="body2" fontWeight={600}>{getPermissionLabel(permission)}</Typography>
+                    <Typography variant="body2" color="text.secondary">{authorizationSchema.permissionDescriptions?.[permission.key] || permission.description}</Typography>
+                  </Box>
+                ))}
+              </Paper>
+            ))}
+            {Object.keys(ownPermissionGroups).length === 0 && <Typography variant="body2" color="text.secondary" sx={{ py: 3, textAlign: 'center' }}>
+              {ownPermissionSearch ? 'No permissions match your search.' : 'Your account has no permissions to display.'}
+            </Typography>}
+          </Stack>
+        </DialogContent>
+        <DialogActions><Button onClick={() => setOwnPermissionsOpen(false)}>Done</Button></DialogActions>
+      </Dialog>
 
-            <Alert severity="warning">
-              {roleForm.isSystem
-                ? 'You are editing a protected system role. Reserved access-control permissions are available only to super admins.'
-                : 'Reserved access-control permissions stay unavailable for custom roles.'}
-            </Alert>
+      <Dialog open={Boolean(pendingRoleAssignment)} onClose={updatingUserId ? undefined : () => setPendingRoleAssignment(null)} fullWidth maxWidth="xs" aria-labelledby="role-assignment-title">
+        <DialogTitle id="role-assignment-title">Confirm role change</DialogTitle>
+        <DialogContent>
+          <DialogContentText>
+            Change the assigned role for <strong>{pendingRoleAssignment?.user.email}</strong>?
+          </DialogContentText>
+          <Paper variant="outlined" sx={{ p: 2, my: 2, borderRadius: 1.5 }}>
+            <Typography variant="body2" color="text.secondary">Current role</Typography>
+            <Typography variant="body1" fontWeight={600}>{pendingRoleAssignment?.user.roleName || pendingRoleAssignment?.user.assignedRole?.name || 'Unassigned'}</Typography>
+            <Typography variant="body2" color="text.secondary" sx={{ mt: 1.5 }}>New role</Typography>
+            <Typography variant="body1" fontWeight={600}>{roleOptions.find((role) => role.id === pendingRoleAssignment?.nextRoleId)?.name || 'Unavailable'}</Typography>
+          </Paper>
+          <DialogContentText>Their access will change to the permissions of the new role.</DialogContentText>
+          {pendingRoleAssignment && !roleOptions.some((role) => role.id === pendingRoleAssignment.nextRoleId && isRoleDelegable(role)) && <Alert severity="warning" sx={{ mt: 2 }}>
+            You can no longer assign this role with your current permissions.
+          </Alert>}
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setPendingRoleAssignment(null)} disabled={Boolean(updatingUserId)}>Cancel</Button>
+          <Button
+            variant="contained"
+            disabled={Boolean(updatingUserId) || !canAssignRoles || !roleOptions.some((role) => role.id === pendingRoleAssignment?.nextRoleId && isRoleDelegable(role))}
+            onClick={() => handleRoleAssignment(pendingRoleAssignment.user.id, pendingRoleAssignment.nextRoleId)}
+          >{updatingUserId ? 'Updating…' : 'Confirm change'}</Button>
+        </DialogActions>
+      </Dialog>
 
-            <Box>
-              <Typography variant="subtitle1" fontWeight={700} gutterBottom>
-                Permissions
+      {/* Create / Edit Role Dialog */}
+      <Dialog
+        open={roleDialogOpen}
+        onClose={savingRole ? undefined : closeRoleDialog}
+        fullWidth
+        maxWidth="lg"
+        fullScreen={isMobile}
+        aria-labelledby="role-editor-title"
+        aria-describedby="role-editor-description"
+        PaperProps={{ sx: { borderRadius: { xs: 0, sm: 2 }, maxHeight: { sm: '90vh' } } }}
+      >
+        <DialogTitle id="role-editor-heading-container" component="div" sx={{ px: 3, pt: 3, pb: 2 }}>
+          <Typography id="role-editor-title" component="h2" variant="h5" fontWeight={700}>
+            {roleForm.id ? roleForm.isSystem ? 'Edit system role' : 'Edit custom role' : 'Create custom role'}
+          </Typography>
+          <Typography id="role-editor-description" component="p" variant="body2" color="text.secondary" sx={{ mt: 0.75 }}>
+            Give this role the permissions needed for its work.
+          </Typography>
+        </DialogTitle>
+        <DialogContent dividers sx={{ p: 0 }}>
+          <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', md: '300px minmax(0, 1fr)' } }}>
+            <Stack spacing={2.5} sx={{ p: 3, borderRight: { md: '1px solid' }, borderColor: { md: 'divider' }, bgcolor: 'action.hover' }}>
+              <Typography component="h3" variant="subtitle2" fontWeight={700}>Role details</Typography>
+              <TextField
+                label="Role name"
+                placeholder="For example, Inventory manager"
+                value={roleForm.name}
+                onChange={(event) => setRoleForm((current) => ({ ...current, name: event.target.value }))}
+                fullWidth
+                required
+                inputProps={{ maxLength: 100 }}
+                disabled={roleForm.isSystem || savingRole}
+              />
+              <TextField
+                label="Description (optional)"
+                placeholder="What will this person be responsible for?"
+                value={roleForm.description}
+                onChange={(event) => setRoleForm((current) => ({ ...current, description: event.target.value }))}
+                fullWidth
+                multiline
+                minRows={3}
+                inputProps={{ maxLength: 255 }}
+                disabled={savingRole}
+              />
+              <FormControl component="fieldset" disabled={roleForm.isSystem || savingRole}>
+                <Typography component="legend" variant="subtitle2" fontWeight={700}>Account type</Typography>
+                <Typography variant="body2" color="text.secondary" sx={{ mt: 0.5, mb: 1.5 }}>
+                  Who will use this role? This choice does not add permissions.
+                </Typography>
+                <RadioGroup
+                  aria-label="Account type"
+                  value={roleForm.baseRole}
+                  onChange={(event) => setRoleForm((current) => ({ ...current, baseRole: event.target.value }))}
+                  sx={{ gap: 1 }}
+                >
+                  {[
+                    { value: 'admin', label: 'Staff', description: 'People working in your store.' },
+                    { value: 'customer', label: 'Customer', description: 'People shopping in your store.' },
+                  ].map((type) => (
+                    <Paper key={type.value} variant="outlined" sx={{ borderRadius: 1.5, borderColor: roleForm.baseRole === type.value ? 'primary.main' : 'divider' }}>
+                      <FormControlLabel
+                        value={type.value}
+                        control={<Radio size="small" />}
+                        sx={{ m: 0, p: 1, width: '100%', alignItems: 'flex-start' }}
+                        label={<Box sx={{ pt: 0.5 }}>
+                          <Typography variant="body2" fontWeight={600}>{type.label}</Typography>
+                          <Typography variant="caption" color="text.secondary">{type.description}</Typography>
+                        </Box>}
+                      />
+                    </Paper>
+                  ))}
+                </RadioGroup>
+              </FormControl>
+              {roleForm.isSystem && <Alert severity="info">This built-in role keeps its name and account type.</Alert>}
+              {!isSuperAdmin && <Alert severity="info">Only permissions you have are available to grant.</Alert>}
+              {roleForm.hasHiddenPermissions && <Alert severity="info">This role also has permissions outside your access. Those permissions are preserved when you save.</Alert>}
+            </Stack>
+            <Box sx={{ minWidth: 0, p: { xs: 2, sm: 3 } }}>
+              <Stack direction="row" justifyContent="space-between" alignItems="center" spacing={2} sx={{ mb: 0.75 }}>
+                <Typography variant="h6" component="h3" fontWeight={700}>Permissions</Typography>
+                <Chip role="status" size="small" label={`${effectiveSelectedPermissionCount} selected`} color="primary" variant="outlined" />
+              </Stack>
+              <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
+                Choose what this role can do. Required viewing permissions are included automatically.
               </Typography>
-              <Stack spacing={1.5}>
-                {Object.entries(groupedPermissions).map(([group, groupPermissions]) => {
-                  const toggleableIds = groupPermissions
-                    .filter((p) => roleForm.isSystem || !p.reserved)
-                    .map((p) => p.id);
-                  const allSelected = toggleableIds.length > 0 && toggleableIds.every((id) => roleForm.permissionIds.includes(id));
-                  const someSelected = toggleableIds.some((id) => roleForm.permissionIds.includes(id));
+              <Stack direction={{ xs: 'column', sm: 'row' }} spacing={1} sx={{ mb: 2 }}>
+                <TextField
+                  label="Search permissions"
+                  placeholder="Search products, orders, refunds…"
+                  size="small"
+                  fullWidth
+                  value={permissionSearch}
+                  onChange={(event) => setPermissionSearch(event.target.value)}
+                  InputProps={{ startAdornment: <InputAdornment position="start"><SearchIcon fontSize="small" /></InputAdornment> }}
+                />
+                <FormControlLabel
+                  control={<Checkbox size="small" checked={selectedPermissionsOnly} onChange={(event) => setSelectedPermissionsOnly(event.target.checked)} />}
+                  label={<Typography variant="body2" sx={{ whiteSpace: 'nowrap' }}>Selected only</Typography>}
+                  sx={{ mr: 0 }}
+                />
+              </Stack>
+              {effectiveSelectedPermissionCount === 0 && (
+                <Alert severity="info" sx={{ mb: 2 }}>{roleForm.hasHiddenPermissions
+                  ? 'No permissions selected within your access. Existing permissions outside your access will be preserved.'
+                  : 'No permissions selected. This role will grant no access until permissions are added.'}</Alert>
+              )}
+              <Stack spacing={2}>
+                {filteredPermissionGroups.map(([group, groupPermissions]) => {
+                  const selectedCount = groupPermissions.filter((permission) => roleForm.permissionIds.includes(permission.id) || impliedPermissionKeys.has(permission.key)).length;
                   return (
-                    <Paper
-                      key={group}
-                      variant="outlined"
-                      sx={{ p: 1.5, borderRadius: 2 }}
-                    >
-                      <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 1 }}>
+                    <Paper key={group} variant="outlined" sx={{ borderRadius: 1.5, overflow: 'hidden' }}>
+                      <Box sx={{ px: 1.5, py: 0.75, bgcolor: 'action.hover', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
                         <FormControlLabel
-                          control={
-                            <Checkbox
-                              size="small"
-                              checked={allSelected}
-                              indeterminate={someSelected && !allSelected}
-                              onChange={(e) => handleGroupSelectAll(groupPermissions, e.target.checked)}
-                            />
-                          }
-                          label={
-                            <Typography variant="subtitle2" fontWeight={700} sx={{ textTransform: 'capitalize' }}>
-                              {group}
-                            </Typography>
-                          }
-                          sx={{ mr: 0 }}
+                          control={<Checkbox
+                            size="small"
+                            checked={selectedCount === groupPermissions.length}
+                            indeterminate={selectedCount > 0 && selectedCount < groupPermissions.length}
+                            onChange={(event) => handleGroupSelectAll(groupPermissions, event.target.checked)}
+                            disabled={savingRole}
+                            inputProps={{ 'aria-label': `Select shown ${formatPermissionGroup(group)} permissions` }}
+                          />}
+                          label={<Typography component="span" variant="subtitle2" fontWeight={700}>{formatPermissionGroup(group)}</Typography>}
+                          sx={{ m: 0 }}
                         />
-                        <Chip
-                          label={`${toggleableIds.filter((id) => roleForm.permissionIds.includes(id)).length}/${toggleableIds.length}`}
-                          size="small"
-                          variant="outlined"
-                          sx={{ height: 20, fontSize: '0.7rem' }}
-                        />
+                        <Typography variant="caption" color="text.secondary">{selectedCount} of {groupPermissions.length}</Typography>
                       </Box>
-                      <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 0.75, pl: 1 }}>
-                        {groupPermissions.map((permission) => {
-                          const selected = roleForm.permissionIds.includes(permission.id);
-                          const isImplied = impliedPermissionKeys.has(permission.key);
-                          const description = authorizationSchema.permissionDescriptions?.[permission.key];
-                          const tooltipText = isImplied
-                            ? 'Auto-granted by a higher permission'
-                            : description || '';
-                          return (
-                            <Tooltip key={permission.id} title={tooltipText} arrow placement="top">
-                              <Chip
-                                label={`${permission.name}${isImplied ? ' 🔒' : ''}`}
+                      {groupPermissions.map((permission) => {
+                        const isImplied = impliedPermissionKeys.has(permission.key);
+                        const selected = roleForm.permissionIds.includes(permission.id) || isImplied;
+                        const description = authorizationSchema.permissionDescriptions?.[permission.key] || permission.description;
+                        return (
+                          <Box key={permission.id} sx={{ px: 1.5, py: 0.75, '& + &': { borderTop: '1px solid', borderColor: 'divider' } }}>
+                            <FormControlLabel
+                              control={<Checkbox
                                 size="small"
-                                variant={selected || isImplied ? 'filled' : 'outlined'}
-                                color={isImplied ? 'success' : selected ? 'primary' : 'default'}
-                                disabled={isImplied || (!roleForm.isSystem && permission.reserved)}
-                                onClick={() => !isImplied && handleRolePermissionToggle(permission.id)}
-                                sx={{
-                                  cursor: isImplied ? 'default' : 'pointer',
-                                  fontWeight: selected || isImplied ? 600 : 400,
-                                  opacity: isImplied ? 0.85 : 1,
+                                checked={selected}
+                                disabled={isImplied || savingRole || !canGrantPermission(permission)}
+                                onChange={() => handleRolePermissionToggle(permission.id)}
+                                inputProps={{
+                                  'aria-label': getPermissionLabel(permission),
+                                  'aria-describedby': `permission-description-${permission.id}${isImplied ? ` permission-included-${permission.id}` : ''}`,
                                 }}
-                              />
-                            </Tooltip>
-                          );
-                        })}
-                      </Box>
+                              />}
+                              sx={{ m: 0, width: '100%', alignItems: 'flex-start', '& .MuiFormControlLabel-label': { py: 0.5 } }}
+                              label={<Box>
+                                <Typography component="span" display="block" variant="body2" fontWeight={600}>
+                                  {getPermissionLabel(permission)}
+                                  {isImplied && <Typography id={`permission-included-${permission.id}`} component="span" variant="caption" color="text.secondary" sx={{ ml: 1 }}>Included automatically</Typography>}
+                                </Typography>
+                                <Typography id={`permission-description-${permission.id}`} component="span" display="block" variant="body2" color="text.secondary">{description}</Typography>
+                              </Box>}
+                            />
+                          </Box>
+                        );
+                      })}
                     </Paper>
                   );
                 })}
+                {filteredPermissionGroups.length === 0 && <Paper variant="outlined" sx={{ p: 3, textAlign: 'center' }}>
+                  <Typography variant="body2" color="text.secondary">{selectedPermissionsOnly ? 'No selected permissions match your search.' : 'No permissions match your search.'}</Typography>
+                </Paper>}
               </Stack>
             </Box>
-          </Stack>
+          </Box>
         </DialogContent>
         <DialogActions sx={{ justifyContent: roleForm.id && !roleForm.isSystem && canManageCustomRoles ? 'space-between' : 'flex-end', px: 3, py: 2 }}>
           {roleForm.id && !roleForm.isSystem && canManageCustomRoles && (
@@ -1128,7 +1262,7 @@ const AccessControlPage = () => {
             <Button onClick={closeRoleDialog} disabled={savingRole || deletingRole}>
               Cancel
             </Button>
-            <Button onClick={handleSaveRole} variant="contained" disabled={savingRole || deletingRole}>
+            <Button onClick={handleSaveRole} variant="contained" disabled={savingRole || deletingRole || !roleForm.name.trim()}>
               {savingRole ? 'Saving…' : roleForm.id ? 'Update Role' : 'Create Role'}
             </Button>
           </Box>
@@ -1203,6 +1337,7 @@ const AccessControlPage = () => {
         </DialogActions>
       </Dialog>
     </Box>
+    </ThemeProvider>
   );
 };
 

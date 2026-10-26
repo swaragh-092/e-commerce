@@ -297,6 +297,28 @@ describe('Product Pricing & Variant Sale Logic', () => {
       expect(result.saleEndAt).toBeNull();
     });
 
+    it('P2: normalizeSalePayload normalizes zero placeholder to null and bypasses sale comparison when pricing is disabled', () => {
+      const existingProduct = { price: 100, salePrice: 50 };
+      const result = normalizeSalePayload(
+        { price: 0, name: 'Catalog item' },
+        existingProduct,
+        { pricingEnabled: false }
+      );
+      expect(result.price).toBeNull();
+      expect(result.name).toBe('Catalog item');
+    });
+
+    it('P2: normalizeSalePayload still rejects zero or price below existing sale when pricing is enabled', () => {
+      const existingProduct = { price: 100, salePrice: 50 };
+      expect(() => {
+        normalizeSalePayload(
+          { price: 40 },
+          existingProduct,
+          { pricingEnabled: true }
+        );
+      }).toThrow('Sale price must be less than the regular price');
+    });
+
     it('P3: getCategoryAncestors returns ordered hierarchy from root to leaf', async () => {
       const { getCategoryAncestors } = await import('../../src/modules/category/category.service');
       expect(typeof getCategoryAncestors).toBe('function');

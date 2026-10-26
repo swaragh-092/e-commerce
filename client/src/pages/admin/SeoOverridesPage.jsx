@@ -195,7 +195,16 @@ const SeoOverridesPage = () => {
                   <TableCell>
                     <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
                       <LinkIcon fontSize="small" color="action" />
-                      <Typography variant="body2" sx={{ fontWeight: 600 }}>{override.path}</Typography>
+                      <Typography
+                        component="button"
+                        type="button"
+                        onClick={() => handleOpenDialog(override)}
+                        disabled={!canManage}
+                        aria-label={`Edit SEO override for ${override.path}`}
+                        sx={{ p: 0, border: 0, background: 'none', color: canManage ? 'primary.main' : 'text.primary', font: 'inherit', fontWeight: 600, textAlign: 'left', cursor: canManage ? 'pointer' : 'default', '&:hover': canManage ? { textDecoration: 'underline' } : {}, '&:focus-visible': { outline: '2px solid', outlineColor: 'primary.main', outlineOffset: 2 } }}
+                      >
+                        {override.path}
+                      </Typography>
                     </Box>
                   </TableCell>
                   <TableCell>{override.metaTitle || <Typography variant="caption" color="text.secondary">Default</Typography>}</TableCell>
@@ -311,7 +320,7 @@ const SeoOverridesPage = () => {
             </Stack>
           </DialogContent>
           <DialogActions sx={{ px: 3, pb: 3 }}>
-            <Button onClick={handleCloseDialog} disabled={submitting}>Cancel</Button>
+            <Button color="error" onClick={handleCloseDialog} disabled={submitting}>Cancel</Button>
             <Button type="submit" variant="contained" sx={{ borderRadius: 2 }} disabled={submitting}>
               {submitting ? 'Processing...' : (editingId ? 'Save Changes' : 'Create Override')}
             </Button>

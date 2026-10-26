@@ -4,7 +4,7 @@ const Joi = require('joi');
 const { DESIGN_SETTINGS_GROUPS } = require('./designSettings');
 
 const updateSettingsGroupSchema = Joi.object({
-  group: Joi.string().valid('theme', 'componentStyles', 'sectionPresets', 'features', 'payments', 'sales', 'seo', 'general', 'shipping', 'tax', 'sku', 'logo', 'hero', 'auth', 'footer', 'announcement', 'nav', 'catalog', 'homepage', 'productPage', 'categoryPage', 'brandsPage', 'cartPage', 'accountPage', 'blogPage', 'checkoutPage', 'wishlistPage', 'searchPage', 'notFoundPage', 'ordersPage', 'admin', 'invoice', 'gateway_credentials', 'messaging', 'messaging_credentials', 'ai', 'ai_credentials', 'advanced').required(),
+  group: Joi.string().valid('theme', 'componentStyles', 'sectionPresets', 'features', 'payments', 'sales', 'seo', 'general', 'orders', 'shipping', 'tax', 'sku', 'logo', 'hero', 'auth', 'footer', 'announcement', 'nav', 'catalog', 'homepage', 'productPage', 'categoryPage', 'brandsPage', 'cartPage', 'accountPage', 'blogPage', 'checkoutPage', 'wishlistPage', 'searchPage', 'notFoundPage', 'ordersPage', 'admin', 'invoice', 'gateway_credentials', 'messaging', 'messaging_credentials', 'ai', 'ai_credentials', 'advanced').required(),
   settings: Joi.object().pattern(Joi.string(), Joi.any()).required()
 });
 

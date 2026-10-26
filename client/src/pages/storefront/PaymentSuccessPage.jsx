@@ -78,13 +78,18 @@ const getPaymentRecord = (order) => {
 };
 
 const getVerificationState = (verifiedOrder) => {
-    if (!verifiedOrder || String(verifiedOrder.status || '').toLowerCase() === 'cancelled') {
+    if (!verifiedOrder) {
         return 'error';
     }
 
     const orderStatus = String(verifiedOrder.status || '').toLowerCase();
     const payment = getPaymentRecord(verifiedOrder);
     const paymentStatus = String(payment?.status || verifiedOrder.paymentStatus || '').toLowerCase();
+
+    if (orderStatus === 'cancelled' && PAYMENT_SETTLED_STATUSES.has(paymentStatus)) {
+        return 'late_settlement';
+    }
+    if (orderStatus === 'cancelled') return 'error';
 
     if (verifiedOrder.paymentMethod === 'cod' && ORDER_READY_STATUSES.has(orderStatus)) {
         return 'success';
@@ -129,7 +134,11 @@ const PaymentSuccessPage = () => {
             .then((verifiedOrder) => {
                 if (!active) return;
                 setOrder(verifiedOrder || null);
-                setVerificationState(getVerificationState(verifiedOrder));
+                const state = getVerificationState(verifiedOrder);
+                setVerificationState(state);
+                if (state === 'success') {
+                    try { sessionStorage.removeItem('checkoutSessionId'); } catch (_) {}
+                }
             })
             .catch(() => {
                 if (!active) return;
@@ -144,7 +153,10 @@ const PaymentSuccessPage = () => {
     if (verificationState !== 'success') {
         const isPending = verificationState === 'pending';
         const isLoading = verificationState === 'loading';
-        const title = isLoading
+        const isLateSettlement = verificationState === 'late_settlement';
+        const title = isLateSettlement
+            ? 'Payment received for a cancelled order'
+            : isLoading
             ? 'Verifying your order'
             : isPending
                 ? 'Payment is still being confirmed'
@@ -155,14 +167,16 @@ const PaymentSuccessPage = () => {
                 ? 'Your payment provider or webhook has not confirmed this order yet. We will update the order once confirmation arrives.'
                 : verificationState === 'missing'
                     ? 'The order reference is missing. Open this page from a checkout result or your orders list.'
-                    : verificationError || 'The server did not confirm a completed order. No success has been recorded.';
+                    : isLateSettlement
+                        ? 'Your payment was recorded, but this order remains cancelled and will not be shipped. Contact support to arrange a refund.'
+                        : verificationError || 'The server did not confirm a completed order. No success has been recorded.';
 
         return (
             <Container maxWidth="sm" sx={{ py: { xs: 5, md: 8 } }}>
                 <Paper elevation={0} sx={{ p: { xs: 3, sm: 5 }, borderRadius: 3, border: '1px solid', borderColor: 'divider', textAlign: 'center' }}>
                     {isLoading && <CircularProgress color="primary" sx={{ mb: 2 }} />}
                     <Typography variant="h4" component="h1" fontWeight={800} sx={{ mb: 1 }}>{title}</Typography>
-                    <Alert severity={isPending ? 'info' : isLoading ? 'info' : 'warning'} sx={{ mb: 3, textAlign: 'left' }}>
+                    <Alert severity={isPending || isLoading ? 'info' : isLateSettlement ? 'error' : 'warning'} sx={{ mb: 3, textAlign: 'left' }}>
                         {message}
                     </Alert>
                     <Button variant="contained" component={Link} to="/orders">

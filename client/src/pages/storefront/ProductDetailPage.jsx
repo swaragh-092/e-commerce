@@ -17,7 +17,7 @@ import ShareButton from '../../components/common/ShareButton';
 import ReviewSection from '../../components/product/ReviewSection';
 import DOMPurify from 'dompurify';
 import { useCart } from '../../hooks/useCart';
-import { useCurrency, useSettings, useFeature, useComponentStyles } from '../../hooks/useSettings';
+import { useCurrency, useSettings, useFeature, useFeatureVisible, useComponentStyles } from '../../hooks/useSettings';
 import { formatSaleDateTime, getCountdownText, getDiscountPercent, getSaleTimingMessage, getSavingsAmount, isEndingSoon } from '../../utils/pricing';
 import {
     getVariantDiscountPercent,
@@ -60,8 +60,8 @@ const ProductDetailPage = () => {
     const { formatPrice, currency } = useCurrency();
     const { settings } = useSettings();
     const storeName = getStoreName(settings);
-    const cartEnabled    = useFeature('cart');
-    const pricingEnabled = useFeature('pricing');
+    const cartEnabled    = useFeatureVisible('cart', 'storefront');
+    const pricingEnabled = useFeatureVisible('pricing', 'storefront');
     const showPrice = useFeature('showPrice');
     const wishlistEnabled = useFeature('wishlist');
     const enquiryEnabled = useFeature('enquiry');
@@ -177,7 +177,7 @@ const ProductDetailPage = () => {
         if (selectedVariant?.options) {
             selectedVariant.options.forEach((opt) => {
                 const optLabel = opt?.attribute?.name;
-                const optValue = opt?.value?.value;
+                const optValue = opt?.value ? formatAttributeValue(opt.value, opt.attribute) : '';
                 if (optLabel && optValue) {
                     selectedOptionsByLabel[optLabel] = optValue;
                 }
@@ -302,7 +302,9 @@ const ProductDetailPage = () => {
     const endingSoon = hasSale && sales.showCountdown !== false && isEndingSoon(product.saleEndAt, sales.endingSoonHours);
     const maxStock = selectedVariant
         ? getAvailableStock(selectedVariant, 'stockQty')
-        : getAvailableStock(product, 'quantity');
+        : product.type === 'variable'
+            ? activeVariants.reduce((total, variant) => total + getAvailableStock(variant, 'stockQty'), 0)
+            : getAvailableStock(product, 'quantity');
     const stockAvailable = maxStock > 0;
     const selectedVariantLabel = selectedVariant ? getVariantOptionLabel(selectedVariant) : '';
     const displaySku = selectedVariant?.sku || product.sku;
@@ -341,7 +343,7 @@ const ProductDetailPage = () => {
 
     const productStructuredData = [productJsonLd, breadcrumbStructuredData].filter(Boolean);
 
-    const hasVariants = Array.isArray(product?.variants) && product.variants.some((v) => v?.isActive !== false);
+    const hasVariants = product.type === 'variable' || (Array.isArray(product?.variants) && product.variants.some((v) => v?.isActive !== false));
 
     const handleVariantSelect = (variant) => {
         setSelectedVariant(variant);
@@ -393,6 +395,7 @@ const ProductDetailPage = () => {
                     productId: product.id,
                     variantId: selectedVariant?.id || null,
                     quantity: Math.min(qty, maxStock),
+                    requiresShipping: product.requiresShipping,
                     product: {
                         id: product.id,
                         name: product.name,
@@ -403,6 +406,7 @@ const ProductDetailPage = () => {
                         saleStartAt: product.saleStartAt,
                         saleEndAt: product.saleEndAt,
                         images: product.images,
+                        requiresShipping: product.requiresShipping,
                     },
                     variant: selectedVariant
                         ? {

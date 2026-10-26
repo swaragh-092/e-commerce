@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
+import StaffAssignment from '../../components/admin/StaffAssignment';
 import {
   Alert,
   Badge,
@@ -6,8 +7,10 @@ import {
   Button,
   Chip,
   CircularProgress,
+  Checkbox,
   Divider,
   FormControl,
+  FormControlLabel,
   Grid,
   IconButton,
   InputLabel,
@@ -33,9 +36,11 @@ import HistoryIcon from '@mui/icons-material/History';
 import CloseIcon from '@mui/icons-material/Close';
 import { useCurrency } from '../../hooks/useSettings';
 import { PAYMENT_SETTLED_STATUSES } from '../../utils/constants';
+import ShipmentTrackingTimeline from '../../components/orders/order-detail/ShipmentTrackingTimeline';
 import { getTaxRows } from '../../components/orders/order-detail/orderDetailUtils';
 import { formatDateOnly, formatDateTime } from '../../utils/dates';
-import { getOrderById, updateOrderStatus, createFulfillment, updateFulfillmentStatus, updateShipment, confirmCodPayment, getShippingProviders, addOrderNote, updateReturnStatus, processRefund } from '../../services/adminService';
+import { getOrderById, updateOrderStatus, updateOrderContactEmail, createFulfillment, updateFulfillmentStatus, updateShipment, retryShippingOperation, confirmCodPayment, getShippingProviders, addOrderNote, updateReturnStatus, processRefund } from '../../services/adminService';
+import { getSettingsGroup } from '../../services/settingsService';
 import { useNotification } from '../../context/NotificationContext';
 import {
   Dialog,
@@ -53,6 +58,7 @@ import {
 import AppliedDiscountsSummary from '../../components/orders/AppliedDiscountsSummary';
 import { useAuth } from '../../hooks/useAuth';
 import { PERMISSIONS } from '../../utils/permissions';
+import { getMediaUrl, onImageError, PLACEHOLDER_PRODUCT } from '../../utils/media';
 import { getApiErrorMessage } from '../../utils/apiErrors';
 import {
   getOrderProgressSteps,
@@ -377,8 +383,8 @@ const getDeliveredItemsAmount = (items = [], fulfillments = []) => {
 };
 
 const getDispatchedQuantity = (item = {}) => {
-  const shipmentQty = (item.shipmentItems || []).reduce((sum, shipmentItem) => sum + Number(shipmentItem.quantity || 0), 0);
-  const fulfillmentQty = (item.fulfillmentItems || []).reduce((sum, fulfillmentItem) => sum + Number(fulfillmentItem.quantity || 0), 0);
+  const shipmentQty = (item.shipmentItems || []).filter((row) => row.shipment?.status !== 'cancelled').reduce((sum, shipmentItem) => sum + Number(shipmentItem.quantity || 0), 0);
+  const fulfillmentQty = (item.fulfillmentItems || []).filter((row) => row.fulfillment?.status !== 'cancelled').reduce((sum, fulfillmentItem) => sum + Number(fulfillmentItem.quantity || 0), 0);
   return Math.max(shipmentQty, fulfillmentQty);
 };
 
@@ -492,6 +498,14 @@ const getRefundedAmountForReturnRequest = (order = {}, returnId) => (
     .reduce((sum, refund) => sum + Number(refund.amount || 0), 0)
 );
 
+const hasPendingRefundForReturnRequest = (order = {}, returnId) => (
+  (order.refunds || order.Refunds || []).some((refund) => refund.returnId === returnId && ['refund_initiated', 'refund_processing'].includes(refund.status))
+);
+
+const getOpenRefunds = (order = {}) => (
+  (order.refunds || order.Refunds || []).filter((refund) => ['refund_initiated', 'refund_processing'].includes(refund.status))
+);
+
 const hasFullRefundForReturnRequest = (order = {}, request = {}) => {
   const refunds = (order.refunds || order.Refunds || [])
     .filter((refund) => refund.returnId === request.id && ['refunded', 'partially_refunded'].includes(refund.status));
@@ -502,15 +516,57 @@ const hasFullRefundForReturnRequest = (order = {}, request = {}) => {
   return refundedAmount >= requestAmount;
 };
 
+const formatCourierEstimate = (parcel, snapshot) => {
+  // Only carrier-provided per-parcel estimates (live serviceability: courier +
+  // transit days) count as reliable. Merchant rule days and order-level fallbacks
+  // are not shown here; without carrier data the UI must say pending rather than
+  // fabricate a date or present a merchant estimate as a courier promise.
+  // Transit days are shown as-is; never converted to an arrival date.
+  const source = parcel?.estimatedDeliveryDays != null || parcel?.courierName || parcel?.courierCompanyId
+    ? parcel
+    : null;
+  if (!source) return null;
+  const days = source.estimatedDeliveryDays;
+  const courierName = source.courierName || snapshot?.providerName || '';
+  if (days == null || days === '') return null;
+  const daysLabel = String(days).includes('day') ? String(days) : `${days} days`;
+  return courierName ? `${daysLabel} via ${courierName}` : daysLabel;
+};
+
 const FulfillmentDialog = ({ open, onClose, orderItems, orderDate, order, onSave, loading, notify }) => {
   const [trackingNumber, setTrackingNumber] = useState('');
+  const [trackingUrl, setTrackingUrl] = useState('');
   const [courier, setCourier] = useState('');
   const [expectedDeliveryDate, setExpectedDeliveryDate] = useState('');
   const [notes, setNotes] = useState('');
-  const [status, setStatus] = useState('pending');
+  const [status, setStatus] = useState('created');
   const [items, setItems] = useState({});
   const [providers, setProviders] = useState([]);
   const [providerId, setProviderId] = useState('');
+  const [packageMode, setPackageMode] = useState('planned');
+  const [plannedParcelId, setPlannedParcelId] = useState('');
+  const [manualPackage, setManualPackage] = useState({ packageName: '', lengthCm: '', breadthCm: '', heightCm: '', actualWeightGrams: '' });
+  const [weightConfirmed, setWeightConfirmed] = useState(false);
+  const [savedBoxes, setSavedBoxes] = useState([]);
+  const parcelPlan = Array.isArray(order?.shippingSnapshot?.parcelPlan) ? order.shippingSnapshot.parcelPlan : [];
+  const bookedParcelIds = (order?.fulfillments || []).flatMap((fulfillment) => fulfillment.shipments || []).filter((shipment) => shipment.status !== 'cancelled').map((shipment) => shipment.plannedParcelId).filter(Boolean);
+  const setParcelItems = (parcel) => {
+    const nextItems = {};
+    const contents = new Map();
+    for (const parcelItem of parcel?.items || []) {
+      const key = `${parcelItem.productId}:${parcelItem.variantId || ''}`;
+      contents.set(key, (contents.get(key) || 0) + Number(parcelItem.quantity));
+    }
+    for (const oi of orderItems) {
+      const key = `${oi.productId}:${oi.variantId || ''}`;
+      const plannedQuantity = contents.get(key) || 0;
+      const remainingQuantity = Math.max(0, Number(oi.quantity) - getDispatchedQuantity(oi));
+      const quantity = Math.min(plannedQuantity, remainingQuantity);
+      nextItems[oi.id] = quantity;
+      contents.set(key, Math.max(0, plannedQuantity - quantity));
+    }
+    setItems(nextItems);
+  };
   const minExpectedDate = normalizeDateInputValue(orderDate);
 
   useEffect(() => {
@@ -519,30 +575,60 @@ const FulfillmentDialog = ({ open, onClose, orderItems, orderDate, order, onSave
       orderItems.forEach(oi => {
         const shipped = getDispatchedQuantity(oi);
         const remaining = oi.quantity - shipped;
-        if (remaining > 0) {
-          initialItems[oi.id] = remaining;
-        }
+        if (remaining > 0) initialItems[oi.id] = remaining;
       });
-      setItems(initialItems);
+      const nextParcel = parcelPlan.find((parcel) => !bookedParcelIds.includes(parcel.parcelId));
+      setPlannedParcelId(nextParcel?.parcelId || '');
+      setPackageMode(nextParcel ? 'planned' : parcelPlan.length > 0 ? 'manual' : 'planned');
+      if (nextParcel) {
+        setParcelItems(nextParcel);
+        // Dimensions are a starting point only. The packed scale weight is
+        // never pre-filled from the checkout estimate: staff must weigh the
+        // finished parcel and confirm the reading below.
+        setManualPackage({
+          packageName: nextParcel.packageName || '',
+          lengthCm: String(nextParcel.lengthCm || ''),
+          breadthCm: String(nextParcel.breadthCm || ''),
+          heightCm: String(nextParcel.heightCm || ''),
+          actualWeightGrams: '',
+        });
+        setWeightConfirmed(false);
+      } else {
+        setItems(initialItems);
+        setManualPackage({ packageName: '', lengthCm: '', breadthCm: '', heightCm: '', actualWeightGrams: '' });
+        setWeightConfirmed(false);
+      }
       setTrackingNumber('');
+      setTrackingUrl('');
       setCourier('');
       setExpectedDeliveryDate('');
       setNotes('');
       setStatus('created');
+      getSettingsGroup('shipping')
+        .then((res) => {
+          setSavedBoxes(Array.isArray(res?.packageProfiles) ? res.packageProfiles.filter((p) => p.enabled !== false) : []);
+        })
+        .catch(() => {});
 
       getShippingProviders()
         .then(res => {
             const active = res.data?.data?.filter(p => p.enabled) || [];
             setProviders(active);
+            const eligible = active.filter((provider) => (
+              (order?.paymentMethod !== 'cod' || provider.supportsCod !== false)
+              && (!provider.maxWeightKg || !nextParcel?.actualWeightGrams || Number(nextParcel.actualWeightGrams) <= Number(provider.maxWeightKg) * 1000)
+            ));
             const quotedCode = order?.shippingSnapshot?.provider;
-            const matchedQuoted = active.find(p => p.code === quotedCode || p.id === quotedCode);
-            const defaultProv = active.find(p => p.isDefault);
+            const matchedQuoted = eligible.find(p => p.code === quotedCode || p.id === quotedCode);
+            const defaultProv = eligible.find(p => p.isDefault);
             if (matchedQuoted) {
               setProviderId(matchedQuoted.id);
             } else if (defaultProv) {
               setProviderId(defaultProv.id);
-            } else if (active.length > 0) {
-              setProviderId(active[0].id);
+            } else if (eligible.length === 1) {
+              setProviderId(eligible[0].id);
+            } else if (eligible.length > 0) {
+              setProviderId(eligible[0].id);
             } else {
               setProviderId('manual');
             }
@@ -559,9 +645,39 @@ const FulfillmentDialog = ({ open, onClose, orderItems, orderDate, order, onSave
     setItems(prev => ({ ...prev, [id]: qty }));
   };
 
+  const selectedProvider = providers.find(p => p.id === providerId || p.code === providerId);
+  // Reuse existing provider metadata: code 'manual' means staff-fulfilled.
+  // Every other enabled provider is API-integrated and assigns the AWB itself.
+  const isManualProvider = providerId === 'manual' || selectedProvider?.code === 'manual';
+  const isApiProvider = !isManualProvider;
+  const selectedPlannedParcel = parcelPlan.find((parcel) => parcel.parcelId === plannedParcelId);
+  const usesPlannedPackage = packageMode === 'planned' && Boolean(selectedPlannedParcel);
+  const courierEstimate = formatCourierEstimate(selectedPlannedParcel, order?.shippingSnapshot);
+  const MANUAL_CREATION_STATUSES = ['created', 'packed'];
+
+  const handleProviderChange = (nextProviderId) => {
+    // Switching modes must not carry hidden tracking/date/status values forward.
+    // Parcel measurements (manualPackage) and item quantities (items) are preserved.
+    setProviderId(nextProviderId);
+    setTrackingNumber('');
+    setTrackingUrl('');
+    setCourier('');
+    setExpectedDeliveryDate('');
+    setStatus('created');
+  };
+
   const handleSubmit = () => {
-    if (expectedDeliveryDate && minExpectedDate && expectedDeliveryDate < minExpectedDate) {
+    if (loading) return;
+    if (isManualProvider && expectedDeliveryDate && minExpectedDate && expectedDeliveryDate < minExpectedDate) {
       notify(`Expected delivery date cannot be before ${formatDateOnly(minExpectedDate)}.`, 'error');
+      return;
+    }
+    if (isManualProvider && trackingUrl && !/^https?:\/\/.+/i.test(trackingUrl.trim())) {
+      notify('Tracking URL must start with http:// or https://, or leave it empty.', 'error');
+      return;
+    }
+    if (isManualProvider && !MANUAL_CREATION_STATUSES.includes(status)) {
+      notify('Manual shipments can only be created as Created or Packed.', 'error');
       return;
     }
     const shipmentItems = Object.entries(items)
@@ -569,25 +685,65 @@ const FulfillmentDialog = ({ open, onClose, orderItems, orderDate, order, onSave
       .map(([orderItemId, quantity]) => ({ orderItemId, quantity }));
 
     if (shipmentItems.length === 0) return;
-    const selectedProvider = providers.find(p => p.id === providerId || p.code === providerId);
-    const finalProviderId = selectedProvider ? selectedProvider.id : (providerId === 'manual' ? null : providerId);
+    const hasShippableProducts = shipmentItems.some(({ orderItemId }) => {
+      const oi = orderItems.find(o => o.id === orderItemId);
+      return oi && oi.product?.requiresShipping !== false;
+    });
+
+    if (hasShippableProducts && (
+      ['lengthCm', 'breadthCm', 'heightCm'].some((key) => !Number.isFinite(Number(manualPackage[key])) || Number(manualPackage[key]) <= 0.5) ||
+      !Number.isFinite(Number(manualPackage.actualWeightGrams)) || Number(manualPackage.actualWeightGrams) <= 0
+    )) {
+      notify('Enter confirmed parcel outside dimensions and the packed scale weight before booking.', 'error');
+      return;
+    }
+    if (hasShippableProducts && !weightConfirmed) {
+      notify('Weigh the finished parcel on a scale and tick the scale-weight confirmation before booking.', 'error');
+      return;
+    }
+    const finalProviderId = selectedProvider ? selectedProvider.id : providerId === 'manual' ? 'manual' : providerId;
     onSave({
-      trackingNumber,
-      courier,
-      expectedDeliveryDate: expectedDeliveryDate || null,
       notes,
-      status,
+      // API-integrated couriers assign the AWB, courier and label during booking.
+      // Never submit staff-entered tracking/date/courier/status for them, even if
+      // stale values linger in hidden inputs from the manual mode.
+      ...(isManualProvider
+        ? {
+          trackingNumber: trackingNumber.trim() || null,
+          trackingUrl: trackingUrl.trim() || null,
+          courier: courier.trim() || null,
+          expectedDeliveryDate: expectedDeliveryDate || null,
+          status,
+        }
+        : { status: 'created' }),
       providerId: finalProviderId,
+      ...(plannedParcelId ? { plannedParcelId } : {}),
+      manualPackage: hasShippableProducts ? {
+        packageName: manualPackage.packageName?.trim() || (selectedPlannedParcel?.packageName || 'Measured package'),
+        lengthCm: Number(manualPackage.lengthCm),
+        breadthCm: Number(manualPackage.breadthCm),
+        heightCm: Number(manualPackage.heightCm),
+        actualWeightGrams: Number(manualPackage.actualWeightGrams),
+        weightConfirmed: true,
+      } : null,
       items: shipmentItems,
     });
   };
 
-  const isManualProvider = providerId === 'manual' || providers.find(p => p.id === providerId)?.code === 'manual';
+  const handleDialogClose = () => {
+    if (loading) return;
+    onClose();
+  };
 
   return (
-    <Dialog open={open} onClose={onClose} fullWidth maxWidth="sm">
+    <Dialog open={open} onClose={handleDialogClose} fullWidth maxWidth="sm">
       <DialogTitle component="div">Create Shipment</DialogTitle>
       <DialogContent dividers>
+        {loading && (
+          <Alert severity="info" sx={{ mb: 2 }}>
+            Booking courier{selectedProvider ? ` with ${selectedProvider.name}` : ''} — do not close or submit again.
+          </Alert>
+        )}
         <Stack spacing={2} sx={{ mb: 3 }}>
           <TextField
             select
@@ -595,56 +751,93 @@ const FulfillmentDialog = ({ open, onClose, orderItems, orderDate, order, onSave
             fullWidth
             size="small"
             value={providerId}
-            onChange={(e) => setProviderId(e.target.value)}
+            disabled={loading}
+            onChange={(e) => {
+              handleProviderChange(e.target.value);
+            }}
           >
-            {providers.map(p => (
-              <MenuItem key={p.id} value={p.id}>
+            {providers.map(p => {
+              const overweight = Boolean(selectedPlannedParcel?.actualWeightGrams && p.maxWeightKg && Number(selectedPlannedParcel.actualWeightGrams) > Number(p.maxWeightKg) * 1000);
+              const unsupportedCod = order?.paymentMethod === 'cod' && p.supportsCod === false;
+              return <MenuItem key={p.id} value={p.id} disabled={overweight || unsupportedCod}>
                 {p.name} ({p.code}){p.isDefault ? ' — Default' : ''}
-              </MenuItem>
-            ))}
+                {overweight ? ' — exceeds package weight limit' : unsupportedCod ? ' — COD unavailable' : ''}
+              </MenuItem>;
+            })}
             {!providers.some(p => p.code === 'manual') && (
               <MenuItem value="manual">Manual / Own Delivery</MenuItem>
             )}
           </TextField>
-          {isManualProvider && (
-            <TextField
-              label="Carrier / Courier"
-              fullWidth
-              size="small"
-              value={courier}
-              onChange={(e) => setCourier(e.target.value)}
-              placeholder="e.g. FedEx, BlueDart"
-            />
+          {isApiProvider ? (
+            <Box sx={{ p: 2, bgcolor: 'action.hover', borderRadius: 1.5, border: '1px solid', borderColor: 'divider' }}>
+              <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mb: 0.5 }}>
+                Estimated delivery
+              </Typography>
+              <Typography variant="body2" fontWeight={700}>
+                {courierEstimate || 'Delivery estimate pending.'}
+              </Typography>
+              <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mt: 1 }}>
+                The courier and tracking number are assigned automatically during booking.
+                Label creation does not mean pickup or delivery — carrier status below stays on the persisted booking state.
+              </Typography>
+            </Box>
+          ) : (
+            <>
+              <TextField
+                label="Courier name (optional)"
+                fullWidth
+                size="small"
+                value={courier}
+                disabled={loading}
+                onChange={(e) => setCourier(e.target.value)}
+                placeholder="e.g. Own delivery, Local courier, Delhivery (externally booked)"
+                helperText="Own/local delivery can be left empty. External bookings: enter the courier name."
+              />
+              <TextField
+                label="Tracking number (optional)"
+                fullWidth
+                size="small"
+                value={trackingNumber}
+                disabled={loading}
+                onChange={(e) => setTrackingNumber(e.target.value)}
+                placeholder="AWB / consignment number from the courier"
+                helperText="Leave empty for own delivery without tracking."
+              />
+              <TextField
+                label="Tracking URL (optional)"
+                fullWidth
+                size="small"
+                value={trackingUrl}
+                disabled={loading}
+                onChange={(e) => setTrackingUrl(e.target.value)}
+                placeholder="https://…"
+              />
+              <TextField
+                label="Estimated delivery date (optional)"
+                type="date"
+                fullWidth
+                size="small"
+                value={expectedDeliveryDate}
+                disabled={loading}
+                onChange={(e) => setExpectedDeliveryDate(e.target.value)}
+                inputProps={minExpectedDate ? { min: minExpectedDate } : undefined}
+                InputLabelProps={{ shrink: true }}
+              />
+              <TextField
+                select
+                label="Shipment Status"
+                fullWidth
+                size="small"
+                value={status}
+                disabled={loading}
+                onChange={(e) => setStatus(e.target.value)}
+                helperText="Only valid creation states are offered; carrier progress is tracked after creation."
+              >
+                <MenuItem value="created">Created</MenuItem>
+                <MenuItem value="packed">Packed</MenuItem>
+              </TextField>
+            </>
           )}
-          <TextField
-            label="Tracking Number"
-            fullWidth
-            size="small"
-            value={trackingNumber}
-            onChange={(e) => setTrackingNumber(e.target.value)}
-          />
-          <TextField
-            label="Expected Delivery Date"
-            type="date"
-            fullWidth
-            size="small"
-            value={expectedDeliveryDate}
-            onChange={(e) => setExpectedDeliveryDate(e.target.value)}
-            inputProps={minExpectedDate ? { min: minExpectedDate } : undefined}
-            InputLabelProps={{ shrink: true }}
-          />
-          <TextField
-            select
-            label="Shipment Status"
-            fullWidth
-            size="small"
-            value={status}
-            onChange={(e) => setStatus(e.target.value)}
-          >
-            <MenuItem value="created">Created</MenuItem>
-            <MenuItem value="packed">Packed</MenuItem>
-            <MenuItem value="shipped">Shipped</MenuItem>
-          </TextField>
           <TextField
             label="Notes"
             fullWidth
@@ -652,8 +845,145 @@ const FulfillmentDialog = ({ open, onClose, orderItems, orderDate, order, onSave
             multiline
             rows={2}
             value={notes}
+            disabled={loading}
             onChange={(e) => setNotes(e.target.value)}
           />
+        </Stack>
+        <Stack spacing={1} sx={{ mb: 2 }}>
+          <TextField
+            select
+            label="Packing method"
+            value={packageMode}
+            disabled={loading}
+            onChange={(event) => {
+              const mode = event.target.value;
+              setPackageMode(mode);
+              if (mode === 'manual') {
+                setPlannedParcelId('');
+                const remainingItems = {};
+                orderItems.forEach((oi) => { remainingItems[oi.id] = Math.max(0, oi.quantity - getDispatchedQuantity(oi)); });
+                setItems(remainingItems);
+              } else {
+                const nextParcel = parcelPlan.find((parcel) => !bookedParcelIds.includes(parcel.parcelId));
+                setPlannedParcelId(nextParcel?.parcelId || '');
+                if (nextParcel) setParcelItems(nextParcel);
+              }
+            }}
+          >
+            <MenuItem value="planned" disabled={!parcelPlan.some((parcel) => !bookedParcelIds.includes(parcel.parcelId))}>
+              Use a checkout package plan
+            </MenuItem>
+            <MenuItem value="manual">Pack and measure manually</MenuItem>
+          </TextField>
+          {packageMode === 'planned' && (
+            <TextField
+              select
+              label="Package from checkout plan"
+              value={plannedParcelId}
+              disabled={loading}
+              onChange={(event) => {
+                const nextParcelId = event.target.value;
+                setPlannedParcelId(nextParcelId);
+                const p = parcelPlan.find((parcel) => parcel.parcelId === nextParcelId);
+                setParcelItems(p);
+                if (p) {
+                  setManualPackage({
+                    packageName: p.packageName || '',
+                    lengthCm: String(p.lengthCm || ''),
+                    breadthCm: String(p.breadthCm || ''),
+                    heightCm: String(p.heightCm || ''),
+                    actualWeightGrams: '',
+                  });
+                  setWeightConfirmed(false);
+                }
+              }}
+              helperText="Select one package. Confirm its physical dimensions and actual scale weight below."
+            >
+              {parcelPlan.map((parcel, index) => {
+                const itemsSummary = (parcel.items || []).map((item) => `${item.quantity} × ${item.name || orderItems.find((oi) => oi.productId === item.productId && (oi.variantId || null) === (item.variantId || null))?.snapshotName || 'item'}`).join(', ');
+                const booked = bookedParcelIds.includes(parcel.parcelId);
+                return <MenuItem key={parcel.parcelId} value={parcel.parcelId} disabled={booked}>{parcel.packageName || `Package ${index + 1}`} — {itemsSummary}{booked ? ' (already shipped)' : ''}</MenuItem>;
+              })}
+            </TextField>
+          )}
+          {savedBoxes.length > 0 && (
+            <TextField
+              select
+              fullWidth
+              size="small"
+              label="Saved box preset (optional)"
+              value={savedBoxes.some((b) => b.name === manualPackage.packageName) ? manualPackage.packageName : ''}
+              disabled={loading}
+              onChange={(event) => {
+                const box = savedBoxes.find((b) => b.name === event.target.value);
+                if (box) {
+                  setManualPackage((current) => ({
+                    ...current,
+                    packageName: box.name,
+                    lengthCm: String(box.lengthCm),
+                    breadthCm: String(box.breadthCm),
+                    heightCm: String(box.heightCm),
+                  }));
+                }
+              }}
+              helperText="Selecting a box preset fills measured outside dimensions. Enter packed scale weight below."
+            >
+              <MenuItem value="">Custom / unlisted carton</MenuItem>
+              {savedBoxes.map((box) => (
+                <MenuItem key={box.id} value={box.name}>
+                  {box.name} ({box.lengthCm} × {box.breadthCm} × {box.heightCm} cm, {box.emptyWeightGrams} g tare)
+                </MenuItem>
+              ))}
+            </TextField>
+          )}
+          <Alert severity="info">
+            Confirm parcel outside dimensions and actual weight from a scale (including box tare) before booking. Estimated weight cannot silently become booking weight.
+          </Alert>
+          <Grid container spacing={1}>
+            <Grid item xs={12}>
+              <TextField
+                fullWidth
+                size="small"
+                label="Package name (optional)"
+                value={manualPackage.packageName}
+                disabled={loading}
+                onChange={(event) => setManualPackage((current) => ({ ...current, packageName: event.target.value }))}
+              />
+            </Grid>
+            {[["lengthCm", "Length (cm)"], ["breadthCm", "Width (cm)"], ["heightCm", "Height (cm)"], ["actualWeightGrams", "Packed scale weight (g)"]].map(([key, label]) => (
+              <Grid item xs={12} sm={6} key={key}>
+                <TextField
+                  fullWidth
+                  size="small"
+                  type="number"
+                  label={label}
+                  required={key === 'actualWeightGrams'}
+                  disabled={loading}
+                  inputProps={{ min: key === 'actualWeightGrams' ? 0.1 : 0.51, step: 'any' }}
+                  value={manualPackage[key]}
+                  onChange={(event) => {
+                    const value = event.target.value;
+                    setManualPackage((current) => ({ ...current, [key]: value }));
+                    if (key === 'actualWeightGrams') setWeightConfirmed(false);
+                  }}
+                  helperText={key === 'actualWeightGrams'
+                    ? (selectedPlannedParcel?.actualWeightGrams
+                      ? `Checkout estimate ${selectedPlannedParcel.actualWeightGrams} g is not a measurement — enter the scale reading including packaging.`
+                      : 'Enter the scale reading including packaging.')
+                    : undefined}
+                />
+              </Grid>
+            ))}
+          </Grid>
+          <FormControlLabel
+            control={<Checkbox checked={weightConfirmed} disabled={loading} onChange={(event) => setWeightConfirmed(event.target.checked)} />}
+            label="Packed weight verified on a scale (including box and packaging)"
+          />
+          {parcelPlan.length > 1 && (
+            <Alert severity="info">
+              This order was planned in {parcelPlan.length} packages. Book each physical package as its own shipment.
+            </Alert>
+          )}
         </Stack>
         <Typography variant="subtitle2" sx={{ mb: 1, fontWeight: 700 }}>Items to Ship</Typography>
         <TableContainer component={Paper} elevation={0} sx={{ border: '1px solid', borderColor: 'divider' }}>
@@ -683,8 +1013,9 @@ const FulfillmentDialog = ({ open, onClose, orderItems, orderDate, order, onSave
                         type="number"
                         size="small"
                         value={items[oi.id] || 0}
+                        disabled={loading}
                         onChange={(e) => handleQtyChange(oi.id, e.target.value, remaining)}
-                        inputProps={{ min: 0, max: remaining, style: { textAlign: 'right' } }}
+                        inputProps={{ readOnly: usesPlannedPackage || loading, min: 0, max: remaining, style: { textAlign: 'right' } }}
                       />
                     </TableCell>
                   </TableRow>
@@ -695,13 +1026,14 @@ const FulfillmentDialog = ({ open, onClose, orderItems, orderDate, order, onSave
         </TableContainer>
       </DialogContent>
       <DialogActions sx={{ px: 3, py: 2 }}>
-        <Button onClick={onClose} color="inherit">Cancel</Button>
-        <Button 
-          onClick={handleSubmit} 
-          variant="contained" 
-          disabled={loading || Object.values(items).every(v => v === 0)}
+        <Button onClick={handleDialogClose} color="inherit" disabled={loading}>Cancel</Button>
+        <Button
+          onClick={handleSubmit}
+          variant="contained"
+          disabled={loading || Object.values(items).every(v => v === 0) || (packageMode === 'planned' && parcelPlan.length > 0 && !selectedPlannedParcel)}
+          startIcon={loading ? <CircularProgress size={16} color="inherit" /> : undefined}
         >
-          {loading ? 'Creating...' : 'Create Shipment'}
+          {loading ? (isApiProvider ? 'Booking courier…' : 'Saving…') : (isApiProvider ? 'Book Courier' : 'Create Shipment')}
         </Button>
       </DialogActions>
     </Dialog>
@@ -770,13 +1102,18 @@ const OrderDetailPage = () => {
   const [codCollectionAmount, setCodCollectionAmount] = useState('');
   const [refundDialogRequest, setRefundDialogRequest] = useState(null);
   const [refundAmount, setRefundAmount] = useState('');
+  const [offlineRefundReference, setOfflineRefundReference] = useState('');
+  const [offlineRefundConfirmed, setOfflineRefundConfirmed] = useState(false);
   const [fulfillmentLoading, setFulfillmentLoading] = useState(false);
   const [addingNote, setAddingNote] = useState(false);
+  const [guestContactEmail, setGuestContactEmail] = useState('');
+  const [savingContactEmail, setSavingContactEmail] = useState(false);
 
   const fetchOrder = async () => {
     try {
       const res = await getOrderById(id);
       setOrder(res.data.data);
+      setGuestContactEmail(res.data.data.shippingAddressSnapshot?.email || '');
       setNewStatus(res.data.data.status);
     } catch (fetchError) {
       console.error(fetchError);
@@ -785,6 +1122,24 @@ const OrderDetailPage = () => {
       setError(getApiErrorMessage(fetchError, 'Failed to load order details.'));
     } finally {
       setLoading(false);
+    }
+  };
+
+  const handleSaveGuestEmail = async () => {
+    const email = guestContactEmail.trim();
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+      notify('Enter a valid customer email address.', 'error');
+      return;
+    }
+    setSavingContactEmail(true);
+    try {
+      await updateOrderContactEmail(id, email);
+      await fetchOrder();
+      notify('Guest email saved. Retry a failed carrier booking in Shipping → Operations & Failures.', 'success');
+    } catch (saveError) {
+      notify(getApiErrorMessage(saveError, 'Could not save guest email.'), 'error');
+    } finally {
+      setSavingContactEmail(false);
     }
   };
 
@@ -838,7 +1193,8 @@ const OrderDetailPage = () => {
     });
   }, [order?.status, allowedNextStatuses, canCloseOrder]);
   const hasStatusTransitions = availableStatuses.length > 1;
-  const canFulfill = canUpdateOrderStatus && isFulfillable;
+  const awaitingOnlinePayment = order?.paymentMethod !== 'cod' && !PAYMENT_SETTLED_STATUSES.includes(payment?.status);
+  const canFulfill = canUpdateOrderStatus && isFulfillable && !awaitingOnlinePayment;
   const codCollectedAmount = Number(
     payment?.metadata?.codCollectedAmount
     || (order?.paymentMethod === 'cod' && payment?.status !== 'paid_cod' && Number(payment?.amount || 0) < Number(order?.total || 0)
@@ -959,11 +1315,15 @@ const OrderDetailPage = () => {
     }
     setRefundDialogRequest(returnRequest);
     setRefundAmount(maxAmount > 0 ? maxAmount.toFixed(2) : '');
+    setOfflineRefundReference('');
+    setOfflineRefundConfirmed(false);
   };
 
   const closeReturnRefundDialog = () => {
     setRefundDialogRequest(null);
     setRefundAmount('');
+    setOfflineRefundReference('');
+    setOfflineRefundConfirmed(false);
   };
 
   const handleReturnRefund = async () => {
@@ -982,10 +1342,21 @@ const OrderDetailPage = () => {
 
     setUpdating(true);
     try {
-      await processRefund(id, { returnId: refundDialogRequest.id, amount, reason: refundDialogRequest.reason || 'Return refund' });
+      const isCodRefund = order?.paymentMethod === 'cod';
+      const response = await processRefund(id, {
+        returnId: refundDialogRequest.id,
+        amount,
+        reason: refundDialogRequest.reason || 'Return refund',
+        ...(isCodRefund ? { offlineRefundConfirmed, offlineRefundReference: offlineRefundReference.trim() } : {}),
+      });
+      const refund = response.data?.data;
       closeReturnRefundDialog();
       await fetchOrder();
-      notify('Return refund recorded.', 'success');
+      notify(refund?.status === 'refund_processing'
+        ? `Provider accepted refund ${refund.providerRefundId || refund.id}; it is still processing.`
+        : refund?.metadata?.refundMethod === 'offline'
+          ? `Offline refund recorded with reference ${refund.metadata.manualReference}.`
+          : 'Provider confirmed the refund.', refund?.status === 'refund_processing' ? 'warning' : 'success');
     } catch (err) {
       notify(getApiErrorMessage(err, 'Failed to process return refund.'), 'error');
     } finally {
@@ -996,14 +1367,59 @@ const OrderDetailPage = () => {
   const handleCreateFulfillment = async (data) => {
     setFulfillmentLoading(true);
     try {
-      await createFulfillment(id, data);
-      notify('Shipment created successfully.', 'success');
+      const response = await createFulfillment(id, data);
+      const shipment = response.data?.data?.shipments?.[0];
+      if (shipment?.providerState === 'failed') {
+        notify(`Shipment saved, but carrier booking failed: ${shipment.lastProviderError || 'Retry from this order.'} Duplicate submission was prevented; use Retry carrier booking below.`, 'error');
+      } else if (shipment?.providerState === 'retrying' || shipment?.providerState === 'pending') {
+        notify(`Shipment saved. Carrier booking is ${shipment.providerState === 'pending' ? 'pending' : 'retrying'}; check its persisted status below. Do not resubmit.`, 'warning');
+      } else if (shipment?.providerState === 'not_required') {
+        notify('Manual shipment recorded. Tracking and delivery date are optional and stay as entered.', 'success');
+      } else {
+        const bookedBits = [
+          shipment?.courierName ? `courier ${shipment.courierName}` : null,
+          shipment?.trackingNumber || shipment?.awb ? `tracking ${shipment.trackingNumber || shipment.awb}` : null,
+        ].filter(Boolean).join(', ');
+        notify(`Carrier booking completed${bookedBits ? `: ${bookedBits}` : ''}. Tracking link and label are shown on the shipment below; booking does not imply pickup or delivery.`, 'success');
+      }
       setFulfillmentDialogOpen(false);
       fetchOrder(); // Refresh to catch updated status and fulfills
     } catch (err) {
       notify(getApiErrorMessage(err, 'Failed to create shipment.'), 'error');
     } finally {
       setFulfillmentLoading(false);
+    }
+  };
+
+  const handleRetryShipmentBooking = async (operationId) => {
+    try {
+      const response = await retryShippingOperation(operationId);
+      await fetchOrder();
+      const result = response.data?.data;
+      if (result?.success) {
+        notify('Carrier booking completed successfully.', 'success');
+      } else if (result?.skipped) {
+        notify('This operation is already running or no longer needs a retry. Refresh to see its current status.', 'info');
+      } else if (result?.terminal) {
+        notify(result.error || 'Carrier booking failed after the retry. Review the shipment error.', 'error');
+      } else {
+        notify(result?.error || 'Retry was queued. Carrier booking is still pending; check the shipment status.', 'warning');
+      }
+    } catch (err) {
+      await fetchOrder();
+      notify(getApiErrorMessage(err, 'Carrier booking retry failed.'), 'error');
+    }
+  };
+
+  const handleCancelShipment = async (shipment) => {
+    const confirmed = window.confirm('Cancel this shipment with the carrier? The items will remain allocated to this order. Create a replacement shipment or cancel the order to release them.');
+    if (!confirmed) return;
+    try {
+      await updateShipment(id, shipment.id, { status: 'cancelled' });
+      await fetchOrder();
+      notify('Shipment cancelled. Items remain allocated to this order for replacement shipping or order cancellation.', 'success');
+    } catch (err) {
+      notify(getApiErrorMessage(err, 'Shipment cancellation failed.'), 'error');
     }
   };
 
@@ -1069,6 +1485,7 @@ const OrderDetailPage = () => {
           <Typography variant="body2" color="text.secondary" sx={{ mt: 1 }}>
             Placed on {formatDateTime(order.createdAt)} • Last updated {formatDateTime(order.updatedAt)}
           </Typography>
+          <StaffAssignment kind="orders" recordId={order.id} />
         </Box>
 
         <Stack direction="row" spacing={1}>
@@ -1111,12 +1528,23 @@ const OrderDetailPage = () => {
                Create Shipment
              </Button>
           )}
+          {canUpdateOrderStatus && isFulfillable && awaitingOnlinePayment && (
+            <Tooltip title="Awaiting online payment capture">
+              <span><Button variant="contained" startIcon={<LocalShippingIcon />} disabled>Create Shipment</Button></span>
+            </Tooltip>
+          )}
         </Stack>
       </Box>
 
       {order.status === 'closed' && !hasResolvedPayment && (
         <Alert severity="warning" sx={{ mb: 3 }}>
           This order was previously marked closed before payment and shipping were complete. It will be reopened automatically when refreshed.
+        </Alert>
+      )}
+
+      {payment?.metadata?.lateSettlement && (
+        <Alert severity="error" sx={{ mb: 3 }}>
+          Payment was captured after this order was {payment.metadata.lateSettlement.previousOrderStatus || 'cancelled'}. Do not fulfill it. Review the payment and arrange a refund if appropriate.
         </Alert>
       )}
 
@@ -1153,14 +1581,13 @@ const OrderDetailPage = () => {
                   borderColor: 'divider',
                 }}
               >
-                {item.snapshotImage && (
                   <Box
                     component="img"
-                    src={item.snapshotImage}
+                    src={item.snapshotImage ? getMediaUrl(item.snapshotImage) : PLACEHOLDER_PRODUCT}
                     alt={item.snapshotName}
+                    onError={onImageError(PLACEHOLDER_PRODUCT)}
                     sx={{ width: 60, height: 60, objectFit: 'cover', borderRadius: 1 }}
                   />
-                )}
                 <Box sx={{ flexGrow: 1 }}>
                   <Typography variant="body2" fontWeight={600}>
                     {item.snapshotName}
@@ -1319,6 +1746,12 @@ const OrderDetailPage = () => {
                     </Box>
                   </>
                 )}
+                {getOpenRefunds(order).map((refund) => (
+                  <Box key={refund.id}>
+                    <Typography variant="caption" color="warning.main">Refund processing</Typography>
+                    <Typography variant="body2">{formatPrice(refund.amount)}{refund.providerRefundId ? ` · ${refund.providerRefundId}` : ''}</Typography>
+                  </Box>
+                ))}
               </Stack>
             </DetailCard>
 
@@ -1389,24 +1822,58 @@ const OrderDetailPage = () => {
                               </Select>
                             </FormControl>
                           </Box>
+                          {shipment?.providerState && (
+                            <Chip
+                              size="small"
+                              sx={{ mt: 0.75 }}
+                              color={shipment.providerState === 'completed' ? 'success' : shipment.providerState === 'failed' ? 'error' : 'warning'}
+                              label={{ pending: 'Carrier booking pending', retrying: 'Carrier booking retrying', failed: 'Carrier booking failed', completed: 'Carrier booked', not_required: 'Manual fulfillment', cancelled: 'Carrier cancelled' }[shipment.providerState] || shipment.providerState}
+                            />
+                          )}
+                          {(shipment?.lastProviderError || shipment?.operationError) && (
+                            <Alert severity="error" sx={{ mt: 1 }}>
+                              {shipment.lastProviderError || shipment.operationError}
+                            </Alert>
+                          )}
                         </Box>
                         <Box sx={{ textAlign: 'right' }}>
                           <Typography variant="body2" fontWeight={600}>{f.courier || 'Standard Courier'}</Typography>
                           <Typography variant="body2" color="primary" sx={{ fontWeight: 500 }}>{f.trackingNumber || 'No tracking'}</Typography>
-                          {f.shipments && f.shipments.length > 0 && f.shipments[0].trackingUrl && (
-                            <Typography variant="caption" sx={{ display: 'block', mt: 0.5 }}>
-                              <a href={f.shipments[0].trackingUrl} target="_blank" rel="noreferrer" style={{ color: 'inherit', textDecoration: 'underline' }}>
-                                Track Package
-                              </a>
-                            </Typography>
-                          )}
-                          {f.shipments && f.shipments.length > 0 && f.shipments[0].labelUrl && (
-                            <Typography variant="caption" sx={{ display: 'block', mt: 0.5 }}>
-                              <a href={f.shipments[0].labelUrl} target="_blank" rel="noreferrer" style={{ color: 'inherit', textDecoration: 'underline' }}>
-                                Download Label
-                              </a>
-                            </Typography>
-                          )}
+                          {f.shipments?.map((documentShipment, shipmentIndex) => (
+                            <Box key={documentShipment.id || shipmentIndex} sx={{ mt: shipmentIndex ? 1 : 0 }}>
+                              {f.shipments.length > 1 && <Typography variant="caption" fontWeight={700}>Package {shipmentIndex + 1}</Typography>}
+                              {documentShipment.trackingUrl && (
+                                <Typography variant="caption" sx={{ display: 'block' }}>
+                                  <a href={documentShipment.trackingUrl} target="_blank" rel="noreferrer" style={{ color: 'inherit', textDecoration: 'underline' }}>Track Package</a>
+                                </Typography>
+                              )}
+                              {documentShipment.labelUrl && (
+                                <Typography variant="caption" sx={{ display: 'block' }}>
+                                  <a href={documentShipment.labelUrl} target="_blank" rel="noreferrer" style={{ color: 'inherit', textDecoration: 'underline' }}>Download Label</a>
+                                </Typography>
+                              )}
+                              {documentShipment.manifestUrl && (
+                                <Typography variant="caption" sx={{ display: 'block' }}>
+                                  <a href={documentShipment.manifestUrl} target="_blank" rel="noreferrer" style={{ color: 'inherit', textDecoration: 'underline' }}>Download Manifest</a>
+                                </Typography>
+                              )}
+                              {documentShipment.invoiceUrl && (
+                                <Typography variant="caption" sx={{ display: 'block' }}>
+                                  <a href={documentShipment.invoiceUrl} target="_blank" rel="noreferrer" style={{ color: 'inherit', textDecoration: 'underline' }}>Carrier Invoice</a>
+                                </Typography>
+                              )}
+                              {['retrying', 'failed'].includes(documentShipment.providerState) && documentShipment.operationId && (
+                                <Button size="small" onClick={() => handleRetryShipmentBooking(documentShipment.operationId)}>
+                                  Retry carrier booking
+                                </Button>
+                              )}
+                              {['created', 'packed'].includes(documentShipment.status) && documentShipment.providerState !== 'cancelled' && (
+                                <Button size="small" color="error" onClick={() => handleCancelShipment(documentShipment)}>
+                                  Cancel shipment
+                                </Button>
+                              )}
+                            </Box>
+                          ))}
                         </Box>
                       </Box>
 
@@ -1416,37 +1883,9 @@ const OrderDetailPage = () => {
                         />
                       )}
 
-                      {f.shipments && f.shipments.length > 0 && Array.isArray(f.shipments[0].statusHistory) && f.shipments[0].statusHistory.length > 0 && (
-                        <Box
-                          sx={{
-                            mt: 2,
-                            mb: 3,
-                            p: 2,
-                            bgcolor: 'action.hover',
-                            borderRadius: 1.5,
-                            border: '1px solid',
-                            borderColor: 'divider',
-                          }}
-                        >
-                          <Typography variant="subtitle2" sx={{ mb: 1.5 }}>Tracking Timeline</Typography>
-                          <Stack spacing={1.5}>
-                            {[...f.shipments[0].statusHistory].reverse().map((event, idx) => (
-                              <Box key={idx} sx={{ display: 'flex', gap: 2 }}>
-                                <Box sx={{ minWidth: 120 }}>
-                                  <Typography variant="caption" color="text.secondary" sx={{ display: 'block' }}>
-                                    {formatDateTime(event.timestamp || event.at || event.createdAt)}
-                                  </Typography>
-                                </Box>
-                                <Box>
-                                  <Typography variant="body2" fontWeight={600}>{event.status}</Typography>
-                                  {event.location && <Typography variant="caption" color="text.secondary">{event.location}</Typography>}
-                                  {event.message && <Typography variant="caption" color="text.secondary" sx={{ display: 'block' }}>{event.message}</Typography>}
-                                </Box>
-                              </Box>
-                            ))}
-                          </Stack>
-                        </Box>
-                      )}
+                      {f.shipments?.map((parcel, index) => (
+                        <ShipmentTrackingTimeline key={parcel.id || index} shipment={parcel} packageNumber={index + 1} />
+                      ))}
 
                       <Divider sx={{ mb: 2 }} />
                       <Stack spacing={1.25} sx={{ mb: f.notes ? 2 : 0 }}>
@@ -1519,8 +1958,8 @@ const OrderDetailPage = () => {
                               </Select>
                             </FormControl>
                             {canRefundReturn && (
-                              <Button size="small" variant="outlined" color="error" onClick={() => openReturnRefundDialog(request)} disabled={updating}>
-                                Refund
+                              <Button size="small" variant="outlined" color="error" onClick={() => openReturnRefundDialog(request)} disabled={updating || hasPendingRefundForReturnRequest(order, request.id)}>
+                                {hasPendingRefundForReturnRequest(order, request.id) ? 'Refund processing' : 'Issue refund'}
                               </Button>
                             )}
                             {request.type === 'return' && isReturnFullyRefunded && (
@@ -1575,7 +2014,25 @@ const OrderDetailPage = () => {
                   <Typography variant="caption" color="text.secondary">
                     Email
                   </Typography>
-                  <Typography variant="body2">{order.User?.email || 'No email available'}</Typography>
+                  <Typography variant="body2">{order.User?.email || order.shippingAddressSnapshot?.email || 'No email available'}</Typography>
+                  {!order.userId && canUpdateOrderStatus && (
+                    <Stack spacing={1} sx={{ mt: 1 }}>
+                      <TextField
+                        fullWidth
+                        size="small"
+                        type="email"
+                        label="Guest email"
+                        value={guestContactEmail}
+                        onChange={(event) => setGuestContactEmail(event.target.value)}
+                        disabled={savingContactEmail}
+                        inputProps={{ maxLength: 255 }}
+                        helperText="Use the customer's email for delivery updates."
+                      />
+                      <Button size="small" variant="outlined" onClick={handleSaveGuestEmail} disabled={savingContactEmail || !guestContactEmail.trim() || guestContactEmail.trim() === order.shippingAddressSnapshot?.email}>
+                        {savingContactEmail ? 'Saving…' : 'Save email'}
+                      </Button>
+                    </Stack>
+                  )}
                 </Box>
                 <Box>
                   <Typography variant="caption" color="text.secondary">
@@ -1696,9 +2153,14 @@ const OrderDetailPage = () => {
         maxWidth="xs"
         fullWidth
       >
-        <DialogTitle>Record Return Refund</DialogTitle>
+        <DialogTitle>Issue Return Refund</DialogTitle>
         <DialogContent>
           <Stack spacing={2} sx={{ pt: 1 }}>
+            {order?.paymentMethod === 'cod' && (
+              <Alert severity="warning">
+                COD has no payment gateway to send money back through. Send this amount to the customer first, then enter the transfer reference and confirm below.
+              </Alert>
+            )}
             <Box>
               <Typography variant="caption" color="text.secondary">
                 Returned product limit
@@ -1746,14 +2208,30 @@ const OrderDetailPage = () => {
               helperText="Refunds cannot exceed the returned item amount or the captured payment available."
               fullWidth
             />
+            {order?.paymentMethod === 'cod' && (
+              <>
+                <TextField
+                  label="Bank / UPI / cash refund reference"
+                  value={offlineRefundReference}
+                  onChange={(event) => setOfflineRefundReference(event.target.value)}
+                  inputProps={{ maxLength: 255 }}
+                  required
+                  fullWidth
+                />
+                <FormControlLabel
+                  control={<Checkbox checked={offlineRefundConfirmed} onChange={(event) => setOfflineRefundConfirmed(event.target.checked)} />}
+                  label="I have sent this refund to the customer"
+                />
+              </>
+            )}
           </Stack>
         </DialogContent>
         <DialogActions>
           <Button onClick={closeReturnRefundDialog} disabled={updating}>
             Cancel
           </Button>
-          <Button variant="contained" color="error" onClick={handleReturnRefund} disabled={updating}>
-            {updating ? 'Saving…' : 'Record Refund'}
+          <Button variant="contained" color="error" onClick={handleReturnRefund} disabled={updating || (order?.paymentMethod === 'cod' && (!offlineRefundConfirmed || !offlineRefundReference.trim()))}>
+            {updating ? 'Processing refund…' : order?.paymentMethod === 'cod' ? 'Record sent refund' : 'Issue refund'}
           </Button>
         </DialogActions>
       </Dialog>

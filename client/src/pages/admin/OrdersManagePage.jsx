@@ -43,6 +43,7 @@ import {
   getAllowedOrderStatuses,
   getOrderStatusColor,
   getOrderStatusLabel,
+  getShipmentStatusLabel,
 } from '../../utils/orderWorkflow';
 
 const SummaryCard = ({ label, value, tone = 'default' }) => (
@@ -120,13 +121,14 @@ const OrdersManagePage = () => {
   const [paginationModel, setPaginationModel] = useState({ page: 0, pageSize: 20 });
   // Initialise status from URL query param so dashboard card links pre-apply the filter
   const [status, setStatus] = useState(() => searchParams.get('status') || '');
+  const [shippingStatus, setShippingStatus] = useState(() => searchParams.get('orderShippingStatus') || '');
   const [searchInput, setSearchInput] = useState('');
   const [search, setSearch] = useState('');
   const [counts, setCounts] = useState({});
   const [pageRevenue, setPageRevenue] = useState(0);
   const [codCollectionOrder, setCodCollectionOrder] = useState(null);
   const [codCollectionAmount, setCodCollectionAmount] = useState('');
-  const hasActiveFilters = Boolean(search || status);
+  const hasActiveFilters = Boolean(search || status || shippingStatus);
 
   useEffect(() => {
     const timer = window.setTimeout(() => setSearch(searchInput.trim()), 350);
@@ -140,6 +142,7 @@ const OrdersManagePage = () => {
       page: paginationModel.page + 1,
       limit: paginationModel.pageSize,
       ...(status && { status }),
+      ...(shippingStatus && { orderShippingStatus: shippingStatus }),
       ...(search && { search }),
     })
       .then((res) => {
@@ -166,7 +169,7 @@ const OrdersManagePage = () => {
 
   useEffect(() => {
     fetchOrders();
-  }, [paginationModel, status, search]);
+  }, [paginationModel, status, shippingStatus, search]);
 
   const summaryGroups = useMemo(() => {
     return ORDER_STATUS_SUMMARY_GROUPS.map((group) => {
@@ -507,6 +510,15 @@ const OrdersManagePage = () => {
                 ))}
               </Select>
             </FormControl>
+            <FormControl size="small" sx={{ minWidth: 190 }}>
+              <InputLabel>Delivery status</InputLabel>
+              <Select value={shippingStatus} label="Delivery status" onChange={(e) => setShippingStatus(e.target.value)}>
+                <MenuItem value="">All delivery statuses</MenuItem>
+                {['not_shipped', 'partially_shipped', 'shipped', 'out_for_delivery', 'partially_out_for_delivery', 'delivery_failed', 'partially_delivered', 'delivered', 'rto_initiated', 'partially_rto', 'rto'].map((value) => (
+                  <MenuItem key={value} value={value}>{getShipmentStatusLabel(value)}</MenuItem>
+                ))}
+              </Select>
+            </FormControl>
           </Stack>
           <Stack direction="row" spacing={1}>
             <Button
@@ -514,9 +526,10 @@ const OrdersManagePage = () => {
               onClick={() => {
                 setSearchInput('');
                 setStatus('');
+                setShippingStatus('');
                 setPaginationModel((current) => ({ ...current, page: 0 }));
               }}
-              disabled={!searchInput && !status}
+              disabled={!searchInput && !status && !shippingStatus}
             >
               Clear filters
             </Button>

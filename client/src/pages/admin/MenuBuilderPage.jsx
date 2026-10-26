@@ -46,7 +46,7 @@ const MenuBuilderPage = () => {
   const canManage = hasPermission(PERMISSIONS.MENUS_MANAGE);
 
   const rows = useMemo(() => flattenItems(selectedMenu?.items || []), [selectedMenu]);
-  const parentOptions = rows.filter((row) => row.id !== editingItem?.id);
+  const parentOptions = rows.filter((row) => !row.generatedFromCategory && row.targetType !== 'category_tree' && !row.syncChildren && row.id !== editingItem?.id);
   const categoryOptions = useMemo(() => flattenCategories(categories), [categories]);
 
   const fetchMenus = async (preferredId = selectedMenuId) => {
@@ -175,8 +175,11 @@ const MenuBuilderPage = () => {
     setItemForm(item ? {
       parentId: item.parentId || '',
       label: item.label || '',
-      targetType: item.targetType || 'none',
+      // Collection is a legacy alias for category; both resolve to the same
+      // category list and storefront URL, so expose one choice in the editor.
+      targetType: item.targetType === 'collection' ? 'category' : item.targetType || 'none',
       targetId: item.targetId || '',
+      syncChildren: Boolean(item.syncChildren),
       url: item.url || '',
       placement: item.placement || 'center',
       sortOrder: item.sortOrder || 0,
@@ -194,6 +197,7 @@ const MenuBuilderPage = () => {
       label,
       targetType,
       targetId: needsTarget(targetType) ? itemForm.targetId || null : null,
+      syncChildren: targetType === 'category' && Boolean(itemForm.syncChildren),
       url: needsUrl(targetType) ? itemForm.url.trim() : null,
       placement: itemForm.placement,
       sortOrder: Number(itemForm.sortOrder) || 0,
@@ -286,7 +290,7 @@ const MenuBuilderPage = () => {
 
 
   const nudgeItem = async (item, direction) => {
-    const siblings = rows.filter((row) => (row.parentId || '') === (item.parentId || '') && row.placement === item.placement);
+    const siblings = rows.filter((row) => !row.generatedFromCategory && (row.parentId || '') === (item.parentId || '') && row.placement === item.placement);
     const currentIndex = siblings.findIndex((row) => row.id === item.id);
     const swapWith = siblings[currentIndex + direction];
     if (!swapWith) return;

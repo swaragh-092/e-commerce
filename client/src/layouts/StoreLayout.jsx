@@ -10,7 +10,7 @@ import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
 import MenuIcon from '@mui/icons-material/Menu';
 import { Outlet, Link as RouterLink, useLocation } from 'react-router-dom';
 import { useAuth } from '../hooks/useAuth';
-import { useSettings, useFeature, useCurrency } from '../hooks/useSettings';
+import { useSettings, useFeature, useFeatureVisible, useCurrency } from '../hooks/useSettings';
 import { useCart } from '../hooks/useCart';
 import FavoriteBorderIcon from '@mui/icons-material/FavoriteBorder';
 import CategoryNav from '../components/layout/CategoryNav';
@@ -21,26 +21,29 @@ import SearchWidget from '../components/search/SearchWidget';
 import DarkModeToggle from '../components/layout/DarkModeToggle';
 import PageService from '../services/pageService';
 import MenuService from '../services/menuService';
-import { ADMIN_ACCESS_PERMISSIONS, getFirstAccessibleAdminPath } from '../utils/permissions';
+import { ADMIN_ACCESS_PERMISSIONS } from '../utils/permissions';
+import { filterFeatureLinks } from '../utils/featureNavigation';
 import SEO from '../components/common/SEO';
+import CategoryIcon from '../components/common/CategoryIcon';
 import { isExternalUrl } from '../utils/urls';
 import { getStoreName } from '../utils/store';
-import { resolveShippingAnnouncement } from '../utils/shippingAnnouncement';
+import { isFreeShippingPromotion, resolveShippingAnnouncement } from '../utils/shippingAnnouncement';
 
 const DEFAULT_ACTIONS_ORDER = ['search', 'cart', 'wishlist', 'account'];
 
 const StoreLayout = () => {
   const { isAuthenticated, logout, hasAnyPermission, user } = useAuth();
-  const { settings } = useSettings();
+  const { settings, features } = useSettings();
   const { formatPrice } = useCurrency();
   const location = useLocation();
   const storeName = getStoreName(settings);
   const { cartCount } = useCart();
   const { wishlistCount } = useWishlist();
   const { error: categoryError } = useCategories();
-  const cartEnabled     = useFeature('cart');
+  const cartEnabled     = useFeatureVisible('cart', 'storefront');
   const wishlistEnabled = useFeature('wishlist');
-  const ordersEnabled   = useFeature('orders');
+  const ordersEnabled   = useFeatureVisible('orders', 'storefront');
+  const shippingVisible = useFeatureVisible('shipping', 'storefront');
   const [announcementDismissed, setAnnouncementDismissed] = useState(false);
   const [topLinks, setTopLinks] = useState([]);
   const [headerMenu, setHeaderMenu] = useState(null);
@@ -50,7 +53,6 @@ const StoreLayout = () => {
   const [isMobileSearchExpanded, setIsMobileSearchExpanded] = useState(false);
   const [logoLoadFailed, setLogoLoadFailed] = useState(false);
   const [accountMenuAnchor, setAccountMenuAnchor] = useState(null);
-  const adminEntryPath = getFirstAccessibleAdminPath(user);
   const canAccessAdmin = hasAnyPermission(ADMIN_ACCESS_PERMISSIONS);
   const isAuthPage = ['/login', '/register'].includes(location.pathname);
 
@@ -107,16 +109,17 @@ const StoreLayout = () => {
 
   const themeSettings = settings?.theme || {};
   const announcement = settings?.announcement || {};
-  const announcementText = resolveShippingAnnouncement({
+  const resolvedAnnouncementText = resolveShippingAnnouncement({
     announcement,
     shipping: settings?.shipping,
     formatPrice,
   });
+  const announcementText = shippingVisible || !isFreeShippingPromotion(resolvedAnnouncementText) ? resolvedAnnouncementText : '';
   const showAnnouncement = announcement.enabled && Boolean(announcementText) && !announcementDismissed;
   const navPosition  = nav.sticky !== false ? 'sticky' : 'static';
   const headerStyle = themeSettings.headerStyle || 'gradient';
   const hasDynamicHeaderItems = Array.isArray(headerMenu?.items) && headerMenu.items.length > 0;
-  const headerItems = hasDynamicHeaderItems
+  const headerItems = filterFeatureLinks(hasDynamicHeaderItems
     ? headerMenu.items
     : topLinks.map((link, index) => ({
         id: link.id,
@@ -126,7 +129,7 @@ const StoreLayout = () => {
         placement: 'center',
         sortOrder: index,
         children: [],
-      }));
+      })), features || {});
 
   const groupedHeaderItems = {
     left: headerItems.filter((item) => item.placement === 'left'),
@@ -142,7 +145,7 @@ const StoreLayout = () => {
   const headerAlignment = headerMenu?.alignment || 'left';
 
   const hasDedicatedMobileItems = Array.isArray(mobileMenu?.items) && mobileMenu.items.length > 0;
-  const mobileHeaderItems = hasDedicatedMobileItems ? mobileMenu.items : desktopHeaderItems;
+  const mobileHeaderItems = filterFeatureLinks(hasDedicatedMobileItems ? mobileMenu.items : desktopHeaderItems, features || {});
 
   const getLinkProps = (item) => {
     const url = item.url || '/';
@@ -187,6 +190,7 @@ const StoreLayout = () => {
           onClick={navigable ? () => closeDynamicMenu(parentId) : undefined}
           sx={{ pl: 2 + depth * 2 }}
         >
+          {item.icon && <CategoryIcon value={item.icon} size={20} />}
           {item.label}
         </MenuItem>
         {hasChildren && renderDynamicMenuItems(item.children, parentId, depth + 1)}
@@ -222,6 +226,7 @@ const StoreLayout = () => {
           >
             {isNavigableItem(item) && (
               <MenuItem {...getLinkProps(item)} onClick={() => closeDynamicMenu(item.id)} sx={{ fontWeight: 700 }}>
+                {item.icon && <CategoryIcon value={item.icon} size={20} />}
                 All {item.label}
               </MenuItem>
             )}
@@ -249,6 +254,7 @@ const StoreLayout = () => {
           '&:hover': { bgcolor: 'rgba(255,255,255,0.12)', opacity: 1 },
         }}
       >
+        {item.icon && <CategoryIcon value={item.icon} size={20} />}
         {item.label}
       </Button>
     );
@@ -265,6 +271,7 @@ const StoreLayout = () => {
           onClick={navigable ? closeMobileMenu : undefined}
           sx={{ pl: 2 + depth * 2, fontWeight: depth === 0 ? 700 : 400 }}
         >
+          {item.icon && <CategoryIcon value={item.icon} size={20} />}
           {item.label}
         </MenuItem>
         {hasChildren && renderMobileMenuItems(item.children, depth + 1)}

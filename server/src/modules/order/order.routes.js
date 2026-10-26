@@ -4,7 +4,9 @@ const orderController = require('./order.controller');
 const { validate } = require('../../middleware/validate.middleware');
 const { 
   placeOrderSchema, 
-  updateOrderStatusSchema, 
+  updateOrderStatusSchema,
+  updateOrderContactEmailSchema,
+  cancelOrderSchema,
   createFulfillmentSchema,
   updateFulfillmentStatusSchema,
   updateShipmentStatusSchema,
@@ -13,29 +15,47 @@ const {
   processRefundSchema,
   addOrderNoteSchema,
   listOrdersQuerySchema,
+  claimGuestOrdersSchema,
 } = require('./order.validation');
-const { authenticate } = require('../../middleware/auth.middleware');
-const { authorizePermissions } = require('../../middleware/role.middleware');
+const { authenticate, optionalAuth } = require('../../middleware/auth.middleware');
+const { authorizePermissions, authorizeAnyPermission } = require('../../middleware/role.middleware');
 const { auditLog } = require('../audit/audit.middleware');
 const { PERMISSIONS } = require('../../config/permissions');
 const { idParamSchema, idAndFulfillmentIdParamSchema } = require('../../utils/common.validation');
+const { guestOrderClaimLimiter } = require('../../middleware/rateLimiter.middleware');
 
 
 
-const { featureGate } = require('../../middleware/featureGate.middleware');
+const { featureGate, featureGateUnlessPermission } = require('../../middleware/featureGate.middleware');
 
-router.use(featureGate('orders'));
+router.post('/', featureGate('orders'), optionalAuth, (req, res, next) => {
+  if (req.user) {
+    return authorizePermissions(PERMISSIONS.CHECKOUT_SELF)(req, res, next);
+  }
+  next();
+}, validate(placeOrderSchema), orderController.placeOrder);
 
-router.post('/', authenticate, authorizePermissions(PERMISSIONS.CHECKOUT_SELF), validate(placeOrderSchema), orderController.placeOrder);
-
-router.get('/', authenticate, authorizePermissions(PERMISSIONS.ACCOUNT_SELF), validate(listOrdersQuerySchema, 'query'), orderController.getOrders);
-router.get('/:id/tracking', authenticate, authorizePermissions(PERMISSIONS.ACCOUNT_SELF), validate(idParamSchema, 'params'), orderController.getFulfillmentTracking);
-router.get('/:id', authenticate, authorizePermissions(PERMISSIONS.ACCOUNT_SELF), validate(idParamSchema, 'params'), orderController.getOrderById);
-router.post('/:id/cancel', authenticate, authorizePermissions(PERMISSIONS.ACCOUNT_SELF), validate(idParamSchema, 'params'), orderController.cancelOrder);
-router.post('/:id/returns', authenticate, authorizePermissions(PERMISSIONS.ACCOUNT_SELF), validate(createPutBackSchema), orderController.createReturnRequest);
-router.post('/:id/replacements', authenticate, authorizePermissions(PERMISSIONS.ACCOUNT_SELF), validate(createPutBackSchema), orderController.createReplacementRequest);
+router.get('/', authenticate, featureGateUnlessPermission('orders', PERMISSIONS.ORDERS_READ, PERMISSIONS.ORDERS_UPDATE_STATUS), authorizeAnyPermission(PERMISSIONS.ACCOUNT_SELF, PERMISSIONS.ORDERS_READ), validate(listOrdersQuerySchema, 'query'), orderController.getOrders);
+router.post('/guest-orders/claim/request', authenticate, authorizePermissions(PERMISSIONS.ACCOUNT_SELF), guestOrderClaimLimiter, orderController.requestGuestOrderClaim);
+router.post('/guest-orders/claim', authenticate, authorizePermissions(PERMISSIONS.ACCOUNT_SELF), validate(claimGuestOrdersSchema), orderController.claimGuestOrders);
+router.get('/:id/tracking', authenticate, featureGateUnlessPermission('orders', PERMISSIONS.ORDERS_READ, PERMISSIONS.ORDERS_UPDATE_STATUS), authorizeAnyPermission(PERMISSIONS.ACCOUNT_SELF, PERMISSIONS.ORDERS_READ), validate(idParamSchema, 'params'), orderController.getFulfillmentTracking);
+router.get('/:id', optionalAuth, featureGateUnlessPermission('orders', PERMISSIONS.ORDERS_READ, PERMISSIONS.ORDERS_UPDATE_STATUS), (req, res, next) => {
+  if (req.user) {
+    return authorizeAnyPermission(PERMISSIONS.ACCOUNT_SELF, PERMISSIONS.ORDERS_READ)(req, res, next);
+  }
+  next();
+}, validate(idParamSchema, 'params'), orderController.getOrderById);
+router.post('/:id/cancel', featureGate('orders'), optionalAuth, (req, res, next) => {
+  if (req.user) {
+    return authorizePermissions(PERMISSIONS.ACCOUNT_SELF)(req, res, next);
+  }
+  next();
+}, validate(idParamSchema, 'params'), validate(cancelOrderSchema), orderController.cancelOrder);
+router.post('/:id/returns', featureGate('orders'), authenticate, authorizePermissions(PERMISSIONS.ACCOUNT_SELF), validate(createPutBackSchema), orderController.createReturnRequest);
+router.post('/:id/replacements', featureGate('orders'), authenticate, authorizePermissions(PERMISSIONS.ACCOUNT_SELF), validate(createPutBackSchema), orderController.createReplacementRequest);
 
 // Admin
+router.patch('/:id/contact-email', authenticate, authorizePermissions(PERMISSIONS.ORDERS_UPDATE_STATUS), validate(idParamSchema, 'params'), validate(updateOrderContactEmailSchema), auditLog('Order'), orderController.updateContactEmail);
 router.put('/:id/status', authenticate, authorizePermissions(PERMISSIONS.ORDERS_UPDATE_STATUS), validate(idParamSchema, 'params'), validate(updateOrderStatusSchema), auditLog('Order'), orderController.updateStatus);
 router.post('/:id/refund', authenticate, authorizePermissions(PERMISSIONS.ORDERS_REFUND), validate(processRefundSchema), auditLog('Order'), orderController.processRefund);
 router.post('/:id/fulfillments', authenticate, authorizePermissions(PERMISSIONS.ORDERS_UPDATE_STATUS), validate(idParamSchema, 'params'), validate(createFulfillmentSchema), auditLog('Order'), orderController.createFulfillment);
@@ -46,4 +66,3 @@ router.post('/:id/history/notes', authenticate, authorizePermissions(PERMISSIONS
 
 
 module.exports = router;
-

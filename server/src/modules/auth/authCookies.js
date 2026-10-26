@@ -1,9 +1,16 @@
 'use strict';
 
+const jwt = require('jsonwebtoken');
 const { AUTH_TIME } = require('../../config/constants');
 
 const ACCESS_COOKIE = 'auth_access_token';
 const REFRESH_COOKIE = 'auth_refresh_token';
+const TRUSTED_DEVICE_COOKIE = 'trusted_device';
+
+const getJwtIssAud = () => ({
+  issuer: process.env.JWT_ISSUER || 'ecommerce-pro',
+  audience: process.env.JWT_AUDIENCE || 'ecommerce-pro-client',
+});
 
 const getCookieOptions = () => ({
     httpOnly: true,
@@ -45,12 +52,91 @@ const stripAuthTokens = (result) => {
     return safeResult;
 };
 
+const crypto = require('crypto');
+
+const getEncryptionKey = () => {
+    const secret = process.env.JWT_ACCESS_SECRET || 'default-fallback-jwt-secret-min-32-chars';
+    return crypto.createHash('sha256').update(secret).digest();
+};
+
+const encrypt = (plainText) => {
+    const iv = crypto.randomBytes(12);
+    const cipher = crypto.createCipheriv('aes-256-gcm', getEncryptionKey(), iv);
+    let encrypted = cipher.update(plainText, 'utf8', 'hex');
+    encrypted += cipher.final('hex');
+    const authTag = cipher.getAuthTag().toString('hex');
+    return `${iv.toString('hex')}:${authTag}:${encrypted}`;
+};
+
+const decrypt = (encryptedText) => {
+    try {
+        const parts = String(encryptedText || '').split(':');
+        if (parts.length !== 3) return null;
+        const [ivHex, authTagHex, dataHex] = parts;
+        const iv = Buffer.from(ivHex, 'hex');
+        const authTag = Buffer.from(authTagHex, 'hex');
+        const decipher = crypto.createDecipheriv('aes-256-gcm', getEncryptionKey(), iv);
+        decipher.setAuthTag(authTag);
+        let decrypted = decipher.update(dataHex, 'hex', 'utf8');
+        decrypted += decipher.final('utf8');
+        return decrypted;
+    } catch {
+        return null;
+    }
+};
+
+const getJwtSecret = () => process.env.JWT_ACCESS_SECRET || 'jwt-default-access-secret-32-chars-long';
+
+const createTrustedDeviceToken = (userId) => {
+    const { issuer, audience } = getJwtIssAud();
+    return jwt.sign({ id: userId, purpose: 'trusted_device' }, getJwtSecret(), {
+        expiresIn: '30d',
+        issuer,
+        audience,
+    });
+};
+
+const verifyTrustedDevice = (cookieValue, userId) => {
+    if (!cookieValue || !userId) return false;
+    try {
+        const decrypted = decrypt(cookieValue) || cookieValue;
+        const { issuer, audience } = getJwtIssAud();
+        const decoded = jwt.verify(decrypted, getJwtSecret(), {
+            algorithms: ['HS256'],
+            issuer,
+            audience,
+        });
+        return decoded.purpose === 'trusted_device' && decoded.id === userId;
+    } catch {
+        return false;
+    }
+};
+
+const setTrustedDeviceCookie = (res, userId) => {
+    const rawToken = createTrustedDeviceToken(userId);
+    res.cookie(TRUSTED_DEVICE_COOKIE, encrypt(rawToken), {
+        httpOnly: true,
+        secure: true,
+        sameSite: process.env.AUTH_COOKIE_SAMESITE || 'lax',
+        path: '/',
+        ...(process.env.AUTH_COOKIE_DOMAIN ? { domain: process.env.AUTH_COOKIE_DOMAIN } : {}),
+        maxAge: 30 * 24 * 60 * 60 * 1000,
+    });
+};
+
 module.exports = {
     ACCESS_COOKIE,
     REFRESH_COOKIE,
+    TRUSTED_DEVICE_COOKIE,
     clearAuthCookies,
     getAccessToken,
     getRefreshToken,
     setAuthCookies,
     stripAuthTokens,
+    createTrustedDeviceToken,
+    verifyTrustedDevice,
+    setTrustedDeviceCookie,
+    encrypt,
+    decrypt,
 };
+

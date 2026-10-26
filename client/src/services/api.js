@@ -1,4 +1,5 @@
 import axios from 'axios';
+import { getSessionId } from './session';
 
 const api = axios.create({
   baseURL: import.meta.env.VITE_API_URL || '/api',
@@ -24,6 +25,14 @@ const processQueue = (error, token = null) => {
 
 api.interceptors.request.use(
   (config) => {
+    try {
+      if (config && config.headers && !config.headers['X-Session-Id'] && !config.headers['x-session-id']) {
+        const sessionId = getSessionId();
+        if (sessionId) {
+          config.headers['X-Session-Id'] = sessionId;
+        }
+      }
+    } catch (_) {}
     return config;
   },
   (error) => {
@@ -38,7 +47,7 @@ api.interceptors.response.use(
   async (error) => {
     const originalRequest = error.config;
 
-    if (error.response?.status === 401 && !originalRequest._retry && !['/auth/login', '/auth/refresh', '/auth/logout'].includes(originalRequest.url)) {
+    if (error.response?.status === 401 && !originalRequest._retry && !['/auth/login', '/auth/refresh', '/auth/logout'].some((p) => originalRequest.url?.includes(p))) {
       if (isRefreshing) {
         return new Promise(function(resolve, reject) {
           failedQueue.push({ resolve, reject });

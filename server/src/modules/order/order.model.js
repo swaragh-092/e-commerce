@@ -10,6 +10,7 @@ const {
 
 module.exports = (sequelize, DataTypes) => {
     const Order = sequelize.define('Order', {
+        assignedUserId: { type: DataTypes.UUID, allowNull: true },
         id: {
             type: DataTypes.UUID,
             defaultValue: DataTypes.UUIDV4,
@@ -22,6 +23,14 @@ module.exports = (sequelize, DataTypes) => {
         },
         userId: {
             type: DataTypes.UUID,
+        },
+        guestSessionId: {
+            type: DataTypes.STRING(255),
+            allowNull: true,
+        },
+        guestEmail: {
+            type: DataTypes.STRING(255),
+            allowNull: true,
         },
         status: {
             type: DataTypes.STRING(30),
@@ -82,6 +91,16 @@ module.exports = (sequelize, DataTypes) => {
         checkoutSessionId: {
             type: DataTypes.UUID,
             allowNull: true,
+        },
+        idempotencyKey: {
+            type: DataTypes.STRING(36),
+            allowNull: true,
+            field: 'idempotency_key',
+        },
+        idempotencyPayloadHash: {
+            type: DataTypes.STRING(64),
+            allowNull: true,
+            field: 'idempotency_payload_hash',
         },
         shippingCurrency: {
             type: DataTypes.STRING(10),

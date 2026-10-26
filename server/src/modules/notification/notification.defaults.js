@@ -54,6 +54,17 @@ const EMAIL_WRAPPER = (content, footer = '') => `<!DOCTYPE html>
 </html>`;
 
 const DEFAULTS = {
+  guest_order_claim: {
+    subject: 'Link your guest orders to your account',
+    bodyHtml: EMAIL_WRAPPER(`
+      <h2>Confirm your guest orders</h2>
+      <p>Use this secure link to attach eligible guest checkouts made with your verified account email.</p>
+      <p>This link expires in {{expiry_minutes}} minutes and can be used once.</p>
+      <a href="{{claim_url}}" class="btn">Link guest orders</a>
+      <p>If you did not request this, you can ignore this email. Your orders will not change.</p>
+    `),
+    bodyText: 'Use this secure link to attach eligible guest checkouts to your account: {{claim_url}}\n\nIt expires in {{expiry_minutes}} minutes and can be used once. If you did not request this, ignore this email.',
+  },
   order_placed: {
     subject: 'Order Confirmed — #{{order_number}}',
     bodyHtml: EMAIL_WRAPPER(`
@@ -156,6 +167,19 @@ const DEFAULTS = {
     <p style="font-size:13px;color:#888">Questions? <a href="mailto:{{support_email}}">{{support_email}}</a></p>
 `, ''),
     bodyText: 'Hi {{customer_name}},\n\nRefund of {{refund_amount}} for order #{{order_number}} has been processed.\n\n{{store_name}}',
+  },
+
+  payment_failed_customer: {
+    subject: 'Payment failed for Order #{{order_number}}',
+    bodyHtml: EMAIL_WRAPPER(`
+    <h2>We couldn't process your payment</h2>
+    <p>Hi {{customer_name}}, payment for order <strong>#{{order_number}}</strong> could not be completed.</p>
+    {{#if failure_reason}}<div class="info-box"><p><strong>Reason:</strong> {{failure_reason}}</p></div>{{/if}}
+    <p>You can return to checkout and try another payment method.</p>
+    <a href="{{website_url}}/payment/failure?orderId={{order_id}}" class="btn">Review Payment</a>
+    <p style="font-size:13px;color:#888">Need help? <a href="mailto:{{support_email}}">{{support_email}}</a></p>
+`, ''),
+    bodyText: 'Hi {{customer_name}}, payment for order #{{order_number}} could not be completed. {{#if failure_reason}}Reason: {{failure_reason}}. {{/if}}Review payment: {{website_url}}/payment/failure?orderId={{order_id}}\n\n{{store_name}}',
   },
 
   welcome: {
@@ -370,30 +394,91 @@ const DEFAULTS = {
 `, ''),
     bodyText: 'Hi {{customerName}},\n\n{{replyMessage}}\n\n---\nYour original message:\n{{message}}\n\n{{store_name}}',
   },
+
+  new_login_alert: {
+    subject: 'New login to your account — {{store_name}}',
+    bodyHtml: EMAIL_WRAPPER(`
+    <h2>New Login Detected ⚠️</h2>
+    <p>Hi {{name}},</p>
+    <p>We detected a new login to your account on <strong>{{store_name}}</strong>.</p>
+    <div class="info-box">
+      <p><strong>Device / Browser:</strong> {{device}}</p>
+      <p><strong>IP Address:</strong> {{ip}}</p>
+      <p><strong>Time:</strong> {{time}}</p>
+    </div>
+    <p>If this was you, you can safely ignore this email.</p>
+    <p><strong>If you did not log in</strong>, please change your password immediately and review your account security.</p>
+    <a href="{{website_url}}/forgot-password" class="btn">Secure Your Account</a>
+    <hr class="divider">
+    <p style="font-size:13px;color:#888">Need help? <a href="mailto:{{support_email}}">{{support_email}}</a></p>
+`, ''),
+    bodyText: 'Hi {{name}},\n\nNew login detected to your account:\nDevice: {{device}}\nIP: {{ip}}\nTime: {{time}}\n\nIf this was not you, change your password immediately: {{website_url}}/forgot-password\n\n{{store_name}}',
+  },
+
+  account_deletion_scheduled: {
+    subject: 'Your account is scheduled for deletion — {{store_name}}',
+    bodyHtml: EMAIL_WRAPPER(`
+    <h2>Account Scheduled for Deletion ⚠️</h2>
+    <p>Hi {{name}},</p>
+    <p>Your account on <strong>{{store_name}}</strong> is scheduled for permanent deletion.</p>
+    <div class="info-box">
+      <p><strong>Deletion Date:</strong> {{deletion_date}}</p>
+    </div>
+    <p>All your account data, order history, and preferences will be permanently removed.</p>
+    <p>If you changed your mind, you can cancel the deletion anytime before that date:</p>
+    <a href="{{cancel_url}}" class="btn">Cancel Deletion</a>
+    <hr class="divider">
+    <p style="font-size:13px;color:#888">Need help? <a href="mailto:{{support_email}}">{{support_email}}</a></p>
+`, ''),
+    bodyText: 'Hi {{name}},\n\nYour account is scheduled for permanent deletion on {{deletion_date}}.\n\nTo cancel: {{cancel_url}}\n\n{{store_name}}',
+  },
+
+  email_change_verification: {
+    subject: 'Confirm your new email address — {{store_name}}',
+    bodyHtml: EMAIL_WRAPPER(`
+    <h2>Confirm Your New Email ✉️</h2>
+    <p>Hi {{name}},</p>
+    <p>Please click the button below to confirm this as your new email address for <strong>{{store_name}}</strong>.</p>
+    <div class="info-box">
+      <p>This verification link expires in 24 hours.</p>
+    </div>
+    <a href="{{verify_url}}" class="btn">Confirm Email Address</a>
+    <hr class="divider">
+    <p style="font-size:13px;color:#888">If you did not request this change, you can safely ignore this email.</p>
+`, ''),
+    bodyText: 'Hi {{name}},\n\nConfirm your new email: {{verify_url}}\n\nThis link expires in 24 hours.\n\n{{store_name}}',
+  },
 };
 
 const TEMPLATE_VARIABLES = {
-  order_placed:      ['customer_name','order_number','order_date','order_id','order_total','order_subtotal','shipping_total','tax_total','discount_total','payment_method','items','website_url','store_name','support_email'],
-  order_shipped:     ['customer_name','order_number','order_id','tracking_number','tracking_url','courier','items','order_total','website_url','store_name','support_email'],
-  order_delivered:   ['customer_name','order_number','order_id','items','order_total','website_url','store_name','support_email'],
-  order_out_for_delivery: ['customer_name','order_number','order_id','items','order_total','website_url','store_name','support_email'],
-  order_cancelled:   ['customer_name','order_number','cancel_reason','refund_amount','items','order_total','website_url','store_name','support_email'],
-  order_refunded:    ['customer_name','order_number','order_id','refund_amount','items','order_total','website_url','store_name','support_email'],
-  welcome:           ['name','website_url','store_name','support_email'],
-  email_verification:['name','verify_url','store_name','support_email'],
-  password_reset:    ['name','reset_url','store_name','support_email'],
-  low_stock_alert:   ['productName','sku','stock','website_url','store_name','support_email'],
-  low_stock_admin:   ['productName','sku','stock','website_url','store_name','support_email'],
-  inventory_alert_digest: ['alerts','alert_count','out_of_stock_count','isTest','website_url','store_name','support_email'],
-  admin_new_order:      ['customer_name','customer_email','order_number','order_date','order_id','order_total','order_subtotal','shipping_total','tax_total','discount_total','payment_method','items','website_url','store_name','support_email'],
-  admin_order_cancelled:['customer_name','customer_email','order_number','order_id','cancel_reason','refund_amount','items','order_total','website_url','store_name','support_email'],
-  admin_order_failed:   ['customer_name','customer_email','order_number','order_date','order_id','order_total','payment_method','failure_reason','items','website_url','store_name','support_email'],
-  new_enquiry_admin:    ['customerName','customerEmail','customerPhone','productName','productSku','quantity','cartItems','message','website_url','store_name','support_email'],
-  new_enquiry_customer: ['customerName','productName','cartItems','message','website_url','store_name','support_email'],
-  enquiry_reply_customer: ['customerName','productName','message','replyMessage','website_url','store_name','support_email'],
+  guest_order_claim: ['customer_name','claim_url','expiry_minutes','website_url','store_name','support_email','store_logo','copyright','current_year'],
+  order_placed:      ['customer_name','order_number','order_date','order_id','order_total','order_subtotal','shipping_total','tax_total','discount_total','payment_method','items','website_url','store_name','support_email','store_logo','copyright','current_year'],
+  order_shipped:     ['customer_name','order_number','order_id','tracking_number','tracking_url','courier','items','order_total','website_url','store_name','support_email','store_logo','copyright','current_year'],
+  order_delivered:   ['customer_name','order_number','order_id','items','order_total','website_url','store_name','support_email','store_logo','copyright','current_year'],
+  order_out_for_delivery: ['customer_name','order_number','order_id','items','order_total','website_url','store_name','support_email','store_logo','copyright','current_year'],
+  order_cancelled:   ['customer_name','order_number','cancel_reason','refund_amount','items','order_total','website_url','store_name','support_email','store_logo','copyright','current_year'],
+  order_refunded:    ['customer_name','order_number','order_id','refund_amount','items','order_total','website_url','store_name','support_email','store_logo','copyright','current_year'],
+  payment_failed_customer: ['customer_name','order_number','order_id','failure_reason','website_url','store_name','support_email','store_logo','copyright','current_year'],
+  welcome:           ['name','website_url','store_name','support_email','store_logo','copyright','current_year'],
+  email_verification:['name','verify_url','store_name','support_email','store_logo','copyright','current_year'],
+  password_reset:    ['name','reset_url','store_name','support_email','store_logo','copyright','current_year'],
+  low_stock_alert:   ['productName','sku','stock','website_url','store_name','support_email','store_logo','copyright','current_year'],
+  low_stock_admin:   ['productName','sku','stock','website_url','store_name','support_email','store_logo','copyright','current_year'],
+  inventory_alert_digest: ['alerts','alert_count','out_of_stock_count','isTest','website_url','store_name','support_email','store_logo','copyright','current_year'],
+  admin_new_order:      ['customer_name','customer_email','order_number','order_date','order_id','order_total','order_subtotal','shipping_total','tax_total','discount_total','payment_method','items','website_url','store_name','support_email','store_logo','copyright','current_year'],
+  admin_order_cancelled:['customer_name','customer_email','order_number','order_id','cancel_reason','refund_amount','items','order_total','website_url','store_name','support_email','store_logo','copyright','current_year'],
+  admin_order_failed:   ['customer_name','customer_email','order_number','order_date','order_id','order_total','payment_method','failure_reason','items','website_url','store_name','support_email','store_logo','copyright','current_year'],
+  new_enquiry_admin:    ['customerName','customerEmail','customerPhone','productName','productSku','quantity','cartItems','message','website_url','store_name','support_email','store_logo','copyright','current_year'],
+  new_enquiry_customer: ['customerName','productName','cartItems','message','website_url','store_name','support_email','store_logo','copyright','current_year'],
+  enquiry_reply_customer: ['customerName','productName','message','replyMessage','website_url','store_name','support_email','store_logo','copyright','current_year'],
+  new_login_alert: ['name', 'device', 'ip', 'time', 'website_url', 'store_name', 'support_email', 'store_logo', 'copyright', 'current_year'],
+  account_deletion_scheduled: ['name', 'deletion_date', 'cancel_url', 'website_url', 'store_name', 'support_email', 'store_logo', 'copyright', 'current_year'],
+  email_change_verification: ['name', 'verify_url', 'website_url', 'store_name', 'support_email', 'store_logo', 'copyright', 'current_year'],
 };
 
 const SAMPLE_VARIABLES = {
+  claim_url: 'https://store.example.com/account/orders/link-guest?token=sample-token',
+  expiry_minutes: 30,
   customer_name: 'Jane Doe',
   customer_email: 'jane@example.com',
   name: 'Jane Doe',
@@ -434,6 +519,11 @@ const SAMPLE_VARIABLES = {
   store_logo: null,
   copyright: `© ${new Date().getFullYear()} My Store. All rights reserved.`,
   current_year: new Date().getFullYear(),
+  device: 'Chrome on macOS (Desktop)',
+  ip: '192.168.1.1',
+  time: new Date().toLocaleString(),
+  deletion_date: new Date(Date.now() + 14 * 24 * 60 * 60 * 1000).toLocaleDateString(),
+  cancel_url: 'http://localhost:3000/account/cancel-deletion?token=sample-token',
   items: [
     { name: 'Wireless Headphones Pro', variant: 'Color: Black', quantity: 1, price: '₹899.00', subtotal: '₹899.00' },
     { name: 'USB-C Cable 2m', variant: null, quantity: 2, price: '₹100.00', subtotal: '₹200.00' },
@@ -444,4 +534,8 @@ const SAMPLE_VARIABLES = {
   ],
 };
 
+const lifecycleDefaults = require('./notification.lifecycleDefaults');
+Object.assign(DEFAULTS, lifecycleDefaults.buildDefaults(EMAIL_WRAPPER));
+Object.assign(TEMPLATE_VARIABLES, lifecycleDefaults.TEMPLATE_VARIABLES);
+Object.assign(SAMPLE_VARIABLES, { request_type: 'return', reason: 'Item did not fit', status_label: 'approved', resolution_notes: 'Follow the pickup instructions in your order.', new_email: 'new@example.com', setup_url: '#setup', enquiry_id: 'preview-enquiry', unsubscribe_url: '#unsubscribe', campaign_subject: 'Latest store updates', campaign_message: 'Explore our newest products and offers.' });
 module.exports = { DEFAULTS, TEMPLATE_VARIABLES, SAMPLE_VARIABLES };

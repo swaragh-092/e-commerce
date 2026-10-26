@@ -2,7 +2,7 @@ import React from 'react';
 import { Box, Button, Card, CardActionArea, Skeleton, Typography } from '@mui/material';
 import ArrowForwardIcon from '@mui/icons-material/ArrowForward';
 import { Link } from 'react-router-dom';
-import { getOptimizedMediaUrl, imageLoadingProps } from '../../../utils/media';
+import { getOptimizedMediaUrl, imageLoadingProps, onImageError, PLACEHOLDER_CATEGORY } from '../../../utils/media';
 import { useComponentStyles } from '../../../hooks/useSettings';
 import { resolveRadius, resolveShadow } from '../../../utils/styleMaps';
 import { CanvasEditableText, CanvasEditableImage } from './SectionFallback';
@@ -183,24 +183,24 @@ const CategorySection = ({
                         seedPatch={seedPatch}
                         sx={{ width: '100%', height: '100%' }}
                       >
-                        {tile.image ? (
-                          <Box component="img" src={imageUrl(tile.image)} alt={tile.title} {...imageLoadingProps()} sx={{ width: '100%', height: '100%', objectFit: categoryCardStyle.imageFit || 'cover', transition: 'transform 0.35s ease' }} />
-                        ) : (
-                          <Box sx={{ width: '100%', height: '100%', display: 'grid', placeItems: 'center', bgcolor: 'action.hover' }}>
-                            <Typography variant="caption" sx={{ fontWeight: 950, color: 'text.secondary', visibility: isOverlay ? 'hidden' : 'visible' }}>
-                              {tile.title}
-                            </Typography>
-                          </Box>
-                        )}
+                        <Box
+                          component="img"
+                          src={tile.image ? imageUrl(tile.image) : PLACEHOLDER_CATEGORY}
+                          alt={tile.title}
+                          {...imageLoadingProps()}
+                          onError={onImageError(PLACEHOLDER_CATEGORY)}
+                          sx={{ width: '100%', height: '100%', objectFit: categoryCardStyle.imageFit || 'cover', transition: 'transform 0.35s ease' }}
+                        />
                       </CanvasEditableImage>
                     ) : (
-                      tile.image ? (
-                        <Box component="img" src={imageUrl(tile.image)} alt={tile.title} {...imageLoadingProps()} sx={{ width: '100%', height: '100%', objectFit: categoryCardStyle.imageFit || 'cover', transition: 'transform 0.35s ease' }} />
-                      ) : (
-                        <Typography variant="h4" sx={{ fontWeight: 950, color: 'primary.main', visibility: isOverlay ? 'hidden' : 'visible' }}>
-                          {tile.title?.[0] || '?'}
-                        </Typography>
-                      )
+                      <Box
+                        component="img"
+                        src={tile.image ? imageUrl(tile.image) : PLACEHOLDER_CATEGORY}
+                        alt={tile.title}
+                        {...imageLoadingProps()}
+                        onError={onImageError(PLACEHOLDER_CATEGORY)}
+                        sx={{ width: '100%', height: '100%', objectFit: categoryCardStyle.imageFit || 'cover', transition: 'transform 0.35s ease' }}
+                      />
                     )}
                     {isOverlay && (
                       <Box sx={{ position: 'absolute', inset: 0, display: 'flex', alignItems: titlePlacement === 'centered' ? 'center' : 'flex-end', justifyContent: 'center', p: 1.25, background: 'linear-gradient(180deg, transparent 0%, var(--store-overlay-dark, rgba(15, 23, 42, 0.72)) 100%)' }}>

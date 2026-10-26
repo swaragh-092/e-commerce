@@ -20,6 +20,7 @@ module.exports = (sequelize, DataTypes) => {
             type: DataTypes.DATE,
             allowNull: false,
         },
+        purpose: { type: DataTypes.STRING(30), allowNull: false, defaultValue: 'password_reset', validate: { isIn: [['password_reset', 'staff_invitation']] } },
     }, {
         tableName: 'password_reset_tokens',
         timestamps: true,

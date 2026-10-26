@@ -5,7 +5,7 @@ import PageSEO from '../../components/common/PageSEO';
 import ProductGrid from '../../components/product/ProductGrid';
 import { getProducts } from '../../services/productService';
 import brandService from '../../services/brandService';
-import { getMediaUrl } from '../../utils/media';
+import { getMediaUrl, onImageError, PLACEHOLDER_BRAND } from '../../utils/media';
 import { useSettings } from '../../hooks/useSettings';
 
 const BrandDetailPage = () => {
@@ -143,7 +143,7 @@ const BrandDetailPage = () => {
               }}
             >
               {brandImageUrl ? (
-                <Box component="img" src={brandImageUrl} alt={brand?.name} sx={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                <Box component="img" src={brandImageUrl} alt={brand?.name} onError={onImageError(PLACEHOLDER_BRAND)} sx={{ width: '100%', height: '100%', objectFit: 'cover' }} />
               ) : (
                 <Typography variant="h2" fontWeight={800} color="text.secondary">
                   {brand?.name?.[0]?.toUpperCase() || 'B'}

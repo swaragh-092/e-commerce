@@ -30,6 +30,17 @@ describe('Order workflow - COD payment rules', () => {
         })).toBe(true);
     });
 
+    it('allows closing COD orders when shipment returns to origin (RTO)', () => {
+        const order = {
+            paymentMethod: 'cod',
+            paymentStatus: 'pending_cod',
+            orderShippingStatus: 'rto',
+            total: 100,
+        };
+
+        expect(canCloseOrder({ order, orderShippingStatus: 'rto' })).toBe(true);
+    });
+
     it('allows only the guarded pending_cod to paid_cod payment transition', () => {
         expect(normalizePaymentStatus('pending', 'cod')).toBe('pending_cod');
         expect(getAllowedNextStatuses('payment', 'pending_cod')).toEqual(['paid_cod']);

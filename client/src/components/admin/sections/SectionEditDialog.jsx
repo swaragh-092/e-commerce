@@ -114,7 +114,7 @@ const SectionEditDialog = ({ open, section, onClose, onSave }) => {
         </Stack>
       </DialogContent>
       <DialogActions>
-        <Button onClick={onClose}>Cancel</Button>
+        <Button color="error" onClick={onClose}>Cancel</Button>
         <Button variant="contained" onClick={() => onSave(form)}>Save</Button>
       </DialogActions>
     </Dialog>

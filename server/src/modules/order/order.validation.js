@@ -1,5 +1,7 @@
 'use strict';
 const Joi = require('joi');
+const CANCELLATION_REASONS = require('../../../../shared/cancellation-reasons.json');
+const { isGuestSessionId } = require('../../utils/guestSession');
 const {
     ORDER_STATUS_VALUES,
     SHIPMENT_STATUS_VALUES,
@@ -10,13 +12,16 @@ const {
 } = require('../../utils/orderWorkflow');
 
 const placeOrderSchema = Joi.object({
-    shippingAddressId: Joi.string().uuid().required(),
+    shippingAddressId: Joi.string().uuid().optional().allow(null, ''),
     couponCode: Joi.string().max(50).uppercase().optional().allow(null, ''),
     couponCodes: Joi.array().items(Joi.string().max(50).uppercase()).optional().default([]),
     notes: Joi.string().allow(null, ''),
     paymentMethod: Joi.string().valid('razorpay', 'stripe', 'payu', 'cashfree', 'cod').default('razorpay'),
     shippingQuoteId: Joi.string().uuid().optional(),
     checkoutSessionId: Joi.string().uuid().optional(),
+    idempotencyKey: Joi.string().uuid().optional(),
+    sessionId: Joi.string().custom((value, helpers) => isGuestSessionId(value) ? value : helpers.error('string.guid')).optional(),
+    guestEmail: Joi.string().trim().email().max(255).optional(),
     buyNowItem: Joi.object({
         productId: Joi.string().uuid().required(),
         variantId: Joi.string().uuid().allow(null),
@@ -27,16 +32,37 @@ const placeOrderSchema = Joi.object({
 const updateOrderStatusSchema = Joi.object({
     status: Joi.string().valid(...ORDER_STATUS_VALUES).required()
 });
+const updateOrderContactEmailSchema = Joi.object({
+    email: Joi.string().trim().email().max(255).required(),
+});
+const cancelOrderSchema = Joi.object({
+    reason: Joi.string().valid(...Object.keys(CANCELLATION_REASONS)).required(),
+    reasonDetails: Joi.string().trim().max(500).allow('').when('reason', {
+        is: 'other',
+        then: Joi.string().trim().min(3).max(500).required(),
+        otherwise: Joi.optional(),
+    }),
+});
 
-const FULFILLMENT_STATUS_VALUES = ['pending', ...SHIPMENT_STATUS_VALUES];
+const FULFILLMENT_STATUS_VALUES = ['pending', ...SHIPMENT_STATUS_VALUES.filter((status) => status !== 'cancelled')];
 
 const createFulfillmentSchema = Joi.object({
     trackingNumber: Joi.string().max(255).allow(null, ''),
+    trackingUrl: Joi.string().uri().max(500).allow(null, '').optional(),
     courier: Joi.string().max(100).allow(null, ''),
     expectedDeliveryDate: Joi.date().iso().allow(null).optional(),
     notes: Joi.string().allow(null, ''),
     status: Joi.string().valid(...FULFILLMENT_STATUS_VALUES).default('pending'),
-    providerId: Joi.string().uuid().allow(null).optional(),
+    providerId: Joi.alternatives().try(Joi.string().uuid(), Joi.string().valid('manual')).allow(null).optional(),
+    plannedParcelId: Joi.string().max(100).allow(null, '').optional(),
+    manualPackage: Joi.object({
+        packageName: Joi.string().max(100).allow(null, ''),
+        lengthCm: Joi.number().greater(0.5).required(),
+        breadthCm: Joi.number().greater(0.5).required(),
+        heightCm: Joi.number().greater(0.5).required(),
+        actualWeightGrams: Joi.number().greater(0).required(),
+        weightConfirmed: Joi.boolean().optional(),
+    }).optional(),
     items: Joi.array().items(Joi.object({
         orderItemId: Joi.string().uuid().required(),
         quantity: Joi.number().integer().min(1).required(),
@@ -78,6 +104,8 @@ const processRefundSchema = Joi.object({
     amount: Joi.number().positive().optional(),
     status: Joi.string().valid(...REFUND_STATUS_VALUES).optional(),
     providerRefundId: Joi.string().max(255).allow(null, '').optional(),
+    offlineRefundConfirmed: Joi.boolean().optional(),
+    offlineRefundReference: Joi.string().max(255).trim().allow('', null).optional(),
     reason: Joi.string().allow(null, '').optional(),
     metadata: Joi.object().unknown(true).optional(),
 });
@@ -105,9 +133,15 @@ const listOrdersQuerySchema = Joi.object({
     productId: Joi.string().uuid().optional(),
 });
 
+const claimGuestOrdersSchema = Joi.object({
+    token: Joi.string().hex().length(64).required(),
+});
+
 module.exports = {
     placeOrderSchema,
     updateOrderStatusSchema,
+    updateOrderContactEmailSchema,
+    cancelOrderSchema,
     createFulfillmentSchema,
     updateFulfillmentStatusSchema,
     updateShipmentStatusSchema,
@@ -116,4 +150,5 @@ module.exports = {
     processRefundSchema,
     addOrderNoteSchema,
     listOrdersQuerySchema,
+    claimGuestOrdersSchema,
 };

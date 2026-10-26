@@ -27,6 +27,9 @@ const PROVIDER_MAP = {
     // delhivery:  DelhiveryProvider,  // add when ready
 };
 
+const logger = require('../../../utils/logger');
+const AppError = require('../../../utils/AppError');
+
 /**
  * Resolve a ShippingProvider DB record to its adapter instance.
  *
@@ -35,7 +38,11 @@ const PROVIDER_MAP = {
  */
 const resolveProvider = (providerRecord) => {
     const code = (providerRecord?.code || 'default').toLowerCase();
-    const AdapterClass = PROVIDER_MAP[code] || ManualProvider;
+    const AdapterClass = PROVIDER_MAP[code];
+    if (!AdapterClass) {
+        logger.error(`[ShippingProviderRegistry] Unknown or unmapped shipping provider code: "${code}".`);
+        throw new AppError('SHIPPING_PROVIDER_NOT_FOUND', 500, `Shipping provider adapter not found for code: "${code}"`);
+    }
     return new AdapterClass(providerRecord);
 };
 

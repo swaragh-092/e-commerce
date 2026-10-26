@@ -4,12 +4,24 @@ const { success, paginated } = require('../../utils/response');
 const { PERMISSIONS, getPermissionsForUser } = require('../../config/permissions');
 const AppError = require('../../utils/AppError');
 const logger = require('../../utils/logger');
+const { isGuestSessionId } = require('../../utils/guestSession');
 
 const hasOrderAdminAccess = (user) => getPermissionsForUser(user).includes(PERMISSIONS.ORDERS_READ);
 
 const placeOrder = async (req, res, next) => {
   try {
-    const result = await OrderService.placeOrder(req.user.id, req.validated);
+    const idempotencyHeader = req.get('Idempotency-Key');
+    if (idempotencyHeader && !/^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(idempotencyHeader)) {
+      throw new AppError('VALIDATION_ERROR', 400, 'Idempotency-Key must be a UUID.');
+    }
+    if (idempotencyHeader && req.validated.idempotencyKey && idempotencyHeader.toLowerCase() !== req.validated.idempotencyKey.toLowerCase()) {
+      throw new AppError('VALIDATION_ERROR', 400, 'The Idempotency-Key header and request body must match.');
+    }
+    const result = await OrderService.placeOrder(req.user?.id || null, {
+      ...req.validated,
+      idempotencyKey: req.validated.idempotencyKey || idempotencyHeader || req.validated.checkoutSessionId || null,
+      sessionId: req.validated.sessionId || req.headers['x-session-id'] || null,
+    });
     return success(res, result, 'Order placed successfully', 201);
   } catch (err) {
     next(err);
@@ -46,11 +58,42 @@ const getOrders = async (req, res, next) => {
   }
 };
 
+const requestGuestOrderClaim = async (req, res, next) => {
+  try {
+    const result = await OrderService.requestGuestOrderClaim(req.user.id);
+    return success(res, result, result.message);
+  } catch (err) {
+    next(err);
+  }
+};
+
+const claimGuestOrders = async (req, res, next) => {
+  try {
+    const result = await OrderService.claimGuestOrders(req.user.id, req.validated.token);
+    return success(res, result, `${result.linkedCount} guest order${result.linkedCount === 1 ? '' : 's'} linked to your account.`);
+  } catch (err) {
+    next(err);
+  }
+};
+
 const getOrderById = async (req, res, next) => {
   try {
     const isAdminSession = hasOrderAdminAccess(req.user);
-    const order = await OrderService.getOrderById(req.params.id, req.user.id, isAdminSession);
+    const guestSessionId = req.headers['x-session-id'] || req.cookies?.sessionId || null;
+    if (!req.user && !isAdminSession && !isGuestSessionId(guestSessionId)) {
+      throw new AppError('UNAUTHORIZED', 401, 'A valid guest checkout session is required to view this order');
+    }
+    const order = await OrderService.getOrderById(req.params.id, req.user?.id || null, isAdminSession, guestSessionId);
     return success(res, order);
+  } catch (err) {
+    next(err);
+  }
+};
+
+const updateContactEmail = async (req, res, next) => {
+  try {
+    const order = await OrderService.updateContactEmail(req.params.id, req.validated.email);
+    return success(res, order, 'Guest email updated');
   } catch (err) {
     next(err);
   }
@@ -83,7 +126,11 @@ const updateStatus = async (req, res, next) => {
 
 const cancelOrder = async (req, res, next) => {
   try {
-    const order = await OrderService.cancelOrder(req.params.id, req.user.id);
+    const guestSessionId = req.headers['x-session-id'] || req.cookies?.sessionId || null;
+    if (!req.user && !isGuestSessionId(guestSessionId)) {
+      throw new AppError('UNAUTHORIZED', 401, 'A valid guest checkout session is required to cancel this order');
+    }
+    const order = await OrderService.cancelOrder(req.params.id, req.user?.id || null, req.validated, guestSessionId);
     return success(res, order, 'Order cancelled');
   } catch (err) {
     next(err);
@@ -107,7 +154,14 @@ const createFulfillment = async (req, res, next) => {
   try {
     const auditContext = { userId: req.user?.id, ip: req.ip, userAgent: req.get('User-Agent'), method: req.method, path: req.originalUrl };
     const fulfillment = await OrderService.createFulfillment(req.params.id, req.validated, req.user.id, auditContext);
-    return success(res, fulfillment, 'Shipment created successfully', 201);
+    const shipments = fulfillment?.fulfillment?.shipments || fulfillment?.shipments || [];
+    const states = shipments.map((shipment) => shipment.providerState).filter(Boolean);
+    const message = states.includes('failed')
+      ? 'Shipment saved, but carrier booking failed. Review the shipment error and retry if appropriate.'
+      : states.some((state) => ['pending', 'retrying'].includes(state))
+        ? 'Shipment saved. Carrier booking is still pending; check the shipment status before taking action.'
+        : 'Shipment created and carrier booking completed.';
+    return success(res, fulfillment, message, 201);
   } catch (err) {
     next(err);
   }
@@ -192,7 +246,14 @@ const processRefund = async (req, res, next) => {
     const isAdmin = hasOrderAdminAccess(req.user);
     const auditContext = { userId: req.user?.id, ip: req.ip, userAgent: req.get('User-Agent'), method: req.method, path: req.originalUrl };
     const result = await OrderService.processRefund(req.params.id, req.validated, req.user.id, isAdmin, auditContext);
-    return success(res, result, 'Refund processed', 201);
+    req._auditAction = 'STATUS_CHANGE';
+    req._auditChanges = { status: result.status, amount: result.amount, providerRefundId: result.providerRefundId || null };
+    const message = result.status === 'refund_processing'
+      ? 'Refund request accepted by the provider and is still processing.'
+      : result.metadata?.refundMethod === 'offline'
+        ? 'Offline refund recorded with the submitted transfer reference.'
+        : 'Refund confirmed by the provider.';
+    return success(res, result, message, 201);
   } catch (err) {
     next(err);
   }
@@ -213,8 +274,11 @@ const addNote = async (req, res, next) => {
 
 module.exports = {
   placeOrder,
+  requestGuestOrderClaim,
+  claimGuestOrders,
   getOrders,
   getOrderById,
+  updateContactEmail,
   getFulfillmentTracking,
   updateStatus,
   cancelOrder,

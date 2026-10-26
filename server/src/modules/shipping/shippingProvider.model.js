@@ -82,7 +82,7 @@ module.exports = (sequelize, DataTypes) => {
             allowNull: true,
         },
         webhookSecret: {
-            type: DataTypes.STRING(255),
+            type: DataTypes.TEXT,
             allowNull: true,
         },
         settings: {

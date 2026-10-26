@@ -19,6 +19,9 @@ module.exports = (sequelize, DataTypes) => {
             type: DataTypes.UUID,
             allowNull: true,
         },
+        plannedParcelId: DataTypes.STRING(100),
+        packageProfileId: DataTypes.STRING(100),
+        packageName: DataTypes.STRING(100),
         providerOrderId: DataTypes.STRING(255),
         providerShipmentId: DataTypes.STRING(255),
         providerRequestId: DataTypes.STRING(255),
@@ -37,6 +40,10 @@ module.exports = (sequelize, DataTypes) => {
         labelUrl: DataTypes.STRING(500),
         manifestUrl: DataTypes.STRING(500),
         invoiceUrl: DataTypes.STRING(500),
+        codCollectableAmount: {
+            type: DataTypes.DECIMAL(10, 2),
+            allowNull: true,
+        },
         status: {
             type: DataTypes.STRING(50),
             defaultValue: 'created',

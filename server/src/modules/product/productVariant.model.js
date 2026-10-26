@@ -45,6 +45,26 @@ module.exports = (sequelize, DataTypes) => {
             type: DataTypes.INTEGER,
             defaultValue: 0,
         },
+        weightGrams: {
+            type: DataTypes.DECIMAL(10, 2),
+            allowNull: true,
+            field: 'weight_grams',
+        },
+        lengthCm: {
+            type: DataTypes.DECIMAL(10, 2),
+            allowNull: true,
+            field: 'length_cm',
+        },
+        breadthCm: {
+            type: DataTypes.DECIMAL(10, 2),
+            allowNull: true,
+            field: 'breadth_cm',
+        },
+        heightCm: {
+            type: DataTypes.DECIMAL(10, 2),
+            allowNull: true,
+            field: 'height_cm',
+        },
     }, {
         tableName: 'product_variants',
         timestamps: true,

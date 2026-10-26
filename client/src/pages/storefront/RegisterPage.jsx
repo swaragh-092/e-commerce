@@ -1,16 +1,20 @@
 import { useState } from 'react';
-import { Box, Typography, TextField, Button, Alert, useTheme, IconButton, InputAdornment, Divider, CircularProgress } from '@mui/material';
+import { Box, Typography, TextField, Button, Alert, useTheme, IconButton, InputAdornment, Divider, CircularProgress, Checkbox, FormControlLabel } from '@mui/material';
 import { useNavigate, Link as RouterLink } from 'react-router-dom';
 import { useAuth } from '../../hooks/useAuth';
 import { validateEmail, validatePassword, validateRequired, getPasswordChecks } from '../../utils/authValidation';
 import { getApiErrorMessage } from '../../utils/apiErrors';
 import { EmailOutlined, LockOutlined, PersonOutline, Visibility, VisibilityOff } from '@mui/icons-material';
 import AuthPageShell from '../../components/storefront/AuthPageShell';
+import newsletterService from '../../services/newsletterService';
+import { useSettings } from '../../hooks/useSettings';
 
 const RegisterPage = () => {
   const theme = useTheme();
   const navigate = useNavigate();
   const { register } = useAuth();
+  const { settings, features } = useSettings();
+  const newsletterEnabled = features?.newsletter === true && settings?.auth?.registerNewsletterEnabled !== false;
   
   const [formData, setFormData] = useState({ firstName: '', lastName: '', email: '', password: '', confirmPassword: '' });
   const [fieldErrors, setFieldErrors] = useState({});
@@ -19,6 +23,7 @@ const RegisterPage = () => {
   const [touched, setTouched] = useState({});
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
+  const [newsletterOptIn, setNewsletterOptIn] = useState(false);
 
   const validateForm = (values) => ({
     firstName: validateRequired(values.firstName, 'First name'),
@@ -95,21 +100,37 @@ const RegisterPage = () => {
     setError('');
     const nextErrors = validateForm(formData);
     setFieldErrors(nextErrors);
+    setTouched({ firstName: true, lastName: true, email: true, password: true, confirmPassword: true });
 
-    // if (Object.values(nextErrors).some(Boolean)) {
-    //     return setError('Please fix the highlighted fields.');
-    // }
+    if (Object.values(nextErrors).some(Boolean)) {
+        return setError('Please fix the highlighted fields.');
+    }
 
     setLoading(true);
 
     try {
-      await register({
+      const result = await register({
           firstName: formData.firstName,
           lastName: formData.lastName,
           email: formData.email,
           password: formData.password,
           confirmPassword: formData.confirmPassword
       });
+      let newsletterSaveFailed = false;
+      if (newsletterEnabled && newsletterOptIn) {
+        try {
+          await newsletterService.subscribe(formData.email, 'register');
+        } catch {
+          newsletterSaveFailed = true;
+        }
+      }
+      if (result?.requiresVerification) {
+        // Server issued no session — verification is mandatory for this account.
+        navigate('/login', { state: { message: newsletterSaveFailed
+          ? 'Account created, but we could not save your newsletter preference. You can update it in My Account after signing in.'
+          : 'Account created! Please check your email to verify your account, then log in.' } });
+        return;
+      }
       // register() auto-logs-in, redirect to home
       navigate('/');
     } catch (err) {
@@ -294,6 +315,12 @@ const RegisterPage = () => {
             )
           }}
         />
+
+        {newsletterEnabled && <FormControlLabel
+          control={<Checkbox checked={newsletterOptIn} onChange={(event) => setNewsletterOptIn(event.target.checked)} />}
+          label={settings?.auth?.registerNewsletterLabel || 'Email me offers, new products, and store updates.'}
+          sx={{ alignItems: 'flex-start', mt: 0.5, '& .MuiFormControlLabel-label': { fontSize: 14, lineHeight: 1.5 } }}
+        />}
 
         <Button
           fullWidth

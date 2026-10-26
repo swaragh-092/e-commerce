@@ -32,7 +32,7 @@ module.exports = (sequelize, DataTypes) => {
         },
         price: {
             type: DataTypes.DECIMAL(10, 2),
-            allowNull: false,
+            allowNull: true,
         },
         salePrice: {
             type: DataTypes.DECIMAL(10, 2),
@@ -86,6 +86,15 @@ module.exports = (sequelize, DataTypes) => {
             allowNull: false,
             defaultValue: true,
             field: 'requires_shipping',
+        },
+        packingMode: {
+            type: DataTypes.STRING(20),
+            allowNull: false,
+            defaultValue: 'standard',
+            field: 'packing_mode',
+            validate: {
+                isIn: [['standard', 'separate']],
+            },
         },
         taxConfig: {
             type: DataTypes.JSONB,

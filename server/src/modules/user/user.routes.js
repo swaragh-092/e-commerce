@@ -1,10 +1,10 @@
 'use strict';
 
 const router = require('express').Router();
-const { authenticate } = require('../../middleware/auth.middleware');
+const { authenticate, optionalAuth } = require('../../middleware/auth.middleware');
 const { authorizePermissions } = require('../../middleware/role.middleware');
 const { validate } = require('../../middleware/validate.middleware');
-const { loginLimiter } = require('../../middleware/rateLimiter.middleware');
+const { loginLimiter, otpSendLimiter, otpVerifyLimiter, verifyEmailLimiter } = require('../../middleware/rateLimiter.middleware');
 const { 
   updateProfileSchema, 
   changePasswordSchema, 
@@ -21,31 +21,40 @@ const { idParamSchema } = require('../../utils/common.validation');
 const userController = require('./user.controller');
 
 // Profile Endpoints
-router.get('/me', authenticate, authorizePermissions(PERMISSIONS.ACCOUNT_SELF), userController.getMe);
+// GET /me is the session bootstrap endpoint: it must work for any authenticated
+// user, including custom roles that do not hold `account.self`. Gating it on a
+// grantable permission breaks custom-role sessions at load.
+router.get('/me', authenticate, userController.getMe);
 router.put('/me', authenticate, authorizePermissions(PERMISSIONS.ACCOUNT_SELF), validate(updateProfileSchema), userController.updateMe);
 router.post('/me/avatar', authenticate, authorizePermissions(PERMISSIONS.ACCOUNT_SELF), validate(updateAvatarSchema), userController.updateAvatar);
-router.put('/me/password', authenticate, authorizePermissions(PERMISSIONS.ACCOUNT_SELF), validate(changePasswordSchema), userController.changePassword);
+// Brute-force guard: current-password guessing via stolen session
+router.put('/me/password', authenticate, authorizePermissions(PERMISSIONS.ACCOUNT_SELF), loginLimiter, validate(changePasswordSchema), userController.changePassword);
 
-// Delete Account (rate limited: 1 per minute via loginLimiter)
+// Delete Account (destructive — rate limited)
 router.delete('/me', authenticate, authorizePermissions(PERMISSIONS.ACCOUNT_SELF), loginLimiter, validate(require('./user.validation').deleteAccountSchema), userController.deleteAccount);
 router.post('/me/cancel-deletion', authenticate, authorizePermissions(PERMISSIONS.ACCOUNT_SELF), userController.cancelAccountDeletion);
 
 // Session Management
 router.get('/me/sessions', authenticate, authorizePermissions(PERMISSIONS.ACCOUNT_SELF), userController.getSessions);
-router.delete('/me/sessions/:id', authenticate, authorizePermissions(PERMISSIONS.ACCOUNT_SELF), userController.revokeSession);
+router.delete('/me/sessions/:id', authenticate, authorizePermissions(PERMISSIONS.ACCOUNT_SELF), validate(idParamSchema, 'params'), userController.revokeSession);
 router.delete('/me/sessions', authenticate, authorizePermissions(PERMISSIONS.ACCOUNT_SELF), userController.revokeAllOtherSessions);
 
 // Phone Change (OTP verified)
-router.post('/me/phone/request', authenticate, authorizePermissions(PERMISSIONS.ACCOUNT_SELF), validate(require('./user.validation').phoneChangeRequestSchema), userController.requestPhoneChange);
-router.post('/me/phone/confirm', authenticate, authorizePermissions(PERMISSIONS.ACCOUNT_SELF), validate(require('./user.validation').phoneChangeConfirmSchema), userController.confirmPhoneChange);
+router.post('/me/phone/request', authenticate, authorizePermissions(PERMISSIONS.ACCOUNT_SELF), otpSendLimiter, validate(require('./user.validation').phoneChangeRequestSchema), userController.requestPhoneChange);
+router.post('/me/phone/confirm', authenticate, authorizePermissions(PERMISSIONS.ACCOUNT_SELF), otpVerifyLimiter, validate(require('./user.validation').phoneChangeConfirmSchema), userController.confirmPhoneChange);
 
 // Email Change (verify new email)
-router.post('/me/email/request', authenticate, authorizePermissions(PERMISSIONS.ACCOUNT_SELF), validate(require('./user.validation').emailChangeRequestSchema), userController.requestEmailChange);
-router.post('/me/email/confirm', validate(require('./user.validation').emailChangeConfirmSchema), userController.confirmEmailChange);
+router.post('/me/email/request', authenticate, authorizePermissions(PERMISSIONS.ACCOUNT_SELF), verifyEmailLimiter, validate(require('./user.validation').emailChangeRequestSchema), userController.requestEmailChange);
+router.post('/me/email/confirm', verifyEmailLimiter, validate(require('./user.validation').emailChangeConfirmSchema), userController.confirmEmailChange);
 
 // Address Endpoints
 router.get('/me/addresses', authenticate, authorizePermissions(PERMISSIONS.ACCOUNT_SELF), userController.getAddresses);
-router.post('/me/addresses', authenticate, authorizePermissions(PERMISSIONS.ACCOUNT_SELF), validate(createAddressSchema), userController.createAddress);
+router.post('/me/addresses', optionalAuth, (req, res, next) => {
+  if (req.user) {
+    return authorizePermissions(PERMISSIONS.ACCOUNT_SELF)(req, res, next);
+  }
+  next();
+}, validate(createAddressSchema), userController.createAddress);
 router.put('/me/addresses/:id', authenticate, authorizePermissions(PERMISSIONS.ACCOUNT_SELF), validate(idParamSchema, 'params'), validate(updateAddressSchema), userController.updateAddress);
 router.delete('/me/addresses/:id', authenticate, authorizePermissions(PERMISSIONS.ACCOUNT_SELF), validate(idParamSchema, 'params'), userController.deleteAddress);
 router.put('/me/addresses/:id/default', authenticate, authorizePermissions(PERMISSIONS.ACCOUNT_SELF), validate(idParamSchema, 'params'), userController.setDefaultAddress);

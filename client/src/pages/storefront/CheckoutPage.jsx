@@ -20,13 +20,15 @@ import CreditCardIcon from '@mui/icons-material/CreditCard';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { AuthContext } from '../../context/AuthContext';
 import { useNotification } from '../../context/NotificationContext';
-import { useSettings, useCurrency, useFeature, useComponentStyles } from '../../hooks/useSettings';
+import { useSettings, useCurrency, useFeature, useFeatureVisible, useFeaturesResolved, useComponentStyles } from '../../hooks/useSettings';
 import { useCart } from '../../hooks/useCart';
+import { getSessionId } from '../../services/cartService';
 import { userService } from '../../services/userService';
 import { orderService } from '../../services/orderService';
 import paymentService from '../../services/paymentService';
 import { validateCoupon, getEligibleCoupons } from '../../services/adminService';
 import { calculateShipping } from '../../services/shippingService';
+import { getProductById } from '../../services/productService';
 import PageSEO from '../../components/common/PageSEO';
 import { getCartItemUnitPrice } from '../../utils/variantPricing';
 import CenteredLoader from '../../components/common/CenteredLoader';
@@ -82,18 +84,55 @@ const normalizeBuyNowItem = (item) => {
         )
     );
     if (!hasProductIdentity || !hasPriceData) return null;
+    const requiresShipping = item.requiresShipping !== undefined
+        ? item.requiresShipping
+        : (product?.requiresShipping !== undefined ? product.requiresShipping : undefined);
     return {
         id: item.id || `${item.productId}-${item.variantId || variant?.id || 'base'}`,
         productId: item.productId,
         variantId: item.variantId ?? variant?.id ?? null,
         quantity: normalizeBuyNowQuantity(item.quantity),
-        product: { ...product, id: product.id || item.productId, name: product.name || 'Product' },
+        requiresShipping,
+        product: {
+            ...product,
+            id: product.id || item.productId,
+            name: product.name || 'Product',
+            requiresShipping,
+        },
         variant: variant ? { ...variant, id: variant.id || item.variantId || null } : null,
     };
 };
 
 const createCheckoutSessionId = () => {
-    return uuidv4();
+    try {
+        let id = sessionStorage.getItem('checkoutSessionId');
+        if (!id) {
+            id = uuidv4();
+            sessionStorage.setItem('checkoutSessionId', id);
+        }
+        return id;
+    } catch (_) {
+        return uuidv4();
+    }
+};
+
+const getOrderSubmissionKey = async (checkoutSessionId, orderPayload) => {
+    const payloadForFingerprint = { ...orderPayload };
+    delete payloadForFingerprint.checkoutSessionId;
+    delete payloadForFingerprint.idempotencyKey;
+    const bytes = new TextEncoder().encode(JSON.stringify(payloadForFingerprint));
+    const digest = await crypto.subtle.digest('SHA-256', bytes);
+    const fingerprint = Array.from(new Uint8Array(digest), (byte) => byte.toString(16).padStart(2, '0')).join('');
+    const storageKey = `pendingOrderSubmission:${checkoutSessionId}`;
+    try {
+        const saved = JSON.parse(sessionStorage.getItem(storageKey) || 'null');
+        if (saved?.fingerprint === fingerprint && saved?.idempotencyKey) return saved.idempotencyKey;
+        const idempotencyKey = uuidv4();
+        sessionStorage.setItem(storageKey, JSON.stringify({ fingerprint, idempotencyKey }));
+        return idempotencyKey;
+    } catch (_) {
+        return uuidv4();
+    }
 };
 
 const loadScript = (src, globalName) => new Promise((resolve, reject) => {
@@ -223,19 +262,55 @@ const CheckoutPage = () => {
     }, [location.state?.fromBuyNow, location.state?.buyNowItem]);
     const hasInvalidBuyNowState = Boolean(location.state?.fromBuyNow) && !buyNowItem;
 
-    const checkoutEnabled = useFeature('checkout');
-    const cartEnabled = useFeature('cart');
+    const checkoutEnabled = useFeatureVisible('checkout', 'storefront');
+    const cartEnabled = useFeatureVisible('cart', 'storefront');
+    const paymentsVisible = useFeatureVisible('payments', 'storefront');
+    const shippingVisible = useFeatureVisible('shipping', 'storefront');
+    const pricingVisible = useFeatureVisible('pricing', 'storefront');
+    const showPrice = useFeature('showPrice');
+    const showPrices = pricingVisible && showPrice !== false;
+    const guestCheckoutEnabled = useFeature('guestCheckout');
+    const featuresResolved = useFeaturesResolved();
 
     useEffect(() => {
-        if (!checkoutEnabled || !cartEnabled) {
+        if (featuresResolved && (!checkoutEnabled || !cartEnabled)) {
             navigate('/');
         }
-    }, [checkoutEnabled, cartEnabled, navigate]);
+    }, [featuresResolved, checkoutEnabled, cartEnabled, navigate]);
 
     const isBuyNowFlow = useMemo(() => Boolean(buyNowItem), [buyNowItem]);
-    const couponsEnabled = settings?.features?.coupons !== false;
+    const [buyNowProductRequiresShipping, setBuyNowProductRequiresShipping] = useState(undefined);
+
+    useEffect(() => {
+        if (isBuyNowFlow && buyNowItem?.productId && buyNowItem?.requiresShipping === undefined && buyNowItem?.product?.requiresShipping === undefined) {
+            let active = true;
+            getProductById(buyNowItem.productId)
+                .then((data) => {
+                    const prod = data?.product || data;
+                    if (active && prod && typeof prod.requiresShipping === 'boolean') {
+                        setBuyNowProductRequiresShipping(prod.requiresShipping);
+                    }
+                })
+                .catch(() => {});
+            return () => { active = false; };
+        }
+    }, [isBuyNowFlow, buyNowItem?.productId, buyNowItem?.requiresShipping, buyNowItem?.product?.requiresShipping]);
+
+    const items = useMemo(() => (isBuyNowFlow ? [buyNowItem] : (cart?.items || [])), [isBuyNowFlow, buyNowItem, cart?.items]);
+    const hasPhysicalItems = useMemo(() => {
+        if (!items.length) return true;
+        return items.some((item) => {
+            const prod = item?.product || item;
+            let req = prod?.requiresShipping;
+            if (req === undefined) req = item?.requiresShipping;
+            if (req === undefined && isBuyNowFlow) req = buyNowProductRequiresShipping;
+            return req !== false;
+        });
+    }, [items, isBuyNowFlow, buyNowProductRequiresShipping]);
+    const couponsEnabled = useFeature('coupons');
     const paymentSettings = settings?.payments || {};
     const enabledPaymentMethods = PAYMENT_METHOD_OPTIONS.filter((method) => {
+        if (!hasPhysicalItems && method.id === 'cod') return false;
         const settingValue = paymentSettings[`${method.id}Enabled`];
         return settingValue === undefined
             ? DEFAULT_ENABLED_PAYMENT_METHODS[method.id]
@@ -251,6 +326,13 @@ const CheckoutPage = () => {
     const [activeSection, setActiveSection] = useState(1);
     const [completedSections, setCompletedSections] = useState([]);
     const [checkoutSessionId] = useState(createCheckoutSessionId);
+
+    useEffect(() => {
+        if (!hasPhysicalItems && activeSection === 1) {
+            setCompletedSections((prev) => [...new Set([...prev, 1])]);
+            setActiveSection(couponsEnabled ? 2 : 3);
+        }
+    }, [hasPhysicalItems, activeSection, couponsEnabled]);
 
     const completeSection = (section, nextSection) => {
         setCompletedSections((prev) => [...new Set([...prev, section])]);
@@ -316,12 +398,29 @@ const CheckoutPage = () => {
         setAddrDialog((s) => ({ ...s, saving: true, errors: {} }));
         try {
             let saved;
-            if (mode === 'add') saved = await userService.createAddress(form);
-            else saved = await userService.updateAddress(addrId, form);
-            const list = await userService.getAddresses();
-            const addrList = Array.isArray(list) ? list : list?.rows || [];
-            setAddresses(addrList);
-            if (mode === 'add' && saved?.id) setSelectedAddressId(saved.id);
+            if (mode === 'add' || !user) {
+                saved = await userService.createAddress({
+                    ...form,
+                    ...(!user ? { sessionId: getSessionId() } : {}),
+                });
+            } else {
+                saved = await userService.updateAddress(addrId, form);
+            }
+            if (user) {
+                const list = await userService.getAddresses();
+                const addrList = Array.isArray(list) ? list : list?.rows || [];
+                setAddresses(addrList);
+            } else {
+                setAddresses([saved]);
+                try {
+                    localStorage.setItem('guestCheckoutAddress', JSON.stringify(saved));
+                } catch (_) {}
+            }
+            if (saved?.id) {
+                setSelectedAddressId(saved.id);
+                setCompletedSections([1]);
+                setActiveSection(couponsEnabled ? 2 : 3);
+            }
             setAddrDialog((s) => ({ ...s, open: false }));
         } catch (err) {
             const errData = err?.response?.data?.error;
@@ -338,6 +437,8 @@ const CheckoutPage = () => {
 
     const [placing, setPlacing] = useState(false);
     const [error, setError] = useState(null);
+    const [guestEmail, setGuestEmail] = useState('');
+    const [guestEmailError, setGuestEmailError] = useState(false);
 
     const [paymentMethod, setPaymentMethod] = useState(defaultPaymentMethod || 'razorpay');
 
@@ -347,8 +448,6 @@ const CheckoutPage = () => {
         }
     }, [defaultPaymentMethod, enabledPaymentMethods, paymentMethod]);
 
-
-    const items = useMemo(() => (isBuyNowFlow ? [buyNowItem] : (cart?.items || [])), [isBuyNowFlow, buyNowItem, cart?.items]);
 
     const subtotal = items.reduce((sum, item) => {
         const quantity = normalizeBuyNowQuantity(item?.quantity);
@@ -365,7 +464,7 @@ const CheckoutPage = () => {
 
     const shippingMethod = settings?.shipping?.method || 'flat_rate';
     const freeThreshold = parseFloat(settings?.shipping?.freeThreshold ?? 0);
-    const shippingCost = Number(shippingQuote?.shippingCost ?? 0);
+    const shippingCost = hasPhysicalItems ? Number(shippingQuote?.shippingCost ?? 0) : 0;
 
     const shippingDiscount = couponResult?.shippingDiscount || (couponResult?.freeShipping ? shippingCost : 0);
     const effectiveShippingCost = Math.max(0, shippingCost - shippingDiscount);
@@ -374,21 +473,41 @@ const CheckoutPage = () => {
         settings,
         destinationState: selectedAddress?.state || '',
         quantityResolver: (item) => normalizeBuyNowQuantity(item?.quantity),
-        priceResolver: (item) => (item?.product ? getCartItemUnitPrice(item) : 0),
-    }), [items, settings, selectedAddress?.state]);
+        priceResolver: (item) => {
+            if (!item?.product) return 0;
+            const unitPrice = getCartItemUnitPrice(item);
+            const quantity = normalizeBuyNowQuantity(item?.quantity);
+            const itemSubtotal = unitPrice * quantity;
+            if (itemSubtotal <= 0 || quantity <= 0) return 0;
+
+            const itemKey = item.variantId ? `${item.productId}:${item.variantId}` : item.productId;
+            let itemDiscount = 0;
+            if (couponResult?.lineDiscounts && typeof couponResult.lineDiscounts[itemKey] === 'number') {
+                itemDiscount = couponResult.lineDiscounts[itemKey];
+            } else if (orderDiscount > 0 && subtotal > 0) {
+                itemDiscount = (itemSubtotal / subtotal) * orderDiscount;
+            }
+            const taxableSubtotal = Math.max(0, itemSubtotal - itemDiscount);
+            return taxableSubtotal / quantity;
+        },
+    }), [items, settings, selectedAddress?.state, couponResult, orderDiscount, subtotal]);
     const taxAmount = taxSummary.totalTax;
-    const total = Math.max(0, subtotal + effectiveShippingCost + taxAmount - orderDiscount);
+    const shippingTaxAmount = Number(shippingQuote?.taxAmount || 0);
+    const shippingTaxIncluded = Boolean(shippingQuote?.taxIncluded);
+    const effectiveDeliveryTax = (!shippingTaxIncluded && effectiveShippingCost > 0) ? shippingTaxAmount : 0;
+    const total = Math.max(0, subtotal + effectiveShippingCost + taxAmount + effectiveDeliveryTax - orderDiscount);
     const itemSignature = useMemo(() => (
         items.map((item) => `${item?.productId || item?.product?.id}:${item?.variantId || item?.variant?.id || 'base'}:${normalizeBuyNowQuantity(item?.quantity)}`).join('|')
     ), [items]);
     const appliedCouponCodes = useMemo(() => appliedCoupons.map((coupon) => coupon.code).sort().join('|'), [appliedCoupons]);
 
     const isShippingSetupError = ['MISSING_PRODUCT_MEASUREMENTS', 'INVALID_SHIPPING_PACKAGE', 'SHIPPING_PACKAGE_CAPACITY_EXCEEDED'].includes(shippingErrorCode);
+    const hasShippingIssue = hasPhysicalItems && Boolean(shippingError || shippingQuote?.serviceable === false);
     const isTemporaryShippingError = !isShippingSetupError && (shippingErrorStatus === 503 ||
         (typeof shippingError === 'string' && shippingError.toLowerCase().includes('temporarily')));
 
     useEffect(() => {
-        if (!selectedAddressId || items.length === 0) {
+        if (!hasPhysicalItems || !selectedAddressId || items.length === 0) {
             setShippingQuote(null);
             setShippingError('');
             setShippingErrorStatus(null);
@@ -406,6 +525,7 @@ const CheckoutPage = () => {
                 const response = await calculateShipping({
                     shippingAddressId: selectedAddressId,
                     checkoutSessionId,
+                    sessionId: getSessionId(),
                     paymentMethod,
                     ...(couponCode && couponResult && !couponResult.error && { couponCode }),
                     ...(appliedCouponCodes && { couponCodes: appliedCouponCodes.split('|') }),
@@ -455,6 +575,17 @@ const CheckoutPage = () => {
     }, [selectedAddressId, checkoutSessionId, paymentMethod, couponCode, couponResult, appliedCouponCodes, itemSignature, isBuyNowFlow, buyNowItem, shippingRetryTrigger]);
 
     useEffect(() => {
+        if (!shippingQuote?.expiresAt || !shippingQuote?.quoteId) return undefined;
+        const expiresMs = new Date(shippingQuote.expiresAt).getTime() - Date.now();
+        // If already expired (e.g. slept tab or clock skew), refresh on next tick; otherwise schedule 1s after expiry
+        const delay = expiresMs <= 0 ? 0 : Math.min(expiresMs + 1000, 2147483647);
+        const timer = setTimeout(() => {
+            setShippingRetryTrigger((v) => v + 1);
+        }, delay);
+        return () => clearTimeout(timer);
+    }, [shippingQuote?.expiresAt, shippingQuote?.quoteId]);
+
+    useEffect(() => {
         if (paymentMethod === 'cod' && shippingQuote && shippingQuote.codAvailable === false) {
             const fallback = enabledPaymentMethods.find((method) => method.id !== 'cod');
             if (fallback) {
@@ -465,6 +596,22 @@ const CheckoutPage = () => {
     }, [paymentMethod, shippingQuote, enabledPaymentMethods, notify]);
 
     useEffect(() => {
+        if (!user) {
+            setLoadingAddresses(false);
+            const savedGuest = localStorage.getItem('guestCheckoutAddress');
+            if (savedGuest) {
+                try {
+                    const parsed = JSON.parse(savedGuest);
+                    if (parsed && parsed.id) {
+                        setAddresses([parsed]);
+                        setSelectedAddressId(parsed.id);
+                        setCompletedSections([1]);
+                        setActiveSection(couponsEnabled ? 2 : 3);
+                    }
+                } catch (_) {}
+            }
+            return;
+        }
         userService.getAddresses()
             .then((data) => {
                 const list = Array.isArray(data) ? data : data?.rows || [];
@@ -480,7 +627,7 @@ const CheckoutPage = () => {
             })
             .catch(() => {})
             .finally(() => setLoadingAddresses(false));
-    }, []);
+    }, [user, couponsEnabled]);
 
     useEffect(() => {
         if (activeSection === 2 && couponsEnabled && showAvailableCoupons) {
@@ -552,14 +699,15 @@ const CheckoutPage = () => {
             },
             prefill: {
                 name: selectedAddress?.fullName || '',
-                email: user?.email || '',
+                email: user?.email || guestEmail.trim(),
                 contact: selectedAddress?.phone || '',
             },
             theme: {
                 color: '#6C63FF',
             },
             modal: {
-                ondismiss: () => {
+                ondismiss: async () => {
+                    try { await paymentService.markFailed(orderId, { reason: 'checkout modal dismissed' }); } catch { /* keep order retryable */ }
                     setPlacing(false);
                 },
             },
@@ -572,6 +720,11 @@ const CheckoutPage = () => {
     const startOnlinePayment = async (orderId, orderNumber) => {
         const paymentResponse = await paymentService.createOrder(orderId);
         const paymentOrder = paymentResponse.data?.data || paymentResponse.data;
+        if (paymentOrder?.freeOrder) {
+            if (!isBuyNowFlow) await clearCart();
+            navigate('/payment/success', { state: { orderId, orderNumber } });
+            return;
+        }
         const provider = paymentOrder?.provider || paymentMethod;
 
         if (provider === 'stripe') {
@@ -629,10 +782,20 @@ const CheckoutPage = () => {
     };
 
     const handlePlaceOrder = async () => {
-        if (!selectedAddressId) { setError('Please select a shipping address.'); return; }
+        if (!user && guestCheckoutEnabled === false) {
+            navigate('/login', { state: { from: '/checkout' } });
+            return;
+        }
+        if (hasPhysicalItems && !selectedAddressId) { setError('Please select a shipping address.'); return; }
+        if (!user && hasPhysicalItems && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(guestEmail.trim())) {
+            setGuestEmailError(true);
+            setError('Enter a valid email address for delivery updates.');
+            return;
+        }
         if (!paymentMethod) { setError('No payment method is currently available.'); return; }
-        if (shippingLoading) { setError('Please wait while we confirm delivery availability.'); return; }
-        if (!shippingQuote?.quoteId || shippingQuote.serviceable === false) {
+        if (!hasPhysicalItems && paymentMethod === 'cod') { setError('Cash on delivery is not available for digital products.'); return; }
+        if (hasPhysicalItems && shippingLoading) { setError('Please wait while we confirm delivery availability.'); return; }
+        if (hasPhysicalItems && (!shippingQuote?.quoteId || shippingQuote.serviceable === false)) {
             setError(shippingError || 'Delivery is not available for the selected address.');
             return;
         }
@@ -640,10 +803,12 @@ const CheckoutPage = () => {
         setError(null);
         let orderPlaced = false;
         try {
-            const res = await orderService.placeOrder({
-                shippingAddressId: selectedAddressId,
-                shippingQuoteId: shippingQuote.quoteId,
+            const orderPayload = {
+                ...(hasPhysicalItems && selectedAddressId ? { shippingAddressId: selectedAddressId } : {}),
+                ...(hasPhysicalItems && shippingQuote?.quoteId ? { shippingQuoteId: shippingQuote.quoteId } : {}),
                 checkoutSessionId,
+                sessionId: getSessionId(),
+                ...(!user && hasPhysicalItems ? { guestEmail: guestEmail.trim() } : {}),
                 paymentMethod,
                 ...(couponCode && couponResult && !couponResult.error && { couponCode }),
                 ...(appliedCoupons.length > 0 && { couponCodes: appliedCoupons.map((c) => c.code) }),
@@ -655,22 +820,39 @@ const CheckoutPage = () => {
                         quantity: buyNowItem.quantity,
                     },
                 }),
-            });
+            };
+            const idempotencyKey = await getOrderSubmissionKey(checkoutSessionId, orderPayload);
+            const res = await orderService.placeOrder({ ...orderPayload, idempotencyKey });
 
             const orderId = res?.order?.id;
             const orderNumber = res?.order?.orderNumber;
+            const orderTotal = Number(res?.order?.total);
             orderPlaced = true;
             if (!orderId) {
                 throw new Error('Order was created, but the order id is missing. Please check your orders and retry payment.');
             }
             if (paymentMethod === 'cod') {
+                try { sessionStorage.removeItem('checkoutSessionId'); } catch (_) {}
+                try { sessionStorage.removeItem(`pendingOrderSubmission:${checkoutSessionId}`); } catch (_) {}
                 if (!isBuyNowFlow) await clearCart();
                 navigate('/payment/success', { state: { orderId, orderNumber, isCod: true } });
+            } else if (Number.isFinite(orderTotal) && orderTotal <= 0.009) {
+                // Free order already settled server-side; no provider session.
+                if (!isBuyNowFlow) await clearCart();
+                navigate('/payment/success', { state: { orderId, orderNumber } });
             } else {
                 await startOnlinePayment(orderId, orderNumber);
             }
 
         } catch (err) {
+            const errCode = err?.response?.data?.error?.code;
+            if (errCode === 'SHIPPING_QUOTE_STALE' || errCode === 'SHIPPING_QUOTE_EXPIRED') {
+                notify('Delivery details updated. Refreshing shipping rates...', 'info');
+                setShippingRetryTrigger((prev) => prev + 1);
+                setError(null);
+                setPlacing(false);
+                return;
+            }
             setError(getApiErrorMessage(
                 err,
                 orderPlaced
@@ -717,8 +899,11 @@ const CheckoutPage = () => {
                 {/* ── Left: sections ── */}
                 <Box>
                     {/* Always-visible Shipping Alert & Recovery Action Banner (Edge Case 3 & 4) */}
-                    {(shippingError || (shippingQuote && !shippingQuote.serviceable) || isTemporaryShippingError) && (
+                    {hasShippingIssue && (
                         <Alert
+                            id="checkout-shipping-error"
+                            aria-live="polite"
+                            aria-atomic="true"
                             severity={isTemporaryShippingError ? 'info' : 'warning'}
                             sx={{ mb: 2.5, borderRadius: blockRadius }}
                             action={
@@ -760,7 +945,43 @@ const CheckoutPage = () => {
                         </Alert>
                     )}
 
+                    {!user && hasPhysicalItems && guestCheckoutEnabled !== false && (
+                        <Paper variant="outlined" sx={{ mb: 1.5, p: 2.5, borderRadius: blockRadius }}>
+                            <TextField
+                                {...formFieldProps}
+                                fullWidth
+                                required
+                                type="email"
+                                autoComplete="email"
+                                label="Email address"
+                                value={guestEmail}
+                                onChange={(event) => {
+                                    setGuestEmail(event.target.value);
+                                    setGuestEmailError(false);
+                                }}
+                                error={guestEmailError}
+                                helperText={guestEmailError ? 'Enter a valid email address.' : 'Used for delivery updates.'}
+                                inputProps={{ maxLength: 255 }}
+                            />
+                        </Paper>
+                    )}
+
                     {/* ── Section 1: Delivery Address ── */}
+                    {!hasPhysicalItems ? (
+                        <Paper variant="outlined" sx={{ mb: 3, p: 2.5, borderRadius: blockRadius, bgcolor: 'background.paper' }}>
+                            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5 }}>
+                                <CheckCircleIcon color="success" sx={{ fontSize: 24 }} />
+                                <Box>
+                                    <Typography variant="subtitle2" fontWeight={600}>
+                                        Digital Delivery
+                                    </Typography>
+                                    <Typography variant="body2" color="text.secondary">
+                                        Your order contains only digital products. No shipping address is required; access will be delivered to your account and email.
+                                    </Typography>
+                                </Box>
+                            </Box>
+                        </Paper>
+                    ) : (
                     <Section
                         step={1}
                         radius={blockRadius}
@@ -793,42 +1014,6 @@ const CheckoutPage = () => {
                                         </Box>
                                     </Box>
 
-                                    {(shippingError || (shippingQuote && !shippingQuote.serviceable) || isTemporaryShippingError) && (
-                                        <Alert
-                                            severity={isTemporaryShippingError ? 'info' : 'warning'}
-                                            sx={{ mt: 1 }}
-                                            action={
-                                                <Box sx={{ display: 'flex', gap: 1 }}>
-                                                    {isTemporaryShippingError && (
-                                                        <Button
-                                                            color="inherit"
-                                                            size="small"
-                                                            onClick={(e) => {
-                                                                e.stopPropagation();
-                                                                setShippingRetryTrigger((v) => v + 1);
-                                                            }}
-                                                            sx={{ fontWeight: 600, textTransform: 'none' }}
-                                                        >
-                                                            Retry
-                                                        </Button>
-                                                    )}
-                                                    {!isShippingSetupError && (<Button
-                                                        color="inherit"
-                                                        size="small"
-                                                        onClick={(e) => {
-                                                            e.stopPropagation();
-                                                            editSection(1);
-                                                        }}
-                                                        sx={{ fontWeight: 600, textTransform: 'none' }}
-                                                    >
-                                                        Change Address
-                                                    </Button>)}
-                                                </Box>
-                                            }
-                                        >
-                                            {shippingError || (shippingQuote && !shippingQuote.serviceable ? shippingQuote.message : 'Delivery is not available for this address.')}
-                                        </Alert>
-                                    )}
                                 </Box>
                             )
                         }
@@ -837,6 +1022,41 @@ const CheckoutPage = () => {
                             <CenteredLoader message="Loading addresses..." minHeight="120px" />
                         ) : (
                             <>
+                                {!user && (guestCheckoutEnabled === false ? (
+                                    <Alert
+                                        severity="warning"
+                                        sx={{ mb: 2 }}
+                                        action={
+                                            <Button
+                                                color="inherit"
+                                                size="small"
+                                                onClick={() => navigate('/login', { state: { from: '/checkout' } })}
+                                                sx={{ fontWeight: 600, textTransform: 'none' }}
+                                            >
+                                                Log In
+                                            </Button>
+                                        }
+                                    >
+                                        Guest checkout is disabled for this store. Please log in or create an account to complete your purchase.
+                                    </Alert>
+                                ) : (
+                                    <Alert
+                                        severity="info"
+                                        sx={{ mb: 2 }}
+                                        action={
+                                            <Button
+                                                color="inherit"
+                                                size="small"
+                                                onClick={() => navigate('/login', { state: { from: '/checkout' } })}
+                                                sx={{ fontWeight: 600, textTransform: 'none' }}
+                                            >
+                                                Log In
+                                            </Button>
+                                        }
+                                    >
+                                        Checking out as guest. Address is stored for this browser session only.
+                                    </Alert>
+                                ))}
                                 {addresses.length === 0 ? (
                                     <Box sx={{ textAlign: 'center', py: 3 }}>
                                         <Typography color="text.secondary" mb={2}>No saved addresses yet.</Typography>
@@ -845,7 +1065,7 @@ const CheckoutPage = () => {
                                         </Button>
                                     </Box>
                                 ) : (
-                                    <RadioGroup value={selectedAddressId} onChange={(e) => setSelectedAddressId(e.target.value)}>
+                                    <RadioGroup aria-label="Delivery address" value={selectedAddressId} onChange={(e) => setSelectedAddressId(e.target.value)}>
                                         {addresses.map((addr) => (
                                             <Paper
                                                 key={addr.id}
@@ -856,11 +1076,13 @@ const CheckoutPage = () => {
                                                     bgcolor: selectedAddressId === addr.id ? 'action.selected' : 'background.paper',
                                                     transition: 'all 0.15s',
                                                     '&:hover': { borderColor: 'primary.main', bgcolor: 'action.hover' },
+                                                    '&:focus-within': { outline: '2px solid', outlineColor: 'primary.main', outlineOffset: 2 },
                                                 }}
                                                 onClick={() => setSelectedAddressId(addr.id)}
                                             >
                                                 <Box sx={{ display: 'flex', alignItems: 'flex-start' }}>
                                                     <Radio
+                                                        inputProps={{ 'aria-label': `${addr.fullName}, ${addr.addressLine1}, ${addr.city}, ${addr.postalCode}` }}
                                                         value={addr.id}
                                                         checked={selectedAddressId === addr.id}
                                                         size="small"
@@ -892,7 +1114,7 @@ const CheckoutPage = () => {
                                                             </Typography>
                                                         )}
                                                     </Box>
-                                                    <IconButton size="small" onClick={(e) => { e.stopPropagation(); openEditAddrDialog(addr); }}>
+                                                    <IconButton aria-label={`Edit address for ${addr.fullName}`} size="small" onClick={(e) => { e.stopPropagation(); openEditAddrDialog(addr); }}>
                                                         <EditIcon fontSize="small" />
                                                     </IconButton>
                                                 </Box>
@@ -911,49 +1133,16 @@ const CheckoutPage = () => {
                                     Add a new address
                                 </Button>
 
-                                {selectedAddressId && (
+                                {selectedAddressId && shippingVisible && (
                                     <Box sx={{ mb: 2 }}>
                                         {shippingLoading ? (
                                             <Alert severity="info" icon={<CircularProgress size={16} />}>
                                                 Checking delivery availability...
                                             </Alert>
-                                        ) : isTemporaryShippingError ? (
-                                            <Alert
-                                                severity="info"
-                                                action={
-                                                    <Button
-                                                        color="inherit"
-                                                        size="small"
-                                                        variant="outlined"
-                                                        onClick={() => setShippingRetryTrigger((v) => v + 1)}
-                                                        sx={{ fontWeight: 600, textTransform: 'none' }}
-                                                    >
-                                                        Retry
-                                                    </Button>
-                                                }
-                                            >
-                                                {shippingError || 'Delivery checking is temporarily unavailable. Please retry shortly.'}
-                                            </Alert>
-                                        ) : shippingError || (shippingQuote && !shippingQuote.serviceable) ? (
-                                            <Alert
-                                                severity="warning"
-                                                action={
-                                                    !isShippingSetupError && (<Button
-                                                        color="inherit"
-                                                        size="small"
-                                                        onClick={openAddAddrDialog}
-                                                        sx={{ fontWeight: 600, textTransform: 'none' }}
-                                                    >
-                                                        Change Address
-                                                    </Button>)
-                                                }
-                                            >
-                                                {shippingError || 'Delivery is not available for this pincode. Please select or add a different address.'}
-                                            </Alert>
                                         ) : shippingQuote?.serviceable ? (
                                             <Alert severity="success">
                                                 Delivery available{shippingQuote.estimatedDeliveryDays ? ` in ${shippingQuote.estimatedDeliveryDays} days` : ''}.
-                                                {effectiveShippingCost === 0 ? ' Free shipping applied.' : ` Delivery fee: ${formatPrice(effectiveShippingCost)}.`}
+                                                {effectiveShippingCost === 0 ? ' Free shipping applied.' : showPrices ? ` Delivery fee: ${formatPrice(effectiveShippingCost)}.` : ''}
                                             </Alert>
                                         ) : null}
                                     </Box>
@@ -963,6 +1152,7 @@ const CheckoutPage = () => {
                                     <Button
                                         variant="contained"
                                         disabled={!selectedAddressId || shippingLoading || !shippingQuote?.quoteId || shippingQuote?.serviceable === false}
+                                        aria-describedby={hasShippingIssue ? 'checkout-shipping-error' : undefined}
                                         onClick={() => completeSection(1, couponsEnabled ? 2 : 3)}
                                         sx={{ px: 4 }}
                                     >
@@ -972,6 +1162,7 @@ const CheckoutPage = () => {
                             </>
                         )}
                     </Section>
+                    )}
 
                     {/* ── Section 2: Coupons (optional) ── */}
                     {couponsEnabled && (
@@ -987,7 +1178,9 @@ const CheckoutPage = () => {
                                     <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
                                         <LocalOfferIcon sx={{ fontSize: 16, color: 'success.main' }} />
                                         <Typography variant="body2" color="success.main" fontWeight={600}>
-                                            Saving {formatPrice(couponResult.totalDiscount || couponResult.orderDiscount || 0)} with {appliedCoupons.length > 1 ? `${appliedCoupons.length} offers` : (couponCode || 'coupon')}
+                                            {showPrices
+                                                ? `Saving ${formatPrice(couponResult.totalDiscount || couponResult.orderDiscount || 0)} with ${appliedCoupons.length > 1 ? `${appliedCoupons.length} offers` : (couponCode || 'coupon')}`
+                                                : `Offer applied: ${appliedCoupons.length > 1 ? `${appliedCoupons.length} offers` : (couponCode || 'coupon')}`}
                                         </Typography>
                                     </Box>
                                 ) : (
@@ -1010,7 +1203,7 @@ const CheckoutPage = () => {
                                                 const label = c.type === 'percentage'
                                                     ? `${Number(c.value)}% off`
                                                     : c.type === 'free_shipping' ? 'Free shipping'
-                                                        : `${formatPrice(Number(c.value))} off`;
+                                                        : showPrices ? `${formatPrice(Number(c.value))} off` : 'Discount coupon';
                                                 const applied = couponCode === c.code && couponResult && !couponResult.error;
                                                 return (
                                                     <Chip
@@ -1031,7 +1224,7 @@ const CheckoutPage = () => {
                                     ) : (
                                         <Typography variant="caption" color="text.secondary">No offers available right now.</Typography>
                                     )}
-                                    {eligibleCouponSummary?.bestCoupon && !couponResult?.error && (
+                                    {showPrices && eligibleCouponSummary?.bestCoupon && !couponResult?.error && (
                                         <Alert severity="info" sx={{ mt: 1.5, py: 0.5 }}>
                                             Best offer saves {formatPrice(eligibleCouponSummary.bestCoupon.totalDiscount || 0)}
                                         </Alert>
@@ -1066,7 +1259,7 @@ const CheckoutPage = () => {
                                     onClose={couponResult.error ? () => setCouponResult(null) : undefined}
                                 >
                                     {couponResult.message}
-                                    {!couponResult.error && ` — You save ${formatPrice(couponResult.totalDiscount || couponResult.orderDiscount || 0)}`}
+                                    {!couponResult.error && showPrices && ` — You save ${formatPrice(couponResult.totalDiscount || couponResult.orderDiscount || 0)}`}
                                 </Alert>
                             )}
 
@@ -1078,7 +1271,7 @@ const CheckoutPage = () => {
                                             {...themedChipProps({
                                                 color: coupon.applicationMode === 'auto' ? 'info' : 'success',
                                                 variant: 'outlined',
-                                                label: `${coupon.code} · ${formatPrice(coupon.totalDiscount || 0)}`,
+                                                label: showPrices ? `${coupon.code} · ${formatPrice(coupon.totalDiscount || 0)}` : coupon.code,
                                             })}
                                         />
                                     ))}
@@ -1112,7 +1305,11 @@ const CheckoutPage = () => {
                         onEdit={() => editSection(3)}
                         summary={
                             <Typography variant="body2" color="text.secondary" sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
-                                {paymentMethod === 'cod' ? (
+                                {!paymentsVisible ? (
+                                    <>
+                                        <PaymentsIcon sx={{ fontSize: 16 }} /> Secure payment
+                                    </>
+                                ) : paymentMethod === 'cod' ? (
                                     <>
                                         <PaymentsIcon sx={{ fontSize: 16 }} /> Cash on Delivery
                                     </>
@@ -1124,7 +1321,14 @@ const CheckoutPage = () => {
                             </Typography>
                         }
                     >
+                        {!paymentsVisible && (
+                            <Alert severity="info" sx={{ mb: 2 }}>
+                                Payment options are hidden on the storefront. Your order will use the store's configured payment method.
+                            </Alert>
+                        )}
+                        {paymentsVisible && (
                         <RadioGroup
+                            aria-label="Payment method"
                             value={paymentMethod}
                             onChange={(e) => {
                                 if (e.target.value === 'cod' && shippingQuote?.codAvailable === false) return;
@@ -1149,6 +1353,7 @@ const CheckoutPage = () => {
                                 >
                                     <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
                                         <Radio
+                                            inputProps={{ 'aria-label': method.title }}
                                             value={method.id}
                                             checked={paymentMethod === method.id}
                                             disabled={method.id === 'cod' && shippingQuote?.codAvailable === false}
@@ -1173,6 +1378,7 @@ const CheckoutPage = () => {
                                 </Paper>
                             ))}
                         </RadioGroup>
+                        )}
 
                         {/* Order notes */}
                         <TextField
@@ -1213,7 +1419,9 @@ const CheckoutPage = () => {
                                         </Typography>
 
                                     </Box>
-                                    <Typography variant="body2" fontWeight={600}>{formatPrice(itemPrice * quantity)}</Typography>
+                                    {showPrices && (
+                                        <Typography variant="body2" fontWeight={600}>{formatPrice(itemPrice * quantity)}</Typography>
+                                    )}
                                 </Box>
                             );
                         })}
@@ -1224,7 +1432,7 @@ const CheckoutPage = () => {
                 </Box>
 
                 {/* ── Right: Price breakdown + CTA ── */}
-                <Box sx={{ position: 'sticky', top: 80 }}>
+                <Box sx={{ position: { xs: 'static', md: 'sticky' }, top: { md: 80 } }}>
                     <Paper elevation={0} sx={{ border: '1px solid', borderColor: 'divider', borderRadius: blockRadius, boxShadow: blockShadow, overflow: 'hidden' }}>
                         <Box sx={{ px: 2.5, py: 2, borderBottom: '1px solid', borderColor: 'divider' }}>
                             <Typography variant="subtitle2" fontWeight={700} color="text.secondary" letterSpacing={0.5}>
@@ -1232,90 +1440,120 @@ const CheckoutPage = () => {
                             </Typography>
                         </Box>
                         <Box sx={{ px: 2.5, py: 2 }}>
-                            <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 1 }}>
-                                <Typography variant="body2" color="text.secondary">
-                                    Price ({items.reduce((s, i) => s + normalizeBuyNowQuantity(i?.quantity), 0)} items)
-                                </Typography>
-                                <Typography variant="body2">{formatPrice(subtotal)}</Typography>
-                            </Box>
-
-                            {/* Shipping */}
-                            <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 1 }}>
-                                <Typography variant="body2" color="text.secondary">Delivery Charges</Typography>
-                                {shippingLoading ? (
-                                    <CircularProgress size={16} />
-                                ) : shippingError ? (
-                                    <Typography variant="body2" color="warning.main" fontWeight={600}>Unavailable</Typography>
-                                ) : shippingCost === 0 ? (
-                                    <Typography variant="body2" color="success.main" fontWeight={600}>FREE</Typography>
-                                ) : shippingDiscount > 0 ? (
-                                    <Box sx={{ textAlign: 'right' }}>
-                                        <Typography variant="body2" sx={{ textDecoration: 'line-through', color: 'text.secondary' }}>
-                                            {formatPrice(shippingCost)}
+                            {showPrices ? (
+                                <>
+                                    <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 1 }}>
+                                        <Typography variant="body2" color="text.secondary">
+                                            Price ({items.reduce((s, i) => s + normalizeBuyNowQuantity(i?.quantity), 0)} items)
                                         </Typography>
-                                        <Typography variant="body2" color="success.main" fontWeight={600}>FREE</Typography>
+                                        <Typography variant="body2">{formatPrice(subtotal)}</Typography>
                                     </Box>
-                                ) : (
-                                    <Typography variant="body2">{formatPrice(shippingCost)}</Typography>
-                                )}
-                            </Box>
-                            {shippingMethod === 'free_above_threshold' && shippingCost > 0 && (
-                                <Typography variant="caption" color="success.main" display="block" mb={1}>
-                                    Add {formatPrice(freeThreshold - subtotal)} more for free delivery
-                                </Typography>
-                            )}
 
-                            {/* GST breakdown */}
-                            {taxSummary.taxRows.map((row) => (
-                                <Box key={row.key} sx={{ display: 'flex', justifyContent: 'space-between', mb: 0.5 }}>
-                                    <Typography variant="body2" color="text.secondary">{row.label}</Typography>
-                                    <Typography variant="body2">{formatPrice(row.amount)}</Typography>
-                                </Box>
-                            ))}
-                            {taxSummary.isInclusive && (
-                                <Typography variant="caption" color="text.secondary" display="block" mb={1} textAlign="right">
-                                    Inclusive of all taxes
-                                </Typography>
-                            )}
+                                    {/* Shipping */}
+                                    {shippingVisible && (
+                                    <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 1 }}>
+                                        <Typography variant="body2" color="text.secondary">Delivery Charges</Typography>
+                                        {!hasPhysicalItems ? (
+                                            <Typography variant="body2" color="success.main" fontWeight={600}>FREE (Digital)</Typography>
+                                        ) : shippingLoading ? (
+                                            <CircularProgress size={16} />
+                                        ) : shippingError || shippingQuote?.serviceable === false ? (
+                                            <Typography variant="body2" color="warning.main" fontWeight={600}>Unavailable</Typography>
+                                        ) : !shippingQuote?.quoteId ? (
+                                            <Typography variant="body2" color="text.secondary">Select a delivery address</Typography>
+                                        ) : shippingCost === 0 ? (
+                                            <Typography variant="body2" color="success.main" fontWeight={600}>FREE</Typography>
+                                        ) : shippingDiscount > 0 ? (
+                                            <Box sx={{ textAlign: 'right' }}>
+                                                <Typography variant="body2" sx={{ textDecoration: 'line-through', color: 'text.secondary' }}>
+                                                    {formatPrice(shippingCost)}
+                                                </Typography>
+                                                <Typography variant="body2" color="success.main" fontWeight={600}>FREE</Typography>
+                                            </Box>
+                                        ) : (
+                                            <Typography variant="body2">{formatPrice(shippingCost)}</Typography>
+                                        )}
+                                    </Box>
+                                    )}
+                                    {shippingVisible && hasPhysicalItems && shippingQuote?.pricingSource === 'standard' && shippingMethod === 'free_above_threshold' && shippingCost > 0 && (
+                                        <Typography variant="caption" color="success.main" display="block" mb={1}>
+                                            Add {formatPrice(freeThreshold - subtotal)} more for free delivery
+                                        </Typography>
+                                    )}
 
-                            {/* Discount */}
-                            {orderDiscount > 0 && (
-                                <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 0.5 }}>
-                                    <Typography variant="body2" color="text.secondary">Coupon Discount</Typography>
-                                    <Typography variant="body2" color="success.main" fontWeight={600}>−{formatPrice(orderDiscount)}</Typography>
-                                </Box>
-                            )}
-                            {appliedCoupons.length > 0 && appliedCoupons.map((coupon) => (
-                                <Box key={coupon.code} sx={{ display: 'flex', justifyContent: 'space-between', mb: 0.5 }}>
-                                    <Typography variant="caption" color="text.secondary">
-                                        {coupon.code}{coupon.applicationMode === 'auto' ? ' (auto)' : ''}
+
+                                    {/* GST breakdown */}
+                                    {taxSummary.taxRows.map((row) => (
+                                        <Box key={row.key} sx={{ display: 'flex', justifyContent: 'space-between', mb: 0.5 }}>
+                                            <Typography variant="body2" color="text.secondary">{row.label}</Typography>
+                                            <Typography variant="body2">{formatPrice(row.amount)}</Typography>
+                                        </Box>
+                                    ))}
+                                    {shippingVisible && hasPhysicalItems && effectiveDeliveryTax > 0 && (
+                                        <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 0.5 }}>
+                                            <Typography variant="body2" color="text.secondary">
+                                                Tax on delivery
+                                            </Typography>
+                                            <Typography variant="body2">{formatPrice(effectiveDeliveryTax)}</Typography>
+                                        </Box>
+                                    )}
+                                    {hasPhysicalItems && shippingTaxIncluded && effectiveShippingCost > 0 && (
+                                        <Typography variant="caption" color="text.secondary" display="block" mb={0.5} textAlign="right">
+                                            Delivery charges include tax
+                                        </Typography>
+                                    )}
+                                    {taxSummary.isInclusive && (
+                                        <Typography variant="caption" color="text.secondary" display="block" mb={1} textAlign="right">
+                                            Product prices inclusive of all taxes
+                                        </Typography>
+                                    )}
+
+                                    {/* Discount */}
+                                    {orderDiscount > 0 && (
+                                        <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 0.5 }}>
+                                            <Typography variant="body2" color="text.secondary">Coupon Discount</Typography>
+                                            <Typography variant="body2" color="success.main" fontWeight={600}>−{formatPrice(orderDiscount)}</Typography>
+                                        </Box>
+                                    )}
+                                    {appliedCoupons.length > 0 && appliedCoupons.map((coupon) => (
+                                        <Box key={coupon.code} sx={{ display: 'flex', justifyContent: 'space-between', mb: 0.5 }}>
+                                            <Typography variant="caption" color="text.secondary">
+                                                {coupon.code}{coupon.applicationMode === 'auto' ? ' (auto)' : ''}
+                                            </Typography>
+                                            <Typography variant="caption" color="success.main">
+                                                −{formatPrice(coupon.totalDiscount || 0)}
+                                            </Typography>
+                                        </Box>
+                                    ))}
+
+                                    <Divider sx={{ my: 1.5 }} />
+
+                                    {/* Total */}
+                                    <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 0.5 }}>
+                                        <Typography variant="subtitle1" fontWeight={700}>Total Amount</Typography>
+                                        {shippingLoading ? (
+                                            <Typography variant="body2" color="text.secondary">Calculating...</Typography>
+                                        ) : !selectedAddressId ? (
+                                            <Typography variant="body2" color="text.secondary">Select address</Typography>
+                                        ) : !shippingQuote?.quoteId || shippingQuote?.serviceable === false ? (
+                                            <Typography variant="body2" color="warning.main" fontWeight={600}>Calculated after delivery check</Typography>
+                                        ) : (
+                                            <Typography variant="subtitle1" fontWeight={700}>{formatPrice(total)}</Typography>
+                                        )}
+                                    </Box>
+
+                                    {totalSavings > 0 && (
+                                        <Typography variant="body2" color="success.main" fontWeight={600} sx={{ textAlign: 'right', mt: 0.5 }}>
+                                            You save {formatPrice(totalSavings)} on this order
+                                        </Typography>
+                                    )}
+                                </>
+                            ) : (
+                                <Box sx={{ py: 1 }}>
+                                    <Typography variant="body2" color="text.secondary">
+                                        Pricing details are not displayed for this storefront.
                                     </Typography>
-                                    <Typography variant="caption" color="success.main">
-                                        −{formatPrice(coupon.totalDiscount || 0)}
-                                    </Typography>
                                 </Box>
-                            ))}
-
-                            <Divider sx={{ my: 1.5 }} />
-
-                            {/* Total */}
-                            <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 0.5 }}>
-                                <Typography variant="subtitle1" fontWeight={700}>Total Amount</Typography>
-                                {shippingLoading ? (
-                                    <Typography variant="body2" color="text.secondary">Calculating...</Typography>
-                                ) : !selectedAddressId ? (
-                                    <Typography variant="body2" color="text.secondary">Select address</Typography>
-                                ) : !shippingQuote?.quoteId || shippingQuote?.serviceable === false ? (
-                                    <Typography variant="body2" color="warning.main" fontWeight={600}>Calculated after delivery check</Typography>
-                                ) : (
-                                    <Typography variant="subtitle1" fontWeight={700}>{formatPrice(total)}</Typography>
-                                )}
-                            </Box>
-
-                            {totalSavings > 0 && (
-                                <Typography variant="body2" color="success.main" fontWeight={600} sx={{ textAlign: 'right', mt: 0.5 }}>
-                                    You save {formatPrice(totalSavings)} on this order
-                                </Typography>
                             )}
 
                             <Divider sx={{ my: 1.5 }} />
@@ -1326,8 +1564,9 @@ const CheckoutPage = () => {
                                 variant={checkoutBlockStyle.ctaStyle === 'outline' ? 'outlined' : 'contained'}
                                 color={checkoutBlockStyle.ctaStyle === 'soft' ? 'secondary' : 'primary'}
                                 size="large"
+                                aria-describedby={hasShippingIssue ? 'checkout-shipping-error' : undefined}
                                 onClick={handlePlaceOrder}
-                                disabled={placing || shippingLoading || !shippingQuote?.quoteId || shippingQuote?.serviceable === false || activeSection !== 3 || !selectedAddressId}
+                                disabled={placing || (!user && guestCheckoutEnabled === false) || (hasPhysicalItems && (shippingLoading || !shippingQuote?.quoteId || shippingQuote?.serviceable === false || !selectedAddressId)) || activeSection !== 3}
                                 sx={{
                                     py: 1.5,
                                     fontSize: 16,
@@ -1337,6 +1576,13 @@ const CheckoutPage = () => {
                             >
                                 {placing ? (
                                     <CircularProgress size={22} color="inherit" />
+                                ) : !user && guestCheckoutEnabled === false ? (
+                                    'Log In to Complete Order'
+                                ) : (hasPhysicalItems && shippingLoading) ? (
+                                    <Box sx={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: 1 }}>
+                                        <CircularProgress size={18} color="inherit" />
+                                        <span>Updating Delivery Rates...</span>
+                                    </Box>
                                 ) : paymentMethod === 'cod' ? (
                                     'Place Order'
                                 ) : (
@@ -1346,16 +1592,10 @@ const CheckoutPage = () => {
 
                             {activeSection !== 3 && (
                                 <Typography variant="caption" color="text.secondary" display="block" textAlign="center" mt={1}>
-                                    Complete the steps above to place your order
+                                    {hasPhysicalItems && !selectedAddressId
+                                        ? 'Please select a delivery address to proceed'
+                                        : 'Complete the steps above to place your order'}
                                 </Typography>
-                            )}
-
-                            {(shippingError || (shippingQuote && !shippingQuote.serviceable)) && (
-                                <Alert severity="warning" sx={{ mt: 1.5, py: 0.5 }}>
-                                    <Typography variant="caption" fontWeight={600} display="block">
-                                        {isShippingSetupError ? 'Cannot place order: Please contact support or update your items.' : 'Cannot place order: Please retry or select a serviceable delivery address above.'}
-                                    </Typography>
-                                </Alert>
                             )}
 
                             <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 0.5, mt: 1.5 }}>

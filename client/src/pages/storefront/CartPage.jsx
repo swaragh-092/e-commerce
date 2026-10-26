@@ -18,9 +18,9 @@ import CachedIcon from '@mui/icons-material/Cached';
 import { Link, useNavigate } from 'react-router-dom';
 
 import { useCart } from '../../hooks/useCart';
-import { useSettings, useCurrency, useFeature, useComponentStyles } from '../../hooks/useSettings';
+import { useSettings, useCurrency, useFeature, useFeatureVisible, useFeaturesResolved, useComponentStyles } from '../../hooks/useSettings';
 import { useNotification } from '../../context/NotificationContext';
-import { getMediaUrl } from '../../utils/media';
+import { getMediaUrl, onImageError, PLACEHOLDER_PRODUCT } from '../../utils/media';
 
 
 import PageSEO from '../../components/common/PageSEO';
@@ -138,7 +138,7 @@ const QttyStepper = ({ qty, isUpdating, onDecrement, onIncrement, atMax }) => (
 );
 
 // ── Cart Item Card ────────────────────────────────────────────────────────────
-const CartItem = React.memo(({ item, getQty, handleUpdate, handleRemove, removingIds, updatingIds, formatPrice, cartItemStyle = {} }) => {
+const CartItem = React.memo(({ item, getQty, handleUpdate, handleRemove, removingIds, updatingIds, formatPrice, cartItemStyle = {}, showPrices = true }) => {
     const product = item.product;
     const variant = item.variant;
     const itemPrice = getCartItemUnitPrice(item);
@@ -146,7 +146,7 @@ const CartItem = React.memo(({ item, getQty, handleUpdate, handleRemove, removin
     const discountPct = getVariantDiscountPercent(product, variant);
     const isOnSale = discountPct > 0;
     const displayUnit = product?.unit ? String(product.unit).trim() : '';
-    const imageUrl = getMediaUrl(product?.images?.[0]?.url || '') || '/placeholder.png';
+    const imageUrl = getMediaUrl(product?.images?.[0]?.url || '') || PLACEHOLDER_PRODUCT;
     const qty = getQty(item);
     const maxQty = variant ? getAvailableStock(variant, 'stockQty') : getAvailableStock(product, 'quantity');
     const isRemoving = removingIds.has(item.id);
@@ -168,6 +168,7 @@ const CartItem = React.memo(({ item, getQty, handleUpdate, handleRemove, removin
                 <Box component={Link} to={`/products/${product?.slug}`}
                     sx={{ display: 'block', flexShrink: 0, width: { xs: 100, sm: 120 }, bgcolor: 'action.hover', borderRight: '1px solid', borderColor: 'divider', overflow: 'hidden' }}>
                     <Box component="img" src={imageUrl} alt={product?.name}
+                        onError={onImageError(PLACEHOLDER_PRODUCT)}
                         sx={{ width: '100%', height: '100%', minHeight: 120, objectFit: 'cover', display: 'block', transition: 'transform 0.4s ease', '&:hover': { transform: 'scale(1.06)' } }} />
                 </Box>
                 {/* Body */}
@@ -191,25 +192,29 @@ const CartItem = React.memo(({ item, getQty, handleUpdate, handleRemove, removin
                             )}
                         </Box>
                         {/* Line total */}
-                        <Typography sx={{ fontSize: '1rem', fontWeight: 800, letterSpacing: -0.5, flexShrink: 0 }}>
-                            {formatPrice(itemPrice * qty)}
-                        </Typography>
+                        {showPrices && (
+                            <Typography sx={{ fontSize: '1rem', fontWeight: 800, letterSpacing: -0.5, flexShrink: 0 }}>
+                                {formatPrice(itemPrice * qty)}
+                            </Typography>
+                        )}
                     </Box>
                     {/* Bottom controls */}
                     <Box sx={{ ...row('center', 'space-between') }}>
                         <Box>
-                            <Typography sx={{ fontSize: '0.75rem', color: 'text.disabled', fontWeight: 500 }}>
-                                {isOnSale ? (
-                                    <>
-                                        <Typography component="span" sx={{ textDecoration: 'line-through', fontSize: '0.75rem', color: 'text.disabled', mr: 0.5 }}>{formatPrice(regularPrice)}</Typography>
-                                        <Typography component="span" sx={{ fontSize: '0.75rem', color: 'success.main', fontWeight: 700, mr: 0.5 }}>{formatPrice(itemPrice)}</Typography>
-                                        {displayUnit && <Typography component="span" sx={{ fontSize: '0.75rem', color: 'text.secondary', mr: 0.5 }}>/ {displayUnit}</Typography>}
-                                        <Typography component="span" sx={{ fontSize: '0.68rem', color: 'success.main', fontWeight: 700 }}>({discountPct}% off)</Typography>
-                                    </>
-                                ) : (
-                                    <>{formatPrice(itemPrice)}{displayUnit ? ` / ${displayUnit}` : ''}</>
-                                )}
-                            </Typography>
+                            {showPrices && (
+                                <Typography sx={{ fontSize: '0.75rem', color: 'text.disabled', fontWeight: 500 }}>
+                                    {isOnSale ? (
+                                        <>
+                                            <Typography component="span" sx={{ textDecoration: 'line-through', fontSize: '0.75rem', color: 'text.disabled', mr: 0.5 }}>{formatPrice(regularPrice)}</Typography>
+                                            <Typography component="span" sx={{ fontSize: '0.75rem', color: 'success.main', fontWeight: 700, mr: 0.5 }}>{formatPrice(itemPrice)}</Typography>
+                                            {displayUnit && <Typography component="span" sx={{ fontSize: '0.75rem', color: 'text.secondary', mr: 0.5 }}>/ {displayUnit}</Typography>}
+                                            <Typography component="span" sx={{ fontSize: '0.68rem', color: 'success.main', fontWeight: 700 }}>({discountPct}% off)</Typography>
+                                        </>
+                                    ) : (
+                                        <>{formatPrice(itemPrice)}{displayUnit ? ` / ${displayUnit}` : ''}</>
+                                    )}
+                                </Typography>
+                            )}
 
                             {maxQty > 0 && maxQty <= qty && (
                                 <Typography sx={{ fontSize: '0.68rem', color: 'warning.main', fontWeight: 600, mt: 0.25 }}>
@@ -264,7 +269,7 @@ const TrustBadge = ({ icon, title, sub }) => (
 );
 
 // ── Order Summary ─────────────────────────────────────────────────────────────
-const OrderSummary = ({ visibleCount, subtotal, shippingCost, shippingMethod, freeThreshold, taxRows, taxInclusive, estimatedTotal, offerSummary, formatPrice, onCheckout, setEnquiryOpen, checkoutEnabled, enquiryEnabled, showTrustBadges = true, checkoutBlockStyle = {} }) => {
+const OrderSummary = ({ visibleCount, subtotal, shippingCost, shippingPending, shippingMethod, freeThreshold, taxRows, taxInclusive, estimatedTotal, offerSummary, formatPrice, onCheckout, setEnquiryOpen, checkoutEnabled, enquiryEnabled, showTrustBadges = true, checkoutBlockStyle = {}, showShipping = true, showPayments = true, showPrices = true }) => {
     const shippingFree = shippingMethod === 'free' || shippingCost === 0;
     const progressPct = freeThreshold > 0 ? Math.min((subtotal / freeThreshold) * 100, 100) : 0;
     const blockRadius = checkoutBlockStyle.radius === 'none' ? 0 : checkoutBlockStyle.radius === 'small' ? 1 : checkoutBlockStyle.radius === 'large' ? 3 : 2;
@@ -289,56 +294,68 @@ const OrderSummary = ({ visibleCount, subtotal, shippingCost, shippingMethod, fr
                 </Box>
 
                 <Box sx={blockPadding}>
-                    <PriceRow label="Subtotal" value={formatPrice(subtotal)} />
-                    <PriceRow label="Shipping" icon={<LocalShippingOutlinedIcon />}
-                        value={shippingFree ? 'Free' : formatPrice(shippingCost)} green={shippingFree} />
-                    {taxRows.map(r => <PriceRow key={r.label} label={r.label} value={r.value} />)}
-                    {taxInclusive && <Typography sx={{ fontSize: '0.7rem', color: 'text.disabled', mt: 0.25, mb: 0.5 }}>Taxes included in price</Typography>}
+                    {showPrices ? (
+                        <>
+                            <PriceRow label="Subtotal" value={formatPrice(subtotal)} />
+                            {showShipping && (
+                                <PriceRow label="Shipping" icon={<LocalShippingOutlinedIcon />}
+                                    value={shippingPending ? 'Calculated at checkout' : shippingFree ? 'Free' : formatPrice(shippingCost)} green={!shippingPending && shippingFree} />
+                            )}
+                            {taxRows.map(r => <PriceRow key={r.label} label={r.label} value={r.value} />)}
+                            {taxInclusive && <Typography sx={{ fontSize: '0.7rem', color: 'text.disabled', mt: 0.25, mb: 0.5 }}>Taxes included in price</Typography>}
 
-                    {/* Free shipping bar */}
-                    {shippingMethod === 'free_above_threshold' && shippingCost > 0 && freeThreshold > 0 && (
-                        <Fade in>
-                            <Box sx={{ mt: 1.5, p: 1.5, borderRadius: 1.5, border: '1px solid', borderColor: 'divider', bgcolor: 'action.hover' }}>
-                                <Box sx={{ ...row('center', 'space-between'), mb: 0.9 }}>
-                                    <Typography sx={{ fontSize: '0.72rem', fontWeight: 700, color: 'text.secondary' }}>
-                                        Free shipping at {formatPrice(freeThreshold)}
-                                    </Typography>
-                                    <Typography sx={{ fontSize: '0.68rem', color: 'text.disabled' }}>{progressPct.toFixed(0)}%</Typography>
+                            {/* Free shipping bar */}
+                            {showShipping && !shippingPending && shippingMethod === 'free_above_threshold' && shippingCost > 0 && freeThreshold > 0 && (
+                                <Fade in>
+                                    <Box sx={{ mt: 1.5, p: 1.5, borderRadius: 1.5, border: '1px solid', borderColor: 'divider', bgcolor: 'action.hover' }}>
+                                        <Box sx={{ ...row('center', 'space-between'), mb: 0.9 }}>
+                                            <Typography sx={{ fontSize: '0.72rem', fontWeight: 700, color: 'text.secondary' }}>
+                                                Free shipping at {formatPrice(freeThreshold)}
+                                            </Typography>
+                                            <Typography sx={{ fontSize: '0.68rem', color: 'text.disabled' }}>{progressPct.toFixed(0)}%</Typography>
+                                        </Box>
+                                        <Box sx={{ height: 4, bgcolor: 'divider', borderRadius: 2, overflow: 'hidden' }}>
+                                            <Box sx={{ height: '100%', bgcolor: 'primary.main', borderRadius: 2, width: `${progressPct}%`, transition: 'width 0.5s ease' }} />
+                                        </Box>
+                                        <Typography sx={{ fontSize: '0.7rem', color: 'text.secondary', mt: 0.75 }}>
+                                            Add <Box component="strong" sx={{ color: 'text.primary' }}>{formatPrice(freeThreshold - subtotal)}</Box> more to qualify
+                                        </Typography>
+                                    </Box>
+                                </Fade>
+                            )}
+
+                            {offerSummary?.bestCoupon && (
+                                <Alert icon={<LocalOfferOutlinedIcon sx={{ fontSize: 14 }} />}
+                                    severity={offerSummary.autoAppliedCoupon ? 'success' : 'info'}
+                                    sx={{ mt: 1.75, borderRadius: 1.5, fontSize: '0.75rem', py: 0.25, px: 1.25 }}>
+                                    <strong>{offerSummary.autoAppliedCoupon
+                                        ? `${offerSummary.autoAppliedCoupon.coupon.name || offerSummary.autoAppliedCoupon.coupon.code} auto-applies.`
+                                        : `${offerSummary.bestCoupon.coupon.name || offerSummary.bestCoupon.coupon.code} available.`}
+                                    </strong>
+                                    {` Save ${formatPrice(offerSummary.bestCoupon.totalDiscount || 0)}.`}
+                                </Alert>
+                            )}
+
+                            <Box sx={{ my: 2, borderTop: '1px solid', borderColor: 'divider' }} />
+
+                            {/* Total */}
+                            <Box sx={{ ...row('flex-end', 'space-between'), mb: 0.25 }}>
+                                <Box>
+                                    <Typography sx={{ fontSize: '0.8rem', fontWeight: 700 }}>Estimated Total</Typography>
+                                    <Typography sx={{ fontSize: '0.68rem', color: 'text.disabled' }}>Final delivery fee and tax confirmed at checkout</Typography>
                                 </Box>
-                                <Box sx={{ height: 4, bgcolor: 'divider', borderRadius: 2, overflow: 'hidden' }}>
-                                    <Box sx={{ height: '100%', bgcolor: 'primary.main', borderRadius: 2, width: `${progressPct}%`, transition: 'width 0.5s ease' }} />
-                                </Box>
-                                <Typography sx={{ fontSize: '0.7rem', color: 'text.secondary', mt: 0.75 }}>
-                                    Add <Box component="strong" sx={{ color: 'text.primary' }}>{formatPrice(freeThreshold - subtotal)}</Box> more to qualify
+                                <Typography sx={{ fontSize: '1.55rem', fontWeight: 900, letterSpacing: -1, color: 'primary.main', lineHeight: 1.1 }}>
+                                    {formatPrice(estimatedTotal)}
                                 </Typography>
                             </Box>
-                        </Fade>
-                    )}
-
-                    {offerSummary?.bestCoupon && (
-                        <Alert icon={<LocalOfferOutlinedIcon sx={{ fontSize: 14 }} />}
-                            severity={offerSummary.autoAppliedCoupon ? 'success' : 'info'}
-                            sx={{ mt: 1.75, borderRadius: 1.5, fontSize: '0.75rem', py: 0.25, px: 1.25 }}>
-                            <strong>{offerSummary.autoAppliedCoupon
-                                ? `${offerSummary.autoAppliedCoupon.coupon.name || offerSummary.autoAppliedCoupon.coupon.code} auto-applies.`
-                                : `${offerSummary.bestCoupon.coupon.name || offerSummary.bestCoupon.coupon.code} available.`}
-                            </strong>
-                            {` Save ${formatPrice(offerSummary.bestCoupon.totalDiscount || 0)}.`}
-                        </Alert>
-                    )}
-
-                    <Box sx={{ my: 2, borderTop: '1px solid', borderColor: 'divider' }} />
-
-                    {/* Total */}
-                    <Box sx={{ ...row('flex-end', 'space-between'), mb: 0.25 }}>
-                        <Box>
-                            <Typography sx={{ fontSize: '0.8rem', fontWeight: 700 }}>Estimated Total</Typography>
-                            <Typography sx={{ fontSize: '0.68rem', color: 'text.disabled' }}>Incl. all taxes & fees</Typography>
+                        </>
+                    ) : (
+                        <Box sx={{ py: 1 }}>
+                            <Typography variant="body2" color="text.secondary">
+                                Pricing is not displayed on the storefront.
+                            </Typography>
                         </Box>
-                        <Typography sx={{ fontSize: '1.55rem', fontWeight: 900, letterSpacing: -1, color: 'primary.main', lineHeight: 1.1 }}>
-                            {formatPrice(estimatedTotal)}
-                        </Typography>
-                    </Box>
+                    )}
 
                     {checkoutEnabled && (
                         <Button variant="contained" fullWidth size="large" onClick={onCheckout}
@@ -380,6 +397,7 @@ const OrderSummary = ({ visibleCount, subtotal, shippingCost, shippingMethod, fr
             )}
 
             {/* Payment methods */}
+            {showPayments && (
             <Paper elevation={0} sx={{ border: '1px solid', borderColor: 'divider', borderRadius: 1.75, px: 2, py: 1.25, ...row('center', 'space-between') }}>
                 <Typography sx={{ fontSize: '0.63rem', color: 'text.disabled', fontWeight: 800, letterSpacing: 2 }}>WE ACCEPT</Typography>
                 <Box sx={{ display: 'flex', gap: 0.75 }}>
@@ -390,6 +408,7 @@ const OrderSummary = ({ visibleCount, subtotal, shippingCost, shippingMethod, fr
                     ))}
                 </Box>
             </Paper>
+            )}
         </Box>
     );
 };
@@ -405,9 +424,15 @@ const CartPage = () => {
     const [offerSummary, setOfferSummary] = useState(null);
     const [clearing, setClearing] = useState(false);
     const [enquiryOpen, setEnquiryOpen] = useState(false);
-    const cartEnabled = useFeature('cart');
-    const checkoutEnabled = useFeature('checkout');
+    const cartEnabled = useFeatureVisible('cart', 'storefront');
+    const featuresResolved = useFeaturesResolved();
+    const checkoutEnabled = useFeatureVisible('checkout', 'storefront');
     const enquiryEnabled = useFeature('enquiry');
+    const showShipping = useFeatureVisible('shipping', 'storefront');
+    const showPayments = useFeatureVisible('payments', 'storefront');
+    const pricingVisible = useFeatureVisible('pricing', 'storefront');
+    const showPrice = useFeature('showPrice');
+    const showPrices = pricingVisible && showPrice !== false;
     const cartPage = settings?.cartPage || {};
     const cartItemStyle = useComponentStyles('cartItem');
     const checkoutBlockStyle = useComponentStyles('checkoutBlock');
@@ -417,10 +442,10 @@ const CartPage = () => {
     const emptyStateText = cartPage.emptyStateText || "Haven't added anything yet. Let's fix that.";
 
     useEffect(() => {
-        if (!cartEnabled) {
+        if (featuresResolved && !cartEnabled) {
             navigate('/');
         }
-    }, [cartEnabled, navigate]);
+    }, [featuresResolved, cartEnabled, navigate]);
 
     const items = useMemo(() => sortCartItems(cart?.items || []), [cart?.items]);
     const { getQty, handleUpdate, handleRemove, removingIds, updatingIds } = useOptimisticCart(items, updateItem, removeItem);
@@ -429,9 +454,13 @@ const CartPage = () => {
     const shippingMethod = settings?.shipping?.method || 'flat_rate';
     const flatRate = parseFloat(settings?.shipping?.flatRate || 0);
     const freeThreshold = parseFloat(settings?.shipping?.freeThreshold || 0);
+    const hasPhysicalItems = items.some((item) => item.product?.requiresShipping !== false);
+    const shippingPending = hasPhysicalItems && settings?.shipping?.pricingMode !== 'standard';
     let shippingCost = 0;
-    if (shippingMethod === 'flat_rate') shippingCost = flatRate;
-    else if (shippingMethod === 'free_above_threshold') shippingCost = subtotal >= freeThreshold ? 0 : flatRate;
+    if (hasPhysicalItems && !shippingPending) {
+        if (shippingMethod === 'flat_rate') shippingCost = flatRate;
+        else if (shippingMethod === 'free_above_threshold') shippingCost = subtotal >= freeThreshold ? 0 : flatRate;
+    }
 
     const taxSummary = useMemo(() => calculateTaxSummary({
         items,
@@ -504,7 +533,7 @@ const CartPage = () => {
                         {items.map(item => (
                             <CartItem key={item.id} item={item} getQty={getQty}
                                 handleUpdate={handleUpdate} handleRemove={handleRemove}
-                                removingIds={removingIds} updatingIds={updatingIds} formatPrice={formatPrice} cartItemStyle={cartItemStyle} />
+                                removingIds={removingIds} updatingIds={updatingIds} formatPrice={formatPrice} cartItemStyle={cartItemStyle} showPrices={showPrices} />
                         ))}
                     </Box>
 
@@ -526,13 +555,13 @@ const CartPage = () => {
                                         Cart Breakdown
                                     </Typography>
                                 </Box>
-                                <Box sx={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', px: 2, py: 1.75 }}>
+                                <Box sx={{ display: 'grid', gridTemplateColumns: showPrices ? 'repeat(3, 1fr)' : 'repeat(2, 1fr)', px: 2, py: 1.75 }}>
                                     {[
                                         { label: 'Items', val: visibleItems.length },
                                         { label: 'Total units', val: visibleCount },
-                                        { label: 'Subtotal', val: formatPrice(subtotal) },
+                                        ...(showPrices ? [{ label: 'Subtotal', val: formatPrice(subtotal) }] : []),
                                     ].map(({ label, val }, i, arr) => (
-                                        <Box key={label} sx={{ textAlign: i === 2 ? 'right' : i === 1 ? 'center' : 'left', borderRight: i < arr.length - 1 ? '1px solid' : 'none', borderColor: 'divider', pr: i < arr.length - 1 ? 2 : 0, pl: i > 0 ? 2 : 0 }}>
+                                        <Box key={label} sx={{ textAlign: i === arr.length - 1 ? 'right' : i === 1 && arr.length > 2 ? 'center' : 'left', borderRight: i < arr.length - 1 ? '1px solid' : 'none', borderColor: 'divider', pr: i < arr.length - 1 ? 2 : 0, pl: i > 0 ? 2 : 0 }}>
                                             <Typography sx={{ fontSize: '0.68rem', color: 'text.disabled', mb: 0.25 }}>{label}</Typography>
                                             <Typography sx={{ fontSize: '0.9rem', fontWeight: 800, letterSpacing: -0.3 }}>{val}</Typography>
                                         </Box>
@@ -546,7 +575,7 @@ const CartPage = () => {
                 {/* Summary */}
                 <OrderSummary
                     visibleCount={visibleCount} subtotal={subtotal}
-                    shippingCost={shippingCost} shippingMethod={shippingMethod} freeThreshold={freeThreshold}
+                    shippingCost={shippingCost} shippingPending={shippingPending} shippingMethod={shippingMethod} freeThreshold={freeThreshold}
                     taxRows={taxRows} taxInclusive={taxInclusive}
                     estimatedTotal={estimatedTotal} offerSummary={offerSummary}
                     formatPrice={formatPrice} onCheckout={handleCheckout}
@@ -555,6 +584,9 @@ const CartPage = () => {
                     enquiryEnabled={enquiryEnabled}
                     showTrustBadges={showCartTrustBadges}
                     checkoutBlockStyle={checkoutBlockStyle}
+                    showShipping={showShipping}
+                    showPayments={showPayments}
+                    showPrices={showPrices}
                 />
             </Box>
 

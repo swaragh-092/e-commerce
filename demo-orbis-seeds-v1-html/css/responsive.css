@@ -1,0 +1,489 @@
+@media(max-width:1600px){
+   .founded-wrapper {padding: 80px 0;}
+}
+
+@media(max-width:1300px){
+  .core-value-1 h3{font-size: 24px;}
+}
+
+@media(max-width:1240px){
+   .earth{width:375px;height: 375px;}
+   .orbit-1{width: 440px;height: 440px;}
+   .orbit-2{width: 420px;height: 420px;}
+   .orbit-3{width: 400px;height: 400px;}
+   .moon{width: 80px;height: 80px;}
+   .moon.opposite-moon{width: 80px;height: 80px;}
+    @keyframes moonOrbit {
+       0% {
+         transform: rotate(0deg) translateX(210px) rotate(0deg);
+       }
+       100% {
+         transform: rotate(360deg) translateX(210px) rotate(-360deg);
+       }
+     }
+     
+     @keyframes moonOrbitOpposite {
+      0% {
+        transform: rotate(180deg) translateX(210px) rotate(-180deg);
+      }
+      100% {
+        transform: rotate(540deg) translateX(210px) rotate(-540deg);
+      }
+     }
+     .about-wrapper {padding: 40px 0 100px;}
+}
+
+@media(max-width:1200px){
+    /* .right-desktop-menu-container {display: none;} */
+    .right-desktop-menu-container .nav-links {display: none;}
+    .right-desktop-menu-container {justify-content: flex-end;margin-right: 35px;width: fit-content;}
+    .resp-menu {display: block !important;position: absolute;right: 0px;width: 100%;max-width: 30px;top: 0;bottom: 0;}
+    .bottom-header-top {justify-content: flex-start; width: 100%;max-width: 100%;}
+    .bottom-inner-wrapper {padding: 10px 0;position: relative;}
+    .bottom-header-top .iso-logos img {width: 100%;max-width: 65px;position: relative;top: 3px;}
+    .bottom-header-top .iso-logos{display: block;}
+    header.scrolled-header .bottom-header-top .iso-logos{display: block;}
+    header.scrolled-header .bottom-inner-wrapper .bottom-header-top {align-items: flex-end;flex-direction: row;}
+    header.scrolled-header .bottom-inner-wrapper {justify-content: flex-start;}
+    .variety-of-seeds-1{max-width: 200px;}
+    .variety-of-text h3{font-size: 20px;}
+    .founded-left{max-width: 400px;}
+    #section-1{top: -108px;}
+    .founded-wrapper {padding: 50px 0;}
+    .world-operations-wrapper{padding: 50px 0;}
+    .testimonial-1{max-width: 340px;}
+    .testimionial-cards{max-width: 710px;}
+    .research-and-development-small-left {max-width: 100px;left: 40px;}
+    .research-and-development-small-left img{max-width: 100px;}
+    .research-and-development-small-right {max-width: 130px;top: 60px;right: 0;}
+    .research-and-development-small-right img{max-width: 110px;}
+   .vision-mision-wrapper{padding: 30px 0;margin: 40px 0 0;}
+   .about-us-wrapper{padding: 55px 0 0;}
+   .ip-product-wrapper-main{padding: 50px 0;}
+   .contact-inner{margin: 50px 0 0;}
+   /* .inner-page-banner-wrapper{top: -84px;} */
+   .bottom-header-top a{justify-content: flex-start}
+   .reality .counter span{font-size: 38px;}
+ }
+
+ @media(max-width:1080px){
+    .variety-of-text .arrow img{max-width: 15px;}
+    .reality .counter{padding: 10px 30px;}
+    .reality{justify-content: space-evenly;flex-wrap: wrap;}
+    .locations{justify-content: space-evenly;}
+    .location-1{padding: 20px;}
+    .research-developement-parent{flex-direction: column;gap: 40px}
+    .research-left-img:nth-child(2){transform: unset;}
+    .research-right{max-width: 900px;transform: unset;}
+    .research-faq .common-btn-parent{margin: 0;}
+    .about-wrapper {padding: 0px 0 100px;}
+   .research-developement-parent{padding-top: 25px;}
+   .contact-left{max-width: 215px;}
+   
+  /* Hide all labels by default */
+  #section-1 .content-slider nav .controls label {display: none;}
+
+  /* Show only the active label */
+  #section-1 .content-slider #banner1:checked ~ nav label:nth-of-type(1),
+  #section-1 .content-slider #banner2:checked ~ nav label:nth-of-type(2),
+  #section-1 .content-slider #banner3:checked ~ nav label:nth-of-type(3) {display: flex;justify-content: center;align-items: center;}
+  #section-1 .content-slider nav .controls{justify-content: center;}
+
+  .reality .counter span{font-size: 36px;}
+ }
+
+ @media(max-width:1040px){
+  .about-corevalues-points-1 {float: unset;}
+ .about-corevalues-points-1-parent{width: 100%;max-width: 100%;clear: unset;position: unset;}
+   .about-corevalues-points-1-parent:nth-child(2n+2) .about-corevalues-points-1 {float: unset;}
+   .about-corevalues-points-1-parent:nth-child(2n+1) .about-corevalues-points-1::before{left: 0;right: unset;}
+   .about-corevalues-points-1-parent:nth-child(2n+1) .about-corevalues-points-1{flex-direction: unset;}
+   .about-corevalues-points-1-parent:nth-child(2n+1) .cabout-corevalues-left::before{left: -10px;right: unset;}
+   .about-corevalues-points-1-parent:nth-child(2n+1) .about-corevalues-points-1 .cabout-corevalues-left-text h5{text-align: start;}
+   .about-corevalues-points::before{right: unset;margin: unset;}
+  .about-corevalues-wrapper{height: 100%;}
+  }
+
+  @media(max-width:1020px){
+   /* .variety-of-seeds-links .vegetables {max-width: 645px;} */
+   .variety-of-seeds-links .category-label {left: -50px;min-width: 100px;font-size: 15px;}
+   .variety-of-seeds-1 {max-width: 150px;}
+   .founder-right-1{padding: 20px;}
+   .founder-right-1 h3{font-size: 20px;}
+   .earth {width: 340px;height: 340px;}
+   .orbit-1 {width: 410px;height: 410px;}
+   .orbit-2 {width: 385px;height: 385px;}
+   .orbit-3 {width: 365px;height: 365px;}
+    @keyframes moonOrbit {
+       0% {
+         transform: rotate(0deg) translateX(190px) rotate(0deg);
+       }
+       100% {
+         transform: rotate(360deg) translateX(190px) rotate(-360deg);
+       }
+     }
+     
+      @keyframes moonOrbitOpposite {
+       0% {
+         transform: rotate(180deg) translateX(190px) rotate(-180deg);
+       }
+       100% {
+         transform: rotate(540deg) translateX(190px) rotate(-540deg);
+       }
+     }
+   .variety-of-seeds-img-parent{padding: 10px 0 50px 10px;}
+   .variety-of-seeds-img img{max-width: 50px;}
+   .variety-of-text h3{font-size: 15px;}
+   .variety-of-seeds-1:hover .variety-of-seeds-img {transform: translate(20%,20%);}
+   .variety-of-seeds-links .category-label{font-size: 18px;min-width: 140px;left: -76px;}
+   .testimonial-1{max-width: 300px;}
+   .testimionial-cards{max-width: 630px}
+ }
+
+ @media(max-width:992px){
+.about-inner{gap: 30px;}
+.about-right{padding-top: 50px;}
+.testimonial-inner{flex-direction: column;align-items: flex-start;padding: 30px;}
+.testimonial-left{max-width: 100%;}
+.testimonial-left h2{text-align: center;}
+.about-wrapper {padding: 0px 0 50px;}
+ h2{font-size: 36px;}
+ .testimonial-left h2{text-align: start;}
+ .testimonial-1{max-width: 400px;}
+.testimionial-cards{max-width: 830px}
+.testimonial-inner{padding: 30px 30px 40px;}
+.testimonial-left h2{padding-bottom: 15px;}
+.about-us{flex-direction: column;gap: 10px;}
+.about-us-right{max-width: 100%;}
+.about-us-right h1{text-align: center;}
+.about-us-left{gap: 10px;}
+.about-us-left-right-up{margin-bottom: 10px;}
+.research-and-development-small-right{max-width: 150px;right: 60px;}
+.research-and-development-small-right img {max-width: 150px;}
+.research-and-development-small-left{left: 100px;}
+.research-and-development-big img{max-width: 400px;}
+.research-and-development-big{max-width: 400px;}
+.research-and-development-left{max-width: 100%;}
+.research-and-development{flex-direction: column;}
+.inner-bottom-wrapper{flex-direction: column;}
+.left-cards-main{max-width: 100%;}
+.our-cards img{max-width: 100%;}
+.our-cards{max-width: 100%;}
+.right-cards-main .sub-cards-box{flex-direction: row;}
+.right-cards-main .sub-cards-box:nth-child(1) .bg-geen::before {transform: rotate(0deg);top: 20px;left: -30px;}
+.left-cards-main .sub-cards-box:nth-child(2) .bg-geen::before {color: #71C5DD;}
+.our-cards.cards-box{display: none;}
+.our-collaborations{flex-wrap: wrap;gap: 20px;}
+.our-collaborations-inner{padding: 0;}
+.our-collaboration-1{max-width: 225px;}
+.contact-right{flex-direction: column;padding: 40px 30px;}
+.contact-right-right{padding: 0;}
+.our-team-wrapper{padding: 50px 0;}
+.vision-mission-right{flex-wrap: wrap;}
+.vision-mission-right::before{display: none;}
+
+  .cabout-corevalues-left{max-width: 85px;height: 85px;}
+  .about-corevalues-left-img{max-width: 40px;}
+  .about-corevalues-points::before{height: 800px;}
+
+  .sitemap-wrapper{padding:0 0 50px;}
+
+  .reality .counter span{font-size: 34px;}
+}
+
+  @media(max-width:920px){
+   .about-inner{flex-direction: column;}
+   .solar-system{max-width: 100%;padding-top: 330px;}
+   .about-right{min-width: 100%;}
+   .about-right h2{text-align: center;}
+  .variety-of-seeds-1{max-width: 145px;}
+  .variety-of-text h3{font-size: 14px;}
+   .variety-of-seeds-links .category-label {font-size: 14px;min-width: 100px;left: -53px;}
+.founder-right-1{padding: 15px;}
+.founded-left {max-width: 300px;}
+.founded-inner{flex-direction: column;}
+
+ .variety-of-seeds-links .vegetables{padding: 20px 40px;}
+#section-1 .content-slider nav .controls{justify-content: center;}
+.common-btn-parent a{padding: 10px 30px;}
+.about-right .common-btn-parent{display: flex;justify-content: center;align-items: center;width: 100%;max-width: 100%;}
+
+.contact-us-right .common-btn{max-width: 150px;}
+/* .footer-right-up:nth-child(1){padding-bottom: 30px;} */
+.reality-inner p{font-size:22px;}
+}
+
+@media(max-width:850px){
+  .bottom-box-wrapper {
+    padding: 40px 0 30px;
+  }
+  .inner-bottom-wrapper{padding: 20px 0;}
+  .chillie{flex-direction: column;margin-top: 30px;}
+  .chillie-left {max-width: 100%;height: 360px;}
+  .chillie-right{max-width: 100%;}
+
+  .chillie:nth-child(2n){flex-direction: column;margin-top: 30px}
+  .chillie-left:nth-child(2n){max-width: 100%;height: 360px;}
+  .chillie-right:nth-child(2n){max-width: 100%;}
+
+  .our-team-text{max-width: 180px;display: block;}
+   .our-team-text h5{font-size: 18px;}
+   .our-team-text p{font-size: 14px;}
+   .our-team{flex-wrap: wrap;gap: 50px;}
+   .our-team-1 .our-team-img img{height: 220px;width: 100%;max-width: 220px;border-radius: 10px;}
+   .our-team-1 .our-team-img img.before{height: 220px;width: 100%;max-width: 220px;border-radius: 10px;}
+   .our-team-1 .our-team-img img.after{height: 220px;width: 100%;max-width: 220px;border-radius: 10px;}
+   .our-team-members h4{padding-bottom: 20px;}
+}
+
+@media(max-width:776px){
+   .location-1 h3{font-size: 20px;}
+   .location-1 span {padding: 8px 13px;}
+   .locations{justify-content: center;}
+   .footer-inner {flex-direction: column;align-items: center;gap: 50px;}
+   .footer-left{max-width: 100%;padding: 0;}
+   .footer-middle{max-width: 100%;padding: 0;}
+   .footer-right{max-width: 100%;padding: 0;}
+   .footer-middle ul{align-items: start;}
+   .footer-inner{align-items: start;}
+   .copyright-inner ul{flex-direction: column;padding: 10px 0;gap: 3px;}
+   .copyright-inner ul p{margin: 0;}
+   .our-core-values-inner{flex-wrap: wrap;}
+   .world-operations-wrapper{padding: 30px 0;}
+   .reseach-developement{padding: 30px 0;}
+   .contact-us-wrapper {padding: 30px 0 0;}
+   .testimonials-wrapper {padding: 30px 0;}
+   h2 {font-size: 30px;}
+   h1{font-size: 38px;}
+   .common-btn-parent a{padding: 8px;}
+   .contact-us-right .common-btn{max-width: 150px;}
+   .variety-of-seeds-inner h2{max-width: 400px;}
+   .testimonial-1{max-width: 500px;}
+   .testimionial-cards{max-width: 500px;}
+   .testimonial-1 h4{font-size: 20px;}
+   .testimonial-left h2{padding-bottom: 10px;}
+   .our-core-values-inner{max-width: 615px;}
+   .core-value-1{max-width: 300px;}
+   .vision-mission-text h5{font-size: 22px;}
+   .products{flex-direction: column;}
+   .products-left{max-width: 350px;}
+   .our-team-top{flex-direction: column;gap: 15px;}
+   .our-team-left{max-width: 100%;}
+   .our-team-right{max-width: 100%;}
+   .our-team-right-img img{max-width: 100%;}
+   .our-team-right-img{max-width: 100%;}
+   .our-team-top{padding: 0 0 20px;}
+   .list-variety-chillies ul li h4 {font-size: 22px;}
+   .list-variety-chillies ul li .dot {width: 13px;height: 13px;}
+   .chillie-right h4{font-size: 22px;}
+   .chillie-right-heading h3{font-size: 32px;}
+   .chillie-right-heading span{font-size: 55px;}
+   .counter h3{font-size:22px;text-align:center;}
+   .location-1 h3{font-size: 18px;}
+   .contact-us-right h2{text-align: center;}
+   .copyright-inner ul p a{font-size: 14px;}
+   .ip-products-list{margin: auto; max-width: 400px;}
+   .controls-line{margin-bottom: 40px;}
+   .reality .counter span{font-size:32px;}
+}
+
+@media(max-width:768px){
+   .contact-us-inner{flex-direction: column;}
+   .contact-us-right{max-width: 90%;}
+   .contact-us-left img{max-width: 300px;}
+   .contact-us-left{max-width: 300px;}
+   .contact-us-inner{gap: 0;}
+   .form-div{padding: 15px 0 5px;}
+   .contact-us-right .common-btn{margin-top: 20px;}
+   .contact-us-right{max-width: 100%;}
+   .seed-breeding-up{flex-wrap: wrap;}
+   .breeding-station-1{max-width: 250px;}
+   .tablinks{font-size: 14px;}
+   .tabs{flex-wrap: wrap;}
+   .contact-left {max-width: 72px;rotate: 90deg;margin: auto;}
+  .contact-left img{max-width: 72px;}
+  .contact-inner {flex-direction: column;gap:0;}
+  .contact-right {flex-direction: column;padding: 0px 30px 30px;}
+  .vision-mission-right{flex-direction: column;align-items: center;gap: 12px;}
+  .vision-mission-right-1{margin-bottom: 0;}
+}
+@media(max-width:676px){
+  .research-and-development-big img{max-width: 300px;}
+  .research-and-development-big{max-width: 300px;}
+  .research-and-development-small-left{display: none;}
+  .research-and-development-small-right {display: none;}
+  h1{font-size: 36px;}
+}
+
+@media(max-width:600px){
+   .locations {justify-content: center;flex-direction: column;align-items: flex-start;}
+   .footer-inner{gap: 30px;}
+   .common-btn-parent {max-width: 110px;}
+   .common-btn-parent a {padding: 5px;font-size: 14px;}
+   .contact-us-right .common-btn {max-width: 110px;}
+   .contact-us-right button {padding: 5px;font-size: 14px;}
+}
+@media(max-width:599px){
+   .our-core-values-inner{max-width: 300px;}
+}
+@media(max-width:576px){
+   .variety-of-seeds-links .category-label{left: 0;right: 0;margin: auto;top: -50px;bottom: unset;rotate: unset; padding: 0 20px;}
+   .variety-of-seeds-inner{border: unset;}
+   .variety-of-seeds-links .vegetables{justify-content: center;max-width: 100%;padding: 0 0 80px;}
+   .variety-of-text .arrow img {max-width: 12px;}
+   .variety-of-seeds-inner h2{transform: unset;}
+   .variety-of-seeds-links{padding-top: 90px;}
+   .variety-of-seeds-wrapper{padding: 40px 0;}
+   .vegetables:last-child{padding: 0;}
+   .variety-of-seeds-inner{padding: 0;}
+
+   .variety-of-seeds-links .category-label {top: -45px;left: 0;color: #fff;font-size: 18px;right: 0;rotate: unset;bottom: unset;}
+   .variety-of-seeds-links .vegetables {padding: 10px;margin: 0 0 75px;}
+   .variety-of-seeds-1:hover .variety-of-seeds-img {transform: translate(15%,30%);}
+   .vegetables:last-child{padding: 10px;margin: 30px 0 0;}
+   .location-1 span{font-size: 15px;}
+   .research-faq .acc__title::after {width: 12px;height: 12px;border-right: 3px solid #70c5dd;border-bottom: 3px solid #70c5dd;right: 3px;}
+   .research-right{padding: 12px 10px;}
+   p{font-size: 15px;}
+   .research-faq .acc__title h3{font-size: 22px;}
+   h2 {font-size: 28px;}
+  h1{font-size: 34px;}
+
+   .vision-mission-text h5{font-size: 18px;}
+   .ip-products-list{display: none;}
+   .about-corevalues-points::before{height: 93%;}
+   .other-product-1{max-width: 120px;}
+   .other-product-text .view {width: 34px;height: 34px;}
+   .chillie-right h4{font-size: 20px;}
+   .chillie-right-heading h3{font-size: 28px;}
+   .chillie-right-heading span{font-size: 50px;}
+   .gallery-pagination button{padding: 0px 6px 2px; font-size: 15px;}
+   .gallery-pagination{gap: 0px;}
+}
+@media(max-width:536px){
+   .research-faq .acc__title h3{font-size: 20px;}
+}
+ @media(max-width:480px){
+    .bottom-header-top .iso-logos img {max-width: 38px;}
+    header.scrolled-header .bottom-inner-wrapper .iso-logos img {max-width: 40px;}
+    .about-inner{gap:0}
+    .research-faq .acc__title h3{font-size: 16px;}
+    .testimonial-img{max-width: 75px;}
+    .testimonial-img img{max-width: 75px;}
+    h2 {font-size: 26px;}
+    p{font-size: 14px;}
+    .sub-cards-box{flex-direction: column;}
+    .bg-geen::before {left: 0;top: -35px;rotate: 90deg;right: 0;margin: auto;}
+    .left-cards-main .sub-cards-box:nth-child(2){flex-direction: column;}
+    .right-cards-main .sub-cards-box{flex-direction: column;}
+    .left-cards-main .sub-cards-box:nth-child(2) .bg-geen::before {color: #c9e9f2;left: 0;right: 0;top: -33px;rotate: -90deg;}
+    .right-cards-main .sub-cards-box:nth-child(1) .bg-geen::before {transform: rotate(0deg);top: -33px;left: -30px;}
+  h1{font-size: 32px;}
+  #to-top{bottom: 50px;right: 10px;width: 63px;height: 64px;}
+.counter h3{font-size: 18px;}
+.core-value-1 h3 {font-size:20px;}
+.reality .counter span{font-size:30px;}
+}
+
+ @media(max-width:480px){
+ .reality{flex-direction: column;justify-content: center;align-items: flex-start;}
+ .reality .counter {padding:5px 0;width:100%;}
+ .reality-inner .common-btn-parent {margin: 30px 0 0;}
+ .reality-inner h2{text-align:center;}
+ .earth {width: 320px;height: 320px;}
+ .orbit-1 {width: 365px;height: 365px;}
+ .orbit-2 {width: 347px;height: 347px;}
+ .orbit-3 {width: 333px;height: 333px;}
+ .moon {width: 55px;height: 55px;}
+ .moon.opposite-moon {width: 55px;height: 55px;}
+ @keyframes moonOrbit {
+   0% {
+     transform: rotate(0deg) translateX(170px) rotate(0deg);
+   }
+   100% {
+     transform: rotate(360deg) translateX(170px) rotate(-360deg);
+   }
+  }
+  
+   @keyframes moonOrbitOpposite {
+    0% {
+      transform: rotate(180deg) translateX(170px) rotate(-180deg);
+    }
+    100% {
+      transform: rotate(540deg) translateX(170px) rotate(-540deg);
+    }
+  }
+  .list-variety-chillies ul{justify-content: center;}
+  .bottom-inner-wrapper {gap: 10px;}
+  .bottom-header-top span{font-size: 15px;}
+  .reality-inner p{font-size:20px;text-align:center;}
+}
+@media(max-width:430px){
+   .variety-of-seeds-1 {max-width: 126px;}
+    .about-corevalues-points-1{flex-direction: column;gap: 5px;}
+  .about-corevalues-points::before{display: none;}
+  .about-corevalues-points-1::before{display: none;}
+  .cabout-corevalues-left::before{display: none;}
+  .about-corevalues-points-1{padding: 0 20px;}
+
+  .vision-mission-right-img-grandparent{max-width: 111px;}
+  .vision-mission-right-img-parent{max-width: 85px;}
+  .about-corevalues-points-1-parent:nth-child(2n+1) .about-corevalues-points-1{flex-direction: column;}
+  .about-corevalues-points-1{flex-direction: column;padding: 30px 0;}
+  .about-corevalues-points-1-parent:nth-child(2n+1) .about-corevalues-points-1 .cabout-corevalues-left-text h5, .cabout-corevalues-left-text h5{text-align: center;}
+  .cabout-corevalues-left-text p{text-align: center;}
+  .list-variety-chillies ul {flex-direction: column;gap: 20px;padding: 10px;}
+  .chillie-all-variety{padding: 0;}
+}
+
+ @media(max-width:420px){
+   .founded-right {max-width: 345px;}
+   .founder-right-1 h3 {font-size: 14px;}
+  h1{font-size: 30px;}
+  .chillie-right h4{font-size: 18px;}
+   .chillie-right-heading h3{font-size: 24px;}
+   .chillie-right-heading span{font-size: 45px;}
+   .view-product-btn{padding: 10px 10px;}
+ }
+
+ @media(max-width:400px){
+ .about-right{padding-top: 0;}
+   .earth {width: 225px;height: 225px;}
+   .orbit-1 {width: 255px;height: 255px;}
+   .orbit-2 {width: 243px;height: 243px;}
+   .orbit-3 {width: 233px;height: 233px;}
+   .moon {width: 35px;height: 35px;}
+   .moon.opposite-moon {width: 35px;height: 35px;}
+    @keyframes moonOrbit {
+       0% {
+         transform: rotate(0deg) translateX(120px) rotate(0deg);
+       }
+       100% {
+         transform: rotate(360deg) translateX(120px) rotate(-360deg);
+       }
+     }
+     
+      @keyframes moonOrbitOpposite {
+       0% {
+         transform: rotate(180deg) translateX(120px) rotate(-180deg);
+       }
+       100% {
+         transform: rotate(540deg) translateX(120px) rotate(-540deg);
+       }
+     }
+ }
+
+ @media(max-width:380px){
+   .variety-of-seeds-1 {max-width:116px;position:relative;height:130px;}
+   .variety-of-seeds-img-parent {padding: 10px 0 30px;}
+   /* .variety-of-seeds-img img {max-width: 30px;} */
+   .variety-of-seeds-1:hover .variety-of-seeds-img {transform: translate(-5%,25%);}
+   .variety-of-text{position: absolute;
+  bottom: 0;
+  width: 100%;
+  height: 53px;}
+ }
+
+ @media(max-width:360px){
+   .founder-right-1 h3 {font-size: 12px;}
+ }

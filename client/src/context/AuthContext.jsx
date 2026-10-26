@@ -1,12 +1,19 @@
-import React, { createContext, useState, useEffect } from 'react';
+import React, { createContext, useState, useEffect, useRef, useCallback } from 'react';
 import { Box, CircularProgress } from '@mui/material';
 import authService from '../services/authService';
 import { userService } from '../services/userService';
-import cartService, { clearSessionId } from '../services/cartService';
+import cartService from '../services/cartService';
 import { wishlistService } from '../services/wishlistService';
 import { getPermissionsForUser, getRolesForUser } from '../utils/permissions';
 
 export const AuthContext = createContext(null);
+
+// Event fired when a refresh reveals the user lost at least one permission,
+// so open dialogs can close and restricted state can clear immediately.
+export const AUTH_PERMISSIONS_REVOKED_EVENT = 'auth:permissions-revoked';
+
+// How often (ms) to re-validate the session against /users/me while logged in.
+const AUTH_REFRESH_INTERVAL_MS = 60_000;
 
 const FullPageLoader = () => (
   <Box sx={{ display: 'flex', justifyContent: 'center', alignItems: 'center', minHeight: '100vh' }}>
@@ -22,8 +29,11 @@ export const AuthProvider = ({ children }) => {
   })();
 
   const [user, setUser] = useState(cachedUser);
-  const [isAuthenticated, setIsAuthenticated] = useState(Boolean(cachedUser));
+  // Start unauthenticated until /users/me confirms the session — cached profile
+  // is display-only and must never grant permissions before verification.
+  const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [loading, setLoading] = useState(true);
+  const lastPermissionsRef = useRef(null);
 
   useEffect(() => {
     const initAuth = async () => {
@@ -33,12 +43,14 @@ export const AuthProvider = ({ children }) => {
         const userData = await userService.getMe();
         setUser(userData);
         setIsAuthenticated(true);
+        lastPermissionsRef.current = new Set(getPermissionsForUser(userData));
         localStorage.setItem('userProfile', JSON.stringify(userData));
       } catch (error) {
         if (import.meta.env.DEV) console.debug('No authenticated session to restore', error);
         localStorage.removeItem('userProfile');
         setUser(null);
         setIsAuthenticated(false);
+        lastPermissionsRef.current = null;
       }
       setLoading(false);
     };
@@ -49,11 +61,60 @@ export const AuthProvider = ({ children }) => {
       localStorage.removeItem('userProfile');
       setUser(null);
       setIsAuthenticated(false);
+      lastPermissionsRef.current = null;
     };
 
     window.addEventListener('auth:unauthorized', handleUnauthorized);
     return () => window.removeEventListener('auth:unauthorized', handleUnauthorized);
   }, []);
+
+  // Applies a refreshed /users/me payload. If the user lost any permission
+  // since the last known state, fire a revocation event so open dialogs close
+  // and restricted state clears immediately.
+  const applyRefreshedUser = useCallback((updatedUser) => {
+    const nextPerms = new Set(getPermissionsForUser(updatedUser));
+    const prevPerms = lastPermissionsRef.current;
+    const lost = prevPerms ? [...prevPerms].filter((p) => !nextPerms.has(p)) : [];
+    setUser(updatedUser);
+    localStorage.setItem('userProfile', JSON.stringify(updatedUser));
+    lastPermissionsRef.current = nextPerms;
+    if (lost.length > 0) {
+      window.dispatchEvent(
+        new CustomEvent(AUTH_PERMISSIONS_REVOKED_EVENT, { detail: { lostPermissions: lost } })
+      );
+    }
+    return updatedUser;
+  }, []);
+
+  // Periodically re-validate the session and on tab focus/visibility so
+  // revoked permissions are reflected without a full reload.
+  useEffect(() => {
+    if (!isAuthenticated) return undefined;
+
+    let cancelled = false;
+    const refresh = async () => {
+      try {
+        const updated = await userService.getMe();
+        if (!cancelled) applyRefreshedUser(updated);
+      } catch {
+        // Transient failures (e.g. network) are ignored; the auth:unauthorized
+        // handler clears the session on a real 401.
+      }
+    };
+
+    const intervalId = window.setInterval(refresh, AUTH_REFRESH_INTERVAL_MS);
+    const onFocus = () => refresh();
+    const onVisibility = () => { if (document.visibilityState === 'visible') refresh(); };
+    window.addEventListener('focus', onFocus);
+    document.addEventListener('visibilitychange', onVisibility);
+
+    return () => {
+      cancelled = true;
+      window.clearInterval(intervalId);
+      window.removeEventListener('focus', onFocus);
+      document.removeEventListener('visibilitychange', onVisibility);
+    };
+  }, [isAuthenticated, applyRefreshedUser]);
 
   const login = async (email, password, rememberMe = false) => {
     const data = await authService.login(email, password, rememberMe);
@@ -72,8 +133,12 @@ export const AuthProvider = ({ children }) => {
   };
 
   const register = async (userData) => {
-    // Option B: log in immediately after register and redirect to home
     const data = await authService.register(userData);
+    // When email verification is mandatory the server issues no session —
+    // return early so the caller can route to the verification prompt.
+    if (data.requiresVerification) {
+      return data;
+    }
     const fullUser = await finalizeAuthenticatedSession();
     return { ...data, user: fullUser };
   };
@@ -86,7 +151,8 @@ export const AuthProvider = ({ children }) => {
     localStorage.setItem('userProfile', JSON.stringify(fullUser));
     try { await cartService.mergeGuestCart(); } catch (_) {}
     try { await wishlistService.mergeGuestWishlist(); } catch (_) {}
-    clearSessionId();
+    // Keep the guest session ID: guest orders are owned by this capability and
+    // customers may sign in before cancelling or viewing their order.
     return fullUser;
   };
 
@@ -100,9 +166,7 @@ export const AuthProvider = ({ children }) => {
   /** Re-fetches /users/me and updates context — use after profile/avatar changes */
   const refreshUser = async () => {
     const updatedUser = await userService.getMe();
-    setUser(updatedUser);
-    localStorage.setItem('userProfile', JSON.stringify(updatedUser));
-    return updatedUser;
+    return applyRefreshedUser(updatedUser);
   };
 
   const updateProfile = async (data) => {

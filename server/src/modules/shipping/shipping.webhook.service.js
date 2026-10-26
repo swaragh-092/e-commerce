@@ -2,34 +2,45 @@
 
 const crypto = require('crypto');
 const { Op } = require('sequelize');
-const { sequelize, Shipment, ShipmentEvent, ShippingProvider, Order, Fulfillment } = require('../index');
+const { sequelize, Shipment, ShipmentEvent, ShippingProvider, Order, OrderItem, ShipmentItem, Product, Fulfillment } = require('../index');
 const { resolveProvider } = require('./providers');
-const { deriveOrderShippingStatus } = require('../../utils/orderWorkflow');
 const NotificationService = require('../notification/notification.service');
+const OrderService = require('../order/order.service');
 const AppError = require('../../utils/AppError');
 
 const STATUS_RANK = Object.freeze({
     unknown: -1,
     created: 0,
-    packed: 0,
-    shipped: 1,
-    in_transit: 1,
-    out_for_delivery: 2,
-    delivery_failed: 2,
-    delivered: 3,
-    rto_initiated: 3,
-    rto_in_transit: 4,
-    rto: 5,
-    cancelled: 5,
+    packed: 1,
+    shipped: 2,
+    in_transit: 3,
+    out_for_delivery: 4,
+    delivery_failed: 5,
+    delivered: 6,
+    rto_initiated: 7,
+    rto_in_transit: 8,
+    rto: 9,
+    cancelled: 10,
 });
 
 const TERMINAL_STATUSES = new Set(['delivered', 'rto', 'cancelled']);
 
-const asRawBuffer = (payload) => {
-    if (Buffer.isBuffer(payload)) return payload;
-    if (typeof payload === 'string') return Buffer.from(payload);
-    return Buffer.from(JSON.stringify(payload));
+const mapShipmentStatusToFulfillment = (status, currentStatus) => {
+    if (['delivered', 'rto', 'cancelled'].includes(status)) {
+        return status === 'rto' ? 'returned' : status;
+    }
+    if (['in_transit', 'out_for_delivery'].includes(status)) return 'shipped';
+    if (['created', 'packed', 'shipped', 'delivery_failed', 'rto_initiated', 'rto_in_transit'].includes(status)) return status;
+    return currentStatus;
 };
+
+const stableStringify = (value) => {
+    if (value === null || typeof value !== 'object') return JSON.stringify(value);
+    if (Array.isArray(value)) return `[${value.map(stableStringify).join(',')}]`;
+    return `{${Object.keys(value).sort().map((key) => `${JSON.stringify(key)}:${stableStringify(value[key])}`).join(',')}}`;
+};
+
+const hashEventPayload = (payload) => crypto.createHash('sha256').update(stableStringify(payload)).digest('hex');
 
 const parsePayload = (payload) => {
     try {
@@ -41,10 +52,17 @@ const parsePayload = (payload) => {
     }
 };
 
+const ALLOWED_RETRY_TRANSITIONS = new Set([
+    'delivery_failed->out_for_delivery',
+]);
+
 const isRegression = (current, incoming) => {
     if (!incoming || incoming === 'unknown' || current === incoming) return false;
     if (TERMINAL_STATUSES.has(current)) return true;
-    return STATUS_RANK[incoming] < STATUS_RANK[current];
+    if (ALLOWED_RETRY_TRANSITIONS.has(`${current}->${incoming}`)) return false;
+    const currentRank = STATUS_RANK[current] !== undefined ? STATUS_RANK[current] : 0;
+    const incomingRank = STATUS_RANK[incoming] !== undefined ? STATUS_RANK[incoming] : -1;
+    return incomingRank <= currentRank;
 };
 
 const processWebhook = async (providerCode, payload, headers = {}) => {
@@ -88,14 +106,27 @@ const processWebhook = async (providerCode, payload, headers = {}) => {
         const fulfillment = shipment.fulfillment || (shipment.fulfillmentId ? await Fulfillment.findByPk(shipment.fulfillmentId, { transaction: t }) : null);
         const order = shipment.order || (shipment.orderId ? await Order.findByPk(shipment.orderId, { transaction: t }) : null);
 
-        const payloadHash = crypto.createHash('sha256').update(asRawBuffer(payload)).digest('hex');
+        // Perform regression check before inserting events or updating state
+        if (isRegression(shipment.status || 'created', normalizedEvent.status)) {
+            return { accepted: true, ignored: true, reason: 'stale_status', shipmentId: shipment.id };
+        }
+
+        // Stable timestamp: use parsed timestamp from carrier, or a fixed epoch sentinel
+        // so retries without timestamps produce the exact same fallback dedupe key.
+        const stableTimestamp = normalizedEvent.timestamp && !Number.isNaN(new Date(normalizedEvent.timestamp).getTime())
+            ? new Date(normalizedEvent.timestamp)
+            : new Date(0);
+
+        // Authentication uses the original bytes above. Event identity uses
+        // normalized JSON so retries with reordered fields remain duplicates.
+        const payloadHash = hashEventPayload(parsedPayload);
         const eventWhere = normalizedEvent.providerEventId
             ? { providerId: provider.id, providerEventId: normalizedEvent.providerEventId }
             : {
                 providerId: provider.id,
                 awb: normalizedEvent.awbCode || shipment.awb,
                 eventStatus: normalizedEvent.status,
-                eventTimestamp: normalizedEvent.timestamp,
+                eventTimestamp: stableTimestamp,
                 payloadHash,
             };
         if (await ShipmentEvent.findOne({ where: eventWhere, transaction: t })) {
@@ -110,7 +141,7 @@ const processWebhook = async (providerCode, payload, headers = {}) => {
                 awb: normalizedEvent.awbCode || shipment.awb,
                 eventType: 'status_update',
                 eventStatus: normalizedEvent.status,
-                eventTimestamp: normalizedEvent.timestamp || new Date(),
+                eventTimestamp: stableTimestamp,
                 payloadHash,
                 rawPayload: parsedPayload,
                 processedAt: new Date(),
@@ -120,10 +151,6 @@ const processWebhook = async (providerCode, payload, headers = {}) => {
                 return { accepted: true, duplicate: true, shipmentId: shipment.id };
             }
             throw error;
-        }
-
-        if (isRegression(shipment.status || 'created', normalizedEvent.status)) {
-            return { accepted: true, ignored: true, reason: 'stale_status', shipmentId: shipment.id };
         }
 
         // Record unknown statuses in statusHistory (Edge Case 10)
@@ -145,7 +172,8 @@ const processWebhook = async (providerCode, payload, headers = {}) => {
             return { accepted: true, ignored: true, reason: 'unknown_status', shipmentId: shipment.id };
         }
 
-        if (shipment.status !== normalizedEvent.status) {
+        const statusChanged = shipment.status !== normalizedEvent.status;
+        if (statusChanged) {
             await shipment.update({
                 status: normalizedEvent.status,
                 statusHistory: [
@@ -161,13 +189,7 @@ const processWebhook = async (providerCode, payload, headers = {}) => {
         }
 
         if (fulfillment) {
-            const nextFulfillmentStatus = ['delivered', 'rto'].includes(normalizedEvent.status)
-                ? (normalizedEvent.status === 'rto' ? 'returned' : 'delivered')
-                : normalizedEvent.status === 'in_transit' || normalizedEvent.status === 'out_for_delivery'
-                    ? 'shipped'
-                    : ['packed', 'shipped', 'delivery_failed', 'rto_initiated', 'rto_in_transit'].includes(normalizedEvent.status)
-                        ? normalizedEvent.status
-                    : fulfillment.status;
+            const nextFulfillmentStatus = mapShipmentStatusToFulfillment(normalizedEvent.status, fulfillment.status);
             if (nextFulfillmentStatus !== fulfillment.status) {
                 await fulfillment.update({ status: nextFulfillmentStatus }, { transaction: t });
             }
@@ -175,15 +197,27 @@ const processWebhook = async (providerCode, payload, headers = {}) => {
 
         let notification = null;
         if (order) {
-            const orderShipments = await Shipment.findAll({ where: { orderId: order.id }, transaction: t });
-            const derivedShippingStatus = deriveOrderShippingStatus(orderShipments);
-            if (order.orderShippingStatus !== derivedShippingStatus || order.shipmentStatus !== derivedShippingStatus) {
-                await order.update({
-                    orderShippingStatus: derivedShippingStatus,
-                    shipmentStatus: derivedShippingStatus,
-                }, { transaction: t });
+            try {
+                const orderShippingStatus = await OrderService.syncOrderShippingStatus(order, t);
+                await OrderService.syncCodPaymentIfDelivered(order, t);
+                if (['delivered', 'rto'].includes(orderShippingStatus)) {
+                    await OrderService.syncOrderClosureIfComplete(order, t);
+                }
+            } catch (err) {
+                console.warn('[Webhook] OrderService.syncOrderShippingStatus fallback triggered:', err.message);
+                const [orderItems, orderShipments] = await Promise.all([
+                    OrderItem.findAll({ where: { orderId: order.id }, include: [{ model: Product, as: 'product', attributes: ['id', 'requiresShipping'], required: false }], transaction: t }),
+                    Shipment.findAll({ where: { orderId: order.id }, include: [{ model: ShipmentItem, as: 'items' }], transaction: t }),
+                ]);
+                const derivedShippingStatus = OrderService.deriveQuantityAwareOrderShippingStatus(orderItems, orderShipments);
+                if (order.orderShippingStatus !== derivedShippingStatus || order.shipmentStatus !== derivedShippingStatus) {
+                    await order.update({
+                        orderShippingStatus: derivedShippingStatus,
+                        shipmentStatus: derivedShippingStatus,
+                    }, { transaction: t });
+                }
             }
-            if (['out_for_delivery', 'delivered'].includes(normalizedEvent.status) && order.userId) {
+            if (statusChanged && ['out_for_delivery', 'delivered', 'delivery_failed', 'rto_initiated', 'rto_in_transit', 'rto'].includes(normalizedEvent.status) && order.userId) {
                 notification = { userId: order.userId, orderId: order.id, status: normalizedEvent.status };
             }
         }
@@ -216,7 +250,7 @@ const reconcileTracking = async ({ limit = 20 } = {}) => {
         where: {
             providerState: 'completed',
             status: {
-                [Op.in]: ['created', 'packed', 'shipped', 'in_transit', 'out_for_delivery', 'rto_in_transit'],
+                [Op.in]: ['created', 'packed', 'shipped', 'in_transit', 'out_for_delivery', 'delivery_failed', 'rto_initiated', 'rto_in_transit'],
             },
             awb: { [Op.ne]: null },
         },
@@ -239,6 +273,7 @@ const reconcileTracking = async ({ limit = 20 } = {}) => {
             const tracking = await adapter.getTracking({ awbCode: shipment.awb });
             let statusUpdated = false;
             let touchedInTx = false;
+            let notification = null;
             if (tracking && tracking.status && tracking.status !== 'unknown') {
                 await sequelize.transaction(async (t) => {
                     const freshShipment = await Shipment.findByPk(shipment.id, {
@@ -286,29 +321,51 @@ const reconcileTracking = async ({ limit = 20 } = {}) => {
                         ? await Fulfillment.findByPk(freshShipment.fulfillmentId, { transaction: t })
                         : null;
                     if (fulfillment) {
-                        const nextFulfillmentStatus = ['delivered', 'rto'].includes(tracking.status)
-                            ? (tracking.status === 'rto' ? 'returned' : 'delivered')
-                            : ['shipped', 'in_transit', 'out_for_delivery'].includes(tracking.status)
-                                ? 'shipped'
-                                : fulfillment.status;
+                        const nextFulfillmentStatus = mapShipmentStatusToFulfillment(tracking.status, fulfillment.status);
                         if (nextFulfillmentStatus !== fulfillment.status) {
                             await fulfillment.update({ status: nextFulfillmentStatus }, { transaction: t });
                         }
                     }
 
                     if (freshShipment.orderId) {
-                        const orderShipments = await Shipment.findAll({ where: { orderId: freshShipment.orderId }, transaction: t });
-                        const derivedShippingStatus = deriveOrderShippingStatus(orderShipments);
-                        await Order.update({
-                            orderShippingStatus: derivedShippingStatus,
-                            shipmentStatus: derivedShippingStatus,
-                        }, { where: { id: freshShipment.orderId }, transaction: t });
+                        try {
+                            const targetOrder = await Order.findByPk(freshShipment.orderId, { transaction: t });
+                            if (targetOrder) {
+                                const orderShippingStatus = await OrderService.syncOrderShippingStatus(targetOrder, t);
+                                await OrderService.syncCodPaymentIfDelivered(targetOrder, t);
+                                if (['delivered', 'rto'].includes(orderShippingStatus)) {
+                                    await OrderService.syncOrderClosureIfComplete(targetOrder, t);
+                                }
+                                if (targetOrder.userId && ['out_for_delivery', 'delivered', 'delivery_failed', 'rto_initiated', 'rto_in_transit', 'rto'].includes(tracking.status)) {
+                                    notification = { userId: targetOrder.userId, orderId: targetOrder.id, status: tracking.status };
+                                }
+                            }
+                        } catch (err) {
+                            console.warn('[Webhook] Tracking reconcile syncOrderShippingStatus fallback triggered:', err.message);
+                            const [orderItems, orderShipments] = await Promise.all([
+                                OrderItem.findAll({ where: { orderId: freshShipment.orderId }, include: [{ model: Product, as: 'product', attributes: ['id', 'requiresShipping'], required: false }], transaction: t }),
+                                Shipment.findAll({ where: { orderId: freshShipment.orderId }, include: [{ model: ShipmentItem, as: 'items' }], transaction: t }),
+                            ]);
+                            const derivedShippingStatus = OrderService.deriveQuantityAwareOrderShippingStatus(orderItems, orderShipments);
+                            await Order.update({
+                                orderShippingStatus: derivedShippingStatus,
+                                shipmentStatus: derivedShippingStatus,
+                            }, { where: { id: freshShipment.orderId }, transaction: t });
+                        }
                     }
 
                     touchedInTx = true;
                     reconciledCount++;
                     statusUpdated = true;
                 });
+            }
+
+            if (statusUpdated && notification) {
+                try {
+                    await NotificationService.sendDeliveryUpdate(notification.userId, notification.orderId, notification.status);
+                } catch (error) {
+                    console.error('[reconcileTracking] Delivery notification failed:', error.message);
+                }
             }
 
             // Avoid queue starvation (Edge Case 10): If status was not touched in transaction, touch updatedAt so
@@ -336,4 +393,4 @@ const reconcileTracking = async ({ limit = 20 } = {}) => {
     return reconciledCount;
 };
 
-module.exports = { processWebhook, reconcileTracking };
+module.exports = { processWebhook, reconcileTracking, mapShipmentStatusToFulfillment, hashEventPayload };

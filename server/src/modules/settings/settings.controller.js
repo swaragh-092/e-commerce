@@ -14,6 +14,22 @@ const getAll = async (req, res, next) => {
   }
 };
 
+const getPublicAll = async (req, res, next) => {
+  try {
+    return success(res, await SettingsService.getPublicAll());
+  } catch (err) {
+    next(err);
+  }
+};
+
+const getPublicByGroup = async (req, res, next) => {
+  try {
+    return success(res, await SettingsService.getPublicGroup(req.params.group));
+  } catch (err) {
+    next(err);
+  }
+};
+
 const getByGroup = async (req, res, next) => {
   try {
     const result = await SettingsService.getByGroup(req.params.group);
@@ -34,7 +50,7 @@ const getDesignState = async (req, res, next) => {
 
 const resetDesignSetting = async (req, res, next) => {
   try {
-    const result = await SettingsService.resetDesignSetting(req.body, req.user.id);
+    const result = await SettingsService.resetDesignSetting(req.body, req.user.id, req.user);
     return success(res, result, 'Visual setting reset to default.');
   } catch (err) {
     next(err);
@@ -128,8 +144,8 @@ const updateBulk = async (req, res, next) => {
  */
 const getFeatures = async (req, res, next) => {
   try {
-    const { features, lockedKeys, mode } = await SettingsService.getFeatures();
-    return success(res, { mode, features, lockedKeys });
+    const { features, lockedKeys, mode, visibility } = await SettingsService.getFeatures();
+    return success(res, { mode, features, lockedKeys, visibility });
   } catch (err) {
     next(err);
   }
@@ -137,6 +153,8 @@ const getFeatures = async (req, res, next) => {
 
 module.exports = {
   getAll,
+  getPublicAll,
+  getPublicByGroup,
   getByGroup,
   getDesignState,
   resetDesignSetting,

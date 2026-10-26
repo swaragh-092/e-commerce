@@ -46,6 +46,8 @@ describe('store design ownership', () => {
     }, [{ id: 'hero' }, { id: 'products' }]);
 
     expect(summary.theme.font).toBe('Source Sans Pro');
+    expect(summary.theme.buttonStyle).toBe('solid');
+    expect(summary.theme.errorColor).toBe('#dc3545');
     expect(summary.cards.product).toBe('editorial');
     expect(summary.structure.header).toBe('Static header');
     expect(summary.structure.announcement).toBe('Hidden');
@@ -151,7 +153,7 @@ describe('store design ownership', () => {
     expect(getDesignComponentControlSchema('designTokens').groups.flatMap((group) => group.fields.map((field) => field.key))).toEqual([
       'buttonStyle', 'cardStyle', 'backgroundStyle', 'headerStyle', 'borderRadius', 'lineHeight', 'letterSpacing', 'headingLetterSpacing',
       'primaryColor', 'secondaryColor', 'backgroundColor', 'surfaceColor', 'textColor', 'mode',
-      'errorColor', 'warningColor', 'successColor', 'infoColor',
+      'errorColor', 'cancelButtonColor', 'warningColor', 'successColor', 'infoColor',
       'fontFamily', 'headingFont', 'bodyWeight', 'headingWeight',
     ]);
     expect(isDesignControlVisible(

@@ -5,6 +5,7 @@ const require = createRequire(import.meta.url);
 const db = require('../../src/modules');
 const adminRouter = require('../../src/modules/admin/admin.routes');
 const adminController = require('../../src/modules/admin/admin.controller');
+const { adminDashboardLimiter } = require('../../src/middleware/rateLimiter.middleware');
 const { clearFeatureCache } = require('../../src/middleware/featureGate.middleware');
 
 beforeEach(() => {
@@ -45,19 +46,22 @@ describe('Admin route feature gating', () => {
     expect(couponPerformanceRoute).toBeDefined();
     expect(exportRoute).toBeDefined();
 
-    // sales-chart has adminOnly (2), ordersFeature (1), validate (1), controller (1) = 5
-    expect(salesChartRoute.middlewareCount).toBe(5);
-    // recent-orders has adminOnly (2), ordersFeature (1), controller (1) = 4
-    expect(recentOrdersRoute.middlewareCount).toBe(4);
+    expect(lowStockRoute.stack[0].handle).toBe(adminDashboardLimiter);
+    expect(recentOrdersRoute.stack[0].handle).toBe(adminDashboardLimiter);
+
+    // sales-chart has adminOnly (2), orders.read (1), ordersFeature (1), validate (1), controller (1) = 6
+    expect(salesChartRoute.middlewareCount).toBe(6);
+    // recent-orders has limiter (1), authentication + dashboard/orders authorization (2), ordersFeature (1), controller (1) = 5
+    expect(recentOrdersRoute.middlewareCount).toBe(5);
     // stats has adminOnly (2), controller (1) = 3 (feature-aware payload in service)
     expect(statsRoute.middlewareCount).toBe(3);
-    // top-products has adminOnly (2), validate (1), controller (1) = 4 (ungated for catalog)
+    // top-products has authentication + dashboard/orders authorization (2), validate (1), controller (1) = 4
     expect(topProductsRoute.middlewareCount).toBe(4);
-    // aov-trend has adminOnly (2), ordersFeature (1), validate (1), controller (1) = 5
+    // aov-trend has dashboard+orders checks (2), ordersFeature (1), validate (1), controller (1) = 5
     expect(aovTrendRoute.middlewareCount).toBe(5);
-    // coupon-performance has adminOnly (2), ordersFeature (1), couponsFeature (1), validate (1), controller (1) = 6
+    // coupon-performance has dashboard+orders checks (2), ordersFeature (1), couponsFeature (1), validate (1), controller (1) = 6
     expect(couponPerformanceRoute.middlewareCount).toBe(6);
-    // export route has adminOnly (2), ordersFeature (1), exportMetricFeatureGate (1), controller (1) = 5
+    // export route has authentication + dashboard/orders/customers authorization (2), ordersFeature (1), exportMetricFeatureGate (1), controller (1) = 5
     expect(exportRoute.middlewareCount).toBe(5);
   });
 

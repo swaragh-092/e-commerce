@@ -134,7 +134,7 @@ const AddSectionDialog = ({ open, onClose, onAdd, existingIds = [], sectionPrese
         </Stack>
       </DialogContent>
       <DialogActions>
-        <Button onClick={handleClose}>Cancel</Button>
+        <Button color="error" onClick={handleClose}>Cancel</Button>
         <Button variant="contained" onClick={handleAdd} disabled={!type}>Add Section</Button>
       </DialogActions>
     </Dialog>

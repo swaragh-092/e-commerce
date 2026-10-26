@@ -425,7 +425,7 @@ const CloneTabsDialog = ({ open, onClose, onClone, currentProductId }) => {
                 />
             </DialogContent>
             <DialogActions>
-                <Button onClick={onClose} color="inherit">Cancel</Button>
+                <Button onClick={onClose} color="error">Cancel</Button>
             </DialogActions>
         </Dialog>
     );

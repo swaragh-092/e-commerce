@@ -7,9 +7,11 @@ import { bulkUpdateProducts, getProducts, updateProduct } from '../../../service
 import { getCategoryTree } from '../../../services/categoryService';
 import { getSaleLabels } from '../../../services/adminService';
 
-const { notifyMock, settingsMock } = vi.hoisted(() => ({
+const { notifyMock, settingsMock, disabledFeatures, hiddenPresentation } = vi.hoisted(() => ({
   notifyMock: vi.fn(),
   settingsMock: { sales: { allowBulkSales: false }, catalog: { lowStockThreshold: 10 } },
+  disabledFeatures: new Set(),
+  hiddenPresentation: new Set(),
 }));
 
 vi.mock('@mui/x-data-grid', () => ({
@@ -46,7 +48,8 @@ vi.mock('../../../services/adminService', () => ({ getSaleLabels: vi.fn().mockRe
 vi.mock('../../../hooks/useSettings', () => ({
   useCurrency: () => ({ symbol: '₹', formatPrice: (amount) => `₹${amount}` }),
   useSettings: () => ({ settings: settingsMock }),
-  useFeature: () => true,
+  useFeature: (name) => !disabledFeatures.has(name),
+  useFeatureVisible: (name) => !disabledFeatures.has(name) && !hiddenPresentation.has(name),
 }));
 vi.mock('../../../hooks/useAuth', () => ({ useAuth: () => ({ hasPermission: () => true }) }));
 vi.mock('../../../context/NotificationContext', () => ({ useNotification: () => ({ notify: notifyMock }) }));
@@ -64,8 +67,8 @@ const product = {
   variants: [],
 };
 
-const renderProductsPage = () => render(
-  <MemoryRouter>
+const renderProductsPage = (initialEntries = ['/admin/products']) => render(
+  <MemoryRouter initialEntries={initialEntries}>
     <ProductsManagePage />
   </MemoryRouter>
 );
@@ -77,6 +80,8 @@ const openSelect = async (select) => {
 describe('ProductsManagePage storefront state controls', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    disabledFeatures.clear();
+    hiddenPresentation.clear();
     vi.unstubAllGlobals();
     settingsMock.catalog.lowStockThreshold = 10;
     getCategoryTree.mockResolvedValue({ data: [] });
@@ -93,6 +98,20 @@ describe('ProductsManagePage storefront state controls', () => {
   afterEach(() => {
     vi.unstubAllGlobals();
     vi.restoreAllMocks();
+  });
+
+  it('opens the product editor when the MRP is clicked', async () => {
+    renderProductsPage();
+
+    const pricingLink = await screen.findByRole('link', { name: 'Edit pricing and tax for Test product' });
+    expect(pricingLink).toHaveAttribute('href', '/admin/products/product-1/edit');
+  });
+
+  it('opens the product editor when the product name is clicked', async () => {
+    renderProductsPage();
+
+    const productLink = await screen.findByRole('link', { name: 'Edit Test product' });
+    expect(productLink).toHaveAttribute('href', '/admin/products/product-1/edit');
   });
 
   it('uses one row control and persists Paused as published plus disabled', async () => {
@@ -130,6 +149,35 @@ describe('ProductsManagePage storefront state controls', () => {
     })));
   });
 
+  it('does not overwrite hidden prices or sale data in catalog quick edit', async () => {
+    disabledFeatures.add('pricing');
+    renderProductsPage();
+    await screen.findByText('Test product');
+    fireEvent.click(screen.getByTestId('EditNoteIcon').closest('button'));
+    const dialog = await screen.findByRole('dialog');
+    expect(within(dialog).queryByRole('spinbutton', { name: 'MRP' })).not.toBeInTheDocument();
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Save' }));
+    await waitFor(() => expect(updateProduct).toHaveBeenCalled());
+    const payload = updateProduct.mock.calls[0][1];
+    expect(payload).not.toHaveProperty('price');
+    expect(payload).not.toHaveProperty('salePrice');
+  });
+
+  it('keeps the required price editable while admin pricing presentation is hidden', async () => {
+    hiddenPresentation.add('pricing');
+    renderProductsPage();
+    await screen.findByText('Test product');
+    fireEvent.click(screen.getByTestId('EditNoteIcon').closest('button'));
+    const dialog = await screen.findByRole('dialog');
+    expect(within(dialog).getByRole('spinbutton', { name: 'MRP' })).toBeInTheDocument();
+    expect(within(dialog).queryByText('On Sale')).not.toBeInTheDocument();
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Save' }));
+    await waitFor(() => expect(updateProduct).toHaveBeenCalled());
+    const payload = updateProduct.mock.calls[0][1];
+    expect(payload.price).toBe(100);
+    expect(payload).not.toHaveProperty('salePrice');
+  });
+
   it('bulk-updates selected products with canonical storefront fields', async () => {
     renderProductsPage();
 
@@ -153,6 +201,25 @@ describe('ProductsManagePage storefront state controls', () => {
     fireEvent.click(screen.getByRole('button', { name: /Paused/ }));
 
     await waitFor(() => expect(getProducts).toHaveBeenLastCalledWith(expect.objectContaining({ status: 'paused' })));
+  });
+
+  it('applies the dashboard Published filter from the URL on page load', async () => {
+    renderProductsPage(['/admin/products?status=published']);
+
+    await screen.findByText('Test product');
+
+    await waitFor(() => expect(getProducts).toHaveBeenLastCalledWith(expect.objectContaining({ status: 'published' })));
+    expect(screen.getByRole('button', { name: /Published/ })).toHaveAttribute('aria-pressed', 'true');
+  });
+
+  it('applies the dashboard Low Stock filter from the URL on page load', async () => {
+    renderProductsPage(['/admin/products?stock=low']);
+
+    await screen.findByText('Test product');
+
+    await waitFor(() => expect(getProducts).toHaveBeenLastCalledWith(expect.objectContaining({ maxQty: 10 })));
+    expect(screen.getByText('Showing low-stock products (qty ≤ 10)')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /Low Stock/ })).toHaveAttribute('aria-pressed', 'true');
   });
 
   it('preserves an explicitly configured zero low-stock threshold in the product request', async () => {

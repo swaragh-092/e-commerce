@@ -183,6 +183,7 @@ const searchRoutes = require('./modules/search/search.routes');
 const reviewAdminRoutes = require('./modules/review/review.admin.routes');
 const apiBuilderRoutes = require('./modules/apiBuilder/apiBuilder.routes');
 const blogRoutes = require('./modules/blog/blog.routes');
+const galleryRoutes = require('./modules/gallery/gallery.routes');
 
 const themeRoutes = require('./modules/theme/theme.routes');
 const newsletterRoutes = require('./modules/newsletter/newsletter.routes');
@@ -230,6 +231,7 @@ app.use('/api/enquiries', enquiryRoutes);
 app.use('/api/search', searchRoutes);
 app.use('/api/api-builder', apiBuilderRoutes);
 app.use('/api/blogs', blogRoutes);
+app.use('/api/galleries', galleryRoutes);
 app.use('/api/themes', themeRoutes);
 app.use('/api/newsletter', newsletterRoutes);
 
@@ -252,6 +254,10 @@ app.get('/health', async (req, res) => {
     });
   }
 });
+
+// Social media and search crawler dynamic SEO pre-rendering
+const { crawlerPrerender } = require('./middleware/crawlerPrerender.middleware');
+app.use(crawlerPrerender);
 
 // Handle 404
 app.use((req, res) => {

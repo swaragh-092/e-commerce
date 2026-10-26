@@ -5,11 +5,14 @@ const require = createRequire(import.meta.url);
 const {
   ACCESS_COOKIE,
   REFRESH_COOKIE,
+  TRUSTED_DEVICE_COOKIE,
   clearAuthCookies,
   getAccessToken,
   getRefreshToken,
   setAuthCookies,
   stripAuthTokens,
+  setTrustedDeviceCookie,
+  verifyTrustedDevice,
 } = require('../../src/modules/auth/authCookies');
 const { refreshSchema, logoutSchema } = require('../../src/modules/auth/auth.validation');
 
@@ -40,5 +43,21 @@ describe('HttpOnly auth cookies', () => {
   it('allows empty refresh/logout bodies when the HttpOnly cookie carries the token', () => {
     expect(refreshSchema.validate({}).error).toBeUndefined();
     expect(logoutSchema.validate({}).error).toBeUndefined();
+  });
+
+  it('encrypts trusted device cookie and verifies valid device', () => {
+    const response = { cookie: vi.fn() };
+    setTrustedDeviceCookie(response, 'user-uuid-123');
+
+    expect(response.cookie).toHaveBeenCalledWith(
+      TRUSTED_DEVICE_COOKIE,
+      expect.stringMatching(/^[a-f0-9]+:[a-f0-9]+:[a-f0-9]+$/),
+      expect.objectContaining({ httpOnly: true, secure: true, maxAge: 30 * 24 * 60 * 60 * 1000 })
+    );
+
+    const encryptedToken = response.cookie.mock.calls[0][1];
+    expect(verifyTrustedDevice(encryptedToken, 'user-uuid-123')).toBe(true);
+    expect(verifyTrustedDevice(encryptedToken, 'other-user')).toBe(false);
+    expect(verifyTrustedDevice('invalid-encrypted-value', 'user-uuid-123')).toBe(false);
   });
 });

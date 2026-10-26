@@ -227,7 +227,23 @@ server {
     listen 80;
     server_name _;
 
+    # Detect social media crawlers and search engine indexing bots
+    set \$is_crawler 0;
+    if (\$http_user_agent ~* "facebookexternalhit|facebot|whatsapp|twitterbot|linkedinbot|telegrambot|slackbot|discordbot|pinterest|googlebot|bingbot|applebot|yandex|duckduckbot") {
+        set \$is_crawler 1;
+    }
+    if (\$args ~ "_escaped_fragment_") {
+        set \$is_crawler 1;
+    }
+    if (\$uri ~* "\.(js|css|png|jpg|jpeg|gif|svg|ico|woff|woff2|ttf|eot|webp|json|map|xml|txt)$") {
+        set \$is_crawler 0;
+    }
+
     location / {
+        if (\$is_crawler = 1) {
+            rewrite ^(.*)$ /api/seo/prerender?path=\$1 break;
+            proxy_pass http://localhost:5000;
+        }
         root ${CLIENT_BUILD_DIR};
         try_files \$uri \$uri/ /index.html;
     }

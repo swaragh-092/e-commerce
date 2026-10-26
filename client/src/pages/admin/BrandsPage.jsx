@@ -241,7 +241,34 @@ const BrandsPage = () => {
         </Avatar>
       ),
     },
-    { field: 'name', headerName: 'Brand Name', flex: 1, minWidth: 200 },
+    {
+      field: 'name',
+      headerName: 'Brand Name',
+      flex: 1,
+      minWidth: 200,
+      renderCell: (params) => canUpdateBrand ? (
+        <Typography
+          component="button"
+          type="button"
+          onClick={() => handleOpenDialog(params.row)}
+          aria-label={`Edit brand ${params.row.name}`}
+          sx={{
+            p: 0,
+            border: 0,
+            background: 'none',
+            color: 'primary.main',
+            font: 'inherit',
+            fontWeight: 600,
+            textAlign: 'left',
+            cursor: 'pointer',
+            '&:hover': { textDecoration: 'underline' },
+            '&:focus-visible': { outline: '2px solid', outlineColor: 'primary.main', outlineOffset: 2 },
+          }}
+        >
+          {params.value}
+        </Typography>
+      ) : params.value,
+    },
     { field: 'slug', headerName: 'Slug', width: 200 },
     {
       field: 'isActive',
@@ -577,7 +604,7 @@ const BrandsPage = () => {
           </Stack>
         </DialogContent>
         <DialogActions sx={{ px: 3, py: 2 }}>
-          <Button onClick={handleCloseDialog}>Cancel</Button>
+          <Button color="error" onClick={handleCloseDialog}>Cancel</Button>
           <Button variant="contained" onClick={handleSave} disabled={saving}>
             {saving ? 'Saving...' : 'Save Brand'}
           </Button>
@@ -592,7 +619,7 @@ const BrandsPage = () => {
           Products assigned to this brand will have their brand association removed.
         </DialogContent>
         <DialogActions sx={{ px: 3, py: 2 }}>
-          <Button onClick={() => setDeleteConfirm({ open: false, id: null, name: '' })}>Cancel</Button>
+          <Button color="error" onClick={() => setDeleteConfirm({ open: false, id: null, name: '' })}>Cancel</Button>
           <Button variant="contained" color="error" onClick={handleDelete}>
             Delete
           </Button>

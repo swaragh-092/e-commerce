@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { Alert, Box, Button, Grid, Typography } from '@mui/material';
 import { getStats, getLowStock, getRecentOrders, getInventoryAlerts } from '../../services/adminService';
-import { useSettings, useCurrency } from '../../hooks/useSettings';
+import { useSettings, useCurrency, useFeatureVisible } from '../../hooks/useSettings';
 import { useAuth } from '../../hooks/useAuth';
 import { getEnabledDashboardWidgets, getOrderedDashboardWidgets } from '../../components/admin/dashboard/dashboardWidgets';
 import { densitySpacing, sizeToGrid } from '../../components/admin/dashboard/dashboardUtils';
@@ -12,7 +12,11 @@ const DashboardPage = () => {
   const { hasPermission, hasAnyPermission } = useAuth();
   const canReadProducts = hasPermission(PERMISSIONS.PRODUCTS_READ);
   const { settings, features, mode } = useSettings();
-  const isOrdersAllowed = mode !== 'catalog' && features?.orders !== false;
+  const ordersVisible = useFeatureVisible('orders', 'admin');
+  const paymentsVisible = useFeatureVisible('payments', 'admin');
+  const checkoutVisible = useFeatureVisible('checkout', 'admin');
+  const uiFeatures = { ...features, orders: ordersVisible, payments: paymentsVisible, checkout: checkoutVisible };
+  const isOrdersAllowed = ordersVisible;
 
   const [stats, setStats] = useState(null);
   const [lowStock, setLowStock] = useState([]);
@@ -61,7 +65,7 @@ const DashboardPage = () => {
 
   const { formatPrice } = useCurrency();
   const adminSettings = settings?.admin || {};
-  const widgetContext = { features, mode };
+  const widgetContext = { features: uiFeatures, mode };
 
   const defaultChartPeriod = adminSettings['dashboard.defaultChartPeriod'] || 'monthly';
   const dashboardLayout = adminSettings['dashboard.layout'] || 'balanced';
@@ -83,7 +87,7 @@ const DashboardPage = () => {
     sectionErrors,
     settings: adminSettings,
     allSettings: settings,
-    features,
+    features: uiFeatures,
     mode,
     formatPrice,
     spacing,

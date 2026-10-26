@@ -1,7 +1,7 @@
 'use strict';
 
 const AppError = require('../utils/AppError');
-const { getPermissionsForUser, getRolesForUser } = require('../config/permissions');
+const { getPermissionsForUser, getRolesForUser, isSuperAdminUser } = require('../config/permissions');
 
 /**
  * Middleware to restrict access to specific roles
@@ -11,6 +11,10 @@ const authorize = (...roles) => {
   return (req, res, next) => {
     if (!req.user) {
       return next(new AppError('UNAUTHORIZED', 401, 'Authentication required'));
+    }
+
+    if (isSuperAdminUser(req.user)) {
+      return next();
     }
 
     const userRoles = getRolesForUser(req.user);
@@ -29,6 +33,8 @@ const authorizePermissions = (...permissions) => {
       return next(new AppError('UNAUTHORIZED', 401, 'Authentication required'));
     }
 
+    // Super Admin has no blanket permission bypass here: its grants are
+    // resolved from the role like every other user so switches can restrict it.
     const userPermissions = getPermissionsForUser(req.user);
     const hasAllRequired = permissions.every((permission) => userPermissions.includes(permission));
 
@@ -46,6 +52,7 @@ const authorizeAnyPermission = (...permissions) => {
       return next(new AppError('UNAUTHORIZED', 401, 'Authentication required'));
     }
 
+    // No super-admin bypass: resolve grants from the role like other users.
     const userPermissions = getPermissionsForUser(req.user);
     const hasAnyRequired = permissions.some((permission) => userPermissions.includes(permission));
 

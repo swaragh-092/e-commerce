@@ -72,3 +72,32 @@ export const imageLoadingProps = ({ priority = false } = {}) => ({
   decoding: priority ? 'sync' : 'async',
   fetchPriority: priority ? 'high' : 'auto',
 });
+
+// ─── Default / Placeholder Images ────────────────────────────────────────────
+// Single source of truth for all fallback images across the app.
+// All paths are relative to /public so they work in every environment.
+export const PLACEHOLDER_PRODUCT  = '/product-placeholder.svg';
+export const PLACEHOLDER_CATEGORY = '/category-placeholder.svg';
+export const PLACEHOLDER_BRAND    = '/product-placeholder.svg';
+export const PLACEHOLDER_DEFAULT  = '/product-placeholder.svg';
+
+/**
+ * Returns a React onError handler that replaces a broken <img> src with the
+ * given placeholder URL. Prevents infinite loops by marking the element.
+ *
+ * Usage:
+ *   <img src={url} onError={onImageError(PLACEHOLDER_PRODUCT)} />
+ */
+export const onImageError = (placeholder = PLACEHOLDER_DEFAULT) => (e) => {
+  const img = e?.currentTarget;
+  if (!img) return;
+
+  // Prevent infinite loop if the placeholder itself fails or if this exact src already failed
+  if (img.dataset.lastFailedSrc === img.src || (img.src && img.src.endsWith(placeholder))) {
+    return;
+  }
+
+  img.dataset.lastFailedSrc = img.src;
+  img.dataset.fallbackApplied = '1';
+  img.src = placeholder;
+};

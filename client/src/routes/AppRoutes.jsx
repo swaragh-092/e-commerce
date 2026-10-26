@@ -1,7 +1,7 @@
 import React, { Suspense, lazy } from 'react';
 import { Routes, Route, Navigate, useLocation } from 'react-router-dom';
 import { Box, CircularProgress } from '@mui/material';
-import { useFeature, useMode } from '../hooks/useSettings';
+import { useFeatureVisible, useFeaturesResolved, useMode, useSettings } from '../hooks/useSettings';
 import { Outlet } from 'react-router-dom';
 
 // Layouts
@@ -11,12 +11,22 @@ import { ProtectedRoute } from './ProtectedRoute';
 import { ADMIN_ACCESS_PERMISSIONS, PERMISSIONS, getFirstAccessibleAdminPath } from '../utils/permissions';
 import { useAuth } from '../hooks/useAuth';
 
+const LoadingFallback = () => (
+  <Box sx={{ display: 'flex', justifyContent: 'center', alignItems: 'center', minHeight: '50vh' }}>
+    <CircularProgress />
+  </Box>
+);
+
 /**
  * Redirects to /products if a feature is disabled in the current mode.
  * Use this to guard storefront routes that don't apply in catalog mode.
+ * Waits for the resolved feature map before redirecting so a deep link is not
+ * bounced while server state is still loading.
  */
-const FeatureRoute = ({ feature, redirectTo = '/products' }) => {
-  const enabled = useFeature(feature);
+const FeatureRoute = ({ feature, surface = 'storefront', redirectTo = '/products' }) => {
+  const featuresResolved = useFeaturesResolved();
+  const enabled = useFeatureVisible(feature, surface);
+  if (!featuresResolved) return <LoadingFallback />;
   return enabled ? <Outlet /> : <Navigate to={redirectTo} replace />;
 };
 
@@ -50,6 +60,7 @@ const AccountPage = lazy(() => import('../pages/storefront/AccountPage'));
 const AllOrdersPage = lazy(() => import('../pages/storefront/AllOrdersPage/index'));
 const StoreOrderDetailPage = lazy(() => import('../pages/storefront/OrderDetailPage'));
 const StorefrontOrderInvoicePage = lazy(() => import('../pages/storefront/OrderInvoicePage'));
+const LinkGuestOrdersPage = lazy(() => import('../pages/storefront/LinkGuestOrdersPage'));
 const WishlistPage = lazy(() => import('../pages/storefront/WishlistPage'));
 const ProductDetailPage = lazy(() => import('../pages/storefront/ProductDetailPage'));
 const ProductListPage = lazy(() => import('../pages/storefront/ProductListPage'));
@@ -81,6 +92,7 @@ const CustomerDetailPage = lazy(() => import('../pages/admin/CustomerDetailPage'
 const CouponsPage = lazy(() => import('../pages/admin/CouponsPage'));
 const ReviewsPage = lazy(() => import('../pages/admin/ReviewsPage'));
 const MediaPage = lazy(() => import('../pages/admin/MediaPage'));
+const GalleryPage = lazy(() => import('../pages/admin/GalleryPage'));
 const SettingsPage = lazy(() => import('../pages/admin/SettingsPage'));
 const FeaturesPage = lazy(() => import('../pages/admin/FeaturesPage'));
 const PaymentGatewaysPage = lazy(() => import('../pages/admin/PaymentGatewaysPage'));
@@ -107,29 +119,26 @@ const BlogCategoriesPage = lazy(() => import('../pages/admin/BlogCategoriesPage'
 const AdminProfilePage = lazy(() => import('../pages/admin/AdminProfilePage'));
 const AnalyticsPage = lazy(() => import('../pages/admin/AnalyticsPage'));
 
-const LoadingFallback = () => (
-  <Box sx={{ display: 'flex', justifyContent: 'center', alignItems: 'center', minHeight: '50vh' }}>
-    <CircularProgress />
-  </Box>
-);
-
-
 const Home = () => <HomePage />;
 
 const AdminIndex = () => {
   const { user, hasPermission } = useAuth();
+  const { features } = useSettings();
 
   if (hasPermission(PERMISSIONS.DASHBOARD_VIEW)) {
     return <DashboardPage />;
   }
 
-  const adminEntryPath = getFirstAccessibleAdminPath(user);
+  if (!features) return <LoadingFallback />;
+  const adminEntryPath = getFirstAccessibleAdminPath(user, features);
   if (adminEntryPath && adminEntryPath !== '/admin') {
     return <Navigate to={adminEntryPath} replace />;
   }
 
   return <Navigate to="/" replace />;
 };
+
+const NewsletterUnsubscribePage = lazy(() => import('../pages/storefront/NewsletterUnsubscribePage'));
 
 const AppRoutes = () => (
   <Suspense fallback={<LoadingFallback />}>
@@ -143,10 +152,14 @@ const AppRoutes = () => (
         <Route path="category/:categorySlug" element={<CategoryPage />} />
         <Route path="p/:slug" element={<StaticPageView />} />
         <Route path="search" element={<SearchResultsPage />} />
-        <Route path="brands" element={<StoreBrandsPage />} />
-        <Route path="brands/:slug" element={<BrandDetailPage />} />
-        <Route path="blogs" element={<BlogsPage />} />
-        <Route path="blogs/:slug" element={<BlogDetailPage />} />
+        <Route element={<FeatureRoute feature="brands" />}>
+          <Route path="brands" element={<StoreBrandsPage />} />
+          <Route path="brands/:slug" element={<BrandDetailPage />} />
+        </Route>
+        <Route element={<FeatureRoute feature="blogs" />}>
+          <Route path="blogs" element={<BlogsPage />} />
+          <Route path="blogs/:slug" element={<BlogDetailPage />} />
+        </Route>
         <Route element={<FeatureRoute feature="wishlist" />}>
           <Route path="wishlist" element={<WishlistPage />} />
         </Route>
@@ -154,6 +167,7 @@ const AppRoutes = () => (
         {/* Auth */}
         <Route path="login" element={<LoginPage />} />
         <Route path="register" element={<RegisterPage />} />
+        <Route path="newsletter/unsubscribe" element={<NewsletterUnsubscribePage />} />
         <Route path="forgot-password" element={<ForgotPasswordPage />} />
         <Route path="reset-password" element={<ResetPasswordPage />} />
         <Route path="verify-email" element={<VerifyEmailPage />} />
@@ -173,11 +187,13 @@ const AppRoutes = () => (
         {/* Protected Storefront */}
         <Route element={<ProtectedRoute />}>
           <Route path="account" element={<AccountPage />} />
-          <Route path="account/orders/:id" element={<StoreOrderDetailPage />} />
-          <Route path="account/orders/:id/invoice" element={<StorefrontOrderInvoicePage />} />
-          <Route path="orders" element={<AllOrdersPage />} />
+          <Route element={<FeatureRoute feature="orders" />}>
+            <Route path="account/orders/link-guest" element={<LinkGuestOrdersPage />} />
+            <Route path="account/orders/:id" element={<StoreOrderDetailPage />} />
+            <Route path="account/orders/:id/invoice" element={<StorefrontOrderInvoicePage />} />
+            <Route path="orders" element={<AllOrdersPage />} />
+          </Route>
           <Route path="profile" element={<AccountPage />} />
-
         </Route>
 
         {/* 404 catch-all */}
@@ -198,12 +214,14 @@ const AppRoutes = () => (
           <Route index element={<AdminIndex />} />
           <Route path="profile" element={<AdminProfilePage />} />
           <Route element={<ModeRoute requiredMode="ecommerce" />}>
-            <Route element={<ProtectedRoute permission={PERMISSIONS.DASHBOARD_VIEW} />}>
+            <Route element={<ProtectedRoute permissions={[PERMISSIONS.DASHBOARD_VIEW, PERMISSIONS.ORDERS_READ]} requireAllPermissions />}>
               <Route path="analytics" element={<AnalyticsPage />} />
             </Route>
           </Route>
           <Route element={<ProtectedRoute permission={PERMISSIONS.PRODUCTS_READ} />}>
             <Route path="products" element={<ProductsManagePage />} />
+          </Route>
+          <Route element={<ProtectedRoute permissions={[PERMISSIONS.BRANDS_READ, PERMISSIONS.BRANDS_MANAGE, PERMISSIONS.PRODUCTS_READ]} />}>
             <Route path="brands" element={<BrandsPage />} />
           </Route>
           <Route element={<ProtectedRoute permission={PERMISSIONS.PRODUCTS_CREATE} />}>
@@ -218,22 +236,18 @@ const AppRoutes = () => (
           <Route element={<ProtectedRoute permission={PERMISSIONS.ATTRIBUTES_READ} />}>
             <Route path="attributes" element={<AttributesPage />} />
           </Route>
-          {/* Orders — ecommerce only */}
-          <Route element={<ModeRoute requiredMode="ecommerce" />}>
-            <Route element={<ProtectedRoute permission={PERMISSIONS.ORDERS_READ} />}>
-              <Route path="orders" element={<OrdersManagePage />} />
-              <Route path="orders/:id" element={<OrderDetailPage />} />
-            </Route>
+          {/* Staff retain access to existing orders after new purchases are disabled. */}
+          <Route element={<ProtectedRoute permission={PERMISSIONS.ORDERS_READ} />}>
+            <Route path="orders" element={<OrdersManagePage />} />
+            <Route path="orders/:id" element={<OrderDetailPage />} />
           </Route>
           <Route element={<ProtectedRoute permission={PERMISSIONS.CUSTOMERS_READ} />}>
             <Route path="customers" element={<CustomersPage />} />
             <Route path="customers/:id" element={<CustomerDetailPage />} />
           </Route>
-          {/* Coupons — ecommerce only */}
-          <Route element={<ModeRoute requiredMode="ecommerce" />}>
-            <Route element={<ProtectedRoute permission={PERMISSIONS.COUPONS_READ} />}>
-              <Route path="coupons" element={<CouponsPage />} />
-            </Route>
+          {/* Staff can manage existing campaigns after customer coupon use is disabled. */}
+          <Route element={<ProtectedRoute permission={PERMISSIONS.COUPONS_READ} />}>
+            <Route path="coupons" element={<CouponsPage />} />
           </Route>
           <Route element={<ProtectedRoute permission={PERMISSIONS.ENQUIRIES_READ} />}>
             <Route path="enquiries" element={<EnquiriesPage />} />
@@ -244,21 +258,52 @@ const AppRoutes = () => (
           <Route element={<ProtectedRoute permission={PERMISSIONS.MEDIA_READ} />}>
             <Route path="media" element={<MediaPage />} />
           </Route>
+          <Route element={<ProtectedRoute permissions={[PERMISSIONS.SETTINGS_READ, PERMISSIONS.NOTIFICATIONS_MANAGE]} />}>
+            <Route path="email-templates" element={<EmailTemplatesPage />} />
+          </Route>
+          <Route element={<FeatureRoute feature="gallery" surface="admin" redirectTo="/admin" />}>
+            <Route element={<ProtectedRoute permission={PERMISSIONS.GALLERY_READ} />}>
+              <Route path="gallery" element={<GalleryPage />} />
+            </Route>
+          </Route>
+          <Route element={<FeatureRoute feature="newsletter" surface="admin" redirectTo="/admin" />}>
+            <Route element={<ProtectedRoute permissions={[PERMISSIONS.NEWSLETTER_READ, PERMISSIONS.NEWSLETTER_SUBSCRIBERS_READ]} />}>
+              <Route path="newsletter" element={<NewsletterSubscribersPage />} />
+            </Route>
+          </Route>
           <Route element={<ProtectedRoute permission={PERMISSIONS.SETTINGS_READ} />}>
             <Route path="settings" element={<SettingsPage />} />
-            <Route path="features" element={<FeaturesPage />} />
-            <Route path="seo-overrides" element={<SeoOverridesPage />} />
-            <Route path="email-templates" element={<EmailTemplatesPage />} />
-            <Route path="themes" element={<ThemeGalleryPage />} />
-            <Route path="store-designer" element={<SectionComposerPage />} />
             <Route path="sections" element={<LegacySectionsRedirect />} />
-            <Route path="newsletter" element={<NewsletterSubscribersPage />} />
+          </Route>
+          <Route element={<FeatureRoute feature="seo" surface="admin" redirectTo="/admin" />}>
+            <Route element={<ProtectedRoute permission={PERMISSIONS.SETTINGS_READ} />}>
+              <Route path="seo-overrides" element={<SeoOverridesPage />} />
+            </Route>
+          </Route>
+          <Route element={<FeatureRoute feature="themes" surface="admin" redirectTo="/admin" />}>
+            <Route element={<ProtectedRoute permission={PERMISSIONS.SETTINGS_READ} />}>
+              <Route path="themes" element={<ThemeGalleryPage />} />
+            </Route>
+            <Route element={<ProtectedRoute permission={PERMISSIONS.SETTINGS_MANAGE} />}>
+              <Route path="store-designer" element={<SectionComposerPage />} />
+            </Route>
+          </Route>
+          <Route element={<ProtectedRoute role="super_admin" />}>
+            <Route path="features" element={<FeaturesPage />} />
           </Route>
           {/* Payment Gateways, Shipping, Sale Labels — ecommerce only */}
           <Route element={<ModeRoute requiredMode="ecommerce" />}>
+            <Route element={<FeatureRoute feature="payments" surface="admin" redirectTo="/admin" />}>
+              <Route element={<ProtectedRoute permission={PERMISSIONS.SETTINGS_READ} />}>
+                <Route path="payment-gateways" element={<PaymentGatewaysPage />} />
+              </Route>
+            </Route>
+            <Route element={<FeatureRoute feature="shipping" surface="admin" redirectTo="/admin" />}>
+              <Route element={<ProtectedRoute permission={PERMISSIONS.SETTINGS_MANAGE} />}>
+                <Route path="shipping" element={<ShippingPage />} />
+              </Route>
+            </Route>
             <Route element={<ProtectedRoute permission={PERMISSIONS.SETTINGS_READ} />}>
-              <Route path="payment-gateways" element={<PaymentGatewaysPage />} />
-              <Route path="shipping" element={<ShippingPage />} />
               <Route path="sale-labels" element={<SaleLabelsPage />} />
             </Route>
           </Route>
@@ -268,23 +313,29 @@ const AppRoutes = () => (
           <Route element={<ProtectedRoute permission={PERMISSIONS.PAGES_READ} />}>
             <Route path="pages" element={<PagesManagePage />} />
           </Route>
-          <Route element={<ProtectedRoute permission={PERMISSIONS.BLOGS_READ} />}>
-            <Route path="blogs" element={<BlogsManagePage />} />
-            <Route path="blogs/categories" element={<BlogCategoriesPage />} />
+          <Route element={<FeatureRoute feature="blogs" surface="admin" redirectTo="/admin" />}>
+            <Route element={<ProtectedRoute permission={PERMISSIONS.BLOGS_READ} />}>
+              <Route path="blogs" element={<BlogsManagePage />} />
+              <Route path="blogs/categories" element={<BlogCategoriesPage />} />
+            </Route>
           </Route>
           <Route element={<ProtectedRoute permission={PERMISSIONS.MENUS_READ} />}>
             <Route path="menus" element={<MenuBuilderPage />} />
           </Route>
-          <Route element={<ProtectedRoute permission={PERMISSIONS.SETTINGS_READ} />}>
-            <Route path="api-builder" element={<ApiBuilderPage />} />
+          <Route element={<FeatureRoute feature="apiBuilder" surface="admin" redirectTo="/admin" />}>
+            <Route element={<ProtectedRoute permission={PERMISSIONS.API_BUILDER_READ} />}>
+              <Route path="api-builder" element={<ApiBuilderPage />} />
+            </Route>
           </Route>
           <Route element={<ProtectedRoute permission={PERMISSIONS.PAGES_MANAGE} />}>
             <Route path="pages/new" element={<PageEditPage />} />
             <Route path="pages/:id/edit" element={<PageEditPage />} />
           </Route>
-          <Route element={<ProtectedRoute permission={PERMISSIONS.BLOGS_MANAGE} />}>
-            <Route path="blogs/new" element={<BlogEditPage />} />
-            <Route path="blogs/:id/edit" element={<BlogEditPage />} />
+          <Route element={<FeatureRoute feature="blogs" surface="admin" redirectTo="/admin" />}>
+            <Route element={<ProtectedRoute permission={PERMISSIONS.BLOGS_MANAGE} />}>
+              <Route path="blogs/new" element={<BlogEditPage />} />
+              <Route path="blogs/:id/edit" element={<BlogEditPage />} />
+            </Route>
           </Route>
           <Route
             path="access-control"

@@ -37,14 +37,41 @@ const run = () => {
         where: { expiresAt: { [Op.lt]: now } },
       });
 
-      // Hard-delete users past their 30-day grace period
-      const usersDeleted = await User.destroy({
+      // Hard-delete users past their 30-day grace period — but ONLY when they
+      // have no orders. User -> Order has no CASCADE, so force-deleting an
+      // ordering customer would FK-fail (and loop forever). Order owners are
+      // kept (soft-deleted state) and reported for manual handling/GDPR review.
+      const graceUsers = await User.findAll({
         where: { scheduledDeletionAt: { [Op.lt]: now } },
-        force: true, // bypass paranoid soft-delete
+        attributes: ['id'],
+        paranoid: false,
       });
+      let usersDeleted = 0;
+      let usersSkippedOrders = 0;
+      const { Order } = require('../modules');
+      for (const graceUser of graceUsers) {
+        try {
+          const orderCount = Order ? await Order.count({ where: { userId: graceUser.id } }) : 0;
+          if (orderCount > 0) {
+            usersSkippedOrders += 1;
+            logger.warn('authCleanup skipped grace-deletion user with orders', {
+              userId: graceUser.id,
+              orderCount,
+            });
+            continue;
+          }
+          await User.destroy({ where: { id: graceUser.id }, force: true });
+          usersDeleted += 1;
+        } catch (userErr) {
+          logger.error('authCleanup failed to delete grace user', {
+            userId: graceUser.id,
+            error: userErr.message,
+          });
+        }
+      }
 
       logger.info('authCleanup complete', {
-        refreshDeleted, resetDeleted, verifyDeleted, otpDeleted, usersDeleted,
+        refreshDeleted, resetDeleted, verifyDeleted, otpDeleted, usersDeleted, usersSkippedOrders,
       });
     } catch (error) {
       logger.error('Error in authCleanup job:', error);

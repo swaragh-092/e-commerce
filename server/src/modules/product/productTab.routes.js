@@ -3,7 +3,7 @@
 const express = require('express');
 const router = express.Router({ mergeParams: true }); // inherit :id from parent
 const productTabController = require('./productTab.controller');
-const { authenticate } = require('../../middleware/auth.middleware');
+const { authenticate, optionalAuth } = require('../../middleware/auth.middleware');
 const { authorizePermissions } = require('../../middleware/role.middleware');
 const { validate } = require('../../middleware/validate.middleware');
 const { PERMISSIONS } = require('../../config/permissions');
@@ -22,6 +22,7 @@ const tabIdParamSchema = Joi.object({ id: Joi.string().uuid().required(), tabId:
 // GET  /api/products/:id/tabs  — public-safe
 router.get(
     '/:id/tabs',
+    optionalAuth,
     validate(idParamSchema, 'params'),
     productTabController.list
 );

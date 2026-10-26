@@ -92,6 +92,25 @@ describe('featureGate middleware', () => {
     expect(allowed).toHaveBeenCalledWith();
   });
 
+  it('clears sibling cached features when one feature is invalidated', async () => {
+    featureRows = [
+      { key: 'cart', value: 'false' },
+      { key: 'coupons', value: 'false' },
+    ];
+    await runGate('cart');
+    const couponsBlocked = await runGate('coupons');
+    expect(couponsBlocked.mock.calls[0][0]?.code).toBe('FEATURE_DISABLED');
+
+    featureRows = [
+      { key: 'cart', value: 'true' },
+      { key: 'coupons', value: 'true' },
+    ];
+    invalidateFeature('cart');
+
+    const couponsAllowed = await runGate('coupons');
+    expect(couponsAllowed).toHaveBeenCalledWith();
+  });
+
   it('bypasses a disabled storefront feature for an authorized admin consumer', async () => {
     featureRows = [{ key: 'brands', value: 'false' }];
     const next = vi.fn();

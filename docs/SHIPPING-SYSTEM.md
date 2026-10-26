@@ -28,6 +28,8 @@ Rules are evaluated strictly by **Priority** (descending order):
 - **Structured Slabs:** First slab weight (e.g. 500g), additional slab weight and rate, zone distance multipliers, and fuel surcharge percentage.
 - **COD Controls:** Per-rule `codAllowed` and optional COD handling fees (flat or percentage with minimum floor).
 
+For multi-parcel orders, flat, free-above-threshold, and percentage-of-order delivery fees apply once per order. Per-kg and volumetric rates are calculated for each parcel and summed. Weight conditions use the sum of all parcel chargeable weights; courier maximum-weight limits apply to each parcel separately. A configured COD fee is added once to a COD order for non-`free` rules, including when free-delivery thresholds waive freight.
+
 ---
 
 ## 2. The 10 Practical Edge Cases Handled A-to-Z
@@ -87,11 +89,11 @@ The storefront checkout (`CheckoutPage.jsx`) renders 3 distinct customer deliver
   - **Failed**: Highlights authentication failure message.
 
 ### B. Failed Shipping Operations & Reconciliation Tab
-- **Operations & Failures** tab displays background carrier dispatch attempts.
+- **Operations & Failures** tab separates failed bookings from queued/processing work, so in-flight attempts do not appear as failures.
 - Shows:
   - Order Number & Total
-  - Operation Type (`create_shipment`, `generate_label`, `cancel_shipment`)
-  - Provider Name & Attempt count (`3/8`)
+  - Operation Type (`create` currently; cancellation is confirmed synchronously with the carrier and then persisted locally)
+  - Provider Name, status, and attempt count (for example, `3/8` before a manual retry; a manual retry grants up to eight more attempts)
   - Last Error description (carrier timeout, auth failure, validation error)
   - **Retry Now** button: Dispatches operation and runs immediate reconciliation.
 
@@ -143,9 +145,9 @@ The storefront checkout (`CheckoutPage.jsx`) renders 3 distinct customer deliver
 
 ## 7. Verification & Automated Tests
 
-All edge cases, P1 bug fixes, and architectural invariants are validated with 100% automated test coverage:
+The automated suites cover the following scenarios. Passing these checks does not establish complete coverage or verify live carrier behavior:
 
-- `server/tests/unit/shipping.edgeCases.test.js` (33/33 tests passing):
+- `server/tests/unit/shipping.edgeCases.test.js`:
   - Circuit breaker & auth cooldown
   - Single warehouse origin enforcement, setting parity & matching fulfillment pickup location
   - Pincode formatting & carrier 404/422 graceful handling
@@ -162,24 +164,39 @@ All edge cases, P1 bug fixes, and architectural invariants are validated with 10
   - Webhook unknown status recording, numeric tracking parsing (`status: 7`), and polling starvation prevention
   - Transaction row-locked webhook race guard (preventing carrier poll regression against concurrent webhook updates)
   - Manual retry concurrency locks & state guards
-- `server/tests/unit/shipping.service.test.js` (5/5 tests passing)
-- `server/tests/unit/shipping.webhook.test.js` (5/5 tests passing)
-- Full backend suite (35 test files, 294 tests passing).
-- Full client build (`npm run build`) passing with zero bundle or syntax errors.
+- `server/tests/unit/shipping.service.test.js`: shipping configuration and calculation checks.
+- `server/tests/unit/shipping.webhook.test.js`: lifecycle, authentication, event deduplication and delivery notifications.
+- `server/tests/unit/payment.codClosure.test.js`: COD collection closes processing and ready-for-shipment orders only after full collection and delivery completion.
+- `server/tests/unit/inventory.shipmentCancellation.test.js`: restored parcel stock remains reserved and can be deducted for replacement shipping.
+- Run the backend suite with `cd server && npx vitest run tests/unit`.
+- Build the client with `cd client && npm run build`.
 
 
-## One measured default package
+## Measured package catalog (one box catalog)
 
-Configure **Admin → Shipping → Packaging** to use one measured box or envelope for the store. No dimensions or capacities are prefilled. Enter the exterior dimensions in centimetres, empty package weight in grams, maximum item count confirmed to fit, and maximum contents weight in grams. Dimensions must exceed 0.5 cm. The merchant must check fit across the products and item combinations sold; item count is a declared capacity, not an automatic packing algorithm.
+Configure **Admin → Shipping → Packaging** with one or more measured presets. Each preset records exterior dimensions in centimetres, optional usable interior dimensions, empty tare weight in grams, maximum item count, maximum contents weight in grams, active state, and which preset is the default (used only to break exact ties). No dimensions or capacities are prefilled. Dimensions must exceed 0.5 cm.
 
-With this option enabled, each physical product requires its actual weight without the shipping box or envelope. Product dimensions are optional. Checkout uses the saved package dimensions and adds its empty weight once to the sum of product weights. Known oversized products and orders above the configured count or weight capacity are blocked with a support message. Digital items do not consume capacity. Flat/free shipping rules still determine customer charges; carrier shipment measurements remain required.
+There is no per-product fit matrix: legacy `fits` rules are dropped on save and ignored by planning. Checkout plans parcels purely from measured product dimensions/weights against preset volume, weight, and item-count limits (`planParcels`). A unit without valid measured dimensions fits no preset box and blocks the quote loudly instead of guessing. Items with incompatible explicit mix groups, or marked “Ship each unit separately” (`packingMode: separate`), are isolated into their own parcels; all other goods share parcels up to physical capacity.
 
-The package configuration is included in the quote cache key and saved in the order shipping snapshot. Fulfillment uses that saved configuration, including for partial fulfillment, so changing the default package does not change existing orders. Confirm actual packed measurements before dispatch. This feature does not split orders into multiple parcels.
+Physical orders cannot check out when no active package preset exists (`SHIPPING_PACKAGE_CATALOG_MISSING`); digital-only orders are unaffected. Flat/free shipping rules still determine customer charges; carrier shipment measurements remain required.
 
-Disabling the default package restores product-based dimension calculation. New products no longer receive invented weight or dimension defaults; existing measurements are preserved. Missing measurements are shown to customers as an item shipping issue, with no suggestion to change their address.
+The parcel plan is included in the quote cache key and copied to the order shipping snapshot. Fulfillment links a checkout recommendation only when staff explicitly select it; custom packing without a selection is governed by remaining quantities and never consumes a recommendation. Staff must type the packed scale weight (checkout estimates are never pre-filled as measurements) and tick the scale-weight confirmation before carrier booking; the backend rejects unconfirmed carrier bookings (`SCALE_WEIGHT_CONFIRMATION_REQUIRED`). For COD, each parcel persists its actual collectable (`shipments.cod_collectable_amount`) and later parcels reuse the persisted sum, so split fulfilment can never collect more than the order total. Changing the catalog does not change existing orders or snapshots.
 
 ## Pincode coverage and rate zones
 
-**Admin → Settings → General → Checkout → Storewide Delivery Coverage** is the final storewide allow/block restriction. A blocked pincode always wins; a non-empty allowlist restricts delivery to its listed pincodes. The storewide restriction is applied to manual, rule-based, and Shiprocket quotes after the selected rate/provider is calculated.
+**Admin → Settings → Shipping → Delivery pricing & coverage** is the final storewide allow/block restriction. A blocked pincode always wins; a non-empty allowlist restricts delivery to its listed pincodes. The storewide restriction is applied to manual, rule-based, and Shiprocket quotes after the selected rate/provider is calculated.
 
 **Admin → Settings → Shipping → Rate Zones** groups pincodes for rules to select regional prices or providers. A zone is not a carrier serviceability guarantee and does not replace the storewide restriction. Leave both storewide lists empty to rely on carrier serviceability and matching shipping rules.
+
+
+## Customer delivery fees
+
+Configure default customer fees and storewide pincode restrictions in **Admin → Settings → Shipping → Delivery pricing & coverage**. General → Checkout links here and does not write shipping settings. Existing settings are preserved.
+
+Choose **Standard pricing** for a fixed fee, free delivery, or free delivery above an order amount. Shipping rules do not override this policy. Choose **Advanced shipping rules** for regional or weight-based pricing; the first matching enabled rule ordered by priority, strict override, then creation date supplies the fee. No matching rule means delivery is unavailable; there is no silent fallback to a second pricing system.
+
+Existing stores with no saved `shipping.pricingMode` keep the previous rules-first fallback behavior. The admin shows a migration notice and requires an explicit choice when saving. Saved quotes record the shipping settings hash; changes to pricing, coverage, or packaging require a fresh quote before an order can proceed.
+
+Allowed/blocked delivery pincodes belong only in Delivery pricing & coverage and apply to both policies, checkout, and the admin preview. Pincodes must contain six digits; blocked destinations take precedence. Domestic country and pincode checks also apply to rule-based quotes. Rate Zones group destinations for pricing and do not grant delivery permission. Pickup pincode is the courier collection origin and must match the registered warehouse; it is not a coverage list. Existing zone exclusions remain exclusions from that rate zone, not storewide delivery blocks.
+
+Shiprocket checks serviceability; its carrier cost is separate from the customer fee. The Test Panel reports the pricing reason and chosen courier, but does not make a live carrier call. Packaging shows an illustrative volumetric weight using divisor 5000; actual quotes use the configured divisor.

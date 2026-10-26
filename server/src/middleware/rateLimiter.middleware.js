@@ -43,6 +43,7 @@ const publicApiLimiter = createLimiter(15, 500, 'Too many requests to public end
 
 
 const verifyEmailLimiter = createLimiter(15, 5, 'Too many verification attempts, please try again after 15 minutes');
+const guestOrderClaimLimiter = createLimiter(15, 3, 'Too many guest order link requests. Please try again after 15 minutes.');
 const resetPasswordLimiter = createLimiter(15, 5, 'Too many reset attempts, please try again after 15 minutes');
 const refreshLimiter = createLimiter(15, 30, 'Too many refresh requests, please try again after 15 minutes');
 
@@ -56,12 +57,16 @@ const searchLimiter = createLimiter(1, 30, 'Too many search requests, please slo
 const aiAssistantLimiter = createLimiter(15, 10, 'Too many AI assistant requests. Please wait before trying again.');
 const inventoryAlertLimiter = createLimiter(1, 60, 'Too many inventory alert requests, please try again shortly');
 const inventoryAlertTestLimiter = createLimiter(5, 5, 'Too many test alert emails requested, please try again in a few minutes');
+const adminDashboardLimiter = createLimiter(1, 120, 'Too many dashboard requests, please try again shortly');
+const webhookLimiter = createLimiter(1, 120, 'Too many webhook events received, please try again shortly');
+const shippingWebhookLimiter = createLimiter(1, 120, 'Too many shipping webhook events received, please try again shortly');
 
 module.exports = {
   loginLimiter,
   registerLimiter,
   forgotPasswordLimiter,
   verifyEmailLimiter,
+  guestOrderClaimLimiter,
   resetPasswordLimiter,
   refreshLimiter,
   otpSendLimiter,
@@ -77,6 +82,7 @@ module.exports = {
   aiAssistantLimiter,
   inventoryAlertLimiter,
   inventoryAlertTestLimiter,
+  adminDashboardLimiter,
+  webhookLimiter,
+  shippingWebhookLimiter,
 };
-
-

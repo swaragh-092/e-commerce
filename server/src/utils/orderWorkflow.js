@@ -128,7 +128,8 @@ const shipmentRank = Object.freeze({
 });
 
 const deriveOrderShippingStatus = (shipments = []) => {
-    const statuses = shipments.map((shipment) => shipment.status || shipment).filter(Boolean);
+    // Cancelled parcels are terminal but do not count as delivered progress.
+    const statuses = shipments.map((shipment) => shipment.status || shipment).filter((status) => status && status !== 'cancelled');
     if (statuses.length === 0) return ORDER_DEFAULT_SHIPPING_STATUS;
 
     const all = (set) => statuses.every((status) => set.includes(status));
@@ -194,8 +195,26 @@ const canCloseOrder = ({ order, payment, orderShippingStatus }) => {
     const paymentStatus = payment?.status || order?.paymentStatus;
     const paymentProvider = payment?.provider || order?.paymentMethod;
     const normalizedPaymentStatus = normalizePaymentStatus(paymentStatus, paymentProvider);
+    const shippingStatus = orderShippingStatus || order?.orderShippingStatus;
+
+    // A COD order returned to origin (RTO) never had payment collected and no refund is required.
+    // It is both physically and financially terminal and should be eligible to close.
+    if (paymentProvider === 'cod' && shippingStatus === 'rto') {
+        return true;
+    }
+
+    // A prepaid parcel returned to origin still represents money owed to the
+    // customer. Keep it open until the captured amount has actually been refunded.
+    if (paymentProvider !== 'cod' && shippingStatus === 'rto') {
+        const capturedAmount = Number(payment?.amount || 0);
+        const refundedAmount = payment?.status === 'refunded'
+            ? capturedAmount
+            : Number(payment?.metadata?.refundedAmount || 0);
+        if (capturedAmount <= 0 || refundedAmount < capturedAmount) return false;
+    }
+
     const paymentResolved = isPaymentSettled(paymentStatus, paymentProvider) || normalizedPaymentStatus === 'refunded';
-    if (!paymentResolved || !isShippingTerminal(orderShippingStatus || order?.orderShippingStatus)) {
+    if (!paymentResolved || !isShippingTerminal(shippingStatus)) {
         return false;
     }
     if (paymentProvider === 'cod' && normalizedPaymentStatus !== 'refunded') {

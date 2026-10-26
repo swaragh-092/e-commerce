@@ -4,17 +4,22 @@ import { useLocation } from 'react-router-dom';
 import { seoService } from '../../services/seoService';
 import { SettingsContext } from '../../context/ThemeContext';
 import { useContext } from 'react';
+import { useFeature } from '../../hooks/useSettings';
 import { getStoreName } from '../../utils/store';
 import { buildOrganizationJsonLd } from '../../utils/seo/buildOrganizationJsonLd';
 
 const SEO = () => {
     const { settings } = useContext(SettingsContext);
+    const seoEnabled = useFeature('seo');
     const location = useLocation();
     const [metadata, setMetadata] = useState(null);
 
     useEffect(() => {
         let cancelled = false;
-        if (settings?.features?.seo === false) return;
+        if (!seoEnabled) {
+            setMetadata(null);
+            return undefined;
+        }
         
         const fetchMetadata = async () => {
             try {
@@ -29,7 +34,7 @@ const SEO = () => {
 
         fetchMetadata();
         return () => { cancelled = true; };
-    }, [location.pathname, settings]);
+    }, [location.pathname, settings, seoEnabled]);
 
     if (!metadata) return null;
 

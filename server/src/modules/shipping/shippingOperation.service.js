@@ -42,7 +42,7 @@ const claimOperation = async (operationId, transaction) => {
     if (!operation) return null;
 
     const lockedTooLong = operation.lockedAt && Date.now() - new Date(operation.lockedAt).getTime() > MAX_LOCK_AGE_MS;
-    if (operation.status === 'completed' || operation.status === 'failed' || (operation.status === 'processing' && !lockedTooLong)) {
+    if (['completed', 'failed', 'cancelled'].includes(operation.status) || (operation.status === 'processing' && !lockedTooLong)) {
         return null;
     }
     if (Number(operation.attempts || 0) >= Number(operation.maxAttempts || 8)) {
@@ -77,23 +77,20 @@ const processOperation = async (operationId) => {
             operation.requestPayload.shipment.pickupPincode = dispatchOrigin.pincode;
         }
 
-        if (typeof adapter.getServiceability === 'function') {
-            const serviceability = await adapter.getServiceability({
-                pincode: operation.requestPayload.address?.postalCode,
-                pickupPincode: dispatchOrigin.pincode || null,
-                weightGrams: operation.requestPayload.shipment?.actualWeightGrams || 500,
-                paymentMode: operation.requestPayload.order?.paymentMethod === 'cod' ? 'cod' : 'prepaid',
-            });
-            if (!serviceability.serviceable || (operation.requestPayload.order?.paymentMethod === 'cod' && !serviceability.codAvailable)) {
-                throw new Error(`Shipping provider cannot fulfill this shipment: ${serviceability.reason || 'unserviceable destination'}`);
-            }
-        }
-
         // Reconcile before retrying (Edge Case 9): If prior attempt timed out, check if shipment was already created in carrier
         if (typeof adapter.checkShipmentExists === 'function') {
             const existing = await adapter.checkShipmentExists({
                 providerRequestId: operation.requestPayload.shipment?.providerRequestId,
                 orderNumber: operation.requestPayload.order?.orderNumber,
+                courierCompanyId: operation.requestPayload.shipment?.courierCompanyId,
+                pincode: operation.requestPayload.address?.postalCode,
+                pickupPincode: dispatchOrigin.pincode || null,
+                weightGrams: operation.requestPayload.shipment?.actualWeightGrams || 500,
+                declaredValue: operation.requestPayload.order?.subtotal || 0,
+                paymentMode: operation.requestPayload.order?.paymentMethod === 'cod' ? 'cod' : 'prepaid',
+                lengthCm: operation.requestPayload.shipment?.lengthCm,
+                breadthCm: operation.requestPayload.shipment?.breadthCm,
+                heightCm: operation.requestPayload.shipment?.heightCm,
             });
             if (existing && existing.awbCode) {
                 providerResult = existing;
@@ -101,6 +98,22 @@ const processOperation = async (operationId) => {
         }
 
         if (!providerResult) {
+            if (typeof adapter.getServiceability === 'function') {
+                const serviceability = await adapter.getServiceability({
+                    pincode: operation.requestPayload.address?.postalCode,
+                    pickupPincode: dispatchOrigin.pincode || null,
+                    weightGrams: operation.requestPayload.shipment?.actualWeightGrams || 500,
+                    declaredValue: operation.requestPayload.order?.subtotal || 0,
+                    paymentMode: operation.requestPayload.order?.paymentMethod === 'cod' ? 'cod' : 'prepaid',
+                    lengthCm: operation.requestPayload.shipment?.lengthCm,
+                    breadthCm: operation.requestPayload.shipment?.breadthCm,
+                    heightCm: operation.requestPayload.shipment?.heightCm,
+                    courierCompanyId: operation.requestPayload.shipment?.courierCompanyId,
+                });
+                if (!serviceability.serviceable || (operation.requestPayload.order?.paymentMethod === 'cod' && !serviceability.codAvailable)) {
+                    throw new Error(`Shipping provider cannot fulfill this shipment: ${serviceability.reason || 'unserviceable destination'}`);
+                }
+            }
             providerResult = await adapter.createShipment(operation.requestPayload);
         }
 
@@ -191,14 +204,14 @@ const processQueued = async ({ limit = 20 } = {}) => {
     return processed;
 };
 
-const listFailedOperations = async ({ page = 1, limit = 20 } = {}) => {
+const listFailedOperations = async ({ page = 1, limit = 20, status = 'failed' } = {}) => {
     const offset = (page - 1) * limit;
+    const statusFilter = status === 'failed' ? ['failed']
+        : status === 'active' ? ['queued', 'processing']
+            : ['queued', 'processing', 'failed'];
     const { count, rows } = await ShippingOperation.findAndCountAll({
         where: {
-            [Op.or]: [
-                { status: 'failed' },
-                { attempts: { [Op.gt]: 0 }, status: 'queued' },
-            ],
+            status: { [Op.in]: statusFilter },
         },
         include: [
             {
@@ -233,10 +246,7 @@ const listFailedOperations = async ({ page = 1, limit = 20 } = {}) => {
 
 const retryOperation = async (operationId) => {
     await sequelize.transaction(async (t) => {
-        const operation = await ShippingOperation.findByPk(operationId, {
-            transaction: t,
-            lock: t?.LOCK?.UPDATE,
-        });
+        let operation = await ShippingOperation.findByPk(operationId, { transaction: t });
         if (!operation) throw new Error('Shipping operation not found');
 
         if (operation.status === 'completed') {
@@ -252,9 +262,33 @@ const retryOperation = async (operationId) => {
             throw new Error(`Cannot retry shipping operation with status: ${operation.status}`);
         }
 
+        const shipment = await Shipment.findByPk(operation.shipmentId, { transaction: t, lock: t?.LOCK?.UPDATE });
+        // Cancellation locks the shipment before its operation. Use that order
+        // here too, then recheck the operation after waiting for either lock.
+        operation = await ShippingOperation.findByPk(operationId, { transaction: t, lock: t?.LOCK?.UPDATE });
+        const refreshedLockActive = operation?.lockedAt && Date.now() - new Date(operation.lockedAt).getTime() <= MAX_LOCK_AGE_MS;
+        if (!operation || (!['failed', 'queued'].includes(operation.status) && !(operation.status === 'processing' && !refreshedLockActive))) {
+            throw new Error('Shipping operation changed while waiting for retry. Refresh and try again.');
+        }
+        if (!shipment || shipment.status === 'cancelled' || ['cancelled', 'cancelling'].includes(shipment.providerState)) {
+            throw new Error('Cancelled or missing shipments cannot be booked again. Create a replacement shipment.');
+        }
+        const requestPayload = {
+            ...operation.requestPayload,
+            shipment: {
+                ...operation.requestPayload?.shipment,
+                actualWeightGrams: shipment.actualWeightGrams,
+                volumetricWeightGrams: shipment.volumetricWeightGrams,
+                lengthCm: shipment.lengthCm,
+                breadthCm: shipment.breadthCm,
+                heightCm: shipment.heightCm,
+            },
+        };
+
         await operation.update({
             status: 'queued',
-            attempts: 0,
+            maxAttempts: Math.max(Number(operation.maxAttempts || 8), Number(operation.attempts || 0) + 8),
+            requestPayload,
             nextAttemptAt: new Date(),
             lockedAt: null,
             lastError: null,

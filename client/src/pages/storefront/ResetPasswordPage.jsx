@@ -86,7 +86,7 @@ const ResetPasswordPage = () => {
             value={formData.newPassword}
             onChange={handleChange}
             error={Boolean(fieldErrors.newPassword)}
-            helperText={fieldErrors.newPassword || 'Minimum 8 characters, at least 1 uppercase and 1 number'}
+            helperText={fieldErrors.newPassword || 'Minimum 8 characters, with uppercase, lowercase, number and special character (!@#$%^&*)'}
             required
             />
             <TextField

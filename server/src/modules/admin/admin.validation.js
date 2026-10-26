@@ -13,7 +13,7 @@ const rolePayload = {
   baseRole: Joi.string()
     .valid(ROLES.CUSTOMER, ROLES.ADMIN)
     .required(),
-  permissionIds: Joi.array().items(Joi.string().uuid()).min(1).required(),
+  permissionIds: Joi.array().items(Joi.string().uuid()).default([]).required(),
 };
 
 const createRoleSchema = Joi.object(rolePayload);
@@ -24,7 +24,7 @@ const updateRoleSchema = Joi.object({
   baseRole: Joi.string()
     .valid(ROLES.CUSTOMER, ROLES.ADMIN)
     .optional(),
-  permissionIds: Joi.array().items(Joi.string().uuid()).min(1).optional(),
+  permissionIds: Joi.array().items(Joi.string().uuid()).optional(),
 });
 
 const salesChartQuerySchema = Joi.object({
@@ -48,10 +48,15 @@ const lowStockQuerySchema = Joi.object({
 });
 
 const createStaffUserSchema = Joi.object({
-  firstName: Joi.string().max(100).required(),
-  lastName: Joi.string().max(100).required(),
-  email: Joi.string().email({ tlds: { allow: false } }).required(),
-  password: Joi.string().min(8).max(128).required(),
+  sendInvitation: Joi.boolean().default(false),
+  firstName: Joi.string().trim().min(1).max(100).required(),
+  lastName: Joi.string().trim().min(1).max(100).required(),
+  email: Joi.string().email({ tlds: { allow: false } }).required().lowercase().trim(),
+  password: Joi.string()
+    .min(8)
+    .pattern(new RegExp('^(?=.*[a-z])(?=.*[A-Z])(?=.*[0-9])(?=.*[!@#$%^&*])'))
+    .message('Password must be at least 8 characters long and include uppercase, lowercase, number, and special character (!@#$%^&*)')
+    .when('sendInvitation', { is: true, then: Joi.optional(), otherwise: Joi.required() }),
   roleId: Joi.string().uuid().required(),
 });
 

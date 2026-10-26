@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useContext, useEffect, useMemo, useState } from 'react';
 import {
   Alert,
   Box,
@@ -13,13 +13,19 @@ import {
   DialogActions,
   DialogContent,
   DialogTitle,
+  FormControl,
+  InputLabel,
+  MenuItem,
+  Select,
   TextField,
   Typography,
 } from '@mui/material';
+import cancellationReasons from '../../../../shared/cancellation-reasons.json';
 import { useNavigate, useParams } from 'react-router-dom';
 import CreditCardOutlinedIcon from '@mui/icons-material/CreditCardOutlined';
 import PrintIcon from '@mui/icons-material/Print';
 import PageSEO from '../../components/common/PageSEO';
+import { AuthContext } from '../../context/AuthContext';
 import DeliverySummaryCard from '../../components/orders/order-detail/DeliverySummaryCard';
 import OrderMetaStrip from '../../components/orders/order-detail/OrderMetaStrip';
 import OrderNotesCard from '../../components/orders/order-detail/OrderNotesCard';
@@ -28,12 +34,12 @@ import ProductTrackingSection from '../../components/orders/order-detail/Product
 import ShippingAddressCard from '../../components/orders/order-detail/ShippingAddressCard';
 import TotalsNotesCard from '../../components/orders/order-detail/TotalsNotesCard';
 import { buildProductTrackingItems } from '../../components/orders/order-detail/orderDetailUtils';
-import { useNotification } from '../../context/NotificationContext';
-import { useCurrency, useFeature } from '../../hooks/useSettings';
+import { useCurrency, useFeatureVisible, useFeaturesResolved, useSettings } from '../../hooks/useSettings';
 import { formatDateTime } from '../../utils/dates';
 
 import { useOrderStatusTransitions } from '../../hooks/useOrderStatusTransitions';
 import { userService } from '../../services/userService';
+import { PERMISSIONS } from '../../utils/permissions';
 
 import { orderService } from '../../services/orderService';
 import { getCustomerOrderDisplayStatus, getCustomerOrderStatusLabel } from '../../utils/orderHelpers';
@@ -49,8 +55,10 @@ const OrderDetailPage = () => {
   const { id } = useParams();
   const navigate = useNavigate();
   const { formatPrice } = useCurrency();
-  const { confirm } = useNotification();
-  const ordersEnabled = useFeature('orders');
+  const { settings } = useSettings();
+  const { hasPermission } = useContext(AuthContext);
+  const ordersEnabled = useFeatureVisible('orders', 'storefront');
+  const featuresResolved = useFeaturesResolved();
 
   const [order, setOrder] = useState(null);
   const [tracking, setTracking] = useState(null);
@@ -60,12 +68,16 @@ const OrderDetailPage = () => {
   const [activeTab, setActiveTab] = useState(0);
   const [putBackDialog, setPutBackDialog] = useState(null);
   const [putBackReason, setPutBackReason] = useState('');
+  const [cancelDialogOpen, setCancelDialogOpen] = useState(false);
+  const [cancelReason, setCancelReason] = useState('');
+  const [cancelReasonDetails, setCancelReasonDetails] = useState('');
+  const [cancelError, setCancelError] = useState(null);
 
   useEffect(() => {
-    if (!ordersEnabled) {
+    if (featuresResolved && !ordersEnabled) {
       navigate('/');
     }
-  }, [ordersEnabled, navigate]);
+  }, [featuresResolved, ordersEnabled, navigate]);
 
   useEffect(() => {
     const fetchOrder = async () => {
@@ -101,7 +113,7 @@ const OrderDetailPage = () => {
   const { isCancelable } = useOrderStatusTransitions(order?.status);
   const isPendingOnlinePayment = order?.status === 'pending_payment' && order?.paymentMethod !== 'cod';
   const canRetryPayment = isPendingOnlinePayment && RETRYABLE_PAYMENT_STATUSES.includes(payment?.status);
-  const canCancel = isCancelable && !isPendingOnlinePayment;
+  const canCancel = isCancelable && !isPendingOnlinePayment && !hasPermission(PERMISSIONS.ORDERS_READ);
   const pendingPaymentExpiresAt = isPendingOnlinePayment && order?.createdAt
     ? new Date(new Date(order.createdAt).getTime() + 15 * 60 * 1000)
     : null;
@@ -149,20 +161,17 @@ const OrderDetailPage = () => {
   }, [shipmentRecords]);
 
   const handleCancel = async () => {
-    const confirmed = await confirm(
-      'Cancel Order',
-      'Are you sure you want to cancel this order? This action cannot be undone.',
-      'error'
-    );
-    if (!confirmed) return;
-
     setActionLoading(true);
+    setCancelError(null);
     try {
-      await orderService.cancelOrder(id);
+      await orderService.cancelOrder(id, { reason: cancelReason, reasonDetails: cancelReasonDetails.trim() });
       setOrder((current) => (current ? { ...current, status: 'cancelled' } : current));
       setTracking((current) => (current ? { ...current, orderStatus: 'cancelled' } : current));
+      setCancelDialogOpen(false);
+      setCancelReason('');
+      setCancelReasonDetails('');
     } catch (cancelError) {
-      setError(cancelError?.response?.data?.message || 'Failed to cancel order.');
+      setCancelError(cancelError?.response?.data?.error?.message || cancelError?.response?.data?.message || 'Failed to cancel order. Please try again or contact support.');
     } finally {
       setActionLoading(false);
     }
@@ -283,7 +292,7 @@ const OrderDetailPage = () => {
               size="small"
               color="error"
               variant="outlined"
-              onClick={handleCancel}
+              onClick={() => { setCancelError(null); setCancelDialogOpen(true); }}
               disabled={actionLoading}
               sx={{ fontSize: '0.78rem', fontWeight: 600 }}
             >
@@ -463,6 +472,64 @@ const OrderDetailPage = () => {
           </Grid>
         </Grid>
       </Container>
+      <Dialog open={cancelDialogOpen} onClose={() => !actionLoading && setCancelDialogOpen(false)} maxWidth="sm" fullWidth>
+        <DialogTitle>Why are you cancelling this order?</DialogTitle>
+        <DialogContent>
+          <Stack spacing={2} sx={{ pt: 1 }}>
+            <Typography variant="body2" color="text.secondary">
+              Your feedback helps us improve. You can still cancel eligible orders before a shipment is created.
+            </Typography>
+            <Alert severity="info">
+              <Typography variant="subtitle2" sx={{ mb: 0.5 }}>Cancellation policy</Typography>
+              <Typography variant="body2" sx={{ whiteSpace: 'pre-wrap' }}>
+                {settings?.orders?.cancellationPolicy || 'You can cancel an order before a shipment is created. If a shipment has already been created, use the return or replacement options after delivery. If your payment was captured, the store will review and process the refund separately; cancelling does not issue an automatic refund. Refund posting times depend on your payment provider.'}
+              </Typography>
+            </Alert>
+            {paymentSettled && (
+              <Alert severity="info">
+                This order is already paid. Cancelling does not issue an automatic refund; the store will need to process it.
+              </Alert>
+            )}
+            {cancelError && <Alert severity="error">{cancelError}</Alert>}
+            <FormControl fullWidth required>
+              <InputLabel id="cancel-order-reason-label">Cancellation reason</InputLabel>
+              <Select
+                labelId="cancel-order-reason-label"
+                label="Cancellation reason"
+                value={cancelReason}
+                onChange={(event) => setCancelReason(event.target.value)}
+              >
+                {Object.entries(cancellationReasons).map(([value, label]) => (
+                  <MenuItem key={value} value={value}>{label}</MenuItem>
+                ))}
+              </Select>
+            </FormControl>
+            {cancelReason && (
+              <TextField
+                label={cancelReason === 'other' ? 'Tell us why (required)' : 'Additional details (optional)'}
+                value={cancelReasonDetails}
+                onChange={(event) => setCancelReasonDetails(event.target.value.slice(0, 500))}
+                required={cancelReason === 'other'}
+                multiline
+                minRows={cancelReason === 'other' ? 2 : 1}
+                fullWidth
+                helperText={`${cancelReasonDetails.length}/500`}
+              />
+            )}
+          </Stack>
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setCancelDialogOpen(false)} disabled={actionLoading}>Keep order</Button>
+          <Button
+            color="error"
+            variant="contained"
+            onClick={handleCancel}
+            disabled={actionLoading || !cancelReason || (cancelReason === 'other' && cancelReasonDetails.trim().length < 3)}
+          >
+            {actionLoading ? 'Cancelling…' : 'Confirm cancellation'}
+          </Button>
+        </DialogActions>
+      </Dialog>
       <Dialog open={Boolean(putBackDialog)} onClose={() => !actionLoading && setPutBackDialog(null)} maxWidth="xs" fullWidth>
         <DialogTitle>
           {putBackDialog?.type === 'replacement' ? 'Request Replacement' : 'Request Return'}

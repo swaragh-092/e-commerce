@@ -82,7 +82,23 @@ const PagesManagePage = () => {
   };
 
   const columns = [
-    { field: 'title', headerName: 'Title', flex: 1 },
+    {
+      field: 'title',
+      headerName: 'Title',
+      flex: 1,
+      renderCell: (params) => (
+        <Typography
+          component="button"
+          type="button"
+          onClick={() => navigate(`/admin/pages/${params.row.id}/edit`)}
+          disabled={!canManagePages}
+          aria-label={`Edit page ${params.row.title}`}
+          sx={{ p: 0, border: 0, background: 'none', color: canManagePages ? 'primary.main' : 'text.primary', font: 'inherit', textAlign: 'left', cursor: canManagePages ? 'pointer' : 'default', '&:hover': canManagePages ? { textDecoration: 'underline' } : {}, '&:focus-visible': { outline: '2px solid', outlineColor: 'primary.main', outlineOffset: 2 } }}
+        >
+          {params.value}
+        </Typography>
+      ),
+    },
     { field: 'slug', headerName: 'Slug', flex: 1 },
     {
       field: 'status',
@@ -181,7 +197,7 @@ const PagesManagePage = () => {
           </Typography>
         </DialogContent>
         <DialogActions>
-          <Button onClick={() => setDeleteDialogOpen(false)}>Cancel</Button>
+          <Button color="error" onClick={() => setDeleteDialogOpen(false)}>Cancel</Button>
           <Button onClick={confirmDelete} color="error" variant="contained">
             Delete
           </Button>

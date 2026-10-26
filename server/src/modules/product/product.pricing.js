@@ -256,7 +256,7 @@ const serializeVariantPricing = (product, variant, referenceDate = new Date()) =
 const serializeProductPricing = (product, { adminView = false, features = {} } = {}, labelPresets = []) => {
   if (!product) return product;
 
-  const plain = typeof product.toJSON === 'function' ? product.toJSON() : { ...product };
+  const plain = require('../attribute/productAttributeOrder').orderProductPresentation(typeof product.toJSON === 'function' ? product.toJSON() : { ...product });
 
   // Strip internal fields that should never appear in API responses
   delete plain.searchVector;
@@ -281,28 +281,43 @@ const serializeProductPricing = (product, { adminView = false, features = {} } =
   if (!adminView && (features.pricing === false || features.showPrice === false)) {
       delete plain.price;
       delete plain.salePrice;
+      delete plain.costPrice;
+      delete plain.unitPrice;
+      delete plain.regularPrice;
+      delete plain.effectivePrice;
+      delete plain.savingsAmount;
       if (Array.isArray(plain.variants)) {
           plain.variants = plain.variants.map((variant) => {
               const v = serializeVariantPricing(product, variant);
               delete v.price;
               delete v.salePrice;
+              delete v.costPrice;
               delete v.unitPrice;
+              delete v.regularPrice;
+              delete v.effectivePrice;
+              delete v.savingsAmount;
+              v.discountPercent = 0;
               return v;
           });
       }
-      return {
+      const sanitized = {
           ...plain,
-          effectivePrice: null,
           isSaleActive: false,
           saleStatus: 'none',
           discountPercent: 0,
-          savingsAmount: 0,
           saleLabelResolved: null,
-          salePrice: null,
           saleStartAt: null,
           saleEndAt: null,
           saleLabel: null,
       };
+      delete sanitized.price;
+      delete sanitized.salePrice;
+      delete sanitized.costPrice;
+      delete sanitized.unitPrice;
+      delete sanitized.regularPrice;
+      delete sanitized.effectivePrice;
+      delete sanitized.savingsAmount;
+      return sanitized;
   }
 
   return {
@@ -337,6 +352,12 @@ const serializeProductPricing = (product, { adminView = false, features = {} } =
  */
 const normalizeSalePayload = (payload, currentProductOrPrice = null, options = {}) => {
   const normalized = { ...payload };
+  const pricingEnabled = options.pricingEnabled ?? true;
+
+  // When pricing is disabled (catalog mode), normalize placeholder zero price to null
+  if (!pricingEnabled && normalized.price != null && Number(normalized.price) === 0) {
+    normalized.price = null;
+  }
 
   const existingProduct = (currentProductOrPrice && typeof currentProductOrPrice === 'object')
     ? (typeof currentProductOrPrice.toJSON === 'function' ? currentProductOrPrice.toJSON() : currentProductOrPrice)
@@ -359,11 +380,11 @@ const normalizeSalePayload = (payload, currentProductOrPrice = null, options = {
       if (!Number.isFinite(normalized.salePrice) || normalized.salePrice <= 0) {
         throw new AppError('VALIDATION_ERROR', 400, 'Sale price must be a positive number');
       }
-      if (effectivePrice !== null && normalized.salePrice >= effectivePrice) {
+      if (pricingEnabled && effectivePrice !== null && normalized.salePrice >= effectivePrice) {
         throw new AppError('VALIDATION_ERROR', 400, 'Sale price must be less than the regular price');
       }
     }
-  } else if (normalized.price !== undefined && normalized.price !== null && fallbackSalePrice !== null && fallbackSalePrice !== undefined) {
+  } else if (pricingEnabled && normalized.price !== undefined && normalized.price !== null && fallbackSalePrice !== null && fallbackSalePrice !== undefined) {
     const existingSale = Number(fallbackSalePrice);
     if (effectivePrice !== null && existingSale >= effectivePrice) {
       throw new AppError('VALIDATION_ERROR', 400, 'Sale price must be less than the regular price');

@@ -2,6 +2,7 @@
 
 const axios = require('axios');
 const crypto = require('crypto');
+const Joi = require('joi');
 const BaseShippingProvider = require('./base.provider');
 
 const SHIPROCKET_API_BASE = 'https://apiv2.shiprocket.in/v1/external';
@@ -10,6 +11,40 @@ const TOKEN_TTL_MS = 240 * 60 * 60 * 1000;
 // Auth failure circuit breaker to prevent repeated failed login attempts
 const authFailureCache = new Map();
 const AUTH_FAILURE_COOLDOWN_MS = 10 * 60 * 1000; // 10 minutes
+
+// In-memory serviceability cache to kill N× API latency on repeated or multi-item quotes
+const serviceabilityCache = new Map();
+const inFlightRequests = new Map();
+const SERVICEABILITY_CACHE_TTL_MS = 5 * 60 * 1000; // 5 minutes TTL for success
+const UNSERVICEABLE_CACHE_TTL_MS = 30 * 1000; // 30 seconds TTL for deterministic unserviceable
+
+function getAccountNamespace(credentials, record) {
+    if (credentials?.email) return String(credentials.email).trim().toLowerCase();
+    if (record?.id) return String(record.id).trim();
+    return 'default';
+}
+
+function setCacheEntry(key, data, isServiceable) {
+    if (!data || typeof data !== 'object' || data.rawResponse?.mock) return;
+    const ttl = isServiceable ? SERVICEABILITY_CACHE_TTL_MS : UNSERVICEABLE_CACHE_TTL_MS;
+    const now = Date.now();
+    // 1. Purge expired entries
+    for (const [k, v] of serviceabilityCache) {
+        if (now >= v.expiresAt) serviceabilityCache.delete(k);
+    }
+    // 2. Hard-cap at 1000: bounded eviction of oldest entries
+    while (serviceabilityCache.size >= 1000) {
+        const oldestKey = serviceabilityCache.keys().next().value;
+        if (!oldestKey) break;
+        serviceabilityCache.delete(oldestKey);
+    }
+    serviceabilityCache.set(key, { data: { ...data }, expiresAt: now + ttl });
+}
+
+function clearServiceabilityCache() {
+    serviceabilityCache.clear();
+    inFlightRequests.clear();
+}
 
 function getAuthCacheKey(credentials) {
     return credentials?.email ? String(credentials.email).trim().toLowerCase() : 'default';
@@ -21,6 +56,16 @@ function clearAuthCooldown(email) {
     } else {
         authFailureCache.clear();
     }
+}
+
+// Shiprocket documents a 50-character maximum for channel order_id and advises
+// numeric references. Keep normal IDs readable; long internal parcel IDs are
+// mapped deterministically to an 18-digit numeric reference for the carrier.
+function toShiprocketOrderId(value) {
+    const id = String(value || '').trim();
+    if (id.length <= 50) return id;
+    const digest = crypto.createHash('sha256').update(id).digest('hex').slice(0, 15);
+    return String(BigInt(`0x${digest}`));
 }
 
 const { decryptCredentials, decryptSecret } = require('../shipping.crypto');
@@ -177,7 +222,7 @@ class ShiprocketProvider extends BaseShippingProvider {
     /* Serviceability                                                         */
     /* ------------------------------------------------------------------ */
 
-    async getServiceability({ pincode, pickupPincode, weightGrams = 500, paymentMode = 'prepaid', lengthCm, breadthCm, heightCm }) {
+    async getServiceability({ pincode, pickupPincode, weightGrams = 500, declaredValue = 0, paymentMode = 'prepaid', lengthCm, breadthCm, heightCm, courierCompanyId = null }) {
         const normalizedPincode = String(pincode || '').trim();
         const isIndiaPincode = /^\d{6}$/.test(normalizedPincode);
         if (!isIndiaPincode) {
@@ -220,71 +265,169 @@ class ShiprocketProvider extends BaseShippingProvider {
             };
         }
 
-        try {
-            const weightKg = Math.max(0.1, weightGrams / 1000);
-            const effectivePickup = String(pickupPincode || this.settings.pickupPincode || this.settings.warehousePincode || '').trim();
+        const weightKg = Math.max(0.1, weightGrams / 1000);
+        const effectivePickup = String(pickupPincode || this.settings.pickupPincode || this.settings.warehousePincode || '').trim();
+        const codParam = paymentMode === 'cod' ? 1 : 0;
+        const normL = lengthCm && lengthCm > 0 ? Math.ceil(lengthCm) : 0;
+        const normB = breadthCm && breadthCm > 0 ? Math.ceil(breadthCm) : 0;
+        const normH = heightCm && heightCm > 0 ? Math.ceil(heightCm) : 0;
+        const normVal = Number(declaredValue) > 0 ? Math.ceil(Number(declaredValue)) : 0;
+        const normCourier = courierCompanyId != null ? String(courierCompanyId).trim() : '';
 
-            const codParam = paymentMode === 'cod' ? 1 : 0;
-            const res = await this._request({
-                method: 'get',
-                url: '/courier/serviceability/',
-                params: {
-                    pickup_postcode: effectivePickup,
-                    delivery_postcode: normalizedPincode,
-                    weight: weightKg,
-                    cod: codParam,
-                },
-            });
+        const accountNs = getAccountNamespace(this._credentials, this.record);
+        const cacheKey = `${accountNs}:${effectivePickup}:${normalizedPincode}:${weightKg}:${normL}:${normB}:${normH}:${codParam}:${normVal}:${normCourier}`;
 
-            const available = res.data?.data?.available_courier_companies || [];
-            let serviceable = available.length > 0;
-            let codAvailable = available.some(c => c.cod === 1);
+        const cachedEntry = serviceabilityCache.get(cacheKey);
+        if (cachedEntry && Date.now() < cachedEntry.expiresAt) {
+            return { ...cachedEntry.data };
+        }
 
-            // Edge Case 4: COD unavailable but prepaid available!
-            if (paymentMode === 'cod' && !codAvailable) {
-                try {
-                    const prepaidRes = await this._request({
-                        method: 'get',
-                        url: '/courier/serviceability/',
-                        params: {
-                            pickup_postcode: effectivePickup,
-                            delivery_postcode: normalizedPincode,
-                            weight: weightKg,
-                            cod: 0,
-                        },
-                    });
-                    const prepaidCouriers = prepaidRes.data?.data?.available_courier_companies || [];
-                    if (prepaidCouriers.length > 0) {
-                        return {
-                            serviceable: true,
-                            codAvailable: false,
-                            reason: 'Cash on Delivery is unavailable for this pincode, but prepaid delivery is available.',
-                            rawResponse: { codAttempt: res.data, prepaidFallback: prepaidRes.data },
-                        };
-                    }
-                } catch (_) {
-                    // Fall through to unserviceable
+        if (inFlightRequests.has(cacheKey)) {
+            const inFlightRes = await inFlightRequests.get(cacheKey);
+            return { ...inFlightRes };
+        }
+
+        const executeRequest = async () => {
+            try {
+                const res = await this._request({
+                    method: 'get',
+                    url: '/courier/serviceability/',
+                    params: {
+                        pickup_postcode: effectivePickup,
+                        delivery_postcode: normalizedPincode,
+                        weight: weightKg,
+                        cod: codParam,
+                        ...(normL && normB && normH ? { length: normL, breadth: normB, height: normH } : {}),
+                        ...(normVal > 0 ? { declared_value: normVal } : {}),
+                    },
+                });
+
+                const available = res.data?.data?.available_courier_companies || [];
+                let serviceable = available.length > 0;
+                let codAvailable = available.some(c => c.cod === 1);
+                const pinnedCourier = courierCompanyId == null ? null : available.find((courier) => Number(courier.courier_company_id) === Number(courierCompanyId));
+                const recommended = pinnedCourier || available.find((courier) => courier.is_recommended) || available[0] || null;
+                if (courierCompanyId != null && !pinnedCourier) {
+                    const result = {
+                        serviceable: false,
+                        codAvailable: false,
+                        rate: null,
+                        currency: 'INR',
+                        courierName: null,
+                        courierCompanyId: Number(courierCompanyId),
+                        estimatedDeliveryDays: null,
+                        reason: paymentMode === 'cod'
+                            ? 'The courier selected for this shipment is no longer available for COD on this parcel. Select a new courier or change payment method.'
+                            : 'The courier selected for this shipment is no longer available for this parcel. Select a new courier and retry.',
+                        rawResponse: res.data,
+                    };
+                    setCacheEntry(cacheKey, result, false);
+                    return result;
                 }
-            }
+                if (paymentMode === 'cod' && pinnedCourier && Number(pinnedCourier.cod) !== 1) {
+                    const result = {
+                        serviceable: false,
+                        codAvailable: false,
+                        rate: null,
+                        currency: 'INR',
+                        courierName: pinnedCourier.courier_name || null,
+                        courierCompanyId: Number(courierCompanyId),
+                        estimatedDeliveryDays: pinnedCourier.estimated_delivery_days || null,
+                        reason: 'The courier selected for this shipment no longer supports COD. Select a new courier or change payment method.',
+                        rawResponse: res.data,
+                    };
+                    setCacheEntry(cacheKey, result, false);
+                    return result;
+                }
 
-            return {
-                serviceable,
-                codAvailable,
-                reason: serviceable ? null : 'No courier available for this pincode',
-                rawResponse: res.data,
-            };
-        } catch (err) {
-            console.error('[ShiprocketProvider] getServiceability API error:', err.message);
-            const status = err.response?.status;
-            if (status === 400 || status === 404 || status === 422) {
-                return {
-                    serviceable: false,
-                    codAvailable: false,
-                    reason: err.response?.data?.message || 'Delivery is not available for this pincode.',
-                    rawResponse: err.response?.data,
+                // Edge Case 4: COD unavailable but prepaid available!
+                if (paymentMode === 'cod' && !codAvailable) {
+                    try {
+                        const prepaidRes = await this._request({
+                            method: 'get',
+                            url: '/courier/serviceability/',
+                            params: {
+                                pickup_postcode: effectivePickup,
+                                delivery_postcode: normalizedPincode,
+                                weight: weightKg,
+                                cod: 0,
+                                ...(normL && normB && normH ? { length: normL, breadth: normB, height: normH } : {}),
+                                ...(normVal > 0 ? { declared_value: normVal } : {}),
+                            },
+                        });
+                        const prepaidCouriers = prepaidRes.data?.data?.available_courier_companies || [];
+                        if (courierCompanyId != null && !prepaidCouriers.some((courier) => Number(courier.courier_company_id) === Number(courierCompanyId))) {
+                            const result = {
+                                serviceable: false,
+                                codAvailable: false,
+                                rate: null,
+                                currency: 'INR',
+                                courierName: null,
+                                courierCompanyId: Number(courierCompanyId),
+                                estimatedDeliveryDays: null,
+                                reason: 'The selected courier no longer supports COD for this parcel. Select a new courier or change payment method.',
+                                rawResponse: { codAttempt: res.data, prepaidFallback: prepaidRes.data },
+                            };
+                            setCacheEntry(cacheKey, result, false);
+                            return result;
+                        }
+                        if (prepaidCouriers.length > 0) {
+                            const prepaidRecommended = prepaidCouriers.find((courier) => courier.is_recommended) || prepaidCouriers[0];
+                            const result = {
+                                serviceable: true,
+                                codAvailable: false,
+                                rate: prepaidRecommended.rate !== null && prepaidRecommended.rate !== undefined && prepaidRecommended.rate !== '' && Number.isFinite(Number(prepaidRecommended.rate)) ? Number(prepaidRecommended.rate) : null,
+                                currency: 'INR',
+                                courierName: prepaidRecommended.courier_name || null,
+                                courierCompanyId: prepaidRecommended.courier_company_id || null,
+                                estimatedDeliveryDays: prepaidRecommended.estimated_delivery_days || null,
+                                reason: 'Cash on Delivery is unavailable for this pincode, but prepaid delivery is available.',
+                                rawResponse: { codAttempt: res.data, prepaidFallback: prepaidRes.data },
+                            };
+                            setCacheEntry(cacheKey, result, true);
+                            return result;
+                        }
+                    } catch (_) {
+                        // Fall through to unserviceable
+                    }
+                }
+
+                const result = {
+                    serviceable,
+                    codAvailable,
+                    rate: recommended && recommended.rate !== null && recommended.rate !== undefined && recommended.rate !== '' && Number.isFinite(Number(recommended.rate)) ? Number(recommended.rate) : null,
+                    currency: 'INR',
+                    courierName: recommended?.courier_name || null,
+                    courierCompanyId: recommended?.courier_company_id || null,
+                    estimatedDeliveryDays: recommended?.estimated_delivery_days || null,
+                    reason: serviceable ? null : 'No courier available for this pincode',
+                    rawResponse: res.data,
                 };
+                setCacheEntry(cacheKey, result, serviceable);
+                return result;
+            } catch (err) {
+                console.error('[ShiprocketProvider] getServiceability API error:', err.message);
+                const status = err.response?.status;
+                if (status === 400 || status === 404 || status === 422) {
+                    const result = {
+                        serviceable: false,
+                        codAvailable: false,
+                        reason: err.response?.data?.message || 'Delivery is not available for this pincode.',
+                        rawResponse: err.response?.data,
+                    };
+                    setCacheEntry(cacheKey, result, false);
+                    return result;
+                }
+                throw new Error(`Shiprocket serviceability failed: ${err.response?.data?.message || err.message}`);
             }
-            throw new Error(`Shiprocket serviceability failed: ${err.response?.data?.message || err.message}`);
+        };
+
+        const inFlight = executeRequest();
+        inFlightRequests.set(cacheKey, inFlight);
+        try {
+            return await inFlight;
+        } finally {
+            inFlightRequests.delete(cacheKey);
         }
     }
 
@@ -305,7 +448,7 @@ class ShiprocketProvider extends BaseShippingProvider {
      * @param {string} pincode
      * @param {string} pickupPincode
      */
-    async calculateRate({ pincode, pickupPincode, weightGrams = 500, declaredValue = 0, paymentMode = 'prepaid', zone = 'national', packageCount = 1 }) {
+    async calculateRate({ pincode, pickupPincode, weightGrams = 500, declaredValue = 0, paymentMode = 'prepaid', zone = 'national', packageCount = 1, lengthCm, breadthCm, heightCm }) {
         const maxWeightKg = Number(this.record?.maxWeightKg) || 20;
         const maxWeightGrams = maxWeightKg * 1000;
         if (weightGrams > maxWeightGrams) {
@@ -331,6 +474,11 @@ class ShiprocketProvider extends BaseShippingProvider {
                     weight:            weightKg,
                     cod:               codMode,
                     declared_value:    declaredValue,
+                    ...(lengthCm && breadthCm && heightCm ? {
+                        length: Math.ceil(lengthCm),
+                        breadth: Math.ceil(breadthCm),
+                        height: Math.ceil(heightCm),
+                    } : {}),
                 },
             });
 
@@ -420,8 +568,21 @@ class ShiprocketProvider extends BaseShippingProvider {
     /* Create Shipment                                                        */
     /* ------------------------------------------------------------------ */
 
-    async checkShipmentExists({ providerRequestId, orderNumber }) {
-        const targetOrderId = String(providerRequestId || orderNumber || '').trim();
+    async checkShipmentExists({
+        providerRequestId,
+        orderNumber,
+        courierCompanyId = null,
+        pincode,
+        pickupPincode,
+        weightGrams,
+        declaredValue,
+        paymentMode,
+        lengthCm,
+        breadthCm,
+        heightCm,
+    }) {
+        const rawTargetOrderId = String(providerRequestId || orderNumber || '').trim();
+        const targetOrderId = toShiprocketOrderId(rawTargetOrderId);
         if (!targetOrderId) return null;
 
         try {
@@ -430,28 +591,32 @@ class ShiprocketProvider extends BaseShippingProvider {
             let checkRes = null;
             let existingOrder = null;
 
-            // 1. Search by reference/channel order ID
-            try {
-                checkRes = await this._request({
-                    method: 'get',
-                    url: `/orders?search=${encodeURIComponent(targetOrderId)}`,
-                });
-                const orders = Array.isArray(checkRes?.data?.data) ? checkRes.data.data : (Array.isArray(checkRes?.data) ? checkRes.data : []);
-                existingOrder = orders.find(o => String(o.channel_order_id) === targetOrderId || String(o.id) === targetOrderId) || null;
-            } catch (searchErr) {
-                const searchStatus = searchErr.response?.status || searchErr.status;
-                if (searchStatus !== 404) {
-                    // Do not treat network errors or auth failures as "shipment doesn't exist"
-                    throw searchErr;
+            // Search the bounded new reference first, then the historical raw
+            // reference so a deployment does not lose reconciliation visibility.
+            for (const searchId of [...new Set([targetOrderId, rawTargetOrderId].filter(Boolean))]) {
+                try {
+                    checkRes = await this._request({
+                        method: 'get',
+                        url: `/orders?search=${encodeURIComponent(searchId)}`,
+                    });
+                    const orders = Array.isArray(checkRes?.data?.data) ? checkRes.data.data : (Array.isArray(checkRes?.data) ? checkRes.data : []);
+                    existingOrder = orders.find(o => String(o.channel_order_id) === searchId || String(o.id) === searchId) || null;
+                    if (existingOrder) break;
+                } catch (searchErr) {
+                    const searchStatus = searchErr.response?.status || searchErr.status;
+                    if (searchStatus !== 404) {
+                        // Do not treat network errors or auth failures as "shipment doesn't exist"
+                        throw searchErr;
+                    }
                 }
             }
 
             // 2. If not found via search and target is numeric, check by Shiprocket internal ID
-            if (!existingOrder && /^\d+$/.test(targetOrderId)) {
+            if (!existingOrder && /^\d+$/.test(rawTargetOrderId)) {
                 try {
                     const showRes = await this._request({
                         method: 'get',
-                        url: `/orders/show/${encodeURIComponent(targetOrderId)}`,
+                        url: `/orders/show/${encodeURIComponent(rawTargetOrderId)}`,
                     });
                     existingOrder = showRes?.data?.data || showRes?.data;
                 } catch (showErr) {
@@ -477,10 +642,29 @@ class ShiprocketProvider extends BaseShippingProvider {
 
             // 1. Assign AWB if not yet assigned
             if (!existingAwb) {
+                if (Number(courierCompanyId) > 0) {
+                    const serviceability = await this.getServiceability({
+                        pincode,
+                        pickupPincode,
+                        weightGrams,
+                        declaredValue,
+                        paymentMode,
+                        lengthCm,
+                        breadthCm,
+                        heightCm,
+                        courierCompanyId,
+                    });
+                    if (!serviceability.serviceable || (paymentMode === 'cod' && !serviceability.codAvailable)) {
+                        throw new Error(`Pinned courier is no longer serviceable; recovery will not silently change it: ${serviceability.reason || 'courier unavailable'}`);
+                    }
+                }
                 const assignResponse = await this._request({
                     method: 'post',
                     url: '/courier/assign/awb',
-                    data: { shipment_id: providerShipmentId },
+                    data: {
+                        shipment_id: providerShipmentId,
+                        ...(Number(courierCompanyId) > 0 ? { courier_id: Number(courierCompanyId) } : {}),
+                    },
                 });
 
                 existingAwb = this._providerValue(assignResponse.data, [
@@ -567,6 +751,24 @@ class ShiprocketProvider extends BaseShippingProvider {
                 }
             }
 
+            // Generate Manifest creates the carrier manifest; Print Manifest
+            // produces the individual order's downloadable document. Both are
+            // best-effort because Shiprocket may report an existing manifest.
+            if (providerOrderId) {
+                try {
+                    const printableManifest = await this._request({
+                        method: 'post',
+                        url: '/manifests/print',
+                        data: { order_ids: [providerOrderId] },
+                    });
+                    manifestUrl = this._providerValue(printableManifest?.data, [
+                        'manifest_url', 'payload.manifest_url', 'data.manifest_url', 'response.data.manifest_url',
+                    ]) || manifestUrl;
+                } catch (_) {
+                    // Preserve generated manifest link and keep carrier recovery usable.
+                }
+            }
+
             return {
                 awbCode: String(existingAwb),
                 providerOrderId,
@@ -634,13 +836,27 @@ class ShiprocketProvider extends BaseShippingProvider {
         const existing = await this.checkShipmentExists({
             providerRequestId: shipment.providerRequestId,
             orderNumber: order.orderNumber,
+            courierCompanyId: shipment.courierCompanyId,
+            pincode: address.postalCode || address.pincode,
+            pickupPincode: shipment.pickupPincode || this.settings.pickupPincode,
+            weightGrams: actualWeight,
+            declaredValue: order.subtotal,
+            paymentMode: order.paymentMethod === 'cod' ? 'cod' : 'prepaid',
+            lengthCm: shipment.lengthCm,
+            breadthCm: shipment.breadthCm,
+            heightCm: shipment.heightCm,
         });
         if (existing && existing.awbCode) {
             return existing;
         }
 
+        const billingEmail = String(order.user?.email || address.email || '').trim();
+        if (Joi.string().email().required().validate(billingEmail).error) {
+            throw new Error("Shiprocket booking requires the customer's valid email address. Add it to the order before booking.");
+        }
+
         const payload = {
-            order_id: shipment.providerRequestId || order.orderNumber,
+            order_id: toShiprocketOrderId(shipment.providerRequestId || order.orderNumber),
             order_date: new Date(order.createdAt).toISOString().split('T')[0],
             pickup_location: shipment.pickupLocationName || this.settings.pickupLocationName || 'Primary',
             billing_customer_name: firstName,
@@ -651,7 +867,7 @@ class ShiprocketProvider extends BaseShippingProvider {
             billing_pincode: postalCode,
             billing_state: address.state,
             billing_country: address.country || 'India',
-            billing_email: order.user?.email || '',
+            billing_email: billingEmail,
             billing_phone: phone,
             shipping_is_billing: 1,
             order_items: items.map(i => ({
@@ -659,8 +875,8 @@ class ShiprocketProvider extends BaseShippingProvider {
                 sku: i.snapshotSku || i.sku || 'SKU',
                 units: i.quantity,
                 selling_price: Number(i.unitPrice || 0),
-                discount: 0,
-                tax: 0,
+                discount: Number(i.discountAmount || 0),
+                tax: Number(i.taxAmount || 0),
                 hsn: i.hsnCode || '',
             })),
             payment_method: order.paymentMethod === 'cod' ? 'COD' : 'Prepaid',
@@ -683,7 +899,10 @@ class ShiprocketProvider extends BaseShippingProvider {
         const assignResponse = await this._request({
             method: 'post',
             url: '/courier/assign/awb',
-            data: { shipment_id: providerShipmentId },
+            data: {
+                shipment_id: providerShipmentId,
+                ...(Number(shipment.courierCompanyId) > 0 ? { courier_id: Number(shipment.courierCompanyId) } : {}),
+            },
         });
         const awbCode = this._providerValue(assignResponse.data, [
             'awb_code', 'payload.awb_code', 'data.awb_code', 'response.data.awb_code',
@@ -714,9 +933,22 @@ class ShiprocketProvider extends BaseShippingProvider {
             data: { shipment_id: [providerShipmentId] },
         });
 
+        let printableManifestResponse = null;
+        try {
+            printableManifestResponse = await this._request({
+                method: 'post',
+                url: '/manifests/print',
+                data: { order_ids: [providerOrderId] },
+            });
+        } catch (_) {
+            // The generated manifest remains usable if the per-order print
+            // endpoint is unavailable or the carrier has not indexed it yet.
+        }
+
         const label = this._providerValue(labelResponse.data, ['label_url', 'payload.label_url', 'data.label_url', 'response.data.label_url']);
         const invoice = this._providerValue(invoiceResponse.data, ['invoice_url', 'payload.invoice_url', 'data.invoice_url', 'response.data.invoice_url']);
-        const manifest = this._providerValue(manifestResponse.data, ['manifest_url', 'payload.manifest_url', 'data.manifest_url', 'response.data.manifest_url']);
+        const manifest = this._providerValue(printableManifestResponse?.data, ['manifest_url', 'payload.manifest_url', 'data.manifest_url', 'response.data.manifest_url'])
+            || this._providerValue(manifestResponse.data, ['manifest_url', 'payload.manifest_url', 'data.manifest_url', 'response.data.manifest_url']);
 
         return {
             awbCode: String(awbCode),
@@ -735,6 +967,7 @@ class ShiprocketProvider extends BaseShippingProvider {
                 label: labelResponse.data,
                 invoice: invoiceResponse.data,
                 manifest: manifestResponse.data,
+                printableManifest: printableManifestResponse?.data || null,
             },
         };
     }
@@ -743,15 +976,35 @@ class ShiprocketProvider extends BaseShippingProvider {
     /* Cancel Shipment                                                        */
     /* ------------------------------------------------------------------ */
 
-    async cancelShipment({ awbCode }) {
-        const { data } = await this._request({
-            method: 'post',
-            url: '/orders/cancel/shipment/awbs',
-            data: { awbs: [awbCode] },
-        });
+    async cancelShipment({ awbCode, providerOrderId }) {
+        let response;
+        try {
+            response = await this._request({
+                method: 'post',
+                url: '/orders/cancel/shipment/awbs',
+                data: { awbs: [awbCode] },
+            });
+        } catch (error) {
+            const status = error?.response?.status;
+            const responseMessage = [error?.response?.data?.message, error?.response?.data?.error_description, error?.message]
+                .filter(Boolean).join(' ');
+            const explicitRouteNotFound = status === 404
+                && /(?:route|endpoint|path|url).*(?:not found|unsupported|does not exist)|(?:not found|unsupported|does not exist).*(?:route|endpoint|path|url)/i.test(responseMessage);
+            // Only fall back when the endpoint itself is unavailable. A timeout,
+            // auth error, or carrier business rejection is ambiguous/meaningful;
+            // issuing a second cancellation could conceal the actual outcome.
+            if (!(status === 405 || status === 501 || explicitRouteNotFound) || providerOrderId == null) throw error;
+            response = await this._request({
+                method: 'post',
+                url: '/orders/cancel',
+                data: { ids: [providerOrderId] },
+            });
+        }
+        const data = response?.data || {};
 
-        // Derive success from response schema
-        const success = Boolean(data.success) || data.status === 'cancelled' || data.code === 200;
+        // Shiprocket documents a successful cancellation with HTTP 204 and no
+        // body; also accept its body-based success responses for older accounts.
+        const success = response?.status === 204 || Boolean(data.success) || data.status === 'cancelled' || data.code === 200;
 
         return {
             success,
@@ -977,11 +1230,14 @@ class ShiprocketProvider extends BaseShippingProvider {
 
         const providerOrderId = payload.order_id || payload.shipment_id || payload.provider_order_id || null;
 
-        const timestamp = payload.current_timestamp ||
+        const rawTimestamp = payload.current_timestamp ||
             payload.scan_date_time ||
             payload.timestamp ||
             payload.date ||
-            new Date();
+            null;
+
+        const parsedDate = rawTimestamp ? new Date(rawTimestamp) : null;
+        const validTimestamp = parsedDate && !Number.isNaN(parsedDate.getTime()) ? parsedDate : null;
 
         return {
             providerEventId: providerEventId ? String(providerEventId) : null,
@@ -989,7 +1245,7 @@ class ShiprocketProvider extends BaseShippingProvider {
             awbCode,
             status: this._normalizeStatus(status),
             location,
-            timestamp: Number.isNaN(new Date(timestamp).getTime()) ? new Date() : new Date(timestamp),
+            timestamp: validTimestamp,
             rawPayload: payload,
         };
     }
@@ -1013,5 +1269,9 @@ class ShiprocketProvider extends BaseShippingProvider {
 ShiprocketProvider.clearAuthCooldown = clearAuthCooldown;
 ShiprocketProvider.authFailureCache = authFailureCache;
 ShiprocketProvider.AUTH_FAILURE_COOLDOWN_MS = AUTH_FAILURE_COOLDOWN_MS;
+ShiprocketProvider.serviceabilityCache = serviceabilityCache;
+ShiprocketProvider.inFlightRequests = inFlightRequests;
+ShiprocketProvider.clearServiceabilityCache = clearServiceabilityCache;
+ShiprocketProvider.toShiprocketOrderId = toShiprocketOrderId;
 
 module.exports = ShiprocketProvider;

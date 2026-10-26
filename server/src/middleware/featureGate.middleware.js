@@ -80,7 +80,7 @@ const getResolvedFeature = async (featureKey) => {
  * @param {string} featureKey - Feature key to check (e.g. 'wishlist', 'cart')
  */
 const featureGate = (featureKey) => {
-  return async (req, res, next) => {
+  const gate = async (req, res, next) => {
     try {
       const isEnabled = await getResolvedFeature(featureKey);
       if (!isEnabled) {
@@ -105,6 +105,10 @@ const featureGate = (featureKey) => {
       );
     }
   };
+  // Metadata for route-wiring tests and diagnostics.
+  gate.featureGate = true;
+  gate.featureKey = featureKey;
+  return gate;
 };
 
 /**
@@ -118,7 +122,7 @@ const featureGate = (featureKey) => {
 const featureGateUnlessPermission = (featureKey, ...permissions) => {
   const gate = featureGate(featureKey);
 
-  return async (req, res, next) => {
+  const permissionGate = async (req, res, next) => {
     if (req.user) {
       const userPermissions = getPermissionsForUser(req.user);
       if (permissions.some((permission) => userPermissions.includes(permission))) {
@@ -128,21 +132,20 @@ const featureGateUnlessPermission = (featureKey, ...permissions) => {
 
     return gate(req, res, next);
   };
+
+  permissionGate.featureGate = true;
+  permissionGate.featureKey = featureKey;
+  permissionGate.bypassPermissions = permissions;
+  return permissionGate;
 };
 
 /**
- * Invalidates a single feature key from the cache.
- * Call this after a feature setting is updated in the DB so the next request
- * immediately re-reads the fresh value instead of waiting for TTL expiry.
- *
- * @param {string} featureKey
+ * Invalidates the feature cache after a settings change.
+ * All keys are cleared because feature updates and mode changes can cascade
+ * into dependent features (e.g. cart -> coupons, reviews -> requirePurchaseForReview).
  */
-const invalidateFeature = (featureKey) => {
-  if (featureKey === 'mode') {
-    featureCache.clear();
-  } else {
-    featureCache.delete(featureKey);
-  }
+const invalidateFeature = () => {
+  featureCache.clear();
 };
 
 /**

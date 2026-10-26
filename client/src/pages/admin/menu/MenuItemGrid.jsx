@@ -61,13 +61,14 @@ const MenuItemGrid = ({
     if (source.droppableId === destination.droppableId && source.index === destination.index) return;
 
     // 1. Identify the dragged item
-    const draggedItem = rows.find(r => String(r.id) === result.draggableId);
+    const draggedItem = rows.find(r => !r.generatedFromCategory && String(r.id) === result.draggableId);
     if (!draggedItem) return;
 
     // 2. Prepare the destination parent items
     const destParentId = destination.droppableId === 'root' ? null : destination.droppableId;
+    if (rows.some((row) => row.id === destParentId && (row.targetType === 'category_tree' || row.syncChildren))) return;
     const destItems = rows
-      .filter(r => (r.parentId || 'root') === destination.droppableId)
+      .filter(r => !r.generatedFromCategory && (r.parentId || 'root') === destination.droppableId)
       .filter(r => String(r.id) !== result.draggableId) // Remove from current position if it was already there
       .sort((a, b) => a.sortOrder - b.sortOrder);
 
@@ -102,13 +103,13 @@ const MenuItemGrid = ({
 
   const renderSortableList = (parentId = 'root', depth = 0) => {
     const levelItems = rows
-      .filter(r => (r.parentId || 'root') === parentId)
+      .filter(r => !r.generatedFromCategory && (r.parentId || 'root') === parentId)
       .sort((a, b) => a.sortOrder - b.sortOrder);
     
     // Always render a Droppable for potential children, even if empty,
     // to allow dragging items into it to create submenus.
     // Except we limit depth for sanity.
-    if (depth > 3) return null;
+    if (depth > 3 || rows.some((row) => row.id === parentId && (row.targetType === 'category_tree' || row.syncChildren))) return null;
 
     return (
       <Droppable droppableId={parentId} type="items">
@@ -192,7 +193,14 @@ const MenuItemGrid = ({
       ),
     },
     { field: 'placement', headerName: 'Placement', width: 130 },
-    { field: 'targetType', headerName: 'Type', width: 130 },
+    {
+      field: 'targetType',
+      headerName: 'Type',
+      width: 160,
+      valueGetter: (value, row) => row?.generatedFromCategory
+        ? 'Synced category'
+        : (row?.syncChildren ? 'Category + synced children' : ({ none: 'Label only', custom_url: 'Custom URL', system_route: 'Store page', category_tree: 'Synced categories', collection: 'Category' }[value] || value)),
+    },
     { field: 'url', headerName: 'URL', flex: 1 },
     { field: 'sortOrder', headerName: 'Order', width: 90 },
     {
@@ -217,7 +225,7 @@ const MenuItemGrid = ({
           <Tooltip title="Move up">
             <span>
               <IconButton
-                disabled={!canManage}
+                disabled={!canManage || params.row.generatedFromCategory}
                 onClick={() => nudgeItem(params.row, -1)}
                 aria-label={`Move ${params.row.label} up`}
               >
@@ -228,7 +236,7 @@ const MenuItemGrid = ({
           <Tooltip title="Move down">
             <span>
               <IconButton
-                disabled={!canManage}
+                disabled={!canManage || params.row.generatedFromCategory}
                 onClick={() => nudgeItem(params.row, 1)}
                 aria-label={`Move ${params.row.label} down`}
               >
@@ -239,7 +247,7 @@ const MenuItemGrid = ({
           <Tooltip title="Edit">
             <span>
               <IconButton
-                disabled={!canManage}
+                disabled={!canManage || params.row.generatedFromCategory}
                 onClick={() => openItemDialog(params.row)}
                 aria-label={`Edit ${params.row.label}`}
               >
@@ -250,7 +258,7 @@ const MenuItemGrid = ({
           <Tooltip title="Delete">
             <span>
               <IconButton
-                disabled={!canManage}
+                disabled={!canManage || params.row.generatedFromCategory}
                 color="error"
                 onClick={() => deleteItem(params.row)}
                 aria-label={`Delete ${params.row.label}`}
@@ -350,6 +358,7 @@ const MenuItemGrid = ({
             columns={columns}
             loading={loading}
             checkboxSelection
+            isRowSelectable={(params) => !params.row.generatedFromCategory}
             disableRowSelectionOnClick
             onRowSelectionModelChange={(newSelection) => setSelectedIds(newSelection)}
             rowSelectionModel={selectedIds}

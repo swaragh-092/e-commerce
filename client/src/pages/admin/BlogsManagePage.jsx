@@ -34,6 +34,10 @@ const BlogsManagePage = () => {
   const { hasPermission } = useAuth();
   const canManageBlogs = hasPermission(PERMISSIONS.BLOGS_MANAGE);
 
+  useEffect(() => {
+    if (!canManageBlogs) { setDeleteOpen(false); setSelected(null); }
+  }, [canManageBlogs]);
+
   const fetchData = async () => {
     setLoading(true);
     try {
@@ -67,7 +71,24 @@ const BlogsManagePage = () => {
   };
 
   const columns = useMemo(() => ([
-    { field: 'title', headerName: 'Title', flex: 1.2, minWidth: 220 },
+    {
+      field: 'title',
+      headerName: 'Title',
+      flex: 1.2,
+      minWidth: 220,
+      renderCell: (params) => (
+        <Typography
+          component="button"
+          type="button"
+          onClick={() => navigate(`/admin/blogs/${params.row.id}/edit`)}
+          disabled={!canManageBlogs}
+          aria-label={`Edit blog ${params.row.title}`}
+          sx={{ p: 0, border: 0, background: 'none', color: canManageBlogs ? 'primary.main' : 'text.primary', font: 'inherit', textAlign: 'left', cursor: canManageBlogs ? 'pointer' : 'default', '&:hover': canManageBlogs ? { textDecoration: 'underline' } : {}, '&:focus-visible': { outline: '2px solid', outlineColor: 'primary.main', outlineOffset: 2 } }}
+        >
+          {params.value}
+        </Typography>
+      ),
+    },
     { field: 'slug', headerName: 'Slug', flex: 1, minWidth: 180 },
     {
       field: 'status',
@@ -151,13 +172,13 @@ const BlogsManagePage = () => {
         />
       </Paper>
 
-      <Dialog open={deleteOpen} onClose={() => setDeleteOpen(false)}>
+      <Dialog open={canManageBlogs && deleteOpen} onClose={() => setDeleteOpen(false)}>
         <DialogTitle>Delete Blog Post</DialogTitle>
         <DialogContent>
           <Typography>Are you sure you want to delete "{selected?.title}"?</Typography>
         </DialogContent>
         <DialogActions>
-          <Button onClick={() => setDeleteOpen(false)}>Cancel</Button>
+          <Button color="error" onClick={() => setDeleteOpen(false)}>Cancel</Button>
           <Button color="error" variant="contained" onClick={confirmDelete}>Delete</Button>
         </DialogActions>
       </Dialog>

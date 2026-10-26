@@ -17,6 +17,7 @@ const router = express.Router();
 const allowInternalBrandReads = featureGateUnlessPermission(
     'brands',
     PERMISSIONS.BRANDS_READ,
+    PERMISSIONS.BRANDS_MANAGE,
     PERMISSIONS.PRODUCTS_READ,
     PERMISSIONS.COUPONS_READ,
     PERMISSIONS.SETTINGS_READ

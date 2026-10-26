@@ -3,7 +3,7 @@ import { Box, Container, Typography, Pagination, FormControl, Select, MenuItem }
 import ProductGrid from '../../components/product/ProductGrid';
 import { getProducts } from '../../services/productService';
 import PageSEO from '../../components/common/PageSEO';
-import { useSettings, useFeature } from '../../hooks/useSettings';
+import { useSettings, useFeature, useFeatureVisible, useFeaturesResolved } from '../../hooks/useSettings';
 import { Navigate } from 'react-router-dom';
 
 const SalePage = () => {
@@ -13,7 +13,9 @@ const SalePage = () => {
     const [page, setPage] = useState(1);
     const [sort, setSort] = useState('discount_desc');
 
-    const pricingEnabled = useFeature('pricing');
+    const pricingEnabled = useFeatureVisible('pricing', 'storefront');
+    const showPrice = useFeature('showPrice');
+    const featuresResolved = useFeaturesResolved();
 
     const { settings } = useSettings();
     const catalog = settings?.catalog || {};
@@ -44,6 +46,8 @@ const SalePage = () => {
         fetchProducts();
     }, [page, defaultLimit, sort]);
 
+    if (!featuresResolved) return null;
+
     if (!pricingEnabled) {
         return <Navigate to="/404" replace />;
     }
@@ -68,8 +72,8 @@ const SalePage = () => {
                     <Select value={sort} onChange={(e) => { setSort(e.target.value); setPage(1); }}>
                         <MenuItem value="discount_desc">Biggest Discount</MenuItem>
                         <MenuItem value="ending_soon">Ending Soonest</MenuItem>
-                        <MenuItem value="price_asc">Price: Low to High</MenuItem>
-                        <MenuItem value="price_desc">Price: High to Low</MenuItem>
+                        {pricingEnabled && showPrice && <MenuItem value="price_asc">Price: Low to High</MenuItem>}
+                        {pricingEnabled && showPrice && <MenuItem value="price_desc">Price: High to Low</MenuItem>}
                         <MenuItem value="newest">Newest First</MenuItem>
                     </Select>
                 </FormControl>

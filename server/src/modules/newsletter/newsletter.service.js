@@ -2,20 +2,37 @@
 
 const { NewsletterSubscriber, Sequelize } = require('../index');
 const AppError = require('../../utils/AppError');
+const Joi = require('joi');
 
 const UNIQUE_VIOLATION = 'SequelizeUniqueConstraintError';
 
+const queueConfirmation = async (subscriber) => {
+  if (!subscriber.unsubscribeToken) return;
+  await require('../notification/notification.service').send('newsletter_confirmation', subscriber.email, {
+    subscriber_id: subscriber.id,
+    subscribed_at: new Date(subscriber.subscribedAt).toISOString(),
+    unsubscribe_url: require('./newsletterCampaign.service').unsubscribeUrl(subscriber.unsubscribeToken),
+  });
+};
+
 const subscribe = async (email, source = 'homepage') => {
+  if (!await require('../../middleware/featureGate.middleware').getResolvedFeature('newsletter')) {
+    throw new AppError('FEATURE_DISABLED', 403, 'Newsletter subscriptions are disabled');
+  }
+  if (typeof email !== 'string' || Joi.string().email().validate(email.trim()).error) throw new AppError('VALIDATION_ERROR', 400, 'Enter a valid email address');
+  if (typeof source !== 'string' || source.length > 50) throw new AppError('VALIDATION_ERROR', 400, 'Invalid subscription source');
   const normalized = email.trim().toLowerCase();
   const existing = await NewsletterSubscriber.findOne({ where: { email: normalized } });
   if (existing) {
     if (existing.status === 'active') return { alreadySubscribed: true, unsubscribeToken: existing.unsubscribeToken };
     await existing.update({ status: 'active', subscribedAt: new Date(), unsubscribedAt: null, source });
+    await queueConfirmation(existing);
     return { resubscribed: true, unsubscribeToken: existing.unsubscribeToken };
   }
   // Token is generated in the model beforeCreate hook — no follow-up write needed.
   try {
     const subscriber = await NewsletterSubscriber.create({ email: normalized, source });
+    await queueConfirmation(subscriber);
     return { subscribed: true, unsubscribeToken: subscriber.unsubscribeToken };
   } catch (err) {
     // Two concurrent subscribes for the same new email can both pass the
@@ -26,6 +43,11 @@ const subscribe = async (email, source = 'homepage') => {
     }
     throw err;
   }
+};
+
+const getStatus = async (email) => {
+  const subscriber = await NewsletterSubscriber.findOne({ where: { email: email.trim().toLowerCase() } });
+  return { subscribed: subscriber?.status === 'active' };
 };
 
 const unsubscribeByToken = async (token) => {
@@ -64,6 +86,7 @@ const list = async (query = {}) => {
   if (query.status) where.status = query.status;
   const { count, rows } = await NewsletterSubscriber.findAndCountAll({
     where,
+    attributes: { exclude: ['unsubscribeToken'] },
     order: [['subscribed_at', 'DESC']],
     limit: parseInt(query.limit) || 50,
     offset: parseInt(query.offset) || 0,
@@ -71,4 +94,4 @@ const list = async (query = {}) => {
   return { subscribers: rows, total: count };
 };
 
-module.exports = { subscribe, unsubscribe, unsubscribeByToken, getUnsubscribeToken, list };
+module.exports = { subscribe, getStatus, unsubscribe, unsubscribeByToken, getUnsubscribeToken, list };

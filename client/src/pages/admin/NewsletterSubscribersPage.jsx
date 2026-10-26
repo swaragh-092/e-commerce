@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import {
   Box, Button, Chip, Container, IconButton, Paper, Stack,
   Table, TableBody, TableCell, TableContainer, TableHead, TableRow,
@@ -8,6 +8,9 @@ import FileDownloadIcon from '@mui/icons-material/FileDownload';
 import RefreshIcon from '@mui/icons-material/Refresh';
 import api from '../../services/api';
 import { useNotification } from '../../context/NotificationContext';
+import { useAuth } from '../../hooks/useAuth';
+import { PERMISSIONS } from '../../utils/permissions';
+import NewsletterCampaigns from '../../components/admin/NewsletterCampaigns';
 
 const normalizeSubscriber = (sub = {}) => ({
   ...sub,
@@ -16,6 +19,11 @@ const normalizeSubscriber = (sub = {}) => ({
 });
 
 const NewsletterSubscribersPage = () => {
+  const { hasPermission } = useAuth();
+  const canReadSubscribers = hasPermission(PERMISSIONS.NEWSLETTER_SUBSCRIBERS_READ);
+  const canReadCampaigns = hasPermission(PERMISSIONS.NEWSLETTER_READ);
+  const subscriberAccess = useRef(canReadSubscribers);
+  subscriberAccess.current = canReadSubscribers;
   const [subscribers, setSubscribers] = useState([]);
   const [total, setTotal] = useState(0);
   const [loading, setLoading] = useState(true);
@@ -24,9 +32,11 @@ const NewsletterSubscribersPage = () => {
   const { notify } = useNotification();
 
   const fetchData = useCallback(async () => {
+    if (!canReadSubscribers) { setSubscribers([]); setTotal(0); setLoading(false); return; }
     setLoading(true);
     try {
       const res = await api.get('/newsletter', { params: { limit: rowsPerPage, offset: page * rowsPerPage } });
+      if (!subscriberAccess.current) return;
       const list = res.data?.data?.subscribers || [];
       setSubscribers(list.map(normalizeSubscriber));
       setTotal(res.data?.data?.total || 0);
@@ -35,11 +45,12 @@ const NewsletterSubscribersPage = () => {
     } finally {
       setLoading(false);
     }
-  }, [page, rowsPerPage, notify]);
+  }, [page, rowsPerPage, notify, canReadSubscribers]);
 
   useEffect(() => { fetchData(); }, [fetchData]);
 
   const handleExport = () => {
+    if (!subscriberAccess.current) return;
     const header = 'Email,Status,Source,Subscribed At\n';
     const rows = subscribers.map((s) =>
       `${s.email},${s.status},${s.source || ''},${s.subscribedAt || ''}`
@@ -61,18 +72,20 @@ const NewsletterSubscribersPage = () => {
         <Box>
           <Typography variant="h5" component="h1" fontWeight={800}>Newsletter Subscribers</Typography>
           <Typography variant="body2" color="text.secondary">
-            {total} total • {activeCount} active on this page
+            {canReadSubscribers ? `${total} total • ${activeCount} active on this page` : 'Newsletter campaigns'}
           </Typography>
         </Box>
-        <Stack direction="row" spacing={1}>
+        {canReadSubscribers && <Stack direction="row" spacing={1}>
           <IconButton onClick={fetchData} disabled={loading}><RefreshIcon /></IconButton>
           <Button startIcon={<FileDownloadIcon />} variant="outlined" onClick={handleExport} disabled={!subscribers.length}>
             Export CSV
           </Button>
-        </Stack>
+        </Stack>}
       </Stack>
 
-      <TableContainer component={Paper} variant="outlined">
+      {canReadCampaigns && <NewsletterCampaigns />}
+
+      {canReadSubscribers && <TableContainer component={Paper} variant="outlined">
         <Table size="small">
           <TableHead>
             <TableRow>
@@ -115,7 +128,7 @@ const NewsletterSubscribersPage = () => {
           onRowsPerPageChange={(e) => { setRowsPerPage(parseInt(e.target.value)); setPage(0); }}
           rowsPerPageOptions={[10, 25, 50]}
         />
-      </TableContainer>
+      </TableContainer>}
     </Container>
   );
 };

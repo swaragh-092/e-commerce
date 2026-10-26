@@ -35,6 +35,7 @@ import {
   AccordionDetails,
   Switch,
   LinearProgress,
+  Breadcrumbs,
 } from '@mui/material';
 
 import AddIcon from '@mui/icons-material/Add';
@@ -45,6 +46,10 @@ import StarIcon from '@mui/icons-material/Star';
 import StarBorderIcon from '@mui/icons-material/StarBorder';
 import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
 import ImageIcon from '@mui/icons-material/Image';
+import ArrowBackIcon from '@mui/icons-material/ArrowBack';
+import SaveIcon from '@mui/icons-material/Save';
+import CloseIcon from '@mui/icons-material/Close';
+import NavigateNextIcon from '@mui/icons-material/NavigateNext';
 import { getMediaUrl } from '../../utils/media';
 import useSKUGenerator from '../../hooks/useSKUGenerator';
 import {
@@ -57,7 +62,7 @@ import attributeService from '../../services/attributeService';
 import { getSaleLabels } from '../../services/adminService';
 import MediaPicker from '../../components/common/MediaPicker';
 import { useNotification } from '../../context/NotificationContext';
-import { useCurrency, useSettings, useFeature } from '../../hooks/useSettings';
+import { useCurrency, useSettings, useFeature, useFeatureVisible, useFeaturesResolved } from '../../hooks/useSettings';
 import { getProductBasePrice } from '../../utils/variantPricing';
 import { getVariantOptionLabel } from '../../utils/variantOptions';
 import { formatAttributeValue, getSwatchColor } from '../../utils/attributePresentation';
@@ -114,11 +119,11 @@ const validate = (formData) => {
   else if (formData.name?.trim().length > 255)
     errs.name = 'Product name must be 255 characters or less.';
 
-  // Only validate price/tax if their respective features are enabled
-  const pricingEnabled = window.__APP_FEATURES__?.pricing ?? true; // Fallback to true if unknown
-  const showPrice = window.__APP_FEATURES__?.showPrice ?? true;
+  const pricingEnabled = formData._features?.pricing === true;
+  const shippingEnabled = formData._features?.shipping === true;
 
-  if (pricingEnabled || showPrice) {
+
+  if (pricingEnabled) {
     const rPrice = Number(formData.price);
     if (formData.price === '' || formData.price === null || formData.price === undefined) {
       errs.price = 'MRP is required.';
@@ -145,10 +150,10 @@ const validate = (formData) => {
   }
 
   if (
-    formData.quantity !== '' &&
-    (isNaN(Number(formData.quantity)) || Number(formData.quantity) < 0)
+    formData.type === 'simple' && formData.quantity !== '' &&
+    (!Number.isInteger(Number(formData.quantity)) || Number(formData.quantity) < 0 || Number(formData.quantity) > 2147483647)
   ) {
-    errs.quantity = 'Stock quantity must be 0 or more.';
+    errs.quantity = 'Stock quantity must be a whole number from 0 to 2147483647.';
   }
 
   if (formData.shortDescription && formData.shortDescription.length > 500) {
@@ -178,6 +183,22 @@ const validate = (formData) => {
       errs.taxConfig = 'CGST must be between 0 and 100%.';
     } else if (isNaN(Number(igst)) || igst < 0 || igst > 1) {
       errs.taxConfig = 'IGST must be between 0 and 100%.';
+    }
+  }
+
+  // Shipping Readiness Validation for purchasable (published) products
+  if (shippingEnabled && formData.requiresShipping && formData.status === 'published') {
+    if (!formData.weightGrams || Number(formData.weightGrams) <= 0) {
+      errs.weightGrams = 'Weight (> 0 g) is required before publishing.';
+    }
+    if (!formData.lengthCm || Number(formData.lengthCm) <= 0.5) {
+      errs.lengthCm = 'Length (> 0.5 cm) is required before publishing.';
+    }
+    if (!formData.breadthCm || Number(formData.breadthCm) <= 0.5) {
+      errs.breadthCm = 'Breadth (> 0.5 cm) is required before publishing.';
+    }
+    if (!formData.heightCm || Number(formData.heightCm) <= 0.5) {
+      errs.heightCm = 'Height (> 0.5 cm) is required before publishing.';
     }
   }
 
@@ -212,10 +233,14 @@ const ProductEditPage = () => {
   const canCreateProducts = hasPermission(PERMISSIONS.PRODUCTS_CREATE);
   const canUpdateProducts = hasPermission(PERMISSIONS.PRODUCTS_UPDATE);
   const canUploadMedia = hasPermission(PERMISSIONS.MEDIA_UPLOAD);
-  const pricingEnabled = useFeature('pricing');
-  const showPrice = useFeature('showPrice');
+  const pricingEnabled = useFeatureVisible('pricing', 'admin');
+  const featuresResolved = useFeaturesResolved();
+  const pricingCapability = useFeature('pricing');
+  const shippingCapability = useFeature('shipping');
+  const brandsEnabled = useFeature('brands');
+  const seoEnabled = useFeature('seo');
   const productAssistantEnabled = useFeature('productAssistant');
-  const canSaveProduct = isNew ? canCreateProducts : canUpdateProducts;
+  const canSaveProduct = featuresResolved && (isNew ? canCreateProducts : canUpdateProducts);
 
   const [formData, setFormData] = useState({
     name: '',
@@ -245,6 +270,7 @@ const ProductEditPage = () => {
     },
     // Shipping dimensions
     requiresShipping: true,
+    packingMode: 'standard',
     weightGrams: '',
     lengthCm: '',
     breadthCm: '',
@@ -262,10 +288,12 @@ const ProductEditPage = () => {
   const [saving, setSaving] = useState(false);
   const [mediaPickerOpen, setMediaPickerOpen] = useState(false);
   const [ogPickerOpen, setOgPickerOpen] = useState(false);
-  const [dbProduct, setDbProduct] = useState(null); 
+  const [dbProduct, setDbProduct] = useState(null);
   const [hasVariants, setHasVariants] = useState(false);
+  const [variantCount, setVariantCount] = useState(0);
   const [variantStockTotal, setVariantStockTotal] = useState(0);
   const [globalPrimaryVersion, setGlobalPrimaryVersion] = useState(0);
+  const initialFormRef = useRef(null);
 
   useEffect(() => {
     const load = async () => {
@@ -273,8 +301,12 @@ const ProductEditPage = () => {
         const catRes = await getCategoryTree();
         setCategories(catRes?.data || []);
 
-        const brandRes = await brandService.getBrands({ limit: 100, isActive: 'true' });
-        setBrands(brandRes?.data?.data || []);
+        if (brandsEnabled) {
+          const brandRes = await brandService.getBrands({ limit: 100, isActive: 'true' });
+          setBrands(brandRes?.data?.data || []);
+        } else {
+          setBrands([]);
+        }
 
         try {
           const labelsRes = await getSaleLabels();
@@ -295,9 +327,10 @@ const ProductEditPage = () => {
             const nextHasVariants = activeVariants.length > 0;
             const nextVariantStockTotal = activeVariants.reduce((sum, variant) => sum + Number(variant.stockQty || 0), 0);
             setHasVariants(nextHasVariants);
+            setVariantCount(Array.isArray(p.variants) ? p.variants.length : 0);
             setVariantStockTotal(nextVariantStockTotal);
 
-            setFormData({
+            const loadedFormData = {
               name: p.name || '',
               slug: p.slug || '',
               description: p.description || '',
@@ -325,6 +358,7 @@ const ProductEditPage = () => {
               },
               // Shipping dimensions
               requiresShipping: p.requiresShipping ?? true,
+              packingMode: p.packingMode || 'standard',
               weightGrams: p.weightGrams ?? '',
               lengthCm:    p.lengthCm    ?? '',
               breadthCm:   p.breadthCm   ?? '',
@@ -334,7 +368,9 @@ const ProductEditPage = () => {
               metaDescription: p.metaDescription || '',
               metaKeywords: p.metaKeywords || '',
               ogImage: p.ogImage || '',
-            });
+            };
+            setFormData(loadedFormData);
+            initialFormRef.current = JSON.stringify(loadedFormData);
           }
         }
       } catch (err) {
@@ -342,7 +378,52 @@ const ProductEditPage = () => {
       }
     };
     load();
-  }, [id, isNew]);
+  }, [id, isNew, brandsEnabled]);
+
+  useEffect(() => {
+    if (isNew && !initialFormRef.current) {
+      initialFormRef.current = JSON.stringify(formData);
+    }
+  }, [isNew]);
+
+  const isDirty = () => {
+    if (!initialFormRef.current) return false;
+    return JSON.stringify(formData) !== initialFormRef.current;
+  };
+
+  const handleBack = async () => {
+    if (isDirty()) {
+      const confirmed = await confirm({
+        title: 'Discard unsaved changes?',
+        message: 'You have unsaved changes on this product. Are you sure you want to leave?',
+        confirmText: 'Discard & Leave',
+        cancelText: 'Keep Editing',
+        severity: 'warning',
+      });
+      if (confirmed) {
+        navigate(returnTo);
+      }
+    } else {
+      navigate(returnTo);
+    }
+  };
+
+  const handleCancel = async () => {
+    if (isDirty()) {
+      const confirmed = await confirm({
+        title: 'Discard unsaved changes?',
+        message: 'You have unsaved changes on this product. Are you sure you want to cancel?',
+        confirmText: 'Discard Changes',
+        cancelText: 'Keep Editing',
+        severity: 'warning',
+      });
+      if (confirmed) {
+        navigate(returnTo);
+      }
+    } else {
+      navigate(returnTo);
+    }
+  };
 
   const setField = (key, value) => {
     setFormData((prev) => ({ ...prev, [key]: value }));
@@ -364,8 +445,9 @@ const ProductEditPage = () => {
   const discountAmount = hasValidDiscount ? priceNum - salePriceNum : 0;
   const discountPercent = hasValidDiscount ? Math.round(((priceNum - salePriceNum) / priceNum) * 100) : 0;
 
-  const handleVariantStockChange = useCallback((total, count, fallbackQuantity) => {
+  const handleVariantStockChange = useCallback((total, count, fallbackQuantity, totalCount) => {
     setVariantStockTotal(total);
+    if (totalCount !== undefined) setVariantCount(totalCount);
     setHasVariants(count > 0);
     if (count > 0) {
       setFormData((prev) => ({ ...prev, quantity: total }));
@@ -378,7 +460,7 @@ const ProductEditPage = () => {
   const applyAssistantResult = useCallback((result) => {
     const draft = result?.draft || {};
     const attributes = result?.attributes || {};
-    const matchedBrand = attributes.brand
+    const matchedBrand = brandsEnabled && attributes.brand
       ? brands.find((brand) => brand.name?.trim().toLowerCase() === attributes.brand.trim().toLowerCase())
       : null;
 
@@ -412,12 +494,12 @@ const ProductEditPage = () => {
       unit: undefined,
     }));
 
-    if (attributes.brand && !matchedBrand) {
+    if (brandsEnabled && attributes.brand && !matchedBrand) {
       notify(`AI detected brand "${attributes.brand}", but it does not match an existing brand record.`, 'warning');
     } else {
       notify('AI content applied to the product form.', 'success');
     }
-  }, [brands, notify]);
+  }, [brands, brandsEnabled, notify]);
 
   const handleSave = async (e) => {
     e.preventDefault();
@@ -426,32 +508,38 @@ const ProductEditPage = () => {
       return;
     }
 
-    const effectiveQuantity = hasVariants ? variantStockTotal : formData.quantity;
-    const errs = validate({ ...formData, quantity: effectiveQuantity, _features: { pricing: pricingEnabled, showPrice } });
+    const effectiveQuantity = formData.type === 'variable' || hasVariants ? variantStockTotal : formData.quantity;
+    const errs = validate({ ...formData, quantity: effectiveQuantity, _features: { pricing: pricingCapability, shipping: shippingCapability } });
 
     // Block type change if invariants are violated
     if (!isNew && dbProduct && formData.type !== dbProduct.type) {
-        if (formData.type === 'combo' && dbProduct.variants?.length > 0) {
-            errs.type = 'Cannot change to Combo type: this product has existing variants. Delete them first.';
+        if (formData.type !== 'variable' && variantCount > 0) {
+            errs.type = 'Remove all variants, including inactive ones, before changing to Simple or Combo.';
         }
         if (formData.type !== 'combo' && dbProduct.comboItems?.length > 0) {
             errs.type = `Cannot change to ${formData.type} type: this product has combo items. Clear the bundle first.`;
         }
     }
 
+    if (formData.type === 'simple' && variantCount > 0) errs.type = 'This product already has variants. Select Variable Product and save.';
 
     if (Object.keys(errs).length > 0) {
       setErrors(errs);
       if (errs.type) notify(errs.type, 'error');
-      else notify('Please fix the validation errors before saving.', 'warning');
+      else notify(`Please fix the following before saving: ${Object.values(errs).join(' ')}`, 'warning');
       return;
     }
 
+    let confirmInventoryReset = false;
+    if (!isNew && dbProduct?.type === 'simple' && formData.type !== 'simple' && !variantCount && Number(dbProduct.quantity || 0) > 0) {
+      confirmInventoryReset = await confirm({ title: 'Change how stock is managed?', message: `This product has ${dbProduct.quantity} units of standalone stock. Switching type clears that total. Set stock on each variant or bundle component afterward; units are not distributed automatically.`, confirmText: 'Change type and clear stock', cancelText: 'Keep editing', severity: 'warning' });
+      if (!confirmInventoryReset) return;
+    }
     setSaving(true);
     try {
       const payload = {
         ...formData,
-        price: parseFloat(formData.price),
+        price: formData.price === '' ? null : Number(formData.price),
         salePrice:
           formData.salePrice !== '' && formData.salePrice !== null && !isNaN(parseFloat(formData.salePrice))
             ? parseFloat(formData.salePrice)
@@ -461,10 +549,10 @@ const ProductEditPage = () => {
         saleLabel: (formData.salePrice !== '' && formData.salePrice !== null) ? (formData.saleLabel || null) : null,
         brandId: formData.brandId || null,
         unit: formData.unit?.trim() || null,
-        quantity: formData.type === 'combo' ? 0 : (parseInt(formData.quantity) || 0),
         type: formData.type || 'simple',
         // Shipping dimensions — null when blank so DB stores NULL cleanly
         requiresShipping: formData.requiresShipping,
+        packingMode: formData.packingMode || 'standard',
         weightGrams: formData.weightGrams !== '' ? Number(formData.weightGrams) : null,
         lengthCm:    formData.lengthCm    !== '' ? Number(formData.lengthCm)    : null,
         breadthCm:   formData.breadthCm   !== '' ? Number(formData.breadthCm)   : null,
@@ -476,9 +564,23 @@ const ProductEditPage = () => {
         ogImage: formData.ogImage || null,
       };
 
+      if (!pricingCapability) {
+        if (isNew) payload.price = 0;
+        else delete payload.price;
+        for (const key of ['salePrice', 'saleStartAt', 'saleEndAt', 'saleLabel', 'taxConfig']) delete payload[key];
+      }
+      if (!shippingCapability) {
+        for (const key of ['requiresShipping', 'packingMode', 'weightGrams', 'lengthCm', 'breadthCm', 'heightCm']) delete payload[key];
+      }
+      if (!brandsEnabled) delete payload.brandId;
+      if (!seoEnabled) for (const key of ['metaTitle', 'metaDescription', 'metaKeywords', 'ogImage']) delete payload[key];
+
+      // Variant and bundle stock is managed by their own editors.
+      delete payload.quantity;
       if (payload.type === 'simple') {
         payload.quantity = parseInt(formData.quantity) || 0;
       }
+      if (confirmInventoryReset) payload.confirmInventoryReset = true;
       if (isNew) {
         const res = await createProduct(payload);
         const newId = res?.data?.id;
@@ -489,15 +591,28 @@ const ProductEditPage = () => {
           return;
         }
 
-        notify('Product created successfully. You can now add variants below.', 'success');
+        notify(payload.type === 'variable' ? 'Product saved. Add attributes and create variants below.' : 'Product created successfully.', 'success');
+        initialFormRef.current = JSON.stringify(formData);
         navigate(`/admin/products/${newId}/edit`, { replace: true });
       } else {
         const res = await updateProduct(id, payload);
-        if (res?.data) setDbProduct(res.data);
+        if (res?.data) {
+          setDbProduct(res.data);
+          if (payload.type === 'variable') {
+            const active = (res.data.variants || []).filter((variant) => variant.isActive !== false);
+            setVariantStockTotal(active.reduce((sum, variant) => sum + Number(variant.stockQty || 0), 0));
+            setVariantCount((res.data.variants || []).length);
+          }
+        }
+        initialFormRef.current = JSON.stringify(formData);
         notify('Product updated successfully.', 'success');
       }
     } catch (err) {
-      notify(getApiErrorMessage(err), 'error');
+      const details = err?.response?.data?.error?.details;
+      const validationMessage = Array.isArray(details)
+        ? details.map((detail) => detail.message).filter(Boolean).join(' ')
+        : '';
+      notify(validationMessage || getApiErrorMessage(err), 'error');
     } finally {
       setSaving(false);
     }
@@ -507,11 +622,11 @@ const ProductEditPage = () => {
   const handleMediaSelect = (selectedMedia) => {
     if (!selectedMedia) return;
     const mediaArray = Array.isArray(selectedMedia) ? selectedMedia : [selectedMedia];
-    
+
     setFormData((prev) => {
       const existingIds = new Set(prev.images.map(img => img.mediaId));
       const filteredNew = mediaArray.filter(m => !existingIds.has(m.id));
-      
+
       return {
         ...prev,
         images: [
@@ -562,13 +677,123 @@ const ProductEditPage = () => {
     depth,
     path,
   }));
+  const previewPrice = getProductBasePrice(formData, new Date());
+  const previewPriceLabel = previewPrice < Number(formData.price) ? 'Active sale price' : 'MRP';
+  const productTypeLabel = formData.type === 'variable' ? 'Variable' : formData.type === 'combo' ? 'Combo' : 'Simple';
 
   return (
-    <Box sx={{ p: 3, mx: 'auto' }}>
-      <Typography variant="h5" component="h1" fontWeight={700} gutterBottom>
-        {isNew ? 'Create Product' : 'Edit Product'}
-      </Typography>
+    <Box sx={{ p: { xs: 1.5, sm: 3 }, mx: 'auto' }}>
       <form onSubmit={handleSave} noValidate>
+        {/* Sticky Action Bar */}
+        <Paper
+          elevation={0}
+          sx={{
+            position: 'sticky',
+            top: { xs: 56, sm: 64 },
+            zIndex: 10,
+            mt: { xs: -1, sm: -1.5 },
+            mb: 3,
+            p: { xs: 1.5, sm: 2 },
+            borderRadius: 2,
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            flexWrap: 'wrap',
+            gap: 2,
+            bgcolor: (theme) =>
+              theme.palette.mode === 'light'
+                ? 'rgba(255, 255, 255, 0.94)'
+                : 'rgba(30, 30, 30, 0.94)',
+            backdropFilter: 'blur(8px)',
+            border: '1px solid',
+            borderColor: 'divider',
+            boxShadow: (theme) =>
+              theme.palette.mode === 'light'
+                ? '0 4px 20px rgba(0, 0, 0, 0.05)'
+                : '0 4px 20px rgba(0, 0, 0, 0.4)',
+            transition: 'box-shadow 0.2s ease',
+          }}
+        >
+          {/* Left: Back button + Breadcrumbs + Title + Badges */}
+          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5 }}>
+            <Tooltip title="Back to Products">
+              <IconButton
+                onClick={handleBack}
+                size="medium"
+                aria-label="Back to Products"
+                sx={{
+                  border: '1px solid',
+                  borderColor: 'divider',
+                  borderRadius: 1.5,
+                  p: 1,
+                  '&:hover': { bgcolor: 'action.hover' },
+                }}
+              >
+                <ArrowBackIcon fontSize="small" />
+              </IconButton>
+            </Tooltip>
+
+            <Box>
+              <Breadcrumbs
+                separator={<NavigateNextIcon sx={{ fontSize: 14 }} />}
+                sx={{ fontSize: '0.75rem', mb: 0.25 }}
+              >
+                <Link
+                  to="/admin/products"
+                  style={{ textDecoration: 'none', color: 'inherit' }}
+                >
+                  Products
+                </Link>
+                <Typography color="text.secondary" sx={{ fontSize: '0.75rem' }}>
+                  {isNew ? 'New Product' : 'Edit'}
+                </Typography>
+              </Breadcrumbs>
+
+              <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, flexWrap: 'wrap' }}>
+                <Typography variant="h6" component="h1" fontWeight={700} sx={{ lineHeight: 1.2 }}>
+                  {isNew ? 'Create Product' : (formData.name || 'Untitled Product')}
+                </Typography>
+                <Chip
+                  size="small"
+                  label={(formData.status || 'draft').toUpperCase()}
+                  color={formData.status === 'published' ? 'success' : 'default'}
+                  sx={{ height: 20, fontSize: '0.7rem', fontWeight: 600 }}
+                />
+                <Chip
+                  size="small"
+                  variant="outlined"
+                  label={productTypeLabel}
+                  sx={{ height: 20, fontSize: '0.7rem' }}
+                />
+              </Box>
+            </Box>
+          </Box>
+
+          {/* Right: Cancel & Save Action Buttons */}
+          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5 }}>
+            <Button
+              variant="outlined"
+              color="error"
+              onClick={handleCancel}
+              disabled={saving}
+              startIcon={<CloseIcon />}
+              sx={{ textTransform: 'none', fontWeight: 600, px: 2 }}
+            >
+              Cancel
+            </Button>
+            <Button
+              variant="contained"
+              color="primary"
+              type="submit"
+              size="medium"
+              disabled={saving || !canSaveProduct}
+              startIcon={saving ? <CircularProgress size={16} color="inherit" /> : <SaveIcon />}
+              sx={{ px: 2.5, textTransform: 'none', fontWeight: 600 }}
+            >
+              {saving ? 'Saving…' : 'Save Product'}
+            </Button>
+          </Box>
+        </Paper>
         <Grid container spacing={4}>
           <Grid item xs={12} md={8}>
             {productAssistantEnabled && (
@@ -651,13 +876,18 @@ const ProductEditPage = () => {
               </Typography>
             </Paper>
 
-            {(pricingEnabled || showPrice) && (
+            {pricingCapability && (
               <Paper sx={{ p: 3, mb: 3 }}>
-                <Typography variant="h6" sx={{ mb: 2 }}>
-                  Pricing
+                <Typography variant="h6" sx={{ mb: 0.5 }}>
+                  {pricingEnabled ? 'Pricing & Tax' : 'Selling Price'}
+                </Typography>
+                <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
+                  {pricingEnabled
+                    ? 'Set the item price and tax together. The estimate below uses the active sale price when a sale is live.'
+                    : 'A selling price is required while ecommerce is enabled, even when price presentation is hidden.'}
                 </Typography>
                 <Grid container spacing={2}>
-                  <Grid item xs={6}>
+                  <Grid item xs={12} sm={6}>
                     <TextField
                       fullWidth
                       label="MRP *"
@@ -670,7 +900,7 @@ const ProductEditPage = () => {
                       helperText={errors.price}
                     />
                   </Grid>
-                  <Grid item xs={6}>
+                  <Grid item xs={12} sm={6}>
                     <TextField
                       fullWidth
                       label="Sale Price"
@@ -790,6 +1020,18 @@ const ProductEditPage = () => {
                     </Box>
                   </Grid>
                 </Grid>
+                {pricingEnabled && (
+                  <TaxConfigSection
+                    taxConfig={formData.taxConfig}
+                    basePrice={previewPrice}
+                    priceLabel={previewPriceLabel}
+                    setTaxConfig={(val) => setField('taxConfig', val)}
+                    globalSettings={settings?.tax || {}}
+                    formatPrice={formatPrice}
+                    disabled={!canSaveProduct}
+                    error={errors.taxConfig}
+                  />
+                )}
               </Paper>
             )}
 
@@ -929,101 +1171,6 @@ const ProductEditPage = () => {
               )}
             </Paper>
 
-            {pricingEnabled && (
-              <Paper sx={{ p: 3, mb: 3, mt: 3 }}>
-                <Typography variant="h6" gutterBottom>
-                  Shipping &amp; Dimensions
-                </Typography>
-                <FormControlLabel
-                  control={
-                    <Switch
-                      checked={formData.requiresShipping}
-                      onChange={(e) => setField('requiresShipping', e.target.checked)}
-                    />
-                  }
-                  label="This product requires shipping"
-                  sx={{ mb: 2 }}
-                />
-
-                {formData.requiresShipping && (
-                  <>
-                    <TextField
-                      fullWidth
-                      label="Weight (grams)"
-                      type="number"
-                      margin="normal"
-                      size="small"
-                      inputProps={{ min: 0, step: 1 }}
-                      InputProps={{
-                        endAdornment: <InputAdornment position="end">g</InputAdornment>,
-                      }}
-                      value={formData.weightGrams}
-                      onChange={(e) => setField('weightGrams', e.target.value)}
-                      helperText="Actual product weight without the shipping box or envelope. Package weight is added separately."
-                    />
-                    <Typography variant="subtitle2" sx={{ mt: 2, mb: 1 }}>Dimensions (cm)</Typography>
-                    <Typography variant="body2" color="text.secondary" sx={{ mb: 1 }}>Optional when a default package is enabled in Shipping → Packaging. Otherwise, enter measured dimensions for shipping.</Typography>
-                    <Grid container spacing={1.5}>
-                      <Grid item xs={4}>
-                        <TextField
-                          fullWidth label="Length" type="number" size="small"
-                          inputProps={{ min: 0, step: 0.5 }}
-                          InputProps={{ endAdornment: <InputAdornment position="end">cm</InputAdornment> }}
-                          value={formData.lengthCm}
-                          onChange={(e) => setField('lengthCm', e.target.value)}
-                        />
-                      </Grid>
-                      <Grid item xs={4}>
-                        <TextField
-                          fullWidth label="Breadth" type="number" size="small"
-                          inputProps={{ min: 0, step: 0.5 }}
-                          InputProps={{ endAdornment: <InputAdornment position="end">cm</InputAdornment> }}
-                          value={formData.breadthCm}
-                          onChange={(e) => setField('breadthCm', e.target.value)}
-                        />
-                      </Grid>
-                      <Grid item xs={4}>
-                        <TextField
-                          fullWidth label="Height" type="number" size="small"
-                          inputProps={{ min: 0, step: 0.5 }}
-                          InputProps={{ endAdornment: <InputAdornment position="end">cm</InputAdornment> }}
-                          value={formData.heightCm}
-                          onChange={(e) => setField('heightCm', e.target.value)}
-                        />
-                      </Grid>
-                    </Grid>
-
-                    {/* Live volumetric weight preview */}
-                    {!settings?.shipping?.defaultPackage?.enabled && formData.lengthCm && formData.breadthCm && formData.heightCm && (
-                      (() => {
-                        const volWeight = Math.ceil(
-                          (Number(formData.lengthCm) * Number(formData.breadthCm) * Number(formData.heightCm)) / (Number(settings?.shipping?.volumetricDivisor) || 5000) * 1000
-                        );
-                        const actual = Number(formData.weightGrams) || 0;
-                        const chargeable = Math.ceil(Math.max(actual, volWeight) / 500) * 500;
-                        return (
-                          <Box sx={{
-                            mt: 2, p: 1.5, borderRadius: 1,
-                            bgcolor: 'action.hover',
-                            border: '1px dashed', borderColor: 'divider'
-                          }}>
-                            <Typography variant="caption" color="text.secondary" display="block">
-                              Volumetric weight: <strong>{volWeight} g</strong>
-                            </Typography>
-                            <Typography variant="caption" color="text.secondary" display="block">
-                              Actual weight: <strong>{actual} g</strong>
-                            </Typography>
-                            <Typography variant="caption" color="primary.main" fontWeight={700} display="block">
-                              Estimated chargeable weight before packaging: {chargeable} g
-                            </Typography>
-                          </Box>
-                        );
-                      })()
-                    )}
-                  </>
-                )}
-              </Paper>
-            )}
           </Grid>
 
           <Grid item xs={12} md={4}>
@@ -1052,24 +1199,17 @@ const ProductEditPage = () => {
               </FormControl>
 
               <FormControl fullWidth margin="normal" error={Boolean(errors.type)}>
-                <InputLabel>Product Type</InputLabel>
+                <InputLabel id="product-type-label">Product Type</InputLabel>
                 <Select
+                  labelId="product-type-label"
+                  disabled={saving || !canSaveProduct}
                   value={formData.type}
                   label="Product Type"
-                  onChange={async (e) => {
+                  onChange={(e) => {
                     const newType = e.target.value;
-                    if (newType === 'combo' && formData.type !== 'combo') {
-                        const ok = await confirm(
-                            'Switch to Combo Product?',
-                            'Changing to a Combo will clear the current stock quantity and SKU, as inventory will be managed via constituents. Existing variants will also be ignored. Continue?',
-                            'warning'
-                        );
-                        if (!ok) return;
-                        // Clear inventory fields for combo
-                        setFormData(prev => ({ ...prev, type: newType, quantity: 0, sku: '' }));
-                    } else {
-                        setField('type', newType);
-                    }
+                    if (newType !== 'variable' && variantCount > 0) { notify('Remove all variants, including inactive ones, before changing to Simple or Combo.', 'warning'); return; }
+                    if (newType !== 'combo' && dbProduct?.comboItems?.length > 0) { notify('Clear the bundle items before changing this product type.', 'warning'); return; }
+                    setField('type', newType);
                   }}
                 >
                   <MenuItem value="simple">Simple Product</MenuItem>
@@ -1077,24 +1217,15 @@ const ProductEditPage = () => {
                   <MenuItem value="combo">Combo / Bundle</MenuItem>
                 </Select>
                 {errors.type && <FormHelperText>{errors.type}</FormHelperText>}
+                <FormHelperText>{formData.type === 'variable' ? 'Customers choose a variant. Manage prices and stock per combination below.' : formData.type === 'combo' ? 'Bundle existing products. Stock depends on the included products.' : 'One version with its own price and stock quantity.'}</FormHelperText>
               </FormControl>
+              {formData.type === 'simple' && variantCount > 0 && <Alert severity="warning" action={<Button onClick={() => setField('type', 'variable')} disabled={!canSaveProduct}>Use Variable Product</Button>}>This product has existing variants. Select Variable Product and save to manage them.</Alert>}
 
             </Paper>
-            
-            {pricingEnabled && (
-              <TaxConfigSection 
-                taxConfig={formData.taxConfig} 
-                basePrice={formData.price}
-                setTaxConfig={(val) => setField('taxConfig', val)}
-                globalSettings={settings?.checkout || {}}
-                formatPrice={formatPrice}
-                disabled={!canSaveProduct}
-              />
-            )}
 
             <Paper sx={{ p: 3, mb: 3 }}>
               <Typography variant="h6" gutterBottom>
-                Organization
+                Categories &amp; Brand
               </Typography>
               <Autocomplete
                 multiple
@@ -1158,6 +1289,7 @@ const ProductEditPage = () => {
                 sx={{ mt: 1 }}
               />
 
+              {brandsEnabled && (
               <FormControl fullWidth margin="normal">
                 <InputLabel id="brand-select-label">Brand</InputLabel>
                 <Select
@@ -1175,6 +1307,7 @@ const ProductEditPage = () => {
                 </Select>
                 {/* <FormHelperText>Select a product brand</FormHelperText> */}
               </FormControl>
+              )}
             </Paper>
 
 
@@ -1218,14 +1351,15 @@ const ProductEditPage = () => {
 
                 <TextField
                   fullWidth
-                  label="Stock Quantity *"
+                  label={formData.type === 'variable' ? 'Total variant stock' : 'Stock Quantity *'}
                   type="number"
                   margin="normal"
                   inputProps={{ min: 0 }}
-                  value={formData.quantity}
+                  value={formData.type === 'variable' ? variantStockTotal : formData.quantity}
+                  InputProps={{ readOnly: formData.type === 'variable' || variantCount > 0 }}
                   onChange={(e) => setField('quantity', e.target.value)}
                   error={Boolean(errors.quantity)}
-                  helperText={errors.quantity}
+                  helperText={errors.quantity || (formData.type === 'variable' ? 'Calculated from active variants. Set each combination’s stock below; no variants means 0 stock.' : variantCount > 0 ? 'Existing variants manage stock. Save this product as Variable Product.' : 'Stock for this single product.')}
                 />
               </Paper>
             )}
@@ -1239,30 +1373,179 @@ const ProductEditPage = () => {
 
             {!isNew && formData.type === 'combo' && dbProduct?.type === 'combo' && (
               <Paper sx={{ p: 3, mb: 3 }}>
-                <ProductComboBuilder 
-                  productId={id} 
+                <ProductComboBuilder
+                  productId={id}
                   canEdit={canUpdateProducts}
                   onSuggestedPrice={(price) => setField('price', price)}
                 />
               </Paper>
             )}
 
-
-            
-
-            {settings?.features?.seo !== false && (
+            {shippingCapability && (
               <Paper sx={{ p: 3, mb: 3 }}>
-                <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 2 }}>
-                  <Typography variant="h6">
-                    SEO Configuration
-                  </Typography>
-                  <Chip label="SEO v2" size="small" color="primary" variant="outlined" />
-                </Box>
-                <Alert severity="info" sx={{ mb: 3 }}>
-                  Fine-tune how this product appears in search engines and social media. 
-                  If left blank, the system will auto-generate metadata.
-                </Alert>
-                
+                <Typography variant="h6" gutterBottom>
+                  Shipping &amp; Dimensions
+                </Typography>
+                <FormControlLabel
+                  control={
+                    <Switch
+                      checked={formData.requiresShipping}
+                      onChange={(e) => setField('requiresShipping', e.target.checked)}
+                    />
+                  }
+                  label="This product requires shipping"
+                  sx={{ mb: 2 }}
+                />
+
+                {formData.requiresShipping && (
+                  <>
+                    <FormControlLabel
+                      control={
+                        <Checkbox
+                          checked={formData.packingMode === 'separate'}
+                          onChange={(e) => setField('packingMode', e.target.checked ? 'separate' : 'standard')}
+                        />
+                      }
+                      label="Ship each unit separately (never combine in a single box)"
+                      sx={{ mb: 1, display: 'block' }}
+                    />
+                    <TextField
+                      fullWidth
+                      label="Weight (grams)"
+                      type="number"
+                      margin="normal"
+                      size="small"
+                      inputProps={{ min: 0, step: 1 }}
+                      InputProps={{
+                        endAdornment: <InputAdornment position="end">g</InputAdornment>,
+                      }}
+                      value={formData.weightGrams}
+                      onChange={(e) => setField('weightGrams', e.target.value)}
+                      error={Boolean(errors.weightGrams)}
+                      helperText={errors.weightGrams || "Actual product weight without packaging."}
+                    />
+                    <Typography variant="subtitle2" sx={{ mt: 2, mb: 0.5 }}>Dimensions (cm)</Typography>
+                    <Typography variant="caption" color="text.secondary" sx={{ mb: 1, display: 'block' }}>
+                      Variants inherit absent measurements from base product.
+                    </Typography>
+                    <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1.5, mt: 1 }}>
+                      <TextField
+                        fullWidth label="Length" type="number" size="small"
+                        inputProps={{ min: 0, step: 0.5 }}
+                        InputProps={{ endAdornment: <InputAdornment position="end">cm</InputAdornment> }}
+                        value={formData.lengthCm}
+                        onChange={(e) => setField('lengthCm', e.target.value)}
+                        error={Boolean(errors.lengthCm)}
+                        helperText={errors.lengthCm}
+                      />
+                      <TextField
+                        fullWidth label="Breadth" type="number" size="small"
+                        inputProps={{ min: 0, step: 0.5 }}
+                        InputProps={{ endAdornment: <InputAdornment position="end">cm</InputAdornment> }}
+                        value={formData.breadthCm}
+                        onChange={(e) => setField('breadthCm', e.target.value)}
+                        error={Boolean(errors.breadthCm)}
+                        helperText={errors.breadthCm}
+                      />
+                      <TextField
+                        fullWidth label="Height" type="number" size="small"
+                        inputProps={{ min: 0, step: 0.5 }}
+                        InputProps={{ endAdornment: <InputAdornment position="end">cm</InputAdornment> }}
+                        value={formData.heightCm}
+                        onChange={(e) => setField('heightCm', e.target.value)}
+                        error={Boolean(errors.heightCm)}
+                        helperText={errors.heightCm}
+                      />
+                    </Box>
+
+                    {/* Live volumetric weight preview */}
+                    {Boolean(formData.lengthCm && formData.breadthCm && formData.heightCm) && (
+                      (() => {
+                        const volWeight = Math.ceil(
+                          (Number(formData.lengthCm) * Number(formData.breadthCm) * Number(formData.heightCm)) / (Number(settings?.shipping?.volumetricDivisor) || 5000) * 1000
+                        );
+                        const actual = Number(formData.weightGrams) || 0;
+                        const chargeable = Math.ceil(Math.max(actual, volWeight) / 500) * 500;
+                        return (
+                          <Box sx={{
+                            mt: 2, p: 1.5, borderRadius: 1,
+                            bgcolor: 'action.hover',
+                            border: '1px dashed', borderColor: 'divider'
+                          }}>
+                            <Typography variant="caption" color="text.secondary" display="block">
+                              Volumetric weight: <strong>{volWeight} g</strong>
+                            </Typography>
+                            <Typography variant="caption" color="text.secondary" display="block">
+                              Actual weight: <strong>{actual} g</strong>
+                            </Typography>
+                            <Typography variant="caption" color="primary.main" fontWeight={700} display="block">
+                              Estimated chargeable weight: {chargeable} g
+                            </Typography>
+                          </Box>
+                        );
+                      })()
+                    )}
+                  </>
+                )}
+              </Paper>
+            )}
+          </Grid>
+        </Grid>
+
+        {(isNew || dbProduct?.type !== 'variable') && formData.type === 'variable' && (
+          <Paper variant="outlined" sx={{ p: 3, mt: 3 }}>
+            <Typography variant="h6" fontWeight={700}>Attributes and variants</Typography>
+            <Typography variant="body2" color="text.secondary">Save the product first. You can then choose or create attributes, add their values, and generate variants.</Typography>
+          </Paper>
+        )}
+
+        {/* Variant operations require the Variable type to be saved first. */}
+        {!isNew && formData.type === 'variable' && dbProduct?.type === 'variable' && (
+          <Box onKeyDown={(e) => { if (e.key === 'Enter' && e.target.tagName !== 'TEXTAREA') { e.preventDefault(); e.stopPropagation(); } }}>
+            <VariantsPanel 
+              pricingEnabled={pricingCapability}
+              productId={id}
+              productName={formData.name}
+              productSku={formData.sku}
+              categoryIds={formData.categoryIds}
+              flatCatFiles={flatCatFiles}
+              canManageVariants={canUpdateProducts}
+              onStockTotalChange={handleVariantStockChange}
+              globalPrimaryVersion={globalPrimaryVersion}
+              onVariantPrimarySelected={() => setFormData((prev) => ({
+                ...prev,
+                images: prev.images.map((img) => ({ ...img, isPrimary: false })),
+              }))}
+            />
+          </Box>
+        )}
+
+        {/* Custom Tabs panel — only after product is saved */}
+        {!isNew && (
+          <Box onKeyDown={(e) => { if (e.key === 'Enter' && e.target.tagName !== 'TEXTAREA') { e.preventDefault(); e.stopPropagation(); } }}>
+            <ProductCustomTabs
+              productId={id}
+              canEdit={canUpdateProducts}
+            />
+          </Box>
+        )}
+
+        {/* SEO Configuration — always last, even after Attributes and Variants */}
+        {seoEnabled && (
+          <Paper sx={{ p: 3, mt: 3 }}>
+            <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 2 }}>
+              <Typography variant="h6">
+                SEO Configuration
+              </Typography>
+              <Chip label="SEO v2" size="small" color="primary" variant="outlined" />
+            </Box>
+            <Alert severity="info" sx={{ mb: 3 }}>
+              Fine-tune how this product appears in search engines and social media.
+              If left blank, the system will auto-generate metadata.
+            </Alert>
+
+            <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', md: 'minmax(0, 5fr) minmax(0, 3fr) minmax(0, 4fr)' }, gap: 3, alignItems: 'start' }}>
+              <Box>
                 <TextField
                   fullWidth
                   label="Meta Title"
@@ -1294,114 +1577,78 @@ const ProductEditPage = () => {
                   onChange={(e) => setField('metaKeywords', e.target.value)}
                   helperText="Used for internal search optimization. Separate with commas."
                 />
-                
-                <Box sx={{ mt: 2 }}>
-                  <Typography variant="subtitle2" gutterBottom>Social Sharing Image (OG Image)</Typography>
-                  {canUploadMedia && (
-                    <>
-                      <Button
-                        variant="outlined"
+
+              </Box>
+              <Box sx={{ mt: { xs: 0, md: 2 } }}>
+                <Typography variant="subtitle2" gutterBottom>Social Sharing Image (OG Image)</Typography>
+                {canUploadMedia && (
+                  <>
+                    <Button
+                      variant="outlined"
+                      size="small"
+                      onClick={() => setOgPickerOpen(true)}
+                      startIcon={<ImageIcon />}
+                    >
+                      Select from Media Library
+                    </Button>
+                    <MediaPicker
+                      open={ogPickerOpen}
+                      onClose={() => setOgPickerOpen(false)}
+                      onSelect={(selected) => {
+                        const media = Array.isArray(selected) ? selected[0] : selected;
+                        if (media?.url) setField('ogImage', media.url);
+                        setOgPickerOpen(false);
+                      }}
+                      multiple={false}
+                      title="Select OG Image"
+                    />
+                  </>
+                )}
+                {formData.ogImage && (
+                  <Box sx={{ mt: 2, position: 'relative', width: 'fit-content' }}>
+                    <img
+                      src={getMediaUrl(formData.ogImage)}
+                      alt="SEO Preview"
+                      style={{ maxWidth: '100%', maxHeight: 200, borderRadius: 8, border: '1px solid #ddd' }}
+                    />
+                    {canSaveProduct && (
+                      <IconButton
                         size="small"
-                        onClick={() => setOgPickerOpen(true)}
-                        startIcon={<ImageIcon />}
+                        color="error"
+                        sx={{ position: 'absolute', top: -10, right: -10, bgcolor: 'background.paper', boxShadow: 1 }}
+                        onClick={() => setField('ogImage', '')}
                       >
-                        Select from Media Library
-                      </Button>
-                      <MediaPicker
-                        open={ogPickerOpen}
-                        onClose={() => setOgPickerOpen(false)}
-                        onSelect={(selected) => {
-                          const media = Array.isArray(selected) ? selected[0] : selected;
-                          if (media?.url) setField('ogImage', media.url);
-                          setOgPickerOpen(false);
-                        }}
-                        multiple={false}
-                        title="Select OG Image"
-                      />
-                    </>
-                  )}
-                  {formData.ogImage && (
-                    <Box sx={{ mt: 2, position: 'relative', width: 'fit-content' }}>
-                      <img 
-                        src={getMediaUrl(formData.ogImage)} 
-                        alt="SEO Preview" 
-                        style={{ maxWidth: '100%', maxHeight: 200, borderRadius: 8, border: '1px solid #ddd' }} 
-                      />
-                      {canSaveProduct && (
-                        <IconButton 
-                          size="small" 
-                          color="error" 
-                          sx={{ position: 'absolute', top: -10, right: -10, bgcolor: 'background.paper', boxShadow: 1 }}
-                          onClick={() => setField('ogImage', '')}
-                        >
-                          <DeleteIcon fontSize="small" />
-                        </IconButton>
-                      )}
-                    </Box>
-                  )}
-                  {!canUploadMedia && !formData.ogImage && (
-                    <Typography variant="caption" color="text.secondary">
-                      You do not have permission to upload media.
-                    </Typography>
-                  )}
-                  <FormHelperText>Recommended size: 1200x630px</FormHelperText>
-                </Box>
+                        <DeleteIcon fontSize="small" />
+                      </IconButton>
+                    )}
+                  </Box>
+                )}
+                {!canUploadMedia && !formData.ogImage && (
+                  <Typography variant="caption" color="text.secondary">
+                    You do not have permission to upload media.
+                  </Typography>
+                )}
+                <FormHelperText>Recommended size: 1200x630px</FormHelperText>
+              </Box>
 
-                <Box sx={{ mt: 3, p: 2, bgcolor: '#f8f9fa', borderRadius: 2, border: '1px solid #e0e0e0' }}>
-                  <Typography variant="caption" color="text.secondary" sx={{ fontWeight: 700, mb: 1, display: 'block' }}>
-                    GOOGLE SEARCH PREVIEW
-                  </Typography>
-                  <Typography variant="body1" sx={{ color: '#1a0dab', fontSize: '18px', '&:hover': { textDecoration: 'underline' }, cursor: 'pointer', mb: 0.5 }}>
-                    {formData.metaTitle || formData.name || 'Product Name'} {settings?.seo?.titleSuffix || ' | My Store'}
-                  </Typography>
-                  <Typography variant="body2" sx={{ color: '#006621', fontSize: '14px', mb: 0.5 }}>
-                    {window.location.origin}/product/{formData.slug || 'slug'}
-                  </Typography>
-                  <Typography variant="body2" sx={{ color: '#545454', fontSize: '13px', lineHeight: 1.4 }}>
-                    {formData.metaDescription || formData.shortDescription || 'Your product description will appear here...'}
-                  </Typography>
-                </Box>
-              </Paper>
-            )}
-          </Grid>
-        </Grid>
-
-        <Box sx={{ mt: 4, display: 'flex', justifyContent: 'flex-end', gap: 2 }}>
-          <Button onClick={() => navigate(returnTo)} disabled={saving}>
-            Cancel
-          </Button>
-          <Button variant="contained" type="submit" size="large" disabled={saving || !canSaveProduct}>
-            {saving ? 'Saving…' : 'Save Product'}
-          </Button>
-        </Box>
+              <Box sx={{ mt: { xs: 0, md: 2 }, p: 2, bgcolor: '#f8f9fa', borderRadius: 2, border: '1px solid #e0e0e0', overflowWrap: 'anywhere' }}>
+                <Typography variant="caption" color="text.secondary" sx={{ fontWeight: 700, mb: 1, display: 'block' }}>
+                  GOOGLE SEARCH PREVIEW
+                </Typography>
+                <Typography variant="body1" sx={{ color: '#1a0dab', fontSize: '18px', '&:hover': { textDecoration: 'underline' }, cursor: 'pointer', mb: 0.5 }}>
+                  {formData.metaTitle || formData.name || 'Product Name'} {settings?.seo?.titleSuffix || ' | My Store'}
+                </Typography>
+                <Typography variant="body2" sx={{ color: '#006621', fontSize: '14px', mb: 0.5 }}>
+                  {window.location.origin}/product/{formData.slug || 'slug'}
+                </Typography>
+                <Typography variant="body2" sx={{ color: '#545454', fontSize: '13px', lineHeight: 1.4 }}>
+                  {formData.metaDescription || formData.shortDescription || 'Your product description will appear here...'}
+                </Typography>
+              </Box>
+            </Box>
+          </Paper>
+        )}
       </form>
-
-      {/* Variants panel — only visible once the product has been saved and has a real ID */}
-      {/* Variants panel — only visible once the product has been saved and has a real ID and is NOT a combo */}
-      {!isNew && formData.type !== 'combo' && (
-        <VariantsPanel 
-          productId={id} 
-          productName={formData.name}
-          productSku={formData.sku}
-          categoryIds={formData.categoryIds} 
-          flatCatFiles={flatCatFiles} 
-          canManageVariants={canUpdateProducts} 
-          onStockTotalChange={handleVariantStockChange}
-          globalPrimaryVersion={globalPrimaryVersion}
-          onVariantPrimarySelected={() => setFormData((prev) => ({
-            ...prev,
-            images: prev.images.map((img) => ({ ...img, isPrimary: false })),
-          }))}
-        />
-      )}
-
-      {/* Custom Tabs panel — only after product is saved */}
-      {!isNew && (
-        <ProductCustomTabs
-          productId={id}
-          canEdit={canUpdateProducts}
-        />
-      )}
     </Box>
   );
 };

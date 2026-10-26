@@ -4,6 +4,7 @@ const { MIN_SEARCH_QUERY_LENGTH, MAX_SEARCH_QUERY_LENGTH, normalizeSearchQuery }
 
 
 const productListQuerySchema = Joi.object({
+  hasVariants: Joi.boolean(),
   page: Joi.number().integer().min(1).default(1),
   limit: Joi.number().integer().min(1).max(1000).default(20),
   search: Joi.string().allow('').custom((value, helpers) => {
@@ -17,6 +18,29 @@ const productListQuerySchema = Joi.object({
     'search.max': 'Search query must be at most 100 characters',
   }),
 }).unknown();
+
+const productVariantCreateSchema = Joi.object({
+  sku: Joi.string().max(100).allow('', null),
+  price: Joi.number().precision(2).min(0).required(),
+  stockQty: Joi.number().integer().min(0).default(0),
+  isActive: Joi.boolean().default(true),
+  sortOrder: Joi.number().integer().min(0).default(0),
+  weightGrams: Joi.number().min(0).allow(null),
+  lengthCm: Joi.number().min(0).allow(null),
+  breadthCm: Joi.number().min(0).allow(null),
+  heightCm: Joi.number().min(0).allow(null),
+  images: Joi.array().items(Joi.object({
+    url: Joi.string().allow('', null),
+    alt: Joi.string().max(255).allow('', null),
+    mediaId: Joi.string().uuid().allow(null),
+    sortOrder: Joi.number().integer().default(0),
+    isPrimary: Joi.boolean().default(false),
+  })),
+  options: Joi.array().items(Joi.object({
+    attributeId: Joi.string().uuid().required(),
+    valueId: Joi.string().uuid().required(),
+  })).min(1).required(),
+});
 
 const createProductSchema = Joi.object({
   name: Joi.string().max(255).required(),
@@ -42,6 +66,7 @@ const createProductSchema = Joi.object({
   }),
   weight: Joi.number().precision(2).min(0).allow(null), // legacy field
   requiresShipping: Joi.boolean().default(true),
+  packingMode: Joi.string().valid('standard', 'separate').default('standard'),
   weightGrams: Joi.number().min(0).allow(null),
   lengthCm: Joi.number().min(0).allow(null),
   breadthCm: Joi.number().min(0).allow(null),
@@ -59,32 +84,9 @@ const createProductSchema = Joi.object({
   categoryIds: Joi.array().items(Joi.string().uuid()),
   brandId: Joi.string().uuid().allow(null),
   tags: Joi.array().items(Joi.string()),
-  variants: Joi.array().items(
-    Joi.object({
-      sku: Joi.string().max(100).allow('', null),
-      price: Joi.number().precision(2).min(0).required(),
-      stockQty: Joi.number().integer().min(0).default(0),
-      isActive: Joi.boolean().default(true),
-      sortOrder: Joi.number().integer().min(0).default(0),
-      images: Joi.array().items(
-        Joi.object({
-          url: Joi.string().allow('', null),
-          alt: Joi.string().max(255).allow('', null),
-          mediaId: Joi.string().uuid().allow(null),
-          sortOrder: Joi.number().integer().default(0),
-          isPrimary: Joi.boolean().default(false),
-        })
-      ),
-      options: Joi.array().items(
-        Joi.object({
-          attributeId: Joi.string().uuid().required(),
-          valueId: Joi.string().uuid().required(),
-        })
-      ).min(1).required(),
-    })
-  ).when('type', {
+  variants: Joi.array().items(productVariantCreateSchema).when('type', {
     is: 'variable',
-    then: Joi.required(),
+    then: Joi.optional(),
     otherwise: Joi.forbidden()
   }),
   images: Joi.array().items(
@@ -96,6 +98,14 @@ const createProductSchema = Joi.object({
       isPrimary: Joi.boolean().default(false),
     })
   ),
+});
+
+const catalogCreateProductSchema = createProductSchema.fork(
+  ['price'], () => Joi.number().precision(2).min(0).optional().allow(null).default(null)
+).keys({
+  variants: Joi.array().items(productVariantCreateSchema.keys({ price: Joi.number().precision(2).min(0).default(0) })).when('type', {
+    is: 'variable', then: Joi.required(), otherwise: Joi.forbidden(),
+  }),
 });
 
 const updateProductSchema = Joi.object({
@@ -122,6 +132,7 @@ const updateProductSchema = Joi.object({
   quantity: Joi.number().integer().min(0),
   weight: Joi.number().precision(2).min(0).allow(null),
   requiresShipping: Joi.boolean(),
+  packingMode: Joi.string().valid('standard', 'separate'),
   weightGrams: Joi.number().min(0).allow(null),
   lengthCm: Joi.number().min(0).allow(null),
   breadthCm: Joi.number().min(0).allow(null),
@@ -134,6 +145,7 @@ const updateProductSchema = Joi.object({
     igst: Joi.number().min(0).max(1),
   }).allow(null),
   type: Joi.string().valid('simple', 'variable', 'combo'),
+  confirmInventoryReset: Joi.boolean(),
   status: Joi.string().valid('draft', 'published', 'archived'),
   isFeatured: Joi.boolean(),
   categoryIds: Joi.array().items(Joi.string().uuid()),
@@ -146,6 +158,10 @@ const updateProductSchema = Joi.object({
       stockQty: Joi.number().integer().min(0).default(0),
       isActive: Joi.boolean().default(true),
       sortOrder: Joi.number().integer().min(0).default(0),
+      weightGrams: Joi.number().min(0).allow(null),
+      lengthCm: Joi.number().min(0).allow(null),
+      breadthCm: Joi.number().min(0).allow(null),
+      heightCm: Joi.number().min(0).allow(null),
       images: Joi.array().items(
         Joi.object({
           url: Joi.string().allow('', null),
@@ -221,4 +237,26 @@ const bulkUpdateSchema = Joi.object({
   }).min(1).required(),
 });
 
-module.exports = { productListQuerySchema, createProductSchema, updateProductSchema, bulkSaleSchema, bulkDeleteSchema, bulkUpdateSchema };
+// Only the server-resolved feature map may relax MRP requirements.
+const getProductWriteSchema = (schema, features = {}) => {
+  // Price presentation can be hidden while ecommerce still requires a valid
+  // selling price. Only the resolved pricing capability relaxes this field.
+  if (features.pricing !== false) return schema;
+  return schema.fork('price', () => (
+    schema === createProductSchema
+      ? Joi.number().precision(2).min(0).optional().allow(null).default(null)
+      : Joi.number().precision(2).min(0).allow(null)
+  ));
+};
+
+module.exports = {
+  getProductWriteSchema,
+  productListQuerySchema,
+  createProductSchema,
+  catalogCreateProductSchema,
+  updateProductSchema,
+  bulkSaleSchema,
+  bulkDeleteSchema,
+  bulkUpdateSchema,
+};
+

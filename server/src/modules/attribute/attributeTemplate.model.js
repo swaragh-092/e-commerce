@@ -35,6 +35,10 @@ module.exports = (sequelize, DataTypes) => {
             type: DataTypes.STRING(20),
             allowNull: true,
         },
+        unitCategory: {
+            type: DataTypes.STRING(50),
+            allowNull: true,
+        },
     }, {
         tableName: 'attribute_templates',
         timestamps: true,

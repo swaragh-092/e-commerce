@@ -1,4 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
+const { calculateShipmentAmounts, getPriorCodAllocatedTotal, buildOrderLookupWhere, getDispatchedQuantityForOrderItem, hashOrderIntent, assertMatchingOrderIntent, getOrderIdempotencyWhere } = require('../../src/modules/order/order.service');
 
 // We mock the database models and test the core constraints of placeOrder
 // This avoids spinning up a PG database just to test inventory calculation.
@@ -22,6 +23,159 @@ const calculateTotalCheckout = (checkoutItems, shippingCost = 0, discountAmount 
 };
 
 describe('Order Service - Calculations & Safeguards', () => {
+
+    it('fingerprints object payloads independent of property ordering', () => {
+        expect(hashOrderIntent({ shippingAddressId: 'a', paymentMethod: 'stripe' }))
+            .toBe(hashOrderIntent({ paymentMethod: 'stripe', shippingAddressId: 'a' }));
+    });
+
+    it('rejects a reused idempotency key when the order intent changed', () => {
+        const storedHash = hashOrderIntent({ shippingAddressId: 'address-a', paymentMethod: 'stripe' });
+        expect(() => assertMatchingOrderIntent({ idempotencyPayloadHash: storedHash }, hashOrderIntent({ shippingAddressId: 'address-b', paymentMethod: 'stripe' })))
+            .toThrow(expect.objectContaining({ code: 'IDEMPOTENCY_KEY_REUSED', statusCode: 422 }));
+    });
+
+    it('scopes guest idempotency by the guest session rather than across guests', () => {
+        expect(getOrderIdempotencyWhere({ userId: null, guestSessionId: 'guest-a', idempotencyKey: 'key-1' }))
+            .toEqual({ userId: null, guestSessionId: 'guest-a', idempotencyKey: 'key-1' });
+        expect(getOrderIdempotencyWhere({ userId: 'user-1', guestSessionId: 'guest-a', idempotencyKey: 'key-1' }))
+            .toEqual({ userId: 'user-1', idempotencyKey: 'key-1' });
+    });
+
+    it('allows replacement quantities after cancellation without double counting active shipment rows', () => {
+        expect(getDispatchedQuantityForOrderItem({
+            shipmentItems: [{ quantity: 2, shipment: { status: 'cancelled' } }, { quantity: 1, shipment: { status: 'created' } }],
+            fulfillmentItems: [{ quantity: 2, fulfillment: { status: 'cancelled' } }, { quantity: 1, fulfillment: { status: 'created' } }],
+        })).toBe(1);
+    });
+
+    it('scopes guest order confirmation lookup to its checkout session', () => {
+        expect(buildOrderLookupWhere('order-1', null, false, 'guest-session-1')).toEqual({
+            id: 'order-1', userId: null, guestSessionId: 'guest-session-1',
+        });
+        expect(buildOrderLookupWhere('order-1', null, false, null)).not.toEqual({ id: 'order-1' });
+        expect(buildOrderLookupWhere('order-1', 'user-1', false, 'guest-session-1')).toEqual({
+            id: 'order-1', userId: 'user-1',
+        });
+    });
+
+    it('allocates COD parcel value to the fulfilled items and order shipping charges once', () => {
+        const order = {
+            subtotal: 3000,
+            tax: 300,
+            discountAmount: 300,
+            shippingCost: 100,
+            shippingTaxAmount: 18,
+            shippingTaxIncluded: false,
+        };
+        const firstParcel = calculateShipmentAmounts({
+            order,
+            parcelItems: [{ unitPrice: 1000, quantity: 1 }],
+            allocateOrderShipping: true,
+        });
+        const secondParcel = calculateShipmentAmounts({
+            order,
+            parcelItems: [{ unitPrice: 2000, quantity: 1 }],
+            allocateOrderShipping: false,
+        });
+
+        expect(firstParcel).toEqual({ subtotal: 1000, shippingCost: 100, discountAmount: 100, tax: 118, total: 1118 });
+        expect(secondParcel).toEqual({ subtotal: 2000, shippingCost: 0, discountAmount: 200, tax: 200, total: 2000 });
+        expect(firstParcel.total + secondParcel.total).toBe(3118);
+    });
+
+    it('conserves exact total in split COD fulfillment without penny drift', () => {
+        const order = {
+            total: 3118.75,
+            paymentMethod: 'cod',
+            subtotal: 3000,
+            tax: 300.75,
+            discountAmount: 300,
+            shippingCost: 100,
+            shippingTaxAmount: 18,
+            shippingTaxIncluded: false,
+        };
+        const firstParcel = calculateShipmentAmounts({
+            order,
+            parcelItems: [{ unitPrice: 1000, quantity: 1 }],
+            allocateOrderShipping: true,
+            priorAllocatedTotal: 0,
+            isFinalShipment: false,
+        });
+        const secondParcel = calculateShipmentAmounts({
+            order,
+            parcelItems: [{ unitPrice: 2000, quantity: 1 }],
+            allocateOrderShipping: false,
+            priorAllocatedTotal: firstParcel.total,
+            isFinalShipment: true,
+        });
+
+        expect(firstParcel.total + secondParcel.total).toBe(3118.75);
+    });
+
+    it('reuses persisted COD allocations so split parcels never exceed the order total', () => {
+        // Regression: a Rs.220 COD order allocated Rs.120 + Rs.120 because prior
+        // parcels were recomputed without the first parcel's shipping fee.
+        const order = {
+            total: 220,
+            paymentMethod: 'cod',
+            subtotal: 200,
+            tax: 0,
+            discountAmount: 0,
+            shippingCost: 20,
+            shippingTaxAmount: 0,
+            shippingTaxIncluded: true,
+        };
+        const orderItemMap = { 'item-1': { snapshotPrice: 100 } };
+        const firstParcel = calculateShipmentAmounts({
+            order,
+            parcelItems: [{ unitPrice: 100, quantity: 1 }],
+            allocateOrderShipping: true,
+            priorAllocatedTotal: 0,
+            isFinalShipment: false,
+        });
+        expect(firstParcel.total).toBe(120);
+
+        const persistedPrior = [{ codCollectableAmount: firstParcel.total, createdAt: new Date('2026-10-01'), items: [] }];
+        const priorAllocatedTotal = getPriorCodAllocatedTotal(persistedPrior, order, orderItemMap);
+        expect(priorAllocatedTotal).toBe(120);
+
+        const finalParcel = calculateShipmentAmounts({
+            order,
+            parcelItems: [{ unitPrice: 100, quantity: 1 }],
+            allocateOrderShipping: false,
+            priorAllocatedTotal,
+            isFinalShipment: true,
+        });
+        expect(firstParcel.total + finalParcel.total).toBe(220);
+    });
+
+    it('recomputes legacy COD priors with shipping on the earliest parcel', () => {
+        const order = {
+            total: 220,
+            paymentMethod: 'cod',
+            subtotal: 200,
+            tax: 0,
+            discountAmount: 0,
+            shippingCost: 20,
+            shippingTaxAmount: 0,
+            shippingTaxIncluded: true,
+        };
+        const orderItemMap = { 'item-1': { snapshotPrice: 100 } };
+        const legacyPriors = [
+            { codCollectableAmount: null, createdAt: new Date('2026-10-01'), items: [{ orderItemId: 'item-1', quantity: 1 }] },
+        ];
+        // Legacy row recomputed with its shipping fee: 100 + 20 = 120, not 100.
+        expect(getPriorCodAllocatedTotal(legacyPriors, order, orderItemMap)).toBe(120);
+    });
+
+    it('does not duplicate shipping tax or charges on later parcel payloads', () => {        const amounts = calculateShipmentAmounts({
+            order: { subtotal: 1000, tax: 90, discountAmount: 0, shippingCost: 50, shippingTaxAmount: 4.5, shippingTaxIncluded: false },
+            parcelItems: [{ unitPrice: 1000, quantity: 1 }],
+            allocateOrderShipping: false,
+        });
+        expect(amounts).toEqual({ subtotal: 1000, shippingCost: 0, discountAmount: 0, tax: 90, total: 1090 });
+    });
     
     it('calculates order totals correctly without tax or shipping', () => {
         const items = [
@@ -103,4 +257,92 @@ describe('Order Service - Calculations & Safeguards', () => {
         expect(payload.quantity).not.toBeUndefined();
     });
 
+    it('allocates targeted discounts strictly to eligible items without distorting other tax lines', () => {
+        // Line 1: Book (5% GST), subtotal 100
+        // Line 2: Electronic Gadget (18% GST), subtotal 100
+        // Targeted coupon gives 20 off Book category
+        const lineDiscounts = { 'book-1': 20 };
+        const checkoutItems = [
+            { productId: 'book-1', currentPrice: 100, quantity: 1, taxRate: 0.05 },
+            { productId: 'gadget-1', currentPrice: 100, quantity: 1, taxRate: 0.18 },
+        ];
+
+        let totalTax = 0;
+        const itemBreakdowns = checkoutItems.map((item) => {
+            const itemSubtotal = item.currentPrice * item.quantity;
+            const itemDiscount = lineDiscounts[item.productId] || 0;
+            const taxableSubtotal = Math.max(0, itemSubtotal - itemDiscount);
+            const tax = taxableSubtotal * item.taxRate;
+            totalTax += tax;
+            return { productId: item.productId, taxableSubtotal, tax };
+        });
+
+        // Book: 100 - 20 = 80 @ 5% = 4.00
+        expect(itemBreakdowns[0].taxableSubtotal).toBe(80);
+        expect(itemBreakdowns[0].tax).toBe(4.00);
+
+        // Gadget: 100 - 0 = 100 @ 18% = 18.00 (ineligible line untouched)
+        expect(itemBreakdowns[1].taxableSubtotal).toBe(100);
+        expect(itemBreakdowns[1].tax).toBe(18.00);
+
+        // Total tax: 22.00
+        expect(totalTax).toBe(22.00);
+    });
+
+    it('reconciles order components when free shipping coupon eliminates quoted delivery fee', () => {
+        const subtotal = 1000;
+        const totalTax = 180;
+        const quotedShippingCost = 100;
+        const freeShipping = true;
+
+        let shippingCost = quotedShippingCost;
+        let shippingDiscount = 0;
+        if (freeShipping && shippingCost > 0) {
+            shippingDiscount = quotedShippingCost;
+        }
+
+        const orderDiscountAmount = 0;
+        const discountAmount = Number((orderDiscountAmount + shippingDiscount).toFixed(2));
+        const total = Number(Math.max(0, subtotal + totalTax + quotedShippingCost - discountAmount).toFixed(2));
+
+        // Customer pays subtotal + tax = 1180, shipping is preserved as quoted alongside discount
+        expect(shippingCost).toBe(100);
+        expect(shippingDiscount).toBe(100);
+        expect(discountAmount).toBe(100);
+        expect(total).toBe(1180);
+        // Financial breakdown reconciles: subtotal + tax + shipping - discount = total
+        expect(subtotal + totalTax + shippingCost - discountAmount).toBe(total);
+    });
+
+    it('excludes digital items from shipment completion totals in deriveQuantityAwareOrderShippingStatus', () => {
+        const { deriveQuantityAwareOrderShippingStatus } = require('../../src/modules/order/order.service');
+
+        const orderItems = [
+            { id: 'item-phys', quantity: 2, requiresShipping: true, product: { requiresShipping: true } },
+            { id: 'item-digi', quantity: 1, requiresShipping: false, product: { requiresShipping: false } },
+        ];
+
+        // Shipment contains only physical items and has delivered them
+        const shipments = [
+            {
+                id: 'ship-1',
+                status: 'delivered',
+                items: [{ orderItemId: 'item-phys', quantity: 2 }],
+            },
+        ];
+
+        const status = deriveQuantityAwareOrderShippingStatus(orderItems, shipments);
+        expect(status).toBe('delivered');
+    });
+
+    it('returns delivered for all-digital orders in deriveQuantityAwareOrderShippingStatus', () => {
+        const { deriveQuantityAwareOrderShippingStatus } = require('../../src/modules/order/order.service');
+
+        const orderItems = [
+            { id: 'item-digi', quantity: 1, requiresShipping: false, product: { requiresShipping: false } },
+        ];
+
+        const status = deriveQuantityAwareOrderShippingStatus(orderItems, []);
+        expect(status).toBe('delivered');
+    });
 });

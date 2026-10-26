@@ -13,9 +13,9 @@ import ProductFilters from '../../components/product/ProductFilters';
 import StorefrontSidebarMenu from '../../components/layout/StorefrontSidebarMenu';
 import CategorySection from '../../components/storefront/sections/CategorySection';
 import PageSEO from '../../components/common/PageSEO';
-import { useSettings, useFeature } from '../../hooks/useSettings';
+import { useSettings, useFeature, useFeatureVisible } from '../../hooks/useSettings';
 import { getCategoryWithProducts } from '../../services/categoryService';
-import { getMediaUrl } from '../../utils/media';
+import { getMediaUrl, onImageError, PLACEHOLDER_CATEGORY } from '../../utils/media';
 import { buildBreadcrumbJsonLd } from '../../utils/seo/buildStructuredData';
 
 // ─── Subcategory chip rail (maps service response to CategorySection format) ─
@@ -39,7 +39,7 @@ const BannerSkeleton = () => (
 const CategoryHeader = ({ category, layout = 'standard', fallbackTitle = 'Shop Category' }) => {
     const title = category?.customHeading || category?.name || fallbackTitle;
     const description = category?.description;
-    const image = category?.bannerImage ? getMediaUrl(category.bannerImage) : '';
+    const image = category?.bannerImage ? getMediaUrl(category.bannerImage) : (category?.image ? getMediaUrl(category.image) : '');
 
     if (layout === 'cover') {
         return (
@@ -54,9 +54,13 @@ const CategoryHeader = ({ category, layout = 'standard', fallbackTitle = 'Shop C
                     bgcolor: 'primary.main',
                 }}
             >
-                {image && (
-                    <Box component="img" src={image} alt={title} sx={{ width: '100%', height: '100%', objectFit: 'cover' }} />
-                )}
+                <Box
+                    component="img"
+                    src={image || PLACEHOLDER_CATEGORY}
+                    alt={title}
+                    onError={onImageError(PLACEHOLDER_CATEGORY)}
+                    sx={{ width: '100%', height: '100%', objectFit: 'cover' }}
+                />
                 <Box
                     sx={{
                         position: 'absolute',
@@ -109,9 +113,13 @@ const CategoryHeader = ({ category, layout = 'standard', fallbackTitle = 'Shop C
                         </Typography>
                     )}
                 </Box>
-                {image && (
-                    <Box component="img" src={image} alt={title} sx={{ width: '100%', height: { xs: 190, md: 240 }, objectFit: 'cover', borderRadius: 2.5 }} />
-                )}
+                <Box
+                    component="img"
+                    src={image || PLACEHOLDER_CATEGORY}
+                    alt={title}
+                    onError={onImageError(PLACEHOLDER_CATEGORY)}
+                    sx={{ width: '100%', height: { xs: 190, md: 240 }, objectFit: 'cover', borderRadius: 2.5 }}
+                />
             </Box>
         );
     }
@@ -165,7 +173,8 @@ const CategoryPage = () => {
     const showSubcategories = categoryPage.showSubcategories !== false;
     const showSidebarFilters = showFilters && !isMobile && filterLayout !== 'topbar';
     const showTopbarFilters  = showFilters && !isMobile && filterLayout === 'topbar';
-    const pricingEnabled     = useFeature('pricing');
+    const pricingEnabled     = useFeatureVisible('pricing', 'storefront');
+    const showPrice          = useFeature('showPrice');
 
     // ── URL-driven filter state ───────────────────────────────────────────────
     const filters = {
@@ -363,8 +372,8 @@ const CategoryPage = () => {
                             sx={{ borderRadius: 1.5, bgcolor: 'background.paper' }}
                         >
                             <MenuItem value="newest">Newest Arrivals</MenuItem>
-                            {pricingEnabled && <MenuItem value="price_asc">Price: Low → High</MenuItem>}
-                            {pricingEnabled && <MenuItem value="price_desc">Price: High → Low</MenuItem>}
+                            {pricingEnabled && showPrice && <MenuItem value="price_asc">Price: Low → High</MenuItem>}
+                            {pricingEnabled && showPrice && <MenuItem value="price_desc">Price: High → Low</MenuItem>}
                             <MenuItem value="name_asc">Name: A → Z</MenuItem>
                         </Select>
                     </FormControl>

@@ -26,9 +26,9 @@ import { useNotification } from '../../context/NotificationContext';
 import { SettingsContext } from '../../context/ThemeContext';
 import { useAuth } from '../../hooks/useAuth';
 import { useIsSuperAdmin } from '../../hooks/useAuth';
-import { useMode } from '../../hooks/useSettings';
+import { useMode, useFeature, useFeatureVisible } from '../../hooks/useSettings';
 import useHomepageSettings from '../../hooks/useHomepageSettings';
-import { PERMISSIONS } from '../../utils/permissions';
+import { PERMISSIONS, isSuperAdminOnlySettingsKey } from '../../utils/permissions';
 import { DASHBOARD_PROFILES } from '../../components/admin/dashboard/dashboardWidgets';
 import MessagingSettingsPanel from '../../components/admin/settings/MessagingSettingsPanel';
 import SettingsPreviewPanel from '../../components/admin/settings/SettingsPreviewPanel';
@@ -131,6 +131,22 @@ const SettingsPage = () => {
   const { refreshSettings, features: resolvedFeatures } = useContext(SettingsContext) || {};
   const { hasPermission } = useAuth();
   const appMode = useMode();
+  const adminCart = useFeatureVisible('cart', 'admin');
+  const adminCheckout = useFeatureVisible('checkout', 'admin');
+  const adminOrders = useFeatureVisible('orders', 'admin');
+  const adminPayments = useFeatureVisible('payments', 'admin');
+  const adminPricing = useFeatureVisible('pricing', 'admin');
+  const adminShipping = useFeatureVisible('shipping', 'admin');
+  const seoEnabled = useFeature('seo');
+  const adminVisibility = {
+    cart: adminCart,
+    checkout: adminCheckout,
+    orders: adminOrders,
+    payments: adminPayments,
+    pricing: adminPricing,
+    shipping: adminShipping,
+    seo: seoEnabled,
+  };
   const isSuperAdmin = useIsSuperAdmin();
   const canManageSettings = hasPermission(PERMISSIONS.SETTINGS_MANAGE);
   const canManageAdvancedSettings = hasPermission(PERMISSIONS.SETTINGS_ADVANCED);
@@ -235,7 +251,9 @@ const SettingsPage = () => {
         const [group, ...keyParts] = flatKey.split('.');
         return { group, key: keyParts.join('.'), value };
       }).filter(({ group, key, value }) => (
-        !isDesignerOwnedSetting(group, key)
+        group !== 'shipping'
+        && (isSuperAdmin || !isSuperAdminOnlySettingsKey(group, key))
+        && !isDesignerOwnedSetting(group, key)
         && !isMaskedSecret(value)
         && (canManageAdvancedSettings || !['advanced', 'ai', 'ai_credentials'].includes(group))
       ));
@@ -258,6 +276,9 @@ const SettingsPage = () => {
   const visibleTabs = [
     ...allTabs.filter((t) => {
       if (appMode !== 'ecommerce' && ['Checkout', 'Promotions', 'Invoice'].includes(t)) return false;
+      if (t === 'SEO' && !seoEnabled) return false;
+      if (t === 'Checkout' && !adminCart && !adminCheckout && !adminPayments && !adminShipping) return false;
+      if (t === 'Promotions' && !adminPricing) return false;
       if (t === 'Advanced' && !canManageAdvancedSettings) return false;
       return true;
     })
@@ -434,11 +455,12 @@ const SettingsPage = () => {
     : headerStyle === 'glass'
       ? `${surfaceColor}dd`
       : brandPrimary;
+  const previewButtonRadius = buttonStyle === 'pill' ? '9999px' : `${Math.max(borderRadius - 2, 4)}px`;
   const previewButtonSx = {
-    bgcolor: buttonStyle === 'soft' ? `${brandPrimary}22` : brandPrimary,
-    color: buttonStyle === 'soft' ? brandPrimary : '#fff',
+    bgcolor: buttonStyle === 'soft' ? `${brandPrimary}22` : buttonStyle === 'outline' ? 'transparent' : brandPrimary,
+    color: buttonStyle === 'soft' || buttonStyle === 'outline' ? brandPrimary : '#fff',
     border: buttonStyle === 'outline' ? `1px solid ${brandPrimary}` : '1px solid transparent',
-    borderRadius: `${Math.max(borderRadius - 2, 4)}px`,
+    borderRadius: previewButtonRadius,
   };
   const previewCardSx = {
     bgcolor: surfaceColor,
@@ -498,6 +520,7 @@ const SettingsPage = () => {
     updateHomepagePromo, removeHomepagePromo, addHomepagePromo,
     updateValueProp, removeValueProp, addValueProp,
     enableCGST, enableSGST, enableIGST,
+    adminVisibility,
   });
 
   return (
@@ -643,6 +666,8 @@ const SettingsPage = () => {
                       { icon: '✉️', label: 'Email Verification' },
                       { icon: '🔑', label: 'Password Reset' },
                       { icon: '⚠️', label: 'Low Stock Alert' },
+                      { icon: '📬', label: 'New Enquiry — Staff' },
+                      { icon: '✉️', label: 'Enquiry Received — Customer' },
                     ].map(({ icon, label }) => (
                       <Box key={label} sx={{ display: 'flex', alignItems: 'center', gap: 1.5, p: 1.5, border: '1px solid', borderColor: 'divider', borderRadius: 2 }}>
                         <Typography fontSize={20}>{icon}</Typography>

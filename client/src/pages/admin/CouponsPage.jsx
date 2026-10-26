@@ -5,6 +5,7 @@ import {
   Box,
   Button,
   Chip,
+  CircularProgress,
   Dialog,
   DialogActions,
   DialogContent,
@@ -30,7 +31,7 @@ import EditIcon from '@mui/icons-material/Edit';
 import FileCopyIcon from '@mui/icons-material/FileCopy';
 import { getCoupons, createCoupon, updateCoupon, deleteCoupon } from '../../services/adminService';
 import { useNotification } from '../../context/NotificationContext';
-import { useCurrency } from '../../hooks/useSettings';
+import { useCurrency, useFeature } from '../../hooks/useSettings';
 import { getProducts } from '../../services/productService';
 import { getCategoryTree } from '../../services/categoryService';
 import brandService from '../../services/brandService';
@@ -99,12 +100,14 @@ const CouponsPage = () => {
   const [formErrors, setFormErrors] = useState({});
   const [saving, setSaving] = useState(false);
   const [loadingOptions, setLoadingOptions] = useState(false);
+  const [duplicatingCouponId, setDuplicatingCouponId] = useState(null);
   const [products, setProducts] = useState([]);
   const [categories, setCategories] = useState([]);
   const [brands, setBrands] = useState([]);
   const { notify } = useNotification();
   const { formatPrice } = useCurrency();
   const { hasPermission } = useAuth();
+  const brandsEnabled = useFeature('brands');
   const canManageCoupons = hasPermission(PERMISSIONS.COUPONS_MANAGE);
 
   const productOptions = useMemo(
@@ -197,10 +200,13 @@ const CouponsPage = () => {
   const fetchOptions = async () => {
     setLoadingOptions(true);
     try {
+      const brandPromise = brandsEnabled
+        ? brandService.getBrands({ page: 1, limit: 100 })
+        : Promise.resolve({ data: { data: { brands: [] } } });
       const [productResponse, categoryResponse, brandResponse] = await Promise.all([
         getProducts({ page: 1, limit: 100 }),
         getCategoryTree(),
-        brandService.getBrands({ page: 1, limit: 100 }),
+        brandPromise,
       ]);
 
       setProducts(productResponse?.data || []);
@@ -273,35 +279,73 @@ const CouponsPage = () => {
     setOpen(true);
   };
 
-  const duplicateCoupon = (row) => {
+  const duplicateCoupon = async (row) => {
     if (!canManageCoupons) {
       notify('You do not have permission to manage coupons.', 'error');
       return;
     }
 
-    setEditing(null);
-    setForm({
-      ...empty,
-      ...row,
-      name: `${row.name} Copy`,
-      code: `${row.code}_COPY`,
-      startDate: formatLocalDateTime(row.startDate),
-      endDate: formatLocalDateTime(row.endDate),
-      applicableIds: row.applicableIds || [],
-      excludedProductIds: row.excludedProductIds || [],
-      excludedCategoryIds: row.excludedCategoryIds || [],
-      excludedBrandIds: row.excludedBrandIds || [],
-      value: row.type === 'free_shipping' ? '' : row.value,
-      campaignStatus: row.campaignStatus || 'active',
-      applicationMode: row.applicationMode || 'manual',
-      stackingRules: {
-        allowOrderDiscounts: Boolean(row.stackingRules?.allowOrderDiscounts),
-        allowShippingDiscounts: row.stackingRules?.allowShippingDiscounts !== false,
-        allowMultipleCoupons: Boolean(row.stackingRules?.allowMultipleCoupons),
-      },
-    });
-    setFormErrors({});
-    setOpen(true);
+    setDuplicatingCouponId(row.id);
+    try {
+      const pageSize = 1000;
+      const firstPage = await getCoupons({ page: 1, limit: pageSize });
+      const getCouponRows = (response) => {
+        const data = response?.data?.data;
+        return Array.isArray(data) ? data : Array.isArray(data?.rows) ? data.rows : [];
+      };
+      const totalPages = Math.max(1, Number(firstPage?.data?.meta?.totalPages) || 1);
+      const allCoupons = getCouponRows(firstPage);
+      for (let page = 2; page <= totalPages; page += 1) {
+        const response = await getCoupons({ page, limit: pageSize });
+        allCoupons.push(...getCouponRows(response));
+      }
+
+      const existingNames = new Set(allCoupons.map((coupon) => coupon.name?.trim().toLowerCase()).filter(Boolean));
+      const baseName = `${row.name} Copy`;
+      let name = baseName;
+      let copyNumber = 2;
+      while (existingNames.has(name.trim().toLowerCase())) {
+        name = `${baseName} ${copyNumber}`;
+        copyNumber += 1;
+      }
+
+      const existingCodes = new Set(allCoupons.map((coupon) => coupon.code?.trim().toUpperCase()).filter(Boolean));
+      const baseCode = `${row.code}_COPY`.toUpperCase();
+      let code = baseCode;
+      let codeNumber = 2;
+      while (existingCodes.has(code)) {
+        code = `${baseCode}_${codeNumber}`;
+        codeNumber += 1;
+      }
+
+      setEditing(null);
+      setForm({
+        ...empty,
+        ...row,
+        name,
+        code,
+        startDate: formatLocalDateTime(row.startDate),
+        endDate: formatLocalDateTime(row.endDate),
+        applicableIds: row.applicableIds || [],
+        excludedProductIds: row.excludedProductIds || [],
+        excludedCategoryIds: row.excludedCategoryIds || [],
+        excludedBrandIds: row.excludedBrandIds || [],
+        value: row.type === 'free_shipping' ? '' : row.value,
+        campaignStatus: row.campaignStatus || 'active',
+        applicationMode: row.applicationMode || 'manual',
+        stackingRules: {
+          allowOrderDiscounts: Boolean(row.stackingRules?.allowOrderDiscounts),
+          allowShippingDiscounts: row.stackingRules?.allowShippingDiscounts !== false,
+          allowMultipleCoupons: Boolean(row.stackingRules?.allowMultipleCoupons),
+        },
+      });
+      setFormErrors({});
+      setOpen(true);
+    } catch (error) {
+      notify('Could not check all coupon codes. Please try again before duplicating.', 'error');
+    } finally {
+      setDuplicatingCouponId(null);
+    }
   };
 
   const set = (key, value) => {
@@ -450,8 +494,19 @@ const CouponsPage = () => {
       minWidth: 180,
       renderCell: ({ row }) => (
         <Box sx={{ py: 1 }}>
-          <Typography variant="body2" fontWeight={700}>{row.name}</Typography>
-          <Typography variant="caption" color="text.secondary">{row.code}</Typography>
+          <Typography
+            component="button"
+            type="button"
+            onClick={() => openEdit(row)}
+            disabled={!canManageCoupons}
+            aria-label={`Edit coupon ${row.name}`}
+            sx={{ p: 0, border: 0, background: 'none', color: canManageCoupons ? 'primary.main' : 'text.primary', font: 'inherit', fontWeight: 700, textAlign: 'left', cursor: canManageCoupons ? 'pointer' : 'default', '&:hover': canManageCoupons ? { textDecoration: 'underline' } : {}, '&:focus-visible': { outline: '2px solid', outlineColor: 'primary.main', outlineOffset: 2 } }}
+          >
+            {row.name}
+          </Typography>
+          <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mt: 0.25 }}>
+            Code: {row.code}
+          </Typography>
         </Box>
       ),
     },
@@ -525,8 +580,8 @@ const CouponsPage = () => {
         canManageCoupons ? (
           <>
             <Tooltip title="Duplicate">
-              <IconButton size="small" onClick={() => duplicateCoupon(row)}>
-                <FileCopyIcon fontSize="small" />
+              <IconButton size="small" onClick={() => duplicateCoupon(row)} disabled={duplicatingCouponId === row.id}>
+                {duplicatingCouponId === row.id ? <CircularProgress size={18} /> : <FileCopyIcon fontSize="small" />}
               </IconButton>
             </Tooltip>
             <Tooltip title="Edit">
@@ -642,7 +697,7 @@ const CouponsPage = () => {
                       <MenuItem value="all">Entire order</MenuItem>
                       <MenuItem value="product">Selected products</MenuItem>
                       <MenuItem value="category">Selected categories</MenuItem>
-                      <MenuItem value="brand">Selected brands</MenuItem>
+                      {brandsEnabled && <MenuItem value="brand">Selected brands</MenuItem>}
                     </Select>
                   </FormControl>
                   {form.applicableTo !== 'all' && renderSelection(
@@ -656,7 +711,7 @@ const CouponsPage = () => {
                     renderSelection('Excluded products', 'excludedProductIds', productOptions)}
                   {(form.applicableTo === 'all' || (form.applicableTo === 'category' && form.applicableIds.length === 0)) &&
                     renderSelection('Excluded categories', 'excludedCategoryIds', categories)}
-                  {(form.applicableTo === 'all' || (form.applicableTo === 'brand' && form.applicableIds.length === 0)) &&
+                  {brandsEnabled && (form.applicableTo === 'all' || (form.applicableTo === 'brand' && form.applicableIds.length === 0)) &&
                     renderSelection('Excluded brands', 'excludedBrandIds', brandOptions)}
                   <FormControlLabel control={<Switch checked={Boolean(form.excludeSaleItems)} onChange={(e) => set('excludeSaleItems', e.target.checked)} />} label="Exclude products already on sale" />
                 </Stack>
@@ -735,7 +790,7 @@ const CouponsPage = () => {
           </Box>
         </DialogContent>
         <DialogActions>
-          <Button onClick={closeDialog}>Cancel</Button>
+          <Button color="error" onClick={closeDialog}>Cancel</Button>
           <Button variant="contained" onClick={handleSave} disabled={saving || !canManageCoupons}>{saving ? 'Saving…' : 'Save Promotion'}</Button>
         </DialogActions>
       </Dialog>

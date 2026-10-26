@@ -14,6 +14,7 @@ module.exports = (sequelize, DataTypes) => {
         },
         phone: {
             type: DataTypes.STRING(20),
+            unique: true,
         },
         avatar: {
             type: DataTypes.STRING(500),

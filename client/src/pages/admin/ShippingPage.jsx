@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { v4 as uuidv4 } from 'uuid';
 import {
   Box,
   Typography,
@@ -48,7 +49,7 @@ import {
   deleteShippingRule,
   testShippingCalculation,
   testShippingProviderConnection,
-  getFailedShippingOperations,
+  getShippingOperations,
   retryShippingOperation,
 } from '../../services/adminService';
 import { useCurrency } from '../../hooks/useSettings';
@@ -65,8 +66,40 @@ const ShippingPage = () => {
   const [zones, setZones] = useState([]);
   const [rules, setRules] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [defaultPackage, setDefaultPackage] = useState({ enabled: false, lengthCm: '', breadthCm: '', heightCm: '', emptyWeightGrams: '', maxItems: '', maxContentsWeightGrams: '' });
   const [savingPackage, setSavingPackage] = useState(false);
+  const [packageProfiles, setPackageProfiles] = useState([]);
+  const [defaultPackageId, setDefaultPackageId] = useState('');
+  const [packageDialogOpen, setPackageDialogOpen] = useState(false);
+  const [packageDraft, setPackageDraft] = useState(null);
+  const [deliverySettings, setDeliverySettings] = useState({ pricingMode: '', method: 'flat_rate', flatRate: '', freeThreshold: '', serviceablePincodes: '', blockedPincodes: '' });
+  const [savingDelivery, setSavingDelivery] = useState(false);
+  const enabledRules = rules.filter((rule) => rule.enabled);
+  const setDeliveryField = (key, value) => setDeliverySettings((current) => ({ ...current, [key]: value }));
+  const handleSaveDelivery = async () => {
+    if (!['standard', 'rules', 'carrier'].includes(deliverySettings.pricingMode)) {
+      notify('Choose standard pricing, advanced shipping rules, or carrier-calculated delivery.', 'warning');
+      return;
+    }
+    if (['serviceablePincodes', 'blockedPincodes'].some((key) => deliverySettings[key].trim() && deliverySettings[key].split(',').some((entry) => !/^\d{6}$/.test(entry.trim())))) {
+      notify('Enter 6-digit delivery pincodes separated by commas.', 'warning');
+      return;
+    }
+    const keys = deliverySettings.pricingMode !== 'standard' || deliverySettings.method === 'free' ? [] : deliverySettings.method === 'free_above_threshold' ? ['flatRate', 'freeThreshold'] : ['flatRate'];
+    if (keys.some((key) => deliverySettings[key] === '' || !Number.isFinite(Number(deliverySettings[key])) || Number(deliverySettings[key]) < 0)) {
+      notify('Enter a non-negative delivery fee and minimum order amount.', 'warning');
+      return;
+    }
+    const settings = ['pricingMode', ...(deliverySettings.pricingMode === 'standard' ? ['method'] : []), 'serviceablePincodes', 'blockedPincodes', ...keys].map((key) => ({ group: 'shipping', key, value: keys.includes(key) ? Number(deliverySettings[key]) : deliverySettings[key] }));
+    setSavingDelivery(true);
+    try {
+      await updateSettingsBulk(settings);
+      notify('Delivery pricing and coverage saved', 'success');
+    } catch (err) {
+      notify(err.response?.data?.error?.message || 'Could not save delivery settings', 'error');
+    } finally {
+      setSavingDelivery(false);
+    }
+  };
   
   // Test Panel State
   const [testParams, setTestParams] = useState({ pincode: '', subtotal: 0, paymentMethod: 'prepaid', weightGrams: 500 });
@@ -83,6 +116,7 @@ const ShippingPage = () => {
   const [failedOpsTotal, setFailedOpsTotal] = useState(0);
   const [failedOpsPage, setFailedOpsPage] = useState(1);
   const [retryingOpId, setRetryingOpId] = useState(null);
+  const [operationStatus, setOperationStatus] = useState('failed');
 
   // Dialog states
   const [providerDialogOpen, setProviderDialogOpen] = useState(false);
@@ -138,7 +172,9 @@ const ShippingPage = () => {
       setProviders(providersRes.data.data || []);
       setZones(zonesRes.data.data || []);
       setRules(rulesRes.data.data || []);
-      setDefaultPackage((previous) => ({ ...previous, ...(shippingSettings.defaultPackage || {}) }));
+      setDeliverySettings((previous) => Object.fromEntries(Object.keys(previous).map((key) => [key, Array.isArray(shippingSettings[key]) ? shippingSettings[key].join(', ') : shippingSettings[key] ?? previous[key]])));
+      setPackageProfiles(Array.isArray(shippingSettings.packageProfiles) ? shippingSettings.packageProfiles : []);
+      setDefaultPackageId(shippingSettings.defaultPackageId || '');
     } catch (err) {
       notify('Failed to load shipping data', 'error');
     } finally {
@@ -146,29 +182,116 @@ const ShippingPage = () => {
     }
   };
 
-  const handleSavePackage = async () => {
-    const value = { enabled: defaultPackage.enabled };
-    for (const key of ['lengthCm', 'breadthCm', 'heightCm', 'emptyWeightGrams', 'maxItems', 'maxContentsWeightGrams']) {
-      value[key] = defaultPackage[key] === '' ? null : Number(defaultPackage[key]);
-    }
-    if (value.enabled && (
-      ['lengthCm', 'breadthCm', 'heightCm'].some((key) => !Number.isFinite(value[key]) || value[key] <= 0.5) ||
-      value.emptyWeightGrams == null || !Number.isFinite(value.emptyWeightGrams) || value.emptyWeightGrams < 0 ||
-      !Number.isSafeInteger(value.maxItems) || value.maxItems < 1 ||
-      !Number.isFinite(value.maxContentsWeightGrams) || value.maxContentsWeightGrams <= 0
-    )) {
-      notify('Enter measured dimensions, empty package weight, and confirmed item and weight capacity.', 'warning');
-      return;
-    }
+  const openPackageDialog = (profile = null) => {
+    setPackageDraft(profile ? {
+      ...profile,
+      innerLengthCm: profile.innerLengthCm ?? '',
+      innerBreadthCm: profile.innerBreadthCm ?? '',
+      innerHeightCm: profile.innerHeightCm ?? '',
+      isDefault: profile.isDefault ?? (profile.id === defaultPackageId),
+    } : {
+      id: uuidv4(), name: '', enabled: true, lengthCm: '', breadthCm: '', heightCm: '',
+      innerLengthCm: '', innerBreadthCm: '', innerHeightCm: '',
+      emptyWeightGrams: '', maxItems: '', maxContentsWeightGrams: '',
+      isDefault: packageProfiles.length === 0,
+    });
+    setPackageDialogOpen(true);
+  };
+
+  const savePackageProfiles = async (nextProfiles, newDefaultId = undefined) => {
     setSavingPackage(true);
     try {
-      await updateSettingsBulk([{ group: 'shipping', key: 'defaultPackage', value }]);
-      notify('Default package saved', 'success');
+      const updates = [{ group: 'shipping', key: 'packageProfiles', value: nextProfiles }];
+      if (newDefaultId !== undefined) {
+        updates.push({ group: 'shipping', key: 'defaultPackageId', value: newDefaultId });
+      }
+      await updateSettingsBulk(updates);
+      setPackageProfiles(nextProfiles);
+      if (newDefaultId !== undefined) {
+        setDefaultPackageId(newDefaultId || '');
+      }
+      notify('Package types saved', 'success');
+      setPackageDialogOpen(false);
     } catch (err) {
-      notify(err.response?.data?.error?.message || 'Could not save the default package', 'error');
+      notify(err.response?.data?.error?.message || 'Could not save package types', 'error');
     } finally {
       setSavingPackage(false);
     }
+  };
+
+  const handleSetDefaultPackage = async (profileId) => {
+    setSavingPackage(true);
+    try {
+      const nextProfiles = packageProfiles.map((p) => ({
+        ...p,
+        isDefault: p.id === profileId,
+      }));
+      await updateSettingsBulk([
+        { group: 'shipping', key: 'defaultPackageId', value: profileId },
+        { group: 'shipping', key: 'packageProfiles', value: nextProfiles },
+      ]);
+      setDefaultPackageId(profileId);
+      setPackageProfiles(nextProfiles);
+      notify('Default package preset updated', 'success');
+    } catch (err) {
+      notify(err.response?.data?.error?.message || 'Could not set default package', 'error');
+    } finally {
+      setSavingPackage(false);
+    }
+  };
+
+  const handleRemoveProfile = async (profileId) => {
+    const nextProfiles = packageProfiles.filter((item) => item.id !== profileId);
+    let newDefaultId = undefined;
+    if (defaultPackageId === profileId) {
+      newDefaultId = nextProfiles[0]?.id || null;
+      if (nextProfiles[0]) nextProfiles[0].isDefault = true;
+    }
+    await savePackageProfiles(nextProfiles, newDefaultId);
+  };
+
+  const savePackageDraft = async () => {
+    if (!packageDraft || !packageDraft.name.trim()) {
+      notify('Enter a package name.', 'warning');
+      return;
+    }
+    const next = { ...packageDraft };
+    delete next.allowMixedContents;
+    // Legacy per-product fit rules are no longer supported: planning is proven
+    // purely by measured dimensions, so stored fit matrices are dropped on save.
+    delete next.fits;
+    for (const key of ['lengthCm', 'breadthCm', 'heightCm', 'emptyWeightGrams', 'maxItems', 'maxContentsWeightGrams']) {
+      next[key] = Number(next[key]);
+    }
+    for (const key of ['innerLengthCm', 'innerBreadthCm', 'innerHeightCm']) {
+      if (next[key] !== '' && next[key] != null) {
+        next[key] = Number(next[key]);
+      } else {
+        delete next[key];
+      }
+    }
+    if (['lengthCm', 'breadthCm', 'heightCm'].some((key) => !Number.isFinite(next[key]) || next[key] <= 0.5) ||
+      !Number.isFinite(next.emptyWeightGrams) || next.emptyWeightGrams < 0 || !Number.isSafeInteger(next.maxItems) || next.maxItems < 1 ||
+      !Number.isFinite(next.maxContentsWeightGrams) || next.maxContentsWeightGrams <= 0) {
+      notify('Enter measured package values (dimensions, tare weight, capacity).', 'warning');
+      return;
+    }
+    if (['innerLengthCm', 'innerBreadthCm', 'innerHeightCm'].some((k) => next[k] != null && (!Number.isFinite(next[k]) || next[k] <= 0.5))) {
+      notify('Usable interior dimensions must be greater than 0.5 cm.', 'warning');
+      return;
+    }
+
+    let nextProfiles = [...packageProfiles.filter((profile) => profile.id !== next.id), next];
+    let newDefaultId = undefined;
+    if (next.isDefault) {
+      nextProfiles = nextProfiles.map((p) => ({ ...p, isDefault: p.id === next.id }));
+      newDefaultId = next.id;
+    } else if (defaultPackageId === next.id && !next.isDefault) {
+      const other = nextProfiles.find((p) => p.id !== next.id);
+      newDefaultId = other ? other.id : null;
+      if (other) other.isDefault = true;
+    }
+    await savePackageProfiles(nextProfiles, newDefaultId);
   };
 
   useEffect(() => {
@@ -205,10 +328,10 @@ const ShippingPage = () => {
     }
   };
 
-  const fetchFailedOperations = async (page = 1) => {
+  const fetchFailedOperations = async (page = 1, status = operationStatus) => {
     setFailedOpsLoading(true);
     try {
-      const res = await getFailedShippingOperations({ page, limit: 10 });
+      const res = await getShippingOperations({ page, limit: 10, status });
       setFailedOperations(res.data?.data || []);
       setFailedOpsTotal(res.data?.meta?.total || 0);
       setFailedOpsPage(page);
@@ -224,9 +347,9 @@ const ShippingPage = () => {
     try {
       const res = await retryShippingOperation(opId);
       if (res.data?.data?.success) {
-        notify('Operation dispatched and reconciled successfully', 'success');
+        notify('Carrier booking completed successfully.', 'success');
       } else {
-        notify(res.data?.data?.error || 'Operation failed during retry', 'warning');
+        notify(res.data?.data?.error || 'Retry was queued or is still processing. Check the operation status before trying again.', 'warning');
       }
       fetchFailedOperations(failedOpsPage);
     } catch (err) {
@@ -238,7 +361,7 @@ const ShippingPage = () => {
 
   useEffect(() => {
     if (tabIndex === 4) {
-      fetchFailedOperations(1);
+      fetchFailedOperations(1, 'failed');
     }
   }, [tabIndex]);
 
@@ -538,39 +661,118 @@ const ShippingPage = () => {
       </Box>
 
       <Paper elevation={0} sx={{ border: '1px solid', borderColor: 'divider', borderRadius: 2 }}>
-        <Tabs value={tabIndex} onChange={handleTabChange} sx={{ borderBottom: 1, borderColor: 'divider', px: 2 }}>
-          <Tab label="Shipping Providers" />
-          <Tab label="Rate Zones" />
-          <Tab label="Shipping Rules" />
-          <Tab label="Test Panel" />
-          <Tab label="Operations & Failures" />
-          <Tab label="Packaging" />
+        <Tabs variant="scrollable" scrollButtons="auto" value={tabIndex} onChange={handleTabChange} sx={{ borderBottom: 1, borderColor: 'divider', px: 2 }}>
+          <Tab value={0} id="shipping-tab-0" aria-controls="shipping-tabpanel-0" label="Delivery pricing & coverage" />
+          <Tab value={1} id="shipping-tab-1" aria-controls="shipping-tabpanel-1" label="Shipping Providers" />
+          <Tab value={2} id="shipping-tab-2" aria-controls="shipping-tabpanel-2" label="Rate Zones" />
+          <Tab value={3} id="shipping-tab-3" aria-controls="shipping-tabpanel-3" label="Shipping Rules" />
+          <Tab value={4} id="shipping-tab-4" aria-controls="shipping-tabpanel-4" label="Test Panel" />
+          <Tab value={5} id="shipping-tab-5" aria-controls="shipping-tabpanel-5" label="Operations & Failures" />
+          <Tab value={6} id="shipping-tab-6" aria-controls="shipping-tabpanel-6" label="Packaging" />
         </Tabs>
 
         <Box sx={{ p: 3 }}>
-          <TabPanel value={tabIndex} index={5} idPrefix="shipping">
-            <Typography variant="subtitle1" fontWeight={600}>Default shipping package</Typography>
-            <Typography variant="body2" sx={{ mb: 2 }}>
-              Measure the outside of your packed box or envelope. Product weights are added to the empty package weight once per order.
-              Enable this only after confirming your products fit within the capacities below. Larger orders require different packaging.
-            </Typography>
-            <FormControlLabel control={<Switch checked={defaultPackage.enabled} onChange={(event) => setDefaultPackage((current) => ({ ...current, enabled: event.target.checked }))} />} label="Use one measured package for all products" />
-            <Grid container spacing={2} sx={{ mt: 1, mb: 2 }}>
-              {[
-                ['lengthCm', 'Length (cm)'], ['breadthCm', 'Width (cm)'], ['heightCm', 'Height (cm)'],
-                ['emptyWeightGrams', 'Empty package weight (grams)'], ['maxItems', 'Maximum items confirmed to fit'],
-                ['maxContentsWeightGrams', 'Maximum contents weight (grams)'],
-              ].map(([key, label]) => (
-                <Grid item xs={12} sm={6} md={4} key={key}>
-                  <TextField fullWidth required={defaultPackage.enabled} disabled={!defaultPackage.enabled || savingPackage} label={label} type="number" value={defaultPackage[key]} inputProps={{ min: key === 'emptyWeightGrams' ? 0 : key === 'maxItems' ? 1 : 0.51, step: key === 'maxItems' ? 1 : 'any' }} onChange={(event) => setDefaultPackage((current) => ({ ...current, [key]: event.target.value }))} />
-                </Grid>
-              ))}
-            </Grid>
-            <Alert severity="info" sx={{ mb: 2 }}>Each physical product still needs its actual weight. With this package enabled, product dimensions are optional. Flat and free shipping rules still apply to the customer charge.</Alert>
-            <Button variant="contained" disabled={savingPackage} onClick={handleSavePackage}>{savingPackage ? 'Saving…' : 'Save package'}</Button>
+          <TabPanel value={tabIndex} index={0} idPrefix="shipping">
+            <Typography variant="subtitle1" fontWeight={600}>Customer delivery fee</Typography>
+            <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>Choose one checkout policy. Standard and rules charge your configured customer fee; carrier-calculated uses a live Shiprocket quote for a supported single parcel.</Typography>
+            {!deliverySettings.pricingMode && <Alert severity="warning" sx={{ mb: 2 }}>Existing pricing is preserved until you choose and save a pricing policy. Previously, matching rules could override the standard fee.</Alert>}
+            {deliverySettings.pricingMode === 'rules' && <Alert severity={enabledRules.length ? 'info' : 'warning'} sx={{ mb: 2 }}>Only matching advanced rules set the customer fee. Orders without a matching rule cannot proceed. {enabledRules.length} rule(s) enabled.<Button size="small" onClick={() => setTabIndex(3)}>Manage rules</Button></Alert>}
+            <Stack spacing={2} sx={{ mb: 3 }}>
+              <TextField select label="Customer delivery pricing" value={deliverySettings.pricingMode} disabled={savingDelivery} onChange={(event) => setDeliveryField('pricingMode', event.target.value)} helperText="Choose one policy; only the selected policy sets the delivery line at checkout.">
+                <MenuItem value="" disabled>Choose a pricing policy</MenuItem>
+                <MenuItem value="standard">Standard pricing — fixed fee or free delivery</MenuItem>
+                <MenuItem value="rules">Advanced shipping rules — regional or weight-based fees</MenuItem>
+                <MenuItem value="carrier">Carrier-calculated — live Shiprocket parcel rates</MenuItem>
+              </TextField>
+              {deliverySettings.pricingMode === 'carrier' && <Alert severity="warning">Checkout will block orders that need multiple parcels until Shiprocket confirms the MPS API request for your account. Account activation alone does not confirm the API flow.</Alert>}
+              {deliverySettings.pricingMode === 'standard' && <TextField select label="Delivery fee method" value={deliverySettings.method} disabled={savingDelivery} onChange={(event) => setDeliveryField('method', event.target.value)}>
+                <MenuItem value="flat_rate">Fixed fee per order</MenuItem>
+                <MenuItem value="free_above_threshold">Free above an order amount</MenuItem>
+                <MenuItem value="free">Always free for customers</MenuItem>
+              </TextField>}
+              {deliverySettings.pricingMode === 'standard' && deliverySettings.method !== 'free' && <TextField label={`Default delivery fee (${symbol})`} type="number" inputProps={{ min: 0 }} value={deliverySettings.flatRate} disabled={savingDelivery} onChange={(event) => setDeliveryField('flatRate', event.target.value)} helperText="Applies to every eligible order. Advanced rules do not override standard pricing. A fee of 0 means free delivery." />}
+              {deliverySettings.pricingMode === 'standard' && deliverySettings.method === 'free_above_threshold' && <TextField label={`Free delivery from order amount (${symbol})`} type="number" inputProps={{ min: 0 }} value={deliverySettings.freeThreshold} disabled={savingDelivery} onChange={(event) => setDeliveryField('freeThreshold', event.target.value)} />}
+              <Typography variant="subtitle1" fontWeight={600}>Delivery coverage</Typography>
+              <Typography variant="body2" color="text.secondary">These restrictions apply to every shipping rule and courier. Leave allowed pincodes empty to allow any destination the courier serves. Blocked pincodes always take priority. Rate Zones group pincodes for pricing rules.</Typography>
+              <TextField label="Allowed delivery pincodes" value={deliverySettings.serviceablePincodes} disabled={savingDelivery} onChange={(event) => setDeliveryField('serviceablePincodes', event.target.value)} helperText="Separate pincodes with commas." />
+              <TextField label="Blocked delivery pincodes" value={deliverySettings.blockedPincodes} disabled={savingDelivery} onChange={(event) => setDeliveryField('blockedPincodes', event.target.value)} helperText="Separate pincodes with commas." />
+            </Stack>
+            <Stack direction="row" spacing={2}><Button variant="contained" disabled={savingDelivery} onClick={handleSaveDelivery}>{savingDelivery ? 'Saving…' : 'Save pricing and coverage'}</Button><Button onClick={() => setTabIndex(4)}>Check which fee applies</Button></Stack>
           </TabPanel>
+          <TabPanel value={tabIndex} index={6} idPrefix="shipping">
+            <Typography variant="subtitle1" fontWeight={600}>Measured package types</Typography>
+            <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
+              Add your measured box presets or mailers with outer dimensions and tare weight. General goods can share a box. Use a restriction only when those items must be packed separately.
+            </Typography>
+            <Alert severity="warning" sx={{ mb: 2 }}>Do not enter a package until you have measured its outside dimensions and empty weight. Every shippable product also needs its actual item weight. This does not confirm Shiprocket MPS API booking eligibility.</Alert>
+            <Stack spacing={1} sx={{ mb: 2 }}>
+              {packageProfiles.length === 0 && <Alert severity="info">No measured package types yet. Checkout will use the existing single-package settings, if enabled.</Alert>}
+              {packageProfiles.map((profile) => {
+                const isDefault = profile.id === defaultPackageId || Boolean(profile.isDefault);
+                return (
+                  <Paper key={profile.id} variant="outlined" sx={{ p: 2 }}>
+                    <Stack direction={{ xs: 'column', sm: 'row' }} alignItems={{ xs: 'stretch', sm: 'center' }} justifyContent="space-between" gap={1}>
+                      <Box>
+                        <Stack direction="row" alignItems="center" spacing={1} sx={{ mb: 0.5 }}>
+                          <Typography fontWeight={600}>{profile.name}{profile.enabled === false ? ' (inactive)' : ''}</Typography>
+                          {isDefault && (
+                            <Chip
+                              size="small"
+                              color="primary"
+                              label="Default"
+                              icon={<StarIcon sx={{ '&&': { fontSize: '1rem' } }} />}
+                            />
+                          )}
+                        </Stack>
+                        <Typography variant="body2" color="text.secondary">
+                          Outer: {profile.lengthCm} × {profile.breadthCm} × {profile.heightCm} cm · {profile.emptyWeightGrams} g tare · up to {profile.maxItems} items / {profile.maxContentsWeightGrams} g contents
+                          {profile.innerLengthCm && profile.innerBreadthCm && profile.innerHeightCm ? ` · Inner: ${profile.innerLengthCm} × ${profile.innerBreadthCm} × ${profile.innerHeightCm} cm` : ''}
+                        </Typography>
+                      </Box>
+                      <Stack direction="row" spacing={1} alignItems="center">
+                        {!isDefault && (
+                          <Button size="small" variant="outlined" disabled={savingPackage} onClick={() => handleSetDefaultPackage(profile.id)}>
+                            Set Default
+                          </Button>
+                        )}
+                        <Button size="small" onClick={() => openPackageDialog(profile)}>Edit</Button>
+                        <Button size="small" color="error" disabled={savingPackage} onClick={() => handleRemoveProfile(profile.id)}>Remove</Button>
+                      </Stack>
+                    </Stack>
+                  </Paper>
+                );
+              })}
+            </Stack>
+            <Button variant="contained" startIcon={<AddIcon />} sx={{ mb: 3 }} disabled={savingPackage} onClick={() => openPackageDialog()}>Add measured package</Button>
+            <Alert severity="info">Every shippable order is planned from these measured presets based on product dimensions and weights. Products with &ldquo;Ship each unit separately&rdquo; enabled will be allocated individual parcels.</Alert>
+          </TabPanel>
+          <Dialog open={packageDialogOpen} onClose={() => setPackageDialogOpen(false)} maxWidth="md" fullWidth>
+            <DialogTitle>{packageProfiles.some((profile) => profile.id === packageDraft?.id) ? 'Edit measured package' : 'Add measured package'}</DialogTitle>
+            <DialogContent dividers>
+              {packageDraft && <Stack spacing={2} sx={{ mt: 1 }}>
+                <Alert severity="info">Measure the packed parcel’s outside L × W × H and the empty box/mailer's tare weight. Outer dimensions are used for courier rating; interior dimensions (if specified) ensure contents physically fit inside box walls.</Alert>
+                <TextField label="Package name" required value={packageDraft.name} onChange={(event) => setPackageDraft((current) => ({ ...current, name: event.target.value }))} />
+                <Typography variant="subtitle2" fontWeight={600}>Outer dimensions & tare weight</Typography>
+                <Grid container spacing={2}>
+                  {[
+                    ['lengthCm', 'Outer Length (cm)'], ['breadthCm', 'Outer Width (cm)'], ['heightCm', 'Outer Height (cm)'],
+                    ['emptyWeightGrams', 'Empty package tare weight (g)'], ['maxItems', 'Maximum total items'], ['maxContentsWeightGrams', 'Maximum contents weight (g)'],
+                  ].map(([key, label]) => <Grid item xs={12} sm={6} md={4} key={key}><TextField fullWidth label={label} required type="number" inputProps={{ min: key === 'emptyWeightGrams' ? 0 : key === 'maxItems' ? 1 : 0.51, step: key === 'maxItems' ? 1 : 'any' }} value={packageDraft[key]} onChange={(event) => setPackageDraft((current) => ({ ...current, [key]: event.target.value }))} /></Grid>)}
+                </Grid>
+                <Typography variant="subtitle2" fontWeight={600}>Usable interior dimensions (optional)</Typography>
+                <Grid container spacing={2}>
+                  {[
+                    ['innerLengthCm', 'Inner Length (cm)'], ['innerBreadthCm', 'Inner Width (cm)'], ['innerHeightCm', 'Inner Height (cm)'],
+                  ].map(([key, label]) => <Grid item xs={12} sm={4} key={key}><TextField fullWidth label={label} type="number" helperText="Leave blank to use outer dimensions" inputProps={{ min: 0.51, step: 'any' }} value={packageDraft[key] ?? ''} onChange={(event) => setPackageDraft((current) => ({ ...current, [key]: event.target.value }))} /></Grid>)}
+                </Grid>
+                <FormControlLabel control={<Switch checked={Boolean(packageDraft.isDefault)} onChange={(event) => setPackageDraft((current) => ({ ...current, isDefault: event.target.checked }))} />} label="Set as default box preset" />
+                <FormControlLabel control={<Switch checked={packageDraft.enabled !== false} onChange={(event) => setPackageDraft((current) => ({ ...current, enabled: event.target.checked }))} />} label="Use this package for new checkout plans" />
+              </Stack>}
+            </DialogContent>
+            <DialogActions sx={{ p: 2 }}><Button color="error" onClick={() => setPackageDialogOpen(false)}>Cancel</Button><Button variant="contained" disabled={savingPackage} onClick={savePackageDraft}>{savingPackage ? 'Saving…' : 'Save package type'}</Button></DialogActions>
+          </Dialog>
           {/* PROVIDERS TAB */}
-            <TabPanel value={tabIndex} index={0} idPrefix="shipping" sx={{ pt: 3 }}>
+            <TabPanel value={tabIndex} index={1} idPrefix="shipping" sx={{ pt: 3 }}>
             <Alert severity="info" sx={{ mb: 3 }}>
               Providers handle the actual delivery. Enable/disable providers, test remote carrier credentials, and set default capabilities here.
             </Alert>
@@ -664,7 +866,7 @@ const ShippingPage = () => {
           </TabPanel>
 
           {/* ZONES TAB */}
-            <TabPanel value={tabIndex} index={1} idPrefix="shipping" sx={{ pt: 3 }}>
+            <TabPanel value={tabIndex} index={2} idPrefix="shipping" sx={{ pt: 3 }}>
             <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 2 }}>
               <Box>
                 <Typography variant="subtitle1" fontWeight={600}>Rate Zones</Typography>
@@ -708,7 +910,7 @@ const ShippingPage = () => {
           </TabPanel>
 
           {/* RULES TAB */}
-            <TabPanel value={tabIndex} index={2} idPrefix="shipping" sx={{ pt: 3 }}>
+            <TabPanel value={tabIndex} index={3} idPrefix="shipping" sx={{ pt: 3 }}>
             <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 2 }}>
               <Typography variant="subtitle1" fontWeight={600}>Shipping Rules</Typography>
               <Button variant="contained" size="small" startIcon={<AddIcon />} onClick={() => handleOpenRuleDialog()}>
@@ -768,12 +970,12 @@ const ShippingPage = () => {
           </TabPanel>
 
           {/* TEST PANEL TAB */}
-          <TabPanel value={tabIndex} index={3}>
+          <TabPanel value={tabIndex} index={4} idPrefix="shipping">
             <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 2 }}>
               <Typography variant="subtitle1" fontWeight={600}>Test Shipping Engine</Typography>
             </Box>
             <Alert severity="info" sx={{ mb: 3 }}>
-              Enter order details below to see which rule and provider the shipping engine selects.
+              Preview the saved pricing policy and delivery coverage for an order. Use chargeable weight including packaging. This preview does not make a live Shiprocket delivery check.
             </Alert>
             <Grid container spacing={3}>
               <Grid item xs={12} md={6}>
@@ -797,9 +999,14 @@ const ShippingPage = () => {
                 <Paper variant="outlined" sx={{ p: 2, height: '100%', minHeight: 200 }}>
                   <Typography variant="subtitle2" mb={2}>Decision Result</Typography>
                   {testResult ? (
-                     <pre style={{ fontSize: '12px', overflowX: 'auto', whiteSpace: 'pre-wrap', wordWrap: 'break-word' }}>
-                       {JSON.stringify(testResult, null, 2)}
-                     </pre>
+                     <Stack spacing={1}>
+                       <Alert severity={testResult.decision?.serviceable ? 'success' : 'warning'}>{testResult.decision?.message}</Alert>
+                       <Typography>Customer fee: {testResult.decision?.pricingSource === 'carrier' ? 'Live quote required at checkout' : formatPrice(testResult.decision?.shippingCost || 0)}</Typography>
+                       <Typography>{testResult.decision?.pricingReason}</Typography>
+                       <Typography>Courier: {testResult.decision?.providerName}</Typography>
+                       <Typography>Pickup pincode: {testResult.warehousePincode} · Delivery pincode: {testResult.deliveryPincode}</Typography>
+                       <Typography variant="caption">Confirm live courier availability at checkout. This result evaluates saved store settings.</Typography>
+                     </Stack>
                   ) : (
                     <Typography variant="body2" color="text.secondary">Run a test to see results here.</Typography>
                   )}
@@ -809,30 +1016,35 @@ const ShippingPage = () => {
           </TabPanel>
 
           {/* OPERATIONS & FAILURES TAB */}
-          <TabPanel value={tabIndex} index={4} idPrefix="shipping" sx={{ pt: 3 }}>
+          <TabPanel value={tabIndex} index={5} idPrefix="shipping" sx={{ pt: 3 }}>
             <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2 }}>
               <div>
-                <Typography variant="subtitle1" fontWeight={600}>Failed Shipping Operations</Typography>
+                <Typography variant="subtitle1" fontWeight={600}>{operationStatus === 'failed' ? 'Failed shipping operations' : 'In-progress shipping operations'}</Typography>
                 <Typography variant="caption" color="text.secondary">
-                  Track background carrier dispatch failures, timeouts, and reconcile duplicate shipment attempts.
+                  Review carrier booking failures or check operations currently queued and processing.
                 </Typography>
               </div>
               <Button
                 variant="outlined"
                 size="small"
                 startIcon={<RefreshIcon />}
-                onClick={() => fetchFailedOperations(1)}
+                onClick={() => fetchFailedOperations(1, operationStatus)}
                 disabled={failedOpsLoading}
               >
                 Refresh
               </Button>
             </Box>
 
+            <Tabs value={operationStatus} onChange={(_, value) => { setOperationStatus(value); fetchFailedOperations(1, value); }} sx={{ mb: 2 }}>
+              <Tab value="failed" label="Failed" />
+              <Tab value="active" label="In progress" />
+            </Tabs>
+
             {failedOpsLoading ? (
               <Box sx={{ display: 'flex', justifyContent: 'center', py: 4 }}><CircularProgress size={32} /></Box>
             ) : failedOperations.length === 0 ? (
-              <Alert severity="success" sx={{ my: 2 }}>
-                All shipping operations and carrier dispatches are healthy! No unresolved failures found.
+              <Alert severity={operationStatus === 'failed' ? 'success' : 'info'} sx={{ my: 2 }}>
+                {operationStatus === 'failed' ? 'No failed carrier bookings need attention.' : 'No carrier bookings are currently queued or processing.'}
               </Alert>
             ) : (
               <TableContainer>
@@ -842,6 +1054,7 @@ const ShippingPage = () => {
                       <TableCell>Order</TableCell>
                       <TableCell>Type</TableCell>
                       <TableCell>Provider</TableCell>
+                      <TableCell>Status</TableCell>
                       <TableCell>Attempts</TableCell>
                       <TableCell>Last Error</TableCell>
                       <TableCell>Updated</TableCell>
@@ -854,10 +1067,9 @@ const ShippingPage = () => {
                         <TableCell sx={{ fontWeight: 600 }}>
                           {op.shipment?.order?.orderNumber || op.orderId || op.shipmentId || 'N/A'}
                         </TableCell>
-                        <TableCell>
-                          <Chip size="small" label={op.type} />
-                        </TableCell>
+                        <TableCell><Chip size="small" label={op.operationType || op.type || 'create'} /></TableCell>
                         <TableCell>{op.provider?.name || op.providerId || 'Provider'}</TableCell>
+                        <TableCell><Chip size="small" color={op.status === 'failed' ? 'error' : 'info'} label={op.status} /></TableCell>
                         <TableCell>
                           <Chip
                             size="small"
@@ -866,7 +1078,7 @@ const ShippingPage = () => {
                           />
                         </TableCell>
                         <TableCell sx={{ maxWidth: 320, color: 'error.main', fontSize: '0.8rem' }}>
-                          {op.lastError || 'Unknown failure'}
+                          {op.lastError || (op.status === 'failed' ? 'No error detail recorded' : 'No error reported; operation is still in progress.')}
                         </TableCell>
                         <TableCell sx={{ fontSize: '0.75rem', color: 'text.secondary' }}>
                           {new Date(op.updatedAt).toLocaleString()}
@@ -876,11 +1088,11 @@ const ShippingPage = () => {
                             size="small"
                             variant="contained"
                             color="warning"
-                            disabled={retryingOpId === op.id}
+                            disabled={retryingOpId === op.id || op.status === 'processing'}
                             onClick={() => handleRetryOperation(op.id)}
                             sx={{ textTransform: 'none', py: 0.25, px: 1, fontSize: '0.75rem' }}
                           >
-                            {retryingOpId === op.id ? 'Retrying...' : 'Retry Now'}
+                            {retryingOpId === op.id ? 'Retrying...' : op.status === 'processing' ? 'Processing' : 'Retry Now'}
                           </Button>
                         </TableCell>
                       </TableRow>
@@ -945,12 +1157,12 @@ const ShippingPage = () => {
                     onChange={(e) => setEditingProvider({...editingProvider, credPassword: e.target.value})} 
                   />
                   <TextField
-                    label="Pickup Pincode"
+                    label="Pickup pincode (warehouse origin)"
                     fullWidth
                     size="small"
                     value={editingProvider?.pickupPincode || ''}
                     onChange={(e) => setEditingProvider({...editingProvider, pickupPincode: e.target.value})}
-                    helperText="Warehouse pincode registered in Shiprocket"
+                    helperText="Where the courier collects parcels. This must match the registered Shiprocket pickup location; it does not define customer delivery coverage."
                   />
                   <TextField
                     label="Shiprocket Pickup Location"
@@ -958,7 +1170,7 @@ const ShippingPage = () => {
                     size="small"
                     value={editingProvider?.pickupLocationName || ''}
                     onChange={(e) => setEditingProvider({...editingProvider, pickupLocationName: e.target.value})}
-                    helperText="Must exactly match the Shiprocket pickup location name"
+                    helperText="Choose the registered Shiprocket warehouse name whose pincode matches the pickup pincode above."
                   />
                   <TextField
                     label="Webhook Header Key"
@@ -983,7 +1195,7 @@ const ShippingPage = () => {
           </Stack>
         </DialogContent>
         <DialogActions sx={{ p: 2 }}>
-          <Button onClick={() => setProviderDialogOpen(false)}>Cancel</Button>
+          <Button color="error" onClick={() => setProviderDialogOpen(false)}>Cancel</Button>
           <Button variant="contained" onClick={handleSaveProvider}>Save Provider</Button>
         </DialogActions>
       </Dialog>
@@ -1017,7 +1229,7 @@ const ShippingPage = () => {
           </Stack>
         </DialogContent>
         <DialogActions sx={{ p: 2 }}>
-          <Button onClick={() => setZoneDialogOpen(false)}>Cancel</Button>
+          <Button color="error" onClick={() => setZoneDialogOpen(false)}>Cancel</Button>
           <Button variant="contained" onClick={handleSaveZone}>Save Zone</Button>
         </DialogActions>
       </Dialog>
@@ -1079,6 +1291,9 @@ const ShippingPage = () => {
                 fullWidth
                 size="small"
                 value={ruleFormData.rateType}
+                helperText={['per_kg_slab', 'volumetric'].includes(ruleFormData.rateType)
+                  ? 'Calculated for each parcel, then added together.'
+                  : 'Charged once per order, even when the order has multiple parcels.'}
                 onChange={(e) => setRuleFormData({...ruleFormData, rateType: e.target.value})}
               >
                 <MenuItem value="flat">Flat Rate</MenuItem>
@@ -1187,6 +1402,7 @@ const ShippingPage = () => {
             {ruleFormData.rateType !== 'free' && (
               <Box sx={{ border: '1px solid', borderColor: 'divider', borderRadius: 1, p: 2 }}>
                 <Typography variant="subtitle2" fontWeight={600} mb={2}>COD Fee</Typography>
+                <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>Added once per order when the customer chooses Cash on Delivery. Free delivery waives the delivery fee; a configured COD fee still applies.</Typography>
                 <Grid container spacing={2}>
                   <Grid item xs={12} sm={4}>
                     <TextField select label="Fee Type" fullWidth size="small"
@@ -1216,6 +1432,7 @@ const ShippingPage = () => {
             {/* WEIGHT CONDITIONS */}
             <Box sx={{ border: '1px solid', borderColor: 'divider', borderRadius: 1, p: 2 }}>
               <Typography variant="subtitle2" fontWeight={600} mb={2}>Weight Conditions (optional)</Typography>
+              <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>Compared with the order’s total chargeable weight (the sum across its parcels).</Typography>
               <Grid container spacing={2}>
                 <Grid item xs={6}>
                   <TextField label="Chargeable Weight ≥ (g)" type="number" fullWidth size="small"
@@ -1257,7 +1474,7 @@ const ShippingPage = () => {
           </Stack>
         </DialogContent>
         <DialogActions sx={{ p: 2 }}>
-          <Button onClick={() => setRuleDialogOpen(false)}>Cancel</Button>
+          <Button color="error" onClick={() => setRuleDialogOpen(false)}>Cancel</Button>
           <Button variant="contained" onClick={handleSaveRule}>Save Rule</Button>
         </DialogActions>
       </Dialog>

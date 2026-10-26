@@ -1,3 +1,4 @@
+import platformFeatures from '../../../shared/platform-features.json';
 import React, { createContext, useContext, useState, useEffect, useCallback, useMemo } from 'react';
 import { ThemeProvider, createTheme, CssBaseline, Box, CircularProgress } from '@mui/material';
 import settingsService from '../services/settingsService';
@@ -29,11 +30,28 @@ const isPreviewMode = () =>
   typeof window !== 'undefined' &&
   new URLSearchParams(window.location.search).get('previewMode') === '1';
 
+export const DEFAULT_TIER1_VISIBILITY = {
+  admin: { pricing: true, cart: true, checkout: true, orders: true, payments: true, shipping: true },
+  storefront: { pricing: true, cart: true, checkout: true, orders: true, payments: true, shipping: true },
+};
+
+export const DEFAULT_FALLBACK_FEATURES = {
+  pricing: true,
+  cart: true,
+  checkout: true,
+  orders: true,
+  payments: true,
+  shipping: true,
+  ...platformFeatures.reservedDefaults,
+  ...Object.fromEntries(platformFeatures.optional.map((feature) => [feature.key, feature.defaults.ecommerce])),
+};
+
 export const SettingsProvider = ({ children }) => {
   const [settings, setSettings] = useState(null);
   const [mode, setMode] = useState('ecommerce');           // APP_MODE from server
   const [features, setFeatures] = useState(null);         // fully resolved feature map
   const [lockedKeys, setLockedKeys] = useState([]);       // Tier 1 keys — greyed-out in Settings UI
+  const [visibility, setVisibility] = useState(null);     // Tier 1 admin/storefront visibility
   const [loading, setLoading] = useState(true);
 
   const t = settings?.theme || {};
@@ -68,7 +86,13 @@ export const SettingsProvider = ({ children }) => {
         const raw = localStorage.getItem(PREVIEW_KEY);
         data = raw ? JSON.parse(raw) : {};
       } else {
-        [data] = await Promise.all([settingsService.getAllSettings()]);
+        try {
+          data = await settingsService.getAllSettings();
+        } catch (settingsError) {
+          const status = settingsError?.response?.status;
+          if (status !== 401 && status !== 403) throw settingsError;
+          data = await settingsService.getPublicSettings();
+        }
       }
 
       const [, featureData] = await Promise.all([
@@ -80,6 +104,7 @@ export const SettingsProvider = ({ children }) => {
       setMode(featureData?.mode || 'ecommerce');
       setFeatures({ ...data?.features, ...featureData?.features });
       setLockedKeys(featureData?.lockedKeys || []);
+      setVisibility(featureData?.visibility || DEFAULT_TIER1_VISIBILITY);
       if (!isPreviewMode()) applyDocumentSettings(data);
     } catch (error) {
       console.error("Failed to load settings", error);
@@ -87,7 +112,7 @@ export const SettingsProvider = ({ children }) => {
       setSettings({
         theme: { primaryColor: '#1976d2', mode: 'light', fontFamily: 'Roboto' },
         general: { storeName: DEFAULT_STORE_NAME },
-        features: { wishlist: true, reviews: true, coupons: true, guestCheckout: true, seo: true, productAssistant: true },
+        features: { ...DEFAULT_FALLBACK_FEATURES },
         payments: {
           razorpayEnabled: true,
           stripeEnabled: false,
@@ -118,7 +143,8 @@ export const SettingsProvider = ({ children }) => {
       });
       // On error, keep mode as ecommerce so the app doesn't silently hide features
       setMode('ecommerce');
-      setFeatures({ wishlist: true, reviews: true, pricing: true, cart: true, checkout: true, productAssistant: true });
+      setFeatures({ ...DEFAULT_FALLBACK_FEATURES });
+      setVisibility(DEFAULT_TIER1_VISIBILITY);
       // Fallback: treat all known Tier 1 keys as locked so UI remains correct offline
       setLockedKeys(['pricing','cart','checkout','orders','payments','shipping','enquiry']);
     } finally {
@@ -203,11 +229,12 @@ export const SettingsProvider = ({ children }) => {
       settings,
       mode,        // 'ecommerce' | 'catalog'
       features,    // fully resolved feature map — use useFeature() to read individual flags
+      visibility,  // Tier 1 presentation switches — use useFeatureVisible()
       lockedKeys,  // Tier 1 keys — use useIsFeatureLocked() to read
       loading,
       refreshSettings: fetchSettings,
     }),
-    [settings, mode, features, lockedKeys, loading, fetchSettings]
+    [settings, mode, features, visibility, lockedKeys, loading, fetchSettings]
   );
 
   // Expose resolved storefront design tokens as CSS custom properties for custom CSS and widgets.

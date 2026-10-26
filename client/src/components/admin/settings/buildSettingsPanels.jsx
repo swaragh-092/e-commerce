@@ -84,6 +84,25 @@ export default function buildSettingsPanels(ctx) {
         </>,
         ['logo', 'favicon', 'brand assets']
       ),
+      section(
+        'Newsletter signup on account forms',
+        'Choose whether customers see an optional newsletter checkbox when registering or signing in.',
+        <>
+          <FormControlLabel
+            control={<Switch checked={form['auth.registerNewsletterEnabled'] !== false} onChange={(event) => set('auth.registerNewsletterEnabled', event.target.checked)} />}
+            label="Show on registration"
+            sx={{ display: 'block', mb: 1 }}
+          />
+          {field('auth.registerNewsletterLabel', 'Registration checkbox text', 'text', { inputProps: { maxLength: 200 } })}
+          <FormControlLabel
+            control={<Switch checked={form['auth.loginNewsletterEnabled'] !== false} onChange={(event) => set('auth.loginNewsletterEnabled', event.target.checked)} />}
+            label="Show on sign in"
+            sx={{ display: 'block', mb: 1 }}
+          />
+          {field('auth.loginNewsletterLabel', 'Sign in checkbox text', 'text', { inputProps: { maxLength: 200 } })}
+        </>,
+        ['newsletter', 'register', 'sign in', 'checkbox', 'subscribe']
+      ),
     ],
     // ─── 1: SEO ─────────────────────────────────────────────────────────
     [
@@ -91,7 +110,13 @@ export default function buildSettingsPanels(ctx) {
         'SEO & Search Engine Control',
         'Configure how your store appears in search results and social media shares globally.',
         <>
-          {toggle('features.seo', 'Enable Storefront SEO Features')}
+          <Alert severity="info" sx={{ mb: 2 }}>
+            The SEO feature switch now lives on the{' '}
+            <Button component={Link} to="/admin/features" size="small" sx={{ textTransform: 'none', fontWeight: 700, p: 0, minWidth: 0, verticalAlign: 'baseline' }}>
+              Platform Features
+            </Button>{' '}
+            page. The settings below only apply while SEO is enabled.
+          </Alert>
           <Divider sx={{ my: 2 }} />
           <Box sx={{ opacity: bool(form['features.seo']) ? 1 : 0.5, pointerEvents: bool(form['features.seo']) ? 'auto' : 'none' }}>
             <Alert severity="info" sx={{ mb: 2.5 }}>
@@ -317,33 +342,18 @@ function buildCatalogPanel({ form, set, section, field, toggle, imageField }) {
   ];
 }
 
-function buildCheckoutPanel({ form, set, section, field, toggle, currSymbol, enableCGST, enableSGST, enableIGST }) {
-  return [
-    section(
+function buildCheckoutPanel({ form, set, section, field, toggle, currSymbol, enableCGST, enableSGST, enableIGST, adminVisibility = {} }) {
+  const sections = [];
+  if (adminVisibility.shipping !== false) {
+    sections.push(section(
       'Shipping',
-      'Set how shipping is calculated at checkout and when customers qualify for free delivery.',
-      <>
-        <FormControl fullWidth size="small" sx={{ mb: 2 }}>
-          <InputLabel>Shipping Method</InputLabel>
-          <Select label="Shipping Method" value={form['shipping.method'] || 'flat_rate'} onChange={(e) => set('shipping.method', e.target.value)}>
-            <MenuItem value="flat_rate">Flat Rate — charge a fixed fee on every order</MenuItem>
-            <MenuItem value="free_above_threshold">Free above threshold — flat rate until a minimum order amount</MenuItem>
-            <MenuItem value="free">Always Free — no shipping charge</MenuItem>
-          </Select>
-        </FormControl>
-        {form['shipping.method'] !== 'free' && field('shipping.flatRate', `Flat Rate (${currSymbol})`, 'number', { InputProps: { startAdornment: <InputAdornment position="start">{currSymbol}</InputAdornment> } })}
-        {form['shipping.method'] === 'free_above_threshold' && field('shipping.freeThreshold', `Free Shipping Above (${currSymbol})`, 'number', { InputProps: { startAdornment: <InputAdornment position="start">{currSymbol}</InputAdornment> } })}
-        <Divider sx={{ my: 2 }} />
-        <Typography variant="subtitle2" fontWeight={600} color="text.secondary" mb={0.5}>Storewide Delivery Coverage</Typography>
-        <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mb: 2 }}>
-          These restrictions apply across all shipping methods. An allowlist limits delivery to listed pincodes; blocked pincodes always take priority. Shiprocket must also confirm that it serves the destination.
-        </Typography>
-        {field('shipping.serviceablePincodes', 'Serviceable pincodes', 'text', { placeholder: '560001, 600001, 110001' })}
-        {field('shipping.blockedPincodes', 'Blocked pincodes', 'text', { placeholder: '194101, 744101' })}
-      </>,
+      'Manage customer delivery fees, delivery coverage, couriers and packaging in one place.',
+      <Button component={Link} to="/admin/shipping" variant="outlined">Manage shipping</Button>,
       ['shipping', 'free shipping', 'delivery', 'pincode', 'serviceable']
-    ),
-    section(
+    ));
+  }
+  if (adminVisibility.checkout !== false || adminVisibility.cart !== false) {
+    sections.push(section(
       'Taxes',
       'Configure your store-wide tax strategy, including inclusive pricing and GST breakdowns.',
       <>
@@ -371,30 +381,49 @@ function buildCheckoutPanel({ form, set, section, field, toggle, currSymbol, ena
         {enableIGST && field('tax.igstRate', 'IGST Rate (e.g. 0.18 for 18%)', 'number')}
       </>,
       ['tax', 'gst', 'cgst', 'sgst', 'igst']
-    ),
-    section(
+    ));
+  }
+  if (adminVisibility.checkout !== false) {
+    sections.push(section(
       'Checkout Experience',
-      'Decide how easy checkout is and which customer conveniences are available.',
-      <></>,
-      ['checkout', 'guest checkout', 'coupons']
-    ),
-    section(
+      'Decide how easy checkout is and configure the cancellation guidance customers see.',
+      <>
+        <Typography variant="subtitle2" fontWeight={600} sx={{ mb: 1 }}>Customer Order Cancellation</Typography>
+        <TextField
+          fullWidth
+          multiline
+          minRows={4}
+          label="Cancellation and refund policy"
+          value={form['orders.cancellationPolicy'] ?? ''}
+          onChange={(event) => set('orders.cancellationPolicy', event.target.value.slice(0, 2000))}
+          inputProps={{ maxLength: 2000 }}
+          helperText="Shown before customers confirm cancellation. The system still enforces the shipment cutoff and the store's refund workflow."
+          sx={{ mb: 2 }}
+        />
+      </>,
+      ['checkout', 'guest checkout', 'coupons', 'cancellation', 'refund policy', 'orders']
+    ));
+  }
+  if (adminVisibility.cart !== false) {
+    sections.push(section(
       'Cart Page Experience',
       'Edit cart layout and customer-facing cart content in Store Designer.',
       <>
         <StoreDesignSummary scope="page" page="cart" form={form} />
       </>,
       ['cart', 'layout', 'cross sells', 'empty state']
-    ),
-    section(
+    ));
+  }
+  sections.push(section(
       'Customer Account Experience',
       'Edit the customer account layout and support presentation in Store Designer.',
       <>
         <StoreDesignSummary scope="page" page="account" form={form} />
       </>,
       ['account', 'customer', 'dashboard', 'orders']
-    ),
-    section(
+    ));
+  if (adminVisibility.payments !== false) {
+    sections.push(section(
       'Payment Gateways',
       'Enable, disable and configure payment providers from the dedicated gateway manager.',
       <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', p: 2, border: '1px solid', borderColor: 'primary.main', borderRadius: 2, bgcolor: 'primary.main', color: '#fff' }}>
@@ -409,11 +438,13 @@ function buildCheckoutPanel({ form, set, section, field, toggle, currSymbol, ena
         </Button>
       </Box>,
       ['payment', 'gateway', 'razorpay', 'stripe', 'payu', 'cashfree', 'cod']
-    ),
-  ];
+    ));
+  }
+  return sections;
 }
 
-function buildPromotionsPanel({ section, field, toggle }) {
+function buildPromotionsPanel({ section, field, toggle, adminVisibility = {} }) {
+  if (adminVisibility.pricing === false) return [];
   return [
     section(
       'Sale Display & Behavior',
@@ -520,10 +551,13 @@ function buildAdvancedPanel({ form, set, section, field, toggle, imageField, boo
       'API Builder',
       'Control whether admins can create public custom APIs from catalog, content, menu, and setting data.',
       <>
-        {toggle('features.apiBuilder', 'Enable API Builder')}
-        <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mt: 0.5 }}>
-          When disabled, saved custom API URLs stop responding and the admin builder is hidden from the sidebar.
-        </Typography>
+        <Alert severity="info">
+          The API Builder feature switch now lives on the{' '}
+          <Button component={Link} to="/admin/features" size="small" sx={{ textTransform: 'none', fontWeight: 700, p: 0, minWidth: 0, verticalAlign: 'baseline' }}>
+            Platform Features
+          </Button>{' '}
+          page. When disabled, saved custom API URLs stop responding and the admin builder is hidden from the sidebar.
+        </Alert>
       </>,
       ['api builder', 'custom api', 'dynamic api', 'public api']
     ),

@@ -4,11 +4,18 @@ const { sequelize, Setting } = require('../index');
 const AuditService = require('../audit/audit.service');
 const AppError = require('../../utils/AppError');
 const { validateDefaultPackage } = require('../shipping/shipping.package');
+const { validateShippingSetting } = require('../shipping/shipping.settings');
+const { validateUnitCatalogSetting, ensureUnitCatalogChangesAllowed, ensureUnitCategoriesAllowed } = require('./unitCatalog');
 const { ACTIONS, ENTITIES } = require('../../config/constants');
 const { buildFeatures, isTier1Feature, TIER1_KEYS } = require('../../config/modes');
 const { getPermissionsForUser, PERMISSIONS } = require('../../config/permissions');
 const { invalidateFeature } = require('../../middleware/featureGate.middleware');
 const { DESIGN_SETTINGS_GROUPS, isDesignSettingTarget } = require('./designSettings');
+const {
+  PUBLIC_SETTING_GROUP_NAMES,
+  pickPublicSettings,
+  pickPublicGroup,
+} = require('../../config/publicSettings');
 
 const fs = require('fs');
 const path = require('path');
@@ -18,11 +25,50 @@ const { encrypt, decrypt } = require('../../utils/crypto');
 const isMaskedSecretPlaceholder = (value) =>
   typeof value === 'string' && value.trim() === '********';
 
+const ensureNotificationRecipientsAllowed = (settingsArray, actingUser) => {
+  if (settingsArray.some(({ key }) => key === 'eventRecipientUserIds')
+      && !getPermissionsForUser(actingUser).includes(PERMISSIONS.NOTIFICATIONS_MANAGE)) {
+    throw new AppError('FORBIDDEN', 403, 'Notification management permission is required to change email recipients');
+  }
+};
+
 const isSensitiveSettingKey = (key) => {
   const normalizedKey = String(key || '').toLowerCase();
-  const isSecret = /pass|token|secret|api[_-]?key|privatekey/i.test(normalizedKey);
+  const isSecret = /pass|token|secret|salt|api[_-]?key|privatekey/i.test(normalizedKey);
   const isPublicIdentifier = /id|public|publishable/i.test(normalizedKey);
   return isSecret && !isPublicIdentifier;
+};
+
+const isSensitiveFieldName = (field, path = []) => {
+  const normalized = String(field || '').toLowerCase();
+  if (normalized === 'key' && path.some((part) => String(part).toLowerCase() === 'payu')) {
+    return true;
+  }
+  return isSensitiveSettingKey(field);
+};
+
+const maskSensitiveValue = (value, path = []) => {
+  if (Array.isArray(value)) return value.map((item) => maskSensitiveValue(item, path));
+  if (!value || typeof value !== 'object') return value;
+
+  const masked = {};
+  for (const [field, fieldValue] of Object.entries(value)) {
+    if (isSensitiveFieldName(field, path) && fieldValue !== null && fieldValue !== undefined && fieldValue !== '') {
+      masked[field] = '********';
+    } else if (fieldValue && typeof fieldValue === 'object') {
+      masked[field] = maskSensitiveValue(fieldValue, [...path, field]);
+    } else {
+      masked[field] = fieldValue;
+    }
+  }
+  return masked;
+};
+
+const maskSettingValue = (group, key, value) => {
+  if (!value) return value;
+  if (isSensitiveSettingKey(key)) return '********';
+  if (typeof value === 'object') return maskSensitiveValue(value, [group, key]);
+  return value;
 };
 
 const PAYMENT_GATEWAY_ENABLED_KEYS = {
@@ -37,6 +83,57 @@ const isTruthySetting = (value) => value === true || value === 'true';
 
 const hasAdvancedSettingsPermission = (user) =>
   getPermissionsForUser(user || {}).includes(PERMISSIONS.SETTINGS_ADVANCED);
+
+const isSuperAdminUser = (user) => {
+  const actingRoles = user?.roles || (user?.role ? [user.role] : []);
+  return actingRoles.includes('super_admin');
+};
+
+const isProtectedFeatureOrModeSetting = (key, group) => {
+  const resolvedGroup = resolveSettingGroup(key, group);
+  return resolvedGroup === 'features' || resolvedGroup === 'visibility'
+    || key === 'mode' || (resolvedGroup === 'general' && key === 'mode');
+};
+
+const VISIBILITY_SURFACES = ['admin', 'storefront'];
+const visibilitySettingKey = (surface, feature) =>
+  `${surface}${feature.charAt(0).toUpperCase()}${feature.slice(1)}`;
+
+const isTruthyVisibilityValue = (value) => value === true || value === 'true';
+
+/**
+ * Tier 1 visibility is presentation-only. It can hide UI for a capability that
+ * the mode enables, but it can never turn a mode-disabled capability back on.
+ */
+const resolveTier1Visibility = (rows, features) => {
+  const stored = {};
+  rows.forEach((row) => {
+    stored[row.key] = isTruthyVisibilityValue(row.value);
+  });
+
+  const resolved = {};
+  for (const surface of VISIBILITY_SURFACES) {
+    resolved[surface] = {};
+    for (const feature of TIER1_KEYS) {
+      const preference = stored[visibilitySettingKey(surface, feature)] !== false;
+      resolved[surface][feature] = Boolean(features[feature]) && preference;
+    }
+  }
+  return resolved;
+};
+
+const ensureSuperAdminIfProtectedSetting = (settingsArray, actingUser) => {
+  const touchesProtected = settingsArray.some(({ key, group }) =>
+    isProtectedFeatureOrModeSetting(key, group)
+  );
+  if (touchesProtected && !isSuperAdminUser(actingUser)) {
+    throw new AppError(
+      'SUPERADMIN_REQUIRED',
+      403,
+      'Only Super Admins can modify platform feature toggles or store mode.'
+    );
+  }
+};
 
 const isAdvancedSettingsGroup = (group) =>
   ['advanced', 'ai', 'ai_credentials'].includes(group);
@@ -60,6 +157,24 @@ const resolveSettingGroup = (key, group) => {
     if (defaultSettings[candidateGroup]?.[key] !== undefined) return candidateGroup;
   }
   return 'general';
+};
+
+const validateOrderSettings = (settingsArray) => {
+  for (const { key, value, group } of settingsArray) {
+    if (resolveSettingGroup(key, group) !== 'orders' || key !== 'cancellationPolicy') continue;
+    if (typeof value !== 'string' || value.length > 2000) {
+      throw new AppError('VALIDATION_ERROR', 400, 'Cancellation policy must be text no longer than 2,000 characters.');
+    }
+  }
+};
+
+const validateEnquiryEmailSettings = (settingsArray) => {
+  for (const { key, value, group } of settingsArray) {
+    if (resolveSettingGroup(key, group) !== 'messaging' || key !== 'enquiryCustomerAcknowledgementEnabled') continue;
+    if (typeof value !== 'boolean') {
+      throw new AppError('VALIDATION_ERROR', 400, 'Customer enquiry acknowledgement must be enabled or disabled.');
+    }
+  }
 };
 
 const ensurePaymentGatewaySettingsAreValid = async (settingsArray) => {
@@ -158,10 +273,12 @@ const getAll = async () => {
     componentStyles: { ...defaultSettings.componentStyles },
     sectionPresets: { ...defaultSettings.sectionPresets },
     features: { ...defaultSettings.features },
+    visibility: { ...defaultSettings.visibility },
     payments: { ...defaultSettings.payments },
     sales: { ...defaultSettings.sales },
     seo: { ...defaultSettings.seo },
     general: { ...defaultSettings.general },
+    orders: { ...defaultSettings.orders },
     shipping: { ...defaultSettings.shipping },
     tax: { ...defaultSettings.tax },
     sku: { ...defaultSettings.sku },
@@ -195,6 +312,7 @@ const getAll = async () => {
   };
 
   settings.forEach(s => {
+    if (s.group === 'messaging' && s.key === 'eventRecipientUserIds') return;
     if (grouped[s.group]) {
       let parsedValue = s.value;
 
@@ -209,9 +327,7 @@ const getAll = async () => {
       }
 
       // Mask sensitive values before sending to client
-      if (isSensitiveSettingKey(s.key) && parsedValue) {
-        parsedValue = '********';
-      }
+      parsedValue = maskSettingValue(s.group, s.key, parsedValue);
 
       if (parsedValue === 'true') parsedValue = true;
       else if (parsedValue === 'false') parsedValue = false;
@@ -222,9 +338,23 @@ const getAll = async () => {
   return grouped;
 };
 
+const getPublicAll = async () => {
+  const all = await getAll();
+  const advanced = await getByGroup('advanced');
+  return pickPublicSettings({ ...all, advanced });
+};
+
+const getPublicGroup = async (groupName) => {
+  if (!PUBLIC_SETTING_GROUP_NAMES.includes(groupName)) {
+    throw new AppError('VALIDATION_ERROR', 400, 'Invalid public setting group');
+  }
+  const values = await getByGroup(groupName);
+  return pickPublicGroup(groupName, values);
+};
+
 const getByGroup = async (groupName, options = {}) => {
   const { maskSensitive = true } = options;
-  const validGroups = ['theme', 'componentStyles', 'sectionPresets', 'features', 'payments', 'sales', 'seo', 'general', 'shipping', 'tax', 'sku', 'logo', 'hero', 'auth', 'footer', 'announcement', 'nav', 'catalog', 'homepage', 'productPage', 'categoryPage', 'blogPage', 'brandsPage', 'cartPage', 'accountPage', 'checkoutPage', 'wishlistPage', 'searchPage', 'notFoundPage', 'ordersPage', 'admin', 'invoice', 'gateway_credentials', 'messaging_credentials', 'messaging', 'ai', 'ai_credentials', 'advanced'];
+  const validGroups = ['theme', 'componentStyles', 'sectionPresets', 'features', 'visibility', 'payments', 'sales', 'seo', 'general', 'orders', 'shipping', 'tax', 'sku', 'logo', 'hero', 'auth', 'footer', 'announcement', 'nav', 'catalog', 'homepage', 'productPage', 'categoryPage', 'blogPage', 'brandsPage', 'cartPage', 'accountPage', 'checkoutPage', 'wishlistPage', 'searchPage', 'notFoundPage', 'ordersPage', 'admin', 'invoice', 'gateway_credentials', 'messaging_credentials', 'messaging', 'ai', 'ai_credentials', 'advanced'];
   if (!validGroups.includes(groupName)) {
     throw new AppError('VALIDATION_ERROR', 400, 'Invalid setting group');
   }
@@ -233,6 +363,7 @@ const getByGroup = async (groupName, options = {}) => {
   
   const result = { ...(defaultSettings[groupName] || {}) };
   settings.forEach(s => {
+    if (maskSensitive && groupName === 'messaging' && s.key === 'eventRecipientUserIds') return;
     let parsedValue = s.value;
 
     // Auto-decrypt if it's an encrypted object
@@ -250,8 +381,8 @@ const getByGroup = async (groupName, options = {}) => {
     
     // Mask sensitive values for client-facing reads. Internal services can opt
     // out so encrypted credentials remain usable by SMTP/Twilio senders.
-    if (maskSensitive && isSensitiveSettingKey(s.key) && parsedValue) {
-      parsedValue = '********';
+    if (maskSensitive) {
+      parsedValue = maskSettingValue(s.group, s.key, parsedValue);
     }
 
     result[s.key] = parsedValue;
@@ -307,7 +438,14 @@ const getDesignState = async () => {
  * effective again. The group/key guard is deliberately stricter than the
  * generic settings update API.
  */
-const resetDesignSetting = async ({ group, key }, actingUserId) => {
+const resetDesignSetting = async ({ group, key }, actingUserId, actingUser = null) => {
+  if (group === 'advanced' && !hasAdvancedSettingsPermission(actingUser)) {
+    throw new AppError(
+      'SETTINGS_ADVANCED_REQUIRED',
+      403,
+      'Advanced settings require the settings.advanced permission.'
+    );
+  }
   if (!isDesignSettingTarget(group, key)) {
     throw new AppError('VALIDATION_ERROR', 400, 'Only visual design settings can be reset.');
   }
@@ -340,11 +478,16 @@ const resetDesignSetting = async ({ group, key }, actingUserId) => {
 };
 
 const updateKey = async (key, value, group, actingUserId, actingUser = null) => {
+  const resolvedGroup = resolveSettingGroup(key, group);
+  validateUnitCatalogSetting(key, value, resolvedGroup);
+  ensureNotificationRecipientsAllowed([{ key, group: resolvedGroup, value }], actingUser);
+  validateOrderSettings([{ key, value, group: resolvedGroup }]);
+  validateEnquiryEmailSettings([{ key, value, group: resolvedGroup }]);
   const credentialGroups = ['gateway_credentials', 'messaging_credentials', 'ai_credentials'];
 
   // Tier 1 feature keys are mode-locked — reject any attempt to modify them via settings.
   // This is the server-side enforcement regardless of who calls the API.
-  if (group === 'features' && isTier1Feature(key)) {
+  if (resolvedGroup === 'features' && isTier1Feature(key)) {
     throw new AppError(
       'FEATURE_LOCKED',
       403,
@@ -352,15 +495,19 @@ const updateKey = async (key, value, group, actingUserId, actingUser = null) => 
     );
   }
 
-  ensureAdvancedSettingsAllowed([{ key, value, group }], actingUser);
-  await ensurePaymentGatewaySettingsAreValid([{ key, value, group }]);
-  if (group === 'shipping' && key === 'defaultPackage') validateDefaultPackage(value);
+  ensureSuperAdminIfProtectedSetting([{ key, group: resolvedGroup, value }], actingUser);
+  ensureAdvancedSettingsAllowed([{ key, value, group: resolvedGroup }], actingUser);
+  await ensurePaymentGatewaySettingsAreValid([{ key, value, group: resolvedGroup }]);
+  if (resolvedGroup === 'shipping') validateShippingSetting(key, value);
+  if (resolvedGroup === 'shipping' && key === 'defaultPackage') validateDefaultPackage(value);
 
   // Capture the transaction result so we can invalidate the feature cache
   // AFTER it commits — ensuring we never bust the cache on a rollback.
   const result = await sequelize.transaction(async (t) => {
+    await ensureUnitCategoriesAllowed([{ key, value, group }], t);
     // Look up by (key, group) to avoid cross-group collisions for shared key names.
-    let setting = await Setting.findOne({ where: { key, group }, transaction: t });
+    let setting = await Setting.findOne({ where: { key, group }, transaction: t, ...(key === 'unitCatalog' ? { lock: true } : {}) });
+    await ensureUnitCatalogChangesAllowed(key, value, setting?.value, t);
     let before = setting ? setting.toJSON() : null;
 
     if (isMaskedSecretPlaceholder(value)) return null;
@@ -399,14 +546,19 @@ const updateKey = async (key, value, group, actingUserId, actingUser = null) => 
 
   // Bust the feature cache after the transaction commits so the next gated
   // request immediately picks up the new value without waiting for TTL expiry.
-  if (group === 'features' || key === 'mode') invalidateFeature(key);
+  if (resolvedGroup === 'features' || key === 'mode') {
+    invalidateFeature(key);
+    try {
+      require('../search/search.service').invalidateSearchCache();
+    } catch (_) {}
+  }
 
   return result;
 };
 
 const bulkUpdate = async (settingsInput, actingUserId, actingUser = null, options = {}) => {
   const { transaction: outerTransaction = null } = options;
-  const validGroups = ['theme', 'componentStyles', 'sectionPresets', 'features', 'payments', 'sales', 'seo', 'general', 'shipping', 'tax', 'sku', 'logo', 'hero', 'auth', 'footer', 'announcement', 'nav', 'catalog', 'homepage', 'productPage', 'categoryPage', 'blogPage', 'brandsPage', 'cartPage', 'accountPage', 'checkoutPage', 'wishlistPage', 'searchPage', 'notFoundPage', 'ordersPage', 'admin', 'invoice', 'gateway_credentials', 'messaging_credentials', 'messaging', 'ai', 'ai_credentials', 'advanced'];
+  const validGroups = ['theme', 'componentStyles', 'sectionPresets', 'features', 'visibility', 'payments', 'sales', 'seo', 'general', 'orders', 'shipping', 'tax', 'sku', 'logo', 'hero', 'auth', 'footer', 'announcement', 'nav', 'catalog', 'homepage', 'productPage', 'categoryPage', 'blogPage', 'brandsPage', 'cartPage', 'accountPage', 'checkoutPage', 'wishlistPage', 'searchPage', 'notFoundPage', 'ordersPage', 'admin', 'invoice', 'gateway_credentials', 'messaging_credentials', 'messaging', 'ai', 'ai_credentials', 'advanced'];
   const credentialGroups = ['gateway_credentials', 'messaging_credentials', 'ai_credentials'];
 
     // Normalize input to an array of { key, value, group }
@@ -415,30 +567,22 @@ const bulkUpdate = async (settingsInput, actingUserId, actingUser = null, option
         : Object.entries(settingsInput).map(([key, value]) => ({ key, value }));
 
     ensureAdvancedSettingsAllowed(settingsArray, actingUser);
+    ensureNotificationRecipientsAllowed(settingsArray, actingUser);
+    validateOrderSettings(settingsArray);
+    validateEnquiryEmailSettings(settingsArray);
     for (const setting of settingsArray) {
+        validateUnitCatalogSetting(setting.key, setting.value, setting.group);
+        if (setting.group === 'shipping') validateShippingSetting(setting.key, setting.value);
         if (setting.group === 'shipping' && setting.key === 'defaultPackage') validateDefaultPackage(setting.value);
     }
     await ensurePaymentGatewaySettingsAreValid(settingsArray);
 
     // ── Superadmin guard ─────────────────────────────────────────────────────
-    // Tier 2 feature toggles (group === 'features', non-Tier-1 keys) may only
-    // be written by a super_admin. Regular admins can save everything else.
-    const hasFeatureKeys = settingsArray.some(
-      ({ key, group }) => (group || 'general') === 'features' && !isTier1Feature(key)
-    );
-    if (hasFeatureKeys) {
-      const actingRoles = actingUser?.roles || (actingUser?.role ? [actingUser.role] : []);
-      const isSuperAdmin = actingRoles.includes('super_admin');
-      if (!isSuperAdmin) {
-        throw new AppError(
-          'SUPERADMIN_REQUIRED',
-          403,
-          'Only Super Admins can modify platform feature toggles.'
-        );
-      }
-    }
+    // Feature toggles and store mode may only be written by a super_admin.
+    ensureSuperAdminIfProtectedSetting(settingsArray, actingUser);
 
     const writeSettings = async (t) => {
+        await ensureUnitCategoriesAllowed(settingsArray, t);
         let updatedCount = 0;
         for (let { key, value, group } of settingsArray) {
             // Resolve the group for this key upfront so lookups are always scoped
@@ -472,7 +616,8 @@ const bulkUpdate = async (settingsInput, actingUserId, actingUser = null, option
             }
 
             // Look up by (key, group) — not key alone — to avoid cross-group collisions
-            let setting = await Setting.findOne({ where: { key, group: resolvedGroup }, transaction: t });
+            let setting = await Setting.findOne({ where: { key, group: resolvedGroup }, transaction: t, ...(key === 'unitCatalog' ? { lock: true } : {}) });
+            await ensureUnitCatalogChangesAllowed(key, finalValue, setting?.value, t);
             
             if (setting) {
                 await setting.update({ value: finalValue, updatedBy: actingUserId }, { transaction: t });
@@ -503,10 +648,18 @@ const bulkUpdate = async (settingsInput, actingUserId, actingUser = null, option
     }
 
     // Bust feature cache for any feature-group key that was updated
+    let featureOrModeUpdated = false;
     for (const { key, group } of settingsArray) {
-        if (!group || group === 'features' || key === 'mode') {
+        const resolvedGroup = resolveSettingGroup(key, group);
+        if (resolvedGroup === 'features' || key === 'mode') {
             invalidateFeature(key);
+            featureOrModeUpdated = true;
         }
+    }
+    if (featureOrModeUpdated) {
+        try {
+            require('../search/search.service').invalidateSearchCache();
+        } catch (_) {}
     }
 
     return true;
@@ -539,15 +692,22 @@ const getFeatures = async () => {
         dbFeatures[row.key] = row.value === true || row.value === 'true';
     }
 
+    const features = buildFeatures(dbFeatures, appMode);
+    const visibilityRows = await Setting.findAll({ where: { group: 'visibility' } });
+
     return {
-        features:   buildFeatures(dbFeatures, appMode),
+        features,
         lockedKeys: [...TIER1_KEYS],   // frontend uses this to grey out Tier 1 toggles
-        mode:       appMode            // Make sure the mode is exposed to the frontend
+        mode:       appMode,           // Make sure the mode is exposed to the frontend
+        // Presentation-only Tier 1 switches, already AND-ed with mode capability.
+        visibility: resolveTier1Visibility(visibilityRows, features),
     };
 };
 
 module.exports = {
   getAll,
+  getPublicAll,
+  getPublicGroup,
   getByGroup,
   getDesignState,
   resetDesignSetting,

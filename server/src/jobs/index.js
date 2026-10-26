@@ -10,6 +10,7 @@ const shippingOperationJob = require('./shippingOperation.job');
 const trackingReconciliationJob = require('./trackingReconciliation.job');
 const authCleanupJob = require('./authCleanup.job');
 const analyticsReportJob = require('./analyticsReport.job');
+const refundReconciliationJob = require('./refundReconciliation.job');
 const logger = require('../utils/logger');
 
 const startJobs = () => {
@@ -20,10 +21,12 @@ const startJobs = () => {
   lowStockAlertJob.run();
   shippingQuoteCleanupJob.run();
   notificationQueueJob.run();
+  require('./newsletterCampaign.job').run();
   shippingOperationJob.run();
   trackingReconciliationJob.run();
   authCleanupJob.run();
   analyticsReportJob.run();
+  refundReconciliationJob.run();
 };
 
 module.exports = startJobs;

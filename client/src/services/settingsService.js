@@ -5,8 +5,23 @@ export const getAllSettings = async () => {
   return response.data.data;
 };
 
+export const getPublicSettings = async () => {
+  const response = await api.get('/settings/public');
+  return response.data.data;
+};
+
+export const getPublicSettingsGroup = async (groupName) => {
+  const response = await api.get(`/settings/public/${groupName}`);
+  return response.data.data;
+};
+
 export const getSettingsGroup = async (groupName) => {
   const response = await api.get(`/settings/${groupName}`);
+  return response.data.data;
+};
+
+export const getUnitUsage = async () => {
+  const response = await api.get('/settings/unit-usage');
   return response.data.data;
 };
 
@@ -75,7 +90,10 @@ export const updateSingleSetting = async (key, value, group) => {
 
 const settingsService = {
   getAllSettings,
+  getPublicSettings,
+  getPublicSettingsGroup,
   getSettingsGroup,
+  getUnitUsage,
   getDesignState,
   resetDesignSetting,
   getDesignDraft,

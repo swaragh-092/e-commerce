@@ -14,6 +14,7 @@ const {
   OrderItem,
   Media,
   ProductTab,
+  ProductComboItem,
   Sequelize,
   sequelize,
 } = require('../index');
@@ -40,7 +41,13 @@ const { events, PRODUCT_EVENTS } = require('../../utils/events');
 const { getSaleLabels } = require('../settings/saleLabel.service');
 const SettingsService = require('../settings/settings.service');
 const inventoryService = require('../inventory/inventory.service');
+const { validateProductTypeChange } = require('./productType');
 const { normalizeSearchQuery, buildSearchPattern } = require('../search/search.utils');
+const {
+  isBrandVisible,
+  stripBrandFields,
+  assertBrandFilterAllowed,
+} = require('../../utils/brandVisibility');
 
 
 // Fetch the active label catalog once per request (the service caches for 60 s)
@@ -229,7 +236,7 @@ const _syncProductTags = async (product, tagNames, transaction) => {
   await product.setTags(tagInstances, { transaction });
 };
 
-const ATTRIBUTE_TEMPLATE_FIELDS = ['id', 'name', 'slug', 'sortOrder', 'displayType', 'valueType', 'unit'];
+const ATTRIBUTE_TEMPLATE_FIELDS = ['id', 'name', 'slug', 'sortOrder', 'displayType', 'valueType', 'unit', 'unitCategory'];
 const ATTRIBUTE_VALUE_FIELDS = ['id', 'value', 'slug', 'sortOrder', 'displayLabel', 'swatchColor', 'imageUrl', 'unitLabel', 'metadata'];
 
 const getCommonAttributeIncludes = () => [
@@ -445,11 +452,7 @@ const replaceVariantsWithOptions = async (productId, variants, transaction) => {
     transaction,
   });
 
-  const variantIds = existingVariants.map((variant) => variant.id);
-  if (variantIds.length) {
-    await VariantOption.destroy({ where: { variantId: variantIds }, transaction });
-    await ProductVariant.destroy({ where: { id: variantIds }, force: true, transaction });
-  }
+  if (existingVariants.length) throw new AppError('VALIDATION_ERROR', 400, 'Use the variant editor to update existing combinations. Product updates cannot replace variant history.');
 
   await createVariantsWithOptions(productId, variants, transaction);
 };
@@ -458,16 +461,26 @@ exports.getProducts = async (filters, page, limit, isAdmin = false) => {
   const { limit: queryLimit, offset } = getPagination(page, limit);
   const where = {};
   const order = [];
+  const now = new Date();
+  const labelPresets = await getLabelPresets();
+  const { features } = await SettingsService.getFeatures();
+  const brandsVisible = isBrandVisible(features, { adminView: isAdmin });
   const include = [
     getGlobalImageInclude(),
     { model: Tag, as: 'tags' },
-    { model: Brand, as: 'brand' },
+    ...(brandsVisible ? [{ model: Brand, as: 'brand' }] : []),
   ];
-  const now = new Date();
-  const labelPresets = await getLabelPresets();
+
+  if (filters.brand && !brandsVisible) {
+    assertBrandFilterAllowed(features, { adminView: isAdmin });
+  }
 
   // Always restrict storefront results to published + enabled products. Admins can filter by state.
   applyProductStorefrontFilters(where, filters, isAdmin);
+  if (typeof filters.hasVariants === 'boolean' || filters.hasVariants === 'true' || filters.hasVariants === 'false') {
+    const hasVariants = filters.hasVariants === true || filters.hasVariants === 'true';
+    where[Op.and] = [...(where[Op.and] || []), Sequelize.literal(`${hasVariants ? '' : 'NOT '}EXISTS (SELECT 1 FROM "product_variants" AS copy_variant WHERE copy_variant.product_id = "Product".id AND copy_variant.deleted_at IS NULL)`)];
+  }
 
   // Filter Logic
   if (typeof filters.search === 'string' && filters.search.length > 0) {
@@ -493,7 +506,7 @@ exports.getProducts = async (filters, page, limit, isAdmin = false) => {
               OR LOWER("search_categories"."slug") LIKE LOWER(${escapedSearchPattern})
             )
         )`),
-        Sequelize.literal(`EXISTS (
+        ...(brandsVisible ? [Sequelize.literal(`EXISTS (
           SELECT 1
           FROM "brands" AS "search_brands"
           WHERE "search_brands"."id" = "Product"."brand_id"
@@ -501,7 +514,7 @@ exports.getProducts = async (filters, page, limit, isAdmin = false) => {
               LOWER("search_brands"."name") LIKE LOWER(${escapedSearchPattern})
               OR LOWER("search_brands"."slug") LIKE LOWER(${escapedSearchPattern})
             )
-        )`),
+        )`)] : []),
         Sequelize.literal(`EXISTS (
           SELECT 1
           FROM "product_tags" AS "search_product_tags"
@@ -541,7 +554,7 @@ exports.getProducts = async (filters, page, limit, isAdmin = false) => {
       Sequelize.literal(`("Product"."quantity" - "Product"."reserved_qty") <= ${maxQty}`),
     ];
   }
-  if (filters.brand) {
+  if (brandsVisible && filters.brand) {
     const isUUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(filters.brand);
     if (isUUID) {
       where.brandId = filters.brand;
@@ -771,11 +784,14 @@ exports.getProducts = async (filters, page, limit, isAdmin = false) => {
     });
   }
 
-  const { features } = await SettingsService.getFeatures();
-  const serializedRows = rows.map((row) => serializeProductPricing(row, { adminView: isAdmin, features }, labelPresets));
+  const serializedRows = rows.map((row) => {
+    const serialized = serializeProductPricing(row, { adminView: isAdmin, features }, labelPresets);
+    return brandsVisible ? serialized : stripBrandFields(serialized);
+  });
   
   const pagingData = getPagingData(serializedRows, count, page, queryLimit);
-  pagingData.priceRange = priceRange;
+  const shouldHidePrice = !isAdmin && (features.pricing === false || features.showPrice === false);
+  pagingData.priceRange = shouldHidePrice ? null : priceRange;
   if (isAdmin) {
     pagingData.counts = counts;
   }
@@ -783,6 +799,8 @@ exports.getProducts = async (filters, page, limit, isAdmin = false) => {
 };
 
 exports.getProductBySlug = async (slug, { adminView = false } = {}) => {
+  const { features } = await SettingsService.getFeatures();
+  const brandsVisible = isBrandVisible(features, { adminView });
   const where = { slug };
   if (!adminView) {
     where.status = 'published';
@@ -796,7 +814,7 @@ exports.getProductBySlug = async (slug, { adminView = false } = {}) => {
       getAttributeInclude(),
       { model: Category, as: 'categories' },
       { model: Tag, as: 'tags' },
-      { model: Brand, as: 'brand' },
+      ...(brandsVisible ? [{ model: Brand, as: 'brand' }] : []),
       // Only active tabs, sorted for storefront display
       {
         model: ProductTab,
@@ -811,8 +829,8 @@ exports.getProductBySlug = async (slug, { adminView = false } = {}) => {
   });
   if (!product) throw new AppError('NOT_FOUND', 404, 'Product not found');
   const labelPresets = await getLabelPresets();
-  const { features } = await SettingsService.getFeatures();
-  return serializeProductPricing(product, { adminView, features }, labelPresets);
+  const serialized = serializeProductPricing(product, { adminView, features }, labelPresets);
+  return brandsVisible ? serialized : stripBrandFields(serialized);
 };
 
 exports.getProductById = async (id) => {
@@ -841,11 +859,73 @@ exports.getProductById = async (id) => {
   return serializeProductPricing(product, { adminView: true, features }, labelPresets);
 };
 
+const validateShippingReadiness = (data, existingProduct = null, shippingEnabled = true) => {
+  if (!shippingEnabled) return;
+  const status = data.status !== undefined ? data.status : existingProduct?.status;
+  if (status !== 'published') return;
+
+  const requiresShipping = data.requiresShipping !== undefined
+    ? data.requiresShipping
+    : (existingProduct?.requiresShipping !== false);
+  if (requiresShipping === false) return;
+
+  const weightGrams = data.weightGrams !== undefined ? data.weightGrams : existingProduct?.weightGrams;
+  const lengthCm = data.lengthCm !== undefined ? data.lengthCm : existingProduct?.lengthCm;
+  const breadthCm = data.breadthCm !== undefined ? data.breadthCm : existingProduct?.breadthCm;
+  const heightCm = data.heightCm !== undefined ? data.heightCm : existingProduct?.heightCm;
+
+  const missing = [];
+  if (!Number.isFinite(Number(weightGrams)) || Number(weightGrams) <= 0) {
+    missing.push('weight (greater than 0 g)');
+  }
+  if (!Number.isFinite(Number(lengthCm)) || Number(lengthCm) <= 0.5) {
+    missing.push('length (greater than 0.5 cm)');
+  }
+  if (!Number.isFinite(Number(breadthCm)) || Number(breadthCm) <= 0.5) {
+    missing.push('breadth (greater than 0.5 cm)');
+  }
+  if (!Number.isFinite(Number(heightCm)) || Number(heightCm) <= 0.5) {
+    missing.push('height (greater than 0.5 cm)');
+  }
+
+  if (missing.length > 0) {
+    const productName = data.name || existingProduct?.name || 'Product';
+    throw new AppError(
+      'SHIPPING_READINESS_ERROR',
+      400,
+      `Cannot publish "${productName}": physical products requiring shipping must have ${missing.join(', ')} before becoming purchasable.`
+    );
+  }
+};
+
+const validateSellingReadiness = (data, existingProduct = null, pricingEnabled = true) => {
+  if (!pricingEnabled) return;
+  const status = data.status !== undefined ? data.status : existingProduct?.status;
+  if (status !== 'published') return;
+  const price = data.price !== undefined ? data.price : existingProduct?.price;
+  if (price === null || price === undefined || !Number.isFinite(Number(price)) || Number(price) <= 0) {
+    throw new AppError('PRODUCT_NOT_READY', 400, 'Set a positive selling price before publishing this product.');
+  }
+};
+
 exports.createProduct = async (data, auditContext = null) => {
   const transaction = await Product.sequelize.transaction();
-  const labelPresets = await getLabelPresets();
   try {
-    data = normalizeSalePayload(data, null, { labelPresets });
+    const labelPresets = await getLabelPresets();
+    const { features: createFeatures } = await SettingsService.getFeatures();
+    // Catalog mode has no selling price. Accept legacy clients that send zero
+    // as an empty-price placeholder, then store the canonical NULL value.
+    if (!createFeatures.pricing && data.price != null && Number(data.price) === 0) {
+      data.price = null;
+    }
+    data = normalizeSalePayload(data, null, { labelPresets, pricingEnabled: createFeatures.pricing });
+    if (data.type !== 'simple') {
+      if (data.quantity !== undefined) throw new AppError('VALIDATION_ERROR', 400, 'Stock is managed by variants or bundle items for this product type.');
+      if (data.type !== 'variable' && data.variants?.length) throw new AppError('VALIDATION_ERROR', 400, 'Only Variable Products can have variants.');
+      data.quantity = 0;
+    } else if (data.variants?.length) {
+      throw new AppError('VALIDATION_ERROR', 400, 'Only Variable Products can have variants.');
+    }
     const slug = data.slug ? await generateSlug(data.slug, Product, 'slug', { transaction }) : await generateSlug(data.name, Product, 'slug', { transaction });
 
     if (data.description) data.description = sanitizeRichText(data.description);
@@ -856,6 +936,8 @@ exports.createProduct = async (data, auditContext = null) => {
     }
 
     validateProductStock(data);
+    validateSellingReadiness(data, null, createFeatures.pricing);
+    validateShippingReadiness(data, null, createFeatures.shipping);
     if (data.images) await validateProductImages(data.images);
 
     const product = await Product.create({ ...data, slug }, { transaction });
@@ -908,13 +990,28 @@ exports.createProduct = async (data, auditContext = null) => {
 };
 
 exports.updateProduct = async (id, data, auditContext = null) => {
-  const product = await Product.findByPk(id);
+  let product = await Product.findByPk(id);
   if (!product) throw new AppError('NOT_FOUND', 404, 'Product not found');
 
   const transaction = await Product.sequelize.transaction();
-  const labelPresets = await getLabelPresets();
   try {
-    data = normalizeSalePayload(data, product, { labelPresets });
+    const labelPresets = await getLabelPresets();
+    const { features: updateFeatures } = await SettingsService.getFeatures();
+    // Match generation/inventory lock order and serialize type changes with generation.
+    await sequelize.query('SELECT pg_advisory_xact_lock(hashtext(:scope), hashtext(:productId))', {
+      replacements: { scope: 'product-variant-generation', productId: id }, transaction,
+    });
+    await ProductVariant.findAll({ where: { productId: id }, order: [['id', 'ASC']], transaction, lock: transaction.LOCK.UPDATE });
+    product = await Product.findByPk(id, { transaction, lock: transaction.LOCK.UPDATE });
+    if (!product) throw new AppError('NOT_FOUND', 404, 'Product not found');
+
+    // Preserve omitted prices during edits. Only normalize an explicitly
+    // supplied zero while pricing is disabled; the products constraint allows
+    // NULL but rejects zero.
+    if (!updateFeatures.pricing && data.price != null && Number(data.price) === 0) {
+      data.price = null;
+    }
+    data = normalizeSalePayload(data, product, { labelPresets, pricingEnabled: updateFeatures.pricing });
     
     if (data.slug && data.slug !== product.slug) {
       data.slug = await generateSlug(data.slug, Product, 'slug', { transaction });
@@ -932,16 +1029,19 @@ exports.updateProduct = async (id, data, auditContext = null) => {
     }
 
     const variantsExist = await productHasVariants(id, transaction);
-    const willHaveVariants = Array.isArray(data.variants)
-      ? data.variants.length > 0
-      : variantsExist;
-
-    if (willHaveVariants && data.quantity !== undefined) {
-      logger.warn(`Attempted to set quantity directly on variant product ${id}. Ignoring — stock is managed by variants.`);
-      delete data.quantity;
+    const hasComboItems = await ProductComboItem.count({ where: { comboProductId: id }, transaction }) > 0;
+    const { nextType, resetInventory } = validateProductTypeChange(product, data, { hasVariants: variantsExist, hasComboItems });
+    if (variantsExist && data.variants !== undefined) throw new AppError('VALIDATION_ERROR', 400, 'Use the variant editor to update existing combinations. Product updates cannot replace variant history.');
+    delete data.confirmInventoryReset;
+    if (nextType !== 'simple' && data.quantity !== undefined) {
+      throw new AppError('VALIDATION_ERROR', 400, 'Stock is managed by variants or bundle items. Edit their stock instead.');
     }
-
+    if (resetInventory) {
+      await inventoryService.adjust({ productId: id, newQuantity: 0, reason: `Change inventory type from simple to ${nextType}`, createdBy: auditContext?.userId || null, transaction });
+    }
     validateProductStock(data, product);
+    validateSellingReadiness(data, product, updateFeatures.pricing);
+    validateShippingReadiness(data, product, updateFeatures.shipping);
     if (data.images) await validateProductImages(data.images);
 
     // Log inventory ADJUSTMENT if quantity is being manually changed
@@ -971,7 +1071,7 @@ exports.updateProduct = async (id, data, auditContext = null) => {
     if (data.variants) {
       await replaceVariantsWithOptions(id, data.variants, transaction);
       await syncProductVariantStock(id, transaction);
-    } else if (variantsExist) {
+    } else if (variantsExist || nextType === 'variable') {
       await syncProductVariantStock(id, transaction);
     }
 
@@ -1099,9 +1199,14 @@ exports.bulkUpdateProducts = async (ids, data, actingUserId = null, auditContext
       throw new AppError('NOT_FOUND', 404, 'No products found to update');
     }
 
+    const { features: bulkFeatures } = await SettingsService.getFeatures();
+    if (!bulkFeatures.pricing && data.price != null && Number(data.price) === 0) {
+      data.price = null;
+    }
+
     if (touchesPricingOrSale) {
       for (const product of products) {
-        const normalized = normalizeSalePayload(data, product, { labelPresets });
+        const normalized = normalizeSalePayload(data, product, { labelPresets, pricingEnabled: bulkFeatures.pricing });
         for (const key of ['saleLabel', 'salePrice', 'saleStartAt', 'saleEndAt', 'price']) {
           if (key in data) {
             updatePayload[key] = normalized[key];
@@ -1112,6 +1217,13 @@ exports.bulkUpdateProducts = async (ids, data, actingUserId = null, auditContext
           updatePayload.saleEndAt = null;
           updatePayload.saleLabel = null;
         }
+      }
+    }
+
+    if (updatePayload.status === 'published') {
+      for (const product of products) {
+        validateSellingReadiness(updatePayload, product, bulkFeatures.pricing);
+        validateShippingReadiness(updatePayload, product, bulkFeatures.shipping);
       }
     }
 
@@ -1217,6 +1329,8 @@ exports.bulkUpdateSale = async (payload, actingUserId = null, auditContext = nul
 };
 
 exports.getRelatedProducts = async (productId, limit = 6) => {
+  const { features } = await SettingsService.getFeatures();
+  const brandsVisible = isBrandVisible(features);
   const baseQuery = (extraWhere = {}, categoryInclude = null) => ({
     where: {
       id: { [Op.ne]: productId },
@@ -1226,7 +1340,7 @@ exports.getRelatedProducts = async (productId, limit = 6) => {
     },
     include: [
       { model: ProductImage, as: 'images' },
-      { model: Brand, as: 'brand' },
+      ...(brandsVisible ? [{ model: Brand, as: 'brand' }] : []),
       ...(categoryInclude ? [categoryInclude] : [{ model: Category, as: 'categories' }]),
       { model: Tag, as: 'tags' },
     ],
@@ -1261,10 +1375,13 @@ exports.getRelatedProducts = async (productId, limit = 6) => {
   }
 
   const labelPresets = await getLabelPresets();
-  const { features } = await SettingsService.getFeatures();
-  return rows.map((p) => serializeProductPricing(p, { adminView: false, features }, labelPresets));
+  return rows.map((p) => {
+    const serialized = serializeProductPricing(p, { adminView: false, features }, labelPresets);
+    return brandsVisible ? serialized : stripBrandFields(serialized);
+  });
 };
 
 exports.buildSqlSaleCondition = buildSqlSaleCondition;
 exports.getSqlEffectivePriceExpr = getSqlEffectivePriceExpr;
 exports.buildSqlSaleStatusCondition = buildSqlSaleStatusCondition;
+exports.validateShippingReadiness = validateShippingReadiness;

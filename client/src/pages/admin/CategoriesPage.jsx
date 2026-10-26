@@ -30,9 +30,11 @@ import { useAuth } from '../../hooks/useAuth';
 import { PERMISSIONS } from '../../utils/permissions';
 import { getApiErrorMessage } from '../../utils/apiErrors';
 import MediaPicker from '../../components/common/MediaPicker';
-import { getMediaUrl } from '../../utils/media';
-import { useSettings } from '../../hooks/useSettings';
+import { getMediaUrl, onImageError, PLACEHOLDER_CATEGORY } from '../../utils/media';
+import { useSettings, useFeature } from '../../hooks/useSettings';
 import CategoryAttributesDialog from '../../components/admin/CategoryAttributesDialog';
+import CategoryIcon from '../../components/common/CategoryIcon';
+import CategoryIconPicker from '../../components/admin/CategoryIconPicker';
 
 // --- Helpers ---
 const flattenTree = (nodes, result = [], level = 0, path = []) => {
@@ -119,7 +121,7 @@ const CategoryTreeItem = ({ node, level, expandedIds, toggleNode, selectedId, on
                     )}
                 </ListItemIcon>
                 <ListItemIcon sx={{ minWidth: 32 }}>
-                    {isSelected || isExpanded ? <FolderOpenIcon color={isSelected ? "primary" : "action"} fontSize="small" /> : <FolderIcon color="action" fontSize="small" />}
+                    {node.icon ? <CategoryIcon value={node.icon} size={20} color={isSelected ? 'primary.main' : 'text.secondary'} /> : (isSelected || isExpanded ? <FolderOpenIcon color={isSelected ? "primary" : "action"} fontSize="small" /> : <FolderIcon color="action" fontSize="small" />)}
                 </ListItemIcon>
                 <ListItemText 
                     primary={node.name} 
@@ -232,18 +234,17 @@ const CategoryDetailsPanel = ({ categoryId, categories, onEdit, onDelete, onAddC
 
             <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', mb: 4, flexWrap: 'wrap', gap: 2 }}>
                 <Box sx={{ display: 'flex', gap: 3, alignItems: 'center' }}>
-                    {selectedCatNode.image ? (
-                        <Box sx={{ width: 80, height: 80, borderRadius: 2, overflow: 'hidden', flexShrink: 0, border: '1px solid', borderColor: 'divider' }}>
-                            <img src={getMediaUrl(selectedCatNode.image)} alt={selectedCatNode.name} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
-                        </Box>
-                    ) : (
-                        <Box sx={{ width: 80, height: 80, borderRadius: 2, overflow: 'hidden', flexShrink: 0, border: '1px solid', borderColor: 'divider', display: 'flex', alignItems: 'center', justifyContent: 'center', bgcolor: 'background.default' }}>
-                            <FolderIcon sx={{ fontSize: 36, color: 'text.secondary', opacity: 0.5 }} />
-                        </Box>
-                    )}
+                    <Box sx={{ width: 80, height: 80, borderRadius: 2, overflow: 'hidden', flexShrink: 0, border: '1px solid', borderColor: 'divider' }}>
+                        <img
+                            src={selectedCatNode.image ? getMediaUrl(selectedCatNode.image) : PLACEHOLDER_CATEGORY}
+                            onError={onImageError(PLACEHOLDER_CATEGORY)}
+                            alt={selectedCatNode.name}
+                            style={{ width: '100%', height: '100%', objectFit: 'cover' }}
+                        />
+                    </Box>
                     {selectedCatNode.icon && (
-                        <Box sx={{ width: 40, height: 40, borderRadius: 1.5, overflow: 'hidden', flexShrink: 0, border: '1px solid', borderColor: 'divider', ml: -1.5, mt: 4, zIndex: 1, bgcolor: 'background.paper' }}>
-                            <img src={getMediaUrl(selectedCatNode.icon)} alt={`${selectedCatNode.name} icon`} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                        <Box sx={{ width: 40, height: 40, borderRadius: 1.5, display: 'grid', placeItems: 'center', flexShrink: 0, border: '1px solid', borderColor: 'divider', ml: -1.5, mt: 4, zIndex: 1, bgcolor: 'background.paper' }}>
+                            <CategoryIcon value={selectedCatNode.icon} size={26} color="primary.main" />
                         </Box>
                     )}
                     <Box>
@@ -296,15 +297,14 @@ const CategoryDetailsPanel = ({ categoryId, categories, onEdit, onDelete, onAddC
                                     <TableRow key={child.id} hover>
                                         <TableCell>
                                             <Box sx={{ display: 'flex', alignItems: 'center', gap: 2, cursor: 'pointer' }} onClick={() => onNavigateNode(child.id)}>
-                                                {child.image ? (
-                                                    <Box sx={{ width: 40, height: 40, borderRadius: 1.5, overflow: 'hidden' }}>
-                                                        <img src={getMediaUrl(child.image)} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
-                                                    </Box>
-                                                ) : (
-                                                    <Box sx={{ width: 40, height: 40, borderRadius: 1.5, display: 'flex', alignItems: 'center', justifyContent: 'center', bgcolor: 'action.hover' }}>
-                                                        <FolderIcon color="action" />
-                                                    </Box>
-                                                )}
+                                                <Box sx={{ width: 40, height: 40, borderRadius: 1.5, overflow: 'hidden', flexShrink: 0, border: '1px solid', borderColor: 'divider' }}>
+                                                    <img
+                                                        src={child.image ? getMediaUrl(child.image) : PLACEHOLDER_CATEGORY}
+                                                        onError={onImageError(PLACEHOLDER_CATEGORY)}
+                                                        alt=""
+                                                        style={{ width: '100%', height: '100%', objectFit: 'cover' }}
+                                                    />
+                                                </Box>
                                                 <Typography variant="body1" fontWeight={500} color="primary.main" sx={{ '&:hover': { textDecoration: 'underline' } }}>{child.name}</Typography>
                                             </Box>
                                         </TableCell>
@@ -368,15 +368,14 @@ const CategoryFlatView = ({ flatCategories, onEdit, onDelete, onAddChild, canMan
                             <TableRow key={cat.id} hover>
                                 <TableCell>
                                     <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
-                                        {cat.image ? (
-                                            <Box sx={{ width: 40, height: 40, borderRadius: 1.5, overflow: 'hidden' }}>
-                                                <img src={getMediaUrl(cat.image)} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
-                                            </Box>
-                                        ) : (
-                                            <Box sx={{ width: 40, height: 40, borderRadius: 1.5, display: 'flex', alignItems: 'center', justifyContent: 'center', bgcolor: 'action.hover' }}>
-                                                <FolderIcon color="action" />
-                                            </Box>
-                                        )}
+                                        <Box sx={{ width: 40, height: 40, borderRadius: 1.5, overflow: 'hidden', flexShrink: 0, border: '1px solid', borderColor: 'divider' }}>
+                                            <img
+                                                src={cat.image ? getMediaUrl(cat.image) : PLACEHOLDER_CATEGORY}
+                                                onError={onImageError(PLACEHOLDER_CATEGORY)}
+                                                alt=""
+                                                style={{ width: '100%', height: '100%', objectFit: 'cover' }}
+                                            />
+                                        </Box>
                                         <Box>
                                             <Typography variant="body2" fontWeight={600}>{cat.name}</Typography>
                                             {cat.children && cat.children.length > 0 && (
@@ -452,12 +451,14 @@ const CategoriesPage = () => {
     const [formErrors, setFormErrors] = useState({});
     const [mediaPickerOpen, setMediaPickerOpen] = useState(false);
     const [iconPickerOpen, setIconPickerOpen] = useState(false);
+    const [iconMediaPickerOpen, setIconMediaPickerOpen] = useState(false);
     const [ogPickerOpen, setOgPickerOpen] = useState(false);
     const [bannerPickerOpen, setBannerPickerOpen] = useState(false);
 
     const { notify, confirm } = useNotification();
     const { hasPermission } = useAuth();
     const { settings } = useSettings();
+    const seoEnabled = useFeature('seo');
     const canManageCategories = hasPermission(PERMISSIONS.CATEGORIES_MANAGE);
     const canManageAttributes = hasPermission(PERMISSIONS.ATTRIBUTES_MANAGE);
     const canManageCategoryAttributes = canManageCategories && canManageAttributes;
@@ -885,44 +886,40 @@ const CategoriesPage = () => {
                     </Box>
             
             <Box>
-                <Typography variant="subtitle2" sx={{ mb: 1.5, fontWeight: 600 }}>Category Icon</Typography>
-                {formData.icon ? (
-                    <Box sx={{ position: 'relative', width: 80, height: 80, borderRadius: 2, overflow: 'hidden', border: '1px solid', borderColor: 'divider' }}>
-                        <CardMedia
-                            component="img"
-                            image={getMediaUrl(formData.icon)}
-                            sx={{ width: '100%', height: '100%', objectFit: 'cover' }}
-                        />
-                        <IconButton 
-                            size="small" 
-                            onClick={() => setFormData(f => ({ ...f, icon: '' }))}
-                            sx={{ position: 'absolute', top: 4, right: 4, bgcolor: 'background.paper', p: 0.5 }}
-                        >
-                            <CloseIcon fontSize="inherit" />
-                        </IconButton>
-                    </Box>
-                ) : (
-                    <Box>
-                        <Button
-                            variant="outlined"
-                            size="small"
-                            onClick={() => setIconPickerOpen(true)}
-                        >
-                            Select Category Icon
+                <Typography variant="subtitle2" sx={{ mb: 0.75, fontWeight: 600 }}>Category Icon</Typography>
+                <Typography variant="body2" color="text.secondary" sx={{ mb: 1.5 }}>
+                    Choose a built-in icon or use an image from your media library.
+                </Typography>
+                <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5, flexWrap: 'wrap' }}>
+                    <Paper variant="outlined" sx={{ width: 64, height: 64, display: 'grid', placeItems: 'center', borderRadius: 2, bgcolor: 'background.default' }}>
+                        {formData.icon ? <CategoryIcon value={formData.icon} size={34} color="primary.main" /> : <CategoryIcon value="mui:category" size={30} />}
+                    </Paper>
+                    <Button variant="outlined" onClick={() => setIconPickerOpen(true)}>
+                        {formData.icon ? 'Change icon' : 'Choose icon'}
+                    </Button>
+                    {formData.icon && (
+                        <Button color="inherit" onClick={() => setFormData((f) => ({ ...f, icon: '' }))}>
+                            Remove icon
                         </Button>
-                        <MediaPicker
-                            open={iconPickerOpen}
-                            onClose={() => setIconPickerOpen(false)}
-                            onSelect={(selected) => {
-                                const media = Array.isArray(selected) ? selected[0] : selected;
-                                if (media?.url) setFormData(f => ({ ...f, icon: media.url }));
-                                setIconPickerOpen(false);
-                            }}
-                            multiple={false}
-                            title="Select Category Icon"
-                        />
-                    </Box>
-                )}
+                    )}
+                </Box>
+                <CategoryIconPicker
+                    open={iconPickerOpen}
+                    onClose={() => setIconPickerOpen(false)}
+                    onSelect={(icon) => setFormData((f) => ({ ...f, icon }))}
+                    onBrowseMedia={() => setIconMediaPickerOpen(true)}
+                />
+                <MediaPicker
+                    open={iconMediaPickerOpen}
+                    onClose={() => setIconMediaPickerOpen(false)}
+                    onSelect={(selected) => {
+                        const media = Array.isArray(selected) ? selected[0] : selected;
+                        if (media?.url) setFormData((f) => ({ ...f, icon: media.url }));
+                        setIconMediaPickerOpen(false);
+                    }}
+                    multiple={false}
+                    title="Choose Category Icon Image"
+                />
             </Box>
 
                     <TextField
@@ -1030,7 +1027,7 @@ const CategoriesPage = () => {
                         </Stack>
                     </Box>
 
-                    {settings?.features?.seo !== false && (
+                    {seoEnabled && (
                         <>
                             <Divider sx={{ my: 1 }} />
                             <Box>
@@ -1118,7 +1115,7 @@ const CategoriesPage = () => {
                 </DialogContent>
                 <Divider />
                 <DialogActions sx={{ px: 3, py: 2 }}>
-                    <Button onClick={handleCloseDialog} disabled={saving} color="inherit">
+                    <Button onClick={handleCloseDialog} disabled={saving} color="error">
                         Cancel
                     </Button>
                     <Button variant="contained" onClick={handleSaveDialog} disabled={saving || !canManageCategories}>

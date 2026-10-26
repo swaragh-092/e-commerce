@@ -18,6 +18,7 @@ const SettingsService = require('../settings/settings.service');
 const SearchRepository = require('./search.repository');
 const { events, PRODUCT_EVENTS } = require('../../utils/events');
 const { normalizeSearchQuery } = require('./search.utils');
+const { stripBrandFields } = require('../../utils/brandVisibility');
 
 // ── Search response cache ────────────────────────────────────────────────
 // Follows the same 60s TTL pattern used by saleLabelCache and featureCache.
@@ -28,8 +29,24 @@ const CACHE_TTL_MS = 60_000;
 const MAX_CACHE_ENTRIES = 200;
 const _cache = new Map();
 
-const buildCacheKey = (query, page, limit) =>
-  `${normalizeSearchQuery(query).toLowerCase()}:${page}:${limit}`;
+const buildCacheKey = (query, page, limit, brandsVisible = true) =>
+  `${normalizeSearchQuery(query).toLowerCase()}:${page}:${limit}:b${brandsVisible ? 1 : 0}`;
+
+/**
+ * Redacts brand identity from search payloads when the brands feature is OFF.
+ * Cached payloads are stored without brand data, and the cache key includes the
+ * brands flag so toggling the feature never serves stale brand details.
+ */
+const redactBrands = (payload, brandsVisible) => {
+  if (brandsVisible || !payload) return payload;
+  return {
+    ...payload,
+    products: Array.isArray(payload.products?.data)
+      ? { ...payload.products, data: payload.products.data.map(stripBrandFields) }
+      : payload.products,
+    brands: [],
+  };
+};
 
 const cacheGet = (key) => {
   const entry = _cache.get(key);
@@ -84,24 +101,25 @@ events.on(PRODUCT_EVENTS.BULK_DELETED, invalidateCache);
  */
 const search = async (query, page = 1, limit = 20) => {
   const normalizedQuery = normalizeSearchQuery(query);
-  const cacheKey = buildCacheKey(normalizedQuery, page, limit);
+  const { features } = await SettingsService.getFeatures();
+  const brandsVisible = features.brands !== false;
+  const cacheKey = buildCacheKey(normalizedQuery, page, limit, brandsVisible);
 
   // Serve from cache if available (hot path)
   const cached = cacheGet(cacheKey);
   if (cached) {
-    return { ...cached, fromCache: true };
+    return { ...redactBrands(cached, brandsVisible), fromCache: true };
   }
 
   const { limit: queryLimit, offset } = getPagination(page, limit);
 
   // Run product, brand, and category searches in parallel
-  const [productResults, brands, categories, labelPresets, { features }] =
+  const [productResults, brands, categories, labelPresets] =
     await Promise.all([
-      SearchRepository.searchProducts(normalizedQuery, queryLimit, offset),
-      SearchRepository.searchBrands(normalizedQuery, 5),
+      SearchRepository.searchProducts(normalizedQuery, queryLimit, offset, { includeBrands: brandsVisible }),
+      brandsVisible ? SearchRepository.searchBrands(normalizedQuery, 5) : [],
       SearchRepository.searchCategories(normalizedQuery, 5),
       getSaleLabels().catch(() => []),
-      SettingsService.getFeatures(),
     ]);
 
   // Apply pricing serialization so sale prices and labels are consistent
@@ -115,15 +133,17 @@ const search = async (query, page = 1, limit = 20) => {
   const isEmpty =
     productResults.count === 0 && brands.length === 0 && categories.length === 0;
 
-  const suggestion = isEmpty ? await SearchRepository.suggestCorrection(normalizedQuery) : null;
+  const suggestion = isEmpty
+    ? await SearchRepository.suggestCorrection(normalizedQuery, { includeBrands: brandsVisible })
+    : null;
 
-  const result = {
+  const result = redactBrands({
     products: productsPaged,
     brands,
     categories,
     ...(suggestion && { suggestion }),
     fromCache: false,
-  };
+  }, brandsVisible);
 
   // Cache the response (but not zero-result typo queries — they're unique)
   if (!isEmpty || suggestion) {
