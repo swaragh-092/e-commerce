@@ -171,6 +171,7 @@ const AdminLayout = () => {
 
   const searchInputRef = React.useRef(null);
   const hoverCloseTimerRef = React.useRef(null);
+  const dismissedGroupRef = React.useRef(null);
 
   const { logout, user, hasAnyPermission, hasPermission, hasRole } = useAuth();
   const location = useLocation();
@@ -197,7 +198,7 @@ const AdminLayout = () => {
   };
 
   const openCollapsedGroup = (title, anchor) => {
-    if (!navCollapsed || isMobile) return;
+    if (!navCollapsed || isMobile || dismissedGroupRef.current?.title === title) return;
     window.clearTimeout(hoverCloseTimerRef.current);
     setHoveredGroup({ title, anchor });
   };
@@ -211,12 +212,27 @@ const AdminLayout = () => {
     window.clearTimeout(hoverCloseTimerRef.current);
   };
 
-  const closeCollapsedGroup = () => {
+  const closeCollapsedGroup = (suppressHoverReopen = false) => {
     window.clearTimeout(hoverCloseTimerRef.current);
+    if (suppressHoverReopen && hoveredGroup) {
+      dismissedGroupRef.current = hoveredGroup;
+    }
     setHoveredGroup(null);
   };
 
   React.useEffect(() => () => window.clearTimeout(hoverCloseTimerRef.current), []);
+
+  React.useEffect(() => {
+    const clearDismissedGroupAfterPointerLeaves = (event) => {
+      const dismissedGroup = dismissedGroupRef.current;
+      if (dismissedGroup && !dismissedGroup.anchor?.contains(event.target)) {
+        dismissedGroupRef.current = null;
+      }
+    };
+
+    document.addEventListener('pointermove', clearDismissedGroupAfterPointerLeaves);
+    return () => document.removeEventListener('pointermove', clearDismissedGroupAfterPointerLeaves);
+  }, []);
 
   React.useEffect(() => {
     window.clearTimeout(hoverCloseTimerRef.current);
@@ -362,7 +378,7 @@ const AdminLayout = () => {
             selected={active}
             onClick={() => {
               if (isMobile) setMobileOpen(false);
-              else if (navCollapsed) closeCollapsedGroup();
+              else if (navCollapsed) closeCollapsedGroup(true);
             }}
             sx={{
               borderRadius: isNested ? '9px' : '12px',
@@ -463,7 +479,10 @@ const AdminLayout = () => {
                 }}
                 onMouseEnter={(event) => openCollapsedGroup(section.title, event.currentTarget)}
                 onMouseLeave={scheduleCollapsedGroupClose}
-                onFocus={(event) => openCollapsedGroup(section.title, event.currentTarget)}
+                onFocus={(event) => {
+                  dismissedGroupRef.current = null;
+                  openCollapsedGroup(section.title, event.currentTarget);
+                }}
                 sx={{
                   mx: 1,
                   borderRadius: 2,
