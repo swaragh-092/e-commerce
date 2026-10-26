@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
-import { useParams, useNavigate, Link } from 'react-router-dom';
+import { useParams, useNavigate, useLocation, Link } from 'react-router-dom';
 import {
   Box,
   Typography,
@@ -200,6 +200,8 @@ const getAttributeRowValue = (row) => (
 const ProductEditPage = () => {
   const { id } = useParams();
   const navigate = useNavigate();
+  const location = useLocation();
+  const returnTo = location.state?.returnTo || '/admin/products';
   const { notify, confirm } = useNotification();
   const { settings } = useSettings();
   const { currency, symbol, formatPrice } = useCurrency();
@@ -1365,7 +1367,7 @@ const ProductEditPage = () => {
         </Grid>
 
         <Box sx={{ mt: 4, display: 'flex', justifyContent: 'flex-end', gap: 2 }}>
-          <Button onClick={() => navigate('/admin/products')} disabled={saving}>
+          <Button onClick={() => navigate(returnTo)} disabled={saving}>
             Cancel
           </Button>
           <Button variant="contained" type="submit" size="large" disabled={saving || !canSaveProduct}>

@@ -4,7 +4,7 @@ import {
   FormControl, InputLabel, Select, MenuItem, Stack, Tooltip,
   Avatar, Dialog, DialogTitle, DialogContent, DialogActions,
   DialogContentText, InputAdornment, Paper, FormHelperText,
-  CircularProgress,
+  CircularProgress, useMediaQuery,
 } from '@mui/material';
 import { DataGrid } from '@mui/x-data-grid';
 import {
@@ -14,7 +14,7 @@ import {
   Inventory as InventoryIcon, History as HistoryIcon,
   LocalOffer as LocalOfferIcon,
 } from '@mui/icons-material';
-import { Link, useNavigate, useSearchParams } from 'react-router-dom';
+import { Link, useLocation, useNavigate, useSearchParams } from 'react-router-dom';
 import { getProducts, getProductById, deleteProduct, updateProduct, bulkUpdateSale, bulkDeleteProducts, bulkUpdateProducts, getStockHistory } from '../../services/productService';
 import attributeService from '../../services/attributeService';
 import { getCategoryTree } from '../../services/categoryService';
@@ -106,7 +106,12 @@ const ClickableSummaryCard = ({ label, value, tone = 'default', onClick, active 
 
 const ProductsManagePage = () => {
   const navigate = useNavigate();
-  const [searchParams] = useSearchParams();
+  const location = useLocation();
+  const [searchParams, setSearchParams] = useSearchParams();
+  const returnTo = `${location.pathname}${location.search}`;
+  const isCompactScreen = useMediaQuery('(max-width: 1440px)');
+  const isTabletScreen = useMediaQuery('(max-width: 1024px)');
+  const isSmallScreen = useMediaQuery((theme) => theme.breakpoints.down('sm'));
   const { symbol, formatPrice } = useCurrency();
   const { settings } = useSettings();
   const { notify } = useNotification();
@@ -129,8 +134,8 @@ const ProductsManagePage = () => {
   const [paginationModel, setPaginationModel] = useState({ page: 0, pageSize: 20 });
 
   // Filters – initialise from URL query params so dashboard cards can pre-apply filters
-  const [search, setSearch] = useState('');
-  const [searchInput, setSearchInput] = useState('');
+  const [search, setSearch] = useState(() => searchParams.get('search') || '');
+  const [searchInput, setSearchInput] = useState(() => searchParams.get('search') || '');
   const [status, setStatus] = useState(() => searchParams.get('status') || '');
   const [saleFilter, setSaleFilter] = useState('');
   const [categoryFilter, setCategoryFilter] = useState('');
@@ -460,9 +465,16 @@ const ProductsManagePage = () => {
     const t = setTimeout(() => {
       setPaginationModel((prev) => ({ ...prev, page: 0 }));
       setSearch(searchInput);
+      const nextParams = new URLSearchParams(searchParams);
+      const trimmedSearch = searchInput.trim();
+      if (trimmedSearch) nextParams.set('search', trimmedSearch);
+      else nextParams.delete('search');
+      if (nextParams.toString() !== searchParams.toString()) {
+        setSearchParams(nextParams, { replace: true });
+      }
     }, 400);
     return () => clearTimeout(t);
-  }, [searchInput]);
+  }, [searchInput, searchParams, setSearchParams]);
 
   const handleStatusChange = (val) => {
     setStatus(val);
@@ -667,7 +679,7 @@ const ProductsManagePage = () => {
       field: 'name',
       headerName: 'Product',
       flex: 1,
-      minWidth: 200,
+      minWidth: isSmallScreen ? 112 : isTabletScreen ? 180 : 200,
       sortable: true,
       renderCell: ({ row }) => (
         <Box sx={{ py: 1, overflow: 'hidden' }}>
@@ -826,7 +838,7 @@ const ProductsManagePage = () => {
           )}
           {canUpdateProducts && (
             <Tooltip title="Edit product">
-              <IconButton size="small" onClick={() => navigate(`/admin/products/${row.id}/edit`)}>
+              <IconButton size="small" onClick={() => navigate(`/admin/products/${row.id}/edit`, { state: { returnTo } })}>
                 <EditIcon fontSize="small" />
               </IconButton>
             </Tooltip>
@@ -1134,17 +1146,24 @@ const ProductsManagePage = () => {
       )}
 
       {/* ── Data Grid ── */}
-      <Box sx={{ 
+      <Box sx={{
         bgcolor: 'background.paper', 
         borderRadius: 2, 
         border: '1px solid', 
         borderColor: 'divider',
-        overflowX: 'auto',
-        '& .MuiDataGrid-root': { minWidth: 700 },
+        width: '100%',
+        minWidth: 0,
       }}>
         <DataGrid
           rows={rows}
           columns={columns}
+          columnVisibilityModel={{
+            images: !isCompactScreen,
+            saleMeta: pricingEnabled && !isCompactScreen,
+            quantity: cartEnabled && !isCompactScreen,
+            price: pricingEnabled && !isTabletScreen,
+            storefrontState: !isTabletScreen,
+          }}
           rowCount={total}
           loading={loading}
           paginationMode="server"
@@ -1157,7 +1176,7 @@ const ProductsManagePage = () => {
             setSortModel(m); 
             setPaginationModel((p) => ({ ...p, page: 0 })); 
           }}
-          checkboxSelection={canBulkModify}
+          checkboxSelection={canBulkModify && !isSmallScreen}
           rowSelectionModel={selectedIds}
           onRowSelectionModelChange={(ids) => setSelectedIds(ids)}
           disableRowSelectionOnClick
