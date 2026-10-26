@@ -218,6 +218,11 @@ const AdminLayout = () => {
 
   React.useEffect(() => () => window.clearTimeout(hoverCloseTimerRef.current), []);
 
+  React.useEffect(() => {
+    window.clearTimeout(hoverCloseTimerRef.current);
+    setHoveredGroup(null);
+  }, [location.pathname, location.search]);
+
   const toggleFavorite = (e, path) => {
     e.preventDefault();
     e.stopPropagation();
