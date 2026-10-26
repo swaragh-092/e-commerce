@@ -97,6 +97,12 @@ const EmailPreferencesTab = () => {
     const { features } = useSettings();
     const newsletterEnabled = features?.newsletter === true;
     const [subscribed, setSubscribed] = useState(false);
+    const [pending, setPending] = useState(false);
+    // True when the subscription is pending but no confirm email was queued
+    // for the CURRENT session (server reports confirmationQueued). Suppresses
+    // the "check your inbox" notice so it cannot contradict reality after a
+    // reload following a failed send.
+    const [confirmEmailFailed, setConfirmEmailFailed] = useState(false);
     const [loading, setLoading] = useState(true);
     const [saving, setSaving] = useState(false);
     const [status, setStatus] = useState(null);
@@ -104,7 +110,12 @@ const EmailPreferencesTab = () => {
     useEffect(() => {
         let active = true;
         newsletterService.getMyStatus()
-            .then((result) => { if (active) setSubscribed(result.subscribed); })
+            .then((result) => {
+                if (!active) return;
+                setSubscribed(result.subscribed);
+                setPending(Boolean(result.pending));
+                setConfirmEmailFailed(Boolean(result.pending) && result?.confirmationQueued === false);
+            })
             .catch((error) => { if (active) setStatus({ type: 'error', message: getApiErrorMessage(error, 'Could not load email preferences.') }); })
             .finally(() => { if (active) setLoading(false); });
         return () => { active = false; };
@@ -114,14 +125,32 @@ const EmailPreferencesTab = () => {
         const nextValue = event.target.checked;
         if (nextValue && !newsletterEnabled) return;
         const previousValue = subscribed;
+        const previousPending = pending;
+        const previousConfirmEmailFailed = confirmEmailFailed;
         setSubscribed(nextValue);
         setSaving(true);
         setStatus(null);
         try {
-            await newsletterService.updateMyStatus(nextValue);
-            setStatus({ type: 'success', message: nextValue ? 'You are subscribed to store updates.' : 'You have unsubscribed from store updates.' });
+            const result = await newsletterService.updateMyStatus(nextValue);
+            if (nextValue && result?.pending) {
+                setSubscribed(false);
+                setPending(true);
+                if (result?.confirmationQueued === false) {
+                    setConfirmEmailFailed(true);
+                    setStatus({ type: 'error', message: 'Subscription saved, but the confirmation email could not be sent. Please try again in a few minutes.' });
+                } else {
+                    setConfirmEmailFailed(false);
+                    setStatus({ type: 'info', message: 'Almost done — check your email to confirm your subscription.' });
+                }
+            } else {
+                setPending(false);
+                setConfirmEmailFailed(false);
+                setStatus({ type: 'success', message: nextValue ? 'You are subscribed to store updates.' : 'You have unsubscribed from store updates.' });
+            }
         } catch (error) {
             setSubscribed(previousValue);
+            setPending(previousPending);
+            setConfirmEmailFailed(previousConfirmEmailFailed);
             setStatus({ type: 'error', message: getApiErrorMessage(error, 'Could not save your email preference.') });
         } finally {
             setSaving(false);
@@ -135,6 +164,7 @@ const EmailPreferencesTab = () => {
                 Choose whether you receive promotional emails. Order and account security emails are always sent when needed.
             </Typography>
             {!newsletterEnabled && <Alert severity="info" sx={{ mb: 2 }}>New newsletter subscriptions are paused. You can still unsubscribe.</Alert>}
+            {pending && !subscribed && !confirmEmailFailed && <Alert severity="info" sx={{ mb: 2 }}>Your subscription is awaiting email confirmation. Check your inbox for the confirm link.</Alert>}
             {status && <Alert severity={status.type} sx={{ mb: 2 }}>{status.message}</Alert>}
             <FormControlLabel
                 control={<Switch checked={subscribed} onChange={handleChange} disabled={loading || saving || (!newsletterEnabled && !subscribed)} />}

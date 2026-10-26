@@ -36,7 +36,14 @@ const LoginPage = () => {
   const saveNewsletterChoice = async (user) => {
     if (!newsletterEnabled || !newsletterOptIn || user?.role !== 'customer') return;
     try {
-      await newsletterService.updateMyStatus(true);
+      const result = await newsletterService.updateMyStatus(true);
+      if (result?.pending) {
+        if (result?.confirmationQueued === false) {
+          notify('Subscription saved, but the confirmation email could not be sent. Please try again in a few minutes.', 'error');
+        } else {
+          notify('Almost done — check your email to confirm your newsletter subscription.', 'info');
+        }
+      }
     } catch {
       notify('You are signed in, but your newsletter preference could not be saved. Try again in My Account.', 'error');
     }

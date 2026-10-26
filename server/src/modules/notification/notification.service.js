@@ -2,14 +2,16 @@
 
 const handlebars = require('handlebars');
 const { Op } = require('sequelize');
-const { NotificationTemplate, NotificationLog, NotificationQueue, InventoryAlert } = require('../index');
+const { sequelize, NotificationTemplate, NotificationLog, NotificationQueue, InventoryAlert } = require('../index');
 const { dispatch } = require('./notification.dispatcher');
 const logger = require('../../utils/logger');
 const AppError = require('../../utils/AppError');
 
 const INVENTORY_ALERT_TEMPLATE = 'inventory_alert_digest';
 const INVENTORY_ALERT_RETRY_DELAY_MS = 15 * 60 * 1000;
-const NEWSLETTER_TEMPLATES = new Set(['newsletter_campaign', 'newsletter_confirmation']);
+const NEWSLETTER_TEMPLATES = new Set(['newsletter_campaign', 'newsletter_confirmation', 'newsletter_confirm']);
+const NEWSLETTER_TEMPLATE_LIST = [...NEWSLETTER_TEMPLATES];
+const PROCESSING_LOCK_MS = 10 * 60 * 1000;
 
 /**
  * Build the channel-specific payload from a compiled template.
@@ -17,9 +19,9 @@ const NEWSLETTER_TEMPLATES = new Set(['newsletter_campaign', 'newsletter_confirm
  * Email needs subject + html + text.
  * SMS / WhatsApp need only the body (we use bodyText for those).
  */
-const buildPayload = (channel, to, subject, html, text) => {
+const buildPayload = (channel, to, subject, html, text, headers = null) => {
     switch (channel) {
-        case 'email':    return { to, subject, html, text };
+        case 'email':    return { to, subject, html, text, ...(headers ? { headers } : {}) };
         case 'sms':      return { to, body: text || subject };
         case 'whatsapp': return { to, body: text || subject };
         default:         return { to, body: text || subject };
@@ -277,6 +279,33 @@ const sendImmediate = async (
 };
 
 const processQueued = async ({ limit = 25 } = {}) => {
+    // Recover jobs stuck in 'processing' (e.g. crash between claim and final
+    // update). Without this reaper those emails are silently lost forever.
+    // A crashed job already had attempts incremented at claim time, so the
+    // recovery MUST respect maxAttempts: exhausted jobs are failed outright,
+    // never requeued for another dispatch attempt.
+    const staleLock = { status: 'processing', lockedAt: { [Op.lt]: new Date(Date.now() - PROCESSING_LOCK_MS) } };
+    const [exhaustedFailed] = await NotificationQueue.update(
+        { status: 'failed', lockedAt: null, error: 'Retry limit reached after interrupted processing' },
+        {
+            where: {
+                ...staleLock,
+                [Op.and]: [sequelize.where(sequelize.col('attempts'), Op.gte, sequelize.col('maxAttempts'))],
+            },
+        },
+    );
+    if (exhaustedFailed > 0) logger.warn(`[notification.service] Failed ${exhaustedFailed} stale 'processing' job(s) that exhausted their retry limit`);
+    const [reclaimed] = await NotificationQueue.update(
+        { status: 'queued', lockedAt: null, error: 'Recovered from stale processing lock' },
+        {
+            where: {
+                ...staleLock,
+                [Op.and]: [sequelize.where(sequelize.col('attempts'), Op.lt, sequelize.col('maxAttempts'))],
+            },
+        },
+    );
+    if (reclaimed > 0) logger.warn(`[notification.service] Reclaimed ${reclaimed} stale 'processing' queue job(s)`);
+
     // Pause marketing deliveries while the feature is off, retaining consent
     // records and queued work. Transactional mail continues independently.
     let newsletterEnabled = false;
@@ -285,7 +314,7 @@ const processQueued = async ({ limit = 25 } = {}) => {
     const jobs = await NotificationQueue.findAll({
         where: {
             status: 'queued',
-            ...(!newsletterEnabled ? { templateName: { [Op.notIn]: ['newsletter_campaign', 'newsletter_confirmation'] } } : {}),
+            ...(!newsletterEnabled ? { templateName: { [Op.notIn]: NEWSLETTER_TEMPLATE_LIST } } : {}),
             [Op.or]: [
                 { nextAttemptAt: null },
                 { nextAttemptAt: { [Op.lte]: new Date() } },
@@ -302,6 +331,14 @@ const processQueued = async ({ limit = 25 } = {}) => {
         if (!claimed) continue;
         Object.assign(job, claim);
         processedCount++;
+
+        // Defense in depth: never dispatch beyond the retry budget, even if a
+        // row reached 'queued' with attempts already at/over the cap.
+        if (Number(job.attempts) > Number(job.maxAttempts || 3)) {
+            await job.update({ status: 'failed', lockedAt: null, error: 'Retry limit exceeded' });
+            await createLog({ job, status: 'failed', error: 'Retry limit exceeded' });
+            continue;
+        }
 
         let subject = null;
         try {
@@ -325,13 +362,20 @@ const processQueued = async ({ limit = 25 } = {}) => {
                     continue;
                 }
             }
-            if (['newsletter_campaign', 'newsletter_confirmation'].includes(job.templateName)) {
+            // Consent re-check: campaigns/welcome mail require an active
+            // subscription; confirm mail requires it to still be pending.
+            // The subscribed_at match invalidates jobs queued before a
+            // resubscribe (fresh consent session).
+            let newsletterSubscriber = null;
+            if (NEWSLETTER_TEMPLATES.has(job.templateName)) {
                 const { NewsletterSubscriber } = require('../index');
-                const subscriber = job.variables?.subscriber_id && job.variables?.subscribed_at
-                    ? await NewsletterSubscriber.findOne({ where: { id: job.variables.subscriber_id, email: job.recipientEmail, status: 'active' } }) : null;
-                if (!subscriber || new Date(subscriber.subscribedAt).toISOString() !== job.variables?.subscribed_at) {
-                    await job.update({ status: 'skipped', error: 'Newsletter consent is no longer active for this subscription' });
-                    await createLog({ job, status: 'skipped', error: 'Newsletter consent is no longer active for this subscription' });
+                const requiredStatus = job.templateName === 'newsletter_confirm' ? 'pending' : 'active';
+                newsletterSubscriber = job.variables?.subscriber_id && job.variables?.subscribed_at
+                    ? await NewsletterSubscriber.findOne({ where: { id: job.variables.subscriber_id, email: job.recipientEmail, status: requiredStatus } }) : null;
+                if (!newsletterSubscriber || new Date(newsletterSubscriber.subscribedAt).toISOString() !== job.variables?.subscribed_at) {
+                    const skipError = 'Newsletter consent is no longer active for this subscription';
+                    await job.update({ status: 'skipped', error: skipError });
+                    await createLog({ job, status: 'skipped', error: skipError });
                     continue;
                 }
             }
@@ -345,7 +389,13 @@ const processQueued = async ({ limit = 25 } = {}) => {
             const compiled = await compileTemplate(template, job.variables || {});
             subject = compiled.subject;
             const recipient = job.channel === 'email' ? job.recipientEmail : job.recipientPhone;
-            const payload = buildPayload(job.channel, recipient, compiled.subject, compiled.html, compiled.text);
+            // RFC 8058 one-click unsubscribe headers on marketing mail.
+            let headers = null;
+            if (job.channel === 'email' && ['newsletter_campaign', 'newsletter_confirmation'].includes(job.templateName) && newsletterSubscriber?.unsubscribeToken) {
+                const oneClick = require('../newsletter/newsletterCampaign.service').oneClickUnsubscribeUrl(newsletterSubscriber.unsubscribeToken);
+                headers = { 'List-Unsubscribe': `<${oneClick}>`, 'List-Unsubscribe-Post': 'List-Unsubscribe=One-Click' };
+            }
+            const payload = buildPayload(job.channel, recipient, compiled.subject, compiled.html, compiled.text, headers);
             const dispatched = await dispatch(job.channel, payload);
             const status = dispatched ? 'sent' : 'skipped';
 

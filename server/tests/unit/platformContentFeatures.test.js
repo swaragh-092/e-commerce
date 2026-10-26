@@ -53,9 +53,10 @@ describe('Content platform switches', () => {
     expect(disabled).toHaveBeenCalledWith(expect.objectContaining({ code: 'FEATURE_DISABLED', statusCode: 403 }));
   });
   it('retains unsubscribe and historical staff access when newsletter is off', () => {
-    for (const [path, method] of [['/unsubscribe', 'post'], ['/unsubscribe/:token', 'get'], ['/campaigns/:id/cancel', 'post'], ['/', 'get']]) {
+    for (const [path, method] of [['/unsubscribe', 'post'], ['/unsubscribe/one-click', 'post'], ['/campaigns/:id/cancel', 'post'], ['/', 'get']]) {
       expect(route(newsletter, path, method).stack.some((l) => l.handle.featureGate)).toBe(false);
     }
+    expect(newsletter.stack.find((layer) => layer.route?.path === '/unsubscribe/:token' && layer.route.methods.get)).toBeUndefined();
   });
   it.each([
     [galleries, '/', 'post', 'gallery'], [galleries, '/:id', 'patch', 'gallery'],
@@ -87,9 +88,10 @@ describe('Content platform switches', () => {
   it('pauses queued newsletter mail while continuing the transactional mail queue', async () => {
     vi.spyOn(featureMiddleware, 'getResolvedFeature').mockResolvedValue(false);
     const find = vi.spyOn(db.NotificationQueue, 'findAll').mockResolvedValue([]);
+    vi.spyOn(db.NotificationQueue, 'update').mockResolvedValue([0]);
     await require('../../src/modules/notification/notification.service').processQueued();
     expect(find).toHaveBeenCalledWith(expect.objectContaining({ where: expect.objectContaining({
-      templateName: { [db.Sequelize.Op.notIn]: ['newsletter_campaign', 'newsletter_confirmation'] },
+      templateName: { [db.Sequelize.Op.notIn]: ['newsletter_campaign', 'newsletter_confirmation', 'newsletter_confirm'] },
     }) }));
   });
   it('blocks direct test sends for newsletter templates while the feature is off', async () => {

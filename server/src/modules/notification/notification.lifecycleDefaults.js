@@ -176,6 +176,18 @@ const buildDefaults = (emailWrapper) => {
     ])
   );
 
+  defaults.newsletter_confirm = {
+    subject: 'Confirm your subscription to {{store_name}}',
+    bodyHtml: emailWrapper(`
+    <h2>Confirm Your Subscription 📧</h2>
+    <p>Thanks for signing up for store updates from <strong>{{store_name}}</strong>. One last step:</p>
+    <p>Click the button below to confirm your email address. The link expires with your pending request — you can request a new one any time by signing up again.</p>
+    {{#if confirm_url}}<a href="{{confirm_url}}" class="btn">Confirm Subscription</a>{{/if}}
+    <p style="font-size:13px;color:#888">If you didn't request this, you can safely ignore this email — you won't be subscribed.</p>
+`),
+    bodyText: 'Confirm your subscription to {{store_name}} updates: {{confirm_url}}\n\nIf you didn\'t request this, ignore this email — you won\'t be subscribed.',
+  };
+
   defaults.newsletter_confirmation = {
     subject: 'You are subscribed to {{store_name}} updates',
     bodyHtml: emailWrapper(`
@@ -209,6 +221,7 @@ module.exports = {
   DEFAULTS: {},
   TEMPLATE_VARIABLES: {
     ...Object.fromEntries(Object.entries(variables).map(([name, vars]) => [name, [...vars, ...commonVariables]])),
+    newsletter_confirm: ['confirm_url', 'store_name', ...commonVariables],
     newsletter_confirmation: ['unsubscribe_url', 'store_name', ...commonVariables],
     newsletter_campaign: ['campaign_subject', 'campaign_message', 'unsubscribe_url', 'is_test', 'store_name', ...commonVariables],
   },

@@ -3,6 +3,7 @@ import { Box, Button, Stack, TextField, Typography, Alert } from '@mui/material'
 import api from '../../../services/api';
 import { useComponentStyles, useFeature } from '../../../hooks/useSettings';
 import { getFormControlSize, getFormControlSx } from '../../../utils/componentStyles';
+import { getApiErrorMessage } from '../../../utils/apiErrors';
 import { CanvasEditableText } from './SectionFallback';
 
 const NewsletterSection = ({ section = {}, mode = 'live', onSelectComponent, onInlineFieldChange, onInlineFieldCommit, onInlineBlockFocus }) => {
@@ -11,7 +12,8 @@ const NewsletterSection = ({ section = {}, mode = 'live', onSelectComponent, onI
   const variant = section.variant || 'banner';
   const inline = variant === 'inline-form';
   const [email, setEmail] = useState('');
-  const [status, setStatus] = useState(null); // 'success' | 'error' | 'already'
+  const [status, setStatus] = useState(null); // 'pending' | 'success' | 'already' | 'error'
+  const [errorMessage, setErrorMessage] = useState('');
   const [loading, setLoading] = useState(false);
   const align = section.textAlign || 'left';
   const formControlStyle = useComponentStyles('formControl');
@@ -23,12 +25,22 @@ const NewsletterSection = ({ section = {}, mode = 'live', onSelectComponent, onI
     if (!email.trim() || preview || !newsletterEnabled) return;
     setLoading(true);
     setStatus(null);
+    setErrorMessage('');
     try {
-      const res = await api.post('/newsletter/subscribe', { email: email.trim(), source: 'homepage' });
-      setStatus(res.data?.data?.alreadySubscribed ? 'already' : 'success');
-      if (!res.data?.data?.alreadySubscribed) setEmail('');
-    } catch {
+      const res = await api.post('/newsletter/subscribe', { email: email.trim(), source: 'storefront' });
+      const data = res.data?.data || {};
+      if (data.alreadySubscribed) {
+        setStatus('already');
+      } else if (data.confirmationQueued === false) {
+        setStatus('error');
+        setErrorMessage('Subscription saved, but we could not send the confirmation email. Please try again in a few minutes.');
+      } else {
+        setStatus('pending');
+        setEmail('');
+      }
+    } catch (failure) {
       setStatus('error');
+      setErrorMessage(getApiErrorMessage(failure, 'Something went wrong. Try again.'));
     } finally {
       setLoading(false);
     }
@@ -69,9 +81,9 @@ const NewsletterSection = ({ section = {}, mode = 'live', onSelectComponent, onI
 
   const alerts = (
     <>
-      {status === 'success' && <Alert severity="success" sx={{ mt: 2, maxWidth: 400, mx: inline ? 0 : 'auto' }}>You're subscribed!</Alert>}
+      {status === 'pending' && <Alert severity="info" sx={{ mt: 2, maxWidth: 400, mx: inline ? 0 : 'auto' }}>Almost done — check your email to confirm your subscription.</Alert>}
       {status === 'already' && <Alert severity="info" sx={{ mt: 2, maxWidth: 400, mx: inline ? 0 : 'auto' }}>You're already subscribed.</Alert>}
-      {status === 'error' && <Alert severity="error" sx={{ mt: 2, maxWidth: 400, mx: inline ? 0 : 'auto' }}>Something went wrong. Try again.</Alert>}
+      {status === 'error' && <Alert severity="error" sx={{ mt: 2, maxWidth: 400, mx: inline ? 0 : 'auto' }}>{errorMessage || 'Something went wrong. Try again.'}</Alert>}
     </>
   );
 
