@@ -44,6 +44,7 @@ const StoreLayout = () => {
   const wishlistEnabled = useFeature('wishlist');
   const ordersEnabled   = useFeatureVisible('orders', 'storefront');
   const shippingVisible = useFeatureVisible('shipping', 'storefront');
+  const pagesEnabled = features?.pages === true;
   const [announcementDismissed, setAnnouncementDismissed] = useState(false);
   const [topLinks, setTopLinks] = useState([]);
   const [headerMenu, setHeaderMenu] = useState(null);
@@ -74,7 +75,7 @@ const StoreLayout = () => {
       const [headerMenuResult, mobileMenuResult, pageResult] = await Promise.allSettled([
         MenuService.getPublicMenu('header'),
         MenuService.getPublicMenu('mobile'),
-        PageService.getPublicPages('top'),
+        pagesEnabled ? PageService.getPublicPages('top') : Promise.resolve({ data: [] }),
       ]);
 
       if (headerMenuResult.status === 'fulfilled') {
@@ -96,7 +97,7 @@ const StoreLayout = () => {
       }
     };
     fetchTopLinks();
-  }, []);
+  }, [pagesEnabled]);
 
   const nav          = settings?.nav          || {};
   const showSearch   = nav.showSearch !== false;

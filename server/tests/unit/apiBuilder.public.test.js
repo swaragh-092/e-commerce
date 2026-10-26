@@ -15,6 +15,16 @@ beforeEach(() => {
 afterEach(() => vi.restoreAllMocks());
 
 describe('API Builder public data boundaries', () => {
+  it('does not expose custom pages when Pages is disabled, while preserving staff previews', async () => {
+    vi.spyOn(db.Page, 'findAll').mockResolvedValue([{ id: 'page-1', title: 'About', slug: 'about' }]);
+    const config = { includeMeta: false, blocks: [{ key: 'pages', resource: 'pages' }] };
+    SettingsService.getFeatures.mockResolvedValue({ features: { pages: false } });
+    await expect(apiBuilder.executeConfig(config)).rejects.toMatchObject({ code: 'FEATURE_DISABLED', statusCode: 403 });
+    await expect(apiBuilder.executeConfig(config, { preview: true })).resolves.toMatchObject({ pages: [{ slug: 'about' }] });
+    SettingsService.getFeatures.mockResolvedValue({ features: { pages: true } });
+    await expect(apiBuilder.executeConfig(config)).resolves.toMatchObject({ pages: [{ slug: 'about' }] });
+  });
+
   it('rejects private settings groups', async () => {
     await expect(apiBuilder.executeConfig({
       includeMeta: false,

@@ -5,7 +5,7 @@ import { ThemeProvider, createTheme } from '@mui/material/styles';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import AdminLayout from '../../layouts/AdminLayout';
 
-const state = vi.hoisted(() => ({ mode: 'catalog', features: { reviews: true } }));
+const state = vi.hoisted(() => ({ mode: 'catalog', features: { reviews: true, pages: true } }));
 
 vi.mock('../../hooks/useAuth', () => ({
   useAuth: () => ({
@@ -33,23 +33,26 @@ const view = () => (
 
 beforeEach(() => {
   localStorage.clear();
-  localStorage.setItem('admin_sidebar_favorites', JSON.stringify(['/admin/reviews']));
-  localStorage.setItem('admin_sidebar_group_order', JSON.stringify(['Sales']));
-  state.features = { reviews: true };
+  localStorage.setItem('admin_sidebar_favorites', JSON.stringify(['/admin/reviews', '/admin/pages']));
+  localStorage.setItem('admin_sidebar_group_order', JSON.stringify(['Sales', 'Content']));
+  state.features = { reviews: true, pages: true };
 });
 
-describe('Reviews sidebar feature visibility', () => {
-  it.each(['catalog', 'ecommerce'])('updates pinned Reviews when the feature changes in %s mode', (mode) => {
+describe('Optional sidebar feature visibility', () => {
+  it.each([
+    ['catalog', 'reviews', 'Reviews'], ['ecommerce', 'reviews', 'Reviews'],
+    ['catalog', 'pages', 'Pages'], ['ecommerce', 'pages', 'Pages'],
+  ])('updates pinned links in %s mode when %s changes', (mode, feature, label) => {
     state.mode = mode;
     const { rerender } = render(view());
-    expect(screen.getByRole('link', { name: 'Reviews' })).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: label })).toBeInTheDocument();
 
-    state.features = { reviews: false };
+    state.features = { ...state.features, [feature]: false };
     rerender(view());
-    expect(screen.queryByRole('link', { name: 'Reviews' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('link', { name: label })).not.toBeInTheDocument();
 
-    state.features = { reviews: true };
+    state.features = { ...state.features, [feature]: true };
     rerender(view());
-    expect(screen.getByRole('link', { name: 'Reviews' })).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: label })).toBeInTheDocument();
   });
 });

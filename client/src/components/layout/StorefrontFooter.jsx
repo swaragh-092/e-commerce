@@ -29,6 +29,7 @@ const SOCIAL = [
 
 const StorefrontFooter = () => {
   const { settings, features } = useSettings();
+  const pagesEnabled = features?.pages === true;
   const theme = useTheme();
   const [dynamicLinks, setDynamicLinks] = React.useState([]);
   const [footerMenu, setFooterMenu] = React.useState(null);
@@ -38,7 +39,7 @@ const StorefrontFooter = () => {
     const fetchDynamicLinks = async () => {
       const [menuResult, pageResult] = await Promise.allSettled([
         MenuService.getPublicMenu('footer'),
-        PageService.getPublicPages('bottom'),
+        pagesEnabled ? PageService.getPublicPages('bottom') : Promise.resolve({ data: [] }),
       ]);
 
       if (menuResult.status === 'fulfilled') {
@@ -54,7 +55,7 @@ const StorefrontFooter = () => {
       }
     };
     fetchDynamicLinks();
-  }, []);
+  }, [pagesEnabled]);
 
   const f       = settings?.footer  || {};
   const general = settings?.general || {};

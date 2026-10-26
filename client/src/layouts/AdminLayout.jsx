@@ -103,7 +103,7 @@ const MENU_STRUCTURE = [
     icon: <DescriptionIcon />,
     items: [
       { text: 'Media', path: '/admin/media', icon: <PhotoLibraryIcon />, permission: PERMISSIONS.MEDIA_READ },
-      { text: 'Pages', path: '/admin/pages', icon: <DescriptionIcon />, permission: PERMISSIONS.PAGES_READ },
+      { text: 'Pages', path: '/admin/pages', icon: <DescriptionIcon />, feature: 'pages', permission: PERMISSIONS.PAGES_READ },
       { text: 'Menu Builder', path: '/admin/menus', icon: <AccountTreeIcon />, permission: PERMISSIONS.MENUS_READ },
       { text: 'API Builder', path: '/admin/api-builder', icon: <ApiIcon />, feature: 'apiBuilder', permission: PERMISSIONS.API_BUILDER_READ },
       { text: 'SEO Overrides', path: '/admin/seo-overrides', icon: <PublicIcon />, feature: 'seo', permission: PERMISSIONS.SETTINGS_READ },

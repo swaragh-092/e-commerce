@@ -840,6 +840,7 @@ Each Tier 1 capability has two independent presentation switches on **Admin → 
 | `newsletter` | ✅ | ✅ | Newsletter signup and campaign delivery | OFF hides signup controls and the admin page, blocks new subscriptions, and pauses marketing jobs. Unsubscribe links, own preference reads, and authorized staff history/cancellation remain available. |
 | `gallery` | ✅ | ✅ | Showcase gallery albums | OFF hides gallery navigation/admin UI and denies public album APIs. Stored albums remain available to authorized staff APIs. |
 | `blogs` | ✅ | ✅ | Blog posts and categories | OFF hides blog navigation/admin UI, redirects public blog pages, and denies public blog APIs. Authorized staff retain API access to existing records. |
+| `pages` | ✅ | ✅ | Custom content pages | OFF hides Pages in admin and storefront navigation, redirects custom page routes, and blocks public page APIs and page writes. Stored pages and authorized staff API reads remain available. |
 | `multiCurrency` | ❌ | ❌ | Multiple currency support — **unimplemented** | No behaviour, no switch. Needs per-currency prices, formatting, and exchange-rate handling before it can be exposed. |
 | `socialLogin` | ❌ | ❌ | Social media login — **unimplemented** | No behaviour, no switch. Needs OAuth providers, account linking, and callback routes before it can be exposed. |
 
