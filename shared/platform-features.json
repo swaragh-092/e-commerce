@@ -1,6 +1,15 @@
 {
   "optional": [
     {
+      "key": "customers",
+      "label": "Customers",
+      "description": "Show customer management, customer profiles, and customer dashboard shortcuts in admin.",
+      "defaults": {
+        "ecommerce": true,
+        "catalog": false
+      }
+    },
+    {
       "key": "wishlist",
       "label": "Wishlist",
       "description": "Allow users to save products to a wishlist.",

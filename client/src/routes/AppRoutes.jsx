@@ -243,9 +243,11 @@ const AppRoutes = () => (
             <Route path="orders" element={<OrdersManagePage />} />
             <Route path="orders/:id" element={<OrderDetailPage />} />
           </Route>
-          <Route element={<ProtectedRoute permission={PERMISSIONS.CUSTOMERS_READ} />}>
-            <Route path="customers" element={<CustomersPage />} />
-            <Route path="customers/:id" element={<CustomerDetailPage />} />
+          <Route element={<FeatureRoute feature="customers" surface="admin" redirectTo="/admin" />}>
+            <Route element={<ProtectedRoute permission={PERMISSIONS.CUSTOMERS_READ} />}>
+              <Route path="customers" element={<CustomersPage />} />
+              <Route path="customers/:id" element={<CustomerDetailPage />} />
+            </Route>
           </Route>
           {/* Staff can manage existing campaigns after customer coupon use is disabled. */}
           <Route element={<ProtectedRoute permission={PERMISSIONS.COUPONS_READ} />}>

@@ -92,7 +92,7 @@ const MENU_STRUCTURE = [
     items: [
       { text: 'Orders', path: '/admin/orders', icon: <ShoppingCartIcon />, feature: 'orders', permission: PERMISSIONS.ORDERS_READ },
       { text: 'Enquiries', path: '/admin/enquiries', icon: <HelpOutlineIcon />, permission: PERMISSIONS.ENQUIRIES_READ },
-      { text: 'Customers', path: '/admin/customers', icon: <PeopleIcon />, permission: PERMISSIONS.CUSTOMERS_READ },
+      { text: 'Customers', path: '/admin/customers', icon: <PeopleIcon />, feature: 'customers', permission: PERMISSIONS.CUSTOMERS_READ },
       { text: 'Coupons', path: '/admin/coupons', icon: <LocalOfferIcon />, permission: PERMISSIONS.COUPONS_READ, mode: 'ecommerce' },
       { text: 'Sale Labels', path: '/admin/sale-labels', icon: <LocalOfferIcon />, permission: PERMISSIONS.SETTINGS_READ, mode: 'ecommerce' },
       { text: 'Reviews', path: '/admin/reviews', icon: <StarIcon />, feature: 'reviews', permission: PERMISSIONS.REVIEWS_READ },

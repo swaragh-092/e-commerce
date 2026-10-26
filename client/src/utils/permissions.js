@@ -26,7 +26,7 @@ export const ADMIN_ROUTE_PERMISSION_MAP = Object.freeze([
   { path: '/admin/brands', permissions: [PERMISSIONS.BRANDS_READ, PERMISSIONS.BRANDS_MANAGE] },
   { path: '/admin/attributes', permissions: [PERMISSIONS.ATTRIBUTES_READ, PERMISSIONS.ATTRIBUTES_MANAGE] },
   { path: '/admin/orders', permissions: [PERMISSIONS.ORDERS_READ, PERMISSIONS.ORDERS_UPDATE_STATUS, PERMISSIONS.ORDERS_REFUND] },
-  { path: '/admin/customers', permissions: [PERMISSIONS.CUSTOMERS_READ, PERMISSIONS.CUSTOMERS_MANAGE] },
+  { path: '/admin/customers', feature: 'customers', permissions: [PERMISSIONS.CUSTOMERS_READ, PERMISSIONS.CUSTOMERS_MANAGE] },
   { path: '/admin/coupons', permissions: [PERMISSIONS.COUPONS_READ, PERMISSIONS.COUPONS_MANAGE] },
   { path: '/admin/reviews', feature: 'reviews', permissions: [PERMISSIONS.REVIEWS_READ, PERMISSIONS.REVIEWS_MODERATE, PERMISSIONS.REVIEWS_DELETE] },
   { path: '/admin/media', permissions: [PERMISSIONS.MEDIA_READ, PERMISSIONS.MEDIA_UPLOAD, PERMISSIONS.MEDIA_UPDATE, PERMISSIONS.MEDIA_DELETE] },

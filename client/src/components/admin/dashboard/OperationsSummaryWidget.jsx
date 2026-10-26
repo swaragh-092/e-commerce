@@ -27,7 +27,7 @@ const OperationsSummaryWidget = ({ stats, spacing, features, mode }) => {
       // Navigate to products filtered to low-stock view
       to: '/admin/products?stock=low',
     },
-    {
+    features?.customers === true && {
       label: 'Customers',
       value: stats?.customerCount ?? 0,
       icon: <PeopleIcon />,

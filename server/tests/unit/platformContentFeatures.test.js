@@ -19,6 +19,13 @@ const state = (key, enabled) => {
 afterEach(() => { vi.restoreAllMocks(); featureMiddleware.clearFeatureCache(); });
 
 describe('Content platform switches', () => {
+  it('defaults customer management off in catalog and on in ecommerce, with saved overrides in either mode', () => {
+    expect(modes.buildFeatures({}, 'catalog').customers).toBe(false);
+    expect(modes.buildFeatures({}, 'ecommerce').customers).toBe(true);
+    expect(modes.buildFeatures({ customers: true }, 'catalog').customers).toBe(true);
+    expect(modes.buildFeatures({ customers: false }, 'ecommerce').customers).toBe(false);
+    expect(modes.isTier1Feature('customers')).toBe(false);
+  });
   it.each(['ecommerce', 'catalog'])('provides every supported UI switch in %s defaults', (mode) => {
     const flags = modes.buildFeatures({}, mode);
     catalog.optional.forEach(({ key, defaults }) => {

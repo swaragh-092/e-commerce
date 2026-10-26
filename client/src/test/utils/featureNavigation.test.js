@@ -13,7 +13,7 @@ describe('Disabled content navigation', () => {
     expect(getNavigationFeature('/blogs?tag=latest')).toBe('blogs');
   });
   it('does not loop through a disabled admin feature as the only landing page', () => {
-    for (const key of ['newsletter', 'gallery', 'blogs', 'pages', 'reviews']) {
+    for (const key of ['newsletter', 'gallery', 'blogs', 'pages', 'reviews', 'customers']) {
       expect(getFirstAccessibleAdminPath({ permissions: [`${key}.read`] }, { [key]: false })).toBeNull();
       expect(getFirstAccessibleAdminPath({ permissions: [`${key}.read`] }, { [key]: true })).toBe(`/admin/${key}`);
     }
