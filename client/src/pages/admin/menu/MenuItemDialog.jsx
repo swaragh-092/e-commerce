@@ -122,29 +122,6 @@ const MenuItemDialog = ({
                   </Select>
                 </FormControl>
               </Grid>
-              {itemForm.targetType === 'category_tree' && (
-                <Grid item xs={12}>
-                  <Typography variant="body2" color="text.secondary">
-                    All categories appear below this item in the same hierarchy and order as Categories Management. Existing manual children are preserved but hidden while sync is active.
-                  </Typography>
-                </Grid>
-              )}
-              {itemForm.targetType === 'category' && (
-                <Grid item xs={12}>
-                  <FormControlLabel
-                    control={(
-                      <Checkbox
-                        checked={Boolean(itemForm.syncChildren)}
-                        onChange={(e) => setItemForm({ ...itemForm, syncChildren: e.target.checked })}
-                      />
-                    )}
-                    label="Sync child categories automatically"
-                  />
-                  <Typography variant="body2" color="text.secondary" sx={{ ml: 4 }}>
-                    Keep this menu branch in sync with the selected category’s child categories and their order.
-                  </Typography>
-                </Grid>
-              )}
               {needsTarget(itemForm.targetType) && (
                 <Grid item xs={12} md={8}>
                   <FormControl fullWidth>
@@ -178,6 +155,29 @@ const MenuItemDialog = ({
                       ))}
                     </Select>
                   </FormControl>
+                </Grid>
+              )}
+              {itemForm.targetType === 'category_tree' && (
+                <Grid item xs={12}>
+                  <Typography variant="body2" color="text.secondary">
+                    All categories appear below this item in the same hierarchy and order as Categories Management. Existing manual children are preserved but hidden while sync is active.
+                  </Typography>
+                </Grid>
+              )}
+              {itemForm.targetType === 'category' && (
+                <Grid item xs={12}>
+                  <FormControlLabel
+                    control={(
+                      <Checkbox
+                        checked={Boolean(itemForm.syncChildren)}
+                        onChange={(e) => setItemForm({ ...itemForm, syncChildren: e.target.checked })}
+                      />
+                    )}
+                    label="Sync child categories automatically"
+                  />
+                  <Typography variant="body2" color="text.secondary" sx={{ ml: 4 }}>
+                    Keep this menu branch in sync with the selected category’s child categories and their order.
+                  </Typography>
                 </Grid>
               )}
               {needsUrl(itemForm.targetType) && (
