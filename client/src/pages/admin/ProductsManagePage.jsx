@@ -5,6 +5,7 @@ import {
   Avatar, Dialog, DialogTitle, DialogContent, DialogActions,
   DialogContentText, InputAdornment, Paper, FormHelperText,
   CircularProgress,
+  useMediaQuery,
 } from '@mui/material';
 import { DataGrid } from '@mui/x-data-grid';
 import {
@@ -111,6 +112,9 @@ const ProductsManagePage = () => {
   const { settings } = useSettings();
   const { notify } = useNotification();
   const { hasPermission } = useAuth();
+  const isCompactScreen = useMediaQuery('(max-width: 1440px)');
+  const isTabletScreen = useMediaQuery('(max-width: 1024px)');
+  const isSmallScreen = useMediaQuery((theme) => theme.breakpoints.down('sm'));
   const pricingEnabled = useFeatureVisible('pricing', 'admin');
   const pricingCapability = useFeature('pricing');
   // Stock tracking is only meaningful in ecommerce mode (cart Tier-1 feature).
@@ -678,7 +682,8 @@ const ProductsManagePage = () => {
       field: 'name',
       headerName: 'Product',
       flex: 1,
-      minWidth: 200,
+      minWidth: isSmallScreen ? 112 : isTabletScreen ? 180 : 200,
+      maxWidth: 520,
       sortable: true,
       renderCell: ({ row }) => (
         <Box
@@ -1188,12 +1193,19 @@ const ProductsManagePage = () => {
         borderRadius: 2, 
         border: '1px solid', 
         borderColor: 'divider',
-        overflowX: 'auto',
-        '& .MuiDataGrid-root': { minWidth: 700 },
+        minWidth: 0,
+        width: '100%',
       }}>
         <DataGrid
           rows={rows}
           columns={columns}
+          columnVisibilityModel={{
+            images: !isCompactScreen,
+            price: pricingEnabled && !isTabletScreen,
+            saleMeta: pricingEnabled && !isCompactScreen,
+            quantity: cartEnabled && !isCompactScreen,
+            storefrontState: !isTabletScreen,
+          }}
           rowCount={total}
           loading={loading}
           paginationMode="server"
@@ -1206,7 +1218,7 @@ const ProductsManagePage = () => {
             setSortModel(m); 
             setPaginationModel((p) => ({ ...p, page: 0 })); 
           }}
-          checkboxSelection={canBulkModify}
+          checkboxSelection={canBulkModify && !isSmallScreen}
           rowSelectionModel={selectedIds}
           onRowSelectionModelChange={(ids) => setSelectedIds(ids)}
           disableRowSelectionOnClick
