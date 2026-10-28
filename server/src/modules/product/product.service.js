@@ -26,6 +26,7 @@ const { generateSlug } = require('../../utils/slugify');
 // and exports it as generateSlug. This handles duplicates automatically.
 const { getPagination, getPagingData } = require('../../utils/pagination');
 const sanitizeHtml = require('sanitize-html');
+const { syncProductTags, buildTagFilter } = require('./tag.service');
 const AuditService = require('../audit/audit.service');
 const AppError = require('../../utils/AppError');
 const logger = require('../../utils/logger');
@@ -219,22 +220,6 @@ const sanitizeRichText = (html) => {
   });
 };
 
-const _syncProductTags = async (product, tagNames, transaction) => {
-  if (!tagNames || !Array.isArray(tagNames)) return;
-
-  const tagInstances = await Promise.all(
-    tagNames.map(async (tagName) => {
-      const tagSlug = await generateSlug(tagName, Tag, 'slug', { transaction });
-      const [tag] = await Tag.findOrCreate({
-        where: { name: tagName },
-        defaults: { slug: tagSlug },
-        transaction,
-      });
-      return tag;
-    })
-  );
-  await product.setTags(tagInstances, { transaction });
-};
 
 const ATTRIBUTE_TEMPLATE_FIELDS = ['id', 'name', 'slug', 'sortOrder', 'displayType', 'valueType', 'unit', 'unitCategory'];
 const ATTRIBUTE_VALUE_FIELDS = ['id', 'value', 'slug', 'sortOrder', 'displayLabel', 'swatchColor', 'imageUrl', 'unitLabel', 'metadata'];
@@ -467,7 +452,7 @@ exports.getProducts = async (filters, page, limit, isAdmin = false) => {
   const brandsVisible = isBrandVisible(features, { adminView: isAdmin });
   const include = [
     getGlobalImageInclude(),
-    { model: Tag, as: 'tags' },
+    { model: Tag, as: 'tags', attributes: { exclude: ['description'] } },
     ...(brandsVisible ? [{ model: Brand, as: 'brand' }] : []),
   ];
 
@@ -580,16 +565,8 @@ exports.getProducts = async (filters, page, limit, isAdmin = false) => {
     where.isFeatured = true;
   }
   
-  if (filters.tags) {
-    const tagList = Array.isArray(filters.tags) ? filters.tags : filters.tags.split(',').map(t => t.trim()).filter(Boolean);
-    if (tagList.length > 0) {
-      const tagInclude = include.find(inc => inc.as === 'tags');
-      if (tagInclude) {
-        tagInclude.where = { name: { [Op.in]: tagList } };
-        tagInclude.required = true;
-      }
-    }
-  }
+  const tagFilter = buildTagFilter(filters.tags);
+  if (tagFilter) where[Op.and] = [...(where[Op.and] || []), tagFilter];
 
   // sale: salePrice is set AND sale window is active (or no window defined)
   if (filters.onSale === 'true' || filters.onSale === true || filters.sale === 'true' || filters.sale === true) {
@@ -715,16 +692,6 @@ exports.getProducts = async (filters, page, limit, isAdmin = false) => {
       Sequelize.literal(`"Product"."id" IN (SELECT "product_id" FROM "product_categories" WHERE "category_id" IN (${escapedIds}))`),
     ];
   }
-  if (filters.tags) {
-    const tagList = Array.isArray(filters.tags) ? filters.tags : filters.tags.split(',').map(t => t.trim()).filter(Boolean);
-    if (tagList.length > 0) {
-      const escapedTags = tagList.map(t => sequelize.escape(t)).join(',');
-      priceRangeWhere[Op.and] = [
-        ...(priceRangeWhere[Op.and] || []),
-        Sequelize.literal(`"Product"."id" IN (SELECT "product_id" FROM "product_tags" pt JOIN "tags" t ON pt."tag_id" = t."id" WHERE t."name" IN (${escapedTags}))`),
-      ];
-    }
-  }
 
   const effectivePriceCol = getSqlEffectivePriceExpr(labelPresets, now, '"Product"');
   const priceRangeResult = await Product.findOne({
@@ -813,7 +780,7 @@ exports.getProductBySlug = async (slug, { adminView = false } = {}) => {
       getVariantInclude(),
       getAttributeInclude(),
       { model: Category, as: 'categories' },
-      { model: Tag, as: 'tags' },
+      { model: Tag, as: 'tags', attributes: { exclude: ['description'] } },
       ...(brandsVisible ? [{ model: Brand, as: 'brand' }] : []),
       // Only active tabs, sorted for storefront display
       {
@@ -840,7 +807,7 @@ exports.getProductById = async (id) => {
       getVariantInclude(),
       getAttributeInclude(),
       { model: Category, as: 'categories' },
-      { model: Tag, as: 'tags' },
+      { model: Tag, as: 'tags', attributes: { exclude: ['description'] } },
       { model: Brand, as: 'brand' },
       // All tabs (including inactive) for admin view
       {
@@ -955,9 +922,7 @@ exports.createProduct = async (data, auditContext = null) => {
       await replaceImageRows({ productId: product.id, images: data.images, transaction });
     }
 
-    if (data.tags) {
-      await _syncProductTags(product, data.tags, transaction);
-    }
+    await syncProductTags(product, data.tags, transaction);
 
     await transaction.commit();
 
@@ -1079,9 +1044,7 @@ exports.updateProduct = async (id, data, auditContext = null) => {
       await replaceImageRows({ productId: id, images: data.images, transaction });
     }
 
-    if (data.tags) {
-      await _syncProductTags(product, data.tags, transaction);
-    }
+    await syncProductTags(product, data.tags, transaction);
 
     await transaction.commit();
 
@@ -1342,7 +1305,7 @@ exports.getRelatedProducts = async (productId, limit = 6) => {
       { model: ProductImage, as: 'images' },
       ...(brandsVisible ? [{ model: Brand, as: 'brand' }] : []),
       ...(categoryInclude ? [categoryInclude] : [{ model: Category, as: 'categories' }]),
-      { model: Tag, as: 'tags' },
+      { model: Tag, as: 'tags', attributes: { exclude: ['description'] } },
     ],
     order: [['createdAt', 'DESC']],
     limit,

@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Box, Breadcrumbs, Container, Grid, Link as MuiLink, Typography, Pagination, Drawer, IconButton, useTheme, useMediaQuery, FormControl, Select, MenuItem, alpha } from '@mui/material';
+import { Chip, Box, Breadcrumbs, Container, Grid, Link as MuiLink, Typography, Pagination, Drawer, IconButton, useTheme, useMediaQuery, FormControl, Select, MenuItem, alpha } from '@mui/material';
 import { FilterList as FilterIcon, Sort as SortIcon } from '@mui/icons-material';
 import { Link as RouterLink, useSearchParams } from 'react-router-dom';
 import ProductGrid from '../../components/product/ProductGrid';
@@ -7,10 +7,11 @@ import ProductFilters from '../../components/product/ProductFilters';
 import StorefrontSidebarMenu from '../../components/layout/StorefrontSidebarMenu';
 import { getProducts } from '../../services/productService';
 import { getCategoryTree } from '../../services/categoryService';
+import { buildBreadcrumbJsonLd } from '../../utils/seo/buildStructuredData';
 import PageSEO from '../../components/common/PageSEO';
 import { useSettings, useFeature, useFeatureVisible } from '../../hooks/useSettings';
 
-const ProductListPage = () => {
+const ProductListPage = ({ tag = null }) => {
     const [searchParams, setSearchParams] = useSearchParams();
     const [products, setProducts] = useState([]);
     const [loading, setLoading] = useState(true);
@@ -43,6 +44,7 @@ const ProductListPage = () => {
     const filters = {
         search: searchParams.get('search') || '',
         category: searchParams.get('category') || '',
+        tags: tag?.slug || searchParams.get('tags') || '',
         brand: brandsEnabled ? (searchParams.get('brand') || '') : '',
         page: parseInt(searchParams.get('page')) || 1,
         sort: searchParams.get('sort') || defaultSort,
@@ -76,7 +78,7 @@ const ProductListPage = () => {
         fetchProducts();
         return () => { cancelled = true; };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [searchParams.toString(), brandsEnabled]);
+    }, [searchParams.toString(), brandsEnabled, tag?.slug]);
 
     // Resolve the category slug → full breadcrumb path for the contextual breadcrumb on PDP
     // e.g. "vegetable" slug → "Vegetable > Roots > Beetroot" when filtering by beetroot
@@ -107,36 +109,55 @@ const ProductListPage = () => {
     const handleFilterChange = (newFilters) => {
         const params = new URLSearchParams();
         Object.entries(newFilters).forEach(([k, v]) => {
-            if (v) params.set(k, v);
+            if (v && !(tag && k === 'tags')) params.set(k, v);
         });
         setSearchParams(params);
     };
 
     const categoryBreadcrumbs = categoryName ? categoryName.split(' > ') : [];
     const hasActiveFilters = Boolean(
-        filters.search
+        (!tag && filters.tags)
+        || filters.search
         || filters.category
         || filters.brand
         || filters.minPrice
         || filters.maxPrice
     );
 
+    const tagPath = tag ? `/tags/${encodeURIComponent(tag.slug)}` : '';
+    let tagUrl = tag ? `${window.location.origin}${tagPath}` : undefined;
+    if (tag) {
+        try {
+            const url = new URL(tagPath, settings?.seo?.canonicalBaseUrl || window.location.origin);
+            if (['http:', 'https:'].includes(url.protocol)) tagUrl = url.toString();
+        } catch (_) { /* Keep the browser origin if the configured base is invalid. */ }
+    }
+    const tagDescription = tag ? (tag.description?.trim() || `Browse products tagged ${tag.name}.`) : '';
+    const tagSummary = tagDescription.replace(/\s+/g, ' ');
+    const tagMetadataDescription = tagSummary.length > 160 ? `${tagSummary.slice(0, 157)}...` : tagSummary;
+    const tagSchemas = tag ? [
+        { '@context': 'https://schema.org', '@type': 'CollectionPage', name: tag.name, description: tagMetadataDescription, url: tagUrl },
+        buildBreadcrumbJsonLd({ items: [{ name: 'Home', url: '/' }, { name: 'Products', url: '/products' }, { name: tag.name, url: tagPath }], canonicalBaseUrl: settings?.seo?.canonicalBaseUrl, pageUrl: tagUrl }),
+    ] : undefined;
+
     return (
         <Container maxWidth={isCompactCatalog ? 'lg' : 'xl'} sx={{ py: isEditorialCatalog ? { xs: 3, md: 5 } : 4 }}>
-            <PageSEO title="Products" description="Browse our products" />
+            <PageSEO title={tag?.name || "Products"} description={tag ? tagMetadataDescription : "Browse our products"} url={tagUrl} structuredData={tagSchemas} />
+            {!tag && filters.tags && <Chip sx={{ mb: 2 }} label={`Tagged: ${filters.tags}`} onDelete={() => handleFilterChange({ ...filters, tags: '', page: 1 })} /> }
             {showCatalogBreadcrumbs && (
             <Breadcrumbs aria-label="breadcrumb" sx={{ mb: 2 }}>
                 <MuiLink component={RouterLink} underline="hover" color="inherit" to="/">
                     Home
                 </MuiLink>
-                {categoryBreadcrumbs.length > 0 ? (
+                {tag || categoryBreadcrumbs.length > 0 ? (
                     <MuiLink component={RouterLink} underline="hover" color="inherit" to="/products">
                         Products
                     </MuiLink>
                 ) : (
                     <Typography color="text.primary">Products</Typography>
                 )}
-                {categoryBreadcrumbs.map((name, index) => (
+                {tag && <Typography color="text.primary">{tag.name}</Typography>}
+                {!tag && categoryBreadcrumbs.map((name, index) => (
                     <Typography key={`${name}-${index}`} color={index === categoryBreadcrumbs.length - 1 ? 'text.primary' : 'text.secondary'}>
                         {name}
                     </Typography>
@@ -147,6 +168,8 @@ const ProductListPage = () => {
                 display: 'flex',
                 justifyContent: 'space-between',
                 alignItems: 'center',
+                gap: 2,
+                flexWrap: 'wrap',
                 mb: 3,
                 p: isEditorialCatalog ? { xs: 2.5, md: 4 } : 0,
                 borderRadius: isEditorialCatalog ? 4 : 0,
@@ -154,7 +177,10 @@ const ProductListPage = () => {
                 borderColor: 'divider',
                 background: isEditorialCatalog ? (theme) => `linear-gradient(135deg, ${alpha(theme.palette.primary.main, 0.10)}, ${alpha(theme.palette.secondary.main, 0.06)})` : 'transparent',
             }}>
-                <Typography variant="h4" component="h1" fontWeight="bold">Our Products</Typography>
+                <Box sx={{ maxWidth: '65ch', minWidth: 0 }}>
+                    <Typography variant="h4" component="h1" fontWeight="bold">{tag?.name || 'Our Products'}</Typography>
+                    {tag?.description && <Typography color="text.secondary" sx={{ mt: 1, whiteSpace: 'pre-line', overflowWrap: 'anywhere' }}>{tag.description}</Typography>}
+                </Box>
 
                 <Box sx={{ display: 'flex', gap: 2, alignItems: 'center' }}>
                     {showFilters && isMobile && (

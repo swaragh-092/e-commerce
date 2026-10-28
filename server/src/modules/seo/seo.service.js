@@ -3,6 +3,8 @@
 const fs = require('fs');
 const path = require('path');
 const { Product, Category, SeoOverride, Setting, ProductImage } = require('../index');
+const tagService = require('../product/tag.service');
+const AppError = require('../../utils/AppError');
 
 function escapeHtml(string) {
   if (string == null) return '';
@@ -21,6 +23,15 @@ function stripHtml(string) {
     .replace(/\s+/g, ' ')
     .trim();
 }
+
+const getTagBaseUrl = (defaults = {}) => {
+  for (const candidate of [defaults.canonicalBaseUrl, process.env.CLIENT_URL, 'http://localhost:5173']) {
+    try {
+      const url = new URL(candidate);
+      if (['http:', 'https:'].includes(url.protocol)) return url.origin;
+    } catch (_) { /* Try the next configured base. */ }
+  }
+};
 
 class SeoService {
   constructor() {
@@ -66,6 +77,15 @@ class SeoService {
       xml += `  </url>\n`;
     }
 
+    const tags = await tagService.getPublicTags();
+    if (tags.length) {
+      const tagBaseUrl = getTagBaseUrl(await this._getGlobalDefaults());
+      for (const tag of tags) {
+        const url = `${tagBaseUrl}/tags/${encodeURIComponent(tag.slug)}`;
+        xml += `  <url>\n    <loc>${escapeHtml(url)}</loc>\n    <changefreq>weekly</changefreq>\n    <priority>0.5</priority>\n  </url>\n`;
+      }
+    }
+
     xml += `</urlset>`;
     return xml;
   }
@@ -81,11 +101,28 @@ class SeoService {
   }
 
   async getMetadataByPath(urlPath) {
+    // Validate public visibility before resolving overrides for tag URLs.
+    let tag = null;
+    const tagMatch = urlPath.match(/^\/tags\/([^\/\?#]+)\/?(?:[\?#].*)?$/);
+    if (urlPath.startsWith('/tags/')) {
+      if (!tagMatch) throw new AppError('NOT_FOUND', 404, 'Tag not found.');
+      let slug;
+      try { slug = decodeURIComponent(tagMatch[1]); }
+      catch (_) { throw new AppError('NOT_FOUND', 404, 'Tag not found.'); }
+      tag = await tagService.getPublicTagBySlug(slug);
+    }
     // 1. Check for explicit overrides
     const override = await SeoOverride.findOne({ where: { path: urlPath } });
     if (override) {
+      if (tag) {
+        const tagData = typeof tag.toJSON === 'function' ? tag.toJSON() : tag;
+        const overrideData = typeof override.toJSON === 'function' ? override.toJSON() : override;
+        return this._formatMetadata({ ...tagData, ...overrideData }, 'tag', `/tags/${encodeURIComponent(tag.slug)}`);
+      }
       return this._formatMetadata(override, 'general', urlPath);
     }
+
+    if (tag) return this._formatMetadata(tag, 'tag', `/tags/${encodeURIComponent(tag.slug)}`);
 
     // 2. Check for Entity Specific SEO (Products/Categories)
     // Extract slug from common patterns: /products/slug or the legacy /product/slug
@@ -134,7 +171,7 @@ class SeoService {
 
   async _formatMetadata(entity, type = 'general', urlPath = '') {
     const defaults = await this._getGlobalDefaults();
-    const baseUrl = process.env.CLIENT_URL || 'http://localhost:5173';
+    const baseUrl = type === 'tag' ? getTagBaseUrl(defaults) : (process.env.CLIENT_URL || 'http://localhost:5173');
 
     let description = entity.metaDescription;
     if (!description && type === 'product') {
@@ -142,14 +179,14 @@ class SeoService {
       if (description.length > 160) {
         description = `${description.slice(0, 157)}...`;
       }
-    } else if (!description && type === 'category') {
+    } else if (!description && (type === 'category' || type === 'tag')) {
       description = stripHtml(entity.description || '');
       if (description.length > 160) {
         description = `${description.slice(0, 157)}...`;
       }
     }
     if (!description) {
-      description = defaults.description;
+      description = type === 'tag' ? `Browse products tagged ${entity.name}.` : defaults.description;
     }
 
     let ogImage = entity.ogImage;
@@ -175,7 +212,7 @@ class SeoService {
     }
 
     const metadata = {
-      title: entity.metaTitle || (type === 'product' || type === 'category' ? entity.name : defaults.title),
+      title: entity.metaTitle || (type === 'product' || type === 'category' || type === 'tag' ? entity.name : defaults.title),
       description,
       keywords: entity.metaKeywords || defaults.keywords,
       ogImage: ogImage || '',
@@ -184,6 +221,7 @@ class SeoService {
       siteName: defaults.siteName,
       titleSuffix: defaults.titleSuffix,
       type: type === 'product' ? 'product' : 'website',
+      ...(type === 'tag' && { schemaType: 'CollectionPage' }),
     };
 
     if (type === 'product') {
@@ -214,6 +252,7 @@ class SeoService {
       ogImage: settingsMap['seo.defaultOgImage'] || '',
       twitterHandle: settingsMap['seo.twitterHandle'] || '',
       currency: settingsMap['general.currency'] || 'INR',
+      canonicalBaseUrl: settingsMap['seo.canonicalBaseUrl'] || '',
     };
   }
 
@@ -336,6 +375,11 @@ class SeoService {
           url: metadata.canonicalUrl,
         },
       };
+    } else if (metadata.schemaType === 'CollectionPage') {
+      schemaObj = {
+        '@context': 'https://schema.org', '@type': 'CollectionPage',
+        name: rawTitle, description: metadata.description, url: metadata.canonicalUrl,
+      };
     } else {
       schemaObj = {
         '@context': 'https://schema.org',
@@ -345,7 +389,7 @@ class SeoService {
         description: metadata.description,
       };
     }
-    tags.push(`<script type="application/ld+json">${JSON.stringify(schemaObj)}</script>`);
+    tags.push(`<script type="application/ld+json">${JSON.stringify(schemaObj).replace(/</g, '\\u003c')}</script>`);
 
     const injectedMeta = '\n    ' + tags.join('\n    ') + '\n  ';
 

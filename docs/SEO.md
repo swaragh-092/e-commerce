@@ -205,3 +205,28 @@ const SEO = () => {
 *   **Slug Integrity**: All products and categories use unique, URL-safe slugs.
 *   **Internal Keywords**: Use the `meta_keywords` field for site-search optimization only.
 *   **Canonical Safety**: Always point to the clean URL, avoiding tracking parameters or filter strings in the canonical tag. Point the `seo.canonicalBaseUrl` to the primary domain.
+
+
+## Tag landing pages
+
+Tags have a dedicated storefront route, `/tags/:slug`, linked from product tag
+chips. The tag name supplies the heading/title, and the optional plain-text
+introduction supplies the visible description and a shortened metadata summary.
+Sorting, paging and additional catalog filters retain the route's tag. Existing
+`/products?tags=` links continue to function.
+
+- Canonicals use the clean tag path and the configured canonical origin (with a
+  browser/client origin fallback).
+- The client and crawler metadata identify the page as a `CollectionPage`;
+  client output also includes breadcrumb structured data.
+- SEO path overrides are supported after public tag visibility has been checked.
+- Only tags attached to published, enabled, non-deleted products enter the sitemap
+  or resolve through the public tag metadata endpoint.
+- Missing/hidden tag pages show a not-found state with noindex metadata; crawler
+  requests receive HTTP 404 and `X-Robots-Tag: noindex`.
+- Structured-data serialization escapes `<` so descriptions cannot terminate the
+  JSON-LD script element.
+
+Apply `20261028100000-add-tag-description.js` before deploying the updated backend.
+The migration defaults existing tag descriptions to an empty string and preserves
+all tag names, slugs and product associations.

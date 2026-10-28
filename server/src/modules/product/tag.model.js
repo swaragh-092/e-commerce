@@ -12,6 +12,11 @@ module.exports = (sequelize, DataTypes) => {
             unique: true,
             allowNull: false,
         },
+        description: {
+            type: DataTypes.TEXT,
+            allowNull: false,
+            defaultValue: '',
+        },
         slug: {
             type: DataTypes.STRING(100),
             unique: true,

@@ -429,7 +429,7 @@ const productInclude = (block) => {
     include.push({ model: Brand, as: 'brand', required: false });
   }
   if (includes.has('tags')) {
-    include.push({ model: Tag, as: 'tags', required: false, through: { attributes: [] } });
+    include.push({ model: Tag, as: 'tags', attributes: { exclude: ['description'] }, required: false, through: { attributes: [] } });
   }
 
   return include;

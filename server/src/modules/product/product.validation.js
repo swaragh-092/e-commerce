@@ -1,9 +1,11 @@
 'use strict';
 const Joi = require('joi');
+const { productTagsSchema, tagFilterSchema } = require('./tag.validation');
 const { MIN_SEARCH_QUERY_LENGTH, MAX_SEARCH_QUERY_LENGTH, normalizeSearchQuery } = require('../search/search.utils');
 
 
 const productListQuerySchema = Joi.object({
+  tags: tagFilterSchema,
   hasVariants: Joi.boolean(),
   page: Joi.number().integer().min(1).default(1),
   limit: Joi.number().integer().min(1).max(1000).default(20),
@@ -83,7 +85,7 @@ const createProductSchema = Joi.object({
   isFeatured: Joi.boolean(),
   categoryIds: Joi.array().items(Joi.string().uuid()),
   brandId: Joi.string().uuid().allow(null),
-  tags: Joi.array().items(Joi.string()),
+  tags: productTagsSchema,
   variants: Joi.array().items(productVariantCreateSchema).when('type', {
     is: 'variable',
     then: Joi.optional(),
@@ -150,7 +152,7 @@ const updateProductSchema = Joi.object({
   isFeatured: Joi.boolean(),
   categoryIds: Joi.array().items(Joi.string().uuid()),
   brandId: Joi.string().uuid().allow(null),
-  tags: Joi.array().items(Joi.string()),
+  tags: productTagsSchema,
   variants: Joi.array().items(
     Joi.object({
       sku: Joi.string().max(100).allow('', null),

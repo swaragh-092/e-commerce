@@ -125,7 +125,7 @@
 | `maxPrice` | number | Max price filter                                |
 | `status`   | string | `draft` / `published` (admin only)              |
 | `sort`     | string | `price_asc`, `price_desc`, `newest`, `name_asc` |
-| `tags`     | string | Comma-separated tag slugs                       |
+| `tags`     | string | Comma-separated tag slugs (ANY match); unambiguous legacy names also accepted |
 
 ### POST `/products`
 ```json
@@ -397,3 +397,73 @@ Send `Idempotency-Key` as a UUID for one order submission (the same value is als
 ---
 
 *All list endpoints support `page` and `limit` query parameters. Default: page=1, limit=20. Rate-limited endpoints return HTTP 429 on excess.*
+
+### Product tags
+
+`GET /tags?search=summer&page=1&limit=20` returns a paginated tag list with
+`id`, `name`, `slug`, and `productCount` (excluding soft-deleted products).
+Requires any of `products.read`, `products.create`, or `products.update`.
+The maximum page size is 100.
+
+- `POST /tags` — `{ "name": "Summer Planting", "description": "Optional introduction" }`; requires product create or update.
+- `PATCH /tags/:id` — `{ "name": "Warm Season", "description": "Updated introduction" }`; requires product update.
+  Changes the shared label while preserving the slug and all product links.
+- `DELETE /tags/:id` — requires product delete; deletes the tag and its associations,
+  leaving products intact. These routes use the existing audit middleware.
+
+Product create/update accepts `tags: ["Summer Planting", "Beginner Friendly"]`.
+Names are normalized and reused case-insensitively. Up to 50 tags per product,
+100 characters per name; commas and control characters are not allowed.
+Omitting tags preserves existing assignments; `tags: []` clears them.
+Unknown slugs in the product filter return no matching products. Product detail
+chips link to `/tags/<slug>`; filters combine with category and price.
+
+### Bulk product tags
+
+`PATCH /tags/products` requires `products.update` and records the selection,
+operation and result counts in the audit log.
+
+```json
+{
+  "productIds": ["aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa"],
+  "action": "add",
+  "tags": ["Summer Planting", "Beginner Friendly"]
+}
+```
+
+Use `action: "remove"` to remove only the specified tags. Other product tags and
+the shared tag dictionary remain intact. Adding reuses existing tags or creates
+new normalized labels; removal never creates tags. Repeated operations are safe:
+already present additions and already absent removals count as no change.
+
+A request accepts 1–100 distinct product UUIDs and 1–50 tag names. All selected
+products must exist and be live (not soft-deleted). Updates run in one transaction;
+any missing product or addition exceeding a product's 50-tag limit rolls back
+the entire operation, including newly created tags.
+
+The response data contains `selectedCount` (products requested), `updatedCount`
+(products whose tag associations changed), and `changedCount` (associations added
+or removed). Product rows are locked in a consistent order before tag mutations,
+so overlapping bulk edits and ordinary product saves do not lose associations.
+
+
+### Public tag landing pages
+
+`GET /tags/public/:slug` is public and returns `id`, `name`, `slug`, and
+`description`. A tag must be attached to at least one published, enabled,
+non-deleted product; otherwise the endpoint returns 404. The full tag dictionary
+and all mutation routes continue to require authentication and permissions.
+
+Tag create/update accepts an optional plain-text `description`, up to 2,000
+characters. Omission on update preserves the current description; an empty string
+or null clears it. Editing the label or description preserves the tag slug.
+
+The storefront route is `/tags/:slug`. The route's tag remains fixed while
+customers sort, paginate, change other filters or clear them. Legacy
+`/products?tags=<slug>` links continue to work. Product filters prioritize a
+canonical slug over another tag whose name happens to equal that slug; legacy
+exact-name filtering is used only when no canonical slug matches.
+
+Run `cd server && npm run migrate` before deploying this version; migration
+`20261028100000-add-tag-description.js` adds the description column with an empty
+string default for existing records.

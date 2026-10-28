@@ -70,6 +70,7 @@ import { useAuth } from '../../hooks/useAuth';
 import { PERMISSIONS } from '../../utils/permissions';
 import { getApiErrorMessage } from '../../utils/apiErrors';
 import { formatOpenEndedDateRange } from '../../utils/dates';
+import ProductTagsInput from '../../components/admin/ProductTagsInput';
 import ProductCustomTabs from '../../components/admin/ProductCustomTabs';
 import ProductComboBuilder from '../../components/admin/ProductComboBuilder';
 import TaxConfigSection from '../../components/admin/ProductTaxConfig';
@@ -115,6 +116,9 @@ const shouldAutoRefreshSlug = (currentSlug, previousName, nextName) => {
 
 const validate = (formData) => {
   const errs = {};
+  if ((formData.tags || []).length > 50 || (formData.tags || []).some((tag) => !tag.trim() || tag.length > 100 || /[\p{Cc}\p{Cf},]/u.test(tag))) {
+    errs.tags = 'Use up to 50 tags, each with 1–100 characters and no commas or control characters.';
+  }
   if (!formData.name?.trim()) errs.name = 'Product name is required.';
   else if (formData.name?.trim().length > 255)
     errs.name = 'Product name must be 255 characters or less.';
@@ -260,6 +264,7 @@ const ProductEditPage = () => {
     isEnabled: true,
     categoryIds: [],
     brandId: '',
+    tags: [],
     images: [],
     taxConfig: {
       isCustom: false,
@@ -348,6 +353,7 @@ const ProductEditPage = () => {
               isEnabled: p.isEnabled ?? true,
               categoryIds: p.categories?.map((c) => c.id) || [],
               brandId: p.brandId || '',
+              tags: p.tags?.map((tag) => tag.name) || [],
               images: p.images || [],
               taxConfig: p.taxConfig || {
                 isCustom: false,
@@ -1286,6 +1292,8 @@ const ProductEditPage = () => {
                 disableCloseOnSelect
                 sx={{ mt: 1 }}
               />
+
+              <ProductTagsInput value={formData.tags} onChange={(tags) => setField('tags', tags)} disabled={!canSaveProduct} error={errors.tags} />
 
               {brandsEnabled && (
               <FormControl fullWidth margin="normal">
