@@ -170,6 +170,15 @@
         "ecommerce": true,
         "catalog": true
       }
+    },
+    {
+      "key": "tags",
+      "label": "Product Tags",
+      "description": "Manage product tags and let customers browse tag pages. Disabling preserves saved tags and product associations.",
+      "defaults": {
+        "ecommerce": true,
+        "catalog": true
+      }
     }
   ],
   "reservedDefaults": {

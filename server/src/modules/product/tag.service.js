@@ -49,6 +49,7 @@ const publicTagPredicate = () => Sequelize.literal(`EXISTS (
     AND p.is_enabled = TRUE AND p.deleted_at IS NULL
 )`);
 const getPublicTagBySlug = async (slug) => {
+  if (!await require('../../middleware/featureGate.middleware').getResolvedFeature('tags')) throw new AppError('NOT_FOUND', 404, 'Tag not found.');
   const tag = await Tag.findOne({
     attributes: ['id', 'name', 'slug', 'description'],
     where: { slug, [Op.and]: [publicTagPredicate()] },
@@ -56,9 +57,10 @@ const getPublicTagBySlug = async (slug) => {
   if (!tag) throw new AppError('NOT_FOUND', 404, 'Tag not found.');
   return tag;
 };
-const getPublicTags = () => Tag.findAll({
-  attributes: ['slug'], where: { [Op.and]: [publicTagPredicate()] }, order: [['slug', 'ASC']],
-});
+const getPublicTags = async () => {
+  if (!await require('../../middleware/featureGate.middleware').getResolvedFeature('tags')) return [];
+  return Tag.findAll({ attributes: ['slug'], where: { [Op.and]: [publicTagPredicate()] }, order: [['slug', 'ASC']] });
+};
 const addTag = (name, description = '') => sequelize.transaction(async (transaction) => {
   await lockTagDictionary(transaction);
   name = normalizeTagName(name);

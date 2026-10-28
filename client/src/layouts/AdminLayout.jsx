@@ -80,7 +80,7 @@ const MENU_STRUCTURE = [
     icon: <InventoryIcon />,
     items: [
       { text: 'Products', path: '/admin/products', icon: <InventoryIcon />, permission: PERMISSIONS.PRODUCTS_READ },
-      { text: 'Tags', path: '/admin/tags', icon: <LocalOfferIcon />, permissions: [PERMISSIONS.PRODUCTS_READ, PERMISSIONS.PRODUCTS_CREATE, PERMISSIONS.PRODUCTS_UPDATE] },
+      { text: 'Tags', feature: 'tags', path: '/admin/tags', icon: <LocalOfferIcon />, permissions: [PERMISSIONS.PRODUCTS_READ, PERMISSIONS.PRODUCTS_CREATE, PERMISSIONS.PRODUCTS_UPDATE] },
       { text: 'Categories', path: '/admin/categories', icon: <CategoryIcon />, permission: PERMISSIONS.CATEGORIES_READ },
       { text: 'Brands', path: '/admin/brands', icon: <LocalOfferIcon />, permissions: [PERMISSIONS.BRANDS_READ, PERMISSIONS.BRANDS_MANAGE, PERMISSIONS.PRODUCTS_READ] },
       { text: 'Attributes', path: '/admin/attributes', icon: <TuneIcon />, permission: PERMISSIONS.ATTRIBUTES_READ },

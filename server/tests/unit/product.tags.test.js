@@ -139,7 +139,7 @@ describe('product listing tag filter consistency', () => {
     const products = require('../../src/modules/product/product.service');
     const settings = require('../../src/modules/settings/settings.service');
     vi.spyOn(db.Setting, 'findOne').mockResolvedValue(null);
-    vi.spyOn(settings, 'getFeatures').mockResolvedValue({ features: { pricing: true, brands: true } });
+    vi.spyOn(settings, 'getFeatures').mockResolvedValue({ features: { pricing: true, brands: true, tags: true } });
     vi.spyOn(settings, 'getByGroup').mockResolvedValue({ lowStockThreshold: 10 });
     vi.spyOn(db.Product, 'findAndCountAll').mockResolvedValue({ rows: [], count: 0 });
     vi.spyOn(db.Product, 'findOne').mockResolvedValue({ min: 0, max: 0 });

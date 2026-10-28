@@ -149,7 +149,7 @@ const AppRoutes = () => (
       <Route path="/" element={<StoreLayout />}>
         <Route index element={<Home />} />
         <Route path="products" element={<ProductListPage />} />
-        <Route path="tags/:slug" element={<TagPage />} />
+        <Route element={<FeatureRoute feature="tags" />}><Route path="tags/:slug" element={<TagPage />} /></Route>
         <Route path="products/:slug" element={<ProductDetailPage />} />
         <Route path="product/:slug" element={<ProductDetailPage />} />
         <Route path="category/:categorySlug" element={<CategoryPage />} />
@@ -230,7 +230,7 @@ const AppRoutes = () => (
             <Route path="brands" element={<BrandsPage />} />
           </Route>
           <Route element={<ProtectedRoute permissions={[PERMISSIONS.PRODUCTS_READ, PERMISSIONS.PRODUCTS_CREATE, PERMISSIONS.PRODUCTS_UPDATE]} />}>
-            <Route path="tags" element={<TagsPage />} />
+            <Route element={<FeatureRoute feature="tags" surface="admin" redirectTo="/admin" />}><Route path="tags" element={<TagsPage />} /></Route>
           </Route>
           <Route element={<ProtectedRoute permission={PERMISSIONS.PRODUCTS_CREATE} />}>
             <Route path="products/new" element={<ProductEditPage />} />

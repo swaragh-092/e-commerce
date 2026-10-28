@@ -763,6 +763,9 @@ const sanitizeApiBuilderPrices = (resource, items) => {
 };
 
 const shapeRows = async (resource, rows, node = {}, context = {}) => {
+  if (resource === 'tags' && context.features?.tags !== true) {
+    throw new AppError('FEATURE_DISABLED', 403, 'Product tags are disabled.');
+  }
   if (resource === 'pages' && !context.preview && !context.isAdmin && context.features?.pages !== true) {
     throw new AppError('FEATURE_DISABLED', 403, 'Pages are disabled for this storefront.');
   }

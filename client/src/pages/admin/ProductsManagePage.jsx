@@ -119,6 +119,7 @@ const ProductsManagePage = () => {
   const isCompactScreen = useMediaQuery('(max-width: 1440px)');
   const isTabletScreen = useMediaQuery('(max-width: 1024px)');
   const isSmallScreen = useMediaQuery((theme) => theme.breakpoints.down('sm'));
+  const tagsEnabled = useFeature('tags');
   const pricingEnabled = useFeatureVisible('pricing', 'admin');
   const pricingCapability = useFeature('pricing');
   // Stock tracking is only meaningful in ecommerce mode (cart Tier-1 feature).
@@ -143,7 +144,7 @@ const ProductsManagePage = () => {
   const [status, setStatus] = useState(() => searchParams.get('status') || '');
   const [saleFilter, setSaleFilter] = useState('');
   const [categoryFilter, setCategoryFilter] = useState('');
-  const tagFilter = searchParams.get('tags') || '';
+  const tagFilter = tagsEnabled ? searchParams.get('tags') || '' : '';
   const [flatCategories, setFlatCategories] = useState([]);
   const [saleLabels, setSaleLabels] = useState([]);
   // ?stock=low from dashboard → show only items with qty ≤ lowStockThreshold
@@ -1150,12 +1151,12 @@ const ProductsManagePage = () => {
             ))}
           </Select>
         </FormControl>
-        <ProductTagFilter value={tagFilter} onChange={(value) => {
+        {tagsEnabled && <ProductTagFilter value={tagFilter} onChange={(value) => {
           const next = new URLSearchParams(searchParams);
           if (value) next.set('tags', value); else next.delete('tags');
           setSearchParams(next);
           setPaginationModel((current) => ({ ...current, page: 0 }));
-        }} />
+        }} />}
       </Stack>
 
       {/* ── Bulk actions bar (only shown when rows are selected) ── */}
@@ -1188,7 +1189,7 @@ const ProductsManagePage = () => {
               </Select>
             </FormControl>
           )}
-          {canUpdateProducts && <Button size="small" variant="outlined" startIcon={<LocalOfferIcon />} onClick={() => setTagEditIds([...selectedIds])}>Edit tags</Button>}
+          {tagsEnabled && canUpdateProducts && <Button size="small" variant="outlined" startIcon={<LocalOfferIcon />} onClick={() => setTagEditIds([...selectedIds])}>Edit tags</Button>}
           {canDeleteProducts && (
             <Button
               size="small" variant="outlined" color="error"
@@ -1780,7 +1781,7 @@ const ProductsManagePage = () => {
         </DialogActions>
       </Dialog>
 
-      {canUpdateProducts && tagEditIds && <BulkProductTagsDialog
+      {tagsEnabled && canUpdateProducts && tagEditIds && <BulkProductTagsDialog
         productIds={tagEditIds}
         onClose={() => setTagEditIds(null)}
         onSaved={(result) => {

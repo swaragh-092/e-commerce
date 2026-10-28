@@ -56,11 +56,11 @@ const TAG_INCLUDE = {
   through: { attributes: [] },
 };
 
-const buildIncludes = (includeBrands) => [
+const buildIncludes = (includeBrands, includeTags) => [
   PRODUCT_IMAGE_INCLUDE,
   ...(includeBrands ? [BRAND_INCLUDE] : []),
   CATEGORY_INCLUDE,
-  TAG_INCLUDE,
+  ...(includeTags ? [TAG_INCLUDE] : []),
 ];
 
 const PUBLISHED_WHERE = {
@@ -142,20 +142,20 @@ const productPartialMatchSql = () => `(
   OR LOWER(COALESCE("Product"."description", '')) LIKE LOWER($queryPattern)
 )`;
 
-const buildRelevanceSql = (baseRelevanceSql, { includeBrands = true } = {}) => `(
+const buildRelevanceSql = (baseRelevanceSql, { includeBrands = true, includeTags = true } = {}) => `(
   CASE WHEN ${categoryMatchSql()} THEN 100000 ELSE 0 END
   ${includeBrands ? `+ CASE WHEN ${exactBrandMatchSql()} THEN 90000 ELSE 0 END` : ''}
   + CASE WHEN LOWER("Product"."name") = LOWER($queryText) THEN 10000 ELSE 0 END
   + CASE WHEN LOWER(COALESCE("Product"."sku", '')) = LOWER($queryText) THEN 9000 ELSE 0 END
   + CASE WHEN ${categoryPartialMatchSql()} THEN 500 ELSE 0 END
   ${includeBrands ? `+ CASE WHEN ${brandMatchSql()} THEN 400 ELSE 0 END` : ''}
-  + CASE WHEN ${tagMatchSql()} THEN 200 ELSE 0 END
+  ${includeTags ? `+ CASE WHEN ${tagMatchSql()} THEN 200 ELSE 0 END` : ''}
   + CASE WHEN LOWER("Product"."name") LIKE LOWER($queryText) || '%' THEN 1000 ELSE 0 END
   + CASE WHEN LOWER("Product"."name") LIKE LOWER($queryPattern) THEN 100 ELSE 0 END
   + (${baseRelevanceSql})
 )`;
 
-const ftsWhere = (queryText, { includeBrands = true } = {}) => ({
+const ftsWhere = (queryText, { includeBrands = true, includeTags = true } = {}) => ({
   ...PUBLISHED_WHERE,
   [Op.and]: [
     Sequelize.literal(`(
@@ -163,7 +163,7 @@ const ftsWhere = (queryText, { includeBrands = true } = {}) => ({
       OR ${productPartialMatchSql()}
       OR ${categoryPartialMatchSql()}
       ${includeBrands ? `OR ${brandMatchSql()}` : ''}
-      OR ${tagMatchSql()}
+      ${includeTags ? `OR ${tagMatchSql()}` : ''}
     )`),
   ],
 });
@@ -176,13 +176,13 @@ const ftsRelevance = (queryText, options = {}) => [
   'relevance',
 ];
 
-const trigramWhere = (queryText, { includeBrands = true } = {}) => ({
+const trigramWhere = (queryText, { includeBrands = true, includeTags = true } = {}) => ({
   ...PUBLISHED_WHERE,
   [Op.or]: [
     Sequelize.literal(productPartialMatchSql()),
     Sequelize.literal(categoryPartialMatchSql()),
     ...(includeBrands ? [Sequelize.literal(brandMatchSql())] : []),
-    Sequelize.literal(tagMatchSql()),
+    ...(includeTags ? [Sequelize.literal(tagMatchSql())] : []),
     Sequelize.literal(`similarity("Product"."name", $queryText) > ${TRIGRAM_MIN_SIMILARITY}`),
     Sequelize.literal(`similarity("Product"."sku", $queryText) > 0.3`),
   ],
@@ -196,13 +196,13 @@ const trigramRelevance = (queryText, options = {}) => [
   'relevance',
 ];
 
-const baseQueryOptions = (queryText, limit, offset, relevanceAttr, whereClause, { includeBrands = true } = {}) => ({
+const baseQueryOptions = (queryText, limit, offset, relevanceAttr, whereClause, { includeBrands = true, includeTags = true } = {}) => ({
   where: whereClause,
   attributes: {
     exclude: ['search_vector'],
     include: [relevanceAttr],
   },
-  include: buildIncludes(includeBrands),
+  include: buildIncludes(includeBrands, includeTags),
   bind: { queryText, queryPattern: buildSearchPattern(queryText) },
   order: [
     [Sequelize.literal('"relevance"'), 'DESC'],
@@ -228,15 +228,15 @@ const baseQueryOptions = (queryText, limit, offset, relevanceAttr, whereClause, 
  * @param {number} offset - Pagination offset
  * @returns {{ rows: Product[], count: number }}
  */
-const searchProducts = async (queryText, limit, offset, { includeBrands = true } = {}) => {
+const searchProducts = async (queryText, limit, offset, { includeBrands = true, includeTags = true } = {}) => {
   const ftsResults = await Product.unscoped().findAndCountAll(
     baseQueryOptions(
       queryText,
       limit,
       offset,
-      ftsRelevance(queryText, { includeBrands }),
-      ftsWhere(queryText, { includeBrands }),
-      { includeBrands }
+      ftsRelevance(queryText, { includeBrands, includeTags }),
+      ftsWhere(queryText, { includeBrands, includeTags }),
+      { includeBrands, includeTags }
     )
   );
 
@@ -252,9 +252,9 @@ const searchProducts = async (queryText, limit, offset, { includeBrands = true }
         queryText,
         limit,
         offset,
-        trigramRelevance(queryText, { includeBrands }),
-        trigramWhere(queryText, { includeBrands }),
-        { includeBrands }
+        trigramRelevance(queryText, { includeBrands, includeTags }),
+        trigramWhere(queryText, { includeBrands, includeTags }),
+        { includeBrands, includeTags }
       )
     );
 
@@ -364,7 +364,7 @@ const searchCategories = async (queryText, limit = 5) => {
  * @param {string} queryText
  * @returns {string|null} suggested correction, or null
  */
-const suggestCorrection = async (queryText, { includeBrands = true } = {}) => {
+const suggestCorrection = async (queryText, { includeBrands = true, includeTags = true } = {}) => {
   const MIN_CORRECTION_SIMILARITY = 0.2; // Catch common typos even on short words
   const normalizedQuery = queryText.toLowerCase();
 

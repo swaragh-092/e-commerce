@@ -103,7 +103,8 @@ const search = async (query, page = 1, limit = 20) => {
   const normalizedQuery = normalizeSearchQuery(query);
   const { features } = await SettingsService.getFeatures();
   const brandsVisible = features.brands !== false;
-  const cacheKey = buildCacheKey(normalizedQuery, page, limit, brandsVisible);
+  const tagsVisible = features.tags === true;
+  const cacheKey = `${buildCacheKey(normalizedQuery, page, limit, brandsVisible)}:tags:${tagsVisible}`;
 
   // Serve from cache if available (hot path)
   const cached = cacheGet(cacheKey);
@@ -116,7 +117,7 @@ const search = async (query, page = 1, limit = 20) => {
   // Run product, brand, and category searches in parallel
   const [productResults, brands, categories, labelPresets] =
     await Promise.all([
-      SearchRepository.searchProducts(normalizedQuery, queryLimit, offset, { includeBrands: brandsVisible }),
+      SearchRepository.searchProducts(normalizedQuery, queryLimit, offset, { includeBrands: brandsVisible, includeTags: tagsVisible }),
       brandsVisible ? SearchRepository.searchBrands(normalizedQuery, 5) : [],
       SearchRepository.searchCategories(normalizedQuery, 5),
       getSaleLabels().catch(() => []),
@@ -134,7 +135,7 @@ const search = async (query, page = 1, limit = 20) => {
     productResults.count === 0 && brands.length === 0 && categories.length === 0;
 
   const suggestion = isEmpty
-    ? await SearchRepository.suggestCorrection(normalizedQuery, { includeBrands: brandsVisible })
+    ? await SearchRepository.suggestCorrection(normalizedQuery, { includeBrands: brandsVisible, includeTags: tagsVisible })
     : null;
 
   const result = redactBrands({

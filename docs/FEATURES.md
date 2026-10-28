@@ -984,3 +984,7 @@ e-commerce/
 Products, categories, product attributes, media storage, content pages, menus, customer accounts, and access control are structural services. They retain permission controls rather than independent global disable switches. Store Designer is covered by `themes`; payment/shipping capabilities follow the store mode. Newsletter opt-out remains available while the newsletter capability is disabled.
 
 The legacy HTML storefront reads the same public resolved feature map and hides Newsletter, Gallery, and Blog links/forms. Public endpoints continue to work anonymously when their feature is ON. Newsletter campaign generation and queued delivery both pause while OFF; transactional order/account mail is independent. Feature changes invalidate the server cache; other already-open storefront tabs adopt UI changes when settings are fetched again.
+
+### Product Tags platform switch
+
+In **Settings → Platform Features**, **Product Tags** controls tag management, product tag inputs and bulk edits, storefront tag links/pages, tag APIs, tag search matching, and sitemap entries. It defaults to enabled in both modes. Disabling preserves all tags and product associations; product edits keep saved tags until the feature is re-enabled. No additional migration is required for this switch.

@@ -500,7 +500,7 @@ exports.getProducts = async (filters, page, limit, isAdmin = false) => {
               OR LOWER("search_brands"."slug") LIKE LOWER(${escapedSearchPattern})
             )
         )`)] : []),
-        Sequelize.literal(`EXISTS (
+        ...(features.tags ? [Sequelize.literal(`EXISTS (
           SELECT 1
           FROM "product_tags" AS "search_product_tags"
           INNER JOIN "tags" AS "search_tags"
@@ -510,7 +510,7 @@ exports.getProducts = async (filters, page, limit, isAdmin = false) => {
               LOWER("search_tags"."name") LIKE LOWER(${escapedSearchPattern})
               OR LOWER("search_tags"."slug") LIKE LOWER(${escapedSearchPattern})
             )
-        )`),
+        )`)] : []),
       ];
     }
   }
@@ -565,7 +565,7 @@ exports.getProducts = async (filters, page, limit, isAdmin = false) => {
     where.isFeatured = true;
   }
   
-  const tagFilter = buildTagFilter(filters.tags);
+  const tagFilter = buildTagFilter(features.tags ? filters.tags : undefined);
   if (tagFilter) where[Op.and] = [...(where[Op.and] || []), tagFilter];
 
   // sale: salePrice is set AND sale window is active (or no window defined)
@@ -922,7 +922,7 @@ exports.createProduct = async (data, auditContext = null) => {
       await replaceImageRows({ productId: product.id, images: data.images, transaction });
     }
 
-    await syncProductTags(product, data.tags, transaction);
+    await syncProductTags(product, createFeatures.tags ? data.tags : undefined, transaction);
 
     await transaction.commit();
 
@@ -1044,7 +1044,7 @@ exports.updateProduct = async (id, data, auditContext = null) => {
       await replaceImageRows({ productId: id, images: data.images, transaction });
     }
 
-    await syncProductTags(product, data.tags, transaction);
+    await syncProductTags(product, updateFeatures.tags ? data.tags : undefined, transaction);
 
     await transaction.commit();
 

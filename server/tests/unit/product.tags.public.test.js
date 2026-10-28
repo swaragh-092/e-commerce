@@ -1,10 +1,11 @@
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { createRequire } from 'node:module';
 const require = createRequire(import.meta.url);
 const db = require('../../src/modules');
 const tags = require('../../src/modules/product/tag.service');
 const { tagWriteSchema, tagSlugSchema } = require('../../src/modules/product/tag.validation');
 const migration = require('../../migrations/20261028100000-add-tag-description');
+beforeEach(() => vi.spyOn(require('../../src/middleware/featureGate.middleware'), 'getResolvedFeature').mockResolvedValue(true));
 afterEach(() => vi.restoreAllMocks());
 
 describe('public tag visibility', () => {

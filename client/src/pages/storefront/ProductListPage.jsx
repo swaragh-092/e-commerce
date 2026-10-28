@@ -36,6 +36,7 @@ const ProductListPage = ({ tag = null }) => {
     const showTopbarFilters = showFilters && !isMobile && filterLayout === 'topbar';
     const showCatalogBreadcrumbs = catalog.showBreadcrumbs !== false;
     const pricingEnabled = useFeatureVisible('pricing', 'storefront');
+    const tagsEnabled = useFeature('tags');
     const showPrice = useFeature('showPrice');
     const brandsEnabled = useFeature('brands');
 
@@ -44,7 +45,7 @@ const ProductListPage = ({ tag = null }) => {
     const filters = {
         search: searchParams.get('search') || '',
         category: searchParams.get('category') || '',
-        tags: tag?.slug || searchParams.get('tags') || '',
+        tags: tagsEnabled ? tag?.slug || searchParams.get('tags') || '' : '',
         brand: brandsEnabled ? (searchParams.get('brand') || '') : '',
         page: parseInt(searchParams.get('page')) || 1,
         sort: searchParams.get('sort') || defaultSort,
@@ -78,7 +79,7 @@ const ProductListPage = ({ tag = null }) => {
         fetchProducts();
         return () => { cancelled = true; };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [searchParams.toString(), brandsEnabled, tag?.slug]);
+    }, [searchParams.toString(), brandsEnabled, tagsEnabled, tag?.slug]);
 
     // Resolve the category slug → full breadcrumb path for the contextual breadcrumb on PDP
     // e.g. "vegetable" slug → "Vegetable > Roots > Beetroot" when filtering by beetroot

@@ -116,7 +116,7 @@ const shouldAutoRefreshSlug = (currentSlug, previousName, nextName) => {
 
 const validate = (formData) => {
   const errs = {};
-  if ((formData.tags || []).length > 50 || (formData.tags || []).some((tag) => !tag.trim() || tag.length > 100 || /[\p{Cc}\p{Cf},]/u.test(tag))) {
+  if (formData._features?.tags !== false && ((formData.tags || []).length > 50 || (formData.tags || []).some((tag) => !tag.trim() || tag.length > 100 || /[\p{Cc}\p{Cf},]/u.test(tag)))) {
     errs.tags = 'Use up to 50 tags, each with 1–100 characters and no commas or control characters.';
   }
   if (!formData.name?.trim()) errs.name = 'Product name is required.';
@@ -237,6 +237,7 @@ const ProductEditPage = () => {
   const canCreateProducts = hasPermission(PERMISSIONS.PRODUCTS_CREATE);
   const canUpdateProducts = hasPermission(PERMISSIONS.PRODUCTS_UPDATE);
   const canUploadMedia = hasPermission(PERMISSIONS.MEDIA_UPLOAD);
+  const tagsEnabled = useFeature('tags');
   const pricingEnabled = useFeatureVisible('pricing', 'admin');
   const featuresResolved = useFeaturesResolved();
   const pricingCapability = useFeature('pricing');
@@ -515,7 +516,7 @@ const ProductEditPage = () => {
     }
 
     const effectiveQuantity = formData.type === 'variable' || hasVariants ? variantStockTotal : formData.quantity;
-    const errs = validate({ ...formData, quantity: effectiveQuantity, _features: { pricing: pricingCapability, shipping: shippingCapability } });
+    const errs = validate({ ...formData, quantity: effectiveQuantity, _features: { tags: tagsEnabled, pricing: pricingCapability, shipping: shippingCapability } });
 
     // Block type change if invariants are violated
     if (!isNew && dbProduct && formData.type !== dbProduct.type) {
@@ -576,6 +577,7 @@ const ProductEditPage = () => {
       if (!shippingCapability) {
         for (const key of ['requiresShipping', 'packingMode', 'weightGrams', 'lengthCm', 'breadthCm', 'heightCm']) delete payload[key];
       }
+      if (!tagsEnabled) delete payload.tags;
       if (!brandsEnabled) delete payload.brandId;
       if (!seoEnabled) for (const key of ['metaTitle', 'metaDescription', 'metaKeywords', 'ogImage']) delete payload[key];
 
@@ -1293,7 +1295,7 @@ const ProductEditPage = () => {
                 sx={{ mt: 1 }}
               />
 
-              <ProductTagsInput value={formData.tags} onChange={(tags) => setField('tags', tags)} disabled={!canSaveProduct} error={errors.tags} />
+              {tagsEnabled && <ProductTagsInput value={formData.tags} onChange={(tags) => setField('tags', tags)} disabled={!canSaveProduct} error={errors.tags} />}
 
               {brandsEnabled && (
               <FormControl fullWidth margin="normal">

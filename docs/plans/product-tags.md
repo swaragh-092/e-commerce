@@ -286,3 +286,7 @@ products, saved introductions and canonical-slug collisions.
   a regression case. Its three focused backend suites passed 31 tests.
 - Credential-pattern scanning of staged files and `git diff --check` passed.
 - Deployment still requires `cd server && npm run migrate` before the new backend.
+
+## Platform feature control
+
+Product Tags is an optional Platform Features capability (`tags`), enabled by default in ecommerce and catalog modes. Turning it off hides admin navigation, editing and bulk controls, storefront links and tag pages, and custom navigation links. Dedicated tag APIs are gated; public metadata returns 404 and sitemap generation skips tags. Product writes omit tag synchronization while disabled, preserving all saved labels and associations. Legacy tag query filters and tag-name search matching are ignored while disabled. No additional database migration is needed.

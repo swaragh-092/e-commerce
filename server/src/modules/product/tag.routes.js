@@ -10,6 +10,9 @@ const { idParamSchema } = require('../../utils/common.validation');
 const { PERMISSIONS } = require('../../config/permissions');
 const { success, paginated } = require('../../utils/response');
 
+const { featureGate } = require('../../middleware/featureGate.middleware');
+router.use(featureGate('tags'));
+
 router.get('/public/:slug', validate(tagSlugSchema, 'params'), async (req, res, next) => {
   try { return success(res, await service.getPublicTagBySlug(req.params.slug)); }
   catch (err) { next(err); }

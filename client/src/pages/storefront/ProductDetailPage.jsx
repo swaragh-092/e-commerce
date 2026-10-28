@@ -62,6 +62,7 @@ const ProductDetailPage = () => {
     const storeName = getStoreName(settings);
     const cartEnabled    = useFeatureVisible('cart', 'storefront');
     const pricingEnabled = useFeatureVisible('pricing', 'storefront');
+    const tagsEnabled = useFeature('tags');
     const showPrice = useFeature('showPrice');
     const wishlistEnabled = useFeature('wishlist');
     const enquiryEnabled = useFeature('enquiry');
@@ -825,7 +826,7 @@ const ProductDetailPage = () => {
                         />
                     )}
 
-                    {product.tags?.length > 0 && (
+                    {tagsEnabled && product.tags?.length > 0 && (
                         <Box sx={{ mt: 3, display: 'flex', gap: 1, flexWrap: 'wrap' }}>
                             {product.tags.map(t => <Chip key={t.id} label={t.name} size="small" variant="outlined" component={RouterLink} to={`/tags/${encodeURIComponent(t.slug)}`} clickable />)}
                         </Box>
