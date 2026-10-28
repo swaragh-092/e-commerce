@@ -57,6 +57,7 @@ const searchLimiter = createLimiter(1, 30, 'Too many search requests, please slo
 const aiAssistantLimiter = createLimiter(15, 10, 'Too many AI assistant requests. Please wait before trying again.');
 const inventoryAlertLimiter = createLimiter(1, 60, 'Too many inventory alert requests, please try again shortly');
 const inventoryAlertTestLimiter = createLimiter(5, 5, 'Too many test alert emails requested, please try again in a few minutes');
+const adminDashboardLimiter = createLimiter(1, 120, 'Too many dashboard requests, please try again shortly');
 const webhookLimiter = createLimiter(1, 120, 'Too many webhook events received, please try again shortly');
 const shippingWebhookLimiter = createLimiter(1, 120, 'Too many shipping webhook events received, please try again shortly');
 
@@ -81,6 +82,7 @@ module.exports = {
   aiAssistantLimiter,
   inventoryAlertLimiter,
   inventoryAlertTestLimiter,
+  adminDashboardLimiter,
   webhookLimiter,
   shippingWebhookLimiter,
 };

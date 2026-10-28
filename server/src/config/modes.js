@@ -59,44 +59,11 @@ const isTier1Feature = (key) => TIER1_KEYS.has(key);
 // Note: guestCheckout is Tier 2 but the Settings UI auto-hides it when
 // checkout (Tier 1) is locked OFF — it becomes irrelevant in catalog mode.
 
-const TIER2_DEFAULTS = {
-  ecommerce: {
-    wishlist:                 true,
-    reviews:                  true,
-    coupons:                  true,
-    guestCheckout:            true,
-    seo:                      true,
-    emailVerification:        false,
-    requirePurchaseForReview: false,
-    showAvailableCoupons:     true,
-    multiCurrency:            false,
-    socialLogin:              false,
-    enquiry:                  false,  // Tier 2: defaults to false in ecommerce but admin can enable
-    showPrice:                true,   // Tier 2: visibility of price on product cards/pages
-    apiBuilder:               true,
-    productAssistant:         true,
-    brands:                   true,
-    themes:                   true,
-  },
-  catalog: {
-    wishlist:                 true,   // defaults to true so catalog users can save favorites
-    reviews:                  true,
-    coupons:                  false,  // coupons are ecommerce-centric by default
-    guestCheckout:            true,   // toggleable but auto-hides in UI (checkout is off)
-    seo:                      true,
-    emailVerification:        false,
-    requirePurchaseForReview: false,
-    showAvailableCoupons:     false,
-    multiCurrency:            false,
-    socialLogin:              false,
-    enquiry:                  true,   // Tier 2: defaults to true in catalog mode
-    showPrice:                false,  // Tier 2: visibility of price (defaults to off in catalog)
-    apiBuilder:               true,
-    productAssistant:         true,
-    brands:                   true,
-    themes:                   true,
-  },
-};
+const featureCatalog = require('../../../shared/platform-features.json');
+const TIER2_DEFAULTS = Object.fromEntries(VALID_MODES.map((mode) => [mode, {
+  ...featureCatalog.reservedDefaults,
+  ...Object.fromEntries(featureCatalog.optional.map((feature) => [feature.key, feature.defaults[mode]])),
+}]));
 
 // ─── Mode Resolution ──────────────────────────────────────────────────────────
 

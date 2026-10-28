@@ -25,34 +25,47 @@ import {
 } from '../../services/adminService';
 import { useNotification } from '../../context/NotificationContext';
 import { useAuth } from '../../hooks/useAuth';
+import { useSettings } from '../../hooks/useSettings';
 import { PERMISSIONS } from '../../utils/permissions';
+import { isNotificationTemplateVisible } from '../../utils/notificationTemplateVisibility';
 
 // ── Human-readable template names ─────────────────────────────────────────────
 const TEMPLATE_LABELS = {
-  newsletter_confirmation: { label: 'Newsletter Confirmation', desc: 'Confirmation after a customer opts into store updates' },
-  newsletter_campaign: { label: 'Newsletter Campaign', desc: 'Wrapper for composed campaigns, including an unsubscribe link' },
-  delivery_exception: { label: 'Delivery Exception', desc: 'Customer alert for delivery failure or a return to sender' },
-  staff_invitation: { label: 'Staff Invitation', desc: 'Expiring password setup link for a new staff account' },
-  order_assigned_staff: { label: 'Order Assigned', desc: 'Sent to the staff member assigned an order' },
-  enquiry_assigned_staff: { label: 'Enquiry Assigned', desc: 'Sent to the staff member assigned a customer enquiry' },
-  password_changed: { label: 'Password Changed', desc: 'Security notice after a password change or reset' },
-  email_changed: { label: 'Email Changed', desc: 'Security notice sent to the previous account email' },
-  return_requested: { label: 'Return or Replacement Requested', desc: 'Acknowledgement sent to the customer' },
-  return_status_updated: { label: 'Return or Replacement Update', desc: 'Customer update when the request status changes' },
-  admin_return_requested: { label: 'New Return or Replacement', desc: 'Review alert sent to configured admin and staff recipients' },
-  payment_failed_customer: { label: 'Payment Failed', desc: 'Customer notice when payment fails' },
-  new_enquiry_admin: { label: 'New Enquiry — Staff', desc: 'Alerts selected staff when a customer submits an enquiry' },
-  new_enquiry_customer: { label: 'Enquiry Received — Customer', desc: 'Acknowledges the customer enquiry and includes its details' },
-  enquiry_reply_customer: { label: 'Enquiry Reply — Customer', desc: 'Reply sent when staff respond to an enquiry' },
-  order_placed:       { label: 'Order Placed',       desc: 'Sent when a customer completes checkout',         icon: '🛍️' },
-  order_shipped:      { label: 'Order Shipped',      desc: 'Sent when a shipment is created',                 icon: '📦' },
-  order_delivered:    { label: 'Order Delivered',    desc: 'Sent when the order is marked delivered',         icon: '✅' },
-  order_cancelled:    { label: 'Order Cancelled',    desc: 'Sent when an order is cancelled',                 icon: '❌' },
-  order_refunded:     { label: 'Order Refunded',     desc: 'Sent when a refund is processed',                 icon: '💳' },
-  welcome:            { label: 'Welcome',            desc: 'Sent on successful account registration',         icon: '👋' },
-  email_verification: { label: 'Email Verification', desc: 'Sent when email verification is required',        icon: '✉️' },
-  password_reset:     { label: 'Password Reset',     desc: 'Sent when a user requests a password reset',      icon: '🔑' },
-  low_stock_alert:    { label: 'Low Stock Alert',    desc: 'Sent to admins when inventory drops below threshold', icon: '⚠️' },
+  admin_new_order:         { label: 'New Order Received',         desc: 'Alert sent to store admins when an order is placed',          icon: '🛍️' },
+  admin_order_cancelled:   { label: 'Admin Order Cancelled',     desc: 'Alert sent to store admins when an order is cancelled',       icon: '🛑' },
+  admin_order_failed:      { label: 'Admin Payment Failed',      desc: 'Alert sent to store admins when an order payment fails',      icon: '⚠️' },
+  admin_return_requested:  { label: 'New Return or Replacement', desc: 'Review alert sent to configured admin and staff recipients', icon: '🔄' },
+  order_placed:            { label: 'Order Placed',              desc: 'Sent when a customer completes checkout',                     icon: '🛍️' },
+  order_shipped:           { label: 'Order Shipped',             desc: 'Sent when a shipment is created with tracking details',        icon: '📦' },
+  order_delivered:         { label: 'Order Delivered',           desc: 'Sent when the order is marked delivered',                     icon: '✅' },
+  order_out_for_delivery:  { label: 'Out for Delivery',          desc: 'Sent when package is out with the courier',                   icon: '🚚' },
+  order_cancelled:         { label: 'Order Cancelled',           desc: 'Sent when an order is cancelled',                             icon: '❌' },
+  order_refunded:          { label: 'Order Refunded',            desc: 'Sent when a refund is processed',                             icon: '💳' },
+  payment_failed_customer: { label: 'Payment Failed',            desc: 'Customer notice when payment fails during checkout',          icon: '⚠️' },
+  delivery_exception:      { label: 'Delivery Exception',        desc: 'Customer alert for delivery failure or return to sender',     icon: '🚚' },
+  return_requested:        { label: 'Return or Replacement Requested', desc: 'Acknowledgement sent to customer on request submission', icon: '📦' },
+  return_status_updated:   { label: 'Return or Replacement Update', desc: 'Customer update when request status changes',              icon: '🔄' },
+  welcome:                 { label: 'Welcome',                   desc: 'Sent on successful account registration',                     icon: '👋' },
+  email_verification:      { label: 'Email Verification',        desc: 'Sent when email verification is required',                    icon: '✉️' },
+  verify_email:            { label: 'Verify Email (Legacy)',     desc: 'Legacy alias for email verification',                         icon: '✉️' },
+  email_change_verification: { label: 'Confirm Email Change',    desc: 'Sent to verify a requested new email address',                icon: '✉️' },
+  email_changed:           { label: 'Email Changed',             desc: 'Security notice sent to the previous account email',          icon: '🔒' },
+  password_reset:          { label: 'Password Reset',            desc: 'Sent when a user requests a password reset',                  icon: '🔑' },
+  password_changed:        { label: 'Password Changed',          desc: 'Security notice after a password change or reset',            icon: '🔒' },
+  new_login_alert:         { label: 'New Login Alert',           desc: 'Security alert when account is accessed from a new device/IP', icon: '⚠️' },
+  account_deletion_scheduled: { label: 'Account Deletion Scheduled', desc: 'Notice sent when account deletion is requested',         icon: '⚠️' },
+  staff_invitation:        { label: 'Staff Invitation',          desc: 'Expiring password setup link for a new staff account',        icon: '👤' },
+  order_assigned_staff:    { label: 'Order Assigned',            desc: 'Sent to the staff member assigned an order',                  icon: '📋' },
+  enquiry_assigned_staff:  { label: 'Enquiry Assigned',          desc: 'Sent to the staff member assigned a customer enquiry',        icon: '📬' },
+  new_enquiry_admin:       { label: 'New Enquiry — Staff',       desc: 'Alerts selected staff when a customer submits an enquiry',    icon: '📬' },
+  new_enquiry_customer:    { label: 'Enquiry Received — Customer', desc: 'Acknowledges customer enquiry and includes details',       icon: '📬' },
+  enquiry_reply_customer:  { label: 'Enquiry Reply — Customer',  desc: 'Reply sent when staff respond to an enquiry',                 icon: '💬' },
+  newsletter_confirmation: { label: 'Newsletter Confirmation',   desc: 'Confirmation after a customer opts into store updates',       icon: '📰' },
+  newsletter_campaign:     { label: 'Newsletter Campaign',       desc: 'Wrapper for composed campaigns, including unsubscribe link',  icon: '📢' },
+  guest_order_claim:       { label: 'Guest Order Claim',         desc: 'One-time link to attach guest orders to a verified account',  icon: '🔗' },
+  low_stock_alert:         { label: 'Low Stock Alert',           desc: 'Sent to admins when inventory drops below threshold',         icon: '⚠️' },
+  low_stock_admin:         { label: 'Low Stock Alert (Admin)',   desc: 'Direct admin inventory alert notification',                   icon: '⚠️' },
+  inventory_alert_digest:  { label: 'Inventory Alert Digest',    desc: 'Periodic digest of low stock and out-of-stock items',         icon: '📊' },
 };
 
 const CHANNELS = [
@@ -114,6 +127,7 @@ const EmailPreviewFrame = ({ html, loading }) => {
 const EmailTemplatesPage = ({ excludeTemplates = [], embedded = false, onDirtyChange }) => {
   const { notify, confirm } = useNotification();
   const { hasPermission } = useAuth();
+  const { features } = useSettings();
   const canEdit = hasPermission(PERMISSIONS.NOTIFICATIONS_MANAGE);
 
   const [templates, setTemplates]           = useState([]);
@@ -154,8 +168,8 @@ const EmailTemplatesPage = ({ excludeTemplates = [], embedded = false, onDirtyCh
   }, []);
 
   const channelTemplates = useMemo(
-    () => templates.filter(t => t.channel === activeChannel),
-    [templates, activeChannel]
+    () => templates.filter(t => t.channel === activeChannel && isNotificationTemplateVisible(t.name, features)),
+    [templates, activeChannel, features]
   );
 
   useEffect(() => {
@@ -171,7 +185,7 @@ const EmailTemplatesPage = ({ excludeTemplates = [], embedded = false, onDirtyCh
   }, [activeChannel, channelTemplates, loading, selected]);
 
   // Sync draft when template changes (only if not yet dirty)
-  const currentTemplate = templates.find(t => t.name === selected && t.channel === activeChannel);
+  const currentTemplate = channelTemplates.find(t => t.name === selected);
   const draftKey = selected ? getDraftKey(activeChannel, selected) : null;
   useEffect(() => {
     if (!currentTemplate) return;
@@ -225,7 +239,7 @@ const EmailTemplatesPage = ({ excludeTemplates = [], embedded = false, onDirtyCh
   // ── Live Preview ───────────────────────────────────────────────────────────
   useEffect(() => {
     const isPreviewTab = activeChannel === 'email' ? editorTab === 1 : editorTab === 0;
-    if (!isPreviewTab || !selected) return;
+    if (!isPreviewTab || !currentTemplate) return;
     const timer = setTimeout(() => {
       setPreviewLoading(true);
       previewEmailTemplate(selected, {
@@ -239,7 +253,7 @@ const EmailTemplatesPage = ({ excludeTemplates = [], embedded = false, onDirtyCh
         .finally(() => setPreviewLoading(false));
     }, 500);
     return () => clearTimeout(timer);
-  }, [editorTab, cur.bodyHtml, cur.bodyText, cur.subject, selected, activeChannel]);
+  }, [editorTab, cur.bodyHtml, cur.bodyText, cur.subject, selected, activeChannel, currentTemplate]);
 
   // ── Save ───────────────────────────────────────────────────────────────────
   const handleSave = async () => {
@@ -341,7 +355,7 @@ const EmailTemplatesPage = ({ excludeTemplates = [], embedded = false, onDirtyCh
         <Box>
           <Typography variant={embedded ? 'h6' : 'h5'} component={embedded ? 'h2' : 'h1'}>{embedded ? 'Account & system templates' : 'Templates'}</Typography>
           <Typography variant="body2" color="text.secondary">
-            Customize transactional Email, SMS, and WhatsApp templates. Use <code style={{ background: 'rgba(0,0,0,0.06)', padding: '1px 5px', borderRadius: 4 }}>{'{{variable}}'}</code> for dynamic content.
+            Customize transactional Email, SMS, and WhatsApp templates for enabled store features. Use <code style={{ background: 'rgba(0,0,0,0.06)', padding: '1px 5px', borderRadius: 4 }}>{'{{variable}}'}</code> for dynamic content.
           </Typography>
         </Box>
         {!canEdit && (
@@ -359,7 +373,7 @@ const EmailTemplatesPage = ({ excludeTemplates = [], embedded = false, onDirtyCh
                 value={activeChannel}
                 onChange={(_, value) => {
                   setActiveChannel(value);
-                  setEditorTab(value === 'email' ? 0 : 2);
+                  setEditorTab(value === 'email' ? 0 : 1);
                 }}
                 variant="fullWidth"
                 sx={{ minHeight: 36 }}
@@ -439,7 +453,7 @@ const EmailTemplatesPage = ({ excludeTemplates = [], embedded = false, onDirtyCh
 
         {/* ── Right: Editor Panel ── */}
         <Grid item xs={12} md={9}>
-          {!selected ? (
+          {!currentTemplate ? (
             <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100%' }}>
               <Typography color="text.secondary">Select a template to edit</Typography>
             </Box>

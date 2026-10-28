@@ -169,7 +169,7 @@ const ThemeCard = ({ theme, onPreview, onApply, onDetail, isActive }) => {
         <Stack direction="row" spacing={1}>
           {onDetail && <Button size="small" startIcon={<InfoOutlinedIcon />} onClick={() => onDetail(pkg)}>Details</Button>}
           <Button size="small" startIcon={<VisibilityIcon />} onClick={() => onPreview(pkg)}>Preview</Button>
-          <Button size="small" variant="contained" startIcon={<DownloadDoneIcon />} onClick={() => onApply(pkg)}>Install</Button>
+          {onApply && <Button size="small" variant="contained" startIcon={<DownloadDoneIcon />} onClick={() => onApply(pkg)}>Install</Button>}
         </Stack>
       </CardContent>
     </Card>

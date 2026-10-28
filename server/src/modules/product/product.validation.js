@@ -104,7 +104,7 @@ const catalogCreateProductSchema = createProductSchema.fork(
   ['price'], () => Joi.number().precision(2).min(0).optional().allow(null).default(null)
 ).keys({
   variants: Joi.array().items(productVariantCreateSchema.keys({ price: Joi.number().precision(2).min(0).default(0) })).when('type', {
-    is: 'variable', then: Joi.required(), otherwise: Joi.forbidden(),
+    is: 'variable', then: Joi.optional(), otherwise: Joi.forbidden(),
   }),
 });
 

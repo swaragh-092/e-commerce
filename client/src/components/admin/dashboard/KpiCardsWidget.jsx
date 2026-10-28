@@ -19,7 +19,7 @@ const KpiCardsWidget = ({ stats, loading, settings, formatPrice, spacing, hasAny
   const showStatCards = checkBool(settings['dashboard.showStatCards']);
   const isOrdersAllowed = mode !== 'catalog' && features?.orders !== false;
   const canViewOrders = isOrdersAllowed && (typeof hasAnyPermission === 'function' ? hasAnyPermission([PERMISSIONS.ORDERS_READ]) : true);
-  const canViewCustomers = typeof hasAnyPermission === 'function' ? hasAnyPermission([PERMISSIONS.CUSTOMERS_READ]) : true;
+  const canViewCustomers = features?.customers === true && (typeof hasAnyPermission === 'function' ? hasAnyPermission([PERMISSIONS.CUSTOMERS_READ]) : true);
   const canViewProducts = typeof hasAnyPermission === 'function' ? hasAnyPermission([PERMISSIONS.PRODUCTS_READ]) : true;
   const canViewReviews = typeof hasAnyPermission === 'function' ? hasAnyPermission([PERMISSIONS.REVIEWS_READ]) : true;
 

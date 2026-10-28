@@ -1,3 +1,4 @@
+import platformFeatures from '../../../shared/platform-features.json';
 import React, { createContext, useContext, useState, useEffect, useCallback, useMemo } from 'react';
 import { ThemeProvider, createTheme, CssBaseline, Box, CircularProgress } from '@mui/material';
 import settingsService from '../services/settingsService';
@@ -41,22 +42,8 @@ export const DEFAULT_FALLBACK_FEATURES = {
   orders: true,
   payments: true,
   shipping: true,
-  wishlist: true,
-  reviews: true,
-  coupons: true,
-  guestCheckout: true,
-  seo: true,
-  emailVerification: false,
-  requirePurchaseForReview: false,
-  showAvailableCoupons: true,
-  multiCurrency: false,
-  socialLogin: false,
-  enquiry: false,
-  showPrice: true,
-  apiBuilder: true,
-  productAssistant: true,
-  brands: true,
-  themes: true,
+  ...platformFeatures.reservedDefaults,
+  ...Object.fromEntries(platformFeatures.optional.map((feature) => [feature.key, feature.defaults.ecommerce])),
 };
 
 export const SettingsProvider = ({ children }) => {
@@ -99,7 +86,13 @@ export const SettingsProvider = ({ children }) => {
         const raw = localStorage.getItem(PREVIEW_KEY);
         data = raw ? JSON.parse(raw) : {};
       } else {
-        [data] = await Promise.all([settingsService.getAllSettings()]);
+        try {
+          data = await settingsService.getAllSettings();
+        } catch (settingsError) {
+          const status = settingsError?.response?.status;
+          if (status !== 401 && status !== 403) throw settingsError;
+          data = await settingsService.getPublicSettings();
+        }
       }
 
       const [, featureData] = await Promise.all([

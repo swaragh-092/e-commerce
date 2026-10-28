@@ -22,7 +22,9 @@ export const isAdminMenuItemVisible = (item, {
     }
   }
   if (item.permission && !hasPermission(item.permission)) return false;
-  if (item.permissions && !hasAnyPermission(item.permissions)) return false;
+  if (item.permissions && !(item.requireAllPermissions
+    ? item.permissions.every(hasPermission)
+    : hasAnyPermission(item.permissions))) return false;
   if (item.role && !hasRole(item.role)) return false;
   return true;
 };

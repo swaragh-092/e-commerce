@@ -7,7 +7,10 @@ const assertVariableProduct = (product) => {
 
 const validateProductTypeChange = (product, data, { hasVariants = false, hasComboItems = false } = {}) => {
     const nextType = data.type || product.type || 'simple';
-    if (nextType !== 'variable' && (hasVariants || data.variants !== undefined)) {
+    // Older products may be labelled Simple despite having variants. Allow
+    // ordinary edits without forcing an inventory type change.
+    const keepsLegacySimple = product.type === 'simple' && nextType === 'simple';
+    if (nextType !== 'variable' && ((hasVariants && !keepsLegacySimple) || data.variants !== undefined)) {
         throw new AppError('VALIDATION_ERROR', 400, 'This product has variants. Keep Variable Product, or remove all variants before changing its type.');
     }
     if (nextType !== 'combo' && hasComboItems) {

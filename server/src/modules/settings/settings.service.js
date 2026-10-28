@@ -11,6 +11,11 @@ const { buildFeatures, isTier1Feature, TIER1_KEYS } = require('../../config/mode
 const { getPermissionsForUser, PERMISSIONS } = require('../../config/permissions');
 const { invalidateFeature } = require('../../middleware/featureGate.middleware');
 const { DESIGN_SETTINGS_GROUPS, isDesignSettingTarget } = require('./designSettings');
+const {
+  PUBLIC_SETTING_GROUP_NAMES,
+  pickPublicSettings,
+  pickPublicGroup,
+} = require('../../config/publicSettings');
 
 const fs = require('fs');
 const path = require('path');
@@ -32,9 +37,41 @@ const ensureNotificationRecipientsAllowed = (settingsArray, actingUser) => {
 
 const isSensitiveSettingKey = (key) => {
   const normalizedKey = String(key || '').toLowerCase();
-  const isSecret = /pass|token|secret|api[_-]?key|privatekey/i.test(normalizedKey);
+  const isSecret = /pass|token|secret|salt|api[_-]?key|privatekey/i.test(normalizedKey);
   const isPublicIdentifier = /id|public|publishable/i.test(normalizedKey);
   return isSecret && !isPublicIdentifier;
+};
+
+const isSensitiveFieldName = (field, path = []) => {
+  const normalized = String(field || '').toLowerCase();
+  if (normalized === 'key' && path.some((part) => String(part).toLowerCase() === 'payu')) {
+    return true;
+  }
+  return isSensitiveSettingKey(field);
+};
+
+const maskSensitiveValue = (value, path = []) => {
+  if (Array.isArray(value)) return value.map((item) => maskSensitiveValue(item, path));
+  if (!value || typeof value !== 'object') return value;
+
+  const masked = {};
+  for (const [field, fieldValue] of Object.entries(value)) {
+    if (isSensitiveFieldName(field, path) && fieldValue !== null && fieldValue !== undefined && fieldValue !== '') {
+      masked[field] = '********';
+    } else if (fieldValue && typeof fieldValue === 'object') {
+      masked[field] = maskSensitiveValue(fieldValue, [...path, field]);
+    } else {
+      masked[field] = fieldValue;
+    }
+  }
+  return masked;
+};
+
+const maskSettingValue = (group, key, value) => {
+  if (!value) return value;
+  if (isSensitiveSettingKey(key)) return '********';
+  if (typeof value === 'object') return maskSensitiveValue(value, [group, key]);
+  return value;
 };
 
 const PAYMENT_GATEWAY_ENABLED_KEYS = {
@@ -293,9 +330,7 @@ const getAll = async () => {
       }
 
       // Mask sensitive values before sending to client
-      if (isSensitiveSettingKey(s.key) && parsedValue) {
-        parsedValue = '********';
-      }
+      parsedValue = maskSettingValue(s.group, s.key, parsedValue);
 
       if (parsedValue === 'true') parsedValue = true;
       else if (parsedValue === 'false') parsedValue = false;
@@ -304,6 +339,20 @@ const getAll = async () => {
   });
 
   return grouped;
+};
+
+const getPublicAll = async () => {
+  const all = await getAll();
+  const advanced = await getByGroup('advanced');
+  return pickPublicSettings({ ...all, advanced });
+};
+
+const getPublicGroup = async (groupName) => {
+  if (!PUBLIC_SETTING_GROUP_NAMES.includes(groupName)) {
+    throw new AppError('VALIDATION_ERROR', 400, 'Invalid public setting group');
+  }
+  const values = await getByGroup(groupName);
+  return pickPublicGroup(groupName, values);
 };
 
 const getByGroup = async (groupName, options = {}) => {
@@ -335,8 +384,8 @@ const getByGroup = async (groupName, options = {}) => {
     
     // Mask sensitive values for client-facing reads. Internal services can opt
     // out so encrypted credentials remain usable by SMTP/Twilio senders.
-    if (maskSensitive && isSensitiveSettingKey(s.key) && parsedValue) {
-      parsedValue = '********';
+    if (maskSensitive) {
+      parsedValue = maskSettingValue(s.group, s.key, parsedValue);
     }
 
     result[s.key] = parsedValue;
@@ -392,7 +441,14 @@ const getDesignState = async () => {
  * effective again. The group/key guard is deliberately stricter than the
  * generic settings update API.
  */
-const resetDesignSetting = async ({ group, key }, actingUserId) => {
+const resetDesignSetting = async ({ group, key }, actingUserId, actingUser = null) => {
+  if (group === 'advanced' && !hasAdvancedSettingsPermission(actingUser)) {
+    throw new AppError(
+      'SETTINGS_ADVANCED_REQUIRED',
+      403,
+      'Advanced settings require the settings.advanced permission.'
+    );
+  }
   if (!isDesignSettingTarget(group, key)) {
     throw new AppError('VALIDATION_ERROR', 400, 'Only visual design settings can be reset.');
   }
@@ -653,6 +709,8 @@ const getFeatures = async () => {
 
 module.exports = {
   getAll,
+  getPublicAll,
+  getPublicGroup,
   getByGroup,
   getDesignState,
   resetDesignSetting,

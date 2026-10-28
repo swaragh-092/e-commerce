@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
-import { useParams, useNavigate, Link } from 'react-router-dom';
+import { useParams, useNavigate, useLocation, Link } from 'react-router-dom';
 import {
   Box,
   Typography,
@@ -221,6 +221,8 @@ const getAttributeRowValue = (row) => (
 const ProductEditPage = () => {
   const { id } = useParams();
   const navigate = useNavigate();
+  const location = useLocation();
+  const returnTo = location.state?.returnTo || '/admin/products';
   const { notify, confirm } = useNotification();
   const { settings } = useSettings();
   const { currency, symbol, formatPrice } = useCurrency();
@@ -399,10 +401,10 @@ const ProductEditPage = () => {
         severity: 'warning',
       });
       if (confirmed) {
-        navigate('/admin/products');
+        navigate(returnTo);
       }
     } else {
-      navigate('/admin/products');
+      navigate(returnTo);
     }
   };
 
@@ -416,10 +418,10 @@ const ProductEditPage = () => {
         severity: 'warning',
       });
       if (confirmed) {
-        navigate('/admin/products');
+        navigate(returnTo);
       }
     } else {
-      navigate('/admin/products');
+      navigate(returnTo);
     }
   };
 
@@ -519,8 +521,6 @@ const ProductEditPage = () => {
         }
     }
 
-    if (formData.type === 'simple' && variantCount > 0) errs.type = 'This product already has variants. Select Variable Product and save.';
-
     if (Object.keys(errs).length > 0) {
       setErrors(errs);
       if (errs.type) notify(errs.type, 'error');
@@ -575,7 +575,7 @@ const ProductEditPage = () => {
 
       // Variant and bundle stock is managed by their own editors.
       delete payload.quantity;
-      if (payload.type === 'simple') {
+      if (payload.type === 'simple' && variantCount === 0) {
         payload.quantity = parseInt(formData.quantity) || 0;
       }
       if (confirmInventoryReset) payload.confirmInventoryReset = true;
@@ -1217,7 +1217,7 @@ const ProductEditPage = () => {
                 {errors.type && <FormHelperText>{errors.type}</FormHelperText>}
                 <FormHelperText>{formData.type === 'variable' ? 'Customers choose a variant. Manage prices and stock per combination below.' : formData.type === 'combo' ? 'Bundle existing products. Stock depends on the included products.' : 'One version with its own price and stock quantity.'}</FormHelperText>
               </FormControl>
-              {formData.type === 'simple' && variantCount > 0 && <Alert severity="warning" action={<Button onClick={() => setField('type', 'variable')} disabled={!canSaveProduct}>Use Variable Product</Button>}>This product has existing variants. Select Variable Product and save to manage them.</Alert>}
+              {formData.type === 'simple' && variantCount > 0 && <Alert severity="warning" action={<Button onClick={() => setField('type', 'variable')} disabled={!canSaveProduct}>Use Variable Product</Button>}>This product has existing variants. Images and product details can still be saved. Select Variable Product and save to manage variants.</Alert>}
 
             </Paper>
 

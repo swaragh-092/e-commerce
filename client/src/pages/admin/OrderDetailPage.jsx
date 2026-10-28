@@ -34,7 +34,7 @@ import AdminPanelSettingsIcon from '@mui/icons-material/AdminPanelSettings';
 import SendIcon from '@mui/icons-material/Send';
 import HistoryIcon from '@mui/icons-material/History';
 import CloseIcon from '@mui/icons-material/Close';
-import { useCurrency } from '../../hooks/useSettings';
+import { useCurrency, useFeature } from '../../hooks/useSettings';
 import { PAYMENT_SETTLED_STATUSES } from '../../utils/constants';
 import ShipmentTrackingTimeline from '../../components/orders/order-detail/ShipmentTrackingTimeline';
 import { getTaxRows } from '../../components/orders/order-detail/orderDetailUtils';
@@ -1087,6 +1087,7 @@ const OrderDetailPage = () => {
   const navigate = useNavigate();
   const { formatPrice } = useCurrency();
   const { hasPermission } = useAuth();
+  const canViewCustomers = useFeature('customers') && hasPermission(PERMISSIONS.CUSTOMERS_READ);
   const { notify } = useNotification();
   const canUpdateOrderStatus = hasPermission(PERMISSIONS.ORDERS_UPDATE_STATUS);
   const canRefundOrders = hasPermission(PERMISSIONS.ORDERS_REFUND);
@@ -1995,16 +1996,16 @@ const OrderDetailPage = () => {
                   <Typography
                     variant="body2"
                     fontWeight={600}
-                    component={order.User?.id ? 'button' : 'p'}
-                    onClick={order.User?.id ? () => navigate(`/admin/customers/${order.User.id}`) : undefined}
+                    component={canViewCustomers && order.User?.id ? 'button' : 'p'}
+                    onClick={canViewCustomers && order.User?.id ? () => navigate(`/admin/customers/${order.User.id}`) : undefined}
                     sx={{
                       p: 0,
                       border: 0,
                       bgcolor: 'transparent',
-                      color: order.User?.id ? 'primary.main' : 'text.primary',
-                      cursor: order.User?.id ? 'pointer' : 'default',
+                      color: canViewCustomers && order.User?.id ? 'primary.main' : 'text.primary',
+                      cursor: canViewCustomers && order.User?.id ? 'pointer' : 'default',
                       textAlign: 'left',
-                      '&:hover': order.User?.id ? { textDecoration: 'underline' } : undefined,
+                      '&:hover': canViewCustomers && order.User?.id ? { textDecoration: 'underline' } : undefined,
                     }}
                   >
                     {customerName}

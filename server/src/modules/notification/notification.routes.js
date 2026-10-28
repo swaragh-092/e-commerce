@@ -39,7 +39,7 @@ router.put('/assignments/:kind/:id', validate(assignmentParams, 'params'), async
   catch (error) { next(error); }
 });
 
-router.get('/recipients', readNotifications, async (req, res, next) => {
+router.get('/recipients', authorizePermissions(PERMISSIONS.NOTIFICATIONS_MANAGE), async (req, res, next) => {
   try {
     const result = await require('./notificationRecipients.service').read();
     return require('../../utils/response').success(res, result);

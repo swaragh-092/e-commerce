@@ -20,24 +20,32 @@ export const ROLE_PERMISSIONS = Object.freeze({
 
 export const ADMIN_ROUTE_PERMISSION_MAP = Object.freeze([
   { path: '/admin', permissions: [PERMISSIONS.DASHBOARD_VIEW] },
-  { path: '/admin/analytics', permissions: [PERMISSIONS.DASHBOARD_VIEW] },
+  { path: '/admin/analytics', permissions: [PERMISSIONS.DASHBOARD_VIEW, PERMISSIONS.ORDERS_READ], requireAllPermissions: true },
   { path: '/admin/products', permissions: [PERMISSIONS.PRODUCTS_READ, PERMISSIONS.PRODUCTS_CREATE, PERMISSIONS.PRODUCTS_UPDATE, PERMISSIONS.PRODUCTS_DELETE] },
   { path: '/admin/categories', permissions: [PERMISSIONS.CATEGORIES_READ, PERMISSIONS.CATEGORIES_MANAGE] },
   { path: '/admin/brands', permissions: [PERMISSIONS.BRANDS_READ, PERMISSIONS.BRANDS_MANAGE] },
   { path: '/admin/attributes', permissions: [PERMISSIONS.ATTRIBUTES_READ, PERMISSIONS.ATTRIBUTES_MANAGE] },
   { path: '/admin/orders', permissions: [PERMISSIONS.ORDERS_READ, PERMISSIONS.ORDERS_UPDATE_STATUS, PERMISSIONS.ORDERS_REFUND] },
-  { path: '/admin/customers', permissions: [PERMISSIONS.CUSTOMERS_READ, PERMISSIONS.CUSTOMERS_MANAGE] },
+  { path: '/admin/customers', feature: 'customers', permissions: [PERMISSIONS.CUSTOMERS_READ, PERMISSIONS.CUSTOMERS_MANAGE] },
   { path: '/admin/coupons', permissions: [PERMISSIONS.COUPONS_READ, PERMISSIONS.COUPONS_MANAGE] },
-  { path: '/admin/reviews', permissions: [PERMISSIONS.REVIEWS_READ, PERMISSIONS.REVIEWS_MODERATE, PERMISSIONS.REVIEWS_DELETE] },
+  { path: '/admin/reviews', feature: 'reviews', permissions: [PERMISSIONS.REVIEWS_READ, PERMISSIONS.REVIEWS_MODERATE, PERMISSIONS.REVIEWS_DELETE] },
   { path: '/admin/media', permissions: [PERMISSIONS.MEDIA_READ, PERMISSIONS.MEDIA_UPLOAD, PERMISSIONS.MEDIA_UPDATE, PERMISSIONS.MEDIA_DELETE] },
-  { path: '/admin/gallery', permissions: [PERMISSIONS.MEDIA_READ, PERMISSIONS.MEDIA_UPDATE, PERMISSIONS.MEDIA_DELETE] },
+  { path: '/admin/gallery', feature: 'gallery', permissions: [PERMISSIONS.GALLERY_READ] },
   { path: '/admin/settings', permissions: [PERMISSIONS.SETTINGS_READ, PERMISSIONS.SETTINGS_MANAGE, PERMISSIONS.SETTINGS_ADVANCED] },
+  { path: '/admin/newsletter', feature: 'newsletter', permissions: [PERMISSIONS.NEWSLETTER_READ, PERMISSIONS.NEWSLETTER_SUBSCRIBERS_READ] },
+  { path: '/admin/themes', feature: 'themes', permissions: [PERMISSIONS.SETTINGS_READ] },
+  { path: '/admin/store-designer', feature: 'themes', permissions: [PERMISSIONS.SETTINGS_MANAGE] },
+  { path: '/admin/seo-overrides', feature: 'seo', permissions: [PERMISSIONS.SETTINGS_READ] },
+  { path: '/admin/payment-gateways', permissions: [PERMISSIONS.SETTINGS_READ] },
+  { path: '/admin/sale-labels', permissions: [PERMISSIONS.SETTINGS_READ] },
+  { path: '/admin/enquiries', permissions: [PERMISSIONS.ENQUIRIES_READ] },
+  { path: '/admin/shipping', permissions: [PERMISSIONS.SETTINGS_MANAGE] },
   // Settings read permission allows view-only access, while notifications manage allows editing.
   { path: '/admin/email-templates', permissions: [PERMISSIONS.SETTINGS_READ, PERMISSIONS.NOTIFICATIONS_MANAGE] },
-  { path: '/admin/pages', permissions: [PERMISSIONS.PAGES_READ, PERMISSIONS.PAGES_MANAGE] },
-  { path: '/admin/blogs', permissions: [PERMISSIONS.BLOGS_READ, PERMISSIONS.BLOGS_MANAGE] },
+  { path: '/admin/pages', feature: 'pages', permissions: [PERMISSIONS.PAGES_READ, PERMISSIONS.PAGES_MANAGE] },
+  { path: '/admin/blogs', feature: 'blogs', permissions: [PERMISSIONS.BLOGS_READ] },
   { path: '/admin/menus', permissions: [PERMISSIONS.MENUS_READ, PERMISSIONS.MENUS_MANAGE] },
-  { path: '/admin/api-builder', permissions: [PERMISSIONS.API_BUILDER_READ, PERMISSIONS.API_BUILDER_MANAGE] },
+  { path: '/admin/api-builder', feature: 'apiBuilder', permissions: [PERMISSIONS.API_BUILDER_READ, PERMISSIONS.API_BUILDER_MANAGE] },
   { path: '/admin/access-control', permissions: [PERMISSIONS.ROLES_READ, PERMISSIONS.ROLES_MANAGE, PERMISSIONS.SYSTEM_ROLES_MANAGE, PERMISSIONS.USERS_ASSIGN_ROLES] },
   { path: '/admin/audit-log', permissions: [PERMISSIONS.AUDIT_READ] },
 ]);
@@ -108,8 +116,10 @@ export const hasAllPermissions = (user, permissions = []) => permissions.every((
 
 export { IMPLIES };
 
-export const getFirstAccessibleAdminPath = (user) => {
+export const getFirstAccessibleAdminPath = (user, features) => {
   const permissions = getPermissionsForUser(user);
-  const match = ADMIN_ROUTE_PERMISSION_MAP.find((item) => item.permissions.some((permission) => permissions.includes(permission)));
+  const match = ADMIN_ROUTE_PERMISSION_MAP.find((item) => (!features || !item.feature || features[item.feature] === true) && (item.requireAllPermissions
+    ? item.permissions.every((permission) => permissions.includes(permission))
+    : item.permissions.some((permission) => permissions.includes(permission))));
   return match?.path || null;
 };

@@ -16,6 +16,9 @@ const queueConfirmation = async (subscriber) => {
 };
 
 const subscribe = async (email, source = 'homepage') => {
+  if (!await require('../../middleware/featureGate.middleware').getResolvedFeature('newsletter')) {
+    throw new AppError('FEATURE_DISABLED', 403, 'Newsletter subscriptions are disabled');
+  }
   if (typeof email !== 'string' || Joi.string().email().validate(email.trim()).error) throw new AppError('VALIDATION_ERROR', 400, 'Enter a valid email address');
   if (typeof source !== 'string' || source.length > 50) throw new AppError('VALIDATION_ERROR', 400, 'Invalid subscription source');
   const normalized = email.trim().toLowerCase();
@@ -83,6 +86,7 @@ const list = async (query = {}) => {
   if (query.status) where.status = query.status;
   const { count, rows } = await NewsletterSubscriber.findAndCountAll({
     where,
+    attributes: { exclude: ['unsubscribeToken'] },
     order: [['subscribed_at', 'DESC']],
     limit: parseInt(query.limit) || 50,
     offset: parseInt(query.offset) || 0,

@@ -823,6 +823,7 @@ Each Tier 1 capability has two independent presentation switches on **Admin → 
 
 | Feature | E-Commerce Default | Catalog Default | Description | Server Cascades & Dependencies |
 |---------|:---:|:---:|-------------|--------------------------------|
+| `customers` | ✅ | ❌ | Admin customer management | OFF hides Customers navigation, management routes, and dashboard shortcuts. Existing customer records and authorized staff APIs are preserved. The saved switch overrides either mode's default. |
 | `wishlist` | ✅ | ✅ | Product wishlist | Independent |
 | `reviews` | ✅ | ✅ | Product reviews and ratings | If OFF, disables ratings on cards and review submissions; admin moderation preserved |
 | `coupons` | ✅ | ❌ | Discount coupon system | Disabled automatically if `cart` is OFF |
@@ -837,11 +838,19 @@ Each Tier 1 capability has two independent presentation switches on **Admin → 
 | `productAssistant` | ✅ | ✅ | AI product creation assistant | When OFF, both AI endpoints return `403 FEATURE_DISABLED`; assistant UI hidden |
 | `brands` | ✅ | ✅ | Brand pages, navigation, filters, and product brand details | When OFF: public `/api/brands` returns `403 FEATURE_DISABLED`, `/brands` routes redirect, brand nav/footer links, filters, showcases, and product brand fields are removed. Staff with `brands.read`/`brands.manage` keep access to existing records. |
 | `themes` | ✅ | ✅ | Theme gallery and store designer | When OFF: all `/api/themes` routes return `403 FEATURE_DISABLED`; Store Templates, Store Designer nav and routes hidden |
+| `newsletter` | ✅ | ✅ | Newsletter signup and campaign delivery | OFF hides signup controls and the admin page, blocks new subscriptions, and pauses marketing jobs. Unsubscribe links, own preference reads, and authorized staff history/cancellation remain available. |
+| `gallery` | ✅ | ✅ | Showcase gallery albums | OFF hides gallery navigation/admin UI and denies public album APIs. Stored albums remain available to authorized staff APIs. |
+| `blogs` | ✅ | ✅ | Blog posts and categories | OFF hides blog navigation/admin UI, redirects public blog pages, and denies public blog APIs. Authorized staff retain API access to existing records. |
+| `pages` | ✅ | ✅ | Custom content pages | OFF hides Pages in admin and storefront navigation, redirects custom page routes, and blocks public page APIs and page writes. Stored pages and authorized staff API reads remain available. |
 | `multiCurrency` | ❌ | ❌ | Multiple currency support — **unimplemented** | No behaviour, no switch. Needs per-currency prices, formatting, and exchange-rate handling before it can be exposed. |
 | `socialLogin` | ❌ | ❌ | Social media login — **unimplemented** | No behaviour, no switch. Needs OAuth providers, account linking, and callback routes before it can be exposed. |
 
 > [!NOTE]
 > All working Tier 2 switches live on **Admin → Platform Features** (`/admin/features`), which is Superadmin-only. Settings panels for SEO and API Builder link there instead of duplicating the toggle. `multiCurrency` and `socialLogin` are deliberately not rendered as switches until their underlying behaviour exists.
+
+General Settings hides panels and editor links when their platform feature or required permission is unavailable, including Store Designer, optional page editors, newsletter controls, AI configuration, and SEO. Tabs with no available panels are hidden. General Settings **Save All** preserves store mode, feature flags, and visibility switches; those are managed only through Platform Features.
+
+**Settings → Templates** lists templates for the enabled store capabilities in all three channels (Email, SMS, and WhatsApp). Catalog mode hides order, payment, delivery, and inventory templates; enquiry and newsletter templates follow their optional switches. Account/security templates remain available in both modes. Changing the mode replaces a hidden editor selection with an available template and preserves stored template content.
 
 ### Existing Records Policy When Features Are Disabled
 | Area | Customer Impact | Staff / Admin Capability |
@@ -966,3 +975,12 @@ e-commerce/
 ├── config/                      # Global configuration presets
 ├── scripts/                     # DevOps & Maintenance scripts
 └── docs/                        # Documentation
+
+
+### Platform feature catalog coverage (2026-10-24)
+
+`shared/platform-features.json` is the source for the optional switch labels, descriptions, and per-mode defaults. The server mode resolver and the Platform Features page consume it. Gallery, Newsletter, and Blogs are optional modules in both modes and default ON to preserve existing stores. No migration is required for these feature flags; existing explicit DB values override the defaults. Staff permission switches are separate from platform capability switches.
+
+Products, categories, product attributes, media storage, content pages, menus, customer accounts, and access control are structural services. They retain permission controls rather than independent global disable switches. Store Designer is covered by `themes`; payment/shipping capabilities follow the store mode. Newsletter opt-out remains available while the newsletter capability is disabled.
+
+The legacy HTML storefront reads the same public resolved feature map and hides Newsletter, Gallery, and Blog links/forms. Public endpoints continue to work anonymously when their feature is ON. Newsletter campaign generation and queued delivery both pause while OFF; transactional order/account mail is independent. Feature changes invalidate the server cache; other already-open storefront tabs adopt UI changes when settings are fetched again.

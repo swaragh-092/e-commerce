@@ -50,6 +50,31 @@ module.exports = {
         updated_at: new Date()
       }
     ]);
+
+    const roles = await queryInterface.sequelize.query(
+      'SELECT id, slug FROM roles WHERE slug IN (:slugs)',
+      {
+        replacements: { slugs: ['super_admin', 'customer'] },
+        type: Sequelize.QueryTypes.SELECT,
+      }
+    );
+    const roleIdBySlug = Object.fromEntries(roles.map(({ id, slug }) => [slug, id]));
+    const userRoleRows = [
+      { userId: adminId, roleSlug: 'super_admin' },
+      { userId: customerId, roleSlug: 'customer' },
+    ]
+      .filter(({ roleSlug }) => roleIdBySlug[roleSlug])
+      .map(({ userId, roleSlug }) => ({
+        id: uuidv4(),
+        user_id: userId,
+        role_id: roleIdBySlug[roleSlug],
+        created_at: new Date(),
+        updated_at: new Date(),
+      }));
+
+    if (userRoleRows.length) {
+      await queryInterface.bulkInsert('user_roles', userRoleRows);
+    }
   },
 
   down: async (queryInterface, Sequelize) => {

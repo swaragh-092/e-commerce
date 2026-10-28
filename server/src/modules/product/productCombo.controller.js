@@ -2,11 +2,15 @@
 
 const productComboService = require('./productCombo.service');
 const { success, error } = require('../../utils/response');
+const { getPermissionsForUser, PERMISSIONS } = require('../../config/permissions');
 
 // GET /api/products/:id/combo-items
 exports.getComboItems = async (req, res, next) => {
     try {
-        const items = await productComboService.getComboItems(req.params.id);
+        const permissions = req.user ? getPermissionsForUser(req.user) : [];
+        const canManageCombo = permissions.includes(PERMISSIONS.PRODUCTS_READ)
+            || permissions.includes(PERMISSIONS.PRODUCTS_UPDATE);
+        const items = await productComboService.getComboItems(req.params.id, { publicView: !canManageCombo });
         return success(res, items, 'Combo items retrieved');
     } catch (err) {
         if (err.code === 'NOT_FOUND' || err.statusCode === 404) {

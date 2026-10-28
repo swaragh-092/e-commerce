@@ -39,6 +39,7 @@ import { getMediaUrl } from '../../utils/media';
 import { DEFAULT_STORE_NAME } from '../../utils/store';
 import { INDIAN_STATES } from '../../utils/indianStates';
 import { isDesignerOwnedSetting } from '../../utils/storeDesign';
+import { isNotificationTemplateVisible } from '../../utils/notificationTemplateVisibility';
 
 const CURRENCIES = [
   { code: 'USD', symbol: '$',  name: 'US Dollar' },
@@ -116,7 +117,7 @@ const parseDashboardOrder = (value) => {
 };
 
 const SettingsPage = () => {
-  const [tab, setTab] = useState(0);
+  const [tab, setTab] = useState('Store');
   const [form, setForm] = useState({});
   const [saving, setSaving] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
@@ -252,6 +253,8 @@ const SettingsPage = () => {
         return { group, key: keyParts.join('.'), value };
       }).filter(({ group, key, value }) => (
         group !== 'shipping'
+        && !['features', 'visibility'].includes(group)
+        && !(group === 'general' && key === 'mode')
         && (isSuperAdmin || !isSuperAdminOnlySettingsKey(group, key))
         && !isDesignerOwnedSetting(group, key)
         && !isMaskedSecret(value)
@@ -273,20 +276,6 @@ const SettingsPage = () => {
 
 
   const allTabs = ['Store', 'SEO', 'Branding', 'Layout', 'Homepage', 'Catalog', 'Checkout', 'Promotions', 'Invoice', 'Advanced', 'Notifications'];
-  const visibleTabs = [
-    ...allTabs.filter((t) => {
-      if (appMode !== 'ecommerce' && ['Checkout', 'Promotions', 'Invoice'].includes(t)) return false;
-      if (t === 'SEO' && !seoEnabled) return false;
-      if (t === 'Checkout' && !adminCart && !adminCheckout && !adminPayments && !adminShipping) return false;
-      if (t === 'Promotions' && !adminPricing) return false;
-      if (t === 'Advanced' && !canManageAdvancedSettings) return false;
-      return true;
-    })
-  ];
-  const safeTabIndex = tab < visibleTabs.length ? tab : 0;
-  const currentTab = visibleTabs[safeTabIndex];
-  const originalIndex = allTabs.indexOf(currentTab);
-  const isMessagingTab = currentTab === 'Notifications';
 
   // Current currency symbol — used in shipping adornments
   const currSymbol = getCurrencySymbol(form['general.currency']);
@@ -360,7 +349,7 @@ const SettingsPage = () => {
 
 
 
-  const section = (title, description, content, keywords = []) => ({ title, description, content, keywords });
+  const section = (title, description, content, keywords = [], requirements = {}) => ({ title, description, content, keywords, requirements });
 
   const renderSections = (sections) => {
     const query = searchQuery.trim().toLowerCase();
@@ -521,7 +510,23 @@ const SettingsPage = () => {
     updateValueProp, removeValueProp, addValueProp,
     enableCGST, enableSGST, enableIGST,
     adminVisibility,
+    features: resolvedFeatures,
+    hasPermission,
+    isSuperAdmin,
   });
+
+  const visibleTabs = allTabs.filter((name, index) => {
+    if (appMode !== 'ecommerce' && ['Checkout', 'Promotions', 'Invoice'].includes(name)) return false;
+    if (name === 'Checkout' && !adminCart && !adminCheckout && !adminPayments && !adminShipping) return false;
+    if (name === 'Promotions' && !adminPricing) return false;
+    if (name === 'Invoice' && !adminOrders) return false;
+    if (name === 'Advanced' && !canManageAdvancedSettings) return false;
+    return name === 'Notifications' || panels[index]?.length > 0;
+  });
+  const safeTabIndex = Math.max(visibleTabs.indexOf(tab), 0);
+  const currentTab = visibleTabs[safeTabIndex];
+  const originalIndex = allTabs.indexOf(currentTab);
+  const isMessagingTab = currentTab === 'Notifications';
 
   return (
     <Box>
@@ -619,7 +624,7 @@ const SettingsPage = () => {
             elevation={0}
             sx={{ borderRadius: 3, border: '1px solid', borderColor: 'divider', overflow: 'hidden' }}
           >
-            <Tabs value={safeTabIndex} onChange={(_, v) => setTab(v)} variant="scrollable" scrollButtons="auto">
+            <Tabs value={safeTabIndex} onChange={(_, v) => setTab(visibleTabs[v])} variant="scrollable" scrollButtons="auto">
               {visibleTabs.map((t) => (
                 <Tab
                   key={t}
@@ -635,7 +640,7 @@ const SettingsPage = () => {
                     <MessagingSettingsPanel form={form} set={set} />
                   </Box>
                   <Divider sx={{ my: 4 }} />
-                  <InventoryAlertSettingsPanel />
+                  {adminCart && <InventoryAlertSettingsPanel />}
                   <Divider sx={{ my: 4 }} />
                   <Box sx={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', mb: 2, flexWrap: 'wrap', gap: 2 }}>
                     <Box>
@@ -656,18 +661,18 @@ const SettingsPage = () => {
                   </Box>
                   <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', sm: '1fr 1fr 1fr' }, gap: 2 }}>
                     {[
-                      { icon: '🛍️', label: 'Order Placed' },
-                      { icon: '📦', label: 'Order Shipped' },
-                      { icon: '✅', label: 'Order Delivered' },
-                      { icon: '❌', label: 'Order Cancelled' },
-                      { icon: '💳', label: 'Order Refunded' },
-                      { icon: '👋', label: 'Welcome' },
-                      { icon: '✉️', label: 'Email Verification' },
-                      { icon: '🔑', label: 'Password Reset' },
-                      { icon: '⚠️', label: 'Low Stock Alert' },
-                      { icon: '📬', label: 'New Enquiry — Staff' },
-                      { icon: '✉️', label: 'Enquiry Received — Customer' },
-                    ].map(({ icon, label }) => (
+                      { name: 'order_placed', icon: '🛍️', label: 'Order Placed' },
+                      { name: 'order_shipped', icon: '📦', label: 'Order Shipped' },
+                      { name: 'order_delivered', icon: '✅', label: 'Order Delivered' },
+                      { name: 'order_cancelled', icon: '❌', label: 'Order Cancelled' },
+                      { name: 'order_refunded', icon: '💳', label: 'Order Refunded' },
+                      { name: 'welcome', icon: '👋', label: 'Welcome' },
+                      { name: 'email_verification', icon: '✉️', label: 'Email Verification' },
+                      { name: 'password_reset', icon: '🔑', label: 'Password Reset' },
+                      { name: 'low_stock_alert', icon: '⚠️', label: 'Low Stock Alert' },
+                      { name: 'new_enquiry_admin', icon: '📬', label: 'New Enquiry — Staff' },
+                      { name: 'new_enquiry_customer', icon: '✉️', label: 'Enquiry Received — Customer' },
+                    ].filter(({ name }) => isNotificationTemplateVisible(name, resolvedFeatures)).map(({ icon, label }) => (
                       <Box key={label} sx={{ display: 'flex', alignItems: 'center', gap: 1.5, p: 1.5, border: '1px solid', borderColor: 'divider', borderRadius: 2 }}>
                         <Typography fontSize={20}>{icon}</Typography>
                         <Typography variant="body2" fontWeight={500}>{label}</Typography>

@@ -1,7 +1,7 @@
 import React, { Suspense, lazy } from 'react';
 import { Routes, Route, Navigate, useLocation } from 'react-router-dom';
 import { Box, CircularProgress } from '@mui/material';
-import { useFeatureVisible, useFeaturesResolved, useMode } from '../hooks/useSettings';
+import { useFeatureVisible, useFeaturesResolved, useMode, useSettings } from '../hooks/useSettings';
 import { Outlet } from 'react-router-dom';
 
 // Layouts
@@ -123,12 +123,14 @@ const Home = () => <HomePage />;
 
 const AdminIndex = () => {
   const { user, hasPermission } = useAuth();
+  const { features } = useSettings();
 
   if (hasPermission(PERMISSIONS.DASHBOARD_VIEW)) {
     return <DashboardPage />;
   }
 
-  const adminEntryPath = getFirstAccessibleAdminPath(user);
+  if (!features) return <LoadingFallback />;
+  const adminEntryPath = getFirstAccessibleAdminPath(user, features);
   if (adminEntryPath && adminEntryPath !== '/admin') {
     return <Navigate to={adminEntryPath} replace />;
   }
@@ -148,14 +150,18 @@ const AppRoutes = () => (
         <Route path="products/:slug" element={<ProductDetailPage />} />
         <Route path="product/:slug" element={<ProductDetailPage />} />
         <Route path="category/:categorySlug" element={<CategoryPage />} />
-        <Route path="p/:slug" element={<StaticPageView />} />
+        <Route element={<FeatureRoute feature="pages" />}>
+          <Route path="p/:slug" element={<StaticPageView />} />
+        </Route>
         <Route path="search" element={<SearchResultsPage />} />
         <Route element={<FeatureRoute feature="brands" />}>
           <Route path="brands" element={<StoreBrandsPage />} />
           <Route path="brands/:slug" element={<BrandDetailPage />} />
         </Route>
-        <Route path="blogs" element={<BlogsPage />} />
-        <Route path="blogs/:slug" element={<BlogDetailPage />} />
+        <Route element={<FeatureRoute feature="blogs" />}>
+          <Route path="blogs" element={<BlogsPage />} />
+          <Route path="blogs/:slug" element={<BlogDetailPage />} />
+        </Route>
         <Route element={<FeatureRoute feature="wishlist" />}>
           <Route path="wishlist" element={<WishlistPage />} />
         </Route>
@@ -210,7 +216,7 @@ const AppRoutes = () => (
           <Route index element={<AdminIndex />} />
           <Route path="profile" element={<AdminProfilePage />} />
           <Route element={<ModeRoute requiredMode="ecommerce" />}>
-            <Route element={<ProtectedRoute permission={PERMISSIONS.DASHBOARD_VIEW} />}>
+            <Route element={<ProtectedRoute permissions={[PERMISSIONS.DASHBOARD_VIEW, PERMISSIONS.ORDERS_READ]} requireAllPermissions />}>
               <Route path="analytics" element={<AnalyticsPage />} />
             </Route>
           </Route>
@@ -237,9 +243,11 @@ const AppRoutes = () => (
             <Route path="orders" element={<OrdersManagePage />} />
             <Route path="orders/:id" element={<OrderDetailPage />} />
           </Route>
-          <Route element={<ProtectedRoute permission={PERMISSIONS.CUSTOMERS_READ} />}>
-            <Route path="customers" element={<CustomersPage />} />
-            <Route path="customers/:id" element={<CustomerDetailPage />} />
+          <Route element={<FeatureRoute feature="customers" surface="admin" redirectTo="/admin" />}>
+            <Route element={<ProtectedRoute permission={PERMISSIONS.CUSTOMERS_READ} />}>
+              <Route path="customers" element={<CustomersPage />} />
+              <Route path="customers/:id" element={<CustomerDetailPage />} />
+            </Route>
           </Route>
           {/* Staff can manage existing campaigns after customer coupon use is disabled. */}
           <Route element={<ProtectedRoute permission={PERMISSIONS.COUPONS_READ} />}>
@@ -253,13 +261,23 @@ const AppRoutes = () => (
           </Route>
           <Route element={<ProtectedRoute permission={PERMISSIONS.MEDIA_READ} />}>
             <Route path="media" element={<MediaPage />} />
-            <Route path="gallery" element={<GalleryPage />} />
+          </Route>
+          <Route element={<ProtectedRoute permissions={[PERMISSIONS.SETTINGS_READ, PERMISSIONS.NOTIFICATIONS_MANAGE]} />}>
+            <Route path="email-templates" element={<NotificationEventsPage />} />
+          </Route>
+          <Route element={<FeatureRoute feature="gallery" surface="admin" redirectTo="/admin" />}>
+            <Route element={<ProtectedRoute permission={PERMISSIONS.GALLERY_READ} />}>
+              <Route path="gallery" element={<GalleryPage />} />
+            </Route>
+          </Route>
+          <Route element={<FeatureRoute feature="newsletter" surface="admin" redirectTo="/admin" />}>
+            <Route element={<ProtectedRoute permissions={[PERMISSIONS.NEWSLETTER_READ, PERMISSIONS.NEWSLETTER_SUBSCRIBERS_READ]} />}>
+              <Route path="newsletter" element={<NewsletterSubscribersPage />} />
+            </Route>
           </Route>
           <Route element={<ProtectedRoute permission={PERMISSIONS.SETTINGS_READ} />}>
             <Route path="settings" element={<SettingsPage />} />
-            <Route path="email-templates" element={<NotificationEventsPage />} />
             <Route path="sections" element={<LegacySectionsRedirect />} />
-            <Route path="newsletter" element={<NewsletterSubscribersPage />} />
           </Route>
           <Route element={<FeatureRoute feature="seo" surface="admin" redirectTo="/admin" />}>
             <Route element={<ProtectedRoute permission={PERMISSIONS.SETTINGS_READ} />}>
@@ -285,7 +303,7 @@ const AppRoutes = () => (
               </Route>
             </Route>
             <Route element={<FeatureRoute feature="shipping" surface="admin" redirectTo="/admin" />}>
-              <Route element={<ProtectedRoute permission={PERMISSIONS.SETTINGS_READ} />}>
+              <Route element={<ProtectedRoute permission={PERMISSIONS.SETTINGS_MANAGE} />}>
                 <Route path="shipping" element={<ShippingPage />} />
               </Route>
             </Route>
@@ -296,12 +314,16 @@ const AppRoutes = () => (
           <Route element={<ProtectedRoute permission={PERMISSIONS.AUDIT_READ} />}>
             <Route path="audit-log" element={<AuditLogPage />} />
           </Route>
-          <Route element={<ProtectedRoute permission={PERMISSIONS.PAGES_READ} />}>
-            <Route path="pages" element={<PagesManagePage />} />
+          <Route element={<FeatureRoute feature="pages" surface="admin" redirectTo="/admin" />}>
+            <Route element={<ProtectedRoute permission={PERMISSIONS.PAGES_READ} />}>
+              <Route path="pages" element={<PagesManagePage />} />
+            </Route>
           </Route>
-          <Route element={<ProtectedRoute permission={PERMISSIONS.BLOGS_READ} />}>
-            <Route path="blogs" element={<BlogsManagePage />} />
-            <Route path="blogs/categories" element={<BlogCategoriesPage />} />
+          <Route element={<FeatureRoute feature="blogs" surface="admin" redirectTo="/admin" />}>
+            <Route element={<ProtectedRoute permission={PERMISSIONS.BLOGS_READ} />}>
+              <Route path="blogs" element={<BlogsManagePage />} />
+              <Route path="blogs/categories" element={<BlogCategoriesPage />} />
+            </Route>
           </Route>
           <Route element={<ProtectedRoute permission={PERMISSIONS.MENUS_READ} />}>
             <Route path="menus" element={<MenuBuilderPage />} />
@@ -311,13 +333,17 @@ const AppRoutes = () => (
               <Route path="api-builder" element={<ApiBuilderPage />} />
             </Route>
           </Route>
-          <Route element={<ProtectedRoute permission={PERMISSIONS.PAGES_MANAGE} />}>
-            <Route path="pages/new" element={<PageEditPage />} />
-            <Route path="pages/:id/edit" element={<PageEditPage />} />
+          <Route element={<FeatureRoute feature="pages" surface="admin" redirectTo="/admin" />}>
+            <Route element={<ProtectedRoute permission={PERMISSIONS.PAGES_MANAGE} />}>
+              <Route path="pages/new" element={<PageEditPage />} />
+              <Route path="pages/:id/edit" element={<PageEditPage />} />
+            </Route>
           </Route>
-          <Route element={<ProtectedRoute permission={PERMISSIONS.BLOGS_MANAGE} />}>
-            <Route path="blogs/new" element={<BlogEditPage />} />
-            <Route path="blogs/:id/edit" element={<BlogEditPage />} />
+          <Route element={<FeatureRoute feature="blogs" surface="admin" redirectTo="/admin" />}>
+            <Route element={<ProtectedRoute permission={PERMISSIONS.BLOGS_MANAGE} />}>
+              <Route path="blogs/new" element={<BlogEditPage />} />
+              <Route path="blogs/:id/edit" element={<BlogEditPage />} />
+            </Route>
           </Route>
           <Route
             path="access-control"

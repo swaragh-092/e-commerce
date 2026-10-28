@@ -21,7 +21,10 @@ const { idParamSchema } = require('../../utils/common.validation');
 const userController = require('./user.controller');
 
 // Profile Endpoints
-router.get('/me', authenticate, authorizePermissions(PERMISSIONS.ACCOUNT_SELF), userController.getMe);
+// GET /me is the session bootstrap endpoint: it must work for any authenticated
+// user, including custom roles that do not hold `account.self`. Gating it on a
+// grantable permission breaks custom-role sessions at load.
+router.get('/me', authenticate, userController.getMe);
 router.put('/me', authenticate, authorizePermissions(PERMISSIONS.ACCOUNT_SELF), validate(updateProfileSchema), userController.updateMe);
 router.post('/me/avatar', authenticate, authorizePermissions(PERMISSIONS.ACCOUNT_SELF), validate(updateAvatarSchema), userController.updateAvatar);
 // Brute-force guard: current-password guessing via stolen session

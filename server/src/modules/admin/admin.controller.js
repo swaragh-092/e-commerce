@@ -9,7 +9,7 @@ const { success, paginated } = require('../../utils/response');
 
 const getStats = async (req, res, next) => {
   try {
-    const data = await AdminService.getStats();
+    const data = await AdminService.getStats(req.user);
     return success(res, data);
   } catch (err) {
     next(err);
@@ -66,7 +66,7 @@ const getRecentOrders = async (req, res, next) => {
 
 const getAccessRoles = async (req, res, next) => {
   try {
-    const roles = await AdminService.getAccessRoles();
+    const roles = await AdminService.getAccessRoles(req.user);
     return success(res, roles);
   } catch (err) {
     next(err);
@@ -75,7 +75,7 @@ const getAccessRoles = async (req, res, next) => {
 
 const getAccessPermissions = async (req, res, next) => {
   try {
-    const permissions = await AdminService.getAccessPermissions();
+    const permissions = await AdminService.getAccessPermissions(req.user);
     return success(res, permissions);
   } catch (err) {
     next(err);
@@ -118,7 +118,7 @@ const getAccessUsers = async (req, res, next) => {
       search,
       roleId,
       includeCustomers: includeCustomers === 'true',
-    });
+    }, req.user);
     return paginated(res, result.rows, result.count, page, limit);
   } catch (err) {
     next(err);
