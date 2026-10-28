@@ -10,13 +10,23 @@ const rateLimit = require('express-rate-limit');
 const { validate } = require('../../middleware/validate.middleware');
 const { idParamSchema } = require('../../utils/common.validation');
 
-const subscribeLimiter = rateLimit({ windowMs: 60000, max: 5, message: { success: false, message: 'Too many subscribe attempts. Try again later.' } });
-const unsubscribeLimiter = rateLimit({ windowMs: 60000, max: 3, message: { success: false, message: 'Too many unsubscribe attempts. Try again later.' } });
+const limiter = (max, message) => rateLimit({
+  windowMs: 60000,
+  max,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { success: false, error: { code: 'TOO_MANY_REQUESTS', message } },
+});
+const subscribeLimiter = limiter(5, 'Too many subscribe attempts. Try again later.');
+const unsubscribeLimiter = limiter(3, 'Too many unsubscribe attempts. Try again later.');
+const confirmLimiter = limiter(5, 'Too many confirmation attempts. Try again later.');
 
 // Public
 router.post('/subscribe', featureGate('newsletter'), subscribeLimiter, controller.subscribe);
 router.post('/unsubscribe', unsubscribeLimiter, controller.unsubscribe);
-router.get('/unsubscribe/:token', controller.unsubscribeByToken);
+// RFC 8058 one-click endpoint (token in query string; state changes via POST only)
+router.post('/unsubscribe/one-click', unsubscribeLimiter, controller.unsubscribeOneClick);
+router.post('/confirm', confirmLimiter, controller.confirm);
 
 // Customer preference (the authenticated account email is always used).
 router.get('/me', authenticate, controller.getMyStatus);

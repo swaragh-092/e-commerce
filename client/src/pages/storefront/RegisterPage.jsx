@@ -8,11 +8,13 @@ import { EmailOutlined, LockOutlined, PersonOutline, Visibility, VisibilityOff }
 import AuthPageShell from '../../components/storefront/AuthPageShell';
 import newsletterService from '../../services/newsletterService';
 import { useSettings } from '../../hooks/useSettings';
+import { useNotification } from '../../context/NotificationContext';
 
 const RegisterPage = () => {
   const theme = useTheme();
   const navigate = useNavigate();
   const { register } = useAuth();
+  const { notify } = useNotification();
   const { settings, features } = useSettings();
   const newsletterEnabled = features?.newsletter === true && settings?.auth?.registerNewsletterEnabled !== false;
   
@@ -116,22 +118,31 @@ const RegisterPage = () => {
           password: formData.password,
           confirmPassword: formData.confirmPassword
       });
-      let newsletterSaveFailed = false;
+      let newsletterNote = '';
+      let newsletterFailed = false;
       if (newsletterEnabled && newsletterOptIn) {
         try {
-          await newsletterService.subscribe(formData.email, 'register');
+          const newsletterResult = await newsletterService.subscribe(formData.email, 'register');
+          if (newsletterResult?.confirmationQueued === false) {
+            newsletterFailed = true;
+            newsletterNote = ' We could not send the newsletter confirmation email — please try again from My Account after signing in.';
+          } else {
+            newsletterNote = ' Check your email to confirm your newsletter subscription.';
+          }
         } catch {
-          newsletterSaveFailed = true;
+          newsletterFailed = true;
+          newsletterNote = ' We could not save your newsletter preference — you can update it in My Account after signing in.';
         }
       }
       if (result?.requiresVerification) {
         // Server issued no session — verification is mandatory for this account.
-        navigate('/login', { state: { message: newsletterSaveFailed
-          ? 'Account created, but we could not save your newsletter preference. You can update it in My Account after signing in.'
-          : 'Account created! Please check your email to verify your account, then log in.' } });
+        navigate('/login', { state: { message: `Account created! Please check your email to verify your account, then log in.${newsletterNote}` } });
         return;
       }
-      // register() auto-logs-in, redirect to home
+      // register() auto-logs-in, redirect to home. The home page does not read
+      // navigation state, so surface the newsletter outcome as a toast —
+      // otherwise a queue failure would be silently swallowed.
+      if (newsletterNote.trim()) notify(newsletterNote.trim(), newsletterFailed ? 'error' : 'info');
       navigate('/');
     } catch (err) {
       const errData = err?.response?.data?.error;

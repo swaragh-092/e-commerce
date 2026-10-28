@@ -139,6 +139,7 @@ const AdminIndex = () => {
 };
 
 const NewsletterUnsubscribePage = lazy(() => import('../pages/storefront/NewsletterUnsubscribePage'));
+const NewsletterConfirmPage = lazy(() => import('../pages/storefront/NewsletterConfirmPage'));
 
 const AppRoutes = () => (
   <Suspense fallback={<LoadingFallback />}>
@@ -170,6 +171,7 @@ const AppRoutes = () => (
         <Route path="login" element={<LoginPage />} />
         <Route path="register" element={<RegisterPage />} />
         <Route path="newsletter/unsubscribe" element={<NewsletterUnsubscribePage />} />
+        <Route path="newsletter/confirm" element={<NewsletterConfirmPage />} />
         <Route path="forgot-password" element={<ForgotPasswordPage />} />
         <Route path="reset-password" element={<ResetPasswordPage />} />
         <Route path="verify-email" element={<VerifyEmailPage />} />

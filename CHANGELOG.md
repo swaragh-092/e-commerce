@@ -2,6 +2,16 @@
 
 All notable changes to this project are documented here.
 
+## [1.1.2.2] - 2026-10-26
+
+### Added
+- Require double opt-in for new newsletter subscriptions, preserve consent evidence, and add one-click unsubscribe support for campaign email.
+- Recover interrupted notification and campaign jobs without exceeding retry limits or sending duplicate campaign messages.
+
+### Fixed
+- Report confirmation email queue failures accurately across storefront and account subscription flows.
+- Prevent stale confirmation links and concurrent unsubscribe actions from activating or changing the wrong subscription.
+
 ## [1.1.2.1] - 2026-10-23
 
 ### Added
