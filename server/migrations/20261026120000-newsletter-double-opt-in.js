@@ -42,7 +42,9 @@ module.exports = {
   },
   async down(queryInterface) {
     await queryInterface.sequelize.transaction(async (transaction) => {
-      await queryInterface.bulkDelete('notification_templates', { name: confirmTemplate.name, channel: confirmTemplate.channel }, { transaction });
+      // Retain the template: it may predate this migration or have been edited
+      // by an administrator. There is no durable ownership record that makes
+      // deletion safe, and an unused template is harmless after rollback.
       await queryInterface.removeColumn('newsletter_subscribers', 'consent_user_agent', { transaction });
       await queryInterface.removeColumn('newsletter_subscribers', 'consent_ip', { transaction });
     });

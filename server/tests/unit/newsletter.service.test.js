@@ -198,8 +198,12 @@ describe('newsletter.service.unsubscribe', () => {
   it('unsubscribes by token and is idempotent', async () => {
     const row = subscriberRow();
     vi.spyOn(db.NewsletterSubscriber, 'findOne').mockResolvedValue(row);
+    const update = vi.spyOn(db.NewsletterSubscriber, 'update').mockResolvedValue([1]);
     expect(await service.unsubscribeByToken('tok_123')).toEqual({ unsubscribed: true });
-    expect(row.update).toHaveBeenCalledWith(expect.objectContaining({ status: 'unsubscribed' }));
+    expect(update).toHaveBeenCalledWith(
+      expect.objectContaining({ status: 'unsubscribed' }),
+      { where: { id: row.id, unsubscribeToken: 'tok_123' } },
+    );
     row.status = 'unsubscribed';
     expect(await service.unsubscribeByToken('tok_123')).toEqual({ alreadyUnsubscribed: true });
   });

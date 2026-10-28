@@ -150,7 +150,13 @@ const unsubscribeByToken = async (token) => {
   const subscriber = await NewsletterSubscriber.findOne({ where: { unsubscribeToken: token } });
   if (!subscriber) throw new AppError('NOT_FOUND', 404, 'Invalid unsubscribe token.');
   if (subscriber.status === 'unsubscribed') return { alreadyUnsubscribed: true };
-  await subscriber.update({ status: 'unsubscribed', unsubscribedAt: new Date() });
+  // A resubscribe rotates the token. Do not let an in-flight request for the
+  // old consent session unsubscribe the replacement session.
+  const [updated] = await NewsletterSubscriber.update(
+    { status: 'unsubscribed', unsubscribedAt: new Date() },
+    { where: { id: subscriber.id, unsubscribeToken: token } },
+  );
+  if (!updated) throw new AppError('NOT_FOUND', 404, 'Invalid unsubscribe token.');
   return { unsubscribed: true };
 };
 

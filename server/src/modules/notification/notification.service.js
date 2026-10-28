@@ -290,7 +290,7 @@ const processQueued = async ({ limit = 25 } = {}) => {
         {
             where: {
                 ...staleLock,
-                [Op.and]: [sequelize.where(sequelize.col('attempts'), Op.gte, sequelize.col('maxAttempts'))],
+                [Op.and]: [sequelize.where(sequelize.col('attempts'), Op.gte, sequelize.col('max_attempts'))],
             },
         },
     );
@@ -300,7 +300,7 @@ const processQueued = async ({ limit = 25 } = {}) => {
         {
             where: {
                 ...staleLock,
-                [Op.and]: [sequelize.where(sequelize.col('attempts'), Op.lt, sequelize.col('maxAttempts'))],
+                [Op.and]: [sequelize.where(sequelize.col('attempts'), Op.lt, sequelize.col('max_attempts'))],
             },
         },
     );
