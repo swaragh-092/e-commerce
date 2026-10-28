@@ -318,9 +318,10 @@
 
         <div class="wrapper">
 
-            <div class="ip-product-wrapper-main">
+            <div class="ip-product-wrapper-main catalog-products-page">
                 <div class="fluid-container">
-                    <div class="ip-product-inner-wrapper">
+                    <div id="catalog-controls" class="catalog-controls"></div>
+                    <div class="ip-product-inner-wrapper" id="catalog-results" aria-busy="true">
                         <div class="ip-products-list">
                             <p><!-- Category Title --></p>
                             <ul class="products-list tap-section">
@@ -331,6 +332,7 @@
                             <!-- Product details loaded dynamically -->
                         </div>
                     </div>
+                    <nav id="catalog-pagination" class="catalog-pagination" aria-label="Product pages"></nav>
                 </div>
             </div>
 
@@ -603,6 +605,7 @@
 
         <!-- <script src="//cdnjs.cloudflare.com/ajax/libs/jquery/3.2.1/jquery.min.js"></script> -->
         <script src="js/constant.js"></script>
+        <script src="js/catalog-browser.js"></script>
         <script src="js/products.js"></script>
         <!-- 
         <script src="https://unpkg.com/aos@2.3.1/dist/aos.js"></script>

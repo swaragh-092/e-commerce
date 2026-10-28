@@ -108,7 +108,7 @@ const PageEditPage = lazy(() => import('../pages/admin/PageEditPage'));
 const MenuBuilderPage = lazy(() => import('../pages/admin/MenuBuilderPage'));
 const ApiBuilderPage = lazy(() => import('../pages/admin/ApiBuilderPage'));
 const SeoOverridesPage = lazy(() => import('../pages/admin/SeoOverridesPage'));
-const EmailTemplatesPage = lazy(() => import('../pages/admin/EmailTemplatesPage'));
+const NotificationEventsPage = lazy(() => import('../pages/admin/NotificationEventsPage'));
 const ThemeGalleryPage = lazy(() => import('../pages/admin/ThemeGalleryPage'));
 const SectionComposerPage = lazy(() => import('../pages/admin/SectionComposerPage'));
 const NewsletterSubscribersPage = lazy(() => import('../pages/admin/NewsletterSubscribersPage'));
@@ -263,7 +263,7 @@ const AppRoutes = () => (
             <Route path="media" element={<MediaPage />} />
           </Route>
           <Route element={<ProtectedRoute permissions={[PERMISSIONS.SETTINGS_READ, PERMISSIONS.NOTIFICATIONS_MANAGE]} />}>
-            <Route path="email-templates" element={<EmailTemplatesPage />} />
+            <Route path="email-templates" element={<NotificationEventsPage />} />
           </Route>
           <Route element={<FeatureRoute feature="gallery" surface="admin" redirectTo="/admin" />}>
             <Route element={<ProtectedRoute permission={PERMISSIONS.GALLERY_READ} />}>

@@ -124,7 +124,7 @@ const EmailPreviewFrame = ({ html, loading }) => {
 };
 
 // ── Main Page ──────────────────────────────────────────────────────────────────
-const EmailTemplatesPage = () => {
+const EmailTemplatesPage = ({ excludeTemplates = [], embedded = false, onDirtyChange }) => {
   const { notify, confirm } = useNotification();
   const { hasPermission } = useAuth();
   const { features } = useSettings();
@@ -146,12 +146,16 @@ const EmailTemplatesPage = () => {
   const [snack, setSnack]                   = useState({ open: false, msg: '', severity: 'success' });
   const textareaRef = useRef(null);
 
+  useEffect(() => {
+    onDirtyChange?.(Object.values(draft).some(value => value._dirty));
+  }, [draft, onDirtyChange]);
+
   // ── Load templates ─────────────────────────────────────────────────────────
   useEffect(() => {
     setLoading(true);
     getEmailTemplates()
       .then(res => {
-        const tpls = res.data?.data || [];
+        const tpls = (res.data?.data || []).filter(template => !excludeTemplates.includes(template.name));
         setTemplates(tpls);
         const initialTpl = tpls.find(t => t.channel === activeChannel) || tpls[0];
         if (initialTpl && !selected) {
@@ -349,7 +353,7 @@ const EmailTemplatesPage = () => {
       {/* ── Page Header ── */}
       <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 3 }}>
         <Box>
-          <Typography variant="h5" component="h1">Templates</Typography>
+          <Typography variant={embedded ? 'h6' : 'h5'} component={embedded ? 'h2' : 'h1'}>{embedded ? 'Account & system templates' : 'Templates'}</Typography>
           <Typography variant="body2" color="text.secondary">
             Customize transactional Email, SMS, and WhatsApp templates for enabled store features. Use <code style={{ background: 'rgba(0,0,0,0.06)', padding: '1px 5px', borderRadius: 4 }}>{'{{variable}}'}</code> for dynamic content.
           </Typography>

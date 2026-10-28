@@ -184,7 +184,7 @@ describe('ShippingWebhookService Lifecycle & Idempotency', () => {
         expect(await ShippingWebhookService.reconcileTracking()).toBe(1);
         expect(mockShipmentRecord.status).toBe('delivered');
         expect(NotificationService.sendDeliveryUpdate).toHaveBeenCalledTimes(1);
-        expect(NotificationService.sendDeliveryUpdate).toHaveBeenCalledWith('user-1', 'order-1', 'delivered');
+        expect(NotificationService.sendDeliveryUpdate).toHaveBeenCalledWith('user-1', 'order-1', 'delivered', expect.stringContaining(mockShipmentRecord.id));
 
         expect(await ShippingWebhookService.reconcileTracking()).toBe(0);
         expect(NotificationService.sendDeliveryUpdate).toHaveBeenCalledTimes(1);
@@ -229,7 +229,7 @@ describe('ShippingWebhookService Lifecycle & Idempotency', () => {
 
         expect(mockShipmentRecord.status).toBe('out_for_delivery');
         expect(mockOrderRecord.orderShippingStatus).toBe('out_for_delivery');
-        expect(NotificationService.sendDeliveryUpdate).toHaveBeenCalledWith('user-1', 'order-1', 'out_for_delivery');
+        expect(NotificationService.sendDeliveryUpdate).toHaveBeenCalledWith('user-1', 'order-1', 'out_for_delivery', expect.stringContaining(mockShipmentRecord.id));
 
         // Step 3: DELIVERED
         await ShippingWebhookService.processWebhook('shiprocket', {
@@ -244,7 +244,7 @@ describe('ShippingWebhookService Lifecycle & Idempotency', () => {
         expect(mockOrderRecord.orderShippingStatus).toBe('delivered');
         expect(OrderService.syncCodPaymentIfDelivered).toHaveBeenCalledWith(mockOrderRecord, expect.any(Object));
         expect(OrderService.syncOrderClosureIfComplete).toHaveBeenCalledWith(mockOrderRecord, expect.any(Object));
-        expect(NotificationService.sendDeliveryUpdate).toHaveBeenCalledWith('user-1', 'order-1', 'delivered');
+        expect(NotificationService.sendDeliveryUpdate).toHaveBeenCalledWith('user-1', 'order-1', 'delivered', expect.stringContaining(mockShipmentRecord.id));
     });
 
     it('skips duplicate webhook events via providerEventId idempotency check', async () => {

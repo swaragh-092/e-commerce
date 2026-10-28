@@ -644,10 +644,9 @@ const SettingsPage = () => {
                   <Divider sx={{ my: 4 }} />
                   <Box sx={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', mb: 2, flexWrap: 'wrap', gap: 2 }}>
                     <Box>
-                      <Typography variant="h6" fontWeight={700} sx={{ mb: 0.5 }}>Email Templates</Typography>
+                      <Typography variant="h6" fontWeight={700} sx={{ mb: 0.5 }}>Event notifications</Typography>
                       <Typography variant="body2" color="text.secondary">
-                        Manage email templates for enabled store features, including account messages and relevant order or enquiry notifications.
-                        Templates support Handlebars <code style={{ background: 'rgba(0,0,0,0.06)', padding: '1px 5px', borderRadius: 4 }}>{'{{variable}}'}</code> syntax and include a live preview.
+                        Choose who receives each event and write separate Email, SMS, and WhatsApp messages for customers, people, and roles. Preview messages before activating them.
                       </Typography>
                     </Box>
                     <Button
@@ -657,7 +656,7 @@ const SettingsPage = () => {
                       startIcon={<span style={{ fontSize: 18 }}>✉️</span>}
                       sx={{ whiteSpace: 'nowrap', flexShrink: 0 }}
                     >
-                      Manage Email Templates
+                      Manage notifications
                     </Button>
                   </Box>
                   <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', sm: '1fr 1fr 1fr' }, gap: 2 }}>

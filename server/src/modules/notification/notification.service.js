@@ -136,7 +136,8 @@ const send = async (
     orderId = null,
     channel = 'email',
     t = null,
-    dedupeKey = null
+    dedupeKey = null,
+    skipRules = false
 ) => {
     // Defensively handle positional argument variations (e.g. if a transaction is passed as channel or orderId)
     if (orderId && typeof orderId === 'object' && !Array.isArray(orderId)) {
@@ -150,6 +151,11 @@ const send = async (
         channel = 'email';
     }
     try {
+        if (!skipRules) {
+            const routed = await require('./notificationRules.service').route({ sourceTemplate: templateName,
+                variables: normalizeVariables(variables), orderId, transaction: t });
+            if (routed !== null) return routed.some(Boolean);
+        }
         const normalizedVariables = normalizeVariables({
             ...(orderId && !variables.order_id && !variables.orderId ? { order_id: orderId } : {}),
             ...variables,
@@ -305,6 +311,13 @@ const processQueued = async ({ limit = 25 } = {}) => {
 
         let subject = null;
         try {
+            const ruleMeta = job.variables?.__notificationRule;
+            if (ruleMeta && !await require('./notificationRules.service').canDeliver(job)) {
+                const reason = 'Notification disabled or recipient is no longer selected or eligible';
+                await job.update({ status: 'skipped', error: reason });
+                await createLog({ job, status: 'skipped', error: reason });
+                continue;
+            }
             if (['order_assigned_staff', 'enquiry_assigned_staff'].includes(job.templateName)) {
                 const kind = job.templateName === 'order_assigned_staff' ? 'orders' : 'enquiries';
                 const id = kind === 'orders' ? job.variables?.order_id : job.variables?.enquiry_id;
@@ -335,7 +348,8 @@ const processQueued = async ({ limit = 25 } = {}) => {
                     continue;
                 }
             }
-            const template = await NotificationTemplate.findOne({ where: { name: job.templateName, channel: job.channel } });
+            const template = ruleMeta ? { ...ruleMeta.message, isActive: true }
+                : await NotificationTemplate.findOne({ where: { name: job.templateName, channel: job.channel } });
             if (!template || !template.isActive) {
                 await job.update({ status: 'skipped', error: template ? 'Template inactive' : 'Template missing' });
                 await createLog({ job, status: 'skipped', error: template ? 'Template inactive' : 'Template missing' });
@@ -385,6 +399,11 @@ const processQueued = async ({ limit = 25 } = {}) => {
  * @param {Object}   [t]            - Sequelize transaction
  */
 const sendToUser = async (templateName, channels, user, variables = {}, orderId = null, t = null) => {
+    const routed = await require('./notificationRules.service').route({ sourceTemplate: templateName,
+        variables: normalizeVariables(variables), orderId, transaction: t,
+        customer: user ? { id: user.id, name: user.firstName || user.email, email: user.email, phone: user.profile?.phone || user.UserProfile?.phone || '' } : null });
+    if (routed !== null) return routed;
+    if (!user) return [];
     const email = user.email;
     const phone = user.profile?.phone || user.UserProfile?.phone || null;
 
@@ -395,7 +414,7 @@ const sendToUser = async (templateName, channels, user, variables = {}, orderId 
                 logger.warn(`[notification.service] No recipient for channel '${channel}' on user ${user.id} — skipping.`);
                 return Promise.resolve(false);
             }
-            return send(templateName, recipient, variables, user.id, orderId, channel, t);
+            return send(templateName, recipient, variables, user.id, orderId, channel, t, null, true);
         })
     );
 
@@ -403,6 +422,9 @@ const sendToUser = async (templateName, channels, user, variables = {}, orderId 
 };
 
 const sendToAdmins = async (templateName, channels = ['email'], variables = {}, orderId = null, t = null) => {
+    const routed = await require('./notificationRules.service').route({ sourceTemplate: templateName,
+        variables: normalizeVariables(variables), orderId, transaction: t });
+    if (routed !== null) return routed;
     const recipientsService = require('./notificationRecipients.service');
     const configuredRecipients = await recipientsService.getConfiguredRecipients(templateName, t);
     const needsDefaults = configuredRecipients === null || channels.some((channel) => channel !== 'email');
@@ -430,7 +452,7 @@ const sendToAdmins = async (templateName, channels = ['email'], variables = {}, 
             const recipientKey = channel === 'email' ? recipient.toLowerCase() : recipient;
             if (seen.has(recipientKey)) continue;
             seen.add(recipientKey);
-            results.push(await send(templateName, recipient, variables, recipientRecord.id || null, orderId, channel, t));
+            results.push(await send(templateName, recipient, variables, recipientRecord.id || null, orderId, channel, t, null, true));
         }
     }
 
@@ -444,14 +466,14 @@ const sendToAdmins = async (templateName, channels = ['email'], variables = {}, 
  * @param {string} orderId - Related order ID
  * @param {string} status - New shipment status (out_for_delivery, delivered, etc)
  */
-const sendDeliveryUpdate = async (userId, orderId, status) => {
+const sendDeliveryUpdate = async (userId, orderId, status, eventId = null) => {
     try {
         const { User, Order } = require('../index');
         const { UserProfile } = require('../index');
         const user = await User.findByPk(userId, { include: [{ model: UserProfile, as: 'profile', required: false }] });
         const order = await Order.findByPk(orderId);
 
-        if (!user || !order) return false;
+        if (!order) return false;
 
         const isException = ['delivery_failed', 'rto_initiated', 'rto_in_transit', 'rto'].includes(status);
         const templateName = isException ? 'delivery_exception' : status === 'delivered' ? 'order_delivered' : 'order_out_for_delivery';
@@ -463,7 +485,8 @@ const sendDeliveryUpdate = async (userId, orderId, status) => {
             order_number: order.orderNumber,
             order_id: order.id,
             status_label: status.replace(/_/g, ' '),
-            customer_name: user.firstName || user.profile?.firstName || user.email || 'Customer'
+            notification_event_id: eventId,
+            customer_name: user?.firstName || user?.email || 'Customer'
         }, orderId);
     } catch (error) {
         logger.error(`[notification.service] Failed to send delivery update:`, error);
@@ -475,4 +498,9 @@ const sendOnce = (templateName, recipient, variables = {}, userId = null, orderI
     if (!dedupeKey) return Promise.resolve(false);
     return send(templateName, recipient, variables, userId, orderId, channel, null, dedupeKey);
 };
-module.exports = { send, sendOnce, sendImmediate, sendToUser, sendToAdmins, sendDeliveryUpdate, processQueued, normalizeVariables };
+const sendEvent = (eventKey, context = {}) => {
+    const event = require('./notification.events').findEvent(eventKey);
+    if (!event) return Promise.resolve(null);
+    return require('./notificationRules.service').route({ ...context, sourceTemplate: context.sourceTemplate || event.customerTemplate });
+};
+module.exports = { send, sendOnce, sendImmediate, sendToUser, sendToAdmins, sendDeliveryUpdate, processQueued, normalizeVariables, compileTemplate, buildPayload, sendEvent };

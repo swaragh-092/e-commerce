@@ -107,17 +107,16 @@ const queueShipmentNotification = async (orderId, shipmentStatus, shipment = {})
     try {
         const order = await Order.findByPk(orderId);
         if (!order) return;
+        const eventId = shipment.id ? `${shipment.id}:${shipment.statusHistory?.slice(-1)[0]?.at || shipment.updatedAt || ''}` : null;
 
         if (shipmentStatus !== 'shipped') {
-            await NotificationService.sendDeliveryUpdate(order.userId, order.id, shipmentStatus);
+            await NotificationService.sendDeliveryUpdate(order.userId, order.id, shipmentStatus, eventId);
             return;
         }
 
         const user = await User.findByPk(order.userId, {
             include: [{ model: UserProfile, as: 'profile', required: false }],
         });
-        if (!user) return;
-
         await NotificationService.sendToUser(
             'order_shipped',
             ['email', 'sms', 'whatsapp'],
@@ -125,7 +124,8 @@ const queueShipmentNotification = async (orderId, shipmentStatus, shipment = {})
             {
                 order_number: order.orderNumber,
                 order_id: order.id,
-                customer_name: `${user.firstName || ''} ${user.lastName || ''}`.trim() || user.email,
+                customer_name: `${user?.firstName || ''} ${user?.lastName || ''}`.trim() || user?.email || 'Customer',
+                notification_event_id: eventId,
                 tracking_number: shipment.trackingNumber || shipment.awb,
                 tracking_url: shipment.trackingUrl,
                 courier: shipment.courierName,
@@ -3002,18 +3002,16 @@ const updateStatus = async (id, status, actingUserId, auditContext = null) => {
             const user = await User.findByPk(orderRecord.userId, {
                 include: [{ model: UserProfile, as: 'profile', required: false }],
             });
-            if (user) {
-                const variables = {
-                    customer_name: `${user.firstName || ''} ${user.lastName || ''}`.trim() || user.email,
-                    customer_email: user.email,
-                    order_number: orderRecord.orderNumber,
-                    order_id: orderRecord.id,
-                    cancel_reason: 'Order cancelled by admin',
-                    order_total: orderRecord.total,
-                };
-                await NotificationService.sendToUser('order_cancelled', ['email', 'sms', 'whatsapp'], user, variables, orderRecord.id);
-                await NotificationService.sendToAdmins('admin_order_cancelled', ['email', 'sms', 'whatsapp'], variables, orderRecord.id);
-            }
+            const variables = {
+                customer_name: `${user?.firstName || ''} ${user?.lastName || ''}`.trim() || user?.email || 'Customer',
+                customer_email: user?.email || '',
+                order_number: orderRecord.orderNumber,
+                order_id: orderRecord.id,
+                cancel_reason: 'Order cancelled by admin',
+                order_total: orderRecord.total,
+            };
+            await NotificationService.sendToUser('order_cancelled', ['email', 'sms', 'whatsapp'], user, variables, orderRecord.id);
+            await NotificationService.sendToAdmins('admin_order_cancelled', ['email', 'sms', 'whatsapp'], variables, orderRecord.id);
         } catch (err) {
             logger.error('Failed to queue admin cancellation notifications', { orderId: id, error: err.message });
         }
@@ -3564,10 +3562,14 @@ const queuePutBackNotification = async (order, record, isNew, transaction) => {
         order_id: order.id,
         order_number: order.orderNumber,
         request_type: record.type,
+        return_id: record.id,
+        notification_event_id: `${record.id}:${record.updatedAt?.toISOString?.() || record.status}`,
         reason: record.reason || 'Not specified',
         status_label: record.status.replace(/_/g, ' '),
         resolution_notes: record.resolutionNotes || '',
     };
+    const routed = await NotificationService.sendEvent(isNew ? 'return_requested' : 'return_status_updated', { orderId: order.id, variables, transaction });
+    if (routed !== null) return;
     if (customer?.email) {
         await NotificationService.send(isNew ? 'return_requested' : 'return_status_updated', customer.email, variables, customer.id, order.id, 'email', transaction);
     }
@@ -3877,13 +3879,16 @@ const processRefund = async (orderId, payload, actingUserId, isAdmin, auditConte
             if (refund && ['refunded', 'partially_refunded'].includes(refund.status)) {
                 const refundedOrder = await Order.findByPk(orderId);
                 const customer = refundedOrder?.userId ? await User.findByPk(refundedOrder.userId) : null;
-                if (customer?.email && NotificationService?.send) {
-                    await NotificationService.send('order_refunded', customer.email, {
-                        customer_name: `${customer.firstName || ''} ${customer.lastName || ''}`.trim() || customer.email,
-                        order_number: refundedOrder.orderNumber,
-                        order_id: refundedOrder.id,
-                        refund_amount: refund.amount,
-                    }, customer.id, refundedOrder.id);
+                const variables = {
+                    customer_name: `${customer?.firstName || ''} ${customer?.lastName || ''}`.trim() || customer?.email || 'Customer',
+                    order_number: refundedOrder?.orderNumber,
+                    order_id: orderId,
+                    refund_amount: refund.amount,
+                    refund_id: refund.id,
+                };
+                const routed = await NotificationService.sendEvent('order_refunded', { orderId, variables });
+                if (routed === null && customer?.email && NotificationService?.send) {
+                    await NotificationService.send('order_refunded', customer.email, variables, customer.id, refundedOrder.id);
                 }
             }
         } catch (error) {

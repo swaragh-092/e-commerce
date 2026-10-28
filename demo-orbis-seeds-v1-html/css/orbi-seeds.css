@@ -1379,3 +1379,54 @@ li.dropdown-wrapper-li:hover > .dropdown-wrapper{visibility: visible;opacity: 1;
 .reset-product-options:focus-visible { outline-color: #dc3545; }
 .cart-variant { margin: 6px 0; font-size: 14px; color: #36545b; overflow-wrap: anywhere; }
 .products-load-error { padding: 20px; text-align: center; }
+
+/* Catalog search, filters and pagination: shared by the HTML storefront pages. */
+.catalog-controls {margin-bottom: 28px; color: #032630;}
+.catalog-toolbar {display: flex; flex-wrap: wrap; align-items: flex-end; gap: 16px; padding: 22px; border: 1px solid #e3ece7; border-radius: 10px; background: #f7faf8;}
+.catalog-field {display: flex; flex: 1 1 150px; flex-direction: column; gap: 7px; min-width: 0;}
+.catalog-field label {font-size: 14px; font-weight: 700; color: #275037;}
+.catalog-field input, .catalog-field select {min-height: 46px; padding: 10px 12px; border: 1px solid #cbd9d1; border-radius: 5px; background: #fff; color: #032630; font-size: 16px; line-height: 1.4;}
+.catalog-field input {cursor: text;}
+.catalog-field select {text-overflow: ellipsis;}
+.catalog-field-q {flex: 2 1 280px; display: grid; grid-template-columns: minmax(0, 1fr) auto;}
+.catalog-field-q label {grid-column: 1 / -1;}
+.catalog-field-q input {width: 100%;}
+.catalog-field-limit {flex: 0 1 100px;}
+.catalog-search-button, .catalog-clear, .catalog-pagination button {width: auto; min-height: 46px; padding: 10px 16px; border: 1px solid #71c5dd; border-radius: 5px; font-size: 15px; font-weight: 700; line-height: 1.4; cursor: pointer; transition: background-color .2s, color .2s, border-color .2s;}
+.catalog-search-button {background: #71c5dd; color: #032630;}
+.catalog-clear {background: #fff; color: #275037; border-color: #bdcec3;}
+.catalog-search-button:hover, .catalog-clear:hover {background: #275037; border-color: #275037; color: #fff;}
+.catalog-controls input:focus-visible, .catalog-controls select:focus-visible, .catalog-controls button:focus-visible, .catalog-pagination button:focus-visible {outline: 3px solid #275037; outline-offset: 3px;}
+.catalog-controls input:focus, .catalog-controls select:focus {border: 1px solid #275037;}
+.catalog-results-status, .catalog-search-help {font-size: 15px; line-height: 1.6; margin: 12px 0 0; text-align: left;}
+.catalog-search-help:empty {display: none;}
+.catalog-search-help {color: #8a351c;}
+.catalog-pagination {display: flex; flex-wrap: wrap; align-items: center; justify-content: center; gap: 8px; margin-top: 30px;}
+.catalog-pagination:empty {display: none;}
+.catalog-pagination button {min-width: 46px; background: #fff; color: #032630;}
+.catalog-pagination button:hover:not(:disabled), .catalog-pagination button[aria-current="page"] {background: #71c5dd; color: #032630;}
+.catalog-pagination button:disabled:not([aria-current="page"]) {color: #65736d; border-color: #d5ded9; cursor: default; background: #f7faf8;}
+.catalog-pagination button[aria-current="page"] {cursor: default; border-color: #4b9e57;}
+.catalog-pagination span {padding: 0 3px;}
+.catalog-products-page .products-content {min-width: 0;}
+.catalog-products-page .products-list a:focus-visible, .products-main-wrapper .view-product-btn:focus-visible {outline: 3px solid #275037; outline-offset: 3px;}
+.catalog-products-page .products-load-error, .products-main-wrapper .no-data, .products-main-wrapper .error {padding: 28px; text-align: center; width: 100%;}
+.products-main-wrapper .error button {display: block; width: auto; margin: 15px auto 0;}
+.catalog-products-page .products-load-error button {width: auto; margin: 12px 0;}
+.catalog-linked-label {color: #275037; font-size: 14px; font-weight: 700; margin: 0 0 10px;}
+#catalog-results {scroll-margin-top: 100px;}
+@media (max-width: 900px) {
+    .catalog-field {flex-basis: calc(50% - 16px);}
+    .catalog-field-q {flex-basis: 100%;}
+    .catalog-field-limit {flex: 1 1 100px;}
+}
+@media (max-width: 600px) {
+    .catalog-toolbar {padding: 16px; gap: 14px;}
+    .catalog-field {flex-basis: 100%;}
+    .catalog-field-limit {flex: 1 1 100%;}
+    .catalog-clear {width: 100%;}
+    .catalog-pagination button {padding: 10px 12px;}
+}
+@media (prefers-reduced-motion: reduce) {
+    .catalog-controls *, .catalog-pagination *, .products-main-wrapper .product-inner {transition: none;}
+}

@@ -197,7 +197,9 @@
 
         <section class="products-main-wrapper">
             <div class="fluid-container">
-                <div class="products-inner-wrapper"></div>
+                <div id="catalog-controls" class="catalog-controls"></div>
+                <div class="products-inner-wrapper" id="catalog-results" aria-busy="true"></div>
+                <nav id="catalog-pagination" class="catalog-pagination" aria-label="Category pages"></nav>
             </div>
         </section>
 
@@ -420,6 +422,7 @@
     </div>
 
     <script src="js/constant.js"></script>
+    <script src="js/catalog-browser.js"></script>
     <script src="js/categories.js"></script>
 
 </body>

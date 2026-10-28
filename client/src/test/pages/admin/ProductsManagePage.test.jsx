@@ -1,6 +1,7 @@
 import React from 'react';
 import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
+import { createTheme, ThemeProvider } from '@mui/material/styles';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import ProductsManagePage from '../../../pages/admin/ProductsManagePage';
 import { bulkUpdateProducts, getProducts, updateProduct } from '../../../services/productService';
@@ -68,9 +69,11 @@ const product = {
 };
 
 const renderProductsPage = (initialEntries = ['/admin/products']) => render(
-  <MemoryRouter initialEntries={initialEntries}>
-    <ProductsManagePage />
-  </MemoryRouter>
+  <ThemeProvider theme={createTheme()}>
+    <MemoryRouter initialEntries={initialEntries}>
+      <ProductsManagePage />
+    </MemoryRouter>
+  </ThemeProvider>
 );
 
 const openSelect = async (select) => {

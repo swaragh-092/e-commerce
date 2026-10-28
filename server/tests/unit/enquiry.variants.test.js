@@ -13,6 +13,7 @@ const customer = { name: 'Test User', email: 'test@example.com', message: 'Produ
 
 describe('enquiry product and variant validation', () => {
   beforeEach(() => {
+    vi.spyOn(notifications, 'sendEvent').mockResolvedValue(null);
     vi.spyOn(Product, 'findByPk').mockResolvedValue({ id: productId, name: 'Marigold', sku: 'FLOWER', type: 'variable', status: 'published', isEnabled: true });
     vi.spyOn(ProductVariant, 'findOne').mockResolvedValue({ id: variantId, productId, sku: 'FLOWER-50', isActive: true, options: [] });
     vi.spyOn(ProductVariant, 'count').mockResolvedValue(1);

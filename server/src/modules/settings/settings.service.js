@@ -26,6 +26,9 @@ const isMaskedSecretPlaceholder = (value) =>
   typeof value === 'string' && value.trim() === '********';
 
 const ensureNotificationRecipientsAllowed = (settingsArray, actingUser) => {
+  if (settingsArray.some(({ key }) => String(key).startsWith('notificationRules_'))) {
+    throw new AppError('FORBIDDEN', 403, 'Use the notification event editor to update notification rules');
+  }
   if (settingsArray.some(({ key }) => key === 'eventRecipientUserIds')
       && !getPermissionsForUser(actingUser).includes(PERMISSIONS.NOTIFICATIONS_MANAGE)) {
     throw new AppError('FORBIDDEN', 403, 'Notification management permission is required to change email recipients');
@@ -312,7 +315,7 @@ const getAll = async () => {
   };
 
   settings.forEach(s => {
-    if (s.group === 'messaging' && s.key === 'eventRecipientUserIds') return;
+    if (s.group === 'messaging' && (s.key === 'eventRecipientUserIds' || s.key.startsWith('notificationRules_'))) return;
     if (grouped[s.group]) {
       let parsedValue = s.value;
 
@@ -363,7 +366,7 @@ const getByGroup = async (groupName, options = {}) => {
   
   const result = { ...(defaultSettings[groupName] || {}) };
   settings.forEach(s => {
-    if (maskSensitive && groupName === 'messaging' && s.key === 'eventRecipientUserIds') return;
+    if (maskSensitive && groupName === 'messaging' && (s.key === 'eventRecipientUserIds' || s.key.startsWith('notificationRules_'))) return;
     let parsedValue = s.value;
 
     // Auto-decrypt if it's an encrypted object
