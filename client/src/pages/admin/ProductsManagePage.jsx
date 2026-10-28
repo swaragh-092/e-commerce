@@ -864,20 +864,21 @@ const ProductsManagePage = () => {
       width: 170,
       sortable: false,
       renderCell: ({ row }) => (
-        <Tooltip title={getProductStorefrontStateHelp(getProductStorefrontState(row))}>
-          <FormControl size="small" fullWidth>
-            <Select
-              value={getProductStorefrontState(row)}
-              onChange={(event) => handleChangeStorefrontState(row, event.target.value)}
-              disabled={!canUpdateProducts}
-              inputProps={{ 'aria-label': `Storefront state for ${row.name}` }}
-            >
-              {Object.values(PRODUCT_STOREFRONT_STATES).map((state) => (
-                <MenuItem key={state} value={state}>{PRODUCT_STOREFRONT_STATE_LABELS[state]}</MenuItem>
-              ))}
-            </Select>
-          </FormControl>
-        </Tooltip>
+        <FormControl size="small" fullWidth>
+          <Select
+            value={getProductStorefrontState(row)}
+            onChange={(event) => handleChangeStorefrontState(row, event.target.value)}
+            disabled={!canUpdateProducts}
+            SelectDisplayProps={{
+              'aria-label': `Storefront state for ${row.name}`,
+              'aria-description': getProductStorefrontStateHelp(getProductStorefrontState(row)),
+            }}
+          >
+            {Object.values(PRODUCT_STOREFRONT_STATES).map((state) => (
+              <MenuItem key={state} value={state}>{PRODUCT_STOREFRONT_STATE_LABELS[state]}</MenuItem>
+            ))}
+          </Select>
+        </FormControl>
       ),
     },
     // 6. Actions: quick-edit | edit | view on storefront | delete
