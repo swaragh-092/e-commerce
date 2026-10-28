@@ -156,6 +156,7 @@ const getBrandBySlug = async (slug, isAdmin = false, query = {}) => {
         {
             model: Tag,
             as: 'tags',
+            attributes: { exclude: ['description'] },
             through: { attributes: [] }
         }
     ];

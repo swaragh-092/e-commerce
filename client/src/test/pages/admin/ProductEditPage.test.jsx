@@ -1,4 +1,5 @@
 import React from 'react';
+import { getTags } from '../../../services/tagService';
 import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { MemoryRouter, Route, Routes } from 'react-router-dom';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
@@ -9,6 +10,7 @@ import { getCategoryTree } from '../../../services/categoryService';
 import brandService from '../../../services/brandService';
 import { getSaleLabels } from '../../../services/adminService';
 
+vi.mock('../../../services/tagService', () => ({ getTags: vi.fn().mockResolvedValue({ data: [] }) }));
 vi.mock('../../../services/productService', () => ({ createProduct: vi.fn(), updateProduct: vi.fn(), getProductById: vi.fn(), getProducts: vi.fn() }));
 vi.mock('../../../services/categoryService', () => ({ getCategoryTree: vi.fn() }));
 vi.mock('../../../services/brandService', () => ({ default: { getBrands: vi.fn() } }));
@@ -36,6 +38,7 @@ const type = async (label) => {
 const loaded = async () => waitFor(() => expect(screen.getByRole('textbox', { name: /Product Name/ })).toHaveValue('Test product'));
 beforeEach(() => {
   vi.clearAllMocks();
+  getTags.mockResolvedValue({ data: [] });
   disabledFeatures.clear();
   getCategoryTree.mockResolvedValue({ data: [] });
   brandService.getBrands.mockResolvedValue({ data: { data: [] } });
@@ -183,5 +186,18 @@ describe('product type and inventory editor', () => {
 
     // Confirmation dialog should appear
     expect(await screen.findByRole('dialog', { name: 'Discard unsaved changes?' })).toBeInTheDocument();
+  });
+});
+
+describe('product editor tag persistence', () => {
+  it('loads existing labels and sends edited tags in the product payload', async () => {
+    getProductById.mockResolvedValue({ data: { ...product, tags: [{ id: 'tag', name: 'Summer', slug: 'summer' }] } });
+    mount(); await loaded();
+    expect(screen.getByText('Summer', { exact: true })).toBeInTheDocument();
+    const input = screen.getByRole('combobox', { name: 'Tags' });
+    fireEvent.change(input, { target: { value: 'Beginner Friendly' } });
+    fireEvent.keyDown(input, { key: 'Enter' });
+    fireEvent.click(screen.getByRole('button', { name: 'Save Product' }));
+    await waitFor(() => expect(updateProduct).toHaveBeenCalledWith('product', expect.objectContaining({ tags: ['Summer', 'Beginner Friendly'] })));
   });
 });

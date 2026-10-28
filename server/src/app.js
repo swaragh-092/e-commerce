@@ -197,6 +197,7 @@ app.use('/api/auth', authRoutes);
 app.use('/api/users', userRoutes);
 app.use('/api/categories', categoryRoutes);
 app.use('/api/products', productRoutes);
+app.use('/api/tags', require('./modules/product/tag.routes'));
 app.use('/api/brands', brandRoutes);
 app.use('/api/media', mediaRoutes);
 app.use('/api/cart', cartRoutes);

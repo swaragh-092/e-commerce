@@ -64,7 +64,7 @@ This is a **complete, production-ready e-commerce platform** that can operate in
 | **Volumetric Dimensions** | Set length, width, height for accurate shipping calculations |
 | **Product Enable/Disable** | Toggle product visibility without deleting |
 | **Rating Cache** | Auto-cached average rating displayed on product cards |
-| **Tags** | Flexible tagging system for product grouping |
+| **Tags** | Product editor suggestions and inline creation; tag management with usage counts; atomic bulk add/remove; admin filtering; descriptions and dedicated storefront tag pages with sitemap and crawler metadata |
 **Customer-Facing Impact:**
 - Customers see product details, images, variants, prices, sale badges, availability
 - Variant selector shows only in-stock options

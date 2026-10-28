@@ -1,4 +1,5 @@
 import React from 'react';
+import { getTags } from '../../../services/tagService';
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { MemoryRouter, Routes, Route } from 'react-router-dom';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
@@ -6,6 +7,7 @@ import ProductEditPage from '../../../pages/admin/ProductEditPage';
 import { createProduct, getProductById, updateProduct } from '../../../services/productService';
 
 const { features, notify } = vi.hoisted(() => ({ features: {}, notify: vi.fn() }));
+vi.mock('../../../services/tagService', () => ({ getTags: vi.fn().mockResolvedValue({ data: [] }) }));
 vi.mock('../../../services/productService', () => ({ createProduct: vi.fn(), updateProduct: vi.fn(), getProductById: vi.fn(), getProducts: vi.fn() }));
 vi.mock('../../../services/categoryService', () => ({ getCategoryTree: vi.fn().mockResolvedValue({ data: [] }) }));
 vi.mock('../../../services/brandService', () => ({ default: { getBrands: vi.fn().mockResolvedValue({ data: { data: [] } }) } }));
@@ -31,6 +33,7 @@ const save = () => fireEvent.click(screen.getByRole('button', { name: 'Save Prod
 describe('product editor validation', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+  getTags.mockResolvedValue({ data: [] });
     features.pricing = false;
     features.showPrice = false;
     createProduct.mockResolvedValue({ data: { id: 'new-product' } });

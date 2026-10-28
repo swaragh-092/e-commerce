@@ -1,4 +1,5 @@
 import React from 'react';
+import { getTags, bulkUpdateProductTags } from '../../../services/tagService';
 import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
 import { createTheme, ThemeProvider } from '@mui/material/styles';
@@ -15,6 +16,7 @@ const { notifyMock, settingsMock, disabledFeatures, hiddenPresentation } = vi.ho
   hiddenPresentation: new Set(),
 }));
 
+vi.mock('../../../services/tagService', () => ({ getTags: vi.fn().mockResolvedValue({ data: [] }), bulkUpdateProductTags: vi.fn() }));
 vi.mock('@mui/x-data-grid', () => ({
   DataGrid: ({ rows, columns, onRowSelectionModelChange }) => (
     <div>
@@ -83,6 +85,8 @@ const openSelect = async (select) => {
 describe('ProductsManagePage storefront state controls', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    getTags.mockResolvedValue({ data: [] });
+    bulkUpdateProductTags.mockResolvedValue({ data: { updatedCount: 1, selectedCount: 1, changedCount: 1 } });
     disabledFeatures.clear();
     hiddenPresentation.clear();
     vi.unstubAllGlobals();
@@ -314,4 +318,25 @@ describe('ProductsManagePage storefront state controls', () => {
     expect(csvText).toContain('Archived');
     expect(revokeObjectURL).toHaveBeenCalledWith('blob:products');
   });
+
+  it('applies tag deep links to the admin product query', async () => {
+    getProducts.mockResolvedValue({ data: [], meta: { total: 0 } });
+    renderProductsPage(['/admin/products?tags=summer']);
+    await waitFor(() => expect(getProducts).toHaveBeenCalledWith(expect.objectContaining({ tags: 'summer' })));
+  });
+  it('applies tags to selected products, clears selection and refreshes results', async () => {
+    renderProductsPage(); await screen.findByText('Test product');
+    fireEvent.click(screen.getByRole('button', { name: 'Select visible products' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Edit tags' }));
+    const dialog = within(screen.getByRole('dialog', { name: 'Edit tags on 1 product' }));
+    const input = dialog.getByRole('combobox', { name: 'Tags' });
+    fireEvent.change(input, { target: { value: 'Summer' } });
+    fireEvent.keyDown(input, { key: 'Enter' });
+    fireEvent.click(dialog.getByRole('button', { name: 'Apply tags' }));
+    await waitFor(() => expect(bulkUpdateProductTags).toHaveBeenCalledWith({ productIds: ['product-1'], action: 'add', tags: ['Summer'] }));
+    await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument());
+    expect(screen.queryByText('1 selected')).not.toBeInTheDocument();
+    expect(notifyMock).toHaveBeenCalledWith('Tags updated on 1 of 1 selected products.', 'success');
+  });
+
 });

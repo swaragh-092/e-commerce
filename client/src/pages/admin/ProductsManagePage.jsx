@@ -18,6 +18,8 @@ import {
 import { Link, useLocation, useNavigate, useSearchParams } from 'react-router-dom';
 import { getProducts, getProductById, deleteProduct, updateProduct, bulkUpdateSale, bulkDeleteProducts, bulkUpdateProducts, getStockHistory } from '../../services/productService';
 import attributeService from '../../services/attributeService';
+import BulkProductTagsDialog from '../../components/admin/BulkProductTagsDialog';
+import ProductTagFilter from '../../components/admin/ProductTagFilter';
 import { getCategoryTree } from '../../services/categoryService';
 import { getSaleLabels } from '../../services/adminService';
 import { getMediaUrl } from '../../utils/media';
@@ -141,6 +143,7 @@ const ProductsManagePage = () => {
   const [status, setStatus] = useState(() => searchParams.get('status') || '');
   const [saleFilter, setSaleFilter] = useState('');
   const [categoryFilter, setCategoryFilter] = useState('');
+  const tagFilter = searchParams.get('tags') || '';
   const [flatCategories, setFlatCategories] = useState([]);
   const [saleLabels, setSaleLabels] = useState([]);
   // ?stock=low from dashboard → show only items with qty ≤ lowStockThreshold
@@ -161,6 +164,7 @@ const ProductsManagePage = () => {
 
   // Bulk selection
   const [selectedIds, setSelectedIds] = useState([]);
+  const [tagEditIds, setTagEditIds] = useState(null);
 
   // Delete confirmation dialog
   const [deleteDialog, setDeleteDialog] = useState({ open: false, id: null, name: '', bulk: false });
@@ -198,7 +202,7 @@ const ProductsManagePage = () => {
     saving: false,
   });
   const [counts, setCounts] = useState({ published: 0, paused: 0, draft: 0, archived: 0 });
-  const hasActiveFilters = Boolean(search || status || saleFilter || categoryFilter || lowStockOnly);
+  const hasActiveFilters = Boolean(search || status || saleFilter || categoryFilter || tagFilter || lowStockOnly);
 
   // Step amount for the stock stepper — persists between quick-edit opens
   // Stock history dialog
@@ -457,6 +461,7 @@ const ProductsManagePage = () => {
       ...(status && { status }),
       ...(saleFilter && { saleStatus: saleFilter }),
       ...(categoryFilter && { categoryId: categoryFilter }),
+      ...(tagFilter && { tags: tagFilter }),
       ...(sortModel[0] && { sortBy: sortModel[0].field, sortOrder: sortModel[0].sort }),
       // Low-stock filter: pass maxQty=lowStockThreshold so the server returns only low-stock items
       ...(lowStockOnly && { maxQty: lowStockThreshold }),
@@ -469,7 +474,7 @@ const ProductsManagePage = () => {
       })
       .catch(console.error)
       .finally(() => setLoading(false));
-  }, [paginationModel, search, status, saleFilter, categoryFilter, sortModel, lowStockOnly, lowStockThreshold]);
+  }, [paginationModel, search, status, saleFilter, categoryFilter, tagFilter, sortModel, lowStockOnly, lowStockThreshold]);
 
   useEffect(() => {
     fetchProducts();
@@ -950,6 +955,7 @@ const ProductsManagePage = () => {
             setStatus('');
             setSaleFilter('');
             setCategoryFilter('');
+            setSearchParams({});
             setLowStockOnly(false);
             setPaginationModel((p) => ({ ...p, page: 0 }));
           }}
@@ -1143,6 +1149,12 @@ const ProductsManagePage = () => {
             ))}
           </Select>
         </FormControl>
+        <ProductTagFilter value={tagFilter} onChange={(value) => {
+          const next = new URLSearchParams(searchParams);
+          if (value) next.set('tags', value); else next.delete('tags');
+          setSearchParams(next);
+          setPaginationModel((current) => ({ ...current, page: 0 }));
+        }} />
       </Stack>
 
       {/* ── Bulk actions bar (only shown when rows are selected) ── */}
@@ -1175,6 +1187,7 @@ const ProductsManagePage = () => {
               </Select>
             </FormControl>
           )}
+          {canUpdateProducts && <Button size="small" variant="outlined" startIcon={<LocalOfferIcon />} onClick={() => setTagEditIds([...selectedIds])}>Edit tags</Button>}
           {canDeleteProducts && (
             <Button
               size="small" variant="outlined" color="error"
@@ -1765,6 +1778,17 @@ const ProductsManagePage = () => {
           </Button>
         </DialogActions>
       </Dialog>
+
+      {canUpdateProducts && tagEditIds && <BulkProductTagsDialog
+        productIds={tagEditIds}
+        onClose={() => setTagEditIds(null)}
+        onSaved={(result) => {
+          notify(`Tags updated on ${result.updatedCount} of ${result.selectedCount} selected products.`, 'success');
+          setTagEditIds(null);
+          setSelectedIds([]);
+          fetchProducts();
+        }}
+      />}
 
       {sales.allowBulkSales !== false && canBulkSaleProducts && <Dialog
         open={bulkSaleDialog.open}

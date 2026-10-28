@@ -63,6 +63,7 @@ const StorefrontOrderInvoicePage = lazy(() => import('../pages/storefront/OrderI
 const LinkGuestOrdersPage = lazy(() => import('../pages/storefront/LinkGuestOrdersPage'));
 const WishlistPage = lazy(() => import('../pages/storefront/WishlistPage'));
 const ProductDetailPage = lazy(() => import('../pages/storefront/ProductDetailPage'));
+const TagPage = lazy(() => import('../pages/storefront/TagPage'));
 const ProductListPage = lazy(() => import('../pages/storefront/ProductListPage'));
 const CategoryPage = lazy(() => import('../pages/storefront/CategoryPage'));
 const CartPage = lazy(() => import('../pages/storefront/CartPage'));
@@ -101,6 +102,7 @@ const SaleLabelsPage = lazy(() => import('../pages/admin/SaleLabelsPage'));
 const EnquiriesPage = lazy(() => import('../pages/admin/EnquiriesPage'));
 const AuditLogPage = lazy(() => import('../pages/admin/AuditLogPage'));
 const AttributesPage = lazy(() => import('../pages/admin/AttributesPage'));
+const TagsPage = lazy(() => import('../pages/admin/TagsPage'));
 const BrandsPage = lazy(() => import('../pages/admin/BrandsPage'));
 const AccessControlPage = lazy(() => import('../pages/admin/AccessControlPage'));
 const PagesManagePage = lazy(() => import('../pages/admin/PagesManagePage'));
@@ -147,6 +149,7 @@ const AppRoutes = () => (
       <Route path="/" element={<StoreLayout />}>
         <Route index element={<Home />} />
         <Route path="products" element={<ProductListPage />} />
+        <Route path="tags/:slug" element={<TagPage />} />
         <Route path="products/:slug" element={<ProductDetailPage />} />
         <Route path="product/:slug" element={<ProductDetailPage />} />
         <Route path="category/:categorySlug" element={<CategoryPage />} />
@@ -225,6 +228,9 @@ const AppRoutes = () => (
           </Route>
           <Route element={<ProtectedRoute permissions={[PERMISSIONS.BRANDS_READ, PERMISSIONS.BRANDS_MANAGE, PERMISSIONS.PRODUCTS_READ]} />}>
             <Route path="brands" element={<BrandsPage />} />
+          </Route>
+          <Route element={<ProtectedRoute permissions={[PERMISSIONS.PRODUCTS_READ, PERMISSIONS.PRODUCTS_CREATE, PERMISSIONS.PRODUCTS_UPDATE]} />}>
+            <Route path="tags" element={<TagsPage />} />
           </Route>
           <Route element={<ProtectedRoute permission={PERMISSIONS.PRODUCTS_CREATE} />}>
             <Route path="products/new" element={<ProductEditPage />} />
