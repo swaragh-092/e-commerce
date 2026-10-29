@@ -60,7 +60,9 @@
     "GALLERY_DELETE": "gallery.delete",
     "NEWSLETTER_READ": "newsletter.read",
     "NEWSLETTER_MANAGE": "newsletter.manage",
-    "NEWSLETTER_SUBSCRIBERS_READ": "newsletter.subscribers_read"
+    "NEWSLETTER_SUBSCRIBERS_READ": "newsletter.subscribers_read",
+    "TAGS_READ": "tags.read",
+    "TAGS_MANAGE": "tags.manage"
   },
   "systemRoleDefinitions": {
     "customer": {
@@ -87,6 +89,8 @@
     "products.update",
     "products.delete",
     "products.bulk_sale",
+    "tags.read",
+    "tags.manage",
     "categories.read",
     "categories.manage",
     "attributes.read",
@@ -190,7 +194,9 @@
     "gallery.delete": "Delete gallery albums or remove images from albums; does not delete media files",
     "newsletter.read": "View newsletter campaign drafts and delivery results",
     "newsletter.manage": "Create, edit, test, schedule, send, and cancel newsletter campaigns",
-    "newsletter.subscribers_read": "View subscriber email addresses and export the displayed subscriber list"
+    "newsletter.subscribers_read": "View subscriber email addresses and export the displayed subscriber list",
+    "tags.read": "View product tags.",
+    "tags.manage": "Create and edit tags assigned to products."
   },
   "implies": {
     "categories.manage": [
@@ -271,6 +277,9 @@
     ],
     "newsletter.manage": [
       "newsletter.read"
+    ],
+    "tags.manage": [
+      "tags.read"
     ]
   }
 }
