@@ -236,6 +236,9 @@ const ProductEditPage = () => {
   const sales = settings?.sales || {};
   const canCreateProducts = hasPermission(PERMISSIONS.PRODUCTS_CREATE);
   const canUpdateProducts = hasPermission(PERMISSIONS.PRODUCTS_UPDATE);
+  const canReadTags = hasPermission(PERMISSIONS.TAGS_READ);
+  const canManageTags = hasPermission(PERMISSIONS.TAGS_MANAGE);
+  const tagsEnabled = useFeature('tags');
   const canUploadMedia = hasPermission(PERMISSIONS.MEDIA_UPLOAD);
   const pricingEnabled = useFeatureVisible('pricing', 'admin');
   const featuresResolved = useFeaturesResolved();
@@ -263,6 +266,7 @@ const ProductEditPage = () => {
     type: 'simple',
     isEnabled: true,
     categoryIds: [],
+    tags: [],
     brandId: '',
     tags: [],
     images: [],
@@ -352,6 +356,7 @@ const ProductEditPage = () => {
               type: p.type || 'simple',
               isEnabled: p.isEnabled ?? true,
               categoryIds: p.categories?.map((c) => c.id) || [],
+              tags: (p.tags || []).map((tag) => typeof tag === 'string' ? tag : tag.name).filter(Boolean),
               brandId: p.brandId || '',
               tags: p.tags?.map((tag) => tag.name) || [],
               images: p.images || [],
@@ -577,6 +582,7 @@ const ProductEditPage = () => {
         for (const key of ['requiresShipping', 'packingMode', 'weightGrams', 'lengthCm', 'breadthCm', 'heightCm']) delete payload[key];
       }
       if (!brandsEnabled) delete payload.brandId;
+      if (!tagsEnabled || !canManageTags) delete payload.tags;
       if (!seoEnabled) for (const key of ['metaTitle', 'metaDescription', 'metaKeywords', 'ogImage']) delete payload[key];
 
       // Variant and bundle stock is managed by their own editors.
@@ -1294,6 +1300,26 @@ const ProductEditPage = () => {
               />
 
               <ProductTagsInput value={formData.tags} onChange={(tags) => setField('tags', tags)} disabled={!canSaveProduct} error={errors.tags} />
+
+              {tagsEnabled && canReadTags && (
+                <Autocomplete
+                  multiple
+                  freeSolo
+                  options={formData.tags}
+                  value={formData.tags}
+                  onChange={(_, values) => setField('tags', [...new Set(values.map((value) => String(value).trim()).filter(Boolean))])}
+                  disabled={!canManageTags}
+                  renderInput={(params) => (
+                    <TextField
+                      {...params}
+                      label="Product tags"
+                      placeholder={formData.tags.length ? '' : 'Add tags and press Enter'}
+                      margin="normal"
+                      helperText={canManageTags ? 'Use tags to organize products and improve filtering.' : 'You have view-only access to product tags.'}
+                    />
+                  )}
+                />
+              )}
 
               {brandsEnabled && (
               <FormControl fullWidth margin="normal">
