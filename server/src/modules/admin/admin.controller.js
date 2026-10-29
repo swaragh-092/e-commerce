@@ -102,7 +102,7 @@ const updateAccessRole = async (req, res, next) => {
 
 const deleteAccessRole = async (req, res, next) => {
   try {
-    await AdminService.deleteAccessRole(req.params.id, req.user);
+    await AdminService.deleteAccessRole(req.params.id, req.user, req.validated?.replacementRoleId);
     return success(res, null, 'Role deleted successfully');
   } catch (err) {
     next(err);
