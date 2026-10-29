@@ -18,6 +18,10 @@ const rolePayload = {
 
 const createRoleSchema = Joi.object(rolePayload);
 
+const deleteRoleSchema = Joi.object({
+  replacementRoleId: Joi.string().uuid().allow(null).optional(),
+});
+
 const updateRoleSchema = Joi.object({
   name: Joi.string().max(100).optional(),
   description: Joi.string().max(255).allow('', null).optional(),
@@ -75,6 +79,7 @@ module.exports = {
   updateUserRoleSchema,
   createRoleSchema,
   updateRoleSchema,
+  deleteRoleSchema,
   salesChartQuerySchema,
   lowStockQuerySchema,
   createStaffUserSchema,
