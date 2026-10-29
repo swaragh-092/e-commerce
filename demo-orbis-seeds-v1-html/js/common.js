@@ -26,14 +26,14 @@ function setActiveLinks() {
     // Select all links in header navigation, dropdowns, megamenu, mobile menu, and footer
     var $navLinks = $('.nav-links a, .mobile-menu-content a, .footer-active-links ul li a, footer .columns-sec li a');
 
-    var $activeNavLinks = $navLinks.filter(function() {
+    var $activeNavLinks = $navLinks.filter(function () {
         var linkHrefAttr = $(this).attr('href');
         if (!linkHrefAttr || linkHrefAttr === '#' || linkHrefAttr === 'javascript:;') return false;
 
         var linkLoc;
         try {
             linkLoc = new URL(this.href);
-        } catch(e) {
+        } catch (e) {
             return false;
         }
 
@@ -64,7 +64,7 @@ function setActiveLinks() {
         return false;
     });
 
-    $activeNavLinks.each(function() {
+    $activeNavLinks.each(function () {
         var $this = $(this);
         $this.addClass('act-link');
 
@@ -79,7 +79,7 @@ function setActiveLinks() {
         }
 
         // Highlight parent dropdown / megamenu <li> and its top-level <a>
-        $this.parents('li.dropdown-wrapper-li, li.megamenu-wrapper-li').each(function() {
+        $this.parents('li.dropdown-wrapper-li, li.megamenu-wrapper-li').each(function () {
             $(this).addClass('act-link');
             $(this).children('a').addClass('act-link');
         });
@@ -87,7 +87,7 @@ function setActiveLinks() {
         // For mobile
         if ($this.closest('.mobile-menu-container').length > 0) {
             $this.closest('li').addClass('act-link');
-            $this.parents('li.has-submenu').each(function() {
+            $this.parents('li.has-submenu').each(function () {
                 $(this).children('.menu-item-row').find('a').addClass('act-link');
                 $(this).addClass('act-link');
             });
@@ -96,7 +96,7 @@ function setActiveLinks() {
 
     // Fallback: If on products page and top-level link isn't already active, highlight "Our Products"
     if (currentPath.indexOf('/product') !== -1 || currentCat) {
-        var $ourProducts = $('.nav-links > li > a, .mobile-menu-content > ul > li > a, .mobile-menu-content > ul > li > .menu-item-row > a').filter(function() {
+        var $ourProducts = $('.nav-links > li > a, .mobile-menu-content > ul > li > a, .mobile-menu-content > ul > li > .menu-item-row > a').filter(function () {
             var text = $(this).text().trim().toLowerCase();
             return text === 'our products' || text === 'products';
         });
@@ -110,9 +110,9 @@ window.setActiveLinks = setActiveLinks;
 
 function formatMenuUrl(url) {
     if (!url || url === "#") return "javascript:;";
-    
+
     var formattedUrl = url;
-    
+
     try {
         if (url.indexOf('http') === 0) {
             var urlObj = new URL(url);
@@ -132,45 +132,45 @@ function formatMenuUrl(url) {
                 formattedUrl = lastPart;
             }
         }
-    } catch(e) { }
+    } catch (e) { }
 
     if (formattedUrl && formattedUrl !== "javascript:;" && formattedUrl !== "#" && formattedUrl !== "/") {
         var queryParts = formattedUrl.split('?');
         var basePart = queryParts[0];
         var suffix = queryParts.length > 1 ? '?' + queryParts[1] : '';
-        
+
         var hashParts = basePart.split('#');
         basePart = hashParts[0];
         var hashSuffix = hashParts.length > 1 ? '#' + hashParts[1] : '';
-        
+
         if (basePart && basePart.indexOf('.') === -1) {
             basePart += ".html";
         } else if (basePart.endsWith('.shtml')) {
             basePart = basePart.replace(/\.shtml$/, '.html');
         }
-        
+
         formattedUrl = basePart + hashSuffix + suffix;
     }
-    
+
     return formattedUrl;
 }
 function buildDesktopMegaMenu(item) {
     var html = '<div class="mega-menu-wrapper"><div class="mega-menu-container"><div class="mega-menu-columns">';
-    
-    var sortedChildren = item.children.sort(function(a, b) { return (a.sortOrder || 0) - (b.sortOrder || 0); });
-    
-    sortedChildren.forEach(function(child) {
+
+    var sortedChildren = item.children.sort(function (a, b) { return (a.sortOrder || 0) - (b.sortOrder || 0); });
+
+    sortedChildren.forEach(function (child) {
         if (!child.isVisible) return;
         var childUrl = formatMenuUrl(child.url);
         var targetAttr = child.openInNewTab ? ' target="_blank"' : '';
-        
+
         html += '<div class="mega-menu-column">';
         html += '<a href="' + childUrl + '" class="mega-menu-column-title"' + targetAttr + '>' + child.label + '</a>';
-        
+
         if (child.children && child.children.length > 0) {
             html += '<ul class="mega-menu-list">';
-            var sortedSubChildren = child.children.sort(function(a, b) { return (a.sortOrder || 0) - (b.sortOrder || 0); });
-            sortedSubChildren.forEach(function(subChild) {
+            var sortedSubChildren = child.children.sort(function (a, b) { return (a.sortOrder || 0) - (b.sortOrder || 0); });
+            sortedSubChildren.forEach(function (subChild) {
                 if (!subChild.isVisible) return;
                 var subUrl = formatMenuUrl(subChild.url);
                 var subTargetAttr = subChild.openInNewTab ? ' target="_blank"' : '';
@@ -180,7 +180,7 @@ function buildDesktopMegaMenu(item) {
         }
         html += '</div>';
     });
-    
+
     html += '</div></div></div>';
     return html;
 }
@@ -189,16 +189,16 @@ function buildDesktopMenuSub(items) {
     var html = "";
     if (!items || !items.length) return html;
 
-    items.forEach(function(item) {
+    items.forEach(function (item) {
         if (!item.isVisible) return;
         var hasChildren = item.children && item.children.length > 0;
         var itemUrl = formatMenuUrl(item.url);
         var targetAttr = item.openInNewTab ? ' target="_blank"' : '';
-        
+
         if (hasChildren) {
             html += '<li class="dropdown-wrapper-li"><a href="' + itemUrl + '"' + targetAttr + '>' + item.label + '</a>';
             html += '<div class="dropdown-wrapper"><ul>';
-            var sortedChildren = item.children.sort(function(a, b) { return (a.sortOrder || 0) - (b.sortOrder || 0); });
+            var sortedChildren = item.children.sort(function (a, b) { return (a.sortOrder || 0) - (b.sortOrder || 0); });
             html += buildDesktopMenuSub(sortedChildren);
             html += '</ul></div></li>';
         } else {
@@ -214,22 +214,22 @@ function buildMobileMenuSub(items, parentLabel) {
 
     html += '<li class="back-item"><a href="javascript:;" class="back-button"><span class="back-icon"><img src="images/icons/back.png" alt="Back"></span> ' + (parentLabel || 'Back') + '</a></li>';
 
-    items.forEach(function(item) {
+    items.forEach(function (item) {
         if (!item.isVisible) return;
         var hasChildren = item.children && item.children.length > 0;
         var itemUrl = formatMenuUrl(item.url);
         var targetAttr = item.openInNewTab ? ' target="_blank"' : '';
-        
+
         var liClass = hasChildren ? 'class="has-submenu"' : '';
         html += '<li ' + liClass + '>';
-        
+
         if (hasChildren) {
             html += '<div class="menu-item-row">';
             html += '<a href="' + itemUrl + '"' + targetAttr + '>' + item.label + '</a>';
             html += '<span class="submenu-toggle"><img src="images/icons/next.png" alt=">"></span>';
             html += '</div>';
             html += '<ul class="submenu">';
-            var sortedChildren = item.children.sort(function(a, b) { return (a.sortOrder || 0) - (b.sortOrder || 0); });
+            var sortedChildren = item.children.sort(function (a, b) { return (a.sortOrder || 0) - (b.sortOrder || 0); });
             html += buildMobileMenuSub(sortedChildren, item.label);
             html += '</ul>';
         } else {
@@ -242,132 +242,132 @@ function buildMobileMenuSub(items, parentLabel) {
 
 function fetchAndRenderMenu() {
     var apiUrl = API_URL;
-    
+
     Promise.all([
-        fetch(apiUrl + "menus/slug/public/orbis-menu").then(function(r) { return r.json(); }),
-        fetch(apiUrl + "categories").then(function(r) { return r.json(); })
+        fetch(apiUrl + "menus/slug/public/orbis-menu").then(function (r) { return r.json(); }),
+        fetch(apiUrl + "categories").then(function (r) { return r.json(); })
     ])
-    .then(function(results) {
-        var menuResult = results[0];
-        var categoriesResult = results[1];
-        
-        if (menuResult && menuResult.success && menuResult.data && menuResult.data.items) {
-            var desktopHtml = "";
-            var mobileHtml = '<ul>';
-            
-            // Initial mobile items
-            mobileHtml += '<li><a href="index.html" class="resp-home">Home</a></li>';
+        .then(function (results) {
+            var menuResult = results[0];
+            var categoriesResult = results[1];
 
-            var items = menuResult.data.items.sort(function(a, b) { return (a.sortOrder || 0) - (b.sortOrder || 0); });
+            if (menuResult && menuResult.success && menuResult.data && menuResult.data.items) {
+                var desktopHtml = "";
+                var mobileHtml = '<ul>';
 
-            items.forEach(function(item) {
-                if (!item.isVisible) return;
-                
-                var hasChildren = item.children && item.children.length > 0;
-                var itemUrl = formatMenuUrl(item.url);
-                var targetAttr = item.openInNewTab ? ' target="_blank"' : '';
+                // Initial mobile items
+                mobileHtml += '<li><a href="index.html" class="resp-home">Home</a></li>';
 
-                // Identify "Our Products" for dynamic category injection
-                var isProducts = item.label.toLowerCase().indexOf("product") !== -1;
+                var items = menuResult.data.items.sort(function (a, b) { return (a.sortOrder || 0) - (b.sortOrder || 0); });
 
-                if (isProducts && (!hasChildren)) {
-                    if (categoriesResult && categoriesResult.success && categoriesResult.data) {
-                        item.children = categoriesResult.data.map(function(cat) {
-                            return {
-                                label: cat.name,
-                                url: "products.html?category=" + cat.slug,
-                                isVisible: true,
-                                children: cat.children ? cat.children.map(function(sub) {
-                                    return {
-                                        label: sub.name,
-                                        url: "products.html?category=" + sub.slug,
-                                        isVisible: true
-                                    };
-                                }) : []
-                            };
-                        });
-                        hasChildren = item.children.length > 0;
+                items.forEach(function (item) {
+                    if (!item.isVisible) return;
+
+                    var hasChildren = item.children && item.children.length > 0;
+                    var itemUrl = formatMenuUrl(item.url);
+                    var targetAttr = item.openInNewTab ? ' target="_blank"' : '';
+
+                    // Identify "Our Products" for dynamic category injection
+                    var isProducts = item.label.toLowerCase().indexOf("product") !== -1;
+
+                    if (isProducts && (!hasChildren)) {
+                        if (categoriesResult && categoriesResult.success && categoriesResult.data) {
+                            item.children = categoriesResult.data.map(function (cat) {
+                                return {
+                                    label: cat.name,
+                                    url: "products.html?category=" + cat.slug,
+                                    isVisible: true,
+                                    children: cat.children ? cat.children.map(function (sub) {
+                                        return {
+                                            label: sub.name,
+                                            url: "products.html?category=" + sub.slug,
+                                            isVisible: true
+                                        };
+                                    }) : []
+                                };
+                            });
+                            hasChildren = item.children.length > 0;
+                        }
                     }
-                }
 
-                // Desktop Builder
-                if (hasChildren) {
-                    // Check if it should be a mega menu (e.g. if children have children)
-                    var isMegaMenu = item.children.some(function(c) { return c.children && c.children.length > 0; });
-                    
-                    if (isMegaMenu) {
-                        desktopHtml += '<li class="megamenu-wrapper-li"><a href="' + itemUrl + '"' + targetAttr + '>' + item.label + '</a>';
-                        desktopHtml += buildDesktopMegaMenu(item);
-                        desktopHtml += '</li>';
+                    // Desktop Builder
+                    if (hasChildren) {
+                        // Check if it should be a mega menu (e.g. if children have children)
+                        var isMegaMenu = item.children.some(function (c) { return c.children && c.children.length > 0; });
+
+                        if (isMegaMenu) {
+                            desktopHtml += '<li class="megamenu-wrapper-li"><a href="' + itemUrl + '"' + targetAttr + '>' + item.label + '</a>';
+                            desktopHtml += buildDesktopMegaMenu(item);
+                            desktopHtml += '</li>';
+                        } else {
+                            desktopHtml += '<li class="dropdown-wrapper-li"><a href="' + itemUrl + '"' + targetAttr + '>' + item.label + '</a>';
+                            desktopHtml += '<div class="dropdown-wrapper last"><ul>';
+                            var sortedChildren = item.children.sort(function (a, b) { return (a.sortOrder || 0) - (b.sortOrder || 0); });
+                            desktopHtml += buildDesktopMenuSub(sortedChildren);
+                            desktopHtml += '</ul></div></li>';
+                        }
                     } else {
-                        desktopHtml += '<li class="dropdown-wrapper-li"><a href="' + itemUrl + '"' + targetAttr + '>' + item.label + '</a>';
-                        desktopHtml += '<div class="dropdown-wrapper last"><ul>';
-                        var sortedChildren = item.children.sort(function(a, b) { return (a.sortOrder || 0) - (b.sortOrder || 0); });
-                        desktopHtml += buildDesktopMenuSub(sortedChildren);
-                        desktopHtml += '</ul></div></li>';
+                        desktopHtml += '<li class="dropdown-wrapper-li"><a href="' + itemUrl + '"' + targetAttr + '>' + item.label + '</a></li>';
                     }
-                } else {
-                    desktopHtml += '<li class="dropdown-wrapper-li"><a href="' + itemUrl + '"' + targetAttr + '>' + item.label + '</a></li>';
+
+                    // Mobile Builder
+                    var liClass = hasChildren ? 'class="has-submenu"' : '';
+                    mobileHtml += '<li ' + liClass + '>';
+                    if (hasChildren) {
+                        mobileHtml += '<div class="menu-item-row">';
+                        mobileHtml += '<a href="' + itemUrl + '"' + targetAttr + '>' + item.label + '</a>';
+                        mobileHtml += '<span class="submenu-toggle"><img src="images/icons/next.png" alt=">"></span>';
+                        mobileHtml += '</div>';
+                        mobileHtml += '<ul class="submenu">';
+                        var sortedChildren = item.children.sort(function (a, b) { return (a.sortOrder || 0) - (b.sortOrder || 0); });
+                        mobileHtml += buildMobileMenuSub(sortedChildren, item.label);
+                        mobileHtml += '</ul>';
+                    } else {
+                        mobileHtml += '<a href="' + itemUrl + '"' + targetAttr + '>' + item.label + '</a>';
+                    }
+                    mobileHtml += '</li>';
+                });
+
+                mobileHtml += '</ul>';
+
+                // Cache in localStorage to render with zero delay/flicker on subsequent loads
+                try {
+                    localStorage.setItem('orbis_desktop_menu_html', desktopHtml);
+                    localStorage.setItem('orbis_mobile_menu_html', mobileHtml);
+                } catch (e) { }
+
+                // Update DOM only if changed to avoid unnecessary flicker/repaint
+                if ($('.nav-links').html() !== desktopHtml) {
+                    $('.nav-links').html(desktopHtml);
                 }
 
-                // Mobile Builder
-                var liClass = hasChildren ? 'class="has-submenu"' : '';
-                mobileHtml += '<li ' + liClass + '>';
-                if (hasChildren) {
-                    mobileHtml += '<div class="menu-item-row">';
-                    mobileHtml += '<a href="' + itemUrl + '"' + targetAttr + '>' + item.label + '</a>';
-                    mobileHtml += '<span class="submenu-toggle"><img src="images/icons/next.png" alt=">"></span>';
-                    mobileHtml += '</div>';
-                    mobileHtml += '<ul class="submenu">';
-                    var sortedChildren = item.children.sort(function(a, b) { return (a.sortOrder || 0) - (b.sortOrder || 0); });
-                    mobileHtml += buildMobileMenuSub(sortedChildren, item.label);
-                    mobileHtml += '</ul>';
-                } else {
-                    mobileHtml += '<a href="' + itemUrl + '"' + targetAttr + '>' + item.label + '</a>';
-                }
-                mobileHtml += '</li>';
-            });
-
-            mobileHtml += '</ul>';
-
-            // Cache in localStorage to render with zero delay/flicker on subsequent loads
-            try {
-                localStorage.setItem('orbis_desktop_menu_html', desktopHtml);
-                localStorage.setItem('orbis_mobile_menu_html', mobileHtml);
-            } catch(e) {}
-
-            // Update DOM only if changed to avoid unnecessary flicker/repaint
-            if ($('.nav-links').html() !== desktopHtml) {
-                $('.nav-links').html(desktopHtml);
-            }
-            
-            // Build the custom mobile menu container if it doesn't exist
-            if ($('.mobile-menu-container').length === 0) {
-                $('body').append(
-                    '<div class="mobile-menu-overlay"></div>' +
-                    '<div class="mobile-menu-container">' +
+                // Build the custom mobile menu container if it doesn't exist
+                if ($('.mobile-menu-container').length === 0) {
+                    $('body').append(
+                        '<div class="mobile-menu-overlay"></div>' +
+                        '<div class="mobile-menu-container">' +
                         '<div class="mobile-menu-header">' +
-                            '<img src="images/orbi-seeds-logo.jpg" alt="Logo">' +
-                            '<div class="mobile-menu-close">&times;</div>' +
+                        '<img src="images/orbi-seeds-logo.jpg" alt="Logo">' +
+                        '<div class="mobile-menu-close">&times;</div>' +
                         '</div>' +
                         '<div class="mobile-menu-content"></div>' +
-                    '</div>'
-                );
+                        '</div>'
+                    );
+                }
+                if ($('.mobile-menu-content').html() !== mobileHtml) {
+                    $('.mobile-menu-content').html(mobileHtml);
+                }
             }
-            if ($('.mobile-menu-content').html() !== mobileHtml) {
-                $('.mobile-menu-content').html(mobileHtml);
+        })
+        .catch(function (error) {
+            console.error("Error fetching menu or categories:", error);
+        })
+        .finally(function () {
+            setActiveLinks();
+            if (typeof window.initMobileMenu === 'function') {
+                window.initMobileMenu();
             }
-        }
-    })
-    .catch(function(error) {
-        console.error("Error fetching menu or categories:", error);
-    })
-    .finally(function() {
-        setActiveLinks();
-        if (typeof window.initMobileMenu === 'function') {
-            window.initMobileMenu();
-        }
-    });
+        });
 }
 
 function applyCachedMenu() {
@@ -382,11 +382,11 @@ function applyCachedMenu() {
                 $('body').append(
                     '<div class="mobile-menu-overlay"></div>' +
                     '<div class="mobile-menu-container">' +
-                        '<div class="mobile-menu-header">' +
-                            '<img src="images/orbi-seeds-logo.jpg" alt="Logo">' +
-                            '<div class="mobile-menu-close">&times;</div>' +
-                        '</div>' +
-                        '<div class="mobile-menu-content"></div>' +
+                    '<div class="mobile-menu-header">' +
+                    '<img src="images/orbi-seeds-logo.jpg" alt="Logo">' +
+                    '<div class="mobile-menu-close">&times;</div>' +
+                    '</div>' +
+                    '<div class="mobile-menu-content"></div>' +
                     '</div>'
                 );
             }
@@ -395,7 +395,7 @@ function applyCachedMenu() {
         if (cachedDesktop) {
             setActiveLinks();
         }
-    } catch(e) {}
+    } catch (e) { }
 }
 
 // Immediately apply cached header to eliminate delay and flickering
@@ -407,25 +407,25 @@ $(document).ready(function () {
     applyCachedMenu();
     fetchAndRenderMenu();
 });
-  // active links code
+// active links code
 
-  
+
 
 // Mobile Menu Toggle logic
-$(document).on('click', '.hc-nav-trigger, .toggle', function(e) {
+$(document).on('click', '.hc-nav-trigger, .toggle', function (e) {
     e.preventDefault();
     $('.mobile-menu-container').addClass('open');
     $('.mobile-menu-overlay').fadeIn();
     $('body').addClass('menu-open');
 });
 
-$(document).on('click', '.mobile-menu-close, .mobile-menu-overlay', function() {
+$(document).on('click', '.mobile-menu-close, .mobile-menu-overlay', function () {
     $('.mobile-menu-container').removeClass('open');
     $('.mobile-menu-overlay').fadeOut();
     $('body').removeClass('menu-open');
 });
 
-$(document).on('click', '.submenu-toggle', function(e) {
+$(document).on('click', '.submenu-toggle', function (e) {
     e.preventDefault();
     e.stopPropagation();
     var $submenu = $(this).closest('li').children('.submenu');
@@ -434,13 +434,13 @@ $(document).on('click', '.submenu-toggle', function(e) {
     $('.mobile-menu-content').scrollTop(0);
 });
 
-$(document).on('click', '.back-button', function(e) {
+$(document).on('click', '.back-button', function (e) {
     e.preventDefault();
     e.stopPropagation();
     $(this).closest('.submenu').removeClass('active');
 });
 
-$(document).on('click', '.mobile-menu-content a:not([href="javascript:;"]):not(.back-button)', function() {
+$(document).on('click', '.mobile-menu-content a:not([href="javascript:;"]):not(.back-button)', function () {
     $('.mobile-menu-close').click();
     // Reset all submenus when closing
     $('.submenu').removeClass('active');
@@ -448,8 +448,7 @@ $(document).on('click', '.mobile-menu-content a:not([href="javascript:;"]):not(.
 
 
 // Form
-function validationCont()
-{
+function validationCont() {
     //1. Name
     var x = document.forms['valid_cont']['textName'];
     var y = x.value;
@@ -475,7 +474,7 @@ function validationCont()
         x.focus();
         return false;
     } else {
-         var reg = /^[A-Za-z]+[A-Za-z0-9._%+-]*@[A-Za-z0-9.-]+\.[A-Za-z]{2,}$/;
+        var reg = /^[A-Za-z]+[A-Za-z0-9._%+-]*@[A-Za-z0-9.-]+\.[A-Za-z]{2,}$/;
         if (reg.test(y) == false) {
             alert('Invalid Email Address....');
             x.focus();
@@ -505,17 +504,17 @@ function validationCont()
         return false
     }
 
-        // message
-        var x = document.forms['valid_cont']['message'];
-        var y = x.value;
-        if (y == "") {
-            alert('Please Enter Your Requirement...');
-            x.focus();
-            return false;
-        }
-       
-alert("Thank you for Submission. Will get back to You..!");
-return true;
+    // message
+    var x = document.forms['valid_cont']['message'];
+    var y = x.value;
+    if (y == "") {
+        alert('Please Enter Your Requirement...');
+        x.focus();
+        return false;
+    }
+
+    alert("Thank you for Submission. Will get back to You..!");
+    return true;
 }
 
 // Form
@@ -679,7 +678,7 @@ return true;
                 var pImg = product.images.find(function (i) { return i.isPrimary; }) || product.images[0];
                 primaryImg = pImg.url || pImg.image || (pImg.media && pImg.media.url) || '';
             }
-            var absImage = OrbiSEO.toAbsoluteUrl(primaryImg || 'images/default-image.png');
+            var absImage = OrbiSEO.toAbsoluteUrl(primaryImg || 'images/orbi-seeds-logo.png');
             var pageUrl = window.location.href;
 
             var schema = {

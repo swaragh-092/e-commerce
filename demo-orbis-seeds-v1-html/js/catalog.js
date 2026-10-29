@@ -9,10 +9,10 @@
         });
     };
     C.imageUrl = function (url) {
-        if (typeof url !== 'string' || !url.trim()) return 'images/default-image.png';
+        if (typeof url !== 'string' || !url.trim()) return 'images/orbi-seeds-logo.png';
         url = url.trim();
         if (/^https?:\/\//i.test(url)) return url;
-        if (/^(?:[a-z][a-z\d+.-]*:|\/\/|\\)/i.test(url)) return 'images/default-image.png';
+        if (/^(?:[a-z][a-z\d+.-]*:|\/\/|\\)/i.test(url)) return 'images/orbi-seeds-logo.png';
         if (url.charAt(0) === '/') return String(window.APP_URL || window.location.origin).replace(/\/+$/, '') + url;
         return url;
     };
@@ -27,10 +27,12 @@
     };
     C.entries = function (variant) {
         return ((variant && variant.options) || []).map(function (o) {
-            return { id: o.attributeId || (o.attribute && o.attribute.id), name: o.attribute && o.attribute.name,
+            return {
+                id: o.attributeId || (o.attribute && o.attribute.id), name: o.attribute && o.attribute.name,
                 valueId: o.valueId || (o.value && o.value.id), label: C.valueLabel(o.value, o.attribute),
                 order: o.attributeOrder == null ? ((o.attribute && o.attribute.sortOrder) || 0) : o.attributeOrder,
-                valueOrder: o.valueOrder == null ? ((o.value && o.value.sortOrder) || 0) : o.valueOrder };
+                valueOrder: o.valueOrder == null ? ((o.value && o.value.sortOrder) || 0) : o.valueOrder
+            };
         }).filter(function (o) { return o.id && o.valueId && o.name && o.label; }).sort(function (a, b) { return a.order - b.order; });
     };
     C.variants = function (product) {
@@ -68,11 +70,13 @@
     }
     C.line = function (product, variant) {
         var unitRow = (product.attributes || []).find(function (a) { return /^(unit|uom)$/i.test(a.customName || (a.attribute && a.attribute.name) || ''); });
-        return { id: String(product.id), name: product.name || 'Product', type: product.type,
+        return {
+            id: String(product.id), name: product.name || 'Product', type: product.type,
             variantId: variant ? variant.id : null, variantLabel: C.variantLabel(variant), sku: (variant && variant.sku) || product.sku || '',
             image: C.imageUrl(primaryImage(variant && variant.images) || (variant && variant.media && variant.media.url) || primaryImage(product.images)),
             slug: product.slug || '', categorySlug: (product.categories && product.categories[0] && product.categories[0].slug) || (product.category && product.category.slug) || '',
-            unit: product.unit || (unitRow && (unitRow.customValue || C.valueLabel(unitRow.value, unitRow.attribute))) || '', quantity: 1 };
+            unit: product.unit || (unitRow && (unitRow.customValue || C.valueLabel(unitRow.value, unitRow.attribute))) || '', quantity: 1
+        };
     };
     C.key = function (line) { return String(line.id || line.productId) + ':' + (line.variantId || ''); };
     C.quantity = function (value) {
@@ -156,9 +160,11 @@
             }
             return C.line(section.orbiProduct, section.orbiVariant);
         }
-        return { id: button.getAttribute('data-id'), name: button.getAttribute('data-name'), variantId: button.getAttribute('data-variant-id') || null,
+        return {
+            id: button.getAttribute('data-id'), name: button.getAttribute('data-name'), variantId: button.getAttribute('data-variant-id') || null,
             variantLabel: button.getAttribute('data-variant-label') || '', image: C.imageUrl(button.getAttribute('data-image')),
-            slug: button.getAttribute('data-slug') || '', categorySlug: button.getAttribute('data-category') || '', unit: button.getAttribute('data-unit') || '', quantity: 1 };
+            slug: button.getAttribute('data-slug') || '', categorySlug: button.getAttribute('data-category') || '', unit: button.getAttribute('data-unit') || '', quantity: 1
+        };
     };
     // Rich descriptions keep formatting; executable markup and arbitrary attributes are discarded.
     C.description = function (html) {
@@ -191,8 +197,8 @@
         if (variable && variants.length) {
             var html = '<fieldset class="product-options-fieldset">' +
                 '<div class="product-options-header">' +
-                    '<span class="product-options-title">Choose your options</span>' +
-                    '<button type="button" class="reset-product-options">Clear selection</button>' +
+                '<span class="product-options-title">Choose your options</span>' +
+                '<button type="button" class="reset-product-options">Clear selection</button>' +
                 '</div>' +
                 '<div class="product-options-body">';
             if (bySku) {

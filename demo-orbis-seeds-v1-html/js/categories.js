@@ -1,7 +1,7 @@
 var categoriesData = [];
 var navigationHistory = [];
 var currentList = [];
-var currentParentName = "Categories";
+var currentParentName = "Our Products";
 var categoryBrowser = null;
 var categoriesLoaded = false;
 var categoriesLoading = false;
@@ -9,9 +9,11 @@ var categoriesLoading = false;
 document.addEventListener("DOMContentLoaded", function () {
     categoryBrowser = window.OrbiBrowser && OrbiBrowser.create({
         label: 'Categories', placeholder: 'Search categories and sub-categories', sizes: [12, 24, 48],
-        filters: [{ name: 'cat', label: 'Category', resetSearch: true, options: [
-            { value: '', label: 'All categories' }
-        ] }],
+        filters: [{
+            name: 'cat', label: 'Category', resetSearch: true, options: [
+                { value: '', label: 'All categories' }
+            ]
+        }],
         sorts: [{ value: 'name_asc', label: 'Name: A–Z' }, { value: 'name_desc', label: 'Name: Z–A' }],
         onChange: function () {
             if (categoriesLoaded) handleUrlParams();
@@ -19,9 +21,9 @@ document.addEventListener("DOMContentLoaded", function () {
         }
     });
     fetchCategories();
-    
+
     // Handle browser back/forward buttons
-    window.addEventListener('popstate', function(event) {
+    window.addEventListener('popstate', function (event) {
         if (!categoryBrowser && categoriesData.length > 0) {
             handleUrlParams();
         }
@@ -84,9 +86,9 @@ function updateCategoryFilterOptions() {
 function handleUrlParams() {
     const urlParams = new URLSearchParams(window.location.search);
     const categorySlug = urlParams.get("cat");
-    
+
     navigationHistory = [];
-    
+
     if (categorySlug) {
         const path = findCategoryPath(categoriesData, categorySlug);
         if (path && path.length > 0) {
@@ -100,10 +102,10 @@ function handleUrlParams() {
             // Root level
             navigationHistory.push({
                 list: categoriesData.filter(c => c.parentId === null),
-                name: "Categories",
+                name: "Our Products",
                 slug: null
             });
-            
+
             // Middle levels
             for (let i = 0; i < path.length - 1; i++) {
                 navigationHistory.push({
@@ -112,7 +114,7 @@ function handleUrlParams() {
                     slug: path[i].slug
                 });
             }
-            
+
             displayCategories(targetCategory.children, targetCategory.name, targetCategory, path);
         } else {
             const corrected = new URL(window.location.href);
@@ -197,7 +199,7 @@ function displayCategories(list, parentName, targetCategory, path) {
             window.OrbiSEO.setCategorySEO(targetCategory, path);
         } else {
             window.OrbiSEO.setMeta({
-                title: 'Categories',
+                title: 'Our Products',
                 description: 'Explore high-yield vegetable, fruit, and flower seed categories from Orbi Seeds International.',
                 keywords: 'seed categories, vegetable seeds, fruit seeds, flower seeds, hybrid seeds, Orbi Seeds'
             });
@@ -209,7 +211,7 @@ function displayCategories(list, parentName, targetCategory, path) {
     if (backBtnWrapper) {
         if (navigationHistory.length > 0) {
             backBtnWrapper.style.display = 'block';
-            backBtnWrapper.innerHTML = 
+            backBtnWrapper.innerHTML =
                 '<a href="javascript:void(0)" class="view-product-btn back-btn">' +
                 '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#ffffff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 12H5M12 19l-7-7 7-7"/></svg>' +
                 '<span>Go Back</span>' +
@@ -261,23 +263,23 @@ function displayCategories(list, parentName, targetCategory, path) {
 function createCategoryCard(category) {
     var imageUrl = OrbiCatalog.imageUrl(category.image);
     const hasChildren = category.children && category.children.length > 0;
-    
+
     const card = document.createElement('div');
     card.className = 'product-inner';
     card.style.cursor = 'pointer';
-    
+
     var buttonText = hasChildren ? "View Sub-categories" : "View Products";
     var linkUrl = (hasChildren ? 'product.html?cat=' : 'products.html?category=') + encodeURIComponent(category.slug);
 
-    card.innerHTML = 
+    card.innerHTML =
         '<div class="product-image"><img src="' + OrbiCatalog.escape(imageUrl) + '" alt="' + OrbiCatalog.escape(category.name) + '" loading="lazy"></div>' +
         '<h3>' + OrbiCatalog.escape(category.name) + '</h3>' +
         '<a href="' + OrbiCatalog.escape(linkUrl) + '" class="view-product-btn">' + buttonText + '</a>';
     card.querySelector('img').addEventListener('error', function () {
-        if (this.getAttribute('src') !== 'images/default-image.png') this.src = 'images/default-image.png';
+        if (this.getAttribute('src') !== 'images/orbi-seeds-logo.png') this.src = 'images/orbi-seeds-logo.png';
     });
 
-    card.onclick = function(e) {
+    card.onclick = function (e) {
         if (e.ctrlKey || e.metaKey || e.shiftKey || e.altKey || e.button > 0) return;
         if (hasChildren) {
             e.preventDefault();
@@ -296,18 +298,18 @@ function updateBreadcrumbs(currentName) {
     let html = '<li><a href="index.html">Home</a></li><li>/</li>';
 
     if (navigationHistory.length === 0) {
-        html += '<li><span>Categories</span></li>';
+        html += '<li><span>Our Products</span></li>';
     } else {
-        html += '<li><a href="javascript:void(0)" onclick="navigateToSlug(null)">Categories</a></li>';
-        
-        // Skip index 0 as it's already added as "Categories"
+        html += '<li><a href="javascript:void(0)" onclick="navigateToSlug(null)">Our Products</a></li>';
+
+        // Skip index 0 as it's already added as "Our Products"
         for (let i = 1; i < navigationHistory.length; i++) {
             const item = navigationHistory[i];
             html += '<li>/</li>';
             html += '<li><a href="product.html?cat=' + encodeURIComponent(item.slug) + '">' + OrbiCatalog.escape(item.name) + '</a></li>';
         }
 
-        if (currentName !== "Categories") {
+        if (currentName !== "Categories" && currentName !== "Our Products") {
             html += '<li>/</li>';
             html += '<li><span>' + OrbiCatalog.escape(currentName) + '</span></li>';
         }
@@ -332,7 +334,7 @@ function resetToRoot(updateUrl = true) {
     }
     navigationHistory = [];
     const rootCats = categoriesData.filter(c => c.parentId === null);
-    displayCategories(rootCats, "Categories", null, null);
+    displayCategories(rootCats, "Our Products", null, null);
 }
 
 function goBack() {

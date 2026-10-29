@@ -1,4 +1,4 @@
-$(document).ready(function() {
+$(document).ready(function () {
     var C = window.OrbiCatalog;
     var ENQUIRY_API_URL = API_URL + "enquiries";
     var enquiryEnabled = true;
@@ -57,23 +57,23 @@ $(document).ready(function() {
         if (type === 'error') {
             $container.find('.custom-toast').remove();
         } else if ($container.find('.custom-toast').filter(function () { return this.getAttribute('data-toast-key') === toastKey; }).length > 0) {
-            return { then: function(callback) { if (typeof callback === 'function') callback(); } };
+            return { then: function (callback) { if (typeof callback === 'function') callback(); } };
         }
 
         var $toast = $(html);
         $container.append($toast);
-        setTimeout(function() { $toast.addClass('show'); }, 10);
+        setTimeout(function () { $toast.addClass('show'); }, 10);
 
         function close() {
             $toast.removeClass('show');
-            setTimeout(function() { $toast.remove(); }, 300);
+            setTimeout(function () { $toast.remove(); }, 300);
         }
 
         if (timer) setTimeout(close, timer);
         else $toast.find('.custom-toast-btn').on('click', close);
 
         return {
-            then: function(callback) {
+            then: function (callback) {
                 if (timer) setTimeout(callback, timer);
                 else $toast.find('.custom-toast-btn').on('click', callback);
             }
@@ -96,15 +96,15 @@ $(document).ready(function() {
         </div>`;
         $('body').append(html);
         var $overlay = $('.custom-confirm-overlay').last();
-        setTimeout(function() { $overlay.addClass('show'); }, 10);
+        setTimeout(function () { $overlay.addClass('show'); }, 10);
 
         function close() {
             $overlay.removeClass('show');
-            setTimeout(function() { $overlay.remove(); }, 300);
+            setTimeout(function () { $overlay.remove(); }, 300);
         }
 
         $overlay.find('.custom-confirm-cancel').on('click', close);
-        $overlay.find('.custom-confirm-ok').on('click', function() { close(); if (callback) callback(); });
+        $overlay.find('.custom-confirm-ok').on('click', function () { close(); if (callback) callback(); });
     }
 
     function getCart() { return C.getCart(); }
@@ -115,7 +115,7 @@ $(document).ready(function() {
         if (event.key === 'enquiryCart') { updateHeaderCounter(); renderCart(); }
     });
 
-    $(document).on('click', '.add-enquiry-list', function(e) {
+    $(document).on('click', '.add-enquiry-list', function (e) {
         e.preventDefault();
         if (!enquiryEnabled) return;
         try {
@@ -136,18 +136,18 @@ $(document).ready(function() {
         if (!cart.length) {
             $container.html(
                 '<section class="enquiry-empty-state" aria-labelledby="enquiry-empty-title">' +
-                    '<div class="enquiry-empty-icon" aria-hidden="true"><svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="5" y="3" width="14" height="18" rx="2"/><path d="M9 8h6M9 12h6M9 16h3"/></svg></div>' +
-                    '<h2 id="enquiry-empty-title">Your enquiry list is empty</h2>' +
-                    '<p>Explore our seed varieties and add the products you are interested in to your enquiry list. Then return here to send your enquiry to our team.</p>' +
-                    '<div class="enquiry-empty-actions">' +
-                        '<a class="enquiry-empty-primary" href="product.html">Browse Products</a>' +
-                        '<a class="enquiry-empty-secondary" href="index.html">Back to Home</a>' +
-                    '</div>' +
+                '<div class="enquiry-empty-icon" aria-hidden="true"><svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="5" y="3" width="14" height="18" rx="2"/><path d="M9 8h6M9 12h6M9 16h3"/></svg></div>' +
+                '<h2 id="enquiry-empty-title">Your enquiry list is empty</h2>' +
+                '<p>Explore our seed varieties and add the products you are interested in to your enquiry list. Then return here to send your enquiry to our team.</p>' +
+                '<div class="enquiry-empty-actions">' +
+                '<a class="enquiry-empty-primary" href="product.html">Browse Products</a>' +
+                '<a class="enquiry-empty-secondary" href="index.html">Back to Home</a>' +
+                '</div>' +
                 '</section>'
             );
             return;
         }
-        cart.forEach(function(item) {
+        cart.forEach(function (item) {
             var esc = C.escape, url = esc(C.productUrl(item));
             var $row = $('<div class="cart-inner">').attr('data-key', C.key(item));
             $row.html('<button type="button" class="close-btn remove-item" aria-label="Remove from enquiry list">&times;</button>' +
@@ -159,7 +159,7 @@ $(document).ready(function() {
                 '<div class="cart-bottom"><div class="quantity"><button type="button" class="qty-btn minus" aria-label="Decrease quantity">-</button>' +
                 '<input type="number" class="qty-input" min="1" max="99999" step="1" value="' + item.quantity + '" aria-label="Quantity for ' + esc(item.name + ' ' + (item.variantLabel || '')) + '">' +
                 '<button type="button" class="qty-btn plus" aria-label="Increase quantity">+</button></div></div></div>');
-            $row.find('img').on('error', function () { if (this.getAttribute('src') !== 'images/default-image.png') this.src = 'images/default-image.png'; });
+            $row.find('img').on('error', function () { if (this.getAttribute('src') !== 'images/orbi-seeds-logo.png') this.src = 'images/orbi-seeds-logo.png'; });
             $container.append($row);
         });
     }
@@ -167,14 +167,14 @@ $(document).ready(function() {
     updateHeaderCounter();
     renderCart();
 
-    $(document).on('click', '.qty-btn', function(e) {
+    $(document).on('click', '.qty-btn', function (e) {
         e.preventDefault();
         var $btn = $(this);
         var $parent = $btn.closest('.quantity');
         var $input = $parent.find('.qty-input');
         var id = $btn.closest('.cart-inner').attr('data-key');
         var cart = getCart();
-        var item = cart.find(function(i) { return C.key(i) === id; });
+        var item = cart.find(function (i) { return C.key(i) === id; });
         if (!item) return;
 
         var currentVal = C.quantity($input.val()) || item.quantity || 1;
@@ -187,12 +187,12 @@ $(document).ready(function() {
         updateHeaderCounter();
     });
 
-    $(document).on('input', '.qty-input', function() {
+    $(document).on('input', '.qty-input', function () {
         var $input = $(this);
         var id = $input.closest('.cart-inner').attr('data-key');
         var val = C.quantity($input.val());
         var cart = getCart();
-        var item = cart.find(function(i) { return C.key(i) === id; });
+        var item = cart.find(function (i) { return C.key(i) === id; });
         if (!item) return;
 
         if (val !== null) {
@@ -202,12 +202,12 @@ $(document).ready(function() {
         }
     });
 
-    $(document).on('change blur', '.qty-input', function() {
+    $(document).on('change blur', '.qty-input', function () {
         var $input = $(this);
         var id = $input.closest('.cart-inner').attr('data-key');
         var val = C.quantity($input.val());
         var cart = getCart();
-        var item = cart.find(function(i) { return C.key(i) === id; });
+        var item = cart.find(function (i) { return C.key(i) === id; });
         if (!item) return;
 
         if (val === null) {
@@ -219,24 +219,24 @@ $(document).ready(function() {
         updateHeaderCounter();
     });
 
-    $(document).on('keydown', '.qty-input', function(e) {
+    $(document).on('keydown', '.qty-input', function (e) {
         if (e.key === 'Enter') {
             e.preventDefault();
             $(this).blur();
         }
     });
 
-    $(document).on('click', '.remove-item', function(e) {
+    $(document).on('click', '.remove-item', function (e) {
         e.preventDefault();
         var id = $(this).closest('.cart-inner').attr('data-key');
-        var cart = getCart().filter(function(i) { return C.key(i) !== id; });
+        var cart = getCart().filter(function (i) { return C.key(i) !== id; });
         saveCart(cart);
         renderCart();
     });
 
-    $(document).on('click', '#clear-cart-btn', function(e) {
+    $(document).on('click', '#clear-cart-btn', function (e) {
         e.preventDefault();
-        customConfirm('Are you sure?', 'This will clear all items from your enquiry list.', 'Yes, clear it!', function() {
+        customConfirm('Are you sure?', 'This will clear all items from your enquiry list.', 'Yes, clear it!', function () {
             saveCart([]);
             renderCart();
             customAlert('Cleared!', 'Your enquiry list has been cleared.', 'success', 1500);
@@ -248,7 +248,7 @@ $(document).ready(function() {
         $('body').css('overflow', '');
     }
 
-    $(document).on('click', '.open-enquiry-popup, #cart-enquiry-btn', function(e) {
+    $(document).on('click', '.open-enquiry-popup, #cart-enquiry-btn', function (e) {
         e.preventDefault();
         if (!enquiryEnabled) return;
         var isCartBtn = $(this).attr('id') === 'cart-enquiry-btn';
@@ -299,7 +299,7 @@ $(document).ready(function() {
 
     $(document).on('keydown', function (event) { if (event.key === 'Escape') closePopup(); });
 
-    $(document).on('click', '.close-enquiry-popup, .enquiry-overlay', function(e) {
+    $(document).on('click', '.close-enquiry-popup, .enquiry-overlay', function (e) {
         e.preventDefault();
         closePopup();
     });
@@ -312,7 +312,7 @@ $(document).ready(function() {
         }).then(C.readResponse);
     }
 
-    $(document).on('submit', '.enquiry-form', function(e) {
+    $(document).on('submit', '.enquiry-form', function (e) {
         e.preventDefault();
         var $form = $(this);
         var $submitBtn = $form.find('button[type="submit"]').first();
@@ -375,7 +375,7 @@ $(document).ready(function() {
                 return { product: { id: item.id }, variant: item.variantId ? { id: item.variantId } : null, quantity: item.quantity };
             });
             return sendEnquiry(payload);
-        }).then(async function() {
+        }).then(async function () {
             var params = new URLSearchParams({ name: name, phone: phone, email: email, message: message });
             params.set('items', JSON.stringify(enquiryItems));
             if (isCartEnquiry) {
@@ -397,9 +397,9 @@ $(document).ready(function() {
             $form.removeAttr('data-product-id');
             closePopup();
             window.location.assign('thank-you.html?' + params.toString());
-        }).catch(function(error) {
+        }).catch(function (error) {
             customAlert('Submission Failed', (error && error.message) ? error.message : 'Failed to submit enquiry.', 'error');
-        }).finally(function() {
+        }).finally(function () {
             $submitBtn.prop('disabled', false).removeAttr('aria-busy').text(originalBtnText);
         });
 
@@ -409,7 +409,7 @@ $(document).ready(function() {
     /* ========================================================
        STANDALONE NEWSLETTER FORM HANDLER
        ======================================================== */
-    $(document).on('submit', '#newsletter-form, .newsletter-form, [data-newsletter-form]', function(e) {
+    $(document).on('submit', '#newsletter-form, .newsletter-form, [data-newsletter-form]', function (e) {
         e.preventDefault();
         var $form = $(this);
         var $submitBtn = $form.find('button[type="submit"], input[type="submit"]');
@@ -428,13 +428,13 @@ $(document).ready(function() {
         var originalText = $submitBtn.text();
         $submitBtn.prop('disabled', true).text('Subscribing...');
 
-        subscribeNewsletter({ email: email, source: 'orbi-enquiry' }).then(function(res) {
+        subscribeNewsletter({ email: email, source: 'orbi-enquiry' }).then(function (res) {
             var msg = (res && (res.message || res.msg)) || 'Thank you for subscribing to our newsletter!';
             customAlert('Subscribed', msg, 'success', 2500);
             $form[0].reset();
-        }).catch(function() {
+        }).catch(function () {
             customAlert('Subscription Failed', 'Could not subscribe at this time. Please try again.', 'error');
-        }).finally(function() {
+        }).finally(function () {
             $submitBtn.prop('disabled', false).text(originalText);
         });
     });

@@ -31,8 +31,8 @@ function loadProductView() {
     var state = productBrowser ? productBrowser.sync() : { page: 1 };
     productsState.detailCategory = null;
     if (category || !slug) {
-        updateCategoryUi(category ? formatCategorySlug(category) : 'All Products');
-        updateCategoryBreadcrumbs(category, category ? formatCategorySlug(category) : 'All Products');
+        updateCategoryUi(category ? formatCategorySlug(category) : 'Our Products');
+        updateCategoryBreadcrumbs(category, category ? formatCategorySlug(category) : 'Our Products');
         fetchProducts(category, slug, state.page);
         return;
     }
@@ -51,8 +51,8 @@ function loadProductView() {
         renderProducts([product], content, list, slug, false);
         var category = product.categories && product.categories[0];
         productsState.detailCategory = category && category.slug;
-        updateCategoryUi(category ? category.name : 'Products');
-        updateCategoryBreadcrumbs(category && category.slug, category ? category.name : 'Products');
+        updateCategoryUi(category ? category.name : 'Our Products');
+        updateCategoryBreadcrumbs(category && category.slug, category ? category.name : 'Our Products');
         if (productBrowser) productBrowser.setStatus('Showing the selected product. Use search or filters to browse products.');
     }).catch(function (error) {
         if (requestId !== productsState.requestId) return;
@@ -290,11 +290,12 @@ function renderBreadcrumbWithHierarchy(path, defaultName) {
     const breadcrumb = document.querySelector(".breadcrumb");
     if (!breadcrumb) return;
 
-    let html = '<li><a href="index.html">Home</a></li><li>/</li><li><a href="product.html">Our Products</a></li>';
+    let html = '<li><a href="index.html">Home</a></li>';
 
     const bannerHeading = document.querySelector(".inner-banner .product-heading");
 
     if (path && path.length > 0) {
+        html += '<li>/</li><li><a href="product.html">Our Products</a></li>';
         for (let i = 0; i < path.length - 1; i++) {
             html += '<li>/</li><li><a href="product.html?cat=' + encodeURIComponent(path[i].slug) + '">' + OrbiCatalog.escape(path[i].name) + '</a></li>';
         }
@@ -305,10 +306,11 @@ function renderBreadcrumbWithHierarchy(path, defaultName) {
         if (categoryTitle) categoryTitle.textContent = currentCategory.name;
         if (bannerHeading) bannerHeading.textContent = currentCategory.name;
     } else {
-        html += '<li>/</li><li><span>' + OrbiCatalog.escape(defaultName || 'Products') + '</span></li>';
+        var label = (defaultName && defaultName !== 'Products' && defaultName !== 'All Products') ? defaultName : 'Our Products';
+        html += '<li>/</li><li><span>' + OrbiCatalog.escape(label) + '</span></li>';
         const categoryTitle = document.querySelector(".ip-products-list p");
-        if (categoryTitle) categoryTitle.textContent = defaultName || 'Products';
-        if (bannerHeading) bannerHeading.textContent = defaultName || 'Our Products';
+        if (categoryTitle) categoryTitle.textContent = label;
+        if (bannerHeading) bannerHeading.textContent = label;
     }
 
     breadcrumb.innerHTML = html;
@@ -359,7 +361,7 @@ function updateCategoryBreadcrumbs(categorySlug, fallbackName) {
 function getProductUnit(product) {
     if (product && product.unit) return product.unit;
     if (!product || !product.attributes || !product.attributes.length) return '';
-    var matchedAttribute = product.attributes.find(function(attr) {
+    var matchedAttribute = product.attributes.find(function (attr) {
         var name = (attr.customName || (attr.attribute ? attr.attribute.name : '') || '').trim().toLowerCase();
         return name === 'unit' || name === 'uom';
     });
@@ -463,19 +465,19 @@ function renderProducts(products, contentContainer, listContainer, requestedProd
         const metadata = ' data-id="' + esc(product.id) + '" data-name="' + esc(product.name) + '" data-image="' + esc(finalImageUrl) + '" data-slug="' + esc(productSlug) + '" data-category="' + esc(categorySlug) + '" data-unit="' + esc(productUnit) + '"';
         productDiv.innerHTML =
             '<div class="products">' +
-                '<div class="products-left"><img src="' + esc(finalImageUrl) + '" alt="' + esc(product.name) + '" loading="lazy"></div>' +
-                '<div class="products-right">' +
-                    '<button type="button" class="wishlist-heart-btn"' + metadata + ' aria-label="Add to wishlist" aria-pressed="false" title="Add to wishlist">&#9825;</button>' +
-                    '<h3>' + esc(product.name) + '</h3>' + attributesHtml +
-                    (product.description ? '<div class="product-description">' + OrbiCatalog.description(product.description) + '</div>' : '') +
-                    (product.shortDescription ? '<h4>Remarks</h4><p>' + esc(product.shortDescription) + '</p>' : '') +
-                    '<div class="product-options"></div><p class="product-selection-status" role="status"></p><p class="product-selected-price"></p>' +
-                    '<div class="product-enquiry-actions"><button type="button" class="view-product-btn open-enquiry-popup"' + metadata + '>Enquiry Now</button>' +
-                    '<button type="button" class="view-product-btn add-enquiry-list"' + metadata + '>Add to Enquiry List</button></div>' +
-                '</div>' +
+            '<div class="products-left"><img src="' + esc(finalImageUrl) + '" alt="' + esc(product.name) + '" loading="lazy"></div>' +
+            '<div class="products-right">' +
+            '<button type="button" class="wishlist-heart-btn"' + metadata + ' aria-label="Add to wishlist" aria-pressed="false" title="Add to wishlist">&#9825;</button>' +
+            '<h3>' + esc(product.name) + '</h3>' + attributesHtml +
+            (product.description ? '<div class="product-description">' + OrbiCatalog.description(product.description) + '</div>' : '') +
+            (product.shortDescription ? '<h4>Remarks</h4><p>' + esc(product.shortDescription) + '</p>' : '') +
+            '<div class="product-options"></div><p class="product-selection-status" role="status"></p><p class="product-selected-price"></p>' +
+            '<div class="product-enquiry-actions"><button type="button" class="view-product-btn open-enquiry-popup"' + metadata + '>Enquiry Now</button>' +
+            '<button type="button" class="view-product-btn add-enquiry-list"' + metadata + '>Add to Enquiry List</button></div>' +
+            '</div>' +
             '</div>';
         productDiv.querySelector('img').addEventListener('error', function () {
-            if (this.getAttribute('src') !== 'images/default-image.png') this.src = 'images/default-image.png';
+            if (this.getAttribute('src') !== 'images/orbi-seeds-logo.png') this.src = 'images/orbi-seeds-logo.png';
         });
         const params = new URLSearchParams(window.location.search);
         OrbiCatalog.mountOptions(productDiv, product, params.get('slug') === product.slug ? params.get('variant') : null);
@@ -487,7 +489,7 @@ function renderProducts(products, contentContainer, listContainer, requestedProd
     if (!append && products && products.length > 0) {
         var activeProd = null;
         if (requestedProductSlug) {
-            activeProd = products.find(function(p) { return (p.slug || String(p.id)) === requestedProductSlug; });
+            activeProd = products.find(function (p) { return (p.slug || String(p.id)) === requestedProductSlug; });
         }
         if (!activeProd && !productsState.categorySlug) {
             activeProd = products[0];
@@ -510,7 +512,7 @@ function renderProducts(products, contentContainer, listContainer, requestedProd
 function scrollToProductSlug(productSlug) {
     if (!productSlug) return;
     var target = null;
-    document.querySelectorAll('.ip-product-details').forEach(function(section) {
+    document.querySelectorAll('.ip-product-details').forEach(function (section) {
         if (!target && section.getAttribute('data-product-slug') === productSlug) target = section;
     });
     if (!target) return;
@@ -520,7 +522,7 @@ function scrollToProductSlug(productSlug) {
     window.scrollTo({ top: offsetPosition, behavior: 'smooth' });
     var link = Array.from(document.querySelectorAll('.products-list a')).find(function (item) { return item.getAttribute('href') === '#' + target.id; });
     if (link) {
-        document.querySelectorAll('.products-list .coe-top').forEach(function(item) { item.classList.remove('act'); });
+        document.querySelectorAll('.products-list .coe-top').forEach(function (item) { item.classList.remove('act'); });
         link.classList.add('act');
     }
 }
