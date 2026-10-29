@@ -1,5 +1,6 @@
 import { createRequire } from 'node:module';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { Op } from 'sequelize';
 
 const require = createRequire(import.meta.url);
 const db = require('../../src/modules');
@@ -66,6 +67,34 @@ describe('media type segregation', () => {
     expect(findAndCountAll).toHaveBeenCalled();
     const where = findAndCountAll.mock.calls[0][0].where;
     expect(where.type).toBeDefined();
+  });
+
+  it('includes usage counts and filters unused media before pagination', async () => {
+    const findAndCountAll = vi.spyOn(db.Media, 'findAndCountAll').mockResolvedValue({
+      rows: [],
+      count: 0,
+    });
+
+    await service.listMedia(1, 20, 'createdAt', 'desc', 'image', 'unused');
+
+    const query = findAndCountAll.mock.calls[0][0];
+    expect(query.attributes.include[0][1]).toBe('usageCount');
+    expect(query.where[Op.and]).toHaveLength(1);
+    expect(query.where[Op.and][0].val).toContain('= 0');
+    expect(query.where[Op.and][0].val).toContain('product_images');
+    expect(query.where[Op.and][0].val).toContain('attribute_values');
+  });
+
+  it('filters used media with the same tracked reference count', async () => {
+    const findAndCountAll = vi.spyOn(db.Media, 'findAndCountAll').mockResolvedValue({
+      rows: [],
+      count: 0,
+    });
+
+    await service.listMedia(1, 20, 'createdAt', 'desc', 'image', 'used');
+
+    const where = findAndCountAll.mock.calls[0][0].where;
+    expect(where[Op.and][0].val).toContain('> 0');
   });
 });
 

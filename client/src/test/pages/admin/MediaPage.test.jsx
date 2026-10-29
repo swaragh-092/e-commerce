@@ -30,7 +30,7 @@ describe('Media Library tabs', () => {
     observers = [];
     mediaService.listIcons.mockResolvedValue({ data: [] });
     mediaService.list.mockImplementation(({ page }) => Promise.resolve({
-      data: [{ id: `media-${page}`, url: `/media-${page}.png`, originalName: `media-${page}.png`, size: 1024 }],
+      data: [{ id: `media-${page}`, url: `/media-${page}.png`, originalName: `media-${page}.png`, size: 1024, usageCount: 2 }],
       meta: { totalItems: 2, page, totalPages: 2 },
     }));
 
@@ -82,6 +82,38 @@ describe('Media Library tabs', () => {
 
     expect(await screen.findByText('mui:eco')).toBeInTheDocument();
     expect(screen.getByText('1 icon')).toBeInTheDocument();
+  });
+
+  it('shows per-image usage and requests the unused filter from the server', async () => {
+    render(<MediaPage />);
+
+    expect(await screen.findByText('Used 2 times')).toBeInTheDocument();
+    expect(mediaService.list).toHaveBeenCalledWith(expect.objectContaining({ usage: 'all' }));
+
+    fireEvent.mouseDown(screen.getByRole('combobox', { name: 'Usage' }));
+    fireEvent.click(await screen.findByRole('option', { name: 'Unused images' }));
+
+    await waitFor(() => expect(mediaService.list).toHaveBeenLastCalledWith(expect.objectContaining({ usage: 'unused' })));
+  });
+
+  it('copies a media image URL with the current site origin', async () => {
+    const originalClipboard = Object.getOwnPropertyDescriptor(navigator, 'clipboard');
+    const originalSecureContext = Object.getOwnPropertyDescriptor(window, 'isSecureContext');
+    const writeText = vi.fn().mockResolvedValue();
+    Object.defineProperty(navigator, 'clipboard', { configurable: true, value: { writeText } });
+    Object.defineProperty(window, 'isSecureContext', { configurable: true, value: true });
+
+    try {
+      render(<MediaPage />);
+      fireEvent.click(await screen.findByRole('button', { name: 'Copy URL' }));
+
+      await waitFor(() => expect(writeText).toHaveBeenCalledWith(`${window.location.origin}/media-1.png`));
+    } finally {
+      if (originalClipboard) Object.defineProperty(navigator, 'clipboard', originalClipboard);
+      else delete navigator.clipboard;
+      if (originalSecureContext) Object.defineProperty(window, 'isSecureContext', originalSecureContext);
+      else delete window.isSecureContext;
+    }
   });
 
   it('renders custom icons and displays upload button in icon library', async () => {

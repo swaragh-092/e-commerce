@@ -90,6 +90,7 @@ const getTypeGroup = (mimeType) => {
 
 const MediaCard = ({ file, canDeleteMedia, canUpdateMedia, onCopy, onDelete, onEdit }) => {
   const url = getMediaUrl(file.url);
+  const usageCount = Number(file.usageCount) || 0;
   return (
     <Card
       elevation={0}
@@ -120,6 +121,11 @@ const MediaCard = ({ file, canDeleteMedia, canUpdateMedia, onCopy, onDelete, onE
         <Typography variant="caption" color="text.disabled" sx={{ fontSize: '0.65rem' }}>
           {formatSize(file.size)}
         </Typography>
+        <Tooltip title="Counts saved references in products, galleries, blogs, product attributes, and account avatars.">
+          <Typography variant="caption" color={usageCount > 0 ? 'text.secondary' : 'warning.dark'} sx={{ display: 'block', fontSize: '0.65rem', cursor: 'help' }}>
+            {usageCount > 0 ? `Used ${usageCount} ${usageCount === 1 ? 'time' : 'times'}` : 'Unused'}
+          </Typography>
+        </Tooltip>
       </Box>
       <CardActions sx={{ justifyContent: 'flex-end', p: 0.5, mt: 'auto' }}>
         <Tooltip title="Copy URL">
@@ -162,6 +168,7 @@ const MediaPage = () => {
   const [sortBy, setSortBy] = useState('date'); // 'date' | 'size' | 'name'
   const [sortDir, setSortDir] = useState('desc'); // 'asc' | 'desc'
   const [groupBy, setGroupBy] = useState('none'); // 'none' | 'date' | 'size' | 'type'
+  const [usageFilter, setUsageFilter] = useState('all');
 
   const { notify, confirm } = useNotification();
   const { hasPermission } = useAuth();
@@ -211,7 +218,8 @@ const MediaPage = () => {
         page: pageNum, 
         limit: 30,
         sortBy,
-        sortDir
+        sortDir,
+        usage: usageFilter,
       });
       
       const newFiles = res.data || [];
@@ -238,7 +246,7 @@ const MediaPage = () => {
 
   useEffect(() => {
     fetchMedia(1);
-  }, [sortBy, sortDir]);
+  }, [sortBy, sortDir, usageFilter]);
 
   // Infinite scroll observer
   useEffect(() => {
@@ -311,9 +319,10 @@ const MediaPage = () => {
   };
 
   const copyUrl = async (url) => {
+    const absoluteUrl = new URL(url, window.location.origin).href;
     try {
       if (navigator.clipboard?.writeText && window.isSecureContext) {
-        await navigator.clipboard.writeText(url);
+        await navigator.clipboard.writeText(absoluteUrl);
         notify('Media URL copied to clipboard successfully.', 'success');
         return;
       }
@@ -321,7 +330,7 @@ const MediaPage = () => {
       console.error('Copy failed', err);
     }
 
-    setManualCopyUrl(url);
+    setManualCopyUrl(absoluteUrl);
     notify('Automatic copy is unavailable here. Copy the URL manually from the dialog.', 'warning');
   };
 
@@ -507,6 +516,21 @@ const MediaPage = () => {
           </ToggleButtonGroup>
         </Tooltip>
 
+        <FormControl size="small" sx={{ minWidth: 150 }}>
+          <InputLabel id="media-page-usage-label">Usage</InputLabel>
+          <Select
+            labelId="media-page-usage-label"
+            id="media-page-usage"
+            value={usageFilter}
+            label="Usage"
+            onChange={(event) => setUsageFilter(event.target.value)}
+          >
+            <MenuItem value="all">All files</MenuItem>
+            <MenuItem value="used">Used images</MenuItem>
+            <MenuItem value="unused">Unused images</MenuItem>
+          </Select>
+        </FormControl>
+
         <Divider orientation="vertical" flexItem />
 
         {/* Group by */}
@@ -545,7 +569,11 @@ const MediaPage = () => {
         </Box>
       ) : !loading && files.length === 0 && !error ? (
         <Alert severity="info">
-          No media files uploaded yet. Click the Upload button to add images.
+          {usageFilter === 'unused'
+            ? 'No unused media files found.'
+            : usageFilter === 'used'
+              ? 'No media files are currently in use.'
+              : 'No media files uploaded yet. Click the Upload button to add images.'}
         </Alert>
       ) : (
         <>
