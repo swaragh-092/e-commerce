@@ -24,7 +24,7 @@ module.exports = {
         await queryInterface.bulkInsert('permissions', [{
           id,
           key,
-          name: key.replace(/[._]/g, ' ').replace(/\\b\\w/g, (letter) => letter.toUpperCase()),
+          name: key.replace(/[._]/g, ' ').replace(/\b\w/g, (letter) => letter.toUpperCase()),
           permission_group: 'tags',
           description: schema.permissionDescriptions[key],
           created_at: now,
