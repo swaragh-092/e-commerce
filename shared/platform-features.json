@@ -100,6 +100,15 @@
       }
     },
     {
+      "key": "tags",
+      "label": "Product Tags",
+      "description": "Manage product tags and use them to organize and filter products.",
+      "defaults": {
+        "ecommerce": true,
+        "catalog": true
+      }
+    },
+    {
       "key": "brands",
       "label": "Brands",
       "description": "Show brand pages, brand navigation, brand filters, and brand details on products.",
