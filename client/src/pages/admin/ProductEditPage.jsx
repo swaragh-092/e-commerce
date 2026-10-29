@@ -236,6 +236,9 @@ const ProductEditPage = () => {
   const sales = settings?.sales || {};
   const canCreateProducts = hasPermission(PERMISSIONS.PRODUCTS_CREATE);
   const canUpdateProducts = hasPermission(PERMISSIONS.PRODUCTS_UPDATE);
+  const canReadTags = hasPermission(PERMISSIONS.TAGS_READ);
+  const canManageTags = hasPermission(PERMISSIONS.TAGS_MANAGE);
+  const tagsEnabled = useFeature('tags');
   const canUploadMedia = hasPermission(PERMISSIONS.MEDIA_UPLOAD);
   const pricingEnabled = useFeatureVisible('pricing', 'admin');
   const featuresResolved = useFeaturesResolved();
@@ -577,6 +580,7 @@ const ProductEditPage = () => {
         for (const key of ['requiresShipping', 'packingMode', 'weightGrams', 'lengthCm', 'breadthCm', 'heightCm']) delete payload[key];
       }
       if (!brandsEnabled) delete payload.brandId;
+      if (!tagsEnabled || !canManageTags) delete payload.tags;
       if (!seoEnabled) for (const key of ['metaTitle', 'metaDescription', 'metaKeywords', 'ogImage']) delete payload[key];
 
       // Variant and bundle stock is managed by their own editors.
@@ -1293,7 +1297,7 @@ const ProductEditPage = () => {
                 sx={{ mt: 1 }}
               />
 
-              <ProductTagsInput value={formData.tags} onChange={(tags) => setField('tags', tags)} disabled={!canSaveProduct} error={errors.tags} />
+              {tagsEnabled && canReadTags && <ProductTagsInput value={formData.tags} onChange={(tags) => setField('tags', tags)} disabled={!canSaveProduct || !canManageTags} error={errors.tags} />}
 
               {brandsEnabled && (
               <FormControl fullWidth margin="normal">

@@ -6,7 +6,7 @@ const { authorizeAnyPermission, authorizePermissions } = require('../../middlewa
 const adminController = require('./admin.controller');
 const { PERMISSIONS } = require('../../config/permissions');
 const { validate } = require('../../middleware/validate.middleware');
-const { updateUserRoleSchema, createRoleSchema, updateRoleSchema, salesChartQuerySchema, lowStockQuerySchema, createStaffUserSchema, analyticsQuerySchema, analyticsTrendSchema } = require('./admin.validation');
+const { updateUserRoleSchema, createRoleSchema, updateRoleSchema, deleteRoleSchema, salesChartQuerySchema, lowStockQuerySchema, createStaffUserSchema, analyticsQuerySchema, analyticsTrendSchema } = require('./admin.validation');
 const { idParamSchema, paginationQuerySchema } = require('../../utils/common.validation');
 const { inventoryAlertConfigSchema, updateInventoryAlertSchema } = require('../inventory/inventoryAlert.validation');
 
@@ -85,7 +85,7 @@ router.get('/access-control/roles', ...accessReadOnly, adminController.getAccess
 router.get('/access-control/permissions', ...accessReadOnly, adminController.getAccessPermissions);
 router.post('/access-control/roles', ...roleManageOnly, validate(createRoleSchema), adminController.createAccessRole);
 router.put('/access-control/roles/:id', ...roleEditOnly, validate(idParamSchema, 'params'), validate(updateRoleSchema), adminController.updateAccessRole);
-router.delete('/access-control/roles/:id', ...roleManageOnly, validate(idParamSchema, 'params'), adminController.deleteAccessRole);
+router.delete('/access-control/roles/:id', ...roleManageOnly, validate(idParamSchema, 'params'), validate(deleteRoleSchema), adminController.deleteAccessRole);
 
 router.get('/access-control/users', ...accessManageOnly, validate(paginationQuerySchema, 'query'), adminController.getAccessUsers);
 

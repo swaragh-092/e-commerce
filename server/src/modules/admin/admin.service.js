@@ -381,6 +381,22 @@ const getAccessRoles = async (actingUser = null) => {
     include: roleInclude,
     order: [['isSystem', 'DESC'], ['name', 'ASC']],
   });
+  const assignedUserCounts = await db.sequelize.query(`
+    SELECT assignments.role_id AS "roleId", COUNT(DISTINCT assignments.user_id)::int AS count
+    FROM (
+      SELECT ur.role_id, ur.user_id
+      FROM user_roles ur
+      INNER JOIN users u ON u.id = ur.user_id
+      WHERE u.deleted_at IS NULL
+      UNION
+      SELECT r.id AS role_id, u.id AS user_id
+      FROM roles r
+      INNER JOIN users u ON u.role = r.slug
+      WHERE u.deleted_at IS NULL
+    ) assignments
+    GROUP BY assignments.role_id
+  `, { type: db.sequelize.QueryTypes.SELECT });
+  const assignedCountByRoleId = new Map(assignedUserCounts.map((row) => [row.roleId, Number(row.count || 0)]));
 
   const visibleRoles = isSuperAdminUser(actingUser)
     ? roles
@@ -391,6 +407,7 @@ const getAccessRoles = async (actingUser = null) => {
 
   return visibleRoles.map((role) => ({
     ...serializeRole(role, isSuperAdmin ? null : actorPermissionKeys),
+    assignedUserCount: assignedCountByRoleId.get(role.id) || 0,
     // Keep assignment choices accurate after permission details are redacted.
     // The server still enforces this independently in updateUserRole.
     isDelegable: isSuperAdmin || (
@@ -640,49 +657,92 @@ const updateAccessRole = async (roleId, payload, actingUser) => {
   });
 };
 
-const deleteAccessRole = async (roleId, actingUser) => {
+const deleteAccessRole = async (roleId, actingUser, replacementRoleId = null) => {
   return db.sequelize.transaction(async (transaction) => {
     const actingUserId = typeof actingUser === 'object' && actingUser ? actingUser.id : actingUser;
-
     const role = await Role.findByPk(roleId, { transaction });
-    if (!role) {
-      throw new AppError('NOT_FOUND', 404, 'Role not found');
-    }
-
-    if (role.isSystem) {
-      throw new AppError('FORBIDDEN', 403, 'System roles cannot be deleted');
-    }
-
+    if (!role) throw new AppError('NOT_FOUND', 404, 'Role not found');
+    if (role.isSystem) throw new AppError('FORBIDDEN', 403, 'System roles cannot be deleted');
     if (!canManageCustomRoles(actingUser)) {
       throw new AppError('FORBIDDEN', 403, 'You do not have permission to delete custom roles');
     }
 
-    // Check if any users are currently assigned to this role in user_roles
-    const assignedUsers = await db.sequelize.query(
-      'SELECT COUNT(*)::int AS count FROM user_roles WHERE role_id = :roleId',
-      { replacements: { roleId: role.id }, type: db.sequelize.QueryTypes.SELECT, transaction }
-    );
-    const count = Number(assignedUsers[0]?.count || 0);
-
-    // Also check if any users have their legacy/base role set to this role's slug
-    const legacyCount = await User.count({
-      where: { role: role.slug },
+    const assignedUsers = await db.sequelize.query(`
+      SELECT DISTINCT u.id
+      FROM users u
+      WHERE u.deleted_at IS NULL
+        AND (
+          u.role = :roleSlug
+          OR EXISTS (
+            SELECT 1 FROM user_roles ur
+            WHERE ur.user_id = u.id AND ur.role_id = :roleId
+          )
+        )
+    `, {
+      replacements: { roleSlug: role.slug, roleId: role.id },
+      type: db.sequelize.QueryTypes.SELECT,
       transaction,
     });
+    const totalAssigned = assignedUsers.length;
+    let replacementRole = null;
 
-    const totalAssigned = Math.max(count, legacyCount);
     if (totalAssigned > 0) {
-      throw new AppError(
-        'CONFLICT',
-        409,
-        `Cannot delete role '${role.name}' because it is assigned to ${totalAssigned} user${totalAssigned === 1 ? '' : 's'}. Please reassign those users before deleting this role.`
+      if (!replacementRoleId) {
+        throw new AppError(
+          'CONFLICT',
+          409,
+          `This role is assigned to ${totalAssigned} user${totalAssigned === 1 ? '' : 's'}. Choose a replacement role to reassign them before deleting it.`
+        );
+      }
+      if (replacementRoleId === role.id) {
+        throw new AppError('VALIDATION_ERROR', 400, 'Choose a different replacement role');
+      }
+      replacementRole = await Role.findByPk(replacementRoleId, { include: roleInclude, transaction });
+      if (!replacementRole || !replacementRole.isActive) {
+        throw new AppError('NOT_FOUND', 404, 'Replacement role not found or inactive');
+      }
+      assertDelegableRole(replacementRole, actingUser);
+
+      const actorHasRole = assignedUsers.some((user) => user.id === actingUserId);
+      const replacementPermissions = getPermissionKeysFromRoleObject(replacementRole);
+      if (actorHasRole && !replacementPermissions.includes(PERMISSIONS.ROLES_MANAGE)) {
+        throw new AppError(
+          'VALIDATION_ERROR',
+          400,
+          'Choose a replacement role that preserves your role-management access.'
+        );
+      }
+
+      await db.sequelize.query(`
+        INSERT INTO user_roles (id, user_id, role_id, created_at, updated_at)
+        SELECT gen_random_uuid(), u.id, :replacementRoleId, NOW(), NOW()
+        FROM users u
+        WHERE u.deleted_at IS NULL
+          AND (
+            u.role = :roleSlug
+            OR EXISTS (
+              SELECT 1 FROM user_roles ur
+              WHERE ur.user_id = u.id AND ur.role_id = :roleId
+            )
+          )
+        ON CONFLICT (user_id, role_id) DO NOTHING
+      `, {
+        replacements: { replacementRoleId: replacementRole.id, roleSlug: role.slug, roleId: role.id },
+        transaction,
+      });
+      await User.update(
+        { role: replacementRole.baseRole },
+        { where: { role: role.slug }, transaction }
       );
+    } else if (replacementRoleId) {
+      replacementRole = await Role.findByPk(replacementRoleId, { include: roleInclude, transaction });
+      if (!replacementRole || !replacementRole.isActive || replacementRole.id === role.id) {
+        throw new AppError('NOT_FOUND', 404, 'Replacement role not found or inactive');
+      }
+      assertDelegableRole(replacementRole, actingUser);
     }
 
-    // Clean up permission associations
     await role.setPermissions([], { transaction });
-
-    // Delete role
     await role.destroy({ transaction });
 
     try {
@@ -695,6 +755,8 @@ const deleteAccessRole = async (roleId, actingUser) => {
           name: role.name,
           slug: role.slug,
           baseRole: role.baseRole,
+          reassignedUserCount: totalAssigned,
+          replacementRole: replacementRole?.slug || null,
         },
       }, transaction);
     } catch (error) {}
