@@ -41,7 +41,7 @@ const OperationsSummaryWidget = ({ stats, spacing, features, mode }) => {
       color: 'success.main',
       to: '/admin/products?status=published',
     },
-    {
+    features?.reviews === true && {
       label: 'Pending Reviews',
       value: stats?.pendingReviewsCount ?? 0,
       icon: <PeopleIcon />, // Using PeopleIcon or similar, reviews often related to users

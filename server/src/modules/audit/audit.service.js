@@ -62,7 +62,18 @@ const list = async ({ entity, action, userId, from, to, search, page = 1, limit 
   if (from || to) {
     where.createdAt = {};
     if (from) where.createdAt[Op.gte] = new Date(from);
-    if (to) where.createdAt[Op.lte] = new Date(to);
+    if (to) {
+      // Date inputs are calendar days; use an exclusive next-day boundary so
+      // events later on the selected end date are included as well.
+      const dateOnly = /^\d{4}-\d{2}-\d{2}$/.test(to);
+      const end = new Date(to);
+      if (dateOnly) {
+        end.setUTCDate(end.getUTCDate() + 1);
+        where.createdAt[Op.lt] = end;
+      } else {
+        where.createdAt[Op.lte] = end;
+      }
+    }
   }
 
   if (search) {
