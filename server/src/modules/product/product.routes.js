@@ -7,9 +7,25 @@ const { authenticate, optionalAuth } = require('../../middleware/auth.middleware
 const { authorizePermissions } = require('../../middleware/role.middleware');
 const { validate } = require('../../middleware/validate.middleware');
 const { auditLog } = require('../audit/audit.middleware');
-const { PERMISSIONS } = require('../../config/permissions');
+const { PERMISSIONS, getPermissionsForUser } = require('../../config/permissions');
+const { error } = require('../../utils/response');
 const { idParamSchema } = require('../../utils/common.validation');
 const settingsService = require('../settings/settings.service');
+
+const requireTagPermission = async (req, res, next) => {
+  if (req.body?.tags === undefined) return next();
+  const permissions = getPermissionsForUser(req.user);
+  if (!permissions.includes(PERMISSIONS.TAGS_MANAGE)) {
+    return error(res, 'You do not have permission to manage product tags.', 403, 'FORBIDDEN');
+  }
+  try {
+    const { features } = await settingsService.getFeatures();
+    if (features?.tags !== true) return error(res, 'Product tags are disabled for this store.', 403, 'FEATURE_DISABLED');
+    return next();
+  } catch (err) {
+    return next(err);
+  }
+};
 
 const validateProductWrite = (schema) => async (req, res, next) => {
   try {
@@ -41,6 +57,7 @@ router.post(
   '/',
   authenticate,
   authorizePermissions(PERMISSIONS.PRODUCTS_CREATE),
+  requireTagPermission,
   validateProductWrite(createProductSchema),
   auditLog('Product'),
   productController.create
@@ -51,6 +68,7 @@ router.put(
   authenticate,
   authorizePermissions(PERMISSIONS.PRODUCTS_UPDATE),
   validate(idParamSchema, 'params'),
+  requireTagPermission,
   validateProductWrite(updateProductSchema),
   auditLog('Product'),
   productController.update
