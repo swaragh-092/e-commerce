@@ -15,6 +15,22 @@ const storage = getStorageProvider();
 
 const { Op } = require('sequelize');
 
+// Count each explicit media reference, including repeated placements of the
+// same image. URL-backed avatar references are included for older records.
+const mediaUsageCountSql = () => `(
+  (SELECT COUNT(*) FROM product_images WHERE media_id = "Media"."id") +
+  (SELECT COUNT(*) FROM product_variants WHERE media_id = "Media"."id" AND deleted_at IS NULL) +
+  (SELECT COUNT(*) FROM gallery_items WHERE media_id = "Media"."id") +
+  (SELECT COUNT(*) FROM galleries WHERE cover_media_id = "Media"."id") +
+  (SELECT COUNT(*) FROM blog_posts WHERE featured_image_id = "Media"."id" AND deleted_at IS NULL) +
+  (SELECT COUNT(*) FROM user_profiles WHERE avatar = "Media"."url") +
+  (SELECT COUNT(*) FROM attribute_values
+    CROSS JOIN LATERAL jsonb_array_elements(
+      CASE WHEN jsonb_typeof(metadata->'images') = 'array' THEN metadata->'images' ELSE '[]'::jsonb END
+    ) AS attribute_image
+    WHERE COALESCE(attribute_image->>'mediaId', attribute_image->>'media_id') = "Media"."id"::text)
+)`;
+
 exports.uploadMedia = async (file, type = 'image') => {
   if (!file) throw new AppError('VALIDATION_ERROR', 400, 'No file provided');
 
@@ -101,7 +117,7 @@ exports.uploadFont = async (file) => {
   return media;
 };
 
-exports.listMedia = async (page, limit, sortBy = 'createdAt', sortDir = 'DESC', type = 'image') => {
+exports.listMedia = async (page, limit, sortBy = 'createdAt', sortDir = 'DESC', type = 'image', usage = 'all') => {
   const { limit: queryLimit, offset } = getPagination(page, limit);
   
   // Map frontend sort names to database columns
@@ -125,8 +141,16 @@ exports.listMedia = async (page, limit, sortBy = 'createdAt', sortDir = 'DESC', 
     }
   }
 
+  const usageCountSql = mediaUsageCountSql();
+  if (usage === 'used') {
+    where[Op.and] = [...(where[Op.and] || []), Media.sequelize.literal(`${usageCountSql} > 0`)];
+  } else if (usage === 'unused') {
+    where[Op.and] = [...(where[Op.and] || []), Media.sequelize.literal(`${usageCountSql} = 0`)];
+  }
+
   const { rows, count } = await Media.findAndCountAll({
     where,
+    attributes: { include: [[Media.sequelize.literal(usageCountSql), 'usageCount']] },
     limit: queryLimit,
     offset,
     order: [[orderCol, orderDir]],
