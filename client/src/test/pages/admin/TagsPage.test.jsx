@@ -6,6 +6,10 @@ import { getTags, createTag, renameTag, deleteTag } from '../../../services/tagS
 const permissions = vi.hoisted(() => new Set());
 const notify = vi.hoisted(() => vi.fn());
 vi.mock('../../../services/tagService', () => ({ getTags: vi.fn(), createTag: vi.fn(), renameTag: vi.fn(), deleteTag: vi.fn() }));
+vi.mock('../../../components/common/MediaPicker', async () => {
+  const { Dialog } = await import('@mui/material');
+  return { default: ({ onSelect }) => <Dialog open><button onClick={() => onSelect([{ id: 'image-1', url: '/uploads/tag.jpg' }])}>Choose test image</button></Dialog> };
+});
 vi.mock('../../../hooks/useAuth', () => ({ useAuth: () => ({ hasPermission: (permission) => permissions.has(permission) }) }));
 vi.mock('../../../context/NotificationContext', () => ({ useNotification: () => ({ notify }) }));
 const tag = { id: 'tag-1', name: 'Summer', slug: 'summer', productCount: 4 };
@@ -29,7 +33,7 @@ describe('tag management', () => {
     const dialog = within(screen.getByRole('dialog', { name: 'Add tag' }));
     fireEvent.change(dialog.getByRole('textbox', { name: /Tag name/ }), { target: { value: ' Home   Gardening ' } });
     fireEvent.click(dialog.getByRole('button', { name: 'Save tag' }));
-    await waitFor(() => expect(createTag).toHaveBeenCalledWith('Home Gardening', ''));
+    await waitFor(() => expect(createTag).toHaveBeenCalledWith('Home Gardening', '', null));
     await waitFor(() => expect(notify).toHaveBeenCalledWith('Tag created.', 'success'));
   });
   it('renames the shared label using its existing id', async () => {
@@ -37,8 +41,8 @@ describe('tag management', () => {
     fireEvent.click(await screen.findByRole('button', { name: 'Edit Summer' }));
     const dialog = within(screen.getByRole('dialog', { name: 'Edit tag' }));
     fireEvent.change(dialog.getByRole('textbox', { name: /Tag name/ }), { target: { value: 'Warm Season' } });
-    fireEvent.click(dialog.getByRole('button', { name: 'Save tag' }));
-    await waitFor(() => expect(renameTag).toHaveBeenCalledWith('tag-1', 'Warm Season', ''));
+    fireEvent.click(dialog.getByRole('button', { name: 'Save changes' }));
+    await waitFor(() => expect(renameTag).toHaveBeenCalledWith('tag-1', 'Warm Season', '', null));
   });
   it('explains deletion, supports cancellation, and deletes only after confirmation', async () => {
     mount();
@@ -81,10 +85,71 @@ describe('tag management', () => {
     mount();
     fireEvent.click(await screen.findByRole('button', { name: 'Edit Summer' }));
     const dialog = within(screen.getByRole('dialog', { name: 'Edit tag' }));
-    expect(dialog.getByRole('textbox', { name: 'Description' })).toHaveValue('Original introduction');
-    fireEvent.change(dialog.getByRole('textbox', { name: 'Description' }), { target: { value: '  Products for warm weather.  ' } });
-    fireEvent.click(dialog.getByRole('button', { name: 'Save tag' }));
-    await waitFor(() => expect(renameTag).toHaveBeenCalledWith('tag-1', 'Summer', 'Products for warm weather.'));
+    expect(dialog.getByRole('textbox', { name: 'Description (optional)' })).toHaveValue('Original introduction');
+    fireEvent.change(dialog.getByRole('textbox', { name: 'Description (optional)' }), { target: { value: '  Products for warm weather.  ' } });
+    fireEvent.click(dialog.getByRole('button', { name: 'Save changes' }));
+    await waitFor(() => expect(renameTag).toHaveBeenCalledWith('tag-1', 'Summer', 'Products for warm weather.', null));
+  });
+
+  it('keeps the storefront URL stable while renaming and protects unsaved edits', async () => {
+    mount();
+    fireEvent.click(await screen.findByRole('button', { name: 'Edit Summer' }));
+    const dialog = within(screen.getByRole('dialog', { name: 'Edit tag' }));
+    expect(dialog.getByRole('link', { name: 'View page' })).toHaveAttribute('href', expect.stringContaining('/tags/summer'));
+    expect(dialog.getByText('Used by 4 products.')).toBeInTheDocument();
+    fireEvent.change(dialog.getByRole('textbox', { name: /Tag name/ }), { target: { value: 'Warm Season' } });
+    expect(dialog.getByRole('link', { name: 'View page' })).toHaveAttribute('href', expect.stringContaining('/tags/summer'));
+    fireEvent.click(dialog.getByRole('button', { name: 'Cancel' }));
+    expect(screen.getByRole('dialog', { name: 'Discard unsaved changes?' })).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: 'Keep editing' }));
+    await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Discard unsaved changes?' })).not.toBeInTheDocument());
+    expect(dialog.getByRole('textbox', { name: /Tag name/ })).toHaveValue('Warm Season');
+    fireEvent.click(dialog.getByRole('button', { name: 'Close tag editor' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Discard changes' }));
+    await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument());
+    expect(renameTag).not.toHaveBeenCalled();
+  });
+  it('applies usage and sorting on the server', async () => {
+    mount();
+    await screen.findByText('Summer', { exact: true });
+    fireEvent.mouseDown(screen.getByRole('combobox', { name: 'Usage' }));
+    fireEvent.click(await screen.findByRole('option', { name: 'Unused tags' }));
+    await waitFor(() => expect(getTags).toHaveBeenLastCalledWith(expect.objectContaining({ usage: 'unused', page: 1 })));
+    fireEvent.mouseDown(screen.getByRole('combobox', { name: 'Sort by' }));
+    fireEvent.click(await screen.findByRole('option', { name: 'Most products' }));
+    await waitFor(() => expect(getTags).toHaveBeenLastCalledWith(expect.objectContaining({ usage: 'unused', sortBy: 'products', sortDir: 'desc' })));
+  });
+  it('provides a full selectable link if clipboard copy fails', async () => {
+    const original = Object.getOwnPropertyDescriptor(navigator, 'clipboard');
+    Object.defineProperty(navigator, 'clipboard', { configurable: true, value: { writeText: vi.fn().mockRejectedValue(new Error('Denied')) } });
+    try {
+      mount();
+      fireEvent.click(await screen.findByRole('button', { name: 'Copy storefront link for Summer' }));
+      const dialog = within(await screen.findByRole('dialog', { name: 'Copy storefront link' }));
+      expect(dialog.getByRole('textbox', { name: 'Storefront URL' }).value).toMatch(/^https?:.*\/tags\/summer$/);
+    } finally {
+      if (original) Object.defineProperty(navigator, 'clipboard', original); else delete navigator.clipboard;
+    }
+  });
+
+  it('selects and saves a tag image, and allows explicitly removing it', async () => {
+    permissions.add('media.read');
+    const view = mount();
+    fireEvent.click(await screen.findByRole('button', { name: 'Edit Summer' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Select image' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Choose test image' }));
+    await waitFor(() => expect(screen.queryByRole('button', { name: 'Choose test image' })).not.toBeInTheDocument());
+    expect(screen.getByRole('img', { name: 'Selected tag image' })).toHaveAttribute('src', '/uploads/tag.jpg');
+    fireEvent.click(screen.getByRole('button', { name: 'Save changes' }));
+    await waitFor(() => expect(renameTag).toHaveBeenCalledWith('tag-1', 'Summer', '', 'image-1'));
+    view.unmount();
+    getTags.mockResolvedValue({ data: [{ ...tag, imageId: 'image-1', image: { id: 'image-1', url: '/uploads/tag.jpg' } }], meta: { total: 1 } });
+    mount();
+    fireEvent.click(await screen.findByRole('button', { name: 'Edit Summer' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Remove image' }));
+    expect(screen.queryByRole('img', { name: 'Selected tag image' })).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: 'Save changes' }));
+    await waitFor(() => expect(renameTag).toHaveBeenLastCalledWith('tag-1', 'Summer', '', null));
   });
 
 });
