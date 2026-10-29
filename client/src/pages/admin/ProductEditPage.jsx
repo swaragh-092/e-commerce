@@ -268,7 +268,6 @@ const ProductEditPage = () => {
     categoryIds: [],
     tags: [],
     brandId: '',
-    tags: [],
     images: [],
     taxConfig: {
       isCustom: false,
@@ -356,9 +355,8 @@ const ProductEditPage = () => {
               type: p.type || 'simple',
               isEnabled: p.isEnabled ?? true,
               categoryIds: p.categories?.map((c) => c.id) || [],
-              tags: (p.tags || []).map((tag) => typeof tag === 'string' ? tag : tag.name).filter(Boolean),
-              brandId: p.brandId || '',
               tags: p.tags?.map((tag) => tag.name) || [],
+              brandId: p.brandId || '',
               images: p.images || [],
               taxConfig: p.taxConfig || {
                 isCustom: false,
@@ -1299,27 +1297,7 @@ const ProductEditPage = () => {
                 sx={{ mt: 1 }}
               />
 
-              <ProductTagsInput value={formData.tags} onChange={(tags) => setField('tags', tags)} disabled={!canSaveProduct} error={errors.tags} />
-
-              {tagsEnabled && canReadTags && (
-                <Autocomplete
-                  multiple
-                  freeSolo
-                  options={formData.tags}
-                  value={formData.tags}
-                  onChange={(_, values) => setField('tags', [...new Set(values.map((value) => String(value).trim()).filter(Boolean))])}
-                  disabled={!canManageTags}
-                  renderInput={(params) => (
-                    <TextField
-                      {...params}
-                      label="Product tags"
-                      placeholder={formData.tags.length ? '' : 'Add tags and press Enter'}
-                      margin="normal"
-                      helperText={canManageTags ? 'Use tags to organize products and improve filtering.' : 'You have view-only access to product tags.'}
-                    />
-                  )}
-                />
-              )}
+              {tagsEnabled && canReadTags && <ProductTagsInput value={formData.tags} onChange={(tags) => setField('tags', tags)} disabled={!canSaveProduct || !canManageTags} error={errors.tags} />}
 
               {brandsEnabled && (
               <FormControl fullWidth margin="normal">
