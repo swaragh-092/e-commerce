@@ -1,6 +1,6 @@
 'use strict';
 const { randomUUID } = require('crypto');
-const { Tag, Product, ProductTag, sequelize, Sequelize } = require('../index');
+const { Tag, Product, ProductTag, Media, sequelize, Sequelize } = require('../index');
 const { Op } = Sequelize;
 const { generateSlug } = require('../../utils/slugify');
 const AppError = require('../../utils/AppError');
@@ -15,10 +15,18 @@ const findByName = (name, transaction) => Tag.findOne({
   order: [['createdAt', 'ASC'], ['id', 'ASC']],
   transaction,
 });
-const createTag = async (name, transaction, description = '') => {
+const imageInclude = { model: Media, as: 'image', attributes: ['id', 'url', 'alt'], required: false };
+const validateImage = async (imageId, transaction) => {
+  if (imageId === undefined || imageId === null) return;
+  const image = await Media.findByPk(imageId, { transaction });
+  if (!image || image.type !== 'image' || !image.mimeType?.startsWith('image/')) {
+    throw new AppError('VALIDATION_ERROR', 400, 'Select an image from the Media Library.');
+  }
+};
+const createTag = async (name, transaction, description = '', imageId) => {
   const base = (await generateSlug(name)).slice(0, 60) || `tag-${randomUUID()}`;
   const slug = await generateSlug(base, Tag, 'slug', { transaction });
-  return Tag.create({ name, slug, description: description ?? '' }, { transaction });
+  return Tag.create({ name, slug, description: description ?? '', ...(imageId !== undefined && { imageId }) }, { transaction });
 };
 const resolveTags = async (names, transaction) => {
   await lockTagDictionary(transaction);
@@ -34,12 +42,18 @@ const syncProductTags = async (product, names, transaction) => {
   const tags = await resolveTags(names, transaction);
   await product.setTags(tags, { transaction });
 };
-const listTags = async ({ search, page = 1, limit = 20 }) => {
+const productCountSql = '(SELECT COUNT(*)::int FROM product_tags pt JOIN products p ON p.id = pt.product_id WHERE pt.tag_id = "Tag".id AND p.deleted_at IS NULL)';
+const listTags = async ({ search, page = 1, limit = 20, usage = 'all', sortBy = 'name', sortDir = 'asc' }) => {
   const where = search ? { name: { [Op.iLike]: `%${search.replace(/[\\%_]/g, '\\$&')}%` } } : {};
+  if (usage === 'used' || usage === 'unused') {
+    where[Op.and] = [Sequelize.literal(`${productCountSql} ${usage === 'used' ? '> 0' : '= 0'}`)];
+  }
+  const direction = sortDir === 'desc' ? 'DESC' : 'ASC';
   return Tag.findAndCountAll({
+    include: [imageInclude],
     where, limit, offset: (page - 1) * limit,
-    order: [['name', 'ASC'], ['id', 'ASC']],
-    attributes: { include: [[Sequelize.literal('(SELECT COUNT(*)::int FROM product_tags pt JOIN products p ON p.id = pt.product_id WHERE pt.tag_id = "Tag".id AND p.deleted_at IS NULL)'), 'productCount']] },
+    order: [[sortBy === 'products' ? Sequelize.literal(productCountSql) : 'name', direction], ['id', 'ASC']],
+    attributes: { include: [[Sequelize.literal(productCountSql), 'productCount']] },
   });
 };
 // Only tags attached to currently visible products have public landing pages.
@@ -50,7 +64,8 @@ const publicTagPredicate = () => Sequelize.literal(`EXISTS (
 )`);
 const getPublicTagBySlug = async (slug) => {
   const tag = await Tag.findOne({
-    attributes: ['id', 'name', 'slug', 'description'],
+    attributes: ['id', 'name', 'slug', 'description', 'imageId'],
+    include: [imageInclude],
     where: { slug, [Op.and]: [publicTagPredicate()] },
   });
   if (!tag) throw new AppError('NOT_FOUND', 404, 'Tag not found.');
@@ -59,20 +74,22 @@ const getPublicTagBySlug = async (slug) => {
 const getPublicTags = () => Tag.findAll({
   attributes: ['slug'], where: { [Op.and]: [publicTagPredicate()] }, order: [['slug', 'ASC']],
 });
-const addTag = (name, description = '') => sequelize.transaction(async (transaction) => {
+const addTag = (name, description = '', imageId) => sequelize.transaction(async (transaction) => {
   await lockTagDictionary(transaction);
   name = normalizeTagName(name);
   if (await findByName(name, transaction)) throw new AppError('CONFLICT', 409, 'A tag with this name already exists.');
-  return createTag(name, transaction, description);
+  await validateImage(imageId, transaction);
+  return createTag(name, transaction, description, imageId);
 });
-const renameTag = (id, name, description) => sequelize.transaction(async (transaction) => {
+const renameTag = (id, name, description, imageId) => sequelize.transaction(async (transaction) => {
   await lockTagDictionary(transaction);
   const tag = await Tag.findByPk(id, { transaction });
   if (!tag) throw new AppError('NOT_FOUND', 404, 'Tag not found.');
   name = normalizeTagName(name);
   const existing = await findByName(name, transaction);
   if (existing && existing.id !== id) throw new AppError('CONFLICT', 409, 'A tag with this name already exists.');
-  return tag.update({ name, ...(description !== undefined && { description: description ?? '' }) }, { transaction });
+  await validateImage(imageId, transaction);
+  return tag.update({ name, ...(imageId !== undefined && { imageId }), ...(description !== undefined && { description: description ?? '' }) }, { transaction });
 });
 const deleteTag = (id) => sequelize.transaction(async (transaction) => {
   await lockTagDictionary(transaction);

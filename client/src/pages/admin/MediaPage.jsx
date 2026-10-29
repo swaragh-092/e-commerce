@@ -121,7 +121,7 @@ const MediaCard = ({ file, canDeleteMedia, canUpdateMedia, onCopy, onDelete, onE
         <Typography variant="caption" color="text.disabled" sx={{ fontSize: '0.65rem' }}>
           {formatSize(file.size)}
         </Typography>
-        <Tooltip title="Counts saved references in products, galleries, blogs, product attributes, and account avatars.">
+        <Tooltip title="Counts saved references in products, tags, galleries, blogs, product attributes, and account avatars.">
           <Typography variant="caption" color={usageCount > 0 ? 'text.secondary' : 'warning.dark'} sx={{ display: 'block', fontSize: '0.65rem', cursor: 'help' }}>
             {usageCount > 0 ? `Used ${usageCount} ${usageCount === 1 ? 'time' : 'times'}` : 'Unused'}
           </Typography>

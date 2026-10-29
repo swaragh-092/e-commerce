@@ -18,6 +18,7 @@ const { Op } = require('sequelize');
 // Count each explicit media reference, including repeated placements of the
 // same image. URL-backed avatar references are included for older records.
 const mediaUsageCountSql = () => `(
+  (SELECT COUNT(*) FROM tags WHERE image_id = "Media"."id") +
   (SELECT COUNT(*) FROM product_images WHERE media_id = "Media"."id") +
   (SELECT COUNT(*) FROM product_variants WHERE media_id = "Media"."id" AND deleted_at IS NULL) +
   (SELECT COUNT(*) FROM gallery_items WHERE media_id = "Media"."id") +

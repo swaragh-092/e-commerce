@@ -83,6 +83,7 @@ describe('media type segregation', () => {
     expect(query.where[Op.and][0].val).toContain('= 0');
     expect(query.where[Op.and][0].val).toContain('product_images');
     expect(query.where[Op.and][0].val).toContain('attribute_values');
+    expect(query.where[Op.and][0].val).toContain('FROM tags WHERE image_id');
   });
 
   it('filters used media with the same tracked reference count', async () => {

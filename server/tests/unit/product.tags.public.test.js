@@ -16,7 +16,7 @@ describe('public tag visibility', () => {
     await tags.getPublicTags();
     const lookup = db.Tag.findOne.mock.calls[0][0];
     const sitemap = db.Tag.findAll.mock.calls[0][0];
-    expect(lookup.attributes).toEqual(['id', 'name', 'slug', 'description']);
+    expect(lookup.attributes).toEqual(['id', 'name', 'slug', 'description', 'imageId']);
     const sql = lookup.where[db.Sequelize.Op.and][0].val;
     expect(sql).toContain("p.status = 'published'");
     expect(sql).toContain('p.is_enabled = TRUE');
@@ -69,4 +69,35 @@ describe('tag descriptions and migration', () => {
     await migration.down(queryInterface);
     expect(queryInterface.removeColumn).toHaveBeenCalledWith('tags', 'description');
   });
+  it('validates images, preserves omitted images, and permits removal', async () => {
+    const transaction = {};
+    vi.spyOn(db.sequelize, 'transaction').mockImplementation(async (callback) => callback(transaction));
+    vi.spyOn(db.sequelize, 'query').mockResolvedValue([]);
+    vi.spyOn(db.Tag, 'findOne').mockResolvedValue(null);
+    const existing = { id: 'tag', update: vi.fn() };
+    vi.spyOn(db.Tag, 'findByPk').mockResolvedValue(existing);
+    const image = vi.spyOn(db.Media, 'findByPk').mockResolvedValue({ type: 'image', mimeType: 'image/jpeg' });
+    await tags.renameTag('tag', 'Summer', undefined, 'image');
+    expect(existing.update).toHaveBeenLastCalledWith({ name: 'Summer', imageId: 'image' }, { transaction });
+    await tags.renameTag('tag', 'Summer');
+    expect(existing.update).toHaveBeenLastCalledWith({ name: 'Summer' }, { transaction });
+    await tags.renameTag('tag', 'Summer', undefined, null);
+    expect(existing.update).toHaveBeenLastCalledWith({ name: 'Summer', imageId: null }, { transaction });
+    image.mockResolvedValue(null);
+    await expect(tags.renameTag('tag', 'Summer', undefined, 'missing')).rejects.toMatchObject({ statusCode: 400 });
+    image.mockResolvedValue({ type: 'font', mimeType: 'font/woff2' });
+    await expect(tags.renameTag('tag', 'Summer', undefined, 'font')).rejects.toMatchObject({ statusCode: 400 });
+    expect(tagWriteSchema.validate({ name: 'Summer', imageId: 'invalid' }).error).toBeDefined();
+    expect(tagWriteSchema.validate({ name: 'Summer', imageId: null }).error).toBeUndefined();
+  });
+  it('adds a nullable media reference which clears when media is deleted', async () => {
+    const imageMigration = require('../../migrations/20261029120000-add-tag-image');
+    const transaction = {};
+    const queryInterface = { sequelize: { transaction: async (fn) => fn(transaction) }, addColumn: vi.fn(), addIndex: vi.fn(), removeColumn: vi.fn() };
+    await imageMigration.up(queryInterface, db.Sequelize);
+    expect(queryInterface.addColumn).toHaveBeenCalledWith('tags', 'image_id', expect.objectContaining({ allowNull: true, onDelete: 'SET NULL', references: { model: 'media', key: 'id' } }), { transaction });
+    await imageMigration.down(queryInterface);
+    expect(queryInterface.removeColumn).toHaveBeenCalledWith('tags', 'image_id');
+  });
+
 });
