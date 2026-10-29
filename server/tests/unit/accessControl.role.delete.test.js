@@ -82,8 +82,7 @@ describe('AdminService.deleteAccessRole edge cases', () => {
       slug: 'testing-role',
       isSystem: false,
     });
-    vi.spyOn(db.sequelize, 'query').mockResolvedValue([{ count: 3 }]);
-    vi.spyOn(User, 'count').mockResolvedValue(0);
+    vi.spyOn(db.sequelize, 'query').mockResolvedValue([{ id: 'assigned-user-1' }]);
 
     await expect(
       AdminService.deleteAccessRole('custom-role-id', regularAdminUser)
@@ -91,6 +90,64 @@ describe('AdminService.deleteAccessRole edge cases', () => {
       code: 'CONFLICT',
       statusCode: 409,
     });
+  });
+
+  it('reassigns attached users to the replacement role before deleting', async () => {
+    const targetRole = {
+      id: 'custom-role-id',
+      name: 'Testing Role',
+      slug: 'testing-role',
+      baseRole: 'admin',
+      isSystem: false,
+      setPermissions: vi.fn().mockResolvedValue([]),
+      destroy: vi.fn().mockResolvedValue(true),
+    };
+    const replacementRole = {
+      id: 'replacement-role-id',
+      name: 'Replacement Role',
+      slug: 'replacement-role',
+      baseRole: 'admin',
+      isActive: true,
+      permissions: [],
+    };
+    vi.spyOn(Role, 'findByPk')
+      .mockResolvedValueOnce(targetRole)
+      .mockResolvedValueOnce(replacementRole);
+    const querySpy = vi.spyOn(db.sequelize, 'query')
+      .mockResolvedValueOnce([{ id: 'assigned-user-1' }])
+      .mockResolvedValueOnce([]);
+    const userUpdateSpy = vi.spyOn(User, 'update').mockResolvedValue([1]);
+    const auditSpy = vi.spyOn(AuditService, 'log').mockResolvedValue(true);
+
+    const result = await AdminService.deleteAccessRole(
+      targetRole.id,
+      regularAdminUser,
+      replacementRole.id
+    );
+
+    expect(result).toBe(true);
+    expect(querySpy).toHaveBeenCalledTimes(2);
+    expect(querySpy.mock.calls[1][1].replacements).toMatchObject({
+      replacementRoleId: replacementRole.id,
+      roleSlug: targetRole.slug,
+      roleId: targetRole.id,
+    });
+    expect(userUpdateSpy).toHaveBeenCalledWith(
+      { role: replacementRole.baseRole },
+      expect.objectContaining({ where: { role: targetRole.slug } })
+    );
+    expect(targetRole.setPermissions).toHaveBeenCalledWith([], expect.anything());
+    expect(targetRole.destroy).toHaveBeenCalled();
+    expect(auditSpy).toHaveBeenCalledWith(
+      expect.objectContaining({
+        entityId: targetRole.id,
+        changes: expect.objectContaining({
+          reassignedUserCount: 1,
+          replacementRole: replacementRole.slug,
+        }),
+      }),
+      expect.anything()
+    );
   });
 
   it('successfully cleans up permissions, deletes custom role, and logs audit', async () => {
@@ -105,8 +162,7 @@ describe('AdminService.deleteAccessRole edge cases', () => {
     };
 
     vi.spyOn(Role, 'findByPk').mockResolvedValue(mockRole);
-    vi.spyOn(db.sequelize, 'query').mockResolvedValue([{ count: 0 }]);
-    vi.spyOn(User, 'count').mockResolvedValue(0);
+    vi.spyOn(db.sequelize, 'query').mockResolvedValue([]);
     const auditSpy = vi.spyOn(AuditService, 'log').mockResolvedValue(true);
 
     const result = await AdminService.deleteAccessRole('custom-role-id', regularAdminUser);
