@@ -910,6 +910,7 @@ const getDrillDown = async ({ metric, filterKey, filterValue, period = '30d', pa
 };
 
 module.exports = {
+  resolveDateRange,
   getTopProducts,
   getAovTrend,
   getAbandonedCarts,

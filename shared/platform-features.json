@@ -1,6 +1,12 @@
 {
   "optional": [
     {
+      "key": "analytics",
+      "label": "Analytics",
+      "description": "Show traffic and product-view analytics in Catalog mode, and sales reports in Ecommerce mode. Staff can customize their visible cards and fields.",
+      "defaults": { "ecommerce": true, "catalog": true }
+    },
+    {
       "key": "customers",
       "label": "Customers",
       "description": "Show customer management, customer profiles, and customer dashboard shortcuts in admin.",

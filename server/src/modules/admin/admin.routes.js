@@ -6,7 +6,7 @@ const { authorizeAnyPermission, authorizePermissions } = require('../../middlewa
 const adminController = require('./admin.controller');
 const { PERMISSIONS } = require('../../config/permissions');
 const { validate } = require('../../middleware/validate.middleware');
-const { updateUserRoleSchema, createRoleSchema, updateRoleSchema, deleteRoleSchema, salesChartQuerySchema, lowStockQuerySchema, createStaffUserSchema, analyticsQuerySchema, analyticsTrendSchema } = require('./admin.validation');
+const { updateUserRoleSchema, createRoleSchema, updateRoleSchema, deleteRoleSchema, salesChartQuerySchema, lowStockQuerySchema, createStaffUserSchema, analyticsQuerySchema, analyticsTrendSchema, catalogAnalyticsQuerySchema } = require('./admin.validation');
 const { idParamSchema, paginationQuerySchema } = require('../../utils/common.validation');
 const { inventoryAlertConfigSchema, updateInventoryAlertSchema } = require('../inventory/inventoryAlert.validation');
 
@@ -94,6 +94,8 @@ router.put('/access-control/users/:id/role', ...accessManageOnly, validate(idPar
 router.delete('/access-control/users/:id', ...accessManageOnly, validate(idParamSchema, 'params'), adminController.deleteStaffUser);
 
 // Analytics
+router.use('/analytics', featureGate('analytics'));
+router.get('/analytics/catalog-overview', ...adminOnly, validate(catalogAnalyticsQuerySchema, 'query'), adminController.getCatalogOverview);
 router.get('/analytics/top-products', ...analyticsOnly, validate(analyticsQuerySchema, 'query'), adminController.getTopProducts);
 router.get('/analytics/aov-trend', ...analyticsOnly, ordersFeature, validate(analyticsTrendSchema, 'query'), adminController.getAovTrend);
 router.get('/analytics/abandoned-carts', ...analyticsOnly, ordersFeature, validate(analyticsQuerySchema, 'query'), adminController.getAbandonedCarts);
