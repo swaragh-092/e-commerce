@@ -9,7 +9,6 @@ const StoreHealthWidget = ({ stats, allSettings, spacing, features: featuresProp
   const payments = allSettings?.payments || {};
   const features = featuresProp || allSettings?.features || {};
   const mode = modeProp || allSettings?.general?.mode || allSettings?.mode || 'ecommerce';
-  const logo = allSettings?.logo || {};
 
   const isOrdersAllowed = mode !== 'catalog' && features?.orders !== false;
 
@@ -39,7 +38,6 @@ const StoreHealthWidget = ({ stats, allSettings, spacing, features: featuresProp
       ok: inventoryRiskCount === 0,
       to: '/admin/products?stock=low',
     },
-    { label: 'Logo configured', ok: Boolean(logo.main), to: '/admin/settings' },
     isOrdersAllowed && features?.checkout !== false && {
       label: 'Guest checkout configured',
       ok: features.guestCheckout === true && features.checkout !== false,

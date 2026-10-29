@@ -188,30 +188,8 @@ export default function buildSettingsPanels(ctx) {
         { designer: true }
       ),
     ],
-    // ─── 3: Layout ──────────────────────────────────────────────────────
-    [
-      section(
-        'Header & Navigation',
-        canUseSettingsDesigner(ctx) ? 'Edit the visual header layout in Store Designer and manage published links in Menu Builder.' : 'Manage published navigation links in Menu Builder.',
-        <>
-          <StoreDesignSummary scope="header" form={form} homepageSections={homepageSections} />
-          {ctx.hasPermission?.(PERMISSIONS.MENUS_READ) && <Button component={Link} to="/admin/menus" variant="outlined" size="small" sx={{ mt: 2 }}>
-            Manage published menu links
-          </Button>}
-        </>,
-        ['header', 'nav', 'navigation', 'sticky'],
-        { navigation: true }
-      ),
-      section(
-        'Footer',
-        'Edit footer content and visual layout together from the footer inspector.',
-        <>
-          <StoreDesignSummary scope="footer" form={form} homepageSections={homepageSections} />
-        </>,
-        ['footer', 'links', 'social', 'contact'],
-        { designer: true }
-      ),
-    ],
+    // Preserve panel indexes; navigation is managed in Menu Builder.
+    [],
     // ─── 4: Homepage ────────────────────────────────────────────────────
     [
       section(
