@@ -24,3 +24,14 @@ export const formatValidationError = (error, fallback) => {
   return getApiErrorMessage(error, fallback);
 };
 
+
+export const getMenuItemDeletionBlock = (item, rows) => {
+  const children = rows.filter((row) => row.parentId === item.id);
+  if (children.some((row) => !row.generatedFromCategory)) {
+    return `“${item.label}” has child items. Delete the child items first, then delete the parent item.`;
+  }
+  if (children.length) {
+    return `“${item.label}” displays category-generated children. Edit the item and turn off category syncing or change its link type before deleting it.`;
+  }
+  return '';
+};
