@@ -64,7 +64,7 @@ import { useNotification } from '../../context/NotificationContext';
 import { getApiErrorMessage } from '../../utils/apiErrors';
 
 const permissionGroupLabels = {
-  account: 'My account', api_builder: 'API Builder', attributes: 'Product attributes',
+  account: 'My account', api_builder: 'API Builder', attributes: 'Product attributes', tags: 'Product tags',
   menus: 'Store navigation', roles: 'Role management', users: 'Staff accounts',
 };
 const formatPermissionGroup = (group) => permissionGroupLabels[group]
