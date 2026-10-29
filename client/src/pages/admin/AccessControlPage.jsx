@@ -172,6 +172,7 @@ const AccessControlPage = () => {
   const [pendingRoleAssignment, setPendingRoleAssignment] = useState(null);
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   const [roleToDelete, setRoleToDelete] = useState(null);
+  const [replacementRoleId, setReplacementRoleId] = useState('');
   const [deletingRole, setDeletingRole] = useState(false);
   const [deleteUserDialogOpen, setDeleteUserDialogOpen] = useState(false);
   const [userToDelete, setUserToDelete] = useState(null);
@@ -196,6 +197,8 @@ const AccessControlPage = () => {
       baseRole: role.baseRole,
       permissions: role.permissions || [],
       isDelegable: role.isDelegable,
+      isActive: role.isActive,
+      assignedUserCount: role.assignedUserCount || 0,
     })),
     [roles]
   );
@@ -420,6 +423,7 @@ const AccessControlPage = () => {
 
   const openDeleteDialog = (role) => {
     setRoleToDelete(role);
+    setReplacementRoleId('');
     setDeleteDialogOpen(true);
   };
 
@@ -427,18 +431,21 @@ const AccessControlPage = () => {
     if (deletingRole) return;
     setDeleteDialogOpen(false);
     setRoleToDelete(null);
+    setReplacementRoleId('');
   };
 
   const handleDeleteRole = async () => {
     if (!roleToDelete) return;
     setDeletingRole(true);
     try {
-      await deleteAccessRole(roleToDelete.id);
+      await deleteAccessRole(roleToDelete.id, replacementRoleId || null);
       notify(`Role "${roleToDelete.name}" deleted successfully.`, 'success');
       if (roleFilter === roleToDelete.id) {
         setRoleFilter('');
       }
-      closeDeleteDialog();
+      setDeleteDialogOpen(false);
+      setRoleToDelete(null);
+      setReplacementRoleId('');
       if (roleDialogOpen && roleForm.id === roleToDelete.id) {
         closeRoleDialog();
       }
@@ -1283,9 +1290,39 @@ const AccessControlPage = () => {
           <DialogContentText>
             Are you sure you want to delete the role <strong>"{roleToDelete?.name}"</strong>?
           </DialogContentText>
-          <DialogContentText sx={{ mt: 1, fontSize: '0.85rem', color: 'text.secondary' }}>
-            This will permanently remove the custom role and its associated permissions. This action cannot be undone.
-          </DialogContentText>
+          {Number(roleToDelete?.assignedUserCount || 0) > 0 ? (
+            <Stack spacing={1.5} sx={{ mt: 2 }}>
+              <Alert severity="warning">
+                {roleToDelete.assignedUserCount} user{roleToDelete.assignedUserCount === 1 ? '' : 's'} currently have this role. Choose a replacement role to move them before deletion.
+              </Alert>
+              <FormControl fullWidth size="small" required>
+                <InputLabel id="replacement-role-label">Replacement role</InputLabel>
+                <Select
+                  labelId="replacement-role-label"
+                  value={replacementRoleId}
+                  label="Replacement role"
+                  onChange={(event) => setReplacementRoleId(event.target.value)}
+                  disabled={deletingRole}
+                >
+                  {roleOptions
+                    .filter((role) => role.id !== roleToDelete.id && role.isActive !== false && isRoleDelegable(role))
+                    .map((role) => (
+                      <MenuItem key={role.id} value={role.id}>{role.name}</MenuItem>
+                    ))}
+                </Select>
+              </FormControl>
+              <Typography variant="caption" color="text.secondary">
+                Reassigned users will receive the replacement role’s permissions.
+              </Typography>
+              {!roleOptions.some((role) => role.id !== roleToDelete.id && role.isActive !== false && isRoleDelegable(role)) && (
+                <Alert severity="info">No eligible replacement roles are available to your account.</Alert>
+              )}
+            </Stack>
+          ) : (
+            <DialogContentText sx={{ mt: 1, fontSize: '0.85rem', color: 'text.secondary' }}>
+              This will permanently remove the custom role and its associated permissions. This action cannot be undone.
+            </DialogContentText>
+          )}
         </DialogContent>
         <DialogActions sx={{ px: 3, pb: 2 }}>
           <Button onClick={closeDeleteDialog} disabled={deletingRole}>
@@ -1295,7 +1332,7 @@ const AccessControlPage = () => {
             onClick={handleDeleteRole}
             color="error"
             variant="contained"
-            disabled={deletingRole}
+            disabled={deletingRole || (Number(roleToDelete?.assignedUserCount || 0) > 0 && !replacementRoleId)}
             startIcon={deletingRole ? <CircularProgress size={16} color="inherit" /> : <DeleteIcon />}
           >
             {deletingRole ? 'Deleting…' : 'Delete Role'}
