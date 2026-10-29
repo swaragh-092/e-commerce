@@ -2,6 +2,11 @@
 
 All notable changes to this project are documented here.
 
+## [1.1.2.3] - 2026-10-29
+
+### Changed
+- Clarify store mode behavior, lock mode-disabled feature visibility switches, and make platform feature settings easier to scan on desktop and mobile.
+
 ## [1.1.2.2] - 2026-10-26
 
 ### Added

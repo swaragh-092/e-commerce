@@ -7,10 +7,10 @@ import {
   Switch,
   FormControlLabel,
   FormControl,
+  InputLabel,
   Select,
   MenuItem,
   Button,
-  Divider,
   Chip,
   Dialog,
   DialogTitle,
@@ -21,21 +21,19 @@ import { updateSettings } from '../../services/adminService';
 import { getAllSettings } from '../../services/settingsService';
 import { useNotification } from '../../context/NotificationContext';
 import { SettingsContext } from '../../context/ThemeContext';
-import { useAuth, useIsSuperAdmin } from '../../hooks/useAuth';
+import { useIsSuperAdmin } from '../../hooks/useAuth';
 import { useMode } from '../../hooks/useSettings';
 import platformFeatures from '../../../../shared/platform-features.json';
-import { PERMISSIONS } from '../../utils/permissions';
+import LockOutlinedIcon from '@mui/icons-material/LockOutlined';
 
 const FeaturesPage = () => {
   const [form, setForm] = useState({});
   const [saving, setSaving] = useState(false);
   const { notify } = useNotification();
-  const { refreshSettings, features: resolvedFeatures } = useContext(SettingsContext) || {};
-  const { hasPermission } = useAuth();
+  const { refreshSettings } = useContext(SettingsContext) || {};
   const appMode = useMode();
   const selectedMode = form['general.mode'] || appMode;
   const isSuperAdmin = useIsSuperAdmin();
-  const canManageSettings = hasPermission(PERMISSIONS.SETTINGS_MANAGE);
   const [featureConfirmOpen, setFeatureConfirmOpen] = useState(false);
 
   useEffect(() => {
@@ -56,7 +54,7 @@ const FeaturesPage = () => {
     });
   }, []);
 
-  // Reactive Mode Preview: Update Tier 1 dots when mode changes in dropdown.
+  // Keep mode-locked fields aligned with the selected mode preview.
   // Note: Tier 2 stored preferences in `form` are kept intact so switching modes doesn't erase them.
   useEffect(() => {
     if (!form['general.mode']) return;
@@ -131,55 +129,14 @@ const FeaturesPage = () => {
     }
   };
 
-  const toggle = (key, label) => (
-    <FormControlLabel
-      key={key}
-      control={<Switch checked={Boolean(form[key])} onChange={(e) => set(key, e.target.checked)} />}
-      label={label}
-      sx={{ mb: 1 }}
-    />
-  );
-
-  const lockedToggle = (key, label, currentValue) => (
-    <Box key={key} sx={{ mb: 1, display: 'flex', alignItems: 'center', gap: 1.5, opacity: 0.65 }}>
-      <FormControlLabel
-        control={
-          <Switch
-            checked={Boolean(currentValue)}
-            disabled
-            sx={{ '& .MuiSwitch-thumb': { bgcolor: 'action.disabled' } }}
-          />
-        }
-        label={
-          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-            <Typography variant="body2" color="text.secondary">{label}</Typography>
-            <Box
-              component="span"
-              sx={{
-                px: 1, py: 0.2, borderRadius: 1, fontSize: 10, fontWeight: 700,
-                bgcolor: 'action.selected', color: 'text.secondary',
-                textTransform: 'uppercase', letterSpacing: 0.5,
-              }}
-            >
-              {appMode} mode • locked
-            </Box>
-          </Box>
-        }
-        sx={{ mb: 0 }}
-      />
-    </Box>
-  );
-
   return (
     <Box>
-      <Box sx={{ mb: 4 }}>
+      <Box sx={{ mb: 3 }}>
         <Typography variant="h4" component="h1" fontWeight={800} gutterBottom>
           Platform Features
         </Typography>
         <Typography variant="body1" color="text.secondary">
-          Configure the core operational mode and every optional feature of your platform.
-          This page is the single control point for feature switches; related settings panels
-          link back here.
+          Choose how your store works, then manage the features your team and customers can see.
         </Typography>
       </Box>
 
@@ -189,52 +146,63 @@ const FeaturesPage = () => {
         </Alert>
       )}
 
-      <Paper variant="outlined" sx={{ borderRadius: 3, p: 3, mb: 4 }}>
+      <Box sx={{ mb: 4 }}>
         {/* ── Mode Context Banner ── */}
-        <Alert severity="info" sx={{ mb: 3 }}>
-          <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 1 }}>
-            <Typography component="div" variant="body2" fontWeight={700}>
-              Current Mode: <Box component="span" sx={{ textTransform: 'uppercase', fontWeight: 900 }}>{selectedMode}</Box>
-              {selectedMode === appMode ? (
-                 <Chip label="DB" size="small" sx={{ height: 18, ml: 1, fontSize: 10, fontWeight: 700 }} />
-              ) : (
-                 <Chip label="PREVIEW" color="warning" size="small" sx={{ height: 18, ml: 1, fontSize: 10, fontWeight: 700 }} />
-              )}
-            </Typography>
-            {isSuperAdmin && (
-               <FormControl size="small" sx={{ minWidth: 150 }}>
-                 <Select 
-                   value={form['general.mode'] || appMode} 
-                   onChange={(e) => set('general.mode', e.target.value)} 
-                   sx={{ height: 30, bgcolor: 'background.paper', fontSize: '0.8rem' }}
-                 >
-                   <MenuItem value="ecommerce">E-COMMERCE</MenuItem>
-                   <MenuItem value="catalog">CATALOG</MenuItem>
-                 </Select>
-               </FormControl>
+        <Paper variant="outlined" sx={{ p: { xs: 2, sm: 3 }, borderRadius: 2, mb: 4 }}>
+          <Box sx={{ display: 'flex', flexDirection: { xs: 'column', sm: 'row' }, gap: 2.5, justifyContent: 'space-between' }}>
+            <Box sx={{ maxWidth: '65ch' }}>
+              <Box sx={{ display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: 1, mb: 1 }}>
+                <Typography variant="h6" component="h2" fontWeight={700}>Store mode</Typography>
+                <Chip
+                  label={selectedMode === appMode ? 'Current mode' : 'Unsaved mode change'}
+                  color={selectedMode === appMode ? 'default' : 'warning'}
+                  size="small" variant="outlined"
+                />
+              </Box>
+              <Typography variant="body2" color="text.secondary">
+                {selectedMode === 'catalog'
+                  ? 'Catalog mode lets customers browse your products. Pricing, cart, checkout, orders, payments, and shipping are turned off.'
+                  : 'E-commerce mode enables pricing, cart, checkout, orders, payments, and shipping. Choose where their interfaces appear below.'}
+              </Typography>
+            </Box>
+            {isSuperAdmin ? (
+              <FormControl size="small" sx={{ minWidth: 200, alignSelf: { sm: 'center' } }}>
+                <InputLabel id="store-mode-label">Store mode</InputLabel>
+                <Select labelId="store-mode-label" label="Store mode" value={selectedMode}
+                  onChange={(e) => set('general.mode', e.target.value)} disabled={saving}>
+                  <MenuItem value="ecommerce">E-COMMERCE</MenuItem>
+                  <MenuItem value="catalog">CATALOG</MenuItem>
+                </Select>
+              </FormControl>
+            ) : (
+              <Chip label={selectedMode === 'catalog' ? 'Catalog' : 'E-commerce'} sx={{ alignSelf: 'flex-start' }} />
             )}
           </Box>
-          <Typography variant="body2">
-            The store mode controls Tier 1 backend capability (pricing, cart, checkout, orders, payments, shipping)
-            and cannot be changed on this page except through the mode selector. The visibility switches below are
-            presentation-only: <strong>hides the interface; backend processing continues.</strong> Visibility can
-            never turn on a capability that the mode disables.
-          </Typography>
-        </Alert>
+          {selectedMode !== appMode && (
+            <Alert severity="warning" sx={{ mt: 2 }}>
+              Previewing {selectedMode === 'catalog' ? 'Catalog' : 'E-commerce'} mode. Your live store changes only after you save.
+            </Alert>
+          )}
+        </Paper>
 
         {/* ── Tier 1 Capability + Visibility ── */}
-        <Paper variant="outlined" sx={{ p: 2.5, borderRadius: 2, mb: 3 }}>
-          <Typography variant="subtitle2" fontWeight={700} gutterBottom>
-            Tier 1 — Mode-Locked Capability + Visibility
+        <Box component="section" aria-labelledby="core-features-heading" sx={{ mb: 4 }}>
+          <Typography id="core-features-heading" variant="h6" component="h2" fontWeight={700} gutterBottom>
+            Core features
           </Typography>
           <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
-            The mode controls whether the backend capability is available. The two switches control whether its
-            interface is shown in the admin and on the storefront. <strong>Hides the interface; backend processing
-            continues.</strong> Stored visibility preferences are preserved when the mode changes.
+            Store mode controls availability. When a feature is available, these switches only hide its interface;
+            backend processing continues.
           </Typography>
-          <Box sx={{ display: 'grid', gap: 1.5 }}>
+          {selectedMode === 'catalog' && (
+            <Alert icon={<LockOutlinedIcon fontSize="inherit" />} severity="info" sx={{ mb: 2 }}>
+              These six features are locked off in Catalog mode. Switch to E-commerce to enable them.
+              Your saved visibility preferences will be restored.
+            </Alert>
+          )}
+          <Paper variant="outlined" sx={{ borderRadius: 2, overflow: 'hidden' }}>
             {[['pricing', 'Pricing'], ['cart', 'Cart'], ['checkout', 'Checkout'], ['orders', 'Orders'], ['payments', 'Payments'], ['shipping', 'Shipping']].map(([key, label]) => {
-              const capabilityOn = Boolean(form[`features.${key}`]);
+              const capabilityOn = selectedMode === 'ecommerce';
               const adminKey = `visibility.admin${key.charAt(0).toUpperCase()}${key.slice(1)}`;
               const storefrontKey = `visibility.storefront${key.charAt(0).toUpperCase()}${key.slice(1)}`;
               const adminVisible = form[adminKey] !== false;
@@ -245,42 +213,29 @@ const FeaturesPage = () => {
               return (
                 <Box
                   key={key}
-                  sx={{ p: 1.75, border: '1px solid', borderColor: 'divider', borderRadius: 2 }}
+                  sx={{ px: { xs: 2, sm: 2.5 }, py: 2, display: 'grid', gridTemplateColumns: { xs: '1fr', md: 'minmax(180px, 1fr) minmax(360px, 1fr)' }, gap: { xs: 1, md: 3 }, alignItems: 'center', borderBottom: '1px solid', borderColor: 'divider', '&:last-child': { borderBottom: 0 } }}
                 >
-                  <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 1, flexWrap: 'wrap' }}>
-                    <Box sx={{ width: 10, height: 10, borderRadius: '50%', bgcolor: capabilityOn ? 'success.main' : 'error.light', flexShrink: 0 }} />
+                  <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, flexWrap: 'wrap' }}>
                     <Typography variant="body2" fontWeight={700}>{label}</Typography>
-                    <Chip
-                      label={capabilityOn ? 'Mode: ON' : 'Mode: OFF'}
-                      size="small"
-                      color={capabilityOn ? 'success' : 'default'}
-                      variant="outlined"
-                      sx={{ height: 18, fontSize: 9, fontWeight: 700 }}
-                    />
-                    {!capabilityOn && (
-                      <Chip
-                        label="Hidden regardless of visibility"
-                        size="small"
-                        color="warning"
-                        variant="outlined"
-                        sx={{ height: 18, fontSize: 9, fontWeight: 700 }}
-                      />
-                    )}
+                    {!capabilityOn && <LockOutlinedIcon sx={{ fontSize: 16, color: 'text.secondary' }} />}
+                    <Typography variant="caption" color="text.secondary">
+                      {capabilityOn ? 'Available' : 'Locked OFF in Catalog mode'}
+                    </Typography>
                   </Box>
-                  <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 2 }}>
+                  <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', sm: '1fr 1fr' }, gap: 1 }}>
                     <FormControlLabel
-                      control={<Switch size="small" checked={adminVisible} onChange={(e) => set(adminKey, e.target.checked)} disabled={!isSuperAdmin} />}
+                      control={<Switch inputProps={{ 'aria-label': `Show in Admin UI: ${label}` }} checked={effectiveAdmin} onChange={(e) => set(adminKey, e.target.checked)} disabled={saving || !isSuperAdmin || !capabilityOn} />}
                       label={
-                        <Typography variant="caption" color="text.secondary">
-                          Show in Admin UI {effectiveAdmin ? '' : '(hidden)'}
+                        <Typography variant="body2" color="text.secondary">
+                          Show in Admin UI
                         </Typography>
                       }
                     />
                     <FormControlLabel
-                      control={<Switch size="small" checked={storefrontVisible} onChange={(e) => set(storefrontKey, e.target.checked)} disabled={!isSuperAdmin} />}
+                      control={<Switch inputProps={{ 'aria-label': `Show in Storefront: ${label}` }} checked={effectiveStorefront} onChange={(e) => set(storefrontKey, e.target.checked)} disabled={saving || !isSuperAdmin || !capabilityOn} />}
                       label={
-                        <Typography variant="caption" color="text.secondary">
-                          Show in Storefront {effectiveStorefront ? '' : '(hidden)'}
+                        <Typography variant="body2" color="text.secondary">
+                          Show in Storefront
                         </Typography>
                       }
                     />
@@ -288,19 +243,18 @@ const FeaturesPage = () => {
                 </Box>
               );
             })}
-          </Box>
-        </Paper>
+          </Paper>
+        </Box>
 
         {/* ── Tier 2 Toggles ── */}
-        <Paper variant="outlined" sx={{ p: 2.5, borderRadius: 2, mb: 3 }}>
-          <Typography variant="subtitle2" fontWeight={700} gutterBottom>Tier 2 — Optional Features</Typography>
+        <Box component="section" aria-labelledby="optional-features-heading" sx={{ mb: 3 }}>
+          <Typography id="optional-features-heading" variant="h6" component="h2" fontWeight={700} gutterBottom>Optional features</Typography>
           <Typography variant="body2" color="text.secondary" sx={{ mb: 2.5 }}>
-            These features can be enabled or disabled regardless of the store mode.
-            Default values differ per mode — the badge shows the mode&apos;s default.
-            When OFF, related admin navigation, form controls, and storefront UI are hidden.
-            Authorized staff API access to historical records is preserved.
+            Choose the tools available to your team and customers. Some options require E-commerce mode
+            or another feature to be enabled. Turning a feature off hides its interface; authorized staff
+            can still access historical records through the API.
           </Typography>
-          <Box sx={{ display: 'grid', gap: 2 }}>
+          <Paper variant="outlined" sx={{ borderRadius: 2, overflow: 'hidden' }}>
             {platformFeatures.optional.map(({ key: featureKey, label, description: desc, defaults }) => ({
               key: `features.${featureKey}`, label, desc,
               defaultE: defaults.ecommerce, defaultC: defaults.catalog,
@@ -338,74 +292,67 @@ const FeaturesPage = () => {
                 }
               }
 
-              const isDisabled = isEffectiveLockedOff || !isSuperAdmin;
+              const isDisabled = saving || isEffectiveLockedOff || !isSuperAdmin;
               const isChecked = isEffectiveLockedOff ? false : (form[key] !== undefined ? Boolean(form[key]) : Boolean(modeDefault));
               const isIndented = key === 'features.requirePurchaseForReview' || key === 'features.showAvailableCoupons';
 
               return (
-                <Box 
-                  key={key} 
-                  sx={{ 
-                    display: 'flex', 
-                    alignItems: 'flex-start', 
-                    gap: 2, 
-                    p: 1.75, 
-                    border: '1px solid', 
-                    borderColor: 'divider', 
-                    borderRadius: 2, 
-                    opacity: isEffectiveLockedOff ? 0.65 : 1,
-                    ml: isIndented ? 4 : 0,
+                <Box
+                  key={key}
+                  sx={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: 2,
+                    px: { xs: 2, sm: 2.5 },
+                    py: 2,
+                    borderBottom: '1px solid',
+                    borderColor: 'divider',
+                    '&:last-child': { borderBottom: 0 },
+                    pl: isIndented ? { xs: 3, sm: 5 } : { xs: 2, sm: 2.5 },
                     bgcolor: isEffectiveLockedOff ? 'action.hover' : 'transparent'
                   }}
                 >
-                  <Box sx={{ flexGrow: 1 }}>
+                  <Box id={`${key}-description`} sx={{ flexGrow: 1, minWidth: 0 }}>
                     <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 0.25, flexWrap: 'wrap' }}>
                       <Typography variant="body2" fontWeight={700}>{label}</Typography>
-                      {modeDefault !== null && (
-                        <Chip
-                          label={`Default: ${modeDefault ? 'ON' : 'OFF'}`}
-                          size="small"
-                          variant="outlined"
-                          sx={{ height: 18, fontSize: 9, fontWeight: 700, color: 'text.secondary' }}
-                        />
-                      )}
-                      {lockReason && (
-                        <Chip
-                          label={lockReason}
-                          size="small"
-                          color="warning"
-                          variant="outlined"
-                          sx={{ height: 18, fontSize: 9, fontWeight: 700 }}
-                        />
-                      )}
                     </Box>
-                    <Typography variant="caption" color="text.secondary">{desc}</Typography>
+                    <Typography variant="body2" color="text.secondary">{desc}</Typography>
+                    {lockReason ? (
+                      <Box sx={{ display: 'flex', gap: 0.75, alignItems: 'flex-start', mt: 0.75, color: 'text.secondary' }}>
+                        <LockOutlinedIcon sx={{ fontSize: 16, mt: 0.15, flexShrink: 0 }} />
+                        <Typography variant="caption">{lockReason}</Typography>
+                      </Box>
+                    ) : modeDefault !== null ? (
+                      <Typography variant="caption" color="text.secondary">
+                        Mode default: {modeDefault ? 'On' : 'Off'}
+                      </Typography>
+                    ) : null}
                   </Box>
                   <Switch
                     checked={isChecked}
                     onChange={(e) => set(key, e.target.checked)}
                     disabled={isDisabled}
-                    size="small"
-                    inputProps={{ 'aria-label': label }}
+                    inputProps={{ 'aria-label': label, 'aria-describedby': `${key}-description` }}
+                    sx={{ flexShrink: 0 }}
                   />
                 </Box>
               );
             })}
-          </Box>
-        </Paper>
+          </Paper>
+        </Box>
 
-        <Box sx={{ display: 'flex', justifyContent: 'flex-end', mt: 4 }}>
+        <Paper variant="outlined" sx={{ position: 'sticky', bottom: 16, zIndex: 2, display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 2, p: 2, borderRadius: 2, bgcolor: 'background.paper' }}>
+          <Typography variant="body2" color="text.secondary">Changes apply to your store after you save.</Typography>
           <Button
             variant="contained"
-            color="warning"
             disabled={saving || !isSuperAdmin}
             onClick={() => setFeatureConfirmOpen(true)}
             sx={{ fontWeight: 700, px: 4 }}
           >
             {saving ? 'Saving…' : 'Save Platform Features'}
           </Button>
-        </Box>
-      </Paper>
+        </Paper>
+      </Box>
 
       {/* ── Platform Features Confirmation Dialog ── */}
       <Dialog open={featureConfirmOpen} onClose={() => setFeatureConfirmOpen(false)} maxWidth="xs" fullWidth>
@@ -413,8 +360,8 @@ const FeaturesPage = () => {
         <DialogContent>
           <Typography variant="body2">
             These changes will affect <strong>all storefront visitors and admin users immediately</strong>.
-            Optional features hide their UI when OFF. Tier 1 visibility switches only hide the interface;
-            backend processing continues and stored preferences are preserved across mode changes.
+            Store mode controls core feature availability. Visibility switches hide interfaces for enabled
+            features without stopping backend processing. Saved preferences are preserved across mode changes.
           </Typography>
           <Alert severity="warning" sx={{ mt: 2 }}>
             This action requires Superadmin privileges. Any unauthorized request will be rejected by the server.
