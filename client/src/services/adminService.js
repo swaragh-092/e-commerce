@@ -122,6 +122,7 @@ const deleteSaleLabel = (id) => api.delete(`/settings/sale-labels/${id}`);
 const reorderSaleLabels = (labels) => api.put('/settings/sale-labels', { labels });
 
 // Analytics
+const getCatalogOverview = (params = {}) => api.get(withQueryString(`/${A}/analytics/catalog-overview`, params, { omitEmpty: true }));
 const getTopProducts = (params = {}) => api.get(withQueryString(`/${A}/analytics/top-products`, params, { omitEmpty: true }));
 const getAovTrend = (params = {}) => api.get(withQueryString(`/${A}/analytics/aov-trend`, params, { omitEmpty: true }));
 const getAbandonedCarts = (params = {}) => api.get(withQueryString(`/${A}/analytics/abandoned-carts`, params, { omitEmpty: true }));
@@ -155,6 +156,7 @@ const exportAnalyticsCsv = (metric, params = {}) => {
 };
 
 export {
+  getCatalogOverview,
   getStats, getSalesChart, getLowStock, getInventoryAlerts, updateInventoryAlert, getRecentOrders,
   getInventoryAlertConfig, saveInventoryAlertConfig, testInventoryAlertEmail,
   getAccessRoles, getAccessPermissions, getAccessUsers, createAccessRole, updateAccessRole, deleteAccessRole, updateAccessUserRole, createAccessUser, deleteAccessUser,

@@ -74,7 +74,7 @@ const slimDrawerWidth = 72;
 // Items with a `mode: 'ecommerce'` key are hidden entirely in catalog mode.
 const MENU_STRUCTURE = [
   { text: 'Dashboard', path: '/admin', icon: <DashboardIcon />, permission: PERMISSIONS.DASHBOARD_VIEW },
-  { text: 'Analytics', path: '/admin/analytics', icon: <AnalyticsIcon />, permissions: [PERMISSIONS.DASHBOARD_VIEW, PERMISSIONS.ORDERS_READ], requireAllPermissions: true, mode: 'ecommerce' },
+  { text: 'Analytics', path: '/admin/analytics', icon: <AnalyticsIcon />, permission: PERMISSIONS.DASHBOARD_VIEW, feature: 'analytics' },
   {
     title: 'Catalog',
     icon: <InventoryIcon />,
