@@ -2,6 +2,7 @@ $(document).ready(function () {
     var C = window.OrbiCatalog;
     var ENQUIRY_API_URL = API_URL + "enquiries";
     var enquiryEnabled = true;
+    var detailCache = new Map(), detailQueue = [], activeDetailRequests = 0;
     C.getFeatures().then(function (features) {
         enquiryEnabled = features.enquiry !== false;
         if (!enquiryEnabled) $('<style>').text('.add-enquiry-list, .open-enquiry-popup, .move-to-cart-btn, #move-all-to-cart-btn, #cart-enquiry-btn, a[href*="enquiry-list.html"] { display: none !important; }').appendTo('head');
@@ -109,7 +110,7 @@ $(document).ready(function () {
 
     function getCart() { return C.getCart(); }
     function saveCart(cart) { C.saveCart(cart); }
-    function updateHeaderCounter() { $('#header-enquiry-count').text(getCart().length); }
+    function updateHeaderCounter() { $('#header-enquiry-count').text(getCart().length); updateEnquirySummary(); }
     window.addEventListener('orbi:cart-change', updateHeaderCounter);
     window.addEventListener('storage', function (event) {
         if (event.key === 'enquiryCart') { updateHeaderCounter(); renderCart(); }
@@ -126,43 +127,175 @@ $(document).ready(function () {
         } catch (error) { customAlert('Enquiry list', error.message, 'error', 2500); }
     });
 
+    function listIcon(path) {
+        return '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="' + path + '"/></svg>';
+    }
+    function itemDetails(item) {
+        var record = detailCache.get(item.slug), product = record && record.product;
+        if (!product || String(product.id) !== String(item.id)) return { line: item, status: product ? 'error' : record && record.status };
+        var variant = C.variants(product).find(function (option) { return option.id === item.variantId; });
+        var review = !!((item.variantId || C.hasVariants(product)) && !variant);
+        var fresh = C.line(product, variant);
+        if (review) {
+            fresh.variantId = item.variantId;
+            fresh.variantLabel = item.variantLabel;
+            fresh.sku = item.sku;
+        }
+        return { line: Object.assign({}, item, fresh, { quantity: item.quantity }), product: product, status: record.status, review: review };
+    }
+    function productExcerpt(product) {
+        var template = document.createElement('template');
+        template.innerHTML = C.description(product.description);
+        template.content.querySelectorAll('p, div, li, br, tr, h2, h3, h4, h5, h6').forEach(function (node) { node.appendChild(document.createTextNode(' ')); });
+        var text = (template.content.textContent || '').replace(/\s+/g, ' ').trim();
+        var characters = Array.from(text);
+        return characters.length > 220 ? characters.slice(0, 217).join('').trim() + '…' : text;
+    }
+    function productSpecifications(product) {
+        var groups = new Map();
+        (product.attributes || []).filter(Boolean).slice().sort(function (a, b) {
+            return (Number(a.sortOrder) || 0) - (Number(b.sortOrder) || 0);
+        }).forEach(function (row) {
+            var name = String(row.customName || (row.attribute && row.attribute.name) || '').trim();
+            var value = String(row.customValue || C.valueLabel(row.value, row.attribute)).trim();
+            if (!name || !value || /^(unit|uom)$/i.test(name)) return;
+            if (!groups.has(name)) groups.set(name, []);
+            if (groups.get(name).indexOf(value) === -1) groups.get(name).push(value);
+        });
+        return Array.from(groups).slice(0, 4).map(function (entry) {
+            return '<div><dt>' + C.escape(entry[0]) + '</dt><dd>' + C.escape(entry[1].join(', ')) + '</dd></div>';
+        }).join('');
+    }
+    function productInfo(item) {
+        var details = itemDetails(item), line = details.line, product = details.product, esc = C.escape;
+        var category = product ? (product.categories || (product.category ? [product.category] : [])).map(function (entry) { return entry.name; }).filter(Boolean).join(' · ') : item.categoryName;
+        var html = '<div class="enquiry-item-header">' + (category ? '<span class="enquiry-product-category">' + esc(category) + '</span>' : '') +
+            '<h3 class="enquiry-item-title"><a href="' + esc(C.productUrl(line)) + '">' + esc(line.name) + '</a></h3><div class="enquiry-item-meta">' +
+            (line.variantLabel && line.variantLabel !== line.sku ? '<span class="enquiry-option">' + esc(line.variantLabel) + '</span>' : '') +
+            (line.sku ? '<span>SKU: ' + esc(line.sku) + '</span>' : '') + '</div></div><div class="enquiry-item-details">';
+        if (product) {
+            var specifications = productSpecifications(product), excerpt = productExcerpt(product);
+            if (specifications) html += '<dl class="enquiry-item-specs">' + specifications + '</dl>';
+            if (excerpt) html += '<p class="enquiry-item-description">' + esc(excerpt) + '</p>';
+        }
+        if (details.status === 'loading') html += '<div class="enquiry-details-status" role="status">Loading product details…</div>';
+        if (details.status === 'error') html += '<div class="enquiry-details-status" role="status">More details could not be loaded.<button type="button" class="enquiry-details-retry">Retry</button></div>';
+        if (details.review) html += '<div class="enquiry-details-status">Review this product to confirm your selected options.</div>';
+        return html + '</div>';
+    }
+    function updateEnquirySummary() {
+        if (!document.getElementById('enquiry-summary-details')) return;
+        var cart = getCart(), groups = new Map();
+        cart.forEach(function (item) {
+            var unit = itemDetails(item).line.unit || '';
+            groups.set(unit, (groups.get(unit) || 0) + item.quantity);
+        });
+        $('#enquiry-item-count').text(cart.length + (cart.length === 1 ? ' item' : ' items'));
+        var html = '<div><dt>Selected items</dt><dd>' + cart.length + '</dd></div>';
+        groups.forEach(function (quantity, unit) {
+            html += '<div><dt>' + C.escape(unit ? 'Quantity (' + unit + ')' : 'Quantity') + '</dt><dd>' + quantity + '</dd></div>';
+        });
+        $('#enquiry-summary-details').html(html);
+    }
+    function patchProductDetails(slug) {
+        var cart = getCart();
+        $('#dynamic-cart-container .cart-inner').each(function () {
+            var row = this, item = cart.find(function (line) { return C.key(line) === row.getAttribute('data-key'); });
+            if (!item || item.slug !== slug) return;
+            var details = itemDetails(item), line = details.line, $row = $(row);
+            // Patch only product information: an unfinished quantity and its focus must survive.
+            var $info = $row.find('.enquiry-item-info'), restoreFocus = $info[0].contains(document.activeElement);
+            $info.html(productInfo(item));
+            var image = $row.find('img')[0], source = C.imageUrl(line.image);
+            if (image.getAttribute('src') !== source) {
+                image.classList.toggle('is-placeholder', source === 'images/orbi-seeds-logo.png');
+                image.src = source;
+            }
+            image.alt = line.name;
+            $row.find('.cart-image a, .enquiry-view-product').attr('href', C.productUrl(line));
+            $row.find('.enquiry-view-product').text(details.review ? 'Review options' : 'View full details');
+            $row.find('.enquiry-quantity-label').text(line.unit ? 'Quantity (' + line.unit + ')' : 'Quantity');
+            if (restoreFocus) $row.find('.enquiry-view-product')[0].focus({ preventScroll: true });
+        });
+        updateEnquirySummary();
+    }
+    function processDetailQueue() {
+        while (activeDetailRequests < 4 && detailQueue.length) {
+            (function (slug) {
+                if (!getCart().some(function (item) { return item.slug === slug; })) {
+                    detailCache.delete(slug);
+                    return;
+                }
+                activeDetailRequests++;
+                Promise.resolve().then(function () { return C.fetchProduct(slug); }).then(function (product) {
+                    if (!product || !product.id) throw new Error('Product unavailable');
+                    detailCache.set(slug, { status: 'ready', product: product });
+                }).catch(function () {
+                    detailCache.set(slug, { status: 'error' });
+                }).finally(function () {
+                    activeDetailRequests--;
+                    patchProductDetails(slug);
+                    processDetailQueue();
+                });
+            })(detailQueue.shift());
+        }
+    }
+    function loadCartDetails(cart) {
+        cart.forEach(function (item) {
+            if (!item.slug || detailCache.has(item.slug)) return;
+            detailCache.set(item.slug, { status: 'loading' });
+            detailQueue.push(item.slug);
+        });
+        processDetailQueue();
+    }
+    function updateQuantityButtons($input, quantity) {
+        var $controls = $input.closest('.quantity');
+        $controls.find('.minus').prop('disabled', quantity <= 1);
+        $controls.find('.plus').prop('disabled', quantity >= 99999);
+    }
     function renderCart() {
         var $container = $('#dynamic-cart-container');
         if (!$container.length) return;
-        $('.cart-wrapper h1').show();
         var cart = getCart();
-        $container.empty();
-        $container.siblings('.cart-buttons').toggle(!!cart.length);
+        $container.empty().closest('.enquiry-list-layout').toggleClass('is-empty', !cart.length);
+        $container.siblings('.cart-buttons').prop('hidden', !cart.length);
+        updateEnquirySummary();
         if (!cart.length) {
-            $container.html(
-                '<section class="enquiry-empty-state" aria-labelledby="enquiry-empty-title">' +
-                '<div class="enquiry-empty-icon" aria-hidden="true"><svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="5" y="3" width="14" height="18" rx="2"/><path d="M9 8h6M9 12h6M9 16h3"/></svg></div>' +
-                '<h2 id="enquiry-empty-title">Your enquiry list is empty</h2>' +
-                '<p>Explore our seed varieties and add the products you are interested in to your enquiry list. Then return here to send your enquiry to our team.</p>' +
-                '<div class="enquiry-empty-actions">' +
-                '<a class="enquiry-empty-primary" href="product.html">Browse Products</a>' +
-                '<a class="enquiry-empty-secondary" href="index.html">Back to Home</a>' +
-                '</div>' +
-                '</section>'
-            );
+            $container.html('<section class="enquiry-empty-state" aria-labelledby="enquiry-empty-title">' +
+                '<div class="enquiry-empty-icon" aria-hidden="true">' + listIcon('M5 3h14v18H5zM9 8h6M9 12h6M9 16h3') + '</div>' +
+                '<h3 id="enquiry-empty-title">Your enquiry list is empty</h3>' +
+                '<p>Explore our seed varieties and add the products you would like to enquire about.</p>' +
+                '<a class="enquiry-primary" href="product.html">Explore seed products ' + listIcon('M5 12h14m-6-6 6 6-6 6') + '</a></section>');
             return;
         }
-        cart.forEach(function (item) {
-            var esc = C.escape, url = esc(C.productUrl(item));
-            var $row = $('<div class="cart-inner">').attr('data-key', C.key(item));
-            $row.html('<button type="button" class="close-btn remove-item" aria-label="Remove from enquiry list">&times;</button>' +
-                '<div class="cart-image"><a href="' + url + '"><img src="' + esc(C.imageUrl(item.image)) + '" alt="' + esc(item.name) + '"></a></div>' +
-                '<div class="cart-content"><h2><a href="' + url + '">' + esc(item.name) + '</a></h2>' +
-                (item.variantLabel ? '<p class="cart-variant">' + esc(item.variantLabel) + '</p>' : '') +
-                (item.sku ? '<p class="cart-variant">SKU: ' + esc(item.sku) + '</p>' : '') +
-                (item.unit ? '<p class="cart-unit">Unit: ' + esc(item.unit) + '</p>' : '') +
-                '<div class="cart-bottom"><div class="quantity"><button type="button" class="qty-btn minus" aria-label="Decrease quantity">-</button>' +
-                '<input type="number" class="qty-input" min="1" max="99999" step="1" value="' + item.quantity + '" aria-label="Quantity for ' + esc(item.name + ' ' + (item.variantLabel || '')) + '">' +
-                '<button type="button" class="qty-btn plus" aria-label="Increase quantity">+</button></div></div></div>');
-            $row.find('img').on('error', function () { if (this.getAttribute('src') !== 'images/orbi-seeds-logo.png') this.src = 'images/orbi-seeds-logo.png'; });
+        loadCartDetails(cart);
+        cart.forEach(function (item, index) {
+            var esc = C.escape, details = itemDetails(item), line = details.line, url = esc(C.productUrl(line)), image = C.imageUrl(line.image);
+            var inputId = 'enquiry-quantity-' + index;
+            var $row = $('<article class="cart-inner enquiry-item">').attr('data-key', C.key(item));
+            $row.html('<div class="cart-image"><a href="' + url + '"><img' + (image === 'images/orbi-seeds-logo.png' ? ' class="is-placeholder"' : '') + ' src="' + esc(image) + '" alt="' + esc(line.name) + '" width="144" height="144" loading="lazy"></a></div>' +
+                '<div class="enquiry-item-info">' + productInfo(item) + '</div><button type="button" class="remove-item" aria-label="' + esc('Remove ' + line.name + ' from enquiry list') + '">' + listIcon('M3 6h18M9 6V3h6v3M5 6l1 15h12l1-15M10 10v7M14 10v7') + '</button>' +
+                '<div class="cart-bottom"><div class="enquiry-quantity-field"><label class="enquiry-quantity-label" for="' + inputId + '">' + esc(line.unit ? 'Quantity (' + line.unit + ')' : 'Quantity') + '</label>' +
+                '<div class="quantity"><button type="button" class="qty-btn minus" aria-label="Decrease quantity">−</button>' +
+                '<input id="' + inputId + '" type="number" class="qty-input" min="1" max="99999" step="1" value="' + item.quantity + '" aria-label="' + esc('Quantity for ' + line.name + ' ' + (line.variantLabel || '')) + '">' +
+                '<button type="button" class="qty-btn plus" aria-label="Increase quantity">+</button></div></div>' +
+                '<a class="enquiry-view-product" href="' + url + '">' + (details.review ? 'Review options' : 'View full details') + listIcon('M5 12h14m-6-6 6 6-6 6') + '</a></div>');
+            $row.find('img').on('error', function () {
+                this.classList.add('is-placeholder');
+                if (this.getAttribute('src') !== 'images/orbi-seeds-logo.png') this.src = 'images/orbi-seeds-logo.png';
+            });
+            updateQuantityButtons($row.find('.qty-input'), item.quantity);
             $container.append($row);
         });
     }
+    $(document).on('click', '.enquiry-details-retry', function () {
+        var key = $(this).closest('.cart-inner').attr('data-key');
+        var item = getCart().find(function (line) { return C.key(line) === key; });
+        if (!item || !item.slug) return;
+        detailCache.delete(item.slug);
+        loadCartDetails(getCart());
+        patchProductDetails(item.slug);
+    });
 
     updateHeaderCounter();
     renderCart();
@@ -183,6 +316,7 @@ $(document).ready(function () {
 
         item.quantity = currentVal;
         $input.val(currentVal);
+        updateQuantityButtons($input, currentVal);
         saveCart(cart);
         updateHeaderCounter();
     });
@@ -197,6 +331,7 @@ $(document).ready(function () {
 
         if (val !== null) {
             item.quantity = val;
+            updateQuantityButtons($input, val);
             saveCart(cart);
             updateHeaderCounter();
         }
@@ -215,6 +350,7 @@ $(document).ready(function () {
             $input.val(val);
         }
         item.quantity = val;
+        updateQuantityButtons($input, val);
         saveCart(cart);
         updateHeaderCounter();
     });

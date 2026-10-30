@@ -163,11 +163,13 @@ function isCatalogMenu(item) {
 function getMenuItemUrl(item) {
     if (item.targetType === 'category_tree') return 'product.html';
     var url = formatMenuUrl(item.url);
-    // Parent categories open the category browser; leaves keep their product listing.
-    if (item.children && item.children.length && /^products?\.html\?/.test(url)) {
-        var params = new URL(url, window.location.href).searchParams;
-        var slug = params.get('category') || params.get('cat');
-        if (slug) return 'product.html?cat=' + encodeURIComponent(slug);
+    // Every category, crop and product opens the same catalogue.
+    if (/^products?\.html(?:[?#]|$)/.test(url)) {
+        var parsed = new URL(url, window.location.href);
+        var slug = parsed.searchParams.get('category') || parsed.searchParams.get('cat');
+        parsed.searchParams.delete('cat');
+        if (slug) parsed.searchParams.set('category', slug);
+        return 'product.html' + parsed.search + parsed.hash;
     }
     return url;
 }
@@ -182,7 +184,7 @@ function categoryMenuItem(category) {
     var children = (category.children || []).map(categoryMenuItem);
     return {
         label: category.name,
-        url: (children.length ? 'product.html?cat=' : 'products.html?category=') + encodeURIComponent(category.slug || ''),
+        url: 'product.html?category=' + encodeURIComponent(category.slug || ''),
         sortOrder: category.sortOrder || 0,
         isVisible: true,
         children: children
@@ -368,8 +370,8 @@ function fetchAndRenderMenu() {
 
                 // Cache in localStorage to render with zero delay/flicker on subsequent loads
                 try {
-                    localStorage.setItem('orbis_desktop_menu_html_v4', desktopHtml);
-                    localStorage.setItem('orbis_mobile_menu_html_v3', mobileHtml);
+                    localStorage.setItem('orbis_desktop_menu_html_v5', desktopHtml);
+                    localStorage.setItem('orbis_mobile_menu_html_v4', mobileHtml);
                 } catch (e) { }
 
                 // Update DOM only if changed to avoid unnecessary flicker/repaint
@@ -408,8 +410,8 @@ function fetchAndRenderMenu() {
 
 function applyCachedMenu() {
     try {
-        var cachedDesktop = localStorage.getItem('orbis_desktop_menu_html_v4');
-        var cachedMobile = localStorage.getItem('orbis_mobile_menu_html_v3');
+        var cachedDesktop = localStorage.getItem('orbis_desktop_menu_html_v5');
+        var cachedMobile = localStorage.getItem('orbis_mobile_menu_html_v4');
         if (cachedDesktop && $('.nav-links').length) {
             $('.nav-links').html(cachedDesktop);
         }

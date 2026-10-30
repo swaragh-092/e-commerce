@@ -63,17 +63,231 @@
             return options.length === ids.length && ids.every(function (id) { return options.some(function (o) { return o.id === id && o.valueId === selected[id]; }); });
         }) || null;
     };
-    function primaryImage(images) {
-        var ordered = (images || []).slice().sort(function (a, b) { return (a.sortOrder || 0) - (b.sortOrder || 0); });
-        var image = ordered.find(function (i) { return i.isPrimary; }) || ordered[0];
-        return image && (image.url || (image.media && image.media.url));
+    // Product images stay shared; selecting a variant brings only its images first.
+    C.galleryImages = function (product, variant) {
+        var images = [], seen = new Set();
+        function add(image) {
+            if (!image) return;
+            if (typeof image === 'string') image = { url: image };
+            var raw = image.url || (image.media && image.media.url);
+            if (typeof raw !== 'string' || !raw.trim()) return;
+            var src = C.imageUrl(raw);
+            if (src === 'images/orbi-seeds-logo.png' && raw.trim() !== src) return;
+            var key;
+            try { key = new URL(src, window.location.href).href; } catch (error) { return; }
+            if (seen.has(key)) return;
+            seen.add(key);
+            images.push({ src: src, key: key, alt: image.alt || (image.media && image.media.alt) || product.name || 'Product' });
+        }
+        function ordered(rows) {
+            return (Array.isArray(rows) ? rows : []).filter(Boolean).slice().sort(function (a, b) {
+                return Number(!!b.isPrimary) - Number(!!a.isPrimary) || (Number(a.sortOrder) || 0) - (Number(b.sortOrder) || 0);
+            });
+        }
+        if (variant) {
+            ordered(variant.images).forEach(add);
+            add(variant.media);
+        }
+        ordered(product.images).forEach(add);
+        if (!images.length) images.push({ src: 'images/orbi-seeds-logo.png', key: 'placeholder', alt: (product.name || 'Product') + ' — image unavailable', unavailable: true });
+        return images;
+    };
+
+    var imageDialog, dialogGallery, dialogOpener, bodyOverflow;
+    function cleanUpImageDialog() {
+        if (!dialogGallery) return;
+        document.body.style.overflow = bodyOverflow;
+        dialogGallery = null;
+        var opener = dialogOpener;
+        dialogOpener = null;
+        if (opener && opener.isConnected) opener.focus({ preventScroll: true });
     }
+    C.closeGallery = function () {
+        if (imageDialog && imageDialog.open) { imageDialog.close(); cleanUpImageDialog(); }
+    };
+    function drawImageDialog() {
+        if (!dialogGallery) return;
+        var item = dialogGallery.images[dialogGallery.index];
+        var img = imageDialog.querySelector('img');
+        var src = item.failed ? 'images/orbi-seeds-logo.png' : item.src;
+        if (img.getAttribute('src') !== src) img.src = src;
+        img.alt = item.failed ? dialogGallery.label + ' — image unavailable' : item.alt;
+        imageDialog.querySelector('h2').textContent = dialogGallery.label;
+        imageDialog.querySelector('.product-gallery-count').textContent = dialogGallery.caption();
+        imageDialog.querySelector('.product-image-dialog-nav').hidden = dialogGallery.images.length < 2;
+    }
+    function openImageDialog(gallery, opener) {
+        if (!imageDialog) {
+            imageDialog = document.createElement('dialog');
+            imageDialog.className = 'product-image-dialog';
+            imageDialog.setAttribute('aria-labelledby', 'product-image-dialog-title');
+            imageDialog.innerHTML = '<div class="product-image-dialog-header"><h2 id="product-image-dialog-title"></h2>' +
+                '<button type="button" class="product-image-dialog-close" autofocus>Close</button></div>' +
+                '<div class="product-image-dialog-stage"><img alt=""></div>' +
+                '<div class="product-image-dialog-nav"><button type="button" class="product-gallery-prev" aria-label="Previous image">&#8592;</button>' +
+                '<span class="product-gallery-count" role="status"></span>' +
+                '<button type="button" class="product-gallery-next" aria-label="Next image">&#8594;</button></div>';
+            document.body.appendChild(imageDialog);
+            imageDialog.querySelector('.product-image-dialog-close').addEventListener('click', C.closeGallery);
+            imageDialog.querySelector('.product-gallery-prev').addEventListener('click', function () { if (dialogGallery) dialogGallery.move(-1); });
+            imageDialog.querySelector('.product-gallery-next').addEventListener('click', function () { if (dialogGallery) dialogGallery.move(1); });
+            imageDialog.querySelector('img').addEventListener('error', function () { if (dialogGallery) dialogGallery.fail(dialogGallery.images[dialogGallery.index]); });
+            imageDialog.addEventListener('keydown', function (event) {
+                if (dialogGallery && (event.key === 'ArrowLeft' || event.key === 'ArrowRight')) {
+                    event.preventDefault();
+                    dialogGallery.move(event.key === 'ArrowLeft' ? -1 : 1);
+                }
+            });
+            imageDialog.addEventListener('cancel', function (event) { event.preventDefault(); C.closeGallery(); });
+            imageDialog.addEventListener('click', function (event) { if (event.target === imageDialog) C.closeGallery(); });
+            imageDialog.addEventListener('close', function () {
+                if (!imageDialog.open) cleanUpImageDialog();
+            });
+        }
+        if (typeof imageDialog.showModal !== 'function') return;
+        dialogGallery = gallery;
+        dialogOpener = opener;
+        drawImageDialog();
+        if (!imageDialog.open) {
+            bodyOverflow = document.body.style.overflow;
+            document.body.style.overflow = 'hidden';
+            imageDialog.showModal();
+        }
+    }
+    C.mountGallery = function (section, product) {
+        var host = section.querySelector('.products-left');
+        if (!host) return null;
+        host.classList.add('product-gallery');
+        host.setAttribute('role', 'group');
+        host.setAttribute('aria-label', (product.name || 'Product') + ' images');
+        var open = document.createElement('button');
+        open.type = 'button';
+        open.className = 'product-gallery-open';
+        var image = document.createElement('img');
+        image.className = 'product-gallery-main';
+        image.loading = 'lazy';
+        image.decoding = 'async';
+        image.width = 400; image.height = 400;
+        image.draggable = false;
+        var enlarge = document.createElement('span');
+        enlarge.className = 'product-gallery-enlarge';
+        enlarge.textContent = 'View larger';
+        open.append(image, enlarge);
+        var controls = document.createElement('div');
+        controls.className = 'product-gallery-controls';
+        var previous = document.createElement('button');
+        previous.type = 'button'; previous.className = 'product-gallery-prev';
+        previous.textContent = '←'; previous.setAttribute('aria-label', 'Previous image of ' + product.name);
+        var count = document.createElement('span');
+        count.className = 'product-gallery-count';
+        count.setAttribute('role', 'status');
+        var next = document.createElement('button');
+        next.type = 'button'; next.className = 'product-gallery-next';
+        next.textContent = '→'; next.setAttribute('aria-label', 'Next image of ' + product.name);
+        controls.append(previous, count, next);
+        var thumbs = document.createElement('div');
+        thumbs.className = 'product-gallery-thumbnails';
+        thumbs.setAttribute('role', 'group');
+        thumbs.setAttribute('aria-label', 'Choose an image of ' + product.name);
+        var message = document.createElement('p');
+        message.className = 'product-gallery-message';
+        message.setAttribute('role', 'status');
+        host.replaceChildren(open, controls, thumbs, message);
+        var failed = new Set(), thumbnailButtons = [], suppressOpen = false, touch;
+        var gallery = {
+            images: [], index: 0, variant: undefined, label: product.name || 'Product',
+            caption: function () { return 'Image ' + (gallery.index + 1) + ' of ' + gallery.images.length; },
+            select: function (index) {
+                gallery.index = (index + gallery.images.length) % gallery.images.length;
+                render();
+            },
+            move: function (offset) { gallery.select(gallery.index + offset); },
+            fail: function (item) {
+                if (!item || item.failed || item.unavailable) return;
+                failed.add(item.key); item.failed = true;
+                var thumbnail = thumbnailButtons[gallery.images.indexOf(item)];
+                if (thumbnail) thumbnail.querySelector('img').src = 'images/orbi-seeds-logo.png';
+                render();
+            },
+            update: function (variant) {
+                if (gallery.variant === variant && gallery.images.length) return;
+                gallery.variant = variant;
+                gallery.label = (product.name || 'Product') + (variant ? ' — ' + C.variantLabel(variant) : '');
+                gallery.images = C.galleryImages(product, variant);
+                gallery.images.forEach(function (item) { item.failed = failed.has(item.key); });
+                gallery.index = 0;
+                thumbs.replaceChildren(); thumbnailButtons = [];
+                gallery.images.forEach(function (item, index) {
+                    var button = document.createElement('button');
+                    button.type = 'button'; button.className = 'product-gallery-thumbnail';
+                    button.setAttribute('aria-label', 'View image ' + (index + 1) + ' of ' + product.name + ': ' + item.alt);
+                    var img = document.createElement('img');
+                    img.src = item.failed ? 'images/orbi-seeds-logo.png' : item.src;
+                    img.alt = ''; img.loading = 'lazy'; img.width = 48; img.height = 48;
+                    img.addEventListener('error', function () { gallery.fail(item); });
+                    button.appendChild(img);
+                    button.addEventListener('click', function () { gallery.select(index); });
+                    button.addEventListener('keydown', function (event) {
+                        var target;
+                        if (event.key === 'ArrowRight' || event.key === 'ArrowDown') target = index + 1;
+                        else if (event.key === 'ArrowLeft' || event.key === 'ArrowUp') target = index - 1;
+                        else if (event.key === 'Home') target = 0;
+                        else if (event.key === 'End') target = gallery.images.length - 1;
+                        else return;
+                        event.preventDefault(); gallery.select(target);
+                        thumbnailButtons[gallery.index].focus({ preventScroll: true });
+                        thumbnailButtons[gallery.index].scrollIntoView({ block: 'nearest', inline: 'nearest' });
+                    });
+                    thumbnailButtons.push(button); thumbs.appendChild(button);
+                });
+                render();
+            }
+        };
+        function render() {
+            var item = gallery.images[gallery.index];
+            var unavailable = item.failed || item.unavailable;
+            var src = unavailable ? 'images/orbi-seeds-logo.png' : item.src;
+            if (image.getAttribute('src') !== src) image.src = src;
+            image.alt = unavailable ? gallery.label + ' — image unavailable' : item.alt;
+            open.disabled = !!unavailable;
+            open.setAttribute('aria-label', 'Enlarge image ' + (gallery.index + 1) + ' of ' + gallery.label);
+            enlarge.hidden = !!unavailable;
+            controls.hidden = thumbs.hidden = gallery.images.length < 2;
+            count.textContent = gallery.caption();
+            message.textContent = unavailable ? 'Image unavailable' : '';
+            thumbnailButtons.forEach(function (button, index) { button.setAttribute('aria-pressed', String(index === gallery.index)); });
+            if (dialogGallery === gallery && imageDialog.open) drawImageDialog();
+        }
+        image.addEventListener('error', function () { gallery.fail(gallery.images[gallery.index]); });
+        previous.addEventListener('click', function () { gallery.move(-1); });
+        next.addEventListener('click', function () { gallery.move(1); });
+        open.addEventListener('click', function (event) {
+            if (suppressOpen) { suppressOpen = false; event.preventDefault(); return; }
+            openImageDialog(gallery, open);
+        });
+        open.addEventListener('pointerdown', function (event) {
+            suppressOpen = false;
+            touch = event.pointerType === 'touch' ? { x: event.clientX, y: event.clientY } : null;
+        });
+        open.addEventListener('pointercancel', function () { touch = null; });
+        open.addEventListener('pointerup', function (event) {
+            if (!touch) return;
+            var dx = event.clientX - touch.x, dy = event.clientY - touch.y;
+            touch = null;
+            if (gallery.images.length > 1 && Math.abs(dx) > 40 && Math.abs(dx) > Math.abs(dy) * 1.4) {
+                suppressOpen = true;
+                gallery.move(dx < 0 ? 1 : -1);
+            }
+        });
+        return gallery;
+    };
+
     C.line = function (product, variant) {
         var unitRow = (product.attributes || []).find(function (a) { return /^(unit|uom)$/i.test(a.customName || (a.attribute && a.attribute.name) || ''); });
         return {
             id: String(product.id), name: product.name || 'Product', type: product.type,
             variantId: variant ? variant.id : null, variantLabel: C.variantLabel(variant), sku: (variant && variant.sku) || product.sku || '',
-            image: C.imageUrl(primaryImage(variant && variant.images) || (variant && variant.media && variant.media.url) || primaryImage(product.images)),
+            image: C.galleryImages(product, variant)[0].src,
             slug: product.slug || '', categorySlug: (product.categories && product.categories[0] && product.categories[0].slug) || (product.category && product.category.slug) || '',
             unit: product.unit || (unitRow && (unitRow.customValue || C.valueLabel(unitRow.value, unitRow.attribute))) || '', quantity: 1
         };
@@ -116,7 +330,7 @@
     };
     C.productUrl = function (line) {
         if (!line.slug) return 'product.html';
-        var url = 'products.html?slug=' + encodeURIComponent(line.slug);
+        var url = 'product.html?slug=' + encodeURIComponent(line.slug);
         if (line.categorySlug) url += '&category=' + encodeURIComponent(line.categorySlug);
         if (line.variantId) url += '&variant=' + encodeURIComponent(line.variantId);
         return url;
@@ -186,7 +400,7 @@
         var host = section.querySelector('.product-options');
         var status = section.querySelector('.product-selection-status');
         var price = section.querySelector('.product-selected-price');
-        var image = section.querySelector('.products-left img');
+        var gallery = C.mountGallery(section, product);
         var variants = C.variants(product), groups = C.groups(product), selected = {};
         var variable = C.hasVariants(product);
         // Old SKUs without complete option metadata remain selectable by their SKU.
@@ -217,8 +431,7 @@
             section.orbiVariant = variant;
             var ready = !variable || !!variant;
             var line = C.line(product, variant);
-            image.src = line.image;
-            image.alt = product.name + (line.variantLabel ? ' — ' + line.variantLabel : '');
+            if (gallery) gallery.update(variant);
             if (variable && !variants.length) status.textContent = 'No options are currently available for this product.';
             else if (!ready) status.textContent = requestedVariant && !preselected ? 'The saved option is no longer available. Choose another option.' : '';
             else {

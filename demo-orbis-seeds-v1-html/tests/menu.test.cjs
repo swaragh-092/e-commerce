@@ -38,8 +38,8 @@ test('large catalogs expose bounded previews and links to every remaining catego
 
     assert.equal(count(html, /class="mega-menu-column(?: mega-menu-column-wide)?"/g), 4);
     assert.equal(count(html, /class="mega-menu-more"/g), 4);
-    assert.equal(count(html, /href="products\.html\?category=seed-/g), 48);
-    assert.match(html, /href="product\.html\?cat=category-0" aria-label="More Category 0">More &rarr;/);
+    assert.equal(count(html, /href="product\.html\?category=seed-/g), 48);
+    assert.match(html, /href="product\.html\?category=category-0" aria-label="More Category 0">More &rarr;/);
     assert.match(html, /class="mega-menu-footer"><a href="product\.html">More categories/);
     assert.match(html, />Seed 0-11</);
     assert.doesNotMatch(html, />Seed 0-12</);
@@ -76,20 +76,20 @@ test('previews honor configured order without mutating the source menu', () => {
     assert.equal(JSON.stringify(children), original);
 });
 
-test('parent, nested and leaf category links use their correct standalone pages', () => {
+test('parent, nested and leaf categories all use the unified catalogue', () => {
     const menu = loadMenu();
     const branch = category(0, 13);
     branch.url = '/products?category=' + encodeURIComponent('fruit & flowers');
     branch.children[0].children = [category(50, 0)];
     const html = menu.buildDesktopMegaMenu(catalog([branch, category(1, 0)]));
 
-    assert.match(html, /href="product\.html\?cat=fruit%20%26%20flowers" class="mega-menu-column-title"/);
-    assert.match(html, /href="product\.html\?cat=fruit%20%26%20flowers" aria-label="More Category 0">More &rarr;/);
-    assert.match(html, /href="product\.html\?cat=seed-0-0">Seed 0-0/);
-    assert.match(html, /href="products\.html\?category=seed-0-1">Seed 0-1/);
-    assert.match(html, /href="products\.html\?category=category-1" class="mega-menu-column-title"/);
+    assert.match(html, /href="product\.html\?category=fruit(?:%20|\+)%26(?:%20|\+)flowers" class="mega-menu-column-title"/);
+    assert.match(html, /href="product\.html\?category=fruit(?:%20|\+)%26(?:%20|\+)flowers" aria-label="More Category 0">More &rarr;/);
+    assert.match(html, /href="product\.html\?category=seed-0-0">Seed 0-0/);
+    assert.match(html, /href="product\.html\?category=seed-0-1">Seed 0-1/);
+    assert.match(html, /href="product\.html\?category=category-1" class="mega-menu-column-title"/);
     assert.equal(menu.getMenuItemUrl({ targetType: 'category_tree', url: '/products' }), 'product.html');
-    assert.equal(menu.getMenuItemUrl({ ...branch, url: '/products?category=fruit#featured' }), 'product.html?cat=fruit');
+    assert.equal(menu.getMenuItemUrl({ ...branch, url: '/products?category=fruit#featured' }), 'product.html?category=fruit#featured');
 });
 
 test('More links preserve new-tab behavior and render category labels as text', () => {
@@ -98,7 +98,7 @@ test('More links preserve new-tab behavior and render category labels as text', 
     const html = menu.buildDesktopMegaMenu(catalog([branch]));
 
     assert.match(html, /class="mega-menu-column-title" target="_blank">Fruit &amp; &lt;Flowers&gt;/);
-    assert.match(html, /href="product\.html\?cat=category-0" aria-label="More Fruit &amp; &lt;Flowers&gt;" target="_blank">More &rarr;/);
+    assert.match(html, /href="product\.html\?category=category-0" aria-label="More Fruit &amp; &lt;Flowers&gt;" target="_blank">More &rarr;/);
     assert.doesNotMatch(html, /<Flowers>/);
 });
 
@@ -109,10 +109,10 @@ test('fallback category data keeps deep branches and encodes their slugs', () =>
         children: [{ name: 'Melons', slug: 'melons', children: [{ name: 'Watermelon', slug: 'water melon' }] }],
     });
 
-    assert.equal(item.url, 'product.html?cat=fruit%20%26%20flowers');
+    assert.equal(item.url, 'product.html?category=fruit%20%26%20flowers');
     assert.equal(item.sortOrder, 7);
-    assert.equal(item.children[0].url, 'product.html?cat=melons');
-    assert.equal(item.children[0].children[0].url, 'products.html?category=water%20melon');
+    assert.equal(item.children[0].url, 'product.html?category=melons');
+    assert.equal(item.children[0].children[0].url, 'product.html?category=water%20melon');
 });
 
 test('other mega menus and headings without destinations keep their links reachable', () => {
@@ -154,8 +154,8 @@ test('API fallback renders and caches bounded desktop menus without shortening m
     assert.match(rendered['.mobile-menu-content'], />Crop 7</);
     assert.match(rendered['.mobile-menu-content'], />Seed 7</);
     assert.match(rendered['.mobile-menu-content'], /class="has-submenu mobile-catalog-menu"/);
-    assert.equal(cache.get('orbis_desktop_menu_html_v4'), rendered['.nav-links']);
-    assert.equal(cache.get('orbis_mobile_menu_html_v3'), rendered['.mobile-menu-content']);
+    assert.equal(cache.get('orbis_desktop_menu_html_v5'), rendered['.nav-links']);
+    assert.equal(cache.get('orbis_mobile_menu_html_v4'), rendered['.mobile-menu-content']);
 
     // A catalog containing only leaf categories must use the same bounded preview.
     categories.forEach(item => { item.children = []; });

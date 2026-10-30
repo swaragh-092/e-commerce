@@ -43,7 +43,7 @@ function renderHomeCategories(categories, uploadUrl) {
         if (!cat.children || !cat.children.length) return;
 
         html += '<div class="vegetables">';
-        html += '    <a href="product.html?cat=' + encodeURIComponent(cat.slug || '') + '" class="category-label">' + (cat.name || '') + '</a>';
+        html += '    <a href="product.html?category=' + encodeURIComponent(cat.slug || '') + '" class="category-label">' + (cat.name || '') + '</a>';
 
         var children = cat.children.slice().sort(function (a, b) {
             var aHasImg = (a.icon || a.image || (a.media && a.media.url) || (a.images && a.images.length) || (a.gallery && a.gallery.length)) ? 1 : 0;
@@ -53,7 +53,7 @@ function renderHomeCategories(categories, uploadUrl) {
         });
 
         children.slice(0, 4).forEach(function (sub) {
-            var subUrl = "products.html?category=" + encodeURIComponent(sub.slug || '');
+            var subUrl = "product.html?category=" + encodeURIComponent(sub.slug || '');
             var iconUrl = resolveItemImage(sub, uploadUrl);
             var fallback = getLocalFallbackImage(sub.slug || sub.name);
 
