@@ -125,10 +125,10 @@ describe('custom role editor', () => {
     expect(service.getAccessRoles).toHaveBeenCalledTimes(calls);
   });
 
-  const prepareAssignments = async () => {
+  const prepareAssignments = async (viewerDelegable = true) => {
     auth.grants.add('users.assign_roles');
     service.getAccessRoles.mockResolvedValue({ data: { data: [
-      { id: 'viewer', name: 'Viewer', slug: 'viewer', baseRole: 'admin', isSystem: false, isDelegable: true, permissions: [] },
+      { id: 'viewer', name: 'Viewer', slug: 'viewer', baseRole: 'admin', isSystem: false, isDelegable: viewerDelegable, permissions: [] },
       { id: 'editor', name: 'Editor', slug: 'editor', baseRole: 'admin', isSystem: false, isDelegable: true, permissions: [{ id: 'manage', key: 'categories.manage' }] },
     ] } });
     service.getAccessUsers.mockResolvedValue({ data: { data: [
@@ -145,6 +145,23 @@ describe('custom role editor', () => {
     fireEvent.mouseDown(screen.getByRole('combobox', { name: 'Assigned role for staff@example.test' }));
     fireEvent.click(screen.getByRole('option', { name: 'Editor', exact: true }));
   };
+
+  it('hides a restricted role from assignment choices and preserves its current label', async () => {
+    await prepareAssignments(false);
+    const assignment = screen.getByRole('combobox', { name: 'Assigned role for staff@example.test' });
+    expect(assignment).toHaveTextContent('Viewer');
+    fireEvent.mouseDown(assignment);
+    expect(screen.getByRole('option', { name: 'Editor', exact: true })).toBeInTheDocument();
+    expect(screen.queryByRole('option', { name: /Viewer/ })).not.toBeInTheDocument();
+  });
+
+  it('hides restricted roles when creating staff accounts', async () => {
+    await prepareAssignments(false);
+    fireEvent.click(screen.getByRole('button', { name: 'Create User', exact: true }));
+    fireEvent.mouseDown(within(screen.getByRole('dialog')).getByRole('combobox', { name: 'Assign Role' }));
+    expect(screen.getByRole('option', { name: 'Editor', exact: true })).toBeInTheDocument();
+    expect(screen.queryByRole('option', { name: /Viewer/ })).not.toBeInTheDocument();
+  });
 
   it('disables own role changes and requires confirmation for another account', async () => {
     await prepareAssignments();

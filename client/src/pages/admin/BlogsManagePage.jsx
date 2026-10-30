@@ -12,7 +12,7 @@ import {
   Tooltip,
   Typography,
 } from '@mui/material';
-import { Add as AddIcon, Delete as DeleteIcon, Edit as EditIcon, Visibility as ViewIcon } from '@mui/icons-material';
+import { Add as AddIcon, Delete as DeleteIcon, Edit as EditIcon } from '@mui/icons-material';
 import { DataGrid } from '@mui/x-data-grid';
 import { useNavigate } from 'react-router-dom';
 import BlogService from '../../services/blogService';
@@ -113,11 +113,6 @@ const BlogsManagePage = () => {
       sortable: false,
       renderCell: (params) => (
         <Box>
-          <Tooltip title="View">
-            <IconButton onClick={() => window.open(`/blogs/${params.row.slug}`, '_blank')}>
-              <ViewIcon />
-            </IconButton>
-          </Tooltip>
           <Tooltip title="Edit">
             <span>
               <IconButton disabled={!canManageBlogs} onClick={() => navigate(`/admin/blogs/${params.row.id}/edit`)}>

@@ -211,6 +211,8 @@ const AccessControlPage = () => {
     return rolePerms.every((p) => hasPermission(typeof p === 'string' ? p : p.key));
   }, [hasPermission, isSuperAdmin]);
 
+  const assignableRoleOptions = roleOptions.filter(isRoleDelegable);
+
   const canGrantPermission = useCallback((permission) => {
     if (isSuperAdmin) return true;
     return hasPermission(permission?.key);
@@ -609,6 +611,7 @@ const AccessControlPage = () => {
               }}
               inputProps={{ 'aria-label': `Assigned role for ${row.email}` }}
               displayEmpty
+              renderValue={() => currentRole?.name || row.assignedRole?.name || row.roleName || 'Select role…'}
               sx={{
                 '& .MuiSelect-select': {
                   color: currentRole ? 'text.primary' : 'text.disabled',
@@ -625,15 +628,13 @@ const AccessControlPage = () => {
               <MenuItem disabled value="">
                 <em>Select role…</em>
               </MenuItem>
-              {roleOptions.map((role) => (
-                <MenuItem
-                  key={role.id}
-                  value={role.id}
-                  disabled={!isRoleDelegable(role)}
-                >
-                  {role.name}
-                  {!isRoleDelegable(role) ? ' (Unavailable)' : ''}
+              {currentRole && !isRoleDelegable(currentRole) && (
+                <MenuItem value={currentRole.id} sx={{ display: 'none' }} disabled>
+                  {currentRole.name}
                 </MenuItem>
+              )}
+              {assignableRoleOptions.map((role) => (
+                <MenuItem key={role.id} value={role.id}>{role.name}</MenuItem>
               ))}
             </Select>
           </FormControl>
@@ -869,14 +870,7 @@ const AccessControlPage = () => {
               >
                 <MenuItem value="">All elevated roles</MenuItem>
                 {roleOptions.map((role) => (
-                  <MenuItem
-                    key={role.id}
-                    value={role.id}
-                    disabled={!isRoleDelegable(role)}
-                  >
-                    {role.name}
-                    {!isRoleDelegable(role) ? ' (Unavailable)' : ''}
-                  </MenuItem>
+                  <MenuItem key={role.id} value={role.id}>{role.name}</MenuItem>
                 ))}
               </Select>
             </FormControl>
@@ -986,18 +980,12 @@ const AccessControlPage = () => {
               <InputLabel>Assign Role</InputLabel>
               <Select
                 label="Assign Role"
+                inputProps={{ 'aria-label': 'Assign Role' }}
                 value={createUserForm.roleId}
                 onChange={setUserField('roleId')}
               >
-                {roleOptions.map((role) => (
-                  <MenuItem
-                    key={role.id}
-                    value={role.id}
-                    disabled={!isRoleDelegable(role)}
-                  >
-                    {role.name}
-                    {!isRoleDelegable(role) ? ' (Unavailable)' : ''}
-                  </MenuItem>
+                {assignableRoleOptions.map((role) => (
+                  <MenuItem key={role.id} value={role.id}>{role.name}</MenuItem>
                 ))}
               </Select>
             </FormControl>

@@ -282,6 +282,7 @@ const EnquiriesPage = () => {
         <DataGrid
           rows={rows}
           columns={columns}
+          rowHeight={76}
           rowCount={rowCount}
           loading={loading}
           paginationMode="server"
