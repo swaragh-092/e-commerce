@@ -71,6 +71,10 @@ const analyticsQuerySchema = Joi.object({
   compare: Joi.boolean().default(false),
 });
 
+const catalogAnalyticsQuerySchema = Joi.object({
+  period: Joi.string().valid('7d', '30d', '90d', '12m').default('30d'),
+});
+
 const analyticsTrendSchema = Joi.object({
   period: Joi.string().valid('daily', 'weekly', 'monthly').default('monthly'),
 });
@@ -84,5 +88,6 @@ module.exports = {
   lowStockQuerySchema,
   createStaffUserSchema,
   analyticsQuerySchema,
+  catalogAnalyticsQuerySchema,
   analyticsTrendSchema,
 };

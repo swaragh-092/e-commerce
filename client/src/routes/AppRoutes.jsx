@@ -220,8 +220,8 @@ const AppRoutes = () => (
         <Route element={<AdminLayout />}>
           <Route index element={<AdminIndex />} />
           <Route path="profile" element={<AdminProfilePage />} />
-          <Route element={<ModeRoute requiredMode="ecommerce" />}>
-            <Route element={<ProtectedRoute permissions={[PERMISSIONS.DASHBOARD_VIEW, PERMISSIONS.ORDERS_READ]} requireAllPermissions />}>
+          <Route element={<FeatureRoute feature="analytics" surface="admin" redirectTo="/admin" />}>
+            <Route element={<ProtectedRoute permission={PERMISSIONS.DASHBOARD_VIEW} />}>
               <Route path="analytics" element={<AnalyticsPage />} />
             </Route>
           </Route>

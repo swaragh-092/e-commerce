@@ -94,3 +94,18 @@ coverage/
 brag-output/
 brag-output*/
 .hyperframes/
+
+# Additional local AI tools and shared skill metadata
+.gstack/
+.antigravity/
+.antigravity-ide/
+.grok/
+.kiro/
+.qoder/
+.mimocode/
+.opencodereview/
+.impeccable/
+/AGENTS.md
+/CLAUDE.md
+/GEMINI.md
+/skills-lock.json

@@ -31,8 +31,6 @@ import useHomepageSettings from '../../hooks/useHomepageSettings';
 import { PERMISSIONS, isSuperAdminOnlySettingsKey } from '../../utils/permissions';
 import { DASHBOARD_PROFILES } from '../../components/admin/dashboard/dashboardWidgets';
 import MessagingSettingsPanel from '../../components/admin/settings/MessagingSettingsPanel';
-import SettingsPreviewPanel from '../../components/admin/settings/SettingsPreviewPanel';
-import LiveStorefrontPreview from '../../components/admin/settings/LiveStorefrontPreview';
 import MediaPicker from '../../components/common/MediaPicker';
 import buildSettingsPanels from '../../components/admin/settings/buildSettingsPanels';
 import { getMediaUrl } from '../../utils/media';
@@ -121,7 +119,6 @@ const SettingsPage = () => {
   const [form, setForm] = useState({});
   const [saving, setSaving] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
-  const [previewMode, setPreviewMode] = useState('live'); // 'live' | 'mock'
   const [emailTemplates, setEmailTemplates] = useState([]);
   const [templateSaving, setTemplateSaving] = useState({});
   const [templateTestEmail, setTemplateTestEmail] = useState('');
@@ -428,36 +425,6 @@ const SettingsPage = () => {
   const enableCGST = Boolean(form['tax.enableCGST']);
   const enableSGST = Boolean(form['tax.enableSGST']);
   const enableIGST = Boolean(form['tax.enableIGST']);
-  const previewStyles = {
-    fontFamily: `"${fontFamily}", "Roboto", "Helvetica", "Arial", sans-serif`,
-    fontWeight: form['theme.bodyWeight'] ? parseInt(form['theme.bodyWeight']) : 400,
-    lineHeight: form['theme.lineHeight'] || 1.5,
-    letterSpacing: form['theme.letterSpacing'] || '0px',
-    background: backgroundStyle === 'softGradient'
-      ? `linear-gradient(180deg, ${pageBackground} 0%, ${surfaceColor} 100%)`
-      : pageBackground,
-    color: textColor,
-    borderRadius: `${borderRadius}px`,
-  };
-  const previewHeaderBackground = headerStyle === 'gradient'
-    ? `linear-gradient(135deg, ${brandPrimary}, ${brandSecondary})`
-    : headerStyle === 'glass'
-      ? `${surfaceColor}dd`
-      : brandPrimary;
-  const previewButtonRadius = buttonStyle === 'pill' ? '9999px' : `${Math.max(borderRadius - 2, 4)}px`;
-  const previewButtonSx = {
-    bgcolor: buttonStyle === 'soft' ? `${brandPrimary}22` : buttonStyle === 'outline' ? 'transparent' : brandPrimary,
-    color: buttonStyle === 'soft' || buttonStyle === 'outline' ? brandPrimary : '#fff',
-    border: buttonStyle === 'outline' ? `1px solid ${brandPrimary}` : '1px solid transparent',
-    borderRadius: previewButtonRadius,
-  };
-  const previewCardSx = {
-    bgcolor: surfaceColor,
-    borderRadius: `${borderRadius}px`,
-    border: cardStyle === 'flat' ? '1px solid transparent' : '1px solid',
-    borderColor: cardStyle === 'elevated' ? 'transparent' : 'divider',
-    boxShadow: cardStyle === 'elevated' ? '0 16px 34px rgba(0,0,0,0.14)' : 'none',
-  };
   const {
     homepageSections,
     heroSlides,
@@ -546,7 +513,7 @@ const SettingsPage = () => {
       )}
 
       <Grid container spacing={3}>
-        <Grid item xs={12} xl={8}>
+        <Grid item xs={12}>
           <Paper variant="outlined" sx={{ p: 2.5, borderRadius: 3, mb: 3, boxShadow: 'none' }}>
             <Typography variant="subtitle1" fontWeight={700} gutterBottom>
               Quick Find
@@ -689,92 +656,6 @@ const SettingsPage = () => {
           </Paper>
         </Grid>
 
-        <Grid item xs={12} xl={4}>
-          <Box sx={{ position: { xl: 'sticky' }, top: { xl: 24 } }}>
-            <Paper variant="outlined" sx={{ p: 2.5, borderRadius: 3, boxShadow: 'none' }}>
-              {/* Preview mode toggle */}
-              <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 1.5 }}>
-                <Typography variant="subtitle1" fontWeight={700}>
-                  {previewMode === 'live' ? 'Live Storefront Preview' : 'Mock Storefront Preview'}
-                </Typography>
-                <Box sx={{ display: 'flex', gap: 0.5 }}>
-                  <Button
-                    size="small"
-                    variant={previewMode === 'live' ? 'contained' : 'outlined'}
-                    onClick={() => setPreviewMode('live')}
-                    sx={{ minWidth: 0, px: 1.5, fontSize: '0.72rem', height: 28 }}
-                  >
-                    Live
-                  </Button>
-                  <Button
-                    size="small"
-                    variant={previewMode === 'mock' ? 'contained' : 'outlined'}
-                    onClick={() => setPreviewMode('mock')}
-                    sx={{ minWidth: 0, px: 1.5, fontSize: '0.72rem', height: 28 }}
-                  >
-                    Mock
-                  </Button>
-                </Box>
-              </Box>
-
-              {previewMode === 'live' ? (
-                <LiveStorefrontPreview form={form} />
-              ) : (
-                <>
-                  <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
-                    This mock storefront updates instantly as you edit {currentTab.toLowerCase()} settings.
-                  </Typography>
-                  <SettingsPreviewPanel
-                    currentTab={currentTab}
-                    form={form}
-                    previewStyles={previewStyles}
-                    themeMode={themeMode}
-                    textColor={textColor}
-                    storeName={storeName}
-                    previewHeaderBackground={previewHeaderBackground}
-                    headerStyle={headerStyle}
-                    previewCardSx={previewCardSx}
-                    storeDescription={storeDescription}
-                    previewButtonSx={previewButtonSx}
-                    brandSecondary={brandSecondary}
-                    announcementEnabled={announcementEnabled}
-                    brandPrimary={brandPrimary}
-                    stickyHeader={stickyHeader}
-                    showCategoryBar={showCategoryBar}
-                    footerEnabled={footerEnabled}
-                    surfaceColor={surfaceColor}
-                    borderRadius={borderRadius}
-                    footerTagline={footerTagline}
-                    footerShowLinks={footerShowLinks}
-                    links={links}
-                    primaryHeroSlide={primaryHeroSlide}
-                    heroTextColor={heroTextColor}
-                    heroTitle={heroTitle}
-                    heroSubtitle={heroSubtitle}
-                    heroButtonText={heroButtonText}
-                    homepageSections={homepageSections}
-                    homepageSectionTypes={HOMEPAGE_SECTION_TYPES}
-                    showProductSku={showProductSku}
-                    showStockBadge={showStockBadge}
-                    showBuyNowButton={showBuyNowButton}
-                    addToCartLabel={addToCartLabel}
-                    buyNowLabel={buyNowLabel}
-                    formatMoney={formatMoney}
-                    taxInclusive={taxInclusive}
-                    guestCheckoutEnabled={guestCheckoutEnabled}
-                    couponsEnabled={couponsEnabled}
-                    showSaleLabelBadge={showSaleLabelBadge}
-                    saleLabel={saleLabel}
-                    showDiscountPercentBadge={showDiscountPercentBadge}
-                    showSavingsAmount={showSavingsAmount}
-                    showSaleTiming={showSaleTiming}
-                    showCountdown={showCountdown}
-                  />
-                </>
-              )}
-            </Paper>
-          </Box>
-        </Grid>
       </Grid>
 
       <MediaPicker

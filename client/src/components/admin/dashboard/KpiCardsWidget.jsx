@@ -21,7 +21,7 @@ const KpiCardsWidget = ({ stats, loading, settings, formatPrice, spacing, hasAny
   const canViewOrders = isOrdersAllowed && (typeof hasAnyPermission === 'function' ? hasAnyPermission([PERMISSIONS.ORDERS_READ]) : true);
   const canViewCustomers = features?.customers === true && (typeof hasAnyPermission === 'function' ? hasAnyPermission([PERMISSIONS.CUSTOMERS_READ]) : true);
   const canViewProducts = typeof hasAnyPermission === 'function' ? hasAnyPermission([PERMISSIONS.PRODUCTS_READ]) : true;
-  const canViewReviews = typeof hasAnyPermission === 'function' ? hasAnyPermission([PERMISSIONS.REVIEWS_READ]) : true;
+  const canViewReviews = features?.reviews === true && (typeof hasAnyPermission === 'function' ? hasAnyPermission([PERMISSIONS.REVIEWS_READ]) : true);
 
   const cards = [
     showStatCards && canViewOrders && checkBool(settings['dashboard.showRevenueCard']) && {

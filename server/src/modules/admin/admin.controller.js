@@ -2,6 +2,7 @@
 
 const AdminService = require('./admin.service');
 const AnalyticsService = require('./analytics.service');
+const CatalogAnalyticsService = require('./catalogAnalytics.service');
 const AnalyticsReportService = require('./analyticsReport.service');
 const InventoryAlertService = require('../inventory/inventoryAlert.service');
 const AppError = require('../../utils/AppError');
@@ -158,6 +159,11 @@ const analyticsWithCompare = async (methodName, query) => {
     return AnalyticsService.withComparison(AnalyticsService[methodName], query);
   }
   return AnalyticsService[methodName](query);
+};
+
+const getCatalogOverview = async (req, res, next) => {
+  try { return success(res, await CatalogAnalyticsService.getCatalogOverview(req.query)); }
+  catch (err) { next(err); }
 };
 
 const getTopProducts = async (req, res, next) => {
@@ -357,6 +363,7 @@ const sendTestReport = async (req, res, next) => {
 };
 
 module.exports = {
+  getCatalogOverview,
   getStats,
   getSalesChart,
   getLowStock,

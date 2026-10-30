@@ -27,6 +27,8 @@ import {
   Tabs,
   Tab,
   InputAdornment,
+  Checkbox,
+  FormControlLabel,
 } from '@mui/material';
 import DeleteIcon from '@mui/icons-material/Delete';
 import EditIcon from '@mui/icons-material/Edit';
@@ -39,6 +41,7 @@ import StorageIcon from '@mui/icons-material/Storage';
 import LayersClearIcon from '@mui/icons-material/LayersClear';
 import CategoryIcon from '@mui/icons-material/Category';
 import SearchIcon from '@mui/icons-material/Search';
+import { getApiErrorMessage } from '../../utils/apiErrors';
 import { mediaService } from '../../services/mediaService';
 import { useNotification } from '../../context/NotificationContext';
 import { useAuth } from '../../hooks/useAuth';
@@ -88,14 +91,15 @@ const getTypeGroup = (mimeType) => {
 
 // ─── MediaCard ───────────────────────────────────────────────────────────────
 
-const MediaCard = ({ file, canDeleteMedia, canUpdateMedia, onCopy, onDelete, onEdit }) => {
+const MediaCard = ({ file, canDeleteMedia, canUpdateMedia, onCopy, onDelete, onEdit, selected, onSelect, busy }) => {
   const url = getMediaUrl(file.url);
+  const usageCount = Number(file.usageCount) || 0;
   return (
     <Card
       elevation={0}
       sx={{
         border: '1px solid',
-        borderColor: 'divider',
+        borderColor: selected ? 'primary.main' : 'divider',
         borderRadius: 2,
         overflow: 'hidden',
         height: '100%',
@@ -112,6 +116,9 @@ const MediaCard = ({ file, canDeleteMedia, canUpdateMedia, onCopy, onDelete, onE
           alt={file.alt || file.originalName || file.filename || 'media'}
           sx={{ position: 'absolute', top: 0, left: 0, width: '100%', height: '100%', objectFit: 'cover' }}
         />
+        {canDeleteMedia && <Checkbox checked={selected} disabled={busy} onChange={() => onSelect(file)}
+          inputProps={{ 'aria-label': `Select ${file.originalName || file.filename || 'image'}` }}
+          sx={{ position: 'absolute', top: 8, left: 8, bgcolor: 'background.paper', borderRadius: 1, '&:hover': { bgcolor: 'background.paper' } }} />}
       </Box>
       <Box sx={{ px: 1, pt: 0.5, flex: 1 }}>
         <Typography variant="caption" sx={{ display: 'block', fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
@@ -120,23 +127,28 @@ const MediaCard = ({ file, canDeleteMedia, canUpdateMedia, onCopy, onDelete, onE
         <Typography variant="caption" color="text.disabled" sx={{ fontSize: '0.65rem' }}>
           {formatSize(file.size)}
         </Typography>
+        <Tooltip title="Counts saved references in products, tags, galleries, blogs, product attributes, and account avatars.">
+          <Typography variant="caption" color={usageCount > 0 ? 'text.secondary' : 'warning.dark'} sx={{ display: 'block', fontSize: '0.65rem', cursor: 'help' }}>
+            {usageCount > 0 ? `Used ${usageCount} ${usageCount === 1 ? 'time' : 'times'}` : 'Unused'}
+          </Typography>
+        </Tooltip>
       </Box>
       <CardActions sx={{ justifyContent: 'flex-end', p: 0.5, mt: 'auto' }}>
         <Tooltip title="Copy URL">
-          <IconButton size="small" onClick={() => onCopy(url)}>
+          <IconButton size="small" disabled={busy} onClick={() => onCopy(url)}>
             <ContentCopyIcon fontSize="small" />
           </IconButton>
         </Tooltip>
         {canUpdateMedia && (
           <Tooltip title="Edit Metadata">
-            <IconButton size="small" color="primary" onClick={() => onEdit(file)}>
+            <IconButton size="small" color="primary" disabled={busy} onClick={() => onEdit(file)}>
               <EditIcon fontSize="small" />
             </IconButton>
           </Tooltip>
         )}
         {canDeleteMedia && (
           <Tooltip title="Delete">
-            <IconButton size="small" color="error" onClick={() => onDelete(file.id)}>
+            <IconButton size="small" color="error" disabled={busy} onClick={() => onDelete(file.id)}>
               <DeleteIcon fontSize="small" />
             </IconButton>
           </Tooltip>
@@ -162,6 +174,15 @@ const MediaPage = () => {
   const [sortBy, setSortBy] = useState('date'); // 'date' | 'size' | 'name'
   const [sortDir, setSortDir] = useState('desc'); // 'asc' | 'desc'
   const [groupBy, setGroupBy] = useState('none'); // 'none' | 'date' | 'size' | 'type'
+  const [usageFilter, setUsageFilter] = useState('all');
+  const [selectedFiles, setSelectedFiles] = useState([]);
+  const selectedIds = useMemo(() => new Set(selectedFiles.map((file) => file.id)), [selectedFiles]);
+  const [batchDeleting, setBatchDeleting] = useState(false);
+  const [deleteProgress, setDeleteProgress] = useState(0);
+  const [deleteTotal, setDeleteTotal] = useState(0);
+  const [deleteFailures, setDeleteFailures] = useState([]);
+  const deleteBusyRef = useRef(false);
+  const mediaGenerationRef = useRef(0);
 
   const { notify, confirm } = useNotification();
   const { hasPermission } = useAuth();
@@ -203,6 +224,7 @@ const MediaPage = () => {
   }, [activeLibrary, fetchCustomIcons]);
 
   const fetchMedia = async (pageNum = 1, isLoadMore = false) => {
+    const generation = pageNum === 1 ? ++mediaGenerationRef.current : mediaGenerationRef.current;
     if (isLoadMore) setLoadingMore(true);
     else setLoading(true);
 
@@ -211,9 +233,11 @@ const MediaPage = () => {
         page: pageNum, 
         limit: 30,
         sortBy,
-        sortDir
+        sortDir,
+        usage: usageFilter,
       });
       
+      if (generation !== mediaGenerationRef.current) return;
       const newFiles = res.data || [];
       const meta = res.meta || {};
       
@@ -228,21 +252,22 @@ const MediaPage = () => {
       setPage(pageNum);
       setError(null);
     } catch (err) {
-      console.error(err);
-      setError('Failed to load media library. Please try again.');
+      if (generation === mediaGenerationRef.current) setError('Failed to load media library. Please try again.');
     } finally {
-      setLoading(false);
-      setLoadingMore(false);
+      if (generation === mediaGenerationRef.current) { setLoading(false); setLoadingMore(false); }
     }
   };
 
+  useEffect(() => { setSelectedFiles([]); setDeleteFailures([]); }, [sortBy, sortDir, usageFilter, activeLibrary]);
+
   useEffect(() => {
     fetchMedia(1);
-  }, [sortBy, sortDir]);
+    return () => { mediaGenerationRef.current += 1; };
+  }, [sortBy, sortDir, usageFilter]);
 
   // Infinite scroll observer
   useEffect(() => {
-    if (activeLibrary !== 'files' || !hasMore || loading || loadingMore) return;
+    if (activeLibrary !== 'files' || !hasMore || loading || loadingMore || batchDeleting) return;
 
     const observer = new IntersectionObserver(
       (entries) => {
@@ -264,19 +289,63 @@ const MediaPage = () => {
       }
       observer.disconnect();
     };
-  }, [activeLibrary, hasMore, loading, loadingMore]);
+  }, [activeLibrary, hasMore, loading, loadingMore, batchDeleting]);
 
   const handleLoadMore = () => {
-    if (!loading && !loadingMore && hasMore) {
+    if (!loading && !loadingMore && !deleteBusyRef.current && hasMore) {
       fetchMedia(page + 1, true);
     }
   };
 
+  const toggleSelection = (file) => setSelectedFiles((current) => current.some((item) => item.id === file.id)
+    ? current.filter((item) => item.id !== file.id) : [...current, file]);
+  const selectLoaded = (checked) => setSelectedFiles((current) => checked
+    ? Array.from(new Map([...current, ...files].map((file) => [file.id, file])).values())
+    : current.filter((file) => !files.some((loaded) => loaded.id === file.id)));
+  const handleBulkDelete = async () => {
+    if (!canDeleteMedia || !selectedFiles.length || deleteBusyRef.current) return;
+    deleteBusyRef.current = true;
+    const selection = [...selectedFiles];
+    try {
+      const used = selection.filter((file) => Number(file.usageCount) > 0).length;
+      const warning = used ? ` ${used} selected ${used === 1 ? 'image is' : 'images are'} in use. Deleting them can remove images from your products or other pages.` : '';
+      if (!(await confirm('Delete selected images', `Permanently delete ${selection.length} selected ${selection.length === 1 ? 'image' : 'images'}? This cannot be undone.${warning}`, 'danger'))) return;
+      setBatchDeleting(true); setDeleteProgress(0); setDeleteTotal(selection.length); setDeleteFailures([]);
+      mediaGenerationRef.current += 1;
+      setLoading(false); setLoadingMore(false);
+      const deleted = new Set();
+      const failed = [];
+      // Reuse the permission-checked delete endpoint with bounded concurrency.
+      for (let offset = 0; offset < selection.length; offset += 4) {
+        const chunk = selection.slice(offset, offset + 4);
+        const results = await Promise.allSettled(chunk.map((file) => mediaService.delete(file.id)));
+        results.forEach((result, index) => {
+          if (result.status === 'fulfilled') deleted.add(chunk[index].id);
+          else failed.push({ ...chunk[index], message: getApiErrorMessage(result.reason, 'Could not delete this image.') });
+        });
+        setDeleteProgress(Math.min(offset + chunk.length, selection.length));
+      }
+      setFiles((current) => current.filter((file) => !deleted.has(file.id)));
+      setTotalItems((current) => Math.max(0, current - deleted.size));
+      setSelectedFiles(failed);
+      setDeleteFailures(failed);
+      if (deleted.size) notify(`Deleted ${deleted.size} ${deleted.size === 1 ? 'image' : 'images'}.`, 'success');
+      if (failed.length) notify(`${failed.length} ${failed.length === 1 ? 'image could' : 'images could'} not be deleted. Review the results and retry.`, 'warning');
+      await fetchMedia(1);
+    } finally {
+      setBatchDeleting(false);
+      deleteBusyRef.current = false;
+    }
+  };
+
   const handleDelete = async (id) => {
+    if (deleteBusyRef.current) return;
     if (!canDeleteMedia) { notify('You do not have permission to delete media.', 'error'); return; }
     if (!(await confirm('Delete File', 'Delete this file?', 'danger'))) return;
     try {
       await mediaService.delete(id);
+      setSelectedFiles((current) => current.filter((file) => file.id !== id));
+      setDeleteFailures((current) => current.filter((file) => file.id !== id));
       fetchMedia(1);
     } catch {
       notify('Failed to delete file.', 'error');
@@ -311,9 +380,10 @@ const MediaPage = () => {
   };
 
   const copyUrl = async (url) => {
+    const absoluteUrl = new URL(url, window.location.origin).href;
     try {
       if (navigator.clipboard?.writeText && window.isSecureContext) {
-        await navigator.clipboard.writeText(url);
+        await navigator.clipboard.writeText(absoluteUrl);
         notify('Media URL copied to clipboard successfully.', 'success');
         return;
       }
@@ -321,7 +391,7 @@ const MediaPage = () => {
       console.error('Copy failed', err);
     }
 
-    setManualCopyUrl(url);
+    setManualCopyUrl(absoluteUrl);
     notify('Automatic copy is unavailable here. Copy the URL manually from the dialog.', 'warning');
   };
 
@@ -410,6 +480,9 @@ const MediaPage = () => {
             onCopy={copyUrl}
             onDelete={handleDelete}
             onEdit={handleEditClick}
+            selected={selectedIds.has(file.id)}
+            onSelect={toggleSelection}
+            busy={batchDeleting}
           />
         </Grid>
       ))}
@@ -425,6 +498,7 @@ const MediaPage = () => {
           <Button
             variant="contained"
             startIcon={<CloudUploadIcon />}
+            disabled={batchDeleting}
             onClick={() => setUploadDialogOpen(true)}
             sx={{ borderRadius: 2 }}
           >
@@ -449,8 +523,8 @@ const MediaPage = () => {
         aria-label="Media library sections"
         sx={{ mb: 3, borderBottom: 1, borderColor: 'divider' }}
       >
-        <Tab id="media-files-tab" aria-controls="media-files-panel" value="files" label="Media files" />
-        <Tab id="media-icons-tab" aria-controls="media-icons-panel" value="icons" label="Icon library" />
+        <Tab disabled={batchDeleting} id="media-files-tab" aria-controls="media-files-panel" value="files" label="Media files" />
+        <Tab disabled={batchDeleting} id="media-icons-tab" aria-controls="media-icons-panel" value="icons" label="Icon library" />
       </Tabs>
 
       {/* Controls toolbar */}
@@ -475,7 +549,7 @@ const MediaPage = () => {
         }}
       >
         {/* Sort by */}
-        <FormControl size="small" sx={{ minWidth: 130 }}>
+        <FormControl disabled={batchDeleting} size="small" sx={{ minWidth: 130 }}>
           <InputLabel id="media-page-sort-label">Sort by</InputLabel>
           <Select 
             labelId="media-page-sort-label"
@@ -493,6 +567,7 @@ const MediaPage = () => {
         {/* Sort direction */}
         <Tooltip title={sortDir === 'asc' ? 'Ascending' : 'Descending'}>
           <ToggleButtonGroup
+            disabled={batchDeleting}
             value={sortDir}
             exclusive
             onChange={(_, v) => v && setSortDir(v)}
@@ -507,10 +582,25 @@ const MediaPage = () => {
           </ToggleButtonGroup>
         </Tooltip>
 
+        <FormControl disabled={batchDeleting} size="small" sx={{ minWidth: 150 }}>
+          <InputLabel id="media-page-usage-label">Usage</InputLabel>
+          <Select
+            labelId="media-page-usage-label"
+            id="media-page-usage"
+            value={usageFilter}
+            label="Usage"
+            onChange={(event) => setUsageFilter(event.target.value)}
+          >
+            <MenuItem value="all">All files</MenuItem>
+            <MenuItem value="used">Used images</MenuItem>
+            <MenuItem value="unused">Unused images</MenuItem>
+          </Select>
+        </FormControl>
+
         <Divider orientation="vertical" flexItem />
 
         {/* Group by */}
-        <FormControl size="small" sx={{ minWidth: 150 }}>
+        <FormControl disabled={batchDeleting} size="small" sx={{ minWidth: 150 }}>
           <InputLabel id="media-page-group-label">Group by</InputLabel>
           <Select 
             labelId="media-page-group-label"
@@ -532,6 +622,22 @@ const MediaPage = () => {
         </Box>
       </Box>
 
+      {canDeleteMedia && <Box sx={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: 2, mb: 2 }}>
+        <FormControlLabel label="Select all loaded images" control={<Checkbox
+          checked={files.length > 0 && files.every((file) => selectedIds.has(file.id))}
+          indeterminate={files.some((file) => selectedIds.has(file.id)) && !files.every((file) => selectedIds.has(file.id))}
+          disabled={loading || batchDeleting || files.length === 0}
+          onChange={(event) => selectLoaded(event.target.checked)} />} />
+        <Typography variant="body2" role="status">{selectedFiles.length} selected · {files.length} loaded of {totalItems}</Typography>
+        {selectedFiles.length > 0 && <Button disabled={batchDeleting} onClick={() => { setSelectedFiles([]); setDeleteFailures([]); }}>Clear selection</Button>}
+        <Button color="error" variant="outlined" startIcon={<DeleteIcon />} disabled={!selectedFiles.length || batchDeleting || loading}
+          onClick={handleBulkDelete}>{batchDeleting ? `Deleting ${deleteProgress} / ${deleteTotal}…` : `Delete selected (${selectedFiles.length})`}</Button>
+      </Box>}
+      {deleteFailures.length > 0 && <Alert severity="warning" sx={{ mb: 2 }}>
+        {deleteFailures.length} {deleteFailures.length === 1 ? 'image was' : 'images were'} not deleted. They remain selected; use Delete selected to retry, or clear the selection.
+        {deleteFailures.slice(0, 5).map((file) => <Typography variant="body2" key={file.id} sx={{ overflowWrap: 'anywhere' }}>{file.originalName || file.filename}: {file.message}</Typography>)}
+        {deleteFailures.length > 5 && <Typography variant="body2">And {deleteFailures.length - 5} more.</Typography>}
+      </Alert>}
       {/* Content */}
       {error && (
         <Alert severity="error" sx={{ mb: 3 }} action={<Button color="inherit" size="small" onClick={() => fetchMedia(1)}>Retry</Button>}>
@@ -545,7 +651,11 @@ const MediaPage = () => {
         </Box>
       ) : !loading && files.length === 0 && !error ? (
         <Alert severity="info">
-          No media files uploaded yet. Click the Upload button to add images.
+          {usageFilter === 'unused'
+            ? 'No unused media files found.'
+            : usageFilter === 'used'
+              ? 'No media files are currently in use.'
+              : 'No media files uploaded yet. Click the Upload button to add images.'}
         </Alert>
       ) : (
         <>

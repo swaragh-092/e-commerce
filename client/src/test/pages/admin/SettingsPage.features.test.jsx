@@ -50,8 +50,10 @@ describe('Settings follow platform features and permissions', () => {
     await screen.findByDisplayValue('Test Shop');
     for (const name of ['Branding', 'Homepage', 'SEO']) expect(screen.queryByRole('tab', { name, exact: true })).not.toBeInTheDocument();
     expect(screen.queryByText('Newsletter signup on account forms')).not.toBeInTheDocument();
-    openTab('Layout');
-    expect(screen.getByRole('link', { name: 'Manage published menu links' })).toHaveAttribute('href', '/admin/menus');
+    expect(screen.queryByRole('tab', { name: 'Layout', exact: true })).not.toBeInTheDocument();
+    expect(screen.queryByRole('link', { name: 'Manage published menu links' })).not.toBeInTheDocument();
+    expect(screen.queryByText('Live Storefront Preview')).not.toBeInTheDocument();
+    expect(screen.queryByText('Mock Storefront Preview')).not.toBeInTheDocument();
     expect(designerLinks()).toHaveLength(0);
     openTab('Catalog');
     expect(screen.getByDisplayValue('CAT')).toBeInTheDocument();

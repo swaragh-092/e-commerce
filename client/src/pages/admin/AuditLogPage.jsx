@@ -3,18 +3,14 @@ import {
   Box,
   Typography,
   Chip,
-  IconButton,
   Tooltip,
-  Dialog,
   DialogTitle,
-  DialogContent,
   TextField,
   MenuItem,
   FormControl,
   InputLabel,
   Select,
   Stack,
-  DialogActions,
   Button,
   Avatar,
   Paper,
@@ -22,6 +18,7 @@ import {
   alpha,
   useTheme,
   Divider,
+  Drawer,
 } from '@mui/material';
 import { DataGrid } from '@mui/x-data-grid';
 import InfoIcon from '@mui/icons-material/InfoOutlined';
@@ -31,8 +28,10 @@ import SearchIcon from '@mui/icons-material/Search';
 import FilterListIcon from '@mui/icons-material/FilterList';
 import { getAuditLogs } from '../../services/adminService';
 
-const ENTITIES = ['', 'Product', 'Order', 'User', 'Coupon', 'Settings', 'Review', 'Category', 'Brand', 'Shipping', 'Payment'];
-const ACTIONS = ['', 'CREATE', 'UPDATE', 'DELETE', 'STATUS_CHANGE', 'LOGIN', 'LOGOUT'];
+const ENTITIES = ['', 'Product', 'Order', 'User', 'Address', 'Payment', 'Category', 'Coupon', 'Review', 'Setting', 'Page', 'Brand', 'Media', 'Menu', 'MenuItem', 'Fulfillment', 'Shipment', 'OrderReturn', 'Return', 'Replacement', 'OrderRefund', 'BlogPost', 'BlogCategory', 'SEO_OVERRIDE', 'Role', 'Theme', 'InventoryAlertConfig', 'InventoryAlert', 'Enquiry', 'DesignDraft'];
+const ACTIONS = ['', 'CREATE', 'UPDATE', 'DELETE', 'STATUS_CHANGE', 'LOGIN', 'LOGOUT', 'REFRESH', 'PASSWORD_RESET', 'EMAIL_VERIFIED', 'VERIFICATION_RESENT'];
+
+const humanize = (value = '') => String(value).toLowerCase().replaceAll('_', ' ').replace(/\b\w/g, (letter) => letter.toUpperCase());
 
 const actionColor = {
   CREATE: '#2e7d32',
@@ -50,12 +49,13 @@ const AuditLogPage = () => {
   const [loading, setLoading] = useState(true);
   const [paginationModel, setPaginationModel] = useState({ page: 0, pageSize: 20 });
   const [filters, setFilters] = useState({ entity: '', action: '', from: '', to: '', search: '' });
+  const [appliedFilters, setAppliedFilters] = useState(filters);
   const [diff, setDiff] = useState(null);
 
   const fetchLogs = useCallback(() => {
     setLoading(true);
     getAuditLogs({
-      ...filters,
+      ...appliedFilters,
       page: paginationModel.page + 1,
       limit: paginationModel.pageSize,
     })
@@ -65,13 +65,30 @@ const AuditLogPage = () => {
       })
       .catch(console.error)
       .finally(() => setLoading(false));
-  }, [paginationModel, filters]);
+  }, [paginationModel, appliedFilters]);
 
   useEffect(() => {
     fetchLogs();
   }, [fetchLogs]);
 
   const setFilter = (key, val) => setFilters((f) => ({ ...f, [key]: val }));
+  const applyFilters = () => {
+    setPaginationModel((model) => ({ ...model, page: 0 }));
+    setAppliedFilters({ ...filters });
+  };
+  const clearFilters = () => {
+    const empty = { entity: '', action: '', from: '', to: '', search: '' };
+    setFilters(empty);
+    setAppliedFilters(empty);
+    setPaginationModel((model) => ({ ...model, page: 0 }));
+  };
+  const setDatePreset = (days) => {
+    const to = new Date();
+    const from = new Date();
+    from.setDate(from.getDate() - days + 1);
+    const format = (date) => `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
+    setFilters((current) => ({ ...current, from: format(from), to: format(to) }));
+  };
 
   const columns = [
     {
@@ -121,30 +138,16 @@ const AuditLogPage = () => {
       ),
     },
     {
-      field: 'action',
-      headerName: 'Action',
-      width: 150,
-      renderCell: ({ value }) => (
-        <Chip
-          label={value}
-          size="small"
-          sx={{
-            fontWeight: 700,
-            fontSize: '0.65rem',
-            letterSpacing: '0.05em',
-            bgcolor: alpha(actionColor[value] || '#757575', 0.1),
-            color: actionColor[value] || '#757575',
-            border: `1px solid ${alpha(actionColor[value] || '#757575', 0.2)}`,
-            borderRadius: '6px',
-            textTransform: 'uppercase',
-          }}
-        />
-      ),
+      field: 'activity',
+      headerName: 'Activity',
+      minWidth: 220,
+      flex: 1.2,
+      renderCell: ({ row }) => <Stack direction="row" spacing={1} alignItems="center"><Chip label={humanize(row.action)} size="small" sx={{ fontWeight: 700, bgcolor: alpha(actionColor[row.action] || '#757575', 0.1), color: actionColor[row.action] || '#757575', border: `1px solid ${alpha(actionColor[row.action] || '#757575', 0.2)}`, borderRadius: 1.5 }} /><Typography variant="body2" color="text.secondary">{humanize(row.entity || 'system')}</Typography></Stack>,
     },
     {
       field: 'entity',
       headerName: 'Resource',
-      width: 140,
+      width: 160,
       renderCell: ({ value, row }) => (
         <Box>
           <Typography variant="body2" fontWeight={500}>
@@ -158,8 +161,8 @@ const AuditLogPage = () => {
     },
     {
       field: 'ipAddress',
-      headerName: 'Access Info',
-      width: 180,
+      headerName: 'IP address',
+      width: 150,
       renderCell: ({ value }) => (
         <Tooltip title={value || 'No IP recorded'}>
           <Typography variant="caption" sx={{ fontFamily: 'monospace', color: 'text.secondary' }}>
@@ -171,123 +174,48 @@ const AuditLogPage = () => {
     {
       field: 'changes',
       headerName: 'Details',
-      width: 90,
+      width: 125,
       sortable: false,
       align: 'center',
       headerAlign: 'center',
       renderCell: ({ row }) =>
-        row.changes ? (
-          <Tooltip title="Examine Changes">
-            <IconButton
-              size="small"
-              onClick={() => setDiff(row)}
-              sx={{
-                bgcolor: alpha(theme.palette.primary.main, 0.05),
-                '&:hover': { bgcolor: alpha(theme.palette.primary.main, 0.15) },
-              }}
-            >
-              <InfoIcon fontSize="small" color="primary" />
-            </IconButton>
-          </Tooltip>
-        ) : (
-          <Typography variant="caption" color="text.disabled">
-            None
-          </Typography>
-        ),
+        <Button size="small" startIcon={<InfoIcon fontSize="small" />} onClick={() => setDiff(row)} aria-label={`View details for ${humanize(row.action)} ${humanize(row.entity)}`} sx={{ textTransform: 'none', minWidth: 0 }}>View details</Button>,
     },
   ];
 
   return (
     <Box sx={{ p: 1 }}>
-      <Stack direction="row" justifyContent="space-between" alignItems="center" mb={4}>
+      <Stack direction={{ xs: 'column', sm: 'row' }} justifyContent="space-between" alignItems={{ xs: 'stretch', sm: 'center' }} mb={2.5} gap={2}>
         <Box>
-          <Typography variant="h4" component="h1" fontWeight={800} sx={{ letterSpacing: '-0.02em', mb: 0.5 }}>
-            Audit Infrastructure
+          <Typography variant="h5" component="h1" fontWeight={700} sx={{ mb: 0.5 }}>
+            Audit Log
           </Typography>
           <Typography variant="body2" color="text.secondary">
-            Comprehensive history of administrative operations and system mutations.
+            Track administrative changes and account activity.
           </Typography>
         </Box>
-        <Stack direction="row" spacing={1.5}>
+        <Stack direction="row" spacing={1} alignItems="center">
+          <Typography variant="body2" color="text.secondary" sx={{ mr: 1 }}>{total.toLocaleString()} events</Typography>
           <Button
             variant="outlined"
             startIcon={<HistoryIcon />}
             onClick={() => fetchLogs()}
             sx={{ borderRadius: 2, textTransform: 'none', fontWeight: 600 }}
           >
-            Refresh Logs
+            Refresh
           </Button>
         </Stack>
       </Stack>
 
-      {/* KPI Section */}
-      <Grid container spacing={3} mb={4}>
-        <Grid item xs={12} md={4}>
-          <Paper
-            sx={{
-              p: 3,
-              borderRadius: 3,
-              border: '1px solid',
-              borderColor: 'divider',
-              background: `linear-gradient(135deg, ${alpha(theme.palette.primary.main, 0.05)} 0%, transparent 100%)`,
-            }}
-          >
-            <Typography variant="caption" fontWeight={700} color="primary" sx={{ textTransform: 'uppercase', letterSpacing: '0.1em' }}>
-              Total Operations
-            </Typography>
-            <Typography variant="h3" fontWeight={800} mt={1}>
-              {total.toLocaleString()}
-            </Typography>
-          </Paper>
-        </Grid>
-        <Grid item xs={12} md={4}>
-          <Paper
-            sx={{
-              p: 3,
-              borderRadius: 3,
-              border: '1px solid',
-              borderColor: 'divider',
-              background: `linear-gradient(135deg, ${alpha(theme.palette.success.main, 0.05)} 0%, transparent 100%)`,
-            }}
-          >
-            <Typography variant="caption" fontWeight={700} color="success.main" sx={{ textTransform: 'uppercase', letterSpacing: '0.1em' }}>
-              Logins (this page)
-            </Typography>
-            <Typography variant="h3" fontWeight={800} mt={1}>
-              {rows.filter(r => r.action === 'LOGIN').length}+
-            </Typography>
-          </Paper>
-        </Grid>
-        <Grid item xs={12} md={4}>
-          <Paper
-            sx={{
-              p: 3,
-              borderRadius: 3,
-              border: '1px solid',
-              borderColor: 'divider',
-              background: `linear-gradient(135deg, ${alpha(theme.palette.error.main, 0.05)} 0%, transparent 100%)`,
-            }}
-          >
-            <Typography variant="caption" fontWeight={700} color="error.main" sx={{ textTransform: 'uppercase', letterSpacing: '0.1em' }}>
-              Deletions (this page)
-            </Typography>
-            <Typography variant="h3" fontWeight={800} mt={1}>
-              {rows.filter(r => r.action === 'DELETE').length}
-            </Typography>
-          </Paper>
-        </Grid>
-      </Grid>
-
       {/* Filters */}
       <Paper
         sx={{
-          p: 2.5,
-          mb: 3,
-          borderRadius: 3,
+          p: 2,
+          mb: 2,
+          borderRadius: 2,
           border: '1px solid',
           borderColor: 'divider',
           bgcolor: alpha(theme.palette.background.paper, 0.8),
-          backdropFilter: 'blur(10px)',
         }}
       >
         <Grid container spacing={2} alignItems="center">
@@ -295,16 +223,18 @@ const AuditLogPage = () => {
             <TextField
               fullWidth
               size="small"
-              placeholder="Search by Entity ID or Actor..."
+              label="Search activity"
+              placeholder="Actor, email, resource ID"
               value={filters.search}
               onChange={(e) => setFilter('search', e.target.value)}
+              onKeyDown={(e) => { if (e.key === 'Enter') applyFilters(); }}
               InputProps={{
                 startAdornment: <SearchIcon sx={{ mr: 1, color: 'text.disabled' }} fontSize="small" />,
               }}
               sx={{ '& .MuiOutlinedInput-root': { borderRadius: 2 } }}
             />
           </Grid>
-          <Grid item xs={6} md={2}>
+          <Grid item xs={12} sm={6} md={2}>
             <FormControl fullWidth size="small">
               <InputLabel>Resource</InputLabel>
               <Select
@@ -321,7 +251,7 @@ const AuditLogPage = () => {
               </Select>
             </FormControl>
           </Grid>
-          <Grid item xs={6} md={2}>
+          <Grid item xs={12} sm={6} md={2}>
             <FormControl fullWidth size="small">
               <InputLabel>Action</InputLabel>
               <Select
@@ -338,7 +268,7 @@ const AuditLogPage = () => {
               </Select>
             </FormControl>
           </Grid>
-          <Grid item xs={6} md={2.5}>
+          <Grid item xs={12} md={3}>
             <Stack direction="row" spacing={1}>
               <TextField
                 fullWidth
@@ -362,30 +292,30 @@ const AuditLogPage = () => {
               />
             </Stack>
           </Grid>
-          <Grid item xs={6} md={2.5}>
-            <Button
-              fullWidth
-              variant="contained"
-              startIcon={<FilterListIcon />}
-              onClick={() => fetchLogs()}
-              sx={{ borderRadius: 2, height: 40, textTransform: 'none', fontWeight: 700, boxShadow: 'none' }}
-            >
-              Apply Filters
-            </Button>
+          <Grid item xs={12} md={2}>
+            <Stack direction="row" spacing={1}>
+              <Button fullWidth variant="contained" startIcon={<FilterListIcon />} onClick={applyFilters} sx={{ borderRadius: 2, height: 40, textTransform: 'none', fontWeight: 700, boxShadow: 'none' }}>Apply</Button>
+              <Button onClick={clearFilters} sx={{ minWidth: 'auto', height: 40, textTransform: 'none' }}>Clear</Button>
+            </Stack>
+          </Grid>
+          <Grid item xs={12}>
+            <Stack direction="row" spacing={1} alignItems="center">
+              <Typography variant="caption" color="text.secondary">Quick range:</Typography>
+              <Button size="small" onClick={() => setDatePreset(1)}>Today</Button>
+              <Button size="small" onClick={() => setDatePreset(7)}>7 days</Button>
+              <Button size="small" onClick={() => setDatePreset(30)}>30 days</Button>
+            </Stack>
           </Grid>
         </Grid>
       </Paper>
 
-      {/* Data Grid */}
+      {/* Activity table */}
       <Box
         sx={{
-          height: 650,
           bgcolor: 'background.paper',
-          borderRadius: 4,
-          overflow: 'hidden',
+          borderRadius: 2,
           border: '1px solid',
           borderColor: 'divider',
-          boxShadow: `0 4px 24px ${alpha(theme.palette.common.black, 0.05)}`,
           '& .MuiDataGrid-root': {
             border: 'none',
           },
@@ -399,6 +329,7 @@ const AuditLogPage = () => {
           '& .MuiDataGrid-footerContainer': {
             borderTop: `1px solid ${theme.palette.divider}`,
           },
+          '& .MuiDataGrid-row:hover': { bgcolor: alpha(theme.palette.primary.main, 0.035) },
         }}
       >
         <DataGrid
@@ -409,29 +340,23 @@ const AuditLogPage = () => {
           paginationMode="server"
           paginationModel={paginationModel}
           onPaginationModelChange={setPaginationModel}
+          autoHeight
           disableRowSelectionOnClick
-          rowHeight={64}
+          rowHeight={72}
+          pageSizeOptions={[10, 20, 50]}
+          localeText={{ noRowsLabel: 'No activity found. Try adjusting or clearing your filters.' }}
         />
       </Box>
 
-      {/* Diff Modal */}
-      <Dialog 
-        open={Boolean(diff)} 
-        onClose={() => setDiff(null)} 
-        maxWidth="md" 
-        fullWidth
-        PaperProps={{
-          sx: { borderRadius: 4, boxShadow: theme.shadows[20] }
-        }}
-      >
+      <Drawer anchor="right" open={Boolean(diff)} onClose={() => setDiff(null)} PaperProps={{ sx: { width: { xs: '100%', sm: 480 }, p: 0 } }}>
         <DialogTitle component="div" sx={{ p: 3, pb: 2 }}>
           <Stack direction="row" justifyContent="space-between" alignItems="center">
             <Box>
-              <Typography variant="h6" fontWeight={800}>
-                Change Inspection
+              <Typography variant="h6" fontWeight={700}>
+                Event details
               </Typography>
               <Typography variant="caption" color="text.secondary">
-                {diff?.action} — {diff?.entity} (ID: {diff?.entityId})
+                {humanize(diff?.action)} {diff?.entity && `· ${humanize(diff.entity)}`}
               </Typography>
             </Box>
             <Chip 
@@ -442,44 +367,44 @@ const AuditLogPage = () => {
           </Stack>
         </DialogTitle>
         <Divider />
-        <DialogContent sx={{ p: 0 }}>
-          <Box
+        <Box sx={{ px: 3, pb: 2 }}>
+          <Stack spacing={1.25}>
+            <Typography variant="body2"><b>Actor:</b> {diff?.User ? `${diff.User.firstName || ''} ${diff.User.lastName || ''}`.trim() : 'System'}{diff?.User?.email ? ` · ${diff.User.email}` : ''}</Typography>
+            <Typography variant="body2"><b>When:</b> {diff?.createdAt ? new Date(diff.createdAt).toLocaleString() : '—'}</Typography>
+            <Typography variant="body2" sx={{ overflowWrap: 'anywhere' }}><b>Resource ID:</b> {diff?.entityId || '—'}</Typography>
+            <Typography variant="body2"><b>IP address:</b> {diff?.ipAddress || 'Not recorded'}</Typography>
+          </Stack>
+        </Box>
+        <Divider />
+        <Box sx={{ p: 3, overflow: 'auto', flex: 1 }}>
+          <Typography variant="subtitle2" fontWeight={700} mb={1}>Change data</Typography>
+          {diff?.changes ? <Box
             sx={{
-              p: 3,
-              bgcolor: '#0d1117', // Dark GitHub-like theme for code
-              color: '#c9d1d9',
-              fontFamily: '"JetBrains Mono", "Fira Code", monospace',
+              p: 2,
+              borderRadius: 2,
+              bgcolor: theme.palette.mode === 'dark' ? '#0d1117' : 'grey.50',
+              color: 'text.primary',
+              fontFamily: 'monospace',
               fontSize: 13,
               lineHeight: 1.6,
               overflow: 'auto',
-              maxHeight: '60vh',
+              maxHeight: '55vh',
             }}
           >
-            <Box component="pre" sx={{ m: 0 }}>
+            <Box component="pre" sx={{ m: 0, whiteSpace: 'pre-wrap', overflowWrap: 'anywhere' }}>
               {JSON.stringify(diff?.changes, (key, value) => {
                 const sensitiveKeys = ['password', 'token', 'secret', 'apikey', 'key', 'credential', 'privatekey', 'authorization'];
-                if (key && sensitiveKeys.some(s => key.toLowerCase().includes(s))) {
-                  return '********';
-                }
+                if (key && sensitiveKeys.some(s => key.toLowerCase().includes(s))) return '********';
                 return value;
               }, 2)}
             </Box>
-          </Box>
-        </DialogContent>
+          </Box> : <Typography variant="body2" color="text.secondary">No change details were recorded for this event.</Typography>}
+        </Box>
         <Divider />
-        <DialogActions sx={{ p: 2.5 }}>
-          <Typography variant="caption" color="text.secondary" sx={{ mr: 'auto', ml: 1 }}>
-            IP: {diff?.ipAddress || 'Internal'} • {diff?.createdAt ? new Date(diff.createdAt).toLocaleString() : '—'}
-          </Typography>
-          <Button 
-            onClick={() => setDiff(null)} 
-            variant="contained" 
-            sx={{ borderRadius: 2, px: 4, fontWeight: 700, boxShadow: 'none' }}
-          >
-            Dismiss
-          </Button>
-        </DialogActions>
-      </Dialog>
+        <Box sx={{ p: 2, display: 'flex', justifyContent: 'flex-end' }}>
+          <Button onClick={() => setDiff(null)} variant="contained" sx={{ textTransform: 'none' }}>Close</Button>
+        </Box>
+      </Drawer>
     </Box>
   );
 };

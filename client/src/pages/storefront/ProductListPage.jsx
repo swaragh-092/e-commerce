@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { Chip, Box, Breadcrumbs, Container, Grid, Link as MuiLink, Typography, Pagination, Drawer, IconButton, useTheme, useMediaQuery, FormControl, Select, MenuItem, alpha } from '@mui/material';
 import { FilterList as FilterIcon, Sort as SortIcon } from '@mui/icons-material';
 import { Link as RouterLink, useSearchParams } from 'react-router-dom';
+import { getMediaUrl, onImageError } from '../../utils/media';
 import ProductGrid from '../../components/product/ProductGrid';
 import ProductFilters from '../../components/product/ProductFilters';
 import StorefrontSidebarMenu from '../../components/layout/StorefrontSidebarMenu';
@@ -177,9 +178,12 @@ const ProductListPage = ({ tag = null }) => {
                 borderColor: 'divider',
                 background: isEditorialCatalog ? (theme) => `linear-gradient(135deg, ${alpha(theme.palette.primary.main, 0.10)}, ${alpha(theme.palette.secondary.main, 0.06)})` : 'transparent',
             }}>
-                <Box sx={{ maxWidth: '65ch', minWidth: 0 }}>
+                <Box sx={{ display: 'flex', gap: 2, alignItems: 'center', minWidth: 0, maxWidth: '65ch' }}>
+                  {tag?.image?.url && <Box component="img" src={getMediaUrl(tag.image.url)} alt={tag.image.alt || tag.name} onError={onImageError()} sx={{ width: { xs: 72, sm: 112 }, height: { xs: 72, sm: 112 }, objectFit: 'cover', borderRadius: 2, flexShrink: 0 }} />}
+                  <Box sx={{ minWidth: 0 }}>
                     <Typography variant="h4" component="h1" fontWeight="bold">{tag?.name || 'Our Products'}</Typography>
                     {tag?.description && <Typography color="text.secondary" sx={{ mt: 1, whiteSpace: 'pre-line', overflowWrap: 'anywhere' }}>{tag.description}</Typography>}
+                  </Box>
                 </Box>
 
                 <Box sx={{ display: 'flex', gap: 2, alignItems: 'center' }}>
