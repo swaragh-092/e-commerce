@@ -620,6 +620,30 @@ function buildAdvancedPanel(ctx) {
       { feature: 'seo' }
     ),
     section(
+      'Admin Appearance',
+      'Choose your admin brand color. Buttons and selection follow it unless you choose custom colors. Save settings to apply.',
+      <Grid container spacing={2}>
+        {[
+          ['brandColor', 'Brand color', '#4f46e5', 'Header, navigation accents, and links.'],
+          ['buttonColor', 'Button color', form['admin.brandColor'] || '#4f46e5', 'Primary actions. Hover and pressed shades are automatic.'],
+          ['stateColor', 'Focus / selection color', form['admin.brandColor'] || '#4f46e5', 'Keyboard focus outlines and selected-item highlights.'],
+        ].map(([key, label, fallback, help]) => (
+          <Grid item xs={12} sm={4} key={key}>
+            {key !== 'brandColor' && <FormControlLabel
+              control={<Switch checked={!form[`admin.${key}`]} onChange={(event) => set(`admin.${key}`, event.target.checked ? '' : fallback)} />}
+              label="Use brand color" />}
+            <TextField fullWidth size="small" type="color" label={label}
+              disabled={key !== 'brandColor' && !form[`admin.${key}`]}
+              value={form[`admin.${key}`] || fallback}
+              onChange={(event) => set(`admin.${key}`, event.target.value)}
+              helperText={`${form[`admin.${key}`] || fallback} — ${help}`}
+              InputLabelProps={{ shrink: true }} />
+          </Grid>
+        ))}
+      </Grid>,
+      ['admin appearance', 'brand color', 'button color', 'state color', 'dashboard theme']
+    ),
+    section(
       'Dashboard',
       'Control dashboard layout, density, default date period, and visible widgets.',
       <>
