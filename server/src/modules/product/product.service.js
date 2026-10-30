@@ -226,7 +226,7 @@ const ATTRIBUTE_TEMPLATE_FIELDS = ['id', 'name', 'slug', 'sortOrder', 'displayTy
 const ATTRIBUTE_VALUE_FIELDS = ['id', 'value', 'slug', 'sortOrder', 'displayLabel', 'swatchColor', 'imageUrl', 'unitLabel', 'metadata'];
 
 const getCommonAttributeIncludes = () => [
-  { model: AttributeTemplate, as: 'attribute', attributes: ATTRIBUTE_TEMPLATE_FIELDS },
+  { model: AttributeTemplate, as: 'attribute', attributes: ATTRIBUTE_TEMPLATE_FIELDS, paranoid: false },
   { model: AttributeValue, as: 'value', attributes: ATTRIBUTE_VALUE_FIELDS },
 ];
 

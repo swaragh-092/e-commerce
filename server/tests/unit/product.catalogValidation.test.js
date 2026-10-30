@@ -53,7 +53,7 @@ describe('product pricing validation by resolved features', () => {
   it.each([false, true])('lets the POST route save a Variable product before variants (pricing=%s)', async (pricing) => {
     vi.spyOn(settingsService, 'getFeatures').mockResolvedValue({ features: { pricing } });
     const route = productRoutes.stack.find((layer) => layer.route?.path === '/' && layer.route.methods.post).route;
-    const validateWrite = route.stack[2].handle;
+    const validateWrite = route.stack[3].handle; // Tag permission checks precede body validation.
     const req = { body: { name: 'Shirt', type: 'variable', price: pricing ? 100 : 0, requiresShipping: false } };
     const res = { status: vi.fn().mockReturnThis(), json: vi.fn() };
     const next = vi.fn();

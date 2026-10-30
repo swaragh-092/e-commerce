@@ -1513,7 +1513,7 @@ const ProductEditPage = () => {
         {!isNew && formData.type === 'variable' && dbProduct?.type === 'variable' && (
           <Box onKeyDown={(e) => { if (e.key === 'Enter' && e.target.tagName !== 'TEXTAREA') { e.preventDefault(); e.stopPropagation(); } }}>
             <VariantsPanel 
-              pricingEnabled={pricingCapability}
+              pricingEnabled={pricingEnabled}
               productId={id}
               productName={formData.name}
               productSku={formData.sku}

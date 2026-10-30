@@ -38,28 +38,31 @@ describe('Attribute, Brand & Permission Fixes Verification', () => {
     });
   });
 
-  describe('P2 — Attribute & Value Safe Deletion Guards', () => {
+  describe('P2 — Template soft deletion and value deletion guards', () => {
     beforeEach(() => {
       vi.clearAllMocks();
+      db.sequelize.transaction = vi.fn(async callback => callback({ LOCK: { UPDATE: 'UPDATE' } }));
+      db.AttributeTemplate.findByPk = vi.fn().mockResolvedValue({ id: 'attr-1' });
     });
 
-    it('blocks template deletion with 409 if in use by product attributes', async () => {
+    it('blocks template deletion while it is attached to non-deleted products', async () => {
       const mockAttr = { id: 'attr-1', destroy: vi.fn() };
       db.AttributeTemplate.findByPk = vi.fn().mockResolvedValue(mockAttr);
       db.ProductAttribute.count = vi.fn().mockResolvedValue(3);
       db.VariantOption.count = vi.fn().mockResolvedValue(0);
 
-      await expect(deleteAttribute('attr-1')).rejects.toThrow(/in use by 3 product attribute\(s\)/);
+      await expect(deleteAttribute('attr-1')).rejects.toMatchObject({ statusCode: 409, message: expect.stringContaining('still attached to products') });
+      expect(db.AttributeTemplate.options.paranoid).toBe(true);
       expect(mockAttr.destroy).not.toHaveBeenCalled();
     });
 
-    it('blocks template deletion with 409 if in use by variant options', async () => {
+    it('blocks template deletion when only variant links remain on non-deleted products', async () => {
       const mockAttr = { id: 'attr-1', destroy: vi.fn() };
       db.AttributeTemplate.findByPk = vi.fn().mockResolvedValue(mockAttr);
       db.ProductAttribute.count = vi.fn().mockResolvedValue(0);
       db.VariantOption.count = vi.fn().mockResolvedValue(5);
 
-      await expect(deleteAttribute('attr-1')).rejects.toThrow(/in use by 0 product attribute\(s\) and 5 variant option\(s\)/);
+      await expect(deleteAttribute('attr-1')).rejects.toMatchObject({ statusCode: 409 });
       expect(mockAttr.destroy).not.toHaveBeenCalled();
     });
 
@@ -70,7 +73,7 @@ describe('Attribute, Brand & Permission Fixes Verification', () => {
       db.VariantOption.count = vi.fn().mockResolvedValue(0);
 
       await deleteAttribute('attr-1');
-      expect(mockAttr.destroy).toHaveBeenCalled();
+      expect(mockAttr.destroy).toHaveBeenCalledWith({ transaction: expect.any(Object) });
     });
 
     it('blocks value removal with 409 if in use by product attributes or variant options', async () => {
@@ -270,6 +273,3 @@ describe('Attribute, Brand & Permission Fixes Verification', () => {
     });
   });
 });
-
-
-

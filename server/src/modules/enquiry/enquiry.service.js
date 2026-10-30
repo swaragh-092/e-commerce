@@ -43,7 +43,7 @@ class EnquiryService {
       variant = await ProductVariant.findOne({
         where: { id: variantId, productId, isActive: true },
         include: [{ model: VariantOption, as: 'options', include: [
-          { model: AttributeTemplate, as: 'attribute' },
+          { model: AttributeTemplate, as: 'attribute', paranoid: false },
           { model: AttributeValue, as: 'value' },
         ] }],
       });
@@ -250,7 +250,7 @@ class EnquiryService {
       { model: Product, as: 'product', attributes: ['id', 'name', 'slug'], required: false },
       { model: ProductVariant, as: 'variant', attributes: ['id', 'sku'], required: false, include: [
         { model: VariantOption, as: 'options', separate: true, include: [
-          { model: AttributeTemplate, as: 'attribute' },
+          { model: AttributeTemplate, as: 'attribute', paranoid: false },
           { model: AttributeValue, as: 'value' },
         ] },
       ] },
