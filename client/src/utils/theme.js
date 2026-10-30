@@ -193,13 +193,9 @@ export const buildStorefrontCssVariables = (settingsOrTheme = {}, customerDarkMo
   // selected brand colours by the shared resolver, so MUI, CSS variables, and
   // the designer previews cannot drift apart.
   const tokens        = resolveDesignTokens(themeSettings, customerDarkMode);
-  const colors        = tokens.colors;
-  const textMuted     = colors.textMuted;
-  const textDisabled  = colors.textDisabled;
   const typeScale     = getTypographyScale(t);
   const fontStacks    = getFontStacks(t);
   const mobile        = getMobileOverrides(t);
-  const divider       = colors.divider;
 
   const productCardStyles = componentStyles.productCard || {};
   const categoryCardStyles = componentStyles.categoryCard || {};

@@ -378,7 +378,10 @@ const SectionComposerPage = () => {
       return result;
     }, {});
     if (Object.keys(nextPages).length) setPageSettings(nextPages);
-    if (merged.homepage?.sections) setSections(merged.homepage.sections);
+    if (merged.homepage?.sections) {
+      sectionsRef.current = merged.homepage.sections;
+      setSections(merged.homepage.sections);
+    }
     return { groups: merged, resetTargets };
   }, []);
 
@@ -578,6 +581,7 @@ const SectionComposerPage = () => {
   };
 
   const update = (next, skipHistory = false) => {
+    sectionsRef.current = next;
     setSections(next);
     clearDraftDelete('homepage');
     setDirty(true);
@@ -592,6 +596,7 @@ const SectionComposerPage = () => {
     if (historyIndex > 0) {
       const prevIndex = historyIndex - 1;
       setHistoryIndex(prevIndex);
+      sectionsRef.current = history[prevIndex];
       setSections(history[prevIndex]);
       setDirty(true);
       if (panelView.sectionId) {
@@ -605,6 +610,7 @@ const SectionComposerPage = () => {
     if (historyIndex < history.length - 1) {
       const nextIndex = historyIndex + 1;
       setHistoryIndex(nextIndex);
+      sectionsRef.current = history[nextIndex];
       setSections(history[nextIndex]);
       setDirty(true);
       if (panelView.sectionId) {
@@ -720,7 +726,7 @@ const SectionComposerPage = () => {
   const livePreviewRef = useRef({ value: null, timer: null });
   const handleInlineFieldChange = (key, value) => {
     if (!panelView.sectionId) return;
-    const next = sections.map((section) =>
+    const next = sectionsRef.current.map((section) =>
       section.id === panelView.sectionId ? updateSectionField(section, key, value) : section
     );
     update(next, true);
@@ -728,13 +734,14 @@ const SectionComposerPage = () => {
 
   const handleInlineFieldBlur = () => {
     // Commit the current state to the undo/redo history on input blur
+    const latestSections = sectionsRef.current;
     const currentHead = history[historyIndex];
     const currentHeadSections = Array.isArray(currentHead) ? currentHead : currentHead?.sections;
-    if (currentHead && JSON.stringify(currentHeadSections) === JSON.stringify(sections)) {
+    if (currentHead && JSON.stringify(currentHeadSections) === JSON.stringify(latestSections)) {
       return;
     }
     const nextHistory = history.slice(0, historyIndex + 1);
-    setHistory([...nextHistory, sections]);
+    setHistory([...nextHistory, latestSections]);
     setHistoryIndex(nextHistory.length);
   };
 
@@ -787,6 +794,7 @@ const SectionComposerPage = () => {
       const base = seedPatch && typeof seedPatch === 'object' ? { ...section, ...seedPatch } : section;
       return updateSectionField(base, key, value);
     });
+    sectionsRef.current = nextSections;
     setSections(nextSections);
     setDirty(true);
     const updated = nextSections.find((section) => section.id === sectionId);

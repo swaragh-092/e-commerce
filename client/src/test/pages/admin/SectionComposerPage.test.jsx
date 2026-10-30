@@ -12,7 +12,13 @@ vi.mock('../../../hooks/useAuth', () => ({ useAuth: () => ({ hasPermission: () =
 vi.mock('../../../services/settingsService', () => ({ getSettingsGroup: vi.fn(), getDesignDraft: vi.fn(), getDesignState: vi.fn(), getDesignVersions: vi.fn(), publishDesignDraft: vi.fn(), restoreDesignVersion: vi.fn(), saveDesignDraft: vi.fn() }));
 vi.mock('../../../components/admin/themes/StorefrontTemplatePreview', () => ({ default: ({ activePage, currentSettings, onSelectSection }) => <div>{(activePage === 'home' ? currentSettings.homepage.sections : currentSettings.productPage.sections)?.map((section) => <button key={section.id} onClick={() => onSelectSection(section)}>Preview {section.title}</button>)}</div> }));
 vi.mock('../../../components/admin/themes/designer/DesignerTreePanel', () => ({ default: ({ sections, onToggleSection }) => <div>{sections.map((section, index) => <button key={section.id} onClick={() => onToggleSection(index)}>Hide {section.title}</button>)}</div> }));
-vi.mock('../../../components/admin/themes/designer/DesignerSectionEditor', () => ({ default: ({ section, onChange, onBlur }) => <input aria-label="Section title" value={section.title} onChange={(event) => onChange('title', event.target.value)} onBlur={onBlur} /> }));
+vi.mock('../../../components/admin/themes/designer/DesignerSectionEditor', () => ({ default: ({ section, onChange, onBlur }) => (
+  <div>
+    <input aria-label="Section title" value={section.title} onChange={(event) => onChange('title', event.target.value)} onBlur={onBlur} />
+    <button type="button" onClick={() => { onChange('slides', [{ title: 'Added slide' }]); onBlur(); }}>Customize blocks</button>
+    <span>Slide blocks: {section.slides?.length || 0}</span>
+  </div>
+) }));
 vi.mock('../../../components/admin/themes/DesignVersionHistoryDialog', () => ({ default: () => null }));
 vi.mock('../../../components/admin/themes/SaveAsTemplateDialog', () => ({ default: () => null }));
 vi.mock('../../../components/admin/sections/AddSectionDialog', () => ({ default: () => null }));
@@ -128,6 +134,20 @@ describe('Store Designer section editing', () => {
     expect(title).toHaveValue('Updated Hero');
     expect(redoBtn).toBeDisabled();
     expect(undoBtn).toBeEnabled();
+  });
+  it('records synchronous block changes in undo history immediately', async () => {
+    mount();
+    fireEvent.click(await screen.findByRole('button', { name: 'Preview Homepage hero' }));
+    const undo = screen.getByRole('button', { name: 'Undo section change' });
+    expect(undo).toBeDisabled();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Customize blocks' }));
+    expect(screen.getByText('Slide blocks: 1')).toBeInTheDocument();
+    expect(undo).toBeEnabled();
+
+    fireEvent.click(undo);
+    expect(screen.getByText('Slide blocks: 0')).toBeInTheDocument();
+    expect(undo).toBeDisabled();
   });
 
   it('blocks saving and shows retry when initial homepage sections load fails', async () => {

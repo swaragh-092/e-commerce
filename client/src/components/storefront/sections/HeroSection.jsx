@@ -95,10 +95,16 @@ const HeroEyebrow = ({ slide, preview }) => (
   ) : null
 );
 
-const HeroCopy = ({ section, slide, preview, align = 'left', color = 'inherit', active = 0, onInlineFieldChange, onInlineFieldCommit, onInlineBlockFocus }) => {
-  const isCustomSlides = Array.isArray(section?.slides) && section.slides.length > active;
-  const titleField = isCustomSlides ? `slides.${active}.title` : 'title';
-  const subtitleField = isCustomSlides ? `slides.${active}.subtitle` : 'subtitle';
+const HeroCopy = ({ section, slide, visibleSlides, preview, align = 'left', color = 'inherit', active = 0, onInlineFieldChange, onInlineFieldCommit, onInlineBlockFocus }) => {
+  const hasActiveSlide = Array.isArray(visibleSlides) && visibleSlides.length > active;
+  const usesSlideFields = Array.isArray(section?.slides)
+    ? section.slides.length > active
+    : hasActiveSlide;
+  const seedPatch = usesSlideFields && !Array.isArray(section?.slides)
+    ? { slides: visibleSlides }
+    : undefined;
+  const titleField = usesSlideFields ? `slides.${active}.title` : 'title';
+  const subtitleField = usesSlideFields ? `slides.${active}.subtitle` : 'subtitle';
 
   return (
     <Box sx={{ textAlign: align, color }}>
@@ -107,6 +113,7 @@ const HeroCopy = ({ section, slide, preview, align = 'left', color = 'inherit', 
         section={section}
         field={titleField}
         preview={preview}
+        seedPatch={seedPatch}
         onInlineFieldChange={onInlineFieldChange}
         onInlineFieldCommit={onInlineFieldCommit} onInlineBlockFocus={onInlineBlockFocus}
         variant={preview ? 'h3' : 'h1'}
@@ -127,6 +134,7 @@ const HeroCopy = ({ section, slide, preview, align = 'left', color = 'inherit', 
           section={section}
           field={subtitleField}
           preview={preview}
+          seedPatch={seedPatch}
           onInlineFieldChange={onInlineFieldChange}
           onInlineFieldCommit={onInlineFieldCommit} onInlineBlockFocus={onInlineBlockFocus}
           variant={preview ? 'body1' : 'h6'}
@@ -274,7 +282,7 @@ const OverlayHero = ({ section, slide, visibleSlides, active, preview, onSelectC
       <Container maxWidth="xl" sx={{ position: 'relative', zIndex: 1, py: { xs: 6, md: 8 } }}>
         <Grid container spacing={4} alignItems="center" justifyContent={centered ? 'center' : right ? 'flex-end' : 'flex-start'}>
           <Grid item xs={12} md={centered ? 9 : 7} lg={centered ? 8 : 6}>
-            <HeroCopy section={section} slide={slide} preview={preview} align={align} active={active} onInlineFieldChange={onInlineFieldChange} onInlineFieldCommit={onInlineFieldCommit} onInlineBlockFocus={onInlineBlockFocus} />
+            <HeroCopy section={section} slide={slide} visibleSlides={visibleSlides} preview={preview} align={align} active={active} onInlineFieldChange={onInlineFieldChange} onInlineFieldCommit={onInlineFieldCommit} onInlineBlockFocus={onInlineBlockFocus} />
             <Box sx={{ display: 'flex', justifyContent: flexAlign(align) }}>
               <HeroButtons
                 slide={slide}
@@ -298,7 +306,7 @@ const SplitHero = ({ section, slide, preview, active, visibleSlides, onSelectCom
     <Container maxWidth="xl" sx={{ py: { xs: 4, md: 7 } }}>
       <Grid container spacing={{ xs: 3, md: 6 }} alignItems="center" direction={slide.imagePosition === 'left' ? 'row-reverse' : 'row'}>
         <Grid item xs={12} md={6}>
-          <HeroCopy section={section} slide={slide} preview={preview} align={align} active={active} color="text.primary" onInlineFieldChange={onInlineFieldChange} onInlineFieldCommit={onInlineFieldCommit} onInlineBlockFocus={onInlineBlockFocus} />
+          <HeroCopy section={section} slide={slide} visibleSlides={visibleSlides} preview={preview} align={align} active={active} color="text.primary" onInlineFieldChange={onInlineFieldChange} onInlineFieldCommit={onInlineFieldCommit} onInlineBlockFocus={onInlineBlockFocus} />
           <HeroButtons
             slide={slide}
             preview={preview}
@@ -331,7 +339,7 @@ const ProductSpotlightHero = ({ section, slide, preview, active, visibleSlides, 
     <Container maxWidth="xl" sx={{ py: { xs: 4, md: 7 } }}>
       <Grid container spacing={{ xs: 3, md: 6 }} alignItems="center">
         <Grid item xs={12} md={6}>
-          <HeroCopy section={section} slide={slide} preview={preview} align={align} active={active} color="text.primary" onInlineFieldChange={onInlineFieldChange} onInlineFieldCommit={onInlineFieldCommit} onInlineBlockFocus={onInlineBlockFocus} />
+          <HeroCopy section={section} slide={slide} visibleSlides={visibleSlides} preview={preview} align={align} active={active} color="text.primary" onInlineFieldChange={onInlineFieldChange} onInlineFieldCommit={onInlineFieldCommit} onInlineBlockFocus={onInlineBlockFocus} />
           <HeroButtons
             slide={slide}
             preview={preview}

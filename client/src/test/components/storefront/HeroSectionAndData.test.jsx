@@ -1,5 +1,5 @@
 import React from 'react';
-import { render, screen } from '@testing-library/react';
+import { fireEvent, render, screen } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
 import HeroSection from '../../../components/storefront/sections/HeroSection';
 import { buildSectionRendererData } from '../../../components/storefront/sections/sectionData';
@@ -68,6 +68,33 @@ describe('HeroSection live and preview synchronization', () => {
 
     expect(screen.getByRole('heading', { name: 'Preview Headliner' })).toBeInTheDocument();
     expect(screen.getByText('Draft subtitle preview')).toBeInTheDocument();
+  });
+
+  it('edits inherited slide headings and seeds the inherited slides into the draft', () => {
+    const section = { id: 'hero-inherited', type: 'hero-carousel', title: 'Section name' };
+    const inheritedSlides = [{ title: 'Default heading', subtitle: 'Default description' }];
+    const onInlineFieldCommit = vi.fn();
+    render(
+      <HeroSection
+        section={section}
+        slides={inheritedSlides}
+        mode="preview"
+        onInlineFieldCommit={onInlineFieldCommit}
+      />
+    );
+
+    const heading = screen.getByRole('heading', { name: 'Default heading' });
+    fireEvent.focus(heading);
+    heading.textContent = 'Edited heading';
+    fireEvent.blur(heading);
+
+    expect(onInlineFieldCommit).toHaveBeenCalledWith(
+      'hero-inherited',
+      'slides.0.title',
+      'Edited heading',
+      { slides: inheritedSlides },
+      'Default heading'
+    );
   });
 });
 
