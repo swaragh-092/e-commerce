@@ -528,7 +528,8 @@ const forgotPassword = async (email) => {
       expiresAt: new Date(Date.now() + AUTH_TIME.PASSWORD_RESET_TTL_MS)
     }, { transaction: t });
 
-    const resetUrl = `${getClientBaseUrl()}/reset-password?token=${resetToken}`;
+    const resetPath = user.role === 'customer' ? '/reset-password' : '/admin/reset-password';
+    const resetUrl = `${getClientBaseUrl()}${resetPath}?token=${resetToken}`;
     if (process.env.NODE_ENV === 'development') {
       // Never log the raw token — dev logs persist in history/CI output.
       logger.info(`[Auth] Password reset link generated for ${user.email} (token redacted, 15m TTL)`);
