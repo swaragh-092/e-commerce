@@ -18,7 +18,8 @@ vi.mock('../../../services/adminService', () => ({ getSaleLabels: vi.fn() }));
 vi.mock('../../../hooks/useAuth', () => ({ useAuth: () => ({ hasPermission: () => true }) }));
 vi.mock('../../../hooks/useSKUGenerator', () => ({ default: () => ({ generateProductSKU: () => 'SKU', generateVariantSKU: () => 'VSKU' }) }));
 const disabledFeatures = vi.hoisted(() => new Set());
-vi.mock('../../../hooks/useSettings', () => ({ useSettings: () => ({ settings: { features: { seo: false } } }), useCurrency: () => ({ symbol: '$', currency: 'USD', formatPrice: (value) => `$${value}` }), useFeature: (name) => !['productAssistant', 'seo'].includes(name) && !disabledFeatures.has(name), useFeatureVisible: (name) => !disabledFeatures.has(name), useFeaturesResolved: () => true }));
+const hiddenFeatures = vi.hoisted(() => new Set());
+vi.mock('../../../hooks/useSettings', () => ({ useSettings: () => ({ settings: { features: { seo: false } } }), useCurrency: () => ({ symbol: '$', currency: 'USD', formatPrice: (value) => `$${value}` }), useFeature: (name) => !['productAssistant', 'seo'].includes(name) && !disabledFeatures.has(name), useFeatureVisible: (name) => !disabledFeatures.has(name) && !hiddenFeatures.has(name), useFeaturesResolved: () => true }));
 vi.mock('../../../components/common/MediaPicker', () => ({ default: ({ open, onSelect, onClose }) => open ? <button type="button" onClick={() => {
   onSelect([{ id: 'media-1', url: '/uploads/product.jpg', originalName: 'Product photo' }]);
   onClose();
@@ -27,7 +28,7 @@ vi.mock('../../../components/admin/UnitSelector', () => ({ default: () => null }
 vi.mock('../../../components/admin/ProductCustomTabs', () => ({ default: () => null }));
 vi.mock('../../../components/admin/ProductTaxConfig', () => ({ default: () => null }));
 vi.mock('../../../components/admin/ProductComboBuilder', () => ({ default: () => <div>Bundle builder</div> }));
-vi.mock('../../../components/admin/ProductVariantsPanel', () => ({ default: ({ onStockTotalChange }) => <div>Variant editor<button type="button" onClick={() => onStockTotalChange(14, 2, undefined, 2)}>Update variant stock</button></div> }));
+vi.mock('../../../components/admin/ProductVariantsPanel', () => ({ default: ({ onStockTotalChange, pricingEnabled }) => <div data-testid="variant-editor" data-pricing-enabled={pricingEnabled}>Variant editor<button type="button" onClick={() => onStockTotalChange(14, 2, undefined, 2)}>Update variant stock</button></div> }));
 
 const product = { id: 'product', name: 'Test product', slug: 'test-product', type: 'simple', price: 200, quantity: 10, requiresShipping: false, status: 'draft', variants: [], comboItems: [], categories: [], images: [] };
 const mount = (id = 'product') => render(<MemoryRouter initialEntries={[`/admin/products/${id}/edit`]}><NotificationProvider><Routes><Route path="/admin/products/:id/edit" element={<ProductEditPage />} /></Routes></NotificationProvider></MemoryRouter>);
@@ -40,6 +41,7 @@ beforeEach(() => {
   vi.clearAllMocks();
   getTags.mockResolvedValue({ data: [] });
   disabledFeatures.clear();
+  hiddenFeatures.clear();
   getCategoryTree.mockResolvedValue({ data: [] });
   brandService.getBrands.mockResolvedValue({ data: { data: [] } });
   getSaleLabels.mockResolvedValue({ data: { data: [] } });
@@ -49,6 +51,18 @@ beforeEach(() => {
 });
 
 describe('product type and inventory editor', () => {
+  it.each([
+    { pricing: false, showPrices: false },
+    { pricing: true, showPrices: false },
+    { pricing: true, showPrices: true },
+  ])('respects admin price visibility in variant editing (pricing=$pricing, showPrices=$showPrices)', async ({ pricing, showPrices }) => {
+    if (!pricing) disabledFeatures.add('pricing');
+    if (!showPrices) hiddenFeatures.add('pricing');
+    getProductById.mockResolvedValue({ data: { ...product, type: 'variable' } });
+    mount(); await loaded();
+    expect(screen.getByTestId('variant-editor')).toHaveAttribute('data-pricing-enabled', String(pricing && showPrices));
+  });
+
   it('creates a catalog product without price or shipping measurements', async () => {
     disabledFeatures.add('pricing');
     disabledFeatures.add('shipping');

@@ -48,7 +48,7 @@ const variantInclude = [
         model: VariantOption,
         as: 'options',
         include: [
-            { model: AttributeTemplate, as: 'attribute', attributes: ATTRIBUTE_TEMPLATE_FIELDS },
+            { model: AttributeTemplate, as: 'attribute', attributes: ATTRIBUTE_TEMPLATE_FIELDS, paranoid: false },
             { model: AttributeValue,    as: 'value',     attributes: ATTRIBUTE_VALUE_FIELDS },
         ],
     },
@@ -113,8 +113,18 @@ const replaceVariantImageRows = async ({ productId, variantId, images = [], tran
 /**
  * Attribute Template CRUD
  */
-const createAttribute = async (data) => {
-    const slug = await generateSlug(data.name, AttributeTemplate);
+const writeAttributeTemplate = async (write) => {
+    try { return await write(); }
+    catch (error) {
+        if (error.name === 'SequelizeUniqueConstraintError') {
+            throw new AppError('CONFLICT', 409, 'An active attribute template with this name or slug already exists. Choose a different name.');
+        }
+        throw error;
+    }
+};
+
+const createAttribute = (data) => writeAttributeTemplate(async () => {
+    const slug = await generateSlug(data.name, AttributeTemplate, 'slug', { paranoid: true });
     if (data.unitCategory !== undefined) {
         return sequelize.transaction(async (transaction) => {
             await lockUnitSettings(transaction);
@@ -124,7 +134,7 @@ const createAttribute = async (data) => {
         });
     }
     return AttributeTemplate.create({ ...data, slug });
-};
+});
 
 const getAllAttributes = async (optionsOrPage = 1, limitArg = 20) => {
     let page = 1;
@@ -235,7 +245,7 @@ const getAttributeById = async (id, transaction) => {
     return attr;
 };
 
-const updateAttribute = async (id, data) => {
+const updateAttribute = (id, data) => writeAttributeTemplate(async () => {
     if (data.unitCategory !== undefined) {
         return sequelize.transaction(async (transaction) => {
             await lockUnitSettings(transaction);
@@ -245,37 +255,43 @@ const updateAttribute = async (id, data) => {
             validateCategoryChange(attr, unitCategory, settings);
             const updates = { ...data, unitCategory };
             if (unitCategory !== (attr.unitCategory || null)) updates.unit = null;
-            if (data.name && data.name !== attr.name) updates.slug = await generateSlug(data.name, AttributeTemplate);
+            if (data.name && data.name !== attr.name) updates.slug = await generateSlug(data.name, AttributeTemplate, 'slug', { transaction, paranoid: true });
             await attr.update(updates, { transaction });
             return attr;
         });
     }
     const attr = await getAttributeById(id);
     if (data.name && data.name !== attr.name) {
-        data.slug = await generateSlug(data.name, AttributeTemplate);
+        data.slug = await generateSlug(data.name, AttributeTemplate, 'slug', { paranoid: true });
     }
     await attr.update(data);
     return attr;
-};
+});
 
-const deleteAttribute = async (id) => {
-    const attr = await getAttributeById(id);
-
+const deleteAttribute = (id) => sequelize.transaction(async (transaction) => {
+    const attr = await AttributeTemplate.findByPk(id, {
+        attributes: ['id'], transaction, lock: transaction.LOCK.UPDATE,
+    });
+    if (!attr) throw new AppError('NOT_FOUND', 404, 'Attribute not found');
+    // Draft/hidden products and inactive variants still count; deleted products/variants do not.
     const [productAttrCount, variantOptCount] = await Promise.all([
-        ProductAttribute.count({ where: { attributeId: id } }),
-        VariantOption.count({ where: { attributeId: id } }),
+        ProductAttribute.count({
+            where: { attributeId: id }, transaction,
+            include: [{ model: Product, as: 'product', attributes: [], required: true }],
+        }),
+        VariantOption.count({
+            where: { attributeId: id }, transaction,
+            include: [{ model: ProductVariant, as: 'variant', attributes: [], required: true,
+                include: [{ model: Product, as: 'product', attributes: [], required: true }],
+            }],
+        }),
     ]);
-
-    if (productAttrCount > 0 || variantOptCount > 0) {
-        throw new AppError(
-            'CONFLICT',
-            409,
-            `Cannot delete attribute template: in use by ${productAttrCount} product attribute(s) and ${variantOptCount} variant option(s)`
-        );
+    if (productAttrCount || variantOptCount) {
+        throw new AppError('CONFLICT', 409, 'Cannot delete this attribute: it is still attached to product.');
     }
-
-    await attr.destroy();
-};
+    // Archive only the template; historical links and values are retained.
+    await attr.destroy({ transaction });
+});
 
 /**
  * Attribute Value CRUD
@@ -294,12 +310,12 @@ const addValue = async (attributeId, data) => {
 const updateValue = async (attributeId, valueId, data) => {
     return sequelize.transaction(async (transaction) => {
         await lockUnitSettings(transaction);
+        const attr = await getAttributeById(attributeId, transaction);
         const val = await AttributeValue.findOne({ where: { id: valueId, attributeId }, transaction });
         if (!val) throw new AppError('NOT_FOUND', 404, 'Attribute value not found');
 
         const updates = { ...data };
         if (data.unitLabel !== undefined) {
-            const attr = await getAttributeById(attributeId, transaction);
             const settings = await readUnitSettings(transaction);
             updates.unitLabel = validateValueUnit(attr, data.unitLabel, settings, val.unitLabel || attr.unit || null);
         }
@@ -313,6 +329,7 @@ const updateValue = async (attributeId, valueId, data) => {
 };
 
 const removeValue = async (attributeId, valueId) => {
+    await getAttributeById(attributeId);
     const val = await AttributeValue.findOne({ where: { id: valueId, attributeId } });
     if (!val) throw new AppError('NOT_FOUND', 404, 'Attribute value not found');
 
@@ -447,7 +464,7 @@ const loadVariantGenerationPlan = async (productId, transaction) => {
     const rows = await ProductAttribute.findAll({
         where: { productId, isVariantAttr: true, attributeId: { [Op.ne]: null } },
         include: [
-            { model: AttributeTemplate, as: 'attribute', attributes: ATTRIBUTE_TEMPLATE_FIELDS },
+            { model: AttributeTemplate, as: 'attribute', attributes: ATTRIBUTE_TEMPLATE_FIELDS, paranoid: false },
             { model: AttributeValue, as: 'value', attributes: ATTRIBUTE_VALUE_FIELDS },
         ],
         order: [['sortOrder', 'ASC']], transaction,
@@ -701,6 +718,7 @@ const reorderValues = async (attributeId, valueIds) => {
         throw new AppError('VALIDATION_ERROR', 400, 'Invalid attributeId or valueIds array');
     }
 
+    await getAttributeById(attributeId);
     // Verify all valueIds belong to this attribute
     const count = await AttributeValue.count({
         where: {

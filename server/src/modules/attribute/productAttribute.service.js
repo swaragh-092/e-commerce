@@ -14,6 +14,7 @@ const fullInclude = [
         model: AttributeTemplate,
         as: 'attribute',
         attributes: ATTRIBUTE_TEMPLATE_FIELDS,
+        paranoid: false,
     },
     {
         model: AttributeValue,

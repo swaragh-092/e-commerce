@@ -32,7 +32,7 @@ const assignProductAttribute = async (productId, data) => sequelize.transaction(
             if (existingCategory !== unitCategory) throw new AppError('CONFLICT', 409, 'An attribute with this name has a different unit category. Select the existing attribute or choose another name.');
             template = existing;
         } else {
-            const slug = await generateSlug(name, AttributeTemplate, 'slug', { transaction });
+            const slug = await generateSlug(name, AttributeTemplate, 'slug', { transaction, paranoid: true });
             template = await AttributeTemplate.create({ name, slug, unitCategory, valueType: data.attribute.valueType || 'auto', displayType: 'auto' }, { transaction });
         }
     }
@@ -71,7 +71,7 @@ const assignProductAttribute = async (productId, data) => sequelize.transaction(
             await ProductAttribute.create({ productId, attributeId: template.id, valueId: value.id, isVariantAttr, sortOrder: nextSortOrder++ }, { transaction });
         }
     }
-    return ProductAttribute.findAll({ where: { productId }, include: [{ model: AttributeTemplate, as: 'attribute' }, { model: AttributeValue, as: 'value' }], order: [['sortOrder', 'ASC'], ['createdAt', 'ASC'], ['id', 'ASC']], transaction });
+    return ProductAttribute.findAll({ where: { productId }, include: [{ model: AttributeTemplate, as: 'attribute', paranoid: false }, { model: AttributeValue, as: 'value' }], order: [['sortOrder', 'ASC'], ['createdAt', 'ASC'], ['id', 'ASC']], transaction });
 });
 
 module.exports = { assignProductAttribute };

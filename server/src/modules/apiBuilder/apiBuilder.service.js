@@ -405,7 +405,7 @@ const productInclude = (block) => {
         as: 'options',
         required: false,
         include: [
-          { model: AttributeTemplate, as: 'attribute', required: false },
+          { model: AttributeTemplate, as: 'attribute', required: false, paranoid: false },
           { model: AttributeValue, as: 'value', required: false },
         ],
       }],
@@ -417,7 +417,7 @@ const productInclude = (block) => {
       as: 'attributes',
       required: false,
       include: [
-        { model: AttributeTemplate, as: 'attribute', required: false },
+        { model: AttributeTemplate, as: 'attribute', required: false, paranoid: false },
         { model: AttributeValue, as: 'value', required: false },
       ],
     });
@@ -644,6 +644,7 @@ const RELATION_LOADERS = {
   }),
   attributeTemplate: async (parent, node, context) => ({
     rows: await AttributeTemplate.findAll({
+      paranoid: false,
       where: {
         ...buildNodeWhere('attributeTemplates', node, context),
         id: parent.attributeId || null,

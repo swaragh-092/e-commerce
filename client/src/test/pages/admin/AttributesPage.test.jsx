@@ -9,7 +9,7 @@ import settingsService from '../../../services/settingsService';
 
 const permissions = vi.hoisted(() => ({ manage: true }));
 vi.mock('../../../services/attributeService', () => ({ default: {
-  getAttributes: vi.fn(), getAttributeById: vi.fn(), createAttribute: vi.fn(), updateAttribute: vi.fn(),
+  getAttributes: vi.fn(), getAttributeById: vi.fn(), createAttribute: vi.fn(), updateAttribute: vi.fn(), deleteAttribute: vi.fn(),
   removeAttributeValue: vi.fn(), reorderAttributeValues: vi.fn(),
   addAttributeValue: vi.fn(), updateAttributeValue: vi.fn(),
 } }));
@@ -50,9 +50,36 @@ beforeEach(() => {
   attributeService.addAttributeValue.mockResolvedValue({});
   attributeService.updateAttributeValue.mockResolvedValue({});
   attributeService.removeAttributeValue.mockResolvedValue({});
+  attributeService.deleteAttribute.mockResolvedValue({});
 });
 
 describe('attribute category and value unit flow', () => {
+  it('explains soft deletion and refreshes the list without deleting existing product data', async () => {
+    mount();
+    const row = within(await screen.findByRole('row', { name: 'View values for Height' }));
+    fireEvent.click(row.getByRole('button', { name: 'Delete', exact: true }));
+    const dialog = within(await screen.findByRole('dialog', { name: 'Delete Attribute Template' }));
+    expect(dialog.getByText(/Deletion is blocked while it is attached to any product that has not been deleted/)).toBeInTheDocument();
+    expect(dialog.getByText(/You can reuse the name after deletion/)).toBeInTheDocument();
+    attributeService.getAttributes.mockResolvedValue({ data: { data: { rows: [], count: 0 } } });
+    fireEvent.click(dialog.getByRole('button', { name: 'Confirm', exact: true }));
+    await waitFor(() => expect(attributeService.deleteAttribute).toHaveBeenCalledWith('height'));
+    await waitFor(() => expect(screen.queryByRole('row', { name: 'View values for Height' })).not.toBeInTheDocument());
+    expect(attributeService.removeAttributeValue).not.toHaveBeenCalled();
+  });
+
+  it('keeps the attribute listed and explains when an existing product prevents deletion', async () => {
+    attributeService.deleteAttribute.mockRejectedValueOnce(new Error('Cannot delete this attribute: it is still attached to products that have not been deleted.'));
+    mount();
+    const row = within(await screen.findByRole('row', { name: 'View values for Height' }));
+    fireEvent.click(row.getByRole('button', { name: 'Delete', exact: true }));
+    const dialog = within(await screen.findByRole('dialog', { name: 'Delete Attribute Template' }));
+    fireEvent.click(dialog.getByRole('button', { name: 'Confirm', exact: true }));
+    expect(await screen.findByRole('alert')).toHaveTextContent('still attached to products that have not been deleted');
+    expect(await screen.findByRole('row', { name: 'View values for Height' })).toBeInTheDocument();
+    expect(attributeService.removeAttributeValue).not.toHaveBeenCalled();
+  });
+
   it('opens the values panel when an attribute row is clicked', async () => {
     mount();
     fireEvent.click(await screen.findByText('Height', { exact: true }));

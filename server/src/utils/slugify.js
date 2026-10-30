@@ -32,7 +32,7 @@ const generateSlug = async (text, Model = null, field = 'slug', options = {}) =>
     while (await Model.findOne({ 
         where: { [field]: candidate, ...(options.where || {}) }, 
         transaction: options.transaction,
-        paranoid: false // Check even deleted items to avoid collision if they are restored
+        paranoid: options.paranoid ?? false // Keep deleted slugs reserved unless the caller explicitly permits reuse.
     })) {
         candidate = `${slug}-${counter}`;
         counter++;
