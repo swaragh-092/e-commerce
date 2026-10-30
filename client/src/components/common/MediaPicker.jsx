@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo, useRef, useCallback } from 'react';
+import React, { useState, useEffect, useMemo, useRef, useCallback, useId } from 'react';
 import {
   Dialog,
   DialogTitle,
@@ -55,6 +55,8 @@ const CACHE_TTL = 30000; // 30 seconds
  * @param {string}   title       - Custom dialog title
  */
 const MediaPicker = ({ open, onClose, onSelect, multiple = false, title = 'Select Media' }) => {
+  const titleId = useId();
+  const activeRef = useRef(open);
   const [tab, setTab] = useState(0); // 0: Upload, 1: Library
   const [media, setMedia] = useState([]);
   const [loading, setLoading] = useState(false);
@@ -134,6 +136,7 @@ const MediaPicker = ({ open, onClose, onSelect, multiple = false, title = 'Selec
   // Reset state when opening
   useEffect(() => {
     if (open) {
+      activeRef.current = true;
       setSelected([]);
       setLoadError('');
 
@@ -146,6 +149,10 @@ const MediaPicker = ({ open, onClose, onSelect, multiple = false, title = 'Selec
       } else {
         fetchMedia(1);
       }
+    } else {
+      activeRef.current = false;
+      requestIdRef.current += 1;
+      abortControllerRef.current?.abort();
     }
   }, [cacheKey, fetchMedia, open]);
 
@@ -157,11 +164,15 @@ const MediaPicker = ({ open, onClose, onSelect, multiple = false, title = 'Selec
     }
   }, [cacheKey, fetchMedia, open]);
 
-  useEffect(() => () => abortControllerRef.current?.abort(), []);
+  useEffect(() => () => {
+    activeRef.current = false;
+    requestIdRef.current += 1;
+    abortControllerRef.current?.abort();
+  }, []);
 
   // Infinite scroll observer
   useEffect(() => {
-    if (!hasMore || loading || loadingMore) return;
+    if (!open || !hasMore || loading || loadingMore) return;
 
     const observer = new IntersectionObserver(
       (entries) => {
@@ -183,7 +194,7 @@ const MediaPicker = ({ open, onClose, onSelect, multiple = false, title = 'Selec
       }
       observer.disconnect();
     };
-  }, [hasMore, loading, loadingMore]);
+  }, [open, hasMore, loading, loadingMore]);
 
   const handleLoadMore = () => {
     if (!loading && !loadingMore && hasMore) {
@@ -214,16 +225,25 @@ const MediaPicker = ({ open, onClose, onSelect, multiple = false, title = 'Selec
     }
   };
 
-  const handleConfirm = () => {
-    onSelect(multiple ? selected : (selected[0] ? [selected[0]] : []));
+  const handleClose = () => {
+    activeRef.current = false;
+    requestIdRef.current += 1;
+    abortControllerRef.current?.abort();
     onClose();
   };
 
+  const handleConfirm = () => {
+    if (!activeRef.current || selected.length === 0) return;
+    onSelect(multiple ? selected : (selected[0] ? [selected[0]] : []));
+    handleClose();
+  };
+
   const handleUploadSuccess = (newMedia) => {
+    if (!activeRef.current) return;
     // If it's a single upload and we are in single mode, auto-select and close
     if (!multiple) {
       onSelect([newMedia]);
-      onClose();
+      handleClose();
     } else {
       // If multiple, add to selection but don't refresh here (onAllUploadsComplete handles it)
       setSelected((prev) => [...prev, newMedia]);
@@ -232,30 +252,37 @@ const MediaPicker = ({ open, onClose, onSelect, multiple = false, title = 'Selec
   };
 
   const handleAllUploadsComplete = () => {
-    fetchMedia(1, false, true); // Refresh library in background
+    if (activeRef.current) fetchMedia(1, false, true); // Refresh only an active picker.
   };
 
   return (
     <Dialog
       open={open}
-      onClose={onClose}
+      onClose={handleClose}
+      aria-labelledby={titleId}
+      // Portaled clicks still bubble through React parents (including canvas image triggers).
+      onClick={(event) => event.stopPropagation()}
+      onMouseDown={(event) => event.stopPropagation()}
+      onKeyDown={(event) => event.stopPropagation()}
       maxWidth="md"
       fullWidth
       PaperProps={{
         sx: {
-          borderRadius: 3,
-          height: { xs: '90vh', sm: '80vh' },
-          maxHeight: '90vh',
+          borderRadius: '12px',
+          m: { xs: 1, sm: 4 },
+          width: { xs: 'calc(100% - 16px)', sm: 'calc(100% - 64px)' },
+          height: { xs: 'calc(100dvh - 16px)', sm: '80dvh' },
+          maxHeight: 'calc(100dvh - 16px)',
           display: 'flex',
           flexDirection: 'column',
         },
       }}
     >
-      <DialogTitle component="div" sx={{ p: 2, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+      <DialogTitle id={titleId} component="div" sx={{ p: 2, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
         <Typography variant="h6" fontWeight={700}>
           {title}
         </Typography>
-        <IconButton onClick={onClose} size="small">
+        <IconButton onClick={handleClose} aria-label="Close media picker" size="small" sx={{ width: 40, height: 40 }}>
           <CloseIcon />
         </IconButton>
       </DialogTitle>
@@ -278,7 +305,7 @@ const MediaPicker = ({ open, onClose, onSelect, multiple = false, title = 'Selec
       </Box>
 
       <DialogContent sx={{ p: 0, display: 'flex', flexDirection: 'column', bgcolor: 'grey.50' }}>
-        {tab === 0 && (
+        {tab === 0 && open && (
           <Box sx={{ p: 4, height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
             <Box sx={{ width: '100%', maxWidth: 500 }}>
               <MediaUploader
@@ -366,16 +393,22 @@ const MediaPicker = ({ open, onClose, onSelect, multiple = false, title = 'Selec
                       return (
                         <Grid item xs={4} sm={3} md={2.4} key={item.id}>
                           <Card
+                            component="button"
+                            type="button"
+                            aria-label={`Select ${item.alt || item.originalName || item.filename || 'image'}`}
+                            aria-pressed={isSelected}
                             elevation={0}
                             onClick={() => handleToggleSelect(item)}
                             sx={{
                               position: 'relative',
+                              width: '100%',
                               pt: '100%',
                               cursor: 'pointer',
                               borderRadius: 2,
                               border: '3px solid',
                               borderColor: isSelected ? 'primary.main' : 'transparent',
                               transition: 'all 0.2s',
+                              '&:focus-visible': { outline: '2px solid', outlineColor: 'primary.main', outlineOffset: 2 },
                               '&:hover': {
                                 transform: 'scale(1.02)',
                                 boxShadow: 2,
@@ -450,7 +483,7 @@ const MediaPicker = ({ open, onClose, onSelect, multiple = false, title = 'Selec
           )}
         </Box>
         <Box sx={{ display: 'flex', gap: 1 }}>
-          <Button onClick={onClose} variant="outlined">
+          <Button onClick={handleClose} variant="outlined" color="inherit">
             Cancel
           </Button>
           <Button

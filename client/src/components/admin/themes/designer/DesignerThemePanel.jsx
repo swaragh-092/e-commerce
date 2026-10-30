@@ -299,52 +299,45 @@ const DesignerThemePanel = ({
   return (
     <Box sx={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
 
-      {/* Panel header */}
-      <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, px: 1.5, py: 1, borderBottom: '1px solid', borderColor: 'divider' }}>
-        <IconButton size="small" onClick={onBack}>
+      {/* The inspector carries its own title; avoid repeating panel chrome. */}
+      {!activeComponent && <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, px: 1.5, py: 1, borderBottom: '1px solid', borderColor: 'divider' }}>
+        <IconButton size="small" onClick={onBack} aria-label="Back to sections" sx={{ width: 40, height: 40 }}>
           <ArrowBackIcon fontSize="small" />
         </IconButton>
         <Box>
-          <Typography variant="subtitle2" fontWeight={800} sx={{ fontSize: '0.88rem' }}>Design system &amp; components</Typography>
+          <Typography variant="subtitle2" fontWeight={800} sx={{ fontSize: '0.88rem' }}>Store styles</Typography>
           <Typography variant="caption" color="text.secondary" sx={{ fontSize: '0.7rem' }}>
-            Select an item in the editor preview for contextual controls, or use the library below.
+            Colors, buttons and reusable components.
           </Typography>
         </Box>
-      </Box>
+      </Box>}
 
       {activeComponent ? (
         // Inspector sub-view — showing a specific component editor
         <Box sx={{ display: 'flex', flexDirection: 'column', flex: 1, overflow: 'hidden' }}>
-          <Box sx={{ display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: 1, rowGap: 0.5, px: 1.5, py: 0.75, bgcolor: 'action.hover', borderBottom: '1px solid', borderColor: 'divider' }}>
-            <Box sx={{ color: 'primary.main' }}>{activeItem.icon}</Box>
-            <Box sx={{ flex: 1, minWidth: 0 }}>
-              <Typography variant="body2" fontWeight={700} sx={{ fontSize: '0.82rem' }}>{activeItem.label}</Typography>
-              <Typography variant="caption" color="text.secondary" sx={{ display: 'block', fontSize: '0.68rem' }}>
-                {activeItem.description}
+          <Box sx={{ px: 2, py: 1.5, borderBottom: '1px solid', borderColor: 'divider' }}>
+            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 0.5 }}>
+              <Box sx={{ color: 'text.secondary', display: 'flex', flexShrink: 0 }}>{activeItem.icon}</Box>
+              <Typography variant="subtitle2" fontWeight={700} sx={{ flex: 1, minWidth: 0 }}>
+                {activeComponent === 'designTokens' ? 'Storefront style' : activeItem.label}
               </Typography>
+              <Chip label={isDraft ? 'Draft' : isCustomized ? 'Custom' : 'Default'} size="small" variant="outlined"
+                sx={{ height: 22, fontSize: 11, flexShrink: 0 }} />
             </Box>
-            <Chip
-              label={isDraft ? 'Draft' : isCustomized ? 'Customized' : 'Default'}
-              size="small"
-              color={isDraft || isCustomized ? 'primary' : 'default'}
-              variant={isDraft || isCustomized ? 'filled' : 'outlined'}
-              sx={{ height: 22, fontSize: '0.66rem', fontWeight: 700 }}
-            />
-            <Button
-              size="small"
-              color="inherit"
-              onClick={() => setResetOpen(true)}
-              disabled={(!isCustomized && !isDraft) || resetting}
-              sx={{ minWidth: 0, px: 0.75, fontSize: '0.7rem', whiteSpace: 'nowrap' }}
-            >
-              {resetting ? 'Resetting…' : 'Reset'}
-            </Button>
-            <Button size="small" variant="text" onClick={() => onComponentSelect(null)}
-              sx={{ fontSize: '0.72rem', minWidth: 0, px: 1 }}>
-              ← All
-            </Button>
+            <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mb: 1 }}>
+              {activeItem.description}
+            </Typography>
+            <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 1 }}>
+              <Button size="small" color="inherit" startIcon={<ArrowBackIcon />} onClick={() => onComponentSelect(null)}
+                sx={{ minHeight: 36, textTransform: 'none', borderRadius: 1 }}>All styles</Button>
+              <Button size="small" color="inherit" onClick={() => setResetOpen(true)}
+                disabled={(!isCustomized && !isDraft) || resetting}
+                sx={{ minHeight: 36, textTransform: 'none', borderRadius: 1 }}>
+                {resetting ? 'Resetting…' : 'Reset defaults'}
+              </Button>
+            </Box>
           </Box>
-          <Box sx={{ flex: 1, overflowY: 'auto', p: 2 }}>
+          <Box sx={{ flex: 1, minHeight: 0, minWidth: 0, overflowY: 'auto', overflowX: 'hidden', p: 2 }}>
             {activeItem.requiresAdvanced && !canManageAdvancedSettings && (
               <Alert severity="warning" sx={{ mb: 2 }}>
                 Advanced settings permission required.

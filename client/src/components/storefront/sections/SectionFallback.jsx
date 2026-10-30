@@ -275,8 +275,20 @@ export const CanvasEditableImage = ({
   };
 
   return (
+    <>
     <Box
+      {...props}
+      role="button"
+      tabIndex={0}
+      aria-label={props['aria-label'] ? `Change image: ${props['aria-label']}` : 'Change image'}
       onClick={(event) => {
+        stop(event);
+        focusBlock();
+        setPickerOpen(true);
+      }}
+      onKeyDown={(event) => {
+        if (event.key !== 'Enter' && event.key !== ' ') return;
+        event.preventDefault();
         stop(event);
         focusBlock();
         setPickerOpen(true);
@@ -291,9 +303,10 @@ export const CanvasEditableImage = ({
         '&:hover .image-edit-overlay': {
           opacity: 1,
         },
+        '&:focus-visible': { outline: '2px solid', outlineColor: 'primary.main', outlineOffset: 2 },
+        '&:focus-visible .image-edit-overlay': { opacity: 1 },
         ...sx,
       }}
-      {...props}
     >
       {children}
       <Box
@@ -331,6 +344,7 @@ export const CanvasEditableImage = ({
           Change Image
         </Typography>
       </Box>
+    </Box>
       {pickerOpen && (
         <MediaPicker
           open={pickerOpen}
@@ -339,7 +353,7 @@ export const CanvasEditableImage = ({
           title="Select Image"
         />
       )}
-    </Box>
+    </>
   );
 };
 

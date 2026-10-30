@@ -1,3 +1,16 @@
+import {
+  buildButtonPalette,
+  buildColorCssVariables,
+  buildMuiButtonStyleOverrides,
+  mixColor,
+  resolveDesignTokens,
+  SAFETY_RED,
+  SAFETY_RED_HOVER,
+} from './designTokens';
+
+// Re-exported for callers that historically imported these from theme.js.
+export { SAFETY_RED, SAFETY_RED_HOVER };
+
 const TYPOGRAPHY_SCALE_PRESETS = {
   compact: {
     h1: '2.125rem', h2: '1.75rem', h3: '1.5rem', h4: '1.25rem', h5: '1.1rem', h6: '1rem', body1: '0.95rem', body2: '0.85rem',
@@ -25,10 +38,6 @@ const TYPOGRAPHY_SCALE_PRESETS = {
   },
 };
 
-// Fixed immutable Safety Red constants for delete, danger, and destructive actions.
-// Kept strictly separate from the configurable theme errorColor token.
-export const SAFETY_RED = '#dc3545';
-export const SAFETY_RED_HOVER = '#b91c1c';
 
 const cssValue = (value, fallback) => (value === undefined || value === null || value === '' ? fallback : value);
 const numeric = (value, fallback) => {
@@ -94,40 +103,27 @@ const buildFontFaceStyles = (t = {}) => {
 };
 
 export const resolveStorefrontThemeState = (themeSettings = {}, customerDarkMode = null) => {
-  const t = themeSettings || {};
-  const prefersDark = typeof window !== 'undefined' && window.matchMedia?.('(prefers-color-scheme: dark)').matches;
-  const themeMode = customerDarkMode || t.mode || (prefersDark ? 'dark' : 'light');
-  const isDark = themeMode === 'dark';
-  const fallbackPrimary = isDark ? '#4fd1a5' : '#0f766e';
-  const fallbackSecondary = isDark ? '#ffb86b' : '#f97316';
-  const fallbackBackground = isDark ? '#101514' : '#f7f3ec';
-  const fallbackSurface = isDark ? '#17211f' : '#fffaf2';
-  const fallbackText = isDark ? '#f8fafc' : '#1f2933';
-  // Always honor admin-configured colors. The darkPalette object (if provided)
-  // is layered on top in dark mode. Previously a useAdminColors flag dropped
-  // admin colors whenever a customer toggled to a mode that did not match the
-  // admin's configured mode — see issue H1 in docs/DESIGN-SYSTEM-ISSUES.md.
-  // Dark palette: admin-configured colors for dark mode override
-  const dp = isDark && t.darkPalette ? t.darkPalette : null;
-
+  const tokens = resolveDesignTokens(themeSettings, customerDarkMode);
+  const colors = tokens.colors;
   return {
-    t,
-    themeMode,
-    isDark,
-    radius: parseInt(t.borderRadius, 10) || 8,
-    backgroundStyle: t.backgroundStyle || 'softGradient',
-    buttonStyle: t.buttonStyle || 'solid',
-    cardStyle: t.cardStyle || 'elevated',
-    primaryMain:    dp?.primaryColor    || t.primaryColor    || fallbackPrimary,
-    secondaryMain:  dp?.secondaryColor  || t.secondaryColor  || fallbackSecondary,
-    backgroundDefault: dp?.backgroundColor || t.backgroundColor || fallbackBackground,
-    surfaceColor:   dp?.surfaceColor    || t.surfaceColor    || fallbackSurface,
-    textColor:      dp?.textColor       || t.textColor       || fallbackText,
-    errorColor:     dp?.errorColor      || t.errorColor      || '#dc3545',
-    cancelButtonColor: dp?.cancelButtonColor || t.cancelButtonColor || '#dc3545',
-    warningColor:   dp?.warningColor    || t.warningColor    || '#d97706',
-    successColor:   dp?.successColor    || t.successColor    || '#059669',
-    infoColor:      dp?.infoColor       || t.infoColor       || '#0284c7',
+    t: tokens.theme,
+    tokens,
+    themeMode: tokens.mode,
+    isDark: tokens.isDark,
+    radius: tokens.radius,
+    backgroundStyle: tokens.backgroundStyle,
+    buttonStyle: tokens.legacyButtonStyle,
+    cardStyle: tokens.cardStyle,
+    primaryMain: colors.primary,
+    secondaryMain: colors.secondary,
+    backgroundDefault: colors.background,
+    surfaceColor: colors.surface,
+    textColor: colors.text,
+    errorColor: colors.error,
+    cancelButtonColor: colors.cancel,
+    warningColor: colors.warning,
+    successColor: colors.success,
+    infoColor: colors.info,
   };
 };
 
@@ -187,37 +183,23 @@ export const buildStorefrontCssVariables = (settingsOrTheme = {}, customerDarkMo
     buttonStyle,
     cardStyle,
     primaryMain,
-    secondaryMain,
     backgroundDefault,
     surfaceColor,
     textColor,
-    errorColor,
-    cancelButtonColor,
-    warningColor,
-    successColor,
-    infoColor,
     t,
   } = resolveStorefrontThemeState(themeSettings, customerDarkMode);
 
-  // Derived color scale — mirrors the values computed in buildStorefrontTheme() palette
-  // so MUI and CSS vars are always in sync.
-  const primaryDark   = isDark ? '#31a884' : '#0b4f49';
-  const primaryLight  = isDark ? '#7ee5c4' : '#ccfbf1';
-  const secondaryDark = isDark ? '#f59e0b' : '#c2410c';
-  const secondaryLight= isDark ? '#ffd39a' : '#fed7aa';
-  const onSecondary   = isDark ? '#1f2933' : '#ffffff';
-  const textMuted     = isDark ? '#cbd5e1' : '#64748b';
-  const textDisabled  = isDark ? '#475569' : '#94a3b8';
+  // All colour scale / interaction tokens are derived from the merchant's
+  // selected brand colours by the shared resolver, so MUI, CSS variables, and
+  // the designer previews cannot drift apart.
+  const tokens        = resolveDesignTokens(themeSettings, customerDarkMode);
+  const colors        = tokens.colors;
+  const textMuted     = colors.textMuted;
+  const textDisabled  = colors.textDisabled;
   const typeScale     = getTypographyScale(t);
   const fontStacks    = getFontStacks(t);
   const mobile        = getMobileOverrides(t);
-  const divider       = isDark ? 'rgba(148, 163, 184, 0.18)' : 'rgba(15, 118, 110, 0.14)';
-
-  // State colors — derived from primary for hover/active/focus interactions
-  const primaryHover  = isDark ? '#3fc49e' : '#0d6b63';
-  const primaryActive = isDark ? '#2a9e7d' : '#094844';
-  const surfaceHover  = isDark ? 'rgba(79, 209, 165, 0.08)' : 'rgba(15, 118, 110, 0.06)';
-  const surfaceActive = isDark ? 'rgba(79, 209, 165, 0.14)' : 'rgba(15, 118, 110, 0.10)';
+  const divider       = colors.divider;
 
   const productCardStyles = componentStyles.productCard || {};
   const categoryCardStyles = componentStyles.categoryCard || {};
@@ -261,46 +243,11 @@ export const buildStorefrontCssVariables = (settingsOrTheme = {}, customerDarkMo
   }
 
   return {
-    // ─── Core brand colors ───────────────────────────────────────────────────
-    '--store-theme-mode':     themeMode,
-    '--store-color-primary':  primaryMain,
-    '--store-color-secondary':secondaryMain,
-    '--store-color-background':backgroundDefault,
-    '--store-color-surface':  surfaceColor,
-    '--store-color-text':     textColor,
-    '--store-color-text-muted':   textMuted,
-    '--store-color-text-disabled': textDisabled,
-    '--store-color-divider':      divider,
-    '--store-color-border':       divider,   // semantic alias — same value, different intent
-
-    // ─── Derived color scale (dark / light / on-* variants) ─────────────────
-    // Enables: var(--store-color-primary-dark) in custom CSS / widgets
-    '--store-color-primary-dark':    primaryDark,
-    '--store-color-primary-light':   primaryLight,
-    '--store-color-on-primary':      '#ffffff',
-    '--store-color-secondary-dark':  secondaryDark,
-    '--store-color-secondary-light': secondaryLight,
-    '--store-color-on-secondary':    onSecondary,
-    '--store-color-on-surface':      textColor,
-    '--store-color-on-surface-secondary': textMuted,
-
-    // ─── Semantic / state colors ─────────────────────────────────────────────
-    // These match the MUI palette (error/warning/success/info) so widgets can
-    // use var(--store-color-success) instead of hardcoding hex.
-    '--store-color-error':   errorColor,
-    '--store-color-warning': warningColor,
-    '--store-color-success': successColor,
-    '--store-color-info':    infoColor,
-
-    // ─── Interaction state tokens ─────────────────────────────────────────────
-    // Hover / active / focus variants for primary and surface colours.
-    // Use these in custom CSS: a:hover { color: var(--store-color-primary-hover) }
-    '--store-color-primary-hover':  primaryHover,
-    '--store-color-primary-active': primaryActive,
-    '--store-color-surface-hover':  surfaceHover,
-    '--store-color-surface-active': surfaceActive,
-    '--store-color-overlay':        isDark ? 'rgba(0, 0, 0, 0.56)' : 'rgba(0, 0, 0, 0.32)',
-    '--store-color-scrim':          isDark ? 'rgba(0, 0, 0, 0.72)' : 'rgba(0, 0, 0, 0.48)',
+    // ─── Core brand, semantic, derived and interaction colors ────────────────
+    // Generated by the shared resolver so previews, MUI, and custom CSS use
+    // exactly the same values.
+    '--store-theme-mode': themeMode,
+    ...buildColorCssVariables(tokens),
 
     // ─── Shape scale ─────────────────────────────────────────────────────────
     // Full semantic radius scale derived from the admin-configured borderRadius.
@@ -325,7 +272,7 @@ export const buildStorefrontCssVariables = (settingsOrTheme = {}, customerDarkMo
     '--store-shadow-hover':    isDark ? '0 18px 40px rgba(0, 0, 0, 0.30)'    : '0 12px 28px rgba(15, 23, 42, 0.13)',
     '--store-shadow-dropdown': isDark ? '0 12px 32px rgba(0, 0, 0, 0.28)'    : '0 12px 32px rgba(31, 41, 51, 0.12)',
     '--store-shadow-none':     'none',
-    '--store-focus-ring':      `0 0 0 3px color-mix(in srgb, ${primaryMain} 18%, transparent)`,
+    '--store-focus-ring':      tokens.colors.focusRing,
     '--store-overlay-dark':    'rgba(15, 23, 42, 0.72)',
 
     // ─── Typography ──────────────────────────────────────────────────────────
@@ -447,26 +394,7 @@ export const buildStorefrontCssVariables = (settingsOrTheme = {}, customerDarkMo
     '--store-style-card':       cardStyle,
 
     // ─── Button semantic tokens ───────────────────────────────────────────────
-    '--store-btn-radius':         buttonRadiusVal,
-    '--store-btn-primary-bg':     primaryMain,
-    '--store-btn-primary-text':   '#ffffff',
-    '--store-btn-secondary-bg':   secondaryMain,
-    '--store-btn-secondary-text': onSecondary,
-    '--store-btn-danger-bg':      SAFETY_RED,
-    '--store-btn-danger-hover':   SAFETY_RED_HOVER,
-    '--store-btn-danger-text':    '#ffffff',
-    '--store-btn-cancel-border':  cancelButtonColor || SAFETY_RED,
-    '--store-btn-cancel-text':    cancelButtonColor || SAFETY_RED,
-    '--store-btn-success-bg':     successColor || '#059669',
-    '--store-btn-success-text':   '#ffffff',
-    '--store-btn-warning-bg':     warningColor || '#d97706',
-    '--store-btn-warning-text':   '#ffffff',
-    '--store-btn-info-bg':        infoColor || '#0284c7',
-    '--store-btn-info-text':      '#ffffff',
-    '--store-btn-light-bg':       isDark ? '#334155' : '#f8fafc',
-    '--store-btn-light-text':     isDark ? '#f8fafc' : '#1e293b',
-    '--store-btn-dark-bg':        isDark ? '#0f172a' : '#212529',
-    '--store-btn-dark-text':      '#ffffff',
+    '--store-btn-radius': buttonRadiusVal,
   };
 };
 
@@ -503,16 +431,17 @@ export const buildStorefrontTheme = (themeSettings = {}, customerDarkMode = null
     buttonStyle,
     cardStyle,
     primaryMain,
-    secondaryMain,
     backgroundDefault,
     surfaceColor,
     textColor,
-    errorColor,
-    cancelButtonColor,
-    warningColor,
-    successColor,
-    infoColor,
   } = resolveStorefrontThemeState(themeSettings, customerDarkMode);
+
+  const tokens = resolveDesignTokens(themeSettings, customerDarkMode);
+  const paletteTokens = buildButtonPalette(tokens);
+  const { styleOverrides: buttonStyleOverrides, variants: buttonVariants } = buildMuiButtonStyleOverrides(tokens, {
+    radius,
+    buttonStyle,
+  });
 
   const typeScale = getTypographyScale(t);
   const fontStacks = getFontStacks(t);
@@ -534,63 +463,23 @@ export const buildStorefrontTheme = (themeSettings = {}, customerDarkMode = null
   return {
     palette: {
       mode: themeMode,
-      primary: {
-        main: primaryMain,
-        dark: isDark ? '#31a884' : '#0b4f49',
-        light: isDark ? '#7ee5c4' : '#ccfbf1',
-        contrastText: '#ffffff',
-      },
-      secondary: {
-        main: secondaryMain,
-        dark: isDark ? '#f59e0b' : '#c2410c',
-        light: isDark ? '#ffd39a' : '#fed7aa',
-        contrastText: isDark ? '#1f2933' : '#ffffff',
-      },
-      error: {
-        main: errorColor || '#dc3545',
-        dark: '#b91c1c',
-        light: '#f87171',
-        contrastText: '#ffffff',
-      },
-      warning: {
-        main: warningColor || '#d97706',
-        dark: '#b45309',
-        light: '#fde68a',
-        contrastText: '#ffffff',
-      },
-      success: {
-        main: successColor || '#059669',
-        dark: '#047857',
-        light: '#a7f3d0',
-        contrastText: '#ffffff',
-      },
-      info: {
-        main: infoColor || '#0284c7',
-        dark: '#0369a1',
-        light: '#bae6fd',
-        contrastText: '#ffffff',
-      },
-      light: {
-        main: isDark ? '#334155' : '#f8fafc',
-        dark: isDark ? '#1e293b' : '#e2e8f0',
-        light: isDark ? '#475569' : '#ffffff',
-        contrastText: isDark ? '#f8fafc' : '#1e293b',
-      },
-      dark: {
-        main: isDark ? '#0f172a' : '#212529',
-        dark: '#020617',
-        light: '#334155',
-        contrastText: '#ffffff',
-      },
+      ...paletteTokens,
       background: {
         default: backgroundDefault,
         paper: surfaceColor,
       },
       text: {
         primary: textColor,
-        secondary: isDark ? '#cbd5e1' : '#64748b',
+        secondary: tokens.colors.textMuted,
+        disabled: tokens.colors.textDisabled,
       },
-      divider: isDark ? 'rgba(148, 163, 184, 0.18)' : 'rgba(15, 118, 110, 0.14)',
+      divider: tokens.colors.divider,
+      action: {
+        hover: tokens.colors.surfaceHover,
+        selected: tokens.colors.surfacePressed,
+        disabled: tokens.colors.textDisabled,
+        disabledBackground: mixColor(surfaceColor, textColor, 0.08),
+      },
     },
     typography: {
       fontFamily: fontStacks.body,
@@ -618,222 +507,8 @@ export const buildStorefrontTheme = (themeSettings = {}, customerDarkMode = null
     },
     components: {
       MuiButton: {
-        styleOverrides: {
-          root: {
-            borderRadius: buttonStyle === 'pill' ? 9999 : radius,
-            textTransform: 'none',
-            fontWeight: 600,
-            boxShadow: 'none',
-            transition: 'all 0.15s ease-in-out',
-            '&:hover': { boxShadow: 'none' },
-          },
-          containedPrimary: {
-            background: buttonStyle === 'soft' || buttonStyle === 'outline'
-              ? 'transparent'
-              : `linear-gradient(135deg, ${primaryMain} 0%, ${isDark ? secondaryMain : '#134e4a'} 100%)`,
-            color: buttonStyle === 'soft' || buttonStyle === 'outline' ? primaryMain : '#ffffff',
-            border: buttonStyle === 'outline' ? `1px solid ${primaryMain}` : '1px solid transparent',
-            ...(buttonStyle === 'soft' && { backgroundColor: `${primaryMain}22` }),
-            '&:hover': {
-              boxShadow: 'none',
-              ...(buttonStyle === 'outline'
-                ? { backgroundColor: `${primaryMain}14`, borderColor: primaryMain }
-                : buttonStyle === 'soft'
-                  ? { backgroundColor: `${primaryMain}33` }
-                  : { opacity: 0.92 }),
-            },
-          },
-          containedSecondary: {
-            background: buttonStyle === 'soft' || buttonStyle === 'outline'
-              ? 'transparent'
-              : secondaryMain,
-            color: buttonStyle === 'soft' || buttonStyle === 'outline' ? secondaryMain : (isDark ? '#1f2933' : '#ffffff'),
-            border: buttonStyle === 'outline' ? `1px solid ${secondaryMain}` : '1px solid transparent',
-            ...(buttonStyle === 'soft' && { backgroundColor: `${secondaryMain}22` }),
-            '&:hover': {
-              boxShadow: 'none',
-              ...(buttonStyle === 'outline'
-                ? { backgroundColor: `${secondaryMain}14`, borderColor: secondaryMain }
-                : buttonStyle === 'soft'
-                  ? { backgroundColor: `${secondaryMain}33` }
-                  : { opacity: 0.92 }),
-            },
-          },
-          containedSuccess: {
-            backgroundColor: successColor || '#059669',
-            color: '#ffffff',
-            border: '1px solid transparent',
-            '&:hover': {
-              backgroundColor: '#047857',
-              boxShadow: 'none',
-            },
-          },
-          containedError: {
-            // Strictly locked to Safety Red (#dc3545) for all delete, danger, and destructive actions
-            backgroundColor: SAFETY_RED,
-            color: '#ffffff',
-            border: '1px solid transparent',
-            '&:hover': {
-              backgroundColor: SAFETY_RED_HOVER,
-              boxShadow: 'none',
-            },
-          },
-          containedWarning: {
-            backgroundColor: warningColor || '#d97706',
-            color: '#ffffff',
-            border: '1px solid transparent',
-            '&:hover': {
-              backgroundColor: '#b45309',
-              boxShadow: 'none',
-            },
-          },
-          containedInfo: {
-            backgroundColor: infoColor || '#0284c7',
-            color: '#ffffff',
-            border: '1px solid transparent',
-            '&:hover': {
-              backgroundColor: '#0369a1',
-              boxShadow: 'none',
-            },
-          },
-          outlinedSuccess: {
-            borderColor: successColor || '#059669',
-            color: successColor || '#059669',
-            '&:hover': {
-              borderColor: '#047857',
-              backgroundColor: `${successColor || '#059669'}14`,
-            },
-          },
-          outlinedError: {
-            borderColor: cancelButtonColor || SAFETY_RED,
-            color: cancelButtonColor || SAFETY_RED,
-            '&:hover': {
-              borderColor: cancelButtonColor || SAFETY_RED_HOVER,
-              backgroundColor: `${cancelButtonColor || SAFETY_RED}14`,
-            },
-          },
-          outlinedWarning: {
-            borderColor: warningColor || '#d97706',
-            color: warningColor || '#d97706',
-            '&:hover': {
-              borderColor: '#b45309',
-              backgroundColor: `${warningColor || '#d97706'}14`,
-            },
-          },
-          outlinedInfo: {
-            borderColor: infoColor || '#0284c7',
-            color: infoColor || '#0284c7',
-            '&:hover': {
-              borderColor: '#0369a1',
-              backgroundColor: `${infoColor || '#0284c7'}14`,
-            },
-          },
-          textError: {
-            color: cancelButtonColor || SAFETY_RED,
-            '&:hover': {
-              backgroundColor: `${cancelButtonColor || SAFETY_RED}14`,
-            },
-          },
-          textSuccess: {
-            color: successColor || '#059669',
-            '&:hover': {
-              backgroundColor: `${successColor || '#059669'}14`,
-            },
-          },
-        },
-        variants: [
-          {
-            props: { color: 'light' },
-            style: {
-              backgroundColor: isDark ? '#334155' : '#f8fafc',
-              color: isDark ? '#f8fafc' : '#1e293b',
-              border: `1px solid ${isDark ? '#475569' : '#e2e8f0'}`,
-              '&:hover': {
-                backgroundColor: isDark ? '#475569' : '#f1f5f9',
-                borderColor: isDark ? '#64748b' : '#cbd5e1',
-                boxShadow: 'none',
-              },
-            },
-          },
-          {
-            props: { variant: 'contained', color: 'light' },
-            style: {
-              backgroundColor: isDark ? '#334155' : '#f8fafc',
-              color: isDark ? '#f8fafc' : '#1e293b',
-              border: `1px solid ${isDark ? '#475569' : '#e2e8f0'}`,
-              '&:hover': {
-                backgroundColor: isDark ? '#475569' : '#f1f5f9',
-                boxShadow: 'none',
-              },
-            },
-          },
-          {
-            props: { variant: 'outlined', color: 'light' },
-            style: {
-              backgroundColor: 'transparent',
-              color: isDark ? '#f8fafc' : '#475569',
-              borderColor: isDark ? '#475569' : '#cbd5e1',
-              '&:hover': {
-                backgroundColor: isDark ? '#33415522' : '#f8fafc',
-                borderColor: isDark ? '#64748b' : '#94a3b8',
-              },
-            },
-          },
-          {
-            props: { color: 'dark' },
-            style: {
-              backgroundColor: isDark ? '#0f172a' : '#212529',
-              color: '#ffffff',
-              border: `1px solid ${isDark ? '#1e293b' : '#212529'}`,
-              '&:hover': {
-                backgroundColor: isDark ? '#1e293b' : '#1a1e21',
-                boxShadow: 'none',
-              },
-            },
-          },
-          {
-            props: { variant: 'contained', color: 'dark' },
-            style: {
-              backgroundColor: isDark ? '#0f172a' : '#212529',
-              color: '#ffffff',
-              border: `1px solid ${isDark ? '#1e293b' : '#212529'}`,
-              '&:hover': {
-                backgroundColor: isDark ? '#1e293b' : '#1a1e21',
-                boxShadow: 'none',
-              },
-            },
-          },
-          {
-            props: { variant: 'outlined', color: 'dark' },
-            style: {
-              backgroundColor: 'transparent',
-              color: isDark ? '#f8fafc' : '#212529',
-              borderColor: isDark ? '#64748b' : '#212529',
-              '&:hover': {
-                backgroundColor: isDark ? '#ffffff10' : '#21252914',
-                borderColor: isDark ? '#94a3b8' : '#000000',
-              },
-            },
-          },
-          {
-            props: { variant: 'link' },
-            style: {
-              background: 'transparent',
-              backgroundColor: 'transparent',
-              border: 'none',
-              minWidth: 'auto',
-              padding: '4px 8px',
-              color: primaryMain,
-              textDecoration: 'none',
-              fontWeight: 500,
-              '&:hover': {
-                background: 'transparent',
-                backgroundColor: 'transparent',
-                textDecoration: 'underline',
-              },
-            },
-          },
-        ],
+        styleOverrides: buttonStyleOverrides,
+        variants: buttonVariants,
       },
       MuiCard: {
         styleOverrides: {

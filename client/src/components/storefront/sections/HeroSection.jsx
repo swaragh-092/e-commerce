@@ -1,14 +1,12 @@
 import React, { useEffect, useState } from 'react';
 import {
   Box,
-  Button,
   Chip,
   Container,
   Grid,
   IconButton,
   Stack,
   Typography,
-  useTheme,
 } from '@mui/material';
 import ArrowBackIosNewIcon from '@mui/icons-material/ArrowBackIosNew';
 import ArrowForwardIcon from '@mui/icons-material/ArrowForward';
@@ -16,8 +14,8 @@ import ArrowForwardIosIcon from '@mui/icons-material/ArrowForwardIos';
 import BoltIcon from '@mui/icons-material/Bolt';
 import { Link } from 'react-router-dom';
 import { getOptimizedMediaUrl } from '../../../utils/media';
-import { useSettings } from '../../../hooks/useSettings';
 import { resolveHeroGradient } from '../../../utils/styleMaps';
+import StorefrontButton from '../StorefrontButton';
 import { CanvasEditableText, CanvasEditableImage } from './SectionFallback';
 
 const DEFAULT_HERO_IMAGE = 'https://images.unsplash.com/photo-1441986300917-64674bd600d8?auto=format&fit=crop&w=1800&q=80';
@@ -44,30 +42,38 @@ const buttonProps = ({ preview, link }) => (
 
 const flexAlign = (align) => align === 'center' ? 'center' : align === 'right' ? 'flex-end' : 'flex-start';
 
-const HeroButtons = ({ slide, preview, primarySx, secondarySx, size = 'large', align = 'left', onSelectComponent }) => (
+const previewSelectionSx = (preview, onSelectComponent) => (
+  preview && onSelectComponent
+    ? { outline: '1px dashed transparent', '&:hover': { outlineColor: '#1976d2' } }
+    : undefined
+);
+
+const HeroButtons = ({ slide, preview, overImage = false, size = 'large', align = 'left', onSelectComponent }) => (
   <Stack direction={{ xs: 'column', sm: 'row' }} spacing={1.5} sx={{ mt: 4, justifyContent: flexAlign(align), alignItems: { xs: flexAlign(align), sm: 'center' } }}>
     {slide.buttonText && (preview || slide.buttonLink) && (
-      <Button
+      <StorefrontButton
         {...buttonProps({ preview, link: slide.buttonLink })}
-        variant="contained"
+        role="primary"
+        overImage={overImage}
         size={preview ? 'small' : size}
         endIcon={<ArrowForwardIcon />}
         onClick={preview && onSelectComponent ? (event) => { event.stopPropagation(); onSelectComponent('designTokens'); } : undefined}
-        sx={{ ...primarySx, ...(preview && onSelectComponent ? { outline: '1px dashed transparent', '&:hover': { outlineColor: '#1976d2' } } : {}) }}
+        sx={previewSelectionSx(preview, onSelectComponent)}
       >
         {slide.buttonText}
-      </Button>
+      </StorefrontButton>
     )}
     {slide.secondaryButtonText && (preview || slide.secondaryButtonLink) && (
-      <Button
+      <StorefrontButton
         {...buttonProps({ preview, link: slide.secondaryButtonLink })}
-        variant="outlined"
+        role="secondary"
+        overImage={overImage}
         size={preview ? 'small' : size}
         onClick={preview && onSelectComponent ? (event) => { event.stopPropagation(); onSelectComponent('designTokens'); } : undefined}
-        sx={{ ...secondarySx, ...(preview && onSelectComponent ? { outline: '1px dashed transparent', '&:hover': { outlineColor: '#1976d2' } } : {}) }}
+        sx={previewSelectionSx(preview, onSelectComponent)}
       >
         {slide.secondaryButtonText}
-      </Button>
+      </StorefrontButton>
     )}
   </Stack>
 );
@@ -89,53 +95,55 @@ const HeroEyebrow = ({ slide, preview }) => (
   ) : null
 );
 
-const HeroCopy = ({ section, slide, preview, align = 'left', color = 'inherit', onInlineFieldChange, onInlineFieldCommit, onInlineBlockFocus }) => (
-  <Box sx={{ textAlign: align, color }}>
-    <HeroEyebrow slide={slide} preview={preview} />
-    <CanvasEditableText
-      section={section}
-      field="title"
-      preview={preview}
-      onInlineFieldChange={onInlineFieldChange}
-      onInlineFieldCommit={onInlineFieldCommit} onInlineBlockFocus={onInlineBlockFocus}
-      variant={preview ? 'h3' : 'h1'}
-      sx={{
-        // Hero title scales with the theme's --store-font-size-h1 token so
-        // admins choosing a "compact" or "editorial" scale see a consistent
-        // hierarchy. The clamp() expression is sized up ~10% for hero
-        // emphasis, but is still driven by the admin-configured scale.
-        fontSize: preview
-          ? { xs: '1.75rem', sm: '2rem' }
-          : { xs: 'calc(var(--store-font-size-h1, 2.5rem) * 1.0)', md: 'calc(var(--store-font-size-h1, 2.5rem) * 1.1)' },
-        lineHeight: 0.98,
-        fontWeight: 950,
-        maxWidth: align === 'center' ? 820 : 760,
-        mx: align === 'center' ? 'auto' : 0,
-      }}
-    >
-      {slide.title || 'Your Store Headline'}
-    </CanvasEditableText>
-    {(slide.subtitle || preview) && (
+const HeroCopy = ({ section, slide, preview, align = 'left', color = 'inherit', active = 0, onInlineFieldChange, onInlineFieldCommit, onInlineBlockFocus }) => {
+  const isCustomSlides = Array.isArray(section?.slides) && section.slides.length > active;
+  const titleField = isCustomSlides ? `slides.${active}.title` : 'title';
+  const subtitleField = isCustomSlides ? `slides.${active}.subtitle` : 'subtitle';
+
+  return (
+    <Box sx={{ textAlign: align, color }}>
+      <HeroEyebrow slide={slide} preview={preview} />
       <CanvasEditableText
         section={section}
-        field="subtitle"
+        field={titleField}
         preview={preview}
         onInlineFieldChange={onInlineFieldChange}
         onInlineFieldCommit={onInlineFieldCommit} onInlineBlockFocus={onInlineBlockFocus}
-        variant={preview ? 'body1' : 'h6'}
+        variant={preview ? 'h3' : 'h1'}
         sx={{
-          mt: 2,
-          maxWidth: align === 'center' ? 680 : 620,
+          fontSize: preview
+            ? { xs: '1.75rem', sm: '2rem' }
+            : { xs: 'calc(var(--store-font-size-h1, 2.5rem) * 1.0)', md: 'calc(var(--store-font-size-h1, 2.5rem) * 1.1)' },
+          lineHeight: 0.98,
+          fontWeight: 950,
+          maxWidth: align === 'center' ? 820 : 760,
           mx: align === 'center' ? 'auto' : 0,
-          color: color === 'inherit' ? 'rgba(255,255,255,0.88)' : 'text.secondary',
-          lineHeight: 1.55,
         }}
       >
-        {slide.subtitle || 'Add supporting text'}
+        {slide.title || 'Your Store Headline'}
       </CanvasEditableText>
-    )}
-  </Box>
-);
+      {(slide.subtitle || preview) && (
+        <CanvasEditableText
+          section={section}
+          field={subtitleField}
+          preview={preview}
+          onInlineFieldChange={onInlineFieldChange}
+          onInlineFieldCommit={onInlineFieldCommit} onInlineBlockFocus={onInlineBlockFocus}
+          variant={preview ? 'body1' : 'h6'}
+          sx={{
+            mt: 2,
+            maxWidth: align === 'center' ? 680 : 620,
+            mx: align === 'center' ? 'auto' : 0,
+            color: color === 'inherit' ? 'rgba(255,255,255,0.88)' : 'text.secondary',
+            lineHeight: 1.55,
+          }}
+        >
+          {slide.subtitle || 'Add supporting text'}
+        </CanvasEditableText>
+      )}
+    </Box>
+  );
+};
 
 const MediaPanel = ({
   slide,
@@ -184,40 +192,11 @@ const MediaPanel = ({
   );
 };
 
-const OverlayHero = ({ section, slide, visibleSlides, active, preview, theme, buttonStyle, onSelectComponent, onInlineFieldChange, onInlineFieldCommit, onInlineBlockFocus }) => {
+const OverlayHero = ({ section, slide, visibleSlides, active, preview, onSelectComponent, onInlineFieldChange, onInlineFieldCommit, onInlineBlockFocus }) => {
   const image = imageUrl(slide.image, preview ? 900 : 1800) || DEFAULT_HERO_IMAGE;
   const align = section.textAlign || section.align || section.contentAlign || 'left';
   const centered = align === 'center';
   const right = align === 'right';
-
-  // Hero overlay sits on a dark image, so we keep contrast with white. The
-  // admin's buttonStyle still controls fill/outline so the CTA matches the
-  // rest of the store's button language — see issue M3.
-  const primaryHeroSx = (() => {
-    if (buttonStyle === 'outline') {
-      return {
-        bgcolor: 'transparent',
-        color: '#ffffff',
-        border: '2px solid #ffffff',
-        px: 3,
-        '&:hover': { bgcolor: 'rgba(255,255,255,0.12)' },
-      };
-    }
-    if (buttonStyle === 'soft') {
-      return {
-        bgcolor: 'rgba(255,255,255,0.18)',
-        color: '#ffffff',
-        px: 3,
-        '&:hover': { bgcolor: 'rgba(255,255,255,0.28)' },
-      };
-    }
-    return {
-      bgcolor: '#ffffff',
-      color: theme.palette.primary.dark,
-      px: 3,
-      '&:hover': { bgcolor: theme.palette.secondary.light },
-    };
-  })();
 
   return (
     <Box
@@ -295,13 +274,12 @@ const OverlayHero = ({ section, slide, visibleSlides, active, preview, theme, bu
       <Container maxWidth="xl" sx={{ position: 'relative', zIndex: 1, py: { xs: 6, md: 8 } }}>
         <Grid container spacing={4} alignItems="center" justifyContent={centered ? 'center' : right ? 'flex-end' : 'flex-start'}>
           <Grid item xs={12} md={centered ? 9 : 7} lg={centered ? 8 : 6}>
-            <HeroCopy section={section} slide={slide} preview={preview} align={align} onInlineFieldChange={onInlineFieldChange} onInlineFieldCommit={onInlineFieldCommit} onInlineBlockFocus={onInlineBlockFocus} />
+            <HeroCopy section={section} slide={slide} preview={preview} align={align} active={active} onInlineFieldChange={onInlineFieldChange} onInlineFieldCommit={onInlineFieldCommit} onInlineBlockFocus={onInlineBlockFocus} />
             <Box sx={{ display: 'flex', justifyContent: flexAlign(align) }}>
               <HeroButtons
                 slide={slide}
                 preview={preview}
-                primarySx={primaryHeroSx}
-                secondarySx={{ color: 'inherit', borderColor: 'rgba(255,255,255,0.55)', px: 3, '&:hover': { borderColor: '#ffffff', bgcolor: 'rgba(255,255,255,0.12)' } }}
+                overImage
                 align={align}
                 onSelectComponent={onSelectComponent}
               />
@@ -313,19 +291,17 @@ const OverlayHero = ({ section, slide, visibleSlides, active, preview, theme, bu
   );
 };
 
-const SplitHero = ({ section, slide, preview, theme, active, visibleSlides, onSelectComponent, onInlineFieldChange, onInlineFieldCommit, onInlineBlockFocus }) => {
+const SplitHero = ({ section, slide, preview, active, visibleSlides, onSelectComponent, onInlineFieldChange, onInlineFieldCommit, onInlineBlockFocus }) => {
   const align = section.textAlign || section.align || section.contentAlign || 'left';
   return (
   <Box component="section" sx={{ bgcolor: 'background.paper', borderRadius: 5, overflow: 'hidden' }}>
     <Container maxWidth="xl" sx={{ py: { xs: 4, md: 7 } }}>
       <Grid container spacing={{ xs: 3, md: 6 }} alignItems="center" direction={slide.imagePosition === 'left' ? 'row-reverse' : 'row'}>
         <Grid item xs={12} md={6}>
-          <HeroCopy section={section} slide={slide} preview={preview} align={align} color="text.primary" onInlineFieldChange={onInlineFieldChange} onInlineFieldCommit={onInlineFieldCommit} onInlineBlockFocus={onInlineBlockFocus} />
+          <HeroCopy section={section} slide={slide} preview={preview} align={align} active={active} color="text.primary" onInlineFieldChange={onInlineFieldChange} onInlineFieldCommit={onInlineFieldCommit} onInlineBlockFocus={onInlineBlockFocus} />
           <HeroButtons
             slide={slide}
             preview={preview}
-            primarySx={{ px: 3 }}
-            secondarySx={{ px: 3, borderColor: theme.palette.divider, color: 'text.primary' }}
             align={align}
             onSelectComponent={onSelectComponent}
           />
@@ -348,19 +324,17 @@ const SplitHero = ({ section, slide, preview, theme, active, visibleSlides, onSe
   );
 };
 
-const ProductSpotlightHero = ({ section, slide, preview, theme, active, visibleSlides, onSelectComponent, onInlineFieldChange, onInlineFieldCommit, onInlineBlockFocus }) => {
+const ProductSpotlightHero = ({ section, slide, preview, active, visibleSlides, onSelectComponent, onInlineFieldChange, onInlineFieldCommit, onInlineBlockFocus }) => {
   const align = section.textAlign || section.align || section.contentAlign || 'left';
   return (
   <Box component="section" sx={{ bgcolor: 'background.default', borderRadius: 5, overflow: 'hidden', border: '1px solid', borderColor: 'divider' }}>
     <Container maxWidth="xl" sx={{ py: { xs: 4, md: 7 } }}>
       <Grid container spacing={{ xs: 3, md: 6 }} alignItems="center">
         <Grid item xs={12} md={6}>
-          <HeroCopy section={section} slide={slide} preview={preview} align={align} color="text.primary" onInlineFieldChange={onInlineFieldChange} onInlineFieldCommit={onInlineFieldCommit} onInlineBlockFocus={onInlineBlockFocus} />
+          <HeroCopy section={section} slide={slide} preview={preview} align={align} active={active} color="text.primary" onInlineFieldChange={onInlineFieldChange} onInlineFieldCommit={onInlineFieldCommit} onInlineBlockFocus={onInlineBlockFocus} />
           <HeroButtons
             slide={slide}
             preview={preview}
-            primarySx={{ px: 3 }}
-            secondarySx={{ px: 3, borderColor: theme.palette.divider, color: 'text.primary' }}
             align={align}
             onSelectComponent={onSelectComponent}
           />
@@ -395,37 +369,68 @@ const ProductSpotlightHero = ({ section, slide, preview, theme, active, visibleS
 
 const HeroSection = ({ section = {}, slides = [], mode = 'live', onSelectComponent, onInlineFieldChange, onInlineFieldCommit, onInlineBlockFocus }) => {
   const [active, setActive] = useState(0);
-  const theme = useTheme();
-  const { settings } = useSettings();
   const preview = mode === 'preview';
-  const visibleSlides = Array.isArray(slides) && slides.length ? slides : defaultSlides;
-  const baseSlide = visibleSlides[active] || visibleSlides[0] || {};
-  const slide = preview ? { ...baseSlide, title: section.title || baseSlide.title, subtitle: section.subtitle || baseSlide.subtitle } : baseSlide;
+  const hasCustomSlides = Array.isArray(section?.slides);
+  const visibleSlides = hasCustomSlides
+    ? section.slides
+    : (Array.isArray(slides) && slides.length ? slides : defaultSlides);
+
   const canRotate = !preview && visibleSlides.length > 1;
-  const interval = num(section.interval, 6500);
-  const variant = section.variant || section.heroVariant || slide.variant || 'overlay';
-  const overlayLike = !['split', 'split-editorial', 'editorial', 'product-spotlight', 'spotlight'].includes(variant);
-  const buttonStyle = settings?.theme?.buttonStyle || 'solid';
+  const interval = num(section?.interval, 6500);
 
   useEffect(() => {
-    if (!canRotate || section.autoPlay === false) return undefined;
+    if (!canRotate || section?.autoPlay === false || !visibleSlides.length) return undefined;
     const timer = setInterval(() => setActive((current) => (current + 1) % visibleSlides.length), interval);
     return () => clearInterval(timer);
-  }, [canRotate, interval, section.autoPlay, visibleSlides.length]);
+  }, [canRotate, interval, section?.autoPlay, visibleSlides.length]);
+
+  if (!visibleSlides.length) {
+    if (preview) {
+      return (
+        <Box sx={{ p: 4, textAlign: 'center', bgcolor: 'action.hover', border: '1px dashed', borderColor: 'divider', borderRadius: 2, m: 2 }}>
+          <Typography variant="body2" color="text.secondary">
+            Hero Carousel has no slides. Add a slide or reset to default content in the sidebar.
+          </Typography>
+        </Box>
+      );
+    }
+    return null;
+  }
+
+  const safeActive = active < visibleSlides.length ? active : 0;
+  const baseSlide = visibleSlides[safeActive] || visibleSlides[0] || {};
+  // Slide headings are authoritative. Fall back to section title only if the slide has no title/heading.
+  const slideTitle = (baseSlide.title !== undefined && baseSlide.title !== '')
+    ? baseSlide.title
+    : (baseSlide.heading !== undefined && baseSlide.heading !== '')
+      ? baseSlide.heading
+      : (section.title || '');
+  const slideSubtitle = (baseSlide.subtitle !== undefined && baseSlide.subtitle !== '')
+    ? baseSlide.subtitle
+    : (baseSlide.text !== undefined && baseSlide.text !== '')
+      ? baseSlide.text
+      : (section.subtitle || '');
+  const slide = {
+    ...baseSlide,
+    title: slideTitle,
+    subtitle: slideSubtitle,
+  };
+  const variant = section.variant || section.heroVariant || slide.variant || 'overlay';
+  const overlayLike = !['split', 'split-editorial', 'editorial', 'product-spotlight', 'spotlight'].includes(variant);
 
   const goTo = (direction) => setActive((current) => (current + direction + visibleSlides.length) % visibleSlides.length);
 
   const hero = (() => {
     if (variant === 'split' || variant === 'split-editorial' || variant === 'editorial') {
-      return <SplitHero section={section} slide={slide} preview={preview} theme={theme} active={active} visibleSlides={visibleSlides} onSelectComponent={onSelectComponent} onInlineFieldChange={onInlineFieldChange} onInlineFieldCommit={onInlineFieldCommit} onInlineBlockFocus={onInlineBlockFocus} />;
+      return <SplitHero section={section} slide={slide} preview={preview} active={active} visibleSlides={visibleSlides} onSelectComponent={onSelectComponent} onInlineFieldChange={onInlineFieldChange} onInlineFieldCommit={onInlineFieldCommit} onInlineBlockFocus={onInlineBlockFocus} />;
     }
     if (variant === 'product-spotlight' || variant === 'spotlight') {
-      return <ProductSpotlightHero section={section} slide={slide} preview={preview} theme={theme} active={active} visibleSlides={visibleSlides} onSelectComponent={onSelectComponent} onInlineFieldChange={onInlineFieldChange} onInlineFieldCommit={onInlineFieldCommit} onInlineBlockFocus={onInlineBlockFocus} />;
+      return <ProductSpotlightHero section={section} slide={slide} preview={preview} active={active} visibleSlides={visibleSlides} onSelectComponent={onSelectComponent} onInlineFieldChange={onInlineFieldChange} onInlineFieldCommit={onInlineFieldCommit} onInlineBlockFocus={onInlineBlockFocus} />;
     }
     if (variant === 'centered') {
-      return <OverlayHero section={{ ...section, align: 'center' }} slide={slide} visibleSlides={visibleSlides} active={active} preview={preview} theme={theme} buttonStyle={buttonStyle} onSelectComponent={onSelectComponent} onInlineFieldChange={onInlineFieldChange} onInlineFieldCommit={onInlineFieldCommit} onInlineBlockFocus={onInlineBlockFocus} />;
+      return <OverlayHero section={{ ...section, align: 'center' }} slide={slide} visibleSlides={visibleSlides} active={active} preview={preview} onSelectComponent={onSelectComponent} onInlineFieldChange={onInlineFieldChange} onInlineFieldCommit={onInlineFieldCommit} onInlineBlockFocus={onInlineBlockFocus} />;
     }
-    return <OverlayHero section={section} slide={slide} visibleSlides={visibleSlides} active={active} preview={preview} theme={theme} buttonStyle={buttonStyle} onSelectComponent={onSelectComponent} onInlineFieldChange={onInlineFieldChange} onInlineFieldCommit={onInlineFieldCommit} onInlineBlockFocus={onInlineBlockFocus} />;
+    return <OverlayHero section={section} slide={slide} visibleSlides={visibleSlides} active={active} preview={preview} onSelectComponent={onSelectComponent} onInlineFieldChange={onInlineFieldChange} onInlineFieldCommit={onInlineFieldCommit} onInlineBlockFocus={onInlineBlockFocus} />;
   })();
 
   return (
