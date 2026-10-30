@@ -1,6 +1,7 @@
 import { describe, expect, it, vi, beforeEach } from 'vitest';
 import { render, screen, waitFor } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
+import { useTheme } from '@mui/material/styles';
 import { SettingsProvider, useDesignTokens } from '../../context/ThemeContext';
 
 const settings = {
@@ -24,6 +25,7 @@ vi.mock('../../services/settingsService', () => ({
 }));
 
 const Probe = () => {
+  const theme = useTheme();
   const { cssVariables, isAdminRoute, tokens } = useDesignTokens();
   return (
     <div
@@ -31,6 +33,7 @@ const Probe = () => {
       data-admin={String(isAdminRoute)}
       data-has-vars={String(Object.keys(cssVariables).length > 0)}
       data-primary={tokens.colors.primary}
+      data-ui-primary={theme.palette.primary.main}
     />
   );
 };
@@ -74,5 +77,14 @@ describe('SettingsProvider admin/storefront theme separation', () => {
     expect(probe.dataset.primary).toBe('#2563eb');
     expect(document.documentElement.style.getPropertyValue('--store-color-primary')).toBe('#2563eb');
     expect(document.getElementById('admin-custom-css')?.textContent).toContain('storefront-only');
+  });
+
+  it('uses saved admin colors without changing storefront tokens', async () => {
+    service.getAllSettings.mockResolvedValue({ ...settings, admin: { brandColor: '#126443' } });
+    renderAt('/admin/settings');
+    const probe = await screen.findByTestId('probe');
+    await waitFor(() => expect(probe.dataset.uiPrimary).toBe('#126443'));
+    expect(probe.dataset.primary).toBe('#2563eb');
+    expect(probe.dataset.hasVars).toBe('false');
   });
 });

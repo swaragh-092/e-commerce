@@ -6,7 +6,7 @@ import settingsService from '../services/settingsService';
 import { DEFAULT_STORE_NAME } from '../utils/store';
 import { buildCriticalThemeCss, buildStorefrontCssVariables, buildStorefrontTheme } from '../utils/theme';
 import { resolveDesignTokens } from '../utils/designTokens';
-import { adminTheme } from '../theme/adminTheme';
+import { buildAdminTheme } from '../theme/adminTheme';
 
 export const SettingsContext = createContext(null);
 // Separate context for components that ONLY need the resolved design tokens
@@ -218,8 +218,8 @@ export const SettingsProvider = ({ children }) => {
   );
   const isDark = isAdminRoute ? false : storefrontTokens.isDark;
   const themeConfig = useMemo(
-    () => (isAdminRoute ? adminTheme : createTheme(buildStorefrontTheme(t, customerDarkMode))),
-    [isAdminRoute, t, customerDarkMode]
+    () => (isAdminRoute ? buildAdminTheme(settings?.admin) : createTheme(buildStorefrontTheme(t, customerDarkMode))),
+    [isAdminRoute, settings?.admin, t, customerDarkMode]
   );
   // Resolved design tokens — used by DesignTokensContext subscribers.
   // Admin routes deliberately receive the stable admin theme, never merchant

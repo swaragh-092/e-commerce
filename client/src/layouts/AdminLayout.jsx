@@ -391,10 +391,10 @@ const AdminLayout = () => {
               bgcolor: isNested ? 'background.paper' : 'transparent',
               transition: 'all 0.25s cubic-bezier(0.4, 0, 0.2, 1)',
               '&:hover': {
-                bgcolor: (theme) => alpha(theme.palette.primary.main, isNested ? 0.07 : 0.04),
+                bgcolor: 'action.hover',
                 '& .MuiListItemIcon-root': {
                   transform: 'translateX(3px)',
-                  color: 'primary.main',
+                  color: 'adminSelection.main',
                 },
               },
               ...(isNested ? {
@@ -404,10 +404,10 @@ const AdminLayout = () => {
                 },
               } : {}),
               '&.Mui-selected': {
-                bgcolor: (theme) => alpha(theme.palette.primary.main, 0.08),
-                color: 'primary.main',
-                '& .MuiListItemIcon-root': { color: 'primary.main', transform: 'scale(1.1)' },
-                '& .MuiListItemText-primary': { color: 'primary.main', fontWeight: 700 },
+                bgcolor: 'action.selected',
+                color: 'adminSelection.main',
+                '& .MuiListItemIcon-root': { color: 'adminSelection.main', transform: 'scale(1.1)' },
+                '& .MuiListItemText-primary': { color: 'adminSelection.main', fontWeight: 700 },
               },
             }}
           >
