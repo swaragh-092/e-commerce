@@ -4,9 +4,12 @@ import NotificationEventsPage from '../../../pages/admin/NotificationEventsPage'
 import { notificationService } from '../../../services/notificationService';
 
 const auth = vi.hoisted(() => ({ editable: true }));
+const settings = vi.hoisted(() => ({ features: null }));
 const { notify, confirm } = vi.hoisted(() => ({ notify: vi.fn(), confirm: vi.fn().mockResolvedValue(true) }));
 vi.mock('../../../hooks/useAuth', () => ({ useAuth: () => ({ hasPermission: () => auth.editable }) }));
+vi.mock('../../../hooks/useSettings', () => ({ useSettings: () => settings }));
 vi.mock('../../../context/NotificationContext', () => ({ useNotification: () => ({ notify, confirm }) }));
+vi.mock('../../../pages/admin/EmailTemplatesPage', () => ({ default: () => <h2>Account & system templates</h2> }));
 vi.mock('../../../services/notificationService', () => ({ notificationService: {
   events: vi.fn(), options: vi.fn(), read: vi.fn(), save: vi.fn(), preview: vi.fn(), test: vi.fn(), history: vi.fn(),
 } }));
@@ -22,6 +25,7 @@ const ready = async () => { await screen.findByRole('textbox', { name: 'Notifica
 
 beforeEach(() => {
   vi.clearAllMocks(); auth.editable = true;
+  settings.features = { orders: true, shipping: true, payments: true, enquiry: true };
   notificationService.events.mockResolvedValue(events);
   notificationService.options.mockResolvedValue({ users: [{ id: 'person-1', name: 'Alex', email: 'alex@example.test', roleIds: ['role-1'] }], roles: [{ id: 'role-1', name: 'Warehouse' }] });
   notificationService.read.mockImplementation(async key => data(events.find(event => event.key === key)));
@@ -31,7 +35,126 @@ beforeEach(() => {
   notificationService.history.mockResolvedValue([]);
 });
 
+const capabilityEvents = [
+  ...events,
+  { key: 'order_cancelled', label: 'Order cancelled', group: 'Orders', customerTemplate: 'order_cancelled', internalTemplate: 'admin_order_cancelled', variables: [] },
+  { key: 'order_refunded', label: 'Order refunded', group: 'Payments', customerTemplate: 'order_refunded', variables: [] },
+  { key: 'payment_failed', label: 'Payment failed', group: 'Payments', customerTemplate: 'payment_failed_customer', internalTemplate: 'admin_order_failed', variables: [] },
+  { key: 'return_requested', label: 'Return requested', group: 'Returns', customerTemplate: 'return_requested', internalTemplate: 'admin_return_requested', variables: [] },
+  { key: 'enquiry_received', label: 'Enquiry received', group: 'Enquiries', customerTemplate: 'new_enquiry_customer', internalTemplate: 'new_enquiry_admin', variables: [] },
+  { key: 'enquiry_replied', label: 'Enquiry replied', group: 'Enquiries', customerTemplate: 'enquiry_reply_customer', variables: [] },
+];
+const catalogFeatures = { orders: false, shipping: false, payments: false, enquiry: true };
+const loadCapabilityEvents = () => {
+  notificationService.events.mockResolvedValue(capabilityEvents);
+  notificationService.read.mockImplementation(async key => data(capabilityEvents.find(event => event.key === key)));
+};
+
+describe('Event notification feature filtering', () => {
+  it('shows only enquiry events in catalog mode in the list and mobile selector', async () => {
+    settings.features = catalogFeatures;
+    loadCapabilityEvents();
+    render(<NotificationEventsPage />); await ready();
+    expect(screen.getByRole('heading', { name: 'Enquiry received' })).toBeInTheDocument();
+    for (const event of capabilityEvents.filter(event => event.group !== 'Enquiries')) {
+      expect(screen.queryByLabelText(event.label)).not.toBeInTheDocument();
+    }
+    expect(notificationService.read.mock.calls.map(([key]) => key)).toEqual(['enquiry_received']);
+    fireEvent.mouseDown(screen.getByRole('combobox', { name: 'Notification event' }));
+    expect(screen.getAllByRole('option').map(option => option.textContent)).toEqual(['Enquiry received', 'Enquiry replied']);
+    fireEvent.click(screen.getByRole('option', { name: 'Enquiry replied' }));
+    expect(await screen.findByRole('heading', { name: 'Enquiry replied' })).toBeInTheDocument();
+  });
+
+  it('uses each resolved capability to hide shipping, payment and enquiry events independently', async () => {
+    settings.features = { orders: true, shipping: false, payments: false, enquiry: false };
+    loadCapabilityEvents();
+    render(<NotificationEventsPage />); await ready();
+    fireEvent.mouseDown(screen.getByRole('combobox', { name: 'Notification event' }));
+    expect(screen.getAllByRole('option').map(option => option.textContent)).toEqual(['Order placed', 'Order cancelled', 'Return requested']);
+  });
+
+  it('switches away from disabled events while preserving their unsaved drafts', async () => {
+    loadCapabilityEvents();
+    const { rerender } = render(<NotificationEventsPage />); await ready();
+    fireEvent.change(screen.getByRole('textbox', { name: 'Email subject' }), { target: { value: 'Keep my order draft' } });
+    settings.features = catalogFeatures;
+    rerender(<NotificationEventsPage />);
+    expect(await screen.findByRole('heading', { name: 'Enquiry received' })).toBeInTheDocument();
+    expect(screen.queryByRole('heading', { name: 'Order placed' })).not.toBeInTheDocument();
+    settings.features = { orders: true, shipping: true, payments: true, enquiry: false };
+    rerender(<NotificationEventsPage />);
+    await waitFor(() => expect(screen.getByRole('textbox', { name: 'Email subject' })).toHaveValue('Keep my order draft'));
+    expect(notificationService.save).not.toHaveBeenCalled();
+  });
+
+  it('waits for settings before selecting or loading an event', async () => {
+    settings.features = null;
+    loadCapabilityEvents();
+    const { rerender } = render(<NotificationEventsPage />);
+    await waitFor(() => expect(notificationService.events).toHaveBeenCalled());
+    expect(notificationService.read).not.toHaveBeenCalled();
+    expect(screen.getByLabelText('Loading notifications')).toBeInTheDocument();
+    settings.features = catalogFeatures;
+    rerender(<NotificationEventsPage />); await ready();
+    expect(notificationService.read.mock.calls.map(([key]) => key)).toEqual(['enquiry_received']);
+  });
+
+  it('explains when no events are enabled and keeps account templates accessible', async () => {
+    settings.features = { orders: false, shipping: false, payments: false, enquiry: false };
+    loadCapabilityEvents();
+    render(<NotificationEventsPage />);
+    expect(await screen.findByText('No event notifications are available for the enabled store features.')).toBeInTheDocument();
+    expect(screen.queryByRole('combobox', { name: 'Notification event' })).not.toBeInTheDocument();
+    expect(notificationService.read).not.toHaveBeenCalled();
+    fireEvent.click(screen.getByRole('tab', { name: 'Account & system templates' }));
+    expect(await screen.findByRole('heading', { name: 'Account & system templates' })).toBeInTheDocument();
+  });
+
+  it('ignores a pending response for an event disabled by a settings change', async () => {
+    loadCapabilityEvents();
+    let finishOrder;
+    notificationService.read.mockImplementation(key => key === 'order_placed'
+      ? new Promise(resolve => { finishOrder = resolve; })
+      : Promise.resolve(data(capabilityEvents.find(event => event.key === key))));
+    const { rerender } = render(<NotificationEventsPage />);
+    await waitFor(() => expect(notificationService.read).toHaveBeenCalledWith('order_placed'));
+    settings.features = catalogFeatures;
+    rerender(<NotificationEventsPage />); await ready();
+    finishOrder(data(events[0]));
+    await waitFor(() => expect(screen.getByRole('heading', { name: 'Enquiry received' })).toBeInTheDocument());
+    expect(screen.queryByRole('heading', { name: 'Order placed' })).not.toBeInTheDocument();
+  });
+});
+
 describe('Event notification configuration', () => {
+  it.each([true, false])('saves and reloads the customer enquiry acknowledgement as %s without changing staff alerts', async enabled => {
+    const event = capabilityEvents.find(event => event.key === 'enquiry_received');
+    let saved = { ...data(event), rules: [
+      { ...structuredClone(rule), name: 'Customer acknowledgement', isActive: !enabled },
+      { ...structuredClone(rule), id: 'rule-staff', name: 'Admin alert', audience: 'internal',
+        recipients: { ...recipients, userIds: ['person-1'] } },
+    ] };
+    notificationService.events.mockResolvedValue([event]);
+    notificationService.read.mockImplementation(async () => structuredClone(saved));
+    notificationService.save.mockImplementation(async (_, input) => {
+      saved = { event, managed: true, revision: 'revision-2', rules: structuredClone(input.rules) };
+      return structuredClone(saved);
+    });
+    render(<NotificationEventsPage />); await ready();
+    expect(screen.getByRole('textbox', { name: 'Notification name' })).toHaveValue('Customer acknowledgement');
+    fireEvent.click(screen.getByRole('checkbox', { name: 'Active', exact: true }));
+    fireEvent.click(screen.getByRole('button', { name: 'Save event' }));
+    await waitFor(() => expect(notificationService.save).toHaveBeenCalledWith('enquiry_received', expect.objectContaining({ rules: [
+      expect.objectContaining({ audience: 'customer', name: 'Customer acknowledgement', isActive: enabled, channels: ['email'] }),
+      expect.objectContaining({ audience: 'internal', name: 'Admin alert', isActive: true, recipients: expect.objectContaining({ userIds: ['person-1'] }) }),
+    ] })));
+    await screen.findByText('Configured');
+    fireEvent.click(screen.getByRole('button', { name: 'Reload' }));
+    await waitFor(() => expect(notificationService.read).toHaveBeenCalledTimes(2));
+    await waitFor(() => expect(screen.getByRole('checkbox', { name: 'Active', exact: true })).toHaveProperty('checked', enabled));
+  });
+
   it('shows the involved customer explicitly and saves that audience without selecting other customers', async () => {
     render(<NotificationEventsPage />); await ready();
     expect(screen.getByRole('checkbox', { name: 'Customer involved in this event' })).toBeChecked();

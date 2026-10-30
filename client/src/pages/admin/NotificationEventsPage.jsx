@@ -1,4 +1,4 @@
-import { lazy, Suspense, useEffect, useState } from 'react';
+import { lazy, Suspense, useEffect, useMemo, useState } from 'react';
 import { Alert, Box, Button, Chip, CircularProgress, Dialog, DialogActions, DialogContent, DialogContentText, DialogTitle, Grid, InputAdornment, List, ListItemButton, ListItemText, MenuItem, Paper, Stack, Tab, Tabs, TextField, Typography } from '@mui/material';
 import AddIcon from '@mui/icons-material/Add';
 import SaveOutlinedIcon from '@mui/icons-material/SaveOutlined';
@@ -8,9 +8,11 @@ import NotificationRuleCard from '../../components/admin/settings/NotificationRu
 import { emptyRecipients, recipientTargets, targetSignature } from '../../components/admin/settings/NotificationRecipients';
 import { notificationService } from '../../services/notificationService';
 import { useAuth } from '../../hooks/useAuth';
+import { useSettings } from '../../hooks/useSettings';
 import { useNotification } from '../../context/NotificationContext';
 import { PERMISSIONS } from '../../utils/permissions';
 import { getApiErrorMessage } from '../../utils/apiErrors';
+import { isNotificationTemplateVisible } from '../../utils/notificationTemplateVisibility';
 
 const SystemTemplates = lazy(() => import('./EmailTemplatesPage'));
 const EMPTY_OPTIONS = { users: [], roles: [] };
@@ -46,6 +48,7 @@ function DeliveryHistory({ event }) {
 
 export default function NotificationEventsPage() {
   const { hasPermission } = useAuth();
+  const { features } = useSettings();
   const { notify, confirm } = useNotification();
   const canEdit = hasPermission(PERMISSIONS.NOTIFICATIONS_MANAGE);
   const [tab, setTab] = useState('events');
@@ -53,7 +56,7 @@ export default function NotificationEventsPage() {
   const [systemDirty, setSystemDirty] = useState(false);
   const [events, setEvents] = useState([]);
   const [options, setOptions] = useState(EMPTY_OPTIONS);
-  const [selected, setSelected] = useState('');
+  const [selectedEvent, setSelected] = useState('');
   const [drafts, setDrafts] = useState({});
   const [loading, setLoading] = useState(true);
   const [loadingEvent, setLoadingEvent] = useState(false);
@@ -68,6 +71,11 @@ export default function NotificationEventsPage() {
   const [separateSource, setSeparateSource] = useState('');
   const [separateTarget, setSeparateTarget] = useState('');
   const [focusRule, setFocusRule] = useState('');
+  const availableEvents = useMemo(() => features == null ? [] : events.filter(event =>
+    [event.customerTemplate, event.internalTemplate].filter(Boolean).every(name => isNotificationTemplateVisible(name, features))
+  ), [events, features]);
+  const selected = availableEvents.some(event => event.key === selectedEvent) ? selectedEvent : availableEvents[0]?.key || '';
+  const loadingNotifications = loading || features == null;
   const draft = drafts[selected];
   const dirty = systemDirty || Object.values(drafts).some(value => value.dirty);
 
@@ -76,11 +84,16 @@ export default function NotificationEventsPage() {
     setLoading(true); setLoadError('');
     Promise.all([notificationService.events(), notificationService.options()]).then(([events, options]) => {
       if (!active) return;
-      setEvents(events); setOptions(options); setSelected(value => value || events[0]?.key || '');
+      setEvents(events); setOptions(options);
     }).catch(error => { if (active) setLoadError(getApiErrorMessage(error, 'Could not load notifications.')); })
       .finally(() => { if (active) setLoading(false); });
     return () => { active = false; };
   }, [retry]);
+
+  useEffect(() => {
+    if (selectedEvent === selected) return;
+    setSelected(selected); setDetailTab('notifications'); setEventError(''); setSaveError(''); setSeparateSource(''); setFocusRule('');
+  }, [selectedEvent, selected]);
 
   useEffect(() => {
     if (!selected || drafts[selected]) return;
@@ -152,20 +165,20 @@ export default function NotificationEventsPage() {
     setRetry(value => value + 1); setSaveError('');
   };
   const excludedTemplates = events.flatMap(event => [event.customerTemplate, event.internalTemplate]).filter(Boolean);
-  const visibleEvents = events.filter(event => `${event.label} ${event.group}`.toLowerCase().includes(search.trim().toLowerCase()));
+  const visibleEvents = availableEvents.filter(event => `${event.label} ${event.group}`.toLowerCase().includes(search.trim().toLowerCase()));
   const selectEvent = key => { setSelected(key); setDetailTab('notifications'); setEventError(''); setSaveError(''); setSeparateSource(''); setFocusRule(''); };
   return (
     <Box>
       <Typography variant="h5" component="h1">Notifications</Typography>
       <Typography variant="body2" color="text.secondary" sx={{ mt: 0.5, mb: 2 }}>Choose an event, then decide who hears about it and what they receive.</Typography>
       <Tabs value={tab} onChange={(_, value) => { setTab(value); if (value === 'system') setSystemVisited(true); }} variant="scrollable" scrollButtons="auto" allowScrollButtonsMobile sx={{ mb: 3, borderBottom: 1, borderColor: 'divider' }}>
-        <Tab value="events" label="Event notifications" /><Tab value="system" label="Account & system templates" disabled={loading || Boolean(loadError)} />
+        <Tab value="events" label="Event notifications" /><Tab value="system" label="Account & system templates" disabled={loadingNotifications || Boolean(loadError)} />
       </Tabs>
       {systemVisited && <Box sx={{ display: tab === 'system' ? 'block' : 'none' }}><Suspense fallback={<CircularProgress size={24} />}><SystemTemplates excludeTemplates={excludedTemplates} embedded onDirtyChange={setSystemDirty} /></Suspense></Box>}
-      {loading ? <CircularProgress aria-label="Loading notifications" /> : loadError ? <Alert severity="error" action={<Button onClick={() => setRetry(value => value + 1)}>Retry</Button>}>{loadError}</Alert> : <Grid container spacing={3} sx={{ display: tab === 'events' ? 'flex' : 'none' }}>
+      {loadingNotifications ? <CircularProgress aria-label="Loading notifications" /> : loadError ? <Alert severity="error" action={<Button onClick={() => setRetry(value => value + 1)}>Retry</Button>}>{loadError}</Alert> : !availableEvents.length ? <Box sx={{ display: tab === 'events' ? 'block' : 'none' }}><Alert severity="info">No event notifications are available for the enabled store features.</Alert></Box> : <Grid container spacing={3} sx={{ display: tab === 'events' ? 'flex' : 'none' }}>
         <Grid item xs={12} md={3}>
           <Paper variant="outlined" sx={{ borderRadius: 2, overflow: 'hidden' }}>
-            <Box sx={{ p: 2, display: { xs: 'block', md: 'none' } }}><TextField select fullWidth size="small" label="Notification event" value={selected} disabled={saving} onChange={event => selectEvent(event.target.value)}>{events.map(event => <MenuItem key={event.key} value={event.key}>{event.label}</MenuItem>)}</TextField></Box>
+            <Box sx={{ p: 2, display: { xs: 'block', md: 'none' } }}><TextField select fullWidth size="small" label="Notification event" value={selected} disabled={saving} onChange={event => selectEvent(event.target.value)}>{availableEvents.map(event => <MenuItem key={event.key} value={event.key}>{event.label}</MenuItem>)}</TextField></Box>
             <Box sx={{ p: 2, display: { xs: 'none', md: 'block' } }}><TextField size="small" fullWidth placeholder="Search events" value={search} onChange={event => setSearch(event.target.value)}
               inputProps={{ 'aria-label': 'Search events' }} InputProps={{ startAdornment: <InputAdornment position="start"><SearchIcon fontSize="small" /></InputAdornment> }} /></Box>
             <List sx={{ py: 0, maxHeight: 'calc(100vh - 280px)', overflow: 'auto', display: { xs: 'none', md: 'block' } }}>
