@@ -43,7 +43,7 @@ function renderHomeCategories(categories, uploadUrl) {
         if (!cat.children || !cat.children.length) return;
 
         html += '<div class="vegetables">';
-        html += '    <div class="category-label">' + (cat.name || '') + '</div>';
+        html += '    <a href="product.html?cat=' + encodeURIComponent(cat.slug || '') + '" class="category-label">' + (cat.name || '') + '</a>';
 
         var children = cat.children.slice().sort(function (a, b) {
             var aHasImg = (a.icon || a.image || (a.media && a.media.url) || (a.images && a.images.length) || (a.gallery && a.gallery.length)) ? 1 : 0;
